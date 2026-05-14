@@ -320,29 +320,26 @@ func isSpecialFloat(f *Float) bool {
 }
 
 // NumberToFloat64 converts any Number to a best-effort float64 approximation.
-// BigInteger, BigFloat, and Rational values lose precision in the conversion.
-// For Complex inputs, only the real component is returned; for BigComplex,
-// the real part is converted via toBigFloat. Callers must not rely on this
-// function to reject complex values.
+//
+// Behavior across kinds:
+//   - Integer/BigInteger/Float/BigFloat/Rational: silent precision loss is
+//     possible (BigInteger > 2^53, BigFloat with extra precision, Rational
+//     like 1/3). See plans/2026-05-14-numeric-loss-signals-design.md for the
+//     follow-up that adds big.Accuracy plumbing and an ErrLossyConversion
+//     sentinel.
+//   - Complex/BigComplex with imag == 0: returns the real part (lossless
+//     since no information is discarded).
+//   - Complex/BigComplex with imag != 0: panics with ErrNotAReal preserved
+//     as the cause sentinel; the imaginary component cannot be carried in a
+//     float64. Callers in extensions/math should Simplify() the value first
+//     if they want zero-imag complex inputs to flow through transparently.
 func NumberToFloat64(n Number) float64 {
-	switch v := n.(type) {
-	case *Integer:
-		return float64(v.Value)
-	case *BigInteger:
-		return float64FromBigInt(v.value)
-	case *Float:
-		return v.Value
-	case *BigFloat:
-		f, _ := v.value.Float64()
-		return f
-	case *Rational:
-		return v.Float64()
-	case *Complex:
-		return real(v.Value)
-	case *BigComplex:
-		return toBigFloat(v.real).Float64()
+	f, err := LookupNumericSpec(n.Kind()).ToFloat64(n)
+	if err != nil {
+		panic(werr.WrapForeignErrorWithCause(werr.ErrNotAReal, err,
+			"NumberToFloat64: cannot convert %T to float64", n))
 	}
-	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "NumberToFloat64: unsupported type %T", n))
+	return f
 }
 
 // NumberToComplex128 converts any Number to complex128. BigFloat and
@@ -350,23 +347,7 @@ func NumberToFloat64(n Number) float64 {
 // intended for paths where precision loss is acceptable, such as IEEE 754
 // Inf/NaN guards and inexact complex arithmetic in extensions.
 func NumberToComplex128(n Number) complex128 {
-	switch v := n.(type) {
-	case *Integer:
-		return complex(float64(v.Value), 0)
-	case *BigInteger:
-		return complex(float64FromBigInt(v.value), 0)
-	case *Float:
-		return complex(v.Value, 0)
-	case *BigFloat:
-		return complex(v.Float64(), 0)
-	case *Rational:
-		return complex(v.Float64(), 0)
-	case *Complex:
-		return v.Value
-	case *BigComplex:
-		return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
-	}
-	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "NumberToComplex128: unsupported type %T", n))
+	return LookupNumericSpec(n.Kind()).ToComplex128(n)
 }
 
 // cmpFloat64 compares two float64 values, returning -1, 0, or 1.

@@ -85,42 +85,25 @@ func floatToExact(f float64) (Number, error) {
 // Simplify attempts to reduce a number to a simpler type without losing information.
 //
 // Simplification rules:
-// - BigComplex with zero imaginary → real part
-// - Complex with zero imaginary → Float → possibly Integer
-// - BigFloat that is an integer → BigInteger → possibly Integer
-// - Float that is an integer → Integer
-// - Rational that is an integer → BigInteger → possibly Integer
-// - BigInteger that fits int64 → Integer
+//   - BigComplex with zero imaginary → real part (cross-kind; handled here)
+//   - Complex with zero imaginary → Float → possibly Integer (cross-kind; handled here)
+//   - All other per-kind descents are delegated to the NumericTypeSpec.SimplifyDown
+//     function registered for each kind (see values/numeric_registry.go).
+//
+// Returns nil unchanged (callers may pass nil from generic Value paths).
 func Simplify(n Number) Number {
-	switch v := n.(type) {
-	case *BigComplex:
-		if v.Imag().IsZero() {
-			return Simplify(v.Real())
-		}
-	case *Complex:
-		if imag(v.Value) == 0 {
-			return Simplify(NewFloat(real(v.Value)))
-		}
-	case *BigFloat:
-		if v.value.IsInt() {
-			bi, _ := v.value.Int(nil)
-			return Simplify(&BigInteger{value: bi})
-		}
-	case *Float:
-		// Check if float is a whole number that fits in int64
-		if v.Value == float64(int64(v.Value)) {
-			return NewInteger(int64(v.Value))
-		}
-	case *Rational:
-		if v.IsInteger() {
-			return Simplify(&BigInteger{value: new(big.Int).Set(v.Num())})
-		}
-	case *BigInteger:
-		if v.value.IsInt64() {
-			return NewInteger(v.value.Int64())
-		}
+	if n == nil {
+		return nil
 	}
-	return n
+	bc, ok := n.(*BigComplex)
+	if ok && bc.Imag().IsZero() {
+		return Simplify(bc.Real())
+	}
+	c, ok := n.(*Complex)
+	if ok && imag(c.Value) == 0 {
+		return Simplify(NewFloat(real(c.Value)))
+	}
+	return LookupNumericSpec(n.Kind()).SimplifyDown(n)
 }
 
 // Exactness represents whether a number is exact or inexact.
@@ -139,22 +122,27 @@ const (
 // ExactnessOf returns the exactness of a number.
 //
 // R7RS §6.2.2:
-// - Integer, BigInteger, Rational are exact
-// - Float, BigFloat, Complex are inexact
-// - BigComplex depends on its components
+// - Integer, BigInteger, Rational are always exact (IsAlwaysExact in spec)
+// - Float, BigFloat, Complex are always inexact (IsAlwaysExact == false)
+// - BigComplex depends on its components (per-instance check via IsExact)
+//
+// Panics on nil; nil cannot meaningfully classify as Exact or Inexact and
+// indicates a caller bug.
 func ExactnessOf(n Number) Exactness {
-	switch v := n.(type) {
-	case *Integer, *BigInteger, *Rational:
-		return Exact
-	case *Float, *BigFloat, *Complex:
-		return Inexact
-	case *BigComplex:
-		if v.IsExact() {
+	if n == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "ExactnessOf: nil Number"))
+	}
+	bc, ok := n.(*BigComplex)
+	if ok {
+		if bc.IsExact() {
 			return Exact
 		}
 		return Inexact
 	}
-	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "ExactnessOf: unsupported type %T", n))
+	if LookupNumericSpec(n.Kind()).IsAlwaysExact() {
+		return Exact
+	}
+	return Inexact
 }
 
 // IntegerEqualsFloat compares an exact integer to an inexact float.

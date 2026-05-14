@@ -162,6 +162,24 @@ func (p *Integer) Kind() NumericKind {
 	return KindInteger
 }
 
+// integerSimplifyDown is an identity: Integer is the bottom of the exact-real
+// simplification chain (BigFloat→BigInteger→Integer; Rational→BigInteger→Integer).
+func integerSimplifyDown(n Number) Number {
+	return n
+}
+
+// integerToFloat64 converts an Integer's int64 value to float64. Lossless for
+// |v| ≤ 2^53; silently lossy beyond (see loss-signals follow-up).
+func integerToFloat64(n Number) (float64, error) {
+	return float64(n.(*Integer).Value), nil
+}
+
+// integerToComplex128 lifts an Integer to a complex128 with zero imag.
+// Lossless for |v| ≤ 2^53; silently lossy beyond.
+func integerToComplex128(n Number) complex128 {
+	return complex(float64(n.(*Integer).Value), 0)
+}
+
 var integerAdd [numKinds]func(*Integer, Number) Number
 var integerSubtract [numKinds]func(*Integer, Number) Number
 var integerLessThan [numKinds]func(*Integer, Number) bool
@@ -203,6 +221,14 @@ func init() {
 			return NewInteger(result.NumInt64()), nil
 		}
 		return result, nil
+	})
+
+	registerNumericSpec(KindInteger, NumericTypeSpec{
+		schemeName:    "integer",
+		simplifyDown:  integerSimplifyDown,
+		toFloat64:     integerToFloat64,
+		toComplex128:  integerToComplex128,
+		isAlwaysExact: true,
 	})
 }
 

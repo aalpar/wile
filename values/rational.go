@@ -102,6 +102,35 @@ func (p *Rational) Kind() NumericKind {
 	return KindRational
 }
 
+// rationalSimplifyDown descends Rational → BigInteger → Integer in a single
+// call when the rational is integer-valued (denominator == 1) and the
+// numerator fits each smaller representation.
+func rationalSimplifyDown(n Number) Number {
+	v := n.(*Rational)
+	if v.IsInteger() {
+		bi := &BigInteger{value: new(big.Int).Set(v.Num())}
+		if bi.value.IsInt64() {
+			return NewInteger(bi.value.Int64())
+		}
+		return bi
+	}
+	return n
+}
+
+// rationalToFloat64 reduces an exact rational to the nearest float64.
+// Silently lossy for rationals like 1/3 that cannot be represented exactly
+// in binary float; the loss-signals follow-up will surface the exact-bool
+// from big.Rat.Float64().
+func rationalToFloat64(n Number) (float64, error) {
+	return n.(*Rational).Float64(), nil
+}
+
+// rationalToComplex128 lifts a Rational to complex128 with zero imag.
+// Same precision-loss caveat as rationalToFloat64.
+func rationalToComplex128(n Number) complex128 {
+	return complex(n.(*Rational).Float64(), 0)
+}
+
 var rationalAdd [numKinds]func(*Rational, Number) Number
 var rationalSubtract [numKinds]func(*Rational, Number) Number
 var rationalLessThan [numKinds]func(*Rational, Number) bool
@@ -136,6 +165,14 @@ func init() {
 	rationalDivide = makeDivideDispatch(KindRational, func(p *Rational, o Number) (Number, error) {
 		result := new(big.Rat).Quo(p.value, o.(*Rational).value)
 		return &Rational{value: result}, nil
+	})
+
+	registerNumericSpec(KindRational, NumericTypeSpec{
+		schemeName:    "rational",
+		simplifyDown:  rationalSimplifyDown,
+		toFloat64:     rationalToFloat64,
+		toComplex128:  rationalToComplex128,
+		isAlwaysExact: true,
 	})
 }
 

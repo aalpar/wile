@@ -73,6 +73,28 @@ func (p *Float) Kind() NumericKind {
 	return KindFloat
 }
 
+// floatSimplifyDown demotes an integer-valued Float to Integer. The
+// double-cast equality guard rejects |Value| > MaxInt64 by way of Go's
+// implementation-defined overflow on the int64 cast — the resulting
+// inequality fails the test, so the float is left as-is.
+func floatSimplifyDown(n Number) Number {
+	v := n.(*Float)
+	if v.Value == float64(int64(v.Value)) {
+		return NewInteger(int64(v.Value))
+	}
+	return n
+}
+
+// floatToFloat64 returns the underlying float64 directly; lossless.
+func floatToFloat64(n Number) (float64, error) {
+	return n.(*Float).Value, nil
+}
+
+// floatToComplex128 lifts a Float to complex128 with zero imag; lossless.
+func floatToComplex128(n Number) complex128 {
+	return complex(n.(*Float).Value, 0)
+}
+
 var floatAdd [numKinds]func(*Float, Number) Number
 var floatSubtract [numKinds]func(*Float, Number) Number
 var floatLessThan [numKinds]func(*Float, Number) bool
@@ -105,6 +127,14 @@ func init() {
 
 	floatDivide = makeDivideDispatch(KindFloat, func(p *Float, o Number) (Number, error) {
 		return NewFloat(p.Value / o.(*Float).Value), nil
+	})
+
+	registerNumericSpec(KindFloat, NumericTypeSpec{
+		schemeName:    "real",
+		simplifyDown:  floatSimplifyDown,
+		toFloat64:     floatToFloat64,
+		toComplex128:  floatToComplex128,
+		isAlwaysExact: false,
 	})
 }
 

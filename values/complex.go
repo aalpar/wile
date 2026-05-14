@@ -66,6 +66,31 @@ func (p *Complex) Kind() NumericKind {
 	return KindComplex
 }
 
+// complexSimplifyDown is an identity: Complex's cross-kind reduction to a
+// real Float (when imag == 0) lives in numeric_tower.go's Simplify(), so
+// the per-kind step is a no-op.
+func complexSimplifyDown(n Number) Number {
+	return n
+}
+
+// complexToFloat64 returns the real component when the imaginary part is
+// zero (lossless), and ErrNotAReal otherwise. This aligns with the
+// loss-signals design principle: "succeed silently when no information is
+// lost; error precisely when it would be."
+func complexToFloat64(n Number) (float64, error) {
+	v := n.(*Complex)
+	if imag(v.Value) != 0 {
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
+			"complexToFloat64: nonzero imaginary part (%g) cannot be carried in float64", imag(v.Value))
+	}
+	return real(v.Value), nil
+}
+
+// complexToComplex128 returns the underlying complex128 directly.
+func complexToComplex128(n Number) complex128 {
+	return n.(*Complex).Value
+}
+
 var complexAdd [numKinds]func(*Complex, Number) Number
 var complexSubtract [numKinds]func(*Complex, Number) Number
 var complexLessThan [numKinds]func(*Complex, Number) bool
@@ -102,6 +127,14 @@ func init() {
 
 	complexDivide = makeDivideDispatch(KindComplex, func(p *Complex, o Number) (Number, error) {
 		return NewComplex(p.Value / o.(*Complex).Value), nil
+	})
+
+	registerNumericSpec(KindComplex, NumericTypeSpec{
+		schemeName:    "complex",
+		simplifyDown:  complexSimplifyDown,
+		toFloat64:     complexToFloat64,
+		toComplex128:  complexToComplex128,
+		isAlwaysExact: false,
 	})
 }
 
