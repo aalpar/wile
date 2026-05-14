@@ -40,16 +40,6 @@ func TestParseValueType(t *testing.T) {
 			expectedName: "list",
 		},
 		{
-			// "exact-integer" used to be a known ValueType alias for
-			// TypeInteger. The alias was removed in the values/ Phase 0
-			// structural reduction; the name now flows through as an
-			// unresolved NamedTypeConstraint, preserving its appearance
-			// in docstrings without claiming a built-in type.
-			name:         "exact-integer no longer known, falls through",
-			input:        "exact-integer",
-			expectedName: "exact-integer",
-		},
-		{
 			name:         "unknown type",
 			input:        "frobnicate",
 			expectedName: "frobnicate",
@@ -86,6 +76,20 @@ func TestParseValueType(t *testing.T) {
 		result := docparse.ParseValueType("frobnicate")
 		_, isNamed := result.(*values.NamedTypeConstraint)
 		c.Assert(isNamed, qt.IsTrue)
+	})
+
+	// "exact-integer" used to alias TypeInteger via TypeExactInteger.
+	// The alias was removed in the values/ Phase 0 structural reduction
+	// (see plans/2026-05-13-values-structural-reduction.md Finding 4).
+	// The name must now flow through as an unresolved NamedTypeConstraint —
+	// asserting type tag (not just Name()) so a future re-introduction
+	// of the alias would fail this test rather than silently masquerading.
+	t.Run("exact-integer falls through as NamedTypeConstraint", func(t *testing.T) {
+		c := qt.New(t)
+		result := docparse.ParseValueType("exact-integer")
+		_, isNamed := result.(*values.NamedTypeConstraint)
+		c.Assert(isNamed, qt.IsTrue)
+		c.Assert(result.Name(), qt.Equals, "exact-integer")
 	})
 }
 

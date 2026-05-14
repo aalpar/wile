@@ -920,9 +920,10 @@ Sections may appear in any order. Place metadata sections after the prose descri
 and before `Examples:` / `See also:` (which remain part of the prose text).
 
 Type names must match the `ValueType.String()` vocabulary: `any`, `boolean`, `number`,
-`integer`, `exact-integer`, `real`, `rational`, `complex`, `string`, `character`,
-`symbol`, `pair`, `list`, `vector`, `bytevector`, `hashtable`, `procedure`, `port`,
-`input-port`, `output-port`. Unknown names degrade gracefully to `any`.
+`integer`, `real`, `rational`, `complex`, `flonum`, `string`, `character`,
+`symbol`, `byte`, `pair`, `list`, `vector`, `bytevector`, `hashtable`, `procedure`,
+`port`, `input-port`, `output-port`, `textual-input-port`, `textual-output-port`,
+`binary-input-port`, `binary-output-port`. Unknown names degrade gracefully to `any`.
 
 Example with all sections:
 ```scheme

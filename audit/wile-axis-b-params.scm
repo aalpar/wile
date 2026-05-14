@@ -305,7 +305,7 @@
     ("ExtractReal"             . ((0 . "real")))
     ("ToFloat64"               . ((0 . "real")))
     ("ToComplex128"            . ((0 . "complex")))
-    ("ParseSubrange"           . ((0 . "exact-integer") (1 . "exact-integer")))
+    ("ParseSubrange"           . ((0 . "integer") (1 . "integer")))
 
     ;; Numeric-fold / numeric-compare delegators (accept full CallContext,
     ;; iterate args internally). All slots share the same accepted type.
@@ -321,8 +321,8 @@
     ("AssocLookup"             . ((0 . "any") (1 . "list")))
     ("MemberLookup"            . ((0 . "any") (1 . "list")))
     ("ListToVector"            . ((0 . "list")))
-    ("SequenceRef"             . ((0 . "seq") (1 . "exact-integer")))
-    ("SequenceSet"             . ((0 . "seq") (1 . "exact-integer") (2 . "any")))
+    ("SequenceRef"             . ((0 . "seq") (1 . "integer")))
+    ("SequenceSet"             . ((0 . "seq") (1 . "integer") (2 . "any")))
     ("SequenceLength"          . ((0 . "seq")))
     ("StringCompareVariadic"   . ((all . "string")))
     ("CharCompareVariadic"     . ((all . "character")))

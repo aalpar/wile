@@ -423,6 +423,8 @@ func TestSchemeTypeName(t *testing.T) {
 		{name: "float", val: values.NewFloat(3.14), want: "flonum"},
 		{name: "big float", val: values.NewBigFloatFromFloat64(2.71), want: "flonum"},
 		{name: "complex", val: values.NewComplex(1 + 2i), want: "complex"},
+		{name: "big complex", val: values.NewBigComplexFromBigIntegers(
+			values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4)), want: "complex"},
 		{name: "string", val: values.NewString("hi"), want: "string"},
 		{name: "character", val: values.NewCharacter('x'), want: "character"},
 		{name: "symbol", val: values.NewSymbol("foo"), want: "symbol"},
@@ -437,7 +439,10 @@ func TestSchemeTypeName(t *testing.T) {
 		{name: "box", val: values.NewBox(values.NewInteger(7)), want: "box"},
 		{name: "promise", val: values.NewForcedPromise(values.NewInteger(7)), want: "promise"},
 
-		// Layer 3 — interface fallback for the empty-list singleton.
+		// Layer 3 — IsEmptyList predicate catches the singleton before
+		// any interface fallback fires. (The IsList branch beneath it is
+		// unreachable today: every Tuple implementer either has a
+		// goTypeToValueType row — *Pair — or is the empty-list singleton.)
 		{name: "empty list singleton", val: values.EmptyList, want: "empty-list"},
 	}
 	for _, tc := range tcs {

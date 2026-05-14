@@ -182,10 +182,19 @@ var checks [TypeCount]checkFunc
 // underlying machine representation.
 //
 // Types whose Scheme name has no ValueType counterpart (Record, Box,
-// Promise) are handled by a small explicit switch in SchemeTypeName.
-// Singletons (emptyListType, eofType) and interface fallbacks
-// (Tuple proper-lists) are resolved via the same predicates the
-// values package already exposes.
+// Promise) are handled by a small explicit switch in SchemeTypeName —
+// these three are first-class Scheme values with predicates (record?,
+// box?, promise?) but the extension-API vocabulary does not currently
+// expose them as ValueType constants. Extending ValueType to cover
+// them is tracked alongside Finding 3 in
+// plans/2026-05-13-values-structural-reduction.md.
+//
+// The empty-list singleton (emptyListType) is resolved via IsEmptyList
+// in SchemeTypeName. Other Value-implementing types that are neither
+// in this map nor in the explicit switch (Thread, Channel, EOF, port
+// types, closures, etc.) fall through to fmt.Sprintf("%T", v) — a
+// pre-existing leak documented as Opportunity 1 of the same plan, to
+// be closed via a roster-completeness test in a follow-up.
 var goTypeToValueType map[reflect.Type]ValueType
 
 func init() {
@@ -298,8 +307,7 @@ func (p ValueType) Check(v Value) (any, bool, error) {
 //     a ValueType constant — one lookup, no per-type case.
 //  2. A small explicit switch covers types whose Scheme name has no
 //     ValueType counterpart (records, boxes, promises).
-//  3. Interface predicates cover the empty list and proper lists, which
-//     cross multiple concrete types via the Tuple interface.
+//  3. IsEmptyList catches the empty-list singleton.
 //
 // Unrecognized types fall through to fmt.Sprintf("%T", v) as a
 // debugging-grade name. Adding a new Value type with a ValueType
@@ -321,11 +329,8 @@ func SchemeTypeName(v Value) string {
 	case *Promise:
 		return "promise"
 	}
-	switch {
-	case IsEmptyList(v):
+	if IsEmptyList(v) {
 		return "empty-list"
-	case IsList(v):
-		return "list"
 	}
 	return fmt.Sprintf("%T", v)
 }
