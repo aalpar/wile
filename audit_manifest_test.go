@@ -409,11 +409,11 @@ func TestFormatManifest(t *testing.T) {
 			input: []manifestEntry{
 				{
 					Name: "vector-set!", ReturnType: "void",
-					ParamTypes: []string{"vector", "exact-integer", "any"},
+					ParamTypes: []string{"vector", "integer", "any"},
 					GoFunction: "pkg.PrimVectorSet", SourceFile: "f.go", SourceLine: 1,
 				},
 			},
-			expected: `(("vector-set!" "void" ("vector" "exact-integer" "any") "pkg.PrimVectorSet" "f.go:1"))` + "\n",
+			expected: `(("vector-set!" "void" ("vector" "integer" "any") "pkg.PrimVectorSet" "f.go:1"))` + "\n",
 		},
 		{
 			name: "variadic rest-slot prefix",
@@ -474,15 +474,15 @@ func TestFormatParamTypes(t *testing.T) {
 		},
 		{
 			name:       "non-variadic single slot",
-			types:      []values.TypeConstraint{values.TypeExactInteger},
+			types:      []values.TypeConstraint{values.TypeInteger},
 			isVariadic: false,
-			want:       []string{"exact-integer"},
+			want:       []string{"integer"},
 		},
 		{
 			name:       "non-variadic multiple slots",
-			types:      []values.TypeConstraint{values.TypeVector, values.TypeExactInteger, values.TypeAny},
+			types:      []values.TypeConstraint{values.TypeVector, values.TypeInteger, values.TypeAny},
 			isVariadic: false,
-			want:       []string{"vector", "exact-integer", "any"},
+			want:       []string{"vector", "integer", "any"},
 		},
 		{
 			name:       "variadic sole rest slot",
@@ -498,9 +498,9 @@ func TestFormatParamTypes(t *testing.T) {
 		},
 		{
 			name:       "nil slot rendered as empty string",
-			types:      []values.TypeConstraint{values.TypeExactInteger, nil},
+			types:      []values.TypeConstraint{values.TypeInteger, nil},
 			isVariadic: false,
-			want:       []string{"exact-integer", ""},
+			want:       []string{"integer", ""},
 		},
 		{
 			name:       "nil rest slot still gets prefix",

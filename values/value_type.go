@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/aalpar/wile/werr"
 )
@@ -57,8 +58,7 @@ const (
 	TypeComplex                            // ComplexNumber interface
 	TypeReal                               // RealNumber interface
 	TypeRational                           // *Rational
-	TypeInteger                            // *Integer | *BigInteger
-	TypeExactInteger                       // alias for TypeInteger
+	TypeInteger                            // *Integer | *BigInteger (all Wile integers are exact)
 	TypeFlonum                             // *Float | *BigFloat
 	TypeString                             // *String
 	TypeCharacter                          // *Character
@@ -90,7 +90,6 @@ var typeNames = [TypeCount]string{
 	TypeReal:              "real",
 	TypeRational:          "rational",
 	TypeInteger:           "integer",
-	TypeExactInteger:      "exact-integer",
 	TypeFlonum:            "flonum",
 	TypeString:            "string",
 	TypeCharacter:         "character",
@@ -134,7 +133,6 @@ var typeDescriptions = [TypeCount]string{
 	TypeReal:              "real number",
 	TypeRational:          "exact rational number",
 	TypeInteger:           "exact integer",
-	TypeExactInteger:      "exact integer",
 	TypeFlonum:            "inexact floating-point number",
 	TypeString:            "string",
 	TypeCharacter:         "character",
@@ -171,6 +169,34 @@ type checkFunc func(Value) (any, bool, error)
 // checks is populated in init() with a checker for each ValueType.
 var checks [TypeCount]checkFunc
 
+// goTypeToValueType maps each concrete Go runtime type to its
+// corresponding ValueType. Populated in init(). Used by SchemeTypeName
+// to translate a runtime value's Go type to its Scheme-facing name
+// without a hand-maintained switch. Acts as the Go-type → ValueType
+// bridge that lets a single authoritative table serve both directions
+// of translation.
+//
+// Multiple Go types can map to the same ValueType when they share a
+// Scheme identity — e.g., *Integer and *BigInteger both → TypeInteger
+// because Scheme exposes a single "integer" tower regardless of the
+// underlying machine representation.
+//
+// Types whose Scheme name has no ValueType counterpart (Record, Box,
+// Promise) are handled by a small explicit switch in SchemeTypeName —
+// these three are first-class Scheme values with predicates (record?,
+// box?, promise?) but the extension-API vocabulary does not currently
+// expose them as ValueType constants. Extending ValueType to cover
+// them is tracked alongside Finding 3 in
+// plans/2026-05-13-values-structural-reduction.md.
+//
+// The empty-list singleton (emptyListType) is resolved via IsEmptyList
+// in SchemeTypeName. Other Value-implementing types that are neither
+// in this map nor in the explicit switch (Thread, Channel, EOF, port
+// types, closures, etc.) fall through to fmt.Sprintf("%T", v) — a
+// pre-existing leak documented as Opportunity 1 of the same plan, to
+// be closed via a roster-completeness test in a follow-up.
+var goTypeToValueType map[reflect.Type]ValueType
+
 func init() {
 	checks[TypeAny] = func(v Value) (any, bool, error) {
 		return v, true, nil
@@ -183,9 +209,9 @@ func init() {
 			"expected void, got %s", SchemeTypeName(v))
 	}
 	checks[TypeBoolean] = makeCheck[*Boolean]("boolean")
-	checks[TypeNumber] = makeInterfaceCheck[Number]("number")
-	checks[TypeComplex] = makeInterfaceCheck[ComplexNumber]("complex")
-	checks[TypeReal] = makeInterfaceCheck[RealNumber]("real")
+	checks[TypeNumber] = makeCheck[Number]("number")
+	checks[TypeComplex] = makeCheck[ComplexNumber]("complex")
+	checks[TypeReal] = makeCheck[RealNumber]("real")
 	checks[TypeRational] = makeCheck[*Rational]("rational")
 	checks[TypeInteger] = func(v Value) (any, bool, error) {
 		switch t := v.(type) {
@@ -198,7 +224,6 @@ func init() {
 				"expected integer, got %s", SchemeTypeName(v))
 		}
 	}
-	checks[TypeExactInteger] = checks[TypeInteger]
 	checks[TypeFlonum] = func(v Value) (any, bool, error) {
 		switch t := v.(type) {
 		case *Float:
@@ -215,18 +240,18 @@ func init() {
 	checks[TypeSymbol] = makeCheck[*Symbol]("symbol")
 	checks[TypeByte] = makeCheck[*Byte]("byte")
 	checks[TypePair] = makeCheck[*Pair]("pair")
-	checks[TypeList] = makeInterfaceCheck[Tuple]("list")
+	checks[TypeList] = makeCheck[Tuple]("list")
 	checks[TypeVector] = makeCheck[*Vector]("vector")
 	checks[TypeByteVector] = makeCheck[*ByteVector]("bytevector")
 	checks[TypeHashtable] = makeCheck[*Hashtable]("hashtable")
-	checks[TypeProcedure] = makeInterfaceCheck[Callable]("procedure")
-	checks[TypePort] = makeInterfaceCheck[Port]("port")
-	checks[TypeInputPort] = makeInterfaceCheck[InputPort]("input-port")
-	checks[TypeOutputPort] = makeInterfaceCheck[OutputPort]("output-port")
-	checks[TypeTextualInputPort] = makeInterfaceCheck[TextualReader]("textual-input-port")
-	checks[TypeTextualOutputPort] = makeInterfaceCheck[TextualWriter]("textual-output-port")
-	checks[TypeBinaryInputPort] = makeInterfaceCheck[BinaryReader]("binary-input-port")
-	checks[TypeBinaryOutputPort] = makeInterfaceCheck[BinaryWriter]("binary-output-port")
+	checks[TypeProcedure] = makeCheck[Callable]("procedure")
+	checks[TypePort] = makeCheck[Port]("port")
+	checks[TypeInputPort] = makeCheck[InputPort]("input-port")
+	checks[TypeOutputPort] = makeCheck[OutputPort]("output-port")
+	checks[TypeTextualInputPort] = makeCheck[TextualReader]("textual-input-port")
+	checks[TypeTextualOutputPort] = makeCheck[TextualWriter]("textual-output-port")
+	checks[TypeBinaryInputPort] = makeCheck[BinaryReader]("binary-input-port")
+	checks[TypeBinaryOutputPort] = makeCheck[BinaryWriter]("binary-output-port")
 
 	// Verify all slots are populated — catches missing entries when new types are added.
 	for i := range TypeCount {
@@ -239,6 +264,28 @@ func init() {
 		if checks[i] == nil {
 			panic("values: missing Check function for ValueType " + typeNames[i])
 		}
+	}
+
+	// Build the Go-type → ValueType reverse map. Listed in the same order
+	// as the ValueType constants for greppability. Each pair declares
+	// "instances of this Go type render as this Scheme type name."
+	goTypeToValueType = map[reflect.Type]ValueType{
+		reflect.TypeFor[*Boolean]():    TypeBoolean,
+		reflect.TypeFor[*Rational]():   TypeRational,
+		reflect.TypeFor[*Integer]():    TypeInteger,
+		reflect.TypeFor[*BigInteger](): TypeInteger,
+		reflect.TypeFor[*Float]():      TypeFlonum,
+		reflect.TypeFor[*BigFloat]():   TypeFlonum,
+		reflect.TypeFor[*Complex]():    TypeComplex,
+		reflect.TypeFor[*BigComplex](): TypeComplex,
+		reflect.TypeFor[*String]():     TypeString,
+		reflect.TypeFor[*Character]():  TypeCharacter,
+		reflect.TypeFor[*Symbol]():     TypeSymbol,
+		reflect.TypeFor[*Byte]():       TypeByte,
+		reflect.TypeFor[*Pair]():       TypePair,
+		reflect.TypeFor[*Vector]():     TypeVector,
+		reflect.TypeFor[*ByteVector](): TypeByteVector,
+		reflect.TypeFor[*Hashtable]():  TypeHashtable,
 	}
 }
 
@@ -254,72 +301,45 @@ func (p ValueType) Check(v Value) (any, bool, error) {
 
 // SchemeTypeName returns the Scheme-facing type name for a value.
 // Used in error messages so users see "integer" instead of "*values.Integer".
+//
+// Resolution proceeds in three layers:
+//  1. The goTypeToValueType reverse map covers concrete types backed by
+//     a ValueType constant — one lookup, no per-type case.
+//  2. A small explicit switch covers types whose Scheme name has no
+//     ValueType counterpart (records, boxes, promises).
+//  3. IsEmptyList catches the empty-list singleton.
+//
+// Unrecognized types fall through to fmt.Sprintf("%T", v) as a
+// debugging-grade name. Adding a new Value type with a ValueType
+// constant means adding one row to goTypeToValueType, not editing this
+// function.
 func SchemeTypeName(v Value) string {
 	if v == nil || v.IsVoid() {
 		return "void"
 	}
+	vt, ok := goTypeToValueType[reflect.TypeOf(v)]
+	if ok {
+		return vt.String()
+	}
 	switch v.(type) {
-	case *Boolean:
-		return "boolean"
-	case *Integer, *BigInteger:
-		return "integer"
-	case *Rational:
-		return "rational"
-	case *Float, *BigFloat:
-		return "flonum"
-	case *Complex, *BigComplex:
-		return "complex"
-	case *String:
-		return "string"
-	case *Character:
-		return "character"
-	case *Symbol:
-		return "symbol"
-	case *Byte:
-		return "byte"
-	case *Pair:
-		return "pair"
-	case *Vector:
-		return "vector"
-	case *ByteVector:
-		return "bytevector"
-	case *Hashtable:
-		return "hashtable"
 	case *Record:
 		return "record"
 	case *Box:
 		return "box"
 	case *Promise:
 		return "promise"
-	default:
-		// Fall back to interface checks for port types and other interfaces.
-		switch {
-		case IsEmptyList(v):
-			return "empty-list"
-		case IsList(v):
-			return "list"
-		default:
-			return fmt.Sprintf("%T", v)
-		}
 	}
+	if IsEmptyList(v) {
+		return "empty-list"
+	}
+	return fmt.Sprintf("%T", v)
 }
 
-// makeCheck creates a checkFunc for a concrete pointer type T.
+// makeCheck creates a checkFunc for type T via a Go type assertion. T may be
+// either a concrete pointer type (e.g., *Boolean) or an interface type
+// (e.g., Number, Port) — the assertion semantics handle both uniformly.
+// typeName is the Scheme-facing name used in mismatch errors.
 func makeCheck[T any](typeName string) checkFunc {
-	return func(v Value) (any, bool, error) {
-		t, ok := v.(T)
-		if ok {
-			return t, true, nil
-		}
-		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"expected %s, got %s", typeName, SchemeTypeName(v))
-	}
-}
-
-// makeInterfaceCheck creates a checkFunc for an interface type T.
-// The implementation is identical to makeCheck — both use Go type assertions —
-// but keeping them separate documents the intent: concrete type vs interface.
-func makeInterfaceCheck[T any](typeName string) checkFunc {
 	return func(v Value) (any, bool, error) {
 		t, ok := v.(T)
 		if ok {

@@ -39,7 +39,6 @@ func TestValueType_String(t *testing.T) {
 		{name: "TypeReal", in: values.TypeReal, out: "real"},
 		{name: "TypeRational", in: values.TypeRational, out: "rational"},
 		{name: "TypeInteger", in: values.TypeInteger, out: "integer"},
-		{name: "TypeExactInteger", in: values.TypeExactInteger, out: "exact-integer"},
 		{name: "TypeFlonum", in: values.TypeFlonum, out: "flonum"},
 		{name: "TypeString", in: values.TypeString, out: "string"},
 		{name: "TypeCharacter", in: values.TypeCharacter, out: "character"},
@@ -90,7 +89,6 @@ func TestValueType_Description(t *testing.T) {
 		{name: "TypeAny", in: values.TypeAny, out: "any value"},
 		{name: "TypeBoolean", in: values.TypeBoolean, out: "boolean (#t or #f)"},
 		{name: "TypeInteger", in: values.TypeInteger, out: "exact integer"},
-		{name: "TypeExactInteger", in: values.TypeExactInteger, out: "exact integer"},
 		{name: "TypeList", in: values.TypeList, out: "proper list (pair or empty list)"},
 		{name: "TypeProcedure", in: values.TypeProcedure, out: "procedure"},
 		{name: "TypeByte", in: values.TypeByte, out: "exact integer in [0, 255]"},
@@ -176,10 +174,6 @@ func TestValueType_Check(t *testing.T) {
 		{name: "integer/integer", typ: values.TypeInteger, val: integer, match: true},
 		{name: "integer/bigint", typ: values.TypeInteger, val: bigInt, match: true},
 		{name: "integer/float", typ: values.TypeInteger, val: flt, match: false, wantErr: true},
-
-		// TypeExactInteger — alias for TypeInteger.
-		{name: "exact-integer/integer", typ: values.TypeExactInteger, val: integer, match: true},
-		{name: "exact-integer/bigint", typ: values.TypeExactInteger, val: bigInt, match: true},
 
 		// TypeFlonum — matches *Float and *BigFloat.
 		{name: "flonum/float", typ: values.TypeFlonum, val: flt, match: true},
@@ -393,4 +387,67 @@ func TestNewRecordTypeConstraintNilPanics(t *testing.T) {
 	qt.Assert(t, func() {
 		values.NewRecordTypeConstraint(nil)
 	}, qt.PanicMatches, `.*rtd must not be nil.*`)
+}
+
+// TestSchemeTypeName pins the Scheme-facing names produced for every
+// type that SchemeTypeName claims to handle. After the SR Phase 0
+// refactor, resolution flows through three layers: the
+// goTypeToValueType reverse map (concrete types with a ValueType),
+// an explicit switch (Record/Box/Promise — types named in Scheme
+// without a ValueType counterpart), and an interface fallback
+// (empty list, proper lists). A regression in any layer surfaces
+// here instead of through ugly "*values.SomeType" leakage in error
+// messages months later.
+func TestSchemeTypeName(t *testing.T) {
+	// Record fixtures for the explicit-switch layer.
+	pointRT := values.NewRecordType(values.NewSymbol("point"), []*values.Symbol{
+		values.NewSymbol("x"),
+	})
+	record := mustNewRecord(pointRT, []values.Value{values.NewInteger(1)})
+
+	tcs := []struct {
+		name string
+		val  values.Value
+		want string
+	}{
+		// Layer 0 — void/nil shortcut.
+		{name: "nil", val: nil, want: "void"},
+		{name: "void singleton", val: values.Void, want: "void"},
+
+		// Layer 1 — reverse-map lookups for concrete ValueType-backed types.
+		{name: "boolean true", val: values.TrueValue, want: "boolean"},
+		{name: "boolean false", val: values.FalseValue, want: "boolean"},
+		{name: "integer", val: values.NewInteger(42), want: "integer"},
+		{name: "big integer", val: values.NewBigIntegerFromInt64(100), want: "integer"},
+		{name: "rational", val: values.NewRational(1, 3), want: "rational"},
+		{name: "float", val: values.NewFloat(3.14), want: "flonum"},
+		{name: "big float", val: values.NewBigFloatFromFloat64(2.71), want: "flonum"},
+		{name: "complex", val: values.NewComplex(1 + 2i), want: "complex"},
+		{name: "big complex", val: values.NewBigComplexFromBigIntegers(
+			values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4)), want: "complex"},
+		{name: "string", val: values.NewString("hi"), want: "string"},
+		{name: "character", val: values.NewCharacter('x'), want: "character"},
+		{name: "symbol", val: values.NewSymbol("foo"), want: "symbol"},
+		{name: "byte", val: values.NewByte(7), want: "byte"},
+		{name: "pair", val: values.NewCons(values.NewInteger(1), values.EmptyList), want: "pair"},
+		{name: "vector", val: values.NewVector(), want: "vector"},
+		{name: "bytevector", val: values.NewByteVector(), want: "bytevector"},
+		{name: "hashtable", val: values.NewEmptyHashtable(), want: "hashtable"},
+
+		// Layer 2 — explicit switch for non-ValueType named types.
+		{name: "record", val: record, want: "record"},
+		{name: "box", val: values.NewBox(values.NewInteger(7)), want: "box"},
+		{name: "promise", val: values.NewForcedPromise(values.NewInteger(7)), want: "promise"},
+
+		// Layer 3 — IsEmptyList predicate catches the singleton before
+		// any interface fallback fires. (The IsList branch beneath it is
+		// unreachable today: every Tuple implementer either has a
+		// goTypeToValueType row — *Pair — or is the empty-list singleton.)
+		{name: "empty list singleton", val: values.EmptyList, want: "empty-list"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, values.SchemeTypeName(tc.val), qt.Equals, tc.want)
+		})
+	}
 }

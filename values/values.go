@@ -95,6 +95,14 @@ var EOFObject Value = eofType{}
 //  5. values/scheme_writer.go          — if it has internal structure that can be shared/circular
 //  6. machine/machine_context_apply.go  — if it is callable (implements Callable)
 //  7. machine/native_template.go       — if it can appear as a compile-time literal
+//  8. values/value_type.go             — if the type participates in the extension-API type
+//     vocabulary: add a ValueType constant + entries in
+//     typeNames, typeDescriptions, checks, AND a row in
+//     goTypeToValueType so SchemeTypeName renders a
+//     Scheme name instead of leaking the Go type via %T.
+//     Types named in Scheme but without a ValueType
+//     counterpart (Record, Box, Promise) instead get an
+//     arm in SchemeTypeName's explicit switch.
 //
 // For numeric types, see the more detailed guide in values/numeric_kind.go (12 items).
 type Value interface {

@@ -48,7 +48,7 @@ func addHashtables(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeList},
 		{Name: "hashtable-size", ParamCount: 1, Impl: PrimHashtableSize,
 			Doc: "Returns the number of key-value pairs in HT.\n\nExamples:\n  (hashtable-size (make-hashtable))  => 0", ParamNames: []string{"ht"}, Category: "hashtables",
-			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeExactInteger},
+			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeInteger},
 		{Name: "hashtable-copy", ParamCount: 1, Impl: PrimHashtableCopy,
 			Doc: "Returns a shallow copy of HT. Keys and values are shared with the original.\n\nExamples:\n  (let ((ht (make-hashtable))) (hashtable-set! ht 'a 1) (hashtable-size (hashtable-copy ht)))  => 1", ParamNames: []string{"ht"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeHashtable},

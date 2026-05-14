@@ -321,7 +321,7 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 		ParamNames: []string{"string", "k"},
 		Category:   "strings",
 		ParamCount: 2,
-		ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger},
+		ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger},
 		ReturnType: values.TypeCharacter,
 	}
 	formatPrimitiveDoc(&buf, "string-ref", info, true)
@@ -332,7 +332,7 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 		qt.Commentf("output: %s", output))
 	c.Assert(strings.Contains(output, "STRING : string"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
-	c.Assert(strings.Contains(output, "K : exact-integer"), qt.IsTrue,
+	c.Assert(strings.Contains(output, "K : integer"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
 	c.Assert(strings.Contains(output, "Returns: character"), qt.IsTrue,
 		qt.Commentf("output: %s", output))

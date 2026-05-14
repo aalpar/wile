@@ -27,27 +27,27 @@ func addStrings(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeCharacter}, ReturnType: values.TypeString},
 		{Name: "make-string", ParamCount: 2, IsVariadic: true, Impl: PrimMakeString,
 			Doc: "Returns a string of length K. If CHAR is given, each position is filled with CHAR; otherwise unspecified.\n\nExamples:\n  (make-string 3 #\\a)    => \"aaa\"", ParamNames: []string{"k", "char"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeString},
+			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeCharacter}, ReturnType: values.TypeString},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// String access
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-length", ParamCount: 1, Impl: PrimStringLength,
 			Doc: "Returns the number of characters in STRING.\n\nExamples:\n  (string-length \"hello\")  => 5\n  (string-length \"\")       => 0", ParamNames: []string{"string"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString}, ReturnType: values.TypeExactInteger},
+			ParamTypes: []values.TypeConstraint{values.TypeString}, ReturnType: values.TypeInteger},
 		{Name: "string-ref", ParamCount: 2, Impl: PrimStringRef,
 			Doc: "Returns the character at 0-based index K in STRING. Raises an error if K is out of range.\n\nExamples:\n  (string-ref \"hello\" 0)  => #\\h\n  (string-ref \"hello\" 4)  => #\\o", ParamNames: []string{"string", "k"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeCharacter},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger}, ReturnType: values.TypeCharacter},
 		{Name: "string-set!", ParamCount: 3, Impl: PrimStringSet,
 			Doc: "Stores CHAR at 0-based index K in STRING. STRING must be mutable.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-set! s 0 #\\H) s)  => \"Hello\"", ParamNames: []string{"string", "k", "char"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeVoid},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger, values.TypeCharacter}, ReturnType: values.TypeVoid},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// String conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string->list", ParamCount: 2, IsVariadic: true, Impl: PrimStringToList,
 			Doc: "Returns a list of the characters in STRING from START to end. START defaults to 0, end to string length.\n\nExamples:\n  (string->list \"abc\")  => (#\\a #\\b #\\c)", ParamNames: []string{"string", "start"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeList,
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger}, ReturnType: values.TypeList,
 			Keywords: []string{"split", "explode", "characters"}},
 		{Name: "list->string", ParamCount: 1, Impl: PrimListToString,
 			Doc: "Returns a string formed from LIST. All elements must be characters.\n\nExamples:\n  (list->string '(#\\a #\\b #\\c))  => \"abc\"", ParamNames: []string{"list"}, Category: "strings",
@@ -71,11 +71,11 @@ func addStrings(r *registry.Registry) error {
 			Keywords: []string{"concat", "concatenate", "join"}},
 		{Name: "substring", ParamCount: 3, Impl: PrimSubstring,
 			Doc: "Returns a newly allocated string containing characters of STRING from START (inclusive) to END (exclusive).\n\nExamples:\n  (substring \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start", "end"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger, values.TypeExactInteger}, ReturnType: values.TypeString,
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeString,
 			Keywords: []string{"slice", "substr", "extract", "range"}},
 		{Name: "string-copy", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopy,
 			Doc: "Returns a mutable copy of STRING from START to end. START defaults to 0, end to string length.\n\nExamples:\n  (string-copy \"hello\")      => \"hello\"\n  (string-copy \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeString,
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger}, ReturnType: values.TypeString,
 			Keywords: []string{"clone", "duplicate"}},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
