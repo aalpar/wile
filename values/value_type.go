@@ -180,9 +180,9 @@ func init() {
 			"expected void, got %s", SchemeTypeName(v))
 	}
 	checks[TypeBoolean] = makeCheck[*Boolean]("boolean")
-	checks[TypeNumber] = makeInterfaceCheck[Number]("number")
-	checks[TypeComplex] = makeInterfaceCheck[ComplexNumber]("complex")
-	checks[TypeReal] = makeInterfaceCheck[RealNumber]("real")
+	checks[TypeNumber] = makeCheck[Number]("number")
+	checks[TypeComplex] = makeCheck[ComplexNumber]("complex")
+	checks[TypeReal] = makeCheck[RealNumber]("real")
 	checks[TypeRational] = makeCheck[*Rational]("rational")
 	checks[TypeInteger] = func(v Value) (any, bool, error) {
 		switch t := v.(type) {
@@ -211,18 +211,18 @@ func init() {
 	checks[TypeSymbol] = makeCheck[*Symbol]("symbol")
 	checks[TypeByte] = makeCheck[*Byte]("byte")
 	checks[TypePair] = makeCheck[*Pair]("pair")
-	checks[TypeList] = makeInterfaceCheck[Tuple]("list")
+	checks[TypeList] = makeCheck[Tuple]("list")
 	checks[TypeVector] = makeCheck[*Vector]("vector")
 	checks[TypeByteVector] = makeCheck[*ByteVector]("bytevector")
 	checks[TypeHashtable] = makeCheck[*Hashtable]("hashtable")
-	checks[TypeProcedure] = makeInterfaceCheck[Callable]("procedure")
-	checks[TypePort] = makeInterfaceCheck[Port]("port")
-	checks[TypeInputPort] = makeInterfaceCheck[InputPort]("input-port")
-	checks[TypeOutputPort] = makeInterfaceCheck[OutputPort]("output-port")
-	checks[TypeTextualInputPort] = makeInterfaceCheck[TextualReader]("textual-input-port")
-	checks[TypeTextualOutputPort] = makeInterfaceCheck[TextualWriter]("textual-output-port")
-	checks[TypeBinaryInputPort] = makeInterfaceCheck[BinaryReader]("binary-input-port")
-	checks[TypeBinaryOutputPort] = makeInterfaceCheck[BinaryWriter]("binary-output-port")
+	checks[TypeProcedure] = makeCheck[Callable]("procedure")
+	checks[TypePort] = makeCheck[Port]("port")
+	checks[TypeInputPort] = makeCheck[InputPort]("input-port")
+	checks[TypeOutputPort] = makeCheck[OutputPort]("output-port")
+	checks[TypeTextualInputPort] = makeCheck[TextualReader]("textual-input-port")
+	checks[TypeTextualOutputPort] = makeCheck[TextualWriter]("textual-output-port")
+	checks[TypeBinaryInputPort] = makeCheck[BinaryReader]("binary-input-port")
+	checks[TypeBinaryOutputPort] = makeCheck[BinaryWriter]("binary-output-port")
 
 	// Verify all slots are populated — catches missing entries when new types are added.
 	for i := range TypeCount {
@@ -300,22 +300,11 @@ func SchemeTypeName(v Value) string {
 	}
 }
 
-// makeCheck creates a checkFunc for a concrete pointer type T.
+// makeCheck creates a checkFunc for type T via a Go type assertion. T may be
+// either a concrete pointer type (e.g., *Boolean) or an interface type
+// (e.g., Number, Port) — the assertion semantics handle both uniformly.
+// typeName is the Scheme-facing name used in mismatch errors.
 func makeCheck[T any](typeName string) checkFunc {
-	return func(v Value) (any, bool, error) {
-		t, ok := v.(T)
-		if ok {
-			return t, true, nil
-		}
-		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"expected %s, got %s", typeName, SchemeTypeName(v))
-	}
-}
-
-// makeInterfaceCheck creates a checkFunc for an interface type T.
-// The implementation is identical to makeCheck — both use Go type assertions —
-// but keeping them separate documents the intent: concrete type vs interface.
-func makeInterfaceCheck[T any](typeName string) checkFunc {
 	return func(v Value) (any, bool, error) {
 		t, ok := v.(T)
 		if ok {
