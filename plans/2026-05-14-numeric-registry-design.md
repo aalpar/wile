@@ -399,7 +399,8 @@ User accepted the recommended default for every question.
 |----|-----------------------------------------------------------|------------------------------------------------------------|
 | Qa | Cold-path only                                            | `promotionTable`/`promoter` stay in `promotion.go`. Registry has no `PromoteTo`. |
 | Qb | (implicit) Drop wile-goast scope                          | No cross-repo PR. ADDING guide loses external-repo item.   |
-| Qc | C1 — universal `ToFloat64` with documented precision loss | Every kind's spec has a non-nil `ToFloat64`; BigFloat/BigComplex documented as lossy at the field. |
+| Qc | ~~C1~~ → revisited as **Q-i** below; resolution superseded by Q-i=C3 | The original Q-c=C1 (universal `ToFloat64` with silent loss) was retracted after the PR #750 crosscheck. See Q-i. |
+| Qi (added 2026-05-14, post-crosscheck) | **C3** — registry's `ToFloat64` covers only the 5 reducible kinds (Integer, BigInteger, Float, BigFloat, Rational); BigComplex/Complex have nil `ToFloat64` slots. FFI keeps its 5-case switch. | Most conservative. Preserves today's "reject BigFloat/BigComplex at the FFI boundary" behavior; no silent precision loss introduced. The widened API (detect-and-error-precisely on loss) is the subject of follow-up plan `2026-05-14-numeric-loss-signals-design.md`. |
 | Qd | D1 — leave `Eqv` as a switch                              | Migration scope omits `registry/helpers/equality.go`. PR 2 covers `value_conv.go` + FFI only. |
 | Qe | E2 — three medium PRs                                     | Phasing locked in (see Phasing table above). |
 

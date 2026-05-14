@@ -14,7 +14,7 @@
 | PR | Scope                                                                                      | Bench gate | Est. delta   |
 |----|--------------------------------------------------------------------------------------------|------------|--------------|
 | 1  | New `values/numeric_registry.go`; 7 per-type `init()` registrations; migrate `Simplify`, `ExactnessOf`, `NumberToFloat64`, `NumberToComplex128` to read from registry | yes | +180 / −40   |
-| 2  | Migrate `registry/helpers/value_conv.go` (`ToFloat64`, `ToComplex128`, `ExtractReal`); migrate `ffi_arg_converters.go` float64 path | yes (FFI is borderline) | +20 / −70    |
+| 2  | Migrate `registry/helpers/value_conv.go` (`ToFloat64`, `ToComplex128`, `ExtractReal`) only. **FFI excluded** per Q-i=C3 — handled by the loss-signals follow-up plan. | yes (cold-path, light) | +15 / −55 |
 | 3  | Migrate `extensions/math/prim_conversion.go` + `prim_complex.go`; rewrite the `numeric_kind.go` ADDING-A-NEW-NUMERIC-TYPE guide | no (cold path only) | +30 / −180   |
 
 Cumulative net: ≈ **−60 LOC** + the 10-site update obligation
@@ -97,55 +97,59 @@ fallback helpers in `promotion.go`).
 - `make bench-gabriel` geomean within ≤ 0.5% of master.
 - All existing tests green; new completeness test green.
 
-## PR 2 — registry/helpers + FFI migration
+## PR 2 — registry/helpers migration (FFI excluded per Q-i=C3)
 
 ### Goal
 
-Migrate the cross-package cold-path duplicators. `Eqv` stays as a
-switch per Q-d.
+Migrate the cross-package cold-path duplicators in
+`registry/helpers/value_conv.go` for the 5 reducible kinds only.
+`Eqv` stays as a switch per Q-d. **FFI excluded** per Q-i=C3 —
+the FFI float64 path keeps its existing 5-case switch and
+existing rejection behavior for BigFloat/BigComplex inputs.
+Precision-loss detection at the FFI boundary is the subject of
+follow-up plan `2026-05-14-numeric-loss-signals-design.md`.
 
 ### Files modified
 
 | File                                 | Change                                                                                       |
 |--------------------------------------|----------------------------------------------------------------------------------------------|
-| `registry/helpers/value_conv.go`     | `ToFloat64`, `ToComplex128`, `ExtractReal` rewritten to read from registry. `ExtractReal` needs both `ToFloat64` *and* `Exactness` from the spec — straightforward composition. |
-| `ffi_arg_converters.go`              | Float64-target converter path (lines 76-96) rewritten to consult `values.Lookup(n.(*Number).Kind()).ToFloat64`. Int64-target path stays — it's exact-integer-only and doesn't fit the float64 lens. |
+| `registry/helpers/value_conv.go`     | `ToFloat64`, `ToComplex128`, `ExtractReal` rewritten to read from registry **for the 5 reducible kinds**. BigComplex continues to error with `ErrNotAReal` from `ExtractReal` (`ToComplex128` is universal — covers all 7). |
+| `ffi_arg_converters.go`              | **NO CHANGE** (per Q-i=C3). FFI float64 path stays as its current 5-case switch. Tightening to "accept-when-fits, error-when-lossy" is deferred to `2026-05-14-numeric-loss-signals-design.md` Phase 2. |
 | `registry/helpers/equality.go`       | **NO CHANGE** (per Q-d). Documented as a deliberate exception — referenced from the design doc. |
 
 ### Steps
 
-1. **`ToFloat64` migration** (`value_conv.go`). One-line lookup; the
-   error path stays (non-Number values still raise `ErrNotAReal`).
-2. **`ToComplex128` migration** (`value_conv.go`). Same shape.
+1. **`ToFloat64` migration** (`value_conv.go`). One-line lookup for
+   the 5 reducible kinds; BigFloat is now accepted (was rejected
+   today — minor widening, in the same direction as today's
+   `Integer/BigInteger/Float/Rational` coverage but adding
+   BigFloat); BigComplex/Complex continue to raise `ErrNotAReal`.
+2. **`ToComplex128` migration** (`value_conv.go`). All 7 kinds —
+   the spec's `ToComplex128` is universal. No behavior change.
 3. **`ExtractReal` migration** (`value_conv.go`). Two registry
-   reads: `ToFloat64` for the value, `Exactness` for the bool.
-4. **FFI float64 path** (`ffi_arg_converters.go`). The current code
-   accepts `*Integer`, `*BigInteger`, `*Float`, `*Rational` (4 of
-   7). With C1 the migrated code accepts all 7 — BigFloat and
-   BigComplex documented as lossy but accepted. This is a **subtle
-   behavior change**: previously a `*BigFloat` → `float64` FFI arg
-   would error with `fmtArgError(name, pos, "number", v)`; with C1
-   it succeeds (with precision loss). Test must cover this delta.
-5. **FFI test.** Add a table-driven case in `ffi_test.go`: register
-   a Go func taking `float64`; pass a `BigFloat` argument from
-   Scheme; assert it converts without error (C1 behavior).
-6. **Bench.** FFI is in the borderline category — run a smoke test
-   to ensure the registry lookup doesn't penalize the per-call
-   converter closure. The lookup is one indexed array access, so
-   no regression expected; verify.
-7. **Lint + ci.**
+   reads: `ToFloat64` for the value (5-kind), `Exactness` (or
+   `IsAlwaysExact` per Q-g) for the bool. BigComplex/Complex
+   continue to raise `ErrNotAReal` (real-extraction is real-only
+   by definition).
+4. **FFI** — **no change** this PR. The float64 path stays as the
+   current 5-case switch. Q-i=C3 chose to defer FFI tightening to
+   the loss-signals plan.
+5. **Bench.** Lookup is one indexed array access, no regression
+   expected on cold paths; verify.
+6. **Lint + ci.**
 
 ### Acceptance for PR 2
 
-- `value_conv.go` and `ffi_arg_converters.go` no longer hold
-  numeric-kind switches.
+- `value_conv.go` no longer holds numeric-kind switches for the
+  five reducible kinds.
+- `ffi_arg_converters.go` **unchanged**.
 - `equality.go` `Eqv` is unchanged (and documented as deliberate
   in a comment that points at the design doc).
-- FFI now accepts BigFloat/BigComplex for float64-target arguments
-  (documented behavior change).
-- All existing FFI tests pass; new table case for the C1 behavior
-  green.
-- No bench regression beyond noise on the FFI-heavy benchmarks.
+- No FFI behavior change in this PR. Loss-signal-aware FFI
+  tightening lives in `2026-05-14-numeric-loss-signals-design.md`
+  Phase 2.
+- All existing FFI tests pass; no new FFI tests required.
+- No bench regression beyond noise.
 
 ## PR 3 — extensions/math migration + ADDING guide rewrite
 
@@ -200,7 +204,7 @@ ADDING-A-NEW-NUMERIC-TYPE guide.
 | R1 | Hot-path regression despite "cold-only" rule                              | Bench-gate PR 1 and PR 2; investigate any > 1% regression; revert if needed. |
 | R2 | Init-order bug — consumer reads registry before all `init()` blocks run   | Lazy validation via `numericRegistryOnce`; consumers may call `ensureNumericRegistryValid` if needed. Same pattern as `ensurePromotionInit`. |
 | R3 | `BigComplex` exactness-per-instance edge case routes wrong                | Registry's `Exactness` field for BigComplex holds `Inexact` (dominant case); `ExactnessOf` delegates to `n.(*BigComplex).IsExact()` for the per-instance answer. Documented in the design doc and reinforced by `exactness_contagion_test.go`. |
-| R4 | FFI behavior change in PR 2 (BigFloat → float64 now succeeds with loss)   | New test case covers the change. R7RS doesn't prohibit it; matches the C1 design choice. If users complain, revert to C3-style switch. |
+| R4 | ~~FFI behavior change~~ — **resolved by Q-i=C3.** No FFI change in this plan; the loss-signals plan handles precision-loss detection as a separate, opt-in enhancement.   | n/a |
 | R5 | Cross-PR sequencing — PR 2 needs PR 1 merged; PR 3 needs PR 2 merged       | Open PRs sequentially; merge each before branching for the next. Branch from master post-merge each time. |
 | R6 | Spec field drift between code and design doc                               | Single source of truth: the spec struct definition in `numeric_registry.go`. Design doc references the code at PR-merge time. |
 
