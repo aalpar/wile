@@ -127,6 +127,27 @@ func (p *BigFloat) Kind() NumericKind {
 	return KindBigFloat
 }
 
+func bigFloatSimplifyDown(n Number) Number {
+	v := n.(*BigFloat)
+	if v.value.IsInt() {
+		bi, _ := v.value.Int(nil)
+		bigInt := &BigInteger{value: bi}
+		if bigInt.value.IsInt64() {
+			return NewInteger(bigInt.value.Int64())
+		}
+		return bigInt
+	}
+	return n
+}
+
+func bigFloatToFloat64(n Number) (float64, error) {
+	return n.(*BigFloat).Float64(), nil
+}
+
+func bigFloatToComplex128(n Number) complex128 {
+	return complex(n.(*BigFloat).Float64(), 0)
+}
+
 var bigFloatAdd [numKinds]func(*BigFloat, Number) Number
 var bigFloatSubtract [numKinds]func(*BigFloat, Number) Number
 var bigFloatLessThan [numKinds]func(*BigFloat, Number) bool
@@ -157,6 +178,14 @@ func init() {
 
 	bigFloatDivide = makeDivideDispatch(KindBigFloat, func(p *BigFloat, o Number) (Number, error) {
 		return p.Divide(o)
+	})
+
+	registerNumericSpec(KindBigFloat, NumericTypeSpec{
+		schemeName:    "real",
+		simplifyDown:  bigFloatSimplifyDown,
+		toFloat64:     bigFloatToFloat64,
+		toComplex128:  bigFloatToComplex128,
+		isAlwaysExact: false,
 	})
 }
 

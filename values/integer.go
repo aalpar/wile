@@ -162,6 +162,18 @@ func (p *Integer) Kind() NumericKind {
 	return KindInteger
 }
 
+func integerSimplifyDown(n Number) Number {
+	return n
+}
+
+func integerToFloat64(n Number) (float64, error) {
+	return float64(n.(*Integer).Value), nil
+}
+
+func integerToComplex128(n Number) complex128 {
+	return complex(float64(n.(*Integer).Value), 0)
+}
+
 var integerAdd [numKinds]func(*Integer, Number) Number
 var integerSubtract [numKinds]func(*Integer, Number) Number
 var integerLessThan [numKinds]func(*Integer, Number) bool
@@ -203,6 +215,14 @@ func init() {
 			return NewInteger(result.NumInt64()), nil
 		}
 		return result, nil
+	})
+
+	registerNumericSpec(KindInteger, NumericTypeSpec{
+		schemeName:    "integer",
+		simplifyDown:  integerSimplifyDown,
+		toFloat64:     integerToFloat64,
+		toComplex128:  integerToComplex128,
+		isAlwaysExact: true,
 	})
 }
 

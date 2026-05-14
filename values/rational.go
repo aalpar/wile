@@ -102,6 +102,26 @@ func (p *Rational) Kind() NumericKind {
 	return KindRational
 }
 
+func rationalSimplifyDown(n Number) Number {
+	v := n.(*Rational)
+	if v.IsInteger() {
+		bi := &BigInteger{value: new(big.Int).Set(v.Num())}
+		if bi.value.IsInt64() {
+			return NewInteger(bi.value.Int64())
+		}
+		return bi
+	}
+	return n
+}
+
+func rationalToFloat64(n Number) (float64, error) {
+	return n.(*Rational).Float64(), nil
+}
+
+func rationalToComplex128(n Number) complex128 {
+	return complex(n.(*Rational).Float64(), 0)
+}
+
 var rationalAdd [numKinds]func(*Rational, Number) Number
 var rationalSubtract [numKinds]func(*Rational, Number) Number
 var rationalLessThan [numKinds]func(*Rational, Number) bool
@@ -136,6 +156,14 @@ func init() {
 	rationalDivide = makeDivideDispatch(KindRational, func(p *Rational, o Number) (Number, error) {
 		result := new(big.Rat).Quo(p.value, o.(*Rational).value)
 		return &Rational{value: result}, nil
+	})
+
+	registerNumericSpec(KindRational, NumericTypeSpec{
+		schemeName:    "rational",
+		simplifyDown:  rationalSimplifyDown,
+		toFloat64:     rationalToFloat64,
+		toComplex128:  rationalToComplex128,
+		isAlwaysExact: true,
 	})
 }
 

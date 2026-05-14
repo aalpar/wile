@@ -66,6 +66,19 @@ func (p *Complex) Kind() NumericKind {
 	return KindComplex
 }
 
+func complexSimplifyDown(n Number) Number {
+	return n
+}
+
+func complexToFloat64(_ Number) (float64, error) {
+	return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
+		"complexToFloat64: complex number has no real-only float64 representation")
+}
+
+func complexToComplex128(n Number) complex128 {
+	return n.(*Complex).Value
+}
+
 var complexAdd [numKinds]func(*Complex, Number) Number
 var complexSubtract [numKinds]func(*Complex, Number) Number
 var complexLessThan [numKinds]func(*Complex, Number) bool
@@ -102,6 +115,14 @@ func init() {
 
 	complexDivide = makeDivideDispatch(KindComplex, func(p *Complex, o Number) (Number, error) {
 		return NewComplex(p.Value / o.(*Complex).Value), nil
+	})
+
+	registerNumericSpec(KindComplex, NumericTypeSpec{
+		schemeName:    "complex",
+		simplifyDown:  complexSimplifyDown,
+		toFloat64:     complexToFloat64,
+		toComplex128:  complexToComplex128,
+		isAlwaysExact: false,
 	})
 }
 

@@ -149,6 +149,20 @@ func (p *BigComplex) Kind() NumericKind {
 // Complex ordering is undefined in R7RS §6.2.6 — LessThan delegates to Compare,
 // which uses magnitude comparison as a total order for internal use (sorting, etc.)
 // but is NOT mathematical ordering. Compare is initialized below like all other types.
+func bigComplexSimplifyDown(n Number) Number {
+	return n
+}
+
+func bigComplexToFloat64(_ Number) (float64, error) {
+	return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
+		"bigComplexToFloat64: complex number has no real-only float64 representation")
+}
+
+func bigComplexToComplex128(n Number) complex128 {
+	v := n.(*BigComplex)
+	return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
+}
+
 var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
 var bigComplexSubtract [numKinds]func(*BigComplex, Number) Number
 var bigComplexCompare [numKinds]func(*BigComplex, Number) int
@@ -221,6 +235,14 @@ func init() {
 			return nil, err
 		}
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
+	})
+
+	registerNumericSpec(KindBigComplex, NumericTypeSpec{
+		schemeName:    "complex",
+		simplifyDown:  bigComplexSimplifyDown,
+		toFloat64:     bigComplexToFloat64,
+		toComplex128:  bigComplexToComplex128,
+		isAlwaysExact: false,
 	})
 }
 
