@@ -66,17 +66,12 @@ var knownValueTypes = []string{
 	"*values.RecordType",
 	"*values.Box",
 	"*values.Promise",
-	// Ports
-	"*values.CharacterInputPort",
-	"*values.CharacterOutputPort",
-	"*values.BinaryInputPort",
-	"*values.BinaryOutputPort",
-	"*values.StringInputPort",
-	"*values.StringOutputPort",
-	"*values.ByteVectorInputPort",
-	"*values.ByteVectorOutputPort",
-	"*values.ByteVectorBufferedOutputPort",
-	"*values.ByteVectorInputOutputPort",
+	// Ports — single concrete type after Phase 2 of values SR
+	// (port unification). Embedders that need to distinguish port
+	// flavors should call the PortKind() method or the
+	// capability-checking AsX() accessors on *PortObject, not type
+	// switch on Go types.
+	"*values.PortObject",
 	// Concurrency
 	"*values.Thread",
 	"*values.Mutex",

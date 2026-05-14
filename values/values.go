@@ -104,6 +104,12 @@ var EOFObject Value = eofType{}
 //     counterpart (Record, Box, Promise) instead get an
 //     arm in SchemeTypeName's explicit switch.
 //
+// If the new type has capability-conditional operations (e.g.,
+// optional read/write/seek surfaces), expose them via
+// AsXxx() (T, bool) methods following the *PortObject pattern
+// (values/port.go — AsReader, AsByteWriter, etc.). Document any new
+// slot invariants in a Validate() method that constructors call.
+//
 // For numeric types, see the more detailed guide in values/numeric_kind.go (12 items).
 type Value interface {
 	SchemeString() string
@@ -225,7 +231,11 @@ type SourceLocation interface {
 // Port hierarchy — I/O ports
 // ---------------------------------------------------------------------------
 
-// Port represents a Scheme I/O port.
+// Port represents a Scheme I/O port — the marker interface satisfied
+// by any port value. Concretely implemented by *PortObject (the sole
+// implementer; capability-conditional operations are reached via
+// As*() (T, bool) accessors on *PortObject rather than narrower
+// interfaces).
 //
 // R7RS §6.13: All port types support close and open-state queries.
 type Port interface {
@@ -234,60 +244,8 @@ type Port interface {
 	IsClosed() bool
 }
 
-// InputPort represents a Scheme input port.
-type InputPort interface {
-	Port
-	Read([]byte) (int, error)
-}
-
-// OutputPort represents a Scheme output port.
-type OutputPort interface {
-	Port
-	Write([]byte) (int, error)
-	Flush() error
-}
-
-// InputOutputPort represents a bidirectional Scheme port.
-type InputOutputPort interface {
-	InputPort
-	OutputPort
-}
-
-// TextualReader represents a textual input port capable of rune-level I/O.
-//
-// R7RS §6.13.2: Textual input ports support read-char, peek-char, read-line, etc.
-type TextualReader interface {
-	InputPort
-	ReadRune() (rune, int, error)
-	UnreadRune() error
-}
-
-// TextualWriter represents a textual output port capable of rune-level I/O.
-//
-// R7RS §6.13.3: Textual output ports support write-char, write-string, etc.
-type TextualWriter interface {
-	OutputPort
-	WriteRune(rune) (int, error)
-}
-
-// BinaryReader represents a binary input port capable of byte-level I/O.
-//
-// R7RS §6.13.2: Binary input ports support read-u8, peek-u8, read-bytevector, etc.
-type BinaryReader interface {
-	InputPort
-	ReadByte() (byte, error)
-	UnreadByte() error
-}
-
-// BinaryWriter represents a binary output port capable of byte-level I/O.
-//
-// R7RS §6.13.3: Binary output ports support write-u8, write-bytevector, etc.
-type BinaryWriter interface {
-	OutputPort
-	WriteByte(byte) error
-}
-
 // ByteVectorExtractor represents a port that can extract its accumulated bytes.
+// Returned by (*PortObject).AsByteVectorExtractor.
 type ByteVectorExtractor interface {
 	ReadByteVector() (*ByteVector, error)
 }

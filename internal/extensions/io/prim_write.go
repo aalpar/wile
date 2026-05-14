@@ -23,23 +23,37 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// writeAndFlush writes bs to the textual output port and flushes if
+// the port has a flusher slot. Used by write/display/newline/etc.
+func writeAndFlush(port *values.PortObject, bs []byte, errCtx string) error {
+	w, _ := port.AsWriter()
+	_, err := w.Write(bs)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%s: error writing to output port", errCtx)
+	}
+	flsh, ok := port.AsFlusher()
+	if !ok {
+		return nil
+	}
+	err = flsh.Flush()
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%s: error flushing output port", errCtx)
+	}
+	return nil
+}
+
 // PrimWrite implements the write primitive.
 // Writes a machine-readable representation of an object to the current output port or to the specified port.
 // R7RS §6.13.3: write uses datum labels to handle circular and shared structures.
 func PrimWrite(mc machine.CallContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalTextualOutputPort(mc, 1)
+	port, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
-	// Use cycle-aware writer to handle circular structures
-	_, err = writer.Write([]byte(values.WriteValueToString(obj)))
+	err = writeAndFlush(port, []byte(values.WriteValueToString(obj)), "write")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "error writing to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -52,18 +66,14 @@ func PrimWriteChar(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	writer, err := getOptionalTextualOutputPort(mc, 1)
+	port, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
 	buf := make([]byte, 0, utf8.UTFMax)
-	_, err = writer.Write(utf8.AppendRune(buf, ch.Value))
+	err = writeAndFlush(port, utf8.AppendRune(buf, ch.Value), "write-char")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "error writing character to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -74,18 +84,13 @@ func PrimWriteChar(mc machine.CallContext) error {
 // R7RS §6.13.3: display uses datum labels to handle circular and shared structures.
 func PrimDisplay(mc machine.CallContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalTextualOutputPort(mc, 1)
+	port, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
-	// Use cycle-aware writer to handle circular structures
-	_, err = writer.Write([]byte(values.DisplayValueToString(obj)))
+	err = writeAndFlush(port, []byte(values.DisplayValueToString(obj)), "display")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "error writing to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -94,17 +99,13 @@ func PrimDisplay(mc machine.CallContext) error {
 // PrimNewline implements the newline primitive.
 // Writes a newline character to the output port.
 func PrimNewline(mc machine.CallContext) error {
-	writer, err := getOptionalTextualOutputPort(mc, 0)
+	port, err := getOptionalTextualOutputPort(mc, 0)
 	if err != nil {
 		return err
 	}
-	_, err = writer.Write([]byte("\n"))
+	err = writeAndFlush(port, []byte("\n"), "newline")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "error writing newline to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -116,17 +117,13 @@ func PrimNewline(mc machine.CallContext) error {
 // (write-simple obj) or (write-simple obj port)
 func PrimWriteSimple(mc machine.CallContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalTextualOutputPort(mc, 1)
+	port, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
-	_, err = writer.Write([]byte(obj.SchemeString()))
+	err = writeAndFlush(port, []byte(obj.SchemeString()), "write-simple")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "write-simple: error writing to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "write-simple: error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -140,18 +137,13 @@ func PrimWriteSimple(mc machine.CallContext) error {
 // (write-shared obj) or (write-shared obj port)
 func PrimWriteShared(mc machine.CallContext) error {
 	obj := mc.Arg(0)
-	writer, err := getOptionalTextualOutputPort(mc, 1)
+	port, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
 		return err
 	}
-	// Use cycle-aware writer with datum labels for all shared structure
-	_, err = writer.Write([]byte(values.WriteSharedValueToString(obj)))
+	err = writeAndFlush(port, []byte(values.WriteSharedValueToString(obj)), "write-shared")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "write-shared: error writing to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "write-shared: error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -171,13 +163,19 @@ func PrimWriteString(mc machine.CallContext) error {
 	start := 0
 	end := length
 
-	writer, tuple, found, err := extractPort[values.OutputPort](
+	port, tuple, found, err := extractPort(
 		mc.Arg(1), "write-string", werr.ErrNotAnOutputPort)
 	if err != nil {
 		return err
 	}
 	if !found {
-		writer = resolveCurrentOutputPort(mc)
+		port = resolveCurrentOutputPort(mc)
+	} else {
+		_, ok := port.AsWriter()
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrNotAnOutputPort,
+				"write-string: not an output port")
+		}
 	}
 	if !tuple.IsEmptyList() {
 		start, end, err = helpers.ParseSubrange(tuple.Cdr(), length, "write-string")
@@ -186,13 +184,9 @@ func PrimWriteString(mc machine.CallContext) error {
 		}
 	}
 
-	_, err = writer.Write([]byte(string(runes[start:end])))
+	err = writeAndFlush(port, []byte(string(runes[start:end])), "write-string")
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "write-string: error writing to output port")
-	}
-	err = writer.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "write-string: error flushing output port")
+		return err
 	}
 	mc.SetValue(values.Void)
 	return nil
@@ -201,15 +195,29 @@ func PrimWriteString(mc machine.CallContext) error {
 // PrimFlushOutputPort implements the flush-output-port primitive.
 // R7RS §6.13.3: (flush-output-port [port])
 // Flushes any buffered output to the underlying output device.
+//
+// Ports without a real flusher slot (string output, bytevector
+// buffered output) have nothing to flush — but flush-output-port
+// must still reject closed ports per the general R7RS port-closed
+// guard. Explicit IsClosed check covers that path; ports with a
+// flusher slot get the same guard via the wrapper in
+// values/port_helpers.go.
 func PrimFlushOutputPort(mc machine.CallContext) error {
 	port, err := getOptionalOutputPort(mc, 0)
 	if err != nil {
 		return err
 	}
+	if port.IsClosed() {
+		return werr.WrapForeignErrorf(werr.ErrPortClosed,
+			"flush-output-port: port is closed")
+	}
 
-	err = port.Flush()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "flush-output-port: error flushing port")
+	flsh, ok := port.AsFlusher()
+	if ok {
+		err = flsh.Flush()
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "flush-output-port: error flushing port")
+		}
 	}
 
 	mc.SetValue(values.Void)

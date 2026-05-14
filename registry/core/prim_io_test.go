@@ -45,16 +45,18 @@ func TestCurrentInputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-input-port"))
 	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
-	_, ok := result.(*values.CharacterInputPort)
+	p, ok := result.(*values.PortObject)
 	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, p.PortKind(), qt.Equals, "character-input-port")
 }
 
 func TestCurrentOutputPort(t *testing.T) {
 	prog := values.List(values.NewSymbol("current-output-port"))
 	result, err := testhelpers.RunProgramAST(t, prog)
 	qt.Assert(t, err, qt.IsNil)
-	_, ok := result.(*values.CharacterOutputPort)
+	p, ok := result.(*values.PortObject)
 	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, p.PortKind(), qt.Equals, "character-output-port")
 }
 
 func TestDisplayWithBuffer(t *testing.T) {
