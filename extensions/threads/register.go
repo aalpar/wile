@@ -103,7 +103,7 @@ func addMutexes(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "mutex-state", ParamCount: 1, Impl: PrimMutexState,
-			Doc: "Returns the state of MUTEX: the symbol not-owned, not-abandoned, abandoned, or the owning thread.", ParamNames: []string{"mutex"}, Category: "mutexes",
+			Doc: "Returns the state of MUTEX: the symbol not-owned, abandoned, or the owning thread.", ParamNames: []string{"mutex"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "mutex-lock!", ParamCount: 2, IsVariadic: true, Impl: PrimMutexLock,
 			Doc: "Locks MUTEX, blocking until acquired. Optional TIMEOUT and owner (thread or #f for unowned).", ParamNames: []string{"mutex", "timeout"}, Category: "mutexes",

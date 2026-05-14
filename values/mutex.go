@@ -53,11 +53,11 @@ var (
 //	state == MutexAbandoned  ⇒ owner == nil
 type MutexState int
 
-// MutexState constants.
+// MutexState constants. See the invariant block above for state↔owner relations.
 const (
-	MutexUnlocked  MutexState = iota // Not locked; owner == nil
-	MutexLocked                      // Held; owner is the acquirer, or nil if acquired without owner
-	MutexAbandoned                   // Owner terminated while holding lock; owner == nil
+	MutexUnlocked  MutexState = iota // Not locked
+	MutexLocked                      // Held
+	MutexAbandoned                   // Owner terminated while holding lock
 )
 
 func (p MutexState) String() string {

@@ -379,7 +379,7 @@ func PrimMutexSpecificSet(mc machine.CallContext) error {
 
 // PrimMutexState returns the mutex's state
 // (mutex-state mutex) -> symbol or thread
-// Returns: 'not-owned, 'abandoned, 'not-abandoned, or the owner thread
+// Returns: 'not-owned, 'abandoned, or the owner thread
 func PrimMutexState(mc machine.CallContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-state")
 	if err != nil {
