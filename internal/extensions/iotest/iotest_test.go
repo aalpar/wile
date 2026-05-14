@@ -15,7 +15,6 @@
 package iotest_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -27,6 +26,20 @@ import (
 
 	qt "github.com/frankban/quicktest"
 )
+
+// readRune reads a rune from a fault-injecting port via the public
+// AsRuneReader accessor. The fault wrappers live in the rr slot, so
+// the accessor returns the failing reader transparently.
+func readRune(p *values.PortObject) (rune, int, error) {
+	rr, _ := p.AsRuneReader()
+	return rr.ReadRune()
+}
+
+// unreadRune unreads via the AsRuneUnreader accessor.
+func unreadRune(p *values.PortObject) error {
+	urr, _ := p.AsRuneUnreader()
+	return urr.UnreadRune()
+}
 
 // TestFailingTextualInputPort_UnreadFault verifies that UnreadRune returns
 // ErrIOTestFault when fault injection is enabled, while ReadRune still
@@ -44,12 +57,12 @@ func TestFailingTextualInputPort_UnreadFault(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			p := newFailingUnreadPort(tc.input)
+			p := iotest.NewFailingTextualInputPort(tc.input, true, -1)
 			for i := 0; i < tc.readsFirst; i++ {
-				_, _, err := p.ReadRune()
+				_, _, err := readRune(p)
 				c.Assert(err, qt.IsNil)
 			}
-			err := p.UnreadRune()
+			err := unreadRune(p)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, iotest.ErrIOTestFault), qt.IsTrue)
 		})
@@ -72,12 +85,12 @@ func TestFailingTextualInputPort_ReadAfterFault(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			p := newFailingReadAfterPort(tc.input, tc.n)
+			p := iotest.NewFailingTextualInputPort(tc.input, false, tc.n)
 			for i := 0; i < tc.n; i++ {
-				_, _, err := p.ReadRune()
+				_, _, err := readRune(p)
 				c.Assert(err, qt.IsNil)
 			}
-			_, _, err := p.ReadRune()
+			_, _, err := readRune(p)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, iotest.ErrIOTestFault), qt.IsTrue)
 		})
@@ -85,33 +98,19 @@ func TestFailingTextualInputPort_ReadAfterFault(t *testing.T) {
 }
 
 // TestFailingTextualInputPort_NoFault verifies that without fault injection
-// the wrapper is transparent.
+// the port is transparent.
 func TestFailingTextualInputPort_NoFault(t *testing.T) {
 	c := qt.New(t)
 
-	p := iotest.NewFailingTextualInputPort(
-		values.NewStringInputPortWithBuffer(bytes.NewBufferString("ab")),
-		false, -1)
-	r, _, err := p.ReadRune()
+	p := iotest.NewFailingTextualInputPort("ab", false, -1)
+	r, _, err := readRune(p)
 	c.Assert(err, qt.IsNil)
 	c.Assert(r, qt.Equals, 'a')
-	err = p.UnreadRune()
+	err = unreadRune(p)
 	c.Assert(err, qt.IsNil)
-	r, _, err = p.ReadRune()
+	r, _, err = readRune(p)
 	c.Assert(err, qt.IsNil)
 	c.Assert(r, qt.Equals, 'a')
-}
-
-func newFailingUnreadPort(s string) *iotest.FailingTextualInputPort {
-	return iotest.NewFailingTextualInputPort(
-		values.NewStringInputPortWithBuffer(bytes.NewBufferString(s)),
-		true, -1)
-}
-
-func newFailingReadAfterPort(s string, n int) *iotest.FailingTextualInputPort {
-	return iotest.NewFailingTextualInputPort(
-		values.NewStringInputPortWithBuffer(bytes.NewBufferString(s)),
-		false, n)
 }
 
 // TestExtensionPrimitives_Construct verifies that the Scheme-callable

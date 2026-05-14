@@ -16,16 +16,17 @@
 // classification of read errors per R7RS §6.11. It is intended to be
 // composed with the io extension via WithExtension in tests only.
 //
-// The shipped ports (StringInputPort, CharacterInputPort, ...) cannot be
-// driven into ReadRune/UnreadRune failure modes from Scheme — their
-// underlying bufio.Reader / bytes.Buffer implementations succeed
-// deterministically on the call sequences our primitives produce.
-// Without a fault-injection layer, the (read-error? e) classification
-// path through goErrorToSchemeException is unobservable from a test.
+// Post-port-unification (Phase 2) the wrapper composes by feeding
+// custom rune-reader and rune-unreader values into the
+// values.NewTextualInputPortWithReaders factory. The result is a
+// *values.PortObject — production code's type assertions accept it
+// unchanged. The fault injection lives in the rune-reader/unreader
+// implementations.
 package iotest
 
 import (
 	"bytes"
+	"io"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
@@ -34,71 +35,66 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// ErrIOTestFault is the synthetic error returned by FailingTextualInputPort
-// when fault injection triggers. Test-only; not part of the production
-// werr sentinel inventory.
+// ErrIOTestFault is the synthetic error returned by fault-injecting
+// readers/unreaders. Test-only; not part of the production werr
+// sentinel inventory.
 var ErrIOTestFault = werr.NewStaticError("iotest: injected I/O fault")
 
-var _ values.TextualReader = (*FailingTextualInputPort)(nil)
+// NewFailingTextualInputPort constructs a textual input port whose
+// rune reader and rune unreader can be configured to fail.
+//
+// failUnread: every UnreadRune call returns ErrIOTestFault.
+// failReadAfter >= 0: the (failReadAfter+1)th ReadRune returns
+// ErrIOTestFault. Use -1 to disable.
+//
+// Returns a *values.PortObject so that downstream code's type
+// assertions on *values.PortObject accept the result unchanged. Fault
+// behavior lives in the slot wrappers.
+func NewFailingTextualInputPort(s string, failUnread bool, failReadAfter int) *values.PortObject {
+	underlying := bytes.NewBufferString(s)
+	rr := &countingRuneReader{
+		inner:         underlying,
+		failReadAfter: failReadAfter,
+	}
+	var urr values.RuneUnreader
+	if failUnread {
+		urr = alwaysFailRuneUnreader{}
+	} else {
+		urr = underlying
+	}
+	return values.NewTextualInputPortWithReaders(underlying, rr, urr)
+}
 
-// FailingTextualInputPort wraps a *values.StringInputPort with configurable
-// ReadRune/UnreadRune failure modes for fault-injection testing.
+// countingRuneReader wraps an io.RuneReader and counts successful
+// reads, returning ErrIOTestFault once failReadAfter is reached.
 //
-// Modes are orthogonal:
-//   - failUnread: every UnreadRune call returns ErrIOTestFault.
-//   - failReadAfter >= 0: the (failReadAfter+1)th ReadRune returns
-//     ErrIOTestFault instead of consulting the wrapped port. Use -1 to
-//     disable.
-//
-// All other Value, Port, and TextualReader methods promote through the
-// embedded *StringInputPort.
-type FailingTextualInputPort struct {
-	*values.StringInputPort
-	failUnread      bool
+// Counts by `n > 0` rather than `err == nil`: io.RuneReader permits
+// (r, size>0, io.EOF) when the last rune is read at end of stream.
+type countingRuneReader struct {
+	inner           io.RuneReader
 	failReadAfter   int
 	successfulReads int
 }
 
-// NewFailingTextualInputPort wraps inner with fault-injection. failUnread
-// makes every UnreadRune call fail; failReadAfter >= 0 makes the (n+1)th
-// ReadRune fail (use -1 to disable).
-func NewFailingTextualInputPort(inner *values.StringInputPort, failUnread bool, failReadAfter int) *FailingTextualInputPort {
-	q := &FailingTextualInputPort{
-		StringInputPort: inner,
-		failUnread:      failUnread,
-		failReadAfter:   failReadAfter,
-	}
-	return q
-}
-
-// ReadRune returns ErrIOTestFault once the configured threshold is reached;
-// otherwise it delegates to the wrapped port and counts successful reads.
-//
-// Counts by `n > 0` rather than `err == nil`: io.RuneReader permits
-// (r, size>0, io.EOF) when the last rune is read at end of stream
-// (current bytes.Buffer backing doesn't, but bufio.Reader can — this
-// keeps the counter accurate if the backing changes).
-func (p *FailingTextualInputPort) ReadRune() (rune, int, error) {
-	if p.failReadAfter >= 0 && p.successfulReads >= p.failReadAfter {
+func (r *countingRuneReader) ReadRune() (rune, int, error) {
+	if r.failReadAfter >= 0 && r.successfulReads >= r.failReadAfter {
 		return 0, 0, werr.WrapForeignErrorf(ErrIOTestFault,
-			"FailingTextualInputPort: synthetic ReadRune failure after %d reads",
-			p.failReadAfter)
+			"countingRuneReader: synthetic ReadRune failure after %d reads",
+			r.failReadAfter)
 	}
-	r, n, err := p.StringInputPort.ReadRune()
+	rn, n, err := r.inner.ReadRune()
 	if n > 0 {
-		p.successfulReads++
+		r.successfulReads++
 	}
-	return r, n, err
+	return rn, n, err
 }
 
-// UnreadRune returns ErrIOTestFault when fault injection is enabled;
-// otherwise it delegates to the wrapped port.
-func (p *FailingTextualInputPort) UnreadRune() error {
-	if p.failUnread {
-		return werr.WrapForeignErrorf(ErrIOTestFault,
-			"FailingTextualInputPort: synthetic UnreadRune failure")
-	}
-	return p.StringInputPort.UnreadRune()
+// alwaysFailRuneUnreader returns ErrIOTestFault on every UnreadRune.
+type alwaysFailRuneUnreader struct{}
+
+func (alwaysFailRuneUnreader) UnreadRune() error {
+	return werr.WrapForeignErrorf(ErrIOTestFault,
+		"alwaysFailRuneUnreader: synthetic UnreadRune failure")
 }
 
 // Extension registers the fault-injection constructor primitives.
@@ -134,21 +130,18 @@ func addPrimitives(r *registry.Registry) error {
 	return nil
 }
 
-// PrimMakeFailingUnreadPort constructs a FailingTextualInputPort with
+// PrimMakeFailingUnreadPort constructs a *PortObject with
 // fault-on-UnreadRune.
 func PrimMakeFailingUnreadPort(mc machine.CallContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "make-failing-unread-port")
 	if err != nil {
 		return err
 	}
-	q := NewFailingTextualInputPort(
-		values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)),
-		true, -1)
-	mc.SetValue(q)
+	mc.SetValue(NewFailingTextualInputPort(s.Value, true, -1))
 	return nil
 }
 
-// PrimMakeFailingReadAfterPort constructs a FailingTextualInputPort whose
+// PrimMakeFailingReadAfterPort constructs a *PortObject whose
 // ReadRune fails after N successful reads.
 func PrimMakeFailingReadAfterPort(mc machine.CallContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "make-failing-read-after-port")
@@ -163,9 +156,6 @@ func PrimMakeFailingReadAfterPort(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"make-failing-read-after-port: n must be non-negative, got %d", n.Value)
 	}
-	q := NewFailingTextualInputPort(
-		values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)),
-		false, int(n.Value))
-	mc.SetValue(q)
+	mc.SetValue(NewFailingTextualInputPort(s.Value, false, int(n.Value)))
 	return nil
 }

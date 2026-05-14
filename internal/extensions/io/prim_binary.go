@@ -39,7 +39,8 @@ func PrimReadU8(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	b, err := p.ReadByte()
+	br, _ := p.AsByteReader()
+	b, err := br.ReadByte()
 	if errors.Is(err, io.EOF) {
 		mc.SetValue(values.EOFObject)
 		return nil
@@ -60,7 +61,8 @@ func PrimPeekU8(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	b, err := p.ReadByte()
+	br, _ := p.AsByteReader()
+	b, err := br.ReadByte()
 	if errors.Is(err, io.EOF) {
 		mc.SetValue(values.EOFObject)
 		return nil
@@ -68,8 +70,10 @@ func PrimPeekU8(mc machine.CallContext) error {
 	if err != nil {
 		return werr.WrapForeignReadErrorf(err, "peek-u8: error reading byte")
 	}
-	// Unread the byte so it can be read again
-	err = p.UnreadByte()
+	// Unread the byte so it can be read again. Every binary input port
+	// has a ByteUnreader slot — port_constructors.go pairs rb/urb.
+	urb, _ := p.AsByteUnreader()
+	err = urb.UnreadByte()
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "peek-u8: error unreading byte")
 	}
@@ -111,7 +115,8 @@ func PrimWriteU8(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	err = p.WriteByte(b)
+	bw, _ := p.AsByteWriter()
+	err = bw.WriteByte(b)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "write-u8: error writing byte")
 	}
@@ -151,7 +156,8 @@ func PrimReadBytevector(mc machine.CallContext) error {
 	// Read exactly k bytes using io.ReadFull to avoid short reads from buffered ports.
 	// R7RS §6.13.3: read-bytevector returns a bytevector of exactly k bytes if available.
 	buf := make([]byte, k.Value)
-	n, err := io.ReadFull(p, buf)
+	r, _ := p.AsReader()
+	n, err := io.ReadFull(r, buf)
 	switch {
 	case err == nil:
 		// Full read: proceed with buf as-is.
@@ -198,7 +204,8 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 	// Read exactly (end-start) bytes using io.ReadFull to avoid short reads from buffered ports.
 	// R7RS §6.13.3: read-bytevector! fills the range [start,end) if bytes are available.
 	buf := make([]byte, end-start)
-	n, err := io.ReadFull(p, buf)
+	r, _ := p.AsReader()
+	n, err := io.ReadFull(r, buf)
 	if err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
 			// Partial read at EOF: copy what we got and return the count.
@@ -243,7 +250,8 @@ func PrimWriteBytevector(mc machine.CallContext) error {
 	}
 
 	data := bv.AsBytes(start, end)
-	_, err = p.Write(data)
+	w, _ := p.AsWriter()
+	_, err = w.Write(data)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "write-bytevector: error writing to port")
 	}

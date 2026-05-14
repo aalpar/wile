@@ -246,12 +246,18 @@ func init() {
 	checks[TypeHashtable] = makeCheck[*Hashtable]("hashtable")
 	checks[TypeProcedure] = makeCheck[Callable]("procedure")
 	checks[TypePort] = makeCheck[Port]("port")
-	checks[TypeInputPort] = makeCheck[InputPort]("input-port")
-	checks[TypeOutputPort] = makeCheck[OutputPort]("output-port")
-	checks[TypeTextualInputPort] = makeCheck[TextualReader]("textual-input-port")
-	checks[TypeTextualOutputPort] = makeCheck[TextualWriter]("textual-output-port")
-	checks[TypeBinaryInputPort] = makeCheck[BinaryReader]("binary-input-port")
-	checks[TypeBinaryOutputPort] = makeCheck[BinaryWriter]("binary-output-port")
+	checks[TypeInputPort] = makePortCapCheck("input-port",
+		func(p *PortObject) bool { return p.rdr != nil })
+	checks[TypeOutputPort] = makePortCapCheck("output-port",
+		func(p *PortObject) bool { return p.wrt != nil })
+	checks[TypeTextualInputPort] = makePortCapCheck("textual-input-port",
+		func(p *PortObject) bool { return p.rr != nil })
+	checks[TypeTextualOutputPort] = makePortCapCheck("textual-output-port",
+		func(p *PortObject) bool { return p.wr != nil })
+	checks[TypeBinaryInputPort] = makePortCapCheck("binary-input-port",
+		func(p *PortObject) bool { return p.rb != nil })
+	checks[TypeBinaryOutputPort] = makePortCapCheck("binary-output-port",
+		func(p *PortObject) bool { return p.wb != nil })
 
 	// Verify all slots are populated — catches missing entries when new types are added.
 	for i := range TypeCount {
@@ -286,6 +292,14 @@ func init() {
 		reflect.TypeFor[*Vector]():     TypeVector,
 		reflect.TypeFor[*ByteVector](): TypeByteVector,
 		reflect.TypeFor[*Hashtable]():  TypeHashtable,
+		// *PortObject collapses 9 former concrete port types into one
+		// Go type. The reverse map is necessarily asymmetric: the
+		// narrow ValueTypes (TypeInputPort, TypeBinaryOutputPort, …)
+		// cannot be reverse-mapped from *PortObject alone, since
+		// *PortObject covers all of them. The narrow distinctions
+		// require capability-slot inspection (use *PortObject.PortKind
+		// or the narrow ValueType.Check predicates).
+		reflect.TypeFor[*PortObject](): TypePort,
 	}
 }
 
@@ -333,6 +347,22 @@ func SchemeTypeName(v Value) string {
 		return "empty-list"
 	}
 	return fmt.Sprintf("%T", v)
+}
+
+// makePortCapCheck creates a checkFunc that asserts v is a *PortObject
+// whose capability slot (selected by hasCap) is populated. Used to
+// build the narrow port ValueType predicates (TypeInputPort,
+// TypeBinaryInputPort, etc.) that previously satisfied a Go interface
+// but now inspect the slot directly.
+func makePortCapCheck(typeName string, hasCap func(*PortObject) bool) checkFunc {
+	return func(v Value) (any, bool, error) {
+		p, ok := v.(*PortObject)
+		if ok && hasCap(p) {
+			return p, true, nil
+		}
+		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"expected %s, got %s", typeName, SchemeTypeName(v))
+	}
 }
 
 // makeCheck creates a checkFunc for type T via a Go type assertion. T may be

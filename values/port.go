@@ -112,9 +112,13 @@ func (p *PortObject) PortKind() string {
 }
 
 // Close flushes (if a flusher is present) and closes the port. Close
-// is idempotent. Nil-safe: a nil receiver is a no-op returning nil.
+// is idempotent — subsequent calls are no-ops. Nil-safe: a nil
+// receiver returns nil.
 func (p *PortObject) Close() error {
 	if p == nil {
+		return nil
+	}
+	if p.portBase.IsClosed() {
 		return nil
 	}
 	if p.flsh != nil {

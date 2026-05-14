@@ -108,19 +108,49 @@ func ResetState() {
 	cacheMu.Unlock()
 }
 
+// currentTextualInputPort asserts v is a *PortObject with rune-read
+// capability. Wraps the result with a sentinel-bearing error
+// otherwise, so callers can match via errors.Is.
+func currentTextualInputPort(name string, v values.Value) (*values.PortObject, error) {
+	p, ok := v.(*values.PortObject)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAnInputPort,
+			"%s: value is %T, not a port", name, v)
+	}
+	_, hasRR := p.AsRuneReader()
+	if !hasRR {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotATextualPort,
+			"%s: port is not textual", name)
+	}
+	return p, nil
+}
+
+// currentTextualOutputPort asserts v is a *PortObject with rune-write
+// capability.
+func currentTextualOutputPort(name string, v values.Value) (*values.PortObject, error) {
+	p, ok := v.(*values.PortObject)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAnOutputPort,
+			"%s: value is %T, not a port", name, v)
+	}
+	_, hasRW := p.AsRuneWriter()
+	if !hasRW {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotATextualPort,
+			"%s: port is not textual", name)
+	}
+	return p, nil
+}
+
 // GetCurrentInputPort returns the base input port from the parameter.
 // This is a test convenience for save/restore; production code should use
 // resolveCurrentInputPort which checks continuation marks from parameterize.
-func GetCurrentInputPort() values.TextualReader {
+func GetCurrentInputPort() *values.PortObject {
 	InitState()
-	port, ok := currentInputPortParam.Value().(values.TextualReader)
-	if !ok {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrNotAnInputPort,
-			"current-input-port: value is %T, not an input port",
-			currentInputPortParam.Value()))
+	p, err := currentTextualInputPort("current-input-port", currentInputPortParam.Value())
+	if err != nil {
+		panic(err)
 	}
-	return port
+	return p
 }
 
 // GetCurrentInputPortParam returns the current-input-port parameter object.
@@ -129,7 +159,7 @@ func GetCurrentInputPortParam() *machine.Parameter {
 }
 
 // SetCurrentInputPort sets the current input port value. Used for testing.
-func SetCurrentInputPort(port values.TextualReader) {
+func SetCurrentInputPort(port *values.PortObject) {
 	InitState() // Ensure state is initialized
 	currentInputPortParam.SetValue(port)
 }
@@ -144,16 +174,13 @@ func ResetCurrentInputPort() {
 // GetCurrentOutputPort returns the base output port from the parameter.
 // This is a test convenience for save/restore; production code should use
 // resolveCurrentOutputPort which checks continuation marks from parameterize.
-func GetCurrentOutputPort() values.OutputPort {
+func GetCurrentOutputPort() *values.PortObject {
 	InitState()
-	port, ok := currentOutputPortParam.Value().(values.OutputPort)
-	if !ok {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrNotAnOutputPort,
-			"current-output-port: value is %T, not an output port",
-			currentOutputPortParam.Value()))
+	p, err := currentTextualOutputPort("current-output-port", currentOutputPortParam.Value())
+	if err != nil {
+		panic(err)
 	}
-	return port
+	return p
 }
 
 // GetCurrentOutputPortParam returns the current-output-port parameter object.
@@ -162,7 +189,7 @@ func GetCurrentOutputPortParam() *machine.Parameter {
 }
 
 // SetCurrentOutputPort sets the current output port value. Used for testing and parameterize.
-func SetCurrentOutputPort(port values.OutputPort) {
+func SetCurrentOutputPort(port *values.PortObject) {
 	InitState() // Ensure state is initialized
 	currentOutputPortParam.SetValue(port)
 }
@@ -179,40 +206,38 @@ func GetCurrentErrorPortParam() *machine.Parameter {
 	return currentErrorPortParam
 }
 
-// resolveCurrentOutputPort returns the effective current output port, checking
-// continuation marks (from parameterize) before falling back to the base value.
-// Panics with a wrapped error if the resolved value is not an OutputPort —
-// the panic is caught by OperationForeignFunctionCall's recover and converted
-// to a Scheme exception.
-func resolveCurrentOutputPort(cc machine.CallContext) values.OutputPort {
+// resolveCurrentOutputPort returns the effective current output port,
+// checking continuation marks (from parameterize) before falling back
+// to the base value. Panics with a wrapped error if the resolved value
+// is not a textual output port — the panic is caught by
+// OperationForeignFunctionCall's recover and converted to a Scheme
+// exception.
+func resolveCurrentOutputPort(cc machine.CallContext) *values.PortObject {
 	mc := cc.(*machine.MachineContext)
 	InitState()
 	v := mc.ResolveParameterValue(currentOutputPortParam)
-	port, ok := v.(values.OutputPort)
-	if !ok {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrNotAnOutputPort,
-			"current-output-port: parameterize value is %T, not an output port", v))
+	p, err := currentTextualOutputPort("current-output-port", v)
+	if err != nil {
+		panic(err)
 	}
-	return port
+	return p
 }
 
-// resolveCurrentInputPort returns the effective current input port, checking
-// continuation marks (from parameterize) before falling back to the base value.
-// Panics with a wrapped error if the resolved value is not a TextualReader —
-// the panic is caught by OperationForeignFunctionCall's recover and converted
-// to a Scheme exception.
-func resolveCurrentInputPort(cc machine.CallContext) values.TextualReader {
+// resolveCurrentInputPort returns the effective current input port,
+// checking continuation marks (from parameterize) before falling back
+// to the base value. Panics with a wrapped error if the resolved value
+// is not a textual input port — the panic is caught by
+// OperationForeignFunctionCall's recover and converted to a Scheme
+// exception.
+func resolveCurrentInputPort(cc machine.CallContext) *values.PortObject {
 	mc := cc.(*machine.MachineContext)
 	InitState()
 	v := mc.ResolveParameterValue(currentInputPortParam)
-	port, ok := v.(values.TextualReader)
-	if !ok {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrNotAnInputPort,
-			"current-input-port: parameterize value is %T, not an input port", v))
+	p, err := currentTextualInputPort("current-input-port", v)
+	if err != nil {
+		panic(err)
 	}
-	return port
+	return p
 }
 
 // StringValue returns the display representation of a value.

@@ -23,6 +23,7 @@ import (
 // Standard error values for type checking and runtime errors.
 var (
 	ErrNotABoolean      = NewTypeSentinel("boolean")
+	ErrNotAPort         = NewTypeSentinel("port")
 	ErrNotAnInputPort   = NewTypeSentinel("input port")
 	ErrNotAnOutputPort  = NewTypeSentinel("output port")
 	ErrNotABox          = NewTypeSentinel("box")

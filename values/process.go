@@ -27,9 +27,9 @@ var _ Value = (*Process)(nil)
 type Process struct {
 	cmd     *exec.Cmd
 	command string
-	stdin   *CharacterOutputPort
-	stdout  *CharacterInputPort
-	stderr  *CharacterInputPort
+	stdin   *PortObject
+	stdout  *PortObject
+	stderr  *PortObject
 }
 
 // NewProcess creates a Process value. The cmd may be nil for testing.
@@ -37,9 +37,9 @@ type Process struct {
 func NewProcess(
 	command string,
 	cmd *exec.Cmd,
-	stdin *CharacterOutputPort,
-	stdout *CharacterInputPort,
-	stderr *CharacterInputPort,
+	stdin *PortObject,
+	stdout *PortObject,
+	stderr *PortObject,
 ) *Process {
 	return &Process{
 		cmd:     cmd,
@@ -61,17 +61,17 @@ func (p *Process) Cmd() *exec.Cmd {
 }
 
 // Stdin returns the output port connected to the process stdin.
-func (p *Process) Stdin() *CharacterOutputPort {
+func (p *Process) Stdin() *PortObject {
 	return p.stdin
 }
 
 // Stdout returns the input port connected to the process stdout.
-func (p *Process) Stdout() *CharacterInputPort {
+func (p *Process) Stdout() *PortObject {
 	return p.stdout
 }
 
 // Stderr returns the input port connected to the process stderr.
-func (p *Process) Stderr() *CharacterInputPort {
+func (p *Process) Stderr() *PortObject {
 	return p.stderr
 }
 

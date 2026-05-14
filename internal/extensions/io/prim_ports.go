@@ -24,17 +24,29 @@ import (
 )
 
 // Port type predicates — R7RS §6.13.1.
+//
+// All ports are *values.PortObject after Phase 2; capability checks
+// inspect slot presence via the AsX accessors instead of asserting
+// against narrow Go interfaces.
 var PrimPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(values.Port)
 	return ok
 })
 var PrimInputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(values.InputPort)
-	return ok
+	p, ok := o.(*values.PortObject)
+	if !ok {
+		return false
+	}
+	_, hasReader := p.AsReader()
+	return hasReader
 })
 var PrimOutputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(values.OutputPort)
-	return ok
+	p, ok := o.(*values.PortObject)
+	if !ok {
+		return false
+	}
+	_, hasWriter := p.AsWriter()
+	return hasWriter
 })
 
 // PrimInputPortOpenQ implements the (input-port-open?) primitive.
@@ -42,9 +54,14 @@ var PrimOutputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing input.
 func PrimInputPortOpenQ(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[values.InputPort](mc, 0, werr.ErrNotAnInputPort, "input-port-open?")
+	p, err := helpers.RequireArg[*values.PortObject](mc, 0, werr.ErrNotAnInputPort, "input-port-open?")
 	if err != nil {
 		return err
+	}
+	_, ok := p.AsReader()
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAnInputPort,
+			"input-port-open?: not an input port")
 	}
 	mc.SetValue(values.BoolToBoolean(!p.IsClosed()))
 	return nil
@@ -55,9 +72,14 @@ func PrimInputPortOpenQ(mc machine.CallContext) error {
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing output.
 func PrimOutputPortOpenQ(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[values.OutputPort](mc, 0, werr.ErrNotAnOutputPort, "output-port-open?")
+	p, err := helpers.RequireArg[*values.PortObject](mc, 0, werr.ErrNotAnOutputPort, "output-port-open?")
 	if err != nil {
 		return err
+	}
+	_, ok := p.AsWriter()
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAnOutputPort,
+			"output-port-open?: not an output port")
 	}
 	mc.SetValue(values.BoolToBoolean(!p.IsClosed()))
 	return nil
@@ -82,14 +104,19 @@ func PrimClosePort(mc machine.CallContext) error {
 }
 
 // PrimCloseInputPort implements the (close-input-port) primitive.
-// Requires an input port; errors if given an output port.
+// Requires an input port; errors if given an output-only port.
 //
 // R7RS §6.13.1: close-input-port takes an input port.
 func PrimCloseInputPort(mc machine.CallContext) error {
 	o := mc.Arg(0)
-	_, ok := o.(values.InputPort)
+	p, ok := o.(*values.PortObject)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAnInputPort, "close-input-port: expected an input port but got %T", o)
+	}
+	_, hasReader := p.AsReader()
+	if !hasReader {
+		return werr.WrapForeignErrorf(werr.ErrNotAnInputPort,
+			"close-input-port: not an input port")
 	}
 	err := closePort(o)
 	if err != nil {
@@ -100,19 +127,27 @@ func PrimCloseInputPort(mc machine.CallContext) error {
 }
 
 // PrimCloseOutputPort implements the (close-output-port) primitive.
-// Requires an output port; errors if given an input port.
+// Requires an output port; errors if given an input-only port.
 // Flushes buffered data before closing.
 //
 // R7RS §6.13.1: close-output-port takes an output port.
 func PrimCloseOutputPort(mc machine.CallContext) error {
 	o := mc.Arg(0)
-	p, ok := o.(values.OutputPort)
+	p, ok := o.(*values.PortObject)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAnOutputPort, "close-output-port: expected an output port but got %T", o)
 	}
-	flushErr := p.Flush()
-	if flushErr != nil {
-		return werr.WrapForeignErrorf(flushErr, "close-output-port: flush failed")
+	_, hasWriter := p.AsWriter()
+	if !hasWriter {
+		return werr.WrapForeignErrorf(werr.ErrNotAnOutputPort,
+			"close-output-port: not an output port")
+	}
+	flsh, hasFlsh := p.AsFlusher()
+	if hasFlsh {
+		flushErr := flsh.Flush()
+		if flushErr != nil {
+			return werr.WrapForeignErrorf(flushErr, "close-output-port: flush failed")
+		}
 	}
 	err := closePort(o)
 	if err != nil {
@@ -154,13 +189,23 @@ func PrimOpenOutputString(mc machine.CallContext) error {
 }
 
 // PrimGetOutputString implements the Scheme get-output-string primitive.
+//
+// Two-step extraction: first verify the value is a *PortObject (any
+// port), then ask for string-extractor capability via StringContent.
+// This produces distinct errors for "not a port at all"
+// (ErrNotAPort) vs "wrong port flavor" (ErrNotAStringOutputPort).
 func PrimGetOutputString(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[*values.StringOutputPort](mc, 0, werr.ErrNotAStringOutputPort, "get-output-string")
+	p, err := helpers.RequireArg[*values.PortObject](mc, 0, werr.ErrNotAPort, "get-output-string")
 	if err != nil {
 		return err
 	}
+	s, ok := p.StringContent()
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAStringOutputPort,
+			"get-output-string: port is not a string output port")
+	}
 	// R7RS §6.13.3: get-output-string returns a newly allocated mutable string.
-	mc.SetValue(values.NewMutableString(p.String()))
+	mc.SetValue(values.NewMutableString(s))
 	return nil
 }
 
@@ -189,10 +234,21 @@ func PrimOpenOutputBytevector(mc machine.CallContext) error {
 }
 
 // PrimGetOutputBytevector implements the Scheme get-output-bytevector primitive.
+//
+// Two-step extraction symmetric to PrimGetOutputString: first verify
+// the value is a *PortObject (any port), then ask for the
+// bytevector-extractor capability via AsByteVectorExtractor. This
+// produces distinct errors for "not a port at all" vs "wrong port
+// flavor."
 func PrimGetOutputBytevector(mc machine.CallContext) error {
-	e, err := helpers.RequireArg[values.ByteVectorExtractor](mc, 0, werr.ErrNotABytevectorOutputPort, "get-output-bytevector")
+	p, err := helpers.RequireArg[*values.PortObject](mc, 0, werr.ErrNotAPort, "get-output-bytevector")
 	if err != nil {
 		return err
+	}
+	e, ok := p.AsByteVectorExtractor()
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotABytevectorOutputPort,
+			"get-output-bytevector: port is not a bytevector output port")
 	}
 	q, err := e.ReadByteVector()
 	if err != nil {
@@ -206,9 +262,14 @@ func PrimGetOutputBytevector(mc machine.CallContext) error {
 // R7RS §6.13.1: Returns #t if the port is a textual port, #f otherwise.
 func PrimTextualPortQ(mc machine.CallContext) error {
 	o := mc.Arg(0)
-	_, isReader := o.(values.TextualReader)
-	_, isWriter := o.(values.TextualWriter)
-	mc.SetValue(values.BoolToBoolean(isReader || isWriter))
+	p, ok := o.(*values.PortObject)
+	if !ok {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	_, hasRR := p.AsRuneReader()
+	_, hasRW := p.AsRuneWriter()
+	mc.SetValue(values.BoolToBoolean(hasRR || hasRW))
 	return nil
 }
 
@@ -216,9 +277,14 @@ func PrimTextualPortQ(mc machine.CallContext) error {
 // R7RS §6.13.1: Returns #t if the port is a binary port, #f otherwise.
 func PrimBinaryPortQ(mc machine.CallContext) error {
 	o := mc.Arg(0)
-	_, isReader := o.(values.BinaryReader)
-	_, isWriter := o.(values.BinaryWriter)
-	mc.SetValue(values.BoolToBoolean(isReader || isWriter))
+	p, ok := o.(*values.PortObject)
+	if !ok {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	_, hasBR := p.AsByteReader()
+	_, hasBW := p.AsByteWriter()
+	mc.SetValue(values.BoolToBoolean(hasBR || hasBW))
 	return nil
 }
 

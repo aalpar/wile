@@ -33,40 +33,41 @@ const (
 	MaxReadStringBytes = 100 * 1024 * 1024 // 100 MB
 )
 
-// extractPort extracts a port of type T from a rest-argument list.
-// Returns (port, tuple, true, nil) when a port is found in the list.
-// Returns (zero, tuple, false, nil) when the list is empty — the caller
-// resolves the default. Returns (zero, nil, false, error) on type mismatch
-// or malformed input. The expected-type phrase is read from the sentinel
-// via errSentinel.TypeName().
+// extractPort extracts a *PortObject from a rest-argument list.
+// Returns (port, tuple, true, nil) when a port is found.
+// Returns (nil, tuple, false, nil) when the list is empty — the caller
+// resolves the default. Returns (nil, nil, false, error) on type
+// mismatch or malformed input. The expected-type phrase is read from
+// the sentinel via errSentinel.TypeName().
 //
-// errSentinel MUST be constructed via werr.NewTypeSentinel (not
-// werr.NewStaticError) — otherwise TypeName() returns "" and the type
-// mismatch message degrades to "expected  but got *Foo". All current
-// callers use type sentinels (ErrNotAnInputPort, ErrNotAnOutputPort,
-// ErrNotAByteInputPort, ErrNotAByteOutputPort).
-func extractPort[T any](
+// errSentinel MUST be constructed via werr.NewTypeSentinel — otherwise
+// TypeName() returns "" and the type mismatch message degrades to
+// "expected  but got *Foo".
+//
+// This helper only validates the value is a *PortObject; per-caller
+// capability checks (input/output/textual/binary) happen at the call
+// site via AsReader/AsWriter/AsRuneReader/AsByteReader accessors.
+func extractPort(
 	o values.Value,
 	name string,
 	errSentinel *werr.StaticError,
-) (T, values.Tuple, bool, error) {
-	var zero T
+) (*values.PortObject, values.Tuple, bool, error) {
 	prefix := fmtPrefix(name)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
-		return zero, nil, false, werr.WrapForeignErrorf(
+		return nil, nil, false, werr.WrapForeignErrorf(
 			werr.ErrNotAList, "%sexpected a list but got %T", prefix, o)
 	}
 	if !tuple.IsList() {
-		return zero, nil, false, werr.WrapForeignErrorf(
+		return nil, nil, false, werr.WrapForeignErrorf(
 			werr.ErrNotAList, "%sexpected a list but got %s", prefix, tuple.SchemeString())
 	}
 	if tuple.IsEmptyList() {
-		return zero, tuple, false, nil
+		return nil, tuple, false, nil
 	}
-	p, ok := tuple.Car().(T)
+	p, ok := tuple.Car().(*values.PortObject)
 	if !ok {
-		return zero, nil, false, werr.WrapForeignErrorf(
+		return nil, nil, false, werr.WrapForeignErrorf(
 			errSentinel, "%sexpected %s but got %T", prefix, errSentinel.TypeName(), tuple.Car())
 	}
 	return p, tuple, true, nil
@@ -79,11 +80,12 @@ func fmtPrefix(name string) string {
 	return name + ": "
 }
 
-// getOptionalOutputPort extracts an optional output port from a variadic argument list.
-// If the list is empty, returns the current output port.
-// Otherwise, extracts and validates the port from the list's car.
-func getOptionalOutputPort(mc machine.CallContext, argIndex int) (values.OutputPort, error) {
-	p, _, found, err := extractPort[values.OutputPort](
+// getOptionalOutputPort extracts an optional output port from a
+// variadic argument list. If the list is empty, returns the current
+// output port. Otherwise, extracts and validates the port from the
+// list's car, plus asserts the port has writer capability.
+func getOptionalOutputPort(mc machine.CallContext, argIndex int) (*values.PortObject, error) {
+	p, _, found, err := extractPort(
 		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort)
 	if err != nil {
 		return nil, err
@@ -91,18 +93,24 @@ func getOptionalOutputPort(mc machine.CallContext, argIndex int) (values.OutputP
 	if !found {
 		return resolveCurrentOutputPort(mc), nil
 	}
+	_, ok := p.AsWriter()
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAnOutputPort,
+			"expected an output port, got %s", p.PortKind())
+	}
 	return p, nil
 }
 
-// getOptionalTextualOutputPort extracts an optional textual output port, rejecting
-// binary-only output ports. Use for textual operations (write, display, newline, etc.)
-// that must not accept binary ports. flush-output-port uses getOptionalOutputPort directly.
-func getOptionalTextualOutputPort(mc machine.CallContext, argIndex int) (values.OutputPort, error) {
+// getOptionalTextualOutputPort extracts an optional textual output port,
+// rejecting binary output ports. Used for textual operations (write,
+// display, newline, etc.) that must not accept binary ports.
+// flush-output-port uses getOptionalOutputPort directly.
+func getOptionalTextualOutputPort(mc machine.CallContext, argIndex int) (*values.PortObject, error) {
 	p, err := getOptionalOutputPort(mc, argIndex)
 	if err != nil {
 		return nil, err
 	}
-	_, isBinary := p.(values.BinaryWriter)
+	_, isBinary := p.AsByteWriter()
 	if isBinary {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotATextualPort,
 			"expected a textual output port, got binary port")
@@ -110,27 +118,41 @@ func getOptionalTextualOutputPort(mc machine.CallContext, argIndex int) (values.
 	return p, nil
 }
 
-// getOptionalInputPort extracts an optional input port from a variadic argument list.
-// If the list is empty, returns the current input port.
-// Otherwise, extracts and validates the port from the list's car.
-func getOptionalInputPort(mc machine.CallContext, argIndex int) (values.TextualReader, error) {
-	p, _, found, err := extractPort[values.TextualReader](
+// getOptionalInputPort extracts an optional textual input port from a
+// variadic argument list. If the list is empty, returns the current
+// input port. All current callers (read, read-char, peek-char,
+// read-line, read-string) require textual input, so the helper
+// validates rune-read capability and returns both the port (for cache
+// keying) and the resolved io.RuneReader (for the I/O call).
+//
+// runeReader is also a values.RuneUnreader (set on every textual
+// port — see port_constructors.go), so peek-char's UnreadRune call
+// goes via port.AsRuneUnreader() at the call site.
+func getOptionalInputPort(mc machine.CallContext, argIndex int) (*values.PortObject, io.RuneReader, error) {
+	p, _, found, err := extractPort(
 		mc.Arg(argIndex), "", werr.ErrNotAnInputPort)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !found {
-		return resolveCurrentInputPort(mc), nil
+		port := resolveCurrentInputPort(mc)
+		rr, _ := port.AsRuneReader()
+		return port, rr, nil
 	}
-	return p, nil
+	rr, hasRR := p.AsRuneReader()
+	if !hasRR {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotATextualPort,
+			"expected a textual input port, got %s", p.PortKind())
+	}
+	return p, rr, nil
 }
 
-// getRequiredBinaryInputPort extracts a required binary input port from a variadic argument list.
-// Returns an error if the list is empty (no default port for binary I/O).
-// Also returns the validated tuple for callers that need to extract further arguments.
-func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReader, values.Tuple, error) {
-	p, tuple, found, err := extractPort[values.BinaryReader](
-		o, name, werr.ErrNotAByteInputPort)
+// getRequiredBinaryInputPort extracts a required binary input port
+// from a variadic argument list. Returns an error if the list is empty
+// (no default port for binary I/O) or if the port lacks byte-read
+// capability.
+func getRequiredBinaryInputPort(o values.Value, name string) (*values.PortObject, values.Tuple, error) {
+	p, tuple, found, err := extractPort(o, name, werr.ErrNotAByteInputPort)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -138,21 +160,30 @@ func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReade
 		return nil, nil, werr.WrapForeignErrorf(
 			werr.ErrNotAByteInputPort, "%s: no binary input port specified", name)
 	}
+	_, ok := p.AsByteReader()
+	if !ok {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAByteInputPort,
+			"%s: port is not binary", name)
+	}
 	return p, tuple, nil
 }
 
-// getRequiredBinaryOutputPort extracts a required binary output port from a variadic argument list.
-// Returns an error if the list is empty (no default port for binary I/O).
-// Also returns the validated tuple for callers that need to extract further arguments.
-func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWriter, values.Tuple, error) {
-	p, tuple, found, err := extractPort[values.BinaryWriter](
-		o, name, werr.ErrNotAByteOutputPort)
+// getRequiredBinaryOutputPort extracts a required binary output port
+// from a variadic argument list. Returns an error if the list is empty
+// or if the port lacks byte-write capability.
+func getRequiredBinaryOutputPort(o values.Value, name string) (*values.PortObject, values.Tuple, error) {
+	p, tuple, found, err := extractPort(o, name, werr.ErrNotAByteOutputPort)
 	if err != nil {
 		return nil, nil, err
 	}
 	if !found {
 		return nil, nil, werr.WrapForeignErrorf(
 			werr.ErrNotAByteOutputPort, "%s: no binary output port specified", name)
+	}
+	_, ok := p.AsByteWriter()
+	if !ok {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAByteOutputPort,
+			"%s: port is not binary", name)
 	}
 	return p, tuple, nil
 }
@@ -162,7 +193,7 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWrit
 // Reads from the current input port if no port is specified.
 // R7RS §6.13.2: read uses datum labels to handle circular and shared structures.
 func PrimRead(mc machine.CallContext) error {
-	port, err := getOptionalInputPort(mc, 0)
+	port, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
@@ -171,7 +202,7 @@ func PrimRead(mc machine.CallContext) error {
 	cacheMu.Lock()
 	prss, ok := Parsers[port]
 	if !ok || prss == nil {
-		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
+		prss = parser.NewParser(mc.EnvironmentFrame(), true, rr)
 		Parsers[port] = prss
 	}
 	cacheMu.Unlock()
@@ -198,7 +229,7 @@ func PrimRead(mc machine.CallContext) error {
 // Reads a single token from port.
 // Reads from the current input port if no port is specified.
 func PrimReadToken(mc machine.CallContext) error {
-	port, err := getOptionalInputPort(mc, 0)
+	port, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
@@ -207,7 +238,7 @@ func PrimReadToken(mc machine.CallContext) error {
 	cacheMu.Lock()
 	tknz, ok := Tokenizers[port]
 	if !ok || tknz == nil {
-		tknz = tokenizer.NewTokenizer(port, false)
+		tknz = tokenizer.NewTokenizer(rr, false)
 		Tokenizers[port] = tknz
 	}
 	cacheMu.Unlock()
@@ -230,7 +261,7 @@ func PrimReadToken(mc machine.CallContext) error {
 // Reads datum with source information.
 // Reads from the current input port if no port is specified.
 func PrimReadSyntax(mc machine.CallContext) error {
-	port, err := getOptionalInputPort(mc, 0)
+	port, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
@@ -239,7 +270,7 @@ func PrimReadSyntax(mc machine.CallContext) error {
 	cacheMu.Lock()
 	prss, ok := Parsers[port]
 	if !ok || prss == nil {
-		prss = parser.NewParser(mc.EnvironmentFrame(), true, port)
+		prss = parser.NewParser(mc.EnvironmentFrame(), true, rr)
 		Parsers[port] = prss
 	}
 	cacheMu.Unlock()
@@ -262,12 +293,12 @@ func PrimReadSyntax(mc machine.CallContext) error {
 // R7RS §6.13.2: (read-char [port])
 // Reads and returns a single character from the input port.
 func PrimReadChar(mc machine.CallContext) error {
-	reader, err := getOptionalInputPort(mc, 0)
+	_, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
 
-	r, _, err := reader.ReadRune()
+	r, _, err := rr.ReadRune()
 	if errors.Is(err, io.EOF) {
 		mc.SetValue(values.EOFObject)
 		return nil
@@ -283,12 +314,12 @@ func PrimReadChar(mc machine.CallContext) error {
 // R7RS §6.13.2: (peek-char [port])
 // Reads and returns a single character from the input port without consuming it.
 func PrimPeekChar(mc machine.CallContext) error {
-	reader, err := getOptionalInputPort(mc, 0)
+	port, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
 
-	r, _, err := reader.ReadRune()
+	r, _, err := rr.ReadRune()
 	if errors.Is(err, io.EOF) {
 		mc.SetValue(values.EOFObject)
 		return nil
@@ -296,8 +327,11 @@ func PrimPeekChar(mc machine.CallContext) error {
 	if err != nil {
 		return werr.WrapForeignReadErrorf(err, "peek-char: error reading character")
 	}
-	// Unread the character so it can be read again
-	err = reader.UnreadRune()
+	// Unread the character so it can be read again. Every textual
+	// input port carries a RuneUnreader slot — port_constructors.go
+	// pairs the rdr/rr/urr slots together.
+	urr, _ := port.AsRuneUnreader()
+	err = urr.UnreadRune()
 	if err != nil {
 		return werr.WrapForeignReadErrorf(err, "peek-char: error unreading character")
 	}
@@ -309,14 +343,15 @@ func PrimPeekChar(mc machine.CallContext) error {
 // R7RS §6.13.2: (read-line [port])
 // Reads a line of text from the input port, not including the line ending.
 func PrimReadLine(mc machine.CallContext) error {
-	reader, err := getOptionalInputPort(mc, 0)
+	port, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
+	urr, _ := port.AsRuneUnreader()
 
 	var line []rune
 	for {
-		r, _, err := reader.ReadRune()
+		r, _, err := rr.ReadRune()
 		if errors.Is(err, io.EOF) {
 			if len(line) == 0 {
 				mc.SetValue(values.EOFObject)
@@ -337,12 +372,12 @@ func PrimReadLine(mc machine.CallContext) error {
 		// failure corrupts the read state and must be surfaced as a
 		// read-error per R7RS §6.11.
 		if r == '\r' {
-			nextR, _, err := reader.ReadRune()
+			nextR, _, err := rr.ReadRune()
 			if err != nil && !errors.Is(err, io.EOF) {
 				return werr.WrapForeignReadErrorf(err, "read-line: error reading after carriage return")
 			}
 			if err == nil && nextR != '\n' {
-				err = reader.UnreadRune()
+				err = urr.UnreadRune()
 				if err != nil {
 					return werr.WrapForeignReadErrorf(err, "read-line: error unreading character after carriage return")
 				}
@@ -395,7 +430,7 @@ func PrimReadString(mc machine.CallContext) error {
 		)
 	}
 
-	reader, err := getOptionalInputPort(mc, 1)
+	_, rr, err := getOptionalInputPort(mc, 1)
 	if err != nil {
 		return err
 	}
@@ -403,7 +438,7 @@ func PrimReadString(mc machine.CallContext) error {
 	// Read up to k characters
 	chars := make([]rune, 0, k.Value)
 	for i := int64(0); i < k.Value; i++ {
-		r, _, err := reader.ReadRune()
+		r, _, err := rr.ReadRune()
 		if errors.Is(err, io.EOF) {
 			break
 		}

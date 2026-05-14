@@ -44,7 +44,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 
 	// Create multiple ports that will be accessed concurrently
 	numPorts := 10
-	ports := make([]*values.StringInputPort, numPorts)
+	ports := make([]*values.PortObject, numPorts)
 	for i := range numPorts {
 		ports[i] = values.NewStringInputPortWithBuffer(bytes.NewBufferString("(+ 1 2) (+ 3 4)"))
 	}
@@ -63,10 +63,11 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				port := ports[portIdx%numPorts]
 
 				// Simulate PrimRead: get or create parser
+				rr, _ := port.AsRuneReader()
 				extio.ExportCacheMu.Lock()
 				prss, ok := (*extio.ExportParsers)[port]
 				if !ok || prss == nil {
-					prss = parser.NewParser(nil, true, port)
+					prss = parser.NewParser(nil, true, rr)
 					(*extio.ExportParsers)[port] = prss
 				}
 				extio.ExportCacheMu.Unlock()
@@ -81,8 +82,9 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 	t.Run("concurrent delete", func(t *testing.T) {
 		// Pre-populate maps
 		for _, port := range ports {
+			rr, _ := port.AsRuneReader()
 			extio.ExportCacheMu.Lock()
-			(*extio.ExportParsers)[port] = parser.NewParser(nil, true, port)
+			(*extio.ExportParsers)[port] = parser.NewParser(nil, true, rr)
 			extio.ExportCacheMu.Unlock()
 		}
 
@@ -117,8 +119,9 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 					extio.ExportCacheMu.Unlock()
 				case 1:
 					// Write operation
+					rr, _ := port.AsRuneReader()
 					extio.ExportCacheMu.Lock()
-					(*extio.ExportParsers)[port] = parser.NewParser(nil, true, port)
+					(*extio.ExportParsers)[port] = parser.NewParser(nil, true, rr)
 					extio.ExportCacheMu.Unlock()
 				case 2:
 					// Delete operation

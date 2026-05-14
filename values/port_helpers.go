@@ -132,6 +132,11 @@ func guardedFlush(b *portBase, f Flusher) error {
 
 // flushThenClose flushes buffered data then closes the port.
 // If both flush and close fail, both errors are preserved via errors.Join.
+//
+// Called from (*PortObject).Close on the raw underlying flusher (the
+// flush is done while the port is still open). Subsequent Close calls
+// short-circuit at the *PortObject level; this function does not need
+// idempotence of its own.
 func flushThenClose(f Flusher, b *portBase) error {
 	flushErr := f.Flush()
 	closeErr := b.Close()
@@ -139,4 +144,101 @@ func flushThenClose(f Flusher, b *portBase) error {
 		return errors.Join(closeErr, flushErr)
 	}
 	return flushErr
+}
+
+// Slot wrappers — each slot of *PortObject stores a small struct that
+// guards on portBase.closed before delegating to the raw underlying
+// stdlib type. Constructors allocate the wrappers once; accessors
+// return the slot directly. This preserves the R7RS port-closed
+// rejection semantics that the deleted concrete port types provided
+// via methods like (*BinaryInputPort).ReadByte.
+
+type guardedReader struct {
+	base *portBase
+	raw  io.Reader
+}
+
+func (g guardedReader) Read(b []byte) (int, error) {
+	return guardedRead(g.base, g.raw, b)
+}
+
+type guardedByteReader struct {
+	base *portBase
+	raw  io.ByteReader
+}
+
+func (g guardedByteReader) ReadByte() (byte, error) {
+	return guardedReadByte(g.base, g.raw)
+}
+
+type guardedRuneReader struct {
+	base *portBase
+	raw  io.RuneReader
+}
+
+func (g guardedRuneReader) ReadRune() (rune, int, error) {
+	return guardedReadRune(g.base, g.raw)
+}
+
+type guardedByteUnreader struct {
+	base *portBase
+	raw  ByteUnreader
+}
+
+func (g guardedByteUnreader) UnreadByte() error {
+	return guardedUnreadByte(g.base, g.raw)
+}
+
+type guardedRuneUnreader struct {
+	base *portBase
+	raw  RuneUnreader
+}
+
+func (g guardedRuneUnreader) UnreadRune() error {
+	return guardedUnreadRune(g.base, g.raw)
+}
+
+type guardedWriter struct {
+	base *portBase
+	raw  io.Writer
+}
+
+func (g guardedWriter) Write(b []byte) (int, error) {
+	return guardedWrite(g.base, g.raw, b)
+}
+
+type guardedByteWriter struct {
+	base *portBase
+	raw  io.ByteWriter
+}
+
+func (g guardedByteWriter) WriteByte(c byte) error {
+	return guardedWriteByte(g.base, g.raw, c)
+}
+
+type guardedRuneWriter struct {
+	base *portBase
+	raw  RuneWriter
+}
+
+func (g guardedRuneWriter) WriteRune(r rune) (int, error) {
+	return guardedWriteRune(g.base, g.raw, r)
+}
+
+type guardedStringWriter struct {
+	base *portBase
+	raw  io.StringWriter
+}
+
+func (g guardedStringWriter) WriteString(s string) (int, error) {
+	return guardedWriteString(g.base, g.raw, s)
+}
+
+type guardedFlusher struct {
+	base *portBase
+	raw  Flusher
+}
+
+func (g guardedFlusher) Flush() error {
+	return guardedFlush(g.base, g.raw)
 }
