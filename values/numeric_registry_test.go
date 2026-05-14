@@ -325,9 +325,9 @@ func equivalenceExemplars() []Number {
 		NewRational(7, 2), // non-integer — stays Rational
 		NewRational(1, 3), // not exactly representable in float64
 		// Complex corners
-		NewComplex(complex(3+0i, 0)),
-		NewComplex(complex(3.5+0i, 0)),
-		NewComplex(complex(3, 4)),
+		NewComplex(3 + 0i),
+		NewComplex(3.5 + 0i),
+		NewComplex(3 + 4i),
 		// BigComplex corners — exact and inexact mixes
 		NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(0)),
 		NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
