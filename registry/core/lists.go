@@ -27,7 +27,7 @@ func addLists(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "make-list", ParamCount: 2, IsVariadic: true, Impl: PrimMakeList,
 			Doc: "Returns a list of length K. If FILL is given, each element is FILL; otherwise elements are unspecified.\n\nExamples:\n  (make-list 3 0)    => (0 0 0)\n  (make-list 3 'a)   => (a a a)", ParamNames: []string{"k", "fill"}, Category: "lists",
-			ParamTypes: []values.TypeConstraint{values.TypeExactInteger, values.TypeAny}, ReturnType: values.TypeList},
+			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeAny}, ReturnType: values.TypeList},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// List operations
@@ -44,19 +44,19 @@ func addLists(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeList},
 		{Name: "length", ParamCount: 1, Impl: PrimLength,
 			Doc: "Returns the number of elements in LIST. Raises an error if the argument is not a proper list.\n\nExamples:\n  (length '(1 2 3))    => 3\n  (length '())         => 0", ParamNames: []string{"list"}, Category: "lists",
-			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeExactInteger},
+			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeInteger},
 		{Name: "list-ref", ParamCount: 2, Impl: PrimListRef,
 			Doc: "Returns the K-th element of LIST (0-based). Raises an error if K is out of range.\n\nExamples:\n  (list-ref '(a b c) 0)    => a\n  (list-ref '(a b c) 2)    => c", ParamNames: []string{"list", "k"}, Category: "lists",
-			ParamTypes: []values.TypeConstraint{values.TypeList, values.TypeExactInteger}, ReturnType: values.TypeAny,
+			ParamTypes: []values.TypeConstraint{values.TypeList, values.TypeInteger}, ReturnType: values.TypeAny,
 			Keywords: []string{"index", "nth", "get element"}},
 		{Name: "list-set!", ParamCount: 3, Impl: PrimListSet,
 			Doc: "Stores OBJ as the K-th element of LIST (0-based). The pair at position K must be mutable.\n\nExamples:\n  (let ((ls (list 'a 'b 'c))) (list-set! ls 1 'x) ls)  => (a x c)", ParamNames: []string{"list", "k", "obj"}, Category: "lists",
-			ParamTypes: []values.TypeConstraint{values.TypePair, values.TypeExactInteger, values.TypeAny}, ReturnType: values.TypeVoid},
+			ParamTypes: []values.TypeConstraint{values.TypePair, values.TypeInteger, values.TypeAny}, ReturnType: values.TypeVoid},
 		// list-tail may return any tail, including an improper-list cdr, so
 		// ReturnType is TypeAny rather than TypeList.
 		{Name: "list-tail", ParamCount: 2, Impl: PrimListTail,
 			Doc: "Returns the sublist obtained by dropping the first K elements of LIST. Equivalent to K applications of cdr.\n\nExamples:\n  (list-tail '(a b c d) 2)  => (c d)\n  (list-tail '(a b c) 0)    => (a b c)", ParamNames: []string{"list", "k"}, Category: "lists",
-			ParamTypes: []values.TypeConstraint{values.TypeList, values.TypeExactInteger}, ReturnType: values.TypeAny,
+			ParamTypes: []values.TypeConstraint{values.TypeList, values.TypeInteger}, ReturnType: values.TypeAny,
 			Keywords: []string{"drop", "skip", "nthcdr"}},
 		{Name: "list-copy", ParamCount: 1, Impl: PrimListCopy,
 			Doc: "Returns a shallow copy of LIST. The spine is copied but elements are shared with the original.\n\nExamples:\n  (list-copy '(1 2 3))  => (1 2 3)", ParamNames: []string{"list"}, Category: "lists",

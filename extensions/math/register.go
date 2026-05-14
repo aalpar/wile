@@ -163,7 +163,7 @@ func addPrimitives(r *registry.Registry) error {
 		// exact-integer-sqrt returns two values (s, r) — ReturnType left unset.
 		{Name: "exact-integer-sqrt", ParamCount: 1, Impl: PrimExactIntegerSqrt,
 			Doc: "Returns two values s and r such that N = s*s + r and s*s <= N < (s+1)*(s+1). N must be a non-negative exact integer.", ParamNames: []string{"n"}, Category: "math",
-			ParamTypes: []values.TypeConstraint{values.TypeExactInteger}},
+			ParamTypes: []values.TypeConstraint{values.TypeInteger}},
 	}, registry.PhaseSetRuntime)
 
 	// Complex

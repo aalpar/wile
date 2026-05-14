@@ -52,10 +52,10 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "current-jiffy", Impl: PrimCurrentJiffy,
 			Doc: "Returns the number of nanoseconds since program start, using the monotonic clock.", Category: "system",
 			Keywords:   []string{"monotonic time", "nanoseconds", "timer", "benchmark"},
-			ReturnType: values.TypeExactInteger},
+			ReturnType: values.TypeInteger},
 		{Name: "jiffies-per-second", Impl: PrimJiffiesPerSecond,
 			Doc: "Returns 1000000000, the number of jiffies (nanoseconds) per second.", Category: "system",
-			ReturnType: values.TypeExactInteger},
+			ReturnType: values.TypeInteger},
 	}, registry.PhaseSetRuntime)
 	return nil
 }

@@ -57,8 +57,7 @@ const (
 	TypeComplex                            // ComplexNumber interface
 	TypeReal                               // RealNumber interface
 	TypeRational                           // *Rational
-	TypeInteger                            // *Integer | *BigInteger
-	TypeExactInteger                       // alias for TypeInteger
+	TypeInteger                            // *Integer | *BigInteger (all Wile integers are exact)
 	TypeFlonum                             // *Float | *BigFloat
 	TypeString                             // *String
 	TypeCharacter                          // *Character
@@ -90,7 +89,6 @@ var typeNames = [TypeCount]string{
 	TypeReal:              "real",
 	TypeRational:          "rational",
 	TypeInteger:           "integer",
-	TypeExactInteger:      "exact-integer",
 	TypeFlonum:            "flonum",
 	TypeString:            "string",
 	TypeCharacter:         "character",
@@ -134,7 +132,6 @@ var typeDescriptions = [TypeCount]string{
 	TypeReal:              "real number",
 	TypeRational:          "exact rational number",
 	TypeInteger:           "exact integer",
-	TypeExactInteger:      "exact integer",
 	TypeFlonum:            "inexact floating-point number",
 	TypeString:            "string",
 	TypeCharacter:         "character",
@@ -198,7 +195,6 @@ func init() {
 				"expected integer, got %s", SchemeTypeName(v))
 		}
 	}
-	checks[TypeExactInteger] = checks[TypeInteger]
 	checks[TypeFlonum] = func(v Value) (any, bool, error) {
 		switch t := v.(type) {
 		case *Float:

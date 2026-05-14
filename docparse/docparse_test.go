@@ -40,7 +40,12 @@ func TestParseValueType(t *testing.T) {
 			expectedName: "list",
 		},
 		{
-			name:         "known type exact-integer",
+			// "exact-integer" used to be a known ValueType alias for
+			// TypeInteger. The alias was removed in the values/ Phase 0
+			// structural reduction; the name now flows through as an
+			// unresolved NamedTypeConstraint, preserving its appearance
+			// in docstrings without claiming a built-in type.
+			name:         "exact-integer no longer known, falls through",
 			input:        "exact-integer",
 			expectedName: "exact-integer",
 		},

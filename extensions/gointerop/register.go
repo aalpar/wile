@@ -72,11 +72,11 @@ func addChannels(r *registry.Registry) error {
 		{Name: "channel-length", ParamCount: 1, Impl: PrimChannelLength,
 			Doc: "Returns the number of elements currently buffered in CHANNEL.", ParamNames: []string{"channel"}, Category: "channels",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeExactInteger},
+			ReturnType: values.TypeInteger},
 		{Name: "channel-capacity", ParamCount: 1, Impl: PrimChannelCapacity,
 			Doc: "Returns the total buffer capacity of CHANNEL. 0 for unbuffered channels.", ParamNames: []string{"channel"}, Category: "channels",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeExactInteger},
+			ReturnType: values.TypeInteger},
 	}, registry.PhaseSetRuntime)
 	return nil
 }

@@ -140,10 +140,10 @@ func addMoreStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-copy!", ParamCount: 4, IsVariadic: true, Impl: PrimStringCopyTo,
 			Doc: "Copies characters from the from string into TO starting at position AT.\n\nExamples:\n  (let ((s (string-copy \"abcde\"))) (string-copy! s 1 \"xy\") s)  => \"axyde\"", ParamNames: []string{"to", "at", "from", "start"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger, values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeVoid},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger, values.TypeString, values.TypeInteger}, ReturnType: values.TypeVoid},
 		{Name: "string-fill!", ParamCount: 3, IsVariadic: true, Impl: PrimStringFill,
 			Doc: "Fills STRING positions from start to end with CHAR. Start defaults to 0, end to STRING length.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-fill! s #\\x) s)  => \"xxxxx\"", ParamNames: []string{"string", "fill", "start"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeCharacter, values.TypeExactInteger}, ReturnType: values.TypeVoid},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeCharacter, values.TypeInteger}, ReturnType: values.TypeVoid},
 		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,
 			Doc: "Returns a new string with all characters converted to uppercase using full Unicode case mapping.\n\nExamples:\n  (string-upcase \"hello\")  => \"HELLO\"\n  (string-upcase \"straße\") => \"STRASSE\"", ParamNames: []string{"string"}, Category: "strings",
 			Keywords:   []string{"uppercase", "toupper", "capitalize"},

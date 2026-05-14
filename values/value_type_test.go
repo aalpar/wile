@@ -39,7 +39,6 @@ func TestValueType_String(t *testing.T) {
 		{name: "TypeReal", in: values.TypeReal, out: "real"},
 		{name: "TypeRational", in: values.TypeRational, out: "rational"},
 		{name: "TypeInteger", in: values.TypeInteger, out: "integer"},
-		{name: "TypeExactInteger", in: values.TypeExactInteger, out: "exact-integer"},
 		{name: "TypeFlonum", in: values.TypeFlonum, out: "flonum"},
 		{name: "TypeString", in: values.TypeString, out: "string"},
 		{name: "TypeCharacter", in: values.TypeCharacter, out: "character"},
@@ -90,7 +89,6 @@ func TestValueType_Description(t *testing.T) {
 		{name: "TypeAny", in: values.TypeAny, out: "any value"},
 		{name: "TypeBoolean", in: values.TypeBoolean, out: "boolean (#t or #f)"},
 		{name: "TypeInteger", in: values.TypeInteger, out: "exact integer"},
-		{name: "TypeExactInteger", in: values.TypeExactInteger, out: "exact integer"},
 		{name: "TypeList", in: values.TypeList, out: "proper list (pair or empty list)"},
 		{name: "TypeProcedure", in: values.TypeProcedure, out: "procedure"},
 		{name: "TypeByte", in: values.TypeByte, out: "exact integer in [0, 255]"},
@@ -176,10 +174,6 @@ func TestValueType_Check(t *testing.T) {
 		{name: "integer/integer", typ: values.TypeInteger, val: integer, match: true},
 		{name: "integer/bigint", typ: values.TypeInteger, val: bigInt, match: true},
 		{name: "integer/float", typ: values.TypeInteger, val: flt, match: false, wantErr: true},
-
-		// TypeExactInteger — alias for TypeInteger.
-		{name: "exact-integer/integer", typ: values.TypeExactInteger, val: integer, match: true},
-		{name: "exact-integer/bigint", typ: values.TypeExactInteger, val: bigInt, match: true},
 
 		// TypeFlonum — matches *Float and *BigFloat.
 		{name: "flonum/float", typ: values.TypeFlonum, val: flt, match: true},

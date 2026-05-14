@@ -55,7 +55,7 @@ func addPrimitives(r *registry.Registry) error {
 			ReturnType: values.TypeAny},
 		{Name: "current-load-depth", Impl: PrimCurrentLoadDepth,
 			Doc: "Returns the current nesting depth of load calls as an exact integer.\n\nExamples:\n  (current-load-depth)  ; at top level => 0", Category: "eval",
-			ReturnType: values.TypeExactInteger},
+			ReturnType: values.TypeInteger},
 		// Environment constructors return a SchemeEnvironment (no dedicated
 		// ValueType enum) — TypeAny.
 		{Name: "scheme-report-environment", ParamCount: 1, Impl: PrimSchemeReportEnvironment,
