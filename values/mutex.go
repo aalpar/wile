@@ -38,25 +38,34 @@ var (
 	mutexIDCounter atomic.Uint64
 )
 
-// MutexState represents the state of a mutex
+// MutexState represents the lifecycle state of a mutex.
+//
+// The owned-vs-not-owned distinction (R7RS SRFI-18) is NOT a state — it's
+// the contents of the owner field. Splitting "locked with owner" and
+// "locked without owner" into separate states would force every site that
+// reads state to also know which states permit owner != nil. Instead,
+// MutexLocked is one state; owner = nil iff acquired without owner.
+//
+// Invariants enforced by Lock/Unlock/MarkAbandoned:
+//
+//	state == MutexUnlocked   ⇒ owner == nil
+//	state == MutexLocked     — owner is the identity (nil ⇒ "not-owned")
+//	state == MutexAbandoned  ⇒ owner == nil
 type MutexState int
 
-// MutexState constants.
+// MutexState constants. See the invariant block above for state↔owner relations.
 const (
-	MutexUnlocked       MutexState = iota // Not locked
-	MutexLockedOwned                      // Locked with owner
-	MutexLockedNotOwned                   // Locked without owner
-	MutexAbandoned                        // Owner terminated while holding lock
+	MutexUnlocked  MutexState = iota // Not locked
+	MutexLocked                      // Held
+	MutexAbandoned                   // Owner terminated while holding lock
 )
 
 func (p MutexState) String() string {
 	switch p {
 	case MutexUnlocked:
-		return "not-owned"
-	case MutexLockedOwned:
-		return "owned"
-	case MutexLockedNotOwned:
-		return "not-owned"
+		return "unlocked"
+	case MutexLocked:
+		return "locked"
 	case MutexAbandoned:
 		return "abandoned"
 	default:
@@ -122,11 +131,16 @@ func (p *Mutex) State() MutexState {
 	return p.state
 }
 
-// StateValue returns the state as a Scheme value.
+// StateValue returns the state as a Scheme value per R7RS SRFI-18.
 // Returns package-level singletons for symbol states so that repeated calls
 // return the same pointer: (eq? (mutex-state m) (mutex-state m)) → #t.
 // See the doc comment on SymbolThreadNew in thread.go for eq? vs equal? caveats.
 // Returns: 'not-owned, 'abandoned, or the owner thread.
+//
+// SRFI-18 collapses "unlocked" and "locked without owner" into the single
+// 'not-owned symbol — they are indistinguishable to Scheme. The Go-side
+// distinction is preserved by MutexState (Unlocked is acquirable without
+// blocking; Locked-without-owner is held by a non-thread caller).
 func (p *Mutex) StateValue() Value {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -134,12 +148,10 @@ func (p *Mutex) StateValue() Value {
 	switch p.state {
 	case MutexUnlocked:
 		return SymbolMutexNotOwned
-	case MutexLockedOwned:
+	case MutexLocked:
 		if p.owner != nil {
 			return p.owner
 		}
-		return SymbolMutexNotOwned
-	case MutexLockedNotOwned:
 		return SymbolMutexNotOwned
 	case MutexAbandoned:
 		return SymbolMutexAbandoned
@@ -155,87 +167,68 @@ func (p *Mutex) Owner() *Thread {
 	return p.owner
 }
 
-// Lock acquires the mutex with optional timeout and owner
-// Returns true if acquired, false if timeout
+// Lock acquires the mutex with optional timeout and owner.
+// Returns true if acquired, false if timeout.
+//
+// When acquired, state becomes MutexLocked and owner is set to whatever
+// the caller supplied (nil produces a "locked-but-unowned" mutex, valid
+// per SRFI-18). Acquiring an abandoned mutex succeeds but returns
+// *AbandonedMutexException so the caller can observe the prior owner's
+// termination.
 func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Check for abandoned state
+	// Fast paths: abandoned ⇒ acquire with notification; unlocked ⇒ acquire.
 	if p.state == MutexAbandoned {
-		// Clear abandoned state and acquire
-		p.state = MutexLockedOwned
+		p.state = MutexLocked
 		p.owner = owner
 		return true, &AbandonedMutexException{Mutex: p}
 	}
-
-	// If already unlocked, acquire immediately
 	if p.state == MutexUnlocked {
-		if owner != nil {
-			p.state = MutexLockedOwned
-			p.owner = owner
-		} else {
-			p.state = MutexLockedNotOwned
-		}
+		p.state = MutexLocked
+		p.owner = owner
 		return true, nil
 	}
 
-	// Need to wait
+	// Slow path: wait for the lock to free, with or without deadline.
 	if timeout == nil {
-		// Wait indefinitely
 		for p.state != MutexUnlocked && p.state != MutexAbandoned {
 			p.cond.Wait()
 		}
-		if p.state == MutexAbandoned {
-			p.state = MutexLockedOwned
-			p.owner = owner
-			return true, &AbandonedMutexException{Mutex: p}
-		}
-		if owner != nil {
-			p.state = MutexLockedOwned
-			p.owner = owner
-		} else {
-			p.state = MutexLockedNotOwned
-		}
-		return true, nil
-	}
-
-	// Wait with timeout
-	deadline := time.Now().Add(*timeout)
-	for p.state != MutexUnlocked && p.state != MutexAbandoned {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return false, nil // timeout
-		}
-
-		// Use a goroutine to implement timeout since sync.Cond doesn't support it natively
-		done := make(chan struct{})
-		go func() {
-			select {
-			case <-time.After(remaining):
-				p.cond.Broadcast() // Wake up to check timeout
-			case <-done:
-			}
-		}()
-		p.cond.Wait()
-		close(done)
-
-		if time.Now().After(deadline) {
-			return false, nil // timeout
-		}
-	}
-
-	if p.state == MutexAbandoned {
-		p.state = MutexLockedOwned
-		p.owner = owner
-		return true, &AbandonedMutexException{Mutex: p}
-	}
-
-	if owner != nil {
-		p.state = MutexLockedOwned
-		p.owner = owner
 	} else {
-		p.state = MutexLockedNotOwned
+		deadline := time.Now().Add(*timeout)
+		for p.state != MutexUnlocked && p.state != MutexAbandoned {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				return false, nil // timeout
+			}
+
+			// sync.Cond doesn't support deadlines natively, so we
+			// arrange a wakeup via Broadcast from a side goroutine.
+			done := make(chan struct{})
+			go func() {
+				select {
+				case <-time.After(remaining):
+					p.cond.Broadcast()
+				case <-done:
+				}
+			}()
+			p.cond.Wait()
+			close(done)
+
+			if time.Now().After(deadline) {
+				return false, nil // timeout
+			}
+		}
+	}
+
+	// Wait loop exited: state is MutexUnlocked or MutexAbandoned.
+	abandoned := p.state == MutexAbandoned
+	p.state = MutexLocked
+	p.owner = owner
+	if abandoned {
+		return true, &AbandonedMutexException{Mutex: p}
 	}
 	return true, nil
 }
@@ -260,12 +253,14 @@ func (p *Mutex) Unlock(cv *ConditionVariable, timeout *time.Duration) bool {
 	return cv.Wait(p, timeout)
 }
 
-// MarkAbandoned marks the mutex as abandoned (called when owner thread terminates)
+// MarkAbandoned marks the mutex as abandoned (called when owner thread terminates).
+// Only mutexes in MutexLocked state can be abandoned — unlocked and already-
+// abandoned mutexes are no-ops.
 func (p *Mutex) MarkAbandoned() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.state == MutexLockedOwned || p.state == MutexLockedNotOwned {
+	if p.state == MutexLocked {
 		p.state = MutexAbandoned
 		p.owner = nil
 		p.cond.Broadcast()
