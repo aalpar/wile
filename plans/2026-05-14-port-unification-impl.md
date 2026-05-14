@@ -6,7 +6,10 @@ SchemeString format, build-order of `ErrInvariantViolation`)
 **Design**: `plans/2026-05-14-port-unification-design.md`
 **Parent**: `plans/2026-05-13-values-structural-reduction.md` (Phase 2 of
 the values SR roadmap).
-**Status**: Ready for execution.
+**Status**: **Phases 1–4 implemented in PR #749.** See
+"Implementation outcome" section at end of this document for the
+shipped state, deviations from the original plan, and deferred
+follow-ups.
 **Branch**: `feat/values-sr-phase2-port-unification`.
 **PR scope**: One PR, breaking change (v1.x zero-consumer license).
 
@@ -874,6 +877,124 @@ surprises). Aligns with the design's "1–2 focused-day" estimate.
 - Tier A.1 of SR roadmap: `plans/2026-05-07-structural-reduction-roadmap.md`.
 - Phase 0 precedent (PR #747), Phase 1 precedent (PR #748).
 - Workflow: `plans/CLAUDE.md` § Implementation Completion Workflow.
+
+## Implementation outcome (PR #749)
+
+Five commits on `feat/values-sr-phase2-port-unification`:
+
+1. `283996ba` — docs: design + impl plan + stderr-flush plan
+   (commit-1 plan files, also re-indexes plans/CLAUDE.md)
+2. `667b459c` — refactor(values): introduce `*PortObject` +
+   capability accessors (Phase 1, non-breaking)
+3. `d992dace` — refactor(values): unify port types into single
+   `*PortObject` struct (Phase 2, atomic switch)
+4. `d116fbeb` — docs(values): port unification cleanup — ADDING
+   guide + plans index (Phase 3)
+5. `920dab4b` — fix(values): address Copilot + crosscheck
+   findings on PR #749 (Phase 4 review-fix round 1)
+
+### Final delta
+
+- 10 concrete port files deleted from `values/`
+- 5 concrete port test files deleted from `values/`
+- 7 narrow port interfaces deleted from `values/values.go`
+- 4 new files in `values/`: `port.go`, `port_constructors.go`,
+  `port_test.go`, `port_behavior_test.go`
+- 27 downstream call sites migrated across
+  `internal/extensions/io/{state,prim_read_write,prim_write,
+  prim_ports,prim_binary,prim_read_write_test}.go`,
+  `internal/extensions/iotest/{iotest,iotest_test}.go`,
+  `registry/core/prim_io_test.go`, `cmd/typeswitchlint/main.go`,
+  `values/process.go`
+- 2 new `werr` sentinels: `ErrInvariantViolation` (Phase 1),
+  `ErrNotAPort` (Phase 2 — needed by two-step extraction)
+- Net diff: ~+1500 / −2290 lines
+
+### Deviations from the original plan
+
+Four design decisions emerged during implementation. Each is
+documented in `plans/2026-05-14-port-unification-design.md` under
+**Mid-flight design refinements** (M1–M4):
+
+- **M1 — Slot-level guarding wrappers.** The accessor model
+  alone would have silently regressed the R7RS port-closed
+  semantic. Added 10 small `guardedX` wrapper structs in
+  `port_helpers.go`; each slot stores one wrapper, allocated
+  once per port construction. Accessor returns are
+  zero-allocation; closed-port operations still error with
+  `ErrPortClosed`.
+- **M2 — Iotest factory in `values/`.** The original plan's
+  accessor-override-via-embedding pattern doesn't survive Go's
+  type-assertion semantics (`v.(*PortObject)` doesn't dispatch
+  through embedded types). Shipped: a values-package factory
+  `NewStringInputPortWithReaders` that takes pre-built rune
+  reader/unreader and produces a real `*PortObject`. iotest's
+  wrapper type was eliminated entirely.
+- **M3 — `Close` idempotent at `*PortObject` level.** Wrapper
+  guards (M1) on the `flsh` slot would have caused second-Close
+  calls to error with `ErrPortClosed` instead of being
+  idempotent. Added a top-level `IsClosed` short-circuit in
+  `(*PortObject).Close`.
+- **M4 — `PrimGetOutputBytevector` two-step extraction.** The
+  original plan said `RequireArg[ByteVectorExtractor]` would
+  survive D1 unchanged, but post-migration `*PortObject` doesn't
+  satisfy that interface directly — only the slot wrapper does.
+  Migrated to the same two-step pattern as
+  `PrimGetOutputString`: `RequireArg[*PortObject]` (sentinel
+  `ErrNotAPort`) + `AsByteVectorExtractor` (sentinel
+  `ErrNotABytevectorOutputPort`). Symmetric with
+  `get-output-string`.
+
+### Post-PR review changes (commit `920dab4b`)
+
+Aggregated Copilot's 4 inline comments + 5-lens crosscheck. All
+unambiguous fixes applied; ambiguous fixes deferred + documented.
+
+- **Validate I3 tightened** to bidirectional pairing (both
+  `rb requires urb` and `urb requires rb`; same for `rr/urr`).
+  Construction convention is now a runtime invariant.
+- **`makePortCapCheck` error reporting** uses `p.PortKind()` for
+  `*PortObject` mismatches — `SchemeTypeName` collapses all
+  flavors to "port" post-unification, losing actionable detail.
+- **`PrimFlushOutputPort` closed-port guard** added explicitly
+  for ports without a real flusher slot.
+- **`PrimClosePort`** uses the new `ErrNotAPort` sentinel for
+  its "not a port at all" branch.
+- **`NewTextualInputPortWithReaders` renamed** to
+  `NewStringInputPortWithReaders` (matches the
+  `portKindStringInput` tag it sets) + `setCloser(rdr)` added
+  for parity with sibling `*FromReader` factories.
+- **Closed-port-rejection coverage** extended to character /
+  string / bytevector accessor families (3 new test functions
+  in `port_behavior_test.go`).
+- **`CloseWithCloser` regression test** added (subsumes the
+  deleted `TestBinaryInputPort_CloseWithCloser`).
+- **Stale comments** referencing deleted symbols cleaned up
+  (`values/value_type.go`, `values/port_base.go`,
+  `internal/extensions/iotest/iotest_test.go`).
+
+### Risk-register outcomes
+
+| ID  | Original concern                                    | Outcome                                                    |
+|-----|-----------------------------------------------------|------------------------------------------------------------|
+| R-1 | Slot-read vs interface-satisfaction switch          | **Deferred** — bench-gabriel R-1 gate not run pre-merge.   |
+| R-2 | R7RS port-semantics regression                      | **Clean** — full conformance suite passes.                 |
+| R-3 | `iotest` semantic equivalence (strict no-edit)      | **Clean with caveat** — `iotest_test.go` Scheme paths pass unmodified; the Go test file's internal helpers (`readRune`, `unreadRune`) were rewritten to extract via accessors, but the assertion shape and contract are unchanged. |
+| R-4 | Tokenizer/parser cache key drift                    | **Clean** — `*PortObject` pointer identity preserved through interface boxing; existing parser cache tests pass. |
+| R-5 | `SchemeString` format drift                         | **Clean** — `<{kind} 0x{hex}>` regex enumerated for all 9 kinds in `port_test.go`. |
+| R-6 | Hidden external embedder                            | **Accepted per D2.**                                       |
+| R-7 | `goTypeToValueType` reverse-map asymmetry           | **Clean** — single `(*PortObject, TypePort)` entry; asymmetry documented inline at the map site. |
+| R-8 | `Validate()` overhead at construction               | **Acceptable** — straight-line nil-checks, ~15 branches; not benchmarked but well within the construction overhead. |
+
+### Effort actuals vs estimates
+
+| Phase   | Estimated | Actual         | Notes                                                |
+|---------|-----------|----------------|------------------------------------------------------|
+| Phase 1 | 2 hours   | ~1 hour        | Struct + accessors went smoothly.                    |
+| Phase 2 | 6–8 hours | ~3 hours       | Slot-wrapper M1 added scope; iotest M2 added scope.  |
+| Phase 3 | 1 hour    | ~30 minutes    | Sentinel audit + ADDING guide.                       |
+| Phase 4 | 2 hours   | ~1 hour        | Crosscheck + Copilot all addressed in one fix round. |
+| **Total** | **~12 hours** | **~5–6 hours** | Faster than estimate — no test-file surprises beyond the iotest design issue. |
 
 ## Deferred follow-ups
 

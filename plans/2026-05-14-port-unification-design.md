@@ -4,9 +4,10 @@
 **Source**: Opportunity 2 of `plans/2026-05-13-values-structural-reduction.md`.
 Phase 0 (PR #747 — quick wins) and Phase 1 (PR #748 — mutex state) have
 shipped; this is the next phase per the parent plan's recommended phasing.
-**Status**: Design (revised 2026-05-14 after crosscheck disambiguation;
-re-revised 2026-05-14 after critique pass — fixes R-5 format string,
-D6 invariant ownership, capability-slot count).
+**Status**: **Implemented in PR #749.** Design (revised 2026-05-14 after
+crosscheck disambiguation; re-revised 2026-05-14 after critique pass; updated
+2026-05-14 post-implementation with the four mid-flight design refinements
+documented in §"Mid-flight design refinements" below).
 **Priority**: High. Largest LOC reduction available in `values/` (~900 LOC
 across 10 files collapses to ~1 + tests).
 
@@ -208,7 +209,14 @@ kind/slot pairing.
 Invariants:
 - I1: `rb != nil` requires `rdr != nil` (byte-read implies readable).
 - I2: `rr != nil` requires `rdr != nil` (rune-read implies readable).
-- I3: `urb != nil` requires `rb != nil`; `urr != nil` requires `rr != nil`.
+- I3: bidirectional pairing — `rb` requires `urb` and vice versa;
+  `rr` requires `urr` and vice versa. **Tightened post-PR-#749
+  review** from the original one-direction `urb requires rb / urr
+  requires rr` form. Every factory in `port_constructors.go`
+  already pairs the slots together, so the tightening turns a
+  construction convention into a checked invariant. Discarded `_`
+  bools at `peek-char` / `peek-u8` call sites become safer once
+  the runtime asserts the pairing.
 - I4: `wb`, `wr`, `ws` non-nil require `wrt != nil`.
 - I5: `ext != nil` requires `wrt != nil`.
 - I6: `sext != nil` requires `wrt != nil`.
@@ -217,6 +225,145 @@ Invariants:
   capability profile — e.g., `portKindBinaryInput` ⇒ exactly
   `{rdr, rb, urb}` set, none of the write/textual/extractor slots.
   Enforced by the `New*Port` factories; asserted by per-factory tests.
+
+## Mid-flight design refinements
+
+Four design decisions emerged during implementation. They were not
+visible from the design pass but became necessary once the code was
+written. Each is listed with what triggered it and why the chosen
+shape is preferable to the original sketch.
+
+### M1 — Slot-level guarding wrappers (closed-port semantic preservation)
+
+**Trigger**: Once the constructors were written and the existing
+`binary_port_test.go` was running through the new accessors, the
+`TestBinaryInputPort_Close` test broke: `port.Close()` followed by
+`AsByteReader().ReadByte()` returned a real byte instead of
+`werr.ErrPortClosed`. The original design left "what happens on a
+closed port" implicit — accessors return the raw underlying io
+interface, which has no notion of "the port that wraps me was
+closed."
+
+**Decision**: Each capability slot stores a small guarding wrapper
+struct (`guardedReader`, `guardedByteReader`, `guardedRuneReader`,
+`guardedByteUnreader`, `guardedRuneUnreader`, `guardedWriter`,
+`guardedByteWriter`, `guardedRuneWriter`, `guardedStringWriter`,
+`guardedFlusher`) constructed once at port creation. Each wrapper
+holds a `*portBase` and the raw underlying interface; its single
+delegated method calls the existing `guardedX` helper which checks
+`portBase.closed` first and returns `ErrPortClosed`.
+
+**Why this shape over alternatives**:
+
+- **Per-call wrap at accessor time** would allocate per access (the
+  wrapper is interface-boxed). Per-port wrap allocates 10× once at
+  construction; accessor returns are zero-allocation.
+- **Direct methods on `*PortObject`** (e.g., `(*PortObject).ReadByte`
+  with internal guard) was rejected: it contradicts D1 (capability
+  via accessors, not via methods on the universal type) and bloats
+  the `*PortObject` method set with 10+ direct methods that
+  duplicate the slot information.
+- **Returning `(T, false)` on closed-port** would conflate "no
+  capability" with "closed". The R7RS contract is that operations on
+  closed ports *error* with a specific sentinel, not silently degrade
+  to "not capable."
+
+**Cost**: ~10 wrapper types in `port_helpers.go` (~150 LOC mechanical
+boilerplate), 10 small allocations per port construction. The
+wrapper pattern is itself a structural-reduction candidate (called
+out in the consistency-lens review as a hand-unrolled loop), but
+collapsing it requires either Go method-set generics (not
+available) or a different per-method dispatch shape that gives up
+the zero-overhead accessor.
+
+### M2 — Iotest factory in `values/` instead of accessor-override embedding
+
+**Trigger**: The original design (D1 + §"Downstream call-site
+changes → iotest.go") said the iotest wrapper would compose by
+embedding `*PortObject` and overriding the `AsRuneReader` /
+`AsRuneUnreader` accessors. Implementation revealed this doesn't
+work: production code asserts `v.(*values.PortObject)` directly
+(e.g., `extractPort` after the `extractPort[T]` generic was
+collapsed). A type-assertion to `*PortObject` on a
+`*FailingTextualInputPort` *fails* — Go's type assertion checks the
+dynamic type identity, not whether the embedded type matches. So
+the wrapper would be rejected before the override could fire.
+
+**Decision**: Add `values.NewStringInputPortWithReaders(rdr, rr,
+urr) *PortObject` — a values-package factory that constructs a
+real `*PortObject` whose `rr` and `urr` slots are externally
+supplied. iotest builds its `countingRuneReader` and
+`alwaysFailRuneUnreader`, feeds them to the factory, and gets back
+a real `*PortObject` that production code's type assertions accept.
+The iotest "wrapper type" disappears entirely.
+
+**Why this shape over alternatives**:
+
+- **Add a `PortAccessor` interface** with all 11 accessor methods
+  + change production code to dispatch via this interface instead
+  of `*PortObject`: this re-introduces narrow interfaces and
+  defeats half of D1's reason-to-exist.
+- **Change `extractPort` to use the marker `Port` interface** +
+  reach the accessors through the type assertion at the use site:
+  same problem; either you assert `*PortObject` and lose
+  override-via-embedding, or you build an accessor interface.
+
+The slot-level injection model is structurally consistent with the
+overall design — slots-as-data, factories-as-construction.
+`NewStringInputPortWithReaders` doesn't violate the abstraction; it
+extends the factory family with one that takes pre-built capability
+slots instead of buffer-derivation. The factory is named for its
+*kind tag* (`portKindStringInput`), not its name in the original
+plan ("`NewTextualInputPortWithReaders`"); this keeps name and kind
+in sync and avoids the "a textual input port that's actually a
+string input port" naming drift.
+
+### M3 — `(*PortObject).Close` idempotent at PortObject level
+
+**Trigger**: The slot-level `flsh` wrapper (M1) checks
+`portBase.closed` before flushing. With the design as drafted,
+calling `Close()` twice on a `*bufio.Writer`-backed port would:
+first call → flush succeeds (port is open) → close marks closed;
+second call → flush fails with `ErrPortClosed`. That's a regression
+— `Close` is idempotent in the existing concrete types because
+`portBase.Close` short-circuits on `closed=true` *before* the flush
+helpers run.
+
+**Decision**: `(*PortObject).Close` checks `p.portBase.IsClosed()`
+at the top and returns nil without re-entering `flushThenClose`. The
+flush wrapper's guard remains useful for direct
+`AsFlusher().Flush()` calls on a closed port (which should error).
+
+**Why**: The flush helper and the close helper have different
+intended audiences. `flushThenClose` is called from `Close` itself
+and assumes the port is open. `AsFlusher().Flush()` is called from
+external code (`flush-output-port`) and should reject closed ports.
+Putting the idempotency at the `*PortObject.Close` level
+distinguishes the two without giving up the wrapper's guard.
+
+### M4 — `PrimGetOutputBytevector` two-step extraction
+
+**Trigger**: The plan said "RequireArg[ByteVectorExtractor] stays —
+that interface survives D1." But after migration, `*PortObject`
+*does not* satisfy `ByteVectorExtractor` directly — only the slot
+wrapper (`bufferedBVExtractor` or `inputOutputBVExtractor`) does.
+`RequireArg[ByteVectorExtractor]` rejected every `*PortObject`
+input with "expected a bytevector output port but got
+\*values.PortObject."
+
+**Decision**: Make `PrimGetOutputBytevector` use the same two-step
+extraction shape as `PrimGetOutputString`: first
+`RequireArg[*PortObject]` with `ErrNotAPort`, then
+`AsByteVectorExtractor()` with `ErrNotABytevectorOutputPort`. Two
+sentinels distinguish "not a port" from "wrong port flavor."
+
+**Why this is more consistent**: The String / ByteVector extractor
+primitives are R7RS siblings (`get-output-string` and
+`get-output-bytevector`); their primitives should have the same
+extraction shape. The original plan's asymmetry (one two-step, one
+direct interface assertion) was an artifact of which interface
+happened to survive D1, not a deliberate design choice. Both being
+two-step makes the relationship explicit.
 
 ## `*PortObject` shape
 
@@ -398,6 +545,15 @@ helpers. This centralizes the capability check and preserves the
 old gate semantics.
 
 ### `internal/extensions/iotest/iotest.go` (1 line + structure)
+
+> **POST-IMPLEMENTATION NOTE**: this section is the *original* sketch.
+> The accessor-override-via-embedding approach didn't survive
+> implementation — production code asserts `*values.PortObject`
+> directly, and Go's type assertion does not dispatch through
+> embedded types. See **§Mid-flight design refinements → M2** for
+> the shipped design (slot-level injection via the values-package
+> factory `NewStringInputPortWithReaders`). The original sketch is
+> preserved below for design-history context.
 
 Compile-time assertion `var _ values.TextualReader =
 (*FailingTextualInputPort)(nil)` is dropped (interface gone). The
