@@ -391,9 +391,22 @@ subsystem, plus the elimination of the 10-site update obligation.
 | R4 | `Eqv` migration regresses R7RS exactness semantics               | Keep `Eqv` as a switch per Q-d unless user overrides |
 | R5 | Stale plan claims (item 9, item 10) cause a future contributor to add EXTERNAL repo migration work that isn't needed | This design doc supersedes those claims; the ADDING-A-NEW-NUMERIC-TYPE guide will be rewritten to reflect verified reality |
 
-## Done definition for the design pass
+## Open questions — resolved (2026-05-14)
 
-This document is complete when:
+User accepted the recommended default for every question.
+
+| Q  | Resolution                                                | Implication                                                |
+|----|-----------------------------------------------------------|------------------------------------------------------------|
+| Qa | Cold-path only                                            | `promotionTable`/`promoter` stay in `promotion.go`. Registry has no `PromoteTo`. |
+| Qb | (implicit) Drop wile-goast scope                          | No cross-repo PR. ADDING guide loses external-repo item.   |
+| Qc | C1 — universal `ToFloat64` with documented precision loss | Every kind's spec has a non-nil `ToFloat64`; BigFloat/BigComplex documented as lossy at the field. |
+| Qd | D1 — leave `Eqv` as a switch                              | Migration scope omits `registry/helpers/equality.go`. PR 2 covers `value_conv.go` + FFI only. |
+| Qe | E2 — three medium PRs                                     | Phasing locked in (see Phasing table above). |
+
+All Q-resolutions are now baked into the design above and the
+implementation plan at `2026-05-14-numeric-registry-impl.md`.
+
+## Done definition for the design pass
 
 - [x] All twelve leakage sites in the parent plan are verified or
       retracted against `master`.
@@ -403,8 +416,8 @@ This document is complete when:
       semantics.
 - [x] Five open questions (Q-a … Q-e) are surfaced with
       recommendations.
-- [ ] User resolves Q-a … Q-e.
-- [ ] An implementation plan (`2026-05-??-numeric-registry-impl.md`)
+- [x] User resolves Q-a … Q-e.
+- [x] An implementation plan (`2026-05-14-numeric-registry-impl.md`)
       is drafted from this design after Q-resolution.
 
 ## Cross-references
