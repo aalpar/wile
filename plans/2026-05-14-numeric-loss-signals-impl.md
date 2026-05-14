@@ -32,7 +32,7 @@
 | PR | Scope                                                                                    | Bench gate | Est. delta   |
 |----|------------------------------------------------------------------------------------------|------------|--------------|
 | 1  | Go infrastructure: sentinel + accuracy symbols + per-kind helpers + values/ exports + registry extension | yes — verify cold-path discipline | +400 / −20  |
-| 2  | FFI tightening (Float64 + Complex128 paths) + `WithLossyConversionsAllowed` engine option + `helpers.ToFloat64` Q-5 widening | yes — FFI conversion hot-ish | +180 / −50 |
+| 2  | FFI tightening (Float64 + Complex128 paths) + `WithLossyConversionsAllowed` engine option + `helpers.ToFloat64` Q-5 **tightening** (was silently-truncates; now errors on loss) | yes — FFI conversion hot-ish | +180 / −50 |
 | 3  | Four Scheme primitives in `extensions/math/prim_conversion.go` + docstrings + tests | no (cold-path primitives) | +280 / −0   |
 
 Cumulative net: **≈ +790 LOC**. Larger than typical because the
@@ -50,23 +50,43 @@ consume what this PR exports.
 
 ### Concrete API contract (commit to before writing code)
 
-Five exported functions in `values/` (the cross-package surface):
+**Four** exported functions in `values/` (the cross-package surface).
+The earlier `ToFloat64Lossy` variant was dropped during refinement
+— see "API surface decisions" below.
 
 | Function | Signature | Behavior |
 |----------|-----------|----------|
-| `ToFloat64WithAccuracy` | `func(n Number) (f float64, acc big.Accuracy, real bool, err error)` | Primary. Returns the float64, the `big.Accuracy` (Below/Exact/Above), and a `real` flag (false iff input was Complex/BigComplex with non-zero imaginary). Returns `ErrNotANumber` for non-Number. Non-nil for every `Number` input. |
-| `ToFloat64Lossless` | `func(n Number) (float64, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` (wrapped) if `acc != big.Exact OR !real`. Returns `ErrNotANumber` for non-Number. **FFI strict-path consumer.** |
-| `ToFloat64Lossy` | `func(n Number) (f float64, lossless bool)` | Wraps `WithAccuracy`. Discards the `real` flag and `err`. `lossless = (acc == Exact && real)`. **For non-Number inputs panics** via `werr.WrapForeignErrorf(werr.ErrNotANumber, "ToFloat64Lossy: %T", n)` — this is the explicit-lossy path; the caller is on the hook for type-validating before calling. |
+| `ToFloat64WithAccuracy` | `func(n Number) (f float64, acc big.Accuracy, isReal bool, err error)` | Primary. Returns the float64, the `big.Accuracy` (Below/Exact/Above), and an `isReal` flag (false iff input was Complex/BigComplex with non-zero imaginary). Returns `ErrNotANumber` (wrapped) for non-Number. Non-nil for every `Number` input. Callers who want lossy-allowed semantics use this directly and discard the accuracy/isReal slots. |
+| `ToFloat64Lossless` | `func(n Number) (float64, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` (wrapped, message names direction) if `acc != big.Exact OR !isReal`. Returns `ErrNotANumber` for non-Number. **FFI strict-path consumer.** |
 | `ToComplex128WithAccuracy` | `func(n Number) (c complex128, realAcc, imagAcc big.Accuracy, err error)` | Primary for complex domain. Per-component accuracy. `ErrNotANumber` for non-Number. For real-only inputs, `imagAcc == big.Exact`. |
 | `ToComplex128Lossless` | `func(n Number) (complex128, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` if either component's accuracy is non-Exact. |
 
-**Why `ToFloat64Lossy` panics instead of returning error**: the
-"lossy" path is for callers who have already type-validated and
-just want the float64 + a side-channel bool. A non-Number reaching
-this function is a programming error analogous to passing `nil` to
-a method expecting a non-nil receiver. The panic is wrapped per
-`CLAUDE.md` Imperatives (no bare panics). Callers who can't type-
-validate should use `ToFloat64WithAccuracy` directly.
+**API surface decisions**:
+
+1. **No `ToFloat64Lossy` / `ToComplex128Lossy`.** The earlier
+   refinement had a `ToFloat64Lossy(n) (float64, bool)` wrapper
+   that panicked on non-Number. Dropped because:
+   - The sole would-be caller (the FFI Float64 converter under
+     `WithLossyConversionsAllowed`) already type-validates `n` via
+     `v.(values.Number)` *before* reaching the helper — the panic
+     path is dead.
+   - There is no symmetric `ToComplex128Lossy` and adding one for
+     parity would inflate the public API further without a real
+     caller.
+   - "Panic on non-Number" is an asymmetric failure mode versus
+     the other helpers' wrapped-error returns; consolidating on
+     `WithAccuracy + discard` removes the asymmetry.
+
+   The FFI lossy-allowed path now reads
+   `f, _, _, _ := values.ToFloat64WithAccuracy(n)` — same one-line
+   shape, one fewer exported symbol, no panic site to maintain.
+
+2. **`isReal` (renamed from `real`)** — the boolean slot in the
+   per-kind helper return tuple and in the values/ API. Renamed
+   to avoid shadowing Go's predeclared `real(c)` complex-projection
+   function (which is called from adjacent files like
+   `values/complex.go:56,86`). Apply the rename throughout
+   stubs, tests, and PR-3 primitive implementations.
 
 ### Acceptance criteria for the API contract
 
@@ -368,65 +388,54 @@ import (
 )
 
 // ToFloat64WithAccuracy is the primary loss-signal-aware conversion
-// helper. It is the canonical API; ToFloat64Lossless and
-// ToFloat64Lossy wrap it.
+// helper. ToFloat64Lossless wraps it.
 //
 // Returns:
-//   - f:    the float64 representation, saturated to ±Inf for
-//           overflow per Go (*big.Float).Float64() semantics
-//   - acc:  Below/Exact/Above per Go big.Accuracy semantics:
-//             Below: f < true value
-//             Exact: f == true value
-//             Above: f > true value
-//   - real: false iff n was Complex/BigComplex with non-zero
-//           imaginary part (the imaginary information is dropped)
-//   - err:  ErrNotANumber (wrapped) iff n is not a Number
+//   - f:      the float64 representation, saturated to ±Inf for
+//             overflow per Go (*big.Float).Float64() semantics
+//   - acc:    Below/Exact/Above per Go big.Accuracy semantics:
+//               Below: f < true value
+//               Exact: f == true value
+//               Above: f > true value
+//   - isReal: false iff n was Complex/BigComplex with non-zero
+//             imaginary part (the imaginary information is dropped
+//             — caller should consult ToComplex128WithAccuracy
+//             for full complex semantics)
+//   - err:    ErrNotANumber (wrapped) iff n is not a Number
 //
 // No information loss from the Go big package is introduced by
 // this helper — every signal Go's stdlib surfaces is exposed
-// through the (acc, real, err) tuple.
+// through the (acc, isReal, err) tuple.
+//
+// FFI lossy-allowed callers use this directly and discard the
+// accuracy/isReal slots; FFI strict callers use ToFloat64Lossless.
 func ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool, error) {
     if n == nil {
         return 0, big.Exact, false, werr.WrapForeignErrorf(
             werr.ErrNotANumber, "ToFloat64WithAccuracy: nil input")
     }
-    spec := Lookup(n.Kind())  // post-PR-#750 numeric registry
-    f, acc, real := spec.ToFloat64WithAccuracy(n)
-    return f, acc, real, nil
+    spec := Lookup(n.Kind())
+    f, acc, isReal := spec.ToFloat64WithAccuracy(n)
+    return f, acc, isReal, nil
 }
 
 // ToFloat64Lossless is the FFI-strict convenience wrapper.
 // Returns ErrLossyConversion (wrapped, with direction info) if
 // the conversion would lose precision OR drop the imaginary part.
 func ToFloat64Lossless(n Number) (float64, error) {
-    f, acc, real, err := ToFloat64WithAccuracy(n)
+    f, acc, isReal, err := ToFloat64WithAccuracy(n)
     if err != nil {
         return 0, err
     }
     if acc != big.Exact {
         return f, werr.WrapForeignErrorf(werr.ErrLossyConversion,
-            "ToFloat64Lossless: %T conversion lost precision (%s)", n, acc.String())
+            "ToFloat64Lossless: %T rounded %s (lost precision)", n, acc)
     }
-    if !real {
+    if !isReal {
         return f, werr.WrapForeignErrorf(werr.ErrLossyConversion,
             "ToFloat64Lossless: %T has non-zero imaginary part dropped", n)
     }
     return f, nil
-}
-
-// ToFloat64Lossy always succeeds for Number inputs. Returns the
-// float64 result and a binary lossless bool (true iff
-// acc == big.Exact AND real). Panics (wrapped) for non-Number —
-// this is the explicit-lossy path; the caller is type-validated.
-//
-// Callers that cannot type-validate should use ToFloat64WithAccuracy.
-func ToFloat64Lossy(n Number) (float64, bool) {
-    if n == nil {
-        panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "ToFloat64Lossy: nil input"))
-    }
-    spec := Lookup(n.Kind())
-    f, acc, real := spec.ToFloat64WithAccuracy(n)
-    return f, acc == big.Exact && real
 }
 
 // ToComplex128WithAccuracy is the primary complex-domain helper.
@@ -533,13 +542,18 @@ func TestToFloat64Lossless(t *testing.T) {
             c.Assert(f, qt.Equals, tc.want)
         })
     }
+    // Lossy cases — every one MUST resolve to a concrete fixture
+    // before code is written. No `/* TODO */` placeholders survive.
     lossyCases := []struct {
         name  string
         input Number
     }{
         {"rational-onethird", NewRationalFromInts(1, 3)},
-        {"bigfloat-overflow", /* construct a BigFloat that overflows */},
-        {"complex-with-imag", NewComplex(complex(1, 1))},
+        {"bigfloat-overflow-positive", bigFloatFromString(t, "1e500")},
+        {"bigfloat-overflow-negative", bigFloatFromString(t, "-1e500")},
+        {"bigfloat-irrational",        bigFloatFromString(t, "3.141592653589793238462643383279")},
+        {"complex-with-imag",          NewComplex(complex(1, 1))},
+        {"bigcomplex-with-imag",       NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(1))},
     }
     for _, tc := range lossyCases {
         t.Run(tc.name+"-errors", func(t *testing.T) {
@@ -551,8 +565,36 @@ func TestToFloat64Lossless(t *testing.T) {
     }
 }
 
-// Analogous tests for ToFloat64Lossy, ToComplex128WithAccuracy,
-// ToComplex128Lossless follow the same shape.
+// bigFloatFromString is a test helper that constructs a *BigFloat
+// from a Go literal string (uses big.Float.Parse). Lives in the
+// values_test.go test helper section.
+func bigFloatFromString(t *testing.T, s string) *BigFloat {
+    bf, _, err := new(big.Float).SetPrec(256).Parse(s, 10)
+    if err != nil {
+        t.Fatalf("bigFloatFromString(%q): %v", s, err)
+    }
+    return &BigFloat{value: bf}
+}
+
+// Required additional tests — DO NOT skip with "follow the same
+// shape." Each has a distinct contract that requires its own table:
+
+// TestToComplex128WithAccuracy — 5-column table:
+//   {name, input, wantC, wantRealAcc, wantImagAcc, wantErr}.
+//   Cover all 7 kinds × {Below, Exact, Above} for each component
+//   independently. Imaginary-component Below/Above cases (e.g.,
+//   BigComplex(0, 1/3) yields imagAcc=Below) are the highest-
+//   value rows.
+
+// TestToComplex128Lossless — split tables analogous to the
+// float64 version: lossless (asserts no error) + lossy (asserts
+// errors.Is(err, werr.ErrLossyConversion)). Cover the two distinct
+// loss paths separately: real-part-lossy, imag-part-lossy.
+
+// TestErrNotANumber — non-Number inputs (NewString("hi"),
+// TrueValue, EmptyList, nil) call all four public helpers; assert
+// errors.Is(err, werr.ErrNotANumber). One test per helper × per
+// non-Number-input row.
 ```
 
 ### Steps
@@ -596,17 +638,16 @@ func TestToFloat64Lossless(t *testing.T) {
      real flag is `p.imag.IsZero()`. For the complex helper:
      per-component accuracy from both `real` and `imag`.
 
-5. **Implement the public helpers** in `values/conversion.go`:
+5. **Implement the public helpers** in `values/conversion.go`
+   (4 functions; `ToFloat64Lossy` dropped — see API surface
+   decisions above):
    - `ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool, error)` —
      dispatches via the registry. Returns `ErrNotANumber` if `n`
-     isn't a `Number`.
+     isn't a `Number`. **Primary API; lossy-allowed callers
+     consume this directly and discard `acc`/`isReal`.**
    - `ToFloat64Lossless(n Number) (float64, error)` — wraps
      `WithAccuracy`; returns `ErrLossyConversion` (wrapped) if
-     `acc != Exact || !real`.
-   - `ToFloat64Lossy(n Number) (float64, bool)` — wraps
-     `WithAccuracy`; returns `(f, acc == Exact && real)`. No
-     error path; non-Number inputs panic (the caller is expected
-     to have validated already — this is the Lossy-OK path).
+     `acc != Exact || !isReal`.
    - `ToComplex128WithAccuracy(n Number) (complex128, big.Accuracy, big.Accuracy, error)` —
      dispatches; returns `ErrNotANumber` for non-Number.
    - `ToComplex128Lossless(n Number) (complex128, error)` —
@@ -714,7 +755,9 @@ RegisterFunc(name, fn)
 On FFI call:
   → wrapper invokes makeArgConverter's closure
     → closure has captured lossyAllowed
-    → picks ToFloat64Lossless or ToFloat64Lossy accordingly
+    → if lossyAllowed: ToFloat64WithAccuracy(n) and discard
+                       (acc, isReal) — silent truncation
+    → else:            ToFloat64Lossless(n) — error on loss
 ```
 
 `makeArgConverter` itself currently takes `(name, pos, t)` —
@@ -744,18 +787,19 @@ func makeArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (
             }
             var f float64
             if lossyAllowed {
-                var lossless bool
-                f, lossless = values.ToFloat64Lossy(n)
-                _ = lossless  // intentionally discarded in lossy-allowed mode
+                // Lossy-allowed: consume WithAccuracy, discard
+                // (acc, isReal). Type-asserted to Number above, so
+                // no error path reachable here.
+                f, _, _, _ = values.ToFloat64WithAccuracy(n)
             } else {
-                var err error
-                f, err = values.ToFloat64Lossless(n)
+                f2, err := values.ToFloat64Lossless(n)
                 if err != nil {
                     return reflect.Value{}, werr.WrapForeignErrorf(
                         err,
                         "%s: argument %d: %T", name, pos, v,
                     )
                 }
+                f = f2
             }
             return reflect.ValueOf(f).Convert(targetType), nil
         }, nil
@@ -769,26 +813,19 @@ func makeArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (
             }
             var c complex128
             if lossyAllowed {
-                // ToComplex128 always succeeds for Number — but we
-                // don't have a ToComplex128Lossy. Use WithAccuracy
-                // directly and discard the accuracies.
-                var realAcc, imagAcc big.Accuracy
-                var err error
-                c, realAcc, imagAcc, err = values.ToComplex128WithAccuracy(n)
-                if err != nil {
-                    return reflect.Value{}, fmtArgError(name, pos, "number", v)
-                }
-                _ = realAcc
-                _ = imagAcc
+                // Lossy-allowed: consume WithAccuracy, discard per-
+                // component accuracies. Type-asserted above; the
+                // error path is unreachable.
+                c, _, _, _ = values.ToComplex128WithAccuracy(n)
             } else {
-                var err error
-                c, err = values.ToComplex128Lossless(n)
+                c2, err := values.ToComplex128Lossless(n)
                 if err != nil {
                     return reflect.Value{}, werr.WrapForeignErrorf(
                         err,
                         "%s: argument %d: %T", name, pos, v,
                     )
                 }
+                c = c2
             }
             return reflect.ValueOf(c).Convert(targetType), nil
         }, nil
@@ -796,6 +833,13 @@ func makeArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (
     // ... other cases unchanged ...
 }
 ```
+
+**Why no `_ = lossless` discard pattern**: the previous draft used
+`f, lossless = ToFloat64Lossy(n); _ = lossless` to satisfy the
+"declared but not used" check. With `ToFloat64Lossy` dropped, the
+pattern collapses to `f, _, _, _ = ToFloat64WithAccuracy(n)` — all
+unused slots ignored at the call site directly. One fewer unused-
+variable dance.
 
 ### Code stub: `buildFFISpec` threading
 
@@ -825,21 +869,65 @@ Also update `makeCallbackArgConverter` (recursive inner converters
 for `func` parameter types) to thread `lossyAllowed` if it builds
 inner argument converters of its own. Audit at impl time.
 
-### Code stub: `registry/helpers/value_conv.go::ToFloat64` (Q-5 widening)
+### Code stub: `registry/helpers/value_conv.go::ToFloat64` (Q-5 — **tightening**, not widening)
 
-Replace the current 5-case switch with a registry-driven dispatch:
+**Critical framing correction**: an earlier draft of this plan
+called Q-5 a "widening." Verified against the actual code (read
+`registry/helpers/value_conv.go:72-90` on master): today's
+`ToFloat64` accepts every real-numeric kind **including
+`*BigFloat`** and silently truncates via the discarded
+`big.Accuracy` from `(*big.Float).Float64()`:
+
+```go
+// CURRENT (master) — discards accuracy, silently truncates
+case *values.BigFloat:
+    f, _ := n.BigFloatValue().Float64()   // _ = lossless bit, discarded
+    return f, nil
+case *values.BigInteger:
+    f, _ := new(big.Float).SetInt(n.BigInt()).Float64()  // same
+case *values.Rational:
+    f, _ := n.Rat().Float64()              // same
+```
+
+Q-5 **tightens** this: the same input now errors with
+`ErrLossyConversion` when the conversion loses precision. The
+behavior change is in the **error direction**, not the
+acceptance direction:
+
+| Input | Before Q-5 (master) | After Q-5 |
+|-------|---------------------|-----------|
+| `*Integer(42)` | succeeds: `42.0` | succeeds: `42.0` (unchanged) |
+| `*BigFloat(1.5)` | succeeds: `1.5` (already exact in float64) | succeeds: `1.5` (unchanged) |
+| `*BigFloat(2^100)` | **succeeds silently with `+Inf`** | errors with `ErrLossyConversion` (direction `Above`) |
+| `*Rational(1/3)` | **succeeds silently with `0.333...`** | errors with `ErrLossyConversion` (direction `Below`) |
+| `*Complex(3+0i)` | errors `ErrNotAReal` | errors `ErrNotAReal` (unchanged) |
+| `*Complex(3+4i)` | errors `ErrNotAReal` | errors `ErrNotAReal` (unchanged) |
+
+Three of the seven cases change from "silent truncation" to "loud
+error on loss." This is consistent with the "fail loud at startup"
+discipline; **the existing silent-truncation behavior was the bug
+this plan is correcting.**
+
+Replace the current 5-case switch with a delegation to the new
+helper:
 
 ```go
 // ToFloat64 converts a Scheme real number to a Go float64 with
-// lossless guarantee. Returns ErrLossyConversion (wrapped) if the
-// input is a *BigFloat / *BigInteger / *Rational whose value
-// doesn't fit float64 precisely; returns ErrNotAReal for Complex/
-// BigComplex (real-domain helper).
+// a lossless guarantee.
 //
-// As of PR-N (loss-signals Phase 2): *BigFloat is now accepted
-// when it fits losslessly (was previously rejected unconditionally
-// with ErrNotAReal). This is a strict widening — no successful
-// call becomes a failure.
+// Real inputs (*Integer, *BigInteger, *Float, *BigFloat, *Rational)
+// that fit float64 exactly succeed; ones that don't fit return
+// ErrLossyConversion (wrapped, message names direction Below/Above).
+// Complex inputs (*Complex, *BigComplex) return ErrNotAReal —
+// the helper is real-domain only.
+//
+// Behavior change vs. master: previously this function silently
+// truncated *BigFloat, *BigInteger overflow, and *Rational with
+// non-representable denominators. Now it errors. Embedders who
+// relied on the silent path must either (a) opt into the
+// permissive path via values.ToFloat64WithAccuracy and discard
+// the accuracy, or (b) preserve the input in higher-precision
+// types. See CHANGELOG for migration guidance.
 func ToFloat64(v values.Value) (float64, error) {
     n, ok := v.(values.Number)
     if !ok {
@@ -847,8 +935,7 @@ func ToFloat64(v values.Value) (float64, error) {
             "expected a real number but got %T", v)
     }
     // Reject complex types explicitly — real-extraction is real-only.
-    switch n.(type) {
-    case *values.Complex, *values.BigComplex:
+    if _, isComplex := n.(values.ComplexNumber); isComplex {
         return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
             "expected a real number but got %T", v)
     }
@@ -856,15 +943,20 @@ func ToFloat64(v values.Value) (float64, error) {
 }
 ```
 
+(Note: the rejection switch is replaced by `values.ComplexNumber`
+interface dispatch — matches `Hashable`/`Tuple`/`Indexable` precedent
+in `values/` and avoids enumerating both `*Complex` and `*BigComplex`
+by name.)
+
 ### Files modified
 
 | File                                       | Change                                                                                                                                                       |
 |--------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ffi.go` / engine.go                       | New `WithLossyConversionsAllowed()` engine option. The flag stored on `*Engine`; threaded into FFI spec at `RegisterFunc` time.                              |
-| `ffi_arg_converters.go`                    | `reflect.Float64` case migrates to `ToFloat64Lossless` (or `ToFloat64Lossy` when the engine flag is set). New `reflect.Complex128` case added analogously.   |
-| `registry/helpers/value_conv.go`           | `ToFloat64` migrates to `values.ToFloat64Lossless` for the 5 reducible kinds. BigFloat newly accepted when fits; rejected with `ErrLossyConversion` otherwise. |
-| `ffi_test.go`                              | New tests cover the widening + opt-in + complex128 path.                                                                                                     |
-| `CHANGELOG.md`                             | Document the three behavior changes (BigFloat→float64 widening, BigComplex→complex128 widening, helpers.ToFloat64 widening).                                |
+| `ffi_arg_converters.go`                    | `reflect.Float64` case migrates: strict mode calls `ToFloat64Lossless`; lossy-allowed mode calls `ToFloat64WithAccuracy` and discards `acc`/`isReal`. New `reflect.Complex128` case added analogously. |
+| `registry/helpers/value_conv.go`           | `ToFloat64` migrates to `values.ToFloat64Lossless`. **Tightening**: BigFloat/BigInteger/Rational that today silently truncate now error with `ErrLossyConversion` on loss. Same-precision inputs continue to succeed. |
+| `ffi_test.go`                              | New tests cover (a) FFI Float64 strict-mode loss → error; (b) FFI Float64 lossy-allowed mode → silent truncation; (c) new Complex128 path; (d) `helpers.ToFloat64` tightening. |
+| `CHANGELOG.md`                             | Document **three** behavior changes: FFI float64 precision-aware (previously rejected BigFloat unconditionally → now accepts when lossless); FFI complex128 newly supported; `helpers.ToFloat64` tightened (previously silently truncated → now errors). Plus two additions: `WithLossyConversionsAllowed` option, `ErrLossyConversion` sentinel. |
 
 ### Steps
 
@@ -873,88 +965,149 @@ func ToFloat64(v values.Value) (float64, error) {
    spec at registration time (closure captures the value at
    `RegisterFunc` call).
 
-2. **Migrate `reflect.Float64` path**:
-   ```go
-   case reflect.Float64:
-       targetType := t
-       lossyAllowed := p.lossyConversionsAllowed
-       return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
-           n, ok := v.(values.Number)
-           if !ok {
-               return reflect.Value{}, fmtArgError(name, pos, "number", v)
-           }
-           var f float64
-           var err error
-           if lossyAllowed {
-               f, _ = values.ToFloat64Lossy(n)
-           } else {
-               f, err = values.ToFloat64Lossless(n)
-           }
-           if err != nil {
-               return reflect.Value{}, werr.WrapForeignErrorf(
-                   err, "%s: argument %d: cannot losslessly convert %T to float64",
-                   name, pos, v,
-               )
-           }
-           return reflect.ValueOf(f).Convert(targetType), nil
-       }, nil
-   ```
+2. **Migrate `reflect.Float64` path**. The canonical code stub is
+   the "extended `makeArgConverter` signature" block above (lines
+   ~774-805). The `p.lossyConversionsAllowed` direct-read shown
+   in an earlier draft was wrong — `makeArgConverter` has no `p`
+   receiver. The flag travels via the signature-extension
+   approach: `makeArgConverter(name, pos, t, lossyAllowed)`,
+   captured into the converter closure. See the plumbing diagram
+   for the full chain.
 
-3. **Add `reflect.Complex128` case** analogously, consulting
-   `ToComplex128Lossless` / `ToComplex128Lossy`.
+3. **Add `reflect.Complex128` case** analogously. Canonical stub
+   is the Complex128 block above (lines ~807-836). Strict mode
+   calls `ToComplex128Lossless`; lossy-allowed mode calls
+   `ToComplex128WithAccuracy` and discards `(realAcc, imagAcc)`.
 
-4. **Migrate `helpers.ToFloat64`** (per Q-5). Replace the current
-   5-case switch with a call to `values.ToFloat64Lossless`. The
-   error shape changes from `ErrNotAReal` (broad) to
-   `ErrLossyConversion` (precise) for `*BigFloat` that doesn't
-   fit; `*Complex`/`*BigComplex` continue to return `ErrNotAReal`
-   (they're not real).
+4. **Migrate `helpers.ToFloat64`** (per Q-5 — **tightening**).
+   Replace the current 5-case switch with a call to
+   `values.ToFloat64Lossless`. The behavior change is:
+   - **Same-precision inputs unchanged**: `*Integer(42)` →
+     `42.0`; `*BigFloat(1.5)` → `1.5`. No regression.
+   - **Lossy inputs now error**: `*BigFloat(2^100)` and
+     `*Rational(1/3)` previously silently truncated; now return
+     `ErrLossyConversion` (wrapped, with direction `Above`/`Below`
+     in the message).
+   - **Complex unchanged**: `*Complex`/`*BigComplex` continue to
+     return `ErrNotAReal` (they're not real numbers).
+   - **Audit before code**: `grep -rn 'errors.Is(.*ErrNotAReal)'`
+     to find callers that may need updating to also handle the
+     new `ErrLossyConversion` path. (Most won't — the typical
+     pattern is "if not-a-real, error out"; they'll see the new
+     error wrap as another error and let it propagate.)
 
-5. **Tests** (`ffi_test.go`):
-   - **Widening table**: `*BigFloat(1.5)` → succeeds as float64.
-   - **Narrowing table**: `*BigFloat(2^100)` → errors with
-     `ErrLossyConversion` (verify via `errors.Is`); message
-     contains direction (`Above`).
-   - **Complex128 widening**: `*BigComplex(3+4i)` → succeeds.
-   - **Complex128 narrowing**: `*BigComplex(2^100+1i)` → errors
-     with `ErrLossyConversion`.
+5. **Tests** (`ffi_test.go` + `registry/helpers/value_conv_test.go`):
+   - **FFI Float64 strict-mode loss table**:
+     - `*BigFloat(1.5)` → succeeds (`1.5`)
+     - `*BigFloat("1e500")` → errors `ErrLossyConversion`, direction `Above`
+     - `*BigFloat("-1e500")` → errors `ErrLossyConversion`, direction `Below`
+     - `*Rational(1, 3)` → errors `ErrLossyConversion`, direction `Below`
+     - `*Integer(42)` → succeeds (`42.0`)
+   - **FFI Float64 lossy-allowed-mode**: same inputs all succeed
+     (`+Inf` / `-Inf` / `0.333...` / `42.0`); verify the silent
+     truncation happens.
+   - **Engine isolation**: two engines registered with the same
+     function, one strict, one lossy-allowed — verify per-engine
+     behavior independence.
+   - **Complex128 path**:
+     - `*BigComplex(3, 4)` → succeeds (`3+4i`)
+     - `*BigComplex("1e500", "0")` → errors `ErrLossyConversion`, realAcc=Above
+     - `*BigComplex("0", "1e500")` → errors `ErrLossyConversion`, imagAcc=Above
+   - **`helpers.ToFloat64` tightening regression**:
+     - `*BigFloat("1e500")` previously silently returned `+Inf`;
+       new test asserts it now errors with `ErrLossyConversion`.
+     - `*Rational(1, 3)` previously silently returned
+       `0.333...`; new test asserts it now errors.
+     - Both verify via `errors.Is`.
    - **Opt-in**: engine with `WithLossyConversionsAllowed()` —
      `*BigFloat(2^100)` succeeds (silently truncated to `+Inf`).
-   - **`helpers.ToFloat64` widening**: BigFloat that fits now
-     succeeds; one that overflows errors with `ErrLossyConversion`.
+   - **`helpers.ToFloat64` tightening**: `*BigFloat` /
+     `*BigInteger` overflow / `*Rational(1/3)` previously
+     silently truncated; now error with `ErrLossyConversion`.
 
-6. **Update CHANGELOG.md** with three subsections. Concrete
-   template:
+6. **Update CHANGELOG.md** — **three behavior changes + two
+   additions**. The behavior changes are user-visible and must be
+   prominent. Concrete template:
 
    ```markdown
-   ### Loss-signal-aware numeric conversions
+   ### Numeric conversion semantics — new loss-signal-aware rules
+
+   This release introduces a strict-by-default discipline for
+   numeric-to-fixed-precision conversions. Three sites previously
+   silently truncated to `float64`; they now error on loss.
+   Embedders relying on silent truncation must opt in via the
+   new `WithLossyConversionsAllowed()` engine option.
+
+   **Behavior changes (user-visible):**
 
    - **FFI `float64` parameter conversion is now precision-aware.**
-     A `*BigFloat` argument that fits in `float64` now succeeds
-     (previously errored with `ErrNotAReal` unconditionally). A
-     `*BigFloat` that overflows or rounds errors with
-     `ErrLossyConversion` (new sentinel) — the error message
-     names the direction of loss (`above` / `below`).
+     A `*BigFloat` argument that fits in `float64` continues to
+     succeed; one that overflows or rounds now errors with
+     `ErrLossyConversion` (new sentinel). The error message names
+     the direction of loss (`Above` / `Below`). Previously the
+     FFI rejected `*BigFloat` unconditionally with
+     `ErrTypeConversion`.
+
+     *Net effect*: FFI now accepts strictly more inputs (any
+     BigFloat fitting in float64), and reports precise errors on
+     the rest. No call that succeeded before fails now; some
+     calls that errored before succeed now.
+
    - **FFI `complex128` parameter conversion is now supported.**
-     Previously, Go functions taking `complex128` parameters could
-     not be registered. Now `*Complex` and `*BigComplex` arguments
-     convert with per-component precision tracking.
-   - **`registry/helpers/value_conv.ToFloat64` widened.**
-     Previously rejected `*BigFloat` unconditionally; now accepts
-     `*BigFloat` that fits losslessly. `*Complex`/`*BigComplex`
-     continue to return `ErrNotAReal`.
-   - **New engine option `WithLossyConversionsAllowed()`.** Opt-in
-     to the legacy silent-truncation behavior for FFI conversions.
-     Default is the strict path.
+     Previously, Go functions taking `complex128` parameters
+     could not be registered (FFI had no converter for
+     `reflect.Complex128`). Now `*Complex` and `*BigComplex`
+     arguments convert with per-component precision tracking.
+
+   - **`registry/helpers/value_conv.ToFloat64` tightened.**
+     Previously **silently truncated** `*BigFloat`,
+     `*BigInteger` overflowing float64, and `*Rational` with
+     non-representable denominators (e.g., `1/3`). Now errors
+     with `ErrLossyConversion` on loss. Same-precision inputs
+     (`*Integer`, `*Float`, exact-power-of-2 `*Rational`, etc.)
+     continue to succeed unchanged.
+
+     *Migration*: code that previously consumed silently-
+     truncated values (e.g., `float64(bigFloatValue.RawValue())`)
+     should either (a) catch `ErrLossyConversion` and decide
+     explicitly, or (b) use `values.ToFloat64WithAccuracy` and
+     discard the accuracy slot to recover the silent-truncation
+     behavior.
+
+   **Additions:**
+
+   - **New engine option `wile.WithLossyConversionsAllowed()`.**
+     Opt-in flag suppressing `ErrLossyConversion` returns from
+     the FFI converters; the converter calls
+     `values.ToFloat64WithAccuracy` and discards the accuracy/
+     real flags. Per-engine; captured at `RegisterFunc` time.
+
    - **New error sentinel `werr.ErrLossyConversion`.** Distinct
-     from `ErrNotAReal`; callers can `errors.Is` against it.
+     from `ErrNotAReal` (real-vs-complex domain) and
+     `ErrTypeConversion` (Go reflect.Kind mismatch). Callers can
+     `errors.Is` against it specifically.
+
+   - **New `values.ToFloat64WithAccuracy`,
+     `values.ToFloat64Lossless`, `values.ToComplex128WithAccuracy`,
+     `values.ToComplex128Lossless`** public helpers. See
+     `values/conversion.go`. Surface Go's `big.Accuracy`
+     three-valued enum directly.
    ```
 
 7. **Pre-PR-2 audit checklist** (do this BEFORE writing code):
    - `grep -rn 'errors.Is(.*ErrNotAReal)' --include='*.go'` — list
      every site that catches `ErrNotAReal` from `helpers.ToFloat64`.
-     If any rely on `*BigFloat` always producing this sentinel,
-     they need updating to also handle `ErrLossyConversion`.
+     Audit each: does the caller distinguish "wrong type" from
+     "silently truncated"? The tightening changes the latter path
+     from success to `ErrLossyConversion` — callers that today
+     never see an error path for big-precision inputs now will.
+   - `grep -rn 'helpers.ToFloat64' --include='*.go'` — list every
+     caller; audit error-handling at each. Three categories:
+     (i) propagates error → no change required; (ii) catches
+     `ErrNotAReal` and substitutes a default → must also catch
+     `ErrLossyConversion`; (iii) ignores error → bug regardless.
+   - `grep -rn 'BigFloat(...).RawValue()' --include='*.go'` —
+     direct big-precision-bypass sites that may need migration.
    - `grep -rn 'helpers.ToFloat64' --include='*.go'` — list every
      caller. Audit error-handling at each site.
    - `grep -rn 'reflect.Complex128' --include='*.go'` — verify
@@ -974,9 +1127,17 @@ func ToFloat64(v values.Value) (float64, error) {
   the new helpers.
 - `wile.WithLossyConversionsAllowed()` option exists and works
   (verified by table case).
-- `helpers.ToFloat64` widened for `*BigFloat`.
+- `helpers.ToFloat64` **tightened**: previously-silent-truncation
+  sites for `*BigFloat`, `*BigInteger` overflow, and `*Rational`
+  with non-representable denominators now error with
+  `ErrLossyConversion`. Verified by regression tests asserting
+  these inputs error after migration.
 - The acceptance-table FFI rows from the design pass as Go tests.
-- CHANGELOG documents the three behavior changes.
+- CHANGELOG documents the three behavior changes + two additions
+  (see Step 6 template); documentation deliverables (numeric
+  tower, R7RS differences, embedding api-design, values/
+  CLAUDE.md, werr/CLAUDE.md, extensions/math/CLAUDE.md) all
+  landed in the same PR.
 - No bench regression beyond noise.
 
 ## PR 3 — Scheme primitives
@@ -1361,7 +1522,7 @@ field.
 | I5 | Engine-level `WithLossyConversionsAllowed` interacts with multi-engine embedders (one engine strict, another lossy) | The flag is per-engine instance, set at construction. No global state. Document. |
 | I6 | Saturation-to-±Inf may surprise users who expect an error on overflow rather than `+inf.0` | `inexact-with-accuracy` documents this; the `'above` / `'below` accuracy symbol IS the signal. R7RS itself allows the saturation (`exact->inexact (expt 10 100)` returns `+inf.0`); we just expose the *direction*. |
 | I7 | `BigComplex` with NaN parts — what's the accuracy? | Per the design's NaN handling rule: NaN propagates as `Exact` (identity). A `*BigComplex(NaN, NaN)` returns `(complex(NaN,NaN), Exact, Exact)`. Tests cover this explicitly. |
-| I8 | The new `helpers.ToFloat64` widening (Q-5) might break a caller who relies on `ErrNotAReal` for `*BigFloat` specifically | Audit before PR 2 lands: grep `errors.Is(err, ErrNotAReal)` in callers of `helpers.ToFloat64`. Document in CHANGELOG. The change is strictly more permissive for the 5-reducible-kinds set (no successful call becomes a failure). |
+| I8 | The `helpers.ToFloat64` Q-5 **tightening** breaks callers that today depend on silent truncation of `*BigFloat` / `*BigInteger` overflow / `*Rational`. Three sites change from "success with silently-truncated value" to "error with `ErrLossyConversion`." | Audit before PR 2 lands: grep `helpers.ToFloat64` for all callers; classify each by error-handling shape (propagates / catches-and-defaults / ignores). Document the tightening prominently in CHANGELOG (template above). For callers that need the legacy silent path, the explicit recovery is `values.ToFloat64WithAccuracy(n)` and discard the accuracy slot. |
 
 ## Cross-references
 
@@ -1374,7 +1535,7 @@ field.
 - `werr/werr.go` — sentinel registry; new
   `ErrLossyConversion` joins.
 - `ffi_arg_converters.go` — sites of the FFI tightening (PR 2).
-- `registry/helpers/value_conv.go` — site of the Q-5 widening
+- `registry/helpers/value_conv.go` — site of the Q-5 tightening
   (PR 2).
 - `extensions/math/prim_conversion.go` — site of the new Scheme
   primitives (PR 3).
@@ -1386,12 +1547,46 @@ field.
 - R7RS §6.2.6 — `exact->inexact` semantics; this plan adds
   *companion* primitives, leaves `exact->inexact` unchanged.
 
+## Documentation deliverables (PR 2 must update these)
+
+Per user instruction "Documentation will need to be updated with
+new rules for numeric rounding/handling", the Q-5 tightening
+changes user-visible numeric semantics and must be reflected in
+project documentation, not just the CHANGELOG. PR 2 updates:
+
+| File | What to add / change |
+|------|----------------------|
+| `CHANGELOG.md` | Three behavior changes + two additions; concrete template in PR 2 Step 6 above. **Prominent** placement under a top-level "Numeric conversion semantics" subsection. |
+| `docs/numeric/tower.md` | New section "Conversion to fixed-precision Go types". Document the three-valued `big.Accuracy` enum's Scheme-facing reflection (`'below`/`'exact`/`'above` symbols). Explicitly note the "fail loud on loss" discipline at the float64/complex128 boundary. Contrast with R7RS-mandated `(exact->inexact)` which stays lossy-but-successful. |
+| `docs/reference/r7rs-differences.md` | Add an entry under "Wile-specific numeric primitives" describing the four new `inexact-*` primitives and their relationship to R7RS `exact->inexact`. Note that R7RS-strict programs that import only `(scheme base)` / `(scheme inexact)` are unaffected. |
+| `docs/embedding/api-design.md` (if it documents FFI) | Document the `WithLossyConversionsAllowed()` engine option, the new `ErrLossyConversion` sentinel, and the FFI float64/complex128 behavior. Migration guidance for embedders depending on the previous silent-truncation behavior. |
+| `values/CLAUDE.md` numeric section | Add the new helper functions (`ToFloat64WithAccuracy` etc.) and the `Accuracy` symbol constants to the package's exported-symbol inventory. |
+| `werr/CLAUDE.md` | New `ErrLossyConversion` sentinel listed in the inventory. |
+| `extensions/math/CLAUDE.local.md` | Four new primitives added to the "Numeric Predicates" / "Numeric Conversion" sections. |
+
+**Rule statement** (canonical wording to use across all of the
+above, lifted from the design):
+
+> Conversion of a Scheme numeric value to a fixed-precision Go
+> type (`float64`, `complex128`) reports its accuracy via Go's
+> `big.Accuracy` enum (Below / Exact / Above). The default-strict
+> path errors on any loss with `werr.ErrLossyConversion`; the
+> opt-in lossy-allowed path silently truncates. R7RS-mandated
+> conversions (`exact->inexact`) continue to use the silently-
+> truncating semantics R7RS requires.
+
+PR 2 should land these doc updates in the same commit (or a
+preceding commit on the same PR) as the code changes — not as a
+follow-up — so the documented contract and the implemented
+behavior land atomically.
+
 ## Done definition (whole plan)
 
 - [ ] PR 1 merged: Go infrastructure exposed, registry extended,
       tests pass.
 - [ ] PR 2 merged: FFI tightening + complex128 + helpers.ToFloat64
-      widening; CHANGELOG entries posted.
+      **tightening**; CHANGELOG entries posted; **documentation
+      deliverables above all landed**.
 - [ ] PR 3 merged: four Scheme primitives shipped; acceptance
       table from design passes as Scheme tests.
 - [ ] Parent design plan moves to "Completed Plans" in
