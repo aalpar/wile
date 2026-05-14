@@ -388,3 +388,61 @@ func TestNewRecordTypeConstraintNilPanics(t *testing.T) {
 		values.NewRecordTypeConstraint(nil)
 	}, qt.PanicMatches, `.*rtd must not be nil.*`)
 }
+
+// TestSchemeTypeName pins the Scheme-facing names produced for every
+// type that SchemeTypeName claims to handle. After the SR Phase 0
+// refactor, resolution flows through three layers: the
+// goTypeToValueType reverse map (concrete types with a ValueType),
+// an explicit switch (Record/Box/Promise — types named in Scheme
+// without a ValueType counterpart), and an interface fallback
+// (empty list, proper lists). A regression in any layer surfaces
+// here instead of through ugly "*values.SomeType" leakage in error
+// messages months later.
+func TestSchemeTypeName(t *testing.T) {
+	// Record fixtures for the explicit-switch layer.
+	pointRT := values.NewRecordType(values.NewSymbol("point"), []*values.Symbol{
+		values.NewSymbol("x"),
+	})
+	record := mustNewRecord(pointRT, []values.Value{values.NewInteger(1)})
+
+	tcs := []struct {
+		name string
+		val  values.Value
+		want string
+	}{
+		// Layer 0 — void/nil shortcut.
+		{name: "nil", val: nil, want: "void"},
+		{name: "void singleton", val: values.Void, want: "void"},
+
+		// Layer 1 — reverse-map lookups for concrete ValueType-backed types.
+		{name: "boolean true", val: values.TrueValue, want: "boolean"},
+		{name: "boolean false", val: values.FalseValue, want: "boolean"},
+		{name: "integer", val: values.NewInteger(42), want: "integer"},
+		{name: "big integer", val: values.NewBigIntegerFromInt64(100), want: "integer"},
+		{name: "rational", val: values.NewRational(1, 3), want: "rational"},
+		{name: "float", val: values.NewFloat(3.14), want: "flonum"},
+		{name: "big float", val: values.NewBigFloatFromFloat64(2.71), want: "flonum"},
+		{name: "complex", val: values.NewComplex(1 + 2i), want: "complex"},
+		{name: "string", val: values.NewString("hi"), want: "string"},
+		{name: "character", val: values.NewCharacter('x'), want: "character"},
+		{name: "symbol", val: values.NewSymbol("foo"), want: "symbol"},
+		{name: "byte", val: values.NewByte(7), want: "byte"},
+		{name: "pair", val: values.NewCons(values.NewInteger(1), values.EmptyList), want: "pair"},
+		{name: "vector", val: values.NewVector(), want: "vector"},
+		{name: "bytevector", val: values.NewByteVector(), want: "bytevector"},
+		{name: "hashtable", val: values.NewEmptyHashtable(), want: "hashtable"},
+
+		// Layer 2 — explicit switch for non-ValueType named types.
+		{name: "record", val: record, want: "record"},
+		{name: "box", val: values.NewBox(values.NewInteger(7)), want: "box"},
+		{name: "promise", val: values.NewForcedPromise(values.NewInteger(7)), want: "promise"},
+
+		// Layer 3 — interface fallback for the empty-list singleton.
+		{name: "empty list singleton", val: values.EmptyList, want: "empty-list"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, values.SchemeTypeName(tc.val), qt.Equals, tc.want)
+		})
+	}
+}
