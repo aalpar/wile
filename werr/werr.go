@@ -115,6 +115,7 @@ var (
 	ErrIndexOutOfRange         = NewStaticError("index out of range")
 	ErrImmutableString         = NewStaticError("cannot mutate immutable string")
 	ErrImmutableBinding        = NewStaticError("cannot mutate immutable binding")
+	ErrInvariantViolation      = NewStaticError("invariant violation")
 
 	// FFI errors
 	ErrFFIRegistration          = NewStaticError("FFI registration error")

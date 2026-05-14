@@ -19,21 +19,31 @@ import (
 	"io"
 )
 
-// Unexported interfaces for backing-type methods not in the stdlib.
+// Narrow interfaces for backing-type methods not in the stdlib.
+// Exported because *PortObject's capability accessors expose them as
+// return types (AsRuneWriter, AsByteUnreader, AsRuneUnreader, AsFlusher).
 
-type byteUnreader interface {
+// ByteUnreader is the interface satisfied by readers that can unread the
+// last byte. Mirrors io.ByteScanner's UnreadByte half.
+type ByteUnreader interface {
 	UnreadByte() error
 }
 
-type runeUnreader interface {
+// RuneUnreader is the interface satisfied by readers that can unread the
+// last rune. Mirrors io.RuneScanner's UnreadRune half.
+type RuneUnreader interface {
 	UnreadRune() error
 }
 
-type runeWriter interface {
+// RuneWriter is the interface satisfied by writers that can write a rune.
+// The stdlib has no equivalent; bufio.Writer and bytes.Buffer satisfy it.
+type RuneWriter interface {
 	WriteRune(rune) (int, error)
 }
 
-type flusher interface {
+// Flusher is the interface satisfied by buffered writers that can flush
+// pending bytes to the underlying stream.
+type Flusher interface {
 	Flush() error
 }
 
@@ -56,7 +66,7 @@ func guardedReadByte(b *portBase, r io.ByteReader) (byte, error) {
 	return r.ReadByte()
 }
 
-func guardedUnreadByte(b *portBase, r byteUnreader) error {
+func guardedUnreadByte(b *portBase, r ByteUnreader) error {
 	err := b.guardClosed()
 	if err != nil {
 		return err
@@ -72,7 +82,7 @@ func guardedReadRune(b *portBase, r io.RuneReader) (rune, int, error) {
 	return r.ReadRune()
 }
 
-func guardedUnreadRune(b *portBase, r runeUnreader) error {
+func guardedUnreadRune(b *portBase, r RuneUnreader) error {
 	err := b.guardClosed()
 	if err != nil {
 		return err
@@ -104,7 +114,7 @@ func guardedWriteString(b *portBase, w io.StringWriter, s string) (int, error) {
 	return w.WriteString(s)
 }
 
-func guardedWriteRune(b *portBase, w runeWriter, rn rune) (int, error) {
+func guardedWriteRune(b *portBase, w RuneWriter, rn rune) (int, error) {
 	err := b.guardClosed()
 	if err != nil {
 		return 0, err
@@ -112,7 +122,7 @@ func guardedWriteRune(b *portBase, w runeWriter, rn rune) (int, error) {
 	return w.WriteRune(rn)
 }
 
-func guardedFlush(b *portBase, f flusher) error {
+func guardedFlush(b *portBase, f Flusher) error {
 	err := b.guardClosed()
 	if err != nil {
 		return err
@@ -122,7 +132,7 @@ func guardedFlush(b *portBase, f flusher) error {
 
 // flushThenClose flushes buffered data then closes the port.
 // If both flush and close fail, both errors are preserved via errors.Join.
-func flushThenClose(f flusher, b *portBase) error {
+func flushThenClose(f Flusher, b *portBase) error {
 	flushErr := f.Flush()
 	closeErr := b.Close()
 	if closeErr != nil {
