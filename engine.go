@@ -65,8 +65,9 @@ type Engine struct {
 	maxCallDepth        int
 	maxStackSize        uint64
 	inlineThreshold     int
-	contractEnforcement bool // propagated to RegisterPrimitive via cfg
-	coverageCollector   *coverage.Collector
+	contractEnforcement     bool // propagated to RegisterPrimitive via cfg
+	lossyConversionsAllowed bool // captured into FFI closures at RegisterFunc time
+	coverageCollector       *coverage.Collector
 
 	exportIndexMu    sync.Mutex
 	exportIndexBuilt bool
@@ -253,8 +254,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		maxCallDepth:        cfg.maxCallDepth,
 		maxStackSize:        cfg.maxStackSize,
 		inlineThreshold:     cfg.inlineThreshold,
-		contractEnforcement: cfg.contractEnforcement,
-		coverageCollector:   cfg.coverageCollector,
+		contractEnforcement:     cfg.contractEnforcement,
+		lossyConversionsAllowed: cfg.lossyConversionsAllowed,
+		coverageCollector:       cfg.coverageCollector,
 	}
 	return q, nil
 }
