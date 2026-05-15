@@ -65,28 +65,30 @@ func ComplexOrFloat(c complex128) values.Value {
 	return values.NewComplex(c)
 }
 
-// ToFloat64 converts a Scheme real number to a Go float64, covering the full
-// real numeric tower: Integer, BigInteger, Float, BigFloat, and Rational.
-// Complex types are excluded — they cannot be reduced to a single float64
-// without information loss. Use ToComplex128 for complex values.
+// ToFloat64 converts a Scheme real number to a Go float64 with a lossless
+// guarantee. Real inputs (*Integer, *BigInteger, *Float, *BigFloat, *Rational)
+// that fit float64 exactly succeed; ones that don't fit return
+// werr.ErrLossyConversion (wrapped, message names direction Below/Above).
+// Complex inputs (*Complex, *BigComplex) return werr.ErrNotAReal — the helper
+// is real-domain only.
+//
+// Tightened in PR 2 of the numeric loss signals plan: previously this function
+// silently truncated *BigFloat overflow, *BigInteger overflow, and *Rational
+// with non-representable denominators (e.g., 1/3). Callers that need the
+// silent-truncation behavior should call values.ToFloat64WithAccuracy directly
+// and discard the accuracy slot. See CHANGELOG for migration guidance.
 func ToFloat64(v values.Value) (float64, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return float64(n.Value), nil
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(n.BigInt()).Float64()
-		return f, nil
-	case *values.Float:
-		return n.Value, nil
-	case *values.BigFloat:
-		f, _ := n.BigFloatValue().Float64()
-		return f, nil
-	case *values.Rational:
-		f, _ := n.Rat().Float64()
-		return f, nil
-	default:
+	n, ok := v.(values.Number)
+	if !ok {
 		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
 	}
+	// Domain dispatch via ComplexNumber interface — matches Hashable/Tuple/
+	// Indexable precedent in values/. Avoids enumerating *Complex and
+	// *BigComplex by name (would need updating for any new complex kind).
+	if _, isComplex := n.(values.ComplexNumber); isComplex {
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
+	}
+	return values.ToFloat64Lossless(n)
 }
 
 // ExtractReal extracts a float64 from a real number, tracking exactness.
