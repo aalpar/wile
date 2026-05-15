@@ -204,8 +204,8 @@ func PrimMagnitude(mc machine.CallContext) error {
 		mc.SetValue(values.NewFloat(cmplx.Abs(v.Value)))
 	case *values.BigComplex:
 		// Convert to float64 for magnitude calculation (transcendental operation via sqrt)
-		realF := v.RealAsBigFloat().Float64()
-		imagF := v.ImagAsBigFloat().Float64()
+		realF := v.RealAsBigFloat().Float64Truncated()
+		imagF := v.ImagAsBigFloat().Float64Truncated()
 		mc.SetValue(values.NewFloat(cmplx.Abs(complex(realF, imagF))))
 	case *values.Integer:
 		mc.SetValue(v.Abs())
@@ -235,8 +235,8 @@ func PrimAngle(mc machine.CallContext) error {
 		mc.SetValue(values.NewFloat(cmplx.Phase(v.Value)))
 	case *values.BigComplex:
 		// Convert to float64 for phase calculation (transcendental operation)
-		realF := v.RealAsBigFloat().Float64()
-		imagF := v.ImagAsBigFloat().Float64()
+		realF := v.RealAsBigFloat().Float64Truncated()
+		imagF := v.ImagAsBigFloat().Float64Truncated()
 		mc.SetValue(values.NewFloat(cmplx.Phase(complex(realF, imagF))))
 	case *values.Integer:
 		if v.Value >= 0 {

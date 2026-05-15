@@ -330,7 +330,7 @@ func TestRationalExactness(t *testing.T) {
 	// L18: ToInexact now returns BigFloat for precision
 	bf, ok := inexact.(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(bf.Float64() > 0.33, qt.IsTrue)
+	c.Assert(bf.Float64Truncated() > 0.33, qt.IsTrue)
 }
 
 func TestRationalHashCode(t *testing.T) {

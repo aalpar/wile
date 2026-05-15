@@ -635,8 +635,8 @@ func (p *Parser) numberToInexact(num values.Number) values.Number {
 		f, _ := v.Rat().Float64()
 		return values.NewFloat(f)
 	case *values.BigComplex:
-		reFloat := v.RealAsBigFloat().Float64()
-		imFloat := v.ImagAsBigFloat().Float64()
+		reFloat := v.RealAsBigFloat().Float64Truncated()
+		imFloat := v.ImagAsBigFloat().Float64Truncated()
 		return values.NewComplexFromParts(reFloat, imFloat)
 	default:
 		// Float, BigFloat, Complex are already inexact
@@ -671,8 +671,8 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 		inexactNum = values.NewFloat(f)
 	case *values.BigComplex:
 		// Convert to inexact Complex
-		reFloat := v.RealAsBigFloat().Float64()
-		imFloat := v.ImagAsBigFloat().Float64()
+		reFloat := v.RealAsBigFloat().Float64Truncated()
+		imFloat := v.ImagAsBigFloat().Float64Truncated()
 		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeInexact: unsupported number type")

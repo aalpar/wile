@@ -42,8 +42,8 @@ func TestBigComplex_Constructors(t *testing.T) {
 		values.NewBigFloatFromFloat64(1.5),
 		values.NewBigFloatFromFloat64(2.5),
 	)
-	c.Assert(bc2.RealAsBigFloat().Float64(), qt.Equals, 1.5)
-	c.Assert(bc2.ImagAsBigFloat().Float64(), qt.Equals, 2.5)
+	c.Assert(bc2.RealAsBigFloat().Float64Truncated(), qt.Equals, 1.5)
+	c.Assert(bc2.ImagAsBigFloat().Float64Truncated(), qt.Equals, 2.5)
 	c.Assert(bc2.IsExact(), qt.IsFalse)
 
 	// Mixed parts (inexact due to BigFloat)
@@ -112,8 +112,8 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(quot, qt.IsNotNil)
 	// Division always produces BigFloat parts
-	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64()
-	imagPart := quot.(*values.BigComplex).ImagAsBigFloat().Float64()
+	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64Truncated()
+	imagPart := quot.(*values.BigComplex).ImagAsBigFloat().Float64Truncated()
 	c.Assert(math.Abs(realPart-2.2) < 0.0001, qt.IsTrue)
 	c.Assert(math.Abs(imagPart-(-0.4)) < 0.0001, qt.IsTrue)
 
@@ -139,7 +139,7 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(quotImag, qt.IsNotNil)
 	// (0+1i)/(0+1i) = (0+1)/(0+1) + (0-0)i/(0+1) = 1+0i → simplifies to BigFloat(1)
-	c.Assert(quotImag.(*values.BigFloat).Float64(), qt.Equals, 1.0)
+	c.Assert(quotImag.(*values.BigFloat).Float64Truncated(), qt.Equals, 1.0)
 }
 
 func TestBigComplex_MixedArithmetic(t *testing.T) {
@@ -158,7 +158,7 @@ func TestBigComplex_MixedArithmetic(t *testing.T) {
 	// Add with BigFloat: (3+4i) + 1.5 = (4.5+4i) - becomes inexact
 	sum2 := bc.Add(values.NewBigFloatFromFloat64(1.5))
 	c.Assert(sum2.(*values.BigComplex).IsExact(), qt.IsFalse)
-	c.Assert(sum2.(*values.BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.5)
+	c.Assert(sum2.(*values.BigComplex).RealAsBigFloat().Float64Truncated(), qt.Equals, 4.5)
 
 	// Add with Integer: promotes Integer to BigInteger
 	sum3 := bc.Add(values.NewInteger(10))
@@ -171,8 +171,8 @@ func TestBigComplex_MixedArithmetic(t *testing.T) {
 	// Add with Complex
 	cplx := values.NewComplexFromParts(1.0, 1.0)
 	sum5 := bc.Add(cplx)
-	c.Assert(sum5.(*values.BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.0)
-	c.Assert(sum5.(*values.BigComplex).ImagAsBigFloat().Float64(), qt.Equals, 5.0)
+	c.Assert(sum5.(*values.BigComplex).RealAsBigFloat().Float64Truncated(), qt.Equals, 4.0)
+	c.Assert(sum5.(*values.BigComplex).ImagAsBigFloat().Float64Truncated(), qt.Equals, 5.0)
 }
 
 func TestBigComplex_Exactness(t *testing.T) {
@@ -386,11 +386,11 @@ func TestBigComplex_MagnitudePhase(t *testing.T) {
 	)
 
 	mag := bc.Magnitude()
-	c.Assert(mag.Float64(), qt.Equals, 5.0)
+	c.Assert(mag.Float64Truncated(), qt.Equals, 5.0)
 
 	phase := bc.Phase()
 	expected := math.Atan2(4, 3)
-	c.Assert(math.Abs(phase.Float64()-expected) < 0.0001, qt.IsTrue)
+	c.Assert(math.Abs(phase.Float64Truncated()-expected) < 0.0001, qt.IsTrue)
 
 	// Conjugate: (3+4i)* = 3-4i
 	conj := bc.Conjugate()

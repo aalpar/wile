@@ -103,7 +103,7 @@ func Simplify(n Number) Number {
 	if ok && imag(c.Value) == 0 {
 		return Simplify(NewFloat(real(c.Value)))
 	}
-	return LookupNumericSpec(n.Kind()).SimplifyDown(n)
+	return Lookup(n.Kind()).SimplifyDown(n)
 }
 
 // Exactness represents whether a number is exact or inexact.
@@ -139,7 +139,7 @@ func ExactnessOf(n Number) Exactness {
 		}
 		return Inexact
 	}
-	if LookupNumericSpec(n.Kind()).IsAlwaysExact() {
+	if Lookup(n.Kind()).IsAlwaysExact() {
 		return Exact
 	}
 	return Inexact

@@ -168,16 +168,39 @@ func integerSimplifyDown(n Number) Number {
 	return n
 }
 
-// integerToFloat64 converts an Integer's int64 value to float64. Lossless for
-// |v| ≤ 2^53; silently lossy beyond (see loss-signals follow-up).
-func integerToFloat64(n Number) (float64, error) {
-	return float64(n.(*Integer).Value), nil
+// integerToFloat64WithAccuracy converts an Integer to float64 with
+// direction-recovery. The comparison is in int64 to avoid float-comparison
+// pitfalls (float comparison would itself suffer the rounding being measured).
+//
+// For |v| > 2^53 the float64 representation rounds toward zero, so:
+//
+//	p.Value =  2^53 + 1  →  f =  2^53        →  back = 2^53  < p.Value  → Below
+//	p.Value = -2^53 - 1  →  f = -2^53        →  back =-2^53  > p.Value  → Above
+//
+// Special case: MaxInt64 (2^63-1) rounds up to 2^63 in float64. int64(2^63)
+// saturates back to MaxInt64, making the round-trip falsely appear Exact.
+// Guard before the cast: any f ≥ 2^63 means the float is above the int64.
+func integerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	p := n.(*Integer)
+	f := float64(p.Value)
+	if f >= 9223372036854775808.0 { // 2^63 = MaxInt64+1; int64(f) would saturate
+		return f, big.Above, true
+	}
+	back := int64(f)
+	switch {
+	case back == p.Value:
+		return f, big.Exact, true
+	case back < p.Value:
+		return f, big.Below, true
+	default:
+		return f, big.Above, true
+	}
 }
 
-// integerToComplex128 lifts an Integer to a complex128 with zero imag.
-// Lossless for |v| ≤ 2^53; silently lossy beyond.
-func integerToComplex128(n Number) complex128 {
-	return complex(float64(n.(*Integer).Value), 0)
+// integerToComplex128WithAccuracy lifts an Integer to Complex128Result.
+func integerToComplex128WithAccuracy(n Number) Complex128Result {
+	f, acc, _ := integerToFloat64WithAccuracy(n)
+	return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
 }
 
 var integerAdd [numKinds]func(*Integer, Number) Number
@@ -224,11 +247,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindInteger, NumericTypeSpec{
-		schemeName:    "integer",
-		simplifyDown:  integerSimplifyDown,
-		toFloat64:     integerToFloat64,
-		toComplex128:  integerToComplex128,
-		isAlwaysExact: true,
+		schemeName:               "integer",
+		simplifyDown:             integerSimplifyDown,
+		toFloat64WithAccuracy:    integerToFloat64WithAccuracy,
+		toComplex128WithAccuracy: integerToComplex128WithAccuracy,
+		isAlwaysExact:            true,
 	})
 }
 

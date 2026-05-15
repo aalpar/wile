@@ -104,6 +104,7 @@ var (
 	ErrNotAHashtable           = NewTypeSentinel("hashtable")
 	ErrNoCaptureContext        = NewStaticError("no capture context for expansion")
 	ErrExactnessConversion     = NewStaticError("exactness conversion failed")
+	ErrLossyConversion         = NewStaticError("lossy conversion")
 	ErrNumericRegistry         = NewStaticError("numeric registry violation")
 	ErrInvalidFormat           = NewStaticError("invalid number format")
 	ErrUnknownOpCode           = NewStaticError("unknown op code")

@@ -826,8 +826,8 @@ func TestParseNumber_ExactRationalComplex(t *testing.T) {
 	v := parseSingle(t, "1/2+3/4i")
 	bc, ok := v.(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v", v, v))
-	re := bc.RealAsBigFloat().Float64()
-	im := bc.ImagAsBigFloat().Float64()
+	re := bc.RealAsBigFloat().Float64Truncated()
+	im := bc.ImagAsBigFloat().Float64Truncated()
 	c.Assert(math.Abs(re-0.5) < 1e-10, qt.IsTrue, qt.Commentf("real=%v", re))
 	c.Assert(math.Abs(im-0.75) < 1e-10, qt.IsTrue, qt.Commentf("imag=%v", im))
 }

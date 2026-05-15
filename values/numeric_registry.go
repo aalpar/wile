@@ -15,6 +15,8 @@
 package values
 
 import (
+	"math/big"
+
 	"github.com/aalpar/wile/werr"
 )
 
@@ -30,9 +32,20 @@ import (
 type NumericTypeSpec struct {
 	schemeName    string
 	simplifyDown  func(Number) Number
-	toFloat64     func(Number) (float64, error)
-	toComplex128  func(Number) complex128
 	isAlwaysExact bool
+
+	// toFloat64WithAccuracy replaces the previous toFloat64 field.
+	// Per-kind dispatch returns the float64 result, the big.Accuracy
+	// (Below/Exact/Above), and an isReal flag (false iff input was
+	// Complex/BigComplex with non-zero imaginary part — the imaginary
+	// information is dropped). Always non-nil for every kind.
+	toFloat64WithAccuracy func(Number) (float64, big.Accuracy, bool)
+
+	// toComplex128WithAccuracy replaces the previous toComplex128 field.
+	// Returns a Complex128Result struct (field-named to prevent
+	// realAcc/imagAcc swap bugs at call sites). Always non-nil for every
+	// kind. For real-only kinds, res.ImagAcc is trivially big.Exact.
+	toComplex128WithAccuracy func(Number) Complex128Result
 }
 
 // SchemeName returns the Scheme type name for this numeric kind (e.g. "integer").
@@ -48,18 +61,20 @@ func (p *NumericTypeSpec) SimplifyDown(n Number) Number {
 	return p.simplifyDown(n)
 }
 
-// ToFloat64 converts n to float64. Returns ErrNotAReal when the value carries
-// a non-zero imaginary component (Complex/BigComplex with imag != 0); a complex
-// with imag == 0 succeeds and returns the real part. BigFloat/BigInteger/Rational
-// truncation is currently silent — see plans/2026-05-14-numeric-loss-signals-design.md
-// for the follow-up that adds big.Accuracy plumbing.
-func (p *NumericTypeSpec) ToFloat64(n Number) (float64, error) {
-	return p.toFloat64(n)
+// ToFloat64WithAccuracy dispatches via the registered closure for the kind.
+// Returns (value, accuracy, isReal). The accuracy slot is Below/Exact/Above
+// per Go big.Accuracy semantics. isReal is false iff the input was a
+// Complex/BigComplex with non-zero imaginary part (the imaginary component
+// is dropped; callers should use ToComplex128WithAccuracy for full fidelity).
+func (p *NumericTypeSpec) ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	return p.toFloat64WithAccuracy(n)
 }
 
-// ToComplex128 converts n to complex128. Universal across all 7 kinds.
-func (p *NumericTypeSpec) ToComplex128(n Number) complex128 {
-	return p.toComplex128(n)
+// ToComplex128WithAccuracy dispatches via the registered closure for the kind.
+// Returns a Complex128Result with per-component accuracy. For real-only
+// inputs, res.ImagAcc is big.Exact.
+func (p *NumericTypeSpec) ToComplex128WithAccuracy(n Number) Complex128Result {
+	return p.toComplex128WithAccuracy(n)
 }
 
 // IsAlwaysExact reports whether every value of this kind is exact.
@@ -92,13 +107,13 @@ func registerNumericSpec(kind NumericKind, spec NumericTypeSpec) {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
 			"registerNumericSpec: simplifyDown must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
-	if spec.toFloat64 == nil {
+	if spec.toFloat64WithAccuracy == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: toFloat64 must not be nil for kind %d (%s)", kind, spec.schemeName))
+			"registerNumericSpec: toFloat64WithAccuracy must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
-	if spec.toComplex128 == nil {
+	if spec.toComplex128WithAccuracy == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: toComplex128 must not be nil for kind %d (%s)", kind, spec.schemeName))
+			"registerNumericSpec: toComplex128WithAccuracy must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
 	if registryFilled[kind] {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
@@ -123,7 +138,7 @@ func validateNumericSpecs(specs [numKinds]NumericTypeSpec, filled [numKinds]bool
 			panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
 				"validateNumericSpecs: schemeName empty for kind %d", k))
 		}
-		if specs[k].simplifyDown == nil || specs[k].toFloat64 == nil || specs[k].toComplex128 == nil {
+		if specs[k].simplifyDown == nil || specs[k].toFloat64WithAccuracy == nil || specs[k].toComplex128WithAccuracy == nil {
 			panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
 				"validateNumericSpecs: nil function field for kind %d (%s)", k, specs[k].schemeName))
 		}
@@ -136,17 +151,19 @@ func validateNumericSpecs(specs [numKinds]NumericTypeSpec, filled [numKinds]bool
 // order is lexical by filename; placing the validation in a 'v'-prefixed
 // file is the only way to guarantee it runs after rational.go's init.
 
-// LookupNumericSpec returns the NumericTypeSpec for the given kind.
-// Bounds-checked: an out-of-range kind panics with ErrNumericRegistry rather
+// Lookup returns the NumericTypeSpec for the given kind. Renamed from
+// LookupNumericSpec (PR #752) — the registry is the only Lookup site in
+// values/, so the prefix was redundant. All internal call sites updated.
+// Bounds-checked: out-of-range kind panics with ErrNumericRegistry rather
 // than producing a Go runtime "index out of range" panic. Consulted by the
 // cold-path helpers (Simplify, ExactnessOf, NumberToFloat64, NumberToComplex128).
 // NumberToFloat64/NumberToComplex128 are also reached from the IEEE 754
 // special-value guard inside the arithmetic dispatch closures; those fire
 // only when a Float operand is Inf/NaN, not on every arithmetic op.
-func LookupNumericSpec(kind NumericKind) *NumericTypeSpec {
+func Lookup(kind NumericKind) *NumericTypeSpec {
 	if int(kind) >= int(numKinds) {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"LookupNumericSpec: kind %d out of range [0,%d)", kind, numKinds))
+			"Lookup: kind %d out of range [0,%d)", kind, numKinds))
 	}
 	return &numericRegistry[kind]
 }

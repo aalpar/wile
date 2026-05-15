@@ -165,22 +165,22 @@ func bigComplexSimplifyDown(n Number) Number {
 // bigComplexToFloat64 returns the real component when the imaginary part is
 // zero (lossless on the imaginary axis), and ErrNotAReal otherwise. BigFloat
 // → float64 precision loss is currently silent; the loss-signals follow-up
-// will add big.Accuracy plumbing.
-func bigComplexToFloat64(n Number) (float64, error) {
-	v := n.(*BigComplex)
-	if !v.imag.IsZero() {
-		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
-			"bigComplexToFloat64: nonzero imaginary part cannot be carried in float64")
-	}
-	return toBigFloat(v.real).Float64(), nil
+// bigComplexToFloat64WithAccuracy converts a BigComplex to float64 with
+// per-component loss signal. The real flag is false when the imaginary part
+// is non-zero (caller should use ToComplex128WithAccuracy for full fidelity).
+func bigComplexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	p := n.(*BigComplex)
+	realF, realAcc := toBigFloat(p.real).Float64WithAccuracy()
+	return realF, realAcc, p.imag.IsZero()
 }
 
-// bigComplexToComplex128 reduces the two arbitrary-precision parts to a
-// float64 pair. Currently silent on precision loss; the loss-signals
-// follow-up will add per-component big.Accuracy plumbing.
-func bigComplexToComplex128(n Number) complex128 {
-	v := n.(*BigComplex)
-	return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
+// bigComplexToComplex128WithAccuracy converts a BigComplex to Complex128Result
+// with per-component accuracy. Named fields prevent realAcc/imagAcc swaps.
+func bigComplexToComplex128WithAccuracy(n Number) Complex128Result {
+	p := n.(*BigComplex)
+	realF, realAcc := toBigFloat(p.real).Float64WithAccuracy()
+	imagF, imagAcc := toBigFloat(p.imag).Float64WithAccuracy()
+	return Complex128Result{Value: complex(realF, imagF), RealAcc: realAcc, ImagAcc: imagAcc}
 }
 
 func init() {
@@ -252,11 +252,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindBigComplex, NumericTypeSpec{
-		schemeName:    "complex",
-		simplifyDown:  bigComplexSimplifyDown,
-		toFloat64:     bigComplexToFloat64,
-		toComplex128:  bigComplexToComplex128,
-		isAlwaysExact: false,
+		schemeName:               "complex",
+		simplifyDown:             bigComplexSimplifyDown,
+		toFloat64WithAccuracy:    bigComplexToFloat64WithAccuracy,
+		toComplex128WithAccuracy: bigComplexToComplex128WithAccuracy,
+		isAlwaysExact:            false,
 	})
 }
 
@@ -484,8 +484,8 @@ func (p *BigComplex) Magnitude() *BigFloat {
 // Uses atan2(imag, real).
 func (p *BigComplex) Phase() *BigFloat {
 	// Convert to float64 for atan2 calculation
-	r := toBigFloat(p.real).Float64()
-	i := toBigFloat(p.imag).Float64()
+	r := toBigFloat(p.real).Float64Truncated()
+	i := toBigFloat(p.imag).Float64Truncated()
 	phase := math.Atan2(i, r)
 	return NewBigFloatFromFloat64(phase)
 }
@@ -529,8 +529,8 @@ func (p *BigComplex) EqualTo(o Value) bool {
 		// Check if equal to regular Complex
 		c, ok := o.(*Complex)
 		if ok {
-			pReal := toBigFloat(p.real).Float64()
-			pImag := toBigFloat(p.imag).Float64()
+			pReal := toBigFloat(p.real).Float64Truncated()
+			pImag := toBigFloat(p.imag).Float64Truncated()
 			return pReal == real(c.Value) && pImag == imag(c.Value)
 		}
 		return false

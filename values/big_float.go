@@ -96,13 +96,34 @@ func (p *BigFloat) BigFloatValue() *big.Float {
 	return p.value
 }
 
-// Float64 returns the value as float64 (may lose precision).
-func (p *BigFloat) Float64() float64 {
+// Float64Truncated returns the value as float64, silently rounding when the
+// magnitude exceeds float64 precision. Use only when downstream code inherently
+// cannot use the accuracy bit (math.Sin/Cos inputs, FNV hash seeds,
+// transcendental coercions).
+//
+// For loss-signal-aware conversion, use Float64WithAccuracy() instead.
+//
+// NaN handling: a BigFloat with the NaN flag set returns math.NaN().
+func (p *BigFloat) Float64Truncated() float64 {
 	if p.nan {
 		return math.NaN()
 	}
 	f, _ := p.value.Float64()
 	return f
+}
+
+// Float64WithAccuracy returns the value as float64 along with Go's
+// big.Accuracy indicator (Below / Exact / Above). Mirrors the stdlib
+// (*big.Float).Float64() signature directly; the NaN flag is surfaced as
+// (math.NaN(), big.Exact) since NaN→NaN is bit-pattern identity.
+//
+// Use this whenever the caller can reasonably act on the accuracy bit
+// (precision-aware conversions, the ToFloat64WithAccuracy public helper).
+func (p *BigFloat) Float64WithAccuracy() (float64, big.Accuracy) {
+	if p.nan {
+		return math.NaN(), big.Exact
+	}
+	return p.value.Float64()
 }
 
 // HashCode returns a hash code for this BigFloat.
@@ -117,7 +138,7 @@ func (p *BigFloat) HashCode() uint64 {
 		return hashUint64(0x5, math.Float64bits(math.NaN()))
 	}
 	if p.value.IsInf() {
-		return hashUint64(0x5, math.Float64bits(p.Float64()))
+		return hashUint64(0x5, math.Float64bits(p.Float64Truncated()))
 	}
 	return hashInexactNumeric(p.value)
 }
@@ -146,17 +167,21 @@ func bigFloatSimplifyDown(n Number) Number {
 	return n
 }
 
-// bigFloatToFloat64 reduces arbitrary-precision big.Float to float64.
-// Silently lossy when the BigFloat carries more precision than float64; the
-// loss-signals follow-up will surface big.Accuracy here.
-func bigFloatToFloat64(n Number) (float64, error) {
-	return n.(*BigFloat).Float64(), nil
+// bigFloatToFloat64WithAccuracy converts a BigFloat to float64 with loss-signal.
+// Handles the NaN case first (NaN→NaN is identity, reported as Exact per Q-6).
+func bigFloatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	p := n.(*BigFloat)
+	if p.IsNaN() {
+		return math.NaN(), big.Exact, true // NaN→NaN identity
+	}
+	f, acc := p.value.Float64()
+	return f, acc, true
 }
 
-// bigFloatToComplex128 lifts a BigFloat to complex128 with zero imag.
-// Same precision-loss caveat as bigFloatToFloat64.
-func bigFloatToComplex128(n Number) complex128 {
-	return complex(n.(*BigFloat).Float64(), 0)
+// bigFloatToComplex128WithAccuracy lifts a BigFloat to Complex128Result.
+func bigFloatToComplex128WithAccuracy(n Number) Complex128Result {
+	f, acc, _ := bigFloatToFloat64WithAccuracy(n)
+	return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
 }
 
 var bigFloatAdd [numKinds]func(*BigFloat, Number) Number
@@ -192,11 +217,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindBigFloat, NumericTypeSpec{
-		schemeName:    "real",
-		simplifyDown:  bigFloatSimplifyDown,
-		toFloat64:     bigFloatToFloat64,
-		toComplex128:  bigFloatToComplex128,
-		isAlwaysExact: false,
+		schemeName:               "real",
+		simplifyDown:             bigFloatSimplifyDown,
+		toFloat64WithAccuracy:    bigFloatToFloat64WithAccuracy,
+		toComplex128WithAccuracy: bigFloatToComplex128WithAccuracy,
+		isAlwaysExact:            false,
 	})
 }
 

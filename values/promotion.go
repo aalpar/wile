@@ -324,19 +324,17 @@ func isSpecialFloat(f *Float) bool {
 // Behavior across kinds:
 //   - Integer/BigInteger/Float/BigFloat/Rational: silent precision loss is
 //     possible (BigInteger > 2^53, BigFloat with extra precision, Rational
-//     like 1/3). See plans/2026-05-14-numeric-loss-signals-design.md for the
-//     follow-up that adds big.Accuracy plumbing and an ErrLossyConversion
-//     sentinel.
+//     like 1/3). Use ToFloat64WithAccuracy via the spec for loss signals.
 //   - Complex/BigComplex with imag == 0: returns the real part (lossless
 //     since no information is discarded).
-//   - Complex/BigComplex with imag != 0: panics with ErrNotAReal preserved
-//     as the cause sentinel; the imaginary component cannot be carried in a
-//     float64. Callers in extensions/math should Simplify() the value first
-//     if they want zero-imag complex inputs to flow through transparently.
+//   - Complex/BigComplex with imag != 0: panics with ErrNotAReal; the
+//     imaginary component cannot be carried in a float64. Callers in
+//     extensions/math should Simplify() the value first if they want
+//     zero-imag complex inputs to flow through transparently.
 func NumberToFloat64(n Number) float64 {
-	f, err := LookupNumericSpec(n.Kind()).ToFloat64(n)
-	if err != nil {
-		panic(werr.WrapForeignErrorWithCause(werr.ErrNotAReal, err,
+	f, _, ok := Lookup(n.Kind()).ToFloat64WithAccuracy(n)
+	if !ok {
+		panic(werr.WrapForeignErrorf(werr.ErrNotAReal,
 			"NumberToFloat64: cannot convert %T to float64", n))
 	}
 	return f
@@ -347,7 +345,7 @@ func NumberToFloat64(n Number) float64 {
 // intended for paths where precision loss is acceptable, such as IEEE 754
 // Inf/NaN guards and inexact complex arithmetic in extensions.
 func NumberToComplex128(n Number) complex128 {
-	return LookupNumericSpec(n.Kind()).ToComplex128(n)
+	return Lookup(n.Kind()).ToComplex128WithAccuracy(n).Value
 }
 
 // cmpFloat64 compares two float64 values, returning -1, 0, or 1.
