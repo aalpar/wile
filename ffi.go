@@ -136,7 +136,7 @@ type ffiSpec struct {
 //
 // Returns an error wrapping [werr.ErrFFIRegistration] if fn is not a function or uses unsupported types.
 func (p *Engine) RegisterFunc(name string, fn any) error {
-	spec, err := buildFFISpec(name, fn)
+	spec, err := buildFFISpec(name, fn, p.lossyConversionsAllowed)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,9 @@ func (p *Engine) RegisterFuncs(funcs map[string]any) error {
 }
 
 // buildFFISpec reflects on fn to produce an ffiSpec with pre-computed converters.
-func buildFFISpec(name string, fn any) (*ffiSpec, error) {
+// lossyAllowed is captured into the Float64/Complex128 leaf converters so each
+// FFI registration freezes its loss policy at RegisterFunc time.
+func buildFFISpec(name string, fn any, lossyAllowed bool) (*ffiSpec, error) {
 	fnType := reflect.TypeOf(fn)
 	if fnType == nil || fnType.Kind() != reflect.Func {
 		return nil, werr.WrapForeignErrorf(werr.ErrFFIRegistration, "RegisterFunc %q: not a function", name)
@@ -217,7 +219,7 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 		if spec.isVariadic && i == fnType.NumIn()-1 {
 			convType = paramType.Elem()
 		}
-		conv, err := makeArgConverter(name, idx+1, convType)
+		conv, err := makeArgConverter(name, idx+1, convType, lossyAllowed)
 		if err != nil {
 			return nil, err
 		}

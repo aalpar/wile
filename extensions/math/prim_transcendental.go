@@ -89,7 +89,14 @@ func PrimAtan(mc machine.CallContext) error {
 		}
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Atan(z)))
 	} else {
-		y, err := helpers.ToFloat64(o)
+		// atan2 inherently returns an inexact result, so silent
+		// lossy conversion of *Rational / *BigFloat operands is
+		// load-bearing for R7RS §6.2.6 semantics. Bypass the
+		// PR-2 tightening on helpers.ToFloat64 by going through
+		// the WithAccuracy variant directly and discarding the
+		// per-component accuracy slot. See plans/2026-05-14-
+		// numeric-loss-signals-design.md §R8.
+		y, err := atan2Operand(o)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
@@ -100,13 +107,30 @@ func PrimAtan(mc machine.CallContext) error {
 		if !values.IsEmptyList(xArg.Cdr()) {
 			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "atan: expected 1 or 2 arguments")
 		}
-		x, err := helpers.ToFloat64(xArg.Car())
+		x, err := atan2Operand(xArg.Car())
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
 		mc.SetValue(values.NewFloat(math.Atan2(y, x)))
 	}
 	return nil
+}
+
+// atan2Operand extracts a float64 from a real Scheme number, preserving the
+// pre-PR-2 silent-truncation behavior that helpers.ToFloat64 used to provide.
+// Used by (atan y x), where lossy conversion is semantically correct because
+// the result is inherently inexact.
+func atan2Operand(v values.Value) (float64, error) {
+	n, ok := v.(values.Number)
+	if !ok {
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
+	}
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
+	}
+	f, _, _, _ := values.ToFloat64WithAccuracy(n)
+	return f, nil
 }
 
 // PrimSqrt implements the (sqrt) primitive.

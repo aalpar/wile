@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **FFI `float64` parameter conversion is now precision-aware.** Numeric arguments
+  passed across the FFI to Go `float64` parameters are checked for lossless
+  representability under the default ("strict") mode:
+  - `*BigFloat` is now accepted when the value fits `float64` losslessly;
+    previously the FFI rejected it via `werr.ErrTypeConversion`. Lossy
+    `*BigFloat` (mantissa beyond 53 bits, or magnitude beyond `float64` range)
+    now errors with `werr.ErrLossyConversion`.
+  - `*BigInteger` overflow newly errors. Previously the FFI silently truncated
+    to `±Inf` via `(*big.Int).Float64()`'s discarded accuracy bit; now returns
+    `ErrLossyConversion` with the direction (`Above` / `Below`) named in the
+    message.
+  - `*Rational` non-representable newly errors. Previously `(/ 1 3)` passed to
+    a `float64` parameter silently rounded to `0.333…`; now errors with
+    `ErrLossyConversion`.
+  - Passing `*Complex` or `*BigComplex` to a Go `float64` parameter now returns
+    `ErrLossyConversion` (via the new `!isReal` branch of
+    `values.ToFloat64Lossless`) instead of the previous `ErrTypeConversion`.
+    Embedders matching on `errors.Is(err, ErrTypeConversion)` to catch
+    "complex passed where real expected" should add `errors.Is(err,
+    ErrLossyConversion)`.
+
+  Embedders relying on the previous silent-truncation path can recover it via
+  the new `WithLossyConversionsAllowed()` engine option.
+
+- **FFI `complex128` parameter conversion is now supported.** Go functions
+  taking `complex128` parameters can now be registered. Previously, registration
+  failed with `ErrFFIRegistration`. `*Complex` and `*BigComplex` arguments
+  convert with per-component precision tracking; under strict mode, any
+  component that rounds returns `ErrLossyConversion`. Complex *return* values
+  and complex callback parameters remain unsupported (`makeRetConverter` has no
+  `complex128` arm).
+
+- **`registry/helpers/value_conv.ToFloat64` tightened.** Previously silently
+  truncated `*BigFloat` overflow, `*BigInteger` overflow, and `*Rational` with
+  non-representable denominators (e.g., `1/3`). Now errors with
+  `werr.ErrLossyConversion` on loss. Same-precision inputs (`*Integer`,
+  `*Float`, exact-power-of-2 `*Rational`, etc.) continue to succeed
+  unchanged. Migration: callers needing the silent-truncation behavior should
+  call `values.ToFloat64WithAccuracy` and discard the accuracy slot. The only
+  in-tree caller affected was `(atan y x)`, which now uses the lossy-allowed
+  path directly (R7RS §6.2.6 inherently returns inexact, so silent loss is
+  load-bearing there).
+
+### Added
+
+- **`wile.WithLossyConversionsAllowed()` engine option** — opt-in flag
+  suppressing `ErrLossyConversion` returns from FFI converters. When set, the
+  Float64 converter calls `values.ToFloat64WithAccuracy` and discards the
+  accuracy / `isReal` flags; the Complex128 converter projects the value slot
+  and discards per-component accuracies. Per-engine; the flag is captured at
+  `RegisterFunc` time so changes after registration do not affect already-built
+  FFI closures.
+
+- **`werr.ErrLossyConversion` sentinel** — new static error distinct from
+  `ErrNotAReal` (real-vs-complex domain mismatch) and `ErrTypeConversion`
+  (`reflect.Kind` mismatch). Callers can `errors.Is` against it to detect
+  precision-loss specifically.
+
+- **`values.ToFloat64WithAccuracy`, `values.ToFloat64Lossless`,
+  `values.ToComplex128WithAccuracy`, `values.ToComplex128Lossless`** — public
+  helpers surfacing Go's `big.Accuracy` three-valued enum (`big.Below` /
+  `big.Exact` / `big.Above`) at the cross-package boundary. `WithAccuracy`
+  forms return the raw value plus accuracy slots; `Lossless` forms return
+  `ErrLossyConversion` when any component would round. See
+  `values/conversion.go`.
+
 ### Fixed
 
 - `syntax-case` now propagates non-`ErrNotAMatch` matcher errors instead of silently translating them to "no matching clause". Context cancellations and malformed-input errors during pattern matching surface with the actual diagnostic instead of the misleading no-match message. (#732)

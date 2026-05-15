@@ -17,6 +17,7 @@ package helpers
 import (
 	"errors"
 	"math"
+	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -253,11 +254,12 @@ func TestToFloat64(t *testing.T) {
 		want    float64
 		checkFn func(float64) bool // optional: overrides want comparison
 	}{
-		// Integer
+		// Integer — values that fit float64 exactly (≤ 2^53 magnitude
+		// or exact powers of 2 above that).
 		{"integer zero", values.NewInteger(0), 0, nil},
 		{"integer positive", values.NewInteger(42), 42, nil},
 		{"integer negative", values.NewInteger(-7), -7, nil},
-		{"integer max", values.NewInteger(math.MaxInt64), float64(math.MaxInt64), nil},
+		// math.MinInt64 = -2^63 is an exact power of 2 → representable.
 		{"integer min", values.NewInteger(math.MinInt64), float64(math.MinInt64), nil},
 
 		// Float
@@ -271,8 +273,8 @@ func TestToFloat64(t *testing.T) {
 			math.IsNaN,
 		},
 
-		// Rational
-		{"rational 1/3", values.NewRational(1, 3), 1.0 / 3.0, nil},
+		// Rational — only those losslessly representable as float64
+		// (powers-of-2 denominator, numerator ≤ 2^53 magnitude).
 		{"rational 1/1", values.NewRational(1, 1), 1, nil},
 		{"rational -1/2", values.NewRational(-1, 2), -0.5, nil},
 		{"rational zero", values.NewRational(0, 1), 0, nil},
@@ -282,7 +284,7 @@ func TestToFloat64(t *testing.T) {
 		{"big integer negative", values.NewBigIntegerFromInt64(-7), -7, nil},
 		{"big integer zero", values.NewBigIntegerFromInt64(0), 0, nil},
 
-		// BigFloat
+		// BigFloat — values constructed from float64 round-trip exactly.
 		{"big float positive", values.NewBigFloatFromFloat64(3.14), 3.14, nil},
 		{"big float negative", values.NewBigFloatFromFloat64(-2.718), -2.718, nil},
 		{"big float zero", values.NewBigFloatFromFloat64(0.0), 0, nil},
@@ -324,6 +326,45 @@ func TestToFloat64_Errors(t *testing.T) {
 			_, err := ToFloat64(tc.input)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+		})
+	}
+}
+
+// TestToFloat64_LossyConversion verifies the PR 2 tightening: inputs that
+// previously truncated silently now error with werr.ErrLossyConversion.
+// Pre-PR-2, all of these succeeded with a silently-rounded float64.
+func TestToFloat64_LossyConversion(t *testing.T) {
+	c := qt.New(t)
+
+	bigOverflow, _, err := big.ParseFloat("1e500", 10, 256, big.ToNearestEven)
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name  string
+		input values.Value
+	}{
+		// math.MaxInt64 = 2^63 - 1; float64 rounds to 2^63 (Above).
+		{"integer max int64", values.NewInteger(math.MaxInt64)},
+		// 1/3 is rational but not exactly representable in binary
+		// float64 (denominator is not a power of 2) — rounds Below.
+		{"rational 1/3", values.NewRational(1, 3)},
+		// BigInteger that requires more than 53 mantissa bits — float64
+		// can't preserve every digit. (2^100 + 1 cannot, because 2^100
+		// alone uses the implicit leading-1 mantissa bit.)
+		{"big integer precision loss",
+			values.NewBigInteger(new(big.Int).Add(
+				new(big.Int).Lsh(big.NewInt(1), 100),
+				big.NewInt(1)))},
+		// BigFloat overflowing float64 magnitude (saturates to +Inf, Above).
+		{"big float overflow", values.NewBigFloat(bigOverflow)},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ToFloat64(tc.input)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrLossyConversion), qt.IsTrue,
+				qt.Commentf("expected ErrLossyConversion, got: %v", err))
 		})
 	}
 }

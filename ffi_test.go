@@ -46,13 +46,18 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	return result
 }
 
-func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
+// evalExpectError parses and runs the given Scheme expression, asserts that
+// an error occurred, and returns the error. Callers that need to match the
+// error against a sentinel (errors.Is) consume the return value; callers that
+// only need "did it error" can ignore it.
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) error {
 	t.Helper()
 	ctx := context.Background()
 	_, err := engine.Eval(ctx, engine.MustParse(ctx, code))
 	if err == nil {
 		t.Fatalf("eval %q: expected error, got nil", code)
 	}
+	return err
 }
 
 // --- Registration validation errors ---
@@ -89,7 +94,9 @@ func TestRegisterFuncUnsupportedTypes(t *testing.T) {
 		name string
 		fn   any
 	}{
-		{"complex128 param", func(c complex128) float64 { return real(c) }},
+		// complex128 *parameters* are supported as of PR 2 of the numeric
+		// loss signals plan; complex128 *returns* and complex128 *callback
+		// parameters* still go through makeRetConverter and remain unsupported.
 		{"unsupported map key", func(m map[float64]int) int { return len(m) }},
 		{"unsupported return", func() complex128 { return 0 }},
 		{"three returns", func() (int64, int64, error) { return 0, 0, nil }},

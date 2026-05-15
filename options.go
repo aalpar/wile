@@ -64,6 +64,12 @@ type engineConfig struct {
 	// whose specs declare ParamTypes. Enabled via WithContractEnforcement.
 	contractEnforcement bool
 
+	// lossyConversionsAllowed permits FFI converters to silently truncate
+	// Scheme numerics into fixed-precision Go types (float64, complex128).
+	// Enabled via WithLossyConversionsAllowed. Captured into each FFI
+	// closure at RegisterFunc time.
+	lossyConversionsAllowed bool
+
 	// coverageCollector, when non-nil, receives every NativeTemplate produced
 	// by the compiler so per-s-expression execution can be tracked.
 	coverageCollector *coverage.Collector
@@ -110,6 +116,29 @@ func WithExtensions(exts ...registry.Extension) EngineOption {
 func WithContractEnforcement() EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.contractEnforcement = true
+	}
+}
+
+// WithLossyConversionsAllowed permits FFI converters to silently
+// truncate when converting Scheme numerics to fixed-precision Go
+// types (float64, complex128). When set, *BigFloat with magnitude
+// exceeding float64 range converts to ±math.Inf(0) without error;
+// *Rational with non-representable denominators rounds via
+// (*big.Rat).Float64 with the loss bit discarded; *BigComplex
+// imaginary/real components each may truncate independently.
+//
+// Default (option not set): the FFI converter returns
+// werr.ErrLossyConversion (wrapped, with direction info) when any
+// precision loss would occur. This is the "fail loud" discipline —
+// opt-in is required to suppress.
+//
+// The option is per-engine; the flag is captured into each FFI
+// closure at RegisterFunc time, so calling
+// WithLossyConversionsAllowed after some functions have already
+// registered does NOT change their behavior.
+func WithLossyConversionsAllowed() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.lossyConversionsAllowed = true
 	}
 }
 
