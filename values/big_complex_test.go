@@ -42,8 +42,8 @@ func TestBigComplex_Constructors(t *testing.T) {
 		values.NewBigFloatFromFloat64(1.5),
 		values.NewBigFloatFromFloat64(2.5),
 	)
-	c.Assert(bc2.RealAsBigFloat().Float64(), qt.Equals, 1.5)
-	c.Assert(bc2.ImagAsBigFloat().Float64(), qt.Equals, 2.5)
+	c.Assert(bc2.RealAsBigFloat().Float64Truncated(), qt.Equals, 1.5)
+	c.Assert(bc2.ImagAsBigFloat().Float64Truncated(), qt.Equals, 2.5)
 	c.Assert(bc2.IsExact(), qt.IsFalse)
 
 	// Mixed parts (inexact due to BigFloat)
@@ -112,8 +112,8 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(quot, qt.IsNotNil)
 	// Division always produces BigFloat parts
-	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64()
-	imagPart := quot.(*values.BigComplex).ImagAsBigFloat().Float64()
+	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64Truncated()
+	imagPart := quot.(*values.BigComplex).ImagAsBigFloat().Float64Truncated()
 	c.Assert(math.Abs(realPart-2.2) < 0.0001, qt.IsTrue)
 	c.Assert(math.Abs(imagPart-(-0.4)) < 0.0001, qt.IsTrue)
 
@@ -139,7 +139,7 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(quotImag, qt.IsNotNil)
 	// (0+1i)/(0+1i) = (0+1)/(0+1) + (0-0)i/(0+1) = 1+0i → simplifies to BigFloat(1)
-	c.Assert(quotImag.(*values.BigFloat).Float64(), qt.Equals, 1.0)
+	c.Assert(quotImag.(*values.BigFloat).Float64Truncated(), qt.Equals, 1.0)
 }
 
 func TestBigComplex_MixedArithmetic(t *testing.T) {
@@ -158,7 +158,7 @@ func TestBigComplex_MixedArithmetic(t *testing.T) {
 	// Add with BigFloat: (3+4i) + 1.5 = (4.5+4i) - becomes inexact
 	sum2 := bc.Add(values.NewBigFloatFromFloat64(1.5))
 	c.Assert(sum2.(*values.BigComplex).IsExact(), qt.IsFalse)
-	c.Assert(sum2.(*values.BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.5)
+	c.Assert(sum2.(*values.BigComplex).RealAsBigFloat().Float64Truncated(), qt.Equals, 4.5)
 
 	// Add with Integer: promotes Integer to BigInteger
 	sum3 := bc.Add(values.NewInteger(10))
@@ -171,8 +171,8 @@ func TestBigComplex_MixedArithmetic(t *testing.T) {
 	// Add with Complex
 	cplx := values.NewComplexFromParts(1.0, 1.0)
 	sum5 := bc.Add(cplx)
-	c.Assert(sum5.(*values.BigComplex).RealAsBigFloat().Float64(), qt.Equals, 4.0)
-	c.Assert(sum5.(*values.BigComplex).ImagAsBigFloat().Float64(), qt.Equals, 5.0)
+	c.Assert(sum5.(*values.BigComplex).RealAsBigFloat().Float64Truncated(), qt.Equals, 4.0)
+	c.Assert(sum5.(*values.BigComplex).ImagAsBigFloat().Float64Truncated(), qt.Equals, 5.0)
 }
 
 func TestBigComplex_Exactness(t *testing.T) {
@@ -294,7 +294,7 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 				case "Rational":
 					rat, ok := exact.(*values.Rational)
 					c.Assert(ok, qt.IsTrue, qt.Commentf("Result should be Rational, got %T: %v", exact, exact.SchemeString()))
-					c.Assert(rat.Float64(), qt.Equals, tc.wantRealValue)
+					c.Assert(rat.Float64Truncated(), qt.Equals, tc.wantRealValue)
 				case "Integer":
 					switch v := exact.(type) {
 					case *values.Integer:
@@ -320,7 +320,7 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 			case "Rational":
 				rat, ok := realPart.(*values.Rational)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("Real part should be Rational, got %T: %v", realPart, realPart.SchemeString()))
-				c.Assert(rat.Float64(), qt.Equals, tc.wantRealValue)
+				c.Assert(rat.Float64Truncated(), qt.Equals, tc.wantRealValue)
 			case "Integer":
 				// Could be Integer or BigInteger depending on value
 				switch v := realPart.(type) {
@@ -341,7 +341,7 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 			case "Rational":
 				rat, ok := imagPart.(*values.Rational)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("Imaginary part should be Rational, got %T: %v", imagPart, imagPart.SchemeString()))
-				c.Assert(rat.Float64(), qt.Equals, tc.wantImagValue)
+				c.Assert(rat.Float64Truncated(), qt.Equals, tc.wantImagValue)
 			case "Integer":
 				switch v := imagPart.(type) {
 				case *values.Integer:
@@ -386,11 +386,11 @@ func TestBigComplex_MagnitudePhase(t *testing.T) {
 	)
 
 	mag := bc.Magnitude()
-	c.Assert(mag.Float64(), qt.Equals, 5.0)
+	c.Assert(mag.Float64Truncated(), qt.Equals, 5.0)
 
 	phase := bc.Phase()
 	expected := math.Atan2(4, 3)
-	c.Assert(math.Abs(phase.Float64()-expected) < 0.0001, qt.IsTrue)
+	c.Assert(math.Abs(phase.Float64Truncated()-expected) < 0.0001, qt.IsTrue)
 
 	// Conjugate: (3+4i)* = 3-4i
 	conj := bc.Conjugate()
@@ -537,8 +537,8 @@ func TestBigComplex_RationalParts(t *testing.T) {
 
 	// Should be exact
 	c.Assert(bc.IsExact(), qt.IsTrue)
-	c.Assert(bc.Real().(*values.Rational).Float64(), qt.Equals, 1.5)
-	c.Assert(bc.Imag().(*values.Rational).Float64(), qt.Equals, 0.5)
+	c.Assert(bc.Real().(*values.Rational).Float64Truncated(), qt.Equals, 1.5)
+	c.Assert(bc.Imag().(*values.Rational).Float64Truncated(), qt.Equals, 0.5)
 
 	// SchemeString should format correctly
 	c.Assert(bc.SchemeString(), qt.Equals, "3/2+1/2i")
@@ -568,24 +568,24 @@ func TestBigComplex_RationalArithmetic(t *testing.T) {
 	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
 	realPart := sum.(*values.BigComplex).Real().(*values.Rational)
 	imagPart := sum.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64(), qt.Equals, 2.0)
-	c.Assert(imagPart.Float64(), qt.Equals, 0.75)
+	c.Assert(realPart.Float64Truncated(), qt.Equals, 2.0)
+	c.Assert(imagPart.Float64Truncated(), qt.Equals, 0.75)
 
 	// Subtract: (3/2 + 1/2i) - (1/2 + 1/4i) = (1 + 1/4i)
 	diff := bc1.Subtract(bc2)
 	c.Assert(diff.(*values.BigComplex).IsExact(), qt.IsTrue)
 	realPart = diff.(*values.BigComplex).Real().(*values.Rational)
 	imagPart = diff.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64(), qt.Equals, 1.0)
-	c.Assert(imagPart.Float64(), qt.Equals, 0.25)
+	c.Assert(realPart.Float64Truncated(), qt.Equals, 1.0)
+	c.Assert(imagPart.Float64Truncated(), qt.Equals, 0.25)
 
 	// Multiply: (3/2 + 1/2i) * (1/2 + 1/4i) = (3/4 - 1/8) + (3/8 + 1/4)i = 5/8 + 5/8i
 	prod := bc1.Multiply(bc2)
 	c.Assert(prod.(*values.BigComplex).IsExact(), qt.IsTrue)
 	realPart = prod.(*values.BigComplex).Real().(*values.Rational)
 	imagPart = prod.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64(), qt.Equals, 0.625) // 5/8
-	c.Assert(imagPart.Float64(), qt.Equals, 0.625) // 5/8
+	c.Assert(realPart.Float64Truncated(), qt.Equals, 0.625) // 5/8
+	c.Assert(imagPart.Float64Truncated(), qt.Equals, 0.625) // 5/8
 }
 
 func TestBigComplex_RationalWithScalar(t *testing.T) {
@@ -600,7 +600,7 @@ func TestBigComplex_RationalWithScalar(t *testing.T) {
 	sum := bc.Add(values.NewRational(1, 4))
 	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
 	realPart := sum.(*values.BigComplex).Real().(*values.Rational)
-	c.Assert(realPart.Float64(), qt.Equals, 1.75) // 7/4
+	c.Assert(realPart.Float64Truncated(), qt.Equals, 1.75) // 7/4
 
 	// Multiply Rational: (3/2 + 1/2i) * 2 = (3 + 1i)
 	prod := bc.Multiply(values.NewRational(2, 1))
@@ -612,8 +612,8 @@ func TestBigComplex_RationalWithScalar(t *testing.T) {
 	c.Assert(quot.(*values.BigComplex).IsExact(), qt.IsTrue)
 	realPart = quot.(*values.BigComplex).Real().(*values.Rational)
 	imagPart := quot.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64(), qt.Equals, 3.0)
-	c.Assert(imagPart.Float64(), qt.Equals, 1.0)
+	c.Assert(realPart.Float64Truncated(), qt.Equals, 3.0)
+	c.Assert(imagPart.Float64Truncated(), qt.Equals, 1.0)
 }
 
 func TestBigComplex_RationalExactnessContagion(t *testing.T) {

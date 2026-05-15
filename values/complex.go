@@ -73,22 +73,19 @@ func complexSimplifyDown(n Number) Number {
 	return n
 }
 
-// complexToFloat64 returns the real component when the imaginary part is
-// zero (lossless), and ErrNotAReal otherwise. This aligns with the
-// loss-signals design principle: "succeed silently when no information is
-// lost; error precisely when it would be."
-func complexToFloat64(n Number) (float64, error) {
+// complexToFloat64WithAccuracy returns the real component when the imaginary
+// part is zero (ok=true, Exact since *Complex IS a complex128). Returns
+// ok=false when the imaginary part is non-zero — callers must handle this.
+func complexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	v := n.(*Complex)
-	if imag(v.Value) != 0 {
-		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
-			"complexToFloat64: nonzero imaginary part (%g) cannot be carried in float64", imag(v.Value))
-	}
-	return real(v.Value), nil
+	return real(v.Value), big.Exact, imag(v.Value) == 0
 }
 
-// complexToComplex128 returns the underlying complex128 directly.
-func complexToComplex128(n Number) complex128 {
-	return n.(*Complex).Value
+// complexToComplex128WithAccuracy returns the underlying complex128 directly;
+// both components are Exact since *Complex IS a complex128 (identity conversion).
+func complexToComplex128WithAccuracy(n Number) Complex128Result {
+	v := n.(*Complex)
+	return Complex128Result{Value: v.Value, RealAcc: big.Exact, ImagAcc: big.Exact}
 }
 
 var complexAdd [numKinds]func(*Complex, Number) Number
@@ -130,11 +127,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindComplex, NumericTypeSpec{
-		schemeName:    "complex",
-		simplifyDown:  complexSimplifyDown,
-		toFloat64:     complexToFloat64,
-		toComplex128:  complexToComplex128,
-		isAlwaysExact: false,
+		schemeName:               "complex",
+		simplifyDown:             complexSimplifyDown,
+		toFloat64WithAccuracy:    complexToFloat64WithAccuracy,
+		toComplex128WithAccuracy: complexToComplex128WithAccuracy,
+		isAlwaysExact:            false,
 	})
 }
 

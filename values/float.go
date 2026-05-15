@@ -85,14 +85,11 @@ func floatSimplifyDown(n Number) Number {
 	return n
 }
 
-// floatToFloat64 returns the underlying float64 directly; lossless.
-func floatToFloat64(n Number) (float64, error) {
-	return n.(*Float).Value, nil
-}
-
-// floatToComplex128 lifts a Float to complex128 with zero imag; lossless.
-func floatToComplex128(n Number) complex128 {
-	return complex(n.(*Float).Value, 0)
+// floatToFloat64WithAccuracy returns the underlying float64; always Exact
+// since *Float IS a float64 (identity conversion, no precision change).
+// NaN and Inf are also Exact per Q-6: identity is bit-pattern identity.
+func floatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	return n.(*Float).Value, big.Exact, true
 }
 
 var floatAdd [numKinds]func(*Float, Number) Number
@@ -130,11 +127,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindFloat, NumericTypeSpec{
-		schemeName:    "real",
-		simplifyDown:  floatSimplifyDown,
-		toFloat64:     floatToFloat64,
-		toComplex128:  floatToComplex128,
-		isAlwaysExact: false,
+		schemeName:            "real",
+		simplifyDown:          floatSimplifyDown,
+		toFloat64WithAccuracy: floatToFloat64WithAccuracy,
+		isAlwaysExact:         false,
+		isAlwaysReal:          true,
 	})
 }
 

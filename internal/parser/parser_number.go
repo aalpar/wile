@@ -624,6 +624,11 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 //
 // R7RS §7.1.1: Numbers containing # digit placeholders are inexact.
 // R7RS §6.2.6: Inexact numbers use floating-point representation.
+//
+// The accuracy/exact-bool returns from big.Float/big.Rat are intentionally
+// discarded: R7RS §6.2.6 sanctions silent precision loss when constructing
+// an inexact number from an exact one. The loss-signal helpers in
+// values/conversion.go are not used here for the same reason.
 func (p *Parser) numberToInexact(num values.Number) values.Number {
 	switch v := num.(type) {
 	case *values.Integer:
@@ -632,11 +637,10 @@ func (p *Parser) numberToInexact(num values.Number) values.Number {
 		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
 		return values.NewFloat(f)
 	case *values.Rational:
-		f, _ := v.Rat().Float64()
-		return values.NewFloat(f)
+		return values.NewFloat(v.Float64Truncated())
 	case *values.BigComplex:
-		reFloat := v.RealAsBigFloat().Float64()
-		imFloat := v.ImagAsBigFloat().Float64()
+		reFloat := v.RealAsBigFloat().Float64Truncated()
+		imFloat := v.ImagAsBigFloat().Float64Truncated()
 		return values.NewComplexFromParts(reFloat, imFloat)
 	default:
 		// Float, BigFloat, Complex are already inexact
@@ -645,7 +649,9 @@ func (p *Parser) numberToInexact(num values.Number) values.Number {
 }
 
 // makeInexact converts a syntax-wrapped number to its inexact representation.
-// R7RS §6.2.6: inexact converts an exact number to inexact.
+// R7RS §6.2.6: inexact converts an exact number to inexact. Per R7RS, the
+// conversion is sanctioned to lose precision silently — the discarded
+// accuracy/exact bools below are deliberate.
 func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	val := stx.Unwrap()
 	num, ok := val.(values.Number)
@@ -667,12 +673,11 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
 		inexactNum = values.NewFloat(f)
 	case *values.Rational:
-		f, _ := v.Rat().Float64()
-		inexactNum = values.NewFloat(f)
+		inexactNum = values.NewFloat(v.Float64Truncated())
 	case *values.BigComplex:
 		// Convert to inexact Complex
-		reFloat := v.RealAsBigFloat().Float64()
-		imFloat := v.ImagAsBigFloat().Float64()
+		reFloat := v.RealAsBigFloat().Float64Truncated()
+		imFloat := v.ImagAsBigFloat().Float64Truncated()
 		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeInexact: unsupported number type")

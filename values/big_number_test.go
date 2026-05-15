@@ -160,14 +160,14 @@ func TestBigInteger_MixedArithmetic(t *testing.T) {
 	// Result must be BigFloat (inexact) to preserve exactness contagion
 	bf, ok := sumF.(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", sumF))
-	c.Assert(bf.Float64(), qt.Equals, float64(100.5))
+	c.Assert(bf.Float64Truncated(), qt.Equals, float64(100.5))
 	c.Assert(bf.IsExact(), qt.Equals, false) // Must be inexact
 
 	// Add with Complex → BigComplex (no-loss: exact BigInteger never truncates to float64)
 	sumC := bi.Add(values.NewComplex(complex(1, 2)))
 	bc, ok := sumC.(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigComplex, got %T", sumC))
-	c.Assert(bc.RealAsBigFloat().Float64(), qt.Equals, float64(101))
+	c.Assert(bc.RealAsBigFloat().Float64Truncated(), qt.Equals, float64(101))
 }
 
 func TestBigFloat_Constructors(t *testing.T) {
@@ -175,7 +175,7 @@ func TestBigFloat_Constructors(t *testing.T) {
 
 	// From float64
 	bf1 := values.NewBigFloatFromFloat64(3.14)
-	c.Assert(bf1.Float64(), qt.Equals, float64(3.14))
+	c.Assert(bf1.Float64Truncated(), qt.Equals, float64(3.14))
 
 	// From string
 	bf2 := values.NewBigFloatFromString("3.14159265358979323846")
@@ -184,7 +184,7 @@ func TestBigFloat_Constructors(t *testing.T) {
 	// From big.Float
 	bigVal := big.NewFloat(2.71)
 	bf3 := values.NewBigFloat(bigVal)
-	c.Assert(bf3.Float64(), qt.Equals, float64(2.71))
+	c.Assert(bf3.Float64Truncated(), qt.Equals, float64(2.71))
 
 	// Invalid string returns nil
 	bf4 := values.NewBigFloatFromString("invalid")
@@ -199,24 +199,24 @@ func TestBigFloat_Arithmetic(t *testing.T) {
 
 	// Add
 	sum := bf1.Add(bf2)
-	c.Assert(sum.(*values.BigFloat).Float64(), qt.Equals, float64(150.0))
+	c.Assert(sum.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(150.0))
 
 	// Subtract
 	diff := bf1.Subtract(bf2)
-	c.Assert(diff.(*values.BigFloat).Float64(), qt.Equals, float64(50.0))
+	c.Assert(diff.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(50.0))
 
 	// Multiply
 	prod := bf1.Multiply(bf2)
-	c.Assert(prod.(*values.BigFloat).Float64(), qt.Equals, float64(5000.0))
+	c.Assert(prod.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(5000.0))
 
 	// Divide
 	quot, err := bf1.Divide(bf2)
 	c.Assert(err, qt.IsNil)
-	c.Assert(quot.(*values.BigFloat).Float64(), qt.Equals, float64(2.0))
+	c.Assert(quot.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(2.0))
 
 	// Negate
 	neg := bf1.Negate()
-	c.Assert(neg.(*values.BigFloat).Float64(), qt.Equals, float64(-100.0))
+	c.Assert(neg.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(-100.0))
 }
 
 func TestBigFloat_Comparison(t *testing.T) {
@@ -274,6 +274,36 @@ func TestBigFloat_Conversions(t *testing.T) {
 	c.Assert(bf.SchemeString(), qt.Not(qt.Equals), "")
 }
 
+// TestBigFloat_Float64WithAccuracy exercises the loss-signal-aware float64
+// accessor on the three observable branches: NaN flag (returns Exact per the
+// Q-6 NaN identity rule), finite/exact pass-through, and overflow.
+func TestBigFloat_Float64WithAccuracy(t *testing.T) {
+	cases := []struct {
+		name      string
+		input     *values.BigFloat
+		wantValue float64
+		wantAcc   big.Accuracy
+		wantNaN   bool
+	}{
+		{"finite-exact", values.NewBigFloatFromFloat64(2.5), 2.5, big.Exact, false},
+		{"nan-identity", values.NewBigFloatNaN(), 0, big.Exact, true},
+		{"overflow-above", values.NewBigFloatFromString("1e500"), math.Inf(1), big.Above, false},
+		{"overflow-below", values.NewBigFloatFromString("-1e500"), math.Inf(-1), big.Below, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			f, acc := tc.input.Float64WithAccuracy()
+			if tc.wantNaN {
+				c.Assert(math.IsNaN(f), qt.IsTrue)
+			} else {
+				c.Assert(f, qt.Equals, tc.wantValue)
+			}
+			c.Assert(acc, qt.Equals, tc.wantAcc)
+		})
+	}
+}
+
 func TestBigFloat_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
@@ -295,15 +325,15 @@ func TestBigFloat_MixedArithmetic(t *testing.T) {
 
 	// Add with Integer
 	sum := bf.Add(values.NewInteger(50))
-	c.Assert(sum.(*values.BigFloat).Float64(), qt.Equals, float64(150.0))
+	c.Assert(sum.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(150.0))
 
 	// Add with Float
 	sumF := bf.Add(values.NewFloat(0.5))
-	c.Assert(sumF.(*values.BigFloat).Float64(), qt.Equals, float64(100.5))
+	c.Assert(sumF.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(100.5))
 
 	// Add with BigInteger
 	sumBI := bf.Add(values.NewBigIntegerFromInt64(25))
-	c.Assert(sumBI.(*values.BigFloat).Float64(), qt.Equals, float64(125.0))
+	c.Assert(sumBI.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(125.0))
 
 	// Add with Complex (returns BigComplex to preserve BigFloat precision)
 	sumC := bf.Add(values.NewComplex(complex(1, 2)))
@@ -311,7 +341,7 @@ func TestBigFloat_MixedArithmetic(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	// Real part should be 100 + 1 = 101
 	realPart := bc.Real()
-	c.Assert(realPart.(*values.BigFloat).Float64(), qt.Equals, float64(101))
+	c.Assert(realPart.(*values.BigFloat).Float64Truncated(), qt.Equals, float64(101))
 }
 
 func TestBigInteger_DivisionByZero(t *testing.T) {

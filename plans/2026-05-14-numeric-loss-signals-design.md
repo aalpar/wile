@@ -1,10 +1,14 @@
 # Numeric loss signals — design
 
-**Date**: 2026-05-14 (initial draft); refined 2026-05-14 post-approval.
-**Status**: Approved by user; refined; all Q-1..Q-5 resolved; impl
-  plan drafted at `2026-05-14-numeric-loss-signals-impl.md`.
-  Implementation deferred until the numeric-registry Phase 3 PRs
-  (#750 + follow-ups) merge.
+**Date**: 2026-05-14 (initial draft); refined 2026-05-14 post-approval;
+  converged with impl plan 2026-05-14 (BigFloat API hygiene added;
+  `ToFloat64Lossy` dropped; `Complex128Result` struct introduced;
+  `NumericTypeSpec` old fields replaced rather than augmented).
+**Status**: Approved by user; refined; all Q-1..Q-6 resolved; impl
+  plan at `2026-05-14-numeric-loss-signals-impl.md` is the source
+  of truth for code-stub detail (this document records the design
+  rationale + acceptance contract). Numeric-registry Phase 3
+  merged at commit `082836d1` (PR #752) — implementation unblocked.
 **Refinement mandate**: User instruction "no information loss from
   Go `big` package to Scheme side" reshapes the design — every
   precision-loss signal that Go's stdlib surfaces (`big.Accuracy`,
@@ -182,33 +186,206 @@ func ToFloat64WithAccuracy(n Number) (f float64, acc big.Accuracy, real bool, er
 // ErrLossyConversion if accuracy != Exact OR real == false.
 // FFI-callable.
 func ToFloat64Lossless(n Number) (float64, error)
-
-// ToFloat64Lossy is a convenience wrapper for callers (like R7RS
-// exact->inexact) that always succeed regardless of precision loss.
-// Discards accuracy and real flags; returns just float64. Wraps
-// big.Accuracy as a side-channel via the lossless bool for callers
-// that want a binary "was it exact?" answer.
-func ToFloat64Lossy(n Number) (f float64, lossless bool)
 ```
+
+**Note on `ToFloat64Lossy` (dropped during impl-plan refinement):**
+An earlier draft proposed a third wrapper `ToFloat64Lossy(n) (float64, bool)`
+that panicked on non-Number. It was dropped because the sole would-be
+caller (the FFI Float64 converter under `WithLossyConversionsAllowed`)
+already type-validates its input as `values.Number` *before* reaching
+the helper — the panic path is dead. Lossy-allowed callers now use
+`ToFloat64WithAccuracy` directly with discard:
+`f, _, _, _ := values.ToFloat64WithAccuracy(n)`. One fewer exported
+symbol, no asymmetric failure mode.
 
 ### Complex-domain conversion helpers (per-component accuracy)
 
+The complex helpers use a **named result struct** rather than a
+positional return. The two `big.Accuracy` slots (real and
+imaginary) are the same Go type, distinguished by position only —
+naming them as fields prevents a class of swap bugs the type
+system cannot otherwise catch. See "Decision record: return shape"
+below for the full rationale.
+
 ```go
+// Complex128Result captures complex-domain conversion with
+// per-component accuracy. Field-named so realAcc/imagAcc swaps
+// are caught at compile time, not surfaced only as wrong output
+// in the three-layer integration test.
+type Complex128Result struct {
+    // Value is the complex128 representation.
+    Value complex128
+
+    // RealAcc reports the conversion accuracy of the real
+    // component (Below / Exact / Above per Go big.Accuracy).
+    RealAcc big.Accuracy
+
+    // ImagAcc reports the conversion accuracy of the imaginary
+    // component. For real-only inputs (Integer/BigInteger/Float/
+    // BigFloat/Rational), this is always big.Exact (the imaginary
+    // part is exactly zero).
+    ImagAcc big.Accuracy
+}
+
 // ToComplex128WithAccuracy converts a Number to complex128 with
-// per-component accuracy. Each part has its own Below/Exact/Above
-// classification — collapsing them into one bool would itself be
-// information loss.
-//
-// For real-only inputs (Integer/BigInteger/Float/BigFloat/Rational),
-// imagAcc is always Exact (the imaginary part is exactly zero).
+// per-component accuracy.
 //
 // For non-Number inputs, returns ErrNotANumber.
-func ToComplex128WithAccuracy(n Number) (c complex128, realAcc, imagAcc big.Accuracy, err error)
+func ToComplex128WithAccuracy(n Number) (Complex128Result, error)
 
 // ToComplex128Lossless is the binary version: returns
 // ErrLossyConversion if either component's accuracy is non-Exact.
+// Returns the raw complex128 (strict-path consumers don't need
+// the struct).
 func ToComplex128Lossless(n Number) (complex128, error)
 ```
+
+### Decision record: return shape — hybrid (positional + struct)
+
+The two `WithAccuracy` helpers carry multi-component results. Three
+shapes were evaluated. **The hybrid was chosen** after the
+all-positional and all-struct shapes each failed one of the two
+critical criteria. This subsection records the alternatives so a
+future reader can revisit the choice without re-deriving the
+analysis.
+
+**Chosen — Hybrid (positional for float64, struct for complex128)**
+
+```go
+type Complex128Result struct {
+    Value   complex128
+    RealAcc big.Accuracy
+    ImagAcc big.Accuracy
+}
+
+func ToFloat64WithAccuracy(n Number)    (float64, big.Accuracy, bool, error)
+func ToComplex128WithAccuracy(n Number) (Complex128Result, error)
+```
+
+The rule applied: **use positional return when slot types
+distinguish their roles; use a named struct when adjacent slots
+share a type and could be silently swapped.**
+
+- `ToFloat64WithAccuracy` slots: `float64`, `big.Accuracy`, `bool`,
+  `error` — all four are distinct Go types. Position-swap requires
+  swapping the float with the accuracy or the bool with the error;
+  the compiler catches each. Positional is safe.
+- `ToComplex128WithAccuracy` slots in the positional shape would
+  be: `complex128`, `big.Accuracy`, `big.Accuracy`, `error`. The
+  two `big.Accuracy` slots are interchangeable to the compiler. A
+  `realAcc/imagAcc` swap at any call site compiles, type-checks,
+  and is caught only at runtime by the three-layer integration
+  test. Naming the slots as fields prevents the bug class at
+  compile time.
+
+**Alternative A — All-positional (rejected: swap risk on complex)**
+
+```go
+func ToFloat64WithAccuracy(n Number)    (float64,    big.Accuracy, bool, error)
+func ToComplex128WithAccuracy(n Number) (complex128, big.Accuracy, big.Accuracy, error)
+```
+
+Strengths:
+- Public API surface is minimal — no extra exported types.
+- No translation step across the three consumer layers
+  (per-kind closure → values/ helper → consumer); all three
+  carry the same tuple shape.
+- `f, _, _, _ := ToFloat64WithAccuracy(n)` is the idiomatic Go
+  expression of "I want the value, throw the rest away." The FFI
+  converter under `WithLossyConversionsAllowed` relies on this.
+
+Weakness that ruled it out:
+- Same-type adjacency on `(big.Accuracy, big.Accuracy)` in
+  `ToComplex128WithAccuracy` admits silent `realAcc/imagAcc`
+  swap bugs at any call site. Compiler doesn't catch it; unit
+  tests that check both components together don't catch it; only
+  the cross-layer integration test (PR 3) catches it. This matches
+  the established `BigComplex` problem where constructors use
+  `rel, iam` parameter naming as a hint the type system can't
+  enforce.
+
+**Alternative B — All-struct (rejected: needless friction on float)**
+
+```go
+type Float64Result struct {
+    Value    float64
+    Accuracy big.Accuracy
+    IsReal   bool
+}
+
+type Complex128Result struct {
+    Value   complex128
+    RealAcc big.Accuracy
+    ImagAcc big.Accuracy
+}
+
+func ToFloat64WithAccuracy(n Number)    (Float64Result, error)
+func ToComplex128WithAccuracy(n Number) (Complex128Result, error)
+```
+
+Strengths:
+- Field-level godoc (`res.IsReal` explained on the field, not in
+  prose).
+- Non-breaking extension (a future fifth field is opt-in for
+  consumers).
+- Methods attachable (`func (r Float64Result) Lossless() bool`
+  centralizes the rule).
+- `qt.Assert(res, qt.DeepEquals, Float64Result{...})` is one test
+  assertion vs. three positional.
+
+Weaknesses that ruled it out for `ToFloat64WithAccuracy`:
+- Three distinct slot types (`float64`, `big.Accuracy`, `bool`)
+  carry no swap risk; the struct provides no safety benefit here.
+- Forces translation at every consumer of the float64 helper. The
+  FFI lossy-allowed path loses its single-line discard idiom:
+  `f, _, _, _ := fn()` becomes `res, _ := fn(); f := res.Value`.
+- Per-kind closure → struct translation requires either an
+  allocation per call (closure returns positional → public wraps)
+  or a struct stored in the registry closure (changes the cold-
+  path API for no internal benefit). Allocations on the FFI
+  conversion path, while not arithmetic-hot, are higher-volume
+  than the `ToComplex128WithAccuracy` path (most FFI registrations
+  are real-valued).
+
+**Why the hybrid wins**
+
+The rule "positional when types disambiguate, struct when they
+don't" applies the safety property only where it costs something
+(swap risk) and the ergonomic property only where the API needs
+it (discard idiom). Neither all-positional nor all-struct can
+make this distinction; they apply one shape uniformly and pay
+the corresponding price on the wrong helper.
+
+The hybrid does add one cost: API consumers must remember two
+shapes. The mitigation is that the asymmetry mirrors the actual
+domain structure — real numbers have one accuracy signal; complex
+numbers have two. The shape difference reflects a real semantic
+difference, not an arbitrary design choice.
+
+**Revisit trigger conditions**
+
+Re-open this decision if any of:
+- A second `WithAccuracy`-shaped helper with a single accuracy
+  signal is added (e.g., for rationals, intervals, or matrix
+  elements with one component). Re-evaluate whether the new helper
+  should follow `ToFloat64WithAccuracy` (positional) or be
+  promoted to a struct for consistency with `ToComplex128WithAccuracy`.
+- A third or fourth multi-component helper is added (e.g., a
+  quaternion or matrix conversion with N≥3 same-type accuracy
+  slots). At that point the asymmetry-as-domain-structure argument
+  weakens; consider a unified struct convention.
+- The FFI converter is refactored such that it consumes the
+  struct directly for both helpers (eliminating the discard-idiom
+  advantage that motivates keeping `ToFloat64WithAccuracy`
+  positional).
+- A `realAcc/imagAcc` swap bug is reported despite the struct.
+  Indicates the safety property failed; revisit whether the struct
+  shape is sufficient or whether a stricter encoding (e.g.,
+  newtype wrappers `type RealAccuracy big.Accuracy` + `type
+  ImagAccuracy big.Accuracy`) is warranted.
+
+Tracked at `TODO.md` under Tier 5 (Tech Debt) → "Loss-signals API
+follow-ups (numeric-loss-signals impl)".
 
 ### Per-kind accuracy synthesis
 
@@ -226,21 +403,27 @@ deterministic; each is tested):
 | `*Float`      | Identity: always `Exact` (the Scheme `*Float` IS a float64).                      |
 | `*BigFloat`   | Native via `p.value.Float64()`. Use the returned `big.Accuracy` directly.         |
 | `*Complex`    | Real part: `real(p.Value)` (already a float64, identity → `Exact`). If `imag(p.Value) != 0`, real flag is false. |
-| `*BigComplex` | Real part: native via `toBigFloat(p.real).Float64()`. Use returned accuracy. If `!p.imag.IsZero()`, real flag is false. |
+| `*BigComplex` | Real part: native via `toBigFloat(p.real).Float64WithAccuracy()` (the new `*BigFloat` method introduced in PR 1; see impl plan's "BigFloat API hygiene" subsection). Use returned accuracy. If `!p.imag.IsZero()`, real flag is false. |
 
 For complex-domain helpers, `imagAcc` follows the same rules
 applied to the imaginary component.
 
 ### Per-kind dispatch implementations
 
-Each numeric type exposes an unexported `toFloat64WithAccuracy`
-method matching the `(float64, big.Accuracy, real bool)` return
-shape. The package-level `values.ToFloat64WithAccuracy` dispatches
-via the numeric registry (extended in Phase 1).
+Each numeric type contributes two package-level helper functions
+(one per-kind closure each for the float64 and complex128 paths)
+bound through `registerNumericSpec(...)` in the type's existing
+`init()` block — same registry pattern PR #752 established.
+The package-level `values.ToFloat64WithAccuracy` dispatches via the
+numeric registry (extended in Phase 1). The complex helper returns
+a `Complex128Result` struct (see "Decision record: return shape —
+hybrid" above) — same-type adjacency on the two `big.Accuracy`
+slots requires field naming to prevent silent realAcc/imagAcc swaps.
 
 ```go
 // values/integer.go
-func (p *Integer) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
+func integerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    p := n.(*Integer)
     f := float64(p.Value)
     back := int64(f)
     if back == p.Value {
@@ -255,13 +438,15 @@ func (p *Integer) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
 }
 
 // values/big_integer.go
-func (p *BigInteger) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
+func bigIntegerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    p := n.(*BigInteger)
     f, acc := new(big.Float).SetInt(p.value).Float64()
     return f, acc, true
 }
 
 // values/big_float.go
-func (p *BigFloat) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
+func bigFloatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    p := n.(*BigFloat)
     if p.IsNaN() {
         return math.NaN(), big.Exact, true  // NaN propagates as Exact
     }
@@ -270,7 +455,8 @@ func (p *BigFloat) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
 }
 
 // values/rational.go
-func (p *Rational) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
+func rationalToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    p := n.(*Rational)
     f, exact := p.value.Float64()
     if exact {
         return f, big.Exact, true
@@ -289,44 +475,52 @@ func (p *Rational) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
 }
 
 // values/float.go
-func (p *Float) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
-    return p.Value, big.Exact, true  // identity
+func floatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    return n.(*Float).Value, big.Exact, true  // identity
 }
 
 // values/complex.go
-func (p *Complex) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
+func complexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    p := n.(*Complex)
     return real(p.Value), big.Exact, imag(p.Value) == 0
 }
 
-// values/big_complex.go
-func (p *BigComplex) toFloat64WithAccuracy() (float64, big.Accuracy, bool) {
-    realF, realAcc := toBigFloat(p.real).Float64()
+// values/big_complex.go — uses the new (*BigFloat).Float64WithAccuracy()
+// method (introduced by the BigFloat API hygiene fix in PR 1).
+func bigComplexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+    p := n.(*BigComplex)
+    realF, realAcc := toBigFloat(p.real).Float64WithAccuracy()
     return realF, realAcc, p.imag.IsZero()
 }
 ```
 
 For the complex-domain helper, `toComplex128WithAccuracy` returns
-`(complex128, big.Accuracy, big.Accuracy)` — per-component accuracy
-for the real and imaginary parts:
+the `Complex128Result` struct directly (per the hybrid return-shape
+decision above) — per-component accuracy for the real and imaginary
+parts is field-named to prevent realAcc/imagAcc swap bugs:
 
 ```go
 // values/big_complex.go
-func (p *BigComplex) toComplex128WithAccuracy() (complex128, big.Accuracy, big.Accuracy) {
-    realF, realAcc := toBigFloat(p.real).Float64()
-    imagF, imagAcc := toBigFloat(p.imag).Float64()
-    return complex(realF, imagF), realAcc, imagAcc
+func bigComplexToComplex128WithAccuracy(n Number) Complex128Result {
+    p := n.(*BigComplex)
+    realF, realAcc := toBigFloat(p.real).Float64WithAccuracy()
+    imagF, imagAcc := toBigFloat(p.imag).Float64WithAccuracy()
+    return Complex128Result{Value: complex(realF, imagF), RealAcc: realAcc, ImagAcc: imagAcc}
 }
 
 // values/integer.go (real-only kinds; imaginary part trivially exact)
-func (p *Integer) toComplex128WithAccuracy() (complex128, big.Accuracy, big.Accuracy) {
-    f, acc, _ := p.toFloat64WithAccuracy()
-    return complex(f, 0), acc, big.Exact
+func integerToComplex128WithAccuracy(n Number) Complex128Result {
+    f, acc, _ := integerToFloat64WithAccuracy(n)
+    return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
 }
 // ... and analogous for BigInteger, Float, BigFloat, Rational, Complex
 ```
 
-These methods are unexported and accessed via the registry
+These are package-level functions and are accessed via the registry
 (Phase 1 extends `NumericTypeSpec` to carry the function pointers).
+The hot-path arithmetic dispatch tables in `promotion.go` are
+unchanged — these loss-signal helpers live exclusively on the cold
+path (FFI conversions and the four Scheme primitives in PR 3).
 
 ## Proposed Scheme-side API
 
@@ -490,6 +684,14 @@ case reflect.Complex128:
     }, nil
 ```
 
+The above stubs show the **strict path only**. The full PR 2 impl
+plan threads a `lossyAllowed` flag through `buildFFISpec` to
+`makeArgConverter`; when `lossyAllowed` is true the converter
+substitutes `values.ToFloat64WithAccuracy` (and discards
+`(acc, isReal, err)`) / `values.ToComplex128WithAccuracy` (and
+projects `res.Value`) — same in-line discard idiom as the lossless
+path, no new helper required.
+
 **Behavior change vs. today (`float64` path):**
 - Before: any `*BigFloat`, `*BigComplex`, `*Complex` rejected
   unconditionally with `ErrNotAReal`.
@@ -525,10 +727,12 @@ err := eng.RegisterFunc("my-numerical-routine", fn)
 ```
 
 Implementation: a flag on `*Engine` consulted by the FFI converters.
-When true, converters call `values.ToFloat64Lossy` (returns
-`(float64, bool)` where bool is discarded) instead of
-`ToFloat64Lossless`. Default is the strict path — silent loss
-requires an explicit opt-in.
+When true, converters call `values.ToFloat64WithAccuracy` and
+discard the accuracy / isReal / err slots
+(`f, _, _, _ := values.ToFloat64WithAccuracy(n)`); when false (the
+default), converters call `values.ToFloat64Lossless` which errors
+with `ErrLossyConversion` on any loss. Silent truncation requires
+an explicit opt-in.
 
 Per-function and per-parameter granularity (Q-4 options b, c) are
 deferred. The engine-level option is sufficient for v1.
@@ -550,51 +754,68 @@ the FFI:
 
 This brings `helpers.ToFloat64` into alignment with the FFI's
 post-tightening behavior. The `exact->inexact` primitive itself
-remains R7RS-mandated lossy (it consults `ToFloat64Lossy`, not
-`ToFloat64Lossless`).
+remains R7RS-mandated lossy — it does not consume any of the new
+loss-signal helpers; its implementation path is unchanged by this
+plan (R7RS §6.2.6 requires it to succeed regardless of precision
+loss, returning `±inf.0` on overflow).
 
 ## Integration with the numeric registry
 
-Phase 3 of values-SR delivers a `NumericTypeSpec` registry. Under
-Q-i=C3, the existing `toFloat64` field covers only the 5 reducible
-kinds (Integer, BigInteger, Float, BigFloat, Rational); BigComplex
-and Complex return `ErrNotAReal`.
+Phase 3 of values-SR delivers a `NumericTypeSpec` registry (PR #752
+merged 2026-05-13). The existing `toFloat64` and `toComplex128`
+fields cover universal conversion across all 7 kinds with `(float64,
+error)` / `complex128` returns respectively.
 
-This plan extends `NumericTypeSpec` with two new fields, both
-**always populated** for all 7 kinds:
+This plan **replaces** those two fields with loss-signal-aware
+variants (the new fields carry strictly more information; the old
+fields become redundant once internal callers in `promotion.go`
+migrate). Both **always populated** for all 7 kinds:
 
 ```go
 type NumericTypeSpec struct {
     // ... existing fields per the numeric-registry plan ...
 
-    // toFloat64WithAccuracy is the primary loss-signal API.
-    // Returns the float64 result, the big.Accuracy of the
-    // conversion (Below/Exact/Above), and a real bool (false if
-    // the input was complex with non-zero imaginary part, where
-    // the float64 is real-part-only). Always non-nil.
+    // toFloat64WithAccuracy REPLACES the previous `toFloat64
+    // func(Number) (float64, error)` field. Returns the float64
+    // result, the big.Accuracy of the conversion (Below/Exact/
+    // Above), and a real bool (false if the input was complex
+    // with non-zero imaginary part, where the float64 is
+    // real-part-only). Always non-nil — internal callers in
+    // promotion.go that previously consumed `toFloat64` now
+    // synthesize ErrNotAReal from `!isReal` at the call site.
     toFloat64WithAccuracy func(Number) (float64, big.Accuracy, bool)
 
-    // toComplex128WithAccuracy is the complex-domain analog.
-    // Returns the complex128 result and per-component accuracy
-    // (real, imag). Always non-nil. For real-only kinds, imagAcc
-    // is trivially big.Exact (imaginary part is exactly zero).
-    toComplex128WithAccuracy func(Number) (complex128, big.Accuracy, big.Accuracy)
+    // toComplex128WithAccuracy REPLACES the previous `toComplex128
+    // func(Number) complex128` field. Returns a Complex128Result
+    // struct (field-named to prevent realAcc/imagAcc swap bugs at
+    // call sites — see "Decision record: return shape — hybrid"
+    // above). Always non-nil. For real-only kinds, the result's
+    // ImagAcc is trivially big.Exact.
+    toComplex128WithAccuracy func(Number) Complex128Result
 }
 
 func (p *NumericTypeSpec) ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
     return p.toFloat64WithAccuracy(n)
 }
 
-func (p *NumericTypeSpec) ToComplex128WithAccuracy(n Number) (complex128, big.Accuracy, big.Accuracy) {
+func (p *NumericTypeSpec) ToComplex128WithAccuracy(n Number) Complex128Result {
     return p.toComplex128WithAccuracy(n)
 }
 ```
 
-The existing `toFloat64` and `toComplex128` fields stay as
-convenience wrappers (zero-accuracy variants). `helpers.ToFloat64`
-migrates to the new helper per Q-5; its behavior tightens to
-return `ErrLossyConversion` on precision loss for BigFloat
-(previously rejected unconditionally with `ErrNotAReal`).
+The old `ToFloat64` / `ToComplex128` getters from PR #752 are
+**dropped**. The two production wrapper functions in `promotion.go`
+(`NumberToFloat64`, `NumberToComplex128`) migrate to the new
+helpers — the impl plan's PR 1 Step 5 details the per-site
+migration. The full information content of the old getters is
+preserved by `!isReal` (synthesizes the `ErrNotAReal` panic at the
+call site) plus ignoring the accuracy slot on the IEEE 754 guard
+short-circuit path.
+
+`helpers.ToFloat64` migrates to the new helper per Q-5 in PR 2; its
+behavior tightens to return `ErrLossyConversion` on precision loss
+for BigFloat / BigInteger overflow / Rational with non-representable
+denominators (previously silently truncated).
 
 ## Phasing
 
@@ -606,35 +827,61 @@ detail, acceptance criteria, and test plans.
 
 1. Add `werr.ErrLossyConversion` sentinel (`werr/werr.go`).
 2. Add global accuracy symbols (`values.SymbolAccuracyBelow`,
-   `SymbolAccuracyExact`, `SymbolAccuracyAbove`).
-3. Add per-kind `toFloat64WithAccuracy()` and
-   `toComplex128WithAccuracy()` methods on each numeric type
-   (7 type files; ~20 LOC each including direction-recovery for
-   Integer/Rational).
-4. Add exported helpers:
+   `SymbolAccuracyExact`, `SymbolAccuracyAbove`) plus the
+   `BigAccuracyToSymbol(acc) *Symbol` helper.
+3. **BigFloat API hygiene**: rename existing
+   `(*BigFloat).Float64() float64` → `Float64Truncated()` and add
+   new `Float64WithAccuracy() (float64, big.Accuracy)`. Migrate
+   13 production call sites + test sites (full detail in impl
+   plan's "BigFloat API hygiene" subsection). The rename is what
+   lets the new BigComplex helpers below access accuracy through a
+   named-and-symmetric API rather than the awkward
+   `BigFloatValue().Float64()` chain through the stdlib accessor.
+4. Add per-kind package-level helpers
+   (`<type>ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool)`
+   and `<type>ToComplex128WithAccuracy(n Number) Complex128Result`)
+   for each of the 7 numeric types. Bind via `registerNumericSpec`
+   in each type's existing `init()` block. ~20 LOC each including
+   direction-recovery for Integer/Rational.
+5. Add exported helpers:
    - `values.ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool, error)` — primary
    - `values.ToFloat64Lossless(n Number) (float64, error)` — wrapper
-   - `values.ToFloat64Lossy(n Number) (float64, bool)` — wrapper
-   - `values.ToComplex128WithAccuracy(n Number) (complex128, big.Accuracy, big.Accuracy, error)` — primary
+   - `values.Complex128Result` exported struct
+     (`Value complex128`, `RealAcc`, `ImagAcc big.Accuracy`)
+   - `values.ToComplex128WithAccuracy(n Number) (Complex128Result, error)` — primary
    - `values.ToComplex128Lossless(n Number) (complex128, error)` — wrapper
-5. Extend `NumericTypeSpec` with `toFloat64WithAccuracy` and
-   `toComplex128WithAccuracy` fields + getter methods. Register
-   for all 7 kinds in their `init()` blocks.
-6. Tests: round-trip per kind, boundary cases (MaxFloat64,
+
+   `ToFloat64Lossy` was considered and dropped — see "Note on
+   `ToFloat64Lossy`" above. Lossy-allowed callers use
+   `ToFloat64WithAccuracy` directly with `_, _, _` discard.
+6. **Replace** the `NumericTypeSpec` `toFloat64` and `toComplex128`
+   fields with the `toFloat64WithAccuracy` and
+   `toComplex128WithAccuracy` fields + getter methods. Register for
+   all 7 kinds in their `init()` blocks. Migrate the two production
+   call sites in `promotion.go` (`NumberToFloat64`,
+   `NumberToComplex128`) to consume the new spec methods.
+7. Tests: round-trip per kind, boundary cases (MaxFloat64,
    subnormals, 2^100, NaN, ±Inf, ±0, exact 1/3-style rationals
    that round Below/Above predictably). R7RS-required behavior
    preserved (`exact->inexact` still always succeeds).
 
-Estimated: ~350 LOC across ~10 files. No behavior change anywhere
-outside the new helpers.
+Estimated: ~415 LOC / −25 across ~12 files (the BigFloat hygiene
+fix added ~+15 LOC vs the original ~350 estimate; net larger
+because the 13 call-site renames touch four additional files
+outside `values/`). No behavior change anywhere outside the new
+helpers and the renamed `Float64Truncated` (same body, new name).
 
 ### Phase 2 — FFI tightening + helpers.ToFloat64 migration (1 PR)
 
 1. Migrate `ffi_arg_converters.go` `reflect.Float64` case:
-   `ToFloat64Lossless` is the default; `ToFloat64Lossy` used when
-   the engine has `WithLossyConversionsAllowed()` set.
-2. Add `reflect.Complex128` case (currently missing) using
-   `ToComplex128Lossless` / `ToComplex128Lossy`.
+   `ToFloat64Lossless` is the default; in lossy-allowed mode the
+   converter calls `ToFloat64WithAccuracy` and discards the
+   accuracy/isReal slots
+   (`f, _, _, _ := values.ToFloat64WithAccuracy(n)`).
+2. Add `reflect.Complex128` case (currently missing). Strict mode
+   calls `ToComplex128Lossless`; lossy-allowed mode calls
+   `ToComplex128WithAccuracy` and projects `res.Value`, discarding
+   the per-component accuracies.
 3. Add `wile.WithLossyConversionsAllowed()` engine option;
    thread the flag from `*Engine` to the FFI converter closures
    at registration time.
@@ -716,21 +963,21 @@ draft. Each is resolved here:
 | A4 | BigComplex case: which contributed to "lossy" — real-part accuracy or imag-dropped? | Both are independent. `toFloat64WithAccuracy` returns the *real-part accuracy* in the `acc` slot; the `real bool` flag (false if imag != 0) signals imag was dropped. Both must be `Exact`/`true` for fully-lossless. |
 | A5 | NaN handling unspecified | NaN propagates as `big.Exact` (identity conversion). Callers check `math.IsNaN(f)` separately if they need to distinguish. |
 | A6 | `Float(NaN)` → float64 considered "lossless"? | Yes — identity; accuracy `Exact`. (`*Float` IS a float64.) |
-| A7 | `Float64Accuracy` struct vs multiple-value return | Use multiple-value return throughout — Go idiom, no aliasing penalty, matches stdlib `big.Float.Float64()` shape directly. |
+| A7 | `Float64Accuracy` struct vs multiple-value return | **Hybrid** — positional for `ToFloat64WithAccuracy` (slot types are distinct: `float64`/`big.Accuracy`/`bool`/`error` — no swap risk; preserves the discard idiom `f, _, _, _ := ...`); struct (`Complex128Result`) for `ToComplex128WithAccuracy` (same-type `big.Accuracy` slots adjacent; field naming prevents silent realAcc/imagAcc swap). See "Decision record: return shape — hybrid (positional + struct)" above. |
 | A8 | Was `big.Accuracy` supposed to be hidden from public API? | Per the no-information-loss mandate: NO — `big.Accuracy` is the public type at the Go layer. R2 in the risk register has been flipped. |
 
 ## Risks
 
 | # | Risk                                                            | Mitigation                                                                  |
 |---|-----------------------------------------------------------------|-----------------------------------------------------------------------------|
-| R1 | FFI widening breaks a caller who relied on BigFloat rejection   | Behavior is **strictly more permissive** — no successful call becomes a failure. Conversely: any code that today catches the error and supplies a default will now skip that branch. Document in CHANGELOG. |
+| R1 | FFI behavior change breaks callers who relied on prior semantics | **Reframed** after verifying `ffi_arg_converters.go:76-96`: the FFI Float64 path change is **bidirectional** like helpers.ToFloat64 (R8). Widening: `*BigFloat` newly accepted when it fits losslessly (today rejected via `fmtArgError`/ErrTypeConversion). Tightening: `*BigInteger` overflow and `*Rational` non-representable today succeed silently with truncation; under strict mode they will newly error with `ErrLossyConversion`. Embedders depending on either prior behavior can opt into the legacy silent-truncate path via `WithLossyConversionsAllowed()`. CHANGELOG must list both directions. |
 | R2 | ~~`big.Accuracy` exposure leaks stdlib detail~~ **FLIPPED**: the no-information-loss mandate REQUIRES exposing `big.Accuracy` publicly. The plan now treats this as a *goal*, not a risk. | n/a (resolved by the user mandate) |
 | R3 | Subnormal / boundary precision edge cases produce surprising signals | `big.Accuracy` is the authoritative IEEE 754 signal; trust the stdlib. Tests cover boundaries explicitly. |
 | R4 | Scheme primitive names clash with hypothetical future R7RS additions | Names are R7RS-large-compatible (`inexact-lossless?` parallels `inexact?`; `inexact-with-accuracy` is novel but unambiguous). If a future R7RS edition adds the same name with different semantics, namespace via `(wile numerics)` shadowing — deferred until needed. |
 | R5 | Implementation-effort drift: adding loss-signal infrastructure to per-kind dispatch tempts further "what about arithmetic loss?" expansion | Stay scoped: this plan covers *conversion* boundaries only. Arithmetic-internal loss is a separate plan (not yet drafted). |
-| R6 | ~~`ToFloat64WithAccuracy` over-engineered~~ **FLIPPED**: per no-information-loss, `WithAccuracy` is the PRIMARY API; `Lossless`/`Lossy` are wrappers. The original framing — "implement only Lossless/Lossy" — is retracted. | n/a (resolved by the user mandate) |
+| R6 | ~~`ToFloat64WithAccuracy` over-engineered~~ **FLIPPED**: per no-information-loss, `WithAccuracy` is the PRIMARY API; `Lossless` is the only wrapper that ships. (The earlier `Lossy` wrapper was dropped during impl-plan refinement — its sole would-be caller already type-validates `n` as `Number` before reaching the helper, so the wrapper's panic path was dead. Lossy-allowed callers now use `ToFloat64WithAccuracy` directly with `f, _, _, _ := ...` discard.) | n/a (resolved by the user mandate) |
 | R7 | Polymorphic return shape (1, 2, or 3 values from `inexact-with-accuracy`) confuses Scheme callers | Scheme `call-with-values` + `case-lambda` is the documented idiom. Document with examples. `complex-inexact-with-accuracy` exists as a uniform-3-value variant for callers who want monomorphic return. |
-| R8 | `helpers.ToFloat64` tightening (Q-5) changes the cross-package contract in ways not all consumers expect | The change is a strict widening for `*BigFloat` only — calls that previously errored may now succeed; no call that previously succeeded will now fail. Audited consumers: `extensions/algebra`, `extensions/math`, `extensions/wile-tools`, and internal coverage tests. CHANGELOG entry. |
+| R8 | `helpers.ToFloat64` tightening (Q-5) changes the cross-package contract — both widening AND breaking | **Reframed** after verifying current code (`registry/helpers/value_conv.go:72-90`): the change is **bidirectional**. Widening: `*BigFloat` is already accepted today (silently truncated); under Q-5, lossless BigFloat continues to succeed but lossy now errors. Tightening (the breaking part): three input classes that today succeed silently with lossy truncation will newly error — `*BigInteger` overflow, `*BigFloat` overflow, `*Rational` with non-power-of-2 denominator. Calls that succeeded silently for these inputs will now error with `ErrLossyConversion`. Audited consumers: `extensions/algebra`, `extensions/math`, `extensions/wile-tools`, and internal coverage tests — each must be reviewed for whether silent loss was load-bearing. CHANGELOG entry must enumerate all three behavior changes. |
 
 ## Acceptance test cases (the no-information-loss check)
 
@@ -793,12 +1040,18 @@ that surfaces the same information.
 Phase 1 done when:
 - `werr.ErrLossyConversion` sentinel defined and listed in `werr/CLAUDE.md`.
 - `values.SymbolAccuracyBelow`, `SymbolAccuracyExact`, `SymbolAccuracyAbove` defined.
-- `values.ToFloat64WithAccuracy`, `ToFloat64Lossless`, `ToFloat64Lossy`
-  exported.
+- `values.ToFloat64WithAccuracy`, `ToFloat64Lossless` exported.
+- `values.Complex128Result` struct exported with named `Value`,
+  `RealAcc`, `ImagAcc` fields.
 - `values.ToComplex128WithAccuracy`, `ToComplex128Lossless` exported.
-- `NumericTypeSpec` extended with `toFloat64WithAccuracy` and
-  `toComplex128WithAccuracy` fields + getter methods.
-- Per-kind helpers registered for all 7 kinds.
+- `(*BigFloat).Float64()` renamed to `Float64Truncated()`; new
+  `Float64WithAccuracy()` method added; 13 production call sites
+  migrated; grep confirms no remaining `(*BigFloat).Float64()` hits.
+- `NumericTypeSpec` `toFloat64`/`toComplex128` fields **replaced**
+  by `toFloat64WithAccuracy`/`toComplex128WithAccuracy`; per-kind
+  helpers registered for all 7 kinds; `promotion.go`'s
+  `NumberToFloat64`/`NumberToComplex128` migrated to consume the
+  new spec methods.
 - Round-trip + boundary test suite passes; the acceptance table
   above is the test-case source.
 
@@ -823,9 +1076,12 @@ Phase 3 done when:
 - `plans/2026-05-14-numeric-registry-design.md` — Phase 3 of
   values-SR. Q-i resolved C3 (conservative); this plan fills the
   precision-loss gap left by that resolution.
-- `plans/2026-05-14-numeric-registry-impl.md` — extends the
-  `NumericTypeSpec` shape with `ToFloat64Lossy` once Phase 3
-  merges.
+- `plans/2026-05-14-numeric-registry-impl.md` — established the
+  `NumericTypeSpec` shape (PR #752 merged 2026-05-13). This plan
+  replaces the spec's `toFloat64`/`toComplex128` fields with
+  loss-signal-aware variants; no `ToFloat64Lossy` involved (the
+  earlier proposal was retracted — see "Note on `ToFloat64Lossy`"
+  in the conversion-helpers section above).
 - `werr/werr.go` — sentinel registry; new `ErrLossyConversion` joins.
 - `ffi_arg_converters.go:76-96` — site of the FFI tightening
   (Phase 2).

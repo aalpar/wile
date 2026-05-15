@@ -131,17 +131,12 @@ func bigIntegerSimplifyDown(n Number) Number {
 	return n
 }
 
-// bigIntegerToFloat64 converts an arbitrary-precision integer to float64.
-// Silently lossy when the magnitude exceeds 2^53 (BigInteger's defining
-// reason for existing); the loss-signals follow-up will surface big.Accuracy.
-func bigIntegerToFloat64(n Number) (float64, error) {
-	return float64FromBigInt(n.(*BigInteger).value), nil
-}
-
-// bigIntegerToComplex128 lifts a BigInteger to complex128 with zero imag.
-// Same precision-loss caveat as bigIntegerToFloat64.
-func bigIntegerToComplex128(n Number) complex128 {
-	return complex(float64FromBigInt(n.(*BigInteger).value), 0)
+// bigIntegerToFloat64WithAccuracy converts a BigInteger to float64 using
+// native big.Float to get Go's stdlib accuracy signal directly.
+func bigIntegerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	p := n.(*BigInteger)
+	f, acc := new(big.Float).SetInt(p.value).Float64()
+	return f, acc, true
 }
 
 var bigIntegerAdd [numKinds]func(*BigInteger, Number) Number
@@ -182,11 +177,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindBigInteger, NumericTypeSpec{
-		schemeName:    "integer",
-		simplifyDown:  bigIntegerSimplifyDown,
-		toFloat64:     bigIntegerToFloat64,
-		toComplex128:  bigIntegerToComplex128,
-		isAlwaysExact: true,
+		schemeName:            "integer",
+		simplifyDown:          bigIntegerSimplifyDown,
+		toFloat64WithAccuracy: bigIntegerToFloat64WithAccuracy,
+		isAlwaysExact:         true,
+		isAlwaysReal:          true,
 	})
 }
 

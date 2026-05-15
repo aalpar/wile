@@ -134,7 +134,7 @@ func TestReadSyntaxBigFloatInList(t *testing.T) {
 	// First element should be BigFloat with value 1.5
 	bigFloat1, ok := pair.Car().(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(bigFloat1.Float64(), qt.Equals, 1.5)
+	c.Assert(bigFloat1.Float64Truncated(), qt.Equals, 1.5)
 }
 
 func TestReadSyntaxMixedBigNumbers(t *testing.T) {

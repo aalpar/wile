@@ -40,7 +40,7 @@ func getComplexParts(n values.Number) (rel, iam float64) {
 	case *values.Complex:
 		return v.Real(), v.Imag()
 	case *values.BigComplex:
-		return v.RealAsBigFloat().Float64(), v.ImagAsBigFloat().Float64()
+		return v.RealAsBigFloat().Float64Truncated(), v.ImagAsBigFloat().Float64Truncated()
 	case *values.Float:
 		return v.Datum(), 0
 	case *values.Integer:

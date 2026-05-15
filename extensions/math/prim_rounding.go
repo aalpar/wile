@@ -47,7 +47,7 @@ func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
 		case *values.Float:
 			mc.SetValue(values.NewFloat(op.floatOp(v.Value)))
 		case *values.BigFloat:
-			mc.SetValue(values.NewBigFloatFromFloat64(op.floatOp(v.Float64())))
+			mc.SetValue(values.NewBigFloatFromFloat64(op.floatOp(v.Float64Truncated())))
 		case *values.Rational:
 			mc.SetValue(op.rationalOp(v))
 		default:
@@ -66,7 +66,7 @@ func integerPassthrough(v *values.Integer) values.Value {
 // When the input is exact (like a rational), the result must also be exact.
 func rationalToInteger(f func(float64) float64) func(*values.Rational) values.Value {
 	return func(v *values.Rational) values.Value {
-		return values.NewInteger(int64(f(v.Float64())))
+		return values.NewInteger(int64(f(v.Float64Truncated())))
 	}
 }
 

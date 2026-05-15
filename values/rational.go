@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/werr"
@@ -84,10 +85,25 @@ func (p *Rational) DenomInt64() int64 {
 	return p.value.Denom().Int64()
 }
 
-// Float64 returns the rational as a float64 approximation.
-func (p *Rational) Float64() float64 {
+// Float64Truncated returns the rational as a float64, discarding the
+// big.Rat.Float64() exact-bool signal. The name documents the silent loss
+// (1/3 → 0.333..., 2^100 → 1.2e+30, 1e500 → +Inf). Callers that need the
+// signal should use Float64WithAccuracy or, at the cross-package boundary,
+// the values.ToFloat64WithAccuracy helper.
+func (p *Rational) Float64Truncated() float64 {
 	f, _ := p.value.Float64()
 	return f
+}
+
+// Float64WithAccuracy returns the rational as a float64 paired with a
+// big.Accuracy direction. Returns big.Exact when the rational is exactly
+// representable in float64, else big.Below/Above depending on rounding
+// direction; ±Inf overflow is reported as Above/Below relative to the
+// finite limit. See rationalToFloat64WithAccuracy for the registry-path
+// equivalent.
+func (p *Rational) Float64WithAccuracy() (float64, big.Accuracy) {
+	f, acc, _ := rationalToFloat64WithAccuracy(p)
+	return f, acc
 }
 
 // IsInteger returns true if the rational represents an integer (denominator is 1).
@@ -117,18 +133,30 @@ func rationalSimplifyDown(n Number) Number {
 	return n
 }
 
-// rationalToFloat64 reduces an exact rational to the nearest float64.
-// Silently lossy for rationals like 1/3 that cannot be represented exactly
-// in binary float; the loss-signals follow-up will surface the exact-bool
-// from big.Rat.Float64().
-func rationalToFloat64(n Number) (float64, error) {
-	return n.(*Rational).Float64(), nil
-}
-
-// rationalToComplex128 lifts a Rational to complex128 with zero imag.
-// Same precision-loss caveat as rationalToFloat64.
-func rationalToComplex128(n Number) complex128 {
-	return complex(n.(*Rational).Float64(), 0)
+// rationalToFloat64WithAccuracy converts a Rational to float64 with precision
+// direction. big.Rat.Float64() returns exact bool; when inexact, check for
+// ±Inf overflow first (SetFloat64(±Inf) returns nil), then a round-trip Cmp
+// recovers direction (Below / Above).
+func rationalToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
+	p := n.(*Rational)
+	f, exact := p.value.Float64()
+	if exact {
+		return f, big.Exact, true
+	}
+	if math.IsInf(f, 0) {
+		// Rational overflowed float64: +Inf > any finite positive → Above;
+		// -Inf < any finite negative → Below.
+		if f > 0 {
+			return f, big.Above, true
+		}
+		return f, big.Below, true
+	}
+	back := new(big.Rat).SetFloat64(f)
+	cmp := back.Cmp(p.value)
+	if cmp < 0 {
+		return f, big.Below, true
+	}
+	return f, big.Above, true
 }
 
 var rationalAdd [numKinds]func(*Rational, Number) Number
@@ -168,11 +196,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindRational, NumericTypeSpec{
-		schemeName:    "rational",
-		simplifyDown:  rationalSimplifyDown,
-		toFloat64:     rationalToFloat64,
-		toComplex128:  rationalToComplex128,
-		isAlwaysExact: true,
+		schemeName:            "rational",
+		simplifyDown:          rationalSimplifyDown,
+		toFloat64WithAccuracy: rationalToFloat64WithAccuracy,
+		isAlwaysExact:         true,
+		isAlwaysReal:          true,
 	})
 }
 

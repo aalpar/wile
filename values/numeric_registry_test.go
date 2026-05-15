@@ -15,7 +15,6 @@
 package values
 
 import (
-	"errors"
 	"math"
 	"math/big"
 	"reflect"
@@ -32,7 +31,7 @@ import (
 // completeness check in TestAllDispatchEntriesPopulated.
 func TestNumericRegistryAllKindsRegistered(t *testing.T) {
 	c := qt.New(t)
-	funcFieldNames := []string{"simplifyDown", "toFloat64", "toComplex128"}
+	funcFieldNames := []string{"simplifyDown", "toFloat64WithAccuracy", "toComplex128WithAccuracy"}
 	for k := range numKinds {
 		spec := LookupNumericSpec(k)
 		c.Assert(spec.SchemeName(), qt.Not(qt.Equals), "",
@@ -52,11 +51,11 @@ func TestNumericRegistryAllKindsRegistered(t *testing.T) {
 // and sensible (non-NaN) results where expected.
 func TestNumericRegistrySmoke(t *testing.T) {
 	cases := []struct {
-		name         string
-		value        Number
-		wantFloat64  float64
-		wantComplex  complex128
-		expectF64Err bool
+		name           string
+		value          Number
+		wantFloat64    float64
+		wantComplex    complex128
+		expectF64NotOK bool
 	}{
 		{
 			name:        "Integer(3)",
@@ -89,10 +88,10 @@ func TestNumericRegistrySmoke(t *testing.T) {
 			wantComplex: complex(3.5, 0),
 		},
 		{
-			name:         "Complex(3+4i)",
-			value:        NewComplex(complex(3, 4)),
-			expectF64Err: true,
-			wantComplex:  complex(3, 4),
+			name:           "Complex(3+4i)",
+			value:          NewComplex(complex(3, 4)),
+			expectF64NotOK: true,
+			wantComplex:    complex(3, 4),
 		},
 		{
 			name:        "Complex(3+0i)",
@@ -101,10 +100,10 @@ func TestNumericRegistrySmoke(t *testing.T) {
 			wantComplex: complex(3, 0),
 		},
 		{
-			name:         "BigComplex(3,4)",
-			value:        NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
-			expectF64Err: true,
-			wantComplex:  complex(3, 4),
+			name:           "BigComplex(3,4)",
+			value:          NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
+			expectF64NotOK: true,
+			wantComplex:    complex(3, 4),
 		},
 		{
 			name:        "BigComplex(3,0)",
@@ -125,22 +124,23 @@ func TestNumericRegistrySmoke(t *testing.T) {
 			c.Assert(simplified, qt.Not(qt.IsNil),
 				qt.Commentf("SimplifyDown(%s) returned nil", tc.name))
 
-			// ToFloat64
-			f, err := spec.ToFloat64(tc.value)
-			if tc.expectF64Err {
-				c.Assert(err, qt.IsNotNil)
-				c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+			// ToFloat64WithAccuracy
+			f, _, ok := spec.ToFloat64WithAccuracy(tc.value)
+			if tc.expectF64NotOK {
+				c.Assert(ok, qt.IsFalse,
+					qt.Commentf("ToFloat64WithAccuracy(%s) expected ok=false for complex with nonzero imag", tc.name))
 			} else {
-				c.Assert(err, qt.IsNil)
+				c.Assert(ok, qt.IsTrue,
+					qt.Commentf("ToFloat64WithAccuracy(%s) unexpected ok=false", tc.name))
 				c.Assert(math.IsNaN(f), qt.IsFalse,
-					qt.Commentf("ToFloat64(%s) returned NaN", tc.name))
+					qt.Commentf("ToFloat64WithAccuracy(%s) returned NaN", tc.name))
 				c.Assert(f, qt.Equals, tc.wantFloat64)
 			}
 
-			// ToComplex128 is universal.
-			z := spec.ToComplex128(tc.value)
-			c.Assert(real(z), qt.Equals, real(tc.wantComplex))
-			c.Assert(imag(z), qt.Equals, imag(tc.wantComplex))
+			// ToComplex128WithAccuracy is universal.
+			res := spec.ToComplex128WithAccuracy(tc.value)
+			c.Assert(real(res.Value), qt.Equals, real(tc.wantComplex))
+			c.Assert(imag(res.Value), qt.Equals, imag(tc.wantComplex))
 		})
 	}
 }
@@ -161,15 +161,15 @@ func TestEnsureNumericRegistryInitPanics(t *testing.T) {
 		var specs [numKinds]NumericTypeSpec
 		var filled [numKinds]bool
 		id := func(n Number) Number { return n }
-		f64 := func(n Number) (float64, error) { return 0, nil }
-		c128 := func(n Number) complex128 { return 0 }
+		f64 := func(n Number) (float64, big.Accuracy, bool) { return 0, big.Exact, true }
+		c128 := func(n Number) Complex128Result { return Complex128Result{} }
 		// Fill all but KindBigComplex.
 		for k := range numKinds {
 			if k == KindBigComplex {
 				continue
 			}
 			specs[k] = NumericTypeSpec{
-				schemeName: "x", simplifyDown: id, toFloat64: f64, toComplex128: c128,
+				schemeName: "x", simplifyDown: id, toFloat64WithAccuracy: f64, toComplex128WithAccuracy: c128,
 			}
 			filled[k] = true
 		}
@@ -183,10 +183,10 @@ func TestEnsureNumericRegistryInitPanics(t *testing.T) {
 // zero-value false negatives.
 func TestRegisterNumericSpecDuplicateRejected(t *testing.T) {
 	id := func(n Number) Number { return n }
-	f64 := func(n Number) (float64, error) { return 0, nil }
-	c128 := func(n Number) complex128 { return 0 }
+	f64 := func(n Number) (float64, big.Accuracy, bool) { return 0, big.Exact, true }
+	c128 := func(n Number) Complex128Result { return Complex128Result{} }
 	spec := NumericTypeSpec{
-		schemeName: "test", simplifyDown: id, toFloat64: f64, toComplex128: c128,
+		schemeName: "test", simplifyDown: id, toFloat64WithAccuracy: f64, toComplex128WithAccuracy: c128,
 	}
 
 	for _, kind := range []NumericKind{KindInteger, KindBigComplex} {
@@ -267,11 +267,11 @@ func numberToFloat64Golden(n Number) float64 {
 		f, _ := v.value.Float64()
 		return f
 	case *Rational:
-		return v.Float64()
+		return v.Float64Truncated()
 	case *Complex:
 		return real(v.Value)
 	case *BigComplex:
-		return toBigFloat(v.real).Float64()
+		return toBigFloat(v.real).Float64Truncated()
 	}
 	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "numberToFloat64Golden: unsupported type %T", n))
 }
@@ -286,13 +286,13 @@ func numberToComplex128Golden(n Number) complex128 {
 	case *Float:
 		return complex(v.Value, 0)
 	case *BigFloat:
-		return complex(v.Float64(), 0)
+		return complex(v.Float64Truncated(), 0)
 	case *Rational:
-		return complex(v.Float64(), 0)
+		return complex(v.Float64Truncated(), 0)
 	case *Complex:
 		return v.Value
 	case *BigComplex:
-		return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
+		return complex(toBigFloat(v.real).Float64Truncated(), toBigFloat(v.imag).Float64Truncated())
 	}
 	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "numberToComplex128Golden: unsupported type %T", n))
 }
@@ -356,37 +356,37 @@ func TestExactnessOfEquivalence(t *testing.T) {
 }
 
 // TestNumberToFloat64Equivalence compares registry path against the golden
-// switch for the 5 real kinds; asserts ErrNotAReal for the 2 complex kinds.
+// switch for the 5 real kinds; asserts ok=false for the 2 complex kinds with
+// nonzero imaginary part.
 func TestNumberToFloat64Equivalence(t *testing.T) {
 	c := qt.New(t)
 	for _, n := range equivalenceExemplars() {
 		kind := n.Kind()
 		spec := LookupNumericSpec(kind)
-		f, err := spec.ToFloat64(n)
-		// Complex/BigComplex error only when imag != 0; with imag == 0 the
-		// real part is returned losslessly (aligns with loss-signals design).
+		f, _, ok := spec.ToFloat64WithAccuracy(n)
+		// Complex/BigComplex: ok=false only when imag != 0; with imag == 0
+		// the real part is returned losslessly (loss-signals design).
 		if kind == KindComplex || kind == KindBigComplex {
 			if hasNonzeroImag(n) {
-				c.Assert(err, qt.IsNotNil,
-					qt.Commentf("ToFloat64(%s) expected error for complex with nonzero imag", n.SchemeString()))
-				c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+				c.Assert(ok, qt.IsFalse,
+					qt.Commentf("ToFloat64WithAccuracy(%s) expected ok=false for complex with nonzero imag", n.SchemeString()))
 				continue
 			}
-			c.Assert(err, qt.IsNil,
-				qt.Commentf("ToFloat64(%s) unexpected error for complex with zero imag", n.SchemeString()))
+			c.Assert(ok, qt.IsTrue,
+				qt.Commentf("ToFloat64WithAccuracy(%s) unexpected ok=false for complex with zero imag", n.SchemeString()))
 			c.Assert(f, qt.Equals, realPartOfComplex(n),
-				qt.Commentf("ToFloat64(%s): real-part extraction wrong", n.SchemeString()))
+				qt.Commentf("ToFloat64WithAccuracy(%s): real-part extraction wrong", n.SchemeString()))
 			continue
 		}
 		// For real kinds, registry must match golden switch.
-		c.Assert(err, qt.IsNil)
+		c.Assert(ok, qt.IsTrue)
 		golden := numberToFloat64Golden(n)
 		if math.IsNaN(golden) {
 			c.Assert(math.IsNaN(f), qt.IsTrue,
-				qt.Commentf("ToFloat64(%s): expected NaN", n.SchemeString()))
+				qt.Commentf("ToFloat64WithAccuracy(%s): expected NaN", n.SchemeString()))
 		} else {
 			c.Assert(f, qt.Equals, golden,
-				qt.Commentf("ToFloat64(%s): registry path != golden path", n.SchemeString()))
+				qt.Commentf("ToFloat64WithAccuracy(%s): registry path != golden path", n.SchemeString()))
 		}
 	}
 }
@@ -410,7 +410,7 @@ func realPartOfComplex(n Number) float64 {
 	case *Complex:
 		return real(v.Value)
 	case *BigComplex:
-		return toBigFloat(v.Real()).Float64()
+		return toBigFloat(v.Real()).Float64Truncated()
 	}
 	return 0
 }
@@ -420,10 +420,10 @@ func TestNumberToComplex128Equivalence(t *testing.T) {
 	for _, n := range equivalenceExemplars() {
 		golden := numberToComplex128Golden(n)
 		spec := LookupNumericSpec(n.Kind())
-		got := spec.ToComplex128(n)
-		c.Assert(real(got), qt.Equals, real(golden),
-			qt.Commentf("ToComplex128(%s) real: registry != golden", n.SchemeString()))
-		c.Assert(imag(got), qt.Equals, imag(golden),
-			qt.Commentf("ToComplex128(%s) imag: registry != golden", n.SchemeString()))
+		got := spec.ToComplex128WithAccuracy(n)
+		c.Assert(real(got.Value), qt.Equals, real(golden),
+			qt.Commentf("ToComplex128WithAccuracy(%s) real: registry != golden", n.SchemeString()))
+		c.Assert(imag(got.Value), qt.Equals, imag(golden),
+			qt.Commentf("ToComplex128WithAccuracy(%s) imag: registry != golden", n.SchemeString()))
 	}
 }
