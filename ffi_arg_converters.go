@@ -96,7 +96,7 @@ func makeArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (
 				if err != nil {
 					return reflect.Value{}, werr.WrapForeignErrorf(
 						err,
-						"%s: argument %d: %T", name, pos, v,
+						"%s: argument %d: %s", name, pos, v.SchemeString(),
 					)
 				}
 				f = lossless
@@ -123,7 +123,7 @@ func makeArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (
 				if err != nil {
 					return reflect.Value{}, werr.WrapForeignErrorf(
 						err,
-						"%s: argument %d: %T", name, pos, v,
+						"%s: argument %d: %s", name, pos, v.SchemeString(),
 					)
 				}
 				c = lossless

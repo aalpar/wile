@@ -345,7 +345,8 @@ func TestToFloat64_LossyConversion(t *testing.T) {
 	}{
 		// math.MaxInt64 = 2^63 - 1; float64 rounds to 2^63 (Above).
 		{"integer max int64", values.NewInteger(math.MaxInt64)},
-		// 1/3 is irrational in float64 — rounds Below.
+		// 1/3 is rational but not exactly representable in binary
+		// float64 (denominator is not a power of 2) — rounds Below.
 		{"rational 1/3", values.NewRational(1, 3)},
 		// BigInteger that requires more than 53 mantissa bits — float64
 		// can't preserve every digit. (2^100 + 1 cannot, because 2^100

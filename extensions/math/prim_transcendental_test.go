@@ -67,6 +67,18 @@ func TestTranscendental(t *testing.T) {
 		// atan (two args — atan2)
 		{"atan2 diagonal", `(< (abs (- (atan 1 1) 0.7853981633974483)) 1e-10)`, values.TrueValue},
 		{"atan2 y-axis", `(< (abs (- (atan 1 0) 1.5707963267948966)) 1e-10)`, values.TrueValue},
+		// PR-2 migration regression: atan2 must accept lossy real
+		// operands (1/3, BigFloat overflow, etc.) per R7RS §6.2.6
+		// since the result is inherently inexact. atan2Operand
+		// goes through ToFloat64WithAccuracy and discards the
+		// accuracy slot instead of helpers.ToFloat64 (which now
+		// errors on lossy inputs). A future reversion would surface
+		// here as a failing test.
+		{"atan2 rational y", `(< (abs (- (atan 1/3 1) 0.3217505543966422)) 1e-10)`, values.TrueValue},
+		{"atan2 rational x", `(< (abs (- (atan 1 1/3) 1.2490457723982544)) 1e-10)`, values.TrueValue},
+		{"atan2 rational both", `(< (abs (- (atan 1/3 2/7) 0.8621700546672261)) 1e-10)`, values.TrueValue},
+		{"atan2 big float operand",
+			`(< (abs (- (atan 1 (+ 1.0 (expt 10 60))) 1e-60)) 1e-50)`, values.TrueValue},
 
 		// sqrt
 		{"sqrt perfect square", `(< (abs (- (sqrt 4) 2.0)) 1e-10)`, values.TrueValue},

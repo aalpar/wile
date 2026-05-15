@@ -46,13 +46,18 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	return result
 }
 
-func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
+// evalExpectError parses and runs the given Scheme expression, asserts that
+// an error occurred, and returns the error. Callers that need to match the
+// error against a sentinel (errors.Is) consume the return value; callers that
+// only need "did it error" can ignore it.
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) error {
 	t.Helper()
 	ctx := context.Background()
 	_, err := engine.Eval(ctx, engine.MustParse(ctx, code))
 	if err == nil {
 		t.Fatalf("eval %q: expected error, got nil", code)
 	}
+	return err
 }
 
 // --- Registration validation errors ---
