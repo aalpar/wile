@@ -174,6 +174,60 @@ All 49 type combinations (7×7) are handled without panics for valid operations.
 
 ---
 
+## Conversion to Fixed-Precision Go Types
+
+Conversion of a Scheme numeric value to a fixed-precision Go type
+(`float64`, `complex128`) reports its accuracy via Go's `big.Accuracy`
+enum (Below / Exact / Above). Wile surfaces this signal at three
+layers:
+
+| Layer | API | Returns on lossy conversion |
+|-------|-----|-----------------------------|
+| Go helper | `values.ToFloat64WithAccuracy(n)` | `(float64, big.Accuracy, isReal bool, error)` — accuracy field is the signal |
+| Go helper (strict) | `values.ToFloat64Lossless(n)` | `werr.ErrLossyConversion` (wrapped, names direction) |
+| Go helper | `values.ToComplex128WithAccuracy(n)` | `Complex128Result{Value, RealAcc, ImagAcc}` — per-component accuracy |
+| Go helper (strict) | `values.ToComplex128Lossless(n)` | `ErrLossyConversion` if either component non-Exact |
+| FFI converter | `reflect.Float64` / `reflect.Complex128` param | strict (default): errors with `ErrLossyConversion`; lossy: silently truncates if `WithLossyConversionsAllowed()` set on the engine |
+| Scheme primitive | `(inexact-accuracy n)`, `(inexact-lossless? n)`, `(inexact-with-accuracy n)`, `(complex-inexact-with-accuracy n)` | `'below` / `'exact` / `'above` symbols (Wile-specific extensions in the math extension) |
+
+### Strict-by-default discipline
+
+The default ("strict") path **errors loudly** at the float64 /
+complex128 boundary on any precision loss. Embedders that need the
+legacy silent-truncation behavior opt in via
+`wile.WithLossyConversionsAllowed()` on the engine.
+
+This contrasts with R7RS-mandated `(exact->inexact)`, which is itself
+unchanged — `(exact->inexact (expt 10 500))` continues to saturate to
+`+inf.0` per R7RS §6.2.6. The new `inexact-*` primitives **expose the
+saturation direction** rather than gate it.
+
+### Accuracy symbol vocabulary
+
+The Scheme symbols paraphrase Go's `big.Accuracy` directly:
+
+- `'below` — the float64 representation is **less than** the true value
+  (true value rounded down).
+- `'exact` — float64 represents the value with no information loss.
+- `'above` — the float64 representation is **greater than** the true
+  value (true value rounded up).
+
+For complex inputs, the accuracy is per-component: `(values real-acc
+imag-acc)` and the symbols apply to each component independently.
+
+### See also
+
+- `werr.ErrLossyConversion` — sentinel for strict-path FFI / helper
+  rejection.
+- `values.BigAccuracyToSymbol(acc) *Symbol` — Go-side projection
+  used by every primitive.
+- `extensions/math/CLAUDE.local.md` — primitive inventory and design
+  notes.
+- `plans/2026-05-14-numeric-loss-signals-design.md` — design rationale,
+  Q-1 through Q-6 resolutions.
+
+---
+
 ## Testing
 
 Coverage tests are in:

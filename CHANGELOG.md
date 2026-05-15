@@ -75,6 +75,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ErrLossyConversion` when any component would round. See
   `values/conversion.go`.
 
+- **Four loss-signal-aware Scheme primitives in the math extension** — surface
+  Go's `big.Accuracy` to Scheme via `'below` / `'exact` / `'above` symbols.
+  R7RS `(exact->inexact)` continues to silently saturate per §6.2.6; these
+  primitives **expose** the rounding direction:
+
+  | Primitive | Returns | Purpose |
+  |-----------|---------|---------|
+  | `inexact-lossless?` | boolean | `#t` iff `(exact->inexact n)` would be lossless. For complex N, both components must be exact. |
+  | `inexact-accuracy` | 1 sym (real) or 2 syms (complex) | Predicts accuracy without performing the conversion. |
+  | `inexact-with-accuracy` | 2 values (real) or 3 values (complex) | Performs conversion and returns the inexact result with its accuracy. |
+  | `complex-inexact-with-accuracy` | always 3 values | Uniform 3-value variant — `(values complex-c real-acc imag-acc)` regardless of input domain. |
+
+  Domain dispatch (real-vs-complex) uses the `values.ComplexNumber` interface,
+  matching the `Hashable` / `Tuple` / `Indexable` precedent. Available
+  unconditionally when the math extension is loaded (profile `Small` and
+  above). See `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go
+  Types".
+
 ### Fixed
 
 - `syntax-case` now propagates non-`ErrNotAMatch` matcher errors instead of silently translating them to "no matching clause". Context cancellations and malformed-input errors during pattern matching surface with the actual diagnostic instead of the misleading no-match message. (#732)

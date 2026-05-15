@@ -12,7 +12,26 @@
 - **Advanced**: SyntaxValue, CompileTimeValue, Record, Box, Promise, Channel, Thread, Mutex
 - **Errors**: ForeignError, NativeError, StaticError
 
-Interfaces: `Hashable`, `Tuple`, `Indexable`
+Interfaces: `Hashable`, `Tuple`, `Indexable`, `Number`, `ComplexNumber`
+
+## Numeric Conversion Helpers (`conversion.go`)
+
+Public helpers that surface Go's `big.Accuracy` three-valued enum at
+the Scheme/Go boundary for `float64` / `complex128` extraction:
+
+| Function | Returns | Purpose |
+|----------|---------|---------|
+| `ToFloat64WithAccuracy(n Number)` | `(float64, big.Accuracy, isReal bool, error)` | Primary helper. Accuracy field is the signal. |
+| `ToFloat64Lossless(n Number)` | `(float64, error)` | Strict wrapper. Returns `werr.ErrLossyConversion` (wrapped, names direction) on any loss. |
+| `ToComplex128WithAccuracy(n Number)` | `(Complex128Result, error)` | Per-component accuracy via named-field struct. |
+| `ToComplex128Lossless(n Number)` | `(complex128, error)` | Strict wrapper. Returns `ErrLossyConversion` if either component non-Exact. |
+| `BigAccuracyToSymbol(acc big.Accuracy) *Symbol` | `*Symbol` | Projects `big.Below` / `big.Exact` / `big.Above` to the Scheme symbols `'below` / `'exact` / `'above`. |
+
+The `WithAccuracy` forms return the raw value plus accuracy slots
+without erroring on loss; the `Lossless` forms reject loss with
+`werr.ErrLossyConversion`. The FFI converter and the math
+extension's `inexact-*` primitives both consume these helpers. See
+`docs/numeric/tower.md` §"Conversion to Fixed-Precision Go Types".
 
 ## Error Handling
 
