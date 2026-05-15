@@ -28,11 +28,14 @@ import (
 //
 // The three function fields are non-nil invariants enforced by
 // registerNumericSpec — bottom-of-chain kinds bind an identity
-// simplifyDown rather than nil.
+// simplifyDown rather than nil. Real-only kinds may omit
+// toComplex128WithAccuracy and set isAlwaysReal=true; registerNumericSpec
+// will auto-derive it from toFloat64WithAccuracy via liftRealToComplex128.
 type NumericTypeSpec struct {
 	schemeName    string
 	simplifyDown  func(Number) Number
 	isAlwaysExact bool
+	isAlwaysReal  bool
 
 	// toFloat64WithAccuracy replaces the previous toFloat64 field.
 	// Per-kind dispatch returns the float64 result, the big.Accuracy
@@ -43,9 +46,22 @@ type NumericTypeSpec struct {
 
 	// toComplex128WithAccuracy replaces the previous toComplex128 field.
 	// Returns a Complex128Result struct (field-named to prevent
-	// realAcc/imagAcc swap bugs at call sites). Always non-nil for every
-	// kind. For real-only kinds, res.ImagAcc is trivially big.Exact.
+	// realAcc/imagAcc swap bugs at call sites). Always non-nil after
+	// registration. Real-only kinds may leave it nil at registration
+	// time; registerNumericSpec auto-derives it from
+	// toFloat64WithAccuracy when isAlwaysReal=true.
 	toComplex128WithAccuracy func(Number) Complex128Result
+}
+
+// liftRealToComplex128 produces a toComplex128WithAccuracy closure from a
+// real-only toFloat64WithAccuracy. The isReal slot returned by the inner
+// helper is always true for real-only kinds — that's the registration-time
+// invariant the auto-derivation relies on.
+func liftRealToComplex128(toFloat func(Number) (float64, big.Accuracy, bool)) func(Number) Complex128Result {
+	return func(n Number) Complex128Result {
+		f, acc, _ := toFloat(n)
+		return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
+	}
 }
 
 // SchemeName returns the Scheme type name for this numeric kind (e.g. "integer").
@@ -112,8 +128,11 @@ func registerNumericSpec(kind NumericKind, spec NumericTypeSpec) {
 			"registerNumericSpec: toFloat64WithAccuracy must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
 	if spec.toComplex128WithAccuracy == nil {
-		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: toComplex128WithAccuracy must not be nil for kind %d (%s)", kind, spec.schemeName))
+		if !spec.isAlwaysReal {
+			panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
+				"registerNumericSpec: toComplex128WithAccuracy must not be nil for kind %d (%s) unless isAlwaysReal", kind, spec.schemeName))
+		}
+		spec.toComplex128WithAccuracy = liftRealToComplex128(spec.toFloat64WithAccuracy)
 	}
 	if registryFilled[kind] {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
@@ -151,19 +170,18 @@ func validateNumericSpecs(specs [numKinds]NumericTypeSpec, filled [numKinds]bool
 // order is lexical by filename; placing the validation in a 'v'-prefixed
 // file is the only way to guarantee it runs after rational.go's init.
 
-// Lookup returns the NumericTypeSpec for the given kind. Renamed from
-// LookupNumericSpec (PR #752) — the registry is the only Lookup site in
-// values/, so the prefix was redundant. All internal call sites updated.
+// LookupNumericSpec returns the NumericTypeSpec for the given kind.
 // Bounds-checked: out-of-range kind panics with ErrNumericRegistry rather
 // than producing a Go runtime "index out of range" panic. Consulted by the
-// cold-path helpers (Simplify, ExactnessOf, NumberToFloat64, NumberToComplex128).
-// NumberToFloat64/NumberToComplex128 are also reached from the IEEE 754
-// special-value guard inside the arithmetic dispatch closures; those fire
-// only when a Float operand is Inf/NaN, not on every arithmetic op.
-func Lookup(kind NumericKind) *NumericTypeSpec {
+// cold-path helpers (Simplify, ExactnessOf, NumberToFloat64,
+// NumberToComplex128Lossy). NumberToFloat64/NumberToComplex128Lossy are also
+// reached from the IEEE 754 special-value guard inside the arithmetic
+// dispatch closures; those fire only when a Float operand is Inf/NaN, not
+// on every arithmetic op.
+func LookupNumericSpec(kind NumericKind) *NumericTypeSpec {
 	if int(kind) >= int(numKinds) {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"Lookup: kind %d out of range [0,%d)", kind, numKinds))
+			"LookupNumericSpec: kind %d out of range [0,%d)", kind, numKinds))
 	}
 	return &numericRegistry[kind]
 }

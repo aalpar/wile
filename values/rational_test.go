@@ -170,9 +170,9 @@ func TestRational_DenomInt64(t *testing.T) {
 	qt.Assert(t, r.DenomInt64(), qt.Equals, int64(3))
 }
 
-func TestRational_Float64(t *testing.T) {
+func TestRational_Float64Truncated(t *testing.T) {
 	r := values.NewRational(1, 2)
-	qt.Assert(t, r.Float64(), qt.Equals, 0.5)
+	qt.Assert(t, r.Float64Truncated(), qt.Equals, 0.5)
 }
 
 func TestRational_SchemeString(t *testing.T) {

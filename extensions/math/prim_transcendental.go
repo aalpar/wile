@@ -185,7 +185,7 @@ func PrimSqrt(mc machine.CallContext) error {
 			}
 			return nil
 		}
-		f := v.Float64()
+		f := v.Float64Truncated()
 		if f < 0 {
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(f, 0))))
 		} else {
@@ -280,15 +280,15 @@ func PrimExpt(mc machine.CallContext) error {
 	switch baseNum.(type) {
 	case *values.Complex, *values.BigComplex:
 		mc.SetValue(values.NewComplex(cmplx.Pow(
-			values.NumberToComplex128(baseNum),
-			values.NumberToComplex128(expNum))))
+			values.NumberToComplex128Lossy(baseNum),
+			values.NumberToComplex128Lossy(expNum))))
 	default:
 		// Complex exponent with real base
 		switch expNum.(type) {
 		case *values.Complex, *values.BigComplex:
 			mc.SetValue(values.NewComplex(cmplx.Pow(
 				complex(values.NumberToFloat64(baseNum), 0),
-				values.NumberToComplex128(expNum))))
+				values.NumberToComplex128Lossy(expNum))))
 			return nil
 		}
 		mc.SetValue(values.NewFloat(math.Pow(

@@ -139,12 +139,6 @@ func bigIntegerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	return f, acc, true
 }
 
-// bigIntegerToComplex128WithAccuracy lifts a BigInteger to Complex128Result.
-func bigIntegerToComplex128WithAccuracy(n Number) Complex128Result {
-	f, acc, _ := bigIntegerToFloat64WithAccuracy(n)
-	return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
-}
-
 var bigIntegerAdd [numKinds]func(*BigInteger, Number) Number
 var bigIntegerSubtract [numKinds]func(*BigInteger, Number) Number
 var bigIntegerLessThan [numKinds]func(*BigInteger, Number) bool
@@ -183,11 +177,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindBigInteger, NumericTypeSpec{
-		schemeName:               "integer",
-		simplifyDown:             bigIntegerSimplifyDown,
-		toFloat64WithAccuracy:    bigIntegerToFloat64WithAccuracy,
-		toComplex128WithAccuracy: bigIntegerToComplex128WithAccuracy,
-		isAlwaysExact:            true,
+		schemeName:            "integer",
+		simplifyDown:          bigIntegerSimplifyDown,
+		toFloat64WithAccuracy: bigIntegerToFloat64WithAccuracy,
+		isAlwaysExact:         true,
+		isAlwaysReal:          true,
 	})
 }
 

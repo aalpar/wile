@@ -108,6 +108,9 @@ func (p *BigFloat) Float64Truncated() float64 {
 	if p.nan {
 		return math.NaN()
 	}
+	// big.Accuracy intentionally discarded: callers of Float64Truncated have
+	// opted out of the loss signal by name. Use Float64WithAccuracy when the
+	// accuracy bit is actionable.
 	f, _ := p.value.Float64()
 	return f
 }
@@ -178,12 +181,6 @@ func bigFloatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	return f, acc, true
 }
 
-// bigFloatToComplex128WithAccuracy lifts a BigFloat to Complex128Result.
-func bigFloatToComplex128WithAccuracy(n Number) Complex128Result {
-	f, acc, _ := bigFloatToFloat64WithAccuracy(n)
-	return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
-}
-
 var bigFloatAdd [numKinds]func(*BigFloat, Number) Number
 var bigFloatSubtract [numKinds]func(*BigFloat, Number) Number
 var bigFloatLessThan [numKinds]func(*BigFloat, Number) bool
@@ -217,11 +214,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindBigFloat, NumericTypeSpec{
-		schemeName:               "real",
-		simplifyDown:             bigFloatSimplifyDown,
-		toFloat64WithAccuracy:    bigFloatToFloat64WithAccuracy,
-		toComplex128WithAccuracy: bigFloatToComplex128WithAccuracy,
-		isAlwaysExact:            false,
+		schemeName:            "real",
+		simplifyDown:          bigFloatSimplifyDown,
+		toFloat64WithAccuracy: bigFloatToFloat64WithAccuracy,
+		isAlwaysExact:         false,
+		isAlwaysReal:          true,
 	})
 }
 

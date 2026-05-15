@@ -60,6 +60,25 @@ func TestToFloat64WithAccuracy(t *testing.T) {
 		{"big-integer-near-mantissa-boundary",
 			NewBigInteger(new(big.Int).Lsh(big.NewInt(1), 54)),
 			math.Ldexp(1, 54), big.Exact, true},
+		// 2^53+1 is the smallest positive BigInteger that rounds in float64.
+		// round-to-even sends odd-+1 down to 2^53 → Below.
+		{"big-integer-rounds-below",
+			NewBigInteger(new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 53), big.NewInt(1))),
+			math.Ldexp(1, 53), big.Below, true},
+		// -(2^53+1) similarly rounds toward zero → Above relative to the negative value.
+		{"big-integer-rounds-above-negative",
+			NewBigInteger(new(big.Int).Neg(new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 53), big.NewInt(1)))),
+			-math.Ldexp(1, 53), big.Above, true},
+		// 10^308 fits float64 (max ≈ 1.8e308) and rounds — direction observed
+		// from the stdlib is Above. This row exercises the
+		// rounding-but-not-overflow regime distinct from the saturation edges.
+		{"big-integer-near-max-float64",
+			NewBigInteger(new(big.Int).Exp(big.NewInt(10), big.NewInt(308), nil)),
+			func() float64 {
+				f, _ := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(308), nil)).Float64()
+				return f
+			}(),
+			big.Above, true},
 
 		// ---- Float ----
 		{"float-identity", NewFloat(3.5), 3.5, big.Exact, true},
@@ -79,6 +98,9 @@ func TestToFloat64WithAccuracy(t *testing.T) {
 		{"big-float-overflow-negative", NewBigFloatFromString("-1e500"), math.Inf(-1), big.Below, true},
 		// 1e-400 underflows float64 → 0.0 (below true value since 0 < 1e-400)
 		{"big-float-underflow", NewBigFloatFromString("1e-400"), 0.0, big.Below, true},
+		// -1e-400 underflows toward zero → -0.0 (above true value since -0.0 > -1e-400);
+		// Go big.Float's Float64 reports Accuracy in the rounding-direction sense.
+		{"big-float-underflow-negative", NewBigFloatFromString("-1e-400"), math.Copysign(0, -1), big.Above, true},
 		{"big-float-nan", NewBigFloatNaN(), math.NaN(), big.Exact, true},
 		// 256-bit pi rounds below nearest float64 (math.Pi < BigFloat value)
 		{"big-float-irrational-pi", NewBigFloatFromString("3.14159265358979323846"), math.Pi, big.Below, true},
@@ -132,9 +154,16 @@ func TestToFloat64WithAccuracy(t *testing.T) {
 			c := qt.New(t)
 			f, acc, isReal, err := ToFloat64WithAccuracy(tc.input)
 			c.Assert(err, qt.IsNil)
-			if math.IsNaN(tc.wantValue) {
+			switch {
+			case math.IsNaN(tc.wantValue):
 				c.Assert(math.IsNaN(f), qt.IsTrue)
-			} else {
+			case tc.wantValue == 0:
+				// IEEE 754 distinguishes +0 from -0; qt.Equals (== on float64)
+				// does not. Compare sign bits so a regression that drops the
+				// negative-zero polarity is caught.
+				c.Assert(f, qt.Equals, tc.wantValue)
+				c.Assert(math.Signbit(f), qt.Equals, math.Signbit(tc.wantValue))
+			default:
 				c.Assert(f, qt.Equals, tc.wantValue)
 			}
 			c.Assert(acc, qt.Equals, tc.wantAcc)
@@ -242,12 +271,46 @@ func TestToComplex128WithAccuracy(t *testing.T) {
 				NewBigInteger(new(big.Int).Exp(big.NewInt(10), big.NewInt(500), nil)),
 				NewBigIntegerFromInt64(0)),
 			complex(math.Inf(1), 0), big.Above, big.Exact},
+		// Both components inexact, distinct accuracies: 1/3 → Below, 1/10 → Above.
+		// Catches realAcc/imagAcc swaps inside the BigComplex per-kind closure.
+		{"bigcomplex-both-inexact-mixed",
+			NewBigComplex(NewRational(1, 3), NewRational(1, 10)),
+			complex(1.0/3.0, 0.1), big.Below, big.Above},
+
+		// ---- NaN propagation ----
+		// Float NaN: real-component NaN, imag Exact zero.
+		{"float-nan-to-complex", NewFloat(math.NaN()), complex(math.NaN(), 0), big.Exact, big.Exact},
+		// Complex with NaN real: imag is zero so still Exact.
+		{"complex-nan-real-to-complex", NewComplex(complex(math.NaN(), 0)),
+			complex(math.NaN(), 0), big.Exact, big.Exact},
+		// BigComplex with both components NaN: both axes report Exact per Q-6 (NaN→NaN identity).
+		{"bigcomplex-nan-both",
+			NewBigComplex(NewBigFloatNaN(), NewBigFloatNaN()),
+			complex(math.NaN(), math.NaN()), big.Exact, big.Exact},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			res, err := ToComplex128WithAccuracy(tc.input)
 			c.Assert(err, qt.IsNil)
+			// NaN bit-pattern doesn't equal itself; assert NaN-ness component-wise
+			// then check accuracy slots. Non-NaN cases use DeepEquals on the whole
+			// struct so a swap of RealAcc/ImagAcc fields surfaces.
+			wantReal, wantImag := real(tc.wantValue), imag(tc.wantValue)
+			gotReal, gotImag := real(res.Value), imag(res.Value)
+			if math.IsNaN(wantReal) || math.IsNaN(wantImag) {
+				c.Assert(math.IsNaN(gotReal), qt.Equals, math.IsNaN(wantReal))
+				c.Assert(math.IsNaN(gotImag), qt.Equals, math.IsNaN(wantImag))
+				if !math.IsNaN(wantReal) {
+					c.Assert(gotReal, qt.Equals, wantReal)
+				}
+				if !math.IsNaN(wantImag) {
+					c.Assert(gotImag, qt.Equals, wantImag)
+				}
+				c.Assert(res.RealAcc, qt.Equals, tc.wantRealAcc)
+				c.Assert(res.ImagAcc, qt.Equals, tc.wantImagAcc)
+				return
+			}
 			c.Assert(res, qt.DeepEquals, Complex128Result{
 				Value:   tc.wantValue,
 				RealAcc: tc.wantRealAcc,
@@ -300,7 +363,9 @@ func TestToComplex128Lossless(t *testing.T) {
 	}
 }
 
-func TestErrNotANumber(t *testing.T) {
+// TestConvertersRejectNilInput asserts that all four public converters
+// surface ErrNotANumber when given a nil Number interface.
+func TestConvertersRejectNilInput(t *testing.T) {
 	c := qt.New(t)
 	var n Number
 

@@ -12,11 +12,13 @@ package values
 //     declare [numKinds] dispatch tables, register
 //     via init() calling makeXxxDispatch helpers
 //  3. values/xxx.go                  — register a NumericTypeSpec in the same init() via
-//     registerNumericSpec(KindXxx, NumericTypeSpec{...}). Provide the three
-//     per-kind helper functions (xxxSimplifyDown, xxxToFloat64, xxxToComplex128)
-//     and the schemeName + isAlwaysExact metadata. The registry-driven
-//     cold-path functions (Simplify, ExactnessOf, NumberToFloat64,
-//     NumberToComplex128) pick up the new kind automatically.
+//     registerNumericSpec(KindXxx, NumericTypeSpec{...}). Provide the per-kind
+//     helper functions (xxxSimplifyDown, xxxToFloat64WithAccuracy, and either
+//     xxxToComplex128WithAccuracy or set isAlwaysReal=true to have the registry
+//     auto-derive the complex helper via liftRealToComplex128). Provide the
+//     schemeName + isAlwaysExact metadata. The registry-driven cold-path
+//     functions (Simplify, ExactnessOf, NumberToFloat64, NumberToComplex128Lossy)
+//     pick up the new kind automatically.
 //  4. values/promotion.go            — add row/column in promotionTable and promoter
 //  5. values/numeric_dispatch_test.go — add new dispatch tables to TestAllDispatchEntriesPopulated
 //  6. values/numeric_registry_test.go — add the new kind to equivalenceExemplars()

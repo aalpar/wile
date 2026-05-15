@@ -162,12 +162,11 @@ func bigComplexSimplifyDown(n Number) Number {
 	return n
 }
 
-// bigComplexToFloat64 returns the real component when the imaginary part is
-// zero (lossless on the imaginary axis), and ErrNotAReal otherwise. BigFloat
-// → float64 precision loss is currently silent; the loss-signals follow-up
-// bigComplexToFloat64WithAccuracy converts a BigComplex to float64 with
-// per-component loss signal. The real flag is false when the imaginary part
-// is non-zero (caller should use ToComplex128WithAccuracy for full fidelity).
+// bigComplexToFloat64WithAccuracy converts a BigComplex to float64 with a
+// per-component loss signal. The accuracy is the BigFloat→float64 rounding
+// direction of the real component only; the imaginary component's drop is
+// signaled by the isReal bool, which is false iff the imaginary part is
+// non-zero. Callers needing both components should use ToComplex128WithAccuracy.
 func bigComplexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	p := n.(*BigComplex)
 	realF, realAcc := toBigFloat(p.real).Float64WithAccuracy()

@@ -92,12 +92,6 @@ func floatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	return n.(*Float).Value, big.Exact, true
 }
 
-// floatToComplex128WithAccuracy lifts a Float to Complex128Result; both
-// components are Exact since the conversion is identity (no precision change).
-func floatToComplex128WithAccuracy(n Number) Complex128Result {
-	return Complex128Result{Value: complex(n.(*Float).Value, 0), RealAcc: big.Exact, ImagAcc: big.Exact}
-}
-
 var floatAdd [numKinds]func(*Float, Number) Number
 var floatSubtract [numKinds]func(*Float, Number) Number
 var floatLessThan [numKinds]func(*Float, Number) bool
@@ -133,11 +127,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindFloat, NumericTypeSpec{
-		schemeName:               "real",
-		simplifyDown:             floatSimplifyDown,
-		toFloat64WithAccuracy:    floatToFloat64WithAccuracy,
-		toComplex128WithAccuracy: floatToComplex128WithAccuracy,
-		isAlwaysExact:            false,
+		schemeName:            "real",
+		simplifyDown:          floatSimplifyDown,
+		toFloat64WithAccuracy: floatToFloat64WithAccuracy,
+		isAlwaysExact:         false,
+		isAlwaysReal:          true,
 	})
 }
 

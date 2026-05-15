@@ -332,7 +332,7 @@ func isSpecialFloat(f *Float) bool {
 //     extensions/math should Simplify() the value first if they want
 //     zero-imag complex inputs to flow through transparently.
 func NumberToFloat64(n Number) float64 {
-	f, _, ok := Lookup(n.Kind()).ToFloat64WithAccuracy(n)
+	f, _, ok := LookupNumericSpec(n.Kind()).ToFloat64WithAccuracy(n)
 	if !ok {
 		panic(werr.WrapForeignErrorf(werr.ErrNotAReal,
 			"NumberToFloat64: cannot convert %T to float64", n))
@@ -340,12 +340,14 @@ func NumberToFloat64(n Number) float64 {
 	return f
 }
 
-// NumberToComplex128 converts any Number to complex128. BigFloat and
-// BigComplex values are reduced to float64/complex128 precision. This is
-// intended for paths where precision loss is acceptable, such as IEEE 754
-// Inf/NaN guards and inexact complex arithmetic in extensions.
-func NumberToComplex128(n Number) complex128 {
-	return Lookup(n.Kind()).ToComplex128WithAccuracy(n).Value
+// NumberToComplex128Lossy converts any Number to complex128, discarding
+// per-component precision-loss signals. BigFloat and BigComplex values are
+// reduced to float64/complex128 precision. Intended for paths where
+// precision loss is acceptable, such as IEEE 754 Inf/NaN guards and inexact
+// complex arithmetic in extensions. Callers needing loss signals should use
+// ToComplex128WithAccuracy directly.
+func NumberToComplex128Lossy(n Number) complex128 {
+	return LookupNumericSpec(n.Kind()).ToComplex128WithAccuracy(n).Value
 }
 
 // cmpFloat64 compares two float64 values, returning -1, 0, or 1.
@@ -405,7 +407,7 @@ func makeArithmeticDispatch[T Number](
 					if lubIsComplex {
 						// Return BigComplex so the imaginary part of the
 						// BigComplex operand is preserved (fix for #362).
-						z := complex128Op(NumberToComplex128(p), NumberToComplex128(o))
+						z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
 						return NewBigComplexFromBigFloats(
 							NewBigFloatFromFloat64(real(z)),
 							NewBigFloatFromFloat64(imag(z)),
@@ -421,7 +423,7 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						z := complex128Op(NumberToComplex128(p), NumberToComplex128(o))
+						z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
 						return NewBigComplexFromBigFloats(
 							NewBigFloatFromFloat64(real(z)),
 							NewBigFloatFromFloat64(imag(z)),
@@ -514,7 +516,7 @@ func makeDivideDispatch[T Number](
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				if isSpecialFloat(any(p).(*Float)) {
 					if lubIsComplex {
-						z := NumberToComplex128(p) / NumberToComplex128(o)
+						z := NumberToComplex128Lossy(p) / NumberToComplex128Lossy(o)
 						return NewBigComplexFromBigFloats(
 							NewBigFloatFromFloat64(real(z)),
 							NewBigFloatFromFloat64(imag(z)),
@@ -530,7 +532,7 @@ func makeDivideDispatch[T Number](
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						z := NumberToComplex128(p) / NumberToComplex128(o)
+						z := NumberToComplex128Lossy(p) / NumberToComplex128Lossy(o)
 						return NewBigComplexFromBigFloats(
 							NewBigFloatFromFloat64(real(z)),
 							NewBigFloatFromFloat64(imag(z)),

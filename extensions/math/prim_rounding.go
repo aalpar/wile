@@ -66,7 +66,7 @@ func integerPassthrough(v *values.Integer) values.Value {
 // When the input is exact (like a rational), the result must also be exact.
 func rationalToInteger(f func(float64) float64) func(*values.Rational) values.Value {
 	return func(v *values.Rational) values.Value {
-		return values.NewInteger(int64(f(v.Float64())))
+		return values.NewInteger(int64(f(v.Float64Truncated())))
 	}
 }
 

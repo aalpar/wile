@@ -274,6 +274,36 @@ func TestBigFloat_Conversions(t *testing.T) {
 	c.Assert(bf.SchemeString(), qt.Not(qt.Equals), "")
 }
 
+// TestBigFloat_Float64WithAccuracy exercises the loss-signal-aware float64
+// accessor on the three observable branches: NaN flag (returns Exact per the
+// Q-6 NaN identity rule), finite/exact pass-through, and overflow.
+func TestBigFloat_Float64WithAccuracy(t *testing.T) {
+	cases := []struct {
+		name      string
+		input     *values.BigFloat
+		wantValue float64
+		wantAcc   big.Accuracy
+		wantNaN   bool
+	}{
+		{"finite-exact", values.NewBigFloatFromFloat64(2.5), 2.5, big.Exact, false},
+		{"nan-identity", values.NewBigFloatNaN(), 0, big.Exact, true},
+		{"overflow-above", values.NewBigFloatFromString("1e500"), math.Inf(1), big.Above, false},
+		{"overflow-below", values.NewBigFloatFromString("-1e500"), math.Inf(-1), big.Below, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			f, acc := tc.input.Float64WithAccuracy()
+			if tc.wantNaN {
+				c.Assert(math.IsNaN(f), qt.IsTrue)
+			} else {
+				c.Assert(f, qt.Equals, tc.wantValue)
+			}
+			c.Assert(acc, qt.Equals, tc.wantAcc)
+		})
+	}
+}
+
 func TestBigFloat_EqualTo(t *testing.T) {
 	c := qt.New(t)
 

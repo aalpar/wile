@@ -204,6 +204,90 @@ NewComplexFromParts(realPart, imagPart float64) *Complex
 | `String()` | Go standard stringer interface |
 | `SchemeString()` | Scheme-formatted string representation |
 
+### Loss-Signal Suffixes
+
+Numeric conversions in Wile fall into a small lattice: some conversions
+preserve every signal the underlying representation can produce, some
+deliberately discard signals that the caller cannot act on, and some refuse
+to discard signals at all. Four suffixes name where a method or function
+sits in that lattice. Use them consistently — the name is the contract.
+
+| Suffix | Returns | Caller contract | Use when |
+|--------|---------|-----------------|----------|
+| `*WithAccuracy` | `(value, big.Accuracy, ...)` | Caller MAY act on the accuracy/loss signal | The signal exists in the source representation and the API is the bridge that surfaces it |
+| `*Truncated` | bare `value` | Caller HAS opted out of the signal by name | Downstream code inherently cannot use the signal (`math.Sin` inputs, FNV hash seeds, transcendental coercions where the receiver is already inexact) |
+| `*Lossy` | bare `value` | Caller HAS acknowledged that precision loss is acceptable | The function is reached on a hot path where the caller has already proved the precision drop is irrelevant (IEEE 754 Inf/NaN guards, inexact-only arithmetic) |
+| `*Lossless` | `(value, error)` | Function REFUSES to drop information | Strict callers (FFI strict mode, conversion validators) need a hard error rather than a silent rounding; returns `werr.ErrLossyConversion` (wrapped) when the source would round |
+
+**Examples**:
+
+```go
+// *WithAccuracy — bridges Go big.Accuracy to the caller
+func (p *BigFloat) Float64WithAccuracy() (float64, big.Accuracy)
+func ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool, error)
+func ToComplex128WithAccuracy(n Number) (Complex128Result, error)
+
+// *Truncated — name warns the reader at every call site
+func (p *BigFloat) Float64Truncated() float64
+func (p *Rational) Float64Truncated() float64
+
+// *Lossy — hot-path lossy reduction, contract documented at the function
+func NumberToComplex128Lossy(n Number) complex128
+
+// *Lossless — refuses the lossy path
+func ToFloat64Lossless(n Number) (float64, error)
+func ToComplex128Lossless(n Number) (complex128, error)
+```
+
+**Rationale**: the previous `(*BigFloat).Float64()` was indistinguishable
+at the call site from a stdlib `(*big.Float).Float64()`, yet it silently
+dropped Go's `big.Accuracy`. Every caller had to read the body to know
+whether the discard was deliberate or a bug. Renaming the method to
+`Float64Truncated()` and adding `Float64WithAccuracy()` forced every site
+to declare its intent — a swap-bug surface eliminated by name.
+
+**Pairing rule**: a `*Truncated` method MUST coexist with a
+`*WithAccuracy` companion on the same receiver. The truncated form is the
+opt-out; the with-accuracy form is the default. Never offer a `*Truncated`
+without its companion — the caller has no escape hatch.
+
+**Sentinels**: `*Lossless` functions return `werr.ErrLossyConversion`
+(wrapped) when the conversion would round; the wrap message names the
+direction (`"%T rounded %s (lost precision)"`).
+
+### Registry Lookup Naming
+
+Functions that look up entries in a typed registry should name the kind of
+entry in the function name, even when the package has only one registry
+today. Prefer `LookupNumericSpec(kind)` over a bare `Lookup(kind)`.
+
+**Rationale**: a bare `Lookup` in package `values` reads ambiguously the
+moment a second registry appears (`values.Lookup(symKey)` for `*Symbol`?
+`values.Lookup(hashtableKey)`?). The bare name optimizes for the current
+state of the package, not for what a reader of a single line of code can
+infer. Naming the entry type makes the call site self-describing:
+`values.LookupNumericSpec(KindInteger)` tells the reader what is being
+looked up and what shape comes back, with zero context from the
+surrounding code.
+
+The cost — one extra noun at the call site — is paid by the caller, where
+the cost is small. The benefit — unambiguous reading — is collected by
+every reader of every call site.
+
+**Pattern**:
+
+```go
+// Correct
+func LookupNumericSpec(kind NumericKind) *NumericTypeSpec
+func LookupPromotionEntry(src, dst NumericKind) *PromotionEntry
+
+// Avoid
+func Lookup(kind NumericKind) *NumericTypeSpec  // ambiguous at call site
+```
+
+Apply the same rule to register-side helpers: `registerNumericSpec`,
+not `register`.
+
 ## Control Flow
 
 ### If Statement Assignments

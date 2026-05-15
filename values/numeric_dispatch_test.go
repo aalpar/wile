@@ -102,7 +102,7 @@ func TestTypeSwitchFunctionsHandleAllTypes(t *testing.T) {
 		call func(Number)
 	}{
 		{"NumberToFloat64", func(n Number) { NumberToFloat64(n) }},
-		{"NumberToComplex128", func(n Number) { NumberToComplex128(n) }},
+		{"NumberToComplex128", func(n Number) { NumberToComplex128Lossy(n) }},
 		{"Simplify", func(n Number) { Simplify(n) }},
 		{"ExactnessOf", func(n Number) { ExactnessOf(n) }},
 	}

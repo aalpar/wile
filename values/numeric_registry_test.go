@@ -33,7 +33,7 @@ func TestNumericRegistryAllKindsRegistered(t *testing.T) {
 	c := qt.New(t)
 	funcFieldNames := []string{"simplifyDown", "toFloat64WithAccuracy", "toComplex128WithAccuracy"}
 	for k := range numKinds {
-		spec := Lookup(k)
+		spec := LookupNumericSpec(k)
 		c.Assert(spec.SchemeName(), qt.Not(qt.Equals), "",
 			qt.Commentf("kind %d has empty schemeName", k))
 		sv := reflect.ValueOf(*spec)
@@ -115,7 +115,7 @@ func TestNumericRegistrySmoke(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			spec := Lookup(tc.value.Kind())
+			spec := LookupNumericSpec(tc.value.Kind())
 
 			// SimplifyDown must return a non-nil Number of the same or
 			// simpler kind. Returning the input unchanged is allowed
@@ -190,7 +190,7 @@ func TestRegisterNumericSpecDuplicateRejected(t *testing.T) {
 	}
 
 	for _, kind := range []NumericKind{KindInteger, KindBigComplex} {
-		t.Run(Lookup(kind).SchemeName(), func(t *testing.T) {
+		t.Run(LookupNumericSpec(kind).SchemeName(), func(t *testing.T) {
 			c := qt.New(t)
 			// The kind is already registered from package init() — a second call must panic.
 			c.Assert(func() { registerNumericSpec(kind, spec) }, qt.PanicMatches, ".*numeric registry violation.*")
@@ -267,7 +267,7 @@ func numberToFloat64Golden(n Number) float64 {
 		f, _ := v.value.Float64()
 		return f
 	case *Rational:
-		return v.Float64()
+		return v.Float64Truncated()
 	case *Complex:
 		return real(v.Value)
 	case *BigComplex:
@@ -288,7 +288,7 @@ func numberToComplex128Golden(n Number) complex128 {
 	case *BigFloat:
 		return complex(v.Float64Truncated(), 0)
 	case *Rational:
-		return complex(v.Float64(), 0)
+		return complex(v.Float64Truncated(), 0)
 	case *Complex:
 		return v.Value
 	case *BigComplex:
@@ -362,7 +362,7 @@ func TestNumberToFloat64Equivalence(t *testing.T) {
 	c := qt.New(t)
 	for _, n := range equivalenceExemplars() {
 		kind := n.Kind()
-		spec := Lookup(kind)
+		spec := LookupNumericSpec(kind)
 		f, _, ok := spec.ToFloat64WithAccuracy(n)
 		// Complex/BigComplex: ok=false only when imag != 0; with imag == 0
 		// the real part is returned losslessly (loss-signals design).
@@ -419,7 +419,7 @@ func TestNumberToComplex128Equivalence(t *testing.T) {
 	c := qt.New(t)
 	for _, n := range equivalenceExemplars() {
 		golden := numberToComplex128Golden(n)
-		spec := Lookup(n.Kind())
+		spec := LookupNumericSpec(n.Kind())
 		got := spec.ToComplex128WithAccuracy(n)
 		c.Assert(real(got.Value), qt.Equals, real(golden),
 			qt.Commentf("ToComplex128WithAccuracy(%s) real: registry != golden", n.SchemeString()))

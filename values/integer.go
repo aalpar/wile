@@ -172,10 +172,15 @@ func integerSimplifyDown(n Number) Number {
 // direction-recovery. The comparison is in int64 to avoid float-comparison
 // pitfalls (float comparison would itself suffer the rounding being measured).
 //
-// For |v| > 2^53 the float64 representation rounds toward zero, so:
+// Go's int64→float64 conversion rounds to nearest, ties to even per IEEE 754
+// — so the rounding direction is value-dependent, not always toward zero.
+// Direction is recovered from the round-trip: cast f back to int64 and
+// compare against the original. Examples (round-to-even sends an odd low bit
+// to the even neighbor):
 //
-//	p.Value =  2^53 + 1  →  f =  2^53        →  back = 2^53  < p.Value  → Below
-//	p.Value = -2^53 - 1  →  f = -2^53        →  back =-2^53  > p.Value  → Above
+//	p.Value =  2^53 + 1  →  f =  2^53        →  back = 2^53   < p.Value  → Below
+//	p.Value =  2^53 + 3  →  f =  2^53 + 4    →  back = 2^53+4 > p.Value  → Above
+//	p.Value = -2^53 - 1  →  f = -2^53        →  back = -2^53  > p.Value  → Above
 //
 // Special case: MaxInt64 (2^63-1) rounds up to 2^63 in float64. int64(2^63)
 // saturates back to MaxInt64, making the round-trip falsely appear Exact.
@@ -195,12 +200,6 @@ func integerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	default:
 		return f, big.Above, true
 	}
-}
-
-// integerToComplex128WithAccuracy lifts an Integer to Complex128Result.
-func integerToComplex128WithAccuracy(n Number) Complex128Result {
-	f, acc, _ := integerToFloat64WithAccuracy(n)
-	return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
 }
 
 var integerAdd [numKinds]func(*Integer, Number) Number
@@ -247,11 +246,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindInteger, NumericTypeSpec{
-		schemeName:               "integer",
-		simplifyDown:             integerSimplifyDown,
-		toFloat64WithAccuracy:    integerToFloat64WithAccuracy,
-		toComplex128WithAccuracy: integerToComplex128WithAccuracy,
-		isAlwaysExact:            true,
+		schemeName:            "integer",
+		simplifyDown:          integerSimplifyDown,
+		toFloat64WithAccuracy: integerToFloat64WithAccuracy,
+		isAlwaysExact:         true,
+		isAlwaysReal:          true,
 	})
 }
 

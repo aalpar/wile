@@ -24,6 +24,11 @@ import (
 // accuracy. Field-named so RealAcc/ImagAcc swaps are caught at compile time,
 // not surfaced only as wrong output in tests.
 //
+// Zero value is {Value: 0+0i, RealAcc: Exact, ImagAcc: Exact} since
+// big.Exact == 0 in the stdlib enum. That happens to coincide with the
+// "perfectly converted zero" reading; callers receiving an error should
+// still treat the result as unspecified.
+//
 // See design plan §"Decision record: return shape — hybrid (positional + struct)".
 type Complex128Result struct {
 	Value   complex128   // complex128 representation
@@ -37,10 +42,16 @@ type Complex128Result struct {
 // Returns 4-tuple positional:
 //   - f:      the float64 representation, saturated to ±Inf for overflow per
 //     Go (*big.Float).Float64() semantics
-//   - acc:    Below/Exact/Above per Go big.Accuracy semantics:
-//     Below: f < true value (rounded down)
-//     Exact: f == true value (lossless)
-//     Above: f > true value (rounded up)
+//   - acc:    Below/Exact/Above per Go big.Accuracy semantics, describing
+//     *only the real-axis rounding direction* of the returned float64
+//     against the original real-axis value:
+//     Below: f < real-axis true value (rounded down)
+//     Exact: f == real-axis true value (lossless)
+//     Above: f > real-axis true value (rounded up)
+//     For Complex/BigComplex with non-zero imag, acc describes the real
+//     component only; the imaginary-drop signal is carried solely by isReal.
+//     The two channels (acc, isReal) are orthogonal — never collapse a
+//     non-real input's loss into acc.
 //   - isReal: false iff n was Complex/BigComplex with non-zero imaginary part
 //     (the imaginary information is dropped — caller should use
 //     ToComplex128WithAccuracy for full complex semantics)
@@ -67,7 +78,7 @@ func ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool, error) {
 		return 0, big.Exact, true, werr.WrapForeignErrorf(
 			werr.ErrNotANumber, "ToFloat64WithAccuracy: nil input")
 	}
-	spec := Lookup(n.Kind())
+	spec := LookupNumericSpec(n.Kind())
 	f, acc, isReal := spec.ToFloat64WithAccuracy(n)
 	return f, acc, isReal, nil
 }
@@ -108,7 +119,7 @@ func ToComplex128WithAccuracy(n Number) (Complex128Result, error) {
 			werr.WrapForeignErrorf(werr.ErrNotANumber,
 				"ToComplex128WithAccuracy: nil input")
 	}
-	spec := Lookup(n.Kind())
+	spec := LookupNumericSpec(n.Kind())
 	return spec.ToComplex128WithAccuracy(n), nil
 }
 

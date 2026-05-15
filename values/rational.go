@@ -85,10 +85,25 @@ func (p *Rational) DenomInt64() int64 {
 	return p.value.Denom().Int64()
 }
 
-// Float64 returns the rational as a float64 approximation.
-func (p *Rational) Float64() float64 {
+// Float64Truncated returns the rational as a float64, discarding the
+// big.Rat.Float64() exact-bool signal. The name documents the silent loss
+// (1/3 → 0.333..., 2^100 → 1.2e+30, 1e500 → +Inf). Callers that need the
+// signal should use Float64WithAccuracy or, at the cross-package boundary,
+// the values.ToFloat64WithAccuracy helper.
+func (p *Rational) Float64Truncated() float64 {
 	f, _ := p.value.Float64()
 	return f
+}
+
+// Float64WithAccuracy returns the rational as a float64 paired with a
+// big.Accuracy direction. Returns big.Exact when the rational is exactly
+// representable in float64, else big.Below/Above depending on rounding
+// direction; ±Inf overflow is reported as Above/Below relative to the
+// finite limit. See rationalToFloat64WithAccuracy for the registry-path
+// equivalent.
+func (p *Rational) Float64WithAccuracy() (float64, big.Accuracy) {
+	f, acc, _ := rationalToFloat64WithAccuracy(p)
+	return f, acc
 }
 
 // IsInteger returns true if the rational represents an integer (denominator is 1).
@@ -144,12 +159,6 @@ func rationalToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	return f, big.Above, true
 }
 
-// rationalToComplex128WithAccuracy lifts a Rational to Complex128Result.
-func rationalToComplex128WithAccuracy(n Number) Complex128Result {
-	f, acc, _ := rationalToFloat64WithAccuracy(n)
-	return Complex128Result{Value: complex(f, 0), RealAcc: acc, ImagAcc: big.Exact}
-}
-
 var rationalAdd [numKinds]func(*Rational, Number) Number
 var rationalSubtract [numKinds]func(*Rational, Number) Number
 var rationalLessThan [numKinds]func(*Rational, Number) bool
@@ -187,11 +196,11 @@ func init() {
 	})
 
 	registerNumericSpec(KindRational, NumericTypeSpec{
-		schemeName:               "rational",
-		simplifyDown:             rationalSimplifyDown,
-		toFloat64WithAccuracy:    rationalToFloat64WithAccuracy,
-		toComplex128WithAccuracy: rationalToComplex128WithAccuracy,
-		isAlwaysExact:            true,
+		schemeName:            "rational",
+		simplifyDown:          rationalSimplifyDown,
+		toFloat64WithAccuracy: rationalToFloat64WithAccuracy,
+		isAlwaysExact:         true,
+		isAlwaysReal:          true,
 	})
 }
 
