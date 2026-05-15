@@ -28,7 +28,12 @@ import (
 // makeArgConverter creates a converter for a single Go parameter type.
 // Converters are recursive: composite types (slices, maps, structs) build
 // inner converters for their element/field types at registration time.
-func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+//
+// The lossyAllowed flag travels with the converter chain. The Float64 and
+// Complex128 leaves consult it to choose between values.ToFloat64Lossless
+// (strict — errors on precision loss) and values.ToFloat64WithAccuracy
+// (lossy-allowed — silent truncation).
+func makeArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (argConverter, error) {
 	// Only accept the exact wile.Value interface type. Concrete Value
 	// implementers (e.g., *values.Integer) would cause reflect.Call to panic
 	// since the converter produces a *wrappedValue, not the concrete type.
@@ -76,23 +81,54 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 	case reflect.Float64:
 		targetType := t
 		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
-			switch n := v.(type) {
-			case *values.Float:
-				return reflect.ValueOf(n.Value).Convert(targetType), nil
-			case *values.Integer:
-				return reflect.ValueOf(float64(n.Value)).Convert(targetType), nil
-			case *values.BigInteger:
-				if n.BigInt().IsInt64() {
-					return reflect.ValueOf(float64(n.Int64())).Convert(targetType), nil
-				}
-				f, _ := n.BigInt().Float64()
-				return reflect.ValueOf(f).Convert(targetType), nil
-			case *values.Rational:
-				f, _ := n.Rat().Float64()
-				return reflect.ValueOf(f).Convert(targetType), nil
-			default:
+			n, ok := v.(values.Number)
+			if !ok {
 				return reflect.Value{}, fmtArgError(name, pos, "number", v)
 			}
+			var f float64
+			if lossyAllowed {
+				// Type-asserted to Number above; the error path is
+				// only reachable for nil-Number, which cannot occur
+				// here. Discard accuracy + isReal + err deliberately.
+				f, _, _, _ = values.ToFloat64WithAccuracy(n)
+			} else {
+				lossless, err := values.ToFloat64Lossless(n)
+				if err != nil {
+					return reflect.Value{}, werr.WrapForeignErrorf(
+						err,
+						"%s: argument %d: %T", name, pos, v,
+					)
+				}
+				f = lossless
+			}
+			return reflect.ValueOf(f).Convert(targetType), nil
+		}, nil
+
+	case reflect.Complex128:
+		targetType := t
+		return func(_ *MachineContext, v values.Value) (reflect.Value, error) {
+			n, ok := v.(values.Number)
+			if !ok {
+				return reflect.Value{}, fmtArgError(name, pos, "number", v)
+			}
+			var c complex128
+			if lossyAllowed {
+				// Type-asserted above; the error path is unreachable.
+				// Project the value slot; discard per-component
+				// accuracies deliberately.
+				res, _ := values.ToComplex128WithAccuracy(n)
+				c = res.Value
+			} else {
+				lossless, err := values.ToComplex128Lossless(n)
+				if err != nil {
+					return reflect.Value{}, werr.WrapForeignErrorf(
+						err,
+						"%s: argument %d: %T", name, pos, v,
+					)
+				}
+				c = lossless
+			}
+			return reflect.ValueOf(c).Convert(targetType), nil
 		}, nil
 
 	case reflect.String:
@@ -116,16 +152,16 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		}, nil
 
 	case reflect.Slice:
-		return makeSliceArgConverter(name, pos, t)
+		return makeSliceArgConverter(name, pos, t, lossyAllowed)
 
 	case reflect.Map:
-		return makeMapArgConverter(name, pos, t)
+		return makeMapArgConverter(name, pos, t, lossyAllowed)
 
 	case reflect.Struct:
-		return makeStructArgConverter(name, pos, t)
+		return makeStructArgConverter(name, pos, t, lossyAllowed)
 
 	case reflect.Func:
-		return makeCallbackArgConverter(name, pos, t)
+		return makeCallbackArgConverter(name, pos, t, lossyAllowed)
 
 	default:
 		return nil, werr.WrapForeignErrorf(
@@ -138,7 +174,7 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 // makeSliceArgConverter creates a converter for Go slice types.
 // []byte is special-cased to ByteVector; all other element types use
 // recursive inner converters that walk Scheme proper lists.
-func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+func makeSliceArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (argConverter, error) {
 	elemType := t.Elem()
 
 	// []byte special case: ByteVector.
@@ -153,7 +189,7 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 	}
 
 	// Typed slice: build inner converter for element type.
-	elemConv, err := makeArgConverter(name, pos, elemType)
+	elemConv, err := makeArgConverter(name, pos, elemType, lossyAllowed)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +221,7 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 
 // makeMapArgConverter creates a converter for Go map types.
 // Key types are restricted to Go types that produce Hashable Scheme values.
-func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+func makeMapArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (argConverter, error) {
 	keyType := t.Key()
 	valType := t.Elem()
 
@@ -197,11 +233,11 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 		)
 	}
 
-	keyConv, err := makeArgConverter(name, pos, keyType)
+	keyConv, err := makeArgConverter(name, pos, keyType, lossyAllowed)
 	if err != nil {
 		return nil, err
 	}
-	valConv, err := makeArgConverter(name, pos, valType)
+	valConv, err := makeArgConverter(name, pos, valType, lossyAllowed)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +271,7 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 // makeStructArgConverter creates a converter for Go struct types.
 // Scheme alists ((FieldName . value) ...) are mapped to struct fields by
 // matching the car symbol against exported field names.
-func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+func makeStructArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (argConverter, error) {
 	type fieldInfo struct {
 		index int
 		conv  argConverter
@@ -247,7 +283,7 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 		if !f.IsExported() {
 			continue
 		}
-		conv, err := makeArgConverter(name, pos, f.Type)
+		conv, err := makeArgConverter(name, pos, f.Type, lossyAllowed)
 		if err != nil {
 			return nil, err
 		}
@@ -311,7 +347,7 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 // The direction of inner converters is inverted relative to the outer function:
 // callback parameters use retConverters (Go→Scheme) and callback returns use
 // argConverters (Scheme→Go), since data flows in the opposite direction.
-func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverter, error) {
+func makeCallbackArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool) (argConverter, error) {
 	// Build Go→Scheme converters for callback parameters.
 	numIn := t.NumIn()
 	paramConvs := make([]retConverter, numIn)
@@ -336,7 +372,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 	hasErrorReturn := shape.hasError
 	var resultConv argConverter
 	if shape.valueType != nil {
-		conv, err := makeArgConverter(name, pos, shape.valueType)
+		conv, err := makeArgConverter(name, pos, shape.valueType, lossyAllowed)
 		if err != nil {
 			return nil, err
 		}

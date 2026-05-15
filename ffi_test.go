@@ -89,7 +89,9 @@ func TestRegisterFuncUnsupportedTypes(t *testing.T) {
 		name string
 		fn   any
 	}{
-		{"complex128 param", func(c complex128) float64 { return real(c) }},
+		// complex128 *parameters* are supported as of PR 2 of the numeric
+		// loss signals plan; complex128 *returns* and complex128 *callback
+		// parameters* still go through makeRetConverter and remain unsupported.
 		{"unsupported map key", func(m map[float64]int) int { return len(m) }},
 		{"unsupported return", func() complex128 { return 0 }},
 		{"three returns", func() (int64, int64, error) { return 0, 0, nil }},
