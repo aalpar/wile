@@ -125,7 +125,8 @@ func atan2Operand(v values.Value) (float64, error) {
 	if !ok {
 		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
 	}
-	if _, isComplex := n.(values.ComplexNumber); isComplex {
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
 		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
 	}
 	f, _, _, _ := values.ToFloat64WithAccuracy(n)

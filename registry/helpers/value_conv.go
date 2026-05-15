@@ -85,7 +85,8 @@ func ToFloat64(v values.Value) (float64, error) {
 	// Domain dispatch via ComplexNumber interface — matches Hashable/Tuple/
 	// Indexable precedent in values/. Avoids enumerating *Complex and
 	// *BigComplex by name (would need updating for any new complex kind).
-	if _, isComplex := n.(values.ComplexNumber); isComplex {
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
 		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
 	}
 	return values.ToFloat64Lossless(n)

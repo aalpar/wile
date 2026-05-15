@@ -55,16 +55,16 @@ const DefaultMaxCallDepth int = 10000
 // SRFI-18 threads within a single Engine are safe — the VM handles
 // thread coordination internally.
 type Engine struct {
-	namespace           *environment.Namespace
-	env                 *environment.EnvironmentFrame
-	registry            *registry.Registry
-	debugger            *Debugger
-	lastCounters        machine.VMCounters
-	closers             []registry.Closeable
-	closed              bool
-	maxCallDepth        int
-	maxStackSize        uint64
-	inlineThreshold     int
+	namespace               *environment.Namespace
+	env                     *environment.EnvironmentFrame
+	registry                *registry.Registry
+	debugger                *Debugger
+	lastCounters            machine.VMCounters
+	closers                 []registry.Closeable
+	closed                  bool
+	maxCallDepth            int
+	maxStackSize            uint64
+	inlineThreshold         int
 	contractEnforcement     bool // propagated to RegisterPrimitive via cfg
 	lossyConversionsAllowed bool // captured into FFI closures at RegisterFunc time
 	coverageCollector       *coverage.Collector
@@ -247,13 +247,13 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	q := &Engine{
-		namespace:           ns,
-		env:                 env,
-		registry:            reg,
-		closers:             closers,
-		maxCallDepth:        cfg.maxCallDepth,
-		maxStackSize:        cfg.maxStackSize,
-		inlineThreshold:     cfg.inlineThreshold,
+		namespace:               ns,
+		env:                     env,
+		registry:                reg,
+		closers:                 closers,
+		maxCallDepth:            cfg.maxCallDepth,
+		maxStackSize:            cfg.maxStackSize,
+		inlineThreshold:         cfg.inlineThreshold,
 		contractEnforcement:     cfg.contractEnforcement,
 		lossyConversionsAllowed: cfg.lossyConversionsAllowed,
 		coverageCollector:       cfg.coverageCollector,
