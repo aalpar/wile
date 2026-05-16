@@ -186,8 +186,8 @@ layers:
 | Go helper | `values.ToFloat64WithAccuracy(n)` | `(float64, big.Accuracy, isReal bool, error)` — accuracy field is the signal |
 | Go helper (strict) | `values.ToFloat64Lossless(n)` | `werr.ErrLossyConversion` (wrapped, names direction) |
 | Go helper | `values.ToComplex128WithAccuracy(n)` | `Complex128Result{Value, RealAcc, ImagAcc}` — per-component accuracy |
-| Go helper (strict) | `values.ToComplex128Lossless(n)` | `ErrLossyConversion` if either component non-Exact |
-| FFI converter | `reflect.Float64` / `reflect.Complex128` param | strict (default): errors with `ErrLossyConversion`; lossy: silently truncates if `WithLossyConversionsAllowed()` set on the engine |
+| Go helper (strict) | `values.ToComplex128Lossless(n)` | `werr.ErrLossyConversion` (wrapped) if either component non-Exact |
+| FFI converter | `reflect.Float64` / `reflect.Complex128` param | strict (default): errors with `werr.ErrLossyConversion`; lossy: silently truncates if `WithLossyConversionsAllowed()` set on the engine |
 | Scheme primitive | `(inexact-accuracy n)`, `(inexact-lossless? n)`, `(inexact-with-accuracy n)`, `(complex-inexact-with-accuracy n)` | `'below` / `'exact` / `'above` symbols (Wile-specific extensions in the math extension) |
 
 ### Strict-by-default discipline

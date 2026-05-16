@@ -24,7 +24,7 @@ the Scheme/Go boundary for `float64` / `complex128` extraction:
 | `ToFloat64WithAccuracy(n Number)` | `(float64, big.Accuracy, isReal bool, error)` | Primary helper. Accuracy field is the signal. |
 | `ToFloat64Lossless(n Number)` | `(float64, error)` | Strict wrapper. Returns `werr.ErrLossyConversion` (wrapped, names direction) on any loss. |
 | `ToComplex128WithAccuracy(n Number)` | `(Complex128Result, error)` | Per-component accuracy via named-field struct. |
-| `ToComplex128Lossless(n Number)` | `(complex128, error)` | Strict wrapper. Returns `ErrLossyConversion` if either component non-Exact. |
+| `ToComplex128Lossless(n Number)` | `(complex128, error)` | Strict wrapper. Returns `werr.ErrLossyConversion` (wrapped) if either component non-Exact. |
 | `BigAccuracyToSymbol(acc big.Accuracy) *Symbol` | `*Symbol` | Projects `big.Below` / `big.Exact` / `big.Above` to the Scheme symbols `'below` / `'exact` / `'above`. |
 
 The `WithAccuracy` forms return the raw value plus accuracy slots

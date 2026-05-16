@@ -15,9 +15,11 @@
 package math_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -468,8 +470,11 @@ func TestPolymorphicReturnArity(t *testing.T) {
 }
 
 // TestLossSignalPrimitiveErrors verifies the four primitives reject
-// non-numeric inputs with ErrNotANumber.
+// non-numeric inputs with werr.ErrNotANumber specifically — not just
+// "some error". Each primitive wraps the sentinel via
+// werr.WrapForeignErrorf, so errors.Is must match.
 func TestLossSignalPrimitiveErrors(t *testing.T) {
+	c := qt.New(t)
 	engine := newEngine(t)
 	tcs := []struct {
 		name string
@@ -482,7 +487,9 @@ func TestLossSignalPrimitiveErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			evalExpectError(t, engine, tc.code)
+			err := evalExpectError(t, engine, tc.code)
+			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue,
+				qt.Commentf("expected ErrNotANumber, got: %v", err))
 		})
 	}
 }
