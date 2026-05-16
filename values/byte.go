@@ -41,11 +41,6 @@ func (p *Byte) HashCode() uint64 {
 	return hashUint64(0x8, uint64(p.Value))
 }
 
-// Datum returns the underlying byte value.
-func (p *Byte) Datum() uint8 {
-	return p.Value
-}
-
 // IsVoid returns true if the byte is nil.
 func (p *Byte) IsVoid() bool {
 	return p == nil

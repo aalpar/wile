@@ -282,7 +282,7 @@ func TestEmptyList_IsVoidAndIsEmptyList(t *testing.T) {
 func TestEmptyList_AsVector(t *testing.T) {
 	got := values.EmptyList.AsVector()
 	qt.Assert(t, got, qt.Not(qt.IsNil))
-	qt.Assert(t, len(got.Datum()), qt.Equals, 0)
+	qt.Assert(t, got.Length(), qt.Equals, 0)
 }
 
 func TestEmptyList_Append(t *testing.T) {
@@ -561,13 +561,6 @@ func TestPair_SetCdr(t *testing.T) {
 	p.SetCdr(values.NewInteger(20))
 	qt.Assert(t, p.Car(), valuestest.SchemeEquals, values.NewInteger(1))
 	qt.Assert(t, p.Cdr(), valuestest.SchemeEquals, values.NewInteger(20))
-}
-
-func TestPair_Datum(t *testing.T) {
-	p := values.NewCons(values.NewInteger(1), values.NewInteger(2))
-	datum := p.Datum()
-	qt.Assert(t, datum[0], valuestest.SchemeEquals, values.NewInteger(1))
-	qt.Assert(t, datum[1], valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func TestPair_String(t *testing.T) {

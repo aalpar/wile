@@ -58,15 +58,6 @@ func (p *Vector) Length() int {
 	return len(*p)
 }
 
-// Datum returns the underlying slice of values.
-// Returns nil if the vector is void (nil pointer).
-func (p *Vector) Datum() []Value {
-	if p.IsVoid() {
-		return nil
-	}
-	return *p
-}
-
 // IsVoid returns true if the vector is a nil pointer.
 // A nil vector represents the absence of a value, distinct from an empty vector.
 func (p *Vector) IsVoid() bool {

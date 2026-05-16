@@ -52,11 +52,6 @@ func (p *Float) HashCode() uint64 {
 	return hashInexactNumeric(new(big.Float).SetFloat64(p.Value))
 }
 
-// Datum returns the underlying float64 value.
-func (p *Float) Datum() float64 {
-	return p.Value
-}
-
 // Per-type conversion helpers for Float.
 // These eliminate repeated conversion expressions in the type-switch
 // dispatch methods below. Each produces the representation needed by

@@ -40,11 +40,6 @@ func (p *Symbol) HashCode() uint64 {
 	return hashString(0x1, p.Key)
 }
 
-// Datum returns the symbol's key string.
-func (p *Symbol) Datum() string {
-	return p.Key
-}
-
 // Copy returns a copy of the symbol.
 func (p *Symbol) Copy() Value {
 	q := &Symbol{Key: p.Key}

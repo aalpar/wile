@@ -125,7 +125,7 @@ func TestNewErrorObjectWithCauseAndKind(t *testing.T) {
 			c.Assert(err.Kind(), qt.Equals, tt.kind)
 			c.Assert(err.IsFileError(), qt.Equals, tt.file)
 			c.Assert(err.IsReadError(), qt.Equals, tt.read)
-			c.Assert(err.Datum(), qt.Equals, cause)
+			c.Assert(err.Unwrap(), qt.Equals, cause)
 		})
 	}
 }

@@ -60,11 +60,6 @@ func (p *Character) HashCode() uint64 {
 	return hashUint64(0x4, uint64(p.Value))
 }
 
-// Datum returns the underlying rune value.
-func (p *Character) Datum() rune {
-	return p.Value
-}
-
 // IsVoid returns true if the character is nil.
 func (p *Character) IsVoid() bool {
 	return p == nil

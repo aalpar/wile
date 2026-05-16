@@ -125,14 +125,6 @@ func (p *NativeError) IsFileError() bool {
 	return p != nil && p.kind == NativeErrorKindFile
 }
 
-// Datum returns the underlying Go error, if any.
-func (p *NativeError) Datum() error {
-	if p == nil {
-		return nil
-	}
-	return p.err
-}
-
 // Unwrap returns the underlying Go error for errors.Unwrap compatibility.
 func (p *NativeError) Unwrap() error {
 	if p == nil {
@@ -179,7 +171,7 @@ func (p *NativeError) Error() string {
 		return ""
 	}
 	if p.message != nil {
-		return p.message.Datum()
+		return p.message.Value
 	}
 	return ""
 }
@@ -195,7 +187,7 @@ func (p *NativeError) SchemeString() string {
 		return "#<error-object>"
 	}
 	if p.message != nil {
-		return fmt.Sprintf("#<error-object %q>", p.message.Datum())
+		return fmt.Sprintf("#<error-object %q>", p.message.Value)
 	}
 	return "#<error-object>"
 }

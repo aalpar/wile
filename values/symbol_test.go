@@ -35,9 +35,9 @@ func TestSymbol_EqualTo(t *testing.T) {
 	qt.Assert(t, *s0 == *s2, qt.Equals, true)
 }
 
-func TestSymbol_Datum(t *testing.T) {
+func TestSymbol_Key(t *testing.T) {
 	s := values.NewSymbol("test")
-	qt.Assert(t, s.Datum(), qt.Equals, "test")
+	qt.Assert(t, s.Key, qt.Equals, "test")
 }
 
 func TestSymbol_Copy(t *testing.T) {

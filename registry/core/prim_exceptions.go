@@ -290,7 +290,7 @@ func PrimError(cc machine.CallContext) error {
 	}
 
 	// Create error object and raise it
-	errObj := values.NewErrorObject(msgStr.Datum(), irritants...)
+	errObj := values.NewErrorObject(msgStr.Value, irritants...)
 
 	return &machine.ErrExceptionEscape{
 		Condition:    errObj,

@@ -70,59 +70,6 @@ func TestVectorCreation(t *testing.T) {
 	}
 }
 
-func TestVectorDatum(t *testing.T) {
-	tcs := []struct {
-		name   string
-		in     *values.Vector
-		isNil  bool
-		length int
-		values []values.Value
-	}{
-		{
-			name:  "nil vector returns nil",
-			in:    nil,
-			isNil: true,
-		},
-		{
-			name:   "empty vector returns empty slice",
-			in:     values.NewVector(),
-			length: 0,
-		},
-		{
-			name:   "single element",
-			in:     values.NewVector(values.NewInteger(42)),
-			length: 1,
-			values: []values.Value{values.NewInteger(42)},
-		},
-		{
-			name:   "multiple elements",
-			in:     values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
-			length: 3,
-			values: []values.Value{values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)},
-		},
-		{
-			name:   "mixed types",
-			in:     values.NewVector(values.NewInteger(1), values.NewString("hello"), values.TrueValue),
-			length: 3,
-			values: []values.Value{values.NewInteger(1), values.NewString("hello"), values.TrueValue},
-		},
-	}
-
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			datum := tc.in.Datum()
-			if tc.isNil {
-				qt.Assert(t, datum, qt.IsNil)
-			} else {
-				qt.Assert(t, datum, qt.HasLen, tc.length)
-				for i, v := range tc.values {
-					qt.Assert(t, datum[i], valuestest.SchemeEquals, v)
-				}
-			}
-		})
-	}
-}
-
 func TestVectorIsVoid(t *testing.T) {
 	tcs := []struct {
 		name string

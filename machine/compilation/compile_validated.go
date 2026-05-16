@@ -232,7 +232,7 @@ func isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
 		// Non-boolean literal — truthy per R7RS
 		return true, false
 	}
-	return true, !b.Datum()
+	return true, !b.Value
 }
 
 // CompileValidatedDefine compiles a validated define form.

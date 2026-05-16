@@ -76,7 +76,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("add negative infinity", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
 	})
 
 	t.Run("add nan propagation", func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 
 	t.Run("infinity minus infinity is nan", func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestAddition_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -152,7 +152,7 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("negate infinity", func(t *testing.T) {
@@ -160,7 +160,7 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
 	})
 
 	t.Run("subtract nan propagation", func(t *testing.T) {
@@ -168,7 +168,7 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -235,7 +235,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("multiply negative by infinity", func(t *testing.T) {
@@ -243,7 +243,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
 	})
 
 	t.Run("zero times infinity is nan", func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 
 	t.Run("multiply nan propagation", func(t *testing.T) {
@@ -259,7 +259,7 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -312,7 +312,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, f.Datum() == 0.0, qt.IsTrue)
+		qt.Assert(t, f.Value == 0.0, qt.IsTrue)
 	})
 
 	t.Run("infinity divided by number", func(t *testing.T) {
@@ -320,7 +320,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("divide nan propagation", func(t *testing.T) {
@@ -328,7 +328,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 
 	t.Run("infinity divided by infinity is nan", func(t *testing.T) {
@@ -336,7 +336,7 @@ func TestDivision_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 
 	// Note: float division by zero panics in this implementation (guards against division by zero)
@@ -395,7 +395,7 @@ func TestAbs_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("abs of negative infinity", func(t *testing.T) {
@@ -403,7 +403,7 @@ func TestAbs_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("abs of nan", func(t *testing.T) {
@@ -411,7 +411,7 @@ func TestAbs_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -601,7 +601,7 @@ func TestSqrt_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("sqrt of nan", func(t *testing.T) {
@@ -609,7 +609,7 @@ func TestSqrt_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -663,7 +663,7 @@ func TestExpt_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("2^infinity", func(t *testing.T) {
@@ -671,7 +671,7 @@ func TestExpt_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("nan exponent", func(t *testing.T) {
@@ -679,7 +679,7 @@ func TestExpt_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -693,7 +693,7 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.Abs(f.Datum()-2.0) < epsilon, qt.IsTrue)
+		qt.Assert(t, math.Abs(f.Value-2.0) < epsilon, qt.IsTrue)
 	})
 
 	t.Run("27^(1/3) ≈ 3", func(t *testing.T) {
@@ -701,7 +701,7 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.Abs(f.Datum()-3.0) < epsilon, qt.IsTrue)
+		qt.Assert(t, math.Abs(f.Value-3.0) < epsilon, qt.IsTrue)
 	})
 
 	t.Run("i^2 ≈ -1", func(t *testing.T) {
@@ -709,8 +709,8 @@ func TestExpt_FloatingPointPrecision(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		c, ok := result.(*values.Complex)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.Abs(real(c.Datum())+1.0) < epsilon, qt.IsTrue)
-		qt.Assert(t, math.Abs(imag(c.Datum())) < epsilon, qt.IsTrue)
+		qt.Assert(t, math.Abs(real(c.Value)+1.0) < epsilon, qt.IsTrue)
+		qt.Assert(t, math.Abs(imag(c.Value)) < epsilon, qt.IsTrue)
 	})
 }
 
@@ -756,7 +756,7 @@ func TestSquare_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("square of negative infinity", func(t *testing.T) {
@@ -764,7 +764,7 @@ func TestSquare_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("square of nan", func(t *testing.T) {
@@ -772,7 +772,7 @@ func TestSquare_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -1005,7 +1005,7 @@ func TestMax_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), 1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
 	})
 
 	t.Run("max with negative infinity", func(t *testing.T) {
@@ -1013,7 +1013,7 @@ func TestMax_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, f.Datum() == -100.0, qt.IsTrue)
+		qt.Assert(t, f.Value == -100.0, qt.IsTrue)
 	})
 
 	t.Run("max with nan", func(t *testing.T) {
@@ -1021,7 +1021,7 @@ func TestMax_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 
@@ -1081,7 +1081,7 @@ func TestMin_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsInf(f.Datum(), -1), qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
 	})
 
 	t.Run("min with positive infinity", func(t *testing.T) {
@@ -1089,7 +1089,7 @@ func TestMin_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, f.Datum() == 100.0, qt.IsTrue)
+		qt.Assert(t, f.Value == 100.0, qt.IsTrue)
 	})
 
 	t.Run("min with nan", func(t *testing.T) {
@@ -1097,7 +1097,7 @@ func TestMin_SpecialValues(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, math.IsNaN(f.Datum()), qt.IsTrue)
+		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 }
 

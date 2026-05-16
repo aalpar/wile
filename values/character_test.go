@@ -79,7 +79,7 @@ func TestCharacter_EqualTo(t *testing.T) {
 
 func TestCharacter_Datum(t *testing.T) {
 	c := values.NewCharacter('a')
-	qt.Assert(t, c.Datum(), qt.Equals, 'a')
+	qt.Assert(t, c.Value, qt.Equals, 'a')
 }
 
 func TestCharacter_IsVoid(t *testing.T) {
@@ -117,7 +117,7 @@ func TestCharacter_CacheIdentity(t *testing.T) {
 			} else {
 				qt.Assert(t, a != b, qt.IsTrue)
 			}
-			qt.Assert(t, a.Datum(), qt.Equals, tc.r)
+			qt.Assert(t, a.Value, qt.Equals, tc.r)
 		})
 	}
 }

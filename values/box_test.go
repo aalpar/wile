@@ -83,7 +83,7 @@ func TestBox_Unbox(t *testing.T) {
 
 func TestBox_Datum(t *testing.T) {
 	b := values.NewBox(values.NewInteger(99))
-	qt.Assert(t, b.Datum(), valuestest.SchemeEquals, values.NewInteger(99))
+	qt.Assert(t, b.Value, valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 func TestBox_IsVoid(t *testing.T) {

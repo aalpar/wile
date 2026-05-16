@@ -31,11 +31,6 @@ func NewBox(v Value) *Box {
 	return q
 }
 
-// Datum returns the boxed value.
-func (p *Box) Datum() Value {
-	return p.Value
-}
-
 // Unbox returns the boxed value.
 func (p *Box) Unbox() Value {
 	return p.Value

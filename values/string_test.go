@@ -36,7 +36,7 @@ func TestString_EqualTo(t *testing.T) {
 
 func TestString_Datum(t *testing.T) {
 	s := values.NewString("hello")
-	qt.Assert(t, s.Datum(), qt.Equals, "hello")
+	qt.Assert(t, s.Value, qt.Equals, "hello")
 }
 
 func TestString_String(t *testing.T) {

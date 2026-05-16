@@ -106,9 +106,11 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 		return syntax.NewSyntaxCons(car, cdr, sctx)
 
 	case *values.Vector:
-		data := v.Datum()
-		elems := make([]syntax.SyntaxValue, len(data))
-		for i, elem := range data {
+		if v.IsVoid() {
+			return syntax.NewSyntaxVector(sctx)
+		}
+		elems := make([]syntax.SyntaxValue, len(*v))
+		for i, elem := range *v {
 			elems[i] = datumToSyntax(elem, sctx)
 		}
 		return syntax.NewSyntaxVector(sctx, elems...)

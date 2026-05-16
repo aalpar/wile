@@ -28,7 +28,7 @@ import (
 func TestNativeError_NewNativeError(t *testing.T) {
 	c := qt.New(t)
 	err := values.NewNativeError("something went wrong")
-	c.Assert(err.Message().Datum(), qt.Equals, "something went wrong")
+	c.Assert(err.Message().Value, qt.Equals, "something went wrong")
 	c.Assert(err.Irritants().IsVoid(), qt.IsFalse) // EmptyList is not void
 	c.Assert(err.Kind(), qt.Equals, values.NativeErrorKindGeneric)
 	c.Assert(err.Error(), qt.Equals, "something went wrong")
@@ -37,7 +37,7 @@ func TestNativeError_NewNativeError(t *testing.T) {
 func TestNativeError_NewErrorObject(t *testing.T) {
 	c := qt.New(t)
 	err := values.NewErrorObject("bad value", values.NewInteger(42), values.NewString("extra"))
-	c.Assert(err.Message().Datum(), qt.Equals, "bad value")
+	c.Assert(err.Message().Value, qt.Equals, "bad value")
 	c.Assert(err.Kind(), qt.Equals, values.NativeErrorKindGeneric)
 }
 
@@ -45,7 +45,6 @@ func TestNativeError_NewErrorObjectWithCause(t *testing.T) {
 	c := qt.New(t)
 	cause := errors.New("root cause")
 	err := values.NewErrorObjectWithCause("wrapped", cause, values.NewInteger(1))
-	c.Assert(err.Datum(), qt.Equals, cause)
 	c.Assert(err.Unwrap(), qt.Equals, cause)
 	c.Assert(err.Error(), qt.Equals, "wrapped")
 }
@@ -91,7 +90,6 @@ func TestNativeError_NilReceiver(t *testing.T) {
 	var nilErr *values.NativeError
 	c.Assert(nilErr.Message(), qt.IsNil)
 	c.Assert(nilErr.Kind(), qt.Equals, values.NativeErrorKindGeneric)
-	c.Assert(nilErr.Datum(), qt.IsNil)
 	c.Assert(nilErr.Unwrap(), qt.IsNil)
 	c.Assert(nilErr.Error(), qt.Equals, "")
 	c.Assert(nilErr.IsReadError(), qt.IsFalse)

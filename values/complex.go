@@ -46,11 +46,6 @@ func NewComplexFromParts(realPart, imagPart float64) *Complex {
 	return &Complex{Value: complex(realPart, imagPart)}
 }
 
-// Datum returns the underlying complex128 value.
-func (p *Complex) Datum() complex128 {
-	return p.Value
-}
-
 // Real returns the real part of the complex number.
 func (p *Complex) Real() float64 {
 	return real(p.Value)

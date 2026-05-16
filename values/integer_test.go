@@ -51,7 +51,7 @@ func TestInteger_EqualTo(t *testing.T) {
 
 func TestInteger_Datum(t *testing.T) {
 	i := values.NewInteger(42)
-	qt.Assert(t, i.Datum(), qt.Equals, int64(42))
+	qt.Assert(t, i.Value, qt.Equals, int64(42))
 }
 
 func TestInteger_Add(t *testing.T) {

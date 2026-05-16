@@ -132,11 +132,6 @@ func (p *ByteVector) AsBytes(is ...int) []byte {
 	return out
 }
 
-// Datum returns the underlying byte slice.
-func (p *ByteVector) Datum() []*Byte {
-	return *p
-}
-
 // IsVoid returns true if the bytevector is nil.
 func (p *ByteVector) IsVoid() bool {
 	return p == nil

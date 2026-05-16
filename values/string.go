@@ -52,11 +52,6 @@ func (p *String) HashCode() uint64 {
 	return hashString(0x3, p.Value)
 }
 
-// Datum returns the underlying string value.
-func (p *String) Datum() string {
-	return p.Value
-}
-
 // IsVoid returns true if the string is nil.
 func (p *String) IsVoid() bool {
 	return p == nil

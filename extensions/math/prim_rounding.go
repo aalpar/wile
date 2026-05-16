@@ -42,7 +42,7 @@ func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
 			if op.bigIntegerOp != nil {
 				mc.SetValue(op.bigIntegerOp(v))
 			} else {
-				mc.SetValue(values.NewFloat(op.floatOp(v.ToInexact().(*values.Float).Datum())))
+				mc.SetValue(values.NewFloat(op.floatOp(v.ToInexact().(*values.Float).Value)))
 			}
 		case *values.Float:
 			mc.SetValue(values.NewFloat(op.floatOp(v.Value)))

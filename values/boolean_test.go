@@ -74,8 +74,8 @@ func TestBoolean_EqualTo(t *testing.T) {
 }
 
 func TestBoolean_Datum(t *testing.T) {
-	qt.Assert(t, values.TrueValue.Datum(), qt.Equals, true)
-	qt.Assert(t, values.FalseValue.Datum(), qt.Equals, false)
+	qt.Assert(t, values.TrueValue.Value, qt.Equals, true)
+	qt.Assert(t, values.FalseValue.Value, qt.Equals, false)
 }
 
 func TestBoolToBoolean(t *testing.T) {

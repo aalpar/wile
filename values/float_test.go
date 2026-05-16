@@ -73,7 +73,7 @@ func TestFloat_EqualTo(t *testing.T) {
 
 func TestFloat_Datum(t *testing.T) {
 	f := values.NewFloat(3.14)
-	qt.Assert(t, f.Datum(), qt.Equals, 3.14)
+	qt.Assert(t, f.Value, qt.Equals, 3.14)
 }
 
 func TestFloat_String(t *testing.T) {

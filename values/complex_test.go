@@ -38,7 +38,7 @@ func TestComplex_NewComplexFromParts(t *testing.T) {
 
 func TestComplex_Datum(t *testing.T) {
 	c := values.NewComplex(complex(3, 4))
-	qt.Assert(t, c.Datum(), qt.Equals, complex(3, 4))
+	qt.Assert(t, c.Value, qt.Equals, complex(3, 4))
 }
 
 func TestComplex_Real(t *testing.T) {

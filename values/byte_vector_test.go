@@ -134,16 +134,6 @@ func TestByteVector_AsList_Void(t *testing.T) {
 	c.Assert(list, qt.IsNil)
 }
 
-func TestByteVector_Datum(t *testing.T) {
-	c := qt.New(t)
-	bv := values.NewByteVector(values.NewByte(10), values.NewByte(20), values.NewByte(30))
-	datum := bv.Datum()
-	c.Assert(len(datum), qt.Equals, 3)
-	c.Assert(datum[0], valuestest.SchemeEquals, values.NewByte(10))
-	c.Assert(datum[1], valuestest.SchemeEquals, values.NewByte(20))
-	c.Assert(datum[2], valuestest.SchemeEquals, values.NewByte(30))
-}
-
 func TestByteVector_IsVoid(t *testing.T) {
 	c := qt.New(t)
 

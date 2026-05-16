@@ -44,11 +44,6 @@ func (p *Boolean) HashCode() uint64 {
 	return 0
 }
 
-// Datum returns the underlying boolean value.
-func (p *Boolean) Datum() bool {
-	return p.Value
-}
-
 // IsVoid returns true if the boolean is nil.
 func (p *Boolean) IsVoid() bool {
 	return p == nil
@@ -91,7 +86,7 @@ func ValueToBool(b Value) bool {
 	if !ok {
 		return true
 	}
-	return v.Datum()
+	return v.Value
 }
 
 // ValueToBoolean converts a value into a Scheme *Boolean using Scheme semantics.

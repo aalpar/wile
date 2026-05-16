@@ -42,9 +42,9 @@ func getComplexParts(n values.Number) (rel, iam float64) {
 	case *values.BigComplex:
 		return v.RealAsBigFloat().Float64Truncated(), v.ImagAsBigFloat().Float64Truncated()
 	case *values.Float:
-		return v.Datum(), 0
+		return v.Value, 0
 	case *values.Integer:
-		return float64(v.Datum()), 0
+		return float64(v.Value), 0
 	}
 	panic("not a complex number")
 }
@@ -1450,7 +1450,7 @@ func TestReadSyntaxRadixBinary(t *testing.T) {
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(i.Datum(), qt.Equals, tc.expect)
+			c.Assert(i.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1476,7 +1476,7 @@ func TestReadSyntaxRadixOctal(t *testing.T) {
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(i.Datum(), qt.Equals, tc.expect)
+			c.Assert(i.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1500,7 +1500,7 @@ func TestReadSyntaxRadixDecimal(t *testing.T) {
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(i.Datum(), qt.Equals, tc.expect)
+			c.Assert(i.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1530,7 +1530,7 @@ func TestReadSyntaxRadixHex(t *testing.T) {
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(i.Datum(), qt.Equals, tc.expect)
+			c.Assert(i.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1557,7 +1557,7 @@ func TestReadSyntaxExactMarker(t *testing.T) {
 
 			i, ok := syn.UnwrapAll().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(i.Datum(), qt.Equals, tc.expect)
+			c.Assert(i.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1582,7 +1582,7 @@ func TestReadSyntaxInexactMarker(t *testing.T) {
 
 			f, ok := syn.UnwrapAll().(*values.Float)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(f.Datum(), qt.Equals, tc.expect)
+			c.Assert(f.Value, qt.Equals, tc.expect)
 		})
 	}
 }
@@ -1601,7 +1601,7 @@ func TestReadSyntaxRealInf(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	f, ok := syn.UnwrapAll().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(math.IsInf(f.Datum(), 1), qt.IsTrue) // positive infinity
+	c.Assert(math.IsInf(f.Value, 1), qt.IsTrue) // positive infinity
 
 	// Test -inf.0
 	env2 := environment.NewNamespace().Runtime()
@@ -1610,7 +1610,7 @@ func TestReadSyntaxRealInf(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	f2, ok := syn2.UnwrapAll().(*values.Float)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(math.IsInf(f2.Datum(), -1), qt.IsTrue) // negative infinity
+	c.Assert(math.IsInf(f2.Value, -1), qt.IsTrue) // negative infinity
 }
 
 func TestReadSyntaxRealNan(t *testing.T) {
@@ -1629,7 +1629,7 @@ func TestReadSyntaxRealNan(t *testing.T) {
 
 			f, ok := syn.UnwrapAll().(*values.Float)
 			c.Assert(ok, qt.IsTrue)
-			c.Assert(math.IsNaN(f.Datum()), qt.IsTrue) // NaN check
+			c.Assert(math.IsNaN(f.Value), qt.IsTrue) // NaN check
 		})
 	}
 }
@@ -1726,7 +1726,7 @@ func TestReadSyntaxMixedNumericTypes(t *testing.T) {
 	// First: 42 (integer)
 	first, ok := pair.Car().(*values.Integer)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(first.Datum(), qt.Equals, int64(42))
+	c.Assert(first.Value, qt.Equals, int64(42))
 
 	// Second: 3/4 (rational)
 	pair = pair.Cdr().(*values.Pair)

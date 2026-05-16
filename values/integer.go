@@ -77,11 +77,6 @@ func (p *Integer) HashCode() uint64 {
 	return hashExactNumeric(new(big.Rat).SetInt64(p.Value))
 }
 
-// Datum returns the underlying int64 value.
-func (p *Integer) Datum() int64 {
-	return p.Value
-}
-
 // Per-type conversion helpers for Integer.
 // These eliminate repeated conversion expressions in the type-switch
 // dispatch methods below. Each produces the representation needed by
