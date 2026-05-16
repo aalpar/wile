@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile"
@@ -100,27 +101,46 @@ func TestLossSignalsThreeLayerAgreement(t *testing.T) {
 			wantAcc:     big.Exact,
 			wantIsReal:  false,
 		},
+		{
+			// Real-part lossy (BigInteger 10^100 mantissa overflow,
+			// rounds Above) AND imag-part lossy (Rational 1/3,
+			// non-power-of-2 denominator, rounds Below). The
+			// real-part accuracy is what Layer 1's float64 helper
+			// reports, but Layer 2's strict-FFI must reject the
+			// projection because !isReal.
+			name:        "bigcomplex-mixed-lossy",
+			schemeInput: "(make-rectangular (expt 10 100) 1/3)",
+			goInput: func() values.Number {
+				re := values.NewBigInteger(new(big.Int).Exp(
+					big.NewInt(10), big.NewInt(100), nil))
+				return values.NewBigComplex(re, values.NewRational(1, 3))
+			},
+			wantAcc:    big.Above,
+			wantIsReal: false,
+		},
 	}
 
 	ctx := context.Background()
+	c := qt.New(t)
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.Assert(err, qt.IsNil)
 	defer eng.Close()
-
-	// Register a float64-taking callback we'll probe with each input.
-	var fnCalled bool
-	err = eng.RegisterFunc("layer2-probe-float64", func(_ float64) {
-		fnCalled = true
-	})
-	if err != nil {
-		t.Fatalf("RegisterFunc: %v", err)
-	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
+
+			// Register a float64-taking callback per-subtest so the
+			// fnCalled signal is scoped to this iteration. (A
+			// shared package-level var would race if the test ever
+			// adds t.Parallel().)
+			var fnCalled bool
+			probeName := fmt.Sprintf("layer2-probe-float64-%s",
+				strings.ReplaceAll(tc.name, "-", "_"))
+			err := eng.RegisterFunc(probeName, func(_ float64) {
+				fnCalled = true
+			})
+			c.Assert(err, qt.IsNil)
 
 			// --- Layer 1: Go helper directly. ---
 			_, acc, isReal, helperErr := values.ToFloat64WithAccuracy(tc.goInput())
@@ -131,8 +151,7 @@ func TestLossSignalsThreeLayerAgreement(t *testing.T) {
 				qt.Commentf("Layer 1: isReal disagreement on %s", tc.name))
 
 			// --- Layer 2: FFI converter (strict mode). ---
-			fnCalled = false
-			code := fmt.Sprintf("(layer2-probe-float64 %s)", tc.schemeInput)
+			code := fmt.Sprintf("(%s %s)", probeName, tc.schemeInput)
 			_, ffiErr := eng.EvalMultiple(ctx, code)
 			if tc.wantAcc == big.Exact && tc.wantIsReal {
 				c.Assert(ffiErr, qt.IsNil,

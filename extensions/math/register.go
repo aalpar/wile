@@ -211,10 +211,7 @@ func addPrimitives(r *registry.Registry) error {
 			ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime)
 
-	// Loss-signal primitives — surface Go big.Accuracy to Scheme as
-	// 'below / 'exact / 'above symbols. Companions to exact->inexact
-	// that make precision loss at the float64/complex128 boundary
-	// visible to Scheme code. See plans/2026-05-14-numeric-loss-signals-design.md.
+	// Loss-signal primitives — surface Go big.Accuracy to Scheme.
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "inexact-lossless?", ParamCount: 1, Impl: PrimInexactLosslessQ,
 			Doc: "Returns #t if (exact->inexact N) would be lossless (every component exactly representable in float64/complex128). " +
@@ -223,9 +220,7 @@ func addPrimitives(r *registry.Registry) error {
 			Keywords:   []string{"precision", "lossless", "exact", "accuracy", "round-trip"},
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeBoolean},
-
-		// inexact-accuracy returns 1 symbol for real input, 2 for complex —
-		// polymorphic return shape. ReturnType omitted (matches floor/ precedent).
+		// inexact-accuracy returns 1 symbol (real) or 2 (complex) — ReturnType omitted (matches floor/ precedent).
 		{Name: "inexact-accuracy", ParamCount: 1, Impl: PrimInexactAccuracy,
 			Doc: "Predicts the accuracy of (exact->inexact N) without performing the conversion. " +
 				"For real N, returns one of 'below, 'exact, or 'above. " +
@@ -233,8 +228,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"n"}, Category: "math",
 			Keywords:   []string{"precision", "accuracy", "below", "exact", "above"},
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}},
-
-		// inexact-with-accuracy returns 2 values for real, 3 for complex.
+		// inexact-with-accuracy returns 2 values (real) or 3 (complex).
 		{Name: "inexact-with-accuracy", ParamCount: 1, Impl: PrimInexactWithAccuracy,
 			Doc: "Returns (exact->inexact N) along with its accuracy. " +
 				"For real N, returns two values: (values inexact-n accuracy-sym). " +
@@ -243,8 +237,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"n"}, Category: "math",
 			Keywords:   []string{"precision", "convert", "inexact", "accuracy"},
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}},
-
-		// complex-inexact-with-accuracy is the uniform 3-value variant.
+		// complex-inexact-with-accuracy always returns 3 values regardless of input domain.
 		{Name: "complex-inexact-with-accuracy", ParamCount: 1, Impl: PrimComplexInexactWithAccuracy,
 			Doc: "Returns the complex-domain inexact conversion of N with per-component accuracy. " +
 				"Always returns three values: (values inexact-c real-acc imag-acc), " +

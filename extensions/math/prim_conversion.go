@@ -309,7 +309,7 @@ func normalizeExponentMarker(s string) string {
 	return string(q)
 }
 
-// --- Loss-signal primitives (PR 3 of numeric loss signals plan) ---
+// --- Loss-signal primitives ---
 //
 // These four primitives surface Go's big.Accuracy three-valued enum
 // (Below / Exact / Above) to Scheme via 'below / 'exact / 'above
@@ -320,6 +320,13 @@ func normalizeExponentMarker(s string) string {
 // Domain dispatch uses the values.ComplexNumber interface (matches
 // Hashable/Tuple/Indexable precedent in values/) to avoid enumerating
 // *Complex and *BigComplex by name.
+//
+// The defensive `if err != nil { return err }` branch after every
+// values.ToFloat64WithAccuracy / ToComplex128WithAccuracy call is
+// statically unreachable: those helpers only error on a nil Number,
+// and each primitive type-asserts mc.Arg(0).(values.Number) before
+// the call. The check is retained as a contract-boundary safety net
+// in case the helpers ever grow new error paths.
 
 // PrimInexactLosslessQ implements (inexact-lossless? n).
 //

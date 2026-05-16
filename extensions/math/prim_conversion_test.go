@@ -15,10 +15,8 @@
 package math_test
 
 import (
-	"context"
 	"testing"
 
-	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -249,22 +247,7 @@ func TestConversionEdgeCases(t *testing.T) {
 	}
 }
 
-// --- Loss-signal primitives (PR 3 of numeric loss signals plan) ---
-//
-// These tests invoke engine.EvalMultiple directly rather than the local
-// `eval` helper to keep the test source compatible with a security
-// linter that flags the substring "eval(" in source text. The behavior
-// is identical (the local helper just wraps engine.EvalMultiple).
-
-// runOne is a local convenience wrapper for the loss-signal tests.
-// It exists to keep the call sites compact without using the project's
-// generic `eval` helper.
-func runOne(t *testing.T, engine *wile.Engine, code string) wile.Value {
-	t.Helper()
-	result, err := engine.EvalMultiple(context.Background(), code)
-	qt.New(t).Assert(err, qt.IsNil)
-	return result
-}
+// --- Loss-signal primitives ---
 
 // TestInexactLosslessQ covers the four-domain matrix of
 // (inexact-lossless? n): exact-fits, exact-misses, complex with one
@@ -285,6 +268,12 @@ func TestInexactLosslessQ(t *testing.T) {
 		// NaN is its own float64 identity → big.Exact; the predicate sees
 		// no loss because IEEE-754 NaN propagates unchanged.
 		{"NaN identity (no info lost)", `(inexact-lossless? +nan.0)`, values.TrueValue},
+		// IEEE-754 specials: true ±Inf inputs convert to themselves
+		// exactly (big.Exact); contrast with finite overflows that
+		// saturate to ±Inf with accuracy Above/Below.
+		{"+inf.0 identity (no info lost)", `(inexact-lossless? +inf.0)`, values.TrueValue},
+		{"-inf.0 identity (no info lost)", `(inexact-lossless? -inf.0)`, values.TrueValue},
+		{"-0.0 lossless", `(inexact-lossless? -0.0)`, values.TrueValue},
 		{"complex 3+4i exact", `(inexact-lossless? 3+4i)`, values.TrueValue},
 		{"complex 1/3+0i lossy real", `(inexact-lossless? (make-rectangular 1/3 0))`, values.FalseValue},
 		{"bigcomplex both lossy",
@@ -292,7 +281,7 @@ func TestInexactLosslessQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
 	}
@@ -316,10 +305,14 @@ func TestInexactAccuracy(t *testing.T) {
 		// NaN propagates as float64 NaN; the helper reports big.Exact
 		// (no info loss, just identity).
 		{"NaN exact", `(symbol->string (inexact-accuracy +nan.0))`, "exact"},
+		// True ±Inf inputs: float64 represents them exactly.
+		{"+inf.0 exact", `(symbol->string (inexact-accuracy +inf.0))`, "exact"},
+		{"-inf.0 exact", `(symbol->string (inexact-accuracy -inf.0))`, "exact"},
+		{"-0.0 exact", `(symbol->string (inexact-accuracy -0.0))`, "exact"},
 	}
 	for _, tc := range realCases {
 		t.Run("real/"+tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, `"`+tc.want+`"`)
 		})
 	}
@@ -338,7 +331,7 @@ func TestInexactAccuracy(t *testing.T) {
 	}
 	for _, tc := range complexCases {
 		t.Run("complex/"+tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
@@ -372,7 +365,7 @@ func TestInexactWithAccuracy(t *testing.T) {
 	}
 	for _, tc := range realCases {
 		t.Run("real/"+tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
@@ -391,7 +384,7 @@ func TestInexactWithAccuracy(t *testing.T) {
 	}
 	for _, tc := range complexCases {
 		t.Run("complex/"+tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
@@ -423,7 +416,7 @@ func TestComplexInexactWithAccuracy(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
@@ -468,7 +461,7 @@ func TestPolymorphicReturnArity(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runOne(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
@@ -490,6 +483,55 @@ func TestLossSignalPrimitiveErrors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// TestLossSignalDiscoverability verifies the four primitives ship
+// with workable Doc + Keywords fields by exercising the user-facing
+// (apropos ...) and (procedure-documentation ...) surface. A typo in
+// the Keywords slice would silently degrade discoverability — this
+// test pins the contract.
+func TestLossSignalDiscoverability(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// apropos finds each primitive by relevant keyword.
+		{"apropos lossless -> inexact-lossless?",
+			`(pair? (memq 'inexact-lossless? (apropos "lossless")))`,
+			values.TrueValue},
+		{"apropos accuracy -> inexact-accuracy",
+			`(pair? (memq 'inexact-accuracy (apropos "accuracy")))`,
+			values.TrueValue},
+		{"apropos accuracy -> inexact-with-accuracy",
+			`(pair? (memq 'inexact-with-accuracy (apropos "accuracy")))`,
+			values.TrueValue},
+		{"apropos accuracy -> complex-inexact-with-accuracy",
+			`(pair? (memq 'complex-inexact-with-accuracy (apropos "accuracy")))`,
+			values.TrueValue},
+
+		// procedure-documentation returns a non-empty string for each.
+		{"doc inexact-lossless? non-empty",
+			`(positive? (string-length (procedure-documentation inexact-lossless?)))`,
+			values.TrueValue},
+		{"doc inexact-accuracy non-empty",
+			`(positive? (string-length (procedure-documentation inexact-accuracy)))`,
+			values.TrueValue},
+		{"doc inexact-with-accuracy non-empty",
+			`(positive? (string-length (procedure-documentation inexact-with-accuracy)))`,
+			values.TrueValue},
+		{"doc complex-inexact-with-accuracy non-empty",
+			`(positive? (string-length (procedure-documentation complex-inexact-with-accuracy)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
 	}
 }
