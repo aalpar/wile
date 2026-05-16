@@ -1,26 +1,31 @@
 # Numeric loss signals — implementation plan
 
 **Date**: 2026-05-14 (initial); refined for impl detail 2026-05-14.
-**Status**: **Plan ready to start.** Numeric-registry shipped in PR
-  #752 (commit `082836d1`, merged 2026-05-13).
-  `values/numeric_registry.go` exists with `NumericTypeSpec`,
-  `registerNumericSpec`, and `LookupNumericSpec`. PR 1 of this
-  plan extends the struct (replacing `toFloat64`/`toComplex128`
-  with the new loss-signal-aware fields) and renames
-  `LookupNumericSpec` → `Lookup`.
+**Status**: **Complete — all three PRs merged.** See
+  "Post-implementation outcome" at the end of this document for
+  shipped-vs-planned deltas.
+
+  | PR  | Branch                                          | Merge commit | GitHub PR |
+  |-----|-------------------------------------------------|--------------|-----------|
+  | 1   | `feat/values-sr-phase4-loss-signals-go`         | `9d96a56d` (head) + #753 merge | [#753](https://github.com/aalpar/wile/pull/753) |
+  | 2   | `feat/values-sr-phase4-loss-signals-ffi`        | `45295bdb`   | [#754](https://github.com/aalpar/wile/pull/754) |
+  | 3   | `feat/values-sr-phase4-loss-signals-scheme`     | `a965d5ae`   | [#755](https://github.com/aalpar/wile/pull/755) |
+
+  Numeric-registry prerequisite shipped earlier in PR #752
+  (commit `082836d1`, merged 2026-05-13).
 **Design source**: `plans/2026-05-14-numeric-loss-signals-design.md`
   (refined 2026-05-14; resolutions: Q-1 saturate ±Inf, Q-2
   real-triple + per-component complex, Q-3 `extensions/math/`,
   Q-4 engine-level opt-in, Q-5 yes-tighten-helpers, Q-6 NaN/Inf
   documented as `big.Exact` identity).
-**Branches** (matches established `feat/values-sr-phase<N>-<topic>`
+**Branches** (matched established `feat/values-sr-phase<N>-<topic>`
 convention — see PR #747 phase0, #748 phase1-mutex, #749
 phase2-port-unification, #750 phase3-numeric-registry-design):
-  - PR 1: `feat/values-sr-phase4-loss-signals-go`
-  - PR 2: `feat/values-sr-phase4-loss-signals-ffi`
-  - PR 3: `feat/values-sr-phase4-loss-signals-scheme`
+  - PR 1: `feat/values-sr-phase4-loss-signals-go` (merged + deleted)
+  - PR 2: `feat/values-sr-phase4-loss-signals-ffi` (merged + deleted)
+  - PR 3: `feat/values-sr-phase4-loss-signals-scheme` (merged + deleted)
 
-All three branch from master after each preceding PR merges.
+All three branched from master after each preceding PR merged.
 **Prior-art templates (cite these when writing code)**:
   - **Multi-value-return primitive**: `floor/`, `truncate/`,
     `exact-integer-sqrt` — all in `extensions/math/`. Each uses
@@ -2126,12 +2131,84 @@ behavior land atomically.
 
 ## Done definition (whole plan)
 
-- [ ] PR 1 merged: Go infrastructure exposed, registry extended,
-      tests pass.
-- [ ] PR 2 merged: FFI tightening + complex128 + helpers.ToFloat64
-      **tightening**; CHANGELOG entries posted; **documentation
-      deliverables above all landed**.
-- [ ] PR 3 merged: four Scheme primitives shipped; acceptance
-      table from design passes as Scheme tests.
+- [x] PR 1 merged (#753): Go infrastructure exposed, registry
+      extended, tests pass.
+- [x] PR 2 merged (#754): FFI tightening + complex128 +
+      helpers.ToFloat64 **tightening**; CHANGELOG entries posted;
+      documentation deliverables landed (in PR 3 for the
+      math-extension-local docs; in PR 2 for CHANGELOG and other
+      project docs).
+- [x] PR 3 merged (#755): four Scheme primitives shipped;
+      acceptance table from design passes as Scheme tests;
+      three-layer integration test pins inter-layer agreement.
 - [ ] Parent design plan moves to "Completed Plans" in
-      `plans/CLAUDE.md`.
+      `plans/CLAUDE.md`. **Pending** — move both this impl plan
+      and the design plan to `memory/` after the closeout sweep
+      (the convention is move-on-done; keeping them here while
+      this section is fresh).
+
+## Post-implementation outcome
+
+### Shipped vs planned — deltas
+
+| Area | Planned | Shipped | Note |
+|------|---------|---------|------|
+| `LookupNumericSpec` → `Lookup` rename | yes, in PR 1 | **declined** — kept as `LookupNumericSpec` | The rename would have rippled into 4 production call sites (`values/conversion.go:81, 122` and the registry itself). The longer name is unambiguous in cross-package use (`values.LookupNumericSpec`); the shorter `Lookup` collided semantically with other registries. Verified in production: `grep LookupNumericSpec values/` returns 5 hits, all internal. |
+| BigFloat hygiene rename (`Float64` → `Float64Truncated` + new `Float64WithAccuracy`) | yes, PR 1 | shipped as planned | 13 internal call-site migrations all landed. |
+| `atan2Operand` helper | not planned | **added in PR 2** | The `helpers.ToFloat64` tightening surfaced a real R7RS regression: `(atan y x)` with lossy operands (e.g., `(atan 1/3 1)`) would now error, violating R7RS §6.2.6 ("any real arguments"). PR 2 mitigated with a small local helper that goes through the lossy-allowed path. The duplication with `helpers.ToFloat64` was caught by 3-lens crosscheck convergence and filed as a Tier 5 tech-debt entry (`TODO.md`: "Unify `atan2Operand` with `helpers.ToFloat64`"). |
+| FFI `complex128` callback param + return | "deferred — `makeRetConverter` has no complex128 arm" | shipped as deferred | `makeRetConverter` still has no `complex128` arm; complex *returns* and complex *callback params* remain unsupported (`ffi_test.go::TestRegisterFuncUnsupportedTypes` retains those cases). |
+| `runOne` test helper | not planned | **created then deleted** | PR 3 initially introduced a `runOne` test wrapper believing the package-level `eval` helper would trip a security linter on the substring `e`/`v`/`a`/`l` followed by paren. Crosscheck (3-lens convergence: code + errors + consistency) caught that the same file already used the package-level helper six times pre-existing — the workaround was based on a false premise. PR 3 fixup deleted `runOne` and migrated callers to the existing helper. |
+| Three-layer integration test | mentioned in plan as "PR 3 deliverable"; sketched at impl-plan line ~1937 | shipped as `integration/loss_signals_three_layer_test.go` | 6 rows after the post-crosscheck `bigcomplex-mixed-lossy` addition. Per-subtest scoping of `fnCalled` adopted on the consistency lens's recommendation. |
+| Discoverability test | not planned in original impl plan | **added in PR 3 fixup** | `TestLossSignalDiscoverability` exercises `(apropos "lossless")`, `(apropos "accuracy")`, and `(procedure-documentation ...)` from Scheme. 8 cases. Filed after the tests lens flagged that a typo in the `Keywords` slice would silently degrade discoverability. |
+
+### LOC actuals vs estimates
+
+| PR | Estimate | Actual (merge stat) |
+|----|----------|----------------------|
+| 1  | +415 / −25   | merged via two commits + Copilot fixups (see PR #753 final stat) |
+| 2  | +180 / −50   | ≈ +750 / −85 final after Copilot + crosscheck fixups (see PR #754 final stat). Larger than estimated because of the new `atan2Operand` helper + ffi_loss_signals_test.go (new file, 259 lines) + the CHANGELOG block + the lint-fixup commit. |
+| 3  | +280 / −0    | ≈ +735 / −0 final (see PR #755 final stat). Larger than estimated because of the integration test (`integration/loss_signals_three_layer_test.go`, ~180 lines), the docs (`docs/numeric/tower.md`, `docs/reference/r7rs-differences.md`, `values/CLAUDE.md`, `extensions/math/CLAUDE.local.md`), the discoverability test, and the IEEE-754-specials test rows added after crosscheck. |
+
+### Bench gate results (PR 2)
+
+Full A/B comparison ran 6 trials × 16 Gabriel benchmarks on master
+baseline (`6127ab04`) vs PR-2 branch (`21067482`). Geomean ratio:
+**1.0026 (+0.26%)** — within the 0.5% gate the plan called for.
+Per-bench spread was 13–65% per trial, well above any signal from
+the PR-2 changes — expected: the Gabriel suite is pure-Scheme
+arithmetic and never crosses FFI or `helpers.ToFloat64`. PRs 1
+and 3 were not benched (PR 1 was bench-gated separately during
+the values/ structural reduction; PR 3 is cold-path Scheme
+primitives — no bench gate).
+
+### Review findings summary
+
+PR 2 dual-review surfaced 1 Critical (tests-lens: atan2 migration
+untested), 1 Critical (consistency-lens: duplicated test helpers),
+and 8+ Notable findings — all addressed in a single `fix(...)`
+commit per the workflow convention.
+
+PR 3 dual-review surfaced 1 Critical (3-lens convergence on the
+`runOne` duplication), 6 Notable Unambiguous, 3 user-approved
+extras (apropos test, mixed-lossy integration row, IEEE-754
+specials), and 5 declined findings (with rationale in the PR
+resolution comment).
+
+### Cross-references
+
+- Plan parent: `2026-05-14-numeric-loss-signals-design.md`
+- Prerequisite: `2026-05-14-numeric-registry-impl.md` (shipped PR
+  #752 / commit `082836d1`)
+- Tech-debt follow-up: `TODO.md` → "Unify `atan2Operand` with
+  `helpers.ToFloat64`" (Tier 5, Low / S)
+- User-visible documentation:
+  - `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go
+    Types"
+  - `docs/reference/r7rs-differences.md` §"Loss-Signal-Aware
+    Numeric Conversion Primitives" + §"FFI Numeric Argument
+    Precision"
+  - `values/CLAUDE.md` §"Numeric Conversion Helpers"
+  - `extensions/math/CLAUDE.local.md` §"Numeric Conversion
+    (loss-signal aware)" (local-only, gitignored)
+  - `CHANGELOG.md` `[Unreleased]` — three behavior changes + two
+    additions + four-primitive table
