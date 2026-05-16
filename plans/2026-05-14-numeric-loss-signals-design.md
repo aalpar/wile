@@ -4,11 +4,26 @@
   converged with impl plan 2026-05-14 (BigFloat API hygiene added;
   `ToFloat64Lossy` dropped; `Complex128Result` struct introduced;
   `NumericTypeSpec` old fields replaced rather than augmented).
-**Status**: Approved by user; refined; all Q-1..Q-6 resolved; impl
-  plan at `2026-05-14-numeric-loss-signals-impl.md` is the source
-  of truth for code-stub detail (this document records the design
-  rationale + acceptance contract). Numeric-registry Phase 3
-  merged at commit `082836d1` (PR #752) — implementation unblocked.
+**Status**: **Complete — all three PRs merged.**
+  - PR 1 (Go infrastructure) merged 2026-05-15 as #753 (`9d96a56d` +
+    `dd243b9e` + Copilot fixups).
+  - PR 2 (FFI tightening + helpers.ToFloat64 tightening) merged
+    2026-05-15 as #754 (merge commit `45295bdb`).
+  - PR 3 (four Scheme primitives + three-layer integration test +
+    docs) merged 2026-05-15 as #755 (merge commit `a965d5ae`).
+
+  All Q-1..Q-6 resolutions shipped as designed. One acceptance-table
+  variation surfaced during PR 2: `helpers.ToFloat64` tightening
+  broke `(atan y x)` for lossy operands (R7RS §6.2.6 inherently
+  returns inexact, so silent loss is load-bearing there). Mitigated
+  in PR 2 by an `atan2Operand` helper that goes through the
+  lossy-allowed path. Cleanup deferred as a Tier 5 tech-debt entry
+  (`TODO.md`: "Unify `atan2Operand` with `helpers.ToFloat64`").
+
+  This document records the design rationale + acceptance contract.
+  Code-stub detail lives in
+  `2026-05-14-numeric-loss-signals-impl.md`. Numeric-registry
+  Phase 3 prerequisite shipped at commit `082836d1` (PR #752).
 **Refinement mandate**: User instruction "no information loss from
   Go `big` package to Scheme side" reshapes the design — every
   precision-loss signal that Go's stdlib surfaces (`big.Accuracy`,
