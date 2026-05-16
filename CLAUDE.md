@@ -40,7 +40,7 @@ mc.SetValue( BoolToBoolean(<conditional>) )
 
 **ALWAYS** create plan files in `plans/`.
 **NEVER** commit changes without asking first. The user structures commits themselves.
-**NEVER** commit directly to master. All changes must go through feature branches and pull requests.
+**NEVER** commit directly to master. All changes must go through feature branches. Pull requests are optional: open one when the user asks, or when the change is large/risky enough to benefit from Copilot or crosscheck review. Otherwise the standard path is branch → commit → push → merge to master directly once CI is green. Do NOT merge any PR that does get opened without explicit instruction.
 **NEVER write single-line function definitions.** This applies to ALL function forms:
 named functions, methods, closures (inline, deferred, goroutine, or assigned), and
 function arguments. Every function body MUST start on the line after the opening brace
