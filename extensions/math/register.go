@@ -211,5 +211,42 @@ func addPrimitives(r *registry.Registry) error {
 			ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime)
 
+	// Loss-signal primitives — surface Go big.Accuracy to Scheme.
+	r.AddPrimitives([]registry.PrimitiveSpec{
+		{Name: "inexact-lossless?", ParamCount: 1, Impl: PrimInexactLosslessQ,
+			Doc: "Returns #t if (exact->inexact N) would be lossless (every component exactly representable in float64/complex128). " +
+				"For complex N, both real and imaginary parts must be lossless.",
+			ParamNames: []string{"n"}, Category: "math",
+			Keywords:   []string{"precision", "lossless", "exact", "accuracy", "round-trip"},
+			ParamTypes: []values.TypeConstraint{values.TypeNumber},
+			ReturnType: values.TypeBoolean},
+		// inexact-accuracy returns 1 symbol (real) or 2 (complex) — ReturnType omitted (matches floor/ precedent).
+		{Name: "inexact-accuracy", ParamCount: 1, Impl: PrimInexactAccuracy,
+			Doc: "Predicts the accuracy of (exact->inexact N) without performing the conversion. " +
+				"For real N, returns one of 'below, 'exact, or 'above. " +
+				"For complex N, returns two values: (values real-acc imag-acc).",
+			ParamNames: []string{"n"}, Category: "math",
+			Keywords:   []string{"precision", "accuracy", "below", "exact", "above"},
+			ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+		// inexact-with-accuracy returns 2 values (real) or 3 (complex).
+		{Name: "inexact-with-accuracy", ParamCount: 1, Impl: PrimInexactWithAccuracy,
+			Doc: "Returns (exact->inexact N) along with its accuracy. " +
+				"For real N, returns two values: (values inexact-n accuracy-sym). " +
+				"For complex N, returns three values: (values inexact-c real-acc imag-acc). " +
+				"Accuracy symbols are 'below, 'exact, or 'above.",
+			ParamNames: []string{"n"}, Category: "math",
+			Keywords:   []string{"precision", "convert", "inexact", "accuracy"},
+			ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+		// complex-inexact-with-accuracy always returns 3 values regardless of input domain.
+		{Name: "complex-inexact-with-accuracy", ParamCount: 1, Impl: PrimComplexInexactWithAccuracy,
+			Doc: "Returns the complex-domain inexact conversion of N with per-component accuracy. " +
+				"Always returns three values: (values inexact-c real-acc imag-acc), " +
+				"where real-acc and imag-acc are each one of 'below, 'exact, or 'above. " +
+				"For real input N, imag-acc is trivially 'exact.",
+			ParamNames: []string{"n"}, Category: "math",
+			Keywords:   []string{"complex", "precision", "convert", "inexact", "accuracy"},
+			ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+	}, registry.PhaseSetRuntime)
+
 	return nil
 }

@@ -50,13 +50,18 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	return result
 }
 
-// evalExpectError runs Scheme code and asserts that it produces an error.
-func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
+// evalExpectError runs Scheme code, asserts that it produces an error,
+// and returns the error. Callers that need to match the error against a
+// sentinel (errors.Is) consume the return value; callers that only need
+// "did it error" can ignore it. Parse errors are returned unwrapped
+// (and count as expected errors for the assertion side).
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) error {
 	t.Helper()
 	expr, err := engine.Parse(context.Background(), code)
 	if err != nil {
-		return // parse error counts as expected error
+		return err // parse error counts as expected error
 	}
 	_, err = engine.Eval(context.Background(), expr)
 	qt.New(t).Assert(err, qt.IsNotNil)
+	return err
 }

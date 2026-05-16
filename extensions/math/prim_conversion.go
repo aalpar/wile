@@ -308,3 +308,136 @@ func normalizeExponentMarker(s string) string {
 	q[idx] = 'e'
 	return string(q)
 }
+
+// --- Loss-signal primitives ---
+//
+// These four primitives surface Go's big.Accuracy three-valued enum
+// (Below / Exact / Above) to Scheme via 'below / 'exact / 'above
+// symbols. They predict or report the accuracy of an
+// (exact->inexact n) conversion at the float64 / complex128 boundary
+// without erroring on loss — they make the loss visible instead.
+//
+// Domain dispatch uses the values.ComplexNumber interface (matches
+// Hashable/Tuple/Indexable precedent in values/) to avoid enumerating
+// *Complex and *BigComplex by name.
+//
+// The defensive `if err != nil { return err }` branch after every
+// values.ToFloat64WithAccuracy / ToComplex128WithAccuracy call is
+// statically unreachable: those helpers only error on a nil Number,
+// and each primitive type-asserts mc.Arg(0).(values.Number) before
+// the call. The check is retained as a contract-boundary safety net
+// in case the helpers ever grow new error paths.
+
+// PrimInexactLosslessQ implements (inexact-lossless? n).
+//
+// Returns #t iff (exact->inexact n) would lose no information. For
+// real input, this means the float64 conversion is big.Exact. For
+// complex input, BOTH real and imaginary components must be big.Exact.
+// (For real-only inputs the imaginary accuracy is trivially big.Exact,
+// so the complex predicate collapses to the real-part check — hence
+// the unified ToComplex128WithAccuracy path.)
+func PrimInexactLosslessQ(mc machine.CallContext) error {
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"inexact-lossless?: expected a number but got %s", mc.Arg(0).SchemeString())
+	}
+	res, err := values.ToComplex128WithAccuracy(n)
+	if err != nil {
+		return err
+	}
+	lossless := res.RealAcc == big.Exact && res.ImagAcc == big.Exact
+	mc.SetValue(values.BoolToBoolean(lossless))
+	return nil
+}
+
+// PrimInexactAccuracy implements (inexact-accuracy n).
+//
+// Polymorphic return shape: real input → one symbol; complex input →
+// two symbols via mc.SetValues. R7RS-style multi-value protocol.
+func PrimInexactAccuracy(mc machine.CallContext) error {
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"inexact-accuracy: expected a number but got %s", mc.Arg(0).SchemeString())
+	}
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
+		res, err := values.ToComplex128WithAccuracy(n)
+		if err != nil {
+			return err
+		}
+		mc.SetValues(
+			values.BigAccuracyToSymbol(res.RealAcc),
+			values.BigAccuracyToSymbol(res.ImagAcc),
+		)
+		return nil
+	}
+	_, acc, _, err := values.ToFloat64WithAccuracy(n)
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.BigAccuracyToSymbol(acc))
+	return nil
+}
+
+// PrimInexactWithAccuracy implements (inexact-with-accuracy n).
+//
+// Polymorphic return: real input → (values inexact-n acc-sym); complex
+// input → (values inexact-c real-acc-sym imag-acc-sym). The inexact
+// value is the actual float64 / complex128 produced by the conversion;
+// the accuracy symbols indicate the rounding direction.
+func PrimInexactWithAccuracy(mc machine.CallContext) error {
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"inexact-with-accuracy: expected a number but got %s", mc.Arg(0).SchemeString())
+	}
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
+		res, err := values.ToComplex128WithAccuracy(n)
+		if err != nil {
+			return err
+		}
+		mc.SetValues(
+			values.NewComplex(res.Value),
+			values.BigAccuracyToSymbol(res.RealAcc),
+			values.BigAccuracyToSymbol(res.ImagAcc),
+		)
+		return nil
+	}
+	f, acc, _, err := values.ToFloat64WithAccuracy(n)
+	if err != nil {
+		return err
+	}
+	mc.SetValues(
+		values.NewFloat(f),
+		values.BigAccuracyToSymbol(acc),
+	)
+	return nil
+}
+
+// PrimComplexInexactWithAccuracy implements
+// (complex-inexact-with-accuracy n) — the uniform 3-value variant.
+//
+// Always returns (values inexact-c real-acc-sym imag-acc-sym),
+// regardless of whether the input is real or complex. For real input
+// N, the imaginary accuracy is trivially 'exact. Useful when callers
+// want a single arity regardless of input domain.
+func PrimComplexInexactWithAccuracy(mc machine.CallContext) error {
+	n, ok := mc.Arg(0).(values.Number)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"complex-inexact-with-accuracy: expected a number but got %s", mc.Arg(0).SchemeString())
+	}
+	res, err := values.ToComplex128WithAccuracy(n)
+	if err != nil {
+		return err
+	}
+	mc.SetValues(
+		values.NewComplex(res.Value),
+		values.BigAccuracyToSymbol(res.RealAcc),
+		values.BigAccuracyToSymbol(res.ImagAcc),
+	)
+	return nil
+}

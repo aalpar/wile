@@ -168,4 +168,42 @@ R7RS §7.3's reference implementation of `guard` uses `(let ((result (begin e1 e
 
 Wile's `guard` uses `call-with-values` to capture all values from the body, then re-emits them via `(apply values results)`. This means `(guard (e (#f)) (values 1 2))` correctly propagates both values, whereas the R7RS reference implementation would signal an error.
 
+### Loss-Signal-Aware Numeric Conversion Primitives
+
+Wile adds four primitives (in the math extension) that expose the
+accuracy of `exact->inexact` conversion at the `float64` /
+`complex128` boundary, surfacing Go's `big.Accuracy` three-valued
+enum as `'below` / `'exact` / `'above` symbols:
+
+| Primitive | Purpose |
+|-----------|---------|
+| `inexact-lossless?` | Predicate: `#t` iff conversion is lossless |
+| `inexact-accuracy` | Returns accuracy symbol(s) without converting |
+| `inexact-with-accuracy` | Returns `(values inexact-n acc-sym)` (real) or `(values inexact-c real-acc imag-acc)` (complex) |
+| `complex-inexact-with-accuracy` | Uniform 3-value variant regardless of input domain |
+
+R7RS `(exact->inexact)` (§6.2.6) is **unchanged** — it continues to
+saturate silently to `+inf.0` / `-inf.0` on overflow. The new
+primitives **expose** the rounding direction rather than gate it.
+R7RS-strict programs that import only `(scheme base)` /
+`(scheme inexact)` are unaffected; these primitives are reachable
+only after loading the math extension (profile `Small` and above).
+
+### FFI Numeric Argument Precision
+
+For embedders using `wile.RegisterFunc` with Go functions taking
+`float64` or `complex128` parameters: the default conversion is now
+**precision-aware**. Passing a Scheme numeric value that cannot be
+exactly represented in the Go fixed-precision type (e.g. `1/3`,
+`*BigInteger` exceeding 2^53, `*BigFloat` overflowing magnitude)
+returns `werr.ErrLossyConversion` instead of silently truncating.
+
+The `wile.WithLossyConversionsAllowed()` engine option restores the
+silent-truncation behavior for embedders that depended on it. This
+is purely an embedder-API concern; Scheme programs are unaffected.
+
+See `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go Types"
+and `plans/2026-05-14-numeric-loss-signals-design.md` for the
+underlying design.
+
 
