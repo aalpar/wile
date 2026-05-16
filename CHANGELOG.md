@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **13 `Datum()` accessor methods deleted from concrete `*values.X` types.**
+  Affected types: `Integer`, `Float`, `Boolean`, `Character`, `Byte`,
+  `Complex`, `String`, `Symbol`, `Box`, `ByteVector`, `Vector`, `Pair`,
+  `NativeError`. Each method was a pure field accessor with no shared
+  interface contract — the shared name was a false signal of
+  polymorphism, not a real protocol. Callers migrate to direct field
+  access (`v.Value`, `v.Key`) or, for `NativeError`, the
+  identical-bodied `Unwrap()` method (standard Go convention). For
+  `Vector` / `ByteVector` / `Pair` (slice/array-typed values), callers
+  dereference with `*v` or use the existing typed accessors
+  (`Length()`, `Car()`, `Cdr()`, `Get(i)`).
+
+  **Breaking** for any external embedder depending on these methods.
+  Sanctioned under the v1.x zero-consumers policy
+  (`CLAUDE.md` versioning section: "break freely in minor versions
+  — no v2 module path ceremony until real users exist"). Surviving
+  `Datum()` methods on `*SyntaxObject` and `*SyntaxSymbol`
+  (in `internal/syntax/`) are unrelated — they form a separate
+  syntax-level protocol and are out of scope.
+
 ### Changed
 
 - **FFI `float64` parameter conversion is now precision-aware.** Numeric arguments

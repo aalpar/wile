@@ -106,6 +106,9 @@ func datumToSyntax(datum values.Value, sctx *syntax.SourceContext) syntax.Syntax
 		return syntax.NewSyntaxCons(car, cdr, sctx)
 
 	case *values.Vector:
+		// Void guard is required: *v panics on a nil *Vector. Empty
+		// syntax-vector matches the historical Datum()-returns-nil
+		// path. Pinned by TestDatumToSyntax_VoidVector.
 		if v.IsVoid() {
 			return syntax.NewSyntaxVector(sctx)
 		}

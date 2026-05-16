@@ -20,8 +20,39 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
+
+// TestDatumToSyntax_VoidVector pins the void-Vector branch of
+// datumToSyntax (in prim_syntax.go) against silent breakage.
+//
+// The branch is load-bearing: dereferencing a nil *values.Vector
+// (`*v`) panics, so the `if v.IsVoid()` guard cannot be removed
+// without crashing this call path. A future "simplification"
+// deleting the guard would silently regress here (no test
+// previously exercised the void-Vector input to datumToSyntax).
+// Recorded as a crosscheck-errors-lens finding on commit d7112b0c.
+func TestDatumToSyntax_VoidVector(t *testing.T) {
+	c := qt.New(t)
+
+	var voidVec *values.Vector // typed-nil pointer = void per p.IsVoid()
+	c.Assert(voidVec.IsVoid(), qt.IsTrue,
+		qt.Commentf("precondition: nil *Vector should report IsVoid"))
+
+	// Use a sentinel-zero SourceContext (no source file). The
+	// expected outcome is an empty SyntaxVector — same shape the
+	// old Datum()-returns-nil + range-over-nil path produced.
+	sctx := syntax.NewZeroValueSourceContext()
+	result := datumToSyntax(voidVec, sctx)
+
+	sv, ok := result.(*syntax.SyntaxVector)
+	c.Assert(ok, qt.IsTrue,
+		qt.Commentf("expected *SyntaxVector, got %T", result))
+	c.Assert(len(sv.Values), qt.Equals, 0,
+		qt.Commentf("void Vector must produce empty SyntaxVector, got len=%d", len(sv.Values)))
+}
 
 func TestBuilder_AddToRegistry(t *testing.T) {
 	c := qt.New(t)
