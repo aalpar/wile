@@ -1130,6 +1130,14 @@ func TestWriteStringCoverage(t *testing.T) {
 	}
 }
 
+func TestWriteString_BinaryPortSentinel(t *testing.T) {
+	engine := newEngine(t)
+	code := `(write-string "hello" (open-output-bytevector))`
+	_, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), code))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrNotATextualPort), qt.IsTrue)
+}
+
 func TestWriteU8Coverage(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
