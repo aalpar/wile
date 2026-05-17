@@ -144,7 +144,8 @@ func TestAllValueExemplarsCompleteness(t *testing.T) {
 				continue
 			}
 			recv := fn.Recv.List[0].Type
-			if star, ok := recv.(*ast.StarExpr); ok {
+			star, ok := recv.(*ast.StarExpr)
+			if ok {
 				recv = star.X
 			}
 			ident, ok := recv.(*ast.Ident)

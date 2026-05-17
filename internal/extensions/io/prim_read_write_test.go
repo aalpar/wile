@@ -1119,6 +1119,7 @@ func TestWriteStringCoverage(t *testing.T) {
 	}{
 		{"non-string", `(write-string 42 (open-output-string))`},
 		{"non-port second arg", `(write-string "hello" 42)`},
+		{"binary port", `(write-string "hello" (open-output-bytevector))`},
 		{"start greater than end", `(write-string "hello" (open-output-string) 3 1)`},
 		{"start out of bounds", `(write-string "hi" (open-output-string) 10)`},
 	}
