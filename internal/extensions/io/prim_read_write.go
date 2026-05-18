@@ -101,6 +101,20 @@ func getOptionalOutputPort(mc machine.CallContext, argIndex int) (*values.PortOb
 	return p, nil
 }
 
+// requireTextualOutput rejects ports that carry a byte-writer slot
+// (i.e., binary output ports). It is the single source of truth for
+// the "this output port must be textual" predicate — shared by
+// getOptionalTextualOutputPort and by PrimWriteString, which resolves
+// the port itself in order to parse the rest-tuple for start/end.
+func requireTextualOutput(p *values.PortObject) error {
+	_, isBinary := p.AsByteWriter()
+	if !isBinary {
+		return nil
+	}
+	return werr.WrapForeignErrorf(werr.ErrNotATextualPort,
+		"expected a textual output port, got %s", p.PortKind())
+}
+
 // getOptionalTextualOutputPort extracts an optional textual output port,
 // rejecting binary output ports. Used for textual operations (write,
 // display, newline, etc.) that must not accept binary ports.
@@ -110,10 +124,9 @@ func getOptionalTextualOutputPort(mc machine.CallContext, argIndex int) (*values
 	if err != nil {
 		return nil, err
 	}
-	_, isBinary := p.AsByteWriter()
-	if isBinary {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotATextualPort,
-			"expected a textual output port, got binary port")
+	err = requireTextualOutput(p)
+	if err != nil {
+		return nil, err
 	}
 	return p, nil
 }

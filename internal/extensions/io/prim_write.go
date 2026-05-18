@@ -177,10 +177,9 @@ func PrimWriteString(mc machine.CallContext) error {
 				"write-string: expected an output port, got %s", port.PortKind())
 		}
 	}
-	_, isBinary := port.AsByteWriter()
-	if isBinary {
-		return werr.WrapForeignErrorf(werr.ErrNotATextualPort,
-			"write-string: expected a textual output port, got binary port")
+	err = requireTextualOutput(port)
+	if err != nil {
+		return err
 	}
 	if !tuple.IsEmptyList() {
 		start, end, err = helpers.ParseSubrange(tuple.Cdr(), length, "write-string")
