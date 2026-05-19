@@ -60,10 +60,13 @@ const (
 	axisBUpdateEnvVar = "WILE_AXIS_B_UPDATE"
 
 	// maxBindingOnlyPrimitives bounds the expected number of primitives
-	// with nil Impl. Current count is ~47 (binding-only entries like assoc,
-	// member, map, caar, boolean=?). Exceeding this cap likely signals
-	// that real Impls were accidentally nulled — the test fails rather
-	// than silently skipping validation for all of them.
+	// with nil Impl. The current live count is 0: procedures that were
+	// once binding-only registry shells (CxR accessors, assoc, map,
+	// for-each, boolean=?, etc.) are now pure Scheme defines in
+	// bootstrap_procedures.scm with no PrimitiveSpec. The cap is kept as
+	// a guard — a non-zero count would mean real Impls were accidentally
+	// nulled, and the test fails rather than silently skipping validation
+	// for all of them.
 	maxBindingOnlyPrimitives = 60
 
 	// maxReportedDiffs caps how many differences are reported from
