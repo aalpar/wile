@@ -407,14 +407,68 @@ func PrimApropos(mc machine.CallContext) error {
 	}
 
 	env := mc.EnvironmentFrame()
+
+	var libs registry.LibrarySearcher
+	lr, ok := env.LibraryRegistry().(*compilation.LibraryRegistry)
+	if ok && lr != nil {
+		libs = libraryRegistrySearcher{reg: lr}
+	}
+	var exports registry.LibraryExportSearcher
 	exportIndex := ensureExportIndex(mc)
-	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), exportIndex, s.Value)
+	if exportIndex != nil {
+		exports = libraryExportIndexSearcher{idx: exportIndex}
+	}
+
+	results := registry.SearchDoc(reg, env, libs, exports, s.Value)
 	syms := make([]values.Value, len(results))
 	for i, r := range results {
 		syms[i] = values.NewSymbol(r.Name)
 	}
 	mc.SetValue(values.List(syms...))
 	return nil
+}
+
+// libraryRegistrySearcher adapts *compilation.LibraryRegistry to
+// registry.LibrarySearcher. The adapter lives here, not in the registry
+// package, because registry/ must not import machine/compilation (Finding 7
+// of plans/2026-05-18-registry-structural-reduction.md). registry/core
+// already imports both packages, so the conversion belongs here.
+type libraryRegistrySearcher struct {
+	reg *compilation.LibraryRegistry
+}
+
+// AllLibraries flattens the loaded libraries into registry.LibraryDoc values.
+func (p libraryRegistrySearcher) AllLibraries() []registry.LibraryDoc {
+	libs := p.reg.All()
+	q := make([]registry.LibraryDoc, len(libs))
+	for i, lib := range libs {
+		q[i] = registry.LibraryDoc{
+			Name:        lib.Name.SchemeString(),
+			Description: lib.Description,
+		}
+	}
+	return q
+}
+
+// libraryExportIndexSearcher adapts *compilation.LibraryExportIndex to
+// registry.LibraryExportSearcher.
+type libraryExportIndexSearcher struct {
+	idx *compilation.LibraryExportIndex
+}
+
+// AllLibraryExports flattens the indexed library summaries into
+// registry.LibraryExportDoc values.
+func (p libraryExportIndexSearcher) AllLibraryExports() []registry.LibraryExportDoc {
+	entries := p.idx.Entries()
+	q := make([]registry.LibraryExportDoc, len(entries))
+	for i, e := range entries {
+		q[i] = registry.LibraryExportDoc{
+			Name:        e.Name.SchemeString(),
+			Description: e.Description,
+			Exports:     e.Exports,
+		}
+	}
+	return q
 }
 
 // ensureExportIndex returns the cached library export index from the

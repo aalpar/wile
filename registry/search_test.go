@@ -25,10 +25,30 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 )
+
+// stubLibrarySearcher is an in-memory test double for registry.LibrarySearcher.
+// It removes the need to stand up a compilation.LibraryRegistry to exercise
+// SearchDoc's loaded-library path.
+type stubLibrarySearcher struct {
+	libs []registry.LibraryDoc
+}
+
+func (p stubLibrarySearcher) AllLibraries() []registry.LibraryDoc {
+	return p.libs
+}
+
+// stubExportSearcher is an in-memory test double for
+// registry.LibraryExportSearcher.
+type stubExportSearcher struct {
+	exports []registry.LibraryExportDoc
+}
+
+func (p stubExportSearcher) AllLibraryExports() []registry.LibraryExportDoc {
+	return p.exports
+}
 
 func buildSearchTestRegistry() *registry.Registry {
 	reg := registry.NewRegistry()
@@ -254,15 +274,12 @@ func TestSearchDoc_CoreKeywordsDiscovery(t *testing.T) {
 func TestSearchDoc_Libraries(t *testing.T) {
 	c := qt.New(t)
 	reg := registry.NewRegistry()
-	libReg := compilation.NewLibraryRegistry()
 
-	libName := compilation.NewLibraryName("test", "math")
-	lib := compilation.NewCompiledLibrary(libName, environment.NewNamespace().Runtime())
-	lib.Description = "Test math library"
-	err := libReg.Register(lib)
-	c.Assert(err, qt.IsNil)
+	libs := stubLibrarySearcher{libs: []registry.LibraryDoc{
+		{Name: "(test math)", Description: "Test math library"},
+	}}
 
-	results := registry.SearchDoc(reg, nil, libReg, nil, "math")
+	results := registry.SearchDoc(reg, nil, libs, nil, "math")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(test math)")
 	c.Assert(results[0].Category, qt.Equals, "library")
@@ -272,15 +289,12 @@ func TestSearchDoc_Libraries(t *testing.T) {
 func TestSearchDoc_LibraryByDescription(t *testing.T) {
 	c := qt.New(t)
 	reg := registry.NewRegistry()
-	libReg := compilation.NewLibraryRegistry()
 
-	libName := compilation.NewLibraryName("wile", "algebra")
-	lib := compilation.NewCompiledLibrary(libName, environment.NewNamespace().Runtime())
-	lib.Description = "Algebraic structures: rings, fields, lattices"
-	err := libReg.Register(lib)
-	c.Assert(err, qt.IsNil)
+	libs := stubLibrarySearcher{libs: []registry.LibraryDoc{
+		{Name: "(wile algebra)", Description: "Algebraic structures: rings, fields, lattices"},
+	}}
 
-	results := registry.SearchDoc(reg, nil, libReg, nil, "lattice")
+	results := registry.SearchDoc(reg, nil, libs, nil, "lattice")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
 }
@@ -333,15 +347,15 @@ func TestSearchDoc_UnloadedExports(t *testing.T) {
 	c := qt.New(t)
 
 	reg := registry.NewRegistry()
-	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
-		"srfi/1": {
-			Name:        compilation.NewLibraryName("srfi", "1"),
+	exports := stubExportSearcher{exports: []registry.LibraryExportDoc{
+		{
+			Name:        "(srfi 1)",
 			Description: "SRFI 1: List library.",
 			Exports:     []string{"fold", "unfold", "partition"},
 		},
-	})
+	}}
 
-	results := registry.SearchDoc(reg, nil, nil, idx, "partition")
+	results := registry.SearchDoc(reg, nil, nil, exports, "partition")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "partition")
 	c.Assert(results[0].Category, qt.Equals, "not imported")
@@ -353,16 +367,16 @@ func TestSearchDoc_UnloadedLibraryByName(t *testing.T) {
 	c := qt.New(t)
 
 	reg := registry.NewRegistry()
-	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
-		"wile/algebra": {
-			Name:        compilation.NewLibraryName("wile", "algebra"),
+	exports := stubExportSearcher{exports: []registry.LibraryExportDoc{
+		{
+			Name:        "(wile algebra)",
 			Description: "Algebraic structures: rings, fields, lattices.",
 			Exports:     []string{"make-group", "make-ring", "make-field"},
 		},
-	})
+	}}
 
 	// "algebra" matches the library name but none of the export names.
-	results := registry.SearchDoc(reg, nil, nil, idx, "algebra")
+	results := registry.SearchDoc(reg, nil, nil, exports, "algebra")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
 	c.Assert(results[0].Category, qt.Equals, "library (not imported)")
@@ -373,17 +387,17 @@ func TestSearchDoc_UnloadedLibraryByDescription(t *testing.T) {
 	c := qt.New(t)
 
 	reg := registry.NewRegistry()
-	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
-		"wile/algebra": {
-			Name:        compilation.NewLibraryName("wile", "algebra"),
+	exports := stubExportSearcher{exports: []registry.LibraryExportDoc{
+		{
+			Name:        "(wile algebra)",
 			Description: "Algebraic structures: rings, fields, lattices.",
 			Exports:     []string{"make-group", "make-ring", "make-field"},
 		},
-	})
+	}}
 
-	// "lattice" matches the description and also the export "make-lattice"
-	// (not in this test data, but confirms description-only matching).
-	results := registry.SearchDoc(reg, nil, nil, idx, "lattice")
+	// "lattice" matches the description but none of the export names —
+	// confirms description-only matching.
+	results := registry.SearchDoc(reg, nil, nil, exports, "lattice")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
 	c.Assert(results[0].Category, qt.Equals, "library (not imported)")
@@ -393,16 +407,16 @@ func TestSearchDoc_UnloadedLibraryNameAndExportBothMatch(t *testing.T) {
 	c := qt.New(t)
 
 	reg := registry.NewRegistry()
-	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
-		"test/foo": {
-			Name:        compilation.NewLibraryName("test", "foo"),
+	exports := stubExportSearcher{exports: []registry.LibraryExportDoc{
+		{
+			Name:        "(test foo)",
 			Description: "A foo library.",
 			Exports:     []string{"foo-bar", "foo-baz", "quux"},
 		},
-	})
+	}}
 
 	// "foo" matches the library name AND two export names.
-	results := registry.SearchDoc(reg, nil, nil, idx, "foo")
+	results := registry.SearchDoc(reg, nil, nil, exports, "foo")
 	names := make([]string, len(results))
 	for i, r := range results {
 		names[i] = r.Name
@@ -430,16 +444,16 @@ func TestSearchDoc_LoadedTakesPrecedenceOverUnloaded(t *testing.T) {
 	}, registry.PhaseSetRuntime)
 
 	// Also put "fold" in the unloaded export index.
-	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
-		"srfi/1": {
-			Name:        compilation.NewLibraryName("srfi", "1"),
+	exports := stubExportSearcher{exports: []registry.LibraryExportDoc{
+		{
+			Name:        "(srfi 1)",
 			Description: "SRFI 1: List library.",
 			Exports:     []string{"fold", "unfold", "partition"},
 		},
-	})
+	}}
 
 	// Search for "fold" — matches both "fold" and "unfold" as substrings.
-	results := registry.SearchDoc(reg, nil, nil, idx, "fold")
+	results := registry.SearchDoc(reg, nil, nil, exports, "fold")
 
 	// "fold" should appear exactly once — the primitive wins via primNames.
 	foldCount := 0
@@ -465,4 +479,31 @@ func TestSearchDoc_LoadedTakesPrecedenceOverUnloaded(t *testing.T) {
 	for _, r := range results {
 		c.Assert(r.Name != "partition", qt.IsTrue)
 	}
+}
+
+// TestSearchDoc_UnloadedSkipsLoadedLibrary verifies that a library present in
+// the loaded-library searcher is excluded from the unloaded-export results,
+// even when its name matches the pattern. This exercises searchUnloadedExports'
+// loaded-name set, which matches by canonical library-name string.
+func TestSearchDoc_UnloadedSkipsLoadedLibrary(t *testing.T) {
+	c := qt.New(t)
+
+	reg := registry.NewRegistry()
+	libs := stubLibrarySearcher{libs: []registry.LibraryDoc{
+		{Name: "(srfi 1)", Description: "SRFI 1: List library."},
+	}}
+	exports := stubExportSearcher{exports: []registry.LibraryExportDoc{
+		{
+			Name:        "(srfi 1)",
+			Description: "SRFI 1: List library.",
+			Exports:     []string{"fold", "partition"},
+		},
+	}}
+
+	// "srfi" matches the library name. Because (srfi 1) is already loaded,
+	// it must surface only as a loaded library, never as an unloaded one.
+	results := registry.SearchDoc(reg, nil, libs, exports, "srfi")
+	c.Assert(len(results), qt.Equals, 1)
+	c.Assert(results[0].Name, qt.Equals, "(srfi 1)")
+	c.Assert(results[0].Category, qt.Equals, "library")
 }

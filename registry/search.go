@@ -21,21 +21,7 @@ import (
 
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/machine/compilation"
 )
-
-// ExtractLibraryRegistry extracts the *compilation.LibraryRegistry from an
-// environment frame, returning nil if unavailable or a different concrete type.
-func ExtractLibraryRegistry(env *environment.EnvironmentFrame) *compilation.LibraryRegistry {
-	if env == nil {
-		return nil
-	}
-	lr, ok := env.LibraryRegistry().(*compilation.LibraryRegistry)
-	if !ok {
-		return nil
-	}
-	return lr
-}
 
 // DocSearchResult holds one search hit from SearchDoc.
 type DocSearchResult struct {
@@ -43,6 +29,36 @@ type DocSearchResult struct {
 	Doc      string
 	Category string
 	Keywords []string
+}
+
+// LibraryDoc is a read-only view of a loaded library, sufficient for
+// documentation search.
+type LibraryDoc struct {
+	Name        string // canonical Scheme form, e.g. "(wile math)"
+	Description string
+}
+
+// LibraryExportDoc is a read-only view of an indexed (possibly unloaded)
+// library and the names it exports.
+type LibraryExportDoc struct {
+	Name        string // canonical Scheme form, e.g. "(srfi 1)"
+	Description string
+	Exports     []string
+}
+
+// LibrarySearcher enumerates loaded libraries for SearchDoc. Defining the
+// dependency as a narrow interface keeps the registry package free of any
+// import of machine/compilation — the concrete adapter lives in the caller's
+// package (see registry/core). Per the Interface Segregation Principle,
+// SearchDoc depends only on the enumeration it uses, not on the full
+// library-registry surface.
+type LibrarySearcher interface {
+	AllLibraries() []LibraryDoc
+}
+
+// LibraryExportSearcher enumerates indexed library exports for SearchDoc.
+type LibraryExportSearcher interface {
+	AllLibraryExports() []LibraryExportDoc
 }
 
 // SearchDoc searches all documentation sources for case-insensitive
@@ -55,12 +71,12 @@ type DocSearchResult struct {
 //  2. Registry binding specs — includes real bindings AND simple DocOnly
 //     entries registered via AddDocumentation (post-Phase-1 unification).
 //  3. Environment bindings (if env is non-nil)
-//  4. Loaded libraries (if libReg is non-nil)
-//  5. Unloaded library exports (if exportIndex is non-nil)
+//  4. Loaded libraries (if libs is non-nil)
+//  5. Unloaded library exports (if exports is non-nil)
 //
 // Primitives take precedence over non-primitives with the same name.
-// Results are sorted by name. env, libReg, and exportIndex may be nil.
-func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, exportIndex *compilation.LibraryExportIndex, pattern string) []DocSearchResult {
+// Results are sorted by name. env, libs, and exports may be nil.
+func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libs LibrarySearcher, exports LibraryExportSearcher, pattern string) []DocSearchResult {
 	lowerPattern := strings.ToLower(pattern)
 	var q []DocSearchResult
 
@@ -116,8 +132,8 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 	}
 
 	// 4. Loaded libraries.
-	if libReg != nil {
-		for _, r := range searchLibraries(libReg, lowerPattern) {
+	if libs != nil {
+		for _, r := range searchLibraries(libs, lowerPattern) {
 			if seen[r.Name] {
 				continue
 			}
@@ -127,8 +143,8 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 	}
 
 	// 5. Unloaded library exports.
-	if exportIndex != nil {
-		for _, r := range searchUnloadedExports(exportIndex, libReg, lowerPattern) {
+	if exports != nil {
+		for _, r := range searchUnloadedExports(exports, libs, lowerPattern) {
 			if primNames[r.Name] || seen[r.Name] {
 				continue
 			}
@@ -241,14 +257,13 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 }
 
 // searchLibraries searches loaded libraries for matches.
-func searchLibraries(libReg *compilation.LibraryRegistry, lowerPattern string) []DocSearchResult {
+func searchLibraries(libs LibrarySearcher, lowerPattern string) []DocSearchResult {
 	var q []DocSearchResult
-	for _, lib := range libReg.All() {
-		name := lib.Name.SchemeString()
-		if strings.Contains(strings.ToLower(name), lowerPattern) ||
+	for _, lib := range libs.AllLibraries() {
+		if strings.Contains(strings.ToLower(lib.Name), lowerPattern) ||
 			strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
 			q = append(q, DocSearchResult{
-				Name:     name,
+				Name:     lib.Name,
 				Doc:      lib.Description,
 				Category: "library",
 			})
@@ -259,26 +274,36 @@ func searchLibraries(libReg *compilation.LibraryRegistry, lowerPattern string) [
 
 // searchUnloadedExports searches the export index for matching library names,
 // descriptions, and export names from libraries that are not yet loaded.
-// Libraries already present in libReg are skipped (they were imported after
+// Libraries already present in libs are skipped (they were imported after
 // the index was built).
-func searchUnloadedExports(idx *compilation.LibraryExportIndex, libReg *compilation.LibraryRegistry, lowerPattern string) []DocSearchResult {
-	if idx == nil {
+func searchUnloadedExports(exports LibraryExportSearcher, libs LibrarySearcher, lowerPattern string) []DocSearchResult {
+	if exports == nil {
 		return nil
 	}
+
+	// Libraries already loaded are excluded — match by canonical name.
+	// Name strings are an injective key (library name parts are identifiers
+	// with no embedded spaces), so string equality matches the structural
+	// LibraryName equality the old *LibraryRegistry.Lookup performed.
+	loaded := make(map[string]bool)
+	if libs != nil {
+		for _, lib := range libs.AllLibraries() {
+			loaded[lib.Name] = true
+		}
+	}
+
 	var q []DocSearchResult
-	for _, summary := range idx.Entries() {
-		if libReg != nil && libReg.Lookup(summary.Name) != nil {
+	for _, summary := range exports.AllLibraryExports() {
+		if loaded[summary.Name] {
 			continue
 		}
 
-		libName := summary.Name.SchemeString()
-
 		// Library-level match: check name and description, mirroring
 		// searchLibraries for loaded libraries.
-		if strings.Contains(strings.ToLower(libName), lowerPattern) ||
+		if strings.Contains(strings.ToLower(summary.Name), lowerPattern) ||
 			strings.Contains(strings.ToLower(summary.Description), lowerPattern) {
 			q = append(q, DocSearchResult{
-				Name:     libName,
+				Name:     summary.Name,
 				Doc:      summary.Description,
 				Category: "library (not imported)",
 			})
@@ -289,9 +314,9 @@ func searchUnloadedExports(idx *compilation.LibraryExportIndex, libReg *compilat
 			if !strings.Contains(strings.ToLower(export), lowerPattern) {
 				continue
 			}
-			doc := libName
+			doc := summary.Name
 			if summary.Description != "" {
-				doc = fmt.Sprintf("%s — %s", libName, summary.Description)
+				doc = fmt.Sprintf("%s — %s", summary.Name, summary.Description)
 			}
 			q = append(q, DocSearchResult{
 				Name:     export,

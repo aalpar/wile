@@ -4,9 +4,9 @@
 tech-lead verification pass)
 **Source**: `/structural-reduction ./registry` analysis (Tier A.3 of the
 roadmap — `plans/2026-05-07-structural-reduction-roadmap.md`)
-**Status**: **Phases 0-2 shipped** (commits `47b9b0c6`, `924ebe43`, and
-the head of `feat/registry-sr-phase2`). Phase 3 awaiting implementation.
-Phases 4-6 deferred per recommended phasing.
+**Status**: **Phases 0-3 shipped** (commits `47b9b0c6`, `924ebe43`,
+`62f053ad`, and the head of `feat/registry-sr-phase3`). Tier A.3 analysis
+side closed. Phases 4-6 deferred per recommended phasing.
 **Priority**: **Medium-High** (Tier 5 tech debt; the last Tier A target
 before moving to Tier B per the values-SR plan's closing summary).
 
@@ -20,8 +20,9 @@ before moving to Tier B per the values-SR plan's closing summary).
 |       |                       |                   | doc header casing)                          |
 | 1     | 2                     | ✅ Shipped         | commit `924ebe43` on `feat/registry-sr-     |
 |       |                       |                   | phase1`                                     |
-| 2     | 3 (Opportunity 2)     | ✅ Shipped         | `feat/registry-sr-phase2`                    |
-| 3     | 7 (Opportunity 4)     | ⏸ Queued          | —                                           |
+| 2     | 3 (Opportunity 2)     | ✅ Shipped         | commit `62f053ad` on `feat/registry-sr-     |
+|       |                       |                   | phase2`                                     |
+| 3     | 7 (Opportunity 4)     | ✅ Shipped         | `feat/registry-sr-phase3`                    |
 | 4     | 1 Step 2              | ⏸ Deferred         | gated on 7th-category trigger               |
 | 5     | 6 (ArgShape)          | ⏸ Deferred         | gated on extension-contracts Phase 2+       |
 | 6     | 8, 9 unification      | ⏸ Deferred         | gated on iter.Seq2 refactor / 7th variant   |
@@ -1274,6 +1275,40 @@ Deferred:
   / `(doc)`). Both are human-interactive cadence — interface
   indirection at this call site is invisible to users.
 - Estimated: ~80 LOC delta (new types + adapter), 1 PR.
+
+**Phase 3 implementation outcome (shipped on
+`feat/registry-sr-phase3`)**:
+- `registry/search.go` no longer imports `machine/compilation`. New
+  registry-side types: `LibraryDoc`, `LibraryExportDoc` (plain DTOs),
+  `LibrarySearcher`, `LibraryExportSearcher` (one-method interfaces:
+  `AllLibraries()` / `AllLibraryExports()`).
+- `SearchDoc` now accepts `LibrarySearcher` / `LibraryExportSearcher`.
+  `ExtractLibraryRegistry` deleted.
+- Plan-accuracy correction: the plan claimed "`compilation.LibraryRegistry`
+  already satisfies `LibrarySearcher`." It cannot. If the interface
+  methods return registry-defined DTOs, `compilation` would have to
+  import `registry` to satisfy the interface — a dependency cycle
+  (`registry → compilation` already exists). The adapter is therefore
+  mandatory and lives in `registry/core` (a package that imports both):
+  `libraryRegistrySearcher` and `libraryExportIndexSearcher` in
+  `prim_reflection.go`, with their own 100%-covered internal test.
+- DTOs deal in `string` library names, not a re-created `LibraryName`
+  type — `SearchDoc` only ever needs `LibraryName.SchemeString()`.
+- Behavior-mechanism change in `searchUnloadedExports`: the
+  "skip already-loaded library" check moved from per-entry
+  `*LibraryRegistry.Lookup` to a name-set built from
+  `LibrarySearcher.AllLibraries()`. Equivalent — the canonical
+  Scheme-form string is an injective key for library names. Covered
+  by a new test (`TestSearchDoc_UnloadedSkipsLoadedLibrary`).
+- Testability win realized: `registry/search_test.go` no longer imports
+  `machine/compilation`; library/export cases use in-memory stub
+  searchers.
+- Actual delta: +311 / −81 across `registry/search.go` (+63/−38),
+  `registry/search_test.go` (+83/−42), `registry/core/prim_reflection.go`
+  (+55/−1), and `registry/core/prim_reflection_internal_test.go`
+  (+110, new). The plan's "~80 LOC delta" estimate did not account for
+  the adapter test file or the stub-searcher rewrite of the existing
+  search tests.
 
 **Phase 4 — `registrationCategory[T]` (Finding 1 Step 2; optional)**:
 - Only if the 7th category arrives, or if the win is otherwise
