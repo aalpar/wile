@@ -44,27 +44,68 @@ type Closeable interface {
 	Close() error
 }
 
-// ExtensionFunc adapts a function to the Extension interface.
+// ExtensionFunc adapts a function to the Extension interface and
+// carries the three optional capabilities as slots. The slots are
+// populated via the ExtensionOption functions passed to NewExtension.
+//
+// *ExtensionFunc unconditionally satisfies LibraryNamer, Describer,
+// and Closeable. Unset slots are reported as the zero value (empty
+// string, nil slice, nil error). Engine code interprets emptiness
+// uniformly as "not set" and falls back to defaults — there is no
+// behavioral distinction between "did not opt in" and "opted in with
+// the zero value."
 type ExtensionFunc struct {
-	name        string
-	description string
-	fn          func(*Registry) error
+	name          string
+	addToRegistry func(*Registry) error
+	description   string
+	libraryName   []string
+	closeFn       func() error
 }
 
-// NewExtension creates an Extension from a name and function.
-func NewExtension(name string, fn func(*Registry) error) Extension {
-	return NewDescribedExtension(name, "", fn)
+// ExtensionOption configures an ExtensionFunc at construction time.
+type ExtensionOption func(*ExtensionFunc)
+
+// WithDescription attaches a human-readable description, surfaced by
+// ,doc (wile <ext>) and ,libraries in the REPL.
+func WithDescription(s string) ExtensionOption {
+	return func(p *ExtensionFunc) {
+		p.description = s
+	}
 }
 
-// NewDescribedExtension creates an Extension with a human-readable description.
-// The description is surfaced by ,doc and ,libraries in the REPL.
-func NewDescribedExtension(name, description string, fn func(*Registry) error) Extension {
+// WithLibraryName overrides the default R7RS library name. The default,
+// applied when this option is not used, is (wile <ext.Name()>).
+func WithLibraryName(parts ...string) ExtensionOption {
+	return func(p *ExtensionFunc) {
+		p.libraryName = parts
+	}
+}
+
+// WithClose attaches a cleanup hook called by Engine.Close().
+func WithClose(fn func() error) ExtensionOption {
+	return func(p *ExtensionFunc) {
+		p.closeFn = fn
+	}
+}
+
+// NewExtension creates an Extension from a name, a registration function,
+// and zero or more capability options.
+func NewExtension(name string, fn func(*Registry) error, opts ...ExtensionOption) Extension {
 	q := &ExtensionFunc{
-		name:        name,
-		description: description,
-		fn:          fn,
+		name:          name,
+		addToRegistry: fn,
+	}
+	for _, opt := range opts {
+		opt(q)
 	}
 	return q
+}
+
+// NewDescribedExtension creates an Extension with a human-readable
+// description. Retained as a thin forwarder for backward compatibility;
+// new code should use NewExtension(..., WithDescription(desc)) directly.
+func NewDescribedExtension(name, description string, fn func(*Registry) error) Extension {
+	return NewExtension(name, fn, WithDescription(description))
 }
 
 // Name returns the extension name.
@@ -72,12 +113,27 @@ func (p *ExtensionFunc) Name() string {
 	return p.name
 }
 
-// Description returns the extension's human-readable description.
+// Description returns the extension's description, or "" if unset.
 func (p *ExtensionFunc) Description() string {
 	return p.description
 }
 
+// LibraryName returns the configured R7RS library name parts, or nil
+// if unset. A nil/empty return signals "use the default (wile <name>)"
+// to the engine.
+func (p *ExtensionFunc) LibraryName() []string {
+	return p.libraryName
+}
+
+// Close runs the configured close hook, or returns nil if no hook was set.
+func (p *ExtensionFunc) Close() error {
+	if p.closeFn == nil {
+		return nil
+	}
+	return p.closeFn()
+}
+
 // AddToRegistry registers primitives with the registry.
 func (p *ExtensionFunc) AddToRegistry(r *Registry) error {
-	return p.fn(r)
+	return p.addToRegistry(r)
 }

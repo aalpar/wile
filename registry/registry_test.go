@@ -728,3 +728,106 @@ func TestExtension(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(r.PrimitiveCount(), qt.Equals, 1)
 }
+
+func TestExtensionOptions(t *testing.T) {
+	noop := func(*Registry) error {
+		return nil
+	}
+
+	tcs := []struct {
+		name           string
+		opts           []ExtensionOption
+		wantDesc       string
+		wantLibName    []string
+		wantHasCloseFn bool
+	}{
+		{
+			name: "no options",
+		},
+		{
+			name:     "with description",
+			opts:     []ExtensionOption{WithDescription("a description")},
+			wantDesc: "a description",
+		},
+		{
+			name:        "with library name",
+			opts:        []ExtensionOption{WithLibraryName("scheme", "base")},
+			wantLibName: []string{"scheme", "base"},
+		},
+		{
+			name: "with close",
+			opts: []ExtensionOption{WithClose(func() error {
+				return nil
+			})},
+			wantHasCloseFn: true,
+		},
+		{
+			name: "all options",
+			opts: []ExtensionOption{
+				WithDescription("everything"),
+				WithLibraryName("my", "ext"),
+				WithClose(func() error {
+					return nil
+				}),
+			},
+			wantDesc:       "everything",
+			wantLibName:    []string{"my", "ext"},
+			wantHasCloseFn: true,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			ext := NewExtension("t", noop, tc.opts...)
+			c.Assert(ext.Name(), qt.Equals, "t")
+
+			describer, ok := ext.(Describer)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(describer.Description(), qt.Equals, tc.wantDesc)
+
+			namer, ok := ext.(LibraryNamer)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(namer.LibraryName(), qt.DeepEquals, tc.wantLibName)
+
+			closer, ok := ext.(Closeable)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(closer.Close(), qt.IsNil)
+
+			ef, ok := ext.(*ExtensionFunc)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(ef.closeFn != nil, qt.Equals, tc.wantHasCloseFn)
+		})
+	}
+}
+
+func TestExtensionWithCloseInvokesFn(t *testing.T) {
+	c := qt.New(t)
+
+	var called int
+	ext := NewExtension("t", func(*Registry) error {
+		return nil
+	}, WithClose(func() error {
+		called++
+		return nil
+	}))
+
+	closer, ok := ext.(Closeable)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(closer.Close(), qt.IsNil)
+	c.Assert(called, qt.Equals, 1)
+	c.Assert(closer.Close(), qt.IsNil)
+	c.Assert(called, qt.Equals, 2)
+}
+
+func TestNewDescribedExtensionForwardsToOptions(t *testing.T) {
+	c := qt.New(t)
+
+	ext := NewDescribedExtension("t", "desc", func(*Registry) error {
+		return nil
+	})
+
+	c.Assert(ext.(Describer).Description(), qt.Equals, "desc")
+	c.Assert(ext.(LibraryNamer).LibraryName(), qt.IsNil)
+}

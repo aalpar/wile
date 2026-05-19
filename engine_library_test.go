@@ -171,6 +171,27 @@ func TestExtensionAsLibrary_CustomLibraryName(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
+// TestExtensionAsLibrary_EmptyLibraryNameFallsBack verifies the Phase-2
+// semantic: a LibraryNamer that returns an empty slice falls back to the
+// (wile <name>) default rather than erroring. This applies uniformly to
+// both *ExtensionFunc with an unset WithLibraryName slot and to custom
+// types that happen to return [].
+func TestExtensionAsLibrary_EmptyLibraryNameFallsBack(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	ext := &mockLibraryNamerExtension{libName: nil}
+
+	engine, err := NewEngine(ctx,
+		WithExtension(ext),
+		WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (wile custom))`)
+	c.Assert(err, qt.IsNil)
+}
+
 func TestExtensionAsLibrary_NotEnabled(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()

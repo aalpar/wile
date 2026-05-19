@@ -4,8 +4,8 @@
 tech-lead verification pass)
 **Source**: `/structural-reduction ./registry` analysis (Tier A.3 of the
 roadmap — `plans/2026-05-07-structural-reduction-roadmap.md`)
-**Status**: **Phase 0 shipped** (commit `47b9b0c6` on
-`feat/registry-sr-phase0`). Phases 1-3 awaiting implementation.
+**Status**: **Phases 0-2 shipped** (commits `47b9b0c6`, `924ebe43`, and
+the head of `feat/registry-sr-phase2`). Phase 3 awaiting implementation.
 Phases 4-6 deferred per recommended phasing.
 **Priority**: **Medium-High** (Tier 5 tech debt; the last Tier A target
 before moving to Tier B per the values-SR plan's closing summary).
@@ -18,8 +18,9 @@ before moving to Tier B per the values-SR plan's closing summary).
 |       |                       |                   | internalize on deepCopy, ADDING-A-NEW-      |
 |       |                       |                   | CATEGORY guide, test contract coverage,     |
 |       |                       |                   | doc header casing)                          |
-| 1     | 2                     | 🔧 Next (this PR) | `feat/registry-sr-phase1`                    |
-| 2     | 3 (Opportunity 2)     | ⏸ Queued          | —                                           |
+| 1     | 2                     | ✅ Shipped         | commit `924ebe43` on `feat/registry-sr-     |
+|       |                       |                   | phase1`                                     |
+| 2     | 3 (Opportunity 2)     | ✅ Shipped         | `feat/registry-sr-phase2`                    |
 | 3     | 7 (Opportunity 4)     | ⏸ Queued          | —                                           |
 | 4     | 1 Step 2              | ⏸ Deferred         | gated on 7th-category trigger               |
 | 5     | 6 (ArgShape)          | ⏸ Deferred         | gated on extension-contracts Phase 2+       |
@@ -1232,6 +1233,32 @@ Deferred:
   worked examples.
 - Estimated: ~60 LOC added (new options), ~30 LOC removed
   (engine.go simplification + migrated extensions). 1 PR.
+
+**Phase 2 implementation outcome (shipped on
+`feat/registry-sr-phase2`)**:
+- Pre-impl-audit finding: the plan's claim "the only Closeable today"
+  was stale. No production extension implements `Closeable`; only
+  `plans/2026-05-14-stderr-flush-on-exit.md` (design-locked, not yet
+  implemented) would introduce one. The slot is still useful
+  prospectively — the stderr-flush plan can use `WithClose` instead
+  of needing a custom struct.
+- No production `LibraryNamer` implementor exists either (only the
+  `mockLibraryNamerExtension` in `engine_library_test.go`). The
+  `WithLibraryName` option earns its keep via the same prospective
+  argument.
+- Worked-example migrations were therefore *not* applied — there
+  were no consumers to migrate. `NewDescribedExtension` remains the
+  call site for all ~14 extensions; it now forwards through the
+  options API.
+- Semantic relaxation in `engine.go`: previously a custom Extension
+  implementing `LibraryNamer` but returning an empty slice produced
+  an "invalid library name" error; now it falls back to the
+  `(wile <name>)` default. This unifies the "did not implement" and
+  "implemented but returned the zero value" paths — consistent with
+  the slot mental model. No tests asserted the prior defensive-error
+  behavior.
+- Actual delta: +123 / −31 across `registry/extension.go`,
+  `registry/registry_test.go`, `engine.go`.
 
 **Phase 3 — LibrarySearcher interface (Finding 7 / Opportunity 4)**:
 - Define `LibrarySearcher`, `LibraryExportSearcher`,

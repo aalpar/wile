@@ -76,12 +76,18 @@ type Engine struct {
 
 // extSnapshot tracks the primitive index range for an extension so it can be
 // registered as a synthetic R7RS library after environment setup.
+//
+// namer and describer are populated whenever the extension implements the
+// optional interface; *ExtensionFunc always does. Empty results (nil/empty
+// library-name slice, empty description string) are interpreted uniformly
+// as "not set" by registerExtensionLibraries — there is no distinction
+// between "did not implement" and "implemented but returned the zero value."
 type extSnapshot struct {
 	name       string
 	startIndex int
 	endIndex   int
-	namer      registry.LibraryNamer // nil if not implemented
-	describer  registry.Describer    // nil if not implemented
+	namer      registry.LibraryNamer
+	describer  registry.Describer
 }
 
 // NewNamespace creates a fully initialized namespace with a registry,
@@ -284,16 +290,8 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 		}
 		endIdx := reg.PrimitiveCount()
 
-		var namer registry.LibraryNamer
-		n, ok := ext.(registry.LibraryNamer)
-		if ok {
-			namer = n
-		}
-		var describer registry.Describer
-		d, ok := ext.(registry.Describer)
-		if ok {
-			describer = d
-		}
+		namer, _ := ext.(registry.LibraryNamer)
+		describer, _ := ext.(registry.Describer)
 		snapshots = append(snapshots, extSnapshot{
 			name:       ext.Name(),
 			startIndex: startIdx,
@@ -301,10 +299,9 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 			namer:      namer,
 			describer:  describer,
 		})
-
-		c, ok := ext.(registry.Closeable)
+		closer, ok := ext.(registry.Closeable)
 		if ok {
-			closers = append(closers, c)
+			closers = append(closers, closer)
 		}
 	}
 
@@ -636,14 +633,9 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 		var parts []string
 		if snap.namer != nil {
 			parts = snap.namer.LibraryName()
-		} else {
-			parts = []string{"wile", snap.name}
 		}
 		if len(parts) == 0 {
-			return werr.WrapForeignErrorf(
-				werr.ErrEngineInit,
-				"invalid library name for extension %q: no name parts", snap.name,
-			)
+			parts = []string{"wile", snap.name}
 		}
 		if slices.Contains(parts, "") {
 			return werr.WrapForeignErrorf(
