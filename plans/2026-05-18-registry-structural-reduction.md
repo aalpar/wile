@@ -1,17 +1,44 @@
 # `registry/` package structural reduction
 
-**Date**: 2026-05-18
+**Date**: 2026-05-18 (analysis); revised 2026-05-19 (Phase 0 closeout +
+tech-lead verification pass)
 **Source**: `/structural-reduction ./registry` analysis (Tier A.3 of the
 roadmap — `plans/2026-05-07-structural-reduction-roadmap.md`)
-**Status**: Planning — analysis only. No implementation yet.
+**Status**: **Phase 0 shipped** (commit `47b9b0c6` on
+`feat/registry-sr-phase0`). Phases 1-3 awaiting implementation.
+Phases 4-6 deferred per recommended phasing.
 **Priority**: **Medium-High** (Tier 5 tech debt; the last Tier A target
 before moving to Tier B per the values-SR plan's closing summary).
+
+## Phase status (2026-05-19)
+
+| Phase | Findings              | Status            | Where                                       |
+|-------|-----------------------|-------------------|---------------------------------------------|
+| 0     | 4 + 5 + 1-Step1 + 9   | ✅ Shipped         | commit `47b9b0c6` (also ride-along: lock-   |
+|       |                       |                   | internalize on deepCopy, ADDING-A-NEW-      |
+|       |                       |                   | CATEGORY guide, test contract coverage,     |
+|       |                       |                   | doc header casing)                          |
+| 1     | 2                     | 🔧 Next (this PR) | `feat/registry-sr-phase1`                    |
+| 2     | 3 (Opportunity 2)     | ⏸ Queued          | —                                           |
+| 3     | 7 (Opportunity 4)     | ⏸ Queued          | —                                           |
+| 4     | 1 Step 2              | ⏸ Deferred         | gated on 7th-category trigger               |
+| 5     | 6 (ArgShape)          | ⏸ Deferred         | gated on extension-contracts Phase 2+       |
+| 6     | 8, 9 unification      | ⏸ Deferred         | gated on iter.Seq2 refactor / 7th variant   |
+
+The body of this document still describes findings in their
+*pre-Phase-0* form for historical fidelity. Phase 0 findings are
+annotated **✅ SHIPPED** inline; their line-number citations
+(`registry.go:328-347` etc.) reflect the pre-Phase-0 file layout. The
+post-Phase-0 layout differs: `Clone` is now ~3 lines, `deepCopy` is
+the shared helper around line 343 of the current `registry.go`,
+filter methods are 5-line uses of `slices.DeleteFunc`.
 
 ## Why this scope
 
 `registry/` is the contract surface for every primitive in Wile —
 ~397 entries (per `TODO.md`'s status header) across `registry/core/`
-(158 files) and 12 extensions. Twenty packages import it. The roadmap
+(49 prod files; 126 test files in the same directory) and 12
+extensions. Twenty packages import it. The roadmap
 (`2026-05-07-…`) ranks it
 A.3 because, unlike `values/` (most-depended-on) and `environment/`
 (binding-resolution algebra), `registry/` carries the *API shape of
@@ -29,22 +56,28 @@ and adds seven more findings the cross-package plan did not predict.
 ## Scope analyzed
 
 ```
-Package layout (production files only):
-  registry/             8 files,  ~1700 LOC  (registry, apply, phase,
-                                              search, contract,
-                                              extension, builder, doc)
-  registry/helpers/    12 files,  ~3500 LOC  (args, char, equality,
-                                              integer, list, numeric,
-                                              sequence, string, type,
-                                              value_conv, variadic,
-                                              doc)
-  registry/testhelpers/ 4 files,   ~800 LOC  (helpers, pipeline_helpers,
-                                              env_helpers, doc)
-  registry/core/      158 files, ~45000 LOC  (registration + impl;
-                                              consumed by exactly two
-                                              packages — engine.go and
-                                              internal/bootstrap)
+Package layout (production files only; test files excluded):
+  registry/             8 prod files,  ~1460 LOC  (registry, apply, phase,
+                                                   search, contract,
+                                                   extension, builder, doc)
+  registry/helpers/    12 prod files,  ~1820 LOC  (args, char, equality,
+                                                   integer, list, numeric,
+                                                   sequence, string, type,
+                                                   value_conv, variadic,
+                                                   doc)
+  registry/testhelpers/ 4 prod files,   ~481 LOC  (helpers, pipeline_helpers,
+                                                   env_helpers, doc)
+  registry/core/       49 prod files,  ~6952 LOC  (registration + impl;
+                                                   consumed by exactly two
+                                                   packages — wile root
+                                                   and internal/bootstrap)
 ```
+
+(An earlier draft of this plan reported `158 files / ~45000 LOC` for
+`registry/core/`; that figure conflated production with the 126
+co-located test files. The corrected prod-only counts above do not
+change any structural conclusion — the findings are driven by
+*method/type* counts, not by file/LOC volume.)
 
 The `registry/core/` mass is by design — it's the catalog of primitives,
 not the abstraction. The structural findings target the three smaller
@@ -83,7 +116,7 @@ extension consume.
                                 ▼                       ▼
    ┌────────────────────────────────────────────────────────────────┐
    │                          registry                                │
-   │   Ca=20   Ce=6   I = 6/26 ≈ 0.23   (8 files, ~1700 LOC)          │
+   │   Ca=20   Ce=6   I = 6/26 ≈ 0.23   (8 files, ~1460 LOC)          │
    │                                                                   │
    │     Types:                          Submodules:                   │
    │       Registry          (state)       registry/helpers   (Ca=14)  │
@@ -125,6 +158,13 @@ not asserted.
 ## Findings
 
 ### Finding 1 — `Registry` holds 6 parallel slices with hand-unrolled lifecycle
+
+> **Status**: Step 1 (`deepCopy()` extraction) ✅ shipped in commit
+> `47b9b0c6` (Phase 0). The 6-slice copy block now lives in one helper
+> shared by `Clone`, `filterPrimitives`, `WithoutBindings`, and the
+> lock has been internalized so callers don't carry the precondition.
+> Step 2 (generic `registrationCategory[T]`) deferred — see
+> Recommended Phasing → Phase 4. Pre-Phase-0 line numbers below.
 
 **Principle**: Composability (hand-unrolled loops over data)
 **Where**: `registry/registry.go:73-94` (struct + ctor),
@@ -262,10 +302,10 @@ identical. The cast exists because `ApplyDocs` walks "all things that
 carry a doc string indexed by name" — and the two categories *are* the
 same shape, distinguished only by which slice they live in.
 
-**Problem**: Four entry points, two structurally identical types, one
-direct cast in the merge code. Every doc-handling site has to walk
-multiple sources and check provenance. The redundancy is the parallel
-data, not the operations:
+**Problem**: Four registration entry points, two structurally
+identical types, one direct cast in the merge code. Every
+doc-handling site has to walk multiple sources and check provenance.
+The redundancy is the parallel data, not the operations:
 
   - `SearchDoc` walks primitives + binding specs + doc entries + env
     + libraries + unloaded exports (6 sources)
@@ -273,8 +313,15 @@ data, not the operations:
     `[]DocSearchResult` (2 sources for the same conceptual category)
   - `ApplyDocs` walks doc entries + binding specs (2 sources, then
     merges via cast)
-  - `AddDocOnlyPrimitive` creates a 5th data path (a primitive with
-    PhaseSet=0) for documentation-only entries
+
+Note: `AddDocOnlyPrimitive` does **not** create a new data slice —
+it appends to the existing `primitives` slice with `PhaseSet=0`,
+so the Apply path silently ignores it for binding installation
+(`apply.go:69-76` and `:81-98` both gate on phase bits being set).
+That is, the four mechanisms above all carry doc strings; they share
+three underlying slice categories (`primitives`, `bindingSpecs`,
+`docs`). The redundancy is in the *registration API*, not in the
+storage shape.
 
 **Proposed direction**: Collapse to a canonical representation.
 
@@ -415,6 +462,11 @@ not VM performance.
 
 ### Finding 4 — Telescoping `Add*` constructors
 
+> **Status**: ✅ Shipped in commit `47b9b0c6` (Phase 0). `AddPrimitive`,
+> `AddBinding`, `AddBindings` are now 1-line forwarders to
+> `AddPrimitives` / `AddBindingSpecs`. Validation + mutex live in one
+> site per category.
+
 **Principle**: Composability (functions doing too few things; thin
 wrappers)
 **Where**: `registry/registry.go:97-166`:
@@ -482,6 +534,10 @@ collapse, applied to a different package.
 ---
 
 ### Finding 5 — `Clone`, `filterPrimitives`, `WithoutBindings` repeat the 6-slice copy block
+
+> **Status**: ✅ Shipped in commit `47b9b0c6` (Phase 0), as part of
+> Finding 1 Step 1. The per-callsite 6-slice copy is now factored
+> into the shared `deepCopy()` helper.
 
 > **Relationship to Finding 1**: Finding 5 is the *call-site evidence*
 > for Finding 1's Step 1 (extract `deepCopy()`). The fix is one PR
@@ -611,9 +667,18 @@ func PrimSpec(name string, fixed int, variadic bool,
 ```
 
 **Cost**: Breaking change to `PrimitiveSpec` literals — touches every
-primitive registration site (~400 across `registry/core` and
-extensions). High blast radius but mechanical (the literals are
-already mostly named-field style; conversion is search-and-replace).
+primitive registration site. **Precise site count uncertain**: a grep
+for the `PrimitiveSpec{` literal opening finds **71 occurrences**
+across `registry/core/` + `extensions/` + `internal/extensions/`;
+TODO.md reports **397 registered primitives** total. The true edit
+count lies between these two figures (many primitives are constructed
+in bulk slice-of-specs blocks where one literal opens a slice of N
+specs). A precise count must be produced before Phase 5 is scheduled —
+the cost estimate determines whether to bundle with extension-contracts
+Phase 2 (worth it if the figures are close) or schedule independently
+(better if the count is significantly higher than 71). Conversion is
+mechanical regardless: the literals are already mostly named-field
+style; the change is search-and-replace.
 
 **Recommended timing**: **Defer.** Two reasons:
 
@@ -770,6 +835,13 @@ elsewhere.
 ---
 
 ### Finding 9 — Numeric helper family has 6 fold variants
+
+> **Status**: Documentation half ✅ shipped in commit `47b9b0c6`
+> (Phase 0). A `# Fold-Shape Family` section now lives in
+> `registry/helpers/doc.go` naming the six variants and the
+> protocol × accumulator × side-channel axes. Code consolidation
+> remains a **no-op** until a 7th protocol-fundamentally-different
+> variant motivates it — see "Revisit trigger sharpening" below.
 
 **Principle**: Composability (parametric family that could share a skeleton)
 **Where**: `registry/helpers/numeric.go` (NumericFoldVariadic,
@@ -1122,15 +1194,22 @@ Deferred:
 
 ## Recommended phasing
 
-**Phase 0 — Quick wins (single PR)**:
-- Finding 4: Telescoping `Add*` ctor collapse (singular forwarders).
+**Phase 0 — Quick wins (single PR)** ✅ **SHIPPED in commit `47b9b0c6`**:
+- Finding 4: Telescoping `Add*` ctor collapse (singular forwarders). ✓
 - Finding 5 / Finding 1 Step 1: Extract `deepCopy()`; rewrite
-  `Clone`, `filterPrimitives`, `WithoutBindings` in terms of it.
+  `Clone`, `filterPrimitives`, `WithoutBindings` in terms of it. ✓
 - Finding 9 (documentation half): Add family-relationship paragraph
-  to `registry/helpers/doc.go` (or numeric.go top comment).
-- Estimated: ~60 LOC delta (Finding 4: ~30 LOC removed; Finding 5
-  / Finding 1 Step 1: ~30 LOC removed; Finding 9 doc: ~0 LOC code).
-  1 PR.
+  to `registry/helpers/doc.go`. ✓
+- Ride-along (added post-crosscheck):
+  - Internalize `p.mu.RLock` inside `deepCopy()` (4-lens crosscheck
+    convergence) ✓
+  - `ADDING A NEW REGISTRY CATEGORY` guide comment above the Registry
+    struct (matches 6 in-tree precedents) ✓
+  - Extend `TestRegistry_Without{,Category,Bindings}` to cover the
+    docstring contract for the 4 non-filtered fields ✓
+  - `# Fold-Shape Family` header casing ✓
+- Actual delta: +96 / −66 (+VERSION auto-bump).
+- 1 commit on `feat/registry-sr-phase0`.
 
 **Phase 1 — Doc unification (Finding 2)**:
 - Design pass first — decide Path A (alias) vs Path B (`DocOnly`

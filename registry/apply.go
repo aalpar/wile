@@ -55,8 +55,14 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// Register compile-time bindings first
+	// Register compile-time bindings first. DocOnly entries carry doc
+	// strings but install no binding — they're emitted to bindingSpecs
+	// by AddDocumentation / AddDocOnlyPrimitive and consumed only by
+	// ApplyDocs / SearchDoc.
 	for _, spec := range p.bindingSpecs {
+		if spec.DocOnly {
+			continue
+		}
 		err := registerCompileTimeBinding(env, spec)
 		if err != nil {
 			return err
@@ -170,6 +176,11 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 // matching binding. This is necessary because some names (e.g., special forms) have
 // bindings in multiple phases (expand and compile), and the REPL's ,doc command may
 // find any of them.
+//
+// Post-Phase-1: single walk over bindingSpecs (both real bindings with non-empty
+// Doc and DocOnly entries land here). The earlier two-source merge — `docs` slice
+// + bindingSpecs casted via DocEntry(spec) — collapsed when DocEntry was unified
+// into BindingSpec.
 func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -180,17 +191,11 @@ func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 	}
 	phases := topLevel.Phases()
 
-	// Merge both doc sources: explicit DocEntry entries and BindingSpec.Doc fields.
-	allDocs := make([]DocEntry, 0, len(p.docs)+len(p.bindingSpecs))
-	allDocs = append(allDocs, p.docs...)
 	for _, spec := range p.bindingSpecs {
-		if spec.Doc != "" {
-			allDocs = append(allDocs, DocEntry(spec))
+		if spec.Doc == "" {
+			continue
 		}
-	}
-
-	for _, doc := range allDocs {
-		sym := values.NewSymbol(doc.Name)
+		sym := values.NewSymbol(spec.Name)
 		for _, phase := range phases.Phases() {
 			phaseEnv := phases.Get(phase)
 			if phaseEnv == nil {
@@ -198,7 +203,7 @@ func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 			}
 			bnd := phaseEnv.GetBinding(sym, nil)
 			if bnd != nil {
-				bnd.EnsureMeta().Doc = doc.Doc
+				bnd.EnsureMeta().Doc = spec.Doc
 			}
 		}
 	}

@@ -18,12 +18,23 @@ import (
 	"github.com/aalpar/wile/registry"
 )
 
+// nameDoc is a local helper type for the unkeyed `{"name", "doc"}` literal
+// style used in this file's documentation tables. The post-Phase-1
+// registry.BindingSpec has a third field (DocOnly), and converting ~50
+// literals to keyed-field form would be noisy. addSpecialForms below
+// promotes each nameDoc to a registry.BindingSpec at registration time
+// (DocOnly defaults: false for compileTimeBindingSpecs, true for macroDocs).
+type nameDoc struct {
+	Name string
+	Doc  string
+}
+
 // compileTimeBindingSpecs are names that exist only at compile time.
 // The expander recognizes these as primitive forms and dispatches to
 // registered primitive expanders rather than treating them as applications.
 //
 //nolint:govet
-var compileTimeBindingSpecs = []registry.BindingSpec{
+var compileTimeBindingSpecs = []nameDoc{
 	{"if",
 		"Conditional expression. Evaluates TEST; if it yields a true value,\n" +
 			"CONSEQUENT is evaluated and its value returned. Otherwise ALTERNATE\n" +
@@ -321,7 +332,7 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 // is registered here so it's accessible via the REPL's ,doc command.
 //
 //nolint:govet
-var macroDocs = []registry.DocEntry{
+var macroDocs = []nameDoc{
 	{"and",
 		"Short-circuit conjunction. Evaluates tests left-to-right;\n" +
 			"returns #f as soon as one yields false, otherwise returns\n" +
@@ -445,7 +456,11 @@ var macroDocs = []registry.DocEntry{
 }
 
 func addSpecialForms(r *registry.Registry) error {
-	r.AddBindingSpecs(compileTimeBindingSpecs)
+	specs := make([]registry.BindingSpec, len(compileTimeBindingSpecs))
+	for i, b := range compileTimeBindingSpecs {
+		specs[i] = registry.BindingSpec{Name: b.Name, Doc: b.Doc}
+	}
+	r.AddBindingSpecs(specs)
 	for _, doc := range macroDocs {
 		r.AddDocumentation(doc.Name, doc.Doc)
 	}

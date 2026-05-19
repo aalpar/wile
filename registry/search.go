@@ -49,12 +49,14 @@ type DocSearchResult struct {
 // substring matches on name, doc text, category, or keywords.
 //
 // Sources searched in order:
-//  1. Registry primitives
-//  2. Registry binding specs (parsed via docparse)
-//  3. Registry doc entries (parsed via docparse)
-//  4. Environment bindings (if env is non-nil)
-//  5. Loaded libraries (if libReg is non-nil)
-//  6. Unloaded library exports (if exportIndex is non-nil)
+//  1. Registry primitives — real primitives AND doc-only primitives
+//     (the latter carry full PrimitiveSpec metadata; both take precedence
+//     over non-primitive sources below).
+//  2. Registry binding specs — includes real bindings AND simple DocOnly
+//     entries registered via AddDocumentation (post-Phase-1 unification).
+//  3. Environment bindings (if env is non-nil)
+//  4. Loaded libraries (if libReg is non-nil)
+//  5. Unloaded library exports (if exportIndex is non-nil)
 //
 // Primitives take precedence over non-primitives with the same name.
 // Results are sorted by name. env, libReg, and exportIndex may be nil.
@@ -62,9 +64,11 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 	lowerPattern := strings.ToLower(pattern)
 	var q []DocSearchResult
 
-	// 1. Registry primitives — always take precedence.
+	// 1. Registry primitives — always take precedence. Walks both real
+	// primitives and doc-only primitives; AddDocOnlyPrimitive's
+	// skip-if-primitive-exists guarantees no duplicate name across the two.
 	prims := reg.Primitives()
-	primNames := make(map[string]bool, len(prims))
+	primNames := make(map[string]bool, len(prims)+8)
 	for _, pr := range prims {
 		primNames[pr.Spec.Name] = true
 		if matchesDoc(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, pr.Spec.Keywords, lowerPattern) {
@@ -76,8 +80,19 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 			})
 		}
 	}
+	for _, dp := range reg.DocPrimitives() {
+		primNames[dp.Name] = true
+		if matchesDoc(dp.Name, dp.Doc, dp.Category, dp.Keywords, lowerPattern) {
+			q = append(q, DocSearchResult{
+				Name:     dp.Name,
+				Doc:      dp.Doc,
+				Category: dp.Category,
+				Keywords: dp.Keywords,
+			})
+		}
+	}
 
-	// 2-3. Binding specs and doc entries (non-primitive docs).
+	// 2. Binding specs (non-primitive docs; includes DocOnly entries).
 	seen := make(map[string]bool)
 	for _, r := range NonPrimitiveDocs(reg) {
 		if primNames[r.Name] || seen[r.Name] {
@@ -89,7 +104,7 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 		}
 	}
 
-	// 4. Environment bindings.
+	// 3. Environment bindings.
 	if env != nil {
 		for _, r := range searchEnvironmentBindings(env, lowerPattern) {
 			if primNames[r.Name] || seen[r.Name] {
@@ -100,7 +115,7 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 		}
 	}
 
-	// 5. Loaded libraries.
+	// 4. Loaded libraries.
 	if libReg != nil {
 		for _, r := range searchLibraries(libReg, lowerPattern) {
 			if seen[r.Name] {
@@ -111,7 +126,7 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 		}
 	}
 
-	// 6. Unloaded library exports.
+	// 5. Unloaded library exports.
 	if exportIndex != nil {
 		for _, r := range searchUnloadedExports(exportIndex, libReg, lowerPattern) {
 			if primNames[r.Name] || seen[r.Name] {
@@ -128,8 +143,13 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 	return q
 }
 
-// NonPrimitiveDocs returns doc search results from binding specs and doc entries.
+// NonPrimitiveDocs returns doc search results from binding specs (including
+// DocOnly entries registered via AddDocumentation / AddDocOnlyPrimitive).
 // Each entry's Doc, Category, and Keywords are extracted via docparse.ParseDocstring.
+//
+// Post-Phase-1: single walk. Pre-Phase-1 this walked BindingSpecs + Docs
+// as two separate sources; they were unified into bindingSpecs (with DocOnly
+// distinguishing them).
 func NonPrimitiveDocs(reg *Registry) []DocSearchResult {
 	var q []DocSearchResult
 	for _, bs := range reg.BindingSpecs() {
@@ -139,15 +159,6 @@ func NonPrimitiveDocs(reg *Registry) []DocSearchResult {
 		parsed := docparse.ParseDocstring(bs.Doc)
 		q = append(q, DocSearchResult{
 			Name:     bs.Name,
-			Doc:      parsed.Doc,
-			Category: parsed.Category,
-			Keywords: parsed.Keywords,
-		})
-	}
-	for _, de := range reg.Docs() {
-		parsed := docparse.ParseDocstring(de.Doc)
-		q = append(q, DocSearchResult{
-			Name:     de.Name,
 			Doc:      parsed.Doc,
 			Category: parsed.Category,
 			Keywords: parsed.Keywords,

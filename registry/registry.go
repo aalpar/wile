@@ -59,15 +59,16 @@ type GlobalValue struct {
 }
 
 // BindingSpec defines a compile-time binding with optional documentation.
+//
+// DocOnly entries carry doc text but do not install an environment binding —
+// Apply skips them. They are appended via AddDocumentation or
+// AddDocOnlyPrimitive and are the post-Phase-1 unification of what used to
+// be a separate `docs []DocEntry` slice (collapsed per Finding 2 of
+// plans/2026-05-18-registry-structural-reduction.md).
 type BindingSpec struct {
-	Name string
-	Doc  string
-}
-
-// DocEntry associates a documentation string with a named binding.
-type DocEntry struct {
-	Name string
-	Doc  string
+	Name    string
+	Doc     string
+	DocOnly bool
 }
 
 // Registry is the central registry for primitives.
@@ -83,29 +84,45 @@ type DocEntry struct {
 //  6. Registry.Apply (registry/apply.go) — materialize the new category into the environment
 //     at the appropriate lifecycle step
 //
-// All six categories today (primitives, bindingSpecs, docs, initFuncs, macroSources,
-// globalValues) follow this pattern. Forgetting any step is a silent aliasing or
-// drift hazard — Clone, Without, WithoutCategory, and WithoutBindings all assume
-// deepCopy covers every field.
+// All six categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
+// macroSources, globalValues) follow this pattern. Forgetting any step is a
+// silent aliasing or drift hazard — Clone, Without, WithoutCategory, and
+// WithoutBindings all assume deepCopy covers every field.
+//
+// Note: the `docs []DocEntry` slice was removed in Phase 1
+// (plans/2026-05-18-registry-structural-reduction.md, Finding 2):
+// simple AddDocumentation entries now share bindingSpecs (DocOnly=true);
+// rich AddDocOnlyPrimitive entries moved to the dedicated docPrimitives
+// slice (preserves full PrimitiveSpec metadata).
 type Registry struct {
-	mu           sync.RWMutex
-	primitives   []PrimitiveRegistration
-	bindingSpecs []BindingSpec // Compile-time only bindings
-	docs         []DocEntry
-	initFuncs    []InitFunc
-	macroSources []string
-	globalValues []GlobalValue
+	mu sync.RWMutex
+	// primitives: real Scheme primitives backed by ForeignFunction impls.
+	primitives []PrimitiveRegistration
+	// bindingSpecs: compile-time bindings (real) + simple doc-only entries
+	// (DocOnly=true) registered via AddDocumentation. Both carry only Name+Doc.
+	bindingSpecs []BindingSpec
+	// docPrimitives: documentation-only primitives registered via
+	// AddDocOnlyPrimitive (e.g., Scheme-defined procedures discovered via
+	// library import). Carry the full PrimitiveSpec metadata
+	// (Category, ParamNames, ParamTypes, ReturnType, Keywords) but no Impl
+	// and no environment binding. Surfaced by ,doc / ,apropos / SearchDoc /
+	// PrimitivesByCategory; not visible via Primitives() or FindPrimitive
+	// (those are real-primitives-only).
+	docPrimitives []PrimitiveSpec
+	initFuncs     []InitFunc
+	macroSources  []string
+	globalValues  []GlobalValue
 }
 
 // NewRegistry creates a new empty registry.
 func NewRegistry() *Registry {
 	q := &Registry{
-		primitives:   make([]PrimitiveRegistration, 0, 128),
-		bindingSpecs: make([]BindingSpec, 0, 32),
-		docs:         make([]DocEntry, 0, 16),
-		initFuncs:    make([]InitFunc, 0, 8),
-		macroSources: make([]string, 0, 4),
-		globalValues: make([]GlobalValue, 0, 4),
+		primitives:    make([]PrimitiveRegistration, 0, 128),
+		bindingSpecs:  make([]BindingSpec, 0, 48),
+		docPrimitives: make([]PrimitiveSpec, 0, 16),
+		initFuncs:     make([]InitFunc, 0, 8),
+		macroSources:  make([]string, 0, 4),
+		globalValues:  make([]GlobalValue, 0, 4),
 	}
 	return q
 }
@@ -181,10 +198,10 @@ func (p *Registry) AddBindingSpecs(specs []BindingSpec) {
 
 // AddDocumentation registers a documentation entry for a named binding.
 // The documentation is applied to existing bindings during ApplyDocs.
+// Forwarder to AddBindingSpecs with DocOnly=true — the doc-only entry
+// lives in the bindingSpecs slice but Apply skips installing a binding for it.
 func (p *Registry) AddDocumentation(name, doc string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.docs = append(p.docs, DocEntry{Name: name, Doc: doc})
+	p.AddBindingSpecs([]BindingSpec{{Name: name, Doc: doc, DocOnly: true}})
 }
 
 // AddInitFunc registers an initialization function.
@@ -217,6 +234,13 @@ func (p *Registry) AddGlobalValue(name string, value values.Value) {
 // that are already bound in the environment but need registry visibility
 // for apropos/topics. Skips registration if a primitive with the same name
 // already exists (Go primitives take precedence).
+//
+// Post-Phase-1: the entry lands in the dedicated docPrimitives slice
+// (separate tier from real primitives). The full PrimitiveSpec metadata —
+// Category, ParamNames, ParamTypes, ReturnType, Keywords — is preserved.
+// Surfaced by SearchDoc / ,doc / ,apropos / PrimitivesByCategory; not
+// visible via Primitives() or FindPrimitive (those return real
+// primitives only).
 func (p *Registry) AddDocOnlyPrimitive(spec PrimitiveSpec) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -226,11 +250,12 @@ func (p *Registry) AddDocOnlyPrimitive(spec PrimitiveSpec) {
 			return
 		}
 	}
-
-	p.primitives = append(p.primitives, PrimitiveRegistration{
-		Spec:   spec,
-		Phases: 0, // doc-only, not applied to environments
-	})
+	for _, dp := range p.docPrimitives {
+		if dp.Name == spec.Name {
+			return
+		}
+	}
+	p.docPrimitives = append(p.docPrimitives, spec)
 }
 
 // PrimitiveCount returns the number of registered primitives.
@@ -243,6 +268,11 @@ func (p *Registry) PrimitiveCount() int {
 // FindPrimitive returns the first registered primitive with the given name.
 // If phase is the empty PhaseSet (zero), any phase matches; otherwise only
 // primitives whose Phases overlap with phase are considered.
+//
+// When phase is zero, doc-only primitives (registered via AddDocOnlyPrimitive,
+// stored in docPrimitives with Phases=0) are returned as a fallback after
+// the real-primitives search. When phase is non-zero, doc-only primitives
+// are never returned — they have Phases=0 which cannot overlap.
 func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -254,6 +284,13 @@ func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistra
 			continue
 		}
 		return reg, true
+	}
+	if phase == 0 {
+		for _, dp := range p.docPrimitives {
+			if dp.Name == name {
+				return PrimitiveRegistration{Spec: dp, Phases: 0}, true
+			}
+		}
 	}
 	return PrimitiveRegistration{}, false
 }
@@ -291,13 +328,18 @@ func (p *Registry) Primitives() []PrimitiveRegistration {
 	return q
 }
 
-// Bindings returns the names of compile-time bindings.
+// Bindings returns the names of real compile-time bindings (DocOnly=false).
+// DocOnly entries are excluded — use Docs() for those. BindingSpecs() returns
+// the unfiltered slice if both are needed.
 func (p *Registry) Bindings() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]string, len(p.bindingSpecs))
-	for i, spec := range p.bindingSpecs {
-		q[i] = spec.Name
+	var q []string
+	for _, spec := range p.bindingSpecs {
+		if spec.DocOnly {
+			continue
+		}
+		q = append(q, spec.Name)
 	}
 	return q
 }
@@ -311,12 +353,35 @@ func (p *Registry) BindingSpecs() []BindingSpec {
 	return q
 }
 
-// Docs returns a defensive copy of the documentation entries.
-func (p *Registry) Docs() []DocEntry {
+// Docs returns a defensive copy of the doc-only binding specs (those
+// with DocOnly=true). These are simple Name+Doc entries registered via
+// AddDocumentation — they carry doc text but install no environment
+// binding. Real bindings (DocOnly=false) are returned by BindingSpecs.
+//
+// Doc-only *primitives* with full metadata (registered via
+// AddDocOnlyPrimitive) live in DocPrimitives, not here.
+func (p *Registry) Docs() []BindingSpec {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]DocEntry, len(p.docs))
-	copy(q, p.docs)
+	var q []BindingSpec
+	for _, bs := range p.bindingSpecs {
+		if bs.DocOnly {
+			q = append(q, bs)
+		}
+	}
+	return q
+}
+
+// DocPrimitives returns a defensive copy of the doc-only primitives
+// (entries registered via AddDocOnlyPrimitive). These carry the full
+// PrimitiveSpec metadata (Category, ParamNames, ParamTypes, ReturnType,
+// Keywords) but no Impl and no environment binding — used to surface
+// Scheme-defined procedures via ,doc / ,apropos / SearchDoc.
+func (p *Registry) DocPrimitives() []PrimitiveSpec {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]PrimitiveSpec, len(p.docPrimitives))
+	copy(q, p.docPrimitives)
 	return q
 }
 
@@ -356,16 +421,16 @@ func (p *Registry) deepCopy() *Registry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := &Registry{
-		primitives:   make([]PrimitiveRegistration, len(p.primitives)),
-		bindingSpecs: make([]BindingSpec, len(p.bindingSpecs)),
-		docs:         make([]DocEntry, len(p.docs)),
-		initFuncs:    make([]InitFunc, len(p.initFuncs)),
-		macroSources: make([]string, len(p.macroSources)),
-		globalValues: make([]GlobalValue, len(p.globalValues)),
+		primitives:    make([]PrimitiveRegistration, len(p.primitives)),
+		bindingSpecs:  make([]BindingSpec, len(p.bindingSpecs)),
+		docPrimitives: make([]PrimitiveSpec, len(p.docPrimitives)),
+		initFuncs:     make([]InitFunc, len(p.initFuncs)),
+		macroSources:  make([]string, len(p.macroSources)),
+		globalValues:  make([]GlobalValue, len(p.globalValues)),
 	}
 	copy(q.primitives, p.primitives)
 	copy(q.bindingSpecs, p.bindingSpecs)
-	copy(q.docs, p.docs)
+	copy(q.docPrimitives, p.docPrimitives)
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
 	copy(q.globalValues, p.globalValues)
@@ -408,12 +473,19 @@ func (p *Registry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string
 }
 
 // PrimitiveByName returns the registration for the named primitive, if any.
+// Real primitives take precedence; doc-only primitives (Phases=0) are
+// returned as a fallback when no real primitive with that name exists.
 func (p *Registry) PrimitiveByName(name string) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	for _, reg := range p.primitives {
 		if reg.Spec.Name == name {
 			return reg, true
+		}
+	}
+	for _, dp := range p.docPrimitives {
+		if dp.Name == name {
+			return PrimitiveRegistration{Spec: dp, Phases: 0}, true
 		}
 	}
 	return PrimitiveRegistration{}, false
@@ -432,12 +504,21 @@ func (p *Registry) PrimitiveNames() []string {
 
 // PrimitivesByCategory returns registered primitives grouped by category.
 // Primitives with no category are grouped under the empty string key.
+// Includes both real primitives and doc-only primitives (the latter
+// surface under their declared Category for ,doc / ,topics presentation).
+// Doc-only entries appear with Phases=0 in the result.
 func (p *Registry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	result := make(map[string][]PrimitiveRegistration)
 	for _, reg := range p.primitives {
 		result[reg.Spec.Category] = append(result[reg.Spec.Category], reg)
+	}
+	for _, dp := range p.docPrimitives {
+		result[dp.Category] = append(result[dp.Category], PrimitiveRegistration{
+			Spec:   dp,
+			Phases: 0,
+		})
 	}
 	return result
 }
@@ -482,6 +563,12 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 // bindings removed. Use after Without to fully erase a name that exists
 // as both a primitive and a compile-time binding (e.g., set!).
 // Primitives, init funcs, macro sources, and global values are copied unchanged.
+//
+// Post-Phase-1: only real bindings (DocOnly=false) are removed. DocOnly
+// entries with the same name are preserved — they carry documentation
+// for names that may live elsewhere (Scheme-defined procedures, library
+// exports). Removing them would silently strip docs that the embedder
+// likely wants kept.
 func (p *Registry) WithoutBindings(names ...string) *Registry {
 	exclude := make(map[string]struct{}, len(names))
 	for _, name := range names {
@@ -490,6 +577,9 @@ func (p *Registry) WithoutBindings(names ...string) *Registry {
 
 	q := p.deepCopy()
 	q.bindingSpecs = slices.DeleteFunc(q.bindingSpecs, func(s BindingSpec) bool {
+		if s.DocOnly {
+			return false
+		}
 		_, ok := exclude[s.Name]
 		return ok
 	})

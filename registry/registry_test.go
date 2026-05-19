@@ -603,25 +603,37 @@ func TestRegistry_Clone_IncludesDocs(t *testing.T) {
 	r.AddDocumentation("and", "Short-circuit conjunction.")
 	r.AddBindingSpecs([]BindingSpec{{Name: "if", Doc: "Conditional."}})
 	r2 := r.Clone()
-	c.Assert(r2.Docs(), qt.HasLen, 1)
-	c.Assert(r2.BindingSpecs(), qt.HasLen, 1)
+	// Post-Phase-1: BindingSpecs() returns both real bindings and DocOnly
+	// entries (they live in the same slice). Docs() filters to DocOnly=true.
+	c.Assert(r2.BindingSpecs(), qt.HasLen, 2) // "and" (DocOnly) + "if" (real binding)
+	c.Assert(r2.Docs(), qt.HasLen, 1)         // only "and"
 	r2.AddDocumentation("or", "Disjunction.")
-	c.Assert(r.Docs(), qt.HasLen, 1)
+	c.Assert(r.Docs(), qt.HasLen, 1) // original unaffected
+	c.Assert(r2.Docs(), qt.HasLen, 2)
 }
 
 func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 	c := qt.New(t)
 
+	// Post-Phase-1: AddDocOnlyPrimitive routes into the dedicated
+	// docPrimitives slice (per Q-b of plans/2026-05-18-registry-structural-reduction.md
+	// — "separate tier for documentation"). The full PrimitiveSpec metadata
+	// is preserved. FindPrimitive / PrimitiveByName fall back to docPrimitives
+	// when no real primitive with that name exists, so existing callers
+	// (and the import-registers-docstrings tests in the root package) keep
+	// working transparently.
 	tcs := []struct {
-		name       string
-		setup      func(r *Registry)
-		query      string
-		found      bool
-		wantPhases PhaseSet
-		wantDoc    string
+		name           string
+		setup          func(r *Registry)
+		queryName      string
+		wantInDocPrims bool     // expect to find via DocPrimitives()
+		wantFound      bool     // expect FindPrimitive / PrimitiveByName to succeed
+		wantPhases     PhaseSet // expected Phases on the found PrimitiveRegistration
+		wantDocText    string   // doc text expected on the found entry
+		wantCategory   string   // category expected on the found entry (metadata preservation)
 	}{
 		{
-			name: "doc-only primitive is findable",
+			name: "doc-only entry lands in DocPrimitives with full metadata",
 			setup: func(r *Registry) {
 				r.AddDocOnlyPrimitive(PrimitiveSpec{
 					Name:     "map",
@@ -629,13 +641,15 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 					Category: "lists",
 				})
 			},
-			query:      "map",
-			found:      true,
-			wantPhases: 0,
-			wantDoc:    "Apply proc to each element.",
+			queryName:      "map",
+			wantInDocPrims: true,
+			wantFound:      true,
+			wantPhases:     0,
+			wantDocText:    "Apply proc to each element.",
+			wantCategory:   "lists",
 		},
 		{
-			name: "Go primitive takes precedence",
+			name: "Go primitive takes precedence; doc-only entry is skipped at registration",
 			setup: func(r *Registry) {
 				r.AddPrimitive(PrimitiveSpec{
 					Name: "car",
@@ -647,13 +661,14 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 					Doc:  "Scheme car.",
 				})
 			},
-			query:      "car",
-			found:      true,
-			wantPhases: PhaseSetRuntime,
-			wantDoc:    "Go car.",
+			queryName:      "car",
+			wantInDocPrims: false, // skipped because primitive with same name exists
+			wantFound:      true,
+			wantPhases:     PhaseSetRuntime,
+			wantDocText:    "Go car.",
 		},
 		{
-			name: "doc-only entry has zero phases",
+			name: "doc-only entry has zero phases (fallback lookup)",
 			setup: func(r *Registry) {
 				r.AddDocOnlyPrimitive(PrimitiveSpec{
 					Name:       "for-each",
@@ -661,22 +676,39 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 					ParamCount: 2,
 				})
 			},
-			query:      "for-each",
-			found:      true,
-			wantPhases: 0,
-			wantDoc:    "Apply proc for side effects.",
+			queryName:      "for-each",
+			wantInDocPrims: true,
+			wantFound:      true,
+			wantPhases:     0,
+			wantDocText:    "Apply proc for side effects.",
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			r := NewRegistry()
 			tc.setup(r)
-			reg, ok := r.PrimitiveByName(tc.query)
-			c.Assert(ok, qt.Equals, tc.found)
-			if tc.found {
+
+			// Check fallback lookup via PrimitiveByName.
+			reg, found := r.PrimitiveByName(tc.queryName)
+			c.Assert(found, qt.Equals, tc.wantFound)
+			if tc.wantFound {
 				c.Assert(reg.Phases, qt.Equals, tc.wantPhases)
-				c.Assert(reg.Spec.Doc, qt.Equals, tc.wantDoc)
+				c.Assert(reg.Spec.Doc, qt.Equals, tc.wantDocText)
 			}
+
+			// Check dedicated DocPrimitives() tier.
+			var inDocPrims bool
+			for _, dp := range r.DocPrimitives() {
+				if dp.Name == tc.queryName {
+					inDocPrims = true
+					c.Assert(dp.Doc, qt.Equals, tc.wantDocText)
+					if tc.wantCategory != "" {
+						c.Assert(dp.Category, qt.Equals, tc.wantCategory)
+					}
+					break
+				}
+			}
+			c.Assert(inDocPrims, qt.Equals, tc.wantInDocPrims)
 		})
 	}
 }
