@@ -419,6 +419,8 @@ func TestRegistry_Without(t *testing.T) {
 		{Name: "vector-set!", Category: "vectors"},
 	}, PhaseSetRuntime)
 	r.AddBinding("if")
+	r.AddDocumentation("if", "Conditional.")
+	r.AddInitFunc(func() error { return nil })
 	r.AddMacroSource("(define-syntax and ...)")
 	r.AddGlobalValue("gv", testValue("x"))
 
@@ -437,8 +439,10 @@ func TestRegistry_Without(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			filtered := r.Without(tc.exclude...)
 			c.Assert(filtered.PrimitiveNames(), qt.DeepEquals, tc.want)
-			// Non-primitive fields are copied unchanged.
+			// Non-primitive fields are copied unchanged (docstring contract).
 			c.Assert(filtered.Bindings(), qt.DeepEquals, []string{"if"})
+			c.Assert(len(filtered.Docs()), qt.Equals, 1)
+			c.Assert(len(filtered.InitFuncs()), qt.Equals, 1)
 			c.Assert(len(filtered.MacroSources()), qt.Equals, 1)
 			c.Assert(len(filtered.GlobalValues()), qt.Equals, 1)
 		})
@@ -460,6 +464,10 @@ func TestRegistry_WithoutCategory(t *testing.T) {
 		{Name: "uncategorized"},
 	}, PhaseSetRuntime)
 	r.AddBinding("lambda")
+	r.AddDocumentation("lambda", "Procedure.")
+	r.AddInitFunc(func() error { return nil })
+	r.AddMacroSource("(define-syntax when ...)")
+	r.AddGlobalValue("gv", testValue("y"))
 
 	tcs := []struct {
 		name    string
@@ -475,7 +483,12 @@ func TestRegistry_WithoutCategory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			filtered := r.WithoutCategory(tc.exclude...)
 			c.Assert(filtered.PrimitiveNames(), qt.DeepEquals, tc.want)
+			// Non-primitive fields are copied unchanged (docstring contract).
 			c.Assert(filtered.Bindings(), qt.DeepEquals, []string{"lambda"})
+			c.Assert(len(filtered.Docs()), qt.Equals, 1)
+			c.Assert(len(filtered.InitFuncs()), qt.Equals, 1)
+			c.Assert(len(filtered.MacroSources()), qt.Equals, 1)
+			c.Assert(len(filtered.GlobalValues()), qt.Equals, 1)
 		})
 	}
 
@@ -492,6 +505,10 @@ func TestRegistry_WithoutBindings(t *testing.T) {
 		{Name: "+", Category: "arithmetic"},
 	}, PhaseSetRuntime)
 	r.AddBindings([]string{"if", "set!", "lambda", "define"})
+	r.AddDocumentation("set!", "Mutation.")
+	r.AddInitFunc(func() error { return nil })
+	r.AddMacroSource("(define-syntax unless ...)")
+	r.AddGlobalValue("gv", testValue("z"))
 
 	tcs := []struct {
 		name    string
@@ -506,8 +523,13 @@ func TestRegistry_WithoutBindings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			filtered := r.WithoutBindings(tc.exclude...)
 			c.Assert(filtered.Bindings(), qt.DeepEquals, tc.want)
-			// Primitives are unchanged.
+			// Primitives, init funcs, macro sources, and global values
+			// are copied unchanged (docstring contract).
 			c.Assert(filtered.PrimitiveCount(), qt.Equals, 2)
+			c.Assert(len(filtered.Docs()), qt.Equals, 1)
+			c.Assert(len(filtered.InitFuncs()), qt.Equals, 1)
+			c.Assert(len(filtered.MacroSources()), qt.Equals, 1)
+			c.Assert(len(filtered.GlobalValues()), qt.Equals, 1)
 		})
 	}
 }

@@ -21,8 +21,27 @@
 //   - [NumericFoldVariadic]: fold variadic args with binary operation (+, *)
 //   - [NumericFoldWithFirst]: fold with required first arg (-, /)
 //   - [NumericChainCompare]: chain comparisons (=, <, >, <=, >=)
+//   - [NumericChainCompareReal]: ordering comparisons (<, >, <=, >=) with complex rejection
 //   - [NumericExtremum]: find min/max with exactness contagion
 //   - [IntegerFold]: integer fold for gcd/lcm with big.Int fallback
+//
+// # Fold-Shape Family
+//
+// All six numeric helpers above are catamorphisms over Scheme numbers —
+// instances of fold (⊕) ε [a, b, c, ...] differing along three axes:
+//
+//   - Variadic protocol: rest-at-0 (+, *) vs first+rest-at-1 (-, /, <, min, max)
+//   - Accumulator: arithmetic accumulator vs comparison-chain state vs
+//     extremum-tracking
+//   - Per-element side channel: exactness contagion, NaN propagation,
+//     int64 → big.Int promotion
+//
+// They are intentionally kept as named variants — each documents its
+// argument protocol and accumulator role at call sites. A unified
+// generic Fold[Acc] would lose that readability for marginal LOC
+// savings; consolidation is appropriate only when a 7th variant with
+// a fundamentally different protocol (e.g., early-termination with a
+// return-value-producing sentinel, or an async fold) is added.
 //
 // # Comparisons
 //

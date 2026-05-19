@@ -15,6 +15,7 @@
 package registry
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/aalpar/wile/environment"
@@ -70,6 +71,22 @@ type DocEntry struct {
 }
 
 // Registry is the central registry for primitives.
+//
+// ADDING A NEW REGISTRY CATEGORY requires updates in these locations:
+//
+//  1. Registry struct (this file)       — add the slice field
+//  2. NewRegistry (this file)            — initialize the slice with a reasonable capacity
+//  3. Registry.deepCopy (this file)      — extend the make + copy block to include the new slice
+//  4. Add<Category> / Add<Category>s     — registration entry points (mutex-locked appender +
+//     optional singular forwarder)
+//  5. <Category>Count / <Category>s      — accessor pair returning a count and a defensive copy
+//  6. Registry.Apply (registry/apply.go) — materialize the new category into the environment
+//     at the appropriate lifecycle step
+//
+// All six categories today (primitives, bindingSpecs, docs, initFuncs, macroSources,
+// globalValues) follow this pattern. Forgetting any step is a silent aliasing or
+// drift hazard — Clone, Without, WithoutCategory, and WithoutBindings all assume
+// deepCopy covers every field.
 type Registry struct {
 	mu           sync.RWMutex
 	primitives   []PrimitiveRegistration
@@ -93,15 +110,11 @@ func NewRegistry() *Registry {
 	return q
 }
 
-// AddPrimitive registers a primitive with the given phases.
+// AddPrimitive registers a primitive with the given phases. Singular
+// forwarder to AddPrimitives; the plural form is the single source of
+// truth for validation + mutex lifecycle.
 func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
-	validateParamTypes(spec)
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.primitives = append(p.primitives, PrimitiveRegistration{
-		Spec:   spec,
-		Phases: phases,
-	})
+	p.AddPrimitives([]PrimitiveSpec{spec}, phases)
 }
 
 // AddPrimitives registers multiple primitives with the given phases.
@@ -143,19 +156,20 @@ func validateParamTypes(spec PrimitiveSpec) {
 }
 
 // AddBinding registers a compile-time only binding (no runtime value).
+// Singular forwarder to AddBindings.
 func (p *Registry) AddBinding(name string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.bindingSpecs = append(p.bindingSpecs, BindingSpec{Name: name})
+	p.AddBindings([]string{name})
 }
 
-// AddBindings registers multiple compile-time only bindings.
+// AddBindings registers multiple compile-time only bindings. Forwarder
+// to AddBindingSpecs; the spec-typed form is the single source of truth
+// for mutex lifecycle.
 func (p *Registry) AddBindings(names []string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, name := range names {
-		p.bindingSpecs = append(p.bindingSpecs, BindingSpec{Name: name})
+	specs := make([]BindingSpec, len(names))
+	for i, name := range names {
+		specs[i] = BindingSpec{Name: name}
 	}
+	p.AddBindingSpecs(specs)
 }
 
 // AddBindingSpecs registers multiple compile-time bindings with optional documentation.
@@ -326,9 +340,21 @@ func (p *Registry) GlobalValues() []GlobalValue {
 
 // Clone creates a copy of the registry.
 func (p *Registry) Clone() *Registry {
+	return p.deepCopy()
+}
+
+// deepCopy returns a Registry whose 6 category slices are independent
+// copies of p's. Element types are not transitively cloned — the copy is
+// one level deep (slice header + backing array). Callers may overwrite
+// individual slices on the returned Registry to express filter-style
+// transformations; mutating q never affects p.
+//
+// Locking is internal: deepCopy acquires p.mu.RLock for the duration of
+// the copy and releases it before returning. Callers MUST NOT hold p.mu
+// when invoking this method.
+func (p *Registry) deepCopy() *Registry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-
 	q := &Registry{
 		primitives:   make([]PrimitiveRegistration, len(p.primitives)),
 		bindingSpecs: make([]BindingSpec, len(p.bindingSpecs)),
@@ -439,34 +465,16 @@ func (p *Registry) WithoutCategory(categories ...string) *Registry {
 // filterPrimitives returns a new Registry with primitives excluded when
 // keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
 func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *Registry {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	set := make(map[string]struct{}, len(exclude))
 	for _, v := range exclude {
 		set[v] = struct{}{}
 	}
 
-	q := &Registry{
-		primitives:   make([]PrimitiveRegistration, 0, len(p.primitives)),
-		bindingSpecs: make([]BindingSpec, len(p.bindingSpecs)),
-		docs:         make([]DocEntry, len(p.docs)),
-		initFuncs:    make([]InitFunc, len(p.initFuncs)),
-		macroSources: make([]string, len(p.macroSources)),
-		globalValues: make([]GlobalValue, len(p.globalValues)),
-	}
-	for _, reg := range p.primitives {
-		_, ok := set[keyFn(reg)]
-		if ok {
-			continue
-		}
-		q.primitives = append(q.primitives, reg)
-	}
-	copy(q.bindingSpecs, p.bindingSpecs)
-	copy(q.docs, p.docs)
-	copy(q.initFuncs, p.initFuncs)
-	copy(q.macroSources, p.macroSources)
-	copy(q.globalValues, p.globalValues)
+	q := p.deepCopy()
+	q.primitives = slices.DeleteFunc(q.primitives, func(r PrimitiveRegistration) bool {
+		_, ok := set[keyFn(r)]
+		return ok
+	})
 	return q
 }
 
@@ -475,33 +483,15 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 // as both a primitive and a compile-time binding (e.g., set!).
 // Primitives, init funcs, macro sources, and global values are copied unchanged.
 func (p *Registry) WithoutBindings(names ...string) *Registry {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	exclude := make(map[string]struct{}, len(names))
 	for _, name := range names {
 		exclude[name] = struct{}{}
 	}
 
-	q := &Registry{
-		primitives:   make([]PrimitiveRegistration, len(p.primitives)),
-		bindingSpecs: make([]BindingSpec, 0, len(p.bindingSpecs)),
-		docs:         make([]DocEntry, len(p.docs)),
-		initFuncs:    make([]InitFunc, len(p.initFuncs)),
-		macroSources: make([]string, len(p.macroSources)),
-		globalValues: make([]GlobalValue, len(p.globalValues)),
-	}
-	copy(q.primitives, p.primitives)
-	for _, spec := range p.bindingSpecs {
-		_, ok := exclude[spec.Name]
-		if ok {
-			continue
-		}
-		q.bindingSpecs = append(q.bindingSpecs, spec)
-	}
-	copy(q.docs, p.docs)
-	copy(q.initFuncs, p.initFuncs)
-	copy(q.macroSources, p.macroSources)
-	copy(q.globalValues, p.globalValues)
+	q := p.deepCopy()
+	q.bindingSpecs = slices.DeleteFunc(q.bindingSpecs, func(s BindingSpec) bool {
+		_, ok := exclude[s.Name]
+		return ok
+	})
 	return q
 }
