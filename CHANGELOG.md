@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-05-19
+
 ### Removed
 
 - **13 `Datum()` accessor methods deleted from concrete `*values.X` types.**
