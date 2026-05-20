@@ -83,3 +83,61 @@ NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}${SUFFIX}"
 echo "$CURRENT_VERSION → $NEW_VERSION"
 echo "$NEW_VERSION" > "$VERSION_FILE"
 echo "Updated $VERSION_FILE"
+
+# ── CHANGELOG link-reference maintenance ────────────────────────────
+# Keep a Changelog keeps a block of link references at the end of
+# CHANGELOG.md:
+#
+#   [Unreleased]: <repo>/compare/<latest-release>...HEAD
+#   [1.16.0]:     <repo>/compare/<prev-release>...v1.16.0
+#
+# These drifted because the release ceremony only ever finalized the
+# section header, never the refs. A version bump is the point at which
+# the new release identifier becomes known, so the refs are reconciled
+# here. Each guard below is a no-op early return — a repo that does not
+# maintain this block is left untouched.
+update_changelog_links() {
+    local changelog="$REPO_ROOT/CHANGELOG.md"
+    [ -f "$changelog" ] || return 0
+
+    # Reuse the base URL already on the [Unreleased] line rather than
+    # hardcoding the repo slug. Absent line → block not maintained here.
+    local unreleased
+    unreleased=$(grep -m1 '^\[Unreleased\]: ' "$changelog" || true)
+    [ -n "$unreleased" ] || return 0
+    local rest="${unreleased#*: }"      # drop "[Unreleased]: "
+    local base="${rest%%/compare/*}"    # drop "/compare/<...>...HEAD"
+
+    # Previous release: most recent tag reachable from HEAD. During a
+    # release bump HEAD is master before the new tag is cut, so this
+    # resolves to the prior release. No tags yet → nothing to anchor.
+    local prev
+    prev=$(git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null || true)
+    [ -n "$prev" ] || return 0
+
+    local label="${NEW_VERSION#v}"
+
+    # Idempotent: a ref for this version already present → done.
+    if grep -q "^\[${label}\]: " "$changelog"; then
+        return 0
+    fi
+
+    # Rewrite the [Unreleased] anchor and insert the new release ref
+    # below it. cat-into-file (not mv) preserves the original mode.
+    local tmp
+    tmp=$(mktemp)
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" == '[Unreleased]: '* ]]; then
+            printf '[Unreleased]: %s/compare/%s...HEAD\n' "$base" "$NEW_VERSION"
+            printf '[%s]: %s/compare/%s...%s\n' "$label" "$base" "$prev" "$NEW_VERSION"
+        else
+            printf '%s\n' "$line"
+        fi
+    done < "$changelog" > "$tmp"
+    cat "$tmp" > "$changelog"
+    rm -f "$tmp"
+
+    echo "Updated CHANGELOG.md link refs: [Unreleased], [${label}]"
+}
+
+update_changelog_links

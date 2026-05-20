@@ -790,7 +790,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/aalpar/wile/compare/v1.15.0...v1.16.0
+[1.15.0]: https://github.com/aalpar/wile/compare/v1.14.258...v1.15.0
 [1.14.0]: https://github.com/aalpar/wile/compare/v1.13.21...v1.14.0
 [1.13.21]: https://github.com/aalpar/wile/compare/v1.13.0...v1.13.21
 [1.13.0]: https://github.com/aalpar/wile/compare/v1.12.0...v1.13.0
