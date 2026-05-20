@@ -35,5 +35,3 @@ changelog:
 release:
   header: |
     ## Wile Scheme {{ .Tag }}
-  footer: |
-    **Full Changelog**: https://github.com/aalpar/wile/compare/{{ .PreviousTag }}...{{ .Tag }}
