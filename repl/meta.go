@@ -39,6 +39,7 @@ type MetaCommandHandler struct {
 	debugCtx *DebugContext
 	docProv  DocProvider
 	pager    string
+	version  string
 }
 
 // MetaOption configures a MetaCommandHandler.
@@ -48,6 +49,13 @@ type MetaOption func(*MetaCommandHandler)
 func WithMetaDocProvider(dp DocProvider) MetaOption {
 	return func(h *MetaCommandHandler) {
 		h.docProv = dp
+	}
+}
+
+// WithMetaVersion sets the version string shown by the ,version command.
+func WithMetaVersion(version string) MetaOption {
+	return func(h *MetaCommandHandler) {
+		h.version = version
 	}
 }
 
@@ -108,6 +116,8 @@ func (p *MetaCommandHandler) Handle(ctx context.Context, line string, out io.Wri
 		p.cmdLibraries(ctx, out)
 	case "disassemble", "dis":
 		p.cmdDisassemble(args, out)
+	case "version":
+		p.cmdVersion(out)
 	default:
 		// Delegate to debug context
 		if p.debugCtx != nil && p.debugCtx.HandleDebugCommand(line, out) {
@@ -183,6 +193,9 @@ var metaCommands = []commandInfo{
 			"For case-lambda, shows each clause separately.\n" +
 			"For foreign closures, shows name, arity, and documentation.\n\n" +
 			"For ad-hoc expressions, use (disassemble expr) at the REPL instead.",
+		"session"},
+	{"version", nil, "Show the Wile interpreter version",
+		"Usage: ,version\n\nPrints the Wile Scheme interpreter version and build identifier.",
 		"session"},
 }
 
@@ -748,6 +761,14 @@ func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
 		return
 	}
 	writeWithPager(out, content, p.pager)
+}
+
+func (p *MetaCommandHandler) cmdVersion(out io.Writer) {
+	if p.version == "" {
+		fmt.Fprintln(out, "version information unavailable")
+		return
+	}
+	fmt.Fprintln(out, p.version)
 }
 
 // DisassembleBinding looks up a named binding and returns its formatted

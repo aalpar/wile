@@ -100,6 +100,24 @@ func resolveVersion() (version, sha string) {
 	return version, sha
 }
 
+// formatVersion renders the human-readable version line. The SHA is omitted
+// when empty so the output never reads "Wile Scheme <version> ()".
+func formatVersion(version, sha string) string {
+	if version == "" {
+		version = "(unknown version)"
+	}
+	if sha == "" {
+		return fmt.Sprintf("Wile Scheme %s", version)
+	}
+	return fmt.Sprintf("Wile Scheme %s (%s)", version, sha)
+}
+
+// versionString resolves and formats the version line shared by the
+// --version flag, the REPL startup header, and the ,version meta-command.
+func versionString() string {
+	return formatVersion(resolveVersion())
+}
+
 // buildLibraryPaths collects library search paths from environment variables
 // and command-line flags. Paths from -L take priority over SCHEME_LIBRARY_PATH.
 func buildLibraryPaths() []string {
@@ -171,8 +189,7 @@ func main() {
 	}
 
 	if opts.Version {
-		v, s := resolveVersion()
-		fmt.Printf("Wile Scheme %s (%s)\n", v, s)
+		fmt.Println(versionString())
 		os.Exit(0)
 	}
 
@@ -323,6 +340,9 @@ func main() {
 
 	// Enter REPL if no files and no evals were provided, or interactive mode was requested
 	if (len(opts.File) == 0 && len(opts.Eval) == 0) || opts.Interactive {
+		if !opts.Quiet {
+			Printf("%s\n", versionString())
+		}
 		setupSignals(opts.Quiet)
 		runREPL(ctx, eng)
 	}
@@ -467,7 +487,7 @@ func runREPL(ctx context.Context, eng *wile.Engine) {
 		Failf(nil, "internal error: namespace registry has unexpected type")
 	}
 	docProv := repl.NewRegistryDocProvider(reg, eng)
-	r := repl.New(eng, repl.WithDocProvider(docProv))
+	r := repl.New(eng, repl.WithDocProvider(docProv), repl.WithVersion(versionString()))
 	err := r.Run(ctx)
 	if err != nil {
 		Failf(err, "REPL error")

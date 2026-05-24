@@ -66,6 +66,31 @@ func TestMetaCommandHandler(t *testing.T) {
 	}
 }
 
+func TestCmdVersion(t *testing.T) {
+	tcs := []struct {
+		name    string
+		version string
+		contain string
+	}{
+		{"version injected", "Wile Scheme v9.9.9 (abcdef0)", "Wile Scheme v9.9.9 (abcdef0)"},
+		{"version not injected", "", "version information unavailable"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			var opts []MetaOption
+			if tc.version != "" {
+				opts = append(opts, WithMetaVersion(tc.version))
+			}
+			h := NewMetaCommandHandler(nil, opts...)
+			handled := h.Handle(context.Background(), ",version", &buf)
+			qt.Assert(t, handled, qt.IsTrue)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
 func TestCmdEdit(t *testing.T) {
 	tcs := []struct {
 		name    string

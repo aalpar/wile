@@ -40,6 +40,7 @@ type REPL struct {
 	historyFile string
 	prompt      string
 	contPrompt  string
+	version     string
 	out         io.Writer
 	errOut      io.Writer
 }
@@ -89,6 +90,13 @@ func WithDocProvider(dp DocProvider) Option {
 	}
 }
 
+// WithVersion sets the version string shown by the ,version meta-command.
+func WithVersion(version string) Option {
+	return func(r *REPL) {
+		r.version = version
+	}
+}
+
 // WithDebugContext sets an externally-created debug context.
 func WithDebugContext(dc *DebugContext) Option {
 	return func(r *REPL) {
@@ -123,6 +131,9 @@ func New(eng *wile.Engine, opts ...Option) *REPL {
 		var metaOpts []MetaOption
 		if r.docProvider != nil {
 			metaOpts = append(metaOpts, WithMetaDocProvider(r.docProvider))
+		}
+		if r.version != "" {
+			metaOpts = append(metaOpts, WithMetaVersion(r.version))
 		}
 		r.metaHandler = NewMetaCommandHandler(eng, metaOpts...)
 		r.metaHandler.SetDebugContext(r.debugCtx)

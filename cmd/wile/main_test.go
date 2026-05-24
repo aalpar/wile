@@ -366,6 +366,28 @@ func TestResolveVersion(t *testing.T) {
 	})
 }
 
+func TestFormatVersion(t *testing.T) {
+	tcs := []struct {
+		name    string
+		version string
+		sha     string
+		want    string
+	}{
+		{"version and sha", "v1.16.2", "4a92078", "Wile Scheme v1.16.2 (4a92078)"},
+		{"sha omitted", "v1.16.2", "", "Wile Scheme v1.16.2"},
+		{"version unknown", "", "", "Wile Scheme (unknown version)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatVersion(tc.version, tc.sha)
+			if got != tc.want {
+				t.Errorf("formatVersion(%q, %q) = %q, want %q",
+					tc.version, tc.sha, got, tc.want)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Phase 2: Flag parsing tests
 // ---------------------------------------------------------------------------
