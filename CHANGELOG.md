@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **REPL startup version header.** Entering the interactive REPL now prints
+  a `Wile Scheme <version> (<sha>)` header line. Suppressed by `-q`/`--quiet`;
+  file and `-e` execution remain header-free so script output stays clean.
+- **`,version` REPL meta-command.** Prints the interpreter version and build
+  identifier on demand without leaving the session. Available in MCP mode too.
+
+### Changed
+
+- **`--version` output drops the empty `()` suffix** when no build SHA is
+  available (e.g. some `go install` builds): prints `Wile Scheme <version>`
+  instead of `Wile Scheme <version> ()`. The `--version` flag, the REPL header,
+  and `,version` now share a single `versionString()` formatter.
+
 ## [1.16.0] - 2026-05-19
 
 ### Removed
