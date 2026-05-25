@@ -161,7 +161,7 @@ The Smallest-Label-First (SLF) and Largest-Label-Last (LLL) variants of B-F are 
 - Topological sort primitive (separate plan).
 - SLF / LLL ordering variants (deferred per Q-3 default).
 - Sparse adjacency hash-table — orthogonal; `make-graph-analysis` may already do this internally. Confirm during Phase 2 and file separately if not.
-- Bignum performance work in Wile's numeric tower (Karatsuba, in-place arithmetic) — these are wile-side, not algebra-library-side, and would help the cyclic-counting case but not the common-case queries this plan targets.
+- Bignum performance work in Wile's numeric tower (allocation reduction, in-place arithmetic, scratch pool) — sibling plan `2026-05-24-bignum-allocation-reduction.md`. Helps the cyclic-counting case and any bignum-heavy workload; orthogonal to the convergence-detection work here. (Karatsuba was originally listed; verified during audit that `math/big` already provides it.)
 - Approximate-counting semirings (saturating, modular, log-space) — these make cyclic-counting queries tractable at the cost of exactness, and are the complementary fix to this plan's convergence-detection work. See sibling plan `2026-05-24-approximate-counting-semirings.md`. Together: worklist B-F speeds up convergent queries; approximate counting makes (otherwise non-convergent) cyclic-counting queries terminate in bounded time.
 
 ## References

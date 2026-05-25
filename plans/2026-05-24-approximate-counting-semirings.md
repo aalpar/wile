@@ -193,7 +193,7 @@ This lets `make-graph-analysis` (and any future consumer) optionally warn or ref
 - SCC condensation primitive (separate plan, not yet written — would let exact counting work on cyclic graphs by quotienting out the cycles).
 - Tarjan / Kosaraju SCC implementations (separate).
 - Other approximate semirings (probabilistic, Viterbi-with-backpointers, expectation semiring) — feasible follow-ups, not required for v1.
-- Bignum performance work in Wile's numeric tower (Karatsuba, in-place arithmetic) — these would help the *exact* counting case but are orthogonal to providing approximate alternatives.
+- Bignum performance work in Wile's numeric tower (allocation reduction, in-place arithmetic) — sibling plan `2026-05-24-bignum-allocation-reduction.md`. Helps the *exact* counting case, orthogonal to providing approximate alternatives here. (Karatsuba was originally listed; verified during audit that `math/big` already provides it.)
 
 ## References
 
