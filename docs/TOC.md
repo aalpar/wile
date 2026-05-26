@@ -61,6 +61,7 @@ Every document in `docs/`, organized by topic.
 ## Reference
 
 - [scheme.md](reference/scheme.md) -- Complete Wile Scheme language reference
+- [cli-and-repl.md](reference/cli-and-repl.md) -- `wile` command-line flags, REPL meta commands, and debugger commands
 - [r7rs-differences.md](reference/r7rs-differences.md) -- Documented differences from R7RS
 - [implementation-notes.md](reference/implementation-notes.md) -- Implementation choices that differ from canonical approaches
 

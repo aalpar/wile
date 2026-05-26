@@ -13,7 +13,7 @@ implementation notes, and educational articles for a single subsystem.
 | [environment/](environment/) | Environment and namespace system -- binding scopes, phase hierarchy, environment diagram |
 | [extensions/](extensions/) | Extension system -- architecture, authoring, R7RS library integration |
 | [numeric/](numeric/) | Numeric tower -- architecture, precision guarantees, NaN-boxing |
-| [reference/](reference/) | Language reference -- Scheme language spec, R7RS differences, implementation notes |
+| [reference/](reference/) | Language reference -- Scheme language spec, CLI and REPL, R7RS differences, implementation notes |
 | [security/](security/) | Sandboxing -- capability-based security, extension-level and fine-grained authorization |
 | [types/](types/) | Type system -- records, abstract data types, existential types, Racket structs |
 
