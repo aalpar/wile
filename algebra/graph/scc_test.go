@@ -219,3 +219,136 @@ func TestComputeSCC_EmptyEdgeListMultipleNodes(t *testing.T) {
 			qt.Commentf("isolated node %d should be in a trivial SCC", v))
 	}
 }
+
+// --- CondenseSCC ---
+
+// condensedEdgeMultiset collects edges into a multiset keyed by (U, V) with
+// a count of occurrences. Multi-edges are preserved.
+func condensedEdgeMultiset(edges []graph.Edge) map[graph.Edge]int {
+	m := make(map[graph.Edge]int)
+	for _, e := range edges {
+		m[e]++
+	}
+	return m
+}
+
+func TestCondenseSCC_NilOnInvalidInput(t *testing.T) {
+	c := qt.New(t)
+	scc, cond := graph.CondenseSCC(0, nil)
+	c.Assert(scc, qt.IsNil)
+	c.Assert(cond, qt.IsNil)
+
+	scc, cond = graph.CondenseSCC(2, []graph.Edge{{U: 0, V: 5}})
+	c.Assert(scc, qt.IsNil)
+	c.Assert(cond, qt.IsNil)
+}
+
+func TestCondenseSCC_AcyclicPreservesEdges(t *testing.T) {
+	c := qt.New(t)
+	// Diamond DAG — every edge is inter-SCC, so condensation is just
+	// the original edges renumbered through SCC[].
+	original := []graph.Edge{
+		{U: 0, V: 1}, {U: 0, V: 2},
+		{U: 1, V: 3}, {U: 2, V: 3},
+	}
+	scc, cond := graph.CondenseSCC(4, original)
+	c.Assert(scc.NumSCCs, qt.Equals, 4)
+	c.Assert(len(cond), qt.Equals, len(original),
+		qt.Commentf("acyclic input: every original edge becomes one condensed edge"))
+
+	// Each condensed edge should map back to its original under SCC[].
+	want := condensedEdgeMultiset([]graph.Edge{
+		{U: scc.SCC[0], V: scc.SCC[1]},
+		{U: scc.SCC[0], V: scc.SCC[2]},
+		{U: scc.SCC[1], V: scc.SCC[3]},
+		{U: scc.SCC[2], V: scc.SCC[3]},
+	})
+	got := condensedEdgeMultiset(cond)
+	c.Assert(got, qt.DeepEquals, want)
+}
+
+func TestCondenseSCC_SingleCycleEmpty(t *testing.T) {
+	c := qt.New(t)
+	// 0 → 1 → 2 → 0 — all edges within one SCC; condensation is empty.
+	scc, cond := graph.CondenseSCC(3, []graph.Edge{
+		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
+	})
+	c.Assert(scc.NumSCCs, qt.Equals, 1)
+	c.Assert(cond, qt.HasLen, 0)
+}
+
+func TestCondenseSCC_BowtieEmpty(t *testing.T) {
+	c := qt.New(t)
+	// Two cycles sharing node 2 — all five nodes are in one SCC; every
+	// original edge is within-SCC and condensation is empty.
+	scc, cond := graph.CondenseSCC(5, []graph.Edge{
+		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
+		{U: 2, V: 3}, {U: 3, V: 4}, {U: 4, V: 2},
+	})
+	c.Assert(scc.NumSCCs, qt.Equals, 1)
+	c.Assert(cond, qt.HasLen, 0)
+}
+
+func TestCondenseSCC_SelfLoopDroppedFromCondensation(t *testing.T) {
+	c := qt.New(t)
+	// 0 → 0 (self-loop). The single-node SCC is non-trivial, but the
+	// edge from node 0 to itself stays within SCC[0] and is dropped.
+	scc, cond := graph.CondenseSCC(1, []graph.Edge{{U: 0, V: 0}})
+	c.Assert(scc.NumSCCs, qt.Equals, 1)
+	c.Assert(scc.NonTrivial[0], qt.IsTrue)
+	c.Assert(cond, qt.HasLen, 0,
+		qt.Commentf("within-SCC self-loop must not appear in the condensation"))
+}
+
+func TestCondenseSCC_MultiEdgesPreserved(t *testing.T) {
+	c := qt.New(t)
+	// Two parallel edges from node 0 to node 1, both inter-SCC.
+	// The condensation must keep both — they represent two distinct
+	// inter-SCC paths and the downstream count must reflect that.
+	scc, cond := graph.CondenseSCC(2, []graph.Edge{
+		{U: 0, V: 1}, {U: 0, V: 1},
+	})
+	c.Assert(scc.NumSCCs, qt.Equals, 2)
+	c.Assert(cond, qt.HasLen, 2,
+		qt.Commentf("two original parallel edges must produce two condensed edges"))
+	want := graph.Edge{U: scc.SCC[0], V: scc.SCC[1]}
+	c.Assert(cond[0], qt.Equals, want)
+	c.Assert(cond[1], qt.Equals, want)
+}
+
+func TestCondenseSCC_CycleWithTailDropsInternalEdges(t *testing.T) {
+	c := qt.New(t)
+	// Cycle {0,1,2} plus tail 0 → 3:
+	//   intra-SCC edges (within {0,1,2}): (0,1), (1,2), (2,0) — dropped
+	//   inter-SCC edge: (0, 3) — kept, becomes (SCC[0], SCC[3])
+	original := []graph.Edge{
+		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
+		{U: 0, V: 3},
+	}
+	scc, cond := graph.CondenseSCC(4, original)
+	c.Assert(scc.NumSCCs, qt.Equals, 2)
+	c.Assert(cond, qt.HasLen, 1,
+		qt.Commentf("only the inter-SCC edge (0,3) survives condensation"))
+	c.Assert(cond[0], qt.Equals, graph.Edge{U: scc.SCC[0], V: scc.SCC[3]})
+}
+
+func TestCondenseSCC_CondensedGraphIsAcyclic(t *testing.T) {
+	c := qt.New(t)
+	// On any input — including a graph with multiple cycles bridged by
+	// inter-SCC edges — the condensed graph is guaranteed acyclic.
+	// Verify by feeding it through CountPathsInDAG, which returns nil
+	// on cycles. The kernel must succeed for an arbitrary SCC source.
+	edges := []graph.Edge{
+		{U: 0, V: 1}, {U: 1, V: 0}, // cycle X
+		{U: 1, V: 2},               // bridge X → Y
+		{U: 2, V: 3}, {U: 3, V: 2}, // cycle Y
+		{U: 3, V: 4}, // bridge Y → singleton {4}
+	}
+	scc, cond := graph.CondenseSCC(5, edges)
+	c.Assert(scc.NumSCCs, qt.Equals, 3)
+	// Run the DAG kernel on the condensed graph starting from the
+	// source-most SCC. Non-nil result confirms acyclicity.
+	counts := graph.CountPathsInDAG(scc.NumSCCs, cond, scc.SCC[0])
+	c.Assert(counts, qt.Not(qt.IsNil),
+		qt.Commentf("condensed graph must be acyclic"))
+}

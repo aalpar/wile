@@ -185,3 +185,36 @@ func ComputeSCC(numNodes int, edges []Edge) *SCCResult {
 		NonTrivial: nonTrivial,
 	}
 }
+
+// CondenseSCC reduces a directed graph to its DAG of strongly-connected
+// components. Returns the SCC decomposition and the edge list of the
+// condensed graph.
+//
+// For each original edge (u, v) where SCC[u] != SCC[v], emits the
+// condensed edge (SCC[u], SCC[v]). Within-SCC edges (SCC[u] == SCC[v])
+// are dropped — by construction the condensed graph is acyclic.
+//
+// Multi-edges in the condensation are preserved: if two distinct
+// original edges (u1, v1) and (u2, v2) both satisfy SCC[u1]==SCC[u2]==c
+// and SCC[v1]==SCC[v2]==d with c != d, both emit a condensed edge
+// (c, d). They contribute two distinct inter-SCC paths and downstream
+// path counting must reflect that.
+//
+// Returns (nil, nil) if ComputeSCC returns nil (input validation
+// failure).
+func CondenseSCC(numNodes int, edges []Edge) (*SCCResult, []Edge) {
+	scc := ComputeSCC(numNodes, edges)
+	if scc == nil {
+		return nil, nil
+	}
+
+	condensed := make([]Edge, 0, len(edges))
+	for _, e := range edges {
+		su, sv := scc.SCC[e.U], scc.SCC[e.V]
+		if su == sv {
+			continue
+		}
+		condensed = append(condensed, Edge{U: su, V: sv})
+	}
+	return scc, condensed
+}
