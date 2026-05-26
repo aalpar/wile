@@ -34,6 +34,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/algebragraph"
 	"github.com/aalpar/wile/extensions/charsets"
 	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
@@ -82,6 +83,7 @@ var allExtensions = []registry.Extension{
 	process.Extension,
 	charsets.Extension,
 	envvars.Extension,
+	algebragraph.Extension,
 }
 
 // ProfileExtensions returns the extension set for a named profile. It is the
