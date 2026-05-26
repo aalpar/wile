@@ -269,11 +269,19 @@ The Scheme side does the name↔index mapping (Scheme node identifiers are arbit
 
 ### Phase 4 — Scheme adapter
 
-- Add primitives `count-paths-in-dag` and `count-paths-cyclic` in the appropriate extension (likely a new `extensions/algebragraph/` per the project pattern, OR exposed via the existing algebra extensions infrastructure — investigate during implementation).
-- Update `stdlib/lib/wile/algebra/graph.scm`'s dispatch so bigint-carrier semirings route through these primitives.
-- Project the Go result back to the existing alist shape on `graph-query` / `graph-query-all`.
-- Attach `'cyclic-scc-entry-count` metadata on entries that fall in non-trivial SCCs (per Open Q-2 default).
-- Tests in `test/wile/algebra-graph-test.scm`:
+**Phase 4a — FFI surface (shipped):**
+
+- New extension `extensions/algebragraph/` registers `count-paths-in-dag` and `count-paths-cyclic` primitives wrapping the Go kernels. Per-domain extension following the `charsets`/`process`/etc. pattern.
+- Wired into `KitchenSink` profile only (no `Console`/`Small` membership per design Q-3 resolution).
+- 11 Go-side tests in `prim_count_paths_test.go` + 9 Scheme integration tests in `test/wile/algebragraph-test.scm`.
+- Auto-generated `(wile algebragraph)` library exposes the primitives — wile-goast can `import` and call them directly today.
+
+**Phase 4b — `graph.scm` dispatch wiring (deferred):**
+
+- Update `stdlib/lib/wile/algebra/graph.scm`'s dispatch so bigint-carrier semirings route through these primitives transparently. Project the Go result back to the existing alist shape on `graph-query` / `graph-query-all`. Attach `'cyclic-scc-entry-count` metadata on entries that fall in non-trivial SCCs (per Open Q-2 default).
+- **Gating dependency:** the `(semiring-carrier S)` accessor and `bigint-counting-semiring` constructor that signal fast-path eligibility live in `plans/2026-05-24-bignum-allocation-reduction.md` Phase 3 (also not yet shipped). Without those, no semiring carries the metadata that would distinguish fast-path-eligible callers from existing pure-Scheme callers. Wiring the dispatch before the carrier slot lands would require either a parallel ad-hoc detection mechanism (technical debt) or a backward-incompatible change to `make-graph-analysis` (worse).
+- Soft-dispatch mechanism: at library load time, probe `(guard (e (#t #f)) (begin (count-paths-cyclic 1 '() 0) #t))` to detect whether the algebragraph extension is loaded. Combined with the carrier check, this lets the library gracefully fall through to Scheme when either piece is missing.
+- Tests in `test/wile/algebra-graph-test.scm` (new):
   - All existing tests pass unchanged.
   - New tests for cyclic counting with the bigint-counting-semiring.
   - Metadata propagation test (the entry for a node in a non-trivial SCC carries the flag).
