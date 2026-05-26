@@ -34,9 +34,135 @@
 
 ;; --- Single-source computation ---
 
-;; Compute distances from source using worklist Bellman-Ford.
-;; Returns alist ((name . value) ...) for all reachable nodes.
+;; Compute distances from source. Strategy:
+;;   - Attempt topological sort of the subgraph reachable from `source`.
+;;   - DAG (no cycle in reachable subgraph): process nodes in topological
+;;     order with a single forward pass. Each reachable edge is relaxed
+;;     exactly once. Correct for *all* semirings.
+;;   - Cyclic: fall back to the worklist algorithm. Correct for idempotent
+;;     semirings (boolean reachability, tropical shortest path). The
+;;     counting semiring on cycles diverges algebraically; this
+;;     implementation will then not terminate.
+;;
+;; The previous worklist-only algorithm over-counted on non-trivial DAGs
+;; for the counting semiring: re-popping a node after its count was updated
+;; re-propagated the full new count, adding to what was already sent
+;; forward. Topological-order processing visits each node exactly once
+;; after its count has settled.
 (define (compute-single-source ga source)
+  (call-with-values
+    (lambda () (topological-order-from ga source))
+    (lambda (order cyclic?)
+      (if cyclic?
+          (compute-via-worklist ga source)
+          (compute-via-topological-order ga source order)))))
+
+;; Compute a topological order of the subgraph reachable from `source`.
+;; Returns two values (via `values`):
+;;   - order: list of reachable nodes in topological order
+;;            (root first, leaves last); #f if cyclic
+;;   - cyclic?: #t iff the reachable subgraph contains a cycle
+;;
+;; Iterative DFS with white/gray/black coloring. Back-edge (gray-on-gray)
+;; signals a cycle. Each node is prepended to `topo-order` when finalized
+;; (marked black), which yields reverse-postorder = topological order
+;; directly (no final reverse needed).
+(define (topological-order-from ga source)
+  (let ((adj      (ga-adjacency ga))
+        (colors   (list (cons source 'gray))) ; node → 'gray | 'black; absent = 'white
+        (topo     '())
+        (cyclic?  #f))
+    (define (color-of n)
+      (cond ((assoc n colors) => cdr)
+            (else 'white)))
+    (define (out-edges n)
+      (let ((e (assoc n adj)))
+        (if e (cdr e) '())))
+    ;; Stack frames: (node . pending-edges) where pending-edges are the
+    ;; outgoing edges of `node` not yet visited.
+    (let loop ((stack (list (cons source (out-edges source)))))
+      (cond
+        ((or cyclic? (null? stack))
+         (if cyclic?
+             (values #f #t)
+             (values topo #f)))
+        (else
+         (let* ((top     (car stack))
+                (node    (car top))
+                (pending (cdr top)))
+           (cond
+             ((null? pending)
+              ;; All neighbors visited; finalize node.
+              (set! colors (cons (cons node 'black) colors))
+              (set! topo (cons node topo))
+              (loop (cdr stack)))
+             (else
+              (let* ((edge        (car pending))
+                     (neighbor    (car edge))
+                     (rest-edges  (cdr pending))
+                     (c           (color-of neighbor)))
+                (cond
+                  ((eq? c 'white)
+                   (set! colors (cons (cons neighbor 'gray) colors))
+                   (loop (cons (cons neighbor (out-edges neighbor))
+                               (cons (cons node rest-edges) (cdr stack)))))
+                  ((eq? c 'gray)
+                   ;; Back-edge: cycle in reachable subgraph.
+                   (set! cyclic? #t)
+                   (loop '()))
+                  (else
+                   ;; 'black — forward or cross-edge; skip this neighbor.
+                   (loop (cons (cons node rest-edges) (cdr stack))))))))))))))
+
+;; Process nodes in topological order with a single forward pass.
+;; For each node u (in topo order), propagate its current dist value to each
+;; successor v via `dist[v] := dist[v] ⊕ (dist[u] ⊗ w)`. Because the topo
+;; order visits u only after all of u's predecessors have settled, dist[u]
+;; is final at u's turn — no re-propagation occurs, so non-idempotent
+;; semirings (counting) get the right answer.
+(define (compute-via-topological-order ga source order)
+  (let ((S   (ga-semiring ga))
+        (adj (ga-adjacency ga))
+        (wfn (ga-weight-fn ga)))
+    (let outer ((nodes order)
+                (dist (list (cons source (semiring-one S)))))
+      (if (null? nodes)
+          dist
+          (let* ((node      (car nodes))
+                 (node-dist (cond ((assoc node dist) => cdr)
+                                  (else (semiring-zero S))))
+                 (entry     (assoc node adj)))
+            (if (not entry)
+                (outer (cdr nodes) dist)
+                (let inner ((edges (cdr entry))
+                            (d     dist))
+                  (if (null? edges)
+                      (outer (cdr nodes) d)
+                      (let* ((neighbor-name (caar edges))
+                             (edge-data     (cdar edges))
+                             (w             (wfn edge-data))
+                             (candidate     (semiring-times S node-dist w))
+                             (old-entry     (assoc neighbor-name d))
+                             (old-val       (if old-entry
+                                                (cdr old-entry)
+                                                (semiring-zero S)))
+                             (merged        (semiring-plus S old-val candidate))
+                             (new-d         (cons (cons neighbor-name merged)
+                                                  (if old-entry
+                                                      (ga-filter
+                                                        (lambda (p)
+                                                          (not (equal? (car p) neighbor-name)))
+                                                        d)
+                                                      d))))
+                        (inner (cdr edges) new-d))))))))))
+
+;; Worklist Bellman-Ford. Retained for cyclic graphs. Correct for idempotent
+;; semirings (boolean OR, tropical min): repeated propagation is harmless
+;; because `(x ⊕ x) = x`. For non-idempotent semirings on cycles, this
+;; algorithm does not terminate (the counting semiring on cycles has no
+;; finite answer — see the bignum-allocation-reduction plan's five-layer
+;; failure analysis).
+(define (compute-via-worklist ga source)
   (let ((S   (ga-semiring ga))
         (adj (ga-adjacency ga))
         (wfn (ga-weight-fn ga)))
@@ -46,7 +172,6 @@
           (let* ((node (car worklist))
                  (rest (cdr worklist))
                  (node-dist (cdr (assoc node dist))))
-            ;; Get outgoing edges for this node
             (let ((entry (assoc node adj)))
               (if (not entry)
                   (loop rest dist)

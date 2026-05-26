@@ -91,5 +91,25 @@
     ;; A→B: one path, weight 1
     (test 1 (graph-query ga "A" "B"))))
 
+;; Regression: counting semiring on a non-trivially-ordered DAG.
+;; The previous worklist-with-propagate-on-pop algorithm over-counted because
+;; once a node's count was popped and propagated, a later update to that
+;; node's count would re-pop it and re-propagate the full new value — adding
+;; to what was already sent forward. This test pins the correct count.
+(define diamond-with-sink-adj
+  '(("A" . (("B") ("C")))
+    ("B" . (("D")))
+    ("C" . (("D")))
+    ("D" . (("E")))   ; D has a successor — exposes the over-count
+    ("E" . ())))
+
+(test-group "counting semiring on diamond-with-sink DAG"
+  (let ((ga (make-graph-analysis (counting-semiring) diamond-with-sink-adj #f)))
+    ;; Two paths to D (A→B→D and A→C→D)
+    (test 2 (graph-query ga "A" "D"))
+    ;; Same two paths extended through D, so two paths to E
+    ;; (A→B→D→E and A→C→D→E), NOT three.
+    (test 2 (graph-query ga "A" "E"))))
+
 (test-end)
 (test-exit)
