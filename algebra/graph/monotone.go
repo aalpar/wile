@@ -131,3 +131,61 @@ func CountPathsInDAG(numNodes int, edges []Edge, source int) []*big.Int {
 
 	return counts
 }
+
+// CyclicCountResult is the result of CountPathsCyclic. Unlike
+// CountPathsInDAG which returns counts indexed by node, this returns
+// counts indexed by SCC plus the SCC map so callers can project back to
+// per-node answers.
+type CyclicCountResult struct {
+	// SCC[v] is the component containing node v. 0 <= SCC[v] < len(CountsBySCC).
+	SCC []int
+
+	// CountsBySCC[c] is the number of distinct paths in the condensed
+	// DAG from SCC[source] to SCC c. Semantics by SCC kind:
+	//
+	//   Trivial SCC (NonTrivial[c] == false): single node, no within-SCC
+	//     paths. CountsBySCC[c] is the exact number of paths from
+	//     source to that node in the original graph.
+	//
+	//   Non-trivial SCC (NonTrivial[c] == true): contains a cycle.
+	//     Within-SCC path counts are infinite, so CountsBySCC[c] is the
+	//     "entry count" — the number of distinct paths from SCC[source]
+	//     that reach this SCC via some entry point in the condensed
+	//     DAG. Callers should propagate the NonTrivial flag so users
+	//     understand the semantic shift.
+	CountsBySCC []*big.Int
+
+	// NonTrivial[c] mirrors SCCResult.NonTrivial: true iff component c
+	// contains a cycle.
+	NonTrivial []bool
+}
+
+// CountPathsCyclic computes path counts on an arbitrary directed graph
+// by SCC-condensing it and running the monotone kernel on the resulting
+// DAG. Returns counts per SCC, not per node. For acyclic input this is
+// equivalent to CountPathsInDAG with one extra SCC pass of overhead;
+// callers that know their input is acyclic should prefer
+// CountPathsInDAG directly.
+//
+// Returns nil if numNodes <= 0, source is out of range, or any edge
+// references an out-of-range node.
+func CountPathsCyclic(numNodes int, edges []Edge, source int) *CyclicCountResult {
+	if numNodes <= 0 || source < 0 || source >= numNodes {
+		return nil
+	}
+
+	scc, condensed := CondenseSCC(numNodes, edges)
+	if scc == nil {
+		return nil
+	}
+
+	// The condensed graph is acyclic by construction, so CountPathsInDAG
+	// cannot return nil here unless its preconditions are violated.
+	counts := CountPathsInDAG(scc.NumSCCs, condensed, scc.SCC[source])
+
+	return &CyclicCountResult{
+		SCC:         scc.SCC,
+		CountsBySCC: counts,
+		NonTrivial:  scc.NonTrivial,
+	}
+}

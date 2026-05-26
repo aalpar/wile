@@ -211,3 +211,160 @@ func TestCountPathsInDAG_IgnoresUnreachableCycle(t *testing.T) {
 	c.Assert(counts, qt.Not(qt.IsNil))
 	c.Assert(countStrings(counts), qt.DeepEquals, []string{"1", "1", "0", "0"})
 }
+
+// --- CountPathsCyclic ---
+
+// perNodeCountsFromCyclic projects a CyclicCountResult back to per-node
+// counts via the SCC map. Valid only when every SCC is trivial (i.e., the
+// caller knows the original input was acyclic); on cyclic input, multiple
+// nodes share a single SCC count, so this projection is ambiguous.
+func perNodeCountsFromCyclic(res *graph.CyclicCountResult) []string {
+	out := make([]string, len(res.SCC))
+	for v, sid := range res.SCC {
+		out[v] = res.CountsBySCC[sid].String()
+	}
+	return out
+}
+
+func TestCountPathsCyclic_NilOnInvalidInput(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(graph.CountPathsCyclic(0, nil, 0), qt.IsNil)
+	c.Assert(graph.CountPathsCyclic(-1, nil, 0), qt.IsNil)
+	c.Assert(graph.CountPathsCyclic(2, nil, -1), qt.IsNil)
+	c.Assert(graph.CountPathsCyclic(2, nil, 5), qt.IsNil)
+	c.Assert(graph.CountPathsCyclic(2, []graph.Edge{{U: 0, V: 5}}, 0), qt.IsNil)
+}
+
+func TestCountPathsCyclic_AcyclicMatchesDAGKernel(t *testing.T) {
+	c := qt.New(t)
+	// Diamond DAG — each node is its own SCC. CountPathsCyclic's
+	// per-node projection must match CountPathsInDAG exactly.
+	edges := []graph.Edge{
+		{U: 0, V: 1}, {U: 0, V: 2},
+		{U: 1, V: 3}, {U: 2, V: 3},
+	}
+	wantDAG := graph.CountPathsInDAG(4, edges, 0)
+	c.Assert(wantDAG, qt.Not(qt.IsNil))
+
+	res := graph.CountPathsCyclic(4, edges, 0)
+	c.Assert(res, qt.Not(qt.IsNil))
+	c.Assert(len(res.CountsBySCC), qt.Equals, 4, qt.Commentf("acyclic: one SCC per node"))
+
+	// Compare per-node projection against the DAG kernel.
+	c.Assert(perNodeCountsFromCyclic(res), qt.DeepEquals, countStrings(wantDAG))
+	// And every SCC is trivial.
+	for _, nt := range res.NonTrivial {
+		c.Assert(nt, qt.IsFalse)
+	}
+}
+
+func TestCountPathsCyclic_MotivatingCallGraph(t *testing.T) {
+	c := qt.New(t)
+	// The acyclic call graph from plans/2026-05-24-bignum-allocation-
+	// reduction.md Example 1: count paths from "main" (=0) to every
+	// reachable function. Expected per-node counts:
+	//   main=1, init=1, run=1, setup=3, loop=1.
+	edges := []graph.Edge{
+		{U: 0, V: 1}, // main → init
+		{U: 0, V: 2}, // main → run
+		{U: 1, V: 3}, // init → setup
+		{U: 2, V: 3}, // run → setup
+		{U: 2, V: 4}, // run → loop
+		{U: 4, V: 3}, // loop → setup
+	}
+	res := graph.CountPathsCyclic(5, edges, 0)
+	c.Assert(res, qt.Not(qt.IsNil))
+	c.Assert(perNodeCountsFromCyclic(res), qt.DeepEquals,
+		[]string{"1", "1", "1", "3", "1"})
+}
+
+func TestCountPathsCyclic_SingleCycleAllSourceCount(t *testing.T) {
+	c := qt.New(t)
+	// 0 → 1 → 2 → 0 — all three nodes share one non-trivial SCC. From
+	// source 0 (in SCC[0]), the source SCC's count is 1; there are no
+	// other SCCs.
+	edges := []graph.Edge{{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0}}
+	res := graph.CountPathsCyclic(3, edges, 0)
+	c.Assert(res, qt.Not(qt.IsNil))
+	c.Assert(len(res.CountsBySCC), qt.Equals, 1)
+	c.Assert(res.CountsBySCC[0].String(), qt.Equals, "1")
+	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{true},
+		qt.Commentf("caller must see the SCC is non-trivial"))
+}
+
+func TestCountPathsCyclic_CycleWithTail(t *testing.T) {
+	c := qt.New(t)
+	// 3-cycle {0, 1, 2} plus a tail 0 → 3. From source 0:
+	//   SCC containing the cycle: count 1 (the source SCC itself).
+	//   SCC containing 3 (singleton): count 1 (one inter-SCC edge from
+	//   the cycle SCC).
+	edges := []graph.Edge{
+		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
+		{U: 0, V: 3},
+	}
+	res := graph.CountPathsCyclic(4, edges, 0)
+	c.Assert(res, qt.Not(qt.IsNil))
+	c.Assert(len(res.CountsBySCC), qt.Equals, 2)
+
+	cycleSCC := res.SCC[0]
+	tailSCC := res.SCC[3]
+	c.Assert(res.CountsBySCC[cycleSCC].String(), qt.Equals, "1")
+	c.Assert(res.CountsBySCC[tailSCC].String(), qt.Equals, "1")
+	c.Assert(res.NonTrivial[cycleSCC], qt.IsTrue)
+	c.Assert(res.NonTrivial[tailSCC], qt.IsFalse)
+}
+
+func TestCountPathsCyclic_MutualRecursionWithParallelCallSites(t *testing.T) {
+	c := qt.New(t)
+	// A mini call graph that mirrors a real-shape Go fragment:
+	//
+	//   main ─→ f
+	//   main ─→ g
+	//   f ──→ helper  (two distinct call-sites in f)
+	//   f ──→ helper
+	//   f ─→ g       (mutual recursion start)
+	//   g ─→ f       (mutual recursion close)
+	//   g ─→ helper
+	//
+	// Nodes: 0=main, 1=f, 2=g, 3=helper.
+	// Expected SCCs:
+	//   {main} — trivial source
+	//   {f, g} — non-trivial (mutual recursion)
+	//   {helper} — trivial sink
+	//
+	// Inter-SCC condensation has (in some labeling):
+	//   main → {f, g}        (two original edges: main→f, main→g)
+	//   {f, g} → helper      (three original inter-SCC edges:
+	//                          f→helper × 2, g→helper × 1)
+	//
+	// Path counts from main:
+	//   SCC{main}    = 1
+	//   SCC{f, g}    = 2  (two distinct inter-SCC edges main→{f,g})
+	//   SCC{helper}  = 6  (2 × 3 — see below)
+	//
+	// The {f, g} SCC has entry-count 2 (two distinct edges from {main});
+	// each of those edges, combined with the three inter-SCC edges out
+	// to helper, gives 2 × 3 = 6 distinct condensed-DAG paths.
+	edges := []graph.Edge{
+		{U: 0, V: 1}, {U: 0, V: 2},
+		{U: 1, V: 3}, {U: 1, V: 3},
+		{U: 1, V: 2}, {U: 2, V: 1},
+		{U: 2, V: 3},
+	}
+	res := graph.CountPathsCyclic(4, edges, 0)
+	c.Assert(res, qt.Not(qt.IsNil))
+	c.Assert(len(res.CountsBySCC), qt.Equals, 3)
+
+	mainSCC := res.SCC[0]
+	fSCC := res.SCC[1]
+	helperSCC := res.SCC[3]
+
+	c.Assert(res.SCC[2], qt.Equals, fSCC, qt.Commentf("f and g in same SCC"))
+	c.Assert(res.NonTrivial[mainSCC], qt.IsFalse)
+	c.Assert(res.NonTrivial[fSCC], qt.IsTrue)
+	c.Assert(res.NonTrivial[helperSCC], qt.IsFalse)
+
+	c.Assert(res.CountsBySCC[mainSCC].String(), qt.Equals, "1")
+	c.Assert(res.CountsBySCC[fSCC].String(), qt.Equals, "2")
+	c.Assert(res.CountsBySCC[helperSCC].String(), qt.Equals, "6")
+}
