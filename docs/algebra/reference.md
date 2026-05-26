@@ -844,6 +844,37 @@ Semiring-parameterized single-source graph analysis. Lazy Bellman-Ford-style tra
 - `(graph-query ga source target)` -- return the semiring-value between source and target; `semiring-zero` when unreachable; lazily computes and caches single-source distances per source
 - `(graph-query-all ga source)` -- return an alist `((node . value) ...)` for all reachable nodes
 
+### Semiring choice on cyclic graphs
+
+Counting on cyclic graphs has no finite answer in the strict counting semiring `(ℕ, +, ×, 0, 1)` — the path set is infinite, so `Σ` diverges. The library's response depends on the semiring carrier:
+
+- **Boolean reachability, tropical shortest path:** idempotent operations. Worklist Bellman-Ford converges in finite time. Cycles handled correctly.
+- **Counting semiring on a DAG:** topological-order single-pass propagation. Each edge relaxed exactly once. Counts exact (bignum-promoted as needed).
+- **Counting semiring on a cyclic graph:** worklist Bellman-Ford does not terminate (over-counts on each re-pop). Use one of:
+  - **SCC condensation** via `(import (wile algebragraph))` and `count-paths-cyclic` (see below). Gives exact counts per SCC, with "entry count" semantics on non-trivial SCCs (the path-count to the SCC, not within it).
+  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `plans/2026-05-24-approximate-counting-semirings.md`.
+
+## SCC Condensation Fast Path -- `(wile algebragraph)`
+
+Auto-generated extension library exposing the Go-side graph kernels in `algebra/graph/`. Available under the `KitchenSink` profile or via explicit `WithExtension(algebragraph.Extension)`. Designed for callers who want exact path counts on arbitrary directed graphs, including cyclic ones.
+
+Inputs use integer-indexed nodes; the caller is responsible for mapping symbolic names to indices.
+
+### Primitives
+
+- `(count-paths-in-dag num-nodes edges source)` — count paths in a DAG. `edges` is a list of `(u . v)` pairs of node indices. Returns a vector of exact-integer counts (length `num-nodes`) where `v[i]` is the number of distinct paths from `source` to node `i`. Returns `#f` if the input contains a cycle reachable from `source`. Internal monotone-add kernel; O(V + E).
+
+- `(count-paths-cyclic num-nodes edges source)` — count paths via SCC condensation. Handles arbitrary directed graphs. Returns three values:
+  1. SCC vector (length `num-nodes`) mapping each node to its strongly-connected component ID (low IDs are sources in the condensation; high IDs are sinks).
+  2. Counts vector (length `num-sccs`) of distinct paths from the source's SCC to each SCC in the condensed DAG.
+  3. NonTrivial-flag vector (length `num-sccs`) marking SCCs that contain a cycle.
+
+  **Semantics on non-trivial SCCs:** within-SCC path counts are infinite (cycle). For nodes in non-trivial SCCs, the per-SCC count is the *entry count* — the number of distinct condensed-DAG paths from the source's SCC that reach this SCC via some entry point. Callers should propagate the NonTrivial flag so users understand the semantic shift.
+
+### Scale
+
+On a graph the size of the wile/machine package call graph (539 nodes, 623 edges, 12 back-edges — the workload that triggered the 3-hour incident documented in `memory/feedback-counting-semiring-on-cycles.md`), `count-paths-cyclic` completes in ~36 µs (Apple M4 Max). Empirically O(V + E) — the SCC pass, condensation pass, and monotone-add pass each touch every node and edge once.
+
 ---
 
 ## Combinatorial Graph -- `(wile algebra combinatorial-graph)`

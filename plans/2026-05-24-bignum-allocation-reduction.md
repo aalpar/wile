@@ -20,7 +20,7 @@ This plan addresses *one* of several orthogonal cost/correctness layers that com
 |---|---|---|
 | Algebraic | `Σ` over the infinite path set diverges in `(ℕ, +, ×, 0, 1)` — no finite answer exists | `2026-05-24-approximate-counting-semirings.md` (saturating, modular, log Σ-semiring variants) |
 | Algorithmic | Naive Bellman-Ford doesn't detect convergence | Already addressed: `graph.scm:39-73` is worklist-style with per-edge `(equal? merged old-val)` convergence detection. Sibling plan `2026-05-24-graph-worklist-bellman-ford.md` describes a starting state that doesn't match current code. |
-| Structural | Cyclic input forces iteration count proportional to cycle structure | SCC-condensation plan (not yet written) |
+| Structural | Cyclic input forces iteration count proportional to cycle structure | `plans/2026-05-26-scc-condensation.md` (shipped) |
 | Total-correctness gate | Reject ill-posed queries before running | k-closedness check plan (not yet written) |
 | **Implementation cost** | **`(*BigInteger).Add` allocates ~3 heap objects per call, multiplied by every edge relaxation** | **This plan** |
 
@@ -43,7 +43,7 @@ This means:
 - The "non-trivial contribution" check is `d[u].Sign() != 0` for `'big-int`, but generalizes: for `'modular` it's `d[u] != 0 mod P`; for `'log-float` it's `d[u] != -∞`; for `'saturating` it's `d[u] != 0 && d[v] != cap`. The skip-condition shape is `d[u] = additive-identity OR (d[v] = absorbing-element)`.
 - The Pattern 3A inner-loop sketch in Layer 3 is the canonical implementation of this shape. Later plans implementing carrier-specialized sub-paths can lift the shape directly and substitute carrier-specific arithmetic.
 
-Practical consequence: when SCC condensation lands (sibling plan, not yet written) and converts cyclic counting workloads into DAG-on-condensed-graph workloads, Sub-path 4A is the inner loop that runs on the condensed DAG. The work in this plan is the *prerequisite* for the algebraic-and-structural fixes to deliver their full value on real call graphs.
+Practical consequence: SCC condensation has now shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`). Cyclic counting workloads are converted to DAG-on-condensed-graph workloads, and Sub-path 4A becomes the inner loop that runs on the condensed DAG. The work in this plan is the *prerequisite* for the algebraic-and-structural fix to deliver its full value (allocation reduction) on real call graphs.
 
 ### Per-operation allocation cost
 
@@ -293,7 +293,7 @@ Concrete examples showing how the three Phase-4 sub-paths and the escape hatch a
 **Cyclic graphs are not handled by this fast path.** Real-world call graphs typically contain recursion (mutual or direct), which creates cycles. `bigint-counting-semiring` on a cyclic graph does not terminate — the counting semiring `(ℕ, +, ×, 0, 1)` diverges on cycles (no finite path count exists). For cyclic call graphs, use one of:
 
 - `(approximate-counting-semiring CAP)` — saturating carrier (bounded counts; the future approximate-counting plan ships this);
-- SCC condensation pre-pass — collapses each SCC into a super-node, runs `bigint-counting-semiring` on the resulting condensed DAG (a future plan, not yet written);
+- SCC condensation pre-pass — collapses each SCC into a super-node, runs `bigint-counting-semiring` on the resulting condensed DAG. Shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`); the bignum fast path will plug in here once Phase 4 lands.
 - a k-closedness gate — rejects the query at construction time if the graph isn't k-closed (a future plan, not yet written).
 
 This plan ships the inner-loop kernel that all three options will use on the DAG portion of their work.
@@ -586,7 +586,7 @@ Implementation placement:
 - BigFloat / BigComplex / Rational allocation reduction — same pattern applies, same fix shape, but separate plan to keep this one focused on BigInteger which is what the 3-hour incident exposed.
 - Worklist Bellman-Ford convergence detection — already present in `stdlib/lib/wile/algebra/graph.scm:39-73`. The sibling plan `2026-05-24-graph-worklist-bellman-ford.md` describes a starting state that doesn't match the current code; this plan inherits the existing worklist structure directly.
 - Approximate counting semirings — sibling plan `2026-05-24-approximate-counting-semirings.md`.
-- SCC condensation primitive — separate plan, not yet written, needed to make exact counting tractable on cyclic graphs.
+- SCC condensation primitive — shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`). Makes exact counting tractable on cyclic graphs via condensation; the 539-node machine-package incident runs in ~36 µs (vs. the 3-hour baseline).
 - k-closedness check at `make-graph-analysis` time — separate plan, complements this work by preventing the pathological case at construction rather than at runtime.
 - **Scheme-visible mutable-integer types or primitives.** No `*MutableBigInt` value type, no `make-mutable-bigint` / `mutable-bigint-add!` / `mutable-bigint-mul-into!` primitives, no `!`-suffixed bignum arithmetic exposed to Scheme. The in-place API exists for Go callers only. Implementations that need mutable-integer semantics implement that loop in Go (e.g., the algebra-layer fast path in Phase 4). This is a load-bearing decision: it preserves R7RS Number immutability for all Scheme code and confines mutation to library-internal Go boundaries.
 - **Visit-style / stateful-`wfn` Bellman-Ford variant** — see *Two-implementation design paths* below. This plan ships only the static-weight variant (Path A); Path B is documented now as a future-work design surface so the static decision doesn't foreclose it.
