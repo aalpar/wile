@@ -93,85 +93,88 @@
 ;; opt on the semiring is the bridge: when the user opts in via
 ;; `bigint-counting-semiring' (or any `(carrier . big-int)' annotation),
 ;; the wrapper picks up the dispatch and the kernel does the arithmetic.
-(define (%collect-vertices adj)
-  ;; Walk the adjacency once, collecting all distinct vertices (adj keys
-  ;; plus edge targets that aren't keys). Returns a list in stable
-  ;; encounter order so the resulting integer indices are reproducible.
-  (let loop ((entries adj) (order '()))
-    (cond
-      ((null? entries) (reverse order))
-      (else
-       (let* ((e   (car entries))
-              (key (car e))
-              (out (cdr e))
-              (o1  (if (member key order) order (cons key order))))
-         (let edges ((es out) (o o1))
-           (cond
-             ((null? es) (loop (cdr entries) o))
-             (else
-              (let ((tgt (caar es)))
-                (edges (cdr es)
-                       (if (member tgt o) o (cons tgt o))))))))))))
-
+;;
+;; Name→index translation uses a hashtable for O(1) lookups; the naive
+;; alist version was O(V·E) for setup and dominated the kernel's actual
+;; arithmetic cost on graphs >100 nodes.
 (define (compute-via-count-paths-in-dag ga source)
-  ;; Translate name-keyed adjacency to integer indices, call the kernel,
-  ;; project the count vector back to a name-keyed alist. Reachable nodes
-  ;; only (count > 0); source itself has count 1.
-  ;;
-  ;; Cyclic input — kernel returns #f — surfaces as an error pointing at
-  ;; the remedies that handle non-idempotent semirings on cycles.
   (let* ((adj       (ga-adjacency ga))
-         (verts     (%collect-vertices adj))
-         (n         (length verts))
-         (name->idx (let l ((vs verts) (i 0) (acc '()))
-                      (if (null? vs)
-                          (reverse acc)
-                          (l (cdr vs) (+ i 1) (cons (cons (car vs) i) acc)))))
-         (idx-of    (lambda (v) (cdr (assoc v name->idx))))
-         (src-pair  (assoc source name->idx))
-         (src-idx   (if src-pair
-                        (cdr src-pair)
-                        (error
-                         "graph-query: source not present in graph adjacency"
-                         source)))
-         (edges     (let outer ((entries adj) (acc '()))
+         (name->idx (make-hashtable))
+         (idx->name (make-vector 16))
+         (next-idx  0))
+
+    ;; Intern: return existing idx for name, or assign next available.
+    ;; `vec` is mutated in place; we reallocate via `vector-resize!`-style
+    ;; doubling when capacity runs out. `idx->name` shadowing is the
+    ;; idiomatic way to capture the new vector reference.
+    (define (intern! name)
+      (let ((existing (hashtable-ref name->idx name -1)))
+        (cond
+          ((>= existing 0) existing)
+          (else
+           (let ((i next-idx))
+             (when (>= i (vector-length idx->name))
+               (let* ((old-len (vector-length idx->name))
+                      (new-vec (make-vector (* 2 old-len) #f)))
+                 (let copy ((j 0))
+                   (cond
+                     ((= j old-len)
+                      (set! idx->name new-vec))
+                     (else
+                      (vector-set! new-vec j (vector-ref idx->name j))
+                      (copy (+ j 1)))))))
+             (vector-set! idx->name i name)
+             (hashtable-set! name->idx name i)
+             (set! next-idx (+ i 1))
+             i)))))
+
+    ;; Pass 1: intern every vertex name (adj keys + edge targets) and
+    ;; collect the integer edges.
+    (let* ((edges
+             (let outer ((entries adj) (acc '()))
+               (cond
+                 ((null? entries) acc)
+                 (else
+                  (let* ((entry (car entries))
+                         (u     (intern! (car entry))))
+                    (let inner ((es (cdr entry)) (acc2 acc))
                       (cond
-                        ((null? entries) acc)
+                        ((null? es) (outer (cdr entries) acc2))
                         (else
-                         (let* ((from (idx-of (caar entries)))
-                                (outs (cdar entries)))
-                           (let inner ((es outs) (acc2 acc))
-                             (cond
-                               ((null? es) (outer (cdr entries) acc2))
-                               (else
-                                (inner (cdr es)
-                                       (cons (cons from
-                                                   (idx-of (caar es)))
-                                             acc2))))))))))
-         (counts    (count-paths-in-dag n edges src-idx)))
-    (cond
-      ((not counts)
-       ;; Reachable subgraph contains a cycle. The counting semiring on
-       ;; cycles has no finite answer; the fast path declines to spin.
-       (error
-        (string-append
-         "graph-query: bigint-counting-semiring on a cyclic graph "
-         "(non-idempotent semiring; the counting algebra diverges on "
-         "cycles). Remedies: "
-         "(a) (import (wile algebragraph)) and use "
-         "(count-paths-cyclic ...) for exact counts via SCC condensation; "
-         "(b) use a bounded-carrier semiring (saturating, modular, log) "
-         "for approximate counts.")))
-      (else
-       (let l ((vs verts) (i 0) (acc '()))
-         (cond
-           ((null? vs) acc)
-           (else
-            (let ((c (vector-ref counts i)))
-              (cond
-                ((zero? c) (l (cdr vs) (+ i 1) acc))
-                (else (l (cdr vs) (+ i 1)
-                         (cons (cons (car vs) c) acc))))))))))))
+                         (let ((v (intern! (caar es))))
+                           (inner (cdr es) (cons (cons u v) acc2)))))))))))
+           (src-idx (hashtable-ref name->idx source -1)))
+      (when (< src-idx 0)
+        (error "graph-query: source not present in graph adjacency" source))
+      (let ((counts (count-paths-in-dag next-idx edges src-idx)))
+        (cond
+          ((not counts)
+           ;; Reachable subgraph contains a cycle. The counting semiring
+           ;; on cycles has no finite answer; the fast path declines to
+           ;; spin.
+           (error
+            (string-append
+             "graph-query: bigint-counting-semiring on a cyclic graph "
+             "(non-idempotent semiring; the counting algebra diverges on "
+             "cycles). Remedies: "
+             "(a) (import (wile algebragraph)) and use "
+             "(count-paths-cyclic ...) for exact counts via SCC condensation; "
+             "(b) use a bounded-carrier semiring (saturating, modular, log) "
+             "for approximate counts.")))
+          (else
+           ;; Walk indices once, build alist. Reachable nodes have count
+           ;; > 0; unreachable get omitted to match the slow path's
+           ;; result shape.
+           (let l ((i 0) (acc '()))
+             (cond
+               ((= i next-idx) acc)
+               (else
+                (let ((c (vector-ref counts i)))
+                  (cond
+                    ((zero? c) (l (+ i 1) acc))
+                    (else
+                     (l (+ i 1)
+                        (cons (cons (vector-ref idx->name i) c) acc))))))))))))))
 
 ;; Compute a topological order of the subgraph reachable from `source`.
 ;; Returns two values (via `values`):
