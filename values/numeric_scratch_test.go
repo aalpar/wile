@@ -124,3 +124,108 @@ func newBigIntegerFromDecimal(c *qt.C, s string) *BigInteger {
 	c.Assert(ok, qt.IsTrue, qt.Commentf("parsing %q", s))
 	return &BigInteger{value: v}
 }
+
+// --- subBigIntInPlace ---
+
+func TestSubBigIntInPlace_Correctness(t *testing.T) {
+	cases := []struct {
+		name    string
+		p, v    string
+		want    string
+	}{
+		{"zero-minus-zero", "0", "0", "0"},
+		{"small-positive", "10", "3", "7"},
+		{"underflow-to-negative", "3", "10", "-7"},
+		{"large-positive", "18446744073709551617", "1", "18446744073709551616"},
+		{"large-cancellation", "12345678901234567890", "12345678901234567890", "0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			p := newBigIntegerFromDecimal(c, tc.p)
+			v := newBigIntegerFromDecimal(c, tc.v)
+			dest := &BigInteger{value: new(big.Int)}
+			ret := subBigIntInPlace(dest, p, v)
+			c.Assert(ret, qt.Equals, dest, qt.Commentf("returns dest for chaining"))
+			c.Assert(dest.value.String(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestSubBigIntInPlace_AliasAll(t *testing.T) {
+	c := qt.New(t)
+	// dest, dest, dest → 0.
+	dest := newBigIntegerFromDecimal(c, "99999999999999999999")
+	subBigIntInPlace(dest, dest, dest)
+	c.Assert(dest.value.Sign(), qt.Equals, 0)
+}
+
+// --- mulBigIntInPlace ---
+
+func TestMulBigIntInPlace_Correctness(t *testing.T) {
+	cases := []struct {
+		name    string
+		p, v    string
+		want    string
+	}{
+		{"zero-times-x", "0", "12345", "0"},
+		{"one-times-x", "1", "12345", "12345"},
+		{"small", "7", "6", "42"},
+		{"negative-by-positive", "-3", "5", "-15"},
+		{"large", "100000000000000000000", "100000000000000000000", "10000000000000000000000000000000000000000"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			p := newBigIntegerFromDecimal(c, tc.p)
+			v := newBigIntegerFromDecimal(c, tc.v)
+			dest := &BigInteger{value: new(big.Int)}
+			ret := mulBigIntInPlace(dest, p, v)
+			c.Assert(ret, qt.Equals, dest)
+			c.Assert(dest.value.String(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestMulBigIntInPlace_AliasDestEqP(t *testing.T) {
+	c := qt.New(t)
+	// dest aliases p: square-in-place pattern.
+	dest := newBigIntegerFromDecimal(c, "7")
+	v := newBigIntegerFromDecimal(c, "6")
+	mulBigIntInPlace(dest, dest, v)
+	c.Assert(dest.value.String(), qt.Equals, "42")
+}
+
+// --- negateBigIntInPlace ---
+
+func TestNegateBigIntInPlace_Correctness(t *testing.T) {
+	cases := []struct {
+		name string
+		p    string
+		want string
+	}{
+		{"zero", "0", "0"},
+		{"positive", "42", "-42"},
+		{"negative", "-42", "42"},
+		{"large-positive", "99999999999999999999999999", "-99999999999999999999999999"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			p := newBigIntegerFromDecimal(c, tc.p)
+			dest := &BigInteger{value: new(big.Int)}
+			ret := negateBigIntInPlace(dest, p)
+			c.Assert(ret, qt.Equals, dest)
+			c.Assert(dest.value.String(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestNegateBigIntInPlace_AliasDestEqP(t *testing.T) {
+	c := qt.New(t)
+	// In-place negation: negateBigIntInPlace(x, x) → -x.
+	x := newBigIntegerFromDecimal(c, "12345678901234567890")
+	want := new(big.Int).Neg(x.value)
+	negateBigIntInPlace(x, x)
+	c.Assert(x.value.Cmp(want), qt.Equals, 0)
+}

@@ -30,3 +30,29 @@ func addBigIntInPlace(dest, p, v *BigInteger) *BigInteger {
 	dest.value.Add(p.value, v.value)
 	return dest
 }
+
+// subBigIntInPlace stores p.value - v.value into dest.value, reusing dest's
+// existing []Word storage when capacity allows. Returns dest for chaining.
+func subBigIntInPlace(dest, p, v *BigInteger) *BigInteger {
+	dest.value.Sub(p.value, v.value)
+	return dest
+}
+
+// mulBigIntInPlace stores p.value * v.value into dest.value, reusing dest's
+// existing []Word storage when capacity allows. Returns dest for chaining.
+//
+// Note: dest aliasing one of the operands is supported by math/big.Mul,
+// but the inner Karatsuba/Toom-Cook implementations may temporarily
+// allocate scratch even when the destination is pre-sized. Pre-sizing
+// matters more for additive ops than for multiplicative.
+func mulBigIntInPlace(dest, p, v *BigInteger) *BigInteger {
+	dest.value.Mul(p.value, v.value)
+	return dest
+}
+
+// negateBigIntInPlace stores -p.value into dest.value. Returns dest for
+// chaining.
+func negateBigIntInPlace(dest, p *BigInteger) *BigInteger {
+	dest.value.Neg(p.value)
+	return dest
+}
