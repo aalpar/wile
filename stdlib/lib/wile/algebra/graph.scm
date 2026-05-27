@@ -303,6 +303,13 @@
 ;; order visits u only after all of u's predecessors have settled, dist[u]
 ;; is final at u's turn — no re-propagation occurs, so non-idempotent
 ;; semirings (counting) get the right answer.
+;;
+;; No `semiring-eq?' call here, by design: the topo-order loop does not iterate
+;; to a fixpoint. Each node is visited exactly once and each edge relaxed
+;; exactly once. There is no convergence to detect, so no equality predicate
+;; is consulted on semiring values. The `assoc' / `equal?' calls below compare
+;; *node identifiers* (alist keys), not semiring values, and intentionally use
+;; the host equality contract regardless of the semiring's declared equality.
 (define (compute-via-topological-order ga source order)
   (let ((S   (ga-semiring ga))
         (adj (ga-adjacency ga))
@@ -398,7 +405,13 @@
                                (old-entry (assoc neighbor-name d))
                                (old-val (if old-entry (cdr old-entry) (semiring-zero S)))
                                (merged (semiring-plus S old-val candidate)))
-                          (if (equal? merged old-val)
+                          ;; Convergence detection uses the semiring's declared
+                          ;; equality (defaulting to `equal?'). This lets carriers
+                          ;; with non-canonical representations — log-space floats
+                          ;; with tolerance, modular Z/PZ values requiring
+                          ;; normalization — terminate the worklist without
+                          ;; spinning on representational-but-not-value differences.
+                          (if (semiring-eq? S merged old-val)
                               (edge-loop (cdr edges) wl d)
                               (let ((new-d (cons (cons neighbor-name merged)
                                                  (if old-entry
