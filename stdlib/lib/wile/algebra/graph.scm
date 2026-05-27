@@ -26,13 +26,53 @@
   (cache            ga-cache set-ga-cache!)
   (fast-path-kind   ga-fast-path-kind))
 
+;; The fast-path kernel (count-paths-in-dag) lives in (wile algebragraph),
+;; which is an opt-in Go extension only present under the `kitchen-sink`
+;; profile. Under smaller profiles the import in graph.sld is suppressed via
+;; `cond-expand'; %fast-path-available? mirrors that decision so the eligibility
+;; check in `make-graph-analysis' can short-circuit before referencing the
+;; (then-unbound) kernel name. With the kernel absent, every `<graph-analysis>'
+;; falls back to the pure-Scheme inner loop transparently.
+(cond-expand
+  ((library (wile algebragraph))
+   (define %fast-path-available? #t))
+  (else
+   (define %fast-path-available? #f)))
+
+;; The fast path interns node identifiers into a hashtable, which Wile's
+;; `make-hashtable' restricts to atomic Hashable values (symbol, string,
+;; number, char, boolean). The slow path accepts any `equal?'-comparable
+;; value, including pairs, vectors, and lists. To keep the carrier opt
+;; advisory (per `stdlib/lib/wile/algebra/CLAUDE.md' "Consumer libraries...
+;; never error on unrecognised carrier"), we walk the adjacency at
+;; construction time and suppress fast-path attachment if any node
+;; identifier is non-atomic — the analysis falls back to the slow path
+;; transparently.
+(define (%atomic-node-id? v)
+  (or (symbol? v) (string? v) (number? v) (char? v) (boolean? v)))
+
+(define (%adjacency-keys-all-atomic? adj)
+  (let outer ((entries adj))
+    (cond
+      ((null? entries) #t)
+      ((not (%atomic-node-id? (caar entries))) #f)
+      (else
+       (let inner ((es (cdar entries)))
+         (cond
+           ((null? es) (outer (cdr entries)))
+           ((not (%atomic-node-id? (caar es))) #f)
+           (else (inner (cdr es)))))))))
+
 ;; --- Constructor ---
 
 (define (make-graph-analysis semiring adjacency weight-fn)
   "Construct a graph analysis from a semiring, adjacency alist, and weight function.\nADJACENCY is an alist: ((node . ((neighbor . edge-data) ...)) ...).\nWEIGHT-FN receives edge-data and returns a semiring value.\nPass #f for unit weights (each edge = semiring-one).\n\nWhen the semiring declares carrier `'big-int' (via `(make-semiring ... '(carrier . big-int))' or the built-in `bigint-counting-semiring') AND `weight-fn' is `#f', this constructor attaches the unit-weight counting fast path (sub-path 4A of the bignum-allocation-reduction plan). Queries route through `count-paths-in-dag', which uses in-place `*big.Int' arithmetic instead of the per-relaxation allocating loop. A non-`#f' `weight-fn' falls through to the generic Scheme inner loop — weighted-bigint acceleration (sub-path 4B) is not yet implemented.\n\nUse `(graph-analysis-fast-path? ga)' to verify whether the fast path attached.\n\nExamples:\n  (make-graph-analysis (boolean-semiring)\n    '((\"A\" . ((\"B\" . 1))) (\"B\" . ()))\n    #f)\n\nParameters:\n  semiring : any\n  adjacency : list\n  weight-fn : procedure-or-false\nReturns: graph-analysis\nCategory: algebra\n\nSee also: `graph-query', `graph-query-all', `graph-analysis-fast-path?'."
   (let* ((carrier  (semiring-carrier semiring))
          (fast-kind (cond
-                      ((and (eq? carrier 'big-int) (not weight-fn))
+                      ((and %fast-path-available?
+                            (eq? carrier 'big-int)
+                            (not weight-fn)
+                            (%adjacency-keys-all-atomic? adjacency))
                        'unit-weight-counting)
                       (else #f)))
          (wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
@@ -97,84 +137,108 @@
 ;; Name→index translation uses a hashtable for O(1) lookups; the naive
 ;; alist version was O(V·E) for setup and dominated the kernel's actual
 ;; arithmetic cost on graphs >100 nodes.
+;;
+;; `cond-expand' lives inside the function body so the top-level binding
+;; `compute-via-count-paths-in-dag' is visible to the dispatcher
+;; regardless of profile. Under profiles without (wile algebragraph) the
+;; body is a stub `error' — but `%fast-path-available?' ensures
+;; `make-graph-analysis' never assigns `'unit-weight-counting' there, so the
+;; stub is unreachable from the public surface.
 (define (compute-via-count-paths-in-dag ga source)
-  (let* ((adj       (ga-adjacency ga))
-         (name->idx (make-hashtable))
-         (idx->name (make-vector 16))
-         (next-idx  0))
+  (cond-expand
+    ((library (wile algebragraph))
+     (let* ((adj       (ga-adjacency ga))
+            (name->idx (make-hashtable))
+            (idx->name (make-vector 16))
+            (next-idx  0))
 
-    ;; Intern: return existing idx for name, or assign next available.
-    ;; `vec` is mutated in place; we reallocate via `vector-resize!`-style
-    ;; doubling when capacity runs out. `idx->name` shadowing is the
-    ;; idiomatic way to capture the new vector reference.
-    (define (intern! name)
-      (let ((existing (hashtable-ref name->idx name -1)))
-        (cond
-          ((>= existing 0) existing)
-          (else
-           (let ((i next-idx))
-             (when (>= i (vector-length idx->name))
-               (let* ((old-len (vector-length idx->name))
-                      (new-vec (make-vector (* 2 old-len) #f)))
-                 (let copy ((j 0))
-                   (cond
-                     ((= j old-len)
-                      (set! idx->name new-vec))
-                     (else
-                      (vector-set! new-vec j (vector-ref idx->name j))
-                      (copy (+ j 1)))))))
-             (vector-set! idx->name i name)
-             (hashtable-set! name->idx name i)
-             (set! next-idx (+ i 1))
-             i)))))
-
-    ;; Pass 1: intern every vertex name (adj keys + edge targets) and
-    ;; collect the integer edges.
-    (let* ((edges
-             (let outer ((entries adj) (acc '()))
-               (cond
-                 ((null? entries) acc)
-                 (else
-                  (let* ((entry (car entries))
-                         (u     (intern! (car entry))))
-                    (let inner ((es (cdr entry)) (acc2 acc))
+       ;; Intern: return existing idx for name, or assign next available.
+       ;; `idx->name' is mutated via `set!' when capacity doubles, because
+       ;; the inner `intern!' closure captures the original binding and
+       ;; needs to observe the reassignment.
+       (define (intern! name)
+         (let ((existing (hashtable-ref name->idx name -1)))
+           (cond
+             ((>= existing 0) existing)
+             (else
+              (let ((i next-idx))
+                (when (>= i (vector-length idx->name))
+                  (let* ((old-len (vector-length idx->name))
+                         (new-vec (make-vector (* 2 old-len) #f)))
+                    (let copy ((j 0))
                       (cond
-                        ((null? es) (outer (cdr entries) acc2))
+                        ((= j old-len)
+                         (set! idx->name new-vec))
                         (else
-                         (let ((v (intern! (caar es))))
-                           (inner (cdr es) (cons (cons u v) acc2)))))))))))
-           (src-idx (hashtable-ref name->idx source -1)))
-      (when (< src-idx 0)
-        (error "graph-query: source not present in graph adjacency" source))
-      (let ((counts (count-paths-in-dag next-idx edges src-idx)))
-        (cond
-          ((not counts)
-           ;; Reachable subgraph contains a cycle. The counting semiring
-           ;; on cycles has no finite answer; the fast path declines to
-           ;; spin.
-           (error
-            (string-append
-             "graph-query: bigint-counting-semiring on a cyclic graph "
-             "(non-idempotent semiring; the counting algebra diverges on "
-             "cycles). Remedies: "
-             "(a) (import (wile algebragraph)) and use "
-             "(count-paths-cyclic ...) for exact counts via SCC condensation; "
-             "(b) use a bounded-carrier semiring (saturating, modular, log) "
-             "for approximate counts.")))
-          (else
-           ;; Walk indices once, build alist. Reachable nodes have count
-           ;; > 0; unreachable get omitted to match the slow path's
-           ;; result shape.
-           (let l ((i 0) (acc '()))
-             (cond
-               ((= i next-idx) acc)
-               (else
-                (let ((c (vector-ref counts i)))
+                         (vector-set! new-vec j (vector-ref idx->name j))
+                         (copy (+ j 1)))))))
+                (vector-set! idx->name i name)
+                (hashtable-set! name->idx name i)
+                (set! next-idx (+ i 1))
+                i)))))
+
+       ;; Pass 1: intern every vertex name (adj keys + edge targets) and
+       ;; collect the integer edges.
+       (let* ((edges
+                (let outer ((entries adj) (acc '()))
                   (cond
-                    ((zero? c) (l (+ i 1) acc))
+                    ((null? entries) acc)
                     (else
-                     (l (+ i 1)
-                        (cons (cons (vector-ref idx->name i) c) acc))))))))))))))
+                     (let* ((entry (car entries))
+                            (u     (intern! (car entry))))
+                       (let inner ((es (cdr entry)) (acc2 acc))
+                         (cond
+                           ((null? es) (outer (cdr entries) acc2))
+                           (else
+                            (let ((v (intern! (caar es))))
+                              (inner (cdr es) (cons (cons u v) acc2)))))))))))
+              (src-idx (hashtable-ref name->idx source -1)))
+         (cond
+           ;; Source not in graph — match the slow path's permissive
+           ;; behaviour: return an empty distance alist so `graph-query'
+           ;; surfaces `semiring-zero' for every target. The fast path
+           ;; must not narrow the contract that the carrier opt is
+           ;; documented to leave unchanged.
+           ((< src-idx 0) '())
+           (else
+            (let ((counts (count-paths-in-dag next-idx edges src-idx)))
+              (cond
+                ((not counts)
+                 ;; Reachable subgraph contains a cycle. The counting
+                 ;; semiring on cycles has no finite answer; the fast
+                 ;; path declines to spin.
+                 (error
+                  (string-append
+                   "graph-query: bigint-counting-semiring on a cyclic graph "
+                   "(non-idempotent semiring; the counting algebra diverges on "
+                   "cycles). Remedies: "
+                   "(a) (import (wile algebragraph)) and use "
+                   "(count-paths-cyclic ...) for exact counts via SCC "
+                   "condensation; "
+                   "(b) use a bounded-carrier semiring (saturating, modular, "
+                   "log) for approximate counts.")))
+                (else
+                 ;; Walk indices once, build alist. Reachable nodes have
+                 ;; count > 0; unreachable get omitted to match the slow
+                 ;; path's result shape.
+                 (let l ((i 0) (acc '()))
+                   (cond
+                     ((= i next-idx) acc)
+                     (else
+                      (let ((c (vector-ref counts i)))
+                        (cond
+                          ((zero? c) (l (+ i 1) acc))
+                          (else
+                           (l (+ i 1)
+                              (cons (cons (vector-ref idx->name i) c)
+                                    acc))))))))))))))))
+    (else
+     (error
+      (string-append
+       "compute-via-count-paths-in-dag: (wile algebragraph) extension not "
+       "loaded; %fast-path-available? was #f so this dispatch path is "
+       "unreachable from `make-graph-analysis' — this is an internal "
+       "invariant violation, please file a bug.")))))
 
 ;; Compute a topological order of the subgraph reachable from `source`.
 ;; Returns two values (via `values`):

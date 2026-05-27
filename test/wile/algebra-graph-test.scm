@@ -153,6 +153,12 @@
   ;; Diamond: A→{B,C}→D. Two paths from A to D.
   (let ((fast (make-graph-analysis (bigint-counting-semiring) test-adj #f))
         (slow (make-graph-analysis (counting-semiring) test-adj #f)))
+    ;; Absolute pins — anchors the comparison so a symmetric bug
+    ;; producing the same wrong value on both paths still trips a test.
+    (test 2 (graph-query fast "A" "D"))
+    (test 1 (graph-query fast "A" "B"))
+    (test 1 (graph-query fast "A" "A"))
+    ;; Cross-path agreement.
     (test (graph-query slow "A" "D") (graph-query fast "A" "D"))
     (test (graph-query slow "A" "B") (graph-query fast "A" "B"))
     (test (graph-query slow "A" "A") (graph-query fast "A" "A"))))
@@ -201,6 +207,38 @@
     (test 2 (graph-query ga "A" "D"))
     (test 2 (graph-query ga "A" "D"))     ; cached
     (test 1 (graph-query ga "A" "B"))))
+
+(test-group "fast path — non-atomic adjacency keys suppress attachment"
+  ;; The fast path's name interning uses a hashtable, which Wile restricts
+  ;; to atomic keys. Adjacency with a pair-keyed node falls back to the
+  ;; slow path transparently — the carrier opt stays advisory.
+  (let ((ga (make-graph-analysis (bigint-counting-semiring)
+                                 '(((1 2) . (((3 4) . 1))) ((3 4) . ()))
+                                 #f)))
+    (test #f (graph-analysis-fast-path? ga))
+    ;; Slow path still works on the same input — value verifies
+    ;; semantic equivalence under fall-back.
+    (test 1 (graph-query ga '(1 2) '(3 4))))
+  ;; Adjacency mixing atomic and non-atomic keys: presence of either
+  ;; non-atomic key disables the fast path. (Edge target #(0) is a
+  ;; vector — also non-Hashable.)
+  (let ((ga (make-graph-analysis (bigint-counting-semiring)
+                                 (list (cons "A" (list (cons #(0) 1)))
+                                       (cons #(0) '()))
+                                 #f)))
+    (test #f (graph-analysis-fast-path? ga))))
+
+(test-group "fast path — source not in adjacency returns semiring-zero"
+  ;; The fast path used to error on missing source; slow path returns
+  ;; semiring-zero. Aligning them keeps the carrier opt's "advisory"
+  ;; contract intact: same query, same result, regardless of carrier.
+  (let ((fast (make-graph-analysis (bigint-counting-semiring) test-adj #f))
+        (slow (make-graph-analysis (counting-semiring) test-adj #f)))
+    (test (graph-query slow "MISSING" "A")
+          (graph-query fast "MISSING" "A"))
+    (test 0 (graph-query fast "MISSING" "A"))
+    ;; graph-query-all returns an empty alist for a missing source.
+    (test '() (graph-query-all fast "MISSING"))))
 
 (test-end)
 (test-exit)

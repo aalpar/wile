@@ -157,13 +157,17 @@ Structure records that declare a `(carrier . SYM)` opt let consumer
 libraries dispatch on the carrier type without inspecting the structure's
 operations directly. `<semiring>` is the first carrier of this pattern:
 
-| Symbol | Carrier |
-|--------|---------|
-| `'big-int` | `*BigInteger` — opts into `(wile algebra graph)`'s `count-paths-in-dag` integration |
-| `'integer` | `*Integer` (fixnum, with overflow promotion to `*BigInteger`) |
-| `'rational`, `'real`, `'complex` | numeric tower entries — reuse `values/NumericTypeSpec.schemeName` vocabulary where applicable |
-| `'boolean`, `'log-float`, `'modular`, `'saturating`, `'opaque` | non-numeric or non-tower carriers |
-| `#f` (absence) | no fast path — dispatch falls through to the generic Scheme inner loop |
+| Symbol | Carrier | Status |
+|--------|---------|--------|
+| `'big-int` | `*BigInteger` | Active — opts into `(wile algebra graph)`'s `count-paths-in-dag` integration when conditions hold (see below) |
+| `#f` (absence) | n/a | No fast path — dispatch falls through to the generic Scheme inner loop |
+
+Reserved symbols for future sub-paths (no fast path attached today;
+declaring them is equivalent to `#f`): `'integer`, `'rational`, `'real`,
+`'complex`, `'boolean`, `'log-float`, `'modular`, `'saturating`,
+`'opaque`. The active vocabulary reuses `values/NumericTypeSpec.schemeName`
+where applicable. Unknown symbols are accepted silently per the
+"never error on unrecognised carrier" contract below.
 
 The carrier symbol is *advisory* — declaring it doesn't change Scheme-visible
 arithmetic. It signals consumer-side fast-path eligibility. The built-in

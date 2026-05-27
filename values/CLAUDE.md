@@ -61,16 +61,19 @@ DAG kernels will consume the `*BigInteger`-wrapping variants here).
 `[]Word` capacity; the *first* in-place op allocates a backing slice.
 Subsequent ops within capacity reuse it. To skip the growth phase when
 the working width is known, pre-size with
-`(*big.Int).SetBits(make([]big.Word, 0, N))`. Microbenches in
+`(*big.Int).SetBits(make([]big.Word, 0, N))`. The
+`TestBigIntInPlace_ZeroAllocs` regression test pins zero allocations
+on the steady-state path via `testing.AllocsPerRun`; microbenches in
 `numeric_scratch_bench_test.go` measure the steady-state cost against
-the allocating `(*BigInteger).Add` baseline:
+the allocating `(*BigInteger).Add` baseline (Apple M4 Max; absolute
+ns/op vary by CPU, ratios are stable):
 
-| Bench | ns/op | B/op | allocs/op | vs allocating |
-|-------|-------|------|-----------|---------------|
-| `BigIntegerAdd` (allocating) | 35 | 88 | 3 | baseline |
-| `BigIntAddInPlace` | 5.2 | 0 | 0 | **6.7×** |
-| `BigIntegerMultiply` (allocating) | 37 | 88 | 3 | baseline |
-| `BigIntMulInPlace` | 6.6 | 0 | 0 | **5.6×** |
+| Bench | ns/op (M4 Max) | B/op | allocs/op | vs allocating |
+|-------|---------------:|-----:|----------:|---------------|
+| `BigIntegerAdd` (allocating) | ~35 | 88 | 3 | baseline |
+| `BigIntAddInPlace` | ~5 | 0 | 0 | **~7×** |
+| `BigIntegerMultiply` (allocating) | ~37 | 88 | 3 | baseline |
+| `BigIntMulInPlace` | ~7 | 0 | 0 | **~5×** |
 
 ## Error Handling
 
