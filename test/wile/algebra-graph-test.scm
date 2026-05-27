@@ -489,6 +489,21 @@
                      (lambda (_) 1))))
       (test '(a b) (graph-cyclic-nodes ga-trop)))))
 
+(test-group "graph-analysis-sccs raises on non-atomic node identifiers"
+  ;; Wile's make-hashtable restricts keys to atomic Hashable values.
+  ;; The kernel's name-interning step relies on this; on non-atomic node IDs
+  ;; (pairs, vectors, lists) %ensure-graph-scc! must surface a clear error,
+  ;; not let hashtable-set! fail mid-walk with an opaque message.
+  (let* ((adj '(((compound key 1) . (((other compound key) . #f)))
+                ((other compound key) . ())))
+         (ga  (make-graph-analysis (boolean-semiring) adj #f)))
+    ;; Slow-path API still works on non-atomic keys (uses equal?-comparable).
+    (test #t (graph-query ga '(compound key 1) '(other compound key)))
+    ;; SCC side-query API raises with a clear message.
+    (test-error (graph-analysis-sccs ga))
+    (test-error (graph-cyclic-nodes ga))
+    (test-error (graph-node-in-cycle? ga '(compound key 1)))))
+
 (test-group "SCC structure stable across kernel calls with different sources"
   ;; The cyclic-counting adapter discards the per-call SCC vector returned
   ;; by count-paths-cyclic and uses the cached one. This pins the

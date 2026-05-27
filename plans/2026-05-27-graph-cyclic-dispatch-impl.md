@@ -1,6 +1,6 @@
 # Graph Cyclic-Counting Dispatch — Scheme-Side Polish
 
-**Status:** Draft. Implementation not yet started.
+**Status:** Shipped in PR #759 with Copilot + crosscheck revisions. Notable design changes from the draft: `graph-node-in-cycle?` raises on unknown node (was permissive `#f`) for symmetry with sibling structural accessors; `<graph-scc>` accessors are named `graph-scc-*` (matches algebra convention) with a `make-graph-scc` validating wrapper; `graph-analysis-sccs` works on any carrier (R-2 was overly cautious — SCC is structural, not carrier-dependent); `compute-single-source` uses kernel-first dispatch (`or`-fallback on `#f`) rather than Scheme-side topological pre-detection, saving O(V) `assoc` lookups per query on the fast path; `%ensure-graph-scc!` guards against non-atomic node IDs with a clear error rather than letting the hashtable fail mid-walk.
 
 **Scope:** Wire the deferred Phase 4b of `2026-05-26-scc-condensation.md`. The `count-paths-cyclic` Go kernel and the `count-paths-in-dag` kernel both ship today; the bigint-carrier dispatch in `stdlib/lib/wile/algebra/graph.scm` routes acyclic input to the latter but **errors out** on cyclic input. This plan replaces that error path with dispatch to the cyclic kernel, exposes the SCC decomposition through a small side-query API, and adds the in-degree primitives that call-graph consumers (notably wile-goast) need but `(wile algebra combinatorial-graph)` does not yet export.
 

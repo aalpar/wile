@@ -191,19 +191,24 @@
 (define (compute-single-source ga source)
   (case (ga-fast-path-kind ga)
     ((unit-weight-counting)
-     ;; Pre-detect cyclicity to choose between the DAG kernel (in-place
-     ;; bignum, forward propagation on toposort) and the cyclic kernel
-     ;; (Tarjan SCC + condensation, then the DAG kernel on the condensed
-     ;; graph). topological-order-from already does the same DFS the
-     ;; non-fast-path branch uses; reusing it here is symmetric and means
-     ;; the kernel never sees cyclic input from this dispatch (its
-     ;; cycle-return path is downgraded to an internal-invariant error).
-     (call-with-values
-       (lambda () (topological-order-from ga source))
-       (lambda (_order cyclic?)
-         (if cyclic?
-             (compute-via-count-paths-cyclic ga source)
-             (compute-via-count-paths-in-dag  ga source)))))
+     ;; Kernel-first dispatch. count-paths-in-dag does its own O(V+E)
+     ;; cycle detection internally (Go side, hashtable-backed) and returns
+     ;; #f on cyclic input. Running topological-order-from in Scheme first
+     ;; would duplicate that work using O(V) assoc lookups per node — slow
+     ;; enough to erase the fast-path speedup on large DAGs (Copilot
+     ;; finding on PR #759).
+     ;;
+     ;; If ga-scc is already populated, the graph is known cyclic
+     ;; (population only happens via the cyclic kernel or the side-query
+     ;; API), so skip the wasted DAG call and route directly. Acyclic
+     ;; graphs that haven't had graph-analysis-sccs called on them never
+     ;; see the cyclic path.
+     (cond
+       ((ga-scc ga)
+        (compute-via-count-paths-cyclic ga source))
+       (else
+        (or (compute-via-count-paths-in-dag ga source)
+            (compute-via-count-paths-cyclic ga source)))))
     (else
      (call-with-values
        (lambda () (topological-order-from ga source))
@@ -294,16 +299,23 @@
 
 ;; --- Sub-path 4A: unit-weight bigint counting via count-paths-in-dag ---
 ;;
+;; Returns:
+;;   - alist of (name . count) for non-zero entries on acyclic input;
+;;   - '() if SOURCE is not in the adjacency;
+;;   - #f if the reachable subgraph contains a cycle.
+;;
+;; The #f return is the signal `compute-single-source's `or'-dispatch
+;; uses to fall through to `compute-via-count-paths-cyclic'. The kernel
+;; (count-paths-in-dag, in Go) does its own O(V+E) cycle detection
+;; internally; relying on its #f return saves the dispatcher a redundant
+;; Scheme-side topological pass.
+;;
 ;; `cond-expand' lives inside the function body so the top-level binding
 ;; `compute-via-count-paths-in-dag' is visible to the dispatcher
 ;; regardless of profile. Under profiles without (wile algebragraph) the
 ;; body is a stub `error' — but `%fast-path-available?' ensures
-;; `make-graph-analysis' never assigns `'unit-weight-counting' there, so the
-;; stub is unreachable from the public surface.
-;;
-;; When dispatched correctly (caller pre-detects cyclicity), the kernel
-;; never sees cyclic input — its #f return becomes an internal invariant
-;; violation. The pre-detection lives in `compute-single-source'.
+;; `make-graph-analysis' never assigns `'unit-weight-counting' there, so
+;; the stub is unreachable from the public surface.
 (define (compute-via-count-paths-in-dag ga source)
   (cond-expand
     ((library (wile algebragraph))
@@ -321,18 +333,10 @@
              (else
               (let ((counts (count-paths-in-dag num-nodes edges src-idx)))
                 (cond
-                  ((not counts)
-                   ;; Reachable subgraph contains a cycle. The dispatcher
-                   ;; in `compute-single-source' pre-detects this and routes
-                   ;; to `compute-via-count-paths-cyclic' before we get here,
-                   ;; so this branch should be unreachable. If it fires,
-                   ;; the dispatcher's pre-detection got out of sync with
-                   ;; the kernel's cycle detection — file a bug.
-                   (error
-                    (string-append
-                     "compute-via-count-paths-in-dag: kernel reported cyclic "
-                     "input but dispatcher's pre-detection said acyclic. "
-                     "Internal invariant violation, please file a bug.")))
+                  ;; #f from the kernel = reachable subgraph is cyclic.
+                  ;; Propagate to the dispatcher; do not raise — the cyclic
+                  ;; adapter handles this case.
+                  ((not counts) #f)
                   (else
                    (%project-counts-to-alist idx->name counts num-nodes))))))))))
     (else
@@ -420,24 +424,49 @@
   (or (ga-scc ga)
       (cond-expand
         ((library (wile algebragraph))
-         (call-with-values
-           (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
-           (lambda (name->idx idx->name num-nodes edges)
-             (cond
-               ((zero? num-nodes)
-                (let ((rec (make-graph-scc* (make-vector 0) (make-vector 0)
-                                            name->idx idx->name 0 edges)))
-                  (set-ga-scc! ga rec)
-                  rec))
-               (else
-                (call-with-values
-                  (lambda () (count-paths-cyclic num-nodes edges 0))
-                  (lambda (scc-vec _counts non-trivial-vec)
-                    (let ((rec (make-graph-scc*
-                                 scc-vec non-trivial-vec
-                                 name->idx idx->name num-nodes edges)))
-                      (set-ga-scc! ga rec)
-                      rec))))))))
+         (cond
+           ;; The kernel interns node identifiers into Wile's make-hashtable,
+           ;; which restricts keys to atomic Hashable values (symbol, string,
+           ;; number, char, boolean). Public APIs (graph-analysis-sccs,
+           ;; graph-node-in-cycle?, graph-cyclic-nodes) can be called on
+           ;; analyses whose adjacency has non-atomic node IDs (pairs, vectors,
+           ;; lists) — for those, the fast-path-eligibility check at
+           ;; make-graph-analysis already suppresses the dispatch fast path,
+           ;; but the side-query API still routes here. Surface the
+           ;; restriction explicitly rather than letting hashtable-set! fail
+           ;; mid-walk with an opaque error (Copilot finding on PR #759).
+           ((not (%adjacency-keys-all-atomic? (ga-adjacency ga)))
+            (error
+             (string-append
+              "%ensure-graph-scc!: cannot compute SCC on adjacency with "
+              "non-atomic node identifiers. The Go kernel's name-interning "
+              "hashtable requires atomic keys (symbol, string, number, "
+              "char, boolean); pairs, vectors, and lists are rejected. "
+              "Reachable from graph-analysis-sccs, graph-node-in-cycle?, "
+              "graph-cyclic-nodes, and the cyclic-counting dispatch.")
+             (list 'fix
+                   "use atomic node identifiers, or stay within the slow-path "
+                   "API (graph-query / graph-query-all) which accepts any "
+                   "equal?-comparable values.")))
+           (else
+            (call-with-values
+              (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
+              (lambda (name->idx idx->name num-nodes edges)
+                (cond
+                  ((zero? num-nodes)
+                   (let ((rec (make-graph-scc* (make-vector 0) (make-vector 0)
+                                               name->idx idx->name 0 edges)))
+                     (set-ga-scc! ga rec)
+                     rec))
+                  (else
+                   (call-with-values
+                     (lambda () (count-paths-cyclic num-nodes edges 0))
+                     (lambda (scc-vec _counts non-trivial-vec)
+                       (let ((rec (make-graph-scc*
+                                    scc-vec non-trivial-vec
+                                    name->idx idx->name num-nodes edges)))
+                         (set-ga-scc! ga rec)
+                         rec))))))))))
         (else
          (error
           (string-append
