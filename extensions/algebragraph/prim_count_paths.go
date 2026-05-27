@@ -65,6 +65,11 @@ func extractEdgeList(ctx context.Context, v values.Value, numNodes int, primName
 	}
 	var edges []graph.Edge
 	_, err := lst.ForEach(ctx, func(_ context.Context, i int, _ bool, elem values.Value) error {
+		// *values.Pair (not values.Tuple): an edge MUST be a dotted pair
+		// like (u . v), not '() or a proper list like (u v). This is
+		// the type-specific-predicate exception in the CLAUDE.md
+		// "Tuple vs *Pair" rule — Tuple matches '() and proper lists
+		// too, which would silently mis-parse user input.
 		pair, isPair := elem.(*values.Pair)
 		if !isPair {
 			return werr.WrapForeignErrorf(werr.ErrNotAPair,
@@ -75,8 +80,8 @@ func extractEdgeList(ctx context.Context, v values.Value, numNodes int, primName
 			return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
 				"%s: edges[%d]: car: expected exact integer, got %T", primName, i, pair.Car())
 		}
-		v, vOK := values.ExactInteger(pair.Cdr())
-		if !vOK {
+		w, wOK := values.ExactInteger(pair.Cdr())
+		if !wOK {
 			return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
 				"%s: edges[%d]: cdr: expected exact integer, got %T", primName, i, pair.Cdr())
 		}
@@ -84,11 +89,11 @@ func extractEdgeList(ctx context.Context, v values.Value, numNodes int, primName
 			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 				"%s: edges[%d]: car: %d out of range [0, %d)", primName, i, u, numNodes)
 		}
-		if v < 0 || v >= int64(numNodes) {
+		if w < 0 || w >= int64(numNodes) {
 			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-				"%s: edges[%d]: cdr: %d out of range [0, %d)", primName, i, v, numNodes)
+				"%s: edges[%d]: cdr: %d out of range [0, %d)", primName, i, w, numNodes)
 		}
-		edges = append(edges, graph.Edge{U: int(u), V: int(v)})
+		edges = append(edges, graph.Edge{U: int(u), V: int(w)})
 		return nil
 	})
 	if err != nil {
@@ -97,10 +102,10 @@ func extractEdgeList(ctx context.Context, v values.Value, numNodes int, primName
 	return edges, nil
 }
 
-// primCountPathsInDAG implements (count-paths-in-dag num-nodes edges source).
+// PrimCountPathsInDAG implements (count-paths-in-dag num-nodes edges source).
 // Returns a vector of exact-integer counts (length num-nodes), or #f when
 // the input graph contains a cycle reachable from source.
-func primCountPathsInDAG(mc machine.CallContext) error {
+func PrimCountPathsInDAG(mc machine.CallContext) error {
 	const primName = "count-paths-in-dag"
 
 	numNodes, err := extractNumNodes(mc.Arg(0), primName)
@@ -131,10 +136,10 @@ func primCountPathsInDAG(mc machine.CallContext) error {
 	return nil
 }
 
-// primCountPathsCyclic implements (count-paths-cyclic num-nodes edges source).
+// PrimCountPathsCyclic implements (count-paths-cyclic num-nodes edges source).
 // Returns three values: (scc-vector, counts-by-scc-vector, nontrivial-vector).
 // scc-vector has length num-nodes; the other two have length (num-sccs).
-func primCountPathsCyclic(mc machine.CallContext) error {
+func PrimCountPathsCyclic(mc machine.CallContext) error {
 	const primName = "count-paths-cyclic"
 
 	numNodes, err := extractNumNodes(mc.Arg(0), primName)
@@ -168,11 +173,7 @@ func primCountPathsCyclic(mc machine.CallContext) error {
 	}
 	ntVec := make([]values.Value, len(res.NonTrivial))
 	for i, nt := range res.NonTrivial {
-		if nt {
-			ntVec[i] = values.TrueValue
-		} else {
-			ntVec[i] = values.FalseValue
-		}
+		ntVec[i] = values.BoolToBoolean(nt)
 	}
 
 	mc.SetValues(
