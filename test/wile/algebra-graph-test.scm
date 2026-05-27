@@ -127,5 +127,80 @@
   (let ((ga (make-graph-analysis (counting-semiring) cyclic-adj #f)))
     (test-error (graph-query ga "A" "C"))))
 
+;; --- Sub-path 4A: bigint-counting-semiring fast path ---
+;;
+;; The fast path attaches when the semiring declares carrier 'big-int AND
+;; weight-fn is #f. Queries route through count-paths-in-dag, which does
+;; in-place *big.Int arithmetic instead of allocating per relaxation.
+
+(test-group "fast path — eligibility"
+  ;; bigint carrier + #f wfn → attaches
+  (let ((ga (make-graph-analysis (bigint-counting-semiring) test-adj #f)))
+    (test #t (graph-analysis-fast-path? ga))
+    (test 'unit-weight-counting (graph-analysis-fast-path-kind ga)))
+  ;; bigint carrier + non-#f wfn → does NOT attach (defers to slow path
+  ;; pending sub-path 4B)
+  (let ((ga (make-graph-analysis (bigint-counting-semiring) test-adj
+              (lambda (_) 1))))
+    (test #f (graph-analysis-fast-path? ga))
+    (test #f (graph-analysis-fast-path-kind ga)))
+  ;; Non-bigint carrier (default counting-semiring) → does NOT attach
+  (let ((ga (make-graph-analysis (counting-semiring) test-adj #f)))
+    (test #f (graph-analysis-fast-path? ga))
+    (test #f (graph-analysis-fast-path-kind ga))))
+
+(test-group "fast path — diamond DAG counts match slow path"
+  ;; Diamond: A→{B,C}→D. Two paths from A to D.
+  (let ((fast (make-graph-analysis (bigint-counting-semiring) test-adj #f))
+        (slow (make-graph-analysis (counting-semiring) test-adj #f)))
+    (test (graph-query slow "A" "D") (graph-query fast "A" "D"))
+    (test (graph-query slow "A" "B") (graph-query fast "A" "B"))
+    (test (graph-query slow "A" "A") (graph-query fast "A" "A"))))
+
+(test-group "fast path — diamond-with-sink: pins the over-count regression"
+  ;; The over-count regression that motivated topological-order processing
+  ;; would yield 3 for A→E. The fast path's kernel uses reverse-postorder
+  ;; propagation; this confirms it doesn't reintroduce the bug.
+  (let ((ga (make-graph-analysis (bigint-counting-semiring)
+                                 diamond-with-sink-adj #f)))
+    (test 2 (graph-query ga "A" "D"))
+    (test 2 (graph-query ga "A" "E"))))
+
+(test-group "fast path — unreachable nodes absent from alist"
+  ;; Querying from D in test-adj reaches only D itself.
+  (let ((ga (make-graph-analysis (bigint-counting-semiring) test-adj #f)))
+    (let ((dist (graph-query-all ga "D")))
+      (test #t (and (assoc "D" dist) #t))
+      (test #f (assoc "A" dist))
+      (test #f (assoc "B" dist))
+      (test #f (assoc "C" dist))
+      ;; semiring-zero for unreachable
+      (test 0 (graph-query ga "D" "A")))))
+
+(test-group "fast path — cyclic input raises"
+  ;; The kernel returns #f on cyclic-from-source input; the wrapper
+  ;; surfaces this as an error rather than spinning. Pins the
+  ;; raise-vs-hang behaviour rather than the message text.
+  (let ((ga (make-graph-analysis (bigint-counting-semiring) cyclic-adj #f)))
+    (test-error (graph-query ga "A" "C"))))
+
+(test-group "fast path — vertex appearing only as edge target"
+  ;; A graph where some node is referenced from another's out-edges but
+  ;; has no entry of its own. The wrapper must include it in the
+  ;; vertex set; otherwise the kernel sees a missing index.
+  (let* ((adj '(("X" . (("Y" . 1) ("Z" . 1)))))   ; Y, Z have no own entries
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test 1 (graph-query ga "X" "Y"))
+    (test 1 (graph-query ga "X" "Z"))))
+
+(test-group "fast path — caching shares the slow-path machinery"
+  ;; The cache layer sits above compute-single-source; the fast path
+  ;; benefits from it transparently. Repeat the same query and confirm
+  ;; the result is stable (and same as a freshly-constructed analysis).
+  (let ((ga (make-graph-analysis (bigint-counting-semiring) test-adj #f)))
+    (test 2 (graph-query ga "A" "D"))
+    (test 2 (graph-query ga "A" "D"))     ; cached
+    (test 1 (graph-query ga "A" "B"))))
+
 (test-end)
 (test-exit)

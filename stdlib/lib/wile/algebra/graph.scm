@@ -18,19 +18,35 @@
 ;; --- Record type ---
 
 (define-record-type <graph-analysis>
-  (make-graph-analysis* semiring adjacency weight-fn cache)
+  (make-graph-analysis* semiring adjacency weight-fn cache fast-path-kind)
   graph-analysis?
-  (semiring   ga-semiring)
-  (adjacency  ga-adjacency)
-  (weight-fn  ga-weight-fn)
-  (cache      ga-cache set-ga-cache!))
+  (semiring         ga-semiring)
+  (adjacency        ga-adjacency)
+  (weight-fn        ga-weight-fn)
+  (cache            ga-cache set-ga-cache!)
+  (fast-path-kind   ga-fast-path-kind))
 
 ;; --- Constructor ---
 
 (define (make-graph-analysis semiring adjacency weight-fn)
-  "Construct a graph analysis from a semiring, adjacency alist, and weight function.\nADJACENCY is an alist: ((node . ((neighbor . edge-data) ...)) ...).\nWEIGHT-FN receives edge-data and returns a semiring value.\nPass #f for unit weights (each edge = semiring-one).\n\nExamples:\n  (make-graph-analysis (boolean-semiring)\n    '((\"A\" . ((\"B\" . 1))) (\"B\" . ()))\n    #f)\n\nParameters:\n  semiring : any\n  adjacency : list\n  weight-fn : procedure-or-false\nReturns: graph-analysis\nCategory: algebra\n\nSee also: `graph-query', `graph-query-all'."
-  (let ((wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
-    (make-graph-analysis* semiring adjacency wfn '())))
+  "Construct a graph analysis from a semiring, adjacency alist, and weight function.\nADJACENCY is an alist: ((node . ((neighbor . edge-data) ...)) ...).\nWEIGHT-FN receives edge-data and returns a semiring value.\nPass #f for unit weights (each edge = semiring-one).\n\nWhen the semiring declares carrier `'big-int' (via `(make-semiring ... '(carrier . big-int))' or the built-in `bigint-counting-semiring') AND `weight-fn' is `#f', this constructor attaches the unit-weight counting fast path (sub-path 4A of the bignum-allocation-reduction plan). Queries route through `count-paths-in-dag', which uses in-place `*big.Int' arithmetic instead of the per-relaxation allocating loop. A non-`#f' `weight-fn' falls through to the generic Scheme inner loop — weighted-bigint acceleration (sub-path 4B) is not yet implemented.\n\nUse `(graph-analysis-fast-path? ga)' to verify whether the fast path attached.\n\nExamples:\n  (make-graph-analysis (boolean-semiring)\n    '((\"A\" . ((\"B\" . 1))) (\"B\" . ()))\n    #f)\n\nParameters:\n  semiring : any\n  adjacency : list\n  weight-fn : procedure-or-false\nReturns: graph-analysis\nCategory: algebra\n\nSee also: `graph-query', `graph-query-all', `graph-analysis-fast-path?'."
+  (let* ((carrier  (semiring-carrier semiring))
+         (fast-kind (cond
+                      ((and (eq? carrier 'big-int) (not weight-fn))
+                       'unit-weight-counting)
+                      (else #f)))
+         (wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
+    (make-graph-analysis* semiring adjacency wfn '() fast-kind)))
+
+;; --- Fast-path introspection ---
+
+(define (graph-analysis-fast-path? ga)
+  "Return #t iff GA has a fast-path strategy attached.\n\nThe fast path is non-#f when the semiring declares a carrier with a registered Go-side kernel and the constructor's other arguments are compatible. Currently the only attached strategy is `'unit-weight-counting' (bigint carrier + #f weight-fn).\n\nExamples:\n  (graph-analysis-fast-path? (make-graph-analysis (counting-semiring) '() #f))\n  => #f\n  (graph-analysis-fast-path? (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => #t\n\nParameters:\n  ga : graph-analysis\nReturns: boolean\nCategory: algebra\n\nSee also: `graph-analysis-fast-path-kind', `make-graph-analysis'."
+  (if (ga-fast-path-kind ga) #t #f))
+
+(define (graph-analysis-fast-path-kind ga)
+  "Return the symbol naming GA's fast-path strategy, or #f if none.\n\nKnown strategies:\n  'unit-weight-counting — bigint-carrier semiring + #f weight-fn, dispatches\n                         to `count-paths-in-dag'.\n\nExamples:\n  (graph-analysis-fast-path-kind (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => unit-weight-counting\n\nParameters:\n  ga : graph-analysis\nReturns: symbol-or-false\nCategory: algebra\n\nSee also: `graph-analysis-fast-path?', `make-graph-analysis'."
+  (ga-fast-path-kind ga))
 
 ;; --- Single-source computation ---
 
@@ -50,12 +66,112 @@
 ;; forward. Topological-order processing visits each node exactly once
 ;; after its count has settled.
 (define (compute-single-source ga source)
-  (call-with-values
-    (lambda () (topological-order-from ga source))
-    (lambda (order cyclic?)
-      (if cyclic?
-          (compute-via-worklist ga source)
-          (compute-via-topological-order ga source order)))))
+  (case (ga-fast-path-kind ga)
+    ((unit-weight-counting)
+     (compute-via-count-paths-in-dag ga source))
+    (else
+     (call-with-values
+       (lambda () (topological-order-from ga source))
+       (lambda (order cyclic?)
+         (if cyclic?
+             (compute-via-worklist ga source)
+             (compute-via-topological-order ga source order)))))))
+
+;; --- Sub-path 4A: unit-weight bigint counting via count-paths-in-dag ---
+;;
+;; The kernel `count-paths-in-dag' (in (wile algebragraph)) takes integer
+;; node indices and a unit-weight edge list, runs reverse-postorder
+;; propagation with in-place `*big.Int' Add, and returns either a vector
+;; of counts or #f for cyclic input. The wrapper here translates between
+;; the name-keyed adjacency surface of `(wile algebra graph)' and that
+;; integer-indexed kernel.
+;;
+;; Why an explicit wrapper rather than direct exposure of the kernel:
+;; `(wile algebra graph)' is the user-facing entry point for graph
+;; queries (with caching, semiring-parameterization, name-keyed nodes).
+;; The kernel speaks a narrower, performance-tuned protocol. The carrier
+;; opt on the semiring is the bridge: when the user opts in via
+;; `bigint-counting-semiring' (or any `(carrier . big-int)' annotation),
+;; the wrapper picks up the dispatch and the kernel does the arithmetic.
+(define (%collect-vertices adj)
+  ;; Walk the adjacency once, collecting all distinct vertices (adj keys
+  ;; plus edge targets that aren't keys). Returns a list in stable
+  ;; encounter order so the resulting integer indices are reproducible.
+  (let loop ((entries adj) (order '()))
+    (cond
+      ((null? entries) (reverse order))
+      (else
+       (let* ((e   (car entries))
+              (key (car e))
+              (out (cdr e))
+              (o1  (if (member key order) order (cons key order))))
+         (let edges ((es out) (o o1))
+           (cond
+             ((null? es) (loop (cdr entries) o))
+             (else
+              (let ((tgt (caar es)))
+                (edges (cdr es)
+                       (if (member tgt o) o (cons tgt o))))))))))))
+
+(define (compute-via-count-paths-in-dag ga source)
+  ;; Translate name-keyed adjacency to integer indices, call the kernel,
+  ;; project the count vector back to a name-keyed alist. Reachable nodes
+  ;; only (count > 0); source itself has count 1.
+  ;;
+  ;; Cyclic input — kernel returns #f — surfaces as an error pointing at
+  ;; the remedies that handle non-idempotent semirings on cycles.
+  (let* ((adj       (ga-adjacency ga))
+         (verts     (%collect-vertices adj))
+         (n         (length verts))
+         (name->idx (let l ((vs verts) (i 0) (acc '()))
+                      (if (null? vs)
+                          (reverse acc)
+                          (l (cdr vs) (+ i 1) (cons (cons (car vs) i) acc)))))
+         (idx-of    (lambda (v) (cdr (assoc v name->idx))))
+         (src-pair  (assoc source name->idx))
+         (src-idx   (if src-pair
+                        (cdr src-pair)
+                        (error
+                         "graph-query: source not present in graph adjacency"
+                         source)))
+         (edges     (let outer ((entries adj) (acc '()))
+                      (cond
+                        ((null? entries) acc)
+                        (else
+                         (let* ((from (idx-of (caar entries)))
+                                (outs (cdar entries)))
+                           (let inner ((es outs) (acc2 acc))
+                             (cond
+                               ((null? es) (outer (cdr entries) acc2))
+                               (else
+                                (inner (cdr es)
+                                       (cons (cons from
+                                                   (idx-of (caar es)))
+                                             acc2))))))))))
+         (counts    (count-paths-in-dag n edges src-idx)))
+    (cond
+      ((not counts)
+       ;; Reachable subgraph contains a cycle. The counting semiring on
+       ;; cycles has no finite answer; the fast path declines to spin.
+       (error
+        (string-append
+         "graph-query: bigint-counting-semiring on a cyclic graph "
+         "(non-idempotent semiring; the counting algebra diverges on "
+         "cycles). Remedies: "
+         "(a) (import (wile algebragraph)) and use "
+         "(count-paths-cyclic ...) for exact counts via SCC condensation; "
+         "(b) use a bounded-carrier semiring (saturating, modular, log) "
+         "for approximate counts.")))
+      (else
+       (let l ((vs verts) (i 0) (acc '()))
+         (cond
+           ((null? vs) acc)
+           (else
+            (let ((c (vector-ref counts i)))
+              (cond
+                ((zero? c) (l (cdr vs) (+ i 1) acc))
+                (else (l (cdr vs) (+ i 1)
+                         (cons (cons (car vs) c) acc))))))))))))
 
 ;; Compute a topological order of the subgraph reachable from `source`.
 ;; Returns two values (via `values`):
