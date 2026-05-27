@@ -292,7 +292,7 @@ Concrete examples showing how the three Phase-4 sub-paths and the escape hatch a
 
 **Cyclic graphs are not handled by this fast path.** Real-world call graphs typically contain recursion (mutual or direct), which creates cycles. `bigint-counting-semiring` on a cyclic graph does not terminate — the counting semiring `(ℕ, +, ×, 0, 1)` diverges on cycles (no finite path count exists). For cyclic call graphs, use one of:
 
-- `(approximate-counting-semiring CAP)` — saturating carrier (bounded counts; the future approximate-counting plan ships this);
+- `(saturating-counting-semiring CAP)` — saturating carrier (bounded counts; the approximate-counting plan ships this);
 - SCC condensation pre-pass — collapses each SCC into a super-node, runs `bigint-counting-semiring` on the resulting condensed DAG. Shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`); the bignum fast path will plug in here once Phase 4 lands.
 - a k-closedness gate — rejects the query at construction time if the graph isn't k-closed (a future plan, not yet written).
 
@@ -391,7 +391,7 @@ All design questions resolved; plan is implementation-ready pending the Phase 0 
 
 - **Q-3 — Scratch lifecycle.** **Closed: sync.Pool semantics.** Go's GC handles eviction automatically; simpler than a hand-managed shrinking strategy.
 
-- **Q-4 — Fast-path detection in algebra layer.** **Closed: carrier symbol on `<semiring>` record via opts-alist.** The algebra library convention (`stdlib/lib/wile/algebra/CLAUDE.md` "Options-alist discipline") extends structure records via a trailing `. opts` alist; this avoids breaking existing constructors. Add an optional `(carrier . SYM)` slot. Carrier symbols **reuse the existing `NumericTypeSpec.schemeName` vocabulary** (`values/numeric_registry.go`) where applicable — `'integer`, `'rational`, `'real`, `'complex` — extended with `'boolean`, `'log-float`, `'modular`, `'saturating`, `'opaque` for non-numeric or non-tower carriers. The algebra layer dispatches on the symbol; the values layer provides the in-place helpers. Orthogonal to the approximate-counting plan's `approximate-semiring?` slot.
+- **Q-4 — Fast-path detection in algebra layer.** **Closed: carrier symbol on `<semiring>` record via opts-alist.** The algebra library convention (`stdlib/lib/wile/algebra/CLAUDE.md` "Options-alist discipline") extends structure records via a trailing `. opts` alist; this avoids breaking existing constructors. Add an optional `(carrier . SYM)` slot. Carrier symbols **reuse the existing `NumericTypeSpec.schemeName` vocabulary** (`values/numeric_registry.go`) where applicable — `'integer`, `'rational`, `'real`, `'complex` — extended with `'boolean`, `'log-float`, `'modular`, `'saturating`, `'opaque` for non-numeric or non-tower carriers. The algebra layer dispatches on the symbol; the values layer provides the in-place helpers. Orthogonal to the approximate-counting plan's `bounded-carrier-semiring?` slot.
 
 - **Q-5 — Group allocation for cache locality.** Workload sensitivity: an arena strategy fits workloads where bignums stay below ~4 words; for the counting-on-cycles motivating workload, path counts grow past that within a few iterations and the arena's locality benefit is consumed while pinning cost remains. **Resolution:** defer until Phase 1 + Phase 2 land with naive `new(big.Int)`. Measure cache-miss rate via `perf stat` or pprof block/CPU profiles, then decide per-workload. Plan does not commit either strategy as Phase-N work; revisit if profiling shows locality matters.
 
@@ -449,7 +449,7 @@ All design questions resolved; plan is implementation-ready pending the Phase 0 
   - `tropical-semiring` → carrier `'real`; `hint-words` accepted but irrelevant (float64).
   - `modular-counting-semiring P` (from approximate-counting plan) → carrier `'modular`.
   - `log-counting-semiring` (from approximate-counting plan) → carrier `'log-float`.
-  - `approximate-counting-semiring CAP` (from approximate-counting plan) → carrier `'saturating`.
+  - `saturating-counting-semiring CAP` (from approximate-counting plan) → carrier `'saturating`.
 - This change is shared with the approximate-counting plan; pick one for primary owner.
 
 ### Phase 4 — Bellman-Ford fast path in `(wile algebra graph)`
