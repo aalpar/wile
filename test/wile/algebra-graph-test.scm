@@ -240,5 +240,27 @@
     ;; graph-query-all returns an empty alist for a missing source.
     (test '() (graph-query-all fast "MISSING"))))
 
+(test-group "worklist consults semiring-eq? not host equal?"
+  ;; A cyclic adjacency forces compute-via-worklist (not topological-order).
+  ;; A counter-incrementing custom :eq? proves the worklist dispatches
+  ;; through the semiring's declared equality predicate.
+  (let* ((adj '(("a" . (("b" . 1)))
+                ("b" . (("a" . 1)))))                 ; 2-cycle
+         (calls 0)
+         (counting-eq? (lambda (a b)
+                         (set! calls (+ calls 1))
+                         ;; Boolean idempotent: #t = #t terminates the worklist
+                         ;; well before any safety cap.
+                         (eq? a b)))
+         (S (make-semiring (lambda (a b) (or a b))
+                           (lambda (a b) (and a b))
+                           #f #t
+                           (cons 'eq? counting-eq?)))
+         (ga (make-graph-analysis S adj #f)))
+    ;; Query terminates (boolean idempotent) and we expect counting-eq?
+    ;; to have fired at least once.
+    (test #t (graph-query ga "a" "b"))
+    (test #t (> calls 0))))
+
 (test-end)
 (test-exit)

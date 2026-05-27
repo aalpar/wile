@@ -99,5 +99,65 @@
     ;; not the Scheme-visible arithmetic.
     (test #t (positive? (semiring-times C 99999999999999 100000000000)))))
 
+(test-group "semiring-eq? — default is equal?"
+  (let ((S (make-semiring + * 0 1)))
+    (test #t (semiring-eq? S 3 3))
+    (test #f (semiring-eq? S 3 4))
+    ;; equal? handles compound values; default semiring-eq? inherits that.
+    (test #t (semiring-eq? S '(1 2) '(1 2)))))
+
+(test-group "semiring-eq? — built-ins use natural equality"
+  ;; Boolean uses eq?: #t/#f are interned singletons.
+  (let ((B (boolean-semiring)))
+    (test #t (semiring-eq? B #t #t))
+    (test #t (semiring-eq? B #f #f))
+    (test #f (semiring-eq? B #t #f)))
+  ;; Tropical uses tropical-eq?: handles tropical-inf + finite numerics.
+  (let ((T (tropical-semiring)))
+    (test #t (semiring-eq? T tropical-inf tropical-inf))
+    (test #f (semiring-eq? T tropical-inf 5))
+    (test #f (semiring-eq? T 5 tropical-inf))
+    (test #t (semiring-eq? T 5 5))
+    (test #f (semiring-eq? T 5 7)))
+  ;; Counting uses =: works on bignums via in-place big.Int compare.
+  (let ((C (counting-semiring)))
+    (test #t (semiring-eq? C 3 3))
+    (test #f (semiring-eq? C 3 4))
+    (test #t (semiring-eq? C (expt 2 100) (expt 2 100)))
+    (test #f (semiring-eq? C (expt 2 100) (- (expt 2 100) 1)))))
+
+(test-group "semiring-eq? — custom predicate via opts"
+  ;; Verify the custom predicate is actually consulted, not equal?.
+  (let* ((calls   0)
+         (counting-eq? (lambda (a b)
+                         (set! calls (+ calls 1))
+                         (equal? a b)))
+         (S (make-semiring + * 0 1 (cons 'eq? counting-eq?))))
+    (semiring-eq? S 1 1)
+    (semiring-eq? S 1 2)
+    (test 2 calls)))
+
+(test-group "semiring-eq? — tolerance-based equality"
+  ;; The headline non-equal? use case: tolerance on floats.
+  (let ((S (make-semiring + * 0.0 1.0
+                          (cons 'eq?
+                                (lambda (a b) (< (abs (- a b)) 1e-9))))))
+    (test #t (semiring-eq? S 1.0 1.0000000001))
+    (test #f (semiring-eq? S 1.0 1.1))))
+
+(test-group "make-semiring — :eq? opt validation"
+  ;; Unknown opts key is rejected.
+  (test-error (make-semiring + * 0 1 '(eqq? . equal?)))
+  ;; Non-procedure :eq? raises via assert-procedure.
+  (test-error (make-semiring + * 0 1 (cons 'eq? 42))))
+
+(test-group "tropical-eq? — exported helper"
+  ;; Available for composition outside the constructor.
+  (test #t (tropical-eq? tropical-inf tropical-inf))
+  (test #f (tropical-eq? tropical-inf 5))
+  (test #f (tropical-eq? 5 tropical-inf))
+  (test #t (tropical-eq? 5 5))
+  (test #f (tropical-eq? 5 7)))
+
 (test-end)
 (test-exit)
