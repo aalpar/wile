@@ -195,6 +195,35 @@ func TestCountPathsInDAG_RejectsCycleNotInvolvingSource(t *testing.T) {
 	c.Assert(counts, qt.IsNil)
 }
 
+func TestCountPathsInDAG_NilOnInvalidInput(t *testing.T) {
+	c := qt.New(t)
+	// Mirror parity with TestCountPathsCyclic_ErrorOnInvalidInput.
+	// CountPathsInDAG keeps its nil-as-sentinel signature (Q-a partial
+	// resolution), so invalid input collapses to nil along with the
+	// cycle case — same as before. Validating each guard explicitly
+	// catches a future regression where, e.g., the edge-range check
+	// gets dropped and bad edges start panicking.
+	cases := []struct {
+		name     string
+		numNodes int
+		edges    []graph.Edge
+		source   int
+	}{
+		{"numNodes zero", 0, nil, 0},
+		{"numNodes negative", -1, nil, 0},
+		{"source negative", 2, nil, -1},
+		{"source out of range", 2, nil, 5},
+		{"edge V out of range", 2, []graph.Edge{{U: 0, V: 5}}, 0},
+		{"edge U negative", 2, []graph.Edge{{U: -1, V: 0}}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			counts := graph.CountPathsInDAG(tc.numNodes, tc.edges, tc.source)
+			c.Assert(counts, qt.IsNil)
+		})
+	}
+}
+
 func TestCountPathsInDAG_IgnoresUnreachableCycle(t *testing.T) {
 	c := qt.New(t)
 	// 0 → 1, plus cycle 2 ↔ 3 unreachable from 0. The reachable subgraph is

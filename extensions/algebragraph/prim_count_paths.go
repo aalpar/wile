@@ -26,6 +26,12 @@ import (
 // extractNumNodes pulls a non-negative int from an exact-integer argument.
 // Returns ErrInvalidArgument if the value is not an exact integer or is
 // negative or exceeds int range.
+//
+// Uses values.ExactInteger (not helpers.RequireArg[*values.Integer])
+// because the contract here is "exact integer fitting int64" — which
+// includes *BigInteger and integer-valued *Rational, per R7RS §6.1.
+// helpers.RequireIndex is closest in spirit but requires a length
+// bound; this helper has no upper bound from a sequence length.
 func extractNumNodes(v values.Value, primName string) (int, error) {
 	n, ok := values.ExactInteger(v)
 	if !ok {
