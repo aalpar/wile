@@ -957,5 +957,34 @@
   (let ((G (make-graph k3-adj)))
     (test-error (graph-predecessors G 'missing))))
 
+;;; ===== Crosscheck follow-up coverage ==================================
+
+(test-group "graph-in-degree on directed self-loop (contributes 1)"
+  ;; Docstring contract: directed-graph convention treats a loop as one
+  ;; in-edge plus one out-edge, so in-degree contributes 1 (not 2 as
+  ;; undirected does). Pin the directed-self-loop case directly.
+  (let ((G (make-graph '((v . ((v . #f)))) '(directed? . #t))))
+    (test 1 (graph-in-degree G 'v))))
+
+(test-group "graph-reverse preserves edge-data positionally (multi-edge)"
+  ;; Earlier fan-in test uses (assv 'a pred) — order-insensitive. This
+  ;; test pins which edge-data attaches to which predecessor with complex
+  ;; values that would alias under accidental cons-cell sharing.
+  (let* ((G   (make-graph
+                '((a . (("metadata-a" . #(1 2 3))))
+                  (b . (("metadata-b" . (4 5 6))))
+                  ("metadata-a" . ())
+                  ("metadata-b" . ()))
+                '(directed? . #t)))
+         (pred-a (graph-predecessors G "metadata-a"))
+         (pred-b (graph-predecessors G "metadata-b")))
+    ;; Each target has exactly one predecessor with the expected data.
+    (test 1 (length pred-a))
+    (test 'a (caar pred-a))
+    (test #(1 2 3) (cdar pred-a))
+    (test 1 (length pred-b))
+    (test 'b (caar pred-b))
+    (test '(4 5 6) (cdar pred-b))))
+
 (test-end)
 (test-exit)

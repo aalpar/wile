@@ -360,7 +360,9 @@
     (test #t (graph-node-in-cycle? ga "B"))
     (test #t (graph-node-in-cycle? ga "C"))
     (test #f (graph-node-in-cycle? ga "D"))
-    (test #f (graph-node-in-cycle? ga "missing"))))
+    ;; Unknown node raises (not silently #f) — a typo would otherwise be
+    ;; indistinguishable from a known-acyclic node, masking consumer bugs.
+    (test-error (graph-node-in-cycle? ga "missing"))))
 
 (test-group "graph-cyclic-nodes on cycle + tail"
   (let* ((adj '(("A" . (("B") ("D")))
@@ -418,6 +420,98 @@
         (test #t (string? (car entry)))
         (test #t (integer? (cdr entry))))
       dists)))
+
+;;; ===== Crosscheck follow-up coverage ==================================
+
+(test-group "cyclic counting — entry-count > 1 (multi-edge condensed DAG)"
+  ;; Fixture stress-tests the SCC-condensation arithmetic by constructing
+  ;; multiple parallel inter-SCC edges into a non-trivial SCC.
+  ;;
+  ;;   A → B, A → C, B → D, B → E, C → D, D ⇄ E
+  ;;
+  ;; SCCs: {A}, {B}, {C}, {D, E}. Condensed edges from A's SCC:
+  ;;   {A} → {B} (1 edge), {A} → {C} (1 edge)
+  ;; Condensed edges into {D, E}:
+  ;;   {B} → {D, E} preserves B→D + B→E as 2 multi-edges
+  ;;   {C} → {D, E} (1 edge: C→D)
+  ;; Path count from A's SCC to {D, E} via the condensed DAG:
+  ;;   {A}→{B}→{D,E}: 1 × 2 = 2
+  ;;   {A}→{C}→{D,E}: 1 × 1 = 1
+  ;;   total = 3
+  ;; Both D and E (same non-trivial SCC) report the SCC entry count = 3.
+  (let* ((adj '(("A" . (("B") ("C")))
+                ("B" . (("D") ("E")))
+                ("C" . (("D")))
+                ("D" . (("E")))
+                ("E" . (("D")))))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test 1 (graph-query ga "A" "A"))
+    (test 1 (graph-query ga "A" "B"))
+    (test 1 (graph-query ga "A" "C"))
+    (test 3 (graph-query ga "A" "D"))
+    (test 3 (graph-query ga "A" "E"))))
+
+(test-group "source not in cyclic adjacency returns semiring-zero"
+  ;; Mirrors the DAG-path coverage at "fast path — source not in adjacency"
+  ;; above; pins identical behavior on the cyclic dispatch path.
+  (let* ((adj '(("A" . (("B")))
+                ("B" . (("A")))))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    ;; "ZZ" is not in the adjacency; graph-query-all returns '()
+    ;; (no reachable targets), so graph-query surfaces semiring-zero.
+    (test '() (graph-query-all ga "ZZ"))
+    (test 0 (graph-query ga "ZZ" "A"))))
+
+(test-group "empty adjacency — graph-cyclic-nodes and graph-node-in-cycle?"
+  ;; Empty graph: %ensure-graph-scc! skips the kernel (count-paths-cyclic
+  ;; requires source < num-nodes) and builds zero-length vectors.
+  (let ((ga (make-graph-analysis (bigint-counting-semiring) '() #f)))
+    (test '() (graph-cyclic-nodes ga))
+    (test #t (graph-scc? (graph-analysis-sccs ga)))
+    (test 0 (graph-scc-num-nodes (graph-analysis-sccs ga)))
+    ;; Any node query raises (no nodes to look up)
+    (test-error (graph-node-in-cycle? ga "anything"))))
+
+(test-group "graph-analysis-sccs on non-bigint carrier works"
+  ;; SCC is a structural property of the adjacency; the carrier of the
+  ;; analysis doesn't affect it. Three different analyses on the same
+  ;; cyclic adjacency report the same SCC structure.
+  (let* ((adj '((a . ((b))) (b . ((a))) (c . ()))))
+    (let* ((ga-bool (make-graph-analysis (boolean-semiring) adj #f))
+           (s       (graph-analysis-sccs ga-bool)))
+      (test #t (graph-scc? s))
+      (test 3 (graph-scc-num-nodes s))
+      ;; a and b are in a non-trivial SCC; c is not.
+      (test #t (graph-node-in-cycle? ga-bool 'a))
+      (test #t (graph-node-in-cycle? ga-bool 'b))
+      (test #f (graph-node-in-cycle? ga-bool 'c)))
+    (let ((ga-trop (make-graph-analysis (tropical-semiring) adj
+                     (lambda (_) 1))))
+      (test '(a b) (graph-cyclic-nodes ga-trop)))))
+
+(test-group "SCC structure stable across kernel calls with different sources"
+  ;; The cyclic-counting adapter discards the per-call SCC vector returned
+  ;; by count-paths-cyclic and uses the cached one. This pins the
+  ;; load-bearing determinism invariant: kernel SCC IDs must be the same
+  ;; across calls regardless of source.
+  (let* ((adj '(("A" . (("B") ("D")))
+                ("B" . (("C")))
+                ("C" . (("A")))
+                ("D" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    ;; Force population
+    (let ((s (graph-analysis-sccs ga)))
+      ;; Each query routes through compute-via-count-paths-cyclic which
+      ;; re-invokes count-paths-cyclic for that source. The cached vector
+      ;; would mis-index if kernel SCC numbering varied per call.
+      (graph-query ga "A" "D")
+      (graph-query ga "B" "C")
+      (graph-query ga "C" "A")
+      ;; After three queries with three different sources, the cached
+      ;; scc-vec must still be the same object — eq? confirms no cache
+      ;; invalidation, and the queries above would have crashed on
+      ;; out-of-range counts-by-scc[scc[i]] if the invariant failed.
+      (test #t (eq? s (graph-analysis-sccs ga))))))
 
 (test-end)
 (test-exit)

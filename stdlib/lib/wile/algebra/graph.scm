@@ -39,12 +39,30 @@
 (define-record-type <graph-scc>
   (make-graph-scc* scc-vec non-trivial-vec name->idx idx->name num-nodes edges)
   graph-scc?
-  (scc-vec          gscc-scc-vec)         ;; node-idx -> scc-id (vector of ints)
-  (non-trivial-vec  gscc-non-trivial-vec) ;; scc-id   -> bool   (vector)
-  (name->idx        gscc-name->idx)       ;; hashtable name -> int
-  (idx->name        gscc-idx->name)       ;; vector idx -> name
-  (num-nodes        gscc-num-nodes)       ;; how many entries in idx->name
-  (edges            gscc-edges))          ;; list of (u . v) integer-pair edges
+  (scc-vec          graph-scc-scc-vec)         ;; node-idx -> scc-id (vector of ints)
+  (non-trivial-vec  graph-scc-non-trivial-vec) ;; scc-id   -> bool   (vector)
+  (name->idx        graph-scc-name->idx)       ;; hashtable name -> int
+  (idx->name        graph-scc-idx->name)       ;; vector idx -> name
+  (num-nodes        graph-scc-num-nodes)       ;; how many entries in idx->name
+  (edges            graph-scc-edges))          ;; list of (u . v) integer-pair edges
+
+(define (make-graph-scc scc-vec non-trivial-vec name->idx idx->name num-nodes edges)
+  "Construct a <graph-scc> bundling an SCC decomposition with name-interning state.\n\nIntended for internal use by `%ensure-graph-scc!'. Validates: scc-vec\nis a vector of length num-nodes; non-trivial-vec is a vector; num-nodes\nis a non-negative integer; idx->name is a vector with at least num-nodes\nentries; edges is a list. Does NOT validate cross-vector index consistency\n(every scc-id in scc-vec must index non-trivial-vec) — that contract is\nenforced by the kernel and trusted on internal calls.\n\nParameters:\n  scc-vec : vector of non-negative integers\n  non-trivial-vec : vector of booleans\n  name->idx : hashtable\n  idx->name : vector\n  num-nodes : non-negative integer\n  edges : list of (integer . integer) pairs\nReturns: graph-scc\nCategory: algebra"
+  (unless (and (integer? num-nodes) (exact? num-nodes) (>= num-nodes 0))
+    (error "make-graph-scc: num-nodes must be a non-negative exact integer" num-nodes))
+  (unless (and (vector? scc-vec) (= (vector-length scc-vec) num-nodes))
+    (error "make-graph-scc: scc-vec must be a vector of length num-nodes"
+           num-nodes (and (vector? scc-vec) (vector-length scc-vec))))
+  (unless (vector? non-trivial-vec)
+    (error "make-graph-scc: non-trivial-vec must be a vector" non-trivial-vec))
+  (unless (vector? idx->name)
+    (error "make-graph-scc: idx->name must be a vector" idx->name))
+  (unless (>= (vector-length idx->name) num-nodes)
+    (error "make-graph-scc: idx->name must have at least num-nodes entries"
+           num-nodes (vector-length idx->name)))
+  (unless (list? edges)
+    (error "make-graph-scc: edges must be a list" edges))
+  (make-graph-scc* scc-vec non-trivial-vec name->idx idx->name num-nodes edges))
 
 ;; The fast-path kernel (count-paths-in-dag) lives in (wile algebragraph),
 ;; which is an opt-in Go extension only present under the `kitchen-sink`
@@ -123,26 +141,29 @@
 ;; dispatch path.
 
 (define (graph-analysis-sccs ga)
-  "Force computation of the SCC decomposition for GA and return the\n<graph-scc> record. Idempotent: subsequent calls return the same\nobject (eq?). Requires the (wile algebragraph) extension — only loaded\nunder the kitchen-sink profile; raises otherwise.\n\nThe <graph-scc> bundles four pieces of source-independent state:\n  scc-vec         — node-index -> SCC ID (vector of int)\n  non-trivial-vec — SCC ID -> #t/#f (true iff that SCC contains a cycle)\n  name->idx       — hashtable from node names to integer indices\n  idx->name       — vector from integer indices back to node names\nUse `gscc-scc-vec', `gscc-non-trivial-vec', etc. for direct access.\n\nMost callers want `graph-node-in-cycle?' or `graph-cyclic-nodes'\ninstead; this is the lower-level introspection hook.\n\nExamples:\n  (let* ((ga (make-graph-analysis (bigint-counting-semiring)\n                                  '((a . ((b))) (b . ((a))))\n                                  #f))\n         (s (graph-analysis-sccs ga)))\n    (graph-scc? s))                       => #t\n\nParameters:\n  ga : graph-analysis\nReturns: graph-scc\nCategory: algebra\n\nSee also: `graph-node-in-cycle?', `graph-cyclic-nodes', `graph-scc?'."
+  "Force computation of the SCC decomposition for GA and return the\n<graph-scc> record. Idempotent: subsequent calls return the same\nobject (eq?). Requires the (wile algebragraph) extension — only loaded\nunder the kitchen-sink profile; raises otherwise.\n\nWorks on any carrier — SCC is a structural property of the adjacency,\nindependent of the analysis's semiring. A boolean-semiring analysis\nand a bigint-counting-semiring analysis built on the same adjacency\nshare the same SCC structure.\n\nThe <graph-scc> bundles six pieces of source-independent state\n(five exported as accessors, one internal):\n  graph-scc-scc-vec         — node-index -> SCC ID (vector of int)\n  graph-scc-non-trivial-vec — SCC ID -> #t/#f (true iff that SCC contains a cycle)\n  graph-scc-name->idx       — hashtable from node names to integer indices\n  graph-scc-idx->name       — vector from integer indices back to node names\n  graph-scc-num-nodes       — number of distinct nodes interned\n\nMost callers want `graph-node-in-cycle?' or `graph-cyclic-nodes'\ninstead; this is the lower-level introspection hook.\n\nExamples:\n  (let* ((ga (make-graph-analysis (bigint-counting-semiring)\n                                  '((a . ((b))) (b . ((a))))\n                                  #f))\n         (s (graph-analysis-sccs ga)))\n    (graph-scc? s))                       => #t\n\nParameters:\n  ga : graph-analysis\nReturns: graph-scc\nCategory: algebra\n\nSee also: `graph-node-in-cycle?', `graph-cyclic-nodes', `graph-scc?'."
   (%ensure-graph-scc! ga))
 
 (define (graph-node-in-cycle? ga node)
-  "Return #t iff NODE lies in a non-trivial SCC of GA's adjacency.\nA non-trivial SCC contains a cycle (either multiple mutually-reachable\nnodes, or a single node with a self-loop). Returns #f for nodes not\nin GA's adjacency (consistent with `graph-query's permissive\nout-of-graph semantics).\n\nForces SCC computation on first call per GA; subsequent calls are\nO(1) hashtable + vector lookups.\n\nExamples:\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ()))\n               #f)))\n    (graph-node-in-cycle? ga 'a))   => #t   ; a<->b is a 2-cycle\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ()))\n               #f)))\n    (graph-node-in-cycle? ga 'c))   => #f   ; c is a trivial SCC\n\nParameters:\n  ga : graph-analysis\n  node : any\nReturns: boolean\nCategory: algebra\n\nSee also: `graph-cyclic-nodes', `graph-analysis-sccs'."
+  "Return #t iff NODE lies in a non-trivial SCC of GA's adjacency.\nA non-trivial SCC contains a cycle (either multiple mutually-reachable\nnodes, or a single node with a self-loop).\n\nRaises if NODE is not in GA's adjacency. This is the conservative\nchoice: a typo in a node name otherwise silently returns the same\n#f as a known-acyclic node, which masks consumer bugs. Use\n(member NODE (graph-cyclic-nodes ga)) if you need a non-raising\nmembership check.\n\nForces SCC computation on first call per GA; subsequent calls are\nO(1) hashtable + vector lookups.\n\nExamples:\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ()))\n               #f)))\n    (graph-node-in-cycle? ga 'a))   => #t   ; a<->b is a 2-cycle\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ()))\n               #f)))\n    (graph-node-in-cycle? ga 'c))   => #f   ; c is a trivial SCC\n\nParameters:\n  ga : graph-analysis\n  node : any (must be a node of GA's adjacency)\nReturns: boolean\nCategory: algebra\n\nSee also: `graph-cyclic-nodes', `graph-analysis-sccs'."
   (let* ((scc-rec (%ensure-graph-scc! ga))
-         (idx     (hashtable-ref (gscc-name->idx scc-rec) node -1)))
+         (idx     (hashtable-ref (graph-scc-name->idx scc-rec) node -1)))
     (cond
-      ((< idx 0) #f)
+      ((< idx 0)
+       (error "graph-node-in-cycle?: node is not in GA's adjacency"
+              (list 'fix "use (member node (graph-cyclic-nodes ga)) for a non-raising check")
+              node))
       (else
-       (vector-ref (gscc-non-trivial-vec scc-rec)
-                   (vector-ref (gscc-scc-vec scc-rec) idx))))))
+       (vector-ref (graph-scc-non-trivial-vec scc-rec)
+                   (vector-ref (graph-scc-scc-vec scc-rec) idx))))))
 
 (define (graph-cyclic-nodes ga)
-  "Return the list of node names in GA that lie in non-trivial SCCs.\nA non-trivial SCC contains a cycle (multiple mutually-reachable nodes\nor a self-loop). Order matches adjacency-insertion order.\n\nForces SCC computation on first call per GA. Returns '() on a\ncompletely acyclic graph.\n\nExamples:\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ((b))))\n               #f)))\n    (graph-cyclic-nodes ga))    => (a b)\n\nParameters:\n  ga : graph-analysis\nReturns: list\nCategory: algebra\n\nSee also: `graph-node-in-cycle?', `graph-analysis-sccs'."
+  "Return the list of node names in GA that lie in non-trivial SCCs.\nA non-trivial SCC contains a cycle (multiple mutually-reachable nodes\nor a self-loop). Order matches the kernel's interning order, which for\ntypical adjacencies (where every edge target also appears as an\nadjacency key) matches adjacency-insertion order; for adjacencies\nwith targets that don't appear as keys, the targets sort after the\nlast key in interning order.\n\nForces SCC computation on first call per GA. Returns '() on a\ncompletely acyclic graph and on the empty graph.\n\nExamples:\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ((b))))\n               #f)))\n    (graph-cyclic-nodes ga))    => (a b)\n\nParameters:\n  ga : graph-analysis\nReturns: list\nCategory: algebra\n\nSee also: `graph-node-in-cycle?', `graph-analysis-sccs'."
   (let* ((scc-rec   (%ensure-graph-scc! ga))
-         (n         (gscc-num-nodes scc-rec))
-         (scc-vec   (gscc-scc-vec scc-rec))
-         (nt-vec    (gscc-non-trivial-vec scc-rec))
-         (idx->name (gscc-idx->name scc-rec)))
+         (n         (graph-scc-num-nodes scc-rec))
+         (scc-vec   (graph-scc-scc-vec scc-rec))
+         (nt-vec    (graph-scc-non-trivial-vec scc-rec))
+         (idx->name (graph-scc-idx->name scc-rec)))
     (let loop ((i 0) (acc '()))
       (cond
         ((= i n) (reverse acc))
@@ -350,11 +371,11 @@
   (cond-expand
     ((library (wile algebragraph))
      (let* ((scc-record (%ensure-graph-scc! ga))
-            (name->idx  (gscc-name->idx scc-record))
-            (idx->name  (gscc-idx->name scc-record))
-            (num-nodes  (gscc-num-nodes scc-record))
-            (scc-vec    (gscc-scc-vec   scc-record))
-            (edges      (gscc-edges     scc-record))
+            (name->idx  (graph-scc-name->idx scc-record))
+            (idx->name  (graph-scc-idx->name scc-record))
+            (num-nodes  (graph-scc-num-nodes scc-record))
+            (scc-vec    (graph-scc-scc-vec   scc-record))
+            (edges      (graph-scc-edges     scc-record))
             (src-idx    (hashtable-ref name->idx source -1)))
        (cond
          ((< src-idx 0) '())
@@ -420,9 +441,11 @@
         (else
          (error
           (string-append
-           "graph-analysis-sccs: SCC computation requires the (wile "
+           "%ensure-graph-scc!: SCC computation requires the (wile "
            "algebragraph) extension, which is only loaded under the "
-           "kitchen-sink profile."))))))
+           "kitchen-sink profile. Reachable from graph-analysis-sccs, "
+           "graph-node-in-cycle?, graph-cyclic-nodes, and the cyclic-"
+           "counting dispatch."))))))
 
 ;; Compute a topological order of the subgraph reachable from `source`.
 ;; Returns two values (via `values`):

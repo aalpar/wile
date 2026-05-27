@@ -186,9 +186,9 @@
     graph-query graph-query-all
     graph-analysis-fast-path? graph-analysis-fast-path-kind
     graph-analysis-sccs graph-node-in-cycle? graph-cyclic-nodes
-    graph-scc?
-    gscc-scc-vec gscc-non-trivial-vec
-    gscc-name->idx gscc-idx->name gscc-num-nodes
+    graph-scc? make-graph-scc
+    graph-scc-scc-vec graph-scc-non-trivial-vec
+    graph-scc-name->idx graph-scc-idx->name graph-scc-num-nodes
     ;; Matrices
     make-semiring-matrix semiring-matrix?
     semiring-matrix-from-rows semiring-matrix->rows
