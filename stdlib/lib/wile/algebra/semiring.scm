@@ -7,18 +7,20 @@
 ;;; - 0 annihilates ×: 0 × a = a × 0 = 0
 
 (define-record-type <semiring>
-  (make-semiring* plus-fn times-fn zero one)
+  (make-semiring* plus-fn times-fn zero one carrier)
   semiring?
   (plus-fn  semiring-plus-fn)
   (times-fn semiring-times-fn)
   (zero     semiring-zero)
-  (one      semiring-one))
+  (one      semiring-one)
+  (carrier  semiring-carrier))
 
-(define (make-semiring plus times zero one)
-  "Construct a semiring from PLUS, TIMES, ZERO, and ONE.\nPLUS must be associative and commutative with ZERO as identity.\nTIMES must be associative with ONE as identity and must\ndistribute over PLUS. ZERO must annihilate TIMES from both sides.\n\nExamples:\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-plus S 3 4))   => 7\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-times S 3 4))  => 12\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\nReturns: any\nCategory: algebra\nKeywords: semiring, rig, algebraic structure, distributive\n\nSee also: `semiring->additive-monoid', `validate-semiring'."
+(define (make-semiring plus times zero one . opts)
+  "Construct a semiring from PLUS, TIMES, ZERO, and ONE.\nPLUS must be associative and commutative with ZERO as identity.\nTIMES must be associative with ONE as identity and must\ndistribute over PLUS. ZERO must annihilate TIMES from both sides.\n\nThe trailing alist OPTS accepts the following keys:\n  (carrier . SYM) — declares the carrier type. The symbol drives\n    consumer-side fast-path eligibility. Default #f (no fast path).\n    Vocabulary: 'big-int, 'integer, 'rational, 'real, 'complex,\n    'boolean, 'log-float, 'modular, 'saturating, 'opaque.\n\nExamples:\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-plus S 3 4))   => 7\n  (let ((S (make-semiring + * 0 1 '(carrier . big-int))))\n    (semiring-carrier S))    => big-int\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: semiring, rig, algebraic structure, distributive, carrier\n\nSee also: `semiring-carrier', `semiring->additive-monoid', `validate-semiring'."
   (assert-procedure "make-semiring" plus)
   (assert-procedure "make-semiring" times)
-  (make-semiring* plus times zero one))
+  (validate-opts-keys "make-semiring" opts '(carrier))
+  (make-semiring* plus times zero one (assv-or opts 'carrier #f)))
 
 (define (semiring-plus S a b)
   "Add A and B under semiring S's additive operation.\n\nExamples:\n  (semiring-plus (counting-semiring) 3 4)  => 7\n\nParameters:\n  S : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: addition, add, sum, plus, oplus"
@@ -64,8 +66,12 @@
   (make-semiring tropical-min tropical-add tropical-inf 0))
 
 (define (counting-semiring)
-  "Construct the standard counting semiring over exact integers.\nPLUS is addition, TIMES is multiplication, zero is 0, one is 1.\n\nExamples:\n  (let ((C (counting-semiring)))\n    (semiring-plus C 3 4))   => 7\n  (let ((C (counting-semiring)))\n    (semiring-times C 3 4))  => 12\n\nReturns: any\nCategory: algebra\nKeywords: natural numbers, counting, integers, standard arithmetic\n\nSee also: `boolean-semiring', `tropical-semiring', `make-semiring'."
+  "Construct the standard counting semiring over exact integers.\nPLUS is addition, TIMES is multiplication, zero is 0, one is 1.\n\nExamples:\n  (let ((C (counting-semiring)))\n    (semiring-plus C 3 4))   => 7\n  (let ((C (counting-semiring)))\n    (semiring-times C 3 4))  => 12\n\nReturns: any\nCategory: algebra\nKeywords: natural numbers, counting, integers, standard arithmetic\n\nSee also: `boolean-semiring', `tropical-semiring', `bigint-counting-semiring', `make-semiring'."
   (make-semiring + * 0 1))
+
+(define (bigint-counting-semiring)
+  "Construct a counting semiring with carrier 'big-int, opting into the\nbignum-targeted fast path when consumed by `make-graph-analysis'. The\nScheme-visible operations behave identically to (counting-semiring) —\narithmetic auto-promotes to bignum on overflow — but the carrier\nannotation lets `(wile algebra graph)' route path-counting queries\nthrough `count-paths-in-dag', which uses in-place `*big.Int' arithmetic\nand sidesteps the per-relaxation allocation overhead of the generic\nBellman-Ford inner loop.\n\nFast-path attachment requires three conditions on the\n`make-graph-analysis' call site, checked at construction time:\n  1. carrier 'big-int (this semiring or any (carrier . big-int) variant);\n  2. weight-fn is #f (unit weights — the kernel has no edge-data slot);\n  3. all adjacency node identifiers are atomic (symbol, string, number,\n     char, boolean — the kernel's name->index interning uses a hashtable).\nWhen any condition fails, `make-graph-analysis' silently falls back to\nthe pure-Scheme inner loop. The carrier opt is advisory; declaring it\nnever changes Scheme-visible arithmetic or query results, only\ndispatch cost. Use `graph-analysis-fast-path?' to verify attachment.\n\nWeighted bignum acceleration (sub-path 4B) is not yet implemented;\nbig-int carrier + non-#f weight-fn currently routes to the slow path.\n\nExamples:\n  (let ((C (bigint-counting-semiring)))\n    (semiring-carrier C))    => big-int\n  (let ((C (bigint-counting-semiring)))\n    (semiring-plus C 3 4))   => 7\n\nReturns: any\nCategory: algebra\nKeywords: counting, bignum, big-int, carrier, fast path, allocation\n\nSee also: `counting-semiring', `semiring-carrier', `make-graph-analysis', `graph-analysis-fast-path?'."
+  (make-semiring + * 0 1 '(carrier . big-int)))
 
 ;; ─── Macro ───────────────────────────────────
 

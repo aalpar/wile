@@ -33,6 +33,48 @@ without erroring on loss; the `Lossless` forms reject loss with
 extension's `inexact-*` primitives both consume these helpers. See
 `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go Types".
 
+## In-Place Arithmetic on BigInteger (`numeric_scratch.go`)
+
+Unexported helpers that mutate a destination's `*big.Int` storage in
+place, for tight-loop callers that own the destination:
+
+| Helper | Operation |
+|--------|-----------|
+| `addBigIntInPlace(dest, p, v *BigInteger)` | `dest.value = p.value + v.value` |
+| `subBigIntInPlace(dest, p, v *BigInteger)` | `dest.value = p.value - v.value` |
+| `mulBigIntInPlace(dest, p, v *BigInteger)` | `dest.value = p.value * v.value` |
+| `negateBigIntInPlace(dest, p *BigInteger)` | `dest.value = -p.value` |
+
+All return `dest` for chaining. `dest` may alias `p`, `v`, or both —
+the aliasing behaviour is empirically pinned by
+`numeric_scratch_test.go` since the `math/big` doc does not promise it
+in writing.
+
+**Why unexported.** The public `(*BigInteger).Add` etc. remain immutable
+per R7RS Number semantics; in-place mutation would leak observable
+state into Scheme. The helpers exist for Go-side consumers (currently
+`algebra/graph.CountPathsInDAG`, which calls `(*big.Int).Add` directly
+on its own slot array; future weighted-bigint and approximate-counting
+DAG kernels will consume the `*BigInteger`-wrapping variants here).
+
+**Allocation profile.** A freshly-constructed `*big.Int` has zero
+`[]Word` capacity; the *first* in-place op allocates a backing slice.
+Subsequent ops within capacity reuse it. To skip the growth phase when
+the working width is known, pre-size with
+`(*big.Int).SetBits(make([]big.Word, 0, N))`. The
+`TestBigIntInPlace_ZeroAllocs` regression test pins zero allocations
+on the steady-state path via `testing.AllocsPerRun`; microbenches in
+`numeric_scratch_bench_test.go` measure the steady-state cost against
+the allocating `(*BigInteger).Add` baseline (Apple M4 Max; absolute
+ns/op vary by CPU, ratios are stable):
+
+| Bench | ns/op (M4 Max) | B/op | allocs/op | vs allocating |
+|-------|---------------:|-----:|----------:|---------------|
+| `BigIntegerAdd` (allocating) | ~35 | 88 | 3 | baseline |
+| `BigIntAddInPlace` | ~5 | 0 | 0 | **~7×** |
+| `BigIntegerMultiply` (allocating) | ~37 | 88 | 3 | baseline |
+| `BigIntMulInPlace` | ~7 | 0 | 0 | **~5×** |
+
 ## Error Handling
 
 **`errors.Is` and `errors.As` are mandatory.** Never compare errors with `==` or `!=`. Error wrapping means `err == ErrFoo` silently fails when the error is wrapped. Use `errors.Is(err, ErrFoo)` for sentinel errors and `errors.As(err, &target)` for typed errors. This applies to all error comparisons including `io.EOF` and any other sentinel values.

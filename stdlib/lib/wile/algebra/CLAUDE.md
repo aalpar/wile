@@ -151,6 +151,42 @@ established in `group.scm` and `lattice.scm`:
 Backwards compatibility: the required positional arguments of `make-X`
 don't change; new metadata is always optional with sensible defaults.
 
+## Carrier opt — bridging Scheme structures to Go-side fast paths
+
+Structure records that declare a `(carrier . SYM)` opt let consumer
+libraries dispatch on the carrier type without inspecting the structure's
+operations directly. `<semiring>` is the first carrier of this pattern:
+
+| Symbol | Carrier | Status |
+|--------|---------|--------|
+| `'big-int` | `*BigInteger` | Active — opts into `(wile algebra graph)`'s `count-paths-in-dag` integration when conditions hold (see below) |
+| `#f` (absence) | n/a | No fast path — dispatch falls through to the generic Scheme inner loop |
+
+Reserved symbols for future sub-paths (no fast path attached today;
+declaring them is equivalent to `#f`): `'integer`, `'rational`, `'real`,
+`'complex`, `'boolean`, `'log-float`, `'modular`, `'saturating`,
+`'opaque`. The active vocabulary reuses `values/NumericTypeSpec.schemeName`
+where applicable. Unknown symbols are accepted silently per the
+"never error on unrecognised carrier" contract below.
+
+The carrier symbol is *advisory* — declaring it doesn't change Scheme-visible
+arithmetic. It signals consumer-side fast-path eligibility. The built-in
+`bigint-counting-semiring` is shorthand for
+`(make-semiring + * 0 1 '(carrier . big-int))`, so users opting into the
+bignum fast path can do so with one call.
+
+Consumer libraries that wire up a Go-side kernel should:
+
+1. Detect the carrier symbol at construction time, not query time
+   (eligibility shouldn't be re-checked on every operation).
+2. Document which carrier symbols they handle and what fast path attaches.
+3. Fall through to the existing generic path when the carrier doesn't match
+   — never error on unrecognised carrier (the structure remains valid
+   under the generic path).
+
+See `graph.scm`'s `compute-via-count-paths-in-dag` for the canonical
+integration shape: name→index hashtable, kernel call, alist projection.
+
 ## Private helpers
 
 Within a library, use a `%` prefix for private helpers that shouldn't cross
