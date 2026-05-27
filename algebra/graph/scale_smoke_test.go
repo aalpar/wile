@@ -80,10 +80,11 @@ func TestCountPathsCyclic_MachineScaleSmoke(t *testing.T) {
 		qt.Commentf("expected ~623 edges, got %d", len(edges)))
 
 	start := time.Now()
-	res := graph.CountPathsCyclic(numNodes, edges, 0)
+	res, err := graph.CountPathsCyclic(numNodes, edges, 0)
 	elapsed := time.Since(start)
 
 	// Correctness:
+	c.Assert(err, qt.IsNil)
 	c.Assert(res, qt.Not(qt.IsNil), qt.Commentf("kernel must not nil out on the incident shape"))
 	c.Assert(len(res.SCC), qt.Equals, numNodes)
 	c.Assert(len(res.CountsBySCC), qt.Equals, len(res.NonTrivial),
@@ -117,6 +118,6 @@ func TestCountPathsCyclic_MachineScaleSmoke(t *testing.T) {
 func BenchmarkCountPathsCyclic_MachineScale(b *testing.B) {
 	numNodes, edges := machineShapedGraph()
 	for b.Loop() {
-		_ = graph.CountPathsCyclic(numNodes, edges, 0)
+		_, _ = graph.CountPathsCyclic(numNodes, edges, 0)
 	}
 }

@@ -14,6 +14,8 @@
 
 package graph
 
+import "github.com/aalpar/wile/werr"
+
 // Strongly-connected-component computation via Pearce's path-based algorithm
 // (Pearce 2005, "An Improved Algorithm for Finding the Strongly Connected
 // Components of a Directed Graph"). One DFS pass, O(V+E), single rindex
@@ -28,6 +30,11 @@ package graph
 // edges (a "root" in the condensation); SCC NumSCCs-1 has no outgoing
 // inter-SCC edges (a "leaf"). Equivalently, for every condensed edge
 // (c, d) with c != d, SCC[c] < SCC[d].
+//
+// The exported slices (SCC, NonTrivial) alias kernel-internal storage —
+// callers MUST treat them as read-only. Mutation will silently corrupt
+// any downstream computation that re-reads them (CondenseSCC,
+// CountPathsCyclic).
 type SCCResult struct {
 	// SCC[v] is the component ID of node v. 0 <= SCC[v] < NumSCCs.
 	SCC []int
@@ -37,22 +44,26 @@ type SCCResult struct {
 
 	// NonTrivial[c] is true iff component c contains a cycle: either
 	// it has more than one node, or it is a single node with a
-	// self-loop. A trivial SCC is a single node with no self-loop —
-	// within-SCC counts are well-defined (exactly 1, the empty path).
-	// Non-trivial SCCs have infinite within-SCC counts.
+	// self-loop. A trivial SCC is a single node with no self-loop.
 	NonTrivial []bool
 }
 
 // ComputeSCC computes the strongly-connected components of a directed
-// graph using Pearce's path-based algorithm. Returns nil if numNodes <= 0
-// or any edge references an out-of-range node.
-func ComputeSCC(numNodes int, edges []Edge) *SCCResult {
+// graph using Pearce's path-based algorithm. Returns ErrInvalidArgument
+// if numNodes <= 0 or any edge references an out-of-range node.
+func ComputeSCC(numNodes int, edges []Edge) (*SCCResult, error) {
 	if numNodes <= 0 {
-		return nil
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"ComputeSCC: numNodes must be > 0, got %d", numNodes)
 	}
-	for _, e := range edges {
-		if e.U < 0 || e.U >= numNodes || e.V < 0 || e.V >= numNodes {
-			return nil
+	for i, e := range edges {
+		if e.U < 0 || e.U >= numNodes {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"ComputeSCC: edge[%d].U=%d out of range [0, %d)", i, e.U, numNodes)
+		}
+		if e.V < 0 || e.V >= numNodes {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"ComputeSCC: edge[%d].V=%d out of range [0, %d)", i, e.V, numNodes)
 		}
 	}
 
@@ -183,7 +194,7 @@ func ComputeSCC(numNodes int, edges []Edge) *SCCResult {
 		SCC:        component,
 		NumSCCs:    numSCCs,
 		NonTrivial: nonTrivial,
-	}
+	}, nil
 }
 
 // CondenseSCC reduces a directed graph to its DAG of strongly-connected
@@ -200,12 +211,12 @@ func ComputeSCC(numNodes int, edges []Edge) *SCCResult {
 // (c, d). They contribute two distinct inter-SCC paths and downstream
 // path counting must reflect that.
 //
-// Returns (nil, nil) if ComputeSCC returns nil (input validation
+// Returns (nil, nil, err) if ComputeSCC fails (input validation
 // failure).
-func CondenseSCC(numNodes int, edges []Edge) (*SCCResult, []Edge) {
-	scc := ComputeSCC(numNodes, edges)
-	if scc == nil {
-		return nil, nil
+func CondenseSCC(numNodes int, edges []Edge) (*SCCResult, []Edge, error) {
+	scc, err := ComputeSCC(numNodes, edges)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	condensed := make([]Edge, 0, len(edges))
@@ -216,5 +227,5 @@ func CondenseSCC(numNodes int, edges []Edge) (*SCCResult, []Edge) {
 		}
 		condensed = append(condensed, Edge{U: su, V: sv})
 	}
-	return scc, condensed
+	return scc, condensed, nil
 }

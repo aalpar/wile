@@ -15,11 +15,13 @@
 package graph_test
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/algebra/graph"
+	"github.com/aalpar/wile/werr"
 )
 
 // assertReverseTopological asserts that for every edge (u, v) where the
@@ -36,22 +38,52 @@ func assertReverseTopological(c *qt.C, res *graph.SCCResult, edges []graph.Edge)
 	}
 }
 
-func TestComputeSCC_NilOnInvalidInput(t *testing.T) {
+// mustComputeSCC is a test helper that fails the test if ComputeSCC
+// returns an error. The "happy-path" SCC tests use it so each test stays
+// focused on the structural assertion rather than error plumbing.
+func mustComputeSCC(c *qt.C, numNodes int, edges []graph.Edge) *graph.SCCResult {
+	c.Helper()
+	res, err := graph.ComputeSCC(numNodes, edges)
+	c.Assert(err, qt.IsNil)
+	c.Assert(res, qt.Not(qt.IsNil))
+	return res
+}
+
+// mustCondenseSCC is the analogous helper for CondenseSCC.
+func mustCondenseSCC(c *qt.C, numNodes int, edges []graph.Edge) (*graph.SCCResult, []graph.Edge) {
+	c.Helper()
+	scc, cond, err := graph.CondenseSCC(numNodes, edges)
+	c.Assert(err, qt.IsNil)
+	c.Assert(scc, qt.Not(qt.IsNil))
+	return scc, cond
+}
+
+func TestComputeSCC_ErrorOnInvalidInput(t *testing.T) {
 	c := qt.New(t)
-
-	// Zero or negative numNodes.
-	c.Assert(graph.ComputeSCC(0, nil), qt.IsNil)
-	c.Assert(graph.ComputeSCC(-1, nil), qt.IsNil)
-
-	// Out-of-range edge endpoints.
-	c.Assert(graph.ComputeSCC(2, []graph.Edge{{U: 0, V: 5}}), qt.IsNil)
-	c.Assert(graph.ComputeSCC(2, []graph.Edge{{U: -1, V: 0}}), qt.IsNil)
+	cases := []struct {
+		name     string
+		numNodes int
+		edges    []graph.Edge
+	}{
+		{"numNodes zero", 0, nil},
+		{"numNodes negative", -1, nil},
+		{"edge V out of range", 2, []graph.Edge{{U: 0, V: 5}}},
+		{"edge U negative", 2, []graph.Edge{{U: -1, V: 0}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := graph.ComputeSCC(tc.numNodes, tc.edges)
+			c.Assert(res, qt.IsNil)
+			c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+				qt.Commentf("want errors.Is(err, ErrInvalidArgument); got %v", err))
+		})
+	}
 }
 
 func TestComputeSCC_SingleNodeNoEdges(t *testing.T) {
 	c := qt.New(t)
 	// 1 node, no edges → 1 trivial SCC.
-	res := graph.ComputeSCC(1, nil)
+	res := mustComputeSCC(c,1, nil)
 	c.Assert(res, qt.Not(qt.IsNil))
 	c.Assert(res.NumSCCs, qt.Equals, 1)
 	c.Assert(res.SCC, qt.DeepEquals, []int{0})
@@ -64,7 +96,7 @@ func TestComputeSCC_LinearChain(t *testing.T) {
 	// trivial SCC, and the reverse-topological numbering is fully forced
 	// by the chain structure: SCC[i] = i.
 	edges := []graph.Edge{{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 3}}
-	res := graph.ComputeSCC(4, edges)
+	res := mustComputeSCC(c,4, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 4)
 	c.Assert(res.SCC, qt.DeepEquals, []int{0, 1, 2, 3})
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{false, false, false, false})
@@ -75,7 +107,7 @@ func TestComputeSCC_SingleCycle(t *testing.T) {
 	c := qt.New(t)
 	// 0 → 1 → 2 → 0 — all three nodes form one non-trivial SCC.
 	edges := []graph.Edge{{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0}}
-	res := graph.ComputeSCC(3, edges)
+	res := mustComputeSCC(c,3, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 1)
 	c.Assert(res.SCC, qt.DeepEquals, []int{0, 0, 0})
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{true})
@@ -90,7 +122,7 @@ func TestComputeSCC_TwoDisconnectedCycles(t *testing.T) {
 		{U: 0, V: 1}, {U: 1, V: 0},
 		{U: 2, V: 3}, {U: 3, V: 2},
 	}
-	res := graph.ComputeSCC(4, edges)
+	res := mustComputeSCC(c,4, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 2)
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{true, true})
 	c.Assert(res.SCC[0], qt.Equals, res.SCC[1],
@@ -105,7 +137,7 @@ func TestComputeSCC_SelfLoopSingleNode(t *testing.T) {
 	c := qt.New(t)
 	// 0 → 0 — single node with self-loop forms one non-trivial SCC of size 1.
 	edges := []graph.Edge{{U: 0, V: 0}}
-	res := graph.ComputeSCC(1, edges)
+	res := mustComputeSCC(c,1, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 1)
 	c.Assert(res.SCC, qt.DeepEquals, []int{0})
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{true},
@@ -124,7 +156,7 @@ func TestComputeSCC_DiamondDAG(t *testing.T) {
 		{U: 0, V: 1}, {U: 0, V: 2},
 		{U: 1, V: 3}, {U: 2, V: 3},
 	}
-	res := graph.ComputeSCC(4, edges)
+	res := mustComputeSCC(c,4, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 4)
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{false, false, false, false})
 	c.Assert(res.SCC[0], qt.Equals, 0, qt.Commentf("node 0 is the unique source"))
@@ -142,7 +174,7 @@ func TestComputeSCC_Bowtie(t *testing.T) {
 		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
 		{U: 2, V: 3}, {U: 3, V: 4}, {U: 4, V: 2},
 	}
-	res := graph.ComputeSCC(5, edges)
+	res := mustComputeSCC(c,5, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 1)
 	c.Assert(res.SCC, qt.DeepEquals, []int{0, 0, 0, 0, 0})
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{true})
@@ -159,7 +191,7 @@ func TestComputeSCC_CycleWithTail(t *testing.T) {
 		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
 		{U: 0, V: 3},
 	}
-	res := graph.ComputeSCC(4, edges)
+	res := mustComputeSCC(c,4, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 2)
 	// Cycle members share an SCC.
 	c.Assert(res.SCC[0], qt.Equals, res.SCC[1])
@@ -177,7 +209,7 @@ func TestComputeSCC_DisconnectedComponents(t *testing.T) {
 	c := qt.New(t)
 	// Two disconnected DAGs: 0 → 1 and 2 → 3.
 	edges := []graph.Edge{{U: 0, V: 1}, {U: 2, V: 3}}
-	res := graph.ComputeSCC(4, edges)
+	res := mustComputeSCC(c,4, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 4)
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{false, false, false, false})
 	// Within-component ordering: source before sink.
@@ -199,7 +231,7 @@ func TestComputeSCC_NestedSCCs(t *testing.T) {
 		{U: 1, V: 2},
 		{U: 2, V: 3}, {U: 3, V: 2},
 	}
-	res := graph.ComputeSCC(4, edges)
+	res := mustComputeSCC(c,4, edges)
 	c.Assert(res.NumSCCs, qt.Equals, 2)
 	c.Assert(res.NonTrivial, qt.DeepEquals, []bool{true, true})
 	c.Assert(res.SCC[0], qt.Equals, res.SCC[1])
@@ -212,7 +244,7 @@ func TestComputeSCC_NestedSCCs(t *testing.T) {
 func TestComputeSCC_EmptyEdgeListMultipleNodes(t *testing.T) {
 	c := qt.New(t)
 	// 5 isolated nodes, no edges → 5 trivial SCCs.
-	res := graph.ComputeSCC(5, nil)
+	res := mustComputeSCC(c,5, nil)
 	c.Assert(res.NumSCCs, qt.Equals, 5)
 	for v := range 5 {
 		c.Assert(res.NonTrivial[res.SCC[v]], qt.IsFalse,
@@ -232,15 +264,17 @@ func condensedEdgeMultiset(edges []graph.Edge) map[graph.Edge]int {
 	return m
 }
 
-func TestCondenseSCC_NilOnInvalidInput(t *testing.T) {
+func TestCondenseSCC_ErrorOnInvalidInput(t *testing.T) {
 	c := qt.New(t)
-	scc, cond := graph.CondenseSCC(0, nil)
+	scc, cond, err := graph.CondenseSCC(0, nil)
 	c.Assert(scc, qt.IsNil)
 	c.Assert(cond, qt.IsNil)
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 
-	scc, cond = graph.CondenseSCC(2, []graph.Edge{{U: 0, V: 5}})
+	scc, cond, err = graph.CondenseSCC(2, []graph.Edge{{U: 0, V: 5}})
 	c.Assert(scc, qt.IsNil)
 	c.Assert(cond, qt.IsNil)
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
 func TestCondenseSCC_AcyclicPreservesEdges(t *testing.T) {
@@ -251,7 +285,7 @@ func TestCondenseSCC_AcyclicPreservesEdges(t *testing.T) {
 		{U: 0, V: 1}, {U: 0, V: 2},
 		{U: 1, V: 3}, {U: 2, V: 3},
 	}
-	scc, cond := graph.CondenseSCC(4, original)
+	scc, cond := mustCondenseSCC(c,4, original)
 	c.Assert(scc.NumSCCs, qt.Equals, 4)
 	c.Assert(len(cond), qt.Equals, len(original),
 		qt.Commentf("acyclic input: every original edge becomes one condensed edge"))
@@ -270,7 +304,7 @@ func TestCondenseSCC_AcyclicPreservesEdges(t *testing.T) {
 func TestCondenseSCC_SingleCycleEmpty(t *testing.T) {
 	c := qt.New(t)
 	// 0 → 1 → 2 → 0 — all edges within one SCC; condensation is empty.
-	scc, cond := graph.CondenseSCC(3, []graph.Edge{
+	scc, cond := mustCondenseSCC(c,3, []graph.Edge{
 		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
 	})
 	c.Assert(scc.NumSCCs, qt.Equals, 1)
@@ -281,7 +315,7 @@ func TestCondenseSCC_BowtieEmpty(t *testing.T) {
 	c := qt.New(t)
 	// Two cycles sharing node 2 — all five nodes are in one SCC; every
 	// original edge is within-SCC and condensation is empty.
-	scc, cond := graph.CondenseSCC(5, []graph.Edge{
+	scc, cond := mustCondenseSCC(c,5, []graph.Edge{
 		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
 		{U: 2, V: 3}, {U: 3, V: 4}, {U: 4, V: 2},
 	})
@@ -293,7 +327,7 @@ func TestCondenseSCC_SelfLoopDroppedFromCondensation(t *testing.T) {
 	c := qt.New(t)
 	// 0 → 0 (self-loop). The single-node SCC is non-trivial, but the
 	// edge from node 0 to itself stays within SCC[0] and is dropped.
-	scc, cond := graph.CondenseSCC(1, []graph.Edge{{U: 0, V: 0}})
+	scc, cond := mustCondenseSCC(c,1, []graph.Edge{{U: 0, V: 0}})
 	c.Assert(scc.NumSCCs, qt.Equals, 1)
 	c.Assert(scc.NonTrivial[0], qt.IsTrue)
 	c.Assert(cond, qt.HasLen, 0,
@@ -305,7 +339,7 @@ func TestCondenseSCC_MultiEdgesPreserved(t *testing.T) {
 	// Two parallel edges from node 0 to node 1, both inter-SCC.
 	// The condensation must keep both — they represent two distinct
 	// inter-SCC paths and the downstream count must reflect that.
-	scc, cond := graph.CondenseSCC(2, []graph.Edge{
+	scc, cond := mustCondenseSCC(c,2, []graph.Edge{
 		{U: 0, V: 1}, {U: 0, V: 1},
 	})
 	c.Assert(scc.NumSCCs, qt.Equals, 2)
@@ -325,7 +359,7 @@ func TestCondenseSCC_CycleWithTailDropsInternalEdges(t *testing.T) {
 		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
 		{U: 0, V: 3},
 	}
-	scc, cond := graph.CondenseSCC(4, original)
+	scc, cond := mustCondenseSCC(c,4, original)
 	c.Assert(scc.NumSCCs, qt.Equals, 2)
 	c.Assert(cond, qt.HasLen, 1,
 		qt.Commentf("only the inter-SCC edge (0,3) survives condensation"))
@@ -344,7 +378,7 @@ func TestCondenseSCC_CondensedGraphIsAcyclic(t *testing.T) {
 		{U: 2, V: 3}, {U: 3, V: 2}, // cycle Y
 		{U: 3, V: 4}, // bridge Y → singleton {4}
 	}
-	scc, cond := graph.CondenseSCC(5, edges)
+	scc, cond := mustCondenseSCC(c,5, edges)
 	c.Assert(scc.NumSCCs, qt.Equals, 3)
 	// Run the DAG kernel on the condensed graph starting from the
 	// source-most SCC. Non-nil result confirms acyclicity.

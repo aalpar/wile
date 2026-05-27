@@ -150,12 +150,12 @@ func primCountPathsCyclic(mc machine.CallContext) error {
 		return err
 	}
 
-	res := graph.CountPathsCyclic(numNodes, edges, source)
-	if res == nil {
-		// Should not happen given prior validation, but defend against
-		// future changes to the kernel's nil-return preconditions.
-		mc.SetValue(values.FalseValue)
-		return nil
+	res, err := graph.CountPathsCyclic(numNodes, edges, source)
+	if err != nil {
+		// Wrapper validation should have caught everything the kernel
+		// can reject; propagate verbatim if a future kernel invariant
+		// regresses.
+		return err
 	}
 
 	sccVec := make([]values.Value, len(res.SCC))

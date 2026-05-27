@@ -15,12 +15,14 @@
 package graph_test
 
 import (
+	"errors"
 	"math/big"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/algebra/graph"
+	"github.com/aalpar/wile/werr"
 )
 
 // Helper: extract the per-node count as a decimal string for readable assertions.
@@ -226,13 +228,29 @@ func perNodeCountsFromCyclic(res *graph.CyclicCountResult) []string {
 	return out
 }
 
-func TestCountPathsCyclic_NilOnInvalidInput(t *testing.T) {
+func TestCountPathsCyclic_ErrorOnInvalidInput(t *testing.T) {
 	c := qt.New(t)
-	c.Assert(graph.CountPathsCyclic(0, nil, 0), qt.IsNil)
-	c.Assert(graph.CountPathsCyclic(-1, nil, 0), qt.IsNil)
-	c.Assert(graph.CountPathsCyclic(2, nil, -1), qt.IsNil)
-	c.Assert(graph.CountPathsCyclic(2, nil, 5), qt.IsNil)
-	c.Assert(graph.CountPathsCyclic(2, []graph.Edge{{U: 0, V: 5}}, 0), qt.IsNil)
+	cases := []struct {
+		name      string
+		numNodes  int
+		edges     []graph.Edge
+		source    int
+		wantErrIs error
+	}{
+		{"numNodes zero", 0, nil, 0, werr.ErrInvalidArgument},
+		{"numNodes negative", -1, nil, 0, werr.ErrInvalidArgument},
+		{"source negative", 2, nil, -1, werr.ErrInvalidArgument},
+		{"source out of range", 2, nil, 5, werr.ErrInvalidArgument},
+		{"edge V out of range", 2, []graph.Edge{{U: 0, V: 5}}, 0, werr.ErrInvalidArgument},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := graph.CountPathsCyclic(tc.numNodes, tc.edges, tc.source)
+			c.Assert(res, qt.IsNil)
+			c.Assert(errors.Is(err, tc.wantErrIs), qt.IsTrue,
+				qt.Commentf("want errors.Is(err, %v); got err=%v", tc.wantErrIs, err))
+		})
+	}
 }
 
 func TestCountPathsCyclic_AcyclicMatchesDAGKernel(t *testing.T) {
@@ -246,7 +264,8 @@ func TestCountPathsCyclic_AcyclicMatchesDAGKernel(t *testing.T) {
 	wantDAG := graph.CountPathsInDAG(4, edges, 0)
 	c.Assert(wantDAG, qt.Not(qt.IsNil))
 
-	res := graph.CountPathsCyclic(4, edges, 0)
+	res, err := graph.CountPathsCyclic(4, edges, 0)
+	c.Assert(err, qt.IsNil)
 	c.Assert(res, qt.Not(qt.IsNil))
 	c.Assert(len(res.CountsBySCC), qt.Equals, 4, qt.Commentf("acyclic: one SCC per node"))
 
@@ -272,7 +291,8 @@ func TestCountPathsCyclic_MotivatingCallGraph(t *testing.T) {
 		{U: 2, V: 4}, // run → loop
 		{U: 4, V: 3}, // loop → setup
 	}
-	res := graph.CountPathsCyclic(5, edges, 0)
+	res, err := graph.CountPathsCyclic(5, edges, 0)
+	c.Assert(err, qt.IsNil)
 	c.Assert(res, qt.Not(qt.IsNil))
 	c.Assert(perNodeCountsFromCyclic(res), qt.DeepEquals,
 		[]string{"1", "1", "1", "3", "1"})
@@ -284,7 +304,8 @@ func TestCountPathsCyclic_SingleCycleAllSourceCount(t *testing.T) {
 	// source 0 (in SCC[0]), the source SCC's count is 1; there are no
 	// other SCCs.
 	edges := []graph.Edge{{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0}}
-	res := graph.CountPathsCyclic(3, edges, 0)
+	res, err := graph.CountPathsCyclic(3, edges, 0)
+	c.Assert(err, qt.IsNil)
 	c.Assert(res, qt.Not(qt.IsNil))
 	c.Assert(len(res.CountsBySCC), qt.Equals, 1)
 	c.Assert(res.CountsBySCC[0].String(), qt.Equals, "1")
@@ -302,7 +323,8 @@ func TestCountPathsCyclic_CycleWithTail(t *testing.T) {
 		{U: 0, V: 1}, {U: 1, V: 2}, {U: 2, V: 0},
 		{U: 0, V: 3},
 	}
-	res := graph.CountPathsCyclic(4, edges, 0)
+	res, err := graph.CountPathsCyclic(4, edges, 0)
+	c.Assert(err, qt.IsNil)
 	c.Assert(res, qt.Not(qt.IsNil))
 	c.Assert(len(res.CountsBySCC), qt.Equals, 2)
 
@@ -351,7 +373,8 @@ func TestCountPathsCyclic_MutualRecursionWithParallelCallSites(t *testing.T) {
 		{U: 1, V: 2}, {U: 2, V: 1},
 		{U: 2, V: 3},
 	}
-	res := graph.CountPathsCyclic(4, edges, 0)
+	res, err := graph.CountPathsCyclic(4, edges, 0)
+	c.Assert(err, qt.IsNil)
 	c.Assert(res, qt.Not(qt.IsNil))
 	c.Assert(len(res.CountsBySCC), qt.Equals, 3)
 

@@ -20,7 +20,11 @@
 // identifiers (any equal?-comparable value) and integer indices.
 package graph
 
-import "math/big"
+import (
+	"math/big"
+
+	"github.com/aalpar/wile/werr"
+)
 
 // Edge represents a directed edge from U to V with unit weight (for path
 // counting). Multiple edges between the same pair of nodes are allowed and
@@ -53,6 +57,11 @@ type Edge struct {
 func CountPathsInDAG(numNodes int, edges []Edge, source int) []*big.Int {
 	if numNodes <= 0 || source < 0 || source >= numNodes {
 		return nil
+	}
+	for _, e := range edges {
+		if e.U < 0 || e.U >= numNodes || e.V < 0 || e.V >= numNodes {
+			return nil
+		}
 	}
 
 	// Build outgoing adjacency.
@@ -167,25 +176,36 @@ type CyclicCountResult struct {
 // callers that know their input is acyclic should prefer
 // CountPathsInDAG directly.
 //
-// Returns nil if numNodes <= 0, source is out of range, or any edge
-// references an out-of-range node.
-func CountPathsCyclic(numNodes int, edges []Edge, source int) *CyclicCountResult {
-	if numNodes <= 0 || source < 0 || source >= numNodes {
-		return nil
+// Returns ErrInvalidArgument if numNodes <= 0, source is out of range,
+// or any edge references an out-of-range node.
+func CountPathsCyclic(numNodes int, edges []Edge, source int) (*CyclicCountResult, error) {
+	if numNodes <= 0 {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"CountPathsCyclic: numNodes must be > 0, got %d", numNodes)
+	}
+	if source < 0 || source >= numNodes {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"CountPathsCyclic: source=%d out of range [0, %d)", source, numNodes)
 	}
 
-	scc, condensed := CondenseSCC(numNodes, edges)
-	if scc == nil {
-		return nil
+	scc, condensed, err := CondenseSCC(numNodes, edges)
+	if err != nil {
+		return nil, err
 	}
 
-	// The condensed graph is acyclic by construction, so CountPathsInDAG
-	// cannot return nil here unless its preconditions are violated.
+	// The condensed graph is acyclic by construction, and source is in
+	// range by the validation above, so CountPathsInDAG cannot return nil
+	// here. The defensive guard would only fire on a future kernel
+	// invariant change.
 	counts := CountPathsInDAG(scc.NumSCCs, condensed, scc.SCC[source])
+	if counts == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"CountPathsCyclic: internal invariant violated — CountPathsInDAG returned nil on condensed DAG")
+	}
 
 	return &CyclicCountResult{
 		SCC:         scc.SCC,
 		CountsBySCC: counts,
 		NonTrivial:  scc.NonTrivial,
-	}
+	}, nil
 }
