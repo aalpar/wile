@@ -19,13 +19,13 @@ The principled fix is to give callers explicit choice of which approximation reg
 - **Bounded magnitude, exactly correct in ℤ/Pℤ:** modular counting for large prime P — IS a true semiring, useful for "is the count nonzero?" with collision probability 1/P.
 - **Unbounded range, bounded precision:** log-space counting using `float64` — IS a true semiring (log-sum-exp for ⊕, + for ⊗), useful for ranking when only relative magnitudes matter and absolute precision past ~15 decimal digits is noise.
 
-All three alternatives keep arithmetic in machine-word range, eliminating bignum allocation and growth from the inner loop. Speedup vs. exact counting on cyclic graphs is plausibly multiple orders of magnitude (untested — see acceptance criteria).
+All three alternatives keep arithmetic in machine-word range, eliminating bignum allocation and growth from the inner loop. On *cyclic* graphs, however, only saturating converges under naive Bellman-Ford: CAP is an absorbing top element, the algebraic property that forces a fixed point. Modular Z/PZ and log-space have bounded values but no absorbing element, so the worklist iterates until the 2·V·E safety cap fires (empirically verified 2026-05-27, see Acceptance criteria). Modular and log are still valuable on *DAG* workloads where they save space per value and avoid bignum allocation — they just don't make cyclic counting tractable under Bellman-Ford. Cyclic modular counting needs a different algorithm (matrix `*`-closure over Z/PZ); not covered by this plan.
 
 ## Background
 
 See:
 - `feedback-counting-semiring-on-cycles.md` for the 3-hour incident memory.
-- `2026-05-24-graph-worklist-bellman-ford.md` (sibling plan) for the orthogonal graph-side speedup. The two plans are complementary: worklist B-F speeds up convergent queries; approximate counting makes the (otherwise non-convergent) counting-on-cycles question tractable in bounded time at the cost of precision.
+- `2026-05-24-graph-worklist-bellman-ford.md` (sibling plan) for the orthogonal graph-side speedup. The two plans are complementary: worklist B-F speeds up convergent queries; saturating approximate counting (the only cyclic-convergent variant in this plan) makes the otherwise non-convergent counting-on-cycles question tractable in bounded time at the cost of precision.
 
 ## Design
 
@@ -251,12 +251,12 @@ Note: an earlier draft of this plan named the predicate `approximate-semiring?` 
 ### Phase 4 — graph-library integration
 
 - `make-graph-analysis` accepts these semirings unchanged (no API change required — they're just semirings).
-- Benchmark: rerun the machine-package counting query (539 nodes, 12 back-edges) under each of the three approximate variants. Expected: all three terminate in seconds rather than hours.
+- Benchmark: rerun the machine-package counting query (539 nodes, 12 back-edges) under each of the three approximate variants. **Measured 2026-05-27** (`examples/benchmarks/bench-cyclic-counting-approximate.scm`): saturating converges in ~0.23s; modular and log both hit the worklist's 2·V·E safety cap at ~37–39s wall (the safety cap fires because Bellman-Ford has no fixed point under either carrier on cyclic graphs). Saturating is the only cyclic-convergent variant.
 - Document the choice matrix in the `(wile algebra graph)` library docs:
   - "Exact counts, may be slow or non-terminating on cyclic graphs": `counting-semiring`
-  - "Bounded magnitude, sortable ranking; saturates past CAP": `saturating-counting-semiring CAP`
-  - "Modular hash / parity / fingerprint; not a count": `modular-counting-semiring P`
-  - "Relative-magnitude ranking, unbounded range, bounded precision": `log-counting-semiring`
+  - "Bounded magnitude, sortable ranking; saturates past CAP — **convergent on cycles**": `saturating-counting-semiring CAP`
+  - "Modular hash / parity / fingerprint; not a count; **DAG only** (Bellman-Ford doesn't converge under Z/PZ on cycles)": `modular-counting-semiring P`
+  - "Relative-magnitude ranking, unbounded range, bounded precision; **DAG only** (log unbounded on cycles)": `log-counting-semiring`
 
 ### Phase 5 — docs + PR
 
@@ -277,7 +277,8 @@ Note: an earlier draft of this plan named the predicate `approximate-semiring?` 
 - `bounded-carrier-semiring?` predicate exists and behaves correctly (#t for saturating, #f for modular and log).
 - Semiring axiom tests pass for **all three** variants — modular (exact), log (within float epsilon), and saturating (including post-saturation cases such as `a = b = c = CAP/2 + 1`).
 - Saturating-clamp test passes (values past CAP correctly saturate; multiplication overflow before clamp is detected without int64 wraparound).
-- Benchmark: the 539-node machine-package counting query (currently 3-hour bignum hang) terminates in under 1 second using `modular-counting-semiring` (mod a large prime) or `saturating-counting-semiring` (with a meaningful cap). NOTE: the original plan listed `log-counting-semiring` as the benchmark choice; that was a design oversight — log values grow without bound on cycles (log of an infinite count is still infinite), so the log semiring is NOT bounded under cyclic adjacencies. Modular and saturating are the genuinely-tractable choices for cyclic counting; log remains useful for DAG-shaped ranking workloads. The docstring of `log-counting-semiring` documents this.
+- Benchmark: the 539-node machine-package counting query (originally a 3-hour bignum hang) terminates in under 1 second using `saturating-counting-semiring` (with a meaningful cap). Verified 2026-05-27 by `examples/benchmarks/bench-cyclic-counting-approximate.scm` on a graph of the documented incident shape (539 nodes, 12 back-edges): saturating with CAP = 2^53 converges in **0.23s**.
+- **Cyclic-counting acceptance corrected 2026-05-27.** The original criterion listed both `modular-counting-semiring` AND `saturating-counting-semiring` as acceptable. Empirical verification falsified the modular claim: modular Bellman-Ford on cycles **does not converge**. Saturating is the ONLY approximate carrier in this plan that converges under Bellman-Ford on cyclic graphs, because CAP is an *absorbing top element* — the algebraic property that forces a fixed point. Modular Z/PZ has bounded values but no absorbing element; Mohri's k-closedness criterion fails for any finite k. The 539-node bench reports `modular (mersenne-61)` and `log` both hit the worklist's 2·V·E safety cap (~37–39s wall before the error fires). The principled algorithm for cyclic modular counting is matrix `*`-closure A* = (I − A)⁻¹ over Z/PZ (separate kernel, not yet shipped) — not Bellman-Ford. Modular and log remain useful for DAG-shaped workloads (fingerprinting / parity / Schwartz-Zippel for modular; magnitude-ranking / Viterbi for log); their docstrings document the cycle restriction.
 - `make lint && make covercheck && make ci` all green.
 
 ## Out of scope
