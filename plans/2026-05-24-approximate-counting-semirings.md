@@ -277,7 +277,7 @@ Note: an earlier draft of this plan named the predicate `approximate-semiring?` 
 - `bounded-carrier-semiring?` predicate exists and behaves correctly (#t for saturating, #f for modular and log).
 - Semiring axiom tests pass for **all three** variants — modular (exact), log (within float epsilon), and saturating (including post-saturation cases such as `a = b = c = CAP/2 + 1`).
 - Saturating-clamp test passes (values past CAP correctly saturate; multiplication overflow before clamp is detected without int64 wraparound).
-- Benchmark: the 539-node machine-package counting query (currently 3-hour bignum hang) terminates in under 1 second using `log-counting-semiring`.
+- Benchmark: the 539-node machine-package counting query (currently 3-hour bignum hang) terminates in under 1 second using `modular-counting-semiring` (mod a large prime) or `saturating-counting-semiring` (with a meaningful cap). NOTE: the original plan listed `log-counting-semiring` as the benchmark choice; that was a design oversight — log values grow without bound on cycles (log of an infinite count is still infinite), so the log semiring is NOT bounded under cyclic adjacencies. Modular and saturating are the genuinely-tractable choices for cyclic counting; log remains useful for DAG-shaped ranking workloads. The docstring of `log-counting-semiring` documents this.
 - `make lint && make covercheck && make ci` all green.
 
 ## Out of scope

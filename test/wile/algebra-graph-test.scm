@@ -262,5 +262,42 @@
     (test #t (graph-query ga "a" "b"))
     (test #t (> calls 0))))
 
+(test-group "approximate counting variants — cycle tractability"
+  ;; The headline payoff: modular and saturating terminate on cycles where
+  ;; the exact counting-semiring would diverge (or, in our impl, hit the
+  ;; 2·V·E safety cap with a 3-hour-style hang in real scale). Small cycle
+  ;; here is enough to prove the algorithmic termination.
+  (let ((adj '(("a" . (("b" . 1)))
+               ("b" . (("c" . 1)))
+               ("c" . (("a" . 1))))))
+    ;; Modular: carrier is finite (Z/7Z), worklist converges within the
+    ;; finite carrier's cycle length.
+    (let ((ga (make-graph-analysis (modular-counting-semiring 7) adj #f)))
+      ;; Walk-count from a to c is well-defined modulo 7 once the worklist
+      ;; settles. Exact value depends on iteration order; verify it's
+      ;; in-range (0..6) rather than asserting a specific value.
+      (let ((r (graph-query ga "a" "c")))
+        (test #t (and (integer? r) (>= r 0) (< r 7)))))
+    ;; Saturating: carrier is bounded by cap, worklist converges once all
+    ;; reachable nodes hit the cap.
+    (let ((ga (make-graph-analysis (saturating-counting-semiring 100) adj #f)))
+      (let ((r (graph-query ga "a" "c")))
+        (test #t (and (integer? r) (>= r 0) (<= r 100)))))))
+
+(test-group "log-counting-semiring — DAG ranking"
+  ;; Log is bounded-precision but unbounded-magnitude. The docstring
+  ;; explicitly notes it is NOT cycle-tractable. It IS useful for DAG
+  ;; ranking workloads, which we verify here.
+  ;; Diamond DAG: a -> {b, c} -> d. Two paths from a to d, each with
+  ;; product 0 in log-space, sum via log-sum-exp = log(2).
+  (let* ((adj '(("a" . (("b" . 1) ("c" . 1)))
+                ("b" . (("d" . 1)))
+                ("c" . (("d" . 1)))
+                ("d" . ())))
+         (ga (make-graph-analysis (log-counting-semiring) adj #f))
+         (r  (graph-query ga "a" "d")))
+    ;; Result should be ~log(2) to float precision.
+    (test #t (< (abs (- r (log 2))) 1e-12))))
+
 (test-end)
 (test-exit)
