@@ -159,27 +159,55 @@
 ;; Worklist Bellman-Ford. Retained for cyclic graphs. Correct for idempotent
 ;; semirings (boolean OR, tropical min): repeated propagation is harmless
 ;; because `(x ⊕ x) = x`. For non-idempotent semirings on cycles, this
-;; algorithm does not terminate (the counting semiring on cycles has no
-;; finite answer — see the bignum-allocation-reduction plan's five-layer
-;; failure analysis).
+;; algorithm does not terminate algebraically — the counting semiring on
+;; cycles has no finite answer (see the bignum-allocation-reduction plan's
+;; five-layer failure analysis).
+;;
+;; To prevent the documented hang from being silent, a safety cap of
+;; 2·V·E outer-loop iterations is enforced. Textbook Bellman-Ford
+;; converges in V·E node-pops on any well-posed semiring; the 2× margin
+;; is for worklist variants that may re-pop slightly more under
+;; particular insertion orders. When the cap fires the function raises
+;; an error pointing the caller at (wile algebragraph) count-paths-cyclic
+;; for the exact-cyclic-counting case, or at the approximate-counting
+;; semirings (saturating/modular/log) for bounded-carrier alternatives.
 (define (compute-via-worklist ga source)
-  (let ((S   (ga-semiring ga))
-        (adj (ga-adjacency ga))
-        (wfn (ga-weight-fn ga)))
+  (let* ((S   (ga-semiring ga))
+         (adj (ga-adjacency ga))
+         (wfn (ga-weight-fn ga))
+         (V   (length adj))
+         (E   (apply + (map (lambda (entry) (length (cdr entry))) adj)))
+         ;; max 1 below guards trivial graphs (E=0): without it, max-iter
+         ;; would be 0 and the cap would fire on the very first pop.
+         (max-iter (* 2 V (max 1 E))))
     (let loop ((worklist (list source))
-               (dist (list (cons source (semiring-one S)))))
-      (if (null? worklist) dist
+               (dist (list (cons source (semiring-one S))))
+               (iter 0))
+      (cond
+        ((null? worklist) dist)
+        ((>= iter max-iter)
+         (error
+          (string-append
+           "compute-via-worklist: exceeded "
+           (number->string max-iter)
+           " iterations without convergence. Likely a non-idempotent semiring "
+           "(e.g. (counting-semiring)) on a cyclic graph. Remedies: "
+           "(a) (import (wile algebragraph)) and use (count-paths-cyclic ...) "
+           "for exact counts via SCC condensation; "
+           "(b) use a bounded-carrier semiring (saturating, modular, log) "
+           "from (wile algebra semiring) if approximate counts suffice.")))
+        (else
           (let* ((node (car worklist))
                  (rest (cdr worklist))
                  (node-dist (cdr (assoc node dist))))
             (let ((entry (assoc node adj)))
               (if (not entry)
-                  (loop rest dist)
+                  (loop rest dist (+ iter 1))
                   (let edge-loop ((edges (cdr entry))
                                   (wl rest)
                                   (d dist))
                     (if (null? edges)
-                        (loop wl d)
+                        (loop wl d (+ iter 1))
                         (let* ((neighbor-name (caar edges))
                                (edge-data (cdar edges))
                                (w (wfn edge-data))
@@ -195,7 +223,7 @@
                                                      d))))
                                 (edge-loop (cdr edges)
                                            (if (member neighbor-name wl) wl (cons neighbor-name wl))
-                                           new-d)))))))))))))
+                                           new-d))))))))))))))
 
 ;; --- Cache layer ---
 

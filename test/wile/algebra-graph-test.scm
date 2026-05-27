@@ -111,5 +111,21 @@
     ;; (A→B→D→E and A→C→D→E), NOT three.
     (test 2 (graph-query ga "A" "E"))))
 
+;; Regression: counting semiring on a cyclic graph used to hang
+;; indefinitely (memory/feedback-counting-semiring-on-cycles.md
+;; records a 3-hour incident). compute-via-worklist now caps at
+;; 2·V·E outer-loop iterations and raises an error pointing the
+;; caller at (wile algebragraph) count-paths-cyclic. This test pins
+;; the cap rather than the message text — text is brittle, the
+;; raise-vs-hang behavior is the contract.
+(define cyclic-adj
+  '(("A" . (("B")))
+    ("B" . (("C")))
+    ("C" . (("A")))))    ; back-edge → cyclic; counting-semiring diverges
+
+(test-group "counting semiring on cyclic graph raises"
+  (let ((ga (make-graph-analysis (counting-semiring) cyclic-adj #f)))
+    (test-error (graph-query ga "A" "C"))))
+
 (test-end)
 (test-exit)
