@@ -29,7 +29,7 @@ import "github.com/aalpar/wile/werr"
 // topological order of the condensation: SCC 0 has no incoming inter-SCC
 // edges (a "root" in the condensation); SCC NumSCCs-1 has no outgoing
 // inter-SCC edges (a "leaf"). Equivalently, for every condensed edge
-// (c, d) with c != d, SCC[c] < SCC[d].
+// (c, d) with c != d, c < d.
 //
 // The exported slices (SCC, NonTrivial) alias kernel-internal storage —
 // callers MUST treat them as read-only. Mutation will silently corrupt

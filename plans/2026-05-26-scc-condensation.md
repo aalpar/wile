@@ -1,6 +1,6 @@
 # SCC Condensation for Counting on Cyclic Graphs
 
-**Status:** Design draft — not started.
+**Status:** Implemented on `feat/bigint-counting-monotone-kernel` (PR #757).
 
 **Scope:** New Go kernel `algebra/graph/scc.go` providing strongly-connected-component computation and condensation. New entry point `CountPathsCyclic` that composes condensation with the existing `CountPathsInDAG` monotone kernel. Scheme adapter in `stdlib/lib/wile/algebra/graph.scm` so cyclic counting-semiring queries are routed through condensation automatically instead of returning `nil` or diverging. No change to the public Scheme API — `graph-query` / `graph-query-all` continue to return the same alist shape; the values they carry are now well-defined on cyclic input.
 

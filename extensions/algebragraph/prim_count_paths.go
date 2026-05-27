@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/algebra/graph"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -70,7 +71,7 @@ func extractEdgeList(ctx context.Context, v values.Value, numNodes int, primName
 			"%s: edges: expected list of (u . v) pairs, got %T", primName, v)
 	}
 	var edges []graph.Edge
-	_, err := lst.ForEach(ctx, func(_ context.Context, i int, _ bool, elem values.Value) error {
+	err := helpers.ForEachList(ctx, lst, primName+": edges", func(_ context.Context, i int, _ bool, elem values.Value) error {
 		// *values.Pair (not values.Tuple): an edge MUST be a dotted pair
 		// like (u . v), not '() or a proper list like (u v). This is
 		// the type-specific-predicate exception in the CLAUDE.md
