@@ -35,8 +35,17 @@ func newEngine(t *testing.T) *wile.Engine {
 }
 
 // evalString evaluates Scheme source and returns its string representation
-// via Wile's external-printable form. This avoids per-test type assertions
-// for vectors of bignums, which are the dominant output shape here.
+// via Wile's external-printable form. The output shape here is dominated
+// by vectors of bignums and (call-with-values ...) lists — building
+// expected *values.Vector / *values.Pair structures via SchemeEquals
+// would be ~10 lines per test. The string form mirrors what a Scheme
+// REPL user would see, which IS the user-facing contract for these
+// primitives.
+//
+// Trade-off: tests indirectly cover the SchemeWriter. If the printer
+// ever changes its bignum or vector format, these tests fail for
+// unrelated reasons. Switch to valuestest.SchemeEquals + a vector-of-
+// bignum helper if that becomes a real regression channel.
 func evalString(t *testing.T, engine *wile.Engine, code string) string {
 	t.Helper()
 	result, err := engine.EvalMultiple(context.Background(), code)

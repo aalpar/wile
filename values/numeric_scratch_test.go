@@ -80,6 +80,19 @@ func TestAddBigIntInPlace_AliasAll(t *testing.T) {
 	c.Assert(dest.value.Cmp(want), qt.Equals, 0)
 }
 
+func TestAddBigIntInPlace_AliasPEqV(t *testing.T) {
+	c := qt.New(t)
+	// p aliases v but dest is distinct: addBigIntInPlace(dest, x, x) → 2 * x.
+	// This is the Pattern-3A self-loop case from the bignum-allocation-
+	// reduction plan (d[v].Add(d[v], d[u]) where e.u == e.v); the kernel
+	// relies on this aliasing being safe in math/big.
+	x := newBigIntegerFromDecimal(c, "42")
+	dest := &BigInteger{value: new(big.Int)}
+	want := new(big.Int).Add(x.value, x.value)
+	addBigIntInPlace(dest, x, x)
+	c.Assert(dest.value.Cmp(want), qt.Equals, 0)
+}
+
 func TestAddBigIntInPlace_StorageReuse(t *testing.T) {
 	c := qt.New(t)
 	// Pre-size dest's backing to a capacity that comfortably holds the result.

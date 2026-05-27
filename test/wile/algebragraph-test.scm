@@ -54,5 +54,32 @@
     (test #(1 2 6)   (cadr result))        ; counts per SCC
     (test #(#f #t #f) (caddr result))))    ; non-trivial flags
 
+;; --- Error contracts ---
+;;
+;; Mirror the Go-side TestCountPathsInDAG_ErrorOnInvalidInput and
+;; TestCountPathsCyclic_ErrorOnInvalidInput tests at the Scheme
+;; boundary. The Go primitives raise (not return #f) for invalid
+;; input; the FFI bridge surfaces that as a Scheme exception. These
+;; tests pin the user-visible contract: bad input raises, cyclic
+;; input to count-paths-in-dag returns #f (the documented sentinel).
+
+(test-group "count-paths-in-dag error contracts"
+  ;; Non-integer num-nodes
+  (test-error (count-paths-in-dag "two" '() 0))
+  ;; Negative num-nodes
+  (test-error (count-paths-in-dag -1 '() 0))
+  ;; Source out of range
+  (test-error (count-paths-in-dag 2 '() 5))
+  ;; Malformed edge: cdr is not an integer
+  (test-error (count-paths-in-dag 2 '((0 . "x")) 0))
+  ;; Edge endpoint out of range
+  (test-error (count-paths-in-dag 2 '((0 . 5)) 0)))
+
+(test-group "count-paths-cyclic error contracts"
+  (test-error (count-paths-cyclic "two" '() 0))
+  (test-error (count-paths-cyclic -1 '() 0))
+  (test-error (count-paths-cyclic 2 '() 5))
+  (test-error (count-paths-cyclic 2 '((0 . 5)) 0)))
+
 (test-end)
 (test-exit)

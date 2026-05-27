@@ -153,20 +153,11 @@ func TestCountPathsInDAG_LargeCounts(t *testing.T) {
 	// Source has count 1.
 	c.Assert(counts[0].String(), qt.Equals, "1")
 
-	// Layer i (i ≥ 1) nodes each have path count = 2^i (each of two predecessors
-	// in layer i-1 contributes its own 2^(i-1)).
+	// Per-layer counts: layer 1 nodes each have count 1 (one predecessor:
+	// the source). Layer 2 nodes each have count 2 (two predecessors,
+	// each with count 1). Layer i nodes each have count 2^(i-1)
+	// (two predecessors in layer i-1, each with count 2^(i-2)).
 	for i := 1; i <= layers; i++ {
-		want := new(big.Int).Lsh(big.NewInt(1), uint(i)-1)
-		// Wait: layer 1 sees only the source (count 1) from each of its two
-		// in-edges? No — both layer-1 nodes have one predecessor (the source,
-		// count 1), so each is 1. Layer 2 nodes each see both layer-1 nodes
-		// (1 + 1 = 2). Layer i+1 nodes each see both layer-i nodes (2 * layer-i).
-		// So layer i count = 2^(i-1). Adjust:
-		_ = want
-		// Re-derive: layer 1 nodes = 1 each (one predecessor: source).
-		// layer 2 nodes = 2 each (two predecessors: layer-1 nodes, count 1 each).
-		// layer 3 nodes = 4 each (two predecessors: layer-2 nodes, count 2 each).
-		// layer i nodes = 2^(i-1).
 		expected := new(big.Int).Lsh(big.NewInt(1), uint(i-1))
 		n1, n2 := 2*i-1, 2*i
 		c.Assert(counts[n1].Cmp(expected), qt.Equals, 0,

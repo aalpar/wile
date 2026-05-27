@@ -131,6 +131,10 @@ func TestComputeSCC_TwoDisconnectedCycles(t *testing.T) {
 		qt.Commentf("nodes 2 and 3 must share an SCC"))
 	c.Assert(res.SCC[0], qt.Not(qt.Equals), res.SCC[2],
 		qt.Commentf("the two disconnected cycles must be different SCCs"))
+	// All edges are intra-SCC, so the reverse-topological invariant is
+	// trivially satisfied — but the call documents that the property
+	// holds for this fixture too. Consistent with every other SCC test.
+	assertReverseTopological(c, res, edges)
 }
 
 func TestComputeSCC_SelfLoopSingleNode(t *testing.T) {

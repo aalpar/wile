@@ -101,8 +101,13 @@ func TestCountPathsCyclic_MachineScaleSmoke(t *testing.T) {
 			nontrivial++
 		}
 	}
-	c.Assert(nontrivial > 0, qt.IsTrue,
-		qt.Commentf("expected at least one non-trivial SCC from back-edges; got %d", nontrivial))
+	// Deterministic graph construction: 12 back-edges → 12 non-trivial
+	// SCCs (one per back-edge, since each back-edge induces a small
+	// cycle disjoint from the others by construction). Pinning the exact
+	// count catches regressions that change SCC detection in ways a
+	// loose `> 0` assertion would miss.
+	c.Assert(nontrivial, qt.Equals, 12,
+		qt.Commentf("expected exactly 12 non-trivial SCCs (one per back-edge); got %d", nontrivial))
 
 	// Scale: the 3-hour incident must reduce to milliseconds. The acceptance
 	// gate in plans/2026-05-26-scc-condensation.md asks for "under 1 second";
