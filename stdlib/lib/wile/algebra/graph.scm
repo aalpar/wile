@@ -15,16 +15,36 @@
       (loop (cdr xs)
             (if (pred (car xs)) (cons (car xs) acc) acc)))))
 
-;; --- Record type ---
+;; --- Record types ---
 
 (define-record-type <graph-analysis>
-  (make-graph-analysis* semiring adjacency weight-fn cache fast-path-kind)
+  (make-graph-analysis* semiring adjacency weight-fn cache fast-path-kind scc)
   graph-analysis?
   (semiring         ga-semiring)
   (adjacency        ga-adjacency)
   (weight-fn        ga-weight-fn)
   (cache            ga-cache set-ga-cache!)
-  (fast-path-kind   ga-fast-path-kind))
+  (fast-path-kind   ga-fast-path-kind)
+  ;; scc: lazily populated <graph-scc> bundling SCC structure + name interning.
+  ;; Source-independent and immutable once set; mutator is purely a memoization
+  ;; hook. #f until first call to graph-analysis-sccs or a cyclic-counting query.
+  (scc              ga-scc          set-ga-scc!))
+
+;; <graph-scc> bundles the SCC decomposition of a <graph-analysis>'s
+;; adjacency together with the name<->index interning state the Go-side
+;; kernels need. Source-independent: every source on the same analysis
+;; sees the same SCC structure and the same interning. The per-source
+;; counts-by-scc returned by count-paths-cyclic are NOT cached here
+;; (they go in ga-cache like every other per-source query result).
+(define-record-type <graph-scc>
+  (make-graph-scc* scc-vec non-trivial-vec name->idx idx->name num-nodes edges)
+  graph-scc?
+  (scc-vec          gscc-scc-vec)         ;; node-idx -> scc-id (vector of ints)
+  (non-trivial-vec  gscc-non-trivial-vec) ;; scc-id   -> bool   (vector)
+  (name->idx        gscc-name->idx)       ;; hashtable name -> int
+  (idx->name        gscc-idx->name)       ;; vector idx -> name
+  (num-nodes        gscc-num-nodes)       ;; how many entries in idx->name
+  (edges            gscc-edges))          ;; list of (u . v) integer-pair edges
 
 ;; The fast-path kernel (count-paths-in-dag) lives in (wile algebragraph),
 ;; which is an opt-in Go extension only present under the `kitchen-sink`
@@ -76,7 +96,7 @@
                        'unit-weight-counting)
                       (else #f)))
          (wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
-    (make-graph-analysis* semiring adjacency wfn '() fast-kind)))
+    (make-graph-analysis* semiring adjacency wfn '() fast-kind #f)))
 
 ;; --- Fast-path introspection ---
 
@@ -117,26 +137,87 @@
              (compute-via-worklist ga source)
              (compute-via-topological-order ga source order)))))))
 
-;; --- Sub-path 4A: unit-weight bigint counting via count-paths-in-dag ---
+;; --- Sub-path 4A and 4C: name interning shared by all bigint dispatch paths ---
 ;;
-;; The kernel `count-paths-in-dag' (in (wile algebragraph)) takes integer
-;; node indices and a unit-weight edge list, runs reverse-postorder
-;; propagation with in-place `*big.Int' Add, and returns either a vector
-;; of counts or #f for cyclic input. The wrapper here translates between
-;; the name-keyed adjacency surface of `(wile algebra graph)' and that
-;; integer-indexed kernel.
+;; The kernels `count-paths-in-dag' and `count-paths-cyclic' (in
+;; (wile algebragraph)) speak integer node indices. The Scheme-side
+;; adapters need to translate between Wile's name-keyed adjacency and
+;; that integer-indexed kernel protocol. The interning step is identical
+;; for both kernels, so it lives here as a shared helper rather than
+;; duplicated inside each adapter.
 ;;
-;; Why an explicit wrapper rather than direct exposure of the kernel:
-;; `(wile algebra graph)' is the user-facing entry point for graph
-;; queries (with caching, semiring-parameterization, name-keyed nodes).
-;; The kernel speaks a narrower, performance-tuned protocol. The carrier
-;; opt on the semiring is the bridge: when the user opts in via
-;; `bigint-counting-semiring' (or any `(carrier . big-int)' annotation),
-;; the wrapper picks up the dispatch and the kernel does the arithmetic.
+;; Returns 4 values: name->idx hashtable, idx->name vector,
+;; num-nodes integer (distinct names interned), and edges list of (u . v)
+;; integer-index pairs. The hashtable + vector are exactly what the
+;; <graph-scc> cache stores; the cyclic dispatch path keeps both, while
+;; the DAG dispatch path discards them after one kernel call.
 ;;
-;; Name→index translation uses a hashtable for O(1) lookups; the naive
-;; alist version was O(V·E) for setup and dominated the kernel's actual
+;; Name->index translation uses a hashtable for O(1) lookups; the naive
+;; alist version was O(V*E) for setup and dominated the kernel's actual
 ;; arithmetic cost on graphs >100 nodes.
+(define (%intern-adjacency-for-kernel adj)
+  (let ((name->idx (make-hashtable))
+        (idx->name (make-vector 16))
+        (next-idx  0))
+    ;; Intern: return existing idx for name, or assign next available.
+    ;; `idx->name' is mutated via `set!' when capacity doubles, because
+    ;; the inner `intern!' closure captures the original binding and
+    ;; needs to observe the reassignment.
+    (define (intern! name)
+      (let ((existing (hashtable-ref name->idx name -1)))
+        (cond
+          ((>= existing 0) existing)
+          (else
+           (let ((i next-idx))
+             (when (>= i (vector-length idx->name))
+               (let* ((old-len (vector-length idx->name))
+                      (new-vec (make-vector (* 2 old-len) #f)))
+                 (let copy ((j 0))
+                   (cond
+                     ((= j old-len)
+                      (set! idx->name new-vec))
+                     (else
+                      (vector-set! new-vec j (vector-ref idx->name j))
+                      (copy (+ j 1)))))))
+             (vector-set! idx->name i name)
+             (hashtable-set! name->idx name i)
+             (set! next-idx (+ i 1))
+             i)))))
+    ;; Pass 1: intern every vertex name (adj keys + edge targets) and
+    ;; collect the integer edges.
+    (let ((edges
+            (let outer ((entries adj) (acc '()))
+              (cond
+                ((null? entries) acc)
+                (else
+                 (let* ((entry (car entries))
+                        (u     (intern! (car entry))))
+                   (let inner ((es (cdr entry)) (acc2 acc))
+                     (cond
+                       ((null? es) (outer (cdr entries) acc2))
+                       (else
+                        (let ((v (intern! (caar es))))
+                          (inner (cdr es) (cons (cons u v) acc2))))))))))))
+      (values name->idx idx->name next-idx edges))))
+
+;; Shared projection helper: walk node indices [0, num-nodes), look each
+;; one up in `counts-vec' (length num-nodes), and emit
+;; (idx->name[i] . counts-vec[i]) for non-zero entries. Used by the DAG
+;; adapter directly. The cyclic adapter uses a one-level-indirect variant
+;; (counts via scc-vec) and inlines its own loop.
+(define (%project-counts-to-alist idx->name counts-vec num-nodes)
+  (let l ((i 0) (acc '()))
+    (cond
+      ((= i num-nodes) acc)
+      (else
+       (let ((c (vector-ref counts-vec i)))
+         (cond
+           ((zero? c) (l (+ i 1) acc))
+           (else
+            (l (+ i 1)
+               (cons (cons (vector-ref idx->name i) c) acc)))))))))
+
+;; --- Sub-path 4A: unit-weight bigint counting via count-paths-in-dag ---
 ;;
 ;; `cond-expand' lives inside the function body so the top-level binding
 ;; `compute-via-count-paths-in-dag' is visible to the dispatcher
@@ -144,94 +225,41 @@
 ;; body is a stub `error' — but `%fast-path-available?' ensures
 ;; `make-graph-analysis' never assigns `'unit-weight-counting' there, so the
 ;; stub is unreachable from the public surface.
+;;
+;; When dispatched correctly (caller pre-detects cyclicity), the kernel
+;; never sees cyclic input — its #f return becomes an internal invariant
+;; violation. The pre-detection lives in `compute-single-source'.
 (define (compute-via-count-paths-in-dag ga source)
   (cond-expand
     ((library (wile algebragraph))
-     (let* ((adj       (ga-adjacency ga))
-            (name->idx (make-hashtable))
-            (idx->name (make-vector 16))
-            (next-idx  0))
-
-       ;; Intern: return existing idx for name, or assign next available.
-       ;; `idx->name' is mutated via `set!' when capacity doubles, because
-       ;; the inner `intern!' closure captures the original binding and
-       ;; needs to observe the reassignment.
-       (define (intern! name)
-         (let ((existing (hashtable-ref name->idx name -1)))
+     (call-with-values
+       (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
+       (lambda (name->idx idx->name num-nodes edges)
+         (let ((src-idx (hashtable-ref name->idx source -1)))
            (cond
-             ((>= existing 0) existing)
+             ;; Source not in graph — match the slow path's permissive
+             ;; behaviour: return an empty distance alist so `graph-query'
+             ;; surfaces `semiring-zero' for every target. The fast path
+             ;; must not narrow the contract that the carrier opt is
+             ;; documented to leave unchanged.
+             ((< src-idx 0) '())
              (else
-              (let ((i next-idx))
-                (when (>= i (vector-length idx->name))
-                  (let* ((old-len (vector-length idx->name))
-                         (new-vec (make-vector (* 2 old-len) #f)))
-                    (let copy ((j 0))
-                      (cond
-                        ((= j old-len)
-                         (set! idx->name new-vec))
-                        (else
-                         (vector-set! new-vec j (vector-ref idx->name j))
-                         (copy (+ j 1)))))))
-                (vector-set! idx->name i name)
-                (hashtable-set! name->idx name i)
-                (set! next-idx (+ i 1))
-                i)))))
-
-       ;; Pass 1: intern every vertex name (adj keys + edge targets) and
-       ;; collect the integer edges.
-       (let* ((edges
-                (let outer ((entries adj) (acc '()))
-                  (cond
-                    ((null? entries) acc)
-                    (else
-                     (let* ((entry (car entries))
-                            (u     (intern! (car entry))))
-                       (let inner ((es (cdr entry)) (acc2 acc))
-                         (cond
-                           ((null? es) (outer (cdr entries) acc2))
-                           (else
-                            (let ((v (intern! (caar es))))
-                              (inner (cdr es) (cons (cons u v) acc2)))))))))))
-              (src-idx (hashtable-ref name->idx source -1)))
-         (cond
-           ;; Source not in graph — match the slow path's permissive
-           ;; behaviour: return an empty distance alist so `graph-query'
-           ;; surfaces `semiring-zero' for every target. The fast path
-           ;; must not narrow the contract that the carrier opt is
-           ;; documented to leave unchanged.
-           ((< src-idx 0) '())
-           (else
-            (let ((counts (count-paths-in-dag next-idx edges src-idx)))
-              (cond
-                ((not counts)
-                 ;; Reachable subgraph contains a cycle. The counting
-                 ;; semiring on cycles has no finite answer; the fast
-                 ;; path declines to spin.
-                 (error
-                  (string-append
-                   "graph-query: bigint-counting-semiring on a cyclic graph "
-                   "(non-idempotent semiring; the counting algebra diverges on "
-                   "cycles). Remedies: "
-                   "(a) (import (wile algebragraph)) and use "
-                   "(count-paths-cyclic ...) for exact counts via SCC "
-                   "condensation; "
-                   "(b) use a bounded-carrier semiring (saturating, modular, "
-                   "log) for approximate counts.")))
-                (else
-                 ;; Walk indices once, build alist. Reachable nodes have
-                 ;; count > 0; unreachable get omitted to match the slow
-                 ;; path's result shape.
-                 (let l ((i 0) (acc '()))
-                   (cond
-                     ((= i next-idx) acc)
-                     (else
-                      (let ((c (vector-ref counts i)))
-                        (cond
-                          ((zero? c) (l (+ i 1) acc))
-                          (else
-                           (l (+ i 1)
-                              (cons (cons (vector-ref idx->name i) c)
-                                    acc))))))))))))))))
+              (let ((counts (count-paths-in-dag num-nodes edges src-idx)))
+                (cond
+                  ((not counts)
+                   ;; Reachable subgraph contains a cycle. The dispatcher
+                   ;; in `compute-single-source' pre-detects this and routes
+                   ;; to `compute-via-count-paths-cyclic' before we get here,
+                   ;; so this branch should be unreachable. If it fires,
+                   ;; the dispatcher's pre-detection got out of sync with
+                   ;; the kernel's cycle detection — file a bug.
+                   (error
+                    (string-append
+                     "compute-via-count-paths-in-dag: kernel reported cyclic "
+                     "input but dispatcher's pre-detection said acyclic. "
+                     "Internal invariant violation, please file a bug.")))
+                  (else
+                   (%project-counts-to-alist idx->name counts num-nodes))))))))))
     (else
      (error
       (string-append
@@ -239,6 +267,108 @@
        "loaded; %fast-path-available? was #f so this dispatch path is "
        "unreachable from `make-graph-analysis' — this is an internal "
        "invariant violation, please file a bug.")))))
+
+;; --- Sub-path 4C: cyclic-graph counting via count-paths-cyclic (SCC) ---
+;;
+;; Bridges between (wile algebra graph)'s name-keyed adjacency surface
+;; and the SCC-condensation kernel from (wile algebragraph). The kernel
+;; Tarjan-condenses the graph and runs in-place big.Int arithmetic on
+;; the resulting DAG; this wrapper does the name<->index translation
+;; (cached on `ga-scc' so multi-source workloads don't re-walk the
+;; adjacency) and projects the (counts-by-scc, scc-vec) pair back into
+;; the per-node alist that callers of `graph-query' / `graph-query-all'
+;; expect.
+;;
+;; Per-node semantics on non-trivial SCCs: every node in a non-trivial
+;; SCC reports the SCC's *entry count* (paths from source's SCC into
+;; this SCC in the condensed DAG), not a true within-SCC path count
+;; (which is infinite). Callers who need to distinguish use
+;; `graph-node-in-cycle?' or `graph-cyclic-nodes' — the side-query API.
+;; The alist shape is unchanged.
+;;
+;; The kernel re-runs SCC every call (the SCC step is internal to
+;; `count-paths-cyclic'), so multi-source workloads pay O(V+E) for SCC
+;; per source. A future kernel split (separate `compute-sccs' primitive)
+;; could eliminate that; tracked in the parent plan's "out of scope"
+;; section. The cache here still wins by skipping the interning re-walk
+;; and by sharing `scc-vec' with the side-query API.
+(define (compute-via-count-paths-cyclic ga source)
+  (cond-expand
+    ((library (wile algebragraph))
+     (let* ((scc-record (%ensure-graph-scc! ga))
+            (name->idx  (gscc-name->idx scc-record))
+            (idx->name  (gscc-idx->name scc-record))
+            (num-nodes  (gscc-num-nodes scc-record))
+            (scc-vec    (gscc-scc-vec   scc-record))
+            (edges      (gscc-edges     scc-record))
+            (src-idx    (hashtable-ref name->idx source -1)))
+       (cond
+         ((< src-idx 0) '())
+         (else
+          (call-with-values
+            (lambda () (count-paths-cyclic num-nodes edges src-idx))
+            (lambda (_kernel-scc-vec counts-by-scc _kernel-nt-vec)
+              ;; Walk node indices; project (idx->name[i] . counts-by-scc[scc-vec[i]])
+              ;; for non-zero entries. The returned scc-vec / non-trivial-vec
+              ;; from this kernel call match the cached versions on
+              ;; `scc-record' (SCC is source-independent) and are discarded.
+              (let l ((i 0) (acc '()))
+                (cond
+                  ((= i num-nodes) acc)
+                  (else
+                   (let* ((s (vector-ref scc-vec i))
+                          (c (vector-ref counts-by-scc s)))
+                     (cond
+                       ((zero? c) (l (+ i 1) acc))
+                       (else
+                        (l (+ i 1)
+                           (cons (cons (vector-ref idx->name i) c)
+                                 acc))))))))))))))
+    (else
+     (error
+      (string-append
+       "compute-via-count-paths-cyclic: (wile algebragraph) extension not "
+       "loaded; %fast-path-available? was #f so this dispatch path is "
+       "unreachable from `make-graph-analysis' — this is an internal "
+       "invariant violation, please file a bug.")))))
+
+;; %ensure-graph-scc! — populate ga-scc if not yet computed. Picks an
+;; arbitrary kernel source (node-idx 0) for the call; the returned
+;; counts-by-scc is discarded because that's source-dependent and the
+;; user's query will re-invoke the kernel for its actual source. We only
+;; harvest the source-independent scc-vec + non-trivial-vec.
+;;
+;; Returns the `<graph-scc>' (newly created or pre-existing). Empty
+;; adjacency yields a 0-vector pair; the kernel is not called because
+;; `count-paths-cyclic' requires source < num-nodes.
+(define (%ensure-graph-scc! ga)
+  (or (ga-scc ga)
+      (cond-expand
+        ((library (wile algebragraph))
+         (call-with-values
+           (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
+           (lambda (name->idx idx->name num-nodes edges)
+             (cond
+               ((zero? num-nodes)
+                (let ((rec (make-graph-scc* (make-vector 0) (make-vector 0)
+                                            name->idx idx->name 0 edges)))
+                  (set-ga-scc! ga rec)
+                  rec))
+               (else
+                (call-with-values
+                  (lambda () (count-paths-cyclic num-nodes edges 0))
+                  (lambda (scc-vec _counts non-trivial-vec)
+                    (let ((rec (make-graph-scc*
+                                 scc-vec non-trivial-vec
+                                 name->idx idx->name num-nodes edges)))
+                      (set-ga-scc! ga rec)
+                      rec))))))))
+        (else
+         (error
+          (string-append
+           "graph-analysis-sccs: SCC computation requires the (wile "
+           "algebragraph) extension, which is only loaded under the "
+           "kitchen-sink profile."))))))
 
 ;; Compute a topological order of the subgraph reachable from `source`.
 ;; Returns two values (via `values`):
