@@ -156,7 +156,7 @@ The Smallest-Label-First (SLF) and Largest-Label-Last (LLL) variants of B-F are 
 
 ## Out of scope
 
-- SCC condensation primitive (separate plan — would let *exact* counting work on cyclic graphs by quotienting out the cycles).
+- SCC condensation primitive — shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`). Lets exact counting work on cyclic graphs by quotienting out the cycles; the worklist's R-1 non-termination on counting+cycles is now opt-out via the condensation entry point.
 - Tarjan / Kosaraju implementations (separate plan).
 - Topological sort primitive (separate plan).
 - SLF / LLL ordering variants (deferred per Q-3 default).

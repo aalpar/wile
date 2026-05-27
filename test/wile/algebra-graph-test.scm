@@ -91,5 +91,41 @@
     ;; A→B: one path, weight 1
     (test 1 (graph-query ga "A" "B"))))
 
+;; Regression: counting semiring on a non-trivially-ordered DAG.
+;; The previous worklist-with-propagate-on-pop algorithm over-counted because
+;; once a node's count was popped and propagated, a later update to that
+;; node's count would re-pop it and re-propagate the full new value — adding
+;; to what was already sent forward. This test pins the correct count.
+(define diamond-with-sink-adj
+  '(("A" . (("B") ("C")))
+    ("B" . (("D")))
+    ("C" . (("D")))
+    ("D" . (("E")))   ; D has a successor — exposes the over-count
+    ("E" . ())))
+
+(test-group "counting semiring on diamond-with-sink DAG"
+  (let ((ga (make-graph-analysis (counting-semiring) diamond-with-sink-adj #f)))
+    ;; Two paths to D (A→B→D and A→C→D)
+    (test 2 (graph-query ga "A" "D"))
+    ;; Same two paths extended through D, so two paths to E
+    ;; (A→B→D→E and A→C→D→E), NOT three.
+    (test 2 (graph-query ga "A" "E"))))
+
+;; Regression: counting semiring on a cyclic graph used to hang
+;; indefinitely (memory/feedback-counting-semiring-on-cycles.md
+;; records a 3-hour incident). compute-via-worklist now caps at
+;; 2·V·E outer-loop iterations and raises an error pointing the
+;; caller at (wile algebragraph) count-paths-cyclic. This test pins
+;; the cap rather than the message text — text is brittle, the
+;; raise-vs-hang behavior is the contract.
+(define cyclic-adj
+  '(("A" . (("B")))
+    ("B" . (("C")))
+    ("C" . (("A")))))    ; back-edge → cyclic; counting-semiring diverges
+
+(test-group "counting semiring on cyclic graph raises"
+  (let ((ga (make-graph-analysis (counting-semiring) cyclic-adj #f)))
+    (test-error (graph-query ga "A" "C"))))
+
 (test-end)
 (test-exit)

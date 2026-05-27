@@ -123,6 +123,8 @@
  ("continuation-prompt-tag?" "boolean" ("any") "github.com/aalpar/wile/registry/core.init.MakeTypePredicate.func47" "registry/helpers/type.go:26")
  ("continuation?" "boolean" ("any") "github.com/aalpar/wile/registry/core.init.MakeTypePredicate.func31" "registry/helpers/type.go:26")
  ("cos" "number" ("number") "github.com/aalpar/wile/extensions/math.init.makeComplexPrimitive.func11" "extensions/math/prim_transcendental.go:33")
+ ("count-paths-cyclic" "" ("integer" "list" "integer") "github.com/aalpar/wile/extensions/algebragraph.PrimCountPathsCyclic" "extensions/algebragraph/prim_count_paths.go:149")
+ ("count-paths-in-dag" "" ("integer" "list" "integer") "github.com/aalpar/wile/extensions/algebragraph.PrimCountPathsInDAG" "extensions/algebragraph/prim_count_paths.go:115")
  ("create-directory" "void" ("string") "github.com/aalpar/wile/extensions/files.PrimCreateDirectory" "extensions/files/prim_directory.go:31")
  ("current-continuation-marks" "any" ("...any") "github.com/aalpar/wile/registry/core.PrimCurrentContinuationMarks" "registry/core/prim_cont_marks.go:26")
  ("current-directory" "string" () "github.com/aalpar/wile/extensions/files.PrimCurrentDirectory" "extensions/files/prim_directory.go:119")
