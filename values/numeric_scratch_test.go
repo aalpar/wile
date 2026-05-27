@@ -129,9 +129,9 @@ func newBigIntegerFromDecimal(c *qt.C, s string) *BigInteger {
 
 func TestSubBigIntInPlace_Correctness(t *testing.T) {
 	cases := []struct {
-		name    string
-		p, v    string
-		want    string
+		name string
+		p, v string
+		want string
 	}{
 		{"zero-minus-zero", "0", "0", "0"},
 		{"small-positive", "10", "3", "7"},
@@ -164,9 +164,9 @@ func TestSubBigIntInPlace_AliasAll(t *testing.T) {
 
 func TestMulBigIntInPlace_Correctness(t *testing.T) {
 	cases := []struct {
-		name    string
-		p, v    string
-		want    string
+		name string
+		p, v string
+		want string
 	}{
 		{"zero-times-x", "0", "12345", "0"},
 		{"one-times-x", "1", "12345", "12345"},
