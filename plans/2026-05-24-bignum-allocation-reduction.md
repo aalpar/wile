@@ -454,6 +454,14 @@ All design questions resolved; plan is implementation-ready pending the Phase 0 
 
 ### Phase 4 — Bellman-Ford fast path in `(wile algebra graph)`
 
+**Design pattern: BLAS-style parameter dispatch.** The dispatch tree below is shaped like BLAS's parameter-driven kernel selection — `dgemm` inspects `alpha`, `transa`, `uplo` to pick a kernel; `make-graph-analysis` inspects `(semiring-carrier S)`, `weight-fn`, and `(weight-mode . ...)` to pick a sub-path. Three properties to preserve when extending this dispatch:
+
+1. **Correctness monotone in optimization.** No parameter combination ever produces a worse answer than sub-path 4C (the general Scheme kernel). Fast paths can only change cost, not semantics. Adding a new fast path requires proving it agrees with 4C for every input the eligibility check accepts.
+2. **Sticky dispatch (per construction, not per call).** Unlike BLAS, the dispatch decision is baked into the `<graph-analysis>` record at construction time because pre-resolution (4B) is O(E). Callers amortize the inspection cost across all queries against that analysis.
+3. **Parameter shape *is* the API.** `weight-fn = #f` is not an internal optimization — it is the documented way to request unit-weight counting. `(weight-mode . dynamic)` is not a debug switch — it is the documented escape hatch when the static-snapshot contract doesn't fit.
+
+The same pattern composes upward (LAPACK-on-BLAS): SCC condensation detects cycles, reduces the problem to a condensed DAG, and dispatches to 4A. Future structural detectors (tree → linear scan, bipartite → matching kernel) plug in at the same layer. See `memory/feedback-blas-style-dispatch.md` for the broader design-pattern notes.
+
 Three sub-paths are dispatched at `make-graph-analysis` time based on the semiring's carrier slot and whether `wfn` is omitted. The dispatch is sticky — once chosen at construction, it doesn't switch per query.
 
 ```
