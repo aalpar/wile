@@ -67,12 +67,15 @@
 (test-group "validate-semiring"
   (test #t (validate-semiring (counting-semiring) '(0 1 2 3))))
 
-(test-group "carrier — absent on built-ins without declaration"
-  ;; The unannotated built-ins return #f for semiring-carrier; consumer
-  ;; fast-path dispatch keys off non-#f symbols.
+(test-group "carrier — declared on built-ins, absent on raw make-semiring"
+  ;; counting-semiring stays unannotated by design — it has no fast-path
+  ;; eligibility distinct from the generic Scheme loop.
   (test #f (semiring-carrier (counting-semiring)))
-  (test #f (semiring-carrier (boolean-semiring)))
-  (test #f (semiring-carrier (tropical-semiring)))
+  ;; Boolean and tropical declare their carrier so `semiring-cycle-safe?'
+  ;; can recognise their idempotent ⊕ without operation reflection.
+  (test 'boolean  (semiring-carrier (boolean-semiring)))
+  (test 'tropical (semiring-carrier (tropical-semiring)))
+  ;; Raw make-semiring with no carrier opt still answers #f.
   (test #f (semiring-carrier (make-semiring + * 0 1))))
 
 (test-group "carrier — declared via opts"
@@ -322,6 +325,31 @@
   (test #f (bounded-carrier-semiring? 42))
   (test #f (bounded-carrier-semiring? '()))
   (test #f (bounded-carrier-semiring? "saturating")))
+
+(test-group "semiring-cycle-safe? predicate"
+  ;; Saturating: CAP is an absorbing top element — Bellman-Ford converges.
+  (test #t (semiring-cycle-safe? (saturating-counting-semiring 100)))
+  ;; Boolean: ⊕ is logical or, idempotent (a or a = a).
+  (test #t (semiring-cycle-safe? (boolean-semiring)))
+  ;; Tropical: ⊕ is min, idempotent (min(a, a) = a).
+  (test #t (semiring-cycle-safe? (tropical-semiring)))
+  ;; Modular Z/PZ: no absorbing element, ⊕ not idempotent — non-convergent.
+  (test #f (semiring-cycle-safe? (modular-counting-semiring 7)))
+  ;; Log-space: unbounded magnitude on cycles, ⊕ not idempotent.
+  (test #f (semiring-cycle-safe? (log-counting-semiring)))
+  ;; Exact counting: bignum-unbounded on cycles.
+  (test #f (semiring-cycle-safe? (counting-semiring)))
+  (test #f (semiring-cycle-safe? (bigint-counting-semiring)))
+  ;; Raw make-semiring with no carrier opt — conservative #f even though
+  ;; the operations happen to be the same as counting-semiring.
+  (test #f (semiring-cycle-safe? (make-semiring + * 0 1)))
+  ;; Custom carrier symbol outside the known-safe set answers #f.
+  (test #f (semiring-cycle-safe?
+             (make-semiring + * 0 1 '(carrier . my-domain))))
+  ;; Non-semiring values just return #f rather than erroring.
+  (test #f (semiring-cycle-safe? 42))
+  (test #f (semiring-cycle-safe? '()))
+  (test #f (semiring-cycle-safe? "tropical")))
 
 (test-end)
 (test-exit)

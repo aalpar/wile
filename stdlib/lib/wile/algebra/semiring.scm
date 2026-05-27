@@ -52,10 +52,12 @@
 (define (boolean-semiring)
   "Construct the Boolean semiring where PLUS is logical or and TIMES is logical and.\nThe additive identity (zero) is #f and the multiplicative\nidentity (one) is #t.\n\nExamples:\n  (let ((B (boolean-semiring)))\n    (semiring-plus B #f #t))   => #t\n  (let ((B (boolean-semiring)))\n    (semiring-times B #t #f))  => #f\n\nReturns: any\nCategory: algebra\nKeywords: boolean, logic, or, and, truth values\n\nSee also: `tropical-semiring', `counting-semiring', `make-semiring'."
   ;; eq? declared explicitly: #t/#f are eq?-comparable singletons, faster than equal?
+  ;; carrier 'boolean: idempotent ⊕ (logical or) — `semiring-cycle-safe?' returns #t.
   (make-semiring
     (lambda (a b) (or a b))
     (lambda (a b) (and a b))
     #f #t
+    '(carrier . boolean)
     (cons 'eq? eq?)))
 
 (define tropical-inf 'tropical-inf)
@@ -82,7 +84,11 @@
   "Construct the tropical semiring where PLUS is min and TIMES is +.\nThe additive identity (zero) is tropical-inf and the multiplicative\nidentity (one) is 0. Useful for shortest-path problems.\nAll operations on finite values return exact results.\n\nExamples:\n  (let ((T (tropical-semiring)))\n    (semiring-plus T 3 5))   => 3\n  (let ((T (tropical-semiring)))\n    (semiring-times T 3 5))  => 8\n\nReturns: any\nCategory: algebra\nKeywords: tropical, min-plus, shortest path, optimization, graph algorithm\n\nSee also: `boolean-semiring', `counting-semiring', `make-semiring'."
   ;; eq? declared explicitly: numeric = is faster than equal? on numerics,
   ;; tropical-eq? wraps it to handle the tropical-inf symbol correctly.
+  ;; carrier 'tropical: idempotent ⊕ (min) — `semiring-cycle-safe?' returns #t.
+  ;; Convergence is the classical Bellman-Ford guarantee for shortest paths
+  ;; with non-negative edge weights; negative-cycle inputs are out of scope.
   (make-semiring tropical-min tropical-add tropical-inf 0
+                 '(carrier . tropical)
                  (cons 'eq? tropical-eq?)))
 
 (define (counting-semiring)
@@ -204,6 +210,13 @@
   "Return #t iff S's carrier has a saturation point past which information\nis irrecoverable.\n\nCurrently, this is true for `saturating-counting-semiring' instances\n(carrier saturates at CAP — values past CAP are indistinguishable, so\nmagnitude information is lost). It is #f for `modular-counting-semiring'\n(carrier is exactly Z/PZ; values are well-defined modular fingerprints,\nnot approximations) and `log-counting-semiring' (carrier covers the\nfloat64 magnitude range; bounded precision, unbounded magnitude).\n\nThe predicate is a SEMANTIC WARNING, not an algebraic flag: all three\napproximate variants are true semirings. It marks semirings whose\ncarrier has a saturation point so downstream consumers can warn callers\nthat results past the saturation point will be uninformative.\n\nExamples:\n  (bounded-carrier-semiring? (saturating-counting-semiring 100))  => #t\n  (bounded-carrier-semiring? (modular-counting-semiring 7))       => #f\n  (bounded-carrier-semiring? (log-counting-semiring))             => #f\n  (bounded-carrier-semiring? (counting-semiring))                 => #f\n\nParameters:\n  S : semiring\nReturns: boolean\nCategory: algebra\nKeywords: bounded, saturation, predicate, carrier, approximation\n\nSee also: `saturating-counting-semiring', `semiring-carrier'."
   (and (semiring? S)
        (eq? (semiring-carrier S) 'saturating)))
+
+(define (semiring-cycle-safe? S)
+  "Return #t iff Bellman-Ford-style worklist iteration over S is guaranteed\nto converge on cyclic adjacencies in finite steps.\n\nConvergence requires either (a) idempotent ⊕ — `a ⊕ a = a' for all a in\nthe carrier — or (b) an absorbing top element `⊤' reachable from any\nnon-zero state via finitely many ⊕/⊗ steps (Mohri's k-closedness for\nsome finite k). Idempotence is what makes the Boolean (`or') and\ntropical (`min') semirings converge classically; the absorbing top is\nwhat makes `saturating-counting-semiring' converge despite `+' not being\nidempotent. `modular-counting-semiring' and `log-counting-semiring' have\nneither property and `make-graph-analysis' queries on cyclic adjacencies\nover them WILL hit the worklist's 2·V·E safety cap.\n\nDispatched on the carrier symbol attached at construction (see\n`semiring-carrier'). A closed set of known-safe symbols answers #t:\n\n  'saturating  — absorbing top at CAP\n  'boolean     — idempotent ⊕ (logical or)\n  'tropical    — idempotent ⊕ (min)\n\nAll other symbols, including #f (unannotated), answer #f. Semirings\nbuilt via raw `make-semiring' without a `(carrier . SYM)' opt therefore\nreturn #f even if they happen to be cycle-safe — declare the carrier to\nopt in. This is the conservative default: we never claim convergence\nwe haven't verified algebraically.\n\nDISTINCT from `bounded-carrier-semiring?'. Saturating is BOTH bounded\nand cycle-safe; tropical and boolean are cycle-safe but NOT bounded;\nmodular and log are bounded-magnitude (modular in Z/PZ, log in float64)\nbut NOT cycle-safe. The two predicates answer different questions.\n\nAdvisory, not gating: `make-graph-analysis' already detects worst-case\nnon-convergence via the 2·V·E safety cap. This predicate lets callers\nrefuse a query early or surface a warning before paying the cap.\n\nExamples:\n  (semiring-cycle-safe? (saturating-counting-semiring 100))  => #t\n  (semiring-cycle-safe? (boolean-semiring))                  => #t\n  (semiring-cycle-safe? (tropical-semiring))                 => #t\n  (semiring-cycle-safe? (modular-counting-semiring 7))       => #f\n  (semiring-cycle-safe? (log-counting-semiring))             => #f\n  (semiring-cycle-safe? (counting-semiring))                 => #f\n  (semiring-cycle-safe? (bigint-counting-semiring))          => #f\n  (semiring-cycle-safe? (make-semiring + * 0 1))             => #f\n  (semiring-cycle-safe? 42)                                  => #f\n\nParameters:\n  S : any\nReturns: boolean\nCategory: algebra\nKeywords: cycle, convergence, Bellman-Ford, idempotent, absorbing, k-closed, worklist\n\nSee also: `bounded-carrier-semiring?', `semiring-carrier', `saturating-counting-semiring', `modular-counting-semiring', `log-counting-semiring'."
+  (and (semiring? S)
+       (case (semiring-carrier S)
+         ((saturating boolean tropical) #t)
+         (else #f))))
 
 ;; ─── Macro ───────────────────────────────────
 

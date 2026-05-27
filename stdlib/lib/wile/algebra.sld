@@ -79,6 +79,7 @@
     log-counting-semiring
     saturating-counting-semiring
     bounded-carrier-semiring?
+    semiring-cycle-safe?
     validate-semiring with-semiring
     ;; Groups
     make-group group?
