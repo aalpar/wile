@@ -6,6 +6,10 @@
           semiring->additive-monoid semiring->multiplicative-monoid
           boolean-semiring tropical-semiring tropical-inf tropical-eq?
           counting-semiring bigint-counting-semiring
+          modular-counting-semiring mersenne-31 mersenne-61
+          log-counting-semiring
+          saturating-counting-semiring
+          bounded-carrier-semiring?
           validate-semiring
           with-semiring)
   (import (scheme base)
