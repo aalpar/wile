@@ -1,172 +1,252 @@
-# Worklist Bellman-Ford for `(wile algebra graph)`
+# Per-semiring equality for `(wile algebra graph)` convergence detection
 
-**Status:** Design draft — not started.
+**Status:** Design revised 2026-05-26 — narrowed from the original "worklist Bellman-Ford" scope. Phases 2–3 of the original plan shipped via a different mechanism (topological-order dispatch + worklist for cyclic) in the PR #757/#758 wave. Remaining work is the `(eq?)` opts plumbing on `<semiring>` and threading `semiring-eq?` through `graph.scm` in place of the current `equal?` hardcode.
 
-**Scope:** Internal optimization to `make-graph-analysis` / `graph-query` / `graph-query-all`. No API surface change; no semiring contract change; no behavioral change on well-posed inputs.
+**Scope:** Internal correctness/extensibility fix to `(wile algebra graph)`'s convergence-detection path. No public API additions on the graph side; one new optional opts key on `make-semiring` + one new accessor `semiring-eq?`. No behavioral change on the three built-in semirings (boolean / tropical / counting / bigint-counting) since their natural equality matches `equal?` on their carrier values.
 
-**Repository:** `aalpar/wile` (the algebra library lives in `lib/wile/algebra/graph.sld`, *not* in `wile-goast`).
+**Repository:** `aalpar/wile`. Files: `lib/wile/algebra/semiring.scm` (constructor + accessor), `lib/wile/algebra/graph.scm` (call sites), tests under `lib/wile/algebra/`.
 
-## Motivation
+## What this plan was, and what it became
 
-`graph-query` and `graph-query-all` currently implement textbook Bellman-Ford: V−1 outer iterations, each scanning all E edges and relaxing every one. On a 539-node, 623-edge call graph this is ~335K edge relaxations per iteration × 538 iterations = ~180M relaxations, regardless of how few values actually changed in any given iteration.
+The original 2026-05-24 plan targeted the textbook V−1-iteration Bellman-Ford in `graph-query` / `graph-query-all`, proposing to replace it with a worklist variant for convergence detection. Headline target: ≥3× speedup on tree-shaped graphs (the common case in call-graph queries).
 
-The dominant real-world failure mode for this library is the *opposite* of the academic pathology: most queries converge in a small fraction of V iterations because the underlying graphs are tree-shaped or shallow. Textbook B-F does the same V−1 scans whether convergence happened on iteration 3 or iteration 537.
+Between the design draft and any execution of it, three commits in the PR #757/#758 wave already replaced the textbook B-F with a more sophisticated dispatcher that subsumes most of the original plan's value:
 
-A worklist variant only re-scans edges whose source value *changed in the previous round*. On typical call-graph queries (boolean reachability, tropical hop-count, counting on DAGs) this collapses runtime by 1–2 orders of magnitude. Worst case is identical to current behavior.
+- **`compute-via-topological-order`** (`graph.scm:306-340`) — single forward pass on DAGs, each edge relaxed exactly once. **Strictly better than worklist B-F** on tree-shaped or shallow graphs (the plan's headline target). Correct for *all* semirings including non-idempotent counting, because each node is visited only after its predecessors have settled.
+- **`compute-via-worklist`** (`graph.scm:357-409`) — used for cyclic subgraphs. Convergence detection via `(equal? merged old-val)` at line 401. Already has a 2·V·E safety cap with a diagnostic pointing at SCC condensation / approximate semirings (which resolves Q-2 from the original plan).
+- **Dispatcher** (`graph.scm:108-118`) — picks topo-order for DAGs, worklist for cyclic, `count-paths-in-dag` for the big-int-carrier fast path.
 
-This change does **not** fix the cyclic-counting pathology (counting semiring on a graph with reachable cycles is intrinsically intractable — the values exceed int64 within a few iterations and become bignums). That is a *question-shape* problem requiring SCC condensation; see related plan TODO. Worklist B-F still helps *boolean* and *tropical* queries on cyclic graphs because their carriers stay bounded.
+What this means for the plan's three original phases:
 
-## Background — the 3-hour incident (2026-05-23)
+| Original phase | Status |
+|----------------|--------|
+| Phase 1 — `:eq?` slot + plumbing | **Still pending.** Open question: which equality predicate does the worklist use to detect convergence? Today it uses `equal?` hardcoded at `graph.scm:401`. |
+| Phase 2 — worklist core (replace textbook B-F) | **Shipped via different mechanism.** Topo-order is better than worklist on the headline target; worklist already handles the cyclic case. Neither uses textbook V−1 iterations. |
+| Phase 3 — benchmarks vs. textbook B-F | **Obsolete.** No textbook B-F left to compare against. The current dispatcher's wins are documented in the PR #757/#758 trail. |
+| Phase 4 — docs + PR | Folded into Phase 1's PR. |
 
-Ran `(graph-query-all ga-count run-name)` from `(*MachineContext).Run` on the `machine` package's static call graph (539 nodes, 623 edges, 12 back-edges). Ran for ~3 hours before user escaped. Root cause: counting semiring + cycles produces bignum walk explosion. Worklist B-F would NOT have fixed this — counting on cycles is the wrong question. But the incident motivated a profiling pass that surfaced multiple constant-factor wins applicable to the *non-pathological* common case, of which worklist B-F is the most leveraged.
+The remaining piece — Phase 1's `:eq?` plumbing — has standalone value:
 
-See `feedback-counting-semiring-on-cycles.md` for the incident memory.
+1. **Correctness for non-canonical carriers.** `equal?` is the wrong predicate for some carriers. Modular ints want `(mod-eq? p)`. Log-space floats want tolerance-based equality (`abs(a-b) < ε`). Future user-defined non-canonical reps need their own equality. The current `equal?` hardcode locks `(wile algebra graph)` to canonical carriers.
+2. **Prerequisite for approximate-counting semirings.** `2026-05-24-approximate-counting-semirings.md` (sibling plan, still not started) adds three new constructors — saturating, modular, log — each with a different equality contract. None can be wired into graph queries cleanly without the `(eq?)` slot.
+3. **Consistency with the existing carrier-opt pattern.** `<semiring>` already accepts `(carrier . SYM)` via the same trailing-alist mechanism. Adding `(eq? . PROC)` matches the established shape exactly — `validate-opts-keys` just grows by one symbol.
 
-## Current implementation
+## Motivation — what the `(eq?)` slot is *for*
 
-Per the library docs (verified at call sites in the eval session):
+The worklist algorithm at `graph.scm:357-409` terminates by detecting that no node's distance changed in a relaxation step. The check at line 401 is currently:
 
-- `make-graph-analysis SEMIRING ADJACENCY WEIGHT-FN` returns a `graph-analysis` record. Internal indices probably built at construction time.
-- `graph-query GA SOURCE TARGET` lazily computes single-source distances on first query per source; caches per-source results.
-- `graph-query-all GA SOURCE` returns the full distance alist for one source; same lazy cache.
-
-The single-source distance computation is presumably:
-
-```
-;; Pseudocode of current (textbook) implementation
-(define (single-source-distances ga source)
-  (let ((d (make-distance-map)))
-    (distance-set! d source semiring-one)
-    (for-each-iteration (- V 1)
-      (for-each-edge ga
-        (lambda (u v w)
-          (let ((nd (semiring* (distance-ref d u) w)))
-            (distance-set! d v (semiring+ (distance-ref d v) nd))))))
-    d))
+```scheme
+(if (equal? merged old-val)
+    (edge-loop (cdr edges) wl d)        ; no change, skip
+    (let ((new-d ...))
+      (edge-loop ...)))                  ; changed, propagate
 ```
 
-Cost: O(V × E × semiring-op-cost). Always V−1 iterations regardless of convergence.
+For the three built-in semirings this is correct:
 
-## Design — worklist Bellman-Ford (SLF variant)
+- **Boolean:** `equal?` on `#t`/`#f` = correct.
+- **Tropical:** `equal?` on numerics = correct (numeric `=` and `equal?` agree on finite IEEE 754 except for NaN, which has no role in shortest-path values).
+- **Counting (exact int / bigint):** `equal?` on exact integers = correct.
 
-The Smallest-Label-First (SLF) and Largest-Label-Last (LLL) variants of B-F are well-studied. For semiring-parameterized analysis the relevant invariant is *value changed*, not *value ordering* (which doesn't generalize to non-ordered semirings like counting). So the right variant here is the **plain worklist** form:
+For carriers where it goes wrong:
 
-```
-;; Worklist Bellman-Ford
-(define (single-source-distances ga source)
-  (let ((d (make-distance-map))
-        (in-worklist? (make-bitvector V #f))
-        (worklist (make-queue)))
-    (distance-set! d source semiring-one)
-    (queue-enqueue! worklist source)
-    (bitvector-set! in-worklist? source #t)
-    (let loop ()
-      (cond
-        ((queue-empty? worklist) d)
-        (else
-          (let ((u (queue-dequeue! worklist)))
-            (bitvector-set! in-worklist? u #f)
-            (for-each-out-edge ga u
-              (lambda (v w)
-                (let* ((nd (semiring* (distance-ref d u) w))
-                       (old (distance-ref d v))
-                       (new (semiring+ old nd)))
-                  (when (not (semiring-equal? old new))
-                    (distance-set! d v new)
-                    (when (not (bitvector-ref in-worklist? v))
-                      (queue-enqueue! worklist v)
-                      (bitvector-set! in-worklist? v #t))))))
-            (loop)))))))
+- **Log-space `float64`:** Two log-counts can differ by `1e-300` and represent the same physical count for all reasonable purposes. `equal?` says no → the worklist re-propagates indefinitely on cycles. Tolerance-based equality would terminate cleanly.
+- **Modular ℤ/Pℤ:** Carrier values must be normalized (i.e., always in `[0, P)`) before equality. If the operation doesn't normalize and the value is `(+ P 3)` vs `3`, `equal?` says no → re-propagation. Modular-aware equality terminates.
+- **Saturating int64:** `equal?` is correct, but a future variant that stores `(saturated . count)` pairs would need pair-aware equality.
+
+The fix is structural: the semiring should declare its own equality predicate at construction time, defaulting to `equal?` when the user doesn't specify. The graph code consults `semiring-eq?` instead of `equal?` hardcoded.
+
+## Design
+
+### `<semiring>` record — add an `eq?` field with default
+
+The existing record (`semiring.scm:9-15`):
+
+```scheme
+(define-record-type <semiring>
+  (make-semiring* plus-fn times-fn zero one carrier)
+  semiring?
+  (plus-fn  semiring-plus-fn)
+  (times-fn semiring-times-fn)
+  (zero     semiring-zero)
+  (one      semiring-one)
+  (carrier  semiring-carrier))
 ```
 
-**Key properties:**
+Becomes:
 
-1. **Correctness identical to textbook B-F.** Both compute the same fixed point of `d[v] = ⊕ over edges (u,v) of d[u] ⊗ w`. Worklist just visits nodes lazily.
-2. **Best case dramatically better.** On a tree-shaped subgraph rooted at the source, only V edge relaxations total (each node enqueued once). Textbook does V·E.
-3. **Worst case identical.** On a complete graph with values that change every iteration, worklist degenerates to V·E (each node re-enters the queue up to V−1 times).
-4. **Termination requires `semiring-equal?`.** This is the only new operation needed from the semiring side. Defined per-semiring:
-   - Boolean: `eq?`
-   - Tropical: `=` (numeric)
-   - Counting: `=` (numeric — but `=` on bignums is itself O(d), still cheap relative to `+` and `*`)
+```scheme
+(define-record-type <semiring>
+  (make-semiring* plus-fn times-fn zero one carrier eq?-fn)
+  semiring?
+  (plus-fn  semiring-plus-fn)
+  (times-fn semiring-times-fn)
+  (zero     semiring-zero)
+  (one      semiring-one)
+  (carrier  semiring-carrier)
+  (eq?-fn   semiring-eq?-fn))
+```
 
-   Wile's `semiring` record already has the carrier's equality available implicitly via the host `equal?`. Whether to add an explicit `semiring-eq?` slot or use host equality on the carrier values is a design question — see Q-1.
+New accessor `semiring-eq?` calls `eq?-fn` on two values:
 
-5. **Convergence detection is free.** When the worklist drains, we've converged. No need for the explicit V−1 outer bound. (Note: this means worklist B-F on a non-k-closed semiring with reachable cycles **does not terminate** — see Risk R-1.)
+```scheme
+(define (semiring-eq? S a b)
+  ((semiring-eq?-fn S) a b))
+```
+
+### `make-semiring` — extend opts allowlist with `eq?`
+
+Current opts handling (`semiring.scm:18-23`):
+
+```scheme
+(define (make-semiring plus times zero one . opts)
+  "..."
+  (assert-procedure "make-semiring" plus)
+  (assert-procedure "make-semiring" times)
+  (validate-opts-keys "make-semiring" opts '(carrier))
+  (make-semiring* plus times zero one (assv-or opts 'carrier #f)))
+```
+
+Becomes:
+
+```scheme
+(define (make-semiring plus times zero one . opts)
+  "..."
+  (assert-procedure "make-semiring" plus)
+  (assert-procedure "make-semiring" times)
+  (validate-opts-keys "make-semiring" opts '(carrier eq?))
+  (let ((eq?-fn (assv-or opts 'eq? equal?)))
+    (assert-procedure "make-semiring" eq?-fn)
+    (make-semiring* plus times zero one
+                    (assv-or opts 'carrier #f)
+                    eq?-fn)))
+```
+
+Docstring grows by one bullet under the trailing alist key list, mirroring the existing `(carrier . SYM)` entry.
+
+### Built-in semiring constructors — explicit `eq?` where natural
+
+The three (now four) built-ins each declare their natural equality even though it matches `equal?`, both for documentation value and so that user-defined drop-ins have a worked example:
+
+```scheme
+(define (boolean-semiring)
+  (make-semiring or-bool and-bool #f #t '(eq? . eq?)))   ; #t/#f → eq? suffices
+
+(define (tropical-semiring)
+  (make-semiring tropical-min tropical-add tropical-inf 0 '(eq? . =)))
+  ; numeric = is faster than equal? on numerics and handles +inf.0 correctly
+
+(define (counting-semiring)
+  (make-semiring + * 0 1 '(eq? . =)))                    ; numeric =, fast
+
+(define (bigint-counting-semiring)
+  (make-semiring + * 0 1
+                 '(carrier . big-int)
+                 '(eq? . =)))                            ; = on bigints, in-place compare in Go
+```
+
+Open question: are these worth declaring explicitly, or should we rely on the `equal?` default? Documentation value vs. four near-tautological lines of opts. **Default decision: declare them explicitly.** The lines establish a worked example for future custom semirings; the cost is negligible.
+
+### `graph.scm` — switch `equal?` to `semiring-eq?`
+
+Two call sites need attention. The plan's audit during execution will confirm whether more exist (the only one identified in code review is line 401).
+
+**Site 1 — worklist convergence detection (`graph.scm:401`):**
+
+```scheme
+(if (equal? merged old-val) ...)
+```
+
+becomes
+
+```scheme
+(if (semiring-eq? S merged old-val) ...)
+```
+
+**Site 2 — topo-order processing.** The current code at `graph.scm:306-340` doesn't have an analogous equality check because it doesn't iterate to a fixpoint — each node is visited exactly once. So nothing to change here. Confirmed by reading the body: `inner` always recurses on `(cdr edges)` regardless of whether `merged` differs from `old-val`. Worth noting in the implementation commit so a future reader doesn't think we missed a site.
+
+**Site 3 — `count-paths-in-dag` fast path (`graph.scm:147-241`).** This is the bigint-counting Go-side kernel. Equality is internal to the kernel (`*big.Int` compare in Go) and not visible to the Scheme side. Unaffected.
 
 ## Open design questions
 
-- **Q-1:** Equality detection — add `semiring-eq?` slot to the `semiring` record (cleanest, lets each semiring optimize its own equality), or use host `equal?` on carrier values (zero API change, slightly slower for bignums)? **Default:** add the slot, default it to `equal?` if unspecified.
-
-- **Q-2:** Termination guard for non-convergent semirings (counting on cyclic graphs) — should the worklist loop carry a hard iteration cap (e.g., V·V or V³) as a safety net, even though it changes semantics? **Default:** no — the proper fix is k-closedness detection at `make-graph-analysis` time (separate plan). Worklist B-F should be honest about non-termination on bad inputs; the caller's responsibility is to use a sensible semiring.
-
-- **Q-3:** Queue vs. deque — SLF uses deque-front insertion for already-relaxed nodes, FIFO for new. SLF is empirically faster on shortest-path workloads but requires totally-ordered values. Plain FIFO worklist works on any semiring. **Default:** plain FIFO. SLF can be added later as an opt-in for ordered semirings (tropical specifically) if benchmarks justify.
+- **Q-1: Do we declare `(eq? . =)` etc. on the built-ins, or rely on the `equal?` default?** **Default: declare them explicitly** for documentation value and to give custom-semiring authors a worked example. Lines are cheap.
+- **Q-2: Should `semiring-eq?` be reflexive on `#f`?** I.e., what does `(semiring-eq? S #f #f)` mean if the carrier doesn't include `#f`? **Default: don't special-case.** Caller's responsibility to only pass carrier values. The contract is "on carrier values, returns booleantruthy iff they're equal." Free monad: out-of-carrier inputs are undefined behavior.
+- **Q-3: Does the bigint-counting fast path need its own equality?** **No.** It bypasses the Scheme semiring's `eq?` entirely — the comparison happens inside the Go kernel on `*big.Int`. No change needed.
 
 ## Implementation plan
 
-### Phase 1 — equality slot + plumbing
+### Phase 1 — semiring `:eq?` slot + plumbing
 
-- Add `semiring-eq?` accessor to the `semiring` record in `(wile algebra semiring)`.
-- Update `make-semiring` to accept an optional `:eq?` keyword arg, default `equal?`.
-- Update `boolean-semiring`, `tropical-semiring`, `counting-semiring` constructors to pass appropriate equality predicates.
-- Tests: equality slot round-trips correctly for all three built-in semirings; user-defined semirings without an `:eq?` arg still work (default to `equal?`).
+`lib/wile/algebra/semiring.scm`:
 
-### Phase 2 — worklist core
+1. Add `eq?-fn` field to `<semiring>` record-type definition (sixth field).
+2. Update `make-semiring*` record-type constructor signature to take six arguments.
+3. Add `semiring-eq?-fn` accessor (private — used by `semiring-eq?` only).
+4. Add public `semiring-eq?` procedure with docstring.
+5. Update `make-semiring` opts allowlist: `'(carrier)` → `'(carrier eq?)`.
+6. Default `eq?` arg to `equal?` if not supplied.
+7. Validate the supplied procedure with `assert-procedure`.
+8. Update the four built-in semiring constructors with explicit `(eq? . PROC)` per the design above.
+9. Update `make-semiring`'s docstring to document the new opts key.
+10. Make sure validate-semiring continues to work — it doesn't currently consult `eq?` (it uses `equal?` internally for spot-checks of laws; we leave that alone since `validate-semiring` operates on *the semiring under test*, not on values produced by it; consult `equal?` there is the right contract for the law-checker itself).
 
-- Add internal `single-source-distances-worklist` in `(wile algebra graph)`.
-- Switch `graph-query` and `graph-query-all` to dispatch through it.
-- Keep the existing textbook implementation under a debug flag (or delete after CI green — depends on review preference).
-- Tests: every existing graph-query test passes unchanged. Add tests that exercise:
-  - Tree shape (best case for worklist)
-  - Dense small graph (worst case)
-  - Disconnected source (worklist must terminate immediately)
-  - Self-loop on source (one re-enqueue, then stop)
-  - Multi-edge (parallel edges between same vertex pair)
+### Phase 2 — thread through `(wile algebra graph)`
 
-### Phase 3 — benchmark + verification
+`lib/wile/algebra/graph.scm`:
 
-- Add a benchmark suite in `bench/algebra-graph.sld` (or wherever the algebra benchmarks live):
-  - Tree-shaped graph, V = 100, 500, 1000
-  - DAG with depth ~log V
-  - Cyclic graph, boolean semiring (should be fast)
-  - Cyclic graph, tropical semiring (should be fast)
-- Document expected speedup ranges in the benchmark output.
-- Acceptance gate: no regression on any existing benchmark; ≥3× improvement on the tree-shape benchmark (the worklist's natural strength).
+1. Replace `(equal? merged old-val)` at line 401 with `(semiring-eq? S merged old-val)`.
+2. Audit `compute-via-topological-order` — confirm no `equal?` on semiring values exists. Document the absence in a brief comment so a future reader doesn't add one expecting parity with the worklist path.
+3. Audit `compute-via-count-paths-in-dag` — confirm fast path doesn't surface Scheme-side equality (it doesn't; the Go kernel handles its own bigint compare).
+4. Verify the `assoc` calls in both `compute-via-*` paths still use `equal?` for keys (node names) — `equal?` is correct for node identifiers regardless of the semiring's value equality.
+
+### Phase 3 — tests
+
+Add to the existing graph + semiring tests:
+
+1. `semiring-eq?` default behavior: `(semiring-eq? (counting-semiring) 1 1) => #t`, `(semiring-eq? (counting-semiring) 1 2) => #f`. Same for boolean, tropical.
+2. Custom `:eq?` round-trip: `(let ((S (make-semiring + * 0 1 '(eq? . my-eq?)))) (semiring-eq? S a b))` calls `my-eq?` (use a counter-incrementing predicate to verify dispatch).
+3. `validate-opts-keys` rejects unknown keys: `(make-semiring + * 0 1 '(eqq? . equal?))` (typo) raises.
+4. Graph query with custom semiring whose `eq?` differs from `equal?`: construct a "tolerance semiring" on floats (`(eq? (lambda (a b) (< (abs (- a b)) 1e-9)))`) on a cyclic graph; verify the worklist terminates where `equal?` would have iterated to the 2·V·E cap.
+5. `assert-procedure` on the `eq?` arg: `(make-semiring + * 0 1 '(eq? . 42))` raises with the same `make-semiring: eq? must be a procedure` shape as the existing `plus`/`times` checks.
+6. Backward compatibility: every existing graph/semiring test continues to pass unchanged.
 
 ### Phase 4 — docs + PR
 
-- Update `(wile algebra graph)` library description to note "uses worklist Bellman-Ford internally; convergence-detection-based, not fixed V−1 iterations."
-- Add a one-paragraph note in the library docs about non-k-closed semirings: "Counting semiring on graphs with reachable cycles will not terminate. Use SCC condensation first or pick a different semiring." (Forward-references the SCC plan when it exists.)
-- Open PR, dual review (Copilot + `/crosscheck`).
+1. Update `(wile algebra semiring)` library description (the `define-library` `description` field, if present) to mention the optional `:eq?` opt.
+2. Update `docs/algebra/reference.md` semiring section: new `semiring-eq?` accessor, new `eq?` opt on `make-semiring`.
+3. Add a one-line note in `(wile algebra graph)`'s docstring explaining that convergence detection consults the semiring's declared equality, not host `equal?`.
+4. Open PR with the commit chain: revised plan (already committed) + Phase 1 + Phase 2 + Phase 3 + docs.
+5. Request Copilot review.
+6. Optionally dispatch `/crosscheck:crosscheck all` per `plans/CLAUDE.md` implementation workflow.
 
 ## Risks
 
-- **R-1 — Non-termination on non-k-closed semirings with cycles.** Textbook B-F's V−1 cap silently bounded runtime (at the cost of incorrect results — the value at iteration V−1 isn't necessarily the fixpoint, it's just "the value after V−1 iterations"). Worklist B-F has no such cap, so on counting-with-cycles it runs forever (or until OOM from bignum growth). This is honest behavior — the existing textbook implementation was hiding a real failure mode by giving up early — but it changes the runtime characteristic. Mitigation: add k-closedness check at `make-graph-analysis` time in a separate plan; recommend it as a prerequisite-or-parallel-track to this one.
-- **R-2 — Equality cost on bignum semirings.** Adding a per-relaxation `(semiring-equal? old new)` check costs O(d) for bignums. For very-large-bignum workloads this is a small overhead. Negligible compared to the cost of `+` and `*` (both O(d²) schoolbook), but worth measuring in the benchmark.
-- **R-3 — Queue implementation choice.** Wile's standard data structures probably include a queue or deque; if not, a simple list-based FIFO (cons to one end, take from the other) is fine for this. Avoid building a custom data structure if a library primitive exists.
-- **R-4 — Test coverage gap on convergence-detection edge cases.** Self-loops, disconnected components, single-vertex graphs, empty edge sets — all need explicit tests because worklist's behavior on these differs from textbook B-F (it terminates immediately rather than scanning V−1 empty iterations).
+- **R-1 — Hidden `equal?` sites in graph or downstream code.** Mitigated by Phase 2 audit; covered by Phase 3 tests on tolerance-based equality (which would reveal any site still hardcoded to `equal?` by causing non-convergence on a cyclic graph).
+- **R-2 — Performance regression from the indirection.** Replacing `(equal? merged old-val)` with `(semiring-eq? S merged old-val)` adds one dispatch (record-field access + procedure call). Negligible on bignum or float workloads where the value comparison itself dominates; potentially measurable on boolean reachability (where the comparison was `eq?`-fast). Bench-gate: ≤ 0.5% geomean per the project's standard threshold; if it regresses, inline the per-built-in equality at construction time (pre-curry).
+- **R-3 — Documentation drift.** The `(carrier . SYM)` docstring exists; `(eq? . PROC)` needs an analogous entry. The two are conceptually parallel (both are advisory metadata that consumers can dispatch on), so the doc paragraph can mirror the existing one with `s/carrier/eq?/`.
+- **R-4 — Stale test premise.** Some existing semiring test may assert `(eq? (make-semiring + * 0 1) (make-semiring + * 0 1))` or similar — adding a closure field could break record equality if tested. Phase 3 step 6 (backward compat) catches this.
 
 ## Acceptance criteria
 
-- All existing `(wile algebra graph)` tests pass.
-- New worklist-specific tests cover the convergence-detection edge cases.
-- Tree-shape benchmark shows ≥3× speedup (target — measure first, lower bound to ≥1.5× if reality disagrees).
-- Cyclic-graph boolean reachability benchmark shows ≥2× speedup.
-- No regression on any existing benchmark.
+- `semiring-eq?` accessor returns `#t` / `#f` on each built-in semiring's natural value domain, matching `equal?` on those carriers.
+- Custom `:eq?` opt round-trips: `(semiring-eq? S a b)` calls the user-supplied predicate.
+- Graph query with a tolerance-based equality semiring terminates on a cyclic float graph where `equal?` would have hit the 2·V·E iteration cap.
+- All existing `(wile algebra graph)` + `(wile algebra semiring)` tests pass unchanged.
 - `make lint && make covercheck && make ci` all green.
+- No regression > 0.5% geomean on the existing graph benchmark suite.
 
 ## Out of scope
 
-- SCC condensation primitive — shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`). Lets exact counting work on cyclic graphs by quotienting out the cycles; the worklist's R-1 non-termination on counting+cycles is now opt-out via the condensation entry point.
-- Tarjan / Kosaraju implementations (separate plan).
-- Topological sort primitive (separate plan).
-- SLF / LLL ordering variants (deferred per Q-3 default).
-- Sparse adjacency hash-table — orthogonal; `make-graph-analysis` may already do this internally. Confirm during Phase 2 and file separately if not.
-- Bignum performance work in Wile's numeric tower (allocation reduction, in-place arithmetic, scratch pool) — sibling plan `2026-05-24-bignum-allocation-reduction.md`. Helps the cyclic-counting case and any bignum-heavy workload; orthogonal to the convergence-detection work here. (Karatsuba was originally listed; verified during audit that `math/big` already provides it.)
-- Approximate-counting semirings (saturating, modular, log-space) — these make cyclic-counting queries tractable at the cost of exactness, and are the complementary fix to this plan's convergence-detection work. See sibling plan `2026-05-24-approximate-counting-semirings.md`. Together: worklist B-F speeds up convergent queries; approximate counting makes (otherwise non-convergent) cyclic-counting queries terminate in bounded time.
+- Approximate counting semirings — sibling plan `2026-05-24-approximate-counting-semirings.md` consumes this work but ships separately.
+- Bignum allocation reduction in the numeric tower — sibling plan `2026-05-24-bignum-allocation-reduction.md` (Phase 5 shipped; remaining phases tracked separately).
+- SCC condensation primitive — already shipped via `plans/2026-05-26-scc-condensation.md` (PR #757).
+- Worklist Bellman-Ford replacement of textbook B-F — already shipped via topo-order + worklist dispatch in the PR #757/#758 wave. See "What this plan was, and what it became" above.
 
 ## References
 
-- Bellman-Ford-Moore worklist variant: standard algorithms textbook treatment, e.g. Cormen et al. *Introduction to Algorithms*, 3rd ed., §24.1 exercises.
-- Mohri (2002) *Semiring Frameworks and Algorithms for Shortest-Distance Problems* — establishes the k-closedness condition for B-F termination on general semirings. Forward-reference for the planned setup-time check.
-- `feedback-counting-semiring-on-cycles.md` — incident memory motivating the broader optimization sweep.
-- `2026-04-17-algebra-foundations-directions.md` — algebra roadmap (this plan slots into §5 graph-algorithm improvements; flag for inclusion next revision).
+- `feedback-counting-semiring-on-cycles.md` — original incident memory.
+- `2026-04-17-algebra-foundations-directions.md` — algebra roadmap.
+- `2026-05-24-approximate-counting-semirings.md` — sibling plan; consumer of this work.
+- `stdlib/lib/wile/algebra/CLAUDE.md` — algebra library conventions, carrier-opt pattern.
+- `graph.scm` (lines 357-409) — current worklist; line 401 is the equality site to update.
+- `semiring.scm` (lines 9-23) — current `<semiring>` record + `make-semiring`.
