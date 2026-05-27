@@ -71,8 +71,10 @@
     ;; Semirings
     make-semiring semiring?
     semiring-plus semiring-times semiring-zero semiring-one
+    semiring-carrier
     semiring->additive-monoid semiring->multiplicative-monoid
-    boolean-semiring tropical-semiring tropical-inf counting-semiring
+    boolean-semiring tropical-semiring tropical-inf
+    counting-semiring bigint-counting-semiring
     validate-semiring with-semiring
     ;; Groups
     make-group group?
@@ -177,6 +179,7 @@
     ;; Graph algorithms
     make-graph-analysis graph-analysis?
     graph-query graph-query-all
+    graph-analysis-fast-path? graph-analysis-fast-path-kind
     ;; Matrices
     make-semiring-matrix semiring-matrix?
     semiring-matrix-from-rows semiring-matrix->rows

@@ -43,6 +43,14 @@ This promotion is correct per R7RS but has practical consequences:
 - Big* arithmetic is significantly slower (heap-allocated, no hardware acceleration)
 - Mixed operations (e.g., `Float × BigComplex`) promote to the lattice LUB as usual
 
+### Hot-Loop Allocation Reduction (`BigInteger` only)
+
+For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting-semiring path queries on DAGs — `values/numeric_scratch.go` provides unexported in-place arithmetic helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`). These reuse the destination's existing `[]Word` backing rather than allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op (the path through `(*BigInteger).Add`).
+
+The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. See `values/CLAUDE.md` §"In-Place Arithmetic on BigInteger" for the helpers' contract (aliasing, storage reuse) and microbench numbers.
+
+The fast path applies only to `*BigInteger`. Other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but separate plans (see `plans/2026-05-24-bignum-allocation-reduction.md` §"Out of scope" for the scoping rationale).
+
 ### Out of Scope
 
 The following algebraic optimizations are acknowledged but not planned for the current version:

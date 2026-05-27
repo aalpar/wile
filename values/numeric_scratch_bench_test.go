@@ -57,7 +57,7 @@ func BenchmarkBigIntMulInPlace(b *testing.B) {
 
 func BenchmarkBigIntAddInPlace_SelfAlias(b *testing.B) {
 	x := &BigInteger{value: big.NewInt(1)}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		addBigIntInPlace(x, x, x) // grow to a stable working size
 	}
 	b.ResetTimer()
