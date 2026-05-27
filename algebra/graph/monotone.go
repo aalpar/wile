@@ -143,11 +143,16 @@ func CountPathsInDAG(numNodes int, edges []Edge, source int) []*big.Int {
 
 // CyclicCountResult is the result of CountPathsCyclic. Unlike
 // CountPathsInDAG which returns counts indexed by node, this returns
-// counts indexed by SCC plus the SCC map so callers can project back to
-// per-node answers.
+// counts indexed by SCC plus the SCC map (via the embedded *SCCResult)
+// so callers can project back to per-node answers.
+//
+// The embedded *SCCResult gives `result.SCC`, `result.NumSCCs`, and
+// `result.NonTrivial` directly (promoted fields). All three exported
+// slices (SCC, NonTrivial, CountsBySCC) alias kernel-internal storage —
+// callers MUST treat them as read-only. Mutation will silently corrupt
+// any downstream computation that re-reads them.
 type CyclicCountResult struct {
-	// SCC[v] is the component containing node v. 0 <= SCC[v] < len(CountsBySCC).
-	SCC []int
+	*SCCResult
 
 	// CountsBySCC[c] is the number of distinct paths in the condensed
 	// DAG from SCC[source] to SCC c. Semantics by SCC kind:
@@ -163,10 +168,6 @@ type CyclicCountResult struct {
 	//     DAG. Callers should propagate the NonTrivial flag so users
 	//     understand the semantic shift.
 	CountsBySCC []*big.Int
-
-	// NonTrivial[c] mirrors SCCResult.NonTrivial: true iff component c
-	// contains a cycle.
-	NonTrivial []bool
 }
 
 // CountPathsCyclic computes path counts on an arbitrary directed graph
@@ -204,8 +205,7 @@ func CountPathsCyclic(numNodes int, edges []Edge, source int) (*CyclicCountResul
 	}
 
 	return &CyclicCountResult{
-		SCC:         scc.SCC,
+		SCCResult:   scc,
 		CountsBySCC: counts,
-		NonTrivial:  scc.NonTrivial,
 	}, nil
 }
