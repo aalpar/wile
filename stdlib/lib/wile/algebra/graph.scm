@@ -105,8 +105,50 @@
   (if (ga-fast-path-kind ga) #t #f))
 
 (define (graph-analysis-fast-path-kind ga)
-  "Return the symbol naming GA's fast-path strategy, or #f if none.\n\nKnown strategies:\n  'unit-weight-counting — bigint-carrier semiring + #f weight-fn, dispatches\n                         to `count-paths-in-dag'.\n\nExamples:\n  (graph-analysis-fast-path-kind (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => unit-weight-counting\n\nParameters:\n  ga : graph-analysis\nReturns: symbol-or-false\nCategory: algebra\n\nSee also: `graph-analysis-fast-path?', `make-graph-analysis'."
+  "Return the symbol naming GA's fast-path strategy, or #f if none.\n\nKnown strategies:\n  'unit-weight-counting — bigint-carrier semiring + #f weight-fn,\n                         dispatches to `count-paths-in-dag' on acyclic\n                         input or `count-paths-cyclic' on cyclic input\n                         (the dispatcher pre-detects).\n\nExamples:\n  (graph-analysis-fast-path-kind (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => unit-weight-counting\n\nParameters:\n  ga : graph-analysis\nReturns: symbol-or-false\nCategory: algebra\n\nSee also: `graph-analysis-fast-path?', `make-graph-analysis'."
   (ga-fast-path-kind ga))
+
+;; --- SCC side-query API (Open Q-2 of plans/2026-05-26-scc-condensation.md) ---
+;;
+;; `graph-query' / `graph-query-all' remain shape-stable: the alist they
+;; return is (name . count) on every node, whether the node lives in a
+;; trivial or non-trivial SCC. The semantic shift on non-trivial SCCs
+;; (the count is the SCC's entry-count, not a true per-node path count)
+;; is surfaced through this side-query API: callers who need to
+;; distinguish call `graph-node-in-cycle?' or walk `graph-cyclic-nodes'.
+;; Callers who don't care see a plain integer alist.
+;;
+;; All three procedures force `%ensure-graph-scc!' on first use; the
+;; result is cached on `ga-scc' and shared with the cyclic-counting
+;; dispatch path.
+
+(define (graph-analysis-sccs ga)
+  "Force computation of the SCC decomposition for GA and return the\n<graph-scc> record. Idempotent: subsequent calls return the same\nobject (eq?). Requires the (wile algebragraph) extension — only loaded\nunder the kitchen-sink profile; raises otherwise.\n\nThe <graph-scc> bundles four pieces of source-independent state:\n  scc-vec         — node-index -> SCC ID (vector of int)\n  non-trivial-vec — SCC ID -> #t/#f (true iff that SCC contains a cycle)\n  name->idx       — hashtable from node names to integer indices\n  idx->name       — vector from integer indices back to node names\nUse `gscc-scc-vec', `gscc-non-trivial-vec', etc. for direct access.\n\nMost callers want `graph-node-in-cycle?' or `graph-cyclic-nodes'\ninstead; this is the lower-level introspection hook.\n\nExamples:\n  (let* ((ga (make-graph-analysis (bigint-counting-semiring)\n                                  '((a . ((b))) (b . ((a))))\n                                  #f))\n         (s (graph-analysis-sccs ga)))\n    (graph-scc? s))                       => #t\n\nParameters:\n  ga : graph-analysis\nReturns: graph-scc\nCategory: algebra\n\nSee also: `graph-node-in-cycle?', `graph-cyclic-nodes', `graph-scc?'."
+  (%ensure-graph-scc! ga))
+
+(define (graph-node-in-cycle? ga node)
+  "Return #t iff NODE lies in a non-trivial SCC of GA's adjacency.\nA non-trivial SCC contains a cycle (either multiple mutually-reachable\nnodes, or a single node with a self-loop). Returns #f for nodes not\nin GA's adjacency (consistent with `graph-query's permissive\nout-of-graph semantics).\n\nForces SCC computation on first call per GA; subsequent calls are\nO(1) hashtable + vector lookups.\n\nExamples:\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ()))\n               #f)))\n    (graph-node-in-cycle? ga 'a))   => #t   ; a<->b is a 2-cycle\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ()))\n               #f)))\n    (graph-node-in-cycle? ga 'c))   => #f   ; c is a trivial SCC\n\nParameters:\n  ga : graph-analysis\n  node : any\nReturns: boolean\nCategory: algebra\n\nSee also: `graph-cyclic-nodes', `graph-analysis-sccs'."
+  (let* ((scc-rec (%ensure-graph-scc! ga))
+         (idx     (hashtable-ref (gscc-name->idx scc-rec) node -1)))
+    (cond
+      ((< idx 0) #f)
+      (else
+       (vector-ref (gscc-non-trivial-vec scc-rec)
+                   (vector-ref (gscc-scc-vec scc-rec) idx))))))
+
+(define (graph-cyclic-nodes ga)
+  "Return the list of node names in GA that lie in non-trivial SCCs.\nA non-trivial SCC contains a cycle (multiple mutually-reachable nodes\nor a self-loop). Order matches adjacency-insertion order.\n\nForces SCC computation on first call per GA. Returns '() on a\ncompletely acyclic graph.\n\nExamples:\n  (let ((ga (make-graph-analysis (bigint-counting-semiring)\n               '((a . ((b))) (b . ((a))) (c . ((b))))\n               #f)))\n    (graph-cyclic-nodes ga))    => (a b)\n\nParameters:\n  ga : graph-analysis\nReturns: list\nCategory: algebra\n\nSee also: `graph-node-in-cycle?', `graph-analysis-sccs'."
+  (let* ((scc-rec   (%ensure-graph-scc! ga))
+         (n         (gscc-num-nodes scc-rec))
+         (scc-vec   (gscc-scc-vec scc-rec))
+         (nt-vec    (gscc-non-trivial-vec scc-rec))
+         (idx->name (gscc-idx->name scc-rec)))
+    (let loop ((i 0) (acc '()))
+      (cond
+        ((= i n) (reverse acc))
+        ((vector-ref nt-vec (vector-ref scc-vec i))
+         (loop (+ i 1) (cons (vector-ref idx->name i) acc)))
+        (else (loop (+ i 1) acc))))))
 
 ;; --- Single-source computation ---
 
@@ -128,7 +170,19 @@
 (define (compute-single-source ga source)
   (case (ga-fast-path-kind ga)
     ((unit-weight-counting)
-     (compute-via-count-paths-in-dag ga source))
+     ;; Pre-detect cyclicity to choose between the DAG kernel (in-place
+     ;; bignum, forward propagation on toposort) and the cyclic kernel
+     ;; (Tarjan SCC + condensation, then the DAG kernel on the condensed
+     ;; graph). topological-order-from already does the same DFS the
+     ;; non-fast-path branch uses; reusing it here is symmetric and means
+     ;; the kernel never sees cyclic input from this dispatch (its
+     ;; cycle-return path is downgraded to an internal-invariant error).
+     (call-with-values
+       (lambda () (topological-order-from ga source))
+       (lambda (_order cyclic?)
+         (if cyclic?
+             (compute-via-count-paths-cyclic ga source)
+             (compute-via-count-paths-in-dag  ga source)))))
     (else
      (call-with-values
        (lambda () (topological-order-from ga source))

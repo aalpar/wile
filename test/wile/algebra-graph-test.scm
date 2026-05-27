@@ -183,12 +183,14 @@
       ;; semiring-zero for unreachable
       (test 0 (graph-query ga "D" "A")))))
 
-(test-group "fast path — cyclic input raises"
-  ;; The kernel returns #f on cyclic-from-source input; the wrapper
-  ;; surfaces this as an error rather than spinning. Pins the
-  ;; raise-vs-hang behaviour rather than the message text.
-  (let ((ga (make-graph-analysis (bigint-counting-semiring) cyclic-adj #f)))
-    (test-error (graph-query ga "A" "C"))))
+(test-group "fast path — cyclic input dispatches to count-paths-cyclic"
+  ;; The bigint carrier now handles cyclic input via SCC condensation
+  ;; (sub-path 4C). The 3-cycle A→B→C→A is one non-trivial SCC; the
+  ;; entry-count from any source in the SCC is 1 (only one entry: the
+  ;; source itself, no other SCC reaches it). Every node reports 1.
+  (let* ((ga (make-graph-analysis (bigint-counting-semiring) cyclic-adj #f))
+         (r  (graph-query ga "A" "C")))
+    (test 1 r)))
 
 (test-group "fast path — vertex appearing only as edge target"
   ;; A graph where some node is referenced from another's out-edges but
@@ -298,6 +300,124 @@
          (r  (graph-query ga "a" "d")))
     ;; Result should be ~log(2) to float precision.
     (test #t (< (abs (- r (log 2))) 1e-12))))
+
+;;; ===== Sub-path 4C: cyclic-counting via SCC condensation =============
+
+(test-group "cyclic counting — cycle + tail"
+  ;; A→B→C→A is a 3-cycle; A→D is a tail edge. SCC0 = {A,B,C} (non-trivial);
+  ;; SCC1 = {D} (trivial). From A, the cycle SCC's entry count is 1 (the
+  ;; source) and D's count is 1 (one path from A's SCC to D).
+  (let* ((adj '(("A" . (("B") ("D")))
+                ("B" . (("C")))
+                ("C" . (("A")))
+                ("D" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test 1 (graph-query ga "A" "A"))
+    (test 1 (graph-query ga "A" "B"))
+    (test 1 (graph-query ga "A" "C"))
+    (test 1 (graph-query ga "A" "D"))))
+
+(test-group "cyclic counting — bowtie (two cycles sharing a vertex)"
+  ;; A→B→A and A→C→A. SCC = {A,B,C} (all reachable from each other).
+  ;; Single non-trivial SCC; all nodes report the SCC entry-count = 1.
+  (let* ((adj '(("A" . (("B") ("C")))
+                ("B" . (("A")))
+                ("C" . (("A")))))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test 1 (graph-query ga "A" "A"))
+    (test 1 (graph-query ga "A" "B"))
+    (test 1 (graph-query ga "A" "C"))))
+
+(test-group "cyclic counting — self-loop is a non-trivial SCC"
+  ;; A single node with a self-loop. SCC0 = {A} but non-trivial (has the loop).
+  (let* ((adj '(("A" . (("A")))))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test 1 (graph-query ga "A" "A"))
+    (test #t (graph-node-in-cycle? ga "A"))))
+
+(test-group "cyclic counting — mutual recursion + parallel tails (mini call graph)"
+  ;; f<->g forms a cycle. h is called only by f (one tail). i is called only by g.
+  ;; SCC0 = {f, g} (non-trivial); SCC1 = {h}; SCC2 = {i}.
+  ;; From f: cycle entry-count 1; h entry-count 1 (one edge f→h); i entry-count
+  ;; 1 (one edge g→i, but g is in source's SCC so it's a single inter-SCC edge).
+  (let* ((adj '(("f" . (("g") ("h")))
+                ("g" . (("f") ("i")))
+                ("h" . ())
+                ("i" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test 1 (graph-query ga "f" "f"))
+    (test 1 (graph-query ga "f" "g"))
+    (test 1 (graph-query ga "f" "h"))
+    (test 1 (graph-query ga "f" "i"))))
+
+(test-group "graph-node-in-cycle? on cycle + tail"
+  (let* ((adj '(("A" . (("B") ("D")))
+                ("B" . (("C")))
+                ("C" . (("A")))
+                ("D" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test #t (graph-node-in-cycle? ga "A"))
+    (test #t (graph-node-in-cycle? ga "B"))
+    (test #t (graph-node-in-cycle? ga "C"))
+    (test #f (graph-node-in-cycle? ga "D"))
+    (test #f (graph-node-in-cycle? ga "missing"))))
+
+(test-group "graph-cyclic-nodes on cycle + tail"
+  (let* ((adj '(("A" . (("B") ("D")))
+                ("B" . (("C")))
+                ("C" . (("A")))
+                ("D" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f))
+         (cy  (graph-cyclic-nodes ga)))
+    (test 3 (length cy))
+    ;; order matches adjacency-insertion order: A, B, C (D is acyclic, filtered out)
+    (test '("A" "B" "C") cy)))
+
+(test-group "graph-cyclic-nodes on fully acyclic graph"
+  (let* ((adj '(("A" . (("B"))) ("B" . (("C"))) ("C" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    (test '() (graph-cyclic-nodes ga))))
+
+(test-group "graph-analysis-sccs is idempotent (eq? same record)"
+  (let* ((adj '(("A" . (("B"))) ("B" . (("A")))))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f))
+         (s1  (graph-analysis-sccs ga))
+         (s2  (graph-analysis-sccs ga)))
+    (test #t (eq? s1 s2))
+    (test #t (graph-scc? s1))))
+
+(test-group "SCC cache shared across cyclic queries with different sources"
+  ;; Two queries against different sources must reuse the same <graph-scc>.
+  (let* ((adj '(("A" . (("B") ("D")))
+                ("B" . (("C")))
+                ("C" . (("A")))
+                ("D" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    ;; Force initial cache population via a query.
+    (graph-query ga "A" "A")
+    (let ((s1 (graph-analysis-sccs ga)))
+      ;; A second query for a different source must not invalidate or
+      ;; rebuild the cache.
+      (graph-query ga "B" "C")
+      (let ((s2 (graph-analysis-sccs ga)))
+        (test #t (eq? s1 s2))))))
+
+(test-group "graph-query-all on cyclic graph returns plain alist (Q-2 side query)"
+  ;; The alist shape is unchanged: bare (name . count) pairs. Callers
+  ;; that want to distinguish ask graph-node-in-cycle? separately.
+  (let* ((adj '(("A" . (("B") ("D")))
+                ("B" . (("C")))
+                ("C" . (("A")))
+                ("D" . ())))
+         (ga    (make-graph-analysis (bigint-counting-semiring) adj #f))
+         (dists (graph-query-all ga "A")))
+    (test 4 (length dists))
+    (for-each
+      (lambda (entry)
+        (test #t (pair? entry))
+        (test #t (string? (car entry)))
+        (test #t (integer? (cdr entry))))
+      dists)))
 
 (test-end)
 (test-exit)
