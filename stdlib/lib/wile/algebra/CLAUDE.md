@@ -160,14 +160,26 @@ operations directly. `<semiring>` is the first carrier of this pattern:
 | Symbol | Carrier | Status |
 |--------|---------|--------|
 | `'big-int` | `*BigInteger` | Active — opts into `(wile algebra graph)`'s `count-paths-in-dag` integration when conditions hold (see below) |
+| `'saturating` | int (clamped to `[0, CAP]`) | Active — `bounded-carrier-semiring?` and `semiring-cycle-safe?` recognise it |
+| `'boolean` | `#t`/`#f` | Active — `semiring-cycle-safe?` recognises it (idempotent ⊕) |
+| `'tropical` | number ∪ `'tropical-inf` | Active — `semiring-cycle-safe?` recognises it (idempotent ⊕) |
+| `'modular` | int in `[0, P-1]` | Advisory — declared by `modular-counting-semiring` for future Go-side modular kernels |
+| `'log-float` | float64 in log-space | Advisory — declared by `log-counting-semiring` |
 | `#f` (absence) | n/a | No fast path — dispatch falls through to the generic Scheme inner loop |
 
 Reserved symbols for future sub-paths (no fast path attached today;
 declaring them is equivalent to `#f`): `'integer`, `'rational`, `'real`,
-`'complex`, `'boolean`, `'log-float`, `'modular`, `'saturating`,
-`'opaque`. The active vocabulary reuses `values/NumericTypeSpec.schemeName`
-where applicable. Unknown symbols are accepted silently per the
-"never error on unrecognised carrier" contract below.
+`'complex`, `'opaque`. The active vocabulary reuses
+`values/NumericTypeSpec.schemeName` where applicable. Unknown symbols
+are accepted silently per the "never error on unrecognised carrier"
+contract below.
+
+The Scheme-side consumers of the carrier symbol today are
+`bounded-carrier-semiring?` (matches `'saturating`) and
+`semiring-cycle-safe?` (matches `'saturating`, `'boolean`, `'tropical`).
+Both are closed-set lookups: unknown symbols answer `#f`. Adding a new
+cycle-safe carrier requires extending the predicate's `case` list, not
+silently inferring from operations.
 
 The carrier symbol is *advisory* — declaring it doesn't change Scheme-visible
 arithmetic. It signals consumer-side fast-path eligibility. The built-in
