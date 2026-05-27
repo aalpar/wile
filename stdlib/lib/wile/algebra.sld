@@ -71,9 +71,9 @@
     ;; Semirings
     make-semiring semiring?
     semiring-plus semiring-times semiring-zero semiring-one
-    semiring-carrier
+    semiring-carrier semiring-eq?
     semiring->additive-monoid semiring->multiplicative-monoid
-    boolean-semiring tropical-semiring tropical-inf
+    boolean-semiring tropical-semiring tropical-inf tropical-eq?
     counting-semiring bigint-counting-semiring
     validate-semiring with-semiring
     ;; Groups

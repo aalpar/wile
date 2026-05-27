@@ -7,20 +7,25 @@
 ;;; - 0 annihilates ×: 0 × a = a × 0 = 0
 
 (define-record-type <semiring>
-  (make-semiring* plus-fn times-fn zero one carrier)
+  (make-semiring* plus-fn times-fn zero one carrier eq?-fn)
   semiring?
   (plus-fn  semiring-plus-fn)
   (times-fn semiring-times-fn)
   (zero     semiring-zero)
   (one      semiring-one)
-  (carrier  semiring-carrier))
+  (carrier  semiring-carrier)
+  (eq?-fn   semiring-eq?-fn))
 
 (define (make-semiring plus times zero one . opts)
-  "Construct a semiring from PLUS, TIMES, ZERO, and ONE.\nPLUS must be associative and commutative with ZERO as identity.\nTIMES must be associative with ONE as identity and must\ndistribute over PLUS. ZERO must annihilate TIMES from both sides.\n\nThe trailing alist OPTS accepts the following keys:\n  (carrier . SYM) — declares the carrier type. The symbol drives\n    consumer-side fast-path eligibility. Default #f (no fast path).\n    Vocabulary: 'big-int, 'integer, 'rational, 'real, 'complex,\n    'boolean, 'log-float, 'modular, 'saturating, 'opaque.\n\nExamples:\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-plus S 3 4))   => 7\n  (let ((S (make-semiring + * 0 1 '(carrier . big-int))))\n    (semiring-carrier S))    => big-int\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: semiring, rig, algebraic structure, distributive, carrier\n\nSee also: `semiring-carrier', `semiring->additive-monoid', `validate-semiring'."
+  "Construct a semiring from PLUS, TIMES, ZERO, and ONE.\nPLUS must be associative and commutative with ZERO as identity.\nTIMES must be associative with ONE as identity and must\ndistribute over PLUS. ZERO must annihilate TIMES from both sides.\n\nThe trailing alist OPTS accepts the following keys:\n  (carrier . SYM) — declares the carrier type. The symbol drives\n    consumer-side fast-path eligibility. Default #f (no fast path).\n    Vocabulary: 'big-int, 'integer, 'rational, 'real, 'complex,\n    'boolean, 'log-float, 'modular, 'saturating, 'opaque.\n  (eq? . PROC) — declares the carrier's equality predicate. PROC\n    is a binary procedure on carrier values; used by consumer\n    libraries (e.g. `(wile algebra graph)') for convergence\n    detection. Default `equal?'. Override when `equal?' is wrong\n    or expensive on the carrier — e.g. tolerance-based equality\n    on log-space floats, modular-aware equality on ℤ/Pℤ.\n\nExamples:\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-plus S 3 4))   => 7\n  (let ((S (make-semiring + * 0 1 '(carrier . big-int))))\n    (semiring-carrier S))    => big-int\n  (let ((S (make-semiring + * 0 1 (cons 'eq? =))))\n    (semiring-eq? S 1 1.0))  => #t\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: semiring, rig, algebraic structure, distributive, carrier, equality\n\nSee also: `semiring-carrier', `semiring-eq?', `semiring->additive-monoid', `validate-semiring'."
   (assert-procedure "make-semiring" plus)
   (assert-procedure "make-semiring" times)
-  (validate-opts-keys "make-semiring" opts '(carrier))
-  (make-semiring* plus times zero one (assv-or opts 'carrier #f)))
+  (validate-opts-keys "make-semiring" opts '(carrier eq?))
+  (let ((equality-fn (assv-or opts 'eq? equal?)))
+    (assert-procedure "make-semiring" equality-fn)
+    (make-semiring* plus times zero one
+                    (assv-or opts 'carrier #f)
+                    equality-fn)))
 
 (define (semiring-plus S a b)
   "Add A and B under semiring S's additive operation.\n\nExamples:\n  (semiring-plus (counting-semiring) 3 4)  => 7\n\nParameters:\n  S : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: addition, add, sum, plus, oplus"
@@ -29,6 +34,10 @@
 (define (semiring-times S a b)
   "Multiply A and B under semiring S's multiplicative operation.\n\nExamples:\n  (semiring-times (counting-semiring) 3 4)  => 12\n\nParameters:\n  S : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: multiplication, multiply, product, times, otimes"
   ((semiring-times-fn S) a b))
+
+(define (semiring-eq? S a b)
+  "Test equality of A and B under semiring S's declared equality predicate.\n\nReturns truthy iff A and B represent the same value on S's carrier.\nDefaults to host `equal?' when the semiring was constructed without\nan explicit `(eq? . PROC)' opt. Consumer libraries (notably `(wile\nalgebra graph)') consult this for fixpoint convergence detection — a\ncustom equality predicate is the principled hook for non-canonical\ncarriers (e.g. tolerance-based equality on log-space floats, modular-\naware equality on ℤ/Pℤ).\n\nThe contract is defined only on carrier values; out-of-carrier inputs\nare undefined behavior.\n\nExamples:\n  (semiring-eq? (counting-semiring) 3 3)  => #t\n  (semiring-eq? (counting-semiring) 3 4)  => #f\n  (let ((S (make-semiring + * 0.0 1.0\n                          (cons 'eq?\n                                (lambda (a b) (< (abs (- a b)) 1e-9))))))\n    (semiring-eq? S 1.0 1.0000000001))   => #t\n\nParameters:\n  S : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\nKeywords: equality, equal, equivalence, convergence, fixpoint\n\nSee also: `make-semiring', `semiring-carrier'."
+  ((semiring-eq?-fn S) a b))
 
 (define (semiring->additive-monoid S)
   "Extract the additive monoid (PLUS, ZERO) from semiring S.\n\nExamples:\n  (let ((M (semiring->additive-monoid (counting-semiring))))\n    (monoid-op M 3 4))  => 7\n\nParameters:\n  S : any\nReturns: any\nCategory: algebra\nKeywords: additive, forgetful functor, projection, plus monoid\n\nSee also: `semiring->multiplicative-monoid', `make-monoid'."
@@ -42,10 +51,12 @@
 
 (define (boolean-semiring)
   "Construct the Boolean semiring where PLUS is logical or and TIMES is logical and.\nThe additive identity (zero) is #f and the multiplicative\nidentity (one) is #t.\n\nExamples:\n  (let ((B (boolean-semiring)))\n    (semiring-plus B #f #t))   => #t\n  (let ((B (boolean-semiring)))\n    (semiring-times B #t #f))  => #f\n\nReturns: any\nCategory: algebra\nKeywords: boolean, logic, or, and, truth values\n\nSee also: `tropical-semiring', `counting-semiring', `make-semiring'."
+  ;; eq? declared explicitly: #t/#f are eq?-comparable singletons, faster than equal?
   (make-semiring
     (lambda (a b) (or a b))
     (lambda (a b) (and a b))
-    #f #t))
+    #f #t
+    (cons 'eq? eq?)))
 
 (define tropical-inf 'tropical-inf)
 
@@ -61,17 +72,30 @@
         ((eq? b tropical-inf) tropical-inf)
         (else (+ a b))))
 
+(define (tropical-eq? a b)
+  "Return #t iff A and B are equal under tropical-arithmetic semantics.\nHandles the tropical-inf symbol explicitly; falls back to numeric `=' on\nfinite values. Faster than `equal?' on numerics and correct on the\nasymmetric tropical-inf cases that `=' alone would error on.\n\nParameters:\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\n\nSee also: `tropical-semiring', `tropical-min', `tropical-add'."
+  (cond ((eq? a tropical-inf) (eq? b tropical-inf))
+        ((eq? b tropical-inf) #f)
+        (else (= a b))))
+
 (define (tropical-semiring)
   "Construct the tropical semiring where PLUS is min and TIMES is +.\nThe additive identity (zero) is tropical-inf and the multiplicative\nidentity (one) is 0. Useful for shortest-path problems.\nAll operations on finite values return exact results.\n\nExamples:\n  (let ((T (tropical-semiring)))\n    (semiring-plus T 3 5))   => 3\n  (let ((T (tropical-semiring)))\n    (semiring-times T 3 5))  => 8\n\nReturns: any\nCategory: algebra\nKeywords: tropical, min-plus, shortest path, optimization, graph algorithm\n\nSee also: `boolean-semiring', `counting-semiring', `make-semiring'."
-  (make-semiring tropical-min tropical-add tropical-inf 0))
+  ;; eq? declared explicitly: numeric = is faster than equal? on numerics,
+  ;; tropical-eq? wraps it to handle the tropical-inf symbol correctly.
+  (make-semiring tropical-min tropical-add tropical-inf 0
+                 (cons 'eq? tropical-eq?)))
 
 (define (counting-semiring)
   "Construct the standard counting semiring over exact integers.\nPLUS is addition, TIMES is multiplication, zero is 0, one is 1.\n\nExamples:\n  (let ((C (counting-semiring)))\n    (semiring-plus C 3 4))   => 7\n  (let ((C (counting-semiring)))\n    (semiring-times C 3 4))  => 12\n\nReturns: any\nCategory: algebra\nKeywords: natural numbers, counting, integers, standard arithmetic\n\nSee also: `boolean-semiring', `tropical-semiring', `bigint-counting-semiring', `make-semiring'."
-  (make-semiring + * 0 1))
+  ;; eq? declared explicitly: = handles exact integers, bignums (in-place
+  ;; compare on big.Int), and exact/inexact mixed cases consistently.
+  (make-semiring + * 0 1 (cons 'eq? =)))
 
 (define (bigint-counting-semiring)
   "Construct a counting semiring with carrier 'big-int, opting into the\nbignum-targeted fast path when consumed by `make-graph-analysis'. The\nScheme-visible operations behave identically to (counting-semiring) —\narithmetic auto-promotes to bignum on overflow — but the carrier\nannotation lets `(wile algebra graph)' route path-counting queries\nthrough `count-paths-in-dag', which uses in-place `*big.Int' arithmetic\nand sidesteps the per-relaxation allocation overhead of the generic\nBellman-Ford inner loop.\n\nFast-path attachment requires three conditions on the\n`make-graph-analysis' call site, checked at construction time:\n  1. carrier 'big-int (this semiring or any (carrier . big-int) variant);\n  2. weight-fn is #f (unit weights — the kernel has no edge-data slot);\n  3. all adjacency node identifiers are atomic (symbol, string, number,\n     char, boolean — the kernel's name->index interning uses a hashtable).\nWhen any condition fails, `make-graph-analysis' silently falls back to\nthe pure-Scheme inner loop. The carrier opt is advisory; declaring it\nnever changes Scheme-visible arithmetic or query results, only\ndispatch cost. Use `graph-analysis-fast-path?' to verify attachment.\n\nWeighted bignum acceleration (sub-path 4B) is not yet implemented;\nbig-int carrier + non-#f weight-fn currently routes to the slow path.\n\nExamples:\n  (let ((C (bigint-counting-semiring)))\n    (semiring-carrier C))    => big-int\n  (let ((C (bigint-counting-semiring)))\n    (semiring-plus C 3 4))   => 7\n\nReturns: any\nCategory: algebra\nKeywords: counting, bignum, big-int, carrier, fast path, allocation\n\nSee also: `counting-semiring', `semiring-carrier', `make-graph-analysis', `graph-analysis-fast-path?'."
-  (make-semiring + * 0 1 '(carrier . big-int)))
+  ;; eq? declared explicitly: = is in-place compare on *big.Int in Go,
+  ;; faster than equal?'s structural walk on the value-box.
+  (make-semiring + * 0 1 '(carrier . big-int) (cons 'eq? =)))
 
 ;; ─── Macro ───────────────────────────────────
 
