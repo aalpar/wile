@@ -879,5 +879,83 @@
     (test 3 (graph-spanning-tree-count G))
     (test '(0 2 -3 1) (graph-chromatic-polynomial G))))
 
+;;; ===== graph-reverse / graph-in-degree / graph-predecessors ===========
+
+(test-group "graph-reverse on undirected returns G unchanged"
+  (let ((G (make-graph k3-adj)))
+    (test #t (eq? G (graph-reverse G)))))
+
+(test-group "graph-reverse on directed chain: a→b→c becomes c→b→a"
+  (let* ((G   (make-graph p3-directed-adj '(directed? . #t)))
+         (rev (graph-reverse G)))
+    (test #t (graph-directed? rev))
+    (test '(a b c) (graph-vertices rev))             ;; vertex order preserved
+    (test '() (graph-neighbors rev 'a))              ;; a had no incoming edges
+    (test '((a . 1)) (graph-neighbors rev 'b))       ;; only a→b reversed
+    (test '((b . 1)) (graph-neighbors rev 'c))))     ;; only b→c reversed
+
+(test-group "graph-reverse cache: two calls return eq? same graph"
+  (let* ((G    (make-graph p3-directed-adj '(directed? . #t)))
+         (rev1 (graph-reverse G))
+         (rev2 (graph-reverse G)))
+    (test #t (eq? rev1 rev2))))
+
+(test-group "graph-reverse preserves multi? and self-loops? flags"
+  (let* ((G   (make-graph '((a . ((b . 1) (b . 2))) (b . ()))
+                          '(directed? . #t) '(multi? . #t)))
+         (rev (graph-reverse G)))
+    (test #t (graph-multi? rev))
+    (test #t (graph-self-loops? rev))
+    ;; two parallel a→b edges become two parallel b→a edges
+    (test 2 (length (graph-neighbors rev 'b)))))
+
+(test-group "graph-reverse preserves self-loops verbatim"
+  (let* ((G   (make-graph '((v . ((v . #f)))) '(directed? . #t)))
+         (rev (graph-reverse G)))
+    (test '((v . #f)) (graph-neighbors rev 'v))))
+
+(test-group "graph-in-degree on undirected K_3 (= graph-degree)"
+  (let ((G (make-graph k3-adj)))
+    (test 2 (graph-in-degree G 'a))
+    (test 2 (graph-in-degree G 'b))
+    (test 2 (graph-in-degree G 'c))))
+
+(test-group "graph-in-degree on directed chain a→b→c"
+  (let ((G (make-graph p3-directed-adj '(directed? . #t))))
+    (test 0 (graph-in-degree G 'a))
+    (test 1 (graph-in-degree G 'b))
+    (test 1 (graph-in-degree G 'c))))
+
+(test-group "graph-in-degree on directed fan-in"
+  ;; a→c, b→c, c stand-alone: c has in-degree 2
+  (let ((G (make-graph '((a . ((c . #f))) (b . ((c . #f))) (c . ()))
+                       '(directed? . #t))))
+    (test 0 (graph-in-degree G 'a))
+    (test 0 (graph-in-degree G 'b))
+    (test 2 (graph-in-degree G 'c))))
+
+(test-group "graph-in-degree raises on unknown vertex"
+  (let ((G (make-graph k3-adj)))
+    (test-error (graph-in-degree G 'missing))))
+
+(test-group "graph-predecessors on directed fan-in"
+  (let* ((G    (make-graph '((a . ((c . 1))) (b . ((c . 2))) (c . ()))
+                           '(directed? . #t)))
+         (pred (graph-predecessors G 'c)))
+    (test 2 (length pred))
+    ;; result includes both (a . 1) and (b . 2); order is reverse-adjacency order
+    (test #t (and (assv 'a pred) #t))
+    (test #t (and (assv 'b pred) #t))
+    (test 1 (cdr (assv 'a pred)))
+    (test 2 (cdr (assv 'b pred)))))
+
+(test-group "graph-predecessors on undirected = graph-neighbors"
+  (let ((G (make-graph k3-adj)))
+    (test (graph-neighbors G 'a) (graph-predecessors G 'a))))
+
+(test-group "graph-predecessors raises on unknown vertex"
+  (let ((G (make-graph k3-adj)))
+    (test-error (graph-predecessors G 'missing))))
+
 (test-end)
 (test-exit)
