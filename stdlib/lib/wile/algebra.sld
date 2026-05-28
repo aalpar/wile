@@ -185,6 +185,10 @@
     make-graph-analysis graph-analysis?
     graph-query graph-query-all
     graph-analysis-fast-path? graph-analysis-fast-path-kind
+    graph-analysis-sccs graph-node-in-cycle? graph-cyclic-nodes
+    graph-scc? make-graph-scc graph-scc-has-cycle?
+    graph-scc-scc-vec graph-scc-non-trivial-vec
+    graph-scc-name->idx graph-scc-idx->name graph-scc-num-nodes
     ;; Matrices
     make-semiring-matrix semiring-matrix?
     semiring-matrix-from-rows semiring-matrix->rows
@@ -266,6 +270,7 @@
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree
+    graph-in-degree graph-predecessors graph-reverse
     graph-edge? graph-has-vertex? graph-vertex-equiv? graph-setoid
     graph-order graph-size graph-directed? graph-multi? graph-self-loops?
     ;; Combinatorial graphs — tier predicates

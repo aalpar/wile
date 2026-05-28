@@ -2,7 +2,11 @@
   (description "Semiring-parameterized graph algorithms: shortest path, reachability, path counting via Bellman-Ford.")
   (export make-graph-analysis graph-analysis?
           graph-query graph-query-all
-          graph-analysis-fast-path? graph-analysis-fast-path-kind)
+          graph-analysis-fast-path? graph-analysis-fast-path-kind
+          graph-analysis-sccs graph-node-in-cycle? graph-cyclic-nodes
+          graph-scc? make-graph-scc graph-scc-has-cycle?
+          graph-scc-scc-vec graph-scc-non-trivial-vec
+          graph-scc-name->idx graph-scc-idx->name graph-scc-num-nodes)
   (import (scheme base)
           (wile algebra semiring))
   ;; (wile algebragraph) is the Go FFI extension exposing `count-paths-in-dag`,

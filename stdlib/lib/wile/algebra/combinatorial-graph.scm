@@ -26,7 +26,7 @@
 
 (define-record-type <graph>
   (%make-graph adjacency directed? multi? self-loops? setoid
-               order size seed neighbor-fn)
+               order size seed neighbor-fn reverse-cached)
   graph?
   (adjacency   graph-adjacency)
   (directed?   graph-directed?)
@@ -36,7 +36,12 @@
   (order       graph-order)
   (size        graph-size)
   (seed        graph-seed)
-  (neighbor-fn graph-neighbor-fn))
+  (neighbor-fn graph-neighbor-fn)
+  ;; reverse-cached: lazily populated <graph> with edges reversed, or #f
+  ;; if not yet computed. Source-independent and immutable once set, so the
+  ;; mutator is purely a memoization hook (compare ga-cache in graph.scm).
+  ;; Undirected graphs leave this #f because graph-reverse short-circuits.
+  (reverse-cached graph-reverse-cached set-graph-reverse-cached!))
 
 ;;; -- Symmetrization for undirected graphs --
 
@@ -169,7 +174,7 @@
            (edges (%adj-edges adj directed? setoid))
            (size  (length edges)))
       (%make-graph adj directed? multi? self-loops? setoid
-                   order size seed nfn))))
+                   order size seed nfn #f))))
 
 ;;; -- Accessors on derived data --
 
@@ -210,6 +215,126 @@
                 (+ acc 1)))
           0
           nbrs))))
+
+(define (graph-reverse G)
+  "Return G with every directed edge reversed.\n\nFor undirected graphs the reverse is the same graph (an undirected\nedge has no direction to flip); G itself is returned, no copy.\n\nFor directed graphs a fresh <graph> is built with the inverted\nadjacency: an edge u→v in G becomes v→u in the result. The result\nis cached on G so repeated calls return the same object (eq?).\nThe directed?, multi?, self-loops?, and setoid options are preserved.\nTier-2 generator metadata (seed, neighbor-fn) is dropped — the\nreverse adjacency is fully enumerated.\n\nExamples:\n  (graph-reverse (cycle-graph 3))                          ;; undirected → eq?\n  (graph-edges (graph-reverse\n                 (make-graph '((a . ((b))) (b . ()))\n                             '(directed? . #t))))\n  => ((b a #f))\n\nParameters:\n  G : graph\nReturns: graph\nCategory: algebra\nKeywords: reverse, transpose, inverted adjacency, in-degree, predecessors\n\nSee also: `graph-in-degree', `graph-predecessors'."
+  (cond
+    ((not (graph-directed? G)) G)
+    (else
+     (let ((cached (graph-reverse-cached G)))
+       (or cached
+           (let ((rev (%compute-reverse G)))
+             (set-graph-reverse-cached! G rev)
+             rev))))))
+
+;; Hashable values for Wile's make-hashtable (mirrors
+;; %atomic-node-id? / %adjacency-keys-all-atomic? in (wile algebra graph)).
+;; Local copy rather than a shared helper because the two graph libraries
+;; have no other shared private surface; promote (drop the % and export)
+;; if a third caller appears.
+(define (%hashable-vertex? v)
+  (or (symbol? v) (string? v) (number? v) (char? v) (boolean? v)))
+
+(define (%adj-vertices-all-hashable? adj)
+  (let outer ((entries adj))
+    (cond
+      ((null? entries) #t)
+      ((not (%hashable-vertex? (caar entries))) #f)
+      (else
+       (let inner ((es (cdar entries)))
+         (cond
+           ((null? es) (outer (cdr entries)))
+           ((not (%hashable-vertex? (caar es))) #f)
+           (else (inner (cdr es)))))))))
+
+(define (%compute-reverse G)
+  (let* ((adj (graph-adjacency G))
+         (vs  (%adj-vertices adj))
+         (rev-adj
+           (cond
+             ((%adj-vertices-all-hashable? adj)
+              (%compute-reverse-hashed adj vs))
+             (else
+              (%compute-reverse-setoid (graph-setoid G) adj vs)))))
+    ;; Call make-graph rather than %make-graph: we want the same shape
+    ;; validation, order/size derivation, and reverse-cached=#f init that
+    ;; user-constructed graphs get. The cost is one extra adjacency walk
+    ;; in make-graph's validator; trivial relative to graph-reverse itself.
+    (make-graph rev-adj
+                (cons 'directed?   #t)
+                (cons 'multi?      (graph-multi?      G))
+                (cons 'self-loops? (graph-self-loops? G))
+                (cons 'setoid      (graph-setoid G)))))
+
+;; Fast path: O(V+E) via single-pass hashtable accumulation.
+;; Wile's make-hashtable uses equal?, which agrees with default-setoid
+;; on atomic keys. A non-default setoid that identifies two distinct
+;; atomic values (e.g. numeric-setoid with 1 and 1.0) gets equal? bucketing
+;; here, which can produce a different — but equally well-defined —
+;; reverse adjacency than the setoid path below. The existing convention
+;; in (wile algebra graph) (%adjacency-keys-all-atomic? gating the bigint
+;; fast path) makes the same trade-off; preserving it keeps the two
+;; libraries' fast-path semantics in lockstep.
+(define (%compute-reverse-hashed adj vs)
+  (let ((preds (make-hashtable)))
+    ;; Walk forward adjacency once, prepending (u . d) onto v's
+    ;; predecessor list. O(1) per edge. After the walk, each list is in
+    ;; reverse-discovery order; one final per-vertex `reverse' restores
+    ;; the source-order graph-predecessors documents
+    ;; ("Order matches the order predecessors appear in the underlying
+    ;; reverse adjacency"). Total work: O(V + E) — strictly better than
+    ;; the setoid path's O(V * E) and the prior naive append's O(E^2).
+    (for-each
+      (lambda (entry)
+        (let ((u (car entry)))
+          (for-each
+            (lambda (p)
+              (let ((v (car p)))
+                (hashtable-set! preds v
+                  (cons (cons u (cdr p))
+                        (hashtable-ref preds v '())))))
+            (cdr entry))))
+      adj)
+    (map
+      (lambda (v) (cons v (reverse (hashtable-ref preds v '()))))
+      vs)))
+
+;; Slow path: O(V*E) — kept verbatim for graphs whose vertex keys aren't
+;; make-hashtable-compatible (pairs, vectors, records) or whose setoid
+;; mismatches equal? in a way the caller relies on. Self-loops survive
+;; verbatim: u->u in G is still u->u in the reverse.
+(define (%compute-reverse-setoid S adj vs)
+  (let ((rev-edges
+          (append-map
+            (lambda (entry)
+              (let ((u (car entry)))
+                (map (lambda (p) (cons (car p) (cons u (cdr p))))
+                     (cdr entry))))
+            adj)))
+    (map
+      (lambda (v)
+        (cons v
+              (filter-map
+                (lambda (re)
+                  (and (setoid-equiv? S (car re) v) (cdr re)))
+                rev-edges)))
+      vs)))
+
+(define (graph-in-degree G v)
+  "Return the in-degree of V in G.\nFor undirected graphs (where in- and out-degree coincide) this is the\nsame as `graph-degree' — a loop contributes 2. For directed graphs it\nreturns the count of edges arriving at V; a loop contributes 1 (one\nin-edge and one out-edge per directed-graph convention).\n\nRaises if V is not a vertex of G.\n\nExamples:\n  (graph-in-degree (cycle-graph 4) 0)  => 2\n  (graph-in-degree (make-graph '((a . ((b))) (b . ()))\n                               '(directed? . #t))\n                   'b)                 => 1\n\nParameters:\n  G : graph\n  v : vertex\nReturns: non-negative integer\nCategory: algebra\nKeywords: in-degree, predecessors, directed, valence\n\nSee also: `graph-degree', `graph-predecessors', `graph-reverse'."
+  (unless (graph-has-vertex? G v)
+    (error "graph-in-degree: vertex is not a member of G"
+           (list 'fix "use graph-has-vertex? to test membership first") v))
+  (cond
+    ((not (graph-directed? G)) (graph-degree G v))
+    (else (length (graph-neighbors (graph-reverse G) v)))))
+
+(define (graph-predecessors G v)
+  "Return the predecessor alist of V in G as ((u . edge-data) ...).\nFor each edge u→v in G (where u may equal v for a self-loop) the\nresult contains the (u . edge-data) pair. Order matches the order\npredecessors appear in the underlying reverse adjacency.\n\nFor undirected graphs `graph-predecessors' returns the same alist as\n`graph-neighbors' because every neighbor is both a successor and a\npredecessor.\n\nRaises if V is not a vertex of G.\n\nExamples:\n  (graph-predecessors (make-graph '((a . ((c))) (b . ((c))) (c . ()))\n                                  '(directed? . #t))\n                      'c)\n  => ((a . #f) (b . #f))\n\nParameters:\n  G : graph\n  v : vertex\nReturns: list of (vertex . edge-data) pairs\nCategory: algebra\nKeywords: predecessors, in-neighbors, directed, reverse adjacency\n\nSee also: `graph-neighbors', `graph-in-degree', `graph-reverse'."
+  (unless (graph-has-vertex? G v)
+    (error "graph-predecessors: vertex is not a member of G"
+           (list 'fix "use graph-has-vertex? to test membership first") v))
+  (graph-neighbors (graph-reverse G) v))
 
 (define (graph-edge? G u v)
   "Return #t if there is an edge from U to V in G.\nFor undirected graphs, symmetric: (graph-edge? G u v) ⟺ (graph-edge? G v u).\n\nExamples:\n  (graph-edge? (complete-graph 3) 0 1)  => #t\n  (graph-edge? (empty-graph 3) 0 1)     => #f\n\nParameters:\n  G : graph\n  u : vertex\n  v : vertex\nReturns: boolean\nCategory: algebra\nKeywords: edge, incidence, adjacency"
@@ -268,7 +393,8 @@
                            n
                            e-count
                            seed
-                           nfn)))
+                           nfn
+                           #f)))
            (else
             (let* ((v     (car frontier))
                    (rest  (cdr frontier))

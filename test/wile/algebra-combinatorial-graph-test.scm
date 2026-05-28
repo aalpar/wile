@@ -879,5 +879,144 @@
     (test 3 (graph-spanning-tree-count G))
     (test '(0 2 -3 1) (graph-chromatic-polynomial G))))
 
+;;; ===== graph-reverse / graph-in-degree / graph-predecessors ===========
+
+(test-group "graph-reverse on undirected returns G unchanged"
+  (let ((G (make-graph k3-adj)))
+    (test #t (eq? G (graph-reverse G)))))
+
+(test-group "graph-reverse on directed chain: a→b→c becomes c→b→a"
+  (let* ((G   (make-graph p3-directed-adj '(directed? . #t)))
+         (rev (graph-reverse G)))
+    (test #t (graph-directed? rev))
+    (test '(a b c) (graph-vertices rev))             ;; vertex order preserved
+    (test '() (graph-neighbors rev 'a))              ;; a had no incoming edges
+    (test '((a . 1)) (graph-neighbors rev 'b))       ;; only a→b reversed
+    (test '((b . 1)) (graph-neighbors rev 'c))))     ;; only b→c reversed
+
+(test-group "graph-reverse cache: two calls return eq? same graph"
+  (let* ((G    (make-graph p3-directed-adj '(directed? . #t)))
+         (rev1 (graph-reverse G))
+         (rev2 (graph-reverse G)))
+    (test #t (eq? rev1 rev2))))
+
+(test-group "graph-reverse preserves multi? and self-loops? flags"
+  (let* ((G   (make-graph '((a . ((b . 1) (b . 2))) (b . ()))
+                          '(directed? . #t) '(multi? . #t)))
+         (rev (graph-reverse G)))
+    (test #t (graph-multi? rev))
+    (test #t (graph-self-loops? rev))
+    ;; two parallel a→b edges become two parallel b→a edges
+    (test 2 (length (graph-neighbors rev 'b)))))
+
+(test-group "graph-reverse preserves self-loops verbatim"
+  (let* ((G   (make-graph '((v . ((v . #f)))) '(directed? . #t)))
+         (rev (graph-reverse G)))
+    (test '((v . #f)) (graph-neighbors rev 'v))))
+
+(test-group "graph-in-degree on undirected K_3 (= graph-degree)"
+  (let ((G (make-graph k3-adj)))
+    (test 2 (graph-in-degree G 'a))
+    (test 2 (graph-in-degree G 'b))
+    (test 2 (graph-in-degree G 'c))))
+
+(test-group "graph-in-degree on directed chain a→b→c"
+  (let ((G (make-graph p3-directed-adj '(directed? . #t))))
+    (test 0 (graph-in-degree G 'a))
+    (test 1 (graph-in-degree G 'b))
+    (test 1 (graph-in-degree G 'c))))
+
+(test-group "graph-in-degree on directed fan-in"
+  ;; a→c, b→c, c stand-alone: c has in-degree 2
+  (let ((G (make-graph '((a . ((c . #f))) (b . ((c . #f))) (c . ()))
+                       '(directed? . #t))))
+    (test 0 (graph-in-degree G 'a))
+    (test 0 (graph-in-degree G 'b))
+    (test 2 (graph-in-degree G 'c))))
+
+(test-group "graph-in-degree raises on unknown vertex"
+  (let ((G (make-graph k3-adj)))
+    (test-error (graph-in-degree G 'missing))))
+
+(test-group "graph-predecessors on directed fan-in"
+  (let* ((G    (make-graph '((a . ((c . 1))) (b . ((c . 2))) (c . ()))
+                           '(directed? . #t)))
+         (pred (graph-predecessors G 'c)))
+    (test 2 (length pred))
+    ;; result includes both (a . 1) and (b . 2); order is reverse-adjacency order
+    (test #t (and (assv 'a pred) #t))
+    (test #t (and (assv 'b pred) #t))
+    (test 1 (cdr (assv 'a pred)))
+    (test 2 (cdr (assv 'b pred)))))
+
+(test-group "graph-predecessors on undirected = graph-neighbors"
+  (let ((G (make-graph k3-adj)))
+    (test (graph-neighbors G 'a) (graph-predecessors G 'a))))
+
+(test-group "graph-predecessors raises on unknown vertex"
+  (let ((G (make-graph k3-adj)))
+    (test-error (graph-predecessors G 'missing))))
+
+(test-group "graph-reverse: source order preserved across fast (hashed) path"
+  ;; The hashed path prepends per edge and reverses at the end so that
+  ;; predecessor lists preserve source-order (the order predecessors
+  ;; appear in the underlying reverse adjacency, documented on
+  ;; graph-predecessors). Three sources fanning in to a common sink
+  ;; in adj-insertion order: a, b, c.
+  (let* ((G   (make-graph '((a . ((d . 1)))
+                            (b . ((d . 2)))
+                            (c . ((d . 3)))
+                            (d . ()))
+                          '(directed? . #t)))
+         (pred (graph-predecessors G 'd)))
+    (test '(a b c) (map car pred))
+    (test '(1 2 3) (map cdr pred))))
+
+(test-group "graph-reverse: non-atomic vertex keys still work (setoid path)"
+  ;; Pair-valued vertex IDs are not make-hashtable-compatible, so
+  ;; %compute-reverse falls back to the O(V*E) setoid loop. The
+  ;; behavioral contract must match the hashed path.
+  (let* ((G   (make-graph `(((x . 1) . (((y . 2) . a)))
+                            ((y . 2) . ())
+                            ((z . 3) . (((y . 2) . b))))
+                          '(directed? . #t)))
+         (rev (graph-reverse G)))
+    (test '((x . 1) (y . 2) (z . 3)) (graph-vertices rev))
+    (test '() (graph-neighbors rev '(x . 1)))
+    (test '() (graph-neighbors rev '(z . 3)))
+    (let ((pred (graph-neighbors rev '(y . 2))))
+      (test 2 (length pred))
+      (test 'a (cdr (setoid-assoc (graph-setoid rev) '(x . 1) pred)))
+      (test 'b (cdr (setoid-assoc (graph-setoid rev) '(z . 3) pred))))))
+
+;;; ===== Crosscheck follow-up coverage ==================================
+
+(test-group "graph-in-degree on directed self-loop (contributes 1)"
+  ;; Docstring contract: directed-graph convention treats a loop as one
+  ;; in-edge plus one out-edge, so in-degree contributes 1 (not 2 as
+  ;; undirected does). Pin the directed-self-loop case directly.
+  (let ((G (make-graph '((v . ((v . #f)))) '(directed? . #t))))
+    (test 1 (graph-in-degree G 'v))))
+
+(test-group "graph-reverse preserves edge-data positionally (multi-edge)"
+  ;; Earlier fan-in test uses (assv 'a pred) — order-insensitive. This
+  ;; test pins which edge-data attaches to which predecessor with complex
+  ;; values that would alias under accidental cons-cell sharing.
+  (let* ((G   (make-graph
+                '((a . (("metadata-a" . #(1 2 3))))
+                  (b . (("metadata-b" . (4 5 6))))
+                  ("metadata-a" . ())
+                  ("metadata-b" . ()))
+                '(directed? . #t)))
+         (pred-a (graph-predecessors G "metadata-a"))
+         (pred-b (graph-predecessors G "metadata-b")))
+    ;; Each target has exactly one predecessor with the expected data.
+    (test 1 (length pred-a))
+    (test 'a (caar pred-a))
+    (test #(1 2 3) (cdar pred-a))
+    (test 1 (length pred-b))
+    (test 'b (caar pred-b))
+    (test '(4 5 6) (cdar pred-b))))
+
 (test-end)
 (test-exit)
