@@ -18,36 +18,75 @@
 ;; --- Record types ---
 
 (define-record-type <graph-analysis>
-  (make-graph-analysis* semiring adjacency weight-fn cache fast-path-kind scc)
+  (make-graph-analysis* semiring adjacency weight-fn cache fast-path-kind scc interning)
   graph-analysis?
   (semiring         ga-semiring)
   (adjacency        ga-adjacency)
   (weight-fn        ga-weight-fn)
-  (cache            ga-cache set-ga-cache!)
+  (cache            ga-cache       set-ga-cache!)
   (fast-path-kind   ga-fast-path-kind)
-  ;; scc: lazily populated <graph-scc> bundling SCC structure + name interning.
-  ;; Source-independent and immutable once set; mutator is purely a memoization
-  ;; hook. #f until first call to graph-analysis-sccs or a cyclic-counting query.
-  (scc              ga-scc          set-ga-scc!))
+  ;; scc: lazily populated <graph-scc> holding the SCC decomposition.
+  ;; Source-independent and immutable once set; mutator is purely a
+  ;; memoization hook. #f until first call to graph-analysis-sccs or a
+  ;; cyclic-counting query.
+  (scc              ga-scc         set-ga-scc!)
+  ;; interning: lazily populated <graph-interning> holding the
+  ;; name<->index translation state both the DAG and cyclic kernel
+  ;; adapters need. Source-independent. Hoisted up from <graph-scc>
+  ;; (where it lived in the initial PR #759) so the DAG adapter can
+  ;; reuse it across multi-source queries — previously each DAG query
+  ;; re-walked the adjacency to build a fresh hashtable, which on
+  ;; large graphs (>100 nodes) dominated the kernel's actual cost
+  ;; (staff-engineer assessment on feat/graph-cyclic-dispatch).
+  (interning        ga-interning   set-ga-interning!))
 
-;; <graph-scc> bundles the SCC decomposition of a <graph-analysis>'s
-;; adjacency together with the name<->index interning state the Go-side
-;; kernels need. Source-independent: every source on the same analysis
-;; sees the same SCC structure and the same interning. The per-source
-;; counts-by-scc returned by count-paths-cyclic are NOT cached here
-;; (they go in ga-cache like every other per-source query result).
+;; <graph-interning> is the name<->index translation cache shared by the
+;; DAG and cyclic kernel adapters. Build once per <graph-analysis> via
+;; %ensure-interning!; both adapters then consult it. Source-independent
+;; (depends only on ga-adjacency, which is immutable on <graph-analysis>).
+;;
+;; Not exported as a public type — the high-level API (graph-query,
+;; graph-cyclic-nodes, etc.) is the user-facing surface; <graph-scc>
+;; exposes the same data via delegating accessors for power-user
+;; introspection.
+(define-record-type <graph-interning>
+  (make-graph-interning* name->idx idx->name num-nodes edges)
+  %graph-interning?
+  (name->idx %graph-interning-name->idx)   ;; hashtable name -> int
+  (idx->name %graph-interning-idx->name)   ;; vector idx -> name (may be over-allocated)
+  (num-nodes %graph-interning-num-nodes)   ;; valid entries in idx->name
+  (edges     %graph-interning-edges))      ;; list of (u . v) integer-pair edges
+
+;; <graph-scc> holds the SCC decomposition of a <graph-analysis>'s
+;; adjacency. The name<->index interning state lives on a separate
+;; <graph-interning> record on <graph-analysis>; <graph-scc> carries a
+;; back-reference so its public accessors (graph-scc-name->idx etc.)
+;; can delegate without changing their signatures.
+;;
+;; Source-independent: every source on the same analysis sees the same
+;; SCC structure. The per-source counts-by-scc returned by
+;; count-paths-cyclic are NOT cached here (they go in ga-cache like
+;; every other per-source query result).
 (define-record-type <graph-scc>
-  (make-graph-scc* scc-vec non-trivial-vec name->idx idx->name num-nodes edges)
+  (make-graph-scc* scc-vec non-trivial-vec interning)
   graph-scc?
   (scc-vec          graph-scc-scc-vec)         ;; node-idx -> scc-id (vector of ints)
   (non-trivial-vec  graph-scc-non-trivial-vec) ;; scc-id   -> bool   (vector)
-  (name->idx        graph-scc-name->idx)       ;; hashtable name -> int
-  (idx->name        graph-scc-idx->name)       ;; vector idx -> name
-  (num-nodes        graph-scc-num-nodes)       ;; how many entries in idx->name
-  (edges            graph-scc-edges))          ;; list of (u . v) integer-pair edges
+  (interning        %graph-scc-interning))     ;; back-ref to <graph-interning>
+
+;; Delegating accessors keep the public API stable across the
+;; <graph-interning> hoist. Power users still write
+;; (graph-scc-name->idx s), but the data lives on the analysis's
+;; <graph-interning>, shared with the DAG adapter.
+(define (graph-scc-name->idx scc-rec)
+  (%graph-interning-name->idx (%graph-scc-interning scc-rec)))
+(define (graph-scc-idx->name scc-rec)
+  (%graph-interning-idx->name (%graph-scc-interning scc-rec)))
+(define (graph-scc-num-nodes scc-rec)
+  (%graph-interning-num-nodes (%graph-scc-interning scc-rec)))
 
 (define (make-graph-scc scc-vec non-trivial-vec name->idx idx->name num-nodes edges)
-  "Construct a <graph-scc> bundling an SCC decomposition with name-interning state.\n\nIntended for internal use by `%ensure-graph-scc!'. Validates: scc-vec\nis a vector of length num-nodes; non-trivial-vec is a vector; num-nodes\nis a non-negative integer; idx->name is a vector with at least num-nodes\nentries; edges is a list. Does NOT validate cross-vector index consistency\n(every scc-id in scc-vec must index non-trivial-vec) — that contract is\nenforced by the kernel and trusted on internal calls.\n\nParameters:\n  scc-vec : vector of non-negative integers\n  non-trivial-vec : vector of booleans\n  name->idx : hashtable\n  idx->name : vector\n  num-nodes : non-negative integer\n  edges : list of (integer . integer) pairs\nReturns: graph-scc\nCategory: algebra"
+  "Construct a <graph-scc> bundling an SCC decomposition with name-interning state.\n\nIntended for internal use by `%ensure-graph-scc!'. Signature is\nstable across the internal `<graph-interning>' split (the interning\nargs are wrapped into a fresh `<graph-interning>' record inside).\n\nValidates: scc-vec is a vector of length num-nodes; non-trivial-vec\nis a vector; num-nodes is a non-negative integer; idx->name is a\nvector with at least num-nodes entries; edges is a list. Does NOT\nvalidate cross-vector index consistency (every scc-id in scc-vec\nmust index non-trivial-vec) — that contract is enforced by the kernel\nand trusted on internal calls.\n\nParameters:\n  scc-vec : vector of non-negative integers\n  non-trivial-vec : vector of booleans\n  name->idx : hashtable\n  idx->name : vector\n  num-nodes : non-negative integer\n  edges : list of (integer . integer) pairs\nReturns: graph-scc\nCategory: algebra"
   (unless (and (integer? num-nodes) (exact? num-nodes) (>= num-nodes 0))
     (error "make-graph-scc: num-nodes must be a non-negative exact integer" num-nodes))
   (unless (and (vector? scc-vec) (= (vector-length scc-vec) num-nodes))
@@ -62,7 +101,8 @@
            num-nodes (vector-length idx->name)))
   (unless (list? edges)
     (error "make-graph-scc: edges must be a list" edges))
-  (make-graph-scc* scc-vec non-trivial-vec name->idx idx->name num-nodes edges))
+  (let ((interning (make-graph-interning* name->idx idx->name num-nodes edges)))
+    (make-graph-scc* scc-vec non-trivial-vec interning)))
 
 ;; The fast-path kernel (count-paths-in-dag) lives in (wile algebragraph),
 ;; which is an opt-in Go extension only present under the `kitchen-sink`
@@ -114,7 +154,7 @@
                        'bigint-counting)
                       (else #f)))
          (wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
-    (make-graph-analysis* semiring adjacency wfn '() fast-kind #f)))
+    (make-graph-analysis* semiring adjacency wfn '() fast-kind #f #f)))
 
 ;; --- Fast-path introspection ---
 
@@ -291,6 +331,46 @@
                           (inner (cdr es) (cons (cons u v) acc2))))))))))))
       (values name->idx idx->name next-idx edges))))
 
+;; %ensure-interning! — populate ga-interning if not yet computed.
+;; Pure-Scheme: does not call into the (wile algebragraph) extension
+;; (it only builds the name<->index translation that the kernels consume).
+;; Safe to call when the extension isn't loaded; the kernel-call sites
+;; that depend on the extension perform their own cond-expand checks.
+;;
+;; Raises if the adjacency has non-atomic node identifiers — Wile's
+;; make-hashtable requires atomic keys (symbol, string, number, char,
+;; boolean). Reachable from compute-via-count-paths-in-dag (which is
+;; only dispatched when fast-path-kind = 'bigint-counting, which itself
+;; is only set when adjacency is all-atomic, so this is a defensive
+;; check that should never fire on the DAG path) and from
+;; %ensure-graph-scc! (which IS reachable from the public side-query
+;; API on any-carrier analyses, so the check is load-bearing there).
+(define (%ensure-interning! ga)
+  (or (ga-interning ga)
+      (cond
+        ((not (%adjacency-keys-all-atomic? (ga-adjacency ga)))
+         (error
+          (string-append
+           "%ensure-interning!: cannot intern adjacency with non-atomic "
+           "node identifiers. The Go kernel's name-interning hashtable "
+           "requires atomic keys (symbol, string, number, char, "
+           "boolean); pairs, vectors, and lists are rejected. Reachable "
+           "from the bigint-counting dispatch and from the SCC side-"
+           "query API (graph-analysis-sccs, graph-node-in-cycle?, "
+           "graph-cyclic-nodes).")
+          (list 'fix
+                "use atomic node identifiers, or stay within the slow-"
+                "path API (graph-query / graph-query-all) which accepts "
+                "any equal?-comparable values.")))
+        (else
+         (call-with-values
+           (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
+           (lambda (name->idx idx->name num-nodes edges)
+             (let ((rec (make-graph-interning* name->idx idx->name
+                                               num-nodes edges)))
+               (set-ga-interning! ga rec)
+               rec)))))))
+
 ;; Shared projection helper: walk node indices [0, num-nodes), look each
 ;; one up in `counts-vec' (length num-nodes), and emit
 ;; (idx->name[i] . counts-vec[i]) for non-zero entries. Used by the DAG
@@ -339,26 +419,28 @@
 (define (compute-via-count-paths-in-dag ga source)
   (cond-expand
     ((library (wile algebragraph))
-     (call-with-values
-       (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
-       (lambda (name->idx idx->name num-nodes edges)
-         (let ((src-idx (hashtable-ref name->idx source -1)))
-           (cond
-             ;; Source not in graph — match the slow path's permissive
-             ;; behaviour: return an empty distance alist so `graph-query'
-             ;; surfaces `semiring-zero' for every target. The fast path
-             ;; must not narrow the contract that the carrier opt is
-             ;; documented to leave unchanged.
-             ((< src-idx 0) '())
-             (else
-              (let ((counts (count-paths-in-dag num-nodes edges src-idx)))
-                (cond
-                  ;; #f from the kernel = reachable subgraph is cyclic.
-                  ;; Propagate to the dispatcher; do not raise — the cyclic
-                  ;; adapter handles this case.
-                  ((not counts) #f)
-                  (else
-                   (%project-counts-to-alist idx->name counts num-nodes))))))))))
+     (let* ((interning (%ensure-interning! ga))
+            (name->idx (%graph-interning-name->idx interning))
+            (idx->name (%graph-interning-idx->name interning))
+            (num-nodes (%graph-interning-num-nodes interning))
+            (edges     (%graph-interning-edges interning))
+            (src-idx   (hashtable-ref name->idx source -1)))
+       (cond
+         ;; Source not in graph — match the slow path's permissive
+         ;; behaviour: return an empty distance alist so `graph-query'
+         ;; surfaces `semiring-zero' for every target. The fast path
+         ;; must not narrow the contract that the carrier opt is
+         ;; documented to leave unchanged.
+         ((< src-idx 0) '())
+         (else
+          (let ((counts (count-paths-in-dag num-nodes edges src-idx)))
+            (cond
+              ;; #f from the kernel = reachable subgraph is cyclic.
+              ;; Propagate to the dispatcher; do not raise — the cyclic
+              ;; adapter handles this case.
+              ((not counts) #f)
+              (else
+               (%project-counts-to-alist idx->name counts num-nodes))))))))
     (else
      (error
       (string-append
@@ -395,11 +477,12 @@
   (cond-expand
     ((library (wile algebragraph))
      (let* ((scc-record (%ensure-graph-scc! ga))
-            (name->idx  (graph-scc-name->idx scc-record))
-            (idx->name  (graph-scc-idx->name scc-record))
-            (num-nodes  (graph-scc-num-nodes scc-record))
-            (scc-vec    (graph-scc-scc-vec   scc-record))
-            (edges      (graph-scc-edges     scc-record))
+            (interning  (%graph-scc-interning scc-record))
+            (name->idx  (%graph-interning-name->idx interning))
+            (idx->name  (%graph-interning-idx->name interning))
+            (num-nodes  (%graph-interning-num-nodes interning))
+            (edges      (%graph-interning-edges interning))
+            (scc-vec    (graph-scc-scc-vec scc-record))
             (src-idx    (hashtable-ref name->idx source -1)))
        (cond
          ((< src-idx 0) '())
@@ -444,49 +527,27 @@
   (or (ga-scc ga)
       (cond-expand
         ((library (wile algebragraph))
-         (cond
-           ;; The kernel interns node identifiers into Wile's make-hashtable,
-           ;; which restricts keys to atomic Hashable values (symbol, string,
-           ;; number, char, boolean). Public APIs (graph-analysis-sccs,
-           ;; graph-node-in-cycle?, graph-cyclic-nodes) can be called on
-           ;; analyses whose adjacency has non-atomic node IDs (pairs, vectors,
-           ;; lists) — for those, the fast-path-eligibility check at
-           ;; make-graph-analysis already suppresses the dispatch fast path,
-           ;; but the side-query API still routes here. Surface the
-           ;; restriction explicitly rather than letting hashtable-set! fail
-           ;; mid-walk with an opaque error (Copilot finding on PR #759).
-           ((not (%adjacency-keys-all-atomic? (ga-adjacency ga)))
-            (error
-             (string-append
-              "%ensure-graph-scc!: cannot compute SCC on adjacency with "
-              "non-atomic node identifiers. The Go kernel's name-interning "
-              "hashtable requires atomic keys (symbol, string, number, "
-              "char, boolean); pairs, vectors, and lists are rejected. "
-              "Reachable from graph-analysis-sccs, graph-node-in-cycle?, "
-              "graph-cyclic-nodes, and the cyclic-counting dispatch.")
-             (list 'fix
-                   "use atomic node identifiers, or stay within the slow-path "
-                   "API (graph-query / graph-query-all) which accepts any "
-                   "equal?-comparable values.")))
-           (else
-            (call-with-values
-              (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
-              (lambda (name->idx idx->name num-nodes edges)
-                (cond
-                  ((zero? num-nodes)
-                   (let ((rec (make-graph-scc* (make-vector 0) (make-vector 0)
-                                               name->idx idx->name 0 edges)))
-                     (set-ga-scc! ga rec)
-                     rec))
-                  (else
-                   (call-with-values
-                     (lambda () (count-paths-cyclic num-nodes edges 0))
-                     (lambda (scc-vec _counts non-trivial-vec)
-                       (let ((rec (make-graph-scc*
-                                    scc-vec non-trivial-vec
-                                    name->idx idx->name num-nodes edges)))
-                         (set-ga-scc! ga rec)
-                         rec))))))))))
+         ;; %ensure-interning! handles the non-atomic-key check and raises
+         ;; a clear error if the adjacency can't be interned. After this
+         ;; call, the interning record is guaranteed populated and the
+         ;; integer-indexed kernel inputs are ready.
+         (let* ((interning (%ensure-interning! ga))
+                (num-nodes (%graph-interning-num-nodes interning))
+                (edges     (%graph-interning-edges interning)))
+           (cond
+             ((zero? num-nodes)
+              (let ((rec (make-graph-scc* (make-vector 0) (make-vector 0)
+                                          interning)))
+                (set-ga-scc! ga rec)
+                rec))
+             (else
+              (call-with-values
+                (lambda () (count-paths-cyclic num-nodes edges 0))
+                (lambda (scc-vec _counts non-trivial-vec)
+                  (let ((rec (make-graph-scc*
+                               scc-vec non-trivial-vec interning)))
+                    (set-ga-scc! ga rec)
+                    rec)))))))
         (else
          (error
           (string-append
