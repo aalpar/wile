@@ -198,6 +198,17 @@
      ;; enough to erase the fast-path speedup on large DAGs (Copilot
      ;; finding on PR #759).
      ;;
+     ;; LOAD-BEARING CONTRACT: compute-via-count-paths-in-dag must return
+     ;;   - an alist (truthy)         on acyclic input with reachable nodes
+     ;;   - '() (truthy in Scheme)    on source-not-in-graph
+     ;;   - #f (the ONLY falsy value) on cyclic input reachable from source
+     ;; The `or' below relies on this trichotomy: '() short-circuits to an
+     ;; empty alist (correct), #f falls through to the cyclic adapter. A
+     ;; future refactor that returns a different falsy/truthy shape (e.g.
+     ;; 'cyclic symbol, or wrapping the alist in a record) silently
+     ;; misroutes — see `test-group "dispatch contract: ..."' in
+     ;; algebra-graph-test.scm for the regression canary.
+     ;;
      ;; If ga-scc is already populated, the graph is known cyclic
      ;; (population only happens via the cyclic kernel or the side-query
      ;; API), so skip the wasted DAG call and route directly. Acyclic
@@ -299,16 +310,25 @@
 
 ;; --- Sub-path 4A: unit-weight bigint counting via count-paths-in-dag ---
 ;;
-;; Returns:
-;;   - alist of (name . count) for non-zero entries on acyclic input;
-;;   - '() if SOURCE is not in the adjacency;
-;;   - #f if the reachable subgraph contains a cycle.
+;; LOAD-BEARING CONTRACT (consumed by compute-single-source's `or'-dispatch):
+;;   - alist of (name . count) on acyclic input with reachable nodes (TRUTHY)
+;;   - '() if SOURCE is not in the adjacency                          (TRUTHY)
+;;   - #f if the reachable subgraph contains a cycle                  (FALSY)
 ;;
-;; The #f return is the signal `compute-single-source's `or'-dispatch
-;; uses to fall through to `compute-via-count-paths-cyclic'. The kernel
-;; (count-paths-in-dag, in Go) does its own O(V+E) cycle detection
-;; internally; relying on its #f return saves the dispatcher a redundant
-;; Scheme-side topological pass.
+;; The dispatcher's `(or (compute-via-count-paths-in-dag ga source)
+;;                       (compute-via-count-paths-cyclic ga source))'
+;; distinguishes the FALSY case (#f -> fall through to cyclic adapter)
+;; from the TRUTHY cases ('() and alist -> short-circuit, return as-is).
+;; Do NOT change the falsy value to e.g. 'cyclic-symbol or wrap returns
+;; in a record without also updating the dispatcher — the asymmetry
+;; between `'()' (truthy) and `#f' (falsy) is the entire signal.
+;;
+;; Regression canary: test-group "dispatch contract: ..." in
+;; algebra-graph-test.scm pins this trichotomy explicitly.
+;;
+;; Implementation: the kernel (count-paths-in-dag, in Go) does its own
+;; O(V+E) cycle detection internally; relying on its #f return saves
+;; the dispatcher a redundant Scheme-side topological pass.
 ;;
 ;; `cond-expand' lives inside the function body so the top-level binding
 ;; `compute-via-count-paths-in-dag' is visible to the dispatcher

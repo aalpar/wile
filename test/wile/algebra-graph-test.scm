@@ -489,6 +489,42 @@
                      (lambda (_) 1))))
       (test '(a b) (graph-cyclic-nodes ga-trop)))))
 
+(test-group "dispatch contract: compute-via-count-paths-in-dag tri-valued return"
+  ;; Pins the LOAD-BEARING CONTRACT documented at compute-via-count-paths-in-dag:
+  ;;   - alist  on acyclic + reachable source       (TRUTHY)
+  ;;   - '()    on source-not-in-graph              (TRUTHY)
+  ;;   - #f     on cyclic reachable from source     (FALSY)
+  ;;
+  ;; The dispatcher's `or' relies on this trichotomy. A future refactor
+  ;; that returns a non-#f falsy / non-'() truthy / wrapped result would
+  ;; silently misroute. This group exercises all three paths through the
+  ;; public surface (graph-query, graph-query-all) — by observing the
+  ;; downstream-correct behavior on each, it pins the contract without
+  ;; exposing the internal function.
+  (let* ((cyclic-adj  '(("A" . (("B")))
+                        ("B" . (("A")))))
+         (acyclic-adj '(("A" . (("B")))
+                        ("B" . ())))
+         (cyc-ga      (make-graph-analysis (bigint-counting-semiring) cyclic-adj #f))
+         (acyc-ga     (make-graph-analysis (bigint-counting-semiring) acyclic-adj #f)))
+    ;; FALSY path: #f from kernel triggers cyclic fallback -> integer count.
+    ;; If compute-via-count-paths-in-dag returns the wrong shape, this gets
+    ;; a non-integer (or an error from the dispatcher's `or' returning
+    ;; e.g. a symbol that flows into assoc).
+    (test #t (integer? (graph-query cyc-ga "A" "B")))
+    (test 1 (graph-query cyc-ga "A" "B"))
+    ;; TRUTHY-alist path: acyclic + reachable -> integer count via DAG kernel.
+    (test #t (integer? (graph-query acyc-ga "A" "B")))
+    (test 1 (graph-query acyc-ga "A" "B"))
+    ;; TRUTHY-'() path: source not in graph -> empty alist, no fallback,
+    ;; graph-query surfaces semiring-zero.
+    (test '() (graph-query-all acyc-ga "ZZZ"))
+    (test 0 (graph-query acyc-ga "ZZZ" "A"))
+    ;; Same for cyclic: source-not-found returns '() WITHOUT triggering the
+    ;; cyclic adapter (which would also return '() for an unknown source,
+    ;; but the dispatch must take the short-circuit path, not the fallback).
+    (test '() (graph-query-all cyc-ga "ZZZ"))))
+
 (test-group "graph-analysis-sccs raises on non-atomic node identifiers"
   ;; Wile's make-hashtable restricts keys to atomic Hashable values.
   ;; The kernel's name-interning step relies on this; on non-atomic node IDs
