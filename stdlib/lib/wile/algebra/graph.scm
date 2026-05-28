@@ -708,7 +708,12 @@
          (adj (ga-adjacency ga))
          (wfn (ga-weight-fn ga))
          (V   (length adj))
-         (E   (apply + (map (lambda (entry) (length (cdr entry))) adj)))
+         ;; Fold to count edges; `(apply + ...)' on graphs with >~10k nodes
+         ;; exhausts the interpreter call-depth limit by expanding into a
+         ;; recursive variadic call chain proportional to argument count.
+         (E   (let edge-count ((xs adj) (n 0))
+                (if (null? xs) n
+                    (edge-count (cdr xs) (+ n (length (cdr (car xs))))))))
          ;; max 1 below guards trivial graphs (E=0): without it, max-iter
          ;; would be 0 and the cap would fire on the very first pop.
          (max-iter (* 2 V (max 1 E))))
