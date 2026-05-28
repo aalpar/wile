@@ -85,6 +85,25 @@
 (define (graph-scc-num-nodes scc-rec)
   (%graph-interning-num-nodes (%graph-scc-interning scc-rec)))
 
+;; True iff the SCC decomposition contains any non-trivial SCC (i.e.
+;; the underlying adjacency has at least one cycle). Linear in the
+;; number of SCCs, which is bounded by the number of nodes and is
+;; typically much smaller for sparse cyclic graphs. The dispatch path
+;; in compute-single-source relies on this to distinguish "ga-scc was
+;; populated because the graph IS cyclic" from "ga-scc was populated
+;; by a side-query (graph-analysis-sccs / graph-node-in-cycle? /
+;; graph-cyclic-nodes) on an acyclic graph". Without this distinction
+;; the bigint dispatch would skip the faster DAG kernel forever after
+;; the first side-query on an acyclic graph (Copilot finding on PR #759).
+(define (graph-scc-has-cycle? scc-rec)
+  (let* ((nt-vec (graph-scc-non-trivial-vec scc-rec))
+         (n      (vector-length nt-vec)))
+    (let loop ((i 0))
+      (cond
+        ((= i n) #f)
+        ((vector-ref nt-vec i) #t)
+        (else (loop (+ i 1)))))))
+
 (define (make-graph-scc scc-vec non-trivial-vec name->idx idx->name num-nodes edges)
   "Construct a <graph-scc> bundling an SCC decomposition with name-interning state.\n\nIntended for internal use by `%ensure-graph-scc!'. Signature is\nstable across the internal `<graph-interning>' split (the interning\nargs are wrapped into a fresh `<graph-interning>' record inside).\n\nValidates: scc-vec is a vector of length num-nodes; non-trivial-vec\nis a vector; num-nodes is a non-negative integer; idx->name is a\nvector with at least num-nodes entries; edges is a list. Does NOT\nvalidate cross-vector index consistency (every scc-id in scc-vec\nmust index non-trivial-vec) — that contract is enforced by the kernel\nand trusted on internal calls.\n\nParameters:\n  scc-vec : vector of non-negative integers\n  non-trivial-vec : vector of booleans\n  name->idx : hashtable\n  idx->name : vector\n  num-nodes : non-negative integer\n  edges : list of (integer . integer) pairs\nReturns: graph-scc\nCategory: algebra"
   (unless (and (integer? num-nodes) (exact? num-nodes) (>= num-nodes 0))
@@ -249,17 +268,23 @@
      ;; misroutes — see `test-group "dispatch contract: ..."' in
      ;; algebra-graph-test.scm for the regression canary.
      ;;
-     ;; If ga-scc is already populated, the graph is known cyclic
-     ;; (population only happens via the cyclic kernel or the side-query
-     ;; API), so skip the wasted DAG call and route directly. Acyclic
-     ;; graphs that haven't had graph-analysis-sccs called on them never
-     ;; see the cyclic path.
-     (cond
-       ((ga-scc ga)
-        (compute-via-count-paths-cyclic ga source))
-       (else
-        (or (compute-via-count-paths-in-dag ga source)
-            (compute-via-count-paths-cyclic ga source)))))
+     ;; If ga-scc is populated AND the decomposition contains a cycle,
+     ;; the graph is known cyclic — skip the wasted DAG call and route
+     ;; directly. ga-scc population is NOT itself proof of cyclicity:
+     ;; the side-query API (graph-analysis-sccs, graph-node-in-cycle?,
+     ;; graph-cyclic-nodes) computes SCCs on any graph, including
+     ;; acyclic ones (all SCCs trivial). Without the cycle? check, a
+     ;; bigint query after a side-query on an acyclic graph would
+     ;; permanently demote that analysis to the cyclic kernel,
+     ;; silently forfeiting the DAG-path speedup
+     ;; (Copilot finding on PR #759).
+     (let ((scc (ga-scc ga)))
+       (cond
+         ((and scc (graph-scc-has-cycle? scc))
+          (compute-via-count-paths-cyclic ga source))
+         (else
+          (or (compute-via-count-paths-in-dag ga source)
+              (compute-via-count-paths-cyclic ga source))))))
     (else
      (call-with-values
        (lambda () (topological-order-from ga source))

@@ -4,7 +4,7 @@
           graph-query graph-query-all
           graph-analysis-fast-path? graph-analysis-fast-path-kind
           graph-analysis-sccs graph-node-in-cycle? graph-cyclic-nodes
-          graph-scc? make-graph-scc
+          graph-scc? make-graph-scc graph-scc-has-cycle?
           graph-scc-scc-vec graph-scc-non-trivial-vec
           graph-scc-name->idx graph-scc-idx->name graph-scc-num-nodes)
   (import (scheme base)

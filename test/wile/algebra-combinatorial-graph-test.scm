@@ -957,6 +957,38 @@
   (let ((G (make-graph k3-adj)))
     (test-error (graph-predecessors G 'missing))))
 
+(test-group "graph-reverse: source order preserved across fast (hashed) path"
+  ;; The hashed path prepends per edge and reverses at the end so that
+  ;; predecessor lists preserve source-order (the order predecessors
+  ;; appear in the underlying reverse adjacency, documented on
+  ;; graph-predecessors). Three sources fanning in to a common sink
+  ;; in adj-insertion order: a, b, c.
+  (let* ((G   (make-graph '((a . ((d . 1)))
+                            (b . ((d . 2)))
+                            (c . ((d . 3)))
+                            (d . ()))
+                          '(directed? . #t)))
+         (pred (graph-predecessors G 'd)))
+    (test '(a b c) (map car pred))
+    (test '(1 2 3) (map cdr pred))))
+
+(test-group "graph-reverse: non-atomic vertex keys still work (setoid path)"
+  ;; Pair-valued vertex IDs are not make-hashtable-compatible, so
+  ;; %compute-reverse falls back to the O(V*E) setoid loop. The
+  ;; behavioral contract must match the hashed path.
+  (let* ((G   (make-graph `(((x . 1) . (((y . 2) . a)))
+                            ((y . 2) . ())
+                            ((z . 3) . (((y . 2) . b))))
+                          '(directed? . #t)))
+         (rev (graph-reverse G)))
+    (test '((x . 1) (y . 2) (z . 3)) (graph-vertices rev))
+    (test '() (graph-neighbors rev '(x . 1)))
+    (test '() (graph-neighbors rev '(z . 3)))
+    (let ((pred (graph-neighbors rev '(y . 2))))
+      (test 2 (length pred))
+      (test 'a (cdr (setoid-assoc (graph-setoid rev) '(x . 1) pred)))
+      (test 'b (cdr (setoid-assoc (graph-setoid rev) '(z . 3) pred))))))
+
 ;;; ===== Crosscheck follow-up coverage ==================================
 
 (test-group "graph-in-degree on directed self-loop (contributes 1)"

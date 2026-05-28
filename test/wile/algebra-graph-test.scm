@@ -388,6 +388,36 @@
     (test #t (eq? s1 s2))
     (test #t (graph-scc? s1))))
 
+(test-group "graph-scc-has-cycle? distinguishes acyclic from cyclic populations"
+  ;; The dispatch shortcut in compute-single-source consults this
+  ;; predicate rather than ga-scc itself, so we pin the predicate's
+  ;; behavior on both classes of input.
+  (let* ((acyclic-adj '(("A" . (("B"))) ("B" . (("C"))) ("C" . ())))
+         (cyclic-adj  '(("A" . (("B"))) ("B" . (("A")))))
+         (ga-a (make-graph-analysis (bigint-counting-semiring) acyclic-adj #f))
+         (ga-c (make-graph-analysis (bigint-counting-semiring) cyclic-adj #f)))
+    (test #f (graph-scc-has-cycle? (graph-analysis-sccs ga-a)))
+    (test #t (graph-scc-has-cycle? (graph-analysis-sccs ga-c)))))
+
+(test-group "side-query API does not demote acyclic graphs to cyclic kernel"
+  ;; Regression for Copilot finding on PR #759: the dispatch shortcut
+  ;; used to treat (ga-scc ga) being populated as proof of cyclicity.
+  ;; graph-analysis-sccs is structural and runs on any graph, so the
+  ;; previous shortcut misrouted bigint queries through the cyclic
+  ;; kernel after any side-query on an acyclic graph. With
+  ;; graph-scc-has-cycle? gating the shortcut, the bigint query keeps
+  ;; the DAG fast path.
+  (let* ((adj '(("A" . (("B"))) ("B" . (("C"))) ("C" . ())))
+         (ga  (make-graph-analysis (bigint-counting-semiring) adj #f)))
+    ;; Populate ga-scc via the side-query API on an acyclic graph.
+    (graph-analysis-sccs ga)
+    ;; Queries must still return DAG-kernel results, not the cyclic
+    ;; kernel's SCC-entry-count surrogate. On a trivial-SCC graph the
+    ;; numbers agree, so we also pin the side-query state stays clean.
+    (test 1 (graph-query ga "A" "C"))
+    (test 1 (graph-query ga "B" "C"))
+    (test #f (graph-scc-has-cycle? (graph-analysis-sccs ga)))))
+
 (test-group "SCC cache shared across cyclic queries with different sources"
   ;; Two queries against different sources must reuse the same <graph-scc>.
   (let* ((adj '(("A" . (("B") ("D")))
