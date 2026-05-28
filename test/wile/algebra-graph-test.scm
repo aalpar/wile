@@ -137,7 +137,7 @@
   ;; bigint carrier + #f wfn → attaches
   (let ((ga (make-graph-analysis (bigint-counting-semiring) test-adj #f)))
     (test #t (graph-analysis-fast-path? ga))
-    (test 'unit-weight-counting (graph-analysis-fast-path-kind ga)))
+    (test 'bigint-counting (graph-analysis-fast-path-kind ga)))
   ;; bigint carrier + non-#f wfn → does NOT attach (defers to slow path
   ;; pending sub-path 4B)
   (let ((ga (make-graph-analysis (bigint-counting-semiring) test-adj

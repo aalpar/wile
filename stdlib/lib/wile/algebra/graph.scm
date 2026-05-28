@@ -111,7 +111,7 @@
                             (eq? carrier 'big-int)
                             (not weight-fn)
                             (%adjacency-keys-all-atomic? adjacency))
-                       'unit-weight-counting)
+                       'bigint-counting)
                       (else #f)))
          (wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
     (make-graph-analysis* semiring adjacency wfn '() fast-kind #f)))
@@ -119,11 +119,11 @@
 ;; --- Fast-path introspection ---
 
 (define (graph-analysis-fast-path? ga)
-  "Return #t iff GA has a fast-path strategy attached.\n\nThe fast path is non-#f when the semiring declares a carrier with a registered Go-side kernel and the constructor's other arguments are compatible. Currently the only attached strategy is `'unit-weight-counting' (bigint carrier + #f weight-fn).\n\nExamples:\n  (graph-analysis-fast-path? (make-graph-analysis (counting-semiring) '() #f))\n  => #f\n  (graph-analysis-fast-path? (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => #t\n\nParameters:\n  ga : graph-analysis\nReturns: boolean\nCategory: algebra\n\nSee also: `graph-analysis-fast-path-kind', `make-graph-analysis'."
+  "Return #t iff GA has a fast-path strategy attached.\n\nThe fast path is non-#f when the semiring declares a carrier with a registered Go-side kernel and the constructor's other arguments are compatible. Currently the only attached strategy is `'bigint-counting' (bigint carrier + #f weight-fn).\n\nExamples:\n  (graph-analysis-fast-path? (make-graph-analysis (counting-semiring) '() #f))\n  => #f\n  (graph-analysis-fast-path? (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => #t\n\nParameters:\n  ga : graph-analysis\nReturns: boolean\nCategory: algebra\n\nSee also: `graph-analysis-fast-path-kind', `make-graph-analysis'."
   (if (ga-fast-path-kind ga) #t #f))
 
 (define (graph-analysis-fast-path-kind ga)
-  "Return the symbol naming GA's fast-path strategy, or #f if none.\n\nKnown strategies:\n  'unit-weight-counting — bigint-carrier semiring + #f weight-fn,\n                         dispatches to `count-paths-in-dag' on acyclic\n                         input or `count-paths-cyclic' on cyclic input\n                         (the dispatcher pre-detects).\n\nExamples:\n  (graph-analysis-fast-path-kind (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => unit-weight-counting\n\nParameters:\n  ga : graph-analysis\nReturns: symbol-or-false\nCategory: algebra\n\nSee also: `graph-analysis-fast-path?', `make-graph-analysis'."
+  "Return the symbol naming GA's fast-path strategy, or #f if none.\n\nKnown strategies:\n  'bigint-counting — bigint-carrier semiring + #f weight-fn,\n                         dispatches to `count-paths-in-dag' on acyclic\n                         input or `count-paths-cyclic' on cyclic input\n                         (the dispatcher pre-detects).\n\nExamples:\n  (graph-analysis-fast-path-kind (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => bigint-counting\n\nParameters:\n  ga : graph-analysis\nReturns: symbol-or-false\nCategory: algebra\n\nSee also: `graph-analysis-fast-path?', `make-graph-analysis'."
   (ga-fast-path-kind ga))
 
 ;; --- SCC side-query API (Open Q-2 of plans/2026-05-26-scc-condensation.md) ---
@@ -190,7 +190,7 @@
 ;; after its count has settled.
 (define (compute-single-source ga source)
   (case (ga-fast-path-kind ga)
-    ((unit-weight-counting)
+    ((bigint-counting)
      ;; Kernel-first dispatch. count-paths-in-dag does its own O(V+E)
      ;; cycle detection internally (Go side, hashtable-backed) and returns
      ;; #f on cyclic input. Running topological-order-from in Scheme first
@@ -314,7 +314,7 @@
 ;; `compute-via-count-paths-in-dag' is visible to the dispatcher
 ;; regardless of profile. Under profiles without (wile algebragraph) the
 ;; body is a stub `error' — but `%fast-path-available?' ensures
-;; `make-graph-analysis' never assigns `'unit-weight-counting' there, so
+;; `make-graph-analysis' never assigns `'bigint-counting' there, so
 ;; the stub is unreachable from the public surface.
 (define (compute-via-count-paths-in-dag ga source)
   (cond-expand
