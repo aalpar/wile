@@ -180,12 +180,12 @@ func TestQuasisyntaxErrors(t *testing.T) {
 		{
 			name:        "no arguments",
 			code:        `(quasisyntax)`,
-			expectError: "expected exactly one argument",
+			expectError: "quasisyntax: expected exactly",
 		},
 		{
 			name:        "too many arguments",
 			code:        `(quasisyntax a b)`,
-			expectError: "expected exactly one argument",
+			expectError: "quasisyntax: expected exactly",
 		},
 		{
 			name:        "naked unsyntax",

@@ -34,19 +34,11 @@ import (
 // Like quasiquote, unsyntax only evaluates when depth reaches 0.
 // The result is a syntax object, not a raw datum.
 func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
-	// So expr = (template)
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || argsPair.IsEmptyList() {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument"))
-	}
-
-	// Get the template (CAR of the args list)
-	template := argsPair.SyntaxCar()
-
-	// Check no extra arguments
-	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument"))
+	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in
+	// register.go). So expr = (template) — exactly one element.
+	template, err := formSingleArg(expr, "quasisyntax")
+	if err != nil {
+		return p.wrapCompilationError(err)
 	}
 
 	// Compile the quasisyntax template at depth 1

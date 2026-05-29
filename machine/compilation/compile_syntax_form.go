@@ -35,7 +35,7 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 	// So expr = (template)
 	template, err := formSingleArg(expr, "syntax")
 	if err != nil {
-		return err
+		return p.wrapCompilationError(err)
 	}
 
 	// Check if template contains ellipsis - if so, use runtime expansion

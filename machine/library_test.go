@@ -256,7 +256,7 @@ func TestLibraryDescription(t *testing.T) {
 			name:        "extra arguments rejected",
 			input:       `(define-library (test extra) (description "hello" "world"))`,
 			wantErr:     true,
-			errContains: "description: expected exactly one string argument",
+			errContains: "description: expected exactly 1 element(s), got 2",
 		},
 		{
 			name:     "last description wins",

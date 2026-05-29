@@ -198,20 +198,13 @@ func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib 
 
 // processLibraryDescription handles (description <string>) within a library.
 func (p *CompileTimeContinuation) processLibraryDescription(lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	if syntax.IsSyntaxEmptyList(args) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected a string argument"))
+	strExpr, err := formSingleArg(args, "description")
+	if err != nil {
+		return p.wrapCompilationError(err)
 	}
-	argsPair, ok := args.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "description: expected a string argument"))
-	}
-	strExpr := argsPair.SyntaxCar()
 	str, ok := strExpr.UnwrapAll().(*values.String)
 	if !ok {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAString, "description: argument must be a string"))
-	}
-	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected exactly one string argument"))
 	}
 	// Last-writer-wins: multiple description declarations are allowed;
 	// the last one takes effect.
