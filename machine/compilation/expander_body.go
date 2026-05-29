@@ -142,23 +142,20 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair, libraryScope *syntax.Scope, evaluator machine.MacroEvaluator) error {
 	expandEnv := env.Expand()
 
-	// Extract: (define-syntax keyword transformer)
-	cdr, ok := dsPair.Cdr().(*syntax.SyntaxPair)
-	if !ok {
-		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: malformed"))
+	// Extract (define-syntax keyword transformer) — exactly three elements
+	// counting the keyword. Matches CompileDefineSyntax on the top-level path.
+	parts, err := syntax.FormParts(dsPair, "define-syntax", 3, 3)
+	if err != nil {
+		return wrapSourcedError(dsPair.SourceContext(), err)
 	}
-	keywordSym, ok := cdr.SyntaxCar().(*syntax.SyntaxSymbol)
+	keywordSym, ok := parts[1].(*syntax.SyntaxSymbol)
 	if !ok {
 		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "define-syntax: keyword must be a symbol"))
 	}
 	keyword := keywordSym.Unwrap().(*values.Symbol)
 	symbolScopes := keywordSym.Scopes()
 
-	transformerCdr, ok := cdr.Cdr().(*syntax.SyntaxPair)
-	if !ok {
-		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: missing transformer"))
-	}
-	transformer := transformerCdr.SyntaxCar()
+	transformer := parts[2]
 
 	// Compile the transformer using the full environment for free identifier resolution
 	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
