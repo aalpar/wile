@@ -49,34 +49,18 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	if err != nil {
 		return err
 	}
-	// expr is (keyword transformer-expr) — keyword stripped by registerSyntaxCompiler in register.go
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: expected keyword and transformer"))
+	// expr is (keyword transformer-expr) — the define-syntax keyword was stripped
+	// by registerSyntaxCompiler in register.go.
+	parts, err := syntax.FormParts(expr, "define-syntax", 2, 2)
+	if err != nil {
+		return p.wrapCompilationError(err)
 	}
-	// Get the keyword to bind
-	keywordStx := argsPair.SyntaxCar()
-	if keywordStx == nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: missing keyword"))
-	}
-	keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
+	keywordSym, ok := parts[0].(*syntax.SyntaxSymbol)
 	if !ok {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol"))
 	}
 	keyword := keywordSym.Unwrap().(*values.Symbol)
-	// Get the transformer expression
-	transformerCdr := argsPair.Cdr()
-	if transformerCdr == nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: missing transformer expression"))
-	}
-	transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: expected transformer expression"))
-	}
-	transformerExpr := transformerPair.SyntaxCar()
-	if transformerExpr == nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: missing transformer expression"))
-	}
+	transformerExpr := parts[1]
 
 	// Compile the transformer (supports syntax-rules and lambda)
 	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)

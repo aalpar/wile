@@ -32,32 +32,13 @@ func compileERMacroTransformer(
 	erForm *syntax.SyntaxPair,
 	evaluator machine.MacroEvaluator,
 ) (*ERMacroTransformer, error) {
-	// Extract the lambda expression from (er-macro-transformer <lambda>)
-	cdr := erForm.SyntaxCdr()
-	argsPair, ok := cdr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(cdr) {
-		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
-			werr.ErrInvalidSyntax,
-			"er-macro-transformer: expected a lambda expression",
-		))
+	// erForm is (er-macro-transformer <lambda>) — exactly two elements counting
+	// the keyword; parts[1] is the lambda expression.
+	parts, err := syntax.FormParts(erForm, "er-macro-transformer", 2, 2)
+	if err != nil {
+		return nil, wrapSourcedError(erForm.SourceContext(), err)
 	}
-
-	lambdaExpr := argsPair.SyntaxCar()
-	if lambdaExpr == nil {
-		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
-			werr.ErrUnexpectedNil,
-			"er-macro-transformer: lambda expression is nil",
-		))
-	}
-
-	// Reject extra arguments: (er-macro-transformer <lambda>) must have exactly one arg.
-	rest := argsPair.SyntaxCdr()
-	if !syntax.IsSyntaxEmptyList(rest) {
-		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
-			werr.ErrInvalidSyntax,
-			"er-macro-transformer: expected exactly one argument (lambda expression), got extra forms",
-		))
-	}
+	lambdaExpr := parts[1]
 
 	// Compile and evaluate the lambda to get a machine.MachineClosure.
 	// compileAndEvalLambdaTransformer handles expansion, compilation, and evaluation.

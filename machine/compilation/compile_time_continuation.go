@@ -124,15 +124,11 @@ func formArgs(expr syntax.SyntaxValue, formName, usage string) (*syntax.SyntaxPa
 // formSingleArg extracts exactly one argument from a compiled form's expression.
 // Returns an error if the form does not have exactly one argument.
 func formSingleArg(expr syntax.SyntaxValue, formName string) (syntax.SyntaxValue, error) {
-	argsPair, err := formArgs(expr, formName, "exactly one argument")
+	parts, err := syntax.FormParts(expr, formName, 1, 1)
 	if err != nil {
 		return nil, err
 	}
-	arg := argsPair.SyntaxCar()
-	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: expected exactly one argument", formName)
-	}
-	return arg, nil
+	return parts[0], nil
 }
 
 // SetLibraryCallback sets a callback function that will be called when a library
