@@ -229,44 +229,34 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 		return nil
 
 	case *syntax.SyntaxPair:
-		// Could be (rename internal external)
+		// The only list-shaped export spec is (rename internal external).
 		carExpr := s.SyntaxCar()
 		carSym, ok := carExpr.(*syntax.SyntaxSymbol)
 		if !ok {
 			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export: expected symbol"))
 		}
-
-		if carSym.Unwrap().(*values.Symbol).Key == "rename" {
-			// (rename internal external)
-			cdrExpr, ok := s.SyntaxCdr().(*syntax.SyntaxPair)
-			if !ok {
-				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected internal and external names"))
-			}
-
-			internalExpr := cdrExpr.SyntaxCar()
-			internalSym, ok := internalExpr.(*syntax.SyntaxSymbol)
-			if !ok {
-				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: internal name must be symbol"))
-			}
-
-			cdrCdr, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
-			if !ok {
-				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected external name"))
-			}
-
-			externalExpr := cdrCdr.SyntaxCar()
-			externalSym, ok := externalExpr.(*syntax.SyntaxSymbol)
-			if !ok {
-				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: external name must be symbol"))
-			}
-
-			internalName := internalSym.Unwrap().(*values.Symbol).Key
-			externalName := externalSym.Unwrap().(*values.Symbol).Key
-			lib.AddExport(externalName, internalName)
-			return nil
+		if carSym.Unwrap().(*values.Symbol).Key != "rename" {
+			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form"))
 		}
 
-		return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form"))
+		// (rename internal external) — exactly three elements counting the keyword.
+		parts, err := syntax.FormParts(s, "export rename", 3, 3)
+		if err != nil {
+			return wrapSourcedError(spec.SourceContext(), err)
+		}
+		internalSym, ok := parts[1].(*syntax.SyntaxSymbol)
+		if !ok {
+			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: internal name must be symbol"))
+		}
+		externalSym, ok := parts[2].(*syntax.SyntaxSymbol)
+		if !ok {
+			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: external name must be symbol"))
+		}
+
+		internalName := internalSym.Unwrap().(*values.Symbol).Key
+		externalName := externalSym.Unwrap().(*values.Symbol).Key
+		lib.AddExport(externalName, internalName)
+		return nil
 
 	default:
 		return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: expected symbol or rename form"))
