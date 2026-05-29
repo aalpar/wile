@@ -193,31 +193,19 @@ func parseSummaryExportSpec(summary *LibrarySummary, spec syntax.SyntaxValue) {
 	case *syntax.SyntaxPair:
 		// Could be (rename internal external).
 		carSym, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
-		if !ok {
+		if !ok || carSym.Unwrap().(*values.Symbol).Key != "rename" {
 			return
 		}
-		if carSym.Unwrap().(*values.Symbol).Key != "rename" {
+		// (rename internal external) — exactly three elements counting the
+		// keyword. Skip the spec on any structural mismatch (best-effort index).
+		parts, err := syntax.FormParts(s, "rename", 3, 3)
+		if err != nil {
 			return
 		}
-
-		// Walk: cdr should be (internal external).
-		cdrPair, ok := s.SyntaxCdr().(*syntax.SyntaxPair)
-		if !ok {
-			return
+		externalSym, ok := parts[2].(*syntax.SyntaxSymbol)
+		if ok {
+			summary.Exports = append(summary.Exports, externalSym.Unwrap().(*values.Symbol).Key)
 		}
-
-		// Skip internal name, get external name.
-		cdrCdr, ok := cdrPair.SyntaxCdr().(*syntax.SyntaxPair)
-		if !ok {
-			return
-		}
-
-		externalSym, ok := cdrCdr.SyntaxCar().(*syntax.SyntaxSymbol)
-		if !ok {
-			return
-		}
-
-		summary.Exports = append(summary.Exports, externalSym.Unwrap().(*values.Symbol).Key)
 	}
 }
 
