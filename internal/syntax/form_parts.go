@@ -70,6 +70,21 @@ func (*FormArityError) Unwrap() error {
 // wrap naming the form. On an arity mismatch it returns a nil slice and a
 // *FormArityError carrying the bounds and actual count; callers add source
 // context. Both error forms match errors.Is(err, werr.ErrInvalidSyntax).
+//
+// Call sites cluster into three consumption paths (grep FormParts /
+// formSingleArg / formPrologue for the authoritative list):
+//
+//   - Directly, from fixed-arity special-form compilers and expanders in
+//     machine/compilation: define-syntax (both the top-level CompileDefineSyntax
+//     and the body-path compileDefineSyntaxFromSyntax), er-macro-transformer,
+//     and the (rename internal external) export specs (compile path and
+//     library-summary index).
+//   - Via formSingleArg, the arity-1 convenience wrapper, for single-argument
+//     forms: syntax, quasisyntax, and the (description <string>) forms.
+//   - Via internal/validate.formPrologue, which shifts these keyword-inclusive
+//     element bounds to keyword-exclusive "argument" bounds and restates a
+//     *FormArityError in "argument" vocabulary; it backs the core-form
+//     validators (if, lambda, set!, quote, begin, dynamic-wind, apply, ...).
 func FormParts(form SyntaxValue, name string, minLen, maxLen int) ([]SyntaxValue, error) {
 	if IsSyntaxEmptyList(form) {
 		return checkFormArity(nil, name, minLen, maxLen)
