@@ -132,34 +132,20 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	return validateCall(ctx, env, pair, result)
 }
 
-// collectList converts a syntax list to a slice of elements.
-// Returns the elements and whether the list is improper.
+// collectList converts a syntax list to a slice of elements, reporting whether
+// the list is improper. It shares the traversal primitive used by
+// syntax.FormParts: a *SyntaxPair's car and cdr are always SyntaxValues (the
+// Values array is typed [2]SyntaxValue and SetCar/SetCdr enforce it), so the
+// elements need no wrapping and SyntaxForEach's returned tail is non-empty
+// exactly when the list is improper.
 func collectList(pair *syntax.SyntaxPair) ([]syntax.SyntaxValue, bool) {
 	var elements []syntax.SyntaxValue
-	var current values.Value = pair
-
-	for {
-		if values.IsEmptyList(current) {
-			return elements, false // proper list
-		}
-
-		p, ok := current.(*syntax.SyntaxPair)
-		if !ok {
-			// Not a pair - improper list
-			return elements, true
-		}
-
-		// Get the car element
-		car := p.Car()
-		carSyntax, ok := car.(syntax.SyntaxValue)
-		if ok {
-			elements = append(elements, carSyntax)
-		} else if car != nil {
-			// Wrap non-syntax values
-			elements = append(elements, syntax.NewSyntaxObject(car, nil))
-		}
-		current = p.Cdr()
-	}
+	tail, _ := pair.SyntaxForEach(context.Background(),
+		func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
+			elements = append(elements, v)
+			return nil
+		})
+	return elements, !syntax.IsSyntaxEmptyList(tail)
 }
 
 // formPrologue collects list elements, validates the list is proper,
