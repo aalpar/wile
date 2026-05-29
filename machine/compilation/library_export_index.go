@@ -213,17 +213,13 @@ func parseSummaryExportSpec(summary *LibrarySummary, spec syntax.SyntaxValue) {
 // (description "...") declaration. If the argument is not a string,
 // the description is left unchanged.
 func parseSummaryDescription(summary *LibrarySummary, args syntax.SyntaxValue) {
-	argPair, ok := args.(*syntax.SyntaxPair)
-	if !ok {
+	// (description <string>) — exactly one argument; skip on any mismatch
+	// (best-effort index). Mirrors processLibraryDescription on the compile path.
+	strExpr, err := formSingleArg(args, "description")
+	if err != nil {
 		return
 	}
-
-	descObj, ok := argPair.SyntaxCar().(*syntax.SyntaxObject)
-	if !ok {
-		return
-	}
-
-	descStr, ok := descObj.Unwrap().(*values.String)
+	descStr, ok := strExpr.UnwrapAll().(*values.String)
 	if !ok {
 		return
 	}
