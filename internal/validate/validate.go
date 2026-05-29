@@ -16,6 +16,8 @@ package validate
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/forms"
@@ -172,37 +174,39 @@ func formPrologue(
 ) (*syntax.SourceContext, []syntax.SyntaxValue, bool) {
 	source := pair.SourceContext()
 
-	elements, improper := collectList(pair)
-	if improper {
-		result.addError(source, formName, formName+" form must be a proper list")
+	// FormParts counts the form keyword at element 0; formPrologue's bounds
+	// are keyword-exclusive ("arguments"), so shift them by one.
+	maxLen := maxArgs
+	if maxArgs >= 0 {
+		maxLen = maxArgs + 1
+	}
+	elements, err := syntax.FormParts(pair, formName, minArgs+1, maxLen)
+	if err != nil {
+		var ae *syntax.FormArityError
+		if errors.As(err, &ae) {
+			result.addError(source, formName, arityArgMessage(ae))
+		} else {
+			// Structural failure (improper list); no data to restate.
+			result.addError(source, formName, formName+" form must be a proper list")
+		}
 		return nil, nil, false
 	}
-
-	argCount := len(elements) - 1
-
-	if minArgs == maxArgs && maxArgs >= 0 {
-		if argCount != minArgs {
-			result.addErrorf(source, formName,
-				"%s requires exactly %d argument(s), got %d",
-				formName, minArgs, argCount)
-			return nil, nil, false
-		}
-	} else {
-		if argCount < minArgs {
-			result.addErrorf(source, formName,
-				"%s requires at least %d argument(s), got %d",
-				formName, minArgs, argCount)
-			return nil, nil, false
-		}
-		if maxArgs >= 0 && argCount > maxArgs {
-			result.addErrorf(source, formName,
-				"%s requires at most %d argument(s), got %d",
-				formName, maxArgs, argCount)
-			return nil, nil, false
-		}
-	}
-
 	return source, elements, true
+}
+
+// arityArgMessage restates a FormArityError in the validator's keyword-exclusive
+// "argument" vocabulary — the form keyword is not an argument, so element counts
+// drop by one. The wording matches the messages formPrologue emitted before it
+// delegated structural checks to syntax.FormParts.
+func arityArgMessage(ae *syntax.FormArityError) string {
+	argCount := ae.Got - 1
+	if ae.Min == ae.Max && ae.Max >= 0 {
+		return fmt.Sprintf("%s requires exactly %d argument(s), got %d", ae.Name, ae.Min-1, argCount)
+	}
+	if ae.Got < ae.Min {
+		return fmt.Sprintf("%s requires at least %d argument(s), got %d", ae.Name, ae.Min-1, argCount)
+	}
+	return fmt.Sprintf("%s requires at most %d argument(s), got %d", ae.Name, ae.Max-1, argCount)
 }
 
 // getSourceContext extracts SourceContext from a SyntaxValue if available
