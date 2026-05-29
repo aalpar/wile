@@ -189,6 +189,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 
 		keyword := carSym.Unwrap().(*values.Symbol).Key
 		argsExpr := v.SyntaxCdr()
+		// check keyword against known feature predicates
 		switch keyword {
 		case "library":
 			// (library <library-name>)
