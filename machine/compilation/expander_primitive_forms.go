@@ -239,10 +239,11 @@ func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr s
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand test"))
 	}
 
-	// Get consequent
+	// Get consequent. Bail (return the form unchanged) when it is missing so the
+	// validator reports the arity error — consistent with set!/define/begin/lambda.
 	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "if: missing consequent"))
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
 	expandedConseq, err := p.ExpandExpression(cdrPair.SyntaxCar())
@@ -378,20 +379,20 @@ func (p *ExpanderTimeContinuation) expandWithContinuationMarkForm(sym *syntax.Sy
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand key"))
 	}
 
-	// Get val pair
+	// Get val pair. Bail when missing so the validator reports the arity error.
 	valPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(valPair) {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing value"))
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 	expandedVal, err := p.ExpandExpression(valPair.SyntaxCar())
 	if err != nil {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand value"))
 	}
 
-	// Get body pair
+	// Get body pair. Bail when missing so the validator reports the arity error.
 	bodyPair, ok := valPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing body"))
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 	expandedBody, err := p.ExpandExpression(bodyPair.SyntaxCar())
 	if err != nil {
