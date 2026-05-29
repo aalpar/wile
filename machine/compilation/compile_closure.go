@@ -20,6 +20,8 @@ package compilation
 // CompileValidatedBegin in compile_validated.go.
 
 import (
+	"strings"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
@@ -154,7 +156,7 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 
 	// Docstring: the validator has already extracted any leading string
 	// literal and stripped it from the body. Just read the field.
-	doc := clause.Docstring()
+	doc := strings.TrimSpace(clause.Docstring())
 	if doc != "" {
 		tpl.SetDoc(doc)
 	}
