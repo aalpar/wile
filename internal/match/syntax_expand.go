@@ -79,6 +79,27 @@ type ExpandOptions struct {
 	PatternVarSyntax map[string]*syntax.SyntaxSymbol
 }
 
+// resolveSourceContext returns the source context for a newly-constructed
+// structural node derived from template t. The template's context is the
+// default; UseSiteCtx overrides it (so error messages point at the invocation
+// site rather than the macro definition); Origin is stamped on top so the
+// trace records which macro produced the node — see ExpandOptions.Origin for
+// why "last caller wins" is correct.
+//
+// The variants in applyHygieneToSymbol, combineEllipsisResults, and
+// capturedValueToSyntax handle different base contexts or nil-bases and are
+// deliberately kept separate.
+func (opts *ExpandOptions) resolveSourceContext(t syntax.SyntaxValue) *syntax.SourceContext {
+	srcCtx := t.SourceContext()
+	if opts.UseSiteCtx != nil {
+		srcCtx = opts.UseSiteCtx
+	}
+	if opts.Origin != nil {
+		srcCtx = srcCtx.WithOrigin(opts.Origin)
+	}
+	return srcCtx
+}
+
 // Expand performs template expansion with the given hygiene options.
 // Pass a zero-value ExpandOptions{} for expansion without hygiene.
 func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue, opts ExpandOptions) (syntax.SyntaxValue, error) {
@@ -163,16 +184,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 			return nil, err
 		}
 
-		srcCtx := t.SourceContext()
-		if opts.UseSiteCtx != nil {
-			srcCtx = opts.UseSiteCtx
-		}
-		// Stamp origin onto structural nodes so error traces identify which macro
-		// produced them. See ExpandOptions.Origin for why "last caller wins" is correct.
-		if opts.Origin != nil {
-			srcCtx = srcCtx.WithOrigin(opts.Origin)
-		}
-		return syntax.NewSyntaxCons(expandedCar, expandedCdr, srcCtx), nil
+		return syntax.NewSyntaxCons(expandedCar, expandedCdr, opts.resolveSourceContext(t)), nil
 
 	case *syntax.SyntaxVector:
 		// Expand each element
@@ -184,14 +196,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 			}
 			expandedElements[i] = expanded
 		}
-		srcCtx := t.SourceContext()
-		if opts.UseSiteCtx != nil {
-			srcCtx = opts.UseSiteCtx
-		}
-		if opts.Origin != nil {
-			srcCtx = srcCtx.WithOrigin(opts.Origin)
-		}
-		return syntax.NewSyntaxVector(srcCtx, expandedElements...), nil
+		return syntax.NewSyntaxVector(opts.resolveSourceContext(t), expandedElements...), nil
 
 	default:
 		// Self-evaluating values - return as-is
@@ -302,21 +307,19 @@ func (p *SyntaxMatcher) expandSymbol(
 	key := t.Key()
 
 	capturedVal, ok := ctx.bindings[key]
-	if ok {
-		if opts.PatternVarSyntax != nil {
-			patternSym, hasPattern := opts.PatternVarSyntax[key]
-			if hasPattern {
-				templateScopes := t.Scopes()
-				patternScopes := patternSym.Scopes()
-				if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
-					return p.applyHygieneToSymbol(t, opts), nil
-				}
-			}
-		}
-		return p.capturedValueToSyntax(capturedVal, opts)
+	if !ok {
+		return p.applyHygieneToSymbol(t, opts), nil
 	}
 
-	return p.applyHygieneToSymbol(t, opts), nil
+	// Captured, but template/pattern scopes diverge — bail to hygiene to
+	// prevent outer-macro symbols from being captured by inner patterns
+	// (Flatt 2016).
+	patternSym, hasPattern := opts.PatternVarSyntax[key]
+	if hasPattern && !scopesCompatibleForSubstitution(t.Scopes(), patternSym.Scopes()) {
+		return p.applyHygieneToSymbol(t, opts), nil
+	}
+
+	return p.capturedValueToSyntax(capturedVal, opts)
 }
 
 // capturedValueToSyntax converts a captured value back to syntax.
@@ -626,14 +629,7 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 		if err != nil {
 			return nil, err
 		}
-		srcCtx := t.SourceContext()
-		if opts.UseSiteCtx != nil {
-			srcCtx = opts.UseSiteCtx
-		}
-		if opts.Origin != nil {
-			srcCtx = srcCtx.WithOrigin(opts.Origin)
-		}
-		return syntax.NewSyntaxCons(car, cdr, srcCtx), nil
+		return syntax.NewSyntaxCons(car, cdr, opts.resolveSourceContext(t)), nil
 
 	default:
 		return template, nil
