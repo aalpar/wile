@@ -212,22 +212,40 @@ func (p *SyntaxPair) IsVoid() bool {
 	return p == nil
 }
 
-// ForEach iterates over the elements of the list.
-func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
+// walkSyntaxSpine is the shared spine-walk consumed by ForEach and
+// SyntaxForEach. It invokes fn for each cell's car as a SyntaxValue
+// and returns the trailing cdr (values.EmptyList for proper lists,
+// the improper tail otherwise) as a raw values.Value — SyntaxForEach
+// casts that to SyntaxValue at the boundary.
+//
+// Stays open-coded rather than consuming an iter.Seq2-shaped iterator:
+// the equivalent rewrite on values.Pair.ForEach regressed ~40-56% on
+// BenchmarkPairForEach (values/pair_bench_test.go) because each yield
+// goes through two function pointers. The macro-expansion path here
+// is hot enough that the same overhead matters.
+//
+// The cdr.(SyntaxValue) assertion is deliberate: at the syntax phase
+// every cdr is invariantly a SyntaxValue (enforced by NewSyntaxCons +
+// SetSyntaxCdr), so this is a no-op cost on valid input. On misuse
+// (e.g. NewSyntaxCons(nil, nil, nil)) the assertion panics with
+// "interface conversion: interface is nil, not values.SyntaxValue" —
+// the sharper diagnostic pinned by TestSyntaxPair_*_NilNilPair.
+func (p *SyntaxPair) walkSyntaxSpine(ctx context.Context, fn SyntaxForEachFunc) (values.Value, error) {
 	if p == nil {
 		return values.EmptyList, nil
 	}
 	pr := p
 	i := 0
 	for pr != nil {
-		hasNext := !values.IsEmptyList(pr.Cdr())
-		err := fn(ctx, i, hasNext, pr.Car())
+		cdr := pr.Cdr()
+		hasNext := !values.IsEmptyList(cdr.(SyntaxValue))
+		err := fn(ctx, i, hasNext, pr.SyntaxCar())
 		if err != nil {
 			return nil, err
 		}
-		pr0, ok := pr.Cdr().(*SyntaxPair)
+		pr0, ok := cdr.(*SyntaxPair)
 		if !ok {
-			return pr.Cdr(), nil
+			return cdr, nil
 		}
 		pr = pr0
 		i++
@@ -235,27 +253,20 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 	return values.EmptyList, nil
 }
 
+// ForEach iterates over the elements of the list.
+func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
+	return p.walkSyntaxSpine(ctx, func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error {
+		return fn(ctx, i, hasNext, v)
+	})
+}
+
 // SyntaxForEach iterates over the syntax elements of the list.
 func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
-	if p == nil {
-		return SyntaxEmptyList, nil
+	tail, err := p.walkSyntaxSpine(ctx, fn)
+	if err != nil {
+		return nil, err
 	}
-	pr := p
-	i := 0
-	for pr != nil {
-		hasNext := !IsSyntaxEmptyList(pr.Cdr().(SyntaxValue))
-		err := fn(ctx, i, hasNext, pr.Car().(SyntaxValue))
-		if err != nil {
-			return nil, err
-		}
-		pr0, ok := pr.Cdr().(*SyntaxPair)
-		if !ok {
-			return pr.Cdr().(SyntaxValue), nil
-		}
-		pr = pr0
-		i++
-	}
-	return SyntaxEmptyList, nil
+	return tail.(SyntaxValue), nil
 }
 
 // IsPair returns true; SyntaxPair is always a pair.
