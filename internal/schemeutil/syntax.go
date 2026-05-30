@@ -114,6 +114,9 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 		var tuple *syntax.SyntaxPair
 		tuple0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(ctx, sctx, v.Car()), DatumToSyntaxValue(ctx, sctx, values.EmptyList), sctx)
 		tuple = tuple0stx
+		// improper-list aware: v0 captures the trailing non-list cdr (if any)
+		// and is wired into the constructed syntax tail below. Do not migrate
+		// to values.ForEachProperList — that helper rejects improper lists.
 		v0, _ = tuple1.ForEach(ctx, func(_ context.Context, _ int, _ bool, v1 values.Value) error {
 			tuple.SetCdr(
 				syntax.NewSyntaxCons(
