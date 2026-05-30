@@ -679,3 +679,39 @@ func TestPair_ForEach(t *testing.T) {
 		})
 	}
 }
+
+// ── Spine ───────────────────────────────────────────────────────────────
+
+func TestSpine(t *testing.T) {
+	a := values.NewInteger(1)
+	b := values.NewInteger(2)
+	c := values.NewInteger(3)
+	proper := values.NewCons(a, values.NewCons(b, values.NewCons(c, values.EmptyList)))
+	improper := values.NewCons(a, values.NewCons(b, c)) // (1 2 . 3)
+	single := values.NewCons(a, values.EmptyList)
+
+	tcs := []struct {
+		name         string
+		input        *values.Pair
+		wantCars     []values.Value
+		wantTail     values.Value
+	}{
+		{"proper-3-elements", proper, []values.Value{a, b, c}, values.EmptyList},
+		{"improper-2-plus-tail", improper, []values.Value{a, b}, c},
+		{"single-element", single, []values.Value{a}, values.EmptyList},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			var cars []values.Value
+			var tail values.Value
+			for cell := range values.Spine(tc.input, &tail) {
+				cars = append(cars, cell.Car())
+			}
+			qt.Assert(t, len(cars), qt.Equals, len(tc.wantCars))
+			for i, want := range tc.wantCars {
+				qt.Assert(t, cars[i], valuestest.SchemeEquals, want)
+			}
+			qt.Assert(t, tail, valuestest.SchemeEquals, tc.wantTail)
+		})
+	}
+}

@@ -17,6 +17,7 @@ package values
 import (
 	"context"
 	"fmt"
+	"iter"
 	"strings"
 
 	"github.com/aalpar/wile/werr"
@@ -78,6 +79,100 @@ type Pair [2]Value
 func NewCons(car, cdr Value) *Pair {
 	q := &Pair{car, cdr}
 	return q
+}
+
+// Spine yields each *Pair along p's cdr chain. If the list terminates in
+// EmptyList, *improperTail is set to EmptyList. If it terminates in a
+// non-list cdr (improper list), *improperTail is set to that value.
+// improperTail may be nil if the caller does not care about the tail.
+//
+// Spine is the catamorphism for the initial list algebra
+//
+//	List = μX. 1 + Value × X
+//
+// and is the irreducible spine-walk consumed by Pair.IsList, Length,
+// AsVector, EqualTo, and SchemeString. It does NOT detect cycles —
+// for cyclic input, use SpineWithCycleCheck.
+//
+// The yielded value pair (*Pair, struct{}) uses struct{} so consumers
+// can write either `for cell := range Spine(p, &tail)` (preferred) or
+// `for cell, _ := range Spine(p, &tail)`.
+func Spine(p *Pair, improperTail *Value) iter.Seq2[*Pair, struct{}] {
+	return func(yield func(*Pair, struct{}) bool) {
+		pr := p
+		for pr != nil {
+			if !yield(pr, struct{}{}) {
+				return
+			}
+			cdr := pr[1]
+			if IsEmptyList(cdr) {
+				if improperTail != nil {
+					*improperTail = EmptyList
+				}
+				return
+			}
+			next, ok := cdr.(*Pair)
+			if !ok {
+				if improperTail != nil {
+					*improperTail = cdr
+				}
+				return
+			}
+			pr = next
+		}
+		if improperTail != nil {
+			*improperTail = EmptyList
+		}
+	}
+}
+
+// SpineWithCycleCheck is Spine with Floyd's tortoise-and-hare cycle
+// detection. *cycled is set to true if a cycle is detected, false
+// otherwise. cycled may be nil if the caller does not care.
+//
+// The iterator yields cells up to (but not necessarily including) the
+// point of detection, then terminates. SpineWithCycleCheck does NOT
+// report the improper tail — Floyd's algorithm cannot distinguish
+// improper-tail termination from cycle detection in a single pass
+// without an extra O(n) visited set. Callers that need both should
+// use Spine with an external visited map.
+func SpineWithCycleCheck(p *Pair, cycled *bool) iter.Seq2[*Pair, struct{}] {
+	return func(yield func(*Pair, struct{}) bool) {
+		if cycled != nil {
+			*cycled = false
+		}
+		if p == nil {
+			return
+		}
+		slow, fast := p, p
+		for {
+			if !yield(slow, struct{}{}) {
+				return
+			}
+			// Advance fast two cdr-steps, slow one cdr-step.
+			fastNext1, ok := fast[1].(*Pair)
+			if !ok {
+				return
+			}
+			fast = fastNext1
+			fastNext2, ok := fast[1].(*Pair)
+			if !ok {
+				return
+			}
+			fast = fastNext2
+			slowNext, ok := slow[1].(*Pair)
+			if !ok {
+				return
+			}
+			slow = slowNext
+			if slow == fast {
+				if cycled != nil {
+					*cycled = true
+				}
+				return
+			}
+		}
+	}
 }
 
 // Car returns the car of the Pair.
