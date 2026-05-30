@@ -91,15 +91,12 @@ func PrimAppend(mc machine.CallContext) error {
 	}
 
 	var lists values.Vector
-	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	err := helpers.ForEachList(mc.Context(), args, "append", func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		lists = append(lists, elem)
 		return nil
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list of arguments")
+		return err
 	}
 	var result values.Value = values.EmptyList
 	for i := range slices.Backward(lists) {
@@ -116,15 +113,12 @@ func PrimAppend(mc machine.CallContext) error {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected list but got %T", lst)
 		}
 		var elems values.Vector
-		v, err = pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		err = helpers.ForEachList(mc.Context(), pr, "append", func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			elems = append(elems, elem)
 			return nil
 		})
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "append: error processing list: %s", pr.SchemeString())
-		}
-		if !values.IsEmptyList(v) {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list but got improper list")
+			return err
 		}
 		for j := range slices.Backward(elems) {
 			result = values.NewCons(elems[j], result)
@@ -147,15 +141,12 @@ func PrimReverse(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
 	var result values.Value = values.EmptyList
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := helpers.ForEachList(mc.Context(), pr, "reverse", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		result = values.NewCons(v, result)
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "reverse: expected a proper list")
 	}
 	mc.SetValue(result)
 	return nil
@@ -174,15 +165,12 @@ func PrimLength(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "length: expected a list but got %T", o)
 	}
 	count := int64(0)
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
+	err := helpers.ForEachList(mc.Context(), pr, "length", func(_ context.Context, _ int, _ bool, _ values.Value) error {
 		count++
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "length: expected a proper list")
 	}
 	mc.SetValue(values.NewInteger(count))
 	return nil
