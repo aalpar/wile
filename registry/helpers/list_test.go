@@ -490,3 +490,39 @@ func TestAssocLookup_Errors(t *testing.T) {
 		})
 	}
 }
+
+// ── Uncons ──────────────────────────────────────────────────────────────
+
+func TestUncons(t *testing.T) {
+	sym := values.NewSymbol("x")
+	n := values.NewInteger(1)
+	proper := values.List(sym, n)           // (x 1)
+	improper := values.NewCons(sym, n)      // (x . 1) — cdr is not a Tuple
+	tcs := []struct {
+		name     string
+		input    values.Value
+		wantHead values.Value
+		wantTail values.Value
+		wantErr  error
+	}{
+		{"proper-head-symbol", proper, sym, values.NewCons(n, values.EmptyList), nil},
+		{"empty-list", values.EmptyList, nil, nil, werr.ErrNotAList},
+		{"nil-input", nil, nil, nil, werr.ErrNotAList},
+		{"improper-cdr-ok", improper, sym, n, nil},
+		{"non-list-value", values.NewInteger(42), nil, nil, werr.ErrNotAList},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			head, tail, err := Uncons(tc.input, "test", "first arg")
+			if tc.wantErr != nil {
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, errors.Is(err, tc.wantErr), qt.IsTrue,
+					qt.Commentf("got %v", err))
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, head, valuestest.SchemeEquals, tc.wantHead)
+			qt.Assert(t, tail, valuestest.SchemeEquals, tc.wantTail)
+		})
+	}
+}

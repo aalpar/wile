@@ -35,6 +35,29 @@ func ForEachList(ctx context.Context, t values.Tuple, name string, fn func(conte
 	return values.ForEachProperList(ctx, t, name, fn)
 }
 
+// Uncons asserts v is a non-empty Tuple and projects (car, cdr).
+// On empty list or non-Tuple input, returns a wrapped ErrNotAList with
+// the canonical "<name>: <role>" message format. The cdr may be any
+// values.Value — improper lists are accepted here; callers that need
+// a proper-list tail should follow up with ForEachList.
+//
+// Uncons is the eliminator for the Tuple algebra: every site that needs
+// to peel one element off the front of a list and continue with the
+// remainder should funnel through here so the empty-list / non-Tuple
+// rejection is defined exactly once.
+func Uncons(v values.Value, name, role string) (values.Value, values.Value, error) {
+	if values.IsEmptyList(v) {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: %s: expected a non-empty list", name, role)
+	}
+	t, ok := v.(values.Tuple)
+	if !ok {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: %s: expected a list but got %T", name, role, v)
+	}
+	return t.Car(), t.Cdr(), nil
+}
+
 // ListToVector is a helper that converts a list argument to a vector.
 func ListToVector(mc machine.CallContext, name string) error {
 	o := mc.Arg(0)
