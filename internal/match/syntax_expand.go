@@ -230,6 +230,13 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		srcCtx = &syntax.SourceContext{Origin: opts.Origin}
 	}
 
+	// Scope-stripped variant for template identifiers (Flatt 2016).
+	// Skip the WithoutScopes() allocation when there are no scopes to strip.
+	templateCtx := srcCtx
+	if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+		templateCtx = srcCtx.WithoutScopes()
+	}
+
 	// Check if this is a free identifier
 	var isFree bool
 	var resolution FreeIdResolver
@@ -259,21 +266,13 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			// via the TLE scope registry.
 			libScope := resolution.GetLibraryScope()
 			if libScope != nil {
-				symCtx := srcCtx
-				if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-					symCtx = srcCtx.WithoutScopes()
-				}
-				newSym := syntax.NewSyntaxSymbol(key, symCtx)
+				newSym := syntax.NewSyntaxSymbol(key, templateCtx)
 				newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
 				return newSym
 			}
 
 			// No library scope — fall back to WithResolvedBinding
-			symCtx := srcCtx
-			if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-				symCtx = srcCtx.WithoutScopes()
-			}
-			newSym := syntax.NewSyntaxSymbol(key, symCtx)
+			newSym := syntax.NewSyntaxSymbol(key, templateCtx)
 			return newSym.WithResolvedBinding(globalBinding)
 		}
 
@@ -286,10 +285,6 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	}
 
 	// Not a free identifier or unresolved - create symbol with intro scope
-	templateCtx := srcCtx
-	if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-		templateCtx = srcCtx.WithoutScopes()
-	}
 	newSym := syntax.NewSyntaxSymbol(key, templateCtx)
 	if opts.IntroScope != nil {
 		newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
