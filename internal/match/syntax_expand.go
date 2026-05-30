@@ -224,7 +224,6 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 ) syntax.SyntaxValue {
 	key := sym.Key()
 
-	// Determine source context
 	srcCtx := sym.SourceContext()
 	if opts.UseSiteCtx != nil {
 		srcCtx = opts.UseSiteCtx
@@ -242,54 +241,52 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		templateCtx = srcCtx.WithoutScopes()
 	}
 
-	// Check if this is a free identifier
 	var isFree bool
 	var resolution FreeIdResolver
 	if opts.FreeIds != nil {
 		resolution, isFree = opts.FreeIds[key]
 	}
 
-	if isFree && resolution != nil {
-		// Handle free identifier resolution (local or global binding)
-		localScopes := resolution.GetLocalScopes()
-		if len(localScopes) > 0 {
-			// Local binding - use definition-site scopes
-			var scopedCtx *syntax.SourceContext
-			if srcCtx != nil {
-				scopedCtx = srcCtx.Clone()
-			} else {
-				scopedCtx = &syntax.SourceContext{}
-			}
-			scopedCtx.Scopes = localScopes
-			return syntax.NewSyntaxSymbol(key, scopedCtx)
+	// Not a free identifier (or no resolver) — apply intro scope and return.
+	if !isFree || resolution == nil {
+		newSym := syntax.NewSyntaxSymbol(key, templateCtx)
+		if opts.IntroScope != nil {
+			newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 		}
-
-		globalBinding := resolution.GetGlobal()
-		if globalBinding != nil {
-			// Check if we have a library scope — if so, add it to the
-			// identifier so CompileSymbol can redirect to the library's env
-			// via the TLE scope registry.
-			libScope := resolution.GetLibraryScope()
-			if libScope != nil {
-				newSym := syntax.NewSyntaxSymbol(key, templateCtx)
-				newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
-				return newSym
-			}
-
-			// No library scope — fall back to WithResolvedBinding
-			newSym := syntax.NewSyntaxSymbol(key, templateCtx)
-			return newSym.WithResolvedBinding(globalBinding)
-		}
-
-		if resolution.GetHasLocalBinding() {
-			return syntax.NewSyntaxSymbol(key, srcCtx)
-		}
-
-		// Resolution is non-nil but all methods returned zero — the binding was
-		// unresolvable at definition time. Fall through to intro scope.
+		return newSym
 	}
 
-	// Not a free identifier or unresolved - create symbol with intro scope
+	// Local binding — use definition-site scopes.
+	localScopes := resolution.GetLocalScopes()
+	if len(localScopes) > 0 {
+		scopedCtx := func() *syntax.SourceContext {
+			if srcCtx != nil {
+				return srcCtx.Clone()
+			}
+			return &syntax.SourceContext{}
+		}()
+		scopedCtx.Scopes = localScopes
+		return syntax.NewSyntaxSymbol(key, scopedCtx)
+	}
+
+	// Global binding — library scope (if any) lets CompileSymbol redirect via
+	// the TLE scope registry; otherwise carry the binding directly.
+	globalBinding := resolution.GetGlobal()
+	if globalBinding != nil {
+		newSym := syntax.NewSyntaxSymbol(key, templateCtx)
+		libScope := resolution.GetLibraryScope()
+		if libScope != nil {
+			return newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
+		}
+		return newSym.WithResolvedBinding(globalBinding)
+	}
+
+	if resolution.GetHasLocalBinding() {
+		return syntax.NewSyntaxSymbol(key, srcCtx)
+	}
+
+	// Resolution non-nil but all methods returned zero — binding was unresolvable
+	// at definition time. Fall through to intro scope.
 	newSym := syntax.NewSyntaxSymbol(key, templateCtx)
 	if opts.IntroScope != nil {
 		newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
