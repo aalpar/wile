@@ -35,90 +35,26 @@ func ForEachList(ctx context.Context, t values.Tuple, name string, fn func(conte
 	return values.ForEachProperList(ctx, t, name, fn)
 }
 
-// Uncons asserts v is a non-empty Tuple and projects (car, cdr).
-// On empty list or non-Tuple input, returns a wrapped ErrNotAList with
-// the canonical "<name>: <role>" message format. The cdr may be any
-// values.Value — improper lists are accepted here; callers that need
-// a proper-list tail should follow up with ForEachList.
-//
-// Uncons is the eliminator for the Tuple algebra: every site that needs
-// to peel one element off the front of a list and continue with the
-// remainder should funnel through here so the empty-list / non-Tuple
-// rejection is defined exactly once.
+// Uncons is the helper-package alias for values.Uncons. See that function
+// for semantics. machine/ and other layers that cannot import helpers
+// should call values.Uncons directly — they are equivalent.
 func Uncons(v values.Value, name, role string) (values.Value, values.Value, error) {
-	if values.IsEmptyList(v) {
-		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: %s: expected a non-empty list", name, role)
-	}
-	t, ok := v.(values.Tuple)
-	if !ok {
-		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: %s: expected a list but got %T", name, role, v)
-	}
-	return t.Car(), t.Cdr(), nil
+	return values.Uncons(v, name, role)
 }
 
-// UnconsTyped is Uncons followed by a type assertion on the head.
-// On head-type mismatch, returns a wrapped headSentinel with the
-// expected-type phrase read from the sentinel via *StaticError.TypeName().
-// On non-list inputs, returns the same ErrNotAList error as Uncons.
+// UnconsTyped is the helper-package alias for values.UnconsTyped.
 func UnconsTyped[T any](v values.Value, headSentinel error, name, role string) (T, values.Value, error) {
-	var zero T
-	head, tail, err := Uncons(v, name, role)
-	if err != nil {
-		return zero, nil, err
-	}
-	typed, ok := head.(T)
-	if !ok {
-		return zero, nil, werr.WrapForeignErrorf(headSentinel,
-			"%s: %s: expected %s but got %T",
-			name, role, typeNameFromSentinel(headSentinel), head)
-	}
-	return typed, tail, nil
+	return values.UnconsTyped[T](v, headSentinel, name, role)
 }
 
-// CarAs asserts t.Car() has concrete type T. Use this when the caller
-// already holds a Tuple in hand and only needs a typed head — the tail
-// is left implicit. For typed head + tail in one call, use UnconsTyped.
+// CarAs is the helper-package alias for values.CarAs.
 func CarAs[T any](t values.Tuple, headSentinel error, name, role string) (T, error) {
-	var zero T
-	head := t.Car()
-	typed, ok := head.(T)
-	if !ok {
-		return zero, werr.WrapForeignErrorf(headSentinel,
-			"%s: %s: expected %s but got %T",
-			name, role, typeNameFromSentinel(headSentinel), head)
-	}
-	return typed, nil
+	return values.CarAs[T](t, headSentinel, name, role)
 }
 
-// NthCons advances n cons cells along the cdr chain and returns the
-// remaining list (or improper tail). It is the unified primitive
-// behind list-ref (NthCons(...).Car()) and list-tail (NthCons(...)).
-// Returns ErrIndexOutOfRange if n exceeds the list length or if n is
-// negative.
-//
-// At n=0 the input is returned unchanged, including for EmptyList — this
-// matches R7RS semantics where (list-tail x 0) is x even if x is ().
+// NthCons is the helper-package alias for values.NthCons.
 func NthCons(lst values.Value, n int64, name string) (values.Value, error) {
-	if n < 0 {
-		return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
-			"%s: index must be non-negative", name)
-	}
-	current := lst
-	for i := range n {
-		if values.IsEmptyList(current) {
-			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
-				"%s: index %d out of bounds at depth %d", name, n, i)
-		}
-		t, ok := current.(values.Tuple)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
-				"%s: index %d out of bounds: improper tail at depth %d", name, n, i)
-		}
-		current = t.Cdr()
-	}
-	return current, nil
+	return values.NthCons(lst, n, name)
 }
 
 // ListToVector is a helper that converts a list argument to a vector.

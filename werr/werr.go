@@ -260,6 +260,19 @@ func (p *StaticError) TypeName() string {
 	return p.expectedType
 }
 
+// TypeNameOf extracts the expected-type phrase from any error wrapping a
+// type-mismatch sentinel. Returns "" for non-sentinel errors or sentinels
+// without a type name. Use this in helpers that format error messages
+// from a sentinel parameter — it works regardless of where the helper
+// lives in the dependency graph.
+func TypeNameOf(err error) string {
+	var se *StaticError
+	if errors.As(err, &se) {
+		return se.TypeName()
+	}
+	return ""
+}
+
 // ForeignError is an error type for Go primitive implementations (functions
 // foreign to Scheme). It wraps an optional underlying error with a message.
 type ForeignError struct {

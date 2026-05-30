@@ -91,6 +91,90 @@ func ForEachProperList(ctx context.Context, t Tuple, name string, fn ForEachFunc
 	return nil
 }
 
+// Uncons asserts v is a non-empty Tuple and projects (car, cdr).
+// On empty list or non-Tuple input, returns a wrapped ErrNotAList with
+// the canonical "<name>: <role>" message format. The cdr may be any
+// Value — improper lists are accepted here; callers that need a
+// proper-list tail should follow up with ForEachProperList.
+//
+// Uncons is the eliminator for the Tuple algebra: every site that needs
+// to peel one element off the front of a list and continue with the
+// remainder should funnel through here so the empty-list / non-Tuple
+// rejection is defined exactly once. registry/helpers.Uncons delegates here.
+func Uncons(v Value, name, role string) (Value, Value, error) {
+	if IsEmptyList(v) {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: %s: expected a non-empty list", name, role)
+	}
+	t, ok := v.(Tuple)
+	if !ok {
+		return nil, nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: %s: expected a list but got %T", name, role, v)
+	}
+	return t.Car(), t.Cdr(), nil
+}
+
+// UnconsTyped is Uncons followed by a type assertion on the head.
+// On head-type mismatch, returns a wrapped headSentinel with the
+// expected-type phrase read via werr.TypeNameOf.
+func UnconsTyped[T any](v Value, headSentinel error, name, role string) (T, Value, error) {
+	var zero T
+	head, tail, err := Uncons(v, name, role)
+	if err != nil {
+		return zero, nil, err
+	}
+	typed, ok := head.(T)
+	if !ok {
+		return zero, nil, werr.WrapForeignErrorf(headSentinel,
+			"%s: %s: expected %s but got %T",
+			name, role, werr.TypeNameOf(headSentinel), head)
+	}
+	return typed, tail, nil
+}
+
+// CarAs asserts t.Car() has concrete type T. Use this when the caller
+// already holds a Tuple in hand and only needs a typed head — the tail
+// is left implicit. For typed head + tail in one call, use UnconsTyped.
+func CarAs[T any](t Tuple, headSentinel error, name, role string) (T, error) {
+	var zero T
+	head := t.Car()
+	typed, ok := head.(T)
+	if !ok {
+		return zero, werr.WrapForeignErrorf(headSentinel,
+			"%s: %s: expected %s but got %T",
+			name, role, werr.TypeNameOf(headSentinel), head)
+	}
+	return typed, nil
+}
+
+// NthCons advances n cons cells along the cdr chain and returns the
+// remaining list (or improper tail). It is the unified primitive
+// behind list-ref (NthCons(...).Car()) and list-tail (NthCons(...)).
+// Returns ErrIndexOutOfRange if n is negative or exceeds the list length.
+//
+// At n=0 the input is returned unchanged, including for EmptyList — this
+// matches R7RS semantics where (list-tail x 0) is x.
+func NthCons(lst Value, n int64, name string) (Value, error) {
+	if n < 0 {
+		return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"%s: index must be non-negative", name)
+	}
+	current := lst
+	for i := range n {
+		if IsEmptyList(current) {
+			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %d out of bounds at depth %d", name, n, i)
+		}
+		t, ok := current.(Tuple)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %d out of bounds: improper tail at depth %d", name, n, i)
+		}
+		current = t.Cdr()
+	}
+	return current, nil
+}
+
 // equalPairKey identifies a pair of compound values being compared.
 // Go compares interface values in arrays by type and pointer for pointer types,
 // so [2]any{pairA, pairB} works as a map key without unsafe.
