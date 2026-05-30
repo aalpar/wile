@@ -496,8 +496,8 @@ func TestAssocLookup_Errors(t *testing.T) {
 func TestUncons(t *testing.T) {
 	sym := values.NewSymbol("x")
 	n := values.NewInteger(1)
-	proper := values.List(sym, n)           // (x 1)
-	improper := values.NewCons(sym, n)      // (x . 1) — cdr is not a Tuple
+	proper := values.List(sym, n)      // (x 1)
+	improper := values.NewCons(sym, n) // (x . 1) — cdr is not a Tuple
 	tcs := []struct {
 		name     string
 		input    values.Value
