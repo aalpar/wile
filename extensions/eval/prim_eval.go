@@ -310,16 +310,14 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 	if !ok || headSym.Key != "wile" {
 		return nil, false, nil
 	}
-	rest, ok := spec.Cdr().(values.Tuple)
-	if !ok {
-		return nil, false, nil
+	// At this point the head is 'wile. From here, malformed payload is an
+	// error (return true), not a fallthrough.
+	nameSym, restAfterName, err := values.UnconsTyped[*values.Symbol](
+		spec.Cdr(), werr.ErrNotASymbol, "environment", "profile name after 'wile")
+	if err != nil {
+		return nil, true, err
 	}
-	nameSym, ok := rest.Car().(*values.Symbol)
-	if !ok {
-		return nil, true, werr.WrapForeignErrorf(werr.ErrNotASymbol,
-			"environment: expected profile name after 'wile, got %T", rest.Car())
-	}
-	if !values.IsEmptyList(rest.Cdr()) {
+	if !values.IsEmptyList(restAfterName) {
 		return nil, true, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 			"environment: (wile %s ...) takes exactly one profile name", nameSym.Key)
 	}
