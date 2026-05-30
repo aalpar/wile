@@ -37,31 +37,20 @@ func SyntaxValueToDatum(sv values.Value) values.Value {
 	}
 	switch v := sv.(type) {
 	case *syntax.SyntaxPair:
-		// Use a loop to traverse the list spine to avoid stack overflow
+		// Spine walk via the canonical SyntaxPair.ForEach iterator — it
+		// is iterative (no recursion) so stack overflow on long lists is
+		// not a concern. The returned tail captures any improper-list
+		// cdr; we recursively convert it.
 		var cars []values.Value
-		var improperCdr values.Value
-		curr := v
-		for {
-			cars = append(cars, SyntaxValueToDatum(curr.Car()))
-			cdr := curr.Cdr()
-			cdrSyntax, ok := cdr.(syntax.SyntaxValue)
-			if ok && syntax.IsSyntaxEmptyList(cdrSyntax) {
-				break
-			}
-			next, ok := cdr.(*syntax.SyntaxPair)
-			if !ok {
-				// Improper list - convert the final cdr
-				improperCdr = SyntaxValueToDatum(cdr)
-				break
-			}
-			curr = next
-		}
-		// Build list from end to avoid needing SetCdr
+		tail, _ := v.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+			cars = append(cars, SyntaxValueToDatum(elem))
+			return nil
+		})
 		var result values.Value
-		if improperCdr != nil {
-			result = improperCdr
-		} else {
+		if values.IsEmptyList(tail) {
 			result = values.EmptyList
+		} else {
+			result = SyntaxValueToDatum(tail)
 		}
 		for i := range slices.Backward(cars) {
 			result = values.NewCons(cars[i], result)
