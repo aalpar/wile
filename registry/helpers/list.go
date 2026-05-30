@@ -26,15 +26,13 @@ import (
 // ForEachList calls fn on each element of t and returns ErrNotAList if the tail
 // is not an empty list (i.e., t is an improper list). If fn returns an error,
 // that error is returned unchanged.
+//
+// Delegates to values.ForEachProperList so the proper-list rejection logic
+// is defined in exactly one place. Callers that cannot import this package
+// (e.g., machine/) should call values.ForEachProperList directly — they are
+// equivalent.
 func ForEachList(ctx context.Context, t values.Tuple, name string, fn func(context.Context, int, bool, values.Value) error) error {
-	v, err := t.ForEach(ctx, fn)
-	if err != nil {
-		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
-	}
-	return nil
+	return values.ForEachProperList(ctx, t, name, fn)
 }
 
 // ListToVector is a helper that converts a list argument to a vector.

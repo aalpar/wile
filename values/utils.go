@@ -71,6 +71,26 @@ func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
 	return o, nil
 }
 
+// ForEachProperList calls fn on each element of t and returns ErrNotAList
+// if the tail is not the empty list (i.e., t is an improper list). If fn
+// returns an error, that error is returned unchanged.
+//
+// This is the canonical proper-list eliminator — every site that walks a
+// list and rejects improper tails should funnel through this function so
+// the rejection logic is defined exactly once. registry/helpers.ForEachList
+// delegates here; new code in any layer should call ForEachProperList
+// directly when it cannot import the helpers package (e.g., machine/).
+func ForEachProperList(ctx context.Context, t Tuple, name string, fn ForEachFunc) error {
+	v, err := t.ForEach(ctx, fn)
+	if err != nil {
+		return err
+	}
+	if !IsEmptyList(v) {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
+	}
+	return nil
+}
+
 // equalPairKey identifies a pair of compound values being compared.
 // Go compares interface values in arrays by type and pointer for pointer types,
 // so [2]any{pairA, pairB} works as a map key without unsafe.

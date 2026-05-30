@@ -74,6 +74,37 @@ func TestParseLibraryNameFromDatum_InvalidPart(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
+// TestParseLibraryNameFromDatum_RejectsImproperList pins the behavior added
+// when ParseLibraryNameFromDatum migrated to values.ForEachProperList: a
+// dotted-tail library name like (scheme . base) is no longer silently
+// accepted as if the trailing element did not exist.
+func TestParseLibraryNameFromDatum_RejectsImproperList(t *testing.T) {
+	tcs := []struct {
+		name string
+		expr values.Value
+	}{
+		{
+			name: "dotted-pair",
+			expr: values.NewCons(values.NewSymbol("scheme"), values.NewSymbol("base")),
+		},
+		{
+			name: "trailing-non-list",
+			expr: values.NewCons(
+				values.NewSymbol("scheme"),
+				values.NewCons(values.NewSymbol("base"), values.NewInteger(1)),
+			),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseLibraryNameFromDatum(context.Background(), tc.expr)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue,
+				qt.Commentf("expected ErrNotAList, got %v", err))
+		})
+	}
+}
+
 func TestParseImportSetFromDatum_Simple(t *testing.T) {
 	// (scheme base)
 	importSet := values.NewCons(

@@ -37,7 +37,7 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 	}
 
 	var parts []string
-	_, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
+	err := values.ForEachProperList(ctx, tuple, "library name", func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
 		sym, ok := partExpr.(*values.Symbol)
 		if ok {
 			parts = append(parts, sym.Key)
@@ -217,7 +217,7 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "rename: expected list of rename pairs")
 	}
 
-	_, err = renamesTuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, renamePairVal values.Value) error {
+	err = values.ForEachProperList(ctx, renamesTuple, "rename", func(_ context.Context, _ int, _ bool, renamePairVal values.Value) error {
 		renameTuple, ok := renamePairVal.(values.Tuple)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "rename: expected (old new) pair")
@@ -332,7 +332,7 @@ func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (map[s
 	}
 
 	ids := make(map[string]struct{})
-	_, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, idExpr values.Value) error {
+	err := values.ForEachProperList(ctx, tuple, "identifier list", func(_ context.Context, _ int, _ bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "expected identifier symbol")
