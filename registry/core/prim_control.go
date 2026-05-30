@@ -62,15 +62,12 @@ func PrimApply(cc machine.CallContext) error {
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
 		}
-		v, err := finalTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		err := helpers.ForEachList(mc.Context(), finalTuple, "apply", func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			prefixArgs = append(prefixArgs, elem)
 			return nil
 		})
 		if err != nil {
 			return err
-		}
-		if !values.IsEmptyList(v) {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "apply: final argument is an improper list")
 		}
 	}
 

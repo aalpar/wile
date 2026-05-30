@@ -65,7 +65,7 @@ func PrimBytevector(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "bytevector: expected a list but got %T", o)
 	}
 	var bytes []*values.Byte
-	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, hasNext bool, v values.Value) error {
+	err := helpers.ForEachList(mc.Context(), tuple, "bytevector", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		intVal, ok := v.(*values.Integer)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "bytevector: expected an integer but got %T", v)
@@ -79,9 +79,6 @@ func PrimBytevector(mc machine.CallContext) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "bytevector: not a proper list")
 	}
 	bv := values.ByteVector(bytes)
 	mc.SetValue(&bv)
@@ -188,7 +185,7 @@ func PrimBytevectorAppend(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "bytevector-append: expected a list but got %T", o)
 	}
 	result := values.NewByteVector()
-	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := helpers.ForEachList(mc.Context(), tuple, "bytevector-append", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		bv, ok := v.(*values.ByteVector)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAByteVector, "bytevector-append: expected a bytevector but got %T", v)
@@ -198,9 +195,6 @@ func PrimBytevectorAppend(mc machine.CallContext) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "bytevector-append: not a proper list")
 	}
 	mc.SetValue(result)
 	return nil

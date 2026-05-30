@@ -71,7 +71,7 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "make-namespace: expected list of import specs, got %T", argsVal)
 	}
 
-	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
+	err := helpers.ForEachList(mc.Context(), args, "make-namespace", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		importSet, parseErr := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
 		if parseErr != nil {
 			return werr.WrapForeignErrorf(parseErr, "make-namespace: invalid import spec")
@@ -99,9 +99,6 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "make-namespace: improper import spec list")
 	}
 
 	mc.SetValue(newNS)

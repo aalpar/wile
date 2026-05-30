@@ -419,16 +419,12 @@ func (p *MachineContext) Run() error {
 				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument must be a list, got %s", v.SchemeString()))
 			}
-			sentinel, err := tup.ForEach(mc.ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+			err := values.ForEachProperList(mc.ctx, tup, "apply", func(_ context.Context, _ int, _ bool, elem values.Value) error {
 				mc.evals.Push(elem)
 				return nil
 			})
 			if err != nil {
 				return applyCallableError(mc, err)
-			}
-			if !values.IsEmptyList(sentinel) {
-				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
-					"apply: final argument is an improper list"))
 			}
 			err = mc.checkStackSize()
 			if err != nil {

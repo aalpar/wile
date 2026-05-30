@@ -35,8 +35,12 @@ func PrimList(mc machine.CallContext) error {
 		mc.SetValue(values.EmptyList)
 		return nil
 	}
+	t, ok := o.(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "list: expected a list but got %T", o)
+	}
 	var elems []values.Value
-	_, err := values.ForEach(mc.Context(), o, func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := helpers.ForEachList(mc.Context(), t, "list", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		elems = append(elems, v)
 		return nil
 	})

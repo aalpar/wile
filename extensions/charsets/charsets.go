@@ -67,7 +67,7 @@ func primCharSetCtor(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList,
 			"%%char-set: rest argument: expected list of chars, got %T", mc.Arg(1))
 	}
-	_, err = rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+	err = helpers.ForEachList(mc.Context(), rest, "%char-set", func(_ context.Context, i int, _ bool, v values.Value) error {
 		ch, isChar := v.(*values.Character)
 		if !isChar {
 			return werr.WrapForeignErrorf(werr.ErrNotACharacter,
@@ -121,7 +121,7 @@ func primListToCharSet(mc machine.CallContext) error {
 			"list->char-set: argument 1: expected list, got %T", mc.Arg(0))
 	}
 	var runes []rune
-	_, err := lst.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+	err := helpers.ForEachList(mc.Context(), lst, "list->char-set", func(_ context.Context, i int, _ bool, v values.Value) error {
 		ch, isChar := v.(*values.Character)
 		if !isChar {
 			return werr.WrapForeignErrorf(werr.ErrNotACharacter,

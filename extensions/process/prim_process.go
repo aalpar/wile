@@ -76,7 +76,14 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 	var args []string
 	rest := mc.Arg(1)
 	ctx := mc.Context()
-	tail, iterErr := values.ForEach(ctx, rest, func(_ context.Context, _ int, _ bool, v values.Value) error {
+	restTuple, ok := rest.(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(
+			werr.ErrNotAList,
+			"process-spawn: arguments must be a proper list, got %T", rest,
+		)
+	}
+	iterErr := helpers.ForEachList(ctx, restTuple, "process-spawn", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
 			return werr.WrapForeignErrorf(
@@ -89,12 +96,6 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 	})
 	if iterErr != nil {
 		return iterErr
-	}
-	if !values.IsEmptyList(tail) {
-		return werr.WrapForeignErrorf(
-			werr.ErrNotAList,
-			"process-spawn: arguments must be a proper list",
-		)
 	}
 
 	cmd := exec.CommandContext(ctx, command.Value, args...)

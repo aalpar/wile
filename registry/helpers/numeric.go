@@ -69,7 +69,7 @@ func NumericFoldVariadic(
 	// above) stays on the stack. The closure below captures acc by reference,
 	// which forces it to the heap — but only on the 3+-arg path.
 	acc := nbr
-	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
+	err := ForEachList(mc.Context(), rest, name, func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
@@ -82,10 +82,7 @@ func NumericFoldVariadic(
 		return nil
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "%s: error processing arguments", name)
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
+		return err
 	}
 	mc.SetValue(acc)
 	return nil
@@ -139,7 +136,7 @@ func NumericFoldWithFirst(
 	// above) stays on the stack. The closure below captures acc by reference,
 	// which forces it to the heap — but only on the 3+-arg path.
 	acc := result
-	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
+	err = ForEachList(mc.Context(), rest, name, func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
@@ -152,10 +149,7 @@ func NumericFoldWithFirst(
 		return nil
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "%s: error processing arguments", name)
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
+		return err
 	}
 	mc.SetValue(acc)
 	return nil
