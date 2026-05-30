@@ -59,11 +59,11 @@ func parseOptionalName(rest values.Value) string {
 	if values.IsEmptyList(rest) {
 		return ""
 	}
-	restList, ok := rest.(values.Tuple)
-	if !ok {
+	head, _, err := values.Uncons(rest, "thread-name", "name argument")
+	if err != nil {
 		return ""
 	}
-	switch v := restList.Car().(type) {
+	switch v := head.(type) {
 	case *values.String:
 		return v.Value
 	case *values.Symbol:
