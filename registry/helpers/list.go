@@ -58,6 +58,25 @@ func Uncons(v values.Value, name, role string) (values.Value, values.Value, erro
 	return t.Car(), t.Cdr(), nil
 }
 
+// UnconsTyped is Uncons followed by a type assertion on the head.
+// On head-type mismatch, returns a wrapped headSentinel with the
+// expected-type phrase read from the sentinel via *StaticError.TypeName().
+// On non-list inputs, returns the same ErrNotAList error as Uncons.
+func UnconsTyped[T any](v values.Value, headSentinel error, name, role string) (T, values.Value, error) {
+	var zero T
+	head, tail, err := Uncons(v, name, role)
+	if err != nil {
+		return zero, nil, err
+	}
+	typed, ok := head.(T)
+	if !ok {
+		return zero, nil, werr.WrapForeignErrorf(headSentinel,
+			"%s: %s: expected %s but got %T",
+			name, role, typeNameFromSentinel(headSentinel), head)
+	}
+	return typed, tail, nil
+}
+
 // ListToVector is a helper that converts a list argument to a vector.
 func ListToVector(mc machine.CallContext, name string) error {
 	o := mc.Arg(0)

@@ -526,3 +526,36 @@ func TestUncons(t *testing.T) {
 		})
 	}
 }
+
+// ── UnconsTyped ─────────────────────────────────────────────────────────
+
+func TestUnconsTyped(t *testing.T) {
+	sym := values.NewSymbol("x")
+	n := values.NewInteger(1)
+	symList := values.List(sym, n) // (x 1) — head is symbol
+	intList := values.List(n, sym) // (1 x) — head is integer
+	tcs := []struct {
+		name    string
+		input   values.Value
+		wantOk  bool
+		wantErr error
+	}{
+		{"head-is-symbol", symList, true, nil},
+		{"head-is-integer", intList, false, werr.ErrNotASymbol},
+		{"empty", values.EmptyList, false, werr.ErrNotAList},
+		{"non-list", values.NewInteger(42), false, werr.ErrNotAList},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			gotSym, _, err := UnconsTyped[*values.Symbol](tc.input, werr.ErrNotASymbol, "test", "head")
+			if tc.wantErr != nil {
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, errors.Is(err, tc.wantErr), qt.IsTrue,
+					qt.Commentf("got %v", err))
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, gotSym.EqualTo(sym), qt.IsTrue)
+		})
+	}
+}
