@@ -130,20 +130,10 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 		return nil, werr.WrapForeignErrorf(err, "could not parse library file")
 	}
 
-	pair, ok := stx.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library form, got %T", stx)
-	}
-
-	carStx := pair.SyntaxCar()
-	carSym, ok := carStx.(*syntax.SyntaxSymbol)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %T", carStx)
-	}
-
-	symName := carSym.Key()
-	if symName != "define-library" && symName != "library" {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
+	if !isSyntaxFormWithKeyword(stx, "define-library") &&
+		!isSyntaxFormWithKeyword(stx, "library") {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
+			"expected define-library or library form, got %T", stx)
 	}
 
 	lib, err := compileAndExecuteLibrary(ctx, stx, expectedName, libEnv, filePath, evaluator)

@@ -43,19 +43,9 @@ import (
 //   - (define name value)
 //   - (define (name args...) body...)
 func extractDefineName(form syntax.SyntaxValue) *syntax.SyntaxSymbol {
-	pair, ok := form.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return nil
-	}
-
-	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	// Only handle define, not define-syntax (macros are handled separately).
+	pair, ok := asSyntaxFormWithKeyword(form, "define")
 	if !ok {
-		return nil
-	}
-
-	sym := carSym.Unwrap().(*values.Symbol)
-	// Only handle define, not define-syntax (macros are handled separately)
-	if sym.Key != "define" {
 		return nil
 	}
 

@@ -145,21 +145,11 @@ func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, 
 	if len(exprs) != 1 {
 		return exprs, false, nil
 	}
-	pair, ok := exprs[0].(*syntax.SyntaxPair)
+	pair, ok := asSyntaxFormWithKeyword(exprs[0], "begin")
 	if !ok {
 		return exprs, false, nil
 	}
-	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
-	if !ok {
-		return exprs, false, nil
-	}
-	sym, ok := carSym.Unwrap().(*values.Symbol)
-	if !ok || sym.Key != "begin" {
-		return exprs, false, nil
-	}
-	// It's (begin ...), extract the contents
-	cdr := pair.Cdr()
-	cdrPair, ok := cdr.(*syntax.SyntaxPair)
+	cdrPair, ok := pair.Cdr().(*syntax.SyntaxPair)
 	if !ok {
 		return exprs, false, nil
 	}

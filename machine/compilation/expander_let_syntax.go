@@ -253,16 +253,28 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	return beginExpr, nil
 }
 
-// isSyntaxFormWithKeyword checks if expr is a syntax pair whose car is
-// a syntax symbol with the given keyword.
-func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
+// asSyntaxFormWithKeyword returns expr as a *SyntaxPair if it is a non-empty
+// pair whose car is a syntax symbol matching keyword. Returns (nil, false)
+// otherwise. Use this when the caller needs the pair to walk its cdr;
+// use isSyntaxFormWithKeyword when only the boolean test is needed.
+func asSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) (*syntax.SyntaxPair, bool) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return false
+		return nil, false
 	}
 	sym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	if !ok {
-		return false
+		return nil, false
 	}
-	return sym.Key() == keyword
+	if sym.Key() != keyword {
+		return nil, false
+	}
+	return pair, true
+}
+
+// isSyntaxFormWithKeyword reports whether expr is a non-empty syntax pair
+// whose car is a syntax symbol matching keyword.
+func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
+	_, ok := asSyntaxFormWithKeyword(expr, keyword)
+	return ok
 }
