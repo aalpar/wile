@@ -306,6 +306,14 @@ func (p *Pair) IsEmptyList() bool {
 // a boolean hasNext indicating if there are more elements, and the value v.
 // If fn returns an error, the iteration stops and the error is returned.
 // If the list ends with a non-empty cdr, that cdr is returned as the second return value.
+//
+// Stays open-coded rather than consuming Spine: a Spine-consuming
+// variant was measured ~40–56% slower across 10/100/1000-element
+// lists (BenchmarkPairForEach in pair_bench_test.go) because each
+// iter.Seq2 yield goes through two function pointers, and ForEach is
+// hot enough that the per-step overhead dominates. The C.3/C.4 spine
+// consumers (IsList, Length, AsVector) are called far less often per
+// list, so their regression is invisible.
 func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
 		return EmptyList, nil
