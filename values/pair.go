@@ -208,45 +208,22 @@ func (p *Pair) SetCdr(v Value) {
 // Returns false for circular lists per R7RS §6.4.
 // See BIBLIOGRAPHY.md "Floyd's Cycle Detection".
 //
-// Implementation note: This method must use *Pair (not Tuple) for cycle
-// detection because it requires pointer identity comparison (slow == fast).
-// Interfaces cannot be compared by pointer identity.
+// Consumes SpineWithCycleCheck: a cycle short-circuits the spine, and
+// the final cell's cdr is checked for EmptyList to distinguish proper
+// from improper termination.
 func (p *Pair) IsList() bool {
 	if IsVoid(p) {
 		return false
 	}
-	slow := p
-	fast := p
-	for {
-		// Fast pointer advances two steps
-		// Type assertion to *Pair required for pointer identity comparison
-		next, ok := fast.Cdr().(*Pair)
-		if !ok {
-			return IsEmptyList(fast.Cdr())
-		}
-		fast = next
-		if fast.IsEmptyList() {
-			return true
-		}
-		next, ok = fast.Cdr().(*Pair)
-		if !ok {
-			return IsEmptyList(fast.Cdr())
-		}
-		fast = next
-		if fast.IsEmptyList() {
-			return true
-		}
-		// Slow pointer advances one step
-		nextSlow, ok := slow.Cdr().(*Pair)
-		if !ok {
-			return false
-		}
-		slow = nextSlow
-		// Cycle detected
-		if slow == fast {
-			return false
-		}
+	var cycled bool
+	var last *Pair
+	for cell := range SpineWithCycleCheck(p, &cycled) {
+		last = cell
 	}
+	if cycled {
+		return false
+	}
+	return IsEmptyList(last.Cdr())
 }
 
 // Append appends the given Value vs to the end of the list represented by the Pair.
