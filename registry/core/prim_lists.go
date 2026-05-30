@@ -184,31 +184,19 @@ func PrimLength(mc machine.CallContext) error {
 // Returns the element at the given index in a list.
 // R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListRef(mc machine.CallContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
-	idx, ok := values.ExactInteger(k)
+	idx, ok := values.ExactInteger(mc.Arg(1))
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-ref: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+			"list-ref: expected an exact integer index but got %T", mc.Arg(1))
 	}
-	if idx < 0 {
-		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index must be non-negative")
+	result, err := helpers.NthCons(mc.Arg(0), idx, "list-ref")
+	if err != nil {
+		return err
 	}
-	if values.IsEmptyList(o) {
-		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index out of bounds for empty list")
-	}
-	pr, ok := o.(values.Tuple)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "list-ref: expected a list but got %T", o)
-	}
-	for range idx {
-		next := pr.Cdr()
-		if values.IsEmptyList(next) {
-			return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index out of bounds")
-		}
-		pr, ok = next.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "list-ref: expected a list but got %T", next)
-		}
+	pr, ok := result.(values.Tuple)
+	if !ok || pr.IsEmptyList() {
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"list-ref: index %d points past the last element", idx)
 	}
 	mc.SetValue(pr.Car())
 	return nil
@@ -251,42 +239,16 @@ func PrimListSet(mc machine.CallContext) error {
 // PrimListTail implements the (list-tail) primitive.
 // Benchmarked: kept in Go — Scheme impl is 6x slower on short lists.
 func PrimListTail(mc machine.CallContext) error {
-	o := mc.Arg(0)
-	k := mc.Arg(1)
-	idx, ok := values.ExactInteger(k)
+	idx, ok := values.ExactInteger(mc.Arg(1))
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-tail: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+			"list-tail: expected an exact integer index but got %T", mc.Arg(1))
 	}
-	if idx < 0 {
-		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-tail: index must be non-negative")
+	result, err := helpers.NthCons(mc.Arg(0), idx, "list-tail")
+	if err != nil {
+		return err
 	}
-	if idx == 0 {
-		mc.SetValue(o)
-		return nil
-	}
-	pr, ok := o.(values.Tuple)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "list-tail: expected a list but got %T", o)
-	}
-	for i := range idx {
-		next := pr.Cdr()
-		if values.IsEmptyList(next) {
-			if i == idx-1 {
-				mc.SetValue(values.EmptyList)
-				return nil
-			}
-			return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-tail: index out of bounds")
-		}
-		pr, ok = next.(values.Tuple)
-		if !ok {
-			if i == idx-1 {
-				mc.SetValue(next)
-				return nil
-			}
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "list-tail: expected a list but got %T", next)
-		}
-	}
-	mc.SetValue(pr)
+	mc.SetValue(result)
 	return nil
 }
 
