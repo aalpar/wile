@@ -691,10 +691,10 @@ func TestSpine(t *testing.T) {
 	single := values.NewCons(a, values.EmptyList)
 
 	tcs := []struct {
-		name         string
-		input        *values.Pair
-		wantCars     []values.Value
-		wantTail     values.Value
+		name     string
+		input    *values.Pair
+		wantCars []values.Value
+		wantTail values.Value
 	}{
 		{"proper-3-elements", proper, []values.Value{a, b, c}, values.EmptyList},
 		{"improper-2-plus-tail", improper, []values.Value{a, b}, c},
