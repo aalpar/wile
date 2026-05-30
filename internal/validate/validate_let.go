@@ -70,7 +70,7 @@ func validateLetCommon(
 
 		// Named let detection (only for plain let)
 		if kind == LetKindLet {
-			sym, symOk := asSyntaxSymbol(elements[1])
+			sym, symOk := elements[1].(*syntax.SyntaxSymbol)
 			if symOk {
 				return validateNamedLet(ctx, env, source, sym, elements, result)
 			}
@@ -186,7 +186,7 @@ func parseLetBindingPairs(
 			allOk = false
 			continue
 		}
-		nameSym, symOk := asSyntaxSymbol(elems[0])
+		nameSym, symOk := elems[0].(*syntax.SyntaxSymbol)
 		if !symOk {
 			result.addError(getSourceContext(elems[0]), formName,
 				formName+" binding name must be a symbol")

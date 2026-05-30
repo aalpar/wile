@@ -72,7 +72,7 @@ func validateDefineVariable(ctx context.Context, env *environment.EnvironmentFra
 func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFrame, source *syntax.SourceContext, nameAndParams *syntax.SyntaxPair, elements []syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	// Extract the function name from car of the list
 	nameExpr := nameAndParams.Car()
-	name, ok := asSyntaxSymbol(nameExpr.(syntax.SyntaxValue))
+	name, ok := nameExpr.(*syntax.SyntaxSymbol)
 	if !ok {
 		result.addErrorf(source, "define", "expected symbol as function name, got %T", nameExpr)
 		return nil
@@ -109,7 +109,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	params := &ValidatedParams{formName: "@params"}
 
 	// Handle single symbol as rest parameter: (lambda x body)
-	sym, ok := asSyntaxSymbol(paramExpr)
+	sym, ok := paramExpr.(*syntax.SyntaxSymbol)
 	if ok {
 		params.Rest = sym
 		return params
@@ -136,7 +136,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 			// Not a pair - check if it's a rest parameter (improper list)
 			sv, ok := current.(syntax.SyntaxValue)
 			if ok {
-				sym, ok := asSyntaxSymbol(sv)
+				sym, ok := sv.(*syntax.SyntaxSymbol)
 				if !ok {
 					result.addErrorf(getSourceContext(sv), params.formName, "expected symbol as rest parameter, got %T", current)
 					return nil
@@ -154,7 +154,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 			return nil
 		}
 
-		sym, ok := asSyntaxSymbol(paramVal)
+		sym, ok := paramVal.(*syntax.SyntaxSymbol)
 		if !ok {
 			result.addErrorf(getSourceContext(paramVal), params.formName, "expected symbol in parameter list, got %T", paramVal)
 			return nil

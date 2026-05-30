@@ -198,31 +198,9 @@ func arityArgMessage(ae *syntax.FormArityError) string {
 // getSourceContext extracts SourceContext from a SyntaxValue if available
 func getSourceContext(v syntax.SyntaxValue) *syntax.SourceContext {
 	switch sv := v.(type) {
-	case *syntax.SyntaxPair:
-		return sv.SourceContext()
-	case *syntax.SyntaxSymbol:
-		return sv.SourceContext()
-	case *syntax.SyntaxObject:
+	case *syntax.SyntaxPair, *syntax.SyntaxSymbol, *syntax.SyntaxObject:
 		return sv.SourceContext()
 	default:
 		return nil
 	}
-}
-
-// isSyntaxSymbol checks if a SyntaxValue is a symbol
-func asSyntaxSymbol(v syntax.SyntaxValue) (*syntax.SyntaxSymbol, bool) {
-	sym, ok := v.(*syntax.SyntaxSymbol)
-	if ok {
-		return sym, true
-	}
-	// Also check for SyntaxObject wrapping a symbol
-	obj, ok := v.(*syntax.SyntaxObject)
-	if ok {
-		_, ok = obj.Unwrap().(*values.Symbol)
-		if ok {
-			// This is unusual - symbols should be SyntaxSymbol
-			return nil, false
-		}
-	}
-	return nil, false
 }

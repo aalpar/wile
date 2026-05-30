@@ -29,7 +29,7 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 	}
 
 	// Second element must be a symbol
-	name, ok := asSyntaxSymbol(elements[1])
+	name, ok := elements[1].(*syntax.SyntaxSymbol)
 	if !ok {
 		result.addErrorf(source, "set!", "expected symbol as first argument to set!, got %T", elements[1])
 		return nil

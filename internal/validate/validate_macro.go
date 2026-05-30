@@ -32,7 +32,7 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 	}
 
 	// Second element must be a symbol (the keyword to bind)
-	_, isSym := asSyntaxSymbol(elements[1])
+	_, isSym := elements[1].(*syntax.SyntaxSymbol)
 	if !isSym {
 		result.addError(getSourceContext(elements[1]), "define-syntax", "define-syntax keyword must be a symbol")
 		return nil
@@ -67,7 +67,7 @@ func validateSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame,
 			// Validate each literal is a symbol
 			if !literalsPair.IsEmptyList() {
 				_, err := syntax.SyntaxForEach(ctx, literalsPair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-					_, ok := asSyntaxSymbol(v)
+					_, ok := v.(*syntax.SyntaxSymbol)
 					if !ok {
 						result.addErrorf(getSourceContext(v), "syntax-rules", "literal must be a symbol, got %T", v)
 					}
@@ -139,7 +139,7 @@ func validateExport(_ context.Context, env *environment.EnvironmentFrame, pair *
 	// Each export-spec should be a symbol or (rename ...)
 	for i := 1; i < len(elements); i++ {
 		spec := elements[i]
-		_, ok := asSyntaxSymbol(spec)
+		_, ok := spec.(*syntax.SyntaxSymbol)
 		if ok {
 			continue // Simple export
 		}
@@ -177,7 +177,7 @@ func validateDefineLibrary(ctx context.Context, env *environment.EnvironmentFram
 
 	// Validate library name components are symbols or integers
 	_, err := syntax.SyntaxForEach(ctx, namePair, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		_, ok := asSyntaxSymbol(v)
+		_, ok := v.(*syntax.SyntaxSymbol)
 		if ok {
 			return nil
 		}
