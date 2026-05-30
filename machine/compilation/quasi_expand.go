@@ -64,7 +64,7 @@ func (p *CompileTimeContinuation) buildQuasiSyntaxList(srcCtx *syntax.SourceCont
 func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
 	s, ok := v.(*syntax.SyntaxSymbol)
 	if ok {
-		return s.Sym.Key, true
+		return s.Key(), true
 	}
 	return "", false
 }

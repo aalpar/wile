@@ -402,7 +402,7 @@ func validateLetrecBindingsAndBody(
 	allOk := true
 	for _, dup := range findDuplicateSymbols(nameSyms) {
 		result.addErrorf(getSourceContext(dup), formName,
-			"duplicate binding name %q", dup.Sym.Key)
+			"duplicate binding name %q", dup.Key())
 		allOk = false
 	}
 	if !allOk {
@@ -560,7 +560,7 @@ func checkDuplicateBindingNames(
 	allOk := true
 	for _, dup := range findDuplicateSymbols(syms) {
 		result.addErrorf(getSourceContext(dup), formName,
-			"duplicate binding name %q", dup.Sym.Key)
+			"duplicate binding name %q", dup.Key())
 		allOk = false
 	}
 	return allOk

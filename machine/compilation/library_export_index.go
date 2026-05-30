@@ -97,7 +97,7 @@ func ParseLibrarySummary(ctx context.Context, r io.Reader, filePath string, name
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "define-library: expected keyword, got %T", carStx)
 	}
 
-	symName := carSym.Sym.Key
+	symName := carSym.Key()
 	if symName != "define-library" && symName != "library" {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "define-library: expected define-library or library, got %s", symName)
 	}
@@ -153,7 +153,7 @@ func parseSummaryDeclaration(ctx context.Context, summary *LibrarySummary, decl 
 			return nil
 		}
 
-		switch carSym.Sym.Key {
+		switch carSym.Key() {
 		case "export":
 			return parseSummaryExports(ctx, summary, d.SyntaxCdr())
 		case "description":
@@ -188,12 +188,12 @@ func parseSummaryExportSpec(summary *LibrarySummary, spec syntax.SyntaxValue) {
 		return
 
 	case *syntax.SyntaxSymbol:
-		summary.Exports = append(summary.Exports, s.Unwrap().(*values.Symbol).Key)
+		summary.Exports = append(summary.Exports, s.Key())
 
 	case *syntax.SyntaxPair:
 		// Could be (rename internal external).
 		carSym, ok := s.SyntaxCar().(*syntax.SyntaxSymbol)
-		if !ok || carSym.Unwrap().(*values.Symbol).Key != "rename" {
+		if !ok || carSym.Key() != "rename" {
 			return
 		}
 		// (rename internal external) — exactly three elements counting the
@@ -204,7 +204,7 @@ func parseSummaryExportSpec(summary *LibrarySummary, spec syntax.SyntaxValue) {
 		}
 		externalSym, ok := parts[2].(*syntax.SyntaxSymbol)
 		if ok {
-			summary.Exports = append(summary.Exports, externalSym.Unwrap().(*values.Symbol).Key)
+			summary.Exports = append(summary.Exports, externalSym.Key())
 		}
 	}
 }

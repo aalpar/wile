@@ -148,7 +148,7 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 		if car != nil {
 			sym, ok := car.(*syntax.SyntaxSymbol)
 			if ok {
-				macroName = sym.Sym.Key
+				macroName = sym.Key()
 			}
 		}
 	}

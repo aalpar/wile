@@ -264,5 +264,5 @@ func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
 	if !ok {
 		return false
 	}
-	return sym.Sym.Key == keyword
+	return sym.Key() == keyword
 }

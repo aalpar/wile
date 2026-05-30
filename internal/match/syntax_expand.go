@@ -128,7 +128,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		car := t.SyntaxCar()
 		carSym, ok := car.(*syntax.SyntaxSymbol)
 		if ok {
-			if carSym.Unwrap().(*values.Symbol).Key == p.ellipsisID {
+			if carSym.Key() == p.ellipsisID {
 				cdr := t.SyntaxCdr()
 				cdrPair, ok := cdr.(*syntax.SyntaxPair)
 				if ok && !syntax.IsSyntaxEmptyList(cdrPair) {
@@ -145,7 +145,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		if ok && !syntax.IsSyntaxEmptyList(cdrPair) {
 			sym, ok := cdrPair.SyntaxCar().(*syntax.SyntaxSymbol)
 			if ok {
-				if sym.Unwrap().(*values.Symbol).Key == p.ellipsisID {
+				if sym.Key() == p.ellipsisID {
 					// Found ellipsis - handle repetition
 					return p.expandSyntaxEllipsis(
 						car, cdrPair.SyntaxCdr(), ctx, ellipsisVars, excludeEllipsisIDs, opts)
@@ -217,7 +217,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	sym *syntax.SyntaxSymbol,
 	opts *ExpandOptions,
 ) syntax.SyntaxValue {
-	symVal := sym.Unwrap().(*values.Symbol)
+	key := sym.Key()
 
 	// Determine source context
 	srcCtx := sym.SourceContext()
@@ -234,7 +234,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	var isFree bool
 	var resolution FreeIdResolver
 	if opts.FreeIds != nil {
-		resolution, isFree = opts.FreeIds[symVal.Key]
+		resolution, isFree = opts.FreeIds[key]
 	}
 
 	if isFree && resolution != nil {
@@ -249,7 +249,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 				scopedCtx = &syntax.SourceContext{}
 			}
 			scopedCtx.Scopes = localScopes
-			return syntax.NewSyntaxSymbol(symVal.Key, scopedCtx)
+			return syntax.NewSyntaxSymbol(key, scopedCtx)
 		}
 
 		globalBinding := resolution.GetGlobal()
@@ -263,7 +263,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 				if srcCtx != nil && len(srcCtx.Scopes) > 0 {
 					symCtx = srcCtx.WithoutScopes()
 				}
-				newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
+				newSym := syntax.NewSyntaxSymbol(key, symCtx)
 				newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
 				return newSym
 			}
@@ -273,12 +273,12 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			if srcCtx != nil && len(srcCtx.Scopes) > 0 {
 				symCtx = srcCtx.WithoutScopes()
 			}
-			newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
+			newSym := syntax.NewSyntaxSymbol(key, symCtx)
 			return newSym.WithResolvedBinding(globalBinding)
 		}
 
 		if resolution.GetHasLocalBinding() {
-			return syntax.NewSyntaxSymbol(symVal.Key, srcCtx)
+			return syntax.NewSyntaxSymbol(key, srcCtx)
 		}
 
 		// Resolution is non-nil but all methods returned zero — the binding was
@@ -290,7 +290,7 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	if srcCtx != nil && len(srcCtx.Scopes) > 0 {
 		templateCtx = srcCtx.WithoutScopes()
 	}
-	newSym := syntax.NewSyntaxSymbol(symVal.Key, templateCtx)
+	newSym := syntax.NewSyntaxSymbol(key, templateCtx)
 	if opts.IntroScope != nil {
 		newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 	}
@@ -304,12 +304,12 @@ func (p *SyntaxMatcher) expandSymbol(
 	ctx *captureContext,
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
-	symVal := t.Unwrap().(*values.Symbol)
+	key := t.Key()
 
-	capturedVal, ok := ctx.bindings[symVal.Key]
+	capturedVal, ok := ctx.bindings[key]
 	if ok {
 		if opts.PatternVarSyntax != nil {
-			patternSym, hasPattern := opts.PatternVarSyntax[symVal.Key]
+			patternSym, hasPattern := opts.PatternVarSyntax[key]
 			if hasPattern {
 				templateScopes := t.Scopes()
 				patternScopes := patternSym.Scopes()
@@ -584,10 +584,10 @@ func (p *SyntaxMatcher) findSyntaxPatternVariables(template syntax.SyntaxValue) 
 func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, vars map[string]struct{}) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
-		symVal := t.Unwrap().(*values.Symbol)
-		_, ok := p.matcher.variables[symVal.Key]
+		key := t.Key()
+		_, ok := p.matcher.variables[key]
 		if ok {
-			vars[symVal.Key] = struct{}{}
+			vars[key] = struct{}{}
 		}
 	case *syntax.SyntaxPair:
 		if !syntax.IsSyntaxEmptyList(t) {

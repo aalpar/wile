@@ -366,7 +366,7 @@ func TestScopeCreation(t *testing.T) {
 	if ok {
 		// Free identifiers like 'quote' should NOT have intro scope
 		// This is correct behavior - they need to resolve to their original bindings
-		qt.Assert(t, quoteSym.Unwrap().(*values.Symbol).Key, qt.Equals, "quote")
+		qt.Assert(t, quoteSym.Key(), qt.Equals, "quote")
 	}
 }
 
@@ -503,7 +503,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 						car := pair.Car()
 						if car != nil {
 							sym, ok := car.(*syntax.SyntaxSymbol)
-							if ok && sym.Sym.Key == "define-syntax" {
+							if ok && sym.Key() == "define-syntax" {
 								ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 								ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 								args := extractDefineSyntaxArgs(t, expanded)

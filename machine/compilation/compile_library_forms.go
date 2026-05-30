@@ -144,7 +144,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "library declaration must start with symbol"))
 	}
 
-	keyword := keywordSym.Unwrap().(*values.Symbol).Key
+	keyword := keywordSym.Key()
 
 	// Get the rest of the declaration (arguments)
 	argsExpr := declPair.SyntaxCdr()
@@ -224,7 +224,7 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 
 	case *syntax.SyntaxSymbol:
 		// Simple export: symbol name
-		name := s.Unwrap().(*values.Symbol).Key
+		name := s.Key()
 		lib.AddExport(name, name)
 		return nil
 
@@ -235,7 +235,7 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 		if !ok {
 			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export: expected symbol"))
 		}
-		if carSym.Unwrap().(*values.Symbol).Key != "rename" {
+		if carSym.Key() != "rename" {
 			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form"))
 		}
 
@@ -253,8 +253,8 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: external name must be symbol"))
 		}
 
-		internalName := internalSym.Unwrap().(*values.Symbol).Key
-		externalName := externalSym.Unwrap().(*values.Symbol).Key
+		internalName := internalSym.Key()
+		externalName := externalSym.Key()
 		lib.AddExport(externalName, internalName)
 		return nil
 

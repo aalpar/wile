@@ -187,7 +187,7 @@ func (p *DatumToSyntaxValueSuite) TestSymbol(c *qt.C) {
 	result := DatumToSyntaxValue(context.Background(), p.sctx, sym)
 	synSym, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(synSym.Sym.Key, qt.Equals, "foo")
+	c.Assert(synSym.Key(), qt.Equals, "foo")
 }
 
 func (p *DatumToSyntaxValueSuite) TestProperList(c *qt.C) {

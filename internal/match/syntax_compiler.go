@@ -293,14 +293,14 @@ func vectorElementsToPairChain(vec *syntax.SyntaxVector) *syntax.SyntaxPair {
 // Returns true if CDR handling should be skipped (e.g., for ellipsis-in-middle patterns).
 func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) bool {
 	// Check for ellipsis (custom or default)
-	if sym.Sym.Key == vis.ellipsis {
+	if sym.Key() == vis.ellipsis {
 		return compileEllipsis(vis, entry)
 	}
 	// Check for wildcard
 	// R7RS §4.3.2: The identifier _ is a wildcard that matches any input, unless
 	// it appears in the list of literals, in which case it is matched literally.
-	if sym.Sym.Key == "_" {
-		_, isLiteral := vis.literals[sym.Sym.Key]
+	if sym.Key() == "_" {
+		_, isLiteral := vis.literals[sym.Key()]
 		if !isLiteral {
 			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
 			return false
@@ -314,14 +314,14 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 
 // compileSymbolOrLiteral handles a symbol that's either a pattern variable or a literal.
 func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, sym *syntax.SyntaxSymbol) {
-	_, isVar := vis.variables[sym.Sym.Key]
+	_, isVar := vis.variables[sym.Key()]
 	if isVar {
 		// Pattern variable - capture it
-		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Sym.Key})
-		entry.variables[sym.Sym.Key] = struct{}{}
+		vis.codes = append(vis.codes, ByteCodeCaptureCar{Binding: sym.Key()})
+		entry.variables[sym.Key()] = struct{}{}
 	} else {
 		// Literal symbol - compare exactly
-		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(sym.Sym.Key, nil)})
+		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
 	}
 }
 
@@ -405,7 +405,7 @@ func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStack
 	}
 	prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 	if ok {
-		_, isVar := vis.variables[prevSym.Sym.Key]
+		_, isVar := vis.variables[prevSym.Key()]
 		return isVar
 	}
 	return false
@@ -424,9 +424,9 @@ func collectCapturedVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEnt
 	} else {
 		prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
 		if ok {
-			_, isVar := vis.variables[prevSym.Sym.Key]
+			_, isVar := vis.variables[prevSym.Key()]
 			if isVar {
-				capturedVars[prevSym.Sym.Key] = struct{}{}
+				capturedVars[prevSym.Key()] = struct{}{}
 			}
 		}
 	}
@@ -538,14 +538,14 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	// Check for improper list pattern: (_ a . rest) where rest is a pattern variable
 	sym, ok := cdr.(*syntax.SyntaxSymbol)
 	if ok {
-		_, isVar := vis.variables[sym.Sym.Key]
+		_, isVar := vis.variables[sym.Key()]
 		if isVar {
 			// The CDR is a pattern variable - emit CaptureCdr to capture the rest
-			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Sym.Key})
-			entry.variables[sym.Sym.Key] = struct{}{}
+			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key()})
+			entry.variables[sym.Key()] = struct{}{}
 		} else {
 			// The CDR is a literal symbol - compare it
-			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbol(sym.Sym.Key, nil)})
+			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
 		}
 	}
 

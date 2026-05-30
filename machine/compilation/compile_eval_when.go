@@ -154,7 +154,7 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "eval-when: phase must be a symbol"))
 		}
 
-		phaseName := phaseSym.Sym.Key
+		phaseName := phaseSym.Key()
 		b, ok := evalWhenPhaseTable[phaseName]
 		if !ok {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval-when: unknown phase %q", phaseName))

@@ -141,7 +141,7 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %T", carStx)
 	}
 
-	symName := carSym.Sym.Key
+	symName := carSym.Key()
 	if symName != "define-library" && symName != "library" {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
 	}

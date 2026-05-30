@@ -303,8 +303,8 @@ func (p *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.Syn
 	// syntax like => gets exported to phase 0, so both input and pattern may
 	// have bindings. We compare the actual bindings, not just whether they exist.
 	if p.bindingChecker != nil {
-		inputBinding := p.bindingChecker.GetBinding(input.Sym.Key, input.Scopes())
-		patternBinding := p.bindingChecker.GetBinding(pattern.Sym.Key, pattern.Scopes())
+		inputBinding := p.bindingChecker.GetBinding(input.Key(), input.Scopes())
+		patternBinding := p.bindingChecker.GetBinding(pattern.Key(), pattern.Scopes())
 
 		// R7RS §4.3.2: literals match if both have the same binding, or both unbound
 		if inputBinding != patternBinding {

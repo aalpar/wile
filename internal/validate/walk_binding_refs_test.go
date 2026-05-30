@@ -36,7 +36,7 @@ func recordVisits(expr ValidatedExpr) []visitRecord {
 	var got []visitRecord
 	WalkBindingRefs(expr, func(sym *syntax.SyntaxSymbol, role RefRole, depth int) {
 		got = append(got, visitRecord{
-			Name:  sym.Sym.Key,
+			Name:  sym.Key(),
 			Role:  role,
 			Depth: depth,
 		})

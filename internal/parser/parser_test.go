@@ -2918,7 +2918,7 @@ func TestParser_FoldCase(t *testing.T) {
 
 			sym, ok := sv.(*syntax.SyntaxSymbol)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxSymbol, got %T", sv))
-			c.Assert(sym.Sym.Key, qt.Equals, tc.expect)
+			c.Assert(sym.Key(), qt.Equals, tc.expect)
 		})
 	}
 }

@@ -297,7 +297,7 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			if literalMatcher != nil && literalSyntax != nil {
 				patternSym, ok := cd.Value.(*syntax.SyntaxSymbol)
 				if ok {
-					symKey := patternSym.Sym.Key
+					symKey := patternSym.Key()
 					_, isLiteral := literalSyntax[symKey]
 					if isLiteral {
 						inputSym, inputIsSym := inputCar.(*syntax.SyntaxSymbol)
@@ -306,7 +306,7 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 							return ErrNotAMatch
 						}
 						// Check if input symbol key matches (shadowed symbols have $shadowed$ suffix)
-						if inputSym.Sym.Key != symKey {
+						if inputSym.Key() != symKey {
 							return ErrNotAMatch
 						}
 						// Check binding compatibility
@@ -632,7 +632,7 @@ func syntaxValuesEqualForMatch(a, b syntax.SyntaxValue) bool {
 	aSym, aIsSym := a.(*syntax.SyntaxSymbol)
 	bSym, bIsSym := b.(*syntax.SyntaxSymbol)
 	if aIsSym && bIsSym {
-		return aSym.Sym.Key == bSym.Sym.Key
+		return aSym.Key() == bSym.Key()
 	}
 
 	// Compare objects by unwrapped value

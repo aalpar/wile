@@ -67,10 +67,10 @@ func collectPatternVariablesWithEllipsis(v syntax.SyntaxValue, literals map[stri
 	switch t := v.(type) {
 	case *syntax.SyntaxSymbol:
 		// Skip if it's a keyword (first element), literal, or ellipsis
-		if !isFirst && t.Sym.Key != ellipsis {
-			_, isLiteral := literals[t.Sym.Key]
+		if !isFirst && t.Key() != ellipsis {
+			_, isLiteral := literals[t.Key()]
 			if !isLiteral {
-				variables[t.Sym.Key] = struct{}{}
+				variables[t.Key()] = struct{}{}
 			}
 		}
 	case *syntax.SyntaxPair:
@@ -91,7 +91,7 @@ func collectPatternVariablesWithEllipsis(v syntax.SyntaxValue, literals map[stri
 func analyzeRecursive(v syntax.SyntaxValue, variables map[string]struct{}, analysis *PatternAnalysis) bool {
 	switch t := v.(type) {
 	case *syntax.SyntaxSymbol:
-		_, isVar := variables[t.Sym.Key]
+		_, isVar := variables[t.Key()]
 		return isVar
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
@@ -107,9 +107,9 @@ func analyzeRecursive(v syntax.SyntaxValue, variables map[string]struct{}, analy
 			// If car is a symbol variable, add it
 			sym, ok := t.SyntaxCar().(*syntax.SyntaxSymbol)
 			if ok {
-				_, isVar := variables[sym.Sym.Key]
+				_, isVar := variables[sym.Key()]
 				if isVar {
-					varsInSubtree[sym.Sym.Key] = struct{}{}
+					varsInSubtree[sym.Key()] = struct{}{}
 				}
 			}
 			// If car is a pair, merge its variables

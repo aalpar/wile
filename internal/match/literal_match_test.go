@@ -122,7 +122,7 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		ss, ok := result.(*syntax.SyntaxSymbol)
 		c.Assert(ok, qt.IsTrue)
-		c.Assert(ss.Sym.Key, qt.Equals, "hello")
+		c.Assert(ss.Key(), qt.Equals, "hello")
 	})
 
 	c.Run("values.Pair wraps recursively", func(c *qt.C) {
@@ -206,7 +206,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("foo", nil)
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope})
 		ss := result.(*syntax.SyntaxSymbol)
-		c.Assert(ss.Sym.Key, qt.Equals, "foo")
+		c.Assert(ss.Key(), qt.Equals, "foo")
 		scopes := ss.Scopes()
 		c.Assert(len(scopes), qt.Equals, 1)
 		c.Assert(scopes[0], qt.Equals, introScope)
@@ -220,7 +220,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("bar", &syntax.SourceContext{Text: "bar"})
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
-		c.Assert(ss.Sym.Key, qt.Equals, "bar")
+		c.Assert(ss.Key(), qt.Equals, "bar")
 		// Should have definition-site scopes, not intro scope
 		scopes := ss.Scopes()
 		c.Assert(len(scopes), qt.Equals, 1)
@@ -235,7 +235,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("baz", &syntax.SourceContext{Text: "baz"})
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
-		c.Assert(ss.Sym.Key, qt.Equals, "baz")
+		c.Assert(ss.Key(), qt.Equals, "baz")
 		c.Assert(ss.ResolvedBinding, qt.Equals, globalIdx)
 	})
 
@@ -246,7 +246,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("qux", nil)
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
-		c.Assert(ss.Sym.Key, qt.Equals, "qux")
+		c.Assert(ss.Key(), qt.Equals, "qux")
 		// Should NOT have intro scope (has local binding)
 		c.Assert(len(ss.Scopes()), qt.Equals, 0)
 	})
@@ -390,7 +390,7 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		// Should NOT substitute — should apply hygiene instead
 		ss := result.(*syntax.SyntaxSymbol)
-		c.Assert(ss.Sym.Key, qt.Equals, "x")
+		c.Assert(ss.Key(), qt.Equals, "x")
 		scopes := ss.Scopes()
 		c.Assert(len(scopes), qt.Equals, 1)
 		c.Assert(scopes[0], qt.Equals, is)

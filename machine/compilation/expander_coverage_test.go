@@ -55,7 +55,7 @@ func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 		// Result is (formName . body) — returned unchanged
 		pair, ok := result.(*syntax.SyntaxPair)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("form: %s", formName))
-		c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Sym.Key, qt.Equals, formName)
+		c.Assert(pair.SyntaxCar().(*syntax.SyntaxSymbol).Key(), qt.Equals, formName)
 	}
 }
 

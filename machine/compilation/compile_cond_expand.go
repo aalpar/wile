@@ -170,7 +170,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (FeatureRequirement, error) {
 	switch v := expr.(type) {
 	case *syntax.SyntaxSymbol:
-		name := v.Unwrap().(*values.Symbol).Key
+		name := v.Key()
 		if name == "else" {
 			return NewElseRequirement(), nil
 		}
@@ -187,7 +187,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "feature requirement must start with symbol"))
 		}
 
-		keyword := carSym.Unwrap().(*values.Symbol).Key
+		keyword := carSym.Key()
 		argsExpr := v.SyntaxCdr()
 		// check keyword against known feature predicates
 		switch keyword {

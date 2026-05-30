@@ -45,7 +45,7 @@ func TestERRename_Basic(t *testing.T) {
 	// Result must be a SyntaxSymbol.
 	ss, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(ss.Sym.Key, qt.Equals, "if")
+	c.Assert(ss.Key(), qt.Equals, "if")
 }
 
 func TestERRename_CachesResults(t *testing.T) {
@@ -96,7 +96,7 @@ func TestERRename_SyntaxSymbolInput(t *testing.T) {
 	result := mc.GetValue()
 	ss, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(ss.Sym.Key, qt.Equals, "define")
+	c.Assert(ss.Key(), qt.Equals, "define")
 }
 
 func TestERRename_RejectsNonSymbol(t *testing.T) {

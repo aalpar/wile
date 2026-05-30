@@ -225,7 +225,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(sym.Sym.Key, qt.Equals, "hello")
+				c.Assert(sym.Key(), qt.Equals, "hello")
 			},
 		},
 		{
@@ -235,7 +235,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 			checkFn: func(c *qt.C, result syntax.SyntaxValue) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(sym.Sym.Key, qt.Equals, "other")
+				c.Assert(sym.Key(), qt.Equals, "other")
 			},
 		},
 		{
@@ -294,7 +294,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 			checkFn: func(c *qt.C, result syntax.SyntaxValue, introScope *syntax.Scope) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(sym.Sym.Key, qt.Equals, "tmp")
+				c.Assert(sym.Key(), qt.Equals, "tmp")
 				scopes := sym.Scopes()
 				c.Assert(len(scopes), qt.Equals, 1)
 				c.Assert(scopes[0], qt.Equals, introScope)
@@ -310,7 +310,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 			checkFn: func(c *qt.C, result syntax.SyntaxValue, introScope *syntax.Scope) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(sym.Sym.Key, qt.Equals, "tmp")
+				c.Assert(sym.Key(), qt.Equals, "tmp")
 				scopes := sym.Scopes()
 				c.Assert(len(scopes), qt.Equals, 1)
 				c.Assert(scopes[0], qt.Equals, introScope)
@@ -393,7 +393,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 	// Car should be "a" (literal symbol)
 	carSym, ok := resultPair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "a")
+	c.Assert(carSym.Key(), qt.Equals, "a")
 
 	// Cadr should be integer 42 (substituted)
 	cdrPair, ok := resultPair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -553,7 +553,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 	// NOT the intro scope (pattern variable substitutions preserve their scopes).
 	resultSym, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(resultSym.Sym.Key, qt.Equals, "myvar")
+	c.Assert(resultSym.Key(), qt.Equals, "myvar")
 	scopes := resultSym.Scopes()
 	c.Assert(len(scopes), qt.Equals, 1)
 	c.Assert(scopes[0], qt.Equals, capturedScope)
@@ -640,7 +640,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 	// Should NOT substitute - return the symbol as-is (with hygiene applied)
 	sym, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected symbol (no substitution), got %T", result))
-	c.Assert(sym.Sym.Key, qt.Equals, "x")
+	c.Assert(sym.Key(), qt.Equals, "x")
 }
 
 func TestSyntaxExpandEscapedTemplate(t *testing.T) {
@@ -685,7 +685,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 				// Result should be the literal ... symbol
 				sym, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("expected symbol, got %T", result))
-				c.Assert(sym.Sym.Key, qt.Equals, "...")
+				c.Assert(sym.Key(), qt.Equals, "...")
 			},
 		},
 		{
@@ -716,7 +716,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 				c.Assert(ok, qt.IsTrue)
 				ellipsisSym, ok := cdrPair.SyntaxCar().(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue)
-				c.Assert(ellipsisSym.Sym.Key, qt.Equals, "...")
+				c.Assert(ellipsisSym.Key(), qt.Equals, "...")
 			},
 		},
 	}
@@ -773,7 +773,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 	// Second element should be symbol "a"
 	secondSym, ok := vec.Values[1].(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(secondSym.Sym.Key, qt.Equals, "a")
+	c.Assert(secondSym.Key(), qt.Equals, "a")
 }
 
 func TestSyntaxExpandNilTemplate(t *testing.T) {
@@ -1495,7 +1495,7 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 			int2, ok := obj2.Datum().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
 
-			collected = append(collected, triple{Sym: sym.Sym.Key, Val1: int1.Value, Val2: int2.Value})
+			collected = append(collected, triple{Sym: sym.Key(), Val1: int1.Value, Val2: int2.Value})
 			current = pr.SyntaxCdr()
 		}
 
@@ -1694,7 +1694,7 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 			int3, ok := obj3.Datum().(*values.Integer)
 			c.Assert(ok, qt.IsTrue)
 
-			collected = append(collected, quad{Sym: sym.Sym.Key, Val1: int1.Value, Val2: int2.Value, Val3: int3.Value})
+			collected = append(collected, quad{Sym: sym.Key(), Val1: int1.Value, Val2: int2.Value, Val3: int3.Value})
 			current = pr.SyntaxCdr()
 		}
 
@@ -1825,7 +1825,7 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 				rest = rp.SyntaxCdr()
 			}
 
-			collected = append(collected, innerResult{Sym: sym.Sym.Key, Values: vals})
+			collected = append(collected, innerResult{Sym: sym.Key(), Values: vals})
 			current = pr.SyntaxCdr()
 		}
 
@@ -1924,7 +1924,7 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 				rest = rp.SyntaxCdr()
 			}
 
-			collected = append(collected, innerResult{Sym: sym.Sym.Key, Values: vals})
+			collected = append(collected, innerResult{Sym: sym.Key(), Values: vals})
 			current = pr.SyntaxCdr()
 		}
 

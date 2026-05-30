@@ -230,7 +230,7 @@ func TestExpandQuasisyntax_SimpleSymbol(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 func TestExpandQuasisyntax_SimpleList(t *testing.T) {
@@ -250,7 +250,7 @@ func TestExpandQuasisyntax_SimpleList(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntax_UnsyntaxAtDepth1(t *testing.T) {
@@ -273,7 +273,7 @@ func TestExpandQuasisyntax_UnsyntaxAtDepth1(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntax_UnsyntaxAtDepth2(t *testing.T) {
@@ -291,7 +291,7 @@ func TestExpandQuasisyntax_UnsyntaxAtDepth2(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntax_EmptyList(t *testing.T) {
@@ -307,7 +307,7 @@ func TestExpandQuasisyntax_EmptyList(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 func TestExpandQuasisyntax_NestedQuasisyntax(t *testing.T) {
@@ -324,7 +324,7 @@ func TestExpandQuasisyntax_NestedQuasisyntax(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntax_NestedList(t *testing.T) {
@@ -348,7 +348,7 @@ func TestExpandQuasisyntax_NestedList(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 
 	// Check second element is also a list form (the nested (b c))
 	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -359,7 +359,7 @@ func TestExpandQuasisyntax_NestedList(t *testing.T) {
 	secondCar := secondPair.SyntaxCar()
 	secondCarSym, ok := secondCar.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(secondCarSym.Sym.Key, qt.Equals, "list")
+	c.Assert(secondCarSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntax_UnsyntaxSplicing(t *testing.T) {
@@ -380,7 +380,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicing(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }
 
 func TestExpandQuasisyntax_MultipleSplice(t *testing.T) {
@@ -400,20 +400,20 @@ func TestExpandQuasisyntax_MultipleSplice(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 
 	// Check we have two args: a and b
 	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	firstArg := cdr.SyntaxCar()
 	firstArgSym, ok := firstArg.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(firstArgSym.Sym.Key, qt.Equals, "a")
+	c.Assert(firstArgSym.Key(), qt.Equals, "a")
 
 	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
 	secondArg := cdr.SyntaxCar()
 	secondArgSym, ok := secondArg.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(secondArgSym.Sym.Key, qt.Equals, "b")
+	c.Assert(secondArgSym.Key(), qt.Equals, "b")
 }
 
 func TestExpandQuasisyntax_MixedSplice(t *testing.T) {
@@ -434,7 +434,7 @@ func TestExpandQuasisyntax_MixedSplice(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 
 	// Check structure: (append (list ...) ys (list ...))
 	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -446,14 +446,14 @@ func TestExpandQuasisyntax_MixedSplice(t *testing.T) {
 	firstArgCar := firstArgPair.SyntaxCar()
 	firstArgCarSym, ok := firstArgCar.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(firstArgCarSym.Sym.Key, qt.Equals, "list")
+	c.Assert(firstArgCarSym.Key(), qt.Equals, "list")
 
 	// Second arg should be ys (the splice expr)
 	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
 	secondArg := cdr.SyntaxCar()
 	secondArgSym, ok := secondArg.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(secondArgSym.Sym.Key, qt.Equals, "ys")
+	c.Assert(secondArgSym.Key(), qt.Equals, "ys")
 
 	// Third arg should be (list (syntax z))
 	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
@@ -463,7 +463,7 @@ func TestExpandQuasisyntax_MixedSplice(t *testing.T) {
 	thirdArgCar := thirdArgPair.SyntaxCar()
 	thirdArgCarSym, ok := thirdArgCar.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(thirdArgCarSym.Sym.Key, qt.Equals, "list")
+	c.Assert(thirdArgCarSym.Key(), qt.Equals, "list")
 }
 
 // Section 2b: Additional expandQuasisyntax tests for uncovered paths
@@ -482,7 +482,7 @@ func TestExpandQuasisyntax_SyntaxObject(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 // expandQuasisyntax: unsyntax with wrong arg count at depth 1
@@ -500,7 +500,7 @@ func TestExpandQuasisyntax_UnsyntaxWrongArgCountDepth1(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 // expandQuasisyntax: unsyntax at depth > 1 with wrong arg count
@@ -517,7 +517,7 @@ func TestExpandQuasisyntax_UnsyntaxWrongArgCountDepth2(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 // expandQuasisyntax: unsyntax-splicing at depth > 1
@@ -534,7 +534,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicingAtDepth2(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 
 	// Second element should be (syntax unsyntax-splicing)
 	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -542,10 +542,10 @@ func TestExpandQuasisyntax_UnsyntaxSplicingAtDepth2(t *testing.T) {
 	secondArgPair, ok := secondArg.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	innerCar := secondArgPair.SyntaxCar().(*syntax.SyntaxSymbol)
-	c.Assert(innerCar.Sym.Key, qt.Equals, "syntax")
+	c.Assert(innerCar.Key(), qt.Equals, "syntax")
 	innerCdr := secondArgPair.SyntaxCdr().(*syntax.SyntaxPair)
 	innerSym := innerCdr.SyntaxCar().(*syntax.SyntaxSymbol)
-	c.Assert(innerSym.Sym.Key, qt.Equals, "unsyntax-splicing")
+	c.Assert(innerSym.Key(), qt.Equals, "unsyntax-splicing")
 }
 
 // expandQuasisyntax: unsyntax-splicing at depth 1 with wrong arg count
@@ -563,7 +563,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicingWrongArgCount(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 // expandQuasisyntax: unsyntax-splicing at depth > 1 with wrong arg count
@@ -581,7 +581,7 @@ func TestExpandQuasisyntax_UnsyntaxSplicingWrongArgCountDepth2(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 // expandQuasisyntax: quasisyntax with wrong arg count
@@ -598,7 +598,7 @@ func TestExpandQuasisyntax_QuasisyntaxWrongArgCount(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(carSym.Key(), qt.Equals, "syntax")
 }
 
 // Section 3: expandQuasisyntaxList tests
@@ -620,7 +620,7 @@ func TestExpandQuasisyntaxList_SimpleList(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntaxList_WithSplice(t *testing.T) {
@@ -640,7 +640,7 @@ func TestExpandQuasisyntaxList_WithSplice(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }
 
 func TestExpandQuasisyntaxList_OnlySplice(t *testing.T) {
@@ -658,7 +658,7 @@ func TestExpandQuasisyntaxList_OnlySplice(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }
 
 func TestExpandQuasisyntaxList_MultipleSplices(t *testing.T) {
@@ -678,7 +678,7 @@ func TestExpandQuasisyntaxList_MultipleSplices(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }
 
 func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
@@ -700,7 +700,7 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "cons")
+	c.Assert(carSym.Key(), qt.Equals, "cons")
 
 	// Verify we have two elements: (syntax a) and (syntax b)
 	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -710,7 +710,7 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 	firstArgCar := firstArgPair.SyntaxCar()
 	firstArgCarSym, ok := firstArgCar.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(firstArgCarSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(firstArgCarSym.Key(), qt.Equals, "syntax")
 
 	cdr = cdr.SyntaxCdr().(*syntax.SyntaxPair)
 	secondArg := cdr.SyntaxCar()
@@ -719,7 +719,7 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 	secondArgCar := secondArgPair.SyntaxCar()
 	secondArgCarSym, ok := secondArgCar.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(secondArgCarSym.Sym.Key, qt.Equals, "syntax")
+	c.Assert(secondArgCarSym.Key(), qt.Equals, "syntax")
 }
 
 // Section 4: compileQuasisyntaxTemplate tests
@@ -763,7 +763,7 @@ func TestCompileQuasisyntaxTemplate_WithUnsyntax(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestCompileQuasisyntaxTemplate_NestedPure(t *testing.T) {
@@ -809,7 +809,7 @@ func TestCompileQuasisyntaxTemplate_NestedWithUnsyntax(t *testing.T) {
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 // Section 5: Additional coverage for CompileQuasisyntax entry point
@@ -949,7 +949,7 @@ func TestExpandQuasisyntaxList_NonPairInSpliceContext(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }
 
 func TestExpandQuasisyntaxList_SpliceAtDepth2(t *testing.T) {
@@ -965,7 +965,7 @@ func TestExpandQuasisyntaxList_SpliceAtDepth2(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list")
+	c.Assert(carSym.Key(), qt.Equals, "list")
 }
 
 func TestExpandQuasisyntaxList_ImproperWithUnsyntax(t *testing.T) {
@@ -983,7 +983,7 @@ func TestExpandQuasisyntaxList_ImproperWithUnsyntax(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "cons")
+	c.Assert(carSym.Key(), qt.Equals, "cons")
 }
 
 func TestExpandQuasisyntaxList_ImproperWithSplice(t *testing.T) {
@@ -1001,7 +1001,7 @@ func TestExpandQuasisyntaxList_ImproperWithSplice(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }
 
 func TestExpandQuasisyntaxList_SpliceWithNonSplicePairCar(t *testing.T) {
@@ -1021,5 +1021,5 @@ func TestExpandQuasisyntaxList_SpliceWithNonSplicePairCar(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "append")
+	c.Assert(carSym.Key(), qt.Equals, "append")
 }

@@ -167,7 +167,7 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 			message = m.Unwrap().SchemeString()
 		}
 	case *syntax.SyntaxSymbol:
-		message = m.Sym.Key
+		message = m.Key()
 	default:
 		message = msgVal.SchemeString()
 	}

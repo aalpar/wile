@@ -135,7 +135,7 @@ func extractSymbolKey(arg values.Value) (string, error) {
 	case *values.Symbol:
 		return v.Key, nil
 	case *syntax.SyntaxSymbol:
-		return v.Sym.Key, nil
+		return v.Key(), nil
 	default:
 		return "", werr.WrapForeignErrorf(
 			werr.ErrNotASymbol,

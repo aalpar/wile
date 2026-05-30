@@ -126,6 +126,14 @@ func (p *SyntaxSymbol) Datum() *values.Symbol {
 	return p.Sym
 }
 
+// Key returns the underlying symbol's name. For void symbols it returns "".
+func (p *SyntaxSymbol) Key() string {
+	if p.IsVoid() {
+		return ""
+	}
+	return p.Sym.Key
+}
+
 // UnwrapAll returns the underlying symbol value.
 func (p *SyntaxSymbol) UnwrapAll() values.Value {
 	return UnwrapAllShared(p, make(map[SyntaxValue]values.Value))
@@ -148,7 +156,7 @@ func (p *SyntaxSymbol) SchemeString() string {
 	if p.IsVoid() {
 		return "#'<void>"
 	}
-	return fmt.Sprintf("#'%s", p.Sym.Key)
+	return fmt.Sprintf("#'%s", p.Key())
 }
 
 // EqualTo performs pointer comparison only, matching Chez Scheme/Racket behavior.

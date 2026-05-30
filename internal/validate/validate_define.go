@@ -178,7 +178,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	allOk := true
 	for _, dup := range findDuplicateSymbols(allSyms) {
 		result.addErrorf(getSourceContext(dup), params.formName,
-			"duplicate parameter name: %s", dup.Sym.Key)
+			"duplicate parameter name: %s", dup.Key())
 		allOk = false
 	}
 	if !allOk {
