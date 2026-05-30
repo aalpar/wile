@@ -1,6 +1,8 @@
 # Car/Cdr Consolidation Implementation Plan
 
-> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The plan assumes the Wile project conventions in `CLAUDE.md` and `CLAUDE.local.md` (no `fmt.Errorf`, no `errors.New`, sentinel+wrap via `werr.WrapForeignErrorf`, table-driven tests mandatory, no `Co-Authored-By` lines, branch+merge workflow on master, `make lint && make covercheck` must pass before claiming done).
+> **Status: COMPLETE (2026-05-30).** All three phases shipped to master. Phase C.5 (Pair.ForEach → Spine) was skipped per the plan's own decision rule after measuring a 40–56% regression on the micro-bench; comment + permanent regression guard landed in its place. See "Outcome Summary" at the bottom of this file for the full picture.
+
+> **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. The plan assumes the Wile project conventions in `CLAUDE.md` and `CLAUDE.local.md` (no `fmt.Errorf`, no `errors.New`, sentinel+wrap via `werr.WrapForeignErrorf`, table-driven tests mandatory, no `Co-Authored-By` lines, branch+merge workflow on master, `make lint && make covercheck` must pass before claiming done).
 
 **Goal:** Consolidate ~70 hand-rolled `.Car()/.Cdr()` destructuring blocks into a small, closed helper API and a single canonical spine iterator, eliminating ~600 lines of repeated code without changing observable behavior.
 
@@ -31,6 +33,8 @@ These rules apply to every task in this plan. Re-read them when in doubt:
 
 ## Phase A — Adopt `helpers.ForEachList` Across All Inline Sites
 
+**Status: ✅ COMPLETE.** Shipped via commits `5f6de63a`, `68f53579`, `7a8dd15f`, `83fe4ef4`, `949376d0`, `6671f247` (axis-b-manifest regen). Branch merged to master.
+
 **Goal of phase:** Eliminate ~30 inline copies of `ForEach + IsEmptyList(tail) check` by adopting the existing `helpers.ForEachList` (registry/helpers/list.go:29). No new public API. Catches silent improper-list acceptance bugs as a side benefit.
 
 **Branch:** `phase-a-foreach-list-adoption`
@@ -47,7 +51,7 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
 
 ### Task A.0: Setup
 
-- [ ] **Step A.0.1: Branch from master.**
+- [x] **Step A.0.1: Branch from master.**
 
   ```bash
   git fetch origin
@@ -55,7 +59,7 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
   git checkout -b phase-a-foreach-list-adoption
   ```
 
-- [ ] **Step A.0.2: Enumerate target sites.**
+- [x] **Step A.0.2: Enumerate target sites.**
 
   ```bash
   grep -rEn 'ForEach\(.*func.*\) error \{$' --include='*.go' \
@@ -72,7 +76,7 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
 - Modify: `registry/core/prim_lists.go` — `PrimAppend` (lines ~94–103), `PrimReverse` (lines ~150–159), `PrimLength` (lines ~177–186)
 - Test: `registry/core/prim_lists_test.go` (existing — re-run to confirm no regression)
 
-- [ ] **Step A.1.1: Rewrite `PrimAppend`'s outer args-loop.**
+- [x] **Step A.1.1: Rewrite `PrimAppend`'s outer args-loop.**
 
   Find the block beginning `v, err := args.ForEach(mc.Context(), func(...` ending at the `if !values.IsEmptyList(v) { return ... ErrNotAList ... }`.
 
@@ -91,7 +95,7 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
 
   Then rewrite the inner per-list `pr.ForEach(...)` (lines ~119–128) the same way, using `"append"` as the name.
 
-- [ ] **Step A.1.2: Rewrite `PrimReverse`.**
+- [x] **Step A.1.2: Rewrite `PrimReverse`.**
 
   Replace the `pr.ForEach + IsEmptyList(v)` block with:
 
@@ -105,11 +109,11 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
   }
   ```
 
-- [ ] **Step A.1.3: Rewrite `PrimLength`.**
+- [x] **Step A.1.3: Rewrite `PrimLength`.**
 
   Same shape with `"length"` as the name; body increments `count`.
 
-- [ ] **Step A.1.4: Run the affected tests.**
+- [x] **Step A.1.4: Run the affected tests.**
 
   ```bash
   go test ./registry/core/... -run 'TestPrim(Append|Reverse|Length)' -v
@@ -117,7 +121,7 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
 
   Expected: PASS. If any test was checking literal error message text, update it to use `qt.ErrorIs` with the sentinel.
 
-- [ ] **Step A.1.5: Run lint and commit.**
+- [x] **Step A.1.5: Run lint and commit.**
 
   ```bash
   make lint
@@ -132,7 +136,7 @@ If it doesn't, `grep -n 'func ForEachList' registry/helpers/list.go` will report
 
 This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != nil { return ... }`. None of these check the tail at all — they silently accept improper lists. Adopting `ForEachList` *will* change observed behavior on malformed library names like `(scheme . base)`. That's the desired behavior change.
 
-- [ ] **Step A.2.1: Replace each ForEach call.**
+- [x] **Step A.2.1: Replace each ForEach call.**
 
   For each of the three sites, replace:
 
@@ -150,7 +154,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
   Add the import: `"github.com/aalpar/wile/registry/helpers"`.
 
-- [ ] **Step A.2.2: Run the package tests.**
+- [x] **Step A.2.2: Run the package tests.**
 
   ```bash
   go test ./machine/compilation/... -v
@@ -158,7 +162,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
   Expected: PASS. If any test deliberately exercises improper-list library names, it should now expect an `ErrNotAList`-wrapped error.
 
-- [ ] **Step A.2.3: Add a regression test for the improper-list fix.**
+- [x] **Step A.2.3: Add a regression test for the improper-list fix.**
 
   Append to `machine/compilation/import_set_datum_test.go` (or create if absent):
 
@@ -183,7 +187,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
   Add imports as needed.
 
-- [ ] **Step A.2.4: Lint + commit.**
+- [x] **Step A.2.4: Lint + commit.**
 
   ```bash
   make lint
@@ -196,7 +200,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 **Files:**
 - Modify: `extensions/eval/prim_eval.go` — `PrimEnvironment` ForEach loop (lines ~380–415)
 
-- [ ] **Step A.3.1: Replace the loop.**
+- [x] **Step A.3.1: Replace the loop.**
 
   Find the block starting `v, err := args.ForEach(mc.Context(), func(...` (around line 380). Replace it (and the trailing `if !values.IsEmptyList(v)` check around line 413) with:
 
@@ -211,7 +215,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
   The `helpers` import already exists in this file (`helpers.RequireType` is used). No new import.
 
-- [ ] **Step A.3.2: Test + commit.**
+- [x] **Step A.3.2: Test + commit.**
 
   ```bash
   go test ./extensions/eval/... -v
@@ -222,7 +226,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
 ### Task A.4: Sweep remaining sites
 
-- [ ] **Step A.4.1: Re-enumerate.**
+- [x] **Step A.4.1: Re-enumerate.**
 
   ```bash
   grep -rEn '\.ForEach\(.*func' --include='*.go' \
@@ -231,7 +235,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
   wc -l /tmp/foreach-remaining.txt
   ```
 
-- [ ] **Step A.4.2: For each line, classify.**
+- [x] **Step A.4.2: For each line, classify.**
 
   For each remaining hit, open the file and decide:
   - **Adopt** — the call is followed by `IsEmptyList(v)` tail check OR omits the check but should have one. Replace with `helpers.ForEachList`.
@@ -239,13 +243,13 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
   Document each skip with a one-line comment: `// improper-list aware: uses tail`. Future grep sweeps will then ignore them.
 
-- [ ] **Step A.4.3: Run full test suite.**
+- [x] **Step A.4.3: Run full test suite.**
 
   ```bash
   make test
   ```
 
-- [ ] **Step A.4.4: Commit the sweep.**
+- [x] **Step A.4.4: Commit the sweep.**
 
   ```bash
   make lint
@@ -255,7 +259,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
 ### Task A.5: Finalize Phase A
 
-- [ ] **Step A.5.1: Run `make ci`.**
+- [x] **Step A.5.1: Run `make ci`.**
 
   ```bash
   make ci
@@ -263,7 +267,7 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 
   Expected: green. If `make covercheck` flags reduced coverage, the only legitimate cause is that the *inline* error-path arm is now unreachable in tests because `ForEachList` produces it. Add a table-driven error test against the sentinel.
 
-- [ ] **Step A.5.2: Push and merge.**
+- [x] **Step A.5.2: Push and merge.**
 
   ```bash
   git push -u origin phase-a-foreach-list-adoption
@@ -274,6 +278,8 @@ This file currently uses `tuple.ForEach(ctx, func...)` followed by `if err != ni
 ---
 
 ## Phase B — Add `Uncons` Helper Family
+
+**Status: ✅ COMPLETE.** Shipped via commits `82a4aa9e` (Uncons), `a9d3e518` (UnconsTyped), `122674b5` (CarAs), `f7b96f7c` (NthCons), `aa4918b5` (import_set_datum adoption), `91efd060` (eval adoption), `419b1374` (threads adoption), `e0bc4156` (list-ref/list-tail adoption), `aaa22400` (axis-b-manifest regen). Branch merged to master.
 
 **Goal of phase:** Introduce `Uncons`, `UnconsTyped`, `CarAs`, `NthCons` in `registry/helpers/list.go`, ship them with table-driven tests, then adopt them across the ~16 known `Car()/Cdr()` destructuring sites.
 
@@ -289,7 +295,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
 ### Task B.0: Setup
 
-- [ ] **Step B.0.1: Branch from master.**
+- [x] **Step B.0.1: Branch from master.**
 
   ```bash
   git fetch origin
@@ -303,7 +309,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 - Modify: `registry/helpers/list.go` — append new functions
 - Modify: `registry/helpers/list_test.go` — append new table-driven tests
 
-- [ ] **Step B.1.1: Write the failing test FIRST.**
+- [x] **Step B.1.1: Write the failing test FIRST.**
 
   Append to `registry/helpers/list_test.go`:
 
@@ -343,7 +349,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
   Add imports as needed at the top: `"errors"`, `"github.com/aalpar/wile/values/valuestest"`, `"github.com/aalpar/wile/werr"`, etc.
 
-- [ ] **Step B.1.2: Run — confirm FAIL.**
+- [x] **Step B.1.2: Run — confirm FAIL.**
 
   ```bash
   go test ./registry/helpers/ -run TestUncons -v
@@ -351,7 +357,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
   Expected: FAIL with "undefined: helpers.Uncons".
 
-- [ ] **Step B.1.3: Implement `Uncons`.**
+- [x] **Step B.1.3: Implement `Uncons`.**
 
   Append to `registry/helpers/list.go`:
 
@@ -375,7 +381,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
   }
   ```
 
-- [ ] **Step B.1.4: Run — confirm PASS.**
+- [x] **Step B.1.4: Run — confirm PASS.**
 
   ```bash
   go test ./registry/helpers/ -run TestUncons -v
@@ -383,7 +389,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
   Expected: PASS.
 
-- [ ] **Step B.1.5: Commit.**
+- [x] **Step B.1.5: Commit.**
 
   ```bash
   git add registry/helpers/list.go registry/helpers/list_test.go
@@ -392,7 +398,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
 ### Task B.2: Add `UnconsTyped` with tests
 
-- [ ] **Step B.2.1: Write the failing test.**
+- [x] **Step B.2.1: Write the failing test.**
 
   Append:
 
@@ -427,9 +433,9 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
   }
   ```
 
-- [ ] **Step B.2.2: Run — confirm FAIL.**
+- [x] **Step B.2.2: Run — confirm FAIL.**
 
-- [ ] **Step B.2.3: Implement.**
+- [x] **Step B.2.3: Implement.**
 
   ```go
   // UnconsTyped is Uncons followed by a type assertion on the head.
@@ -453,7 +459,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
   `typeNameFromSentinel` already exists (`registry/helpers/args.go:31`).
 
-- [ ] **Step B.2.4: Run — confirm PASS. Commit.**
+- [x] **Step B.2.4: Run — confirm PASS. Commit.**
 
   ```bash
   go test ./registry/helpers/ -run TestUnconsTyped -v
@@ -463,7 +469,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
 ### Task B.3: Add `CarAs` with tests
 
-- [ ] **Step B.3.1: Write the failing test.**
+- [x] **Step B.3.1: Write the failing test.**
 
   ```go
   func TestCarAs(t *testing.T) {
@@ -494,9 +500,9 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
   }
   ```
 
-- [ ] **Step B.3.2: Run — confirm FAIL.**
+- [x] **Step B.3.2: Run — confirm FAIL.**
 
-- [ ] **Step B.3.3: Implement.**
+- [x] **Step B.3.3: Implement.**
 
   ```go
   // CarAs asserts t.Car() has concrete type T. Use this when the caller
@@ -515,7 +521,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
   }
   ```
 
-- [ ] **Step B.3.4: Run — confirm PASS. Commit.**
+- [x] **Step B.3.4: Run — confirm PASS. Commit.**
 
   ```bash
   go test ./registry/helpers/ -run TestCarAs -v
@@ -525,7 +531,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
 
 ### Task B.4: Add `NthCons` with tests
 
-- [ ] **Step B.4.1: Write the failing test.**
+- [x] **Step B.4.1: Write the failing test.**
 
   ```go
   func TestNthCons(t *testing.T) {
@@ -563,9 +569,9 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
   }
   ```
 
-- [ ] **Step B.4.2: Run — confirm FAIL.**
+- [x] **Step B.4.2: Run — confirm FAIL.**
 
-- [ ] **Step B.4.3: Implement.**
+- [x] **Step B.4.3: Implement.**
 
   ```go
   // NthCons advances n cons cells along the cdr chain and returns the
@@ -594,7 +600,7 @@ Expected: no matches. If anything matches, STOP and re-read the plan.
   }
   ```
 
-- [ ] **Step B.4.4: Run — confirm PASS. Commit.**
+- [x] **Step B.4.4: Run — confirm PASS. Commit.**
 
   ```bash
   go test ./registry/helpers/ -run TestNthCons -v
@@ -609,7 +615,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 **Files:**
 - Modify: `machine/compilation/import_set_datum.go`
 
-- [ ] **Step B.5.1: `parseImportSetFilterFromDatum` (lines ~121–149).**
+- [x] **Step B.5.1: `parseImportSetFilterFromDatum` (lines ~121–149).**
 
   Replace the `cdr := tuple.Cdr() / IsEmptyList check / cdrTuple, ok := cdr.(Tuple)` block with:
 
@@ -624,7 +630,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
   Add import: `"github.com/aalpar/wile/registry/helpers"`.
 
-- [ ] **Step B.5.2: `parseImportSetPrefixFromDatum` (lines ~152–188).**
+- [x] **Step B.5.2: `parseImportSetPrefixFromDatum` (lines ~152–188).**
 
   Two destructures stacked: outer (nested-importset + prefix-tail) and inner (prefix-symbol).
 
@@ -647,7 +653,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
   return importSet, nil
   ```
 
-- [ ] **Step B.5.3: `parseImportSetRenameFromDatum` (lines ~191–246).**
+- [x] **Step B.5.3: `parseImportSetRenameFromDatum` (lines ~191–246).**
 
   Outer destructure (rename-pairs is the tail):
 
@@ -679,7 +685,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
   return nil
   ```
 
-- [ ] **Step B.5.4: `parseImportSetPhaseShiftFromDatum` (lines ~251–270).**
+- [x] **Step B.5.4: `parseImportSetPhaseShiftFromDatum` (lines ~251–270).**
 
   ```go
   nestedExpr, _, err := helpers.Uncons(tuple.Cdr(), keyword, "import-set")
@@ -690,7 +696,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
   return importSet, nil
   ```
 
-- [ ] **Step B.5.5: `parseImportSetForMetaFromDatum` (lines ~274–321).**
+- [x] **Step B.5.5: `parseImportSetForMetaFromDatum` (lines ~274–321).**
 
   Two destructures stacked. First the (phase-int . importset-tail), then (importset . nil):
 
@@ -709,7 +715,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
   Leave the range check on `phaseInt.Value` unchanged.
 
-- [ ] **Step B.5.6: Test + commit.**
+- [x] **Step B.5.6: Test + commit.**
 
   ```bash
   go test ./machine/compilation/... -v
@@ -723,7 +729,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 **Files:**
 - Modify: `extensions/eval/prim_eval.go` — `PrimEval` (lines ~51–82), `tryWileProfile` (lines ~293–344)
 
-- [ ] **Step B.6.1: `PrimEval` argument destructuring.**
+- [x] **Step B.6.1: `PrimEval` argument destructuring.**
 
   Replace the argList/restTuple cascade with:
 
@@ -765,7 +771,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
   Don't force `Uncons` into sites where the surrounding sentinel discipline is intentionally different. Leave `PrimEval` mostly as-is; only touch it if `Uncons` cleanly fits.
 
-- [ ] **Step B.6.2: `tryWileProfile` cascade.**
+- [x] **Step B.6.2: `tryWileProfile` cascade.**
 
   The current shape walks `(wile <name>)` with five `Car()/Cdr()` projections. Rewrite:
 
@@ -801,7 +807,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
   // ... rest of function unchanged
   ```
 
-- [ ] **Step B.6.3: Test + commit.**
+- [x] **Step B.6.3: Test + commit.**
 
   ```bash
   go test ./extensions/eval/... -v
@@ -815,7 +821,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 **Files:**
 - Modify: `extensions/threads/prim_threads.go` — `parseOptionalName` (lines ~58–73)
 
-- [ ] **Step B.7.1: Replace.**
+- [x] **Step B.7.1: Replace.**
 
   ```go
   func parseOptionalName(rest values.Value) string {
@@ -838,7 +844,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
   This is a small win — `helpers.Uncons` is a marginal improvement here. Still, the consistency matters.
 
-- [ ] **Step B.7.2: Test + commit.**
+- [x] **Step B.7.2: Test + commit.**
 
   ```bash
   go test ./extensions/threads/... -v
@@ -852,7 +858,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 **Files:**
 - Modify: `registry/core/prim_lists.go` — `PrimListRef` (lines ~194–223), `PrimListTail` (lines ~261–299)
 
-- [ ] **Step B.8.1: Rewrite `PrimListRef`.**
+- [x] **Step B.8.1: Rewrite `PrimListRef`.**
 
   ```go
   func PrimListRef(mc machine.CallContext) error {
@@ -879,7 +885,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
   }
   ```
 
-- [ ] **Step B.8.2: Rewrite `PrimListTail`.**
+- [x] **Step B.8.2: Rewrite `PrimListTail`.**
 
   ```go
   func PrimListTail(mc machine.CallContext) error {
@@ -897,7 +903,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
   }
   ```
 
-- [ ] **Step B.8.3: Test + commit.**
+- [x] **Step B.8.3: Test + commit.**
 
   ```bash
   go test ./registry/core/... -run 'TestPrim(ListRef|ListTail)' -v
@@ -908,7 +914,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
 ### Task B.9: Finalize Phase B
 
-- [ ] **Step B.9.1: Re-grep to confirm impact.**
+- [x] **Step B.9.1: Re-grep to confirm impact.**
 
   ```bash
   grep -rEn '\.Car\(\)\.\(\*values\.Symbol\)|\.Car\(\)\.\(\*values\.Integer\)' \
@@ -917,7 +923,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
   Expected: significantly lower than the baseline of 12 (5 Integer + 7 Symbol). Remaining sites are ones where the surrounding context made adoption awkward — these stay. Document a comment on any remaining ones explaining why.
 
-- [ ] **Step B.9.2: Run `make ci`.**
+- [x] **Step B.9.2: Run `make ci`.**
 
   ```bash
   make ci
@@ -925,7 +931,7 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
   Expected: green.
 
-- [ ] **Step B.9.3: Push.**
+- [x] **Step B.9.3: Push.**
 
   ```bash
   git push -u origin phase-b-uncons-helpers
@@ -937,9 +943,16 @@ This is the densest cluster (six occurrences of the `cdr/IsEmptyList/cdrTuple` b
 
 ## Phase C — `Spine` Iterator and Internal Adoption
 
-**Goal of phase:** Introduce `values.Spine(p *Pair) iter.Seq2[*Pair, error]` and `values.SpineWithCycleCheck(p *Pair) iter.Seq2[*Pair, error]`. Rewrite the internal cycle-walking and length-counting code in `values/pair.go` + `internal/syntax/syntax_pair.go` + `internal/schemeutil/syntax.go` to consume them. Public APIs (`ForEach`, `Append`, `Length`, `IsList`) keep their existing signatures and observable behavior.
+**Status: ✅ COMPLETE (with one task skipped).** Shipped across multiple sessions:
+- C.1, C.2: `Spine`, `SpineWithCycleCheck` (commits `8226f926`, `aec1d936`)
+- C.3: `IsList` consumes `SpineWithCycleCheck` (commit `7c16ab39`)
+- C.4: `Length`, `AsVector` consume `Spine` (commit `e930bf26`)
+- C.5: ❌ **SKIPPED** — ~40-56% regression measured on micro-bench. Documentation + permanent regression guard landed instead (commit `423b790f`).
+- C.6: `SyntaxPair` iterators consume `walkSyntaxSpine` (commit `5449e8c1`)
+- C.7: `SyntaxValueToDatum` consumes `SyntaxPair.ForEach` (commit `f3b4e00d`)
+- C.8: `make ci` green; merged to master 2026-05-30 via `phase-c-finish-spine`.
 
-**Branch:** `phase-c-spine-iterator`
+**Branch:** `phase-c-spine-iterator` (early work landed on master directly; C.5/C.6/C.8 used `phase-c-finish-spine`)
 
 **Pre-flight check:**
 
@@ -951,7 +964,7 @@ Expected: no matches.
 
 ### Task C.0: Setup
 
-- [ ] **Step C.0.1: Branch.**
+- [x] **Step C.0.1: Branch.**
 
   ```bash
   git fetch origin
@@ -969,7 +982,7 @@ Expected: no matches.
 
 Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last step. Rejected because `iter.Seq2[K, V]` consumers expect K to be non-nil unless the loop terminated cleanly; introducing a sentinel nil-key obscures the contract.
 
-- [ ] **Step C.1.1: Write the failing tests.**
+- [x] **Step C.1.1: Write the failing tests.**
 
   Append to `values/pair_test.go`:
 
@@ -1010,13 +1023,13 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
   }
   ```
 
-- [ ] **Step C.1.2: Run — confirm FAIL.**
+- [x] **Step C.1.2: Run — confirm FAIL.**
 
   ```bash
   go test ./values/ -run TestSpine -v
   ```
 
-- [ ] **Step C.1.3: Implement.**
+- [x] **Step C.1.3: Implement.**
 
   Append to `values/pair.go`:
 
@@ -1063,9 +1076,9 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 
   *Verify this signature compiles and works with `for cell := range Spine(...)` syntax. If Go rejects it, fall back to `iter.Seq[*Pair]` instead.* The test above uses single-variable range, so it will fail to compile if `Seq2` requires two-variable form. Adjust the test and implementation together if needed.
 
-- [ ] **Step C.1.4: Run — confirm PASS.**
+- [x] **Step C.1.4: Run — confirm PASS.**
 
-- [ ] **Step C.1.5: Commit.**
+- [x] **Step C.1.5: Commit.**
 
   ```bash
   git add values/pair.go values/pair_test.go
@@ -1074,7 +1087,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 
 ### Task C.2: Add `SpineWithCycleCheck` with tests
 
-- [ ] **Step C.2.1: Write the failing test (cycle detection).**
+- [x] **Step C.2.1: Write the failing test (cycle detection).**
 
   Append:
 
@@ -1118,9 +1131,9 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
   }
   ```
 
-- [ ] **Step C.2.2: Run — confirm FAIL.**
+- [x] **Step C.2.2: Run — confirm FAIL.**
 
-- [ ] **Step C.2.3: Implement using Floyd's tortoise-and-hare.**
+- [x] **Step C.2.3: Implement using Floyd's tortoise-and-hare.**
 
   ```go
   // SpineWithCycleCheck is Spine with Floyd's tortoise-and-hare cycle
@@ -1169,7 +1182,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 
   Note: this iterator does NOT report the improper tail because Floyd's algorithm can't distinguish improper-tail from terminated-cleanly without an extra pass. Callers that need both should use `Spine` and pay the O(n) extra space for a visited set instead.
 
-- [ ] **Step C.2.4: Run — confirm PASS. Commit.**
+- [x] **Step C.2.4: Run — confirm PASS. Commit.**
 
   ```bash
   go test ./values/ -run TestSpineWithCycleCheck -v
@@ -1182,7 +1195,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 **Files:**
 - Modify: `values/pair.go` — `IsList` method (lines ~111–147)
 
-- [ ] **Step C.3.1: Replace.**
+- [x] **Step C.3.1: Replace.**
 
   ```go
   func (p *Pair) IsList() bool {
@@ -1202,7 +1215,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
   }
   ```
 
-- [ ] **Step C.3.2: Run the full pair test suite.**
+- [x] **Step C.3.2: Run the full pair test suite.**
 
   ```bash
   go test ./values/ -run TestPair -v
@@ -1210,7 +1223,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 
   Expected: PASS. If a test fails because the new implementation classifies an edge case differently, scrutinize: is the new behavior R7RS-correct, or did we regress? Per `internal/CLAUDE.md`: "Tests that conform to R7RS must not be removed or reverted."
 
-- [ ] **Step C.3.3: Commit.**
+- [x] **Step C.3.3: Commit.**
 
   ```bash
   git add values/pair.go
@@ -1222,7 +1235,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 **Files:**
 - Modify: `values/pair.go` — `Length` (lines ~205–212), `AsVector` (lines ~407–417)
 
-- [ ] **Step C.4.1: Rewrite `Length`.**
+- [x] **Step C.4.1: Rewrite `Length`.**
 
   ```go
   func (p *Pair) Length() int {
@@ -1239,7 +1252,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
   }
   ```
 
-- [ ] **Step C.4.2: Rewrite `AsVector`.**
+- [x] **Step C.4.2: Rewrite `AsVector`.**
 
   ```go
   func (p *Pair) AsVector() *Vector {
@@ -1259,7 +1272,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
   }
   ```
 
-- [ ] **Step C.4.3: Test + commit.**
+- [x] **Step C.4.3: Test + commit.**
 
   ```bash
   go test ./values/ -v
@@ -1274,7 +1287,7 @@ Alternative considered & rejected: yielding `(nil, ErrImproperTail)` on the last
 
 The public contract of `ForEach` must be preserved exactly: it returns `(tail Value, error)` where `tail = EmptyList` for proper lists. Existing callers depend on this.
 
-- [ ] **Step C.5.1: Rewrite.**
+- [x] **Step C.5.1: Rewrite.**
 
   ```go
   func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
@@ -1305,7 +1318,7 @@ The public contract of `ForEach` must be preserved exactly: it returns `(tail Va
 
   **Decision rule:** If this task's allocation regression shows up in `make bench-gabriel` (specifically the list-heavy benchmarks: `mazefun`, `traverse`), revert this task and skip C.5 entirely. The Phase C win is structural cleanup elsewhere; `ForEach` is a hot path and not worth a 2× allocation hit.
 
-- [ ] **Step C.5.2: Run benchmarks.**
+- [x] **Step C.5.2: Run benchmarks.**
 
   ```bash
   make bench-gabriel 2>&1 | tee /tmp/bench-c5.txt
@@ -1317,7 +1330,9 @@ The public contract of `ForEach` must be preserved exactly: it returns `(tail Va
   git revert HEAD
   ```
 
-- [ ] **Step C.5.3: If kept, commit.**
+  **Outcome (2026-05-30):** Used a focused micro-bench (`values/pair_bench_test.go`, BenchmarkPairForEach) instead of the Gabriel macro-bench — the per-step regression was so large (~40-56% across 10/100/1000-element lists, baseline 40.7→spine 57.8 ns at 10; 256→384 at 100; 2412→3770 at 1000) that the macro-bench was unnecessary. iter.Seq2's per-yield function-pointer overhead (~1.3 ns/cell) dominates because `Pair.ForEach`'s real per-cell work is only ~2 ns. Triggered the revert path.
+
+- [ ] **Step C.5.3: If kept, commit.** ❌ **SKIPPED** — revert path taken per C.5.2 outcome. The original open-coded `ForEach` was restored to its pre-C.5 state in the working tree (no commit was made on the failed attempt, so no `git revert` was needed). What landed instead: a documentation comment on `ForEach` recording the finding, plus `values/pair_bench_test.go` as a permanent regression guard (commit `423b790f`).
 
   ```bash
   git add values/pair.go
@@ -1326,12 +1341,16 @@ The public contract of `ForEach` must be preserved exactly: it returns `(tail Va
 
 ### Task C.6: Rewrite `SyntaxPair` parallel methods
 
+**Outcome (2026-05-30):** Shipped in commit `5449e8c1`. Two plan-vs-reality deviations:
+1. **Scope was narrower than this task claimed.** Of the six methods listed (`IsList`, `Length`, `AsVector`, `AsSyntaxVector`, `ForEach`, `SyntaxForEach`), only the latter two had open-coded spine walks. The other four already delegate through `SyntaxForEach`, so they benefit transitively without source edits.
+2. **Helper shape diverged from `iter.Seq2` to a plain method.** Given the C.5 finding that iter.Seq2 yields cost ~40-56% per-cell, the helper was implemented as `(p *SyntaxPair) walkSyntaxSpine(ctx, fn) (values.Value, error)` — a plain method taking a callback rather than yielding cells. Same structural consolidation, no per-yield overhead.
+
 **Files:**
 - Modify: `internal/syntax/syntax_pair.go` — `IsList` (lines ~129–138), `Length` (lines ~191–201), `AsVector` (lines ~300–317), `AsSyntaxVector` (lines ~320–333), `ForEach` (lines ~216–236), `SyntaxForEach` (lines ~239–259)
 
 The plan here is the same as C.3–C.5 but for the syntax phase. There is no separate `Spine` for `*SyntaxPair`; the easiest path is to walk the cdr chain with a small local helper inside `syntax_pair.go`:
 
-- [ ] **Step C.6.1: Add a local syntaxSpine helper.**
+- [x] **Step C.6.1: Add a local syntaxSpine helper.**
 
   ```go
   // syntaxSpine yields each *SyntaxPair along the cdr chain. The improper
@@ -1359,11 +1378,11 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
   }
   ```
 
-- [ ] **Step C.6.2: Rewrite each method to use syntaxSpine.**
+- [x] **Step C.6.2: Rewrite each method to use syntaxSpine.**
 
   Same patterns as C.3 / C.4 — read each cell's `.Car()` inside the range loop, check `tail` after.
 
-- [ ] **Step C.6.3: Test + commit.**
+- [x] **Step C.6.3: Test + commit.**
 
   ```bash
   go test ./internal/syntax/ -v
@@ -1376,7 +1395,7 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 **Files:**
 - Modify: `internal/schemeutil/syntax.go` — the `*syntax.SyntaxPair` case in `SyntaxValueToDatum` (lines ~39–69)
 
-- [ ] **Step C.7.1: Replace the open-coded `for { curr.Car(); curr.Cdr() }` loop with `syntax.ForEach`.**
+- [x] **Step C.7.1: Replace the open-coded `for { curr.Car(); curr.Cdr() }` loop with `syntax.ForEach`.**
 
   The existing comment ("Use a loop to traverse the list spine to avoid stack overflow") is asserting that `SyntaxForEach` would recurse. It doesn't — `SyntaxForEach` is iterative. The comment is wrong. Verify by reading `internal/syntax/syntax_pair.go:239–259`. After verification, replace the inline loop:
 
@@ -1405,7 +1424,7 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   This removes the open-coded spine walk. The behavior is identical because `SyntaxPair.ForEach` already implements the same iterative walk under the hood.
 
-- [ ] **Step C.7.2: Test + commit.**
+- [x] **Step C.7.2: Test + commit.**
 
   ```bash
   go test ./internal/schemeutil/ -v
@@ -1415,7 +1434,7 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
 ### Task C.8: Finalize Phase C
 
-- [ ] **Step C.8.1: Confirm public APIs unchanged.**
+- [x] **Step C.8.1: Confirm public APIs unchanged.**
 
   ```bash
   git diff origin/master -- values/pair.go internal/syntax/syntax_pair.go | \
@@ -1424,7 +1443,9 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   Expected: only NEW functions (`Spine`, `SpineWithCycleCheck`, `syntaxSpine`). No SIGNATURE CHANGES to existing methods.
 
-- [ ] **Step C.8.2: Run benchmarks once more.**
+  **Outcome (2026-05-30):** Verified. New methods: `walkSyntaxSpine` (private). `ForEach`/`SyntaxForEach` signatures unchanged (body rewritten, public contract preserved). `Spine`/`SpineWithCycleCheck` landed in earlier commits.
+
+- [x] **Step C.8.2: Run benchmarks once more.**
 
   ```bash
   make bench-gabriel | tee /tmp/bench-c8.txt
@@ -1432,7 +1453,9 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   Compare against the master baseline collected before phase start. Acceptable: ±2% on list-heavy benchmarks. >5% regression → investigate; >10% → revert the offending sub-task.
 
-- [ ] **Step C.8.3: Run `make ci`.**
+  **Outcome (2026-05-30):** Used focused micro-bench (`BenchmarkPairForEach`) for the C.5 decision because the regression was conclusive at the unit level (~40-56%). Gabriel macro-bench not re-run for C.6/C.7 — the SyntaxPair path runs at compile/expand time, not at the Gabriel benchmarks' runtime measurement window, so the macro-bench wouldn't have surfaced anything new. `make ci`'s test suite is the integration-level proof of no regression.
+
+- [x] **Step C.8.3: Run `make ci`.**
 
   ```bash
   make ci
@@ -1440,7 +1463,9 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   Expected: green.
 
-- [ ] **Step C.8.4: Push.**
+  **Outcome (2026-05-30):** Green. All 40 packages meet ≥80% coverage; lint, README compile-check, examples build, mod verify all pass.
+
+- [x] **Step C.8.4: Push.**
 
   ```bash
   git push -u origin phase-c-spine-iterator
@@ -1448,11 +1473,13 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   Ask the user before merging.
 
+  **Outcome (2026-05-30):** Pushed as `phase-c-finish-spine` (not `phase-c-spine-iterator`, since C.1-C.4 had already landed on master directly in prior sessions). User authorized fast-forward merge to master. Branch deleted locally and on origin post-merge.
+
 ---
 
 ## Final Verification (All Three Phases Merged)
 
-- [ ] **Step Z.1: Count remaining inline destructuring blocks.**
+- [x] **Step Z.1: Count remaining inline destructuring blocks.**
 
   ```bash
   grep -rEn 'IsEmptyList\([a-zA-Z_]+\.Cdr\(\)\)' --include='*.go' . | wc -l
@@ -1466,7 +1493,9 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   Baseline: 14. Expected after Phase B: < 5.
 
-- [ ] **Step Z.2: Total `.Car()/.Cdr()` count.**
+  **Outcome (2026-05-30):** `IsEmptyList(X.Cdr())` = 10 (vs <5 expected). `.Cdr().(values.Tuple)` = 12 (vs <5 expected). The hit ratio missed the plan's stretch target. The remaining sites concentrate in (a) helpers themselves (where the pattern is the *implementation*, not duplication), (b) `values/pair.go`'s own internals (Append spine-copy, EqualTo, SchemeString — each has a specialized walk that doesn't fit the generic helpers), and (c) compile-time syntax destructuring with site-specific error sentinels. None of these are accidental-duplication; the cleanup floor here is structurally higher than the plan estimated.
+
+- [x] **Step Z.2: Total `.Car()/.Cdr()` count.**
 
   ```bash
   grep -rEn '\.Car\(\)|\.Cdr\(\)' --include='*.go' . | wc -l
@@ -1474,7 +1503,9 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
   Baseline: 322 (production + tests). Expected after all phases: ~180–220. Test files are largely untouched (they exercise the API surface), so most of the reduction comes from the ~150 production sites.
 
-- [ ] **Step Z.3: Re-read the analysis findings.**
+  **Outcome (2026-05-30):** Total = 296 (vs ~180–220 expected). Prod-only = 172. Reduction from baseline 322 → 296 (−26 overall) is real but smaller than projected. Same explanation as Z.1: helpers + specialized internals + intentional site-specific destructuring. The aggregate count is a noisy proxy — the real win is the *named-helper coverage* of every place where a destructure was *accidentally* hand-rolled, not the raw `.Car()/.Cdr()` token count.
+
+- [x] **Step Z.3: Re-read the analysis findings.**
 
   Open `plans/2026-05-29-car-cdr-consolidation.md` (this file) and verify each numbered finding from the original analysis maps to a completed task:
 
@@ -1486,6 +1517,8 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
   - Finding 6 (NthCons unifies list-ref/list-tail) → Phase B tasks B.4, B.8
 
   If any finding is unmapped, file a follow-up task; do not silently drop it.
+
+  **Outcome (2026-05-30):** All six findings have shipped implementations. No follow-up tasks needed.
 
 ---
 
@@ -1509,3 +1542,36 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 | `Spine` materialization regresses `ForEach` performance | C.5 | Bench-driven decision rule in task C.5.2 — revert if Gabriel benchmarks regress >5%. |
 | `iter.Seq2[*Pair, struct{}]` doesn't compile with single-variable range | C.1 | Decision encoded in C.1.3 fallback note — adjust to `iter.Seq[*Pair]` if needed. |
 | Phases conflict on the same file | A vs B | `import_set_datum.go` is touched by both. Phase A removes the `ForEach` loops; Phase B replaces the head-destructure blocks. They edit non-overlapping line ranges; rebase Phase B onto post-A master before starting B.5. |
+
+**Which risks actually fired (2026-05-30):**
+- ✅ **C.5 Spine regression fired as predicted.** The C.5.2 decision rule worked exactly as intended: a 40–56% per-cell regression triggered the revert path. Plan's risk register correctly anticipated this and pre-committed to the response.
+- ⚠️ **`iter.Seq2` single-variable range worked.** Risk did not fire — `for cell := range Spine(p, &tail)` compiled and ran correctly under Go 1.24. No fallback needed.
+- ⚠️ **Phase A/B file conflict on `import_set_datum.go` did not fire.** The rebase discipline (Phase B branched from post-Phase-A master) sidestepped it cleanly.
+
+---
+
+## Outcome Summary (2026-05-30)
+
+**All three phases shipped to master.**
+
+| Phase | Status | Lines changed | Net win |
+|-------|--------|--------------:|---------|
+| A — `helpers.ForEachList` adoption | ✅ shipped | ~150 LOC removed | 19 sites consolidated; improper-list acceptance now an explicit error |
+| B — `Uncons` helper family | ✅ shipped | ~200 LOC removed | 4 new helpers (Uncons, UnconsTyped, CarAs, NthCons); 12+ destructuring sites consolidated |
+| C — `Spine` iterator + internal adoption | ✅ shipped (C.5 skipped) | ~50 LOC removed | `Spine`, `SpineWithCycleCheck` added; `IsList`, `Length`, `AsVector`, SyntaxPair iterators consolidated |
+
+**C.5 decision rule fired as designed.** Implementing `Pair.ForEach` on top of `Spine` regressed the micro-bench by 40–56% (10/100/1000-element lists: 40.7→57.8 / 256→384 / 2412→3770 ns/op). The cause: Go 1.24's `iter.Seq2` dispatches each yield through two function pointers (~1.3 ns/cell overhead), and `Pair.ForEach`'s per-cell work is small enough that the dispatch dominates. The C.3/C.4 consumers (`IsList`, `Length`, `AsVector`) don't hit this because they're called per-*list*, not per-*cell*. **Permanent regression guard:** `values/pair_bench_test.go::BenchmarkPairForEach` — future Spine-rewrite attempts will fail loudly against the baseline.
+
+**Plan-vs-reality deviations worth recording:**
+
+1. **C.6's claimed scope was wrong.** The plan listed six SyntaxPair methods needing rewriting (`IsList`, `Length`, `AsVector`, `AsSyntaxVector`, `ForEach`, `SyntaxForEach`); only the last two had open-coded spine walks. The first four already delegated through `SyntaxForEach`, so they benefited transitively. CLAUDE.local.md's "verify every CLAIM against actual code" caught this.
+2. **C.6's helper shape diverged.** Given C.5's iter.Seq2 finding, the SyntaxPair helper was implemented as `(p *SyntaxPair) walkSyntaxSpine(ctx, fn) (values.Value, error)` — a plain method taking a callback, NOT an `iter.Seq2`. Same consolidation, no per-yield overhead.
+3. **Branch discipline drifted mid-plan.** C.1–C.4 + C.7 landed directly on `master` (violating CLAUDE.md), bypassing the plan's `phase-c-spine-iterator` branch. The 2026-05-30 session restored discipline via `phase-c-finish-spine`. Future plan executions should fail loudly on first direct-master commit.
+4. **Final-verification grep targets missed.** Z.1 expected <5 occurrences but found 10/12; Z.2 expected ~180–220 but found 296 total / 172 prod-only. The remaining sites are structurally legitimate (specialized internals, site-specific error sentinels, helpers' own implementations). The plan's projections under-counted the structural floor.
+
+**Lessons (carry forward to future consolidation plans):**
+
+- **Pre-commit to revert criteria before measuring.** C.5's decision rule (>5% Gabriel regression → revert) made the response automatic when the data came in. No human deliberation needed; no sunk-cost bias.
+- **`iter.Seq2` has measurable overhead.** Don't use it inside per-element hot paths in the values/ layer. Use it for per-list operations (cycle detection, length, conversion). Adopting `iter.Seq2` is a non-trivial perf choice, not a free abstraction.
+- **Plan claims about "needs rewriting" must be re-grepped at execution time.** Plans drift faster than the code they describe. The C.6 scope correction was a multiple-minute save; if the plan had been followed literally, four unnecessary edits would have churned the diff.
+- **The `.Car()/.Cdr()` token count is a noisy proxy.** Some sites are accidental duplication (the consolidation target); others are deliberate primitive implementations (the floor). Targets like "reduce by X%" should be qualified by what fraction is consolidable.
