@@ -715,3 +715,42 @@ func TestSpine(t *testing.T) {
 		})
 	}
 }
+
+func TestSpineWithCycleCheck(t *testing.T) {
+	// Proper list (1 2 3)
+	a := values.NewInteger(1)
+	b := values.NewInteger(2)
+	c := values.NewInteger(3)
+	proper := values.NewCons(a, values.NewCons(b, values.NewCons(c, values.EmptyList)))
+
+	// Cycle: 1 -> 2 -> back to head
+	cycleHead := values.NewCons(a, values.EmptyList)
+	cycleSecond := values.NewCons(b, cycleHead)
+	cycleHead.SetCdr(cycleSecond)
+
+	tcs := []struct {
+		name      string
+		input     *values.Pair
+		wantCells int // -1 = don't care
+		wantCycle bool
+	}{
+		{"proper", proper, 3, false},
+		{"cycle", cycleHead, -1, true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			var cycled bool
+			cells := 0
+			for range values.SpineWithCycleCheck(tc.input, &cycled) {
+				cells++
+				if cells > 100 {
+					t.Fatal("infinite loop — cycle not detected")
+				}
+			}
+			qt.Assert(t, cycled, qt.Equals, tc.wantCycle)
+			if tc.wantCells >= 0 {
+				qt.Assert(t, cells, qt.Equals, tc.wantCells)
+			}
+		})
+	}
+}

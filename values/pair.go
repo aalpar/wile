@@ -130,12 +130,13 @@ func Spine(p *Pair, improperTail *Value) iter.Seq2[*Pair, struct{}] {
 // detection. *cycled is set to true if a cycle is detected, false
 // otherwise. cycled may be nil if the caller does not care.
 //
-// The iterator yields cells up to (but not necessarily including) the
-// point of detection, then terminates. SpineWithCycleCheck does NOT
-// report the improper tail — Floyd's algorithm cannot distinguish
-// improper-tail termination from cycle detection in a single pass
-// without an extra O(n) visited set. Callers that need both should
-// use Spine with an external visited map.
+// The iterator yields every cell up to (but not necessarily including)
+// the point of cycle detection, and yields every cell of a proper or
+// improper list before terminating. It does NOT report the improper
+// tail — Floyd's algorithm cannot distinguish improper-tail termination
+// from cycle detection in a single pass without an extra O(n) visited
+// set. Callers that need both should use Spine with an external visited
+// map.
 func SpineWithCycleCheck(p *Pair, cycled *bool) iter.Seq2[*Pair, struct{}] {
 	return func(yield func(*Pair, struct{}) bool) {
 		if cycled != nil {
@@ -145,27 +146,34 @@ func SpineWithCycleCheck(p *Pair, cycled *bool) iter.Seq2[*Pair, struct{}] {
 			return
 		}
 		slow, fast := p, p
-		for {
+		for slow != nil {
 			if !yield(slow, struct{}{}) {
 				return
 			}
-			// Advance fast two cdr-steps, slow one cdr-step.
+			// Try to advance fast two cdr-steps; if either step
+			// terminates, fastAdvanced is false and we will not test
+			// for a cycle this round — but slow still keeps walking
+			// so the iteration finishes with the remaining proper or
+			// improper tail.
+			fastAdvanced := false
 			fastNext1, ok := fast[1].(*Pair)
-			if !ok {
-				return
+			if ok {
+				fast = fastNext1
+				fastNext2, ok2 := fast[1].(*Pair)
+				if ok2 {
+					fast = fastNext2
+					fastAdvanced = true
+				}
 			}
-			fast = fastNext1
-			fastNext2, ok := fast[1].(*Pair)
-			if !ok {
-				return
-			}
-			fast = fastNext2
+			// Advance slow one cdr-step. If slow's cdr is not a *Pair,
+			// the list (proper or improper) is exhausted from slow's
+			// side and we are done.
 			slowNext, ok := slow[1].(*Pair)
 			if !ok {
 				return
 			}
 			slow = slowNext
-			if slow == fast {
+			if fastAdvanced && slow == fast {
 				if cycled != nil {
 					*cycled = true
 				}
