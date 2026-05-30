@@ -559,3 +559,30 @@ func TestUnconsTyped(t *testing.T) {
 		})
 	}
 }
+
+// ── CarAs ───────────────────────────────────────────────────────────────
+
+func TestCarAs(t *testing.T) {
+	sym := values.NewSymbol("foo")
+	n := values.NewInteger(1)
+	tcs := []struct {
+		name    string
+		tuple   values.Tuple
+		wantErr error
+	}{
+		{"symbol-head", values.List(sym, n), nil},
+		{"int-head", values.List(n), werr.ErrNotASymbol},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := CarAs[*values.Symbol](tc.tuple, werr.ErrNotASymbol, "test", "head")
+			if tc.wantErr != nil {
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, errors.Is(err, tc.wantErr), qt.IsTrue)
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.EqualTo(sym), qt.IsTrue)
+		})
+	}
+}

@@ -77,6 +77,21 @@ func UnconsTyped[T any](v values.Value, headSentinel error, name, role string) (
 	return typed, tail, nil
 }
 
+// CarAs asserts t.Car() has concrete type T. Use this when the caller
+// already holds a Tuple in hand and only needs a typed head — the tail
+// is left implicit. For typed head + tail in one call, use UnconsTyped.
+func CarAs[T any](t values.Tuple, headSentinel error, name, role string) (T, error) {
+	var zero T
+	head := t.Car()
+	typed, ok := head.(T)
+	if !ok {
+		return zero, werr.WrapForeignErrorf(headSentinel,
+			"%s: %s: expected %s but got %T",
+			name, role, typeNameFromSentinel(headSentinel), head)
+	}
+	return typed, nil
+}
+
 // ListToVector is a helper that converts a list argument to a vector.
 func ListToVector(mc machine.CallContext, name string) error {
 	o := mc.Arg(0)
