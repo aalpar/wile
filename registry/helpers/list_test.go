@@ -586,3 +586,42 @@ func TestCarAs(t *testing.T) {
 		})
 	}
 }
+
+// ── NthCons ─────────────────────────────────────────────────────────────
+
+func TestNthCons(t *testing.T) {
+	list := values.List(
+		values.NewInteger(10),
+		values.NewInteger(20),
+		values.NewInteger(30),
+	) // (10 20 30)
+	tcs := []struct {
+		name    string
+		input   values.Value
+		n       int64
+		wantStr string
+		wantErr error
+	}{
+		{"index-0", list, 0, "(10 20 30)", nil},
+		{"index-1", list, 1, "(20 30)", nil},
+		{"index-2", list, 2, "(30)", nil},
+		{"index-3-empty", list, 3, "()", nil},
+		{"index-out-of-range", list, 4, "", werr.ErrIndexOutOfRange},
+		{"index-on-empty", values.EmptyList, 1, "", werr.ErrIndexOutOfRange},
+		{"index-zero-on-empty-ok", values.EmptyList, 0, "()", nil},
+		{"negative-index", list, -1, "", werr.ErrIndexOutOfRange},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NthCons(tc.input, tc.n, "test")
+			if tc.wantErr != nil {
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, errors.Is(err, tc.wantErr), qt.IsTrue,
+					qt.Commentf("got %v", err))
+				return
+			}
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Equals, tc.wantStr)
+		})
+	}
+}

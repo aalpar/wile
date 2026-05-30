@@ -92,6 +92,35 @@ func CarAs[T any](t values.Tuple, headSentinel error, name, role string) (T, err
 	return typed, nil
 }
 
+// NthCons advances n cons cells along the cdr chain and returns the
+// remaining list (or improper tail). It is the unified primitive
+// behind list-ref (NthCons(...).Car()) and list-tail (NthCons(...)).
+// Returns ErrIndexOutOfRange if n exceeds the list length or if n is
+// negative.
+//
+// At n=0 the input is returned unchanged, including for EmptyList — this
+// matches R7RS semantics where (list-tail x 0) is x even if x is ().
+func NthCons(lst values.Value, n int64, name string) (values.Value, error) {
+	if n < 0 {
+		return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+			"%s: index must be non-negative", name)
+	}
+	current := lst
+	for i := range n {
+		if values.IsEmptyList(current) {
+			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %d out of bounds at depth %d", name, n, i)
+		}
+		t, ok := current.(values.Tuple)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
+				"%s: index %d out of bounds: improper tail at depth %d", name, n, i)
+		}
+		current = t.Cdr()
+	}
+	return current, nil
+}
+
 // ListToVector is a helper that converts a list argument to a vector.
 func ListToVector(mc machine.CallContext, name string) error {
 	o := mc.Arg(0)
