@@ -61,14 +61,14 @@ func PrimLog(mc machine.CallContext) error {
 	if values.IsEmptyList(rest) {
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
 	} else {
-		baseArg, ok := rest.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "log: expected a list for rest arguments")
+		baseVal, restAfter, err := helpers.Uncons(rest, "log", "base argument")
+		if err != nil {
+			return err
 		}
-		if !values.IsEmptyList(baseArg.Cdr()) {
+		if !values.IsEmptyList(restAfter) {
 			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "log: expected 1 or 2 arguments")
 		}
-		base, err := helpers.ToComplex128(baseArg.Car())
+		base, err := helpers.ToComplex128(baseVal)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "log: %v", err)
 		}
@@ -100,14 +100,14 @@ func PrimAtan(mc machine.CallContext) error {
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
-		xArg, ok := rest.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "atan: expected a list for rest arguments")
+		xVal, restAfter, err := helpers.Uncons(rest, "atan", "x argument")
+		if err != nil {
+			return err
 		}
-		if !values.IsEmptyList(xArg.Cdr()) {
+		if !values.IsEmptyList(restAfter) {
 			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "atan: expected 1 or 2 arguments")
 		}
-		x, err := atan2Operand(xArg.Car())
+		x, err := atan2Operand(xVal)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}

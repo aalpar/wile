@@ -291,15 +291,12 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 // through to standard import-spec handling), or (nil, true, err) if the
 // match succeeded but construction failed.
 func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.Namespace, bool, error) {
-	if values.IsEmptyList(argsVal) {
-		return nil, false, nil
-	}
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
 		return nil, false, nil
 	}
-	first := args.Car()
-	if !values.IsEmptyList(args.Cdr()) {
+	first, ok := values.Single(args)
+	if !ok {
 		return nil, false, nil
 	}
 	spec, ok := first.(values.Tuple)

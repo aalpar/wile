@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -49,19 +50,16 @@ func PrimNumberToString(mc machine.CallContext) error {
 	rest := mc.Arg(1)
 	radix := 10
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(values.Tuple)
-		if ok && !pr.IsEmptyList() {
-			r, ok := pr.Car().(*values.Integer)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected an integer radix but got %T", pr.Car())
-			}
-			if !values.IsEmptyList(pr.Cdr()) {
-				return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "number->string: expected 1 or 2 arguments")
-			}
-			radix = int(r.Value)
-			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
-				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
-			}
+		r, restAfter, err := helpers.UnconsTyped[*values.Integer](rest, werr.ErrNotANumber, "number->string", "radix")
+		if err != nil {
+			return err
+		}
+		if !values.IsEmptyList(restAfter) {
+			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "number->string: expected 1 or 2 arguments")
+		}
+		radix = int(r.Value)
+		if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
 		}
 	}
 	switch v := n.(type) {
@@ -114,19 +112,16 @@ func PrimStringToNumber(mc machine.CallContext) error {
 	}
 	radix := 10
 	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(values.Tuple)
-		if ok && !pr.IsEmptyList() {
-			r, ok := pr.Car().(*values.Integer)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotANumber, "string->number: expected an integer radix but got %T", pr.Car())
-			}
-			if !values.IsEmptyList(pr.Cdr()) {
-				return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string->number: expected 1 or 2 arguments")
-			}
-			radix = int(r.Value)
-			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
-				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "string->number: radix must be 2, 8, 10, or 16")
-			}
+		r, restAfter, err := helpers.UnconsTyped[*values.Integer](rest, werr.ErrNotANumber, "string->number", "radix")
+		if err != nil {
+			return err
+		}
+		if !values.IsEmptyList(restAfter) {
+			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string->number: expected 1 or 2 arguments")
+		}
+		radix = int(r.Value)
+		if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "string->number: radix must be 2, 8, 10, or 16")
 		}
 	}
 
