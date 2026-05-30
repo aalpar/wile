@@ -279,16 +279,20 @@ func (p *Pair) Append(vs Value) Value {
 // Length returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
 //
-// Note: Uses context.Background() — no cancellation path. ForEach has no
-// cycle detection, so a circular list will hang indefinitely. Callers must
-// ensure the receiver is a proper list (e.g., via IsList).
+// Consumes Spine. Callers must ensure the receiver is a proper list
+// (e.g., via IsList) — a circular list will hang indefinitely because
+// Spine does not detect cycles.
 func (p *Pair) Length() int {
-	q := 0
-	Must(p.ForEach(context.Background(), func(_ context.Context, i int, _ bool, _ Value) error {
-		q = i + 1
-		return nil
-	}))
-	return q
+	var tail Value
+	count := 0
+	for range Spine(p, &tail) {
+		count++
+	}
+	if !IsEmptyList(tail) {
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList,
+			"Pair.Length: improper list"))
+	}
+	return count
 }
 
 // IsEmptyList returns false. A *Pair is never the empty list;
@@ -483,15 +487,19 @@ func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
 // AsVector converts the Pair representing a proper list into a Vector.
 // It panics if the Pair does not represent a proper list.
 //
-// Note: Uses context.Background() — see Length comment for circular list caveat.
+// Consumes Spine. See Length for the circular-list caveat.
 func (p *Pair) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
 	}
+	var tail Value
 	vs := []Value{}
-	Must(p.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
-		vs = append(vs, v)
-		return nil
-	}))
+	for cell := range Spine(p, &tail) {
+		vs = append(vs, cell.Car())
+	}
+	if !IsEmptyList(tail) {
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList,
+			"Pair.AsVector: improper list"))
+	}
 	return NewVector(vs...)
 }
