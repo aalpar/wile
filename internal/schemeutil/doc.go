@@ -16,9 +16,14 @@
 //
 // # Syntax/Datum Conversion
 //
-//   - [SyntaxValueToDatum]: strip source location and scope info from syntax
 //   - [DatumToSyntaxValue]: wrap raw values with source context
 //   - [IsSyntaxComment]: check for comment syntax types
+//
+// To strip source location and scope information from a syntax object,
+// call [syntax.SyntaxValue.UnwrapAll] on it directly. There is no
+// SyntaxValueToDatum here — an earlier function by that name had no
+// production callers and was deleted in favor of the method form, which
+// also handles circular structures correctly via its visited-set cache.
 //
 // # Boolean Conversion
 //

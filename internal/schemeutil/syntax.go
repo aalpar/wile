@@ -16,66 +16,10 @@ package schemeutil
 
 import (
 	"context"
-	"slices"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
-
-// SyntaxValueToDatum converts a syntax object back to a raw Scheme datum,
-// stripping away source location and scope information. Recursively unwraps
-// pairs, vectors, and boxed values.
-func SyntaxValueToDatum(sv values.Value) values.Value {
-	syntaxVal, ok := sv.(syntax.SyntaxValue)
-	if ok {
-		if syntax.IsSyntaxVoid(syntaxVal) {
-			return values.Void
-		}
-		if syntax.IsSyntaxEmptyList(syntaxVal) {
-			return values.EmptyList
-		}
-	}
-	switch v := sv.(type) {
-	case *syntax.SyntaxPair:
-		// Spine walk via the canonical SyntaxPair.ForEach iterator — it
-		// is iterative (no recursion) so stack overflow on long lists is
-		// not a concern. The returned tail captures any improper-list
-		// cdr; we recursively convert it.
-		var cars []values.Value
-		tail, _ := v.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
-			cars = append(cars, SyntaxValueToDatum(elem))
-			return nil
-		})
-		var result values.Value
-		if values.IsEmptyList(tail) {
-			result = values.EmptyList
-		} else {
-			result = SyntaxValueToDatum(tail)
-		}
-		for i := range slices.Backward(cars) {
-			result = values.NewCons(cars[i], result)
-		}
-		return result
-	case *syntax.SyntaxVector:
-		vt := make(values.Vector, len(v.Values))
-		for i := range v.Values {
-			vt[i] = SyntaxValueToDatum(v.Values[i])
-		}
-		return &vt
-	case *syntax.SyntaxObject:
-		bx, ok := v.Datum().(*values.Box)
-		if ok {
-			return values.NewBox(SyntaxValueToDatum(bx.Unbox()))
-		}
-		return v.Datum()
-	case *syntax.SyntaxSymbol:
-		return v.Datum()
-	case values.Value:
-		return v
-	default:
-		return nil
-	}
-}
 
 // DatumToSyntaxValue wraps a raw Scheme datum in syntax objects, attaching
 // the provided SourceContext for source location and scope tracking.
