@@ -377,7 +377,7 @@ func PrimEnvironment(mc machine.CallContext) error {
 	}
 
 	// Process each import spec
-	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
+	err = helpers.ForEachList(mc.Context(), args, "environment", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		// Parse the import set from datum
 		importSet, err := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
 		if err != nil {
@@ -409,9 +409,6 @@ func PrimEnvironment(mc machine.CallContext) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "environment: improper import spec list")
 	}
 
 	mc.SetValue(newTopLevel)
