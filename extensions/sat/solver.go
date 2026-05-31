@@ -254,6 +254,11 @@ func (s *solver) analyze(conflict clauseRef) ([]literal, int32) {
 		if c.learnt {
 			s.bumpClauseActivity(cr)
 		}
+		// Skip lits[0] on subsequent iterations: when this loop body runs after
+		// the first iteration, the clause is a reason clause for the literal p
+		// just resolved against. By MiniSat convention, propagate places the
+		// implied literal (the pivot) at lits[0], so lits[0] is already
+		// accounted for via the trail walk and must not be re-counted here.
 		startK := 0
 		if p != literal(-1) {
 			startK = 1
