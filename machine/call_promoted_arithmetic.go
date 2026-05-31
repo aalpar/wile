@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"math"
-
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -42,6 +40,23 @@ func popTwoNumbers(mc *MachineContext, name string) (values.Number, values.Numbe
 			werr.ErrNotANumber, "%s: expected number, got %s", name, b.SchemeString()))
 	}
 	return an, bn, nil
+}
+
+// popTwoReals pops two arguments via popTwoNumbers, then additionally requires
+// both to be real (R7RS §6.2.6: ordering comparisons reject non-real complex
+// arguments). Returns the two reals (a, b where a was pushed first) or an error
+// if either is not a Number or is a complex number with a non-zero imaginary
+// part.
+func popTwoReals(mc *MachineContext, name string) (values.Number, values.Number, error) {
+	a, b, err := popTwoNumbers(mc, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if isNonRealComplex(a) || isNonRealComplex(b) {
+		return nil, nil, applyCallableError(mc, werr.WrapForeignErrorf(
+			werr.ErrNotAReal, "%s: requires real arguments", name))
+	}
+	return a, b, nil
 }
 
 // inlineAdd pops two numbers and sets value register to their sum.
@@ -80,13 +95,9 @@ func isNonRealComplex(n values.Number) bool {
 
 // inlineNumLt pops two numbers and sets value register to (< a b).
 func inlineNumLt(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "<")
+	a, b, err := popTwoReals(mc, "<")
 	if err != nil {
 		return err
-	}
-	if isNonRealComplex(a) || isNonRealComplex(b) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAReal, "<: requires real arguments"))
 	}
 	mc.SetValue(values.BoolToBoolean(a.LessThan(b)))
 	return nil
@@ -95,13 +106,9 @@ func inlineNumLt(mc *MachineContext) error {
 // inlineNumLe pops two numbers and sets value register to (<= a b).
 // R7RS + IEEE 754: NaN fails all comparisons.
 func inlineNumLe(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "<=")
+	a, b, err := popTwoReals(mc, "<=")
 	if err != nil {
 		return err
-	}
-	if isNonRealComplex(a) || isNonRealComplex(b) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAReal, "<=: requires real arguments"))
 	}
 	if a.IsNaN() || b.IsNaN() {
 		mc.SetValue(values.FalseValue)
@@ -113,13 +120,9 @@ func inlineNumLe(mc *MachineContext) error {
 
 // inlineNumGt pops two numbers and sets value register to (> a b).
 func inlineNumGt(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, ">")
+	a, b, err := popTwoReals(mc, ">")
 	if err != nil {
 		return err
-	}
-	if isNonRealComplex(a) || isNonRealComplex(b) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAReal, ">: requires real arguments"))
 	}
 	mc.SetValue(values.BoolToBoolean(b.LessThan(a)))
 	return nil
@@ -128,13 +131,9 @@ func inlineNumGt(mc *MachineContext) error {
 // inlineNumGe pops two numbers and sets value register to (>= a b).
 // R7RS + IEEE 754: NaN fails all comparisons.
 func inlineNumGe(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, ">=")
+	a, b, err := popTwoReals(mc, ">=")
 	if err != nil {
 		return err
-	}
-	if isNonRealComplex(a) || isNonRealComplex(b) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAReal, ">=: requires real arguments"))
 	}
 	if a.IsNaN() || b.IsNaN() {
 		mc.SetValue(values.FalseValue)
@@ -144,59 +143,13 @@ func inlineNumGe(mc *MachineContext) error {
 	return nil
 }
 
-// numericEquals implements R7RS = semantics for two numbers.
-// Handles IEEE 754 NaN and cross-type Integer/Float precision.
-// Duplicated from registry/core/prim_arithmetic.go to avoid circular dependency.
-func numericEquals(a, b values.Number) bool {
-	af, aIsFloat := a.(*values.Float)
-	bf, bIsFloat := b.(*values.Float)
-	if aIsFloat && bIsFloat {
-		if math.IsNaN(af.Value) || math.IsNaN(bf.Value) {
-			return false
-		}
-		return af.Value == bf.Value
-	}
-
-	intA, ok := a.(*values.Integer)
-	if ok {
-		floatB, ok := b.(*values.Float)
-		if ok {
-			return values.IntegerEqualsFloat(intA, floatB)
-		}
-	}
-	intB, ok := b.(*values.Integer)
-	if ok {
-		floatA, ok := a.(*values.Float)
-		if ok {
-			return values.IntegerEqualsFloat(intB, floatA)
-		}
-	}
-
-	bigA, ok := a.(*values.BigInteger)
-	if ok {
-		floatB, ok := b.(*values.Float)
-		if ok {
-			return values.BigIntegerEqualsFloat(bigA, floatB)
-		}
-	}
-	bigB, ok := b.(*values.BigInteger)
-	if ok {
-		floatA, ok := a.(*values.Float)
-		if ok {
-			return values.BigIntegerEqualsFloat(bigB, floatA)
-		}
-	}
-
-	return a.Subtract(b).IsZero()
-}
-
 // inlineNumEq pops two numbers and sets value register to (= a b).
 func inlineNumEq(mc *MachineContext) error {
 	a, b, err := popTwoNumbers(mc, "=")
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.BoolToBoolean(numericEquals(a, b)))
+	mc.SetValue(values.BoolToBoolean(values.NumericEquals(a, b)))
 	return nil
 }
 

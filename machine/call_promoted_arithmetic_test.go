@@ -89,6 +89,15 @@ func TestCallPromotedArithmeticErrors(t *testing.T) {
 		{Name: "divide non-number", Code: `(/ 1 "a")`},
 		{Name: "less than non-number", Code: `(< 1 "a")`},
 		{Name: "greater than non-number", Code: `(> 1 "a")`},
+
+		// Non-real complex rejection — the guard popTwoReals adds on top of
+		// popTwoNumbers. Each ordering comparison rejects a complex operand
+		// with a non-zero imaginary part, in either operand position.
+		{Name: "less than complex left", Code: `(< (make-rectangular 1 2) 3)`},
+		{Name: "less than complex right", Code: `(< 3 (make-rectangular 1 2))`},
+		{Name: "less or equal complex", Code: `(<= 1 (make-rectangular 0 1))`},
+		{Name: "greater than complex right", Code: `(> 3 (make-rectangular 1 2))`},
+		{Name: "greater or equal complex left", Code: `(>= (make-rectangular 1 2) 3)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -96,4 +105,33 @@ func TestCallPromotedArithmeticErrors(t *testing.T) {
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
+}
+
+// TestPopTwoRealsSemanticBoundary pins the property that justifies popTwoReals
+// existing as a helper distinct from popTwoNumbers: ordering comparisons
+// (<, <=, >, >=) require *real* arguments and reject a non-real complex with
+// werr.ErrNotAReal, whereas numeric equality (=) permits complex arguments
+// (R7RS §6.2.6). The "an error occurred" check in TestCallPromotedArithmeticErrors
+// above is not enough — it would pass even if the wrong error were raised, or
+// if = wrongly rejected complex too. This test asserts the *specific* error and
+// the *exempt* case, which together are the whole reason the guard is selective.
+func TestPopTwoRealsSemanticBoundary(t *testing.T) {
+	// TODO(you): implement the two halves of the boundary.
+	//
+	//   Half 1 — ordering rejects non-real complex with the RIGHT error.
+	//     For each of `(< (make-rectangular 1 2) 3)`, `(<= ...)`, `(> ...)`,
+	//     `(>= ...)`: run it, then assert errors.Is(err, werr.ErrNotAReal) is
+	//     true. (Plain IsNotNil is already covered above; the value here is
+	//     proving it's ErrNotAReal specifically — verify against the sentinel,
+	//     never compare error strings.)
+	//
+	//   Half 2 — equality is EXEMPT.
+	//     `(= (make-rectangular 1 2) (make-rectangular 1 2))` must succeed:
+	//     err == nil AND result is values.TrueValue. This is the case that
+	//     proves the guard lives in popTwoReals and not in popTwoNumbers.
+	//
+	// Pick the table shape from registry/CLAUDE.md (a []struct with a `wantReal`
+	// or `wantErr` discriminant reads cleanly here). The behaviors are already
+	// confirmed at the language level; you are encoding them as a regression lock.
+	t.Skip("TODO: implement popTwoReals semantic-boundary assertions")
 }
