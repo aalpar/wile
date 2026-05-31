@@ -376,3 +376,38 @@ func TestSolve_TwoModels_SAT(t *testing.T) {
 		}
 	}
 }
+
+func TestSolve_ModelSatisfiesInput(t *testing.T) {
+	rng := newDeterministicRNG(17)
+	for iter := 0; iter < 30; iter++ {
+		clauses, numVars := randomCNF(rng, 12, 40, 3)
+		origLits := make([][]literal, len(clauses))
+		for i, c := range clauses {
+			origLits[i] = append([]literal(nil), c.lits...)
+		}
+		s := newSolver(context.Background(), clauses, numVars, 100000)
+		r := s.solve()
+		if r != resultSAT {
+			continue
+		}
+		for ci, lits := range origLits {
+			ok := false
+			for _, l := range lits {
+				vv := int32(l) >> 1
+				sign := int8(l & 1)
+				a := s.assigns[vv]
+				if sign == 0 && a == 1 {
+					ok = true
+					break
+				}
+				if sign == 1 && a == -1 {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				t.Errorf("iter %d, clause %d: model does not satisfy %v", iter, ci, lits)
+			}
+		}
+	}
+}
