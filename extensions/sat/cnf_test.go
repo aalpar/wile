@@ -15,6 +15,8 @@
 package sat
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -40,19 +42,28 @@ func TestParseCNF_HappyPath(t *testing.T) {
 		t.Errorf("len(clauses): got %d, want 3", len(clauses))
 	}
 	want0 := []literal{2*1 + 0, 2*2 + 1, 2*3 + 0}
-	if !equalLits(clauses[0].lits, want0) {
+	if !slices.Equal(clauses[0].lits, want0) {
 		t.Errorf("clauses[0].lits: got %v, want %v", clauses[0].lits, want0)
+	}
+	want1 := []literal{2*1 + 1, 2 * 4}
+	if !slices.Equal(clauses[1].lits, want1) {
+		t.Errorf("clauses[1].lits: got %v, want %v", clauses[1].lits, want1)
+	}
+	want2 := []literal{2 * 2, 2*3 + 1, 2*4 + 1}
+	if !slices.Equal(clauses[2].lits, want2) {
+		t.Errorf("clauses[2].lits: got %v, want %v", clauses[2].lits, want2)
 	}
 }
 
-func equalLits(a, b []literal) bool {
-	if len(a) != len(b) {
-		return false
+func TestParseCNF_Int32OverflowBoundary(t *testing.T) {
+	// var == 1<<30 must be rejected: 2*(1<<30) overflows int32.
+	input := values.NewVector(values.NewInteger(1 << 30))
+	_, _, err := parseCNF(input)
+	if err == nil {
+		t.Fatal("parseCNF: expected error for var 1<<30, got nil")
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
+	const want = "overflows int32"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err.Error(), want)
 	}
-	return true
 }

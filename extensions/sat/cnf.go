@@ -34,17 +34,18 @@ const noClauseRef clauseRef = -1
 type clause struct {
 	learnt   bool
 	activity float32
-	lits     []literal
+	// The first two literals (lits[0] and lits[1]) are the watched pair; solver.go relies on this invariant.
+	lits []literal
 }
 
 // litFromInt packs a DIMACS literal (nonzero signed int) into the internal
 // encoding. Positive DIMACS literal v maps to 2*v; negative DIMACS literal -v
 // maps to 2*v+1.
 func litFromInt(v int64) literal {
-	if v < 0 {
-		return literal(2*(-v) + 1)
+	if v > 0 {
+		return literal(2 * v)
 	}
-	return literal(2 * v)
+	return literal(2*(-v) + 1)
 }
 
 // parseCNF walks a flat vector of exact integers terminated by 0-sentinels and
@@ -83,7 +84,7 @@ func parseCNF(v *values.Vector) ([]clause, int32, error) {
 		if abs < 0 {
 			abs = -abs
 		}
-		if abs > (1 << 30) {
+		if abs >= (1 << 30) {
 			return nil, 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 				"parseCNF: variable index %d overflows int32", abs)
 		}
