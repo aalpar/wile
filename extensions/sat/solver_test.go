@@ -325,3 +325,54 @@ func TestPropagate_WatchInvariant(t *testing.T) {
 		}
 	}
 }
+
+func TestSolve_PHP_3_2_UNSAT(t *testing.T) {
+	// 3 pigeons into 2 holes: UNSAT.
+	v := func(i, j int) int {
+		return (i-1)*2 + j
+	}
+	pos := func(x int) literal {
+		return literal(2 * x)
+	}
+	neg := func(x int) literal {
+		return literal(2*x + 1)
+	}
+	cs := []clause{
+		{lits: []literal{pos(v(1, 1)), pos(v(1, 2))}},
+		{lits: []literal{pos(v(2, 1)), pos(v(2, 2))}},
+		{lits: []literal{pos(v(3, 1)), pos(v(3, 2))}},
+		{lits: []literal{neg(v(1, 1)), neg(v(2, 1))}},
+		{lits: []literal{neg(v(1, 1)), neg(v(3, 1))}},
+		{lits: []literal{neg(v(2, 1)), neg(v(3, 1))}},
+		{lits: []literal{neg(v(1, 2)), neg(v(2, 2))}},
+		{lits: []literal{neg(v(1, 2)), neg(v(3, 2))}},
+		{lits: []literal{neg(v(2, 2)), neg(v(3, 2))}},
+	}
+	s := newSolver(context.Background(), cs, 6, -1)
+	if r := s.solve(); r != resultUNSAT {
+		t.Errorf("PHP-3-2: got %v, want UNSAT", r)
+	}
+}
+
+func TestSolve_TwoModels_SAT(t *testing.T) {
+	cs := []clause{
+		{lits: []literal{2 * 1, 2 * 2}},
+		{lits: []literal{2*1 + 1, 2*2 + 1}},
+	}
+	s := newSolver(context.Background(), cs, 2, -1)
+	if r := s.solve(); r != resultSAT {
+		t.Fatalf("got %v, want SAT", r)
+	}
+	for _, c := range cs {
+		ok := false
+		for _, l := range c.lits {
+			if s.litValue(l) == 1 {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			t.Errorf("model does not satisfy clause %v", c.lits)
+		}
+	}
+}
