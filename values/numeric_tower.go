@@ -192,3 +192,59 @@ func BigIntegerEqualsFloat(bi *BigInteger, f *Float) bool {
 	}
 	return bi.BigInt().Cmp(r.Num()) == 0
 }
+
+// NumericEquals implements R7RS = semantics for two numbers.
+//
+// R7RS §6.2.5: The = procedure returns #t if its arguments are numerically
+// equal. For IEEE 754 floats: infinities of the same sign are equal, NaN is
+// not equal to anything (including itself). Cross-type Integer/BigInteger vs
+// Float comparisons go through the exact-precision helpers above so no
+// precision is lost; all other type pairs fall back to subtraction.
+func NumericEquals(a, b Number) bool {
+	// Handle Float specially due to IEEE 754 infinity and NaN.
+	af, aIsFloat := a.(*Float)
+	bf, bIsFloat := b.(*Float)
+	if aIsFloat && bIsFloat {
+		// NaN != NaN per IEEE 754.
+		if math.IsNaN(af.Value) || math.IsNaN(bf.Value) {
+			return false
+		}
+		// Direct comparison handles infinities correctly.
+		return af.Value == bf.Value
+	}
+
+	// Handle Integer vs Float specially to preserve precision.
+	intA, ok := a.(*Integer)
+	if ok {
+		floatB, ok := b.(*Float)
+		if ok {
+			return IntegerEqualsFloat(intA, floatB)
+		}
+	}
+	intB, ok := b.(*Integer)
+	if ok {
+		floatA, ok := a.(*Float)
+		if ok {
+			return IntegerEqualsFloat(intB, floatA)
+		}
+	}
+
+	// Handle BigInteger vs Float.
+	bigA, ok := a.(*BigInteger)
+	if ok {
+		floatB, ok := b.(*Float)
+		if ok {
+			return BigIntegerEqualsFloat(bigA, floatB)
+		}
+	}
+	bigB, ok := b.(*BigInteger)
+	if ok {
+		floatA, ok := a.(*Float)
+		if ok {
+			return BigIntegerEqualsFloat(bigB, floatA)
+		}
+	}
+
+	// For other types, use subtraction.
+	return a.Subtract(b).IsZero()
+}

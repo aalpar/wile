@@ -15,7 +15,6 @@
 package core
 
 import (
-	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/machine"
@@ -62,66 +61,12 @@ func PrimDiv(mc machine.CallContext) error {
 		})
 }
 
-// numericEquals compares two numbers for equality.
-//
-// R7RS §6.2.5: The = procedure returns #t if its arguments are numerically
-// equal. For IEEE 754 floats: infinities of the same sign are equal,
-// NaN is not equal to anything (including itself).
-func numericEquals(a, b values.Number) bool {
-	// Handle Float specially due to IEEE 754 infinity and NaN
-	af, aIsFloat := a.(*values.Float)
-	bf, bIsFloat := b.(*values.Float)
-	if aIsFloat && bIsFloat {
-		// NaN != NaN per IEEE 754
-		if math.IsNaN(af.Value) || math.IsNaN(bf.Value) {
-			return false
-		}
-		// Direct comparison handles infinities correctly
-		return af.Value == bf.Value
-	}
-
-	// Handle Integer vs Float specially to preserve precision
-	intA, ok := a.(*values.Integer)
-	if ok {
-		floatB, ok := b.(*values.Float)
-		if ok {
-			return values.IntegerEqualsFloat(intA, floatB)
-		}
-	}
-	intB, ok := b.(*values.Integer)
-	if ok {
-		floatA, ok := a.(*values.Float)
-		if ok {
-			return values.IntegerEqualsFloat(intB, floatA)
-		}
-	}
-
-	// Handle BigInteger vs Float
-	bigA, ok := a.(*values.BigInteger)
-	if ok {
-		floatB, ok := b.(*values.Float)
-		if ok {
-			return values.BigIntegerEqualsFloat(bigA, floatB)
-		}
-	}
-	bigB, ok := b.(*values.BigInteger)
-	if ok {
-		floatA, ok := a.(*values.Float)
-		if ok {
-			return values.BigIntegerEqualsFloat(bigB, floatA)
-		}
-	}
-
-	// For other types, use subtraction
-	return a.Subtract(b).IsZero()
-}
-
 // PrimNumEq implements the = primitive.
 //
 // R7RS §6.2.6: Returns #t if its arguments are numerically equal.
 func PrimNumEq(mc machine.CallContext) error {
 	return helpers.NumericChainCompare(mc, "=", func(prev, curr values.Number) bool {
-		return !numericEquals(prev, curr)
+		return !values.NumericEquals(prev, curr)
 	})
 }
 
