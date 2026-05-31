@@ -110,7 +110,7 @@ func randomCNF(rng *rand.Rand, nVars, nClauses, clauseSize int32) ([]clause, int
 		lits := make([]literal, 0, clauseSize)
 		for k := int32(0); k < clauseSize; k++ {
 			v := int32(rng.Intn(int(nVars))) + 1
-			if seen[v] || seen[-v] {
+			if seen[v] {
 				continue
 			}
 			seen[v] = true
