@@ -315,6 +315,7 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-04-22-combinatorial-graph-impl.md` | §5.6 new `(wile algebra combinatorial-graph)` — 1-WL + individualization-refinement isomorphism (McKay-Piperno 2014), spanning-tree count via deletion-contraction, chromatic/Tutte polynomials, Hopcroft-Karp matching. 225 tests (moved to `memory/`) | branch `feat/algebra-combinatorial-graph` |
 | `2026-04-22-wile-goast-algebra-extraction-design.md` + `-impl.md` | Extract pure-algebra substrate from wile-goast: `symbolic-boolean-normalize` in `(wile algebra symbolic)`, new `(wile algebra abstract-domain)` (sign-lattice), new `(wile algebra dataflow)` (MFP worklist solver). +55 tests (moved to `memory/`) | branch `feat/algebra-from-wile-goast` |
 | `2026-05-02-algebra-matching-design.md` + `-impl.md` | `(wile algebra matching)` — two-sided matching per Roth & Sotomayor (1990). Gale-Shapley DA, hospital/intern many-to-one, Conway distributive lattice on stable matchings via Birkhoff (load-tests §5.5), Irving rotations, egalitarian + sex-equal selectors, Hungarian tropical assignment. Many-to-many deferred (moved to `memory/`) | Shipped |
+| `2026-05-30-sat-solver-design.md` / `-impl.md` | CDCL SAT solver extension; closes axiomatic-equivalence gap via `boolean-decide-equivalent?`. | Shipped |
 
 ### Documentation System
 
