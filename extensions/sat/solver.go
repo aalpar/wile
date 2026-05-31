@@ -130,6 +130,28 @@ func (s *solver) addClause(c clause) clauseRef {
 	return ref
 }
 
+// newDecisionLevel pushes a new decision level by recording the current
+// trail length.
+func (s *solver) newDecisionLevel() {
+	s.trailLim = append(s.trailLim, int32(len(s.trail)))
+}
+
+// backjump undoes all assignments above the given decision level.
+func (s *solver) backjump(target int32) {
+	if s.decisionLevel() <= target {
+		return
+	}
+	cutoff := s.trailLim[target]
+	for i := int32(len(s.trail)) - 1; i >= cutoff; i-- {
+		v := int32(s.trail[i]) >> 1
+		s.assigns[v] = 0
+		s.level[v] = 0
+		s.reason[v] = noClauseRef
+	}
+	s.trail = s.trail[:cutoff]
+	s.trailLim = s.trailLim[:target]
+}
+
 // propagate runs watched-literal unit propagation from the current trail
 // head. Returns noClauseRef on success (no conflict, all units enqueued)
 // or the clauseRef of a falsified clause on conflict.

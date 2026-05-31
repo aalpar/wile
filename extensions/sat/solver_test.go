@@ -124,6 +124,26 @@ func randomCNF(rng *rand.Rand, nVars, nClauses, clauseSize int32) ([]clause, int
 	return clauses, nVars
 }
 
+func TestBackjump(t *testing.T) {
+	s := newSolver(context.Background(), nil, 3, -1)
+	s.enqueue(2*1, noClauseRef)
+	s.newDecisionLevel()
+	s.enqueue(2*2, noClauseRef)
+	s.newDecisionLevel()
+	s.enqueue(2*3, noClauseRef)
+
+	s.backjump(1)
+	if s.litValue(2*3) != 0 {
+		t.Errorf("after backjump(1), x3 should be unassigned (got %d)", s.litValue(2*3))
+	}
+	if s.litValue(2*2) != 1 {
+		t.Errorf("after backjump(1), x2 should still be true (got %d)", s.litValue(2*2))
+	}
+	if s.decisionLevel() != 1 {
+		t.Errorf("decisionLevel after backjump(1): got %d, want 1", s.decisionLevel())
+	}
+}
+
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
 	for iter := 0; iter < 50; iter++ {
