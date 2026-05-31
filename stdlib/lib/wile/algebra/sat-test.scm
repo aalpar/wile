@@ -27,6 +27,31 @@
        #f
        (sat-cnf? '((1) (-1))))
 
+(check "sat? trivial true"
+       #t
+       (sat? '#t))
+
+(check "sat? trivial false"
+       #f
+       (sat? '#f))
+
+(check "sat? single var"
+       #t
+       (sat? 'x))
+
+(check "sat? conjunction (SAT)"
+       #t
+       (sat? '(and x y)))
+
+(check "sat? contradiction (UNSAT)"
+       #f
+       (sat? '(and x (not x))))
+
+(check "sat? De Morgan biconditional (tautology — SAT)"
+       #t
+       (sat? '(iff (not (and x y))
+                   (or (not x) (not y)))))
+
 (if (zero? fail-count)
     (begin (display "OK: ") (display test-count) (display " tests passed") (newline))
     (begin (display "FAIL: ") (display fail-count) (display "/") (display test-count) (newline)))
