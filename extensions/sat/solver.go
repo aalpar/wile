@@ -300,11 +300,50 @@ func (s *solver) analyze(conflict clauseRef) ([]literal, int32) {
 	return learnt, btLevel
 }
 
-// bumpClauseActivity / bumpVarActivity: VSIDS bookkeeping. Implemented
-// in Task 11. Stubs so analyze compiles.
-func (s *solver) bumpClauseActivity(cr clauseRef) {
-	_ = cr
-}
+// bumpVarActivity increments variable v's VSIDS activity score by the
+// current increment, then rescales all scores if any would exceed 1e20.
 func (s *solver) bumpVarActivity(v int32) {
-	_ = v
+	s.activity[v] += s.activityInc
+	if s.activity[v] > 1e20 {
+		for i := range s.activity {
+			s.activity[i] *= 1e-20
+		}
+		s.activityInc *= 1e-20
+	}
+}
+
+// decayVarActivity ages all variable scores by growing the increment;
+// equivalent to multiplying all existing scores by activityDecay (0.95).
+func (s *solver) decayVarActivity() {
+	s.activityInc /= s.activityDecay
+}
+
+// bumpClauseActivity increments a learnt clause's activity score,
+// rescaling the entire clause database if any score exceeds 1e20.
+func (s *solver) bumpClauseActivity(cr clauseRef) {
+	c := &s.clauses[cr]
+	c.activity += 1.0
+	if c.activity > 1e20 {
+		for i := range s.clauses {
+			s.clauses[i].activity *= 1e-20
+		}
+	}
+}
+
+// pickBranchVar returns the unassigned variable with the highest VSIDS
+// activity, or 0 if all variables are assigned. Linear scan is fine at
+// the target scale; promote to a heap only if benchmarks show this is hot.
+func (s *solver) pickBranchVar() int32 {
+	var best int32
+	var bestAct float32 = -1
+	for v := int32(1); v <= s.numVars; v++ {
+		if s.assigns[v] != 0 {
+			continue
+		}
+		if s.activity[v] > bestAct {
+			bestAct = s.activity[v]
+			best = v
+		}
+	}
+	return best
 }

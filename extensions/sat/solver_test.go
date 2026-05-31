@@ -217,6 +217,28 @@ func TestAnalyze_1UIPProperty(t *testing.T) {
 	}
 }
 
+func TestVSIDS_BumpAndSelect(t *testing.T) {
+	s := newSolver(context.Background(), nil, 4, -1)
+	s.bumpVarActivity(1)
+	s.bumpVarActivity(1)
+	s.bumpVarActivity(3)
+	v := s.pickBranchVar()
+	if v != 1 {
+		t.Errorf("pickBranchVar: got %d, want 1", v)
+	}
+}
+
+func TestVSIDS_DecayAndRescale(t *testing.T) {
+	s := newSolver(context.Background(), nil, 2, -1)
+	for i := 0; i < 100; i++ {
+		s.bumpVarActivity(1)
+		s.decayVarActivity()
+	}
+	if s.activity[1] != s.activity[1] {
+		t.Errorf("activity is NaN")
+	}
+}
+
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
 	for iter := 0; iter < 50; iter++ {
