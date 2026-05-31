@@ -52,6 +52,40 @@
        (sat? '(iff (not (and x y))
                    (or (not x) (not y)))))
 
+(check "boolean-decide-equivalent? closes De Morgan"
+       #t
+       (boolean-decide-equivalent? '(not (and x y))
+                                    '(or (not x) (not y))))
+
+(check "boolean-decide-equivalent? closes complement law"
+       #t
+       (boolean-decide-equivalent? '(and x (not x)) '#f))
+
+(check "boolean-decide-equivalent? closes bound identity"
+       #t
+       (boolean-decide-equivalent? '(or x #t) '#t))
+
+(check "boolean-decide-equivalent? closes distributivity"
+       #t
+       (boolean-decide-equivalent? '(and x (or y z))
+                                    '(or (and x y) (and x z))))
+
+(check "boolean-decide-equivalent? rejects non-equivalent"
+       #f
+       (boolean-decide-equivalent? '(or x y) '(and x y)))
+
+(check "boolean-decide-equivalent? commutativity (sanity)"
+       #t
+       (boolean-decide-equivalent? '(and a b) '(and b a)))
+
+(check "boolean-decide-equivalent? absorption (sanity)"
+       #t
+       (boolean-decide-equivalent? '(or x (and x y)) 'x))
+
+(check "boolean-decide-sat? wrapper"
+       #t
+       (boolean-decide-sat? '(or x y)))
+
 (if (zero? fail-count)
     (begin (display "OK: ") (display test-count) (display " tests passed") (newline))
     (begin (display "FAIL: ") (display fail-count) (display "/") (display test-count) (newline)))

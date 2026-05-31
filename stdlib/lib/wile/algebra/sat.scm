@@ -156,10 +156,30 @@
               (cons (car cell) (vector-ref vec (cdr cell))))
             *sat-var-alist*)))))
 
+;; ─── Boolean-algebra decision predicates ───
+
 (define (boolean-decide-sat? formula)
-  "Placeholder — full implementation in Task 20."
-  (error "boolean-decide-sat?: not yet implemented (Task 20)"))
+  "SAT-backed satisfiability check. Equivalent to (sat? formula) with the
+   default conflict budget. Returns #t / #f / 'unknown.
+
+   See also: sat?, boolean-decide-equivalent?"
+  (sat? formula))
 
 (define (boolean-decide-equivalent? a b)
-  "Placeholder — full implementation in Task 20."
-  (error "boolean-decide-equivalent?: not yet implemented (Task 20)"))
+  "SAT-backed equivalence check for two boolean S-expression formulas.
+   Two formulas are equivalent iff ¬(a ↔ b) is unsatisfiable.
+
+   Returns #t / #f / 'unknown.
+
+   This closes the De Morgan / complement-law / bound-identity / distributivity
+   gap left by symbolic-boolean-equivalent? in (wile algebra symbolic).
+
+   Examples:
+     (boolean-decide-equivalent? '(not (and x y))
+                                  '(or (not x) (not y))) => #t
+     (boolean-decide-equivalent? '(or x y) '(and x y))   => #f"
+  (let ((result (sat? `(not (iff ,a ,b)))))
+    (cond
+      ((eq? result #f) #t)        ; UNSAT proven → equivalent
+      ((eq? result #t) #f)        ; SAT (witness) → not equivalent
+      (else 'unknown))))
