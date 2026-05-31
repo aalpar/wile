@@ -16,6 +16,7 @@ package sat
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 )
 
@@ -95,5 +96,61 @@ func TestPropagate_ConflictDetection(t *testing.T) {
 	conflict := s.propagate()
 	if conflict == noClauseRef {
 		t.Fatalf("expected conflict, got noClauseRef")
+	}
+}
+
+func newDeterministicRNG(seed int64) *rand.Rand {
+	return rand.New(rand.NewSource(seed))
+}
+
+func randomCNF(rng *rand.Rand, nVars, nClauses, clauseSize int32) ([]clause, int32) {
+	clauses := make([]clause, 0, nClauses)
+	for c := int32(0); c < nClauses; c++ {
+		seen := map[int32]bool{}
+		lits := make([]literal, 0, clauseSize)
+		for k := int32(0); k < clauseSize; k++ {
+			v := int32(rng.Intn(int(nVars))) + 1
+			if seen[v] || seen[-v] {
+				continue
+			}
+			seen[v] = true
+			sign := literal(rng.Intn(2))
+			lits = append(lits, literal(2*v)+sign)
+		}
+		if len(lits) >= 1 {
+			clauses = append(clauses, clause{lits: lits})
+		}
+	}
+	return clauses, nVars
+}
+
+func TestPropagate_WatchInvariant(t *testing.T) {
+	rng := newDeterministicRNG(42)
+	for iter := 0; iter < 50; iter++ {
+		clauses, numVars := randomCNF(rng, 5, 10, 3)
+		s := newSolver(context.Background(), clauses, numVars, -1)
+		k := rng.Intn(int(numVars)/2 + 1)
+		for j := 0; j < k; j++ {
+			v := int32(rng.Intn(int(numVars))) + 1
+			sign := literal(rng.Intn(2))
+			l := literal(2*v) + sign
+			if s.litValue(l) == 0 {
+				s.enqueue(l, noClauseRef)
+			}
+		}
+		conflict := s.propagate()
+		if conflict != noClauseRef {
+			continue
+		}
+		for ci := range s.clauses {
+			c := &s.clauses[ci]
+			if len(c.lits) < 2 {
+				continue
+			}
+			if s.litValue(c.lits[0]) == -1 && s.litValue(c.lits[1]) == -1 {
+				t.Fatalf("iter %d, clause %d: both watches falsified, no conflict reported",
+					iter, ci)
+			}
+		}
 	}
 }

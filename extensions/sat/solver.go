@@ -163,6 +163,12 @@ func (s *solver) propagate() clauseRef {
 				i++
 				continue
 			}
+			if len(c.lits) == 1 {
+				// Unit clause: its only literal is being falsified — conflict.
+				newWatches = append(newWatches, ws[i:]...)
+				s.watches[notP] = newWatches
+				return cr
+			}
 			// Ensure lits[1] is the false watched lit (the one we're processing).
 			if c.lits[0] == notP {
 				c.lits[0], c.lits[1] = c.lits[1], c.lits[0]
