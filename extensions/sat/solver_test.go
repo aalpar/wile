@@ -175,6 +175,48 @@ func TestAnalyze_1UIPClause(t *testing.T) {
 	}
 }
 
+func TestAnalyze_1UIPProperty(t *testing.T) {
+	rng := newDeterministicRNG(7)
+	for iter := 0; iter < 30; iter++ {
+		clauses, numVars := randomCNF(rng, 8, 30, 3)
+		s := newSolver(context.Background(), clauses, numVars, -1)
+		conflict := s.propagate()
+		if conflict != noClauseRef {
+			continue
+		}
+		for step := 0; step < 20 && conflict == noClauseRef; step++ {
+			var pickedVar int32
+			for v := int32(1); v <= numVars; v++ {
+				if s.assigns[v] == 0 {
+					pickedVar = v
+					break
+				}
+			}
+			if pickedVar == 0 {
+				break
+			}
+			s.newDecisionLevel()
+			s.enqueue(literal(2*pickedVar), noClauseRef)
+			conflict = s.propagate()
+		}
+		if conflict == noClauseRef || s.decisionLevel() == 0 {
+			continue
+		}
+		learnt, _ := s.analyze(conflict)
+		curLevel := s.decisionLevel()
+		count := 0
+		for _, q := range learnt {
+			if s.level[int32(q)>>1] == curLevel {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Fatalf("iter %d: learnt has %d lits at current level %d, want 1; learnt=%v",
+				iter, count, curLevel, learnt)
+		}
+	}
+}
+
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
 	for iter := 0; iter < 50; iter++ {
