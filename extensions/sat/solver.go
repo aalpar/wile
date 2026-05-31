@@ -347,3 +347,83 @@ func (s *solver) pickBranchVar() int32 {
 	}
 	return best
 }
+
+// SolverResult is the outcome of one solve() call.
+type SolverResult int8
+
+const (
+	resultUNSAT   SolverResult = -1
+	resultUNKNOWN SolverResult = 0
+	resultSAT     SolverResult = 1
+)
+
+// solve runs the main CDCL search loop until SAT, UNSAT, or budget/ctx
+// exhaustion. On SAT, the satisfying assignment is in s.assigns.
+func (s *solver) solve() SolverResult {
+	// Level-0: enqueue input units (single-literal clauses).
+	for ci := range s.clauses {
+		c := &s.clauses[ci]
+		if len(c.lits) == 1 && s.litValue(c.lits[0]) == 0 {
+			s.enqueue(c.lits[0], clauseRef(ci))
+		}
+	}
+	if s.propagate() != noClauseRef {
+		return resultUNSAT
+	}
+	for {
+		conflict := s.propagate()
+		if conflict != noClauseRef {
+			if s.decisionLevel() == 0 {
+				return resultUNSAT
+			}
+			s.conflicts++
+			if s.conflictBudget >= 0 && s.conflicts >= s.conflictBudget {
+				return resultUNKNOWN
+			}
+			learnt, btLevel := s.analyze(conflict)
+			s.backjump(btLevel)
+			if len(learnt) == 1 {
+				s.enqueue(learnt[0], noClauseRef)
+			} else {
+				cr := s.addLearntClause(learnt)
+				s.enqueue(learnt[0], cr)
+			}
+			s.decayVarActivity()
+			continue
+		}
+		// No conflict. Restart and clause-DB hooks land in Task 13.
+		if s.ctx != nil {
+			select {
+			case <-s.ctx.Done():
+				return resultUNKNOWN
+			default:
+			}
+		}
+		v := s.pickBranchVar()
+		if v == 0 {
+			return resultSAT
+		}
+		s.newDecisionLevel()
+		s.enqueue(literal(2*v), noClauseRef)
+	}
+}
+
+// addLearntClause adds a clause from analyze() to the database. The
+// asserting lit (learnt[0]) is watched at index 0; the second watch
+// must be moved to the lit at the highest decision level among learnt[1:].
+func (s *solver) addLearntClause(lits []literal) clauseRef {
+	c := clause{learnt: true, lits: lits}
+	if len(lits) >= 2 {
+		maxIdx := 1
+		maxLevel := s.level[int32(lits[1])>>1]
+		for k := 2; k < len(lits); k++ {
+			lv := s.level[int32(lits[k])>>1]
+			if lv > maxLevel {
+				maxLevel = lv
+				maxIdx = k
+			}
+		}
+		c.lits[1], c.lits[maxIdx] = c.lits[maxIdx], c.lits[1]
+	}
+	return s.addClause(c)
+}

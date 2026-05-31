@@ -239,6 +239,31 @@ func TestVSIDS_DecayAndRescale(t *testing.T) {
 	}
 }
 
+func TestSearch_TinySAT(t *testing.T) {
+	clauses := []clause{
+		{lits: []literal{2 * 1, 2 * 2}},
+		{lits: []literal{2*1 + 1, 2 * 2}},
+	}
+	s := newSolver(context.Background(), clauses, 2, -1)
+	if r := s.solve(); r != resultSAT {
+		t.Errorf("got %v, want SAT", r)
+	}
+	if s.assigns[2] != 1 {
+		t.Errorf("expected x2=true; got %d", s.assigns[2])
+	}
+}
+
+func TestSearch_TinyUNSAT(t *testing.T) {
+	clauses := []clause{
+		{lits: []literal{2 * 1}},
+		{lits: []literal{2*1 + 1}},
+	}
+	s := newSolver(context.Background(), clauses, 1, -1)
+	if r := s.solve(); r != resultUNSAT {
+		t.Errorf("got %v, want UNSAT", r)
+	}
+}
+
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
 	for iter := 0; iter < 50; iter++ {
