@@ -127,3 +127,20 @@ func TestPrimSatCNFFlatModel_ReturnsFalseAfterUNSAT(t *testing.T) {
 	c.Assert(evalString(t, engine, `(sat-cnf-flat? #(1 0 -1 0) #f)`), qt.Equals, "#f")
 	c.Assert(evalString(t, engine, `(sat-cnf-flat-model)`), qt.Equals, "#f")
 }
+
+func TestPrimSatCNFFlat_ModelRetrieval(t *testing.T) {
+	engine := newEngine(t)
+	// (x1 ∨ x2) ∧ (¬x1 ∨ ¬x2) — SAT with two satisfying assignments.
+	result := evalString(t, engine, `(sat-cnf-flat? #(1 2 0 -1 -2 0) #f)`)
+	if result != "#t" {
+		t.Fatalf("expected SAT (#t), got %q", result)
+	}
+	got := evalString(t, engine, `(sat-cnf-flat-model)`)
+	// Model must be a vector (starts with #( in display form), not #f.
+	if got == "#f" {
+		t.Errorf("model should not be #f after SAT result; got %q", got)
+	}
+	if len(got) < 2 || got[0] != '#' || got[1] != '(' {
+		t.Errorf("model: got %q, want a vector literal", got)
+	}
+}

@@ -16,6 +16,7 @@ package sat
 
 import (
 	"context"
+	"sync"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -111,14 +112,33 @@ func PrimSatCNFFlatModel(mc machine.CallContext) error {
 	return nil
 }
 
-// storeModel and loadModel are stubs. Task 17 wires in per-namespace storage.
-// For now the model is silently discarded so that the SAT/UNSAT/#t/#f return
-// values work correctly in integration tests; sat-cnf-flat-model always
-// returns #f until Task 17.
+// modelStore holds the most recent SAT model for each Engine instance.
+//
+// Wile provides no built-in extension-state API on Namespace. The canonical
+// per-Engine state handle that every CallContext can reach is the *Namespace
+// returned by mc.EnvironmentFrame().Namespace(). We key this package-level
+// sync.Map on that pointer so each Engine (== one root Namespace) gets its
+// own model slot without any modification to Wile internals.
+//
+// Invariant: the stored value is always a *values.Vector (never nil in the
+// map — absent key and nil pointer both map to "no model"). storeModel stores
+// nil by deleting the key rather than mapping to nil.
+var modelStore sync.Map // map[*Namespace]*values.Vector (Namespace is environment.Namespace)
 
-func storeModel(_ machine.CallContext, _ *values.Vector) {
+func storeModel(mc machine.CallContext, v *values.Vector) {
+	ns := mc.EnvironmentFrame().Namespace()
+	if v == nil {
+		modelStore.Delete(ns)
+		return
+	}
+	modelStore.Store(ns, v)
 }
 
-func loadModel(_ machine.CallContext) *values.Vector {
-	return nil
+func loadModel(mc machine.CallContext) *values.Vector {
+	ns := mc.EnvironmentFrame().Namespace()
+	raw, ok := modelStore.Load(ns)
+	if !ok {
+		return nil
+	}
+	return raw.(*values.Vector)
 }
