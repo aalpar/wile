@@ -67,3 +67,64 @@ func TestParseCNF_Int32OverflowBoundary(t *testing.T) {
 		t.Errorf("error %q does not contain %q", err.Error(), want)
 	}
 }
+
+func mkVec(xs ...int64) *values.Vector {
+	vs := make([]values.Value, len(xs))
+	for i, x := range xs {
+		vs[i] = values.NewInteger(x)
+	}
+	return values.NewVector(vs...)
+}
+
+func TestParseCNF_Errors(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   *values.Vector
+		wantSub string
+	}{
+		{
+			name:    "empty clause via leading zero",
+			input:   mkVec(0),
+			wantSub: "empty clause",
+		},
+		{
+			name:    "empty clause between clauses",
+			input:   mkVec(1, 2, 0, 0, 3, 0),
+			wantSub: "empty clause",
+		},
+		{
+			name:    "variable index overflows int32",
+			input:   mkVec(1 << 30),
+			wantSub: "overflows int32",
+		},
+		{
+			// values.NewString produces a *values.String, which ExactInteger rejects.
+			name:    "non-integer element",
+			input:   values.NewVector(values.NewString("bad")),
+			wantSub: "not an exact integer",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := parseCNF(tc.input)
+			if err == nil {
+				t.Fatalf("parseCNF: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantSub) {
+				t.Errorf("error %q does not contain %q", err.Error(), tc.wantSub)
+			}
+		})
+	}
+}
+
+func TestParseCNF_TrivialTrue(t *testing.T) {
+	in := values.NewVector()
+	clauses, n, err := parseCNF(in)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(clauses) != 0 || n != 0 {
+		t.Errorf("got %d clauses, n=%d; want 0, 0", len(clauses), n)
+	}
+}
