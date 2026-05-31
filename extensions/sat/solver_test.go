@@ -61,3 +61,39 @@ func TestEnqueueAndValue(t *testing.T) {
 		t.Errorf("trail length: got %d, want 1", len(s.trail))
 	}
 }
+
+func TestPropagate_UnitClauseDerivation(t *testing.T) {
+	// Clauses: (¬x1 ∨ x2), (¬x2 ∨ x3).
+	// After enqueueing x1=true, propagate should derive x2=true and x3=true.
+	clauses := []clause{
+		{lits: []literal{2*1 + 1, 2 * 2}},
+		{lits: []literal{2*2 + 1, 2 * 3}},
+	}
+	s := newSolver(context.Background(), clauses, 3, -1)
+	s.enqueue(2*1, noClauseRef)
+	conflict := s.propagate()
+	if conflict != noClauseRef {
+		t.Errorf("unexpected conflict: %d", conflict)
+	}
+	if s.litValue(2*2) != 1 {
+		t.Errorf("propagate did not derive x2=true (got %d)", s.litValue(2*2))
+	}
+	if s.litValue(2*3) != 1 {
+		t.Errorf("propagate did not derive x3=true (got %d)", s.litValue(2*3))
+	}
+}
+
+func TestPropagate_ConflictDetection(t *testing.T) {
+	// Clauses: (¬x1 ∨ x2), (¬x1 ∨ ¬x2). Enqueue x1=true.
+	// Propagation derives x2 from clause 0, then clause 1 becomes empty.
+	clauses := []clause{
+		{lits: []literal{2*1 + 1, 2 * 2}},
+		{lits: []literal{2*1 + 1, 2*2 + 1}},
+	}
+	s := newSolver(context.Background(), clauses, 2, -1)
+	s.enqueue(2*1, noClauseRef)
+	conflict := s.propagate()
+	if conflict == noClauseRef {
+		t.Fatalf("expected conflict, got noClauseRef")
+	}
+}

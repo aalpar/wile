@@ -129,3 +129,77 @@ func (s *solver) addClause(c clause) clauseRef {
 	s.watches[c.lits[1]] = append(s.watches[c.lits[1]], ref)
 	return ref
 }
+
+// propagate runs watched-literal unit propagation from the current trail
+// head. Returns noClauseRef on success (no conflict, all units enqueued)
+// or the clauseRef of a falsified clause on conflict.
+//
+// Algorithm: for each literal l on the trail not yet processed, walk
+// watches[¬l]. For each watching clause:
+//   - If the other watched lit is already true, the clause is satisfied;
+//     leave the watch in place.
+//   - Otherwise, scan lits[2:] for a non-false literal to swap into the
+//     watch slot. If found, move the watch and continue.
+//   - If no replacement and the other watched lit is unassigned, the
+//     clause is unit: enqueue the other lit with this clause as reason.
+//   - If no replacement and the other watched lit is false, the clause
+//     is empty under the assignment: conflict.
+//
+// qhead tracks how far down the trail we've processed.
+func (s *solver) propagate() clauseRef {
+	qhead := 0
+	for qhead < len(s.trail) {
+		p := s.trail[qhead]
+		qhead++
+		notP := p ^ 1
+		ws := s.watches[notP]
+		newWatches := ws[:0]
+		i := 0
+		for i < len(ws) {
+			cr := ws[i]
+			c := &s.clauses[cr]
+			if len(c.lits) == 0 {
+				// Tombstoned by reduceClauseDB (added in Task 13); skip without re-watching.
+				i++
+				continue
+			}
+			// Ensure lits[1] is the false watched lit (the one we're processing).
+			if c.lits[0] == notP {
+				c.lits[0], c.lits[1] = c.lits[1], c.lits[0]
+			}
+			other := c.lits[0]
+			if s.litValue(other) == 1 {
+				// Already satisfied; keep current watches.
+				newWatches = append(newWatches, cr)
+				i++
+				continue
+			}
+			// Find a non-false replacement in lits[2:].
+			found := false
+			for k := 2; k < len(c.lits); k++ {
+				if s.litValue(c.lits[k]) != -1 {
+					c.lits[1], c.lits[k] = c.lits[k], c.lits[1]
+					s.watches[c.lits[1]] = append(s.watches[c.lits[1]], cr)
+					found = true
+					break
+				}
+			}
+			if found {
+				i++
+				continue
+			}
+			// No replacement. Unit or conflict.
+			if s.litValue(other) == -1 {
+				// Conflict: restore remaining watches and return.
+				newWatches = append(newWatches, ws[i:]...)
+				s.watches[notP] = newWatches
+				return cr
+			}
+			s.enqueue(other, cr)
+			newWatches = append(newWatches, cr)
+			i++
+		}
+		s.watches[notP] = newWatches
+	}
+	return noClauseRef
+}
