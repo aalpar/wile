@@ -23,8 +23,7 @@ import (
 // Number, and updates counters. Returns the two numbers (a, b where a was
 // pushed first) or an error if either is not a Number.
 func popTwoNumbers(mc *MachineContext, name string) (values.Number, values.Number, error) {
-	b := mc.evals.Pop()
-	a := mc.evals.Pop()
+	b, a := mc.evals.Pop2()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++

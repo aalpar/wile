@@ -116,8 +116,7 @@ func NewOperationRestoreContMark() *OperationRestoreContMark {
 }
 
 func (*OperationRestoreContMark) Apply(mc *MachineContext) (*MachineContext, error) {
-	old := mc.evals.Pop()
-	key := mc.evals.Pop()
+	old, key := mc.evals.Pop2()
 	if _, ok := old.(noMarkSentinelType); ok {
 		mc.DeleteMark(key)
 	} else {

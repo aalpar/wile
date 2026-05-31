@@ -59,8 +59,7 @@ func eqIdentity(a, b values.Value) bool {
 // inlineEq pops two arguments from the eval stack and sets the value register
 // to the eq? result. Returns nil on success.
 func inlineEq(mc *MachineContext) error {
-	b := mc.evals.Pop()
-	a := mc.evals.Pop()
+	b, a := mc.evals.Pop2()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++
@@ -84,8 +83,7 @@ func inlineVectorQ(mc *MachineContext) error {
 // validates them, and sets the value register to the element.
 // Returns nil on success or a wrapped error.
 func inlineVectorRef(mc *MachineContext) error {
-	idx := mc.evals.Pop()
-	vec := mc.evals.Pop()
+	idx, vec := mc.evals.Pop2()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++
@@ -168,8 +166,7 @@ func inlineCdr(mc *MachineContext) error {
 // inlineCons pops two arguments (car, cdr) from the eval stack and sets the
 // value register to a new pair. No validation needed — cons accepts any values.
 func inlineCons(mc *MachineContext) error {
-	cdr := mc.evals.Pop()
-	car := mc.evals.Pop()
+	cdr, car := mc.evals.Pop2()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++

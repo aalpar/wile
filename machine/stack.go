@@ -68,6 +68,20 @@ func (p *Stack) PullDrain() (values.Value, []values.Value) {
 	return first, rest
 }
 
+// Pop2 removes and returns the top two values from the stack. q0 is the
+// top-most value (popped first), q1 is the value beneath it. It checks the
+// length once and is equivalent to two successive Pop() calls.
+func (p *Stack) Pop2() (q0, q1 values.Value) {
+	l := len(*p)
+	if l < 2 {
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "Stack.Pop2: fewer than two values"))
+	}
+	q0 = (*p)[l-1]
+	q1 = (*p)[l-2]
+	*p = (*p)[:l-2]
+	return q0, q1
+}
+
 // Pop removes and returns the top value from the stack.
 func (p *Stack) Pop() values.Value {
 	l := len(*p)
@@ -90,15 +104,26 @@ func (p *Stack) PopN(n int) []values.Value {
 	if n > l {
 		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "PopN: requested %d elements from stack of length %d", n, l))
 	}
-	if n == 0 {
+	var q []values.Value
+	switch n {
+	case 0:
 		return nil
+	case 1:
+		q = []values.Value{
+			(*p)[len(*p)-1],
+		}
+	case 2:
+		q = []values.Value{
+			(*p)[len(*p)-2],
+			(*p)[len(*p)-1],
+		}
+	default:
+		// Allocate result and copy in one operation
+		q = make([]values.Value, n)
+		copy(q, (*p)[l-n:])
 	}
-
-	// Allocate result and copy in one operation
-	result := make([]values.Value, n)
-	copy(result, (*p)[l-n:])
 	*p = (*p)[:l-n]
-	return result
+	return q
 }
 
 // AsList converts the stack to a Scheme list (values.Tuple).

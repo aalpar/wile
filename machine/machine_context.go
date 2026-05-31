@@ -562,12 +562,13 @@ func (p *MachineContext) Run() error {
 		// --- Wave 5: promoted complex operations ---
 
 		case OpMakeClosure:
-			compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
+			envVal, tplVal := mc.evals.Pop2()
+			compiletimeEnv, ok := envVal.(*environment.EnvironmentFrame)
 			if !ok {
 				return werr.WrapForeignErrorf(werr.ErrNotALocalEnvironmentFrame,
 					"MakeClosure: expected environment frame on stack")
 			}
-			tpl, ok := mc.evals.Pop().(*NativeTemplate)
+			tpl, ok := tplVal.(*NativeTemplate)
 			if !ok {
 				return werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
 					"MakeClosure: expected native template on stack")

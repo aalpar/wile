@@ -324,6 +324,49 @@ func TestStackPopN_EdgeCases(t *testing.T) {
 	qt.Assert(t, func() { s.PopN(3) }, qt.PanicMatches, ".*requested 3 elements from stack of length 2.*")
 }
 
+// TestStackPop2EqualsTwoPops pins the contract that Pop2 is equivalent to two
+// successive Pop() calls: the first return is the top, the second is the value
+// beneath it. Several promoted-op call sites (popTwoNumbers, inlineEq,
+// inlineCons, ...) replaced `b := Pop(); a := Pop()` with `b, a := Pop2()` and
+// depend on this ordering. Note this is the REVERSE of PopN(2), which returns
+// top-most last (push order) — the two must not be swapped at a call site.
+func TestStackPop2EqualsTwoPops(t *testing.T) {
+	mk := func() *Stack {
+		s := NewStack()
+		s.Push(values.NewInteger(10))
+		s.Push(values.NewInteger(20))
+		s.Push(values.NewInteger(30)) // 30 on top
+		return s
+	}
+
+	twoPops := mk()
+	wantTop := twoPops.Pop()
+	wantSecond := twoPops.Pop()
+
+	pop2 := mk()
+	gotTop, gotSecond := pop2.Pop2()
+
+	qt.Assert(t, gotTop, valuestest.SchemeEquals, wantTop)       // top: 30
+	qt.Assert(t, gotSecond, valuestest.SchemeEquals, wantSecond) // second: 20
+	qt.Assert(t, pop2.Len(), qt.Equals, twoPops.Len())           // same residual stack
+
+	// Pop2 is the reverse of PopN(2): PopN returns top-most last.
+	popN := mk()
+	vs := popN.PopN(2)
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, gotSecond) // PopN[0] == Pop2 second
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, gotTop)    // PopN[1] == Pop2 top
+}
+
+// TestStackPop2_Underflow verifies Pop2 panics when fewer than two values
+// are present, checking the length once.
+func TestStackPop2_Underflow(t *testing.T) {
+	s := NewStack()
+	qt.Assert(t, func() { s.Pop2() }, qt.PanicMatches, ".*fewer than two values.*")
+
+	s.Push(values.NewInteger(1))
+	qt.Assert(t, func() { s.Pop2() }, qt.PanicMatches, ".*fewer than two values.*")
+}
+
 // TestStackPopAll tests stack PopAll operation
 func TestStackPopAll(t *testing.T) {
 	s := NewStack()
