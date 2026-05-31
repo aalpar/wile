@@ -112,17 +112,24 @@ func PrimSatCNFFlatModel(mc machine.CallContext) error {
 	return nil
 }
 
-// modelStore holds the most recent SAT model for each Engine instance.
+// modelStore holds the most recent SAT model for each Namespace.
 //
-// Wile provides no built-in extension-state API on Namespace. The canonical
-// per-Engine state handle that every CallContext can reach is the *Namespace
-// returned by mc.EnvironmentFrame().Namespace(). We key this package-level
-// sync.Map on that pointer so each Engine (== one root Namespace) gets its
-// own model slot without any modification to Wile internals.
+// Wile exposes no per-Namespace extension-state API, so we use a
+// package-level sync.Map keyed on the frame's *Namespace pointer (via
+// mc.EnvironmentFrame().Namespace()). Each distinct Namespace — whether
+// the Engine's root or a child namespace produced by (environment ...) —
+// gets its own model slot; calls in the same Namespace share storage.
 //
-// Invariant: the stored value is always a *values.Vector (never nil in the
-// map — absent key and nil pointer both map to "no model"). storeModel stores
-// nil by deleting the key rather than mapping to nil.
+// Lifecycle note: this map holds Namespace pointers for the process
+// lifetime. Engines that are constructed and discarded leave their
+// Namespace keys in the map, preventing GC of the Namespace until the
+// process exits. Acceptable for the current usage patterns (a single
+// long-lived Engine in tests and embedding); a future task should add a
+// teardown hook if long-running processes spin up and discard many
+// Engines.
+//
+// nil is never stored: storeModel deletes the entry for nil values so
+// loadModel's type assertion to *values.Vector is unconditionally safe.
 var modelStore sync.Map // map[*Namespace]*values.Vector (Namespace is environment.Namespace)
 
 func storeModel(mc machine.CallContext, v *values.Vector) {
