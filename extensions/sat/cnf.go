@@ -62,7 +62,7 @@ func parseCNF(v *values.Vector) ([]clause, int32, error) {
 	var maxVar int32
 
 	n := v.Length()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		elem := v.Get(i)
 		val, ok := values.ExactInteger(elem)
 		if !ok {
@@ -88,7 +88,7 @@ func parseCNF(v *values.Vector) ([]clause, int32, error) {
 			return nil, 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 				"parseCNF: variable index %d overflows int32", abs)
 		}
-		if int32(abs) > maxVar {
+		if abs > int64(maxVar) {
 			maxVar = int32(abs)
 		}
 		pending = append(pending, litFromInt(val))

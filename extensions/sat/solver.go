@@ -76,10 +76,7 @@ func newSolver(ctx context.Context, clauses []clause, numVars int32, conflictBud
 		s.addClause(c)
 	}
 	if s.learntLimit == 0 {
-		s.learntLimit = len(clauses) / 3
-		if s.learntLimit < 100 {
-			s.learntLimit = 100
-		}
+		s.learntLimit = max(len(clauses)/3, 100)
 	}
 	return s
 }

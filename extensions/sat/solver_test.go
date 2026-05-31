@@ -22,8 +22,8 @@ import (
 
 func TestNewSolver_InitFromClauses(t *testing.T) {
 	clauses := []clause{
-		{lits: []literal{2 * 1, 2*2 + 1}},  // x1 ∨ ¬x2
-		{lits: []literal{2*1 + 1, 2 * 3}},  // ¬x1 ∨ x3
+		{lits: []literal{2 * 1, 2*2 + 1}}, // x1 ∨ ¬x2
+		{lits: []literal{2*1 + 1, 2 * 3}}, // ¬x1 ∨ x3
 	}
 	s := newSolver(context.Background(), clauses, 3, -1)
 	if s.numVars != 3 {
@@ -105,10 +105,10 @@ func newDeterministicRNG(seed int64) *rand.Rand {
 
 func randomCNF(rng *rand.Rand, nVars, nClauses, clauseSize int32) ([]clause, int32) {
 	clauses := make([]clause, 0, nClauses)
-	for c := int32(0); c < nClauses; c++ {
+	for range nClauses {
 		seen := map[int32]bool{}
 		lits := make([]literal, 0, clauseSize)
-		for k := int32(0); k < clauseSize; k++ {
+		for range clauseSize {
 			v := int32(rng.Intn(int(nVars))) + 1
 			if seen[v] {
 				continue
@@ -177,7 +177,7 @@ func TestAnalyze_1UIPClause(t *testing.T) {
 
 func TestAnalyze_1UIPProperty(t *testing.T) {
 	rng := newDeterministicRNG(7)
-	for iter := 0; iter < 30; iter++ {
+	for iter := range 30 {
 		clauses, numVars := randomCNF(rng, 8, 30, 3)
 		s := newSolver(context.Background(), clauses, numVars, -1)
 		conflict := s.propagate()
@@ -230,7 +230,7 @@ func TestVSIDS_BumpAndSelect(t *testing.T) {
 
 func TestVSIDS_DecayAndRescale(t *testing.T) {
 	s := newSolver(context.Background(), nil, 2, -1)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		s.bumpVarActivity(1)
 		s.decayVarActivity()
 	}
@@ -245,7 +245,8 @@ func TestSearch_TinySAT(t *testing.T) {
 		{lits: []literal{2*1 + 1, 2 * 2}},
 	}
 	s := newSolver(context.Background(), clauses, 2, -1)
-	if r := s.solve(); r != resultSAT {
+	r := s.solve()
+	if r != resultSAT {
 		t.Errorf("got %v, want SAT", r)
 	}
 	if s.assigns[2] != 1 {
@@ -259,7 +260,8 @@ func TestSearch_TinyUNSAT(t *testing.T) {
 		{lits: []literal{2*1 + 1}},
 	}
 	s := newSolver(context.Background(), clauses, 1, -1)
-	if r := s.solve(); r != resultUNSAT {
+	r := s.solve()
+	if r != resultUNSAT {
 		t.Errorf("got %v, want UNSAT", r)
 	}
 }
@@ -267,7 +269,8 @@ func TestSearch_TinyUNSAT(t *testing.T) {
 func TestLubySequence(t *testing.T) {
 	want := []int64{1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 2, 4, 8}
 	for i, w := range want {
-		if got := luby(int64(i + 1)); got != w {
+		got := luby(int64(i + 1))
+		if got != w {
 			t.Errorf("luby(%d): got %d, want %d", i+1, got, w)
 		}
 	}
@@ -297,11 +300,11 @@ func TestSearch_CtxCancel(t *testing.T) {
 
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
-	for iter := 0; iter < 50; iter++ {
+	for iter := range 50 {
 		clauses, numVars := randomCNF(rng, 5, 10, 3)
 		s := newSolver(context.Background(), clauses, numVars, -1)
 		k := rng.Intn(int(numVars)/2 + 1)
-		for j := 0; j < k; j++ {
+		for range k {
 			v := int32(rng.Intn(int(numVars))) + 1
 			sign := literal(rng.Intn(2))
 			l := literal(2*v) + sign
@@ -349,7 +352,8 @@ func TestSolve_PHP_3_2_UNSAT(t *testing.T) {
 		{lits: []literal{neg(v(2, 2)), neg(v(3, 2))}},
 	}
 	s := newSolver(context.Background(), cs, 6, -1)
-	if r := s.solve(); r != resultUNSAT {
+	r := s.solve()
+	if r != resultUNSAT {
 		t.Errorf("PHP-3-2: got %v, want UNSAT", r)
 	}
 }
@@ -360,7 +364,8 @@ func TestSolve_TwoModels_SAT(t *testing.T) {
 		{lits: []literal{2*1 + 1, 2*2 + 1}},
 	}
 	s := newSolver(context.Background(), cs, 2, -1)
-	if r := s.solve(); r != resultSAT {
+	r := s.solve()
+	if r != resultSAT {
 		t.Fatalf("got %v, want SAT", r)
 	}
 	for _, c := range cs {
@@ -379,7 +384,7 @@ func TestSolve_TwoModels_SAT(t *testing.T) {
 
 func TestSolve_ModelSatisfiesInput(t *testing.T) {
 	rng := newDeterministicRNG(17)
-	for iter := 0; iter < 30; iter++ {
+	for iter := range 30 {
 		clauses, numVars := randomCNF(rng, 12, 40, 3)
 		origLits := make([][]literal, len(clauses))
 		for i, c := range clauses {
