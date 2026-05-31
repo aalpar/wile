@@ -144,6 +144,37 @@ func TestBackjump(t *testing.T) {
 	}
 }
 
+func TestAnalyze_1UIPClause(t *testing.T) {
+	// Conflict scenario:
+	//   C0: (¬x1 ∨ x2)
+	//   C1: (¬x1 ∨ x3)
+	//   C2: (¬x2 ∨ ¬x3)
+	// Decide x1=true at level 1. Propagation derives x2 (from C0) and x3 (from C1).
+	// C2 becomes empty → conflict. 1-UIP analysis should produce {¬x1}, btLevel=0.
+	clauses := []clause{
+		{lits: []literal{2*1 + 1, 2 * 2}},
+		{lits: []literal{2*1 + 1, 2 * 3}},
+		{lits: []literal{2*2 + 1, 2*3 + 1}},
+	}
+	s := newSolver(context.Background(), clauses, 3, -1)
+	s.newDecisionLevel()
+	s.enqueue(2*1, noClauseRef)
+	conflict := s.propagate()
+	if conflict == noClauseRef {
+		t.Fatalf("expected conflict")
+	}
+	learnt, btLevel := s.analyze(conflict)
+	if btLevel != 0 {
+		t.Errorf("btLevel: got %d, want 0", btLevel)
+	}
+	if len(learnt) != 1 {
+		t.Errorf("learnt clause should be unit: got %d lits", len(learnt))
+	}
+	if learnt[0] != 2*1+1 {
+		t.Errorf("learnt[0]: got %d, want %d (¬x1)", learnt[0], 2*1+1)
+	}
+}
+
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
 	for iter := 0; iter < 50; iter++ {

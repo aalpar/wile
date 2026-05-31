@@ -231,3 +231,75 @@ func (s *solver) propagate() clauseRef {
 	}
 	return noClauseRef
 }
+
+// analyze derives a 1-UIP learnt clause from the given conflict.
+// Returns the literal slice of the learnt clause and the backtrack
+// decision level (highest level among non-asserting literals; 0 if unit).
+//
+// Walks the implication graph backwards via the trail, marking variables
+// seen at the current decision level. When exactly one current-level
+// variable remains in the front, it is the 1-UIP; the remaining lits
+// (lower levels) form the learnt clause.
+func (s *solver) analyze(conflict clauseRef) ([]literal, int32) {
+	seen := make([]bool, s.numVars+1)
+	learnt := []literal{0} // placeholder for asserting literal
+	pathCount := 0
+	curLevel := s.decisionLevel()
+	p := literal(-1) // sentinel
+	idx := int32(len(s.trail)) - 1
+	cr := conflict
+
+	for {
+		c := &s.clauses[cr]
+		if c.learnt {
+			s.bumpClauseActivity(cr)
+		}
+		startK := 0
+		if p != literal(-1) {
+			startK = 1
+		}
+		for k := startK; k < len(c.lits); k++ {
+			q := c.lits[k]
+			v := int32(q) >> 1
+			if !seen[v] && s.level[v] > 0 {
+				seen[v] = true
+				s.bumpVarActivity(v)
+				if s.level[v] >= curLevel {
+					pathCount++
+				} else {
+					learnt = append(learnt, q)
+				}
+			}
+		}
+		for !seen[int32(s.trail[idx])>>1] {
+			idx--
+		}
+		p = s.trail[idx]
+		seen[int32(p)>>1] = false
+		idx--
+		pathCount--
+		if pathCount == 0 {
+			break
+		}
+		cr = s.reason[int32(p)>>1]
+	}
+	learnt[0] = p ^ 1
+
+	var btLevel int32
+	for k := 1; k < len(learnt); k++ {
+		lv := s.level[int32(learnt[k])>>1]
+		if lv > btLevel {
+			btLevel = lv
+		}
+	}
+	return learnt, btLevel
+}
+
+// bumpClauseActivity / bumpVarActivity: VSIDS bookkeeping. Implemented
+// in Task 11. Stubs so analyze compiles.
+func (s *solver) bumpClauseActivity(cr clauseRef) {
+	_ = cr
+}
+func (s *solver) bumpVarActivity(v int32) {
+	_ = v
+}
