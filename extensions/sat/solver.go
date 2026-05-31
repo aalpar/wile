@@ -373,6 +373,7 @@ func (s *solver) solve() SolverResult {
 	for {
 		conflict := s.propagate()
 		if conflict != noClauseRef {
+			// Conflict: learn a clause, backjump, and re-propagate.
 			if s.decisionLevel() == 0 {
 				return resultUNSAT
 			}
@@ -408,9 +409,18 @@ func (s *solver) solve() SolverResult {
 	}
 }
 
-// addLearntClause adds a clause from analyze() to the database. The
-// asserting lit (learnt[0]) is watched at index 0; the second watch
-// must be moved to the lit at the highest decision level among learnt[1:].
+// addLearntClause adds a clause produced by analyze() to the database.
+// The asserting lit (learnt[0]) is watched at position 0; position 1
+// must hold the literal with the highest decision level among learnt[1:].
+//
+// Why: after backjump to the second-highest decision level, the position-1
+// literal is the watch most likely to become unassigned (it sits at the
+// level we just unwound through). The asserting literal at position 0
+// stays assigned and drives the unit propagation that makes the learnt
+// clause immediately useful. Violating this invariant breaks the
+// watched-literal scheme silently — both watches stay falsified after
+// backjump, but propagate has no event to fire on, so the unit never
+// triggers.
 func (s *solver) addLearntClause(lits []literal) clauseRef {
 	c := clause{learnt: true, lits: lits}
 	if len(lits) >= 2 {
