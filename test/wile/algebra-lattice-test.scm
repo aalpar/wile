@@ -511,5 +511,20 @@
     (test #t (modular? B0))
     (test '() (join-irreducibles B0))))
 
+(test-group "two-point-lattice"
+  (let ((T (two-point-lattice)))
+    (test 2 (lattice-cardinality T))
+    (test '(#f #t) (lattice-elements T))
+    (test #f (lattice-bottom T))
+    (test #t (lattice-top T))
+    (test #t (lattice-join T #f #t))    ; join = or
+    (test #f (lattice-join T #f #f))
+    (test #f (lattice-meet T #f #t))    ; meet = and
+    (test #t (lattice-meet T #t #t))
+    (test #t (lattice-leq? T #f #t))    ; #f <= #t
+    (test #f (lattice-leq? T #t #f))    ; #t </= #f
+    (test #t (finite-lattice? T))
+    (test #t (distributive? T))))
+
 (test-end)
 (test-exit)

@@ -34,7 +34,7 @@
     lattice->locally-finite-poset
     birkhoff-representation birkhoff-representation/unchecked
     birkhoff-reconstruction
-    chain-lattice boolean-lattice
+    chain-lattice boolean-lattice two-point-lattice
     diamond-lattice pentagon-lattice
     free-distributive-lattice
     ;; Closure operators

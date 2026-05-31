@@ -12,7 +12,7 @@
           lattice-cardinality lattice-elements
           finite-lattice?
           ;; §5.5 — canonical presets
-          chain-lattice boolean-lattice
+          chain-lattice boolean-lattice two-point-lattice
           diamond-lattice pentagon-lattice
           ;; §5.5 — irreducibles
           join-irreducibles meet-irreducibles
