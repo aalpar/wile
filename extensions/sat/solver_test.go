@@ -44,3 +44,20 @@ func TestNewSolver_InitFromClauses(t *testing.T) {
 		t.Errorf("total watches: got %d, want %d", totalWatches, 2*len(clauses))
 	}
 }
+
+func TestEnqueueAndValue(t *testing.T) {
+	s := newSolver(context.Background(), nil, 3, -1)
+	s.enqueue(2*1, noClauseRef)
+	if s.litValue(2*1) != 1 {
+		t.Errorf("after enqueue x1=true, litValue(x1) = %d, want 1", s.litValue(2*1))
+	}
+	if s.litValue(2*1+1) != -1 {
+		t.Errorf("after enqueue x1=true, litValue(¬x1) = %d, want -1", s.litValue(2*1+1))
+	}
+	if s.litValue(2*2) != 0 {
+		t.Errorf("unassigned litValue(x2) = %d, want 0", s.litValue(2*2))
+	}
+	if len(s.trail) != 1 {
+		t.Errorf("trail length: got %d, want 1", len(s.trail))
+	}
+}

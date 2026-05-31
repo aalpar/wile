@@ -78,6 +78,42 @@ func newSolver(ctx context.Context, clauses []clause, numVars int32, conflictBud
 	return s
 }
 
+// litValue returns 1 if lit is currently true under the assignment,
+// -1 if false, 0 if its variable is unassigned.
+func (s *solver) litValue(l literal) int8 {
+	v := int32(l) >> 1
+	sign := int8(l & 1)
+	a := s.assigns[v]
+	if a == 0 {
+		return 0
+	}
+	if sign == 0 {
+		return a
+	}
+	return -a
+}
+
+// decisionLevel returns the current decision level.
+func (s *solver) decisionLevel() int32 {
+	return int32(len(s.trailLim))
+}
+
+// enqueue commits lit as true at the current decision level. reason is
+// the antecedent clause (or noClauseRef for decisions). Caller must
+// ensure litValue(lit) was 0 (unassigned) before calling.
+func (s *solver) enqueue(l literal, reason clauseRef) {
+	v := int32(l) >> 1
+	sign := int8(l & 1)
+	if sign == 0 {
+		s.assigns[v] = 1
+	} else {
+		s.assigns[v] = -1
+	}
+	s.level[v] = s.decisionLevel()
+	s.reason[v] = reason
+	s.trail = append(s.trail, l)
+}
+
 // addClause appends a clause to the database and registers watches on
 // its first two literals. The caller guarantees the clause has at least
 // one literal (the empty-clause case is rejected by parseCNF).
