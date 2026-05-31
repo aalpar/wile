@@ -16,6 +16,7 @@ package sat
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 // Extension is the SAT solver FFI extension.
@@ -30,7 +31,27 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
-	// Primitives added in later phases. This stub exists now so the
-	// extension compiles and can be wired into AllExtensions.
+	r.AddPrimitives([]registry.PrimitiveSpec{
+		{
+			Name:       "sat-cnf-flat?",
+			ParamCount: 2,
+			Impl:       PrimSatCNFFlat,
+			Doc:        "Decide CNF satisfiability over a flat literal vector with 0 terminators. Variables are 1..N (N inferred from max |lit|). Returns #t/#f/'unknown.\n\nParameters:\n  cnf : vector of exact integers\n  budget : exact integer or #f (unlimited)\nReturns: boolean or symbol\nCategory: algebra-sat\nKeywords: sat, cdcl, decide",
+			ParamNames: []string{"cnf", "budget"},
+			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeAny},
+			Category:   "algebra-sat",
+			Keywords:   []string{"sat", "cdcl", "decide", "satisfiability"},
+		},
+		{
+			Name:       "sat-cnf-flat-model",
+			ParamCount: 0,
+			Impl:       PrimSatCNFFlatModel,
+			Doc:        "Return the model from the most recent sat-cnf-flat? call, or #f. Model is a vector indexed 1..N of #t/#f; index 0 unused.\n\nReturns: vector or #f\nCategory: algebra-sat\nKeywords: sat, model, witness",
+			ParamNames: []string{},
+			ParamTypes: []values.TypeConstraint{},
+			Category:   "algebra-sat",
+			Keywords:   []string{"sat", "model", "witness"},
+		},
+	}, registry.PhaseSetRuntime)
 	return nil
 }
