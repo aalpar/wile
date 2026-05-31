@@ -75,6 +75,12 @@ func newSolver(ctx context.Context, clauses []clause, numVars int32, conflictBud
 	for _, c := range clauses {
 		s.addClause(c)
 	}
+	if s.learntLimit == 0 {
+		s.learntLimit = len(clauses) / 3
+		if s.learntLimit < 100 {
+			s.learntLimit = 100
+		}
+	}
 	return s
 }
 
@@ -348,6 +354,73 @@ func (s *solver) pickBranchVar() int32 {
 	return best
 }
 
+// luby returns the i-th element of the Luby restart sequence (1-indexed).
+// The sequence is: 1,1,2,1,1,2,4,1,1,2,1,1,2,4,8,...
+// Each "super-sequence" of length 2^k-1 ends with 2^(k-1), preceded by
+// two copies of the super-sequence of length 2^(k-1)-1.
+func luby(i int64) int64 {
+	k := int64(1)
+	for {
+		size := (int64(1) << uint(k)) - 1
+		if i == size {
+			return int64(1) << uint(k-1)
+		}
+		if i < size {
+			i = i - (int64(1) << uint(k-1)) + 1
+			k = 1
+			continue
+		}
+		k++
+	}
+}
+
+// reduceClauseDB halves the learnt-clause set by activity, keeping any
+// clause currently used as a reason on the trail. Tombstoned clauses are
+// skipped in propagate via the len(c.lits)==0 check.
+func (s *solver) reduceClauseDB() {
+	locked := make(map[clauseRef]bool)
+	for _, l := range s.trail {
+		r := s.reason[int32(l)>>1]
+		if r != noClauseRef {
+			locked[r] = true
+		}
+	}
+	type idxAct struct {
+		i   int
+		act float32
+	}
+	sortable := make([]idxAct, 0)
+	for i := range s.clauses {
+		if s.clauses[i].learnt && len(s.clauses[i].lits) > 0 {
+			sortable = append(sortable, idxAct{i, s.clauses[i].activity})
+		}
+	}
+	// Insertion sort descending by activity (small N, no allocation).
+	for i := 1; i < len(sortable); i++ {
+		for j := i; j > 0 && sortable[j-1].act < sortable[j].act; j-- {
+			sortable[j-1], sortable[j] = sortable[j], sortable[j-1]
+		}
+	}
+	keep := len(sortable) / 2
+	for k := keep; k < len(sortable); k++ {
+		if !locked[clauseRef(sortable[k].i)] {
+			s.clauses[sortable[k].i].lits = nil // tombstone
+		}
+	}
+	s.learntLimit *= 2
+}
+
+// learntCount returns the count of non-tombstone learnt clauses.
+func (s *solver) learntCount() int {
+	n := 0
+	for _, c := range s.clauses {
+		if c.learnt && len(c.lits) > 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // SolverResult is the outcome of one solve() call.
 type SolverResult int8
 
@@ -392,7 +465,15 @@ func (s *solver) solve() SolverResult {
 			s.decayVarActivity()
 			continue
 		}
-		// No conflict. Restart and clause-DB hooks land in Task 13.
+		// No conflict. Restart on Luby schedule and reduce clause DB if needed.
+		const lubyUnit = 100
+		if s.conflicts >= s.nextRestart {
+			s.backjump(0)
+			s.nextRestart = s.conflicts + lubyUnit*luby(s.conflicts/lubyUnit+1)
+			if s.learntCount() > s.learntLimit {
+				s.reduceClauseDB()
+			}
+		}
 		if s.ctx != nil {
 			select {
 			case <-s.ctx.Done():

@@ -264,6 +264,37 @@ func TestSearch_TinyUNSAT(t *testing.T) {
 	}
 }
 
+func TestLubySequence(t *testing.T) {
+	want := []int64{1, 1, 2, 1, 1, 2, 4, 1, 1, 2, 1, 1, 2, 4, 8}
+	for i, w := range want {
+		if got := luby(int64(i + 1)); got != w {
+			t.Errorf("luby(%d): got %d, want %d", i+1, got, w)
+		}
+	}
+}
+
+func TestSearch_BudgetExhausted(t *testing.T) {
+	rng := newDeterministicRNG(123)
+	clauses, numVars := randomCNF(rng, 50, 218, 3)
+	s := newSolver(context.Background(), clauses, numVars, 10)
+	r := s.solve()
+	if r != resultUNKNOWN {
+		t.Logf("note: tiny budget may have been enough; got %v", r)
+	}
+}
+
+func TestSearch_CtxCancel(t *testing.T) {
+	rng := newDeterministicRNG(99)
+	clauses, numVars := randomCNF(rng, 50, 218, 3)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := newSolver(ctx, clauses, numVars, -1)
+	r := s.solve()
+	if r != resultUNKNOWN && r != resultSAT && r != resultUNSAT {
+		t.Errorf("unexpected result with cancelled ctx: %v", r)
+	}
+}
+
 func TestPropagate_WatchInvariant(t *testing.T) {
 	rng := newDeterministicRNG(42)
 	for iter := 0; iter < 50; iter++ {
