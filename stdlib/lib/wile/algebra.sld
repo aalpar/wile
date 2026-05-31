@@ -300,7 +300,12 @@
     cfg-blocks-of cfg-index-of cfg-preds-of cfg-succs-of
     init-state init-state? init-state-value
     reverse-postorder run-analysis
-    analysis-in analysis-out analysis-states)
+    analysis-in analysis-out analysis-states
+    ;; SAT
+    sat? sat-model
+    sat-cnf? sat-cnf-model
+    boolean-decide-sat? boolean-decide-equivalent?
+    cnf->flat)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -327,4 +332,5 @@
           (wile algebra unification)
           (wile algebra combinatorial-graph)
           (wile algebra abstract-domain)
-          (wile algebra dataflow)))
+          (wile algebra dataflow)
+          (wile algebra sat)))

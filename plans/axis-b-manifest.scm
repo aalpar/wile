@@ -363,6 +363,8 @@
  ("rw-mutex-write-lock!" "void" ("any") "github.com/aalpar/wile/extensions/gointerop.PrimRWMutexWriteLock" "extensions/gointerop/prim_gointerop.go:336")
  ("rw-mutex-write-unlock!" "void" ("any") "github.com/aalpar/wile/extensions/gointerop.PrimRWMutexWriteUnlock" "extensions/gointerop/prim_gointerop.go:349")
  ("rw-mutex?" "boolean" ("any") "github.com/aalpar/wile/extensions/gointerop.init.MakeTypePredicate.func8" "registry/helpers/type.go:26")
+ ("sat-cnf-flat-model" "" () "github.com/aalpar/wile/extensions/sat.PrimSatCNFFlatModel" "extensions/sat/prim_sat.go:105")
+ ("sat-cnf-flat?" "" ("vector" "any") "github.com/aalpar/wile/extensions/sat.PrimSatCNFFlat" "extensions/sat/prim_sat.go:38")
  ("scheme-report-environment" "any" ("integer") "github.com/aalpar/wile/extensions/eval.PrimSchemeReportEnvironment" "extensions/eval/prim_eval.go:230")
  ("seconds->time" "any" ("number") "github.com/aalpar/wile/extensions/threads.PrimSecondsToTime" "extensions/threads/prim_threads.go:631")
  ("set-box!" "void" ("any" "any") "github.com/aalpar/wile/registry/core.PrimSetBox" "registry/core/prim_boxes.go:51")
