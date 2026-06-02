@@ -84,6 +84,7 @@ Bounded lattices with join, meet, and fixpoint computation.
 ### Presets
 
 - `(chain-lattice n)` -- the n-element total order 0 < 1 < ... < n-1; distributive, modular
+- `(two-point-lattice)` -- the truth-value lattice on `{#f, #t}`: bottom `#f`, top `#t`, join `or`, meet `and`, leq? implication; distributive. Distinct from `(boolean-lattice 1)`: its carrier is the two booleans themselves, not subset-valued elements -- the lattice used by reachability-style analyses
 - `(boolean-lattice n)` -- 2^[n]: subsets of an n-element universe ordered by inclusion; distributive
 - `(diamond-lattice n)` -- M_n: bottom, n incomparable atoms, top; modular, not distributive
 - `(pentagon-lattice)` -- N_5: the standard witness of non-modularity; neither distributive nor modular
@@ -337,12 +338,28 @@ Two monoidal operations where times distributes over plus.
 - `(semiring-times S a b)` -- multiplicative operation
 - `(semiring-zero S)` -- additive identity (zero)
 - `(semiring-one S)` -- multiplicative identity (one)
+- `(semiring-carrier S)` -- the advisory carrier symbol attached at construction (e.g. `'big-int`, `'saturating`, `'modular`, `'log-float`, `'boolean`, `'tropical`), or `#f` when unset; lets consumer libraries dispatch to fast paths without inspecting the operations
+- `(semiring-eq? S)` -- the carrier's equivalence procedure used for convergence tests (worklist fixpoint), or `equal?` when unset
 
 ### Built-in Instances
 
-- `(boolean-semiring)` -- plus is `or`, times is `and`, zero is `#f`, one is `#t`
-- `(tropical-semiring)` -- plus is `min`, times is `+`, zero is `tropical-inf`, one is `0`; useful for shortest-path problems
-- `(counting-semiring)` -- plus is `+`, times is `*`, zero is `0`, one is `1`
+- `(boolean-semiring)` -- plus is `or`, times is `and`, zero is `#f`, one is `#t`; carrier `'boolean`, idempotent plus (cycle-safe)
+- `(tropical-semiring)` -- plus is `min`, times is `+`, zero is `tropical-inf`, one is `0`; carrier `'tropical`, idempotent plus (cycle-safe); useful for shortest-path problems
+- `(counting-semiring)` -- plus is `+`, times is `*`, zero is `0`, one is `1`; exact-integer arithmetic, auto-promotes to bignum
+
+#### Counting variants
+
+The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `plans/2026-05-24-approximate-counting-semirings.md`.
+
+- `(bigint-counting-semiring)` -- same arithmetic as `counting-semiring`, but carrier `'big-int` opts into the `count-paths-in-dag` Go kernel when consumed by `make-graph-analysis` under three conditions (carrier `'big-int`, unit weights, atomic node ids); advisory -- never changes results, only dispatch cost
+- `(modular-counting-semiring P)` -- carrier is Z/PZ; plus and times are arithmetic mod `P` (an exact integer >= 2); carrier `'modular`. For fingerprints, parity, and Schwartz-Zippel identity testing -- NOT approximate counts (a true count divisible by `P` reads as 0). Not cycle-safe: Z/PZ has no absorbing top, so worklist iteration on cycles hits the safety cap. `mersenne-31` (`2^31 - 1`) and `mersenne-61` (`2^61 - 1`) are provided as named modulus choices
+- `(log-counting-semiring)` -- carrier float64 in log-space; plus is log-sum-exp, times is `+`, zero `-inf.0`, one `0.0`; carrier `'log-float`. Preserves orders of magnitude past 2^53, loses exact counts. For magnitude-ranking on DAGs (Viterbi-like queries). Not cycle-safe (no absorbing element)
+- `(saturating-counting-semiring cap)` -- carrier `[0, CAP]`; plus is `min(a+b, CAP)`, times is `min(a*b, CAP)`; `CAP` a positive exact integer; carrier `'saturating`. CAP is an absorbing top, so this is **the only counting variant that converges under worklist iteration on cyclic graphs**. Values at CAP mean ">= CAP," not an exact count. Suggested default cap `2^53`
+
+#### Carrier introspection
+
+- `(bounded-carrier-semiring? S)` -- `#t` iff `S`'s carrier saturates (currently only `saturating-counting-semiring`); a semantic warning that results past the saturation point are uninformative, not an algebraic defect
+- `(semiring-cycle-safe? S)` -- `#t` iff worklist iteration over `S` is guaranteed to converge on cyclic adjacencies; closed-set lookup on the carrier symbol, true for `'saturating` (absorbing top), `'boolean`, and `'tropical` (idempotent plus), `#f` otherwise including unannotated semirings
 
 ### Projections
 
@@ -1148,8 +1165,6 @@ Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure pe
 | Dataflow | `(wile algebra dataflow)` |
 | Matching | `(wile algebra matching)` |
 
-## Symbols Not Re-exported by Umbrella
+## Umbrella Re-exports
 
-The following symbols are exported by their sub-libraries but **not** by `(wile algebra)`:
-
-- `tropical-inf` from `(wile algebra semiring)` -- the infinity sentinel for the tropical semiring; import the sub-library directly to access it
+The umbrella `(wile algebra)` re-exports every public binding of its sub-libraries, including sentinels and sub-library-specific helpers such as `tropical-inf` (the tropical semiring's infinity sentinel), `mersenne-31` / `mersenne-61`, and the FCA sorted-string-set primitives. Importing the umbrella is sufficient to reach any symbol documented above; importing an individual sub-library only narrows the surface, it never exposes anything the umbrella hides.

@@ -157,8 +157,9 @@ applying until the result is `#f`.
 
 **Preset structures.** Many libraries ship canonical examples as nullary
 or small-arity constructors: `integer-ring`, `rational-field`, `cyclic-group
-n`, `symmetric-group n`, `chain-lattice n`, `boolean-lattice n`,
-`diamond-lattice n`, `pentagon-lattice`, `free-distributive-lattice n`,
+n`, `symmetric-group n`, `chain-lattice n`, `two-point-lattice`,
+`boolean-lattice n`, `diamond-lattice n`, `pentagon-lattice`,
+`free-distributive-lattice n`,
 `sign-lattice`, `complete-graph n`, `cycle-graph n`, `petersen-graph`.
 Reach for the preset when the classical case fits; build from scratch
 when the domain is custom. Presets short-circuit the "build, then check

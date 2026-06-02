@@ -284,8 +284,9 @@
     #f                                  ; bottom
     #t                                  ; top
     (lambda (a b) (or (not a) b))       ; leq?  = implication
-    (cons 'elements '(#f #t))
-    (cons 'cardinality 2)))
+    (cons 'setoid      (default-setoid)) ; carrier equality on #f/#t
+    (cons 'cardinality 2)
+    (cons 'elements    '(#f #t))))
 
 (define (boolean-lattice n)
   "Construct the Boolean lattice B(n) = 2^[n] of subsets of an n-element\nuniverse, ordered by inclusion.\n\nElements are canonical-order sublists of (0 1 ... n-1) (carried in\nlattice-elements). Join is set union, meet is set intersection, bottom\nis the empty set, top is the full universe. Distributive and modular.\n\nExamples:\n  (lattice-cardinality (boolean-lattice 3))  => 8\n  (lattice-bottom    (boolean-lattice 3))   => ()\n\nParameters:\n  n : exact non-negative integer\nReturns: lattice\nCategory: algebra\nKeywords: boolean, powerset, subset, distributive, canonical lattice\n\nSee also: `powerset-lattice', `chain-lattice'."

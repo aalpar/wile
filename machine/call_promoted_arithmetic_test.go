@@ -15,11 +15,13 @@
 package machine_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -116,22 +118,46 @@ func TestCallPromotedArithmeticErrors(t *testing.T) {
 // if = wrongly rejected complex too. This test asserts the *specific* error and
 // the *exempt* case, which together are the whole reason the guard is selective.
 func TestPopTwoRealsSemanticBoundary(t *testing.T) {
-	// TODO(you): implement the two halves of the boundary.
-	//
-	//   Half 1 — ordering rejects non-real complex with the RIGHT error.
-	//     For each of `(< (make-rectangular 1 2) 3)`, `(<= ...)`, `(> ...)`,
-	//     `(>= ...)`: run it, then assert errors.Is(err, werr.ErrNotAReal) is
-	//     true. (Plain IsNotNil is already covered above; the value here is
-	//     proving it's ErrNotAReal specifically — verify against the sentinel,
-	//     never compare error strings.)
-	//
-	//   Half 2 — equality is EXEMPT.
-	//     `(= (make-rectangular 1 2) (make-rectangular 1 2))` must succeed:
-	//     err == nil AND result is values.TrueValue. This is the case that
-	//     proves the guard lives in popTwoReals and not in popTwoNumbers.
-	//
-	// Pick the table shape from registry/CLAUDE.md (a []struct with a `wantReal`
-	// or `wantErr` discriminant reads cleanly here). The behaviors are already
-	// confirmed at the language level; you are encoding them as a regression lock.
-	t.Skip("TODO: implement popTwoReals semantic-boundary assertions")
+	// Half 1 — every ordering comparison rejects a non-real complex operand with
+	// the SPECIFIC sentinel werr.ErrNotAReal, in either operand position. Matching
+	// the sentinel (errors.Is, traversing the ErrExceptionEscape → error-object →
+	// ForeignError chain) — never the error string — is the point: the broad
+	// IsNotNil check in TestCallPromotedArithmeticErrors would pass for any error.
+	orderingTcs := []struct {
+		name string
+		code string
+	}{
+		{"less than, complex left", `(< (make-rectangular 1 2) 3)`},
+		{"less than, complex right", `(< 3 (make-rectangular 1 2))`},
+		{"less or equal, complex left", `(<= (make-rectangular 1 2) 3)`},
+		{"greater than, complex right", `(> 3 (make-rectangular 1 2))`},
+		{"greater or equal, complex left", `(>= (make-rectangular 1 2) 3)`},
+	}
+	for _, tc := range orderingTcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+		})
+	}
+
+	// Half 2 — numeric equality (=) is EXEMPT: it permits complex arguments
+	// (R7RS §6.2.6) and returns the right answer. This is the case that proves the
+	// real-only guard lives in popTwoReals, not in the shared popTwoNumbers — if it
+	// lived in popTwoNumbers, = would wrongly reject complex too.
+	equalityTcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"equal complexes", `(= (make-rectangular 1 2) (make-rectangular 1 2))`, values.TrueValue},
+		{"unequal complexes", `(= (make-rectangular 1 2) (make-rectangular 1 3))`, values.FalseValue},
+	}
+	for _, tc := range equalityTcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.want)
+		})
+	}
 }

@@ -1300,8 +1300,40 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 //
 // When execution completes normally (Run returns nil), any remaining
 // frames on the winding stack are unwound (after thunks are called).
-func (p *MachineContext) RunWithEscapeHandling() error {
+func (p *MachineContext) RunWithEscapeHandling() (rerr error) {
 	p.promptTag = DefaultPromptTag // install default prompt for call/cc escapes
+
+	// VM invariant guards (the Stack methods on underflow, local-index overflow,
+	// edit-plan bounds, ...) panic with a *werr.ForeignError rather than return —
+	// well-formed bytecode never trips them, so they signal a compiler/VM bug, not
+	// a user-recoverable condition. Recover them here, at the VM boundary, so the
+	// violation surfaces as a returned error to the embedder instead of a raw Go
+	// panic escaping the public API (embedding is the product). A panic unwinds the
+	// whole goroutine stack, so this single site also catches guards tripped inside
+	// nested sub-context Run() calls. Anything that is not a *werr.ForeignError —
+	// notably runtime.Error (nil deref, index out of range) and non-error panics —
+	// is re-raised so genuine Go bugs still crash the process rather than being
+	// silently masked as a returned error.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		var fe *werr.ForeignError
+		err, ok := r.(error)
+		if !ok || !errors.As(err, &fe) {
+			panic(r)
+		}
+		// Attach the VM's source location and continuation-chain stack trace —
+		// both read heap state that survives the panic unwind — so the embedder
+		// can localize the offending bytecode rather than receiving a bare
+		// "stack underflow". WrapError builds a *SchemeError, NOT an
+		// *ErrExceptionEscape: a VM-invariant violation is a compiler/VM bug, not
+		// a user-recoverable Scheme condition, so it must remain uncatchable by
+		// guard / with-exception-handler. The wrapped ForeignError stays
+		// errors.Is-matchable because SchemeError.Unwrap chains to it.
+		rerr = p.WrapError(err, "RunWithEscapeHandling: recovered VM invariant violation")
+	}()
 
 	// freshCancel tracks the cancel function for any recovery context
 	// installed after a timer interrupt. Cleaned up on function exit.

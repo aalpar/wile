@@ -2541,3 +2541,85 @@ func TestApplyCallableError_PassesThroughTimerInterrupt(t *testing.T) {
 	c.Assert(errors.As(result, &timerErr), qt.IsTrue)
 	c.Assert(timerErr.Handler, qt.Equals, handler)
 }
+
+// TestRunWithEscapeHandling_RecoversStackUnderflow proves the embedding-contract
+// guarantee added at the VM boundary: a VM invariant guard that panics — here,
+// OpPop on an empty eval stack, which trips Stack.Pop's ErrStackUnderflow guard —
+// is recovered in RunWithEscapeHandling and surfaces as a RETURNED error wrapping
+// werr.ErrStackUnderflow, not as a raw Go panic escaping the public Run path.
+// Well-formed bytecode never underflows, so this deliberately drives the
+// malformed-bytecode / compiler-bug path.
+//
+// The recover wraps the guard's *werr.ForeignError in a *SchemeError (via
+// WrapError) so the embedder gets the VM's source location and stack trace, not
+// a bare "stack underflow". This test pins both halves of that contract:
+//   - the sentinel stays errors.Is-matchable (SchemeError.Unwrap chains to it), and
+//   - the returned error IS a *SchemeError — distinguishing the wrap from the
+//     earlier `rerr = err`, which returned the raw *ForeignError and for which the
+//     errors.As below would fail.
+//
+// It deliberately does NOT assert *ErrExceptionEscape: a VM-invariant violation
+// is a compiler/VM bug, so it must remain uncatchable by guard.
+func TestRunWithEscapeHandling_RecoversStackUnderflow(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	// Single OpPop with an empty eval stack.
+	tpl := NewNativeTemplate(0, 0, false, NewOperationPop())
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+
+	// If the recover regressed, this call would panic and fail the test outright.
+	err := mc.RunWithEscapeHandling()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrStackUnderflow), qt.IsTrue)
+
+	// The guard error is wrapped with VM context as a *SchemeError, not returned raw.
+	var schemeErr *SchemeError
+	c.Assert(errors.As(err, &schemeErr), qt.IsTrue)
+
+	// It must NOT have been converted into a catchable Scheme exception.
+	var escapeErr *ErrExceptionEscape
+	c.Assert(errors.As(err, &escapeErr), qt.IsFalse)
+}
+
+// panickingComplexOp is a test-only side-table operation whose Apply panics with
+// a caller-supplied value that is NOT a *werr.ForeignError. It exists to pin the
+// SELECTIVITY of the boundary recover: the recover converts VM invariant guards
+// (*werr.ForeignError) into returned errors but re-raises everything else so that
+// genuine Go bugs (nil deref, index-out-of-range — all of which satisfy the error
+// interface as runtime.Error) still crash loudly with a full stack trace.
+type panickingComplexOp struct {
+	OperationBase
+	panicValue any
+}
+
+func (p *panickingComplexOp) EqualTo(o values.Value) bool {
+	v, ok := o.(*panickingComplexOp)
+	return SameType(p, v, ok)
+}
+
+func (*panickingComplexOp) OpKind() OpCode {
+	return OpComplex
+}
+
+func (p *panickingComplexOp) Apply(*MachineContext) (*MachineContext, error) {
+	panic(p.panicValue)
+}
+
+// TestRunWithEscapeHandling_RePanicsNonForeignError proves the recover is
+// selective: a panic value that is an error but not a *werr.ForeignError
+// propagates rather than being swallowed into a returned error. This is the
+// property that prevents the recover from masking genuine Go runtime panics.
+func TestRunWithEscapeHandling_RePanicsNonForeignError(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	op := &panickingComplexOp{
+		OperationBase: NewOperationBase("test-panicking-complex-op"),
+		panicValue:    errors.New("not a foreign error"),
+	}
+	tpl := NewNativeTemplate(0, 0, false, op)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+
+	c.Assert(func() {
+		_ = mc.RunWithEscapeHandling()
+	}, qt.PanicMatches, "not a foreign error")
+}
