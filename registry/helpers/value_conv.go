@@ -78,18 +78,54 @@ func ComplexOrFloat(c complex128) values.Value {
 // silent-truncation behavior should call values.ToFloat64WithAccuracy directly
 // and discard the accuracy slot. See CHANGELOG for migration guidance.
 func ToFloat64(v values.Value) (float64, error) {
-	n, ok := v.(values.Number)
-	if !ok {
-		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
-	}
-	// Domain dispatch via ComplexNumber interface — matches Hashable/Tuple/
-	// Indexable precedent in values/. Avoids enumerating *Complex and
-	// *BigComplex by name (would need updating for any new complex kind).
-	_, isComplex := n.(values.ComplexNumber)
-	if isComplex {
-		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
+	n, err := screenReal(v)
+	if err != nil {
+		return 0, err
 	}
 	return values.ToFloat64Lossless(n)
+}
+
+// ToFloat64Lossy is the silent-truncation counterpart to ToFloat64: it shares
+// the same real-domain screening (non-numbers and complex numbers are rejected
+// with werr.ErrNotAReal) but, instead of erroring on precision loss, returns
+// the rounded float64 from values.ToFloat64WithAccuracy with the accuracy slot
+// discarded. ±Inf saturation on overflow follows (*big.Float).Float64().
+//
+// Use this only where lossy conversion is semantically correct because the
+// result is inherently inexact — e.g. (atan y x) per R7RS §6.2.6. Callers that
+// need a lossless guarantee must use ToFloat64. See
+// plans/2026-05-14-numeric-loss-signals-design.md §R8.
+func ToFloat64Lossy(v values.Value) (float64, error) {
+	n, err := screenReal(v)
+	if err != nil {
+		return 0, err
+	}
+	// screenReal guarantees a non-nil real Number, so the error slot of
+	// ToFloat64WithAccuracy (nil-input only) is unreachable; the accuracy and
+	// isReal slots are intentionally discarded — silent truncation is the
+	// whole point of this variant.
+	f, _, _, _ := values.ToFloat64WithAccuracy(n)
+	return f, nil
+}
+
+// screenReal asserts v is a real Scheme number, rejecting non-numbers and
+// complex numbers with werr.ErrNotAReal. It is the shared screening for the
+// strict (ToFloat64) and lossy (ToFloat64Lossy) extraction policies — the loss
+// policy is the only thing that differs between them.
+//
+// Domain dispatch via the ComplexNumber interface — matches Hashable/Tuple/
+// Indexable precedent in values/. Avoids enumerating *Complex and *BigComplex
+// by name (would need updating for any new complex kind).
+func screenReal(v values.Value) (values.Number, error) {
+	n, ok := v.(values.Number)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
+	}
+	_, isComplex := n.(values.ComplexNumber)
+	if isComplex {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
+	}
+	return n, nil
 }
 
 // ExtractReal extracts a float64 from a real number, tracking exactness.

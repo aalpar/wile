@@ -369,6 +369,87 @@ func TestToFloat64_LossyConversion(t *testing.T) {
 	}
 }
 
+// TestToFloat64Lossy verifies the silent-truncation counterpart to ToFloat64.
+// It must succeed on exact inputs (delegating identically) AND on the inputs
+// ToFloat64 rejects with ErrLossyConversion, returning the silently-rounded
+// float64. This is the load-bearing semantic for (atan y x), where the result
+// is inherently inexact (R7RS §6.2.6).
+func TestToFloat64Lossy(t *testing.T) {
+	c := qt.New(t)
+
+	bigOverflow, _, err := big.ParseFloat("1e500", 10, 256, big.ToNearestEven)
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name    string
+		input   values.Value
+		want    float64
+		checkFn func(float64) bool // optional: overrides want comparison
+	}{
+		// Exact / losslessly-representable — parity with ToFloat64.
+		{"integer", values.NewInteger(42), 42, nil},
+		{"rational 1/2", values.NewRational(-1, 2), -0.5, nil},
+		{"float", values.NewFloat(3.14), 3.14, nil},
+
+		// Lossy inputs — these ERROR under strict ToFloat64 but must
+		// succeed here with the rounded value.
+		{"rational 1/3", values.NewRational(1, 3), 1.0 / 3.0, nil},
+		{"integer max int64", values.NewInteger(math.MaxInt64), float64(math.MaxInt64), nil},
+		{
+			"big integer precision loss",
+			values.NewBigInteger(new(big.Int).Add(
+				new(big.Int).Lsh(big.NewInt(1), 100), big.NewInt(1))),
+			0, func(f float64) bool { return f == math.Ldexp(1, 100) },
+		},
+		{
+			"big float overflow saturates to +Inf",
+			values.NewBigFloat(bigOverflow), 0,
+			func(f float64) bool { return math.IsInf(f, 1) },
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := ToFloat64Lossy(tc.input)
+			c.Assert(err, qt.IsNil)
+			if tc.checkFn != nil {
+				c.Assert(tc.checkFn(result), qt.IsTrue, qt.Commentf("result: %v", result))
+			} else {
+				c.Assert(result, qt.Equals, tc.want)
+			}
+		})
+	}
+}
+
+// TestToFloat64Lossy_Errors confirms the lossy variant shares ToFloat64's
+// real-domain screening: non-numbers and complex numbers are rejected
+// identically with werr.ErrNotAReal (loss policy diverges, screening does not).
+func TestToFloat64Lossy_Errors(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name  string
+		input values.Value
+	}{
+		{"complex", values.NewComplex(complex(1, 2))},
+		{
+			"big complex",
+			values.NewBigComplex(values.NewBigFloatFromFloat64(1), values.NewBigFloatFromFloat64(2)),
+		},
+		{"string", values.NewString("hello")},
+		{"boolean", values.TrueValue},
+		{"empty list", values.EmptyList},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ToFloat64Lossy(tc.input)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+		})
+	}
+}
+
 func TestExtractReal(t *testing.T) {
 	c := qt.New(t)
 
