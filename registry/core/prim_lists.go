@@ -100,7 +100,7 @@ func PrimAppend(mc machine.CallContext) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return werr.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
 	}
 	var result values.Value = values.EmptyList
 	for i := range slices.Backward(lists) {
@@ -122,7 +122,7 @@ func PrimAppend(mc machine.CallContext) error {
 			return nil
 		})
 		if err != nil {
-			return err
+			return werr.WrapForeignErrorf(err, "append: error processing list: %s", pr.SchemeString())
 		}
 		for j := range slices.Backward(elems) {
 			result = values.NewCons(elems[j], result)
