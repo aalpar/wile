@@ -168,6 +168,16 @@ type Namespace struct {
 	// authorizer gate. Nil means "fall through to OS, gated by authorizer".
 	// Set via WithEnvMap (Task 5).
 	envMap map[string]string
+
+	// extensionState holds opaque, namespace-scoped state for extensions
+	// that need per-Namespace storage (e.g. the SAT solver's last model).
+	// Each extension picks its own key (typically an unexported sentinel
+	// type) so keys never collide across extensions. Because the storage
+	// lives on the Namespace, it is collected together with the Namespace
+	// — extensions get namespace lifetime for free without a teardown hook
+	// and without a process-global map that would pin Namespace pointers.
+	// The zero sync.Map is ready to use; no initialization is required.
+	extensionState sync.Map // map[any]any
 }
 
 // ModuleInstance represents a loaded and initialized library.
@@ -331,6 +341,27 @@ func (p *Namespace) Registry() any {
 // SetRegistry sets the primitive registry.
 func (p *Namespace) SetRegistry(reg any) {
 	p.registry = reg
+}
+
+// ExtensionState returns the namespace-scoped state stored under key, and a
+// boolean reporting whether any value was present. Extensions use this for
+// per-Namespace storage whose lifetime is tied to the Namespace. The key is
+// extension-chosen; an unexported sentinel type avoids cross-extension
+// collisions. Safe for concurrent use.
+func (p *Namespace) ExtensionState(key any) (any, bool) {
+	return p.extensionState.Load(key)
+}
+
+// SetExtensionState stores namespace-scoped extension state under key.
+// Safe for concurrent use.
+func (p *Namespace) SetExtensionState(key, value any) {
+	p.extensionState.Store(key, value)
+}
+
+// DeleteExtensionState removes any namespace-scoped extension state stored
+// under key. Safe for concurrent use.
+func (p *Namespace) DeleteExtensionState(key any) {
+	p.extensionState.Delete(key)
 }
 
 // Authorizer returns the security authorizer for this namespace.

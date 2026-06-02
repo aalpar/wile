@@ -239,30 +239,102 @@ func TestVSIDS_DecayAndRescale(t *testing.T) {
 	}
 }
 
-func TestSearch_TinySAT(t *testing.T) {
-	clauses := []clause{
-		{lits: []literal{2 * 1, 2 * 2}},
-		{lits: []literal{2*1 + 1, 2 * 2}},
-	}
-	s := newSolver(context.Background(), clauses, 2, -1)
-	r := s.solve()
-	if r != resultSAT {
-		t.Errorf("got %v, want SAT", r)
-	}
-	if s.assigns[2] != 1 {
-		t.Errorf("expected x2=true; got %d", s.assigns[2])
+// assertModelSatisfies checks that the solver's current assignment makes at
+// least one literal true in every clause — the satisfiability contract for a
+// SAT result.
+func assertModelSatisfies(t *testing.T, s *solver, clauses []clause) {
+	t.Helper()
+	for ci, c := range clauses {
+		ok := false
+		for _, l := range c.lits {
+			if s.litValue(l) == 1 {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			t.Errorf("model does not satisfy clause %d: %v", ci, c.lits)
+		}
 	}
 }
 
-func TestSearch_TinyUNSAT(t *testing.T) {
-	clauses := []clause{
-		{lits: []literal{2 * 1}},
-		{lits: []literal{2*1 + 1}},
+// php32Clauses encodes "3 pigeons into 2 holes" (UNSAT): variable v(i,j) means
+// pigeon i sits in hole j. Each pigeon needs a hole; no two pigeons share one.
+func php32Clauses() []clause {
+	v := func(i, j int) int {
+		return (i-1)*2 + j
 	}
-	s := newSolver(context.Background(), clauses, 1, -1)
-	r := s.solve()
-	if r != resultUNSAT {
-		t.Errorf("got %v, want UNSAT", r)
+	pos := func(x int) literal {
+		return literal(2 * x)
+	}
+	neg := func(x int) literal {
+		return literal(2*x + 1)
+	}
+	return []clause{
+		{lits: []literal{pos(v(1, 1)), pos(v(1, 2))}},
+		{lits: []literal{pos(v(2, 1)), pos(v(2, 2))}},
+		{lits: []literal{pos(v(3, 1)), pos(v(3, 2))}},
+		{lits: []literal{neg(v(1, 1)), neg(v(2, 1))}},
+		{lits: []literal{neg(v(1, 1)), neg(v(3, 1))}},
+		{lits: []literal{neg(v(2, 1)), neg(v(3, 1))}},
+		{lits: []literal{neg(v(1, 2)), neg(v(2, 2))}},
+		{lits: []literal{neg(v(1, 2)), neg(v(3, 2))}},
+		{lits: []literal{neg(v(2, 2)), neg(v(3, 2))}},
+	}
+}
+
+func TestSolve(t *testing.T) {
+	tcs := []struct {
+		name    string
+		clauses []clause
+		numVars int32
+		want    SolverResult
+	}{
+		{
+			name: "tiny SAT (x1∨x2)∧(¬x1∨x2)",
+			clauses: []clause{
+				{lits: []literal{2 * 1, 2 * 2}},
+				{lits: []literal{2*1 + 1, 2 * 2}},
+			},
+			numVars: 2,
+			want:    resultSat,
+		},
+		{
+			name: "tiny UNSAT (x1)∧(¬x1)",
+			clauses: []clause{
+				{lits: []literal{2 * 1}},
+				{lits: []literal{2*1 + 1}},
+			},
+			numVars: 1,
+			want:    resultUnsat,
+		},
+		{
+			name: "two models (x1∨x2)∧(¬x1∨¬x2)",
+			clauses: []clause{
+				{lits: []literal{2 * 1, 2 * 2}},
+				{lits: []literal{2*1 + 1, 2*2 + 1}},
+			},
+			numVars: 2,
+			want:    resultSat,
+		},
+		{
+			name:    "PHP-3-2 UNSAT",
+			clauses: php32Clauses(),
+			numVars: 6,
+			want:    resultUnsat,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newSolver(context.Background(), tc.clauses, tc.numVars, -1)
+			r := s.solve()
+			if r != tc.want {
+				t.Fatalf("solve(): got %v, want %v", r, tc.want)
+			}
+			if tc.want == resultSat {
+				assertModelSatisfies(t, s, tc.clauses)
+			}
+		})
 	}
 }
 
@@ -281,7 +353,7 @@ func TestSearch_BudgetExhausted(t *testing.T) {
 	clauses, numVars := randomCNF(rng, 50, 218, 3)
 	s := newSolver(context.Background(), clauses, numVars, 10)
 	r := s.solve()
-	if r != resultUNKNOWN {
+	if r != resultUnknown {
 		t.Logf("note: tiny budget may have been enough; got %v", r)
 	}
 }
@@ -293,7 +365,7 @@ func TestSearch_CtxCancel(t *testing.T) {
 	cancel()
 	s := newSolver(ctx, clauses, numVars, -1)
 	r := s.solve()
-	if r != resultUNKNOWN && r != resultSAT && r != resultUNSAT {
+	if r != resultUnknown && r != resultSat && r != resultUnsat {
 		t.Errorf("unexpected result with cancelled ctx: %v", r)
 	}
 }
@@ -329,59 +401,6 @@ func TestPropagate_WatchInvariant(t *testing.T) {
 	}
 }
 
-func TestSolve_PHP_3_2_UNSAT(t *testing.T) {
-	// 3 pigeons into 2 holes: UNSAT.
-	v := func(i, j int) int {
-		return (i-1)*2 + j
-	}
-	pos := func(x int) literal {
-		return literal(2 * x)
-	}
-	neg := func(x int) literal {
-		return literal(2*x + 1)
-	}
-	cs := []clause{
-		{lits: []literal{pos(v(1, 1)), pos(v(1, 2))}},
-		{lits: []literal{pos(v(2, 1)), pos(v(2, 2))}},
-		{lits: []literal{pos(v(3, 1)), pos(v(3, 2))}},
-		{lits: []literal{neg(v(1, 1)), neg(v(2, 1))}},
-		{lits: []literal{neg(v(1, 1)), neg(v(3, 1))}},
-		{lits: []literal{neg(v(2, 1)), neg(v(3, 1))}},
-		{lits: []literal{neg(v(1, 2)), neg(v(2, 2))}},
-		{lits: []literal{neg(v(1, 2)), neg(v(3, 2))}},
-		{lits: []literal{neg(v(2, 2)), neg(v(3, 2))}},
-	}
-	s := newSolver(context.Background(), cs, 6, -1)
-	r := s.solve()
-	if r != resultUNSAT {
-		t.Errorf("PHP-3-2: got %v, want UNSAT", r)
-	}
-}
-
-func TestSolve_TwoModels_SAT(t *testing.T) {
-	cs := []clause{
-		{lits: []literal{2 * 1, 2 * 2}},
-		{lits: []literal{2*1 + 1, 2*2 + 1}},
-	}
-	s := newSolver(context.Background(), cs, 2, -1)
-	r := s.solve()
-	if r != resultSAT {
-		t.Fatalf("got %v, want SAT", r)
-	}
-	for _, c := range cs {
-		ok := false
-		for _, l := range c.lits {
-			if s.litValue(l) == 1 {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			t.Errorf("model does not satisfy clause %v", c.lits)
-		}
-	}
-}
-
 func TestSolve_ModelSatisfiesInput(t *testing.T) {
 	rng := newDeterministicRNG(17)
 	for iter := range 30 {
@@ -392,7 +411,7 @@ func TestSolve_ModelSatisfiesInput(t *testing.T) {
 		}
 		s := newSolver(context.Background(), clauses, numVars, 100000)
 		r := s.solve()
-		if r != resultSAT {
+		if r != resultSat {
 			continue
 		}
 		for ci, lits := range origLits {

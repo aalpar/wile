@@ -87,7 +87,6 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 //
 //   - SaveContinuation: mc.callDepth already incremented → mc.callDepth != chain length
 //   - PrimCallCC sub-context path (prim_control.go): mc.callDepth == 0, mc.cont == nil
-//   - PrimDynamicWind escape cont (prim_control.go): mc.callDepth == chain length
 //
 // Using mc.callDepth - 1 would underflow to -1 in the PrimCallCC
 // case (mc.callDepth == 0). The parent-pointer formula is correct for all

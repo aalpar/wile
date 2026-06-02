@@ -166,29 +166,6 @@ func isExtendedExponentMarker(c rune) bool {
 	return c == 'e' || c == 'E' || c == 's' || c == 'S' || c == 'f' || c == 'F' || c == 'd' || c == 'D' || c == 'l' || c == 'L'
 }
 
-// exponentMarkerStrength returns true and the strength of the exponent marker if c is valid.
-// Strengths: e/E=64, s/S=16, f/F=32, d/D=64, l/L=128; otherwise false,0.
-func exponentMarkerStrength(c rune) (bool, int) {
-	switch c {
-	case 'e', 'E':
-		// default exponent marker (double)
-		return true, 64
-	case 's', 'S':
-		// small float (not supported natively)
-		return true, 16
-	case 'f', 'F':
-		// single-precision float
-		return true, 32
-	case 'd', 'D':
-		// double-precision float
-		return true, 64
-	case 'l', 'L':
-		// long double-precision float (not supported natively)
-		return true, 128
-	}
-	return false, 0
-}
-
 // isComplexPolar returns true if c is '@'.
 func isComplexPolar(c rune) bool {
 	return c == '@'

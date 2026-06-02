@@ -16,7 +16,6 @@ package sat
 
 import (
 	"context"
-	"sync"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -74,7 +73,7 @@ func PrimSatCNFFlat(mc machine.CallContext) error {
 	s := newSolver(ctx, clauses, numVars, budget)
 	res := s.solve()
 	switch res {
-	case resultSAT:
+	case resultSat:
 		model := make([]values.Value, numVars+1)
 		model[0] = values.FalseValue
 		for v := int32(1); v <= numVars; v++ {
@@ -83,11 +82,11 @@ func PrimSatCNFFlat(mc machine.CallContext) error {
 		storeModel(mc, values.NewVector(model...))
 		mc.SetValue(values.TrueValue)
 		return nil
-	case resultUNSAT:
+	case resultUnsat:
 		storeModel(mc, nil)
 		mc.SetValue(values.FalseValue)
 		return nil
-	case resultUNKNOWN:
+	case resultUnknown:
 		storeModel(mc, nil)
 		mc.SetValue(symbolUnknown)
 		return nil
@@ -112,38 +111,35 @@ func PrimSatCNFFlatModel(mc machine.CallContext) error {
 	return nil
 }
 
-// modelStore holds the most recent SAT model for each Namespace.
+// modelStateKey is this extension's private key into a Namespace's
+// extension-state bag (Namespace.ExtensionState / SetExtensionState).
+// Its unexported type guarantees it never collides with another
+// extension's key.
+type modelStateKey struct{}
+
+// storeModel records the most recent SAT model on the call's Namespace.
 //
-// Wile exposes no per-Namespace extension-state API, so we use a
-// package-level sync.Map keyed on the frame's *Namespace pointer (via
-// mc.EnvironmentFrame().Namespace()). Each distinct Namespace — whether
-// the Engine's root or a child namespace produced by (environment ...) —
-// gets its own model slot; calls in the same Namespace share storage.
-//
-// Lifecycle note: this map holds Namespace pointers for the process
-// lifetime. Engines that are constructed and discarded leave their
-// Namespace keys in the map, preventing GC of the Namespace until the
-// process exits. Acceptable for the current usage patterns (a single
-// long-lived Engine in tests and embedding); a future task should add a
-// teardown hook if long-running processes spin up and discard many
-// Engines.
+// The model lives on the Namespace itself (via SetExtensionState), so its
+// lifetime is the Namespace's lifetime: when an Engine and its Namespace
+// are discarded, the model is collected with them — no process-global map
+// pinning Namespace pointers, no teardown hook required. Each distinct
+// Namespace — the Engine's root or a child produced by (environment ...) —
+// has its own slot; calls in the same Namespace share storage.
 //
 // nil is never stored: storeModel deletes the entry for nil values so
 // loadModel's type assertion to *values.Vector is unconditionally safe.
-var modelStore sync.Map // map[*Namespace]*values.Vector (Namespace is environment.Namespace)
-
 func storeModel(mc machine.CallContext, v *values.Vector) {
 	ns := mc.EnvironmentFrame().Namespace()
 	if v == nil {
-		modelStore.Delete(ns)
+		ns.DeleteExtensionState(modelStateKey{})
 		return
 	}
-	modelStore.Store(ns, v)
+	ns.SetExtensionState(modelStateKey{}, v)
 }
 
 func loadModel(mc machine.CallContext) *values.Vector {
 	ns := mc.EnvironmentFrame().Namespace()
-	raw, ok := modelStore.Load(ns)
+	raw, ok := ns.ExtensionState(modelStateKey{})
 	if !ok {
 		return nil
 	}

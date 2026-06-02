@@ -422,9 +422,9 @@ func (s *solver) learntCount() int {
 type SolverResult int8
 
 const (
-	resultUNSAT   SolverResult = -1
-	resultUNKNOWN SolverResult = 0
-	resultSAT     SolverResult = 1
+	resultUnsat   SolverResult = -1
+	resultUnknown SolverResult = 0
+	resultSat     SolverResult = 1
 )
 
 // solve runs the main CDCL search loop until SAT, UNSAT, or budget/ctx
@@ -438,18 +438,18 @@ func (s *solver) solve() SolverResult {
 		}
 	}
 	if s.propagate() != noClauseRef {
-		return resultUNSAT
+		return resultUnsat
 	}
 	for {
 		conflict := s.propagate()
 		if conflict != noClauseRef {
 			// Conflict: learn a clause, backjump, and re-propagate.
 			if s.decisionLevel() == 0 {
-				return resultUNSAT
+				return resultUnsat
 			}
 			s.conflicts++
 			if s.conflictBudget >= 0 && s.conflicts >= s.conflictBudget {
-				return resultUNKNOWN
+				return resultUnknown
 			}
 			learnt, btLevel := s.analyze(conflict)
 			s.backjump(btLevel)
@@ -474,13 +474,13 @@ func (s *solver) solve() SolverResult {
 		if s.ctx != nil {
 			select {
 			case <-s.ctx.Done():
-				return resultUNKNOWN
+				return resultUnknown
 			default:
 			}
 		}
 		v := s.pickBranchVar()
 		if v == 0 {
-			return resultSAT
+			return resultSat
 		}
 		s.newDecisionLevel()
 		s.enqueue(literal(2*v), noClauseRef)

@@ -43,50 +43,6 @@ func AnalyzePattern(pattern *syntax.SyntaxPair, variables map[string]struct{}) *
 	return analysis
 }
 
-// AnalyzePatternWithLiterals analyzes a pattern determining variables from literals
-func AnalyzePatternWithLiterals(pattern *syntax.SyntaxPair, literals map[string]struct{}, isKeyword bool) *PatternAnalysis {
-	analysis := NewPatternAnalysis()
-	// Determine pattern variables first
-	variables := make(map[string]struct{})
-	collectPatternVariables(pattern, literals, isKeyword, variables)
-
-	// Then analyze which subtrees contain variables
-	analyzeRecursive(pattern, variables, analysis)
-	return analysis
-}
-
-// collectPatternVariables walks the pattern and identifies all pattern variables.
-// Uses the default ellipsis identifier ("...").
-func collectPatternVariables(v syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}) {
-	collectPatternVariablesWithEllipsis(v, literals, isFirst, variables, DefaultEllipsis)
-}
-
-// collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
-// using the specified ellipsis identifier.
-func collectPatternVariablesWithEllipsis(v syntax.SyntaxValue, literals map[string]struct{}, isFirst bool, variables map[string]struct{}, ellipsis string) {
-	switch t := v.(type) {
-	case *syntax.SyntaxSymbol:
-		// Skip if it's a keyword (first element), literal, or ellipsis
-		if !isFirst && t.Key() != ellipsis {
-			_, isLiteral := literals[t.Key()]
-			if !isLiteral {
-				variables[t.Key()] = struct{}{}
-			}
-		}
-	case *syntax.SyntaxPair:
-		if !syntax.IsSyntaxEmptyList(t) {
-			// First element in a pattern is the keyword
-			collectPatternVariablesWithEllipsis(t.SyntaxCar(), literals, isFirst, variables, ellipsis)
-			// Rest of the pattern
-			collectPatternVariablesWithEllipsis(t.SyntaxCdr(), literals, false, variables, ellipsis)
-		}
-	case *syntax.SyntaxVector:
-		for _, elem := range t.Values {
-			collectPatternVariablesWithEllipsis(elem, literals, false, variables, ellipsis)
-		}
-	}
-}
-
 // analyzeRecursive analyzes which subtrees contain pattern variables
 func analyzeRecursive(v syntax.SyntaxValue, variables map[string]struct{}, analysis *PatternAnalysis) bool {
 	switch t := v.(type) {

@@ -28,7 +28,6 @@ import (
 const (
 	MessageRuneError                             = "rune error"
 	MessageExpectingNumber                       = "expecting number"
-	MessageExpectingExponentMarker               = "expecting exponent marker"
 	MessageExpectingExponentDigits               = "expecting exponent digits"
 	MessageExpectingImaginary                    = "expecting imaginary"
 	MessageExpectingDecimalFraction              = "expecting decimal fraction"

@@ -16,6 +16,7 @@ package sat_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -53,94 +54,98 @@ func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
-func TestPrimSatCNFFlat_SAT(t *testing.T) {
-	c := qt.New(t)
+func TestPrimSatCNFFlat(t *testing.T) {
 	engine := newEngine(t)
-	// Single clause (1 2): SAT — any assignment making x1 or x2 true works.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat? #(1 2 0) #f)`), qt.Equals, "#t")
-}
-
-func TestPrimSatCNFFlat_UNSAT(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-	// (x1) ∧ (¬x1): trivially UNSAT.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat? #(1 0 -1 0) #f)`), qt.Equals, "#f")
-}
-
-func TestPrimSatCNFFlat_EmptyVector(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-	// Zero clauses: trivially SAT.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat? #() #f)`), qt.Equals, "#t")
-}
-
-func TestPrimSatCNFFlat_Budget(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-	// Simple SAT instance with budget=1000: should still decide.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat? #(1 2 0) 1000)`), qt.Equals, "#t")
-}
-
-func TestPrimSatCNFFlat_BudgetZero(t *testing.T) {
-	engine := newEngine(t)
-	// Budget=0 forces immediate UNKNOWN on any non-trivial instance.
-	// A single-literal clause is resolved by unit propagation at level 0
-	// before the budget check, so it may still return SAT. Use a 2-literal
-	// clause which requires a branch decision.
-	got := evalString(t, engine, `(sat-cnf-flat? #(1 2 0) 0)`)
-	// Acceptable results: #t (solved by UP before first conflict) or 'unknown.
-	if got != "#t" && got != "unknown" {
-		t.Errorf("budget=0: got %s, want #t or unknown", got)
+	tcs := []struct {
+		name string
+		code string
+		// want lists the acceptable result strings. Most cases are
+		// deterministic (a single entry); the budget-exhaustion case admits
+		// more than one outcome.
+		want []string
+	}{
+		// Single clause (1 2): any assignment making x1 or x2 true works.
+		{"single clause SAT", `(sat-cnf-flat? #(1 2 0) #f)`, []string{"#t"}},
+		// (x1) ∧ (¬x1): trivially UNSAT.
+		{"contradiction UNSAT", `(sat-cnf-flat? #(1 0 -1 0) #f)`, []string{"#f"}},
+		// Zero clauses: trivially SAT.
+		{"empty vector trivially SAT", `(sat-cnf-flat? #() #f)`, []string{"#t"}},
+		// Budget=1000 is ample: still decides.
+		{"SAT within budget", `(sat-cnf-flat? #(1 2 0) 1000)`, []string{"#t"}},
+		// (x1 ∨ x2) ∧ (¬x1) ∧ (¬x2): UNSAT.
+		{"three clauses UNSAT", `(sat-cnf-flat? #(1 2 0 -1 0 -2 0) #f)`, []string{"#f"}},
+		// Budget=0 forces UNKNOWN on any instance needing a branch decision.
+		// A two-literal clause may still be solved by unit propagation at
+		// level 0 before the budget check, so #t is also acceptable.
+		{"budget zero may be unknown", `(sat-cnf-flat? #(1 2 0) 0)`, []string{"#t", "unknown"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evalString(t, engine, tc.code)
+			if !slices.Contains(tc.want, got) {
+				t.Errorf("%s: got %s, want one of %v", tc.code, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestPrimSatCNFFlat_UNSAT_ThreeClauses(t *testing.T) {
-	c := qt.New(t)
+func TestPrimSatCNFFlatErrors(t *testing.T) {
 	engine := newEngine(t)
-	// (x1 ∨ x2) ∧ (¬x1) ∧ (¬x2): UNSAT.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat? #(1 2 0 -1 0 -2 0) #f)`), qt.Equals, "#f")
-}
-
-func TestPrimSatCNFFlat_Errors(t *testing.T) {
-	engine := newEngine(t)
-	// First argument not a vector.
-	evalExpectError(t, engine, `(sat-cnf-flat? '(1 2 0) #f)`)
-	// Budget not an integer.
-	evalExpectError(t, engine, `(sat-cnf-flat? #(1 0) "big")`)
-	// Non-integer element in vector.
-	evalExpectError(t, engine, `(sat-cnf-flat? #(1 "x" 0) #f)`)
-	// Empty clause (two consecutive 0s).
-	evalExpectError(t, engine, `(sat-cnf-flat? #(1 0 0 2 0) #f)`)
-}
-
-func TestPrimSatCNFFlatModel_ReturnsFalseWhenNoModel(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-	// Before any sat-cnf-flat? call, model is #f.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat-model)`), qt.Equals, "#f")
-}
-
-func TestPrimSatCNFFlatModel_ReturnsFalseAfterUNSAT(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-	// After an UNSAT result, model is still #f.
-	c.Assert(evalString(t, engine, `(sat-cnf-flat? #(1 0 -1 0) #f)`), qt.Equals, "#f")
-	c.Assert(evalString(t, engine, `(sat-cnf-flat-model)`), qt.Equals, "#f")
-}
-
-func TestPrimSatCNFFlat_ModelRetrieval(t *testing.T) {
-	engine := newEngine(t)
-	// (x1 ∨ x2) ∧ (¬x1 ∨ ¬x2) — SAT with two satisfying assignments.
-	result := evalString(t, engine, `(sat-cnf-flat? #(1 2 0 -1 -2 0) #f)`)
-	if result != "#t" {
-		t.Fatalf("expected SAT (#t), got %q", result)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"first argument not a vector", `(sat-cnf-flat? '(1 2 0) #f)`},
+		{"budget not an integer", `(sat-cnf-flat? #(1 0) "big")`},
+		{"non-integer element in vector", `(sat-cnf-flat? #(1 "x" 0) #f)`},
+		{"empty clause (consecutive 0s)", `(sat-cnf-flat? #(1 0 0 2 0) #f)`},
 	}
-	got := evalString(t, engine, `(sat-cnf-flat-model)`)
-	// Model must be a vector (starts with #( in display form), not #f.
-	if got == "#f" {
-		t.Errorf("model should not be #f after SAT result; got %q", got)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
 	}
-	if len(got) < 2 || got[0] != '#' || got[1] != '(' {
-		t.Errorf("model: got %q, want a vector literal", got)
+}
+
+func TestPrimSatCNFFlatModel(t *testing.T) {
+	tcs := []struct {
+		name string
+		// code runs to completion on a fresh engine; the value of its last
+		// expression is what gets asserted. A fresh engine per case keeps the
+		// stored model from leaking across cases.
+		code string
+		// want is the exact expected result string, unless wantVector is set.
+		want string
+		// wantVector asserts the result is a vector literal (a satisfying
+		// model) rather than a fixed string. Used where the precise model is
+		// solver-dependent and only its shape is contractual.
+		wantVector bool
+	}{
+		{"no prior call yields #f", `(sat-cnf-flat-model)`, "#f", false},
+		{
+			"after UNSAT yields #f",
+			`(sat-cnf-flat? #(1 0 -1 0) #f) (sat-cnf-flat-model)`,
+			"#f", false,
+		},
+		{
+			// (x1 ∨ x2) ∧ (¬x1 ∨ ¬x2): SAT with two satisfying assignments.
+			"after SAT yields a model vector",
+			`(sat-cnf-flat? #(1 2 0 -1 -2 0) #f) (sat-cnf-flat-model)`,
+			"", true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := newEngine(t)
+			got := evalString(t, engine, tc.code)
+			if tc.wantVector {
+				// Model display form starts with "#(".
+				if len(got) < 2 || got[0] != '#' || got[1] != '(' {
+					t.Errorf("model: got %q, want a vector literal", got)
+				}
+				return
+			}
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
 	}
 }

@@ -239,13 +239,3 @@ func resolveCurrentInputPort(cc machine.CallContext) *values.PortObject {
 	}
 	return p
 }
-
-// StringValue returns the display representation of a value.
-// Uses String() if available (for human-readable output), otherwise SchemeString().
-func StringValue(o values.Value) string {
-	stringer, ok := o.(interface{ String() string })
-	if ok {
-		return stringer.String()
-	}
-	return o.SchemeString()
-}

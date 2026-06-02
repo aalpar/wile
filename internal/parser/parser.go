@@ -79,12 +79,6 @@ func (p *Parser) curr() tokenizer.Token {
 	return p.cur
 }
 
-// isListOpener returns true if the token type is ( or [.
-// Provided for symmetry with isListCloser; may be useful for future code.
-func (p *Parser) isListOpener(t tokenizer.TokenizerState) bool { //nolint:unused
-	return t == tokenizer.TokenizerStateOpenParen || t == tokenizer.TokenizerStateOpenBracket
-}
-
 // isListCloser returns true if the token type is ) or ].
 func (p *Parser) isListCloser(t tokenizer.TokenizerState) bool {
 	return t == tokenizer.TokenizerStateCloseParen || t == tokenizer.TokenizerStateCloseBracket

@@ -451,8 +451,8 @@ func TestMachineContinuation_CallDepth(t *testing.T) {
 // TestNewMachineContinuationFromMachineContext_CallDepth verifies that
 // NewMachineContinuationFromMachineContext computes callDepth correctly
 // regardless of whether the caller pre-incremented mc.callDepth.
-// This covers the PrimCallCC sub-context path and PrimDynamicWind escape
-// continuation path, where mc.callDepth == 0 would previously underflow.
+// This covers the PrimCallCC sub-context path, where mc.callDepth == 0
+// would previously underflow.
 func TestNewMachineContinuationFromMachineContext_CallDepth(t *testing.T) {
 	c := qt.New(t)
 	env := newNamespace(environment.NewNamespace().Runtime())

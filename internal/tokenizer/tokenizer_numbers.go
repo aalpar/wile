@@ -493,11 +493,6 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	if !isExtendedExponentMarker(p.curr()) {
 		return
 	}
-	ok, _ := exponentMarkerStrength(p.curr())
-	if !ok {
-		p.err = NewTokenizerError(MessageExpectingExponentMarker)
-		return
-	}
 	p.next() // consume exponent marker
 	if p.err != nil {
 		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits)
