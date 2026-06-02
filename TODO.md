@@ -1,11 +1,11 @@
 TODO
 ----
 
-**Last Updated**: 2026-05-13
+**Last Updated**: 2026-06-02
 
 ### Current Project Status
 
-**Version**: v1.15.106 (released)
+**Version**: v1.16.0 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
 **Extensions**: 12 extension packages — 8 public (files, math, process, system, threads, gointerop, introspection, charsets), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Extension API contracts (ValueType enum, PrimitiveSpec type declarations) in Phase 1. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); named profiles (`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) via `WithProfile`; orthogonal `WithSandbox` modifier; virtual env map (`WithEnv`, `WithEnvMap`); `Engine.AvailableLibraries()` API for library discovery.
@@ -133,7 +133,7 @@ Directions documents — identify prioritized capability extensions. Priority se
 - [x] **Environment package structural reduction** [Medium-High, mixed XS/S/M, Done — Phase 10 deferred] — **Phases 1–9 shipped (PR #730, 2026-05-10).** Closed Tier A.2 of the roadmap. 10 findings + 4 opportunities from `/structural-reduction ./environment` (2026-05-09). Findings 1, 2, 3, 4, 5, 6, 7, 8, 9 implemented (dead-code drops + `Namespace.root()` extraction + `bestOf[T]` reducer + `Binding` accessor collapse + 5 Namespace constructors → `NewChildNamespace` + options + `BindingTypeUnknown` documented + `EnvironmentFrame` delegation surface documented). Phase 10 (Finding 10 — `*LocalIndex` allocation audit across 40 sites; unboxed `slot, depth int` fast path already exists) **deferred — benchmark-gated** per the recommended phasing; re-open if a measured allocation win surfaces. `plans/2026-05-09-environment-structural-reduction.md`
 - [ ] **Bidirectional opcode conversion test** [Medium, S]: Verify `operationToInstruction` and `instructionToOperation` cover the same opcode set.
 - [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
-- [ ] **Unify `atan2Operand` with `helpers.ToFloat64`** [Low, S]: PR #754 surfaced 3-lens convergence on a duplication. `extensions/math/prim_transcendental.go::atan2Operand` re-implements the Number-assertion → ComplexNumber-rejection → float64-extraction sequence that `helpers.ToFloat64` performs, just to swap the loss-policy knob from "strict" to "silent truncate." Two call sites today (both inside the same function). Right shape: add `helpers.ToFloat64Lossy` (or extend `ToFloat64` with a `Lossy` variant via the existing `values.ToFloat64WithAccuracy` discard) so the math extension does not re-derive real-vs-complex screening locally. Deferred from PR 2 to keep the loss-signals scope tight.
+- [x] **Unify `atan2Operand` with `helpers.ToFloat64`** [Low, S, Done]: PR #754 surfaced 3-lens convergence on a duplication. `extensions/math/prim_transcendental.go::atan2Operand` re-implemented the Number-assertion → ComplexNumber-rejection → float64-extraction sequence that `helpers.ToFloat64` performs, just to swap the loss-policy knob from "strict" to "silent truncate." **Resolved**: extracted shared `screenReal` screening in `registry/helpers/value_conv.go`; added `helpers.ToFloat64Lossy` (screening + `values.ToFloat64WithAccuracy` discard) as the lossy-policy counterpart to strict `ToFloat64`; deleted `atan2Operand` and routed both `PrimAtan` call sites through `helpers.ToFloat64Lossy`. Lossy semantics (`(atan 1/3)` etc.) preserved per R7RS §6.2.6.
 
 ### Tech Debt Plan (remaining)
 
