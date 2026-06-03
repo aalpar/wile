@@ -218,6 +218,15 @@ func TestMakeNamespaceLibraryNotFound(t *testing.T) {
 	schemeEvalExpectError(t, eng, `(make-namespace '(nonexistent library))`)
 }
 
+func TestMakeNamespaceImportSetError(t *testing.T) {
+	eng := newEngine(t)
+
+	// An import-set modifier naming a binding the library does not export
+	// exercises ImportSpecInto's ApplyToExports failure branch (shared with
+	// the environment and namespace-require primitives).
+	schemeEvalExpectError(t, eng, `(make-namespace '(only (scheme base) totally-not-a-real-binding))`)
+}
+
 func TestNamespaceTypeErrors(t *testing.T) {
 	eng := newEngine(t)
 

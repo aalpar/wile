@@ -216,11 +216,13 @@ func TestThreadSleep(t *testing.T) {
 	}
 }
 
-// TestThreadTimeoutParsing exercises parseTimeout through the optional timeout
-// arguments of mutex-lock!, mutex-unlock!, and thread-join! — the only callers
-// of that helper. Each case acquires a free resource (or joins a finished
-// thread), so the timeout never actually elapses except the deliberate
-// mutex-unlock! case, which times out immediately.
+// TestThreadTimeoutParsing pins the timeout-parsing contract shared by the
+// optional timeout arguments of mutex-lock!, mutex-unlock!, and thread-join!:
+// integer seconds, float seconds, and absolute time objects are all accepted
+// (the #t and string reject branches are covered in TestThreadsErrors). Each
+// case acquires a free resource (or joins a finished thread), so the timeout
+// never actually elapses except the deliberate mutex-unlock! case, which times
+// out immediately.
 func TestThreadTimeoutParsing(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
@@ -312,6 +314,10 @@ func TestMutexBasics(t *testing.T) {
 		{"make-mutex", `(mutex? (make-mutex))`, values.TrueValue},
 		{"make-mutex named", `(mutex? (make-mutex "my-mutex"))`, values.TrueValue},
 		{"make-mutex symbol name", `(mutex? (make-mutex 'my-mutex))`, values.TrueValue},
+		// A name argument that is neither string nor symbol degrades silently to
+		// the unnamed case (helpers.OptionalName never errors) — still a mutex.
+		{"make-mutex non-string/symbol name degrades to unnamed",
+			`(mutex? (make-mutex 42))`, values.TrueValue},
 		{"mutex? false integer", `(mutex? 42)`, values.FalseValue},
 		{"mutex? false string", `(mutex? "hello")`, values.FalseValue},
 
