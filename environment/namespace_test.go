@@ -112,6 +112,44 @@ func TestNamespace_Phases(t *testing.T) {
 	c.Assert(compile.Namespace(), qt.Equals, topLevel)
 }
 
+// TestNamespace_ChildRuntimePhasesNotFoldable pins the invariant that an
+// EnvironmentFrame's phases registry is NOT derivable from its Namespace.
+//
+// A child runtime (NewChildRuntime, used for library loading) deliberately
+// SHARES the parent Namespace — for syntax interning — while holding its OWN
+// PhaseRegistry, so a library's phase environments stay isolated from the
+// importer. Hence child.phases != child.namespace.phases, and AtPhase must read
+// the per-frame phases field rather than namespace.phases.
+//
+// This guards against re-attempting the "phases is redundant with
+// namespace.phases" fold sketched in
+// plans/2026-06-02-environment-frame-hot-cold-layout.md (Phase 1/2). That fold
+// is unsafe precisely because of this divergence: deriving phases from the
+// Namespace would route a library's phase environments into the importer's
+// registry and collapse the isolation NewChildRuntime exists to provide.
+func TestNamespace_ChildRuntimePhasesNotFoldable(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	child := parent.NewChildRuntime()
+
+	// The child shares the parent Namespace...
+	c.Assert(child.Namespace(), qt.Equals, parent)
+	// ...but holds its OWN phase registry, distinct from the Namespace's.
+	c.Assert(child.phases, qt.Not(qt.Equals), child.namespace.phases)
+	c.Assert(child.namespace.phases, qt.Equals, parent.phases)
+
+	// Consequence: phase access via the frame resolves to the child's own
+	// registry, NOT the parent's.
+	c.Assert(child.AtPhase(PhaseExpand), qt.Not(qt.Equals), parent.AtPhase(PhaseExpand))
+	c.Assert(child.AtPhase(PhaseExpand), qt.Equals, child.phases.GetOrCreate(PhaseExpand))
+
+	// By contrast, a Namespace's own runtime frame DOES satisfy the equality —
+	// which is what made the (incorrect) redundancy claim look plausible.
+	rt := parent.Runtime()
+	c.Assert(rt.phases, qt.Equals, rt.namespace.phases)
+}
+
 func TestNamespace_LibraryRegistry(t *testing.T) {
 	c := qt.New(t)
 

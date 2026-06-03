@@ -209,13 +209,35 @@ func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
 
 // BenchmarkNewApplyFrame measures the fused NewApplyFrame path.
 // This is the optimized Apply path: single allocation instead of two.
+// n=0 isolates the struct allocation + field-copy cost with no local bindings
+// to copy — the cost the hot/cold layout change in
+// plans/2026-06-02-environment-frame-hot-cold-layout.md targets.
 func BenchmarkNewApplyFrame(b *testing.B) {
-	for _, n := range []int{1, 5, 10, 25, 50} {
+	for _, n := range []int{0, 1, 5, 10, 25, 50} {
 		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
 			env, _ := setupLocalEnv(n)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_ = env.NewApplyFrame()
+			}
+		})
+	}
+}
+
+// BenchmarkApplyFrameCopyCost isolates the pure per-apply *field-copy* cost,
+// excluding allocation: InitApplyFrame writes into a reused dst (the pooled VM
+// path), so each iteration is zero-alloc and measures only the field copies
+// (parent, global, phaseLevel, phases, namespace + local.copyForApplyInto).
+// n=0 strips the local-binding copy so the cold-field copy cost is visible on
+// its own. This is the baseline the layout change must beat.
+func BenchmarkApplyFrameCopyCost(b *testing.B) {
+	for _, n := range []int{0, 1, 5} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			dst := &EnvironmentFrame{}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				env.InitApplyFrame(dst)
 			}
 		})
 	}
