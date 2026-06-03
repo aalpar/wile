@@ -310,56 +310,23 @@ func primCharSetSubset(mc machine.CallContext) error {
 	return nil
 }
 
-func primCharSetUnion(mc machine.CallContext) error {
-	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-union")
-	if err != nil {
-		return err
+// makeCharSetFold returns a variadic primitive that folds two or more char-sets
+// left-to-right with the given binary operation. char-set-union, -intersection,
+// -difference, and -xor differ only in the fold op and the error-context name,
+// so they share this factory (SRFI-14).
+func makeCharSetFold(name string, op func(a, b *values.CharSet) *values.CharSet) machine.ForeignFunction {
+	return func(mc machine.CallContext) error {
+		sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, name)
+		if err != nil {
+			return err
+		}
+		out := sets[0]
+		for i := 1; i < len(sets); i++ {
+			out = op(out, sets[i])
+		}
+		mc.SetValue(out)
+		return nil
 	}
-	out := sets[0]
-	for i := 1; i < len(sets); i++ {
-		out = unionTwo(out, sets[i])
-	}
-	mc.SetValue(out)
-	return nil
-}
-
-func primCharSetIntersection(mc machine.CallContext) error {
-	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-intersection")
-	if err != nil {
-		return err
-	}
-	out := sets[0]
-	for i := 1; i < len(sets); i++ {
-		out = intersectTwo(out, sets[i])
-	}
-	mc.SetValue(out)
-	return nil
-}
-
-func primCharSetDifference(mc machine.CallContext) error {
-	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-difference")
-	if err != nil {
-		return err
-	}
-	out := sets[0]
-	for i := 1; i < len(sets); i++ {
-		out = differenceTwo(out, sets[i])
-	}
-	mc.SetValue(out)
-	return nil
-}
-
-func primCharSetXor(mc machine.CallContext) error {
-	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-xor")
-	if err != nil {
-		return err
-	}
-	out := sets[0]
-	for i := 1; i < len(sets); i++ {
-		out = xorTwo(out, sets[i])
-	}
-	mc.SetValue(out)
-	return nil
 }
 
 func primCharSetComplement(mc machine.CallContext) error {

@@ -300,7 +300,13 @@ make covercheck` green before claiming done. Preserve sentinels; tests via `erro
   `meta.go`↔`debug.go`). **F30 and F42 dropped as false positives** (see header). **Changes from the
   original list (see reconciliation):** F39 moved to Phase 3; **F41 dropped** (already resolved —
   `expandAndCompileOptimized` is the shared core); **F47 demoted to tail** (2 LOC, taken as ride-along).
-- **Phase 5 — Factory sweep.** Findings 6, 8, 38, 43 + the broader audit. → **`FACTORY-AUDIT.md`.**
-  Defer until Phases 2-4 settle (they reshape `registry/helpers`, the factory sink).
+- **Phase 5 — Factory sweep.** ✅ SHIPPED (`cleanup/code-volume-phase5`). Findings 6, 8, 38, 43.
+  F6 → `makeCharSetFold` (charset union/intersect/diff/xor); F8 → `makeWriteVariant`
+  (write/display/write-simple/write-shared); F38 → `makeBinaryPredicate` (eq?/eqv?/equal?, factored
+  for consistency per maintainer decision, exported `var` kept for API stability); F43 →
+  `makeSyntaxLocAccessor` (syntax-line/column/position, same treatment). Census confirmed the
+  obvious |C|≥4 families were already factored; these four were the holdouts. Full AST-diff sweep
+  of `internal/extensions/*` + special-form tables deferred. See **`FACTORY-AUDIT.md`** for the
+  per-phase detail and the deferred Phase 3 (registry-SR 5/6 trigger not reached).
 
 Tail items (18, 33, 36, 44, 45, 46, 47, 49, 50, 51) ride along when their file is already open.

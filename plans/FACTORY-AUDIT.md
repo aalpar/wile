@@ -1,7 +1,20 @@
 # Primitive Factory Audit
 
 **Date:** 2026-06-01
-**Status:** Planned. Deferred behind `CODE-VOLUME-REDUCTION.md` Phases 2-4 (which reshape
+**Status:** **Phases 1-2 SHIPPED** (`cleanup/code-volume-phase5`, 2026-06-03). Phase 1 (|C|≥4):
+`makeCharSetFold` (char-set union/intersection/difference/xor → `extensions/charsets`) and
+`makeWriteVariant` (write/display/write-simple/write-shared → `internal/extensions/io`). Phase 2
+(borderline |C|=3, factored for consistency per maintainer decision): `makeBinaryPredicate`
+(eq?/eqv?/equal? → `registry/core`) and `makeSyntaxLocAccessor` (syntax-line/column/position →
+`registry/core`); the two registry/core families keep exported `var Prim*` for API stability
+(func→var per open-question 1). `make lint` 0 issues + `make covercheck` 41/41 ≥80% + axis-b
+manifest verified (464 entries, set unchanged — fn=/loc= shifts only). **Census finding:** the
+obvious |C|≥4 families were already factored (math `makeRealNumberPrimitive`/`makeComplexPrimitive`
+×15, char/type/sequence `Make*` factories); the four seed families above were the genuine
+holdouts. A full wile-goast AST-diff sweep across `internal/extensions/*` and the special-form
+registration tables (open-question 3) was **not** run — deferred. Phase 3 (registry-SR Phase 5/6
+ArgShape/unification) remains gated on a 7th-variant trigger not reached by this census.
+Originally deferred behind `CODE-VOLUME-REDUCTION.md` Phases 2-4 (which reshaped
 `registry/helpers`, the factory sink).
 **Type:** Systematic sweep — not a fixed finding list. Discovers the full set of
 "N near-identical primitives → one factory" families across ~448 registration entries.

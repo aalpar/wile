@@ -60,41 +60,41 @@ func PrimSyntaxSource(mc machine.CallContext) error {
 	return nil
 }
 
+// makeSyntaxLocAccessor returns a primitive that projects an integer field from
+// a syntax object's start source-position. syntax-line, syntax-column, and
+// syntax-position (Racket §12.2) differ only in the projected field and the
+// error-context name; the require/NewInteger/SetValue prologue is invariant.
+func makeSyntaxLocAccessor(name string, project func(start syntax.SourceIndexes) int) machine.ForeignFunction {
+	return func(mc machine.CallContext) error {
+		sctx, err := requireSourceContext(mc, name)
+		if sctx == nil {
+			return err
+		}
+		mc.SetValue(values.NewInteger(int64(project(sctx.Start))))
+		return nil
+	}
+}
+
 // PrimSyntaxLine returns the 1-based line number of a syntax object, or #f.
 //
 // Racket §12.2: syntax-line
-func PrimSyntaxLine(mc machine.CallContext) error {
-	sctx, err := requireSourceContext(mc, "syntax-line")
-	if sctx == nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(sctx.Start.Line())))
-	return nil
-}
+var PrimSyntaxLine = makeSyntaxLocAccessor("syntax-line", func(start syntax.SourceIndexes) int {
+	return start.Line()
+})
 
 // PrimSyntaxColumn returns the 0-based column of a syntax object, or #f.
 //
 // Racket §12.2: syntax-column
-func PrimSyntaxColumn(mc machine.CallContext) error {
-	sctx, err := requireSourceContext(mc, "syntax-column")
-	if sctx == nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(sctx.Start.Column())))
-	return nil
-}
+var PrimSyntaxColumn = makeSyntaxLocAccessor("syntax-column", func(start syntax.SourceIndexes) int {
+	return start.Column()
+})
 
 // PrimSyntaxPosition returns the 0-based byte position of a syntax object, or #f.
 //
 // Racket §12.2: syntax-position
-func PrimSyntaxPosition(mc machine.CallContext) error {
-	sctx, err := requireSourceContext(mc, "syntax-position")
-	if sctx == nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(sctx.Start.Index())))
-	return nil
-}
+var PrimSyntaxPosition = makeSyntaxLocAccessor("syntax-position", func(start syntax.SourceIndexes) int {
+	return start.Index()
+})
 
 // PrimSyntaxSpan returns the byte span (end - start) of a syntax object, or #f.
 //
