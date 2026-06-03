@@ -8,7 +8,9 @@ public-API safety, semantic-equivalence, perf hot-path). 71 raw candidates → *
 confirmed**.
 **Status:** **Phase 1 (dead code) SHIPPED** (`cleanup/remove-dead-code`, merged to master).
 **Phase 2 (cross-extension helpers) SHIPPED** (`cleanup/code-volume-phase2`, commit `369c4f98`;
-net −74 prod LOC; `make lint` 0 issues + `make covercheck` 41/41 ≥80% green). Phases 3-5 pending
+net −74 prod LOC; `make lint` 0 issues + `make covercheck` 41/41 ≥80% green).
+**Phase 3 (numeric/parse formatting) SHIPPED** (`cleanup/code-volume-phase3`; findings 11, 12,
+19, 25, 28, 39; `make lint` 0 issues + `make covercheck` 41/41 ≥80% green). Phases 4-5 pending
 (Phase 3/4 scope reconciled 2026-06-03 — see below).
 **Related plans:**
 - `2026-05-08-dispatch-axis-as-data.md` — names the "parallel-variant" pattern (the
@@ -110,23 +112,23 @@ Ranked by (LOC × confidence), low-risk first. Phase grouping below the table.
 | 8 | parallel-variant | 20 | high | write/display/write-simple/write-shared → one factory | `internal/extensions/io/prim_write.go:48,85,118,138` |
 | 9 | parallel-variant | 18 | high | `LocalIndex` accessors dup slot/depth parent-walk | `environment/environment_frame.go:618,644,660,677` |
 | 10 | boilerplate | 16 | high | ✅ **DONE (P2)** nil-to-Void guard ×6 across threads + gointerop → `values.ValueOrVoid` | `extensions/threads/prim_threads.go:170,308,358,554`; `extensions/gointerop/prim_gointerop.go:485,517` |
-| 11 | duplicate | 15 | high | `Float.SchemeString` dup `formatComplexComponent` float fmt | `values/float.go:327`; `values/complex.go:375` |
-| 12 | boilerplate | 15 | high | "optionally-inexact number → syntax wrap" tail dup | `internal/parser/parser_number.go:110,132,145`; `parser.go:760,796,811` |
+| 11 | duplicate | 15 | high | ✅ **DONE (P3)** `Float.SchemeString` dup `formatComplexComponent` → `values.formatInexactReal` | `values/float.go:327`; `values/complex.go:375` |
+| 12 | boilerplate | 15 | high | ✅ **DONE (P3)** makeExact/makeInexact unwrap+rewrap dup → `(*Parser).convertWrappedNumber` | `internal/parser/parser_number.go` (makeExact/makeInexact) |
 | 13 | duplicate | 14 | high | Splice-segment machinery dup quasiquote vector↔list | `machine/compilation/compile_time_continuation_quasiquote.go:135`; `quasi_expand.go:330` |
 | 14 | boilerplate | 13 | high | Named-let should reuse `createBindingEnv` | `machine/compilation/expander_let.go:159,366` |
 | 15 | parallel-variant | 13 | high | `markCapturedBindings`/`markEscapedBindings` share scaffolding | `internal/validate/validate_capture.go:39`; `validate_escape.go:40` |
 | 16 | duplicate | 12 | high | Inline docstring render dup `tryStructuredBindingDoc` | `repl/meta.go:477,516` |
 | 17 | boilerplate | 12 | high | ✅ **DONE (P2)** `PrimChannelTryReceive` hand-codes 3 bool→Boolean → `values.BoolToBoolean` | `extensions/gointerop/prim_gointerop.go:135` |
 | 18 | boilerplate | 18 | med | Per-type identity-object scaffolding ×8 concurrency types | `values/{atomic,channel,condition_variable,mutex,once,rw_mutex,thread,wait_group}.go` |
-| 19 | duplicate | 10 | high | Two complex real-part compares reinline `cmpFloat64` | `values/complex.go:106,254`; `values/promotion.go:355` |
+| 19 | duplicate | 10 | high | ✅ **DONE (P3)** Two complex real-part compares reinline `cmpFloat64` → reuse `values.cmpFloat64` | `values/complex.go:106,254`; `values/promotion.go:355` |
 | 20 | duplicate | 10 | high | `NewApplyFrame` dups `InitApplyFrame` parent-copy | `environment/environment_frame.go:165,187` |
 | 21 | duplicate | 10 | high | Phase-env binding lookup walk dup cmdDoc↔DisassembleBinding | `repl/meta.go:298,781` |
 | 22 | duplicate | 10 | high | ✅ **DONE (P2)** Optional resource-name extraction dup threads↔gointerop → `helpers.OptionalName` | `extensions/threads/prim_threads.go:58`; `extensions/gointerop/prim_gointerop.go:280` |
 | 23 | over-abstraction | 9 | high | Three scope-set wrappers, pure pass-through, no prod callers | `internal/syntax/scope_utils.go:37,42,46` |
 | 24 | duplicate | 9 | high | Doc-only PrimitiveSpec construction dup ×2 | `wile/engine.go:886,936` |
-| 25 | duplicate | 9 | high | `normalizeExponentMarker` byte-identical parser↔math | `internal/parser/parser_number.go:189`; `extensions/math/prim_conversion.go:297` |
+| 25 | duplicate | 9 | high | ✅ **DONE (P3)** `normalizeExponentMarker` byte-identical parser↔math → `schemeutil.NormalizeExponentMarker` | `internal/parser/parser_number.go:189`; `extensions/math/prim_conversion.go:297` |
 | 26 | boilerplate | 8 | high | `PrimErrorContextSource/ObjectSource` reimplement `StringOrFalse` | `registry/core/prim_error_context.go:44,90` |
-| 28 | parallel-variant | 13 | med | `parseComplex` dups `ParseComplexStringNumber` sign-scan | `internal/parser/parser_number.go:416`; `number_string.go:89` |
+| 28 | parallel-variant | 13 | med | ✅ **DONE (P3)** `parseComplex` dups `ParseComplexStringNumber` sign-scan → `findComplexSignSplit` | `internal/parser/parser_number.go:416`; `number_string.go:89` |
 | 29 | over-abstraction | 7 | high | `NewTokenizerWithComments` pure pass-through, stale doc | `internal/tokenizer/tokenizer.go:287`; `internal/parser/parser.go:141` |
 | 30 | over-abstraction | 6 | high | `makeCharComparePrimitive`/`makeStringComparePrimitive` single-use forwarders | `registry/core/prim_characters.go:69`; `prim_strings.go:302` |
 | 31 | boilerplate | 6 | high | ✅ **DONE (P2)** Repeated `MachineContext` checked-cast prologue ×7 → `machine.RequireMachineContext` | `extensions/eval/prim_eval.go:52,116,417,456,547,634,684` |
@@ -136,7 +138,7 @@ Ranked by (LOC × confidence), low-risk first. Phase grouping below the table.
 | 36 | parallel-variant | 14 | low | `fuseCallForeignCached`/`fuseCallGeneric` share call-site scan skeleton | `machine/peephole.go:208,415` |
 | 37 | duplicate | 4 | high | `compileValidatedCall`/`CompileValidatedApply` dup emit loop | `machine/compilation/compile_validated.go:608,864` |
 | 38 | parallel-variant | 4 | high | `eq?`/`eqv?`/`equal?` identical except comparator | `registry/core/prim_equality.go:26,41,50` |
-| 39 | over-abstraction | 4 | high | `parseRealPart` single-caller pass-through | `internal/parser/parser_number.go:535` |
+| 39 | over-abstraction | 4 | high | ✅ **DONE (P3)** `parseRealPart` single-caller pass-through → inlined `parseFloatOrInfnan` | `internal/parser/parser_number.go:535` |
 | 40 | over-abstraction | 4 | high | `containsString` pass-through over `slices.Contains` | `repl/meta.go:264` |
 | 41 | duplicate | 4 | high | `EvalIn` re-inlines `compileExpr` (hardcodes `p.env`) | `wile/engine.go:381,709` |
 | 42 | unrolled-loop | 3 | high | Max-name-width compute ×3 in cmdApropos/Topic/Libraries | `repl/meta.go:620,685,717` |
@@ -267,10 +269,15 @@ make covercheck` green before claiming done. Preserve sentinels; tests via `erro
   `compilation.ImportSpecInto` (F4), `values.ValueOrVoid` (F10), `values.BoolToBoolean` (F17),
   `helpers.OptionalName` (F22), `machine.RequireMachineContext` (F31),
   `(*environment.Namespace).BoundSymbolNames` (F35). +`threads` coverage 79.2%→90.2%.
-- **Phase 3 — Numeric/parse formatting.** Findings 11, 12, 19, 25, 28, **+39 (moved in from
-  Phase 4)**. ~67 LOC. **Split sink** (verified — see reconciliation): F11/F19 → `values/`,
-  F12/F28/F39 → `internal/parser/`, F25 → `internal/schemeutil/`. *Not* a single `schemeutil`
-  sink. Owns `parser_number.go` exclusively. Watch tail-F49 (bench).
+- **Phase 3 — Numeric/parse formatting.** ✅ SHIPPED (`cleanup/code-volume-phase3`). Findings
+  11, 12, 19, 25, 28, +39 (moved in from Phase 4). **Split sink** as planned: F11 →
+  `values.formatInexactReal` (float.go, shared with complex.go); F19 → reuse existing
+  `values.cmpFloat64`; F25 → `schemeutil.NormalizeExponentMarker` (deletes the byte-identical
+  parser + math copies); F28 → `parser.findComplexSignSplit` (collapses both sign-scan loops);
+  F39 → inlined `parseFloatOrInfnan` (deleted `parseRealPart`, test repointed); F12 →
+  `(*Parser).convertWrappedNumber` (unifies makeExact/makeInexact unwrap+rewrap scaffolding).
+  Regenerated `axis-b-manifest.scm` (loc shifts only; count 465). Tail-F49 not taken (left for
+  a `numeric_tower.go` ride-along).
 - **Phase 4 — Intra-package dedup/over-abstraction.** Findings 5 (reuse!), 13, 14, 16, 20,
   21, 23, 24, 29, 30, 32, 37, 40, 42, 48. ~120 LOC. Per-package, low risk. **Changes from the
   original list (see reconciliation):** F39 moved to Phase 3; **F41 dropped** (already resolved —

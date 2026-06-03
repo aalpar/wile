@@ -184,18 +184,6 @@ func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token,
 	return q, p.cur, nil
 }
 
-// normalizeExponentMarker replaces R7RS exponent markers (s, f, d, l) with 'e'
-// so that strconv.ParseFloat can parse the number.
-func normalizeExponentMarker(s string) string {
-	idx := strings.IndexAny(s, "sSfFdDlL")
-	if idx == -1 {
-		return s
-	}
-	q := []byte(s)
-	q[idx] = 'e'
-	return string(q)
-}
-
 // replaceHashDigits replaces all '#' inexact digit placeholders with '0'.
 // R7RS §7.1.1: '#' represents an unknown digit treated as 0; its presence
 // forces the number to be inexact (handled by the caller checking HasHashDigit).
@@ -417,40 +405,8 @@ func (p *Parser) parseComplex(s string) (values.Number, error) {
 	// Remove the trailing 'i'
 	s = schemeutil.TrimSuffixCI(s, "i")
 
-	// Find the position of the sign separating real and imaginary parts
-	// Skip position 0 since the real part might start with a sign
-	// Also need to handle infnan which contains '.' before the sign
-	signPos := -1
-	for i := 1; i < len(s); i++ {
-		if s[i] == '+' || s[i] == '-' {
-			// Make sure this isn't part of an exponent (e.g., 1e+10, 1s+10)
-			// R7RS §7.1.1: exponent markers are e, s, f, d, l (case-insensitive)
-			if i > 0 {
-				prev := s[i-1]
-				if prev == 'e' || prev == 'E' ||
-					prev == 's' || prev == 'S' ||
-					prev == 'f' || prev == 'F' ||
-					prev == 'd' || prev == 'D' ||
-					prev == 'l' || prev == 'L' {
-					continue
-				}
-			}
-			// Make sure this isn't the sign in inf.0 or nan.0 (after the '0')
-			// Check if this could be the start of the imaginary part
-			// by looking at what follows
-			rest := s[i:]
-			if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
-				strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
-				rest == "+" || rest == "-" ||
-				len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/') {
-				signPos = i
-				break
-			}
-			// Not a valid imaginary separator; skip to next sign
-			continue
-		}
-	}
-
+	// Find the sign separating real and imaginary parts.
+	signPos := findComplexSignSplit(s)
 	if signPos == -1 {
 		return nil, NewParserErrorf(p.cur, "invalid complex number: %s (no sign separator found)", s+"i")
 	}
@@ -474,7 +430,7 @@ func (p *Parser) parseComplex(s string) (values.Number, error) {
 	}
 
 	// Parse as inexact complex
-	rel, err := p.parseRealPart(realPart)
+	rel, err := parseFloatOrInfnan(realPart)
 	if err != nil {
 		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
 	}
@@ -529,12 +485,7 @@ func parseFloatOrInfnan(s string) (float64, error) {
 		return num / den, nil
 	}
 
-	return strconv.ParseFloat(normalizeExponentMarker(s), 64)
-}
-
-// parseRealPart parses a real number that may be a float or infnan
-func (p *Parser) parseRealPart(s string) (float64, error) {
-	return parseFloatOrInfnan(s)
+	return strconv.ParseFloat(schemeutil.NormalizeExponentMarker(s), 64)
 }
 
 // parseImagPart parses an imaginary coefficient that may be a float, infnan, or just a sign
@@ -548,76 +499,70 @@ func (p *Parser) parseImagPart(s string) (float64, error) {
 	return parseFloatOrInfnan(s)
 }
 
+// convertWrappedNumber unwraps stx to a Number, applies convert, and re-wraps the
+// result with stx's original source context. op names the calling conversion
+// ("makeExact" / "makeInexact") for the not-a-number error message. It is the
+// shared scaffolding of makeExact and makeInexact: both differ only in the
+// per-type conversion body supplied by convert.
+func (p *Parser) convertWrappedNumber(stx syntax.SyntaxValue, op string, convert func(values.Number) (values.Value, error)) (syntax.SyntaxValue, error) {
+	num, ok := stx.Unwrap().(values.Number)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: value is not numeric", op)
+	}
+	result, err := convert(num)
+	if err != nil {
+		return nil, err
+	}
+	return p.rewrapSyntax(stx, result), nil
+}
+
 // makeExact converts a syntax-wrapped number to its exact representation.
 // R7RS §6.2.6: exact converts an inexact number to exact.
 // For integers and rationals, they are already exact.
 // For floats, they are converted to rationals or integers if they represent whole numbers.
 func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	val := stx.Unwrap()
-	num, ok := val.(values.Number)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "makeExact: value is not numeric")
-	}
-
-	var exactNum values.Value
-	switch v := num.(type) {
-	case *values.Integer, *values.BigInteger, *values.Rational:
-		// Already exact
-		exactNum = v
-	case *values.Float:
-		// Convert float to exact
-		f := v.Value
-		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf or nan to exact")
-		}
-		// Check if it's a whole number
-		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
-			exactNum = values.NewInteger(int64(f))
-		} else {
-			// Convert to rational using big.Rat
-			r := new(big.Rat).SetFloat64(f)
-			exactNum = values.NewRationalFromRat(r)
-		}
-	case *values.BigFloat:
-		// Convert BigFloat to exact
-		bf := v.BigFloatValue()
-		if bf.IsInf() {
-			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf to exact")
-		}
-		// Try to convert to integer first
-		if bf.IsInt() {
-			i, _ := bf.Int(nil)
-			exactNum = values.NewBigInteger(i)
-		} else {
-			// Convert to rational
+	return p.convertWrappedNumber(stx, "makeExact", func(num values.Number) (values.Value, error) {
+		switch v := num.(type) {
+		case *values.Integer, *values.BigInteger, *values.Rational:
+			return v, nil // already exact
+		case *values.Float:
+			f := v.Value
+			if math.IsNaN(f) || math.IsInf(f, 0) {
+				return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf or nan to exact")
+			}
+			if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+				return values.NewInteger(int64(f)), nil
+			}
+			return values.NewRationalFromRat(new(big.Rat).SetFloat64(f)), nil
+		case *values.BigFloat:
+			bf := v.BigFloatValue()
+			if bf.IsInf() {
+				return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf to exact")
+			}
+			if bf.IsInt() {
+				i, _ := bf.Int(nil)
+				return values.NewBigInteger(i), nil
+			}
 			r, _ := bf.Rat(nil)
-			exactNum = values.NewRationalFromRat(r)
-		}
-	case *values.Complex:
-		// Convert complex to exact BigComplex
-		re := v.Real()
-		im := v.Imag()
-		if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
-			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert complex with inf or nan to exact")
-		}
-		reRat := new(big.Rat).SetFloat64(re)
-		imRat := new(big.Rat).SetFloat64(im)
-		reNum := values.NewRationalFromRat(reRat)
-		imNum := values.NewRationalFromRat(imRat)
-		exactNum = values.NewBigComplex(reNum, imNum)
-	case *values.BigComplex:
-		// Already exact or convert to exact
-		if v.IsExact() {
-			exactNum = v
-		} else {
+			return values.NewRationalFromRat(r), nil
+		case *values.Complex:
+			re := v.Real()
+			im := v.Imag()
+			if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
+				return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert complex with inf or nan to exact")
+			}
+			reNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(re))
+			imNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(im))
+			return values.NewBigComplex(reNum, imNum), nil
+		case *values.BigComplex:
+			if v.IsExact() {
+				return v, nil
+			}
 			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inexact BigComplex to exact")
+		default:
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: unsupported number type")
 		}
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: unsupported number type")
-	}
-
-	// Re-wrap with the same syntax context
-	return p.rewrapSyntax(stx, exactNum), nil
+	})
 }
 
 // numberToInexact converts a Number to its inexact representation.
@@ -653,42 +598,30 @@ func (p *Parser) numberToInexact(num values.Number) values.Number {
 // conversion is sanctioned to lose precision silently — the discarded
 // accuracy/exact bools below are deliberate.
 func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	val := stx.Unwrap()
-	num, ok := val.(values.Number)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "makeInexact: value is not numeric")
-	}
-
-	var inexactNum values.Value
-	switch v := num.(type) {
-	case *values.Float, *values.BigFloat:
-		// Already inexact
-		inexactNum = v
-	case *values.Complex:
-		// Already inexact
-		inexactNum = v
-	case *values.Integer:
-		inexactNum = values.NewFloat(float64(v.Value))
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-		inexactNum = values.NewFloat(f)
-	case *values.Rational:
-		inexactNum = values.NewFloat(v.Float64Truncated())
-	case *values.BigComplex:
-		// Convert to inexact Complex
-		reFloat := v.RealAsBigFloat().Float64Truncated()
-		imFloat := v.ImagAsBigFloat().Float64Truncated()
-		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeInexact: unsupported number type")
-	}
-
-	return p.rewrapSyntax(stx, inexactNum), nil
+	return p.convertWrappedNumber(stx, "makeInexact", func(num values.Number) (values.Value, error) {
+		switch v := num.(type) {
+		case *values.Float, *values.BigFloat, *values.Complex:
+			return v, nil // already inexact
+		case *values.Integer:
+			return values.NewFloat(float64(v.Value)), nil
+		case *values.BigInteger:
+			f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+			return values.NewFloat(f), nil
+		case *values.Rational:
+			return values.NewFloat(v.Float64Truncated()), nil
+		case *values.BigComplex:
+			reFloat := v.RealAsBigFloat().Float64Truncated()
+			imFloat := v.ImagAsBigFloat().Float64Truncated()
+			return values.NewComplexFromParts(reFloat, imFloat), nil
+		default:
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeInexact: unsupported number type")
+		}
+	})
 }
 
 // parseDecimalFraction parses a decimal fraction token (e.g., "1.5", "-0.3").
 func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, error) {
-	a, err := strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
+	a, err := strconv.ParseFloat(schemeutil.NormalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
 	if err != nil {
 		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid decimal fraction: %s", p.cur.String())
 	}

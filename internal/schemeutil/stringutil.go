@@ -14,6 +14,22 @@
 
 package schemeutil
 
+import "strings"
+
+// NormalizeExponentMarker replaces an R7RS short float exponent marker
+// (s, S, f, F, d, D, l, L) with 'e' so that strconv.ParseFloat can parse the
+// number. R7RS §7.1.1: all exponent markers have the same meaning in Wile.
+// Only the first marker is replaced; strings without one are returned unchanged.
+func NormalizeExponentMarker(s string) string {
+	idx := strings.IndexAny(s, "sSfFdDlL")
+	if idx == -1 {
+		return s
+	}
+	q := []byte(s)
+	q[idx] = 'e'
+	return string(q)
+}
+
 // ToLowerASCII converts an ASCII byte to lowercase.
 // Non-ASCII bytes are returned unchanged.
 func ToLowerASCII(c byte) byte {

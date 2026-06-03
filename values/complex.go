@@ -18,8 +18,6 @@ import (
 	"math"
 	"math/big"
 	"math/cmplx"
-	"strconv"
-	"strings"
 
 	"github.com/aalpar/wile/werr"
 )
@@ -104,13 +102,7 @@ func init() {
 	})
 
 	complexCompare = makeCompareDispatch(KindComplex, func(p *Complex, o Number) int {
-		r1, r2 := real(p.Value), real(o.(*Complex).Value)
-		if r1 < r2 {
-			return -1
-		} else if r1 > r2 {
-			return 1
-		}
-		return 0
+		return cmpFloat64(real(p.Value), real(o.(*Complex).Value))
 	})
 
 	complexMultiply = makeMultiplyDispatch(KindComplex, func(p *Complex, o Number) Number {
@@ -254,13 +246,7 @@ func (p *Complex) ImagPart() Number {
 func (p *Complex) Compare(o Number) int {
 	v, ok := o.(*Complex)
 	if ok {
-		r1, r2 := real(p.Value), real(v.Value)
-		if r1 < r2 {
-			return -1
-		} else if r1 > r2 {
-			return 1
-		}
-		return 0
+		return cmpFloat64(real(p.Value), real(v.Value))
 	}
 	return complexCompare[o.Kind()](p, o)
 }
@@ -362,29 +348,10 @@ func (p *Complex) HashCode() uint64 {
 func (p *Complex) SchemeString() string {
 	r := real(p.Value)
 	i := imag(p.Value)
-	realStr := formatComplexComponent(r)
-	imagStr := formatComplexComponent(i)
+	realStr := formatInexactReal(r)
+	imagStr := formatInexactReal(i)
 	if len(imagStr) > 0 && imagStr[0] != '-' && imagStr[0] != '+' {
 		return realStr + "+" + imagStr + "i"
 	}
 	return realStr + imagStr + "i"
-}
-
-// formatComplexComponent formats a float64 for use as a complex number component.
-// Ensures R7RS-compliant output: decimal point for inexact values, lowercase inf/nan.
-func formatComplexComponent(f float64) string {
-	if math.IsInf(f, 1) {
-		return "+inf.0"
-	}
-	if math.IsInf(f, -1) {
-		return "-inf.0"
-	}
-	if math.IsNaN(f) {
-		return "+nan.0"
-	}
-	s := strconv.FormatFloat(f, 'f', -1, 64)
-	if !strings.ContainsRune(s, '.') {
-		s += ".0"
-	}
-	return s
 }

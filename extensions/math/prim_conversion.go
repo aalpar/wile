@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -240,7 +241,7 @@ func parseStringToNumber(input string, radix int) values.Value {
 
 	// Float and scientific notation only for radix 10.
 	if radix == 10 {
-		f, err := strconv.ParseFloat(normalizeExponentMarker(input), 64)
+		f, err := strconv.ParseFloat(schemeutil.NormalizeExponentMarker(input), 64)
 		if err == nil {
 			return values.NewFloat(f)
 		}
@@ -289,19 +290,6 @@ func stringToNumberMakeInexact(n values.Value) values.Value {
 	default:
 		return n
 	}
-}
-
-// normalizeExponentMarker replaces R7RS short float exponent suffixes
-// (s, S, f, F, d, D, l, L) with 'e' so strconv.ParseFloat can parse them.
-// R7RS §7.1.1: All exponent markers have the same meaning in Wile.
-func normalizeExponentMarker(s string) string {
-	idx := strings.IndexAny(s, "sSfFdDlL")
-	if idx == -1 {
-		return s
-	}
-	q := []byte(s)
-	q[idx] = 'e'
-	return string(q)
 }
 
 // --- Loss-signal primitives ---

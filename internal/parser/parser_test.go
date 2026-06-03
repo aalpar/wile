@@ -2224,10 +2224,10 @@ func TestParsePolarComplexErrors(t *testing.T) {
 }
 
 // ============================================================================
-// parseRealPart and parseImagPart Unit Tests
+// parseFloatOrInfnan (real-part) and parseImagPart Unit Tests
 // ============================================================================
 
-func TestParseRealPart(t *testing.T) {
+func TestParseFloatOrInfnan(t *testing.T) {
 	tcs := []struct {
 		input   string
 		want    float64
@@ -2259,9 +2259,7 @@ func TestParseRealPart(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
-			env := environment.NewNamespace().Runtime()
-			p := NewParser(env, true, strings.NewReader(""))
-			got, err := p.parseRealPart(tc.input)
+			got, err := parseFloatOrInfnan(tc.input)
 			c.Assert(err, qt.IsNil)
 
 			switch {

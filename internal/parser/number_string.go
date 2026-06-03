@@ -83,6 +83,36 @@ func ParseImaginaryStringNumber(s string) (values.Number, bool) {
 	return values.NewComplexFromParts(0, f), true
 }
 
+// findComplexSignSplit returns the index of the +/- that separates the real and
+// imaginary parts of a rectangular complex string s (with the trailing 'i'
+// already removed), or -1 if there is none. The scan starts at index 1 to skip a
+// leading sign on the real part, ignores exponent-marker signs (e/s/f/d/l, per
+// R7RS §7.1.1), and ignores the signs embedded in inf.0 / nan.0. Shared by
+// parseComplex (parser_number.go) and ParseComplexStringNumber.
+func findComplexSignSplit(s string) int {
+	for i := 1; i < len(s); i++ {
+		if s[i] != '+' && s[i] != '-' {
+			continue
+		}
+		prev := s[i-1]
+		if prev == 'e' || prev == 'E' ||
+			prev == 's' || prev == 'S' ||
+			prev == 'f' || prev == 'F' ||
+			prev == 'd' || prev == 'D' ||
+			prev == 'l' || prev == 'L' {
+			continue
+		}
+		rest := s[i:]
+		if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
+			strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
+			rest == "+" || rest == "-" ||
+			(len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/')) {
+			return i
+		}
+	}
+	return -1
+}
+
 // ParseComplexStringNumber parses a rectangular complex number string ending in 'i'.
 // Handles "3+4i", "1.5-2.5i", "1+inf.0i", "0+3/4i", etc.
 // Returns (nil, false) if s cannot be parsed as a complex number.
@@ -93,32 +123,8 @@ func ParseComplexStringNumber(s string) (values.Number, bool) {
 	// Remove trailing 'i'
 	trim := s[:len(s)-1]
 
-	// Find the sign separating real and imaginary parts (same logic as parseComplex).
-	signPos := -1
-	for i := 1; i < len(trim); i++ {
-		if trim[i] != '+' && trim[i] != '-' {
-			continue
-		}
-		// Don't split on exponent markers.
-		prev := trim[i-1]
-		if prev == 'e' || prev == 'E' ||
-			prev == 's' || prev == 'S' ||
-			prev == 'f' || prev == 'F' ||
-			prev == 'd' || prev == 'D' ||
-			prev == 'l' || prev == 'L' {
-			continue
-		}
-		// The sign must precede a valid imaginary part.
-		rest := trim[i:]
-		if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
-			strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
-			rest == "+" || rest == "-" ||
-			(len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/')) {
-			signPos = i
-			break
-		}
-	}
-
+	// Find the sign separating real and imaginary parts.
+	signPos := findComplexSignSplit(trim)
 	if signPos == -1 {
 		return nil, false
 	}

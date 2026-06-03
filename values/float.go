@@ -325,17 +325,25 @@ func (p *Float) EqualTo(v Value) bool {
 // R7RS §7.1.1: Inexact real numbers must contain a decimal point to distinguish
 // them from exact integers.
 func (p *Float) SchemeString() string {
-	if math.IsInf(p.Value, 1) {
+	return formatInexactReal(p.Value)
+}
+
+// formatInexactReal formats a float64 as its R7RS inexact-real external
+// representation: lowercase +inf.0 / -inf.0 / +nan.0 for the IEEE 754 special
+// values (R7RS §6.2.5), and a forced decimal point on finite values so they read
+// back as inexact rather than exact integers (R7RS §7.1.1). Shared by
+// Float.SchemeString and the complex-component formatter in complex.go.
+func formatInexactReal(f float64) string {
+	if math.IsInf(f, 1) {
 		return "+inf.0"
 	}
-	if math.IsInf(p.Value, -1) {
+	if math.IsInf(f, -1) {
 		return "-inf.0"
 	}
-	if math.IsNaN(p.Value) {
+	if math.IsNaN(f) {
 		return "+nan.0"
 	}
-	s := strconv.FormatFloat(p.Value, 'f', -1, 64)
-	// Ensure inexact integers have a decimal point to distinguish from exact integers
+	s := strconv.FormatFloat(f, 'f', -1, 64)
 	for i := 0; i < len(s); i++ {
 		if s[i] == '.' {
 			return s
