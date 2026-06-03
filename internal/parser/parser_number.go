@@ -168,15 +168,15 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := replaceHashDigits(p.cur.String())
 
-	// Find the exponent marker
-	expIdx := strings.IndexAny(s, "eEsSfFdDlL")
-	if expIdx == -1 {
+	// A scientific-notation token must carry an exponent marker (e/E or a short
+	// s/f/d/l form); its absence means a plain number was mis-routed here.
+	if schemeutil.IndexExponentMarker(s) == -1 {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
 	}
 
-	// Normalize exponent marker to 'e' for strconv.ParseFloat
-	normalized := s[:expIdx] + "e" + s[expIdx+1:]
-	f, err := strconv.ParseFloat(normalized, 64)
+	// NormalizeExponentMarker folds any short marker to 'e'; e/E pass through
+	// since strconv.ParseFloat accepts them directly.
+	f, err := strconv.ParseFloat(schemeutil.NormalizeExponentMarker(s), 64)
 	if err != nil {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
 	}

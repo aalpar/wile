@@ -158,3 +158,51 @@ func TestTrimSuffixCI(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeExponentMarker(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name string
+		s    string
+		want string
+	}{
+		{"short marker s", "1s10", "1e10"},
+		{"short marker f uppercase", "1.5F3", "1.5e3"},
+		{"short marker d", "2d-4", "2e-4"},
+		{"short marker l", "9L9", "9e9"},
+		{"e left untouched", "1e10", "1e10"},
+		{"E left untouched", "1E10", "1E10"},
+		{"no marker", "1.5", "1.5"},
+		{"only first marker folded", "1s2s3", "1e2s3"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			c.Assert(NormalizeExponentMarker(tt.s), qt.Equals, tt.want)
+		})
+	}
+}
+
+func TestIndexExponentMarker(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name string
+		s    string
+		want int
+	}{
+		{"lowercase e", "1e10", 1},
+		{"uppercase E", "1E10", 1},
+		{"short marker s", "1s10", 1},
+		{"short marker D uppercase", "2.5D3", 3},
+		{"marker after decimal", "12.34e5", 5},
+		{"no marker plain int", "123", -1},
+		{"no marker decimal", "1.5", -1},
+		{"empty", "", -1},
+		{"first of several", "1e2e3", 1},
+	}
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			c.Assert(IndexExponentMarker(tt.s), qt.Equals, tt.want)
+		})
+	}
+}

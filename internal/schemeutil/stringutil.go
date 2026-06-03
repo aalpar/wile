@@ -30,6 +30,17 @@ func NormalizeExponentMarker(s string) string {
 	return string(q)
 }
 
+// IndexExponentMarker returns the byte index of the first R7RS float exponent
+// marker in s — any of e, E, s, S, f, F, d, D, l, L — or -1 if none is present.
+// The marker set is deliberately wider than NormalizeExponentMarker's: callers
+// detecting whether a token *is* scientific notation must recognize e/E, whereas
+// NormalizeExponentMarker omits e/E because strconv.ParseFloat already accepts
+// them and only the short s/f/d/l forms need folding. R7RS §7.1.1: all exponent
+// markers are equivalent in Wile.
+func IndexExponentMarker(s string) int {
+	return strings.IndexAny(s, "eEsSfFdDlL")
+}
+
 // ToLowerASCII converts an ASCII byte to lowercase.
 // Non-ASCII bytes are returned unchanged.
 func ToLowerASCII(c byte) byte {
