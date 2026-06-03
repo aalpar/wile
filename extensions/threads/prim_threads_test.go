@@ -216,6 +216,46 @@ func TestThreadSleep(t *testing.T) {
 	}
 }
 
+// TestThreadTimeoutParsing exercises parseTimeout through the optional timeout
+// arguments of mutex-lock!, mutex-unlock!, and thread-join! — the only callers
+// of that helper. Each case acquires a free resource (or joins a finished
+// thread), so the timeout never actually elapses except the deliberate
+// mutex-unlock! case, which times out immediately.
+func TestThreadTimeoutParsing(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"mutex-lock! integer timeout",
+			`(let ((m (make-mutex))) (mutex-lock! m 5))`,
+			values.TrueValue},
+		{"mutex-lock! float timeout",
+			`(let ((m (make-mutex))) (mutex-lock! m 0.5))`,
+			values.TrueValue},
+		{"mutex-lock! time-object timeout",
+			`(let ((m (make-mutex))) (mutex-lock! m (current-time)))`,
+			values.TrueValue},
+		{"thread-join! integer timeout",
+			`(let ((t (thread-start! (make-thread (lambda () 42)))))
+			   (= (thread-join! t 5) 42))`,
+			values.TrueValue},
+		{"mutex-unlock! condvar timeout returns #f on timeout",
+			`(let ((m (make-mutex)) (cv (make-condition-variable)))
+			   (mutex-lock! m)
+			   (not (mutex-unlock! m cv 0)))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestThreadSleepContextCancellation(t *testing.T) {
 	c := qt.New(t)
 
@@ -535,6 +575,10 @@ func TestThreadsErrors(t *testing.T) {
 		{"mutex-state not mutex", `(mutex-state 42)`},
 		{"mutex-lock! not mutex", `(mutex-lock! 42)`},
 		{"mutex-unlock! not mutex", `(mutex-unlock! 42)`},
+
+		// mutex-lock! timeout parse errors (parseTimeout #t and default branches)
+		{"mutex-lock! timeout #t", `(let ((m (make-mutex))) (mutex-lock! m #t))`},
+		{"mutex-lock! timeout string", `(let ((m (make-mutex))) (mutex-lock! m "x"))`},
 
 		// condition-variable type errors
 		{"condition-variable-name not cv", `(condition-variable-name 42)`},

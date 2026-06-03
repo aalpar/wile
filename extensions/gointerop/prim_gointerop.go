@@ -124,29 +124,14 @@ func PrimChannelTryReceive(mc machine.CallContext) error {
 
 	v, received, open := ch.TryReceive()
 
-	// Return multiple values
-	var val values.Value
-	if v == nil {
+	// Return three values: the received value (#f when none, not Void — per the
+	// channel-try-receive contract), whether a value was received, and whether
+	// the channel is still open.
+	val := v
+	if val == nil {
 		val = values.FalseValue
-	} else {
-		val = v
 	}
-
-	var receivedVal values.Value
-	if received {
-		receivedVal = values.TrueValue
-	} else {
-		receivedVal = values.FalseValue
-	}
-
-	var openVal values.Value
-	if open {
-		openVal = values.TrueValue
-	} else {
-		openVal = values.FalseValue
-	}
-
-	mc.SetValues(val, receivedVal, openVal)
+	mc.SetValues(val, values.BoolToBoolean(received), values.BoolToBoolean(open))
 	return nil
 }
 
@@ -273,25 +258,7 @@ func PrimWaitGroupWait(mc machine.CallContext) error {
 // PrimMakeRWMutex creates a new RWMutex
 // (make-rw-mutex [name]) -> rw-mutex
 func PrimMakeRWMutex(mc machine.CallContext) error {
-	restVal := mc.Arg(0)
-
-	name := ""
-	// Parse optional name from rest list
-	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(values.Tuple)
-		if ok {
-			nameVal := restList.Car()
-			s, ok := nameVal.(*values.String)
-			if ok {
-				name = s.Value
-			} else {
-				sym, ok := nameVal.(*values.Symbol)
-				if ok {
-					name = sym.Key
-				}
-			}
-		}
-	}
+	name := helpers.OptionalName(mc.Arg(0))
 
 	rwm := values.NewRWMutex(name)
 	mc.SetValue(rwm)
@@ -481,12 +448,7 @@ func PrimAtomicLoad(mc machine.CallContext) error {
 		return err
 	}
 
-	v := a.Load()
-	if v == nil {
-		mc.SetValue(values.Void)
-	} else {
-		mc.SetValue(v)
-	}
+	mc.SetValue(values.ValueOrVoid(a.Load()))
 	return nil
 }
 
@@ -513,12 +475,7 @@ func PrimAtomicSwap(mc machine.CallContext) error {
 	}
 	newVal := mc.Arg(1)
 
-	old := a.Swap(newVal)
-	if old == nil {
-		mc.SetValue(values.Void)
-	} else {
-		mc.SetValue(old)
-	}
+	mc.SetValue(values.ValueOrVoid(a.Swap(newVal)))
 	return nil
 }
 

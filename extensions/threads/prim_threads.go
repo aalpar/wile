@@ -53,25 +53,6 @@ func parseTimeout(v values.Value, name string) (*time.Duration, error) {
 	}
 }
 
-// parseOptionalName extracts an optional string or symbol name from a rest parameter list.
-// Returns empty string if no name provided.
-func parseOptionalName(rest values.Value) string {
-	if values.IsEmptyList(rest) {
-		return ""
-	}
-	head, _, err := values.Uncons(rest, "thread-name", "name argument")
-	if err != nil {
-		return ""
-	}
-	switch v := head.(type) {
-	case *values.String:
-		return v.Value
-	case *values.Symbol:
-		return v.Key
-	}
-	return ""
-}
-
 // =============================================================================
 // Thread Primitives
 // =============================================================================
@@ -109,7 +90,7 @@ func PrimMakeThread(cc machine.CallContext) error {
 	}
 	restVal := mc.Arg(1)
 
-	name := parseOptionalName(restVal)
+	name := helpers.OptionalName(restVal)
 
 	thread := values.NewThread(thunk, name)
 
@@ -166,12 +147,7 @@ func PrimThreadSpecific(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	v := thread.Specific()
-	if v == nil {
-		mc.SetValue(values.Void)
-	} else {
-		mc.SetValue(v)
-	}
+	mc.SetValue(values.ValueOrVoid(thread.Specific()))
 	return nil
 }
 
@@ -305,11 +281,7 @@ func PrimThreadJoin(mc machine.CallContext) error {
 		return err
 	}
 
-	if result == nil {
-		mc.SetValue(values.Void)
-	} else {
-		mc.SetValue(result)
-	}
+	mc.SetValue(values.ValueOrVoid(result))
 	return nil
 }
 
@@ -329,7 +301,7 @@ var PrimMutexQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 func PrimMakeMutex(mc machine.CallContext) error {
 	restVal := mc.Arg(0)
 
-	name := parseOptionalName(restVal)
+	name := helpers.OptionalName(restVal)
 
 	mutex := values.NewMutex(name)
 	mc.SetValue(mutex)
@@ -354,12 +326,7 @@ func PrimMutexSpecific(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	v := mutex.Specific()
-	if v == nil {
-		mc.SetValue(values.Void)
-	} else {
-		mc.SetValue(v)
-	}
+	mc.SetValue(values.ValueOrVoid(mutex.Specific()))
 	return nil
 }
 
@@ -525,7 +492,7 @@ var PrimConditionVariableQ = helpers.MakeTypePredicate(func(o values.Value) bool
 func PrimMakeConditionVariable(mc machine.CallContext) error {
 	restVal := mc.Arg(0)
 
-	name := parseOptionalName(restVal)
+	name := helpers.OptionalName(restVal)
 
 	cv := values.NewConditionVariable(name)
 	mc.SetValue(cv)
@@ -550,12 +517,7 @@ func PrimConditionVariableSpecific(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	v := cv.Specific()
-	if v == nil {
-		mc.SetValue(values.Void)
-	} else {
-		mc.SetValue(v)
-	}
+	mc.SetValue(values.ValueOrVoid(cv.Specific()))
 	return nil
 }
 

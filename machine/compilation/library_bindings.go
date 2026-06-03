@@ -296,6 +296,35 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 	return nil
 }
 
+// ImportSpecInto parses a single import-spec datum, loads the named library,
+// applies the import set's modifiers (only/except/prefix/rename), and copies
+// the resulting bindings into targetEnv at the spec's phase shift. It is the
+// shared core of the (environment ...), (make-namespace ...), and
+// (namespace-require ...) primitives; op names the calling primitive for error
+// context. callerEnv supplies the library registry for resolution.
+func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, targetEnv *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, op string) error {
+	importSet, err := ParseImportSetFromDatum(ctx, specVal)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%s: invalid import spec", op)
+	}
+
+	lib, err := LoadLibrary(ctx, importSet.LibraryName, callerEnv, evaluator)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%s: failed to load %s", op, importSet.LibraryName.SchemeString())
+	}
+
+	bindings, err := importSet.ApplyToExports(lib)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%s: error in import set for %s", op, importSet.LibraryName.SchemeString())
+	}
+
+	err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "%s: error copying bindings from %s", op, importSet.LibraryName.SchemeString())
+	}
+	return nil
+}
+
 // copyLibraryBindingsDirect installs bindings from lib into targetEnv without
 // AtPhase routing. This is used for library-internal imports where targetEnv
 // is a child runtime frame whose AtPhase() would route to the parent's phase

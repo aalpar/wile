@@ -51,6 +51,18 @@ func (voidType) EqualTo(v Value) bool {
 // Void is the singleton void value.
 var Void Value = voidType{}
 
+// ValueOrVoid returns v, or the singleton Void when v is nil. It collapses the
+// repeated "nil accessor result -> Void" guard used by primitives whose Go
+// accessor returns a nil Value for an unset slot (thread/mutex/condvar
+// -specific, atomic-box load/swap). Follows the BoolToBoolean / StringOrFalse
+// precedent for eliminating repeated if/else patterns.
+func ValueOrVoid(v Value) Value {
+	if v == nil {
+		return Void
+	}
+	return v
+}
+
 // eofType represents the end-of-file object.
 type eofType struct{}
 

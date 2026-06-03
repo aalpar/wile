@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // CallContext is the extension-facing subset of MachineContext.
@@ -58,4 +59,16 @@ type CallContext interface {
 
 	// Thread returns the SRFI-18 thread object (nil for primordial thread).
 	Thread() *values.Thread
+}
+
+// RequireMachineContext asserts that cc is a *MachineContext, returning a
+// wrapped ErrNotAMachineContext naming the primitive on failure. Foreign
+// primitives that need full VM internals (eval, load, expand, syntax-local-*)
+// share this prologue instead of repeating the checked type assertion.
+func RequireMachineContext(cc CallContext, name string) (*MachineContext, error) {
+	mc, ok := cc.(*MachineContext)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "%s: expected MachineContext, got %T", name, cc)
+	}
+	return mc, nil
 }

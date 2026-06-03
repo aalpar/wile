@@ -52,15 +52,7 @@ func PrimEnvironmentBoundNames(mc machine.CallContext) error {
 		return err
 	}
 
-	env := topLevelEnv.Runtime()
-	keys := env.GlobalEnvironment().Keys()
-	var result values.Value = values.EmptyList
-	for key := range keys {
-		sym := values.NewSymbol(key.Key)
-		result = values.NewCons(sym, result)
-	}
-
-	mc.SetValue(result)
+	mc.SetValue(topLevelEnv.BoundSymbolNames())
 	return nil
 }
 

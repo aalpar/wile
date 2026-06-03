@@ -72,30 +72,7 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 	}
 
 	err := helpers.ForEachList(mc.Context(), args, "make-namespace", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
-		importSet, parseErr := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
-		if parseErr != nil {
-			return werr.WrapForeignErrorf(parseErr, "make-namespace: invalid import spec")
-		}
-
-		lib, loadErr := compilation.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
-		if loadErr != nil {
-			return werr.WrapForeignErrorf(loadErr, "make-namespace: failed to load %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		bindings, applyErr := importSet.ApplyToExports(lib)
-		if applyErr != nil {
-			return werr.WrapForeignErrorf(applyErr, "make-namespace: error in import set for %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		copyErr := compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
-		if copyErr != nil {
-			return werr.WrapForeignErrorf(copyErr, "make-namespace: error copying bindings from %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		return nil
+		return compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "make-namespace")
 	})
 	if err != nil {
 		return err
@@ -225,15 +202,7 @@ func PrimNamespaceBoundNames(mc machine.CallContext) error {
 		return err
 	}
 
-	env := ns.Runtime()
-	keys := env.GlobalEnvironment().Keys()
-	var result values.Value = values.EmptyList
-	for key := range keys {
-		sym := values.NewSymbol(key.Key)
-		result = values.NewCons(sym, result)
-	}
-
-	mc.SetValue(result)
+	mc.SetValue(ns.BoundSymbolNames())
 	return nil
 }
 
@@ -248,27 +217,9 @@ func PrimNamespaceRequire(mc machine.CallContext) error {
 	callerEnv := mc.EnvironmentFrame().TopLevel()
 	targetEnv := ns.Runtime()
 
-	importSet, parseErr := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
-	if parseErr != nil {
-		return werr.WrapForeignErrorf(parseErr, "namespace-require: invalid import spec")
-	}
-
-	lib, loadErr := compilation.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
-	if loadErr != nil {
-		return werr.WrapForeignErrorf(loadErr, "namespace-require: failed to load %s",
-			importSet.LibraryName.SchemeString())
-	}
-
-	bindings, applyErr := importSet.ApplyToExports(lib)
-	if applyErr != nil {
-		return werr.WrapForeignErrorf(applyErr, "namespace-require: error in import set for %s",
-			importSet.LibraryName.SchemeString())
-	}
-
-	copyErr := compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
-	if copyErr != nil {
-		return werr.WrapForeignErrorf(copyErr, "namespace-require: error copying bindings from %s",
-			importSet.LibraryName.SchemeString())
+	err = compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, targetEnv, machine.NewVMMacroEvaluator(), "namespace-require")
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(values.Void)

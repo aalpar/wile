@@ -239,6 +239,20 @@ func (p *Namespace) Runtime() *EnvironmentFrame {
 	return p.runtime
 }
 
+// BoundSymbolNames returns a freshly-consed list of every symbol bound in the
+// namespace's runtime global environment. It is the shared body of the
+// environment-bound-names and namespace-bound-names primitives. Iteration
+// order follows the global frame's key map and is therefore unspecified.
+func (p *Namespace) BoundSymbolNames() values.Value {
+	keys := p.runtime.GlobalEnvironment().Keys()
+	var result values.Value = values.EmptyList
+	for key := range keys {
+		sym := values.NewSymbol(key.Key)
+		result = values.NewCons(sym, result)
+	}
+	return result
+}
+
 // AtPhase returns the environment for the given phase level, creating it if needed.
 // Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
 // Negative phases (e.g., -1 for for-template) are also supported.

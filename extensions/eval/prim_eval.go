@@ -49,9 +49,9 @@ var ErrWileProfilesNotRegistered = werr.NewStaticError("wile profiles not regist
 // With ParamCount: 1 and IsVariadic: true, all args arrive as a rest
 // list in mc.Arg(0).
 func PrimEval(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "eval: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "eval")
+	if err != nil {
+		return err
 	}
 	argList, ok := mc.Arg(0).(values.Tuple)
 	if !ok || argList.IsEmptyList() {
@@ -113,9 +113,9 @@ func PrimEval(cc machine.CallContext) error {
 //
 //	LoadPathStack > LibraryRegistry > SCHEME_INCLUDE_PATH > CWD
 func PrimLoad(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "load: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "load")
+	if err != nil {
+		return err
 	}
 	filenameVal := mc.Arg(0)
 	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "load")
@@ -373,34 +373,7 @@ func PrimEnvironment(mc machine.CallContext) error {
 
 	// Process each import spec
 	err = helpers.ForEachList(mc.Context(), args, "environment", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
-		// Parse the import set from datum
-		importSet, err := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "environment: invalid import spec")
-		}
-
-		// Load the library (uses callerEnv for registry access)
-		lib, err := compilation.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "environment: failed to load %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		// Apply modifiers (only, except, prefix, rename)
-		bindings, err := importSet.ApplyToExports(lib)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "environment: error in import set for %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		// Copy bindings to new environment at the specified phase
-		err = compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "environment: error copying bindings from %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		return nil
+		return compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "environment")
 	})
 	if err != nil {
 		return err
@@ -414,9 +387,9 @@ func PrimEnvironment(mc machine.CallContext) error {
 // Fully expands a syntax object and returns the expanded syntax.
 // (expand stx) -> expanded-stx
 func PrimExpand(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "expand: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "expand")
+	if err != nil {
+		return err
 	}
 	stx := mc.Arg(0)
 
@@ -453,9 +426,9 @@ func PrimExpand(cc machine.CallContext) error {
 // expanded syntax and a boolean indicating whether expansion occurred.
 // (expand-once stx) -> (values expanded-stx did-expand?)
 func PrimExpandOnce(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "expand-once: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "expand-once")
+	if err != nil {
+		return err
 	}
 	stx := mc.Arg(0)
 
@@ -544,9 +517,9 @@ func PrimCompile(mc machine.CallContext) error {
 // If the binding is a CompileTimeValue, it returns the unwrapped value.
 // This allows define-for-syntax bindings to be accessed from macro transformers.
 func PrimSyntaxLocalValue(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "syntax-local-value: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "syntax-local-value")
+	if err != nil {
+		return err
 	}
 	id := mc.Arg(0)
 
@@ -631,9 +604,9 @@ func PrimMakeCompileTimeValue(mc machine.CallContext) error {
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with an introduction scope).
 func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "syntax-local-introduce: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "syntax-local-introduce")
+	if err != nil {
+		return err
 	}
 	stx := mc.Arg(0)
 
@@ -681,9 +654,9 @@ func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with a use-site scope).
 func PrimSyntaxLocalIdentifierAsBinding(cc machine.CallContext) error {
-	mc, ok := cc.(*machine.MachineContext)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "syntax-local-identifier-as-binding: expected MachineContext, got %T", cc)
+	mc, err := machine.RequireMachineContext(cc, "syntax-local-identifier-as-binding")
+	if err != nil {
+		return err
 	}
 	id := mc.Arg(0)
 
