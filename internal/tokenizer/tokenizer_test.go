@@ -2324,12 +2324,12 @@ func TestToken_Value_NoVal(t *testing.T) {
 // Test line ending variations
 func TestTokenizer_LineEndingVariations(t *testing.T) {
 	// CRLF line ending
-	p := NewTokenizerWithComments(strings.NewReader("; comment\r\nfoo"), false)
+	p := NewTokenizer(strings.NewReader("; comment\r\nfoo"), false)
 	tok, _ := p.Next()
 	qt.Assert(t, tok.Type(), qt.Equals, TokenizerStateLineCommentBody)
 
 	// CR only line ending
-	p = NewTokenizerWithComments(strings.NewReader("; comment\rfoo"), false)
+	p = NewTokenizer(strings.NewReader("; comment\rfoo"), false)
 	tok, _ = p.Next()
 	qt.Assert(t, tok.Type(), qt.Equals, TokenizerStateLineCommentBody)
 }

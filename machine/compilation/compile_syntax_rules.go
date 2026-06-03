@@ -384,15 +384,6 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 	}
 }
 
-// collectPatternVariables walks the pattern and identifies all pattern variables.
-// A pattern variable is any symbol that is not a literal, not the first element,
-// and not the ellipsis identifier.
-// Uses the default ellipsis identifier ("...").
-// The literalSyntax parameter enables bound-identifier=? comparison for R7RS hygiene.
-func collectPatternVariables(pattern syntax.SyntaxValue, literalSyntax map[string]*syntax.SyntaxSymbol, isFirst bool, variables map[string]struct{}) error {
-	return collectPatternVariablesWithEllipsis(pattern, literalSyntax, isFirst, variables, nil, match.DefaultEllipsis)
-}
-
 // collectPatternVariablesWithEllipsis walks the pattern and identifies all pattern variables,
 // using a custom ellipsis identifier.
 // The literalSyntax parameter enables bound-identifier=? comparison for R7RS hygiene:

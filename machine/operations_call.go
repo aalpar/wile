@@ -15,8 +15,6 @@
 package machine
 
 import (
-	"errors"
-
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -80,41 +78,15 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
 		}
 		rmc = nil
-		// Pass through VM signal types — they must not be wrapped as
-		// Scheme exceptions. Mirrors the error-return checks below.
-		var abortErr *ErrPromptAbort
-		if errors.As(err, &abortErr) {
-			rerr = err
-			return
-		}
-		var excErr *ErrExceptionEscape
-		if errors.As(err, &excErr) {
-			rerr = err
-			return
-		}
-		var timerErr *ErrTimerInterrupt
-		if errors.As(err, &timerErr) {
-			rerr = err
-			return
-		}
-		rerr = goErrorToSchemeException(mc, err)
+		// applyCallableError passes VM signal types (prompt abort, exception
+		// escape, timer interrupt) through unchanged and converts everything
+		// else to a Scheme exception. Mirrors the error-return path below.
+		rerr = applyCallableError(mc, err)
 	}()
 	mc.counters.ForeignCalls++
 	err := p.Function(mc)
 	if err != nil {
-		var abortErr *ErrPromptAbort
-		if errors.As(err, &abortErr) {
-			return nil, err
-		}
-		var excErr *ErrExceptionEscape
-		if errors.As(err, &excErr) {
-			return nil, err
-		}
-		var timerErr *ErrTimerInterrupt
-		if errors.As(err, &timerErr) {
-			return nil, err
-		}
-		return nil, goErrorToSchemeException(mc, err)
+		return nil, applyCallableError(mc, err)
 	}
 	mc.pc++
 	return mc, nil

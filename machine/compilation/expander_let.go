@@ -156,21 +156,9 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 
 	bodyWithScope := syntax.AddScopeToSyntax(bodyPair, letrecScope)
 
-	// Create child env with tag + binding names
-	childEnv := environment.NewEnvironmentFrameWithParent(
-		environment.NewLocalEnvironment(0),
-		p.env,
-	)
-	childEnv.MaybeCreateLocalBinding(
-		tagWithScope.Sym, environment.BindingTypeVariable,
-		tagWithScope.Scopes(), tagWithScope.SourceContext(),
-	)
-	for _, bs := range bindingSyms {
-		childEnv.MaybeCreateLocalBinding(
-			bs.Sym, environment.BindingTypeVariable,
-			bs.Scopes(), bs.SourceContext(),
-		)
-	}
+	// Create child env with tag + binding names. The tag is bound first (slot 0)
+	// so it is visible to the body as the recursive procedure name.
+	childEnv := p.createBindingEnv(append([]*syntax.SyntaxSymbol{tagWithScope}, bindingSyms...))
 
 	expandedBody, err := p.expandBindingBody(childEnv, bodyWithScope)
 	if err != nil {

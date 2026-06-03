@@ -33,21 +33,6 @@ func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
 	return values.ScopesCompatible(bindingScopes, useScopes)
 }
 
-// HasScope checks if a scope set contains a specific scope.
-func HasScope(scopes []*Scope, target *Scope) bool {
-	return values.HasScope(scopes, target)
-}
-
-// AddScopeToSet adds a scope to a set if not already present.
-func AddScopeToSet(scopes []*Scope, newScope *Scope) []*Scope {
-	return values.AddScopeToSet(scopes, newScope)
-}
-
-// RemoveScopeFromSet removes a scope from a set.
-func RemoveScopeFromSet(scopes []*Scope, target *Scope) []*Scope {
-	return values.RemoveScopeFromSet(scopes, target)
-}
-
 // FlipScopeInSet toggles the presence of a scope in a set.
 // This is the core operation for syntax-local-introduce.
 func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {

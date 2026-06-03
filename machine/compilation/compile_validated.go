@@ -589,6 +589,27 @@ func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallCon
 //	  for the last expression in a sequence).
 //
 // See BIBLIOGRAPHY.md "Direct-Style Compilation".
+// emitProcAndArgs compiles the procedure expression then each argument,
+// pushing the procedure and every argument onto the eval stack in order.
+// Shared by the validated-call and validated-apply emit paths; the apply path
+// flattens its final list onto the stack after this returns.
+func (p *CompileTimeContinuation) emitProcAndArgs(ctctx CompileTimeCallContext, proc validate.ValidatedExpr, args []validate.ValidatedExpr) error {
+	err := p.compileValidated(ctctx.NotInTail(), proc)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(machine.NewOperationPush())
+
+	for _, arg := range args {
+		err = p.compileValidated(ctctx.NotInTail(), arg)
+		if err != nil {
+			return err
+		}
+		p.AppendOperations(machine.NewOperationPush())
+	}
+	return nil
+}
+
 func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
 	inlined, err := p.tryInlineCall(ctctx, v)
 	if err != nil {
@@ -605,20 +626,10 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	}
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
-	// Compile the procedure expression
-	err = p.compileValidated(ctctx.NotInTail(), v.Proc())
+	// Compile the procedure and arguments, pushing each onto the stack
+	err = p.emitProcAndArgs(ctctx, v.Proc(), v.Body())
 	if err != nil {
 		return err
-	}
-	p.AppendOperations(machine.NewOperationPush())
-
-	// Compile arguments in order, pushing each to the stack
-	for _, arg := range v.Body() {
-		err = p.compileValidated(ctctx.NotInTail(), arg)
-		if err != nil {
-			return err
-		}
-		p.AppendOperations(machine.NewOperationPush())
 	}
 
 	// Pull the procedure and apply
@@ -861,20 +872,10 @@ func (p *CompileTimeContinuation) CompileValidatedApply(ctctx CompileTimeCallCon
 		saveContinuationIndex = p.emitPatchableSaveContinuation()
 	}
 
-	// Compile proc and push to stack
-	err := p.compileValidated(ctctx.NotInTail(), v.Proc)
+	// Compile proc and prefix args, pushing each onto the stack
+	err := p.emitProcAndArgs(ctctx, v.Proc, v.PrefixArgs)
 	if err != nil {
 		return err
-	}
-	p.AppendOperations(machine.NewOperationPush())
-
-	// Compile prefix args and push each
-	for _, arg := range v.PrefixArgs {
-		err = p.compileValidated(ctctx.NotInTail(), arg)
-		if err != nil {
-			return err
-		}
-		p.AppendOperations(machine.NewOperationPush())
 	}
 
 	// Compile final list (stays in value register)

@@ -331,8 +331,8 @@ func (p *SyntaxVectorSuite) TestAddScope_VectorWithSymbols(c *qt.C) {
 	resultSym1 := resultVec.Values[0].(*SyntaxSymbol)
 	resultSym2 := resultVec.Values[1].(*SyntaxSymbol)
 
-	c.Assert(HasScope(resultSym1.Scopes(), scope), qt.IsTrue)
-	c.Assert(HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym1.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
 }
 
 // TestAddScope_VectorWithObjects verifies SyntaxObject elements unchanged
@@ -371,8 +371,8 @@ func (p *SyntaxVectorSuite) TestAddScope_VectorWithPair(c *qt.C) {
 	resultSym1 := resultPair.SyntaxCar().(*SyntaxSymbol)
 	resultSym2 := resultPair.SyntaxCdr().(*SyntaxSymbol)
 
-	c.Assert(HasScope(resultSym1.Scopes(), scope), qt.IsTrue)
-	c.Assert(HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym1.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
 }
 
 // TestAddScope_NestedVectors verifies deep nesting propagates scopes correctly
@@ -391,7 +391,7 @@ func (p *SyntaxVectorSuite) TestAddScope_NestedVectors(c *qt.C) {
 	resultInner := resultOuter.Values[0].(*SyntaxVector)
 	resultSym := resultInner.Values[0].(*SyntaxSymbol)
 
-	c.Assert(HasScope(resultSym.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym.Scopes(), scope), qt.IsTrue)
 }
 
 // TestAddScope_MixedElements verifies mixed types handled correctly
@@ -411,7 +411,7 @@ func (p *SyntaxVectorSuite) TestAddScope_MixedElements(c *qt.C) {
 
 	// Symbol should have scope
 	resultSym := resultVec.Values[0].(*SyntaxSymbol)
-	c.Assert(HasScope(resultSym.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym.Scopes(), scope), qt.IsTrue)
 
 	// Number should be unchanged
 	c.Assert(resultVec.Values[1], qt.Equals, num)
@@ -434,8 +434,8 @@ func (p *SyntaxVectorSuite) TestAddScope_VectorWithNilElements(c *qt.C) {
 	// Symbols should have scope
 	resultSym0 := resultVec.Values[0].(*SyntaxSymbol)
 	resultSym2 := resultVec.Values[2].(*SyntaxSymbol)
-	c.Assert(HasScope(resultSym0.Scopes(), scope), qt.IsTrue)
-	c.Assert(HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym0.Scopes(), scope), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym2.Scopes(), scope), qt.IsTrue)
 }
 
 // TestAddScope_MultipleScopes verifies accumulation of multiple scopes
@@ -454,8 +454,8 @@ func (p *SyntaxVectorSuite) TestAddScope_MultipleScopes(c *qt.C) {
 	resultSym := resultVec.Values[0].(*SyntaxSymbol)
 
 	// Symbol should have both scopes
-	c.Assert(HasScope(resultSym.Scopes(), scope1), qt.IsTrue)
-	c.Assert(HasScope(resultSym.Scopes(), scope2), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym.Scopes(), scope1), qt.IsTrue)
+	c.Assert(values.HasScope(resultSym.Scopes(), scope2), qt.IsTrue)
 }
 
 func TestSyntaxVector(t *testing.T) {

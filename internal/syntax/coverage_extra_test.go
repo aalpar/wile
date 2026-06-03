@@ -130,14 +130,14 @@ func TestFlipScopeInSet(t *testing.T) {
 	t.Run("add when absent", func(t *testing.T) {
 		result := FlipScopeInSet(nil, s1)
 		c.Assert(len(result), qt.Equals, 1)
-		c.Assert(HasScope(result, s1), qt.IsTrue)
+		c.Assert(values.HasScope(result, s1), qt.IsTrue)
 	})
 
 	t.Run("remove when present", func(t *testing.T) {
 		result := FlipScopeInSet([]*Scope{s1, s2}, s1)
 		c.Assert(len(result), qt.Equals, 1)
-		c.Assert(HasScope(result, s1), qt.IsFalse)
-		c.Assert(HasScope(result, s2), qt.IsTrue)
+		c.Assert(values.HasScope(result, s1), qt.IsFalse)
+		c.Assert(values.HasScope(result, s2), qt.IsTrue)
 	})
 }
 
@@ -152,13 +152,13 @@ func TestFlipScope_Symbol(t *testing.T) {
 	result := FlipScope(sym, scope)
 	flipped, ok := result.(*SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(HasScope(flipped.SourceContext().Scopes, scope), qt.IsTrue)
+	c.Assert(values.HasScope(flipped.SourceContext().Scopes, scope), qt.IsTrue)
 
 	// Flip again to remove
 	result2 := FlipScope(flipped, scope)
 	flipped2, ok := result2.(*SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(HasScope(flipped2.SourceContext().Scopes, scope), qt.IsFalse)
+	c.Assert(values.HasScope(flipped2.SourceContext().Scopes, scope), qt.IsFalse)
 }
 
 func TestFlipScope_Pair(t *testing.T) {
@@ -171,7 +171,7 @@ func TestFlipScope_Pair(t *testing.T) {
 	flippedPair, ok := result.(*SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	car := flippedPair.SyntaxCar().(*SyntaxSymbol)
-	c.Assert(HasScope(car.SourceContext().Scopes, scope), qt.IsTrue)
+	c.Assert(values.HasScope(car.SourceContext().Scopes, scope), qt.IsTrue)
 }
 
 func TestFlipScope_NilAndDefault(t *testing.T) {
@@ -194,7 +194,7 @@ func TestFlipScope_SymbolNilSourceContext(t *testing.T) {
 	result := FlipScope(sym, scope)
 	flipped, ok := result.(*SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(HasScope(flipped.SourceContext().Scopes, scope), qt.IsTrue)
+	c.Assert(values.HasScope(flipped.SourceContext().Scopes, scope), qt.IsTrue)
 }
 
 // AddScopeToSyntax
@@ -207,7 +207,7 @@ func TestAddScopeToSyntax_Symbol(t *testing.T) {
 	result := AddScopeToSyntax(sym, scope)
 	added, ok := result.(*SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(HasScope(added.SourceContext().Scopes, scope), qt.IsTrue)
+	c.Assert(values.HasScope(added.SourceContext().Scopes, scope), qt.IsTrue)
 }
 
 func TestAddScopeToSyntax_Pair(t *testing.T) {

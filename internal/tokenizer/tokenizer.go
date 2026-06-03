@@ -283,14 +283,6 @@ func NewTokenizer(rdr io.RuneReader, ci bool) *Tokenizer {
 	return q
 }
 
-// NewTokenizerWithComments creates a tokenizer with optional comment token emission.
-// When emitComments is true, comments are returned as Begin/Body/End token sequences
-// instead of being skipped.
-func NewTokenizerWithComments(rdr io.RuneReader, ci bool) *Tokenizer {
-	q := NewTokenizer(rdr, ci)
-	return q
-}
-
 // Text returns the text of the current token.
 func (p *Tokenizer) Text() string {
 	return p.text

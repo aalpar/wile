@@ -254,6 +254,45 @@ func (p *CompileTimeContinuation) expandQuasiList(
 	return p.buildQuasiSyntaxList(srcCtx, elems...)
 }
 
+// quasiSegmentKind distinguishes a run of literal elements from a single
+// spliced expression when expanding a quasiquoted list or vector that contains
+// unquote-splicing / unsyntax-splicing.
+type quasiSegmentKind int
+
+const (
+	quasiSegNormal quasiSegmentKind = iota
+	quasiSegSplice
+)
+
+// quasiSegment is one run of a spliced quasiquote form: either a sequence of
+// literal elements (quasiSegNormal) or a single spliced expression
+// (quasiSegSplice). The vector and list expanders accumulate these and render
+// them via segmentsToAppendArgs.
+type quasiSegment struct {
+	kind  quasiSegmentKind
+	elems []syntax.SyntaxValue // for quasiSegNormal
+	expr  syntax.SyntaxValue   // for quasiSegSplice
+}
+
+// segmentsToAppendArgs renders accumulated splice segments into the argument
+// list of an (append ...) form: each normal run becomes (list e ...), each
+// splice contributes its expression directly. The returned slice begins with
+// the `append` symbol. Shared by the list and vector quasiquote expanders.
+func (p *CompileTimeContinuation) segmentsToAppendArgs(srcCtx *syntax.SourceContext, segments []quasiSegment) []syntax.SyntaxValue {
+	appendArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("append", srcCtx)}
+	for _, seg := range segments {
+		switch seg.kind {
+		case quasiSegNormal:
+			listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
+			listArgs = append(listArgs, seg.elems...)
+			appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
+		case quasiSegSplice:
+			appendArgs = append(appendArgs, seg.expr)
+		}
+	}
+	return appendArgs
+}
+
 // expandQuasiListWithSplice handles lists containing splicing (unquote-splicing
 // or unsyntax-splicing). It segments the list into normal and splice segments,
 // then builds (append seg1 seg2 ...).
@@ -262,25 +301,13 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 ) syntax.SyntaxValue {
 	srcCtx := pair.SourceContext()
 
-	type segmentType int
-	const (
-		segNormal segmentType = iota
-		segSplice
-	)
-
-	type segment struct {
-		typ   segmentType
-		elems []syntax.SyntaxValue // for normal segments
-		expr  syntax.SyntaxValue   // for splice segments
-	}
-
-	var segments []segment
+	var segments []quasiSegment
 	var currentElems []syntax.SyntaxValue
 	var improperTail syntax.SyntaxValue
 
 	flushNormal := func() {
 		if len(currentElems) > 0 {
-			segments = append(segments, segment{typ: segNormal, elems: currentElems})
+			segments = append(segments, quasiSegment{kind: quasiSegNormal, elems: currentElems})
 			currentElems = nil
 		}
 	}
@@ -300,7 +327,7 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 				} else {
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
 					expr := cdrPair.SyntaxCar()
-					segments = append(segments, segment{typ: segSplice, expr: expr})
+					segments = append(segments, quasiSegment{kind: quasiSegSplice, expr: expr})
 				}
 				goto next
 			}
@@ -327,21 +354,7 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 
 	flushNormal()
 
-	// Build (append seg1 seg2 ...)
-	var appendArgs []syntax.SyntaxValue
-	appendArgs = append(appendArgs, syntax.NewSyntaxSymbol("append", srcCtx))
-
-	for _, seg := range segments {
-		switch seg.typ {
-		case segNormal:
-			listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
-			listArgs = append(listArgs, seg.elems...)
-			appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
-		case segSplice:
-			appendArgs = append(appendArgs, seg.expr)
-		}
-	}
-
+	appendArgs := p.segmentsToAppendArgs(srcCtx, segments)
 	if improperTail != nil {
 		appendArgs = append(appendArgs, improperTail)
 	}

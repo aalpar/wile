@@ -36,7 +36,7 @@ func TestLineCommentEmitTokens(t *testing.T) {
 	c := qt.New(t)
 
 	// Simple line comment: ; comment
-	tok := NewTokenizerWithComments(strings.NewReader("; this is a comment\n"), false)
+	tok := NewTokenizer(strings.NewReader("; this is a comment\n"), false)
 
 	// Should get LineCommentBody (the comment content)
 	token1, err := tok.Next()
@@ -53,7 +53,7 @@ func TestLineCommentMultipleSemicolons(t *testing.T) {
 	c := qt.New(t)
 
 	// Multiple semicolons: ;;; comment
-	tok := NewTokenizerWithComments(strings.NewReader(";;; triple\n"), false)
+	tok := NewTokenizer(strings.NewReader(";;; triple\n"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
@@ -65,7 +65,7 @@ func TestLineCommentAtEOF(t *testing.T) {
 	c := qt.New(t)
 
 	// Comment without trailing newline (EOF terminates)
-	tok := NewTokenizerWithComments(strings.NewReader("; no newline"), false)
+	tok := NewTokenizer(strings.NewReader("; no newline"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
@@ -81,7 +81,7 @@ func TestLineCommentEmpty(t *testing.T) {
 	c := qt.New(t)
 
 	// Empty comment (just semicolon and newline)
-	tok := NewTokenizerWithComments(strings.NewReader(";\n"), false)
+	tok := NewTokenizer(strings.NewReader(";\n"), false)
 	token2, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token2.Type(), qt.Equals, TokenizerStateLineCommentBody)
@@ -92,7 +92,7 @@ func TestBlockCommentEmitTokens(t *testing.T) {
 	c := qt.New(t)
 
 	// Simple block comment: #| comment |#
-	tok := NewTokenizerWithComments(strings.NewReader("#| block comment |#"), false)
+	tok := NewTokenizer(strings.NewReader("#| block comment |#"), false)
 
 	// Should get BlockCommentBody (the content)
 	token2, err := tok.Next()
@@ -105,7 +105,7 @@ func TestBlockCommentEmpty(t *testing.T) {
 	c := qt.New(t)
 
 	// Empty block comment: #||#
-	tok := NewTokenizerWithComments(strings.NewReader("#||#"), false)
+	tok := NewTokenizer(strings.NewReader("#||#"), false)
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
@@ -116,7 +116,7 @@ func TestBlockCommentMultiline(t *testing.T) {
 	c := qt.New(t)
 
 	// Multiline block comment
-	tok := NewTokenizerWithComments(strings.NewReader("#| line1\nline2\nline3 |#"), false)
+	tok := NewTokenizer(strings.NewReader("#| line1\nline2\nline3 |#"), false)
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
@@ -127,7 +127,7 @@ func TestBlockCommentNested(t *testing.T) {
 	c := qt.New(t)
 
 	// Nested block comment: #| outer #| inner |# outer |#
-	tok := NewTokenizerWithComments(strings.NewReader("#| outer #| inner |# outer |#"), false)
+	tok := NewTokenizer(strings.NewReader("#| outer #| inner |# outer |#"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
@@ -139,7 +139,7 @@ func TestBlockCommentUnclosed(t *testing.T) {
 	c := qt.New(t)
 
 	// Unclosed block comment (EOF before |#)
-	tok := NewTokenizerWithComments(strings.NewReader("#| unclosed"), false)
+	tok := NewTokenizer(strings.NewReader("#| unclosed"), false)
 	// Body ends at EOF, no End token
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
@@ -155,7 +155,7 @@ func TestDatumCommentEmitTokens(t *testing.T) {
 	c := qt.New(t)
 
 	// Datum comment: #; datum
-	tok := NewTokenizerWithComments(strings.NewReader("#;42"), false)
+	tok := NewTokenizer(strings.NewReader("#;42"), false)
 
 	// Should get DatumCommentBegin
 	token1, err := tok.Next()
@@ -174,7 +174,7 @@ func TestCommentFollowedByCode(t *testing.T) {
 	c := qt.New(t)
 
 	// Comment followed by code
-	tok := NewTokenizerWithComments(strings.NewReader("; comment\n42"), false)
+	tok := NewTokenizer(strings.NewReader("; comment\n42"), false)
 
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
@@ -221,7 +221,7 @@ func TestCommentPhases(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
 			for j, expected := range tc.expectedPhases {
 				token, err := tok.Next()
 				c.Check(err, qt.IsNil, qt.Commentf("phase %d", j))
@@ -250,7 +250,7 @@ func TestContinueCommentToken(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
 			count := 0
 			for {
 				q, err := tok.Next()
@@ -271,7 +271,7 @@ func TestContinueCommentToken(t *testing.T) {
 // TestContinueLineComment tests line comment phases
 func TestContinueLineComment(t *testing.T) {
 	input := "; this is a line comment\n"
-	tok := NewTokenizerWithComments(strings.NewReader(input), false)
+	tok := NewTokenizer(strings.NewReader(input), false)
 
 	// Phase 1: Body
 	token2, err2 := tok.Next()
@@ -282,7 +282,7 @@ func TestContinueLineComment(t *testing.T) {
 // TestContinueBlockComment tests block comment phases
 func TestContinueBlockComment(t *testing.T) {
 	input := "#| block comment |#"
-	tok := NewTokenizerWithComments(strings.NewReader(input), false)
+	tok := NewTokenizer(strings.NewReader(input), false)
 
 	// Phase 1: Body
 	token2, err2 := tok.Next()
@@ -312,19 +312,19 @@ func TestDatumCommentExtended(t *testing.T) {
 // Test continueCommentToken for better coverage
 func TestTokenizer_ContinueCommentToken(t *testing.T) {
 	// Line comment with content
-	p := NewTokenizerWithComments(strings.NewReader("; a comment\n"), false)
+	p := NewTokenizer(strings.NewReader("; a comment\n"), false)
 	tok1, _ := p.Next()
 	qt.Assert(t, tok1.Type(), qt.Equals, TokenizerStateLineCommentBody)
 
 	// Block comment
-	p = NewTokenizerWithComments(strings.NewReader("#| block |#"), false)
+	p = NewTokenizer(strings.NewReader("#| block |#"), false)
 	tok1, _ = p.Next()
 	qt.Assert(t, tok1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
 }
 
 // Test block comment with multi-token mode
 func TestTokenizer_BlockCommentMultiToken(t *testing.T) {
-	p := NewTokenizerWithComments(strings.NewReader("#| content |#"), false)
+	p := NewTokenizer(strings.NewReader("#| content |#"), false)
 	tok1, _ := p.Next()
 	qt.Assert(t, tok1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
 }
@@ -336,7 +336,7 @@ func TestTokenizer_DatumComment(t *testing.T) {
 	tok, _ := p.Next()
 	qt.Assert(t, tok.Type(), qt.Equals, TokenizerStateDatumCommentBegin)
 
-	p = NewTokenizerWithComments(strings.NewReader("#;foo bar"), false)
+	p = NewTokenizer(strings.NewReader("#;foo bar"), false)
 	tok, _ = p.Next()
 	qt.Assert(t, tok.Type(), qt.Equals, TokenizerStateDatumCommentBegin)
 }
@@ -344,13 +344,13 @@ func TestTokenizer_DatumComment(t *testing.T) {
 // Test additional comment scenarios
 func TestTokenizer_CommentScenarios(t *testing.T) {
 	// Line comment at EOF
-	p := NewTokenizerWithComments(strings.NewReader("; comment"), false)
+	p := NewTokenizer(strings.NewReader("; comment"), false)
 	tok1, _ := p.Next()
 	qt.Assert(t, tok1.Type(), qt.Equals, TokenizerStateLineCommentBody)
 	// No End token since there's no newline - should get EOF
 
 	// Block comment without closing (incomplete)
-	p = NewTokenizerWithComments(strings.NewReader("#| incomplete"), false)
+	p = NewTokenizer(strings.NewReader("#| incomplete"), false)
 	tok1, _ = p.Next()
 	qt.Assert(t, tok1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
 }

@@ -161,23 +161,12 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 // NewApplyFrame creates a new EnvironmentFrame for a closure application,
 // fusing CopyForApply + NewEnvironmentFrameWithParent into one allocation.
 // The source frame's local bindings are copied into the new frame, and the
-// parent chain is set from the source's parent.
+// parent chain is set from the source's parent. It is the allocating
+// counterpart of InitApplyFrame (the pooling-friendly form); both share the
+// same parent-copy logic.
 func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
-	parent := p.parent
-	if parent == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrNilParentEnvironment,
-			"NewApplyFrame called on frame with nil parent - closure environments must have a parent",
-		))
-	}
-	q := &EnvironmentFrame{
-		parent:     parent,
-		global:     parent.global,
-		phaseLevel: parent.phaseLevel,
-		phases:     parent.phases,
-		namespace:  parent.namespace,
-	}
-	p.local.copyForApplyInto(&q.local)
+	q := &EnvironmentFrame{}
+	p.InitApplyFrame(q)
 	return q
 }
 

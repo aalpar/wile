@@ -184,14 +184,14 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// (unlike syntax-rules which always has the macro name as the first element)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	patternVars := make(map[string]struct{})
-	err := collectPatternVariables(pattern, literalSyntax, false, patternVars)
+	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, false, patternVars, nil, match.DefaultEllipsis)
 	if err != nil {
 		return err
 	}
 
 	// R7RS §4.3.2: _ is a wildcard that matches anything without binding.
 	// The pattern compiler handles _ as a non-capturing wildcard, but
-	// collectPatternVariables includes it. Remove it so BindPatternVars
+	// collectPatternVariablesWithEllipsis includes it. Remove it so BindPatternVars
 	// doesn't create a void binding for _.
 	_, wildcardIsLiteral := literalSyntax["_"]
 	if !wildcardIsLiteral {

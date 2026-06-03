@@ -90,23 +90,12 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	}
 
 	// Has splicing: (list->vector (append seg1 seg2 ...))
-	type segmentType int
-	const (
-		segNormal segmentType = iota
-		segSplice
-	)
-	type segment struct {
-		typ   segmentType
-		elems []syntax.SyntaxValue
-		expr  syntax.SyntaxValue
-	}
-
-	var segments []segment
+	var segments []quasiSegment
 	var currentElems []syntax.SyntaxValue
 
 	flushNormal := func() {
 		if len(currentElems) > 0 {
-			segments = append(segments, segment{typ: segNormal, elems: currentElems})
+			segments = append(segments, quasiSegment{kind: quasiSegNormal, elems: currentElems})
 			currentElems = nil
 		}
 	}
@@ -120,7 +109,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 				if elemPair.Length() == 2 {
 					cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
 					expr := cdrPair.SyntaxCar()
-					segments = append(segments, segment{typ: segSplice, expr: expr})
+					segments = append(segments, quasiSegment{kind: quasiSegSplice, expr: expr})
 				} else {
 					// Malformed - treat as normal
 					currentElems = append(currentElems, p.expandQuasi(ctx, elem, depth, kw))
@@ -132,22 +121,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	}
 	flushNormal()
 
-	// Build (append seg1 seg2 ...)
-	var appendArgs []syntax.SyntaxValue
-	appendArgs = append(appendArgs, syntax.NewSyntaxSymbol("append", srcCtx))
-
-	for _, seg := range segments {
-		switch seg.typ {
-		case segNormal:
-			listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
-			listArgs = append(listArgs, seg.elems...)
-			appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
-		case segSplice:
-			appendArgs = append(appendArgs, seg.expr)
-		}
-	}
-
-	appendExpr := p.buildQuasiSyntaxList(srcCtx, appendArgs...)
+	appendExpr := p.buildQuasiSyntaxList(srcCtx, p.segmentsToAppendArgs(srcCtx, segments)...)
 	return p.buildQuasiSyntaxList(srcCtx,
 		syntax.NewSyntaxSymbol("list->vector", srcCtx),
 		appendExpr,

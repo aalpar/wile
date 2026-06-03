@@ -131,20 +131,9 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 
 	err = fcls.fn(p)
 	if err != nil {
-		// Propagate prompt aborts, exception escapes, and timer interrupts as-is.
-		var abortErr *ErrPromptAbort
-		if errors.As(err, &abortErr) {
-			return nil, err
-		}
-		var excErr *ErrExceptionEscape
-		if errors.As(err, &excErr) {
-			return nil, err
-		}
-		var timerErr *ErrTimerInterrupt
-		if errors.As(err, &timerErr) {
-			return nil, err
-		}
-		return nil, goErrorToSchemeException(p, err)
+		// applyCallableError propagates prompt aborts, exception escapes, and
+		// timer interrupts as-is; everything else becomes a Scheme exception.
+		return nil, applyCallableError(p, err)
 	}
 
 	// Immediate timeout check after foreign call returns successfully.

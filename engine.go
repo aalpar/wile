@@ -893,17 +893,24 @@ func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *regis
 				continue
 			}
 
-			reg.AddDocOnlyPrimitive(registry.PrimitiveSpec{
-				Name:       name,
-				Doc:        parsed.Doc,
-				ParamNames: parsed.ParamNames,
-				ParamTypes: parsed.ParamTypes,
-				ReturnType: parsed.ReturnType,
-				Category:   parsed.Category,
-				Keywords:   parsed.Keywords,
-				ParamCount: len(parsed.ParamNames),
-			})
+			reg.AddDocOnlyPrimitive(docOnlySpec(name, parsed))
 		}
+	}
+}
+
+// docOnlySpec builds a documentation-only PrimitiveSpec from a parsed
+// docstring and the binding's external name. Used by both the library-export
+// and runtime-binding docstring registration walks.
+func docOnlySpec(name string, parsed docparse.DocInfo) registry.PrimitiveSpec {
+	return registry.PrimitiveSpec{
+		Name:       name,
+		Doc:        parsed.Doc,
+		ParamNames: parsed.ParamNames,
+		ParamTypes: parsed.ParamTypes,
+		ReturnType: parsed.ReturnType,
+		Category:   parsed.Category,
+		Keywords:   parsed.Keywords,
+		ParamCount: len(parsed.ParamNames),
 	}
 }
 
@@ -943,16 +950,7 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 			continue
 		}
 
-		reg.AddDocOnlyPrimitive(registry.PrimitiveSpec{
-			Name:       sym.Key,
-			Doc:        parsed.Doc,
-			ParamNames: parsed.ParamNames,
-			ParamTypes: parsed.ParamTypes,
-			ReturnType: parsed.ReturnType,
-			Category:   parsed.Category,
-			Keywords:   parsed.Keywords,
-			ParamCount: len(parsed.ParamNames),
-		})
+		reg.AddDocOnlyPrimitive(docOnlySpec(sym.Key, parsed))
 	}
 }
 

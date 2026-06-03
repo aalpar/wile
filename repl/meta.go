@@ -220,6 +220,35 @@ func (p *MetaCommandHandler) env() *environment.EnvironmentFrame {
 	return p.eng.Environment()
 }
 
+// firstPhaseBinding walks the phase environments of env's namespace in sorted
+// phase order and returns the first binding found for sym, along with the phase
+// it was found in. Returns found=false when env is nil, has no namespace, or no
+// phase binds sym. The binding's value is the source of truth for ,doc and
+// ,disasm, so both walk the phases in the same order.
+func firstPhaseBinding(env *environment.EnvironmentFrame, sym *values.Symbol) (*environment.Binding, environment.Phase, bool) {
+	if env == nil {
+		return nil, 0, false
+	}
+	topLevel := env.Namespace()
+	if topLevel == nil {
+		return nil, 0, false
+	}
+	phases := topLevel.Phases()
+	phaseIndices := phases.Phases()
+	slices.SortFunc(phaseIndices, environment.Phase.Compare)
+	for _, phase := range phaseIndices {
+		phaseEnv := phases.Get(phase)
+		if phaseEnv == nil {
+			continue
+		}
+		bnd := phaseEnv.GetBinding(sym, nil)
+		if bnd != nil {
+			return bnd, phase, true
+		}
+	}
+	return nil, 0, false
+}
+
 func (p *MetaCommandHandler) cmdHelp(args []string, out io.Writer) {
 	if len(args) > 0 {
 		p.cmdHelpSpecific(args[0], out)
@@ -239,10 +268,7 @@ func (p *MetaCommandHandler) cmdHelp(args []string, out io.Writer) {
 			if cmd.category != category {
 				continue
 			}
-			aliases := ""
-			if len(cmd.aliases) > 0 {
-				aliases = " (," + strings.Join(cmd.aliases, ", ,") + ")"
-			}
+			aliases := formatAliases(cmd.aliases)
 			fmt.Fprintf(&content, "  ,%-12s %s%s\n", cmd.name, cmd.summary, aliases)
 		}
 	}
@@ -250,9 +276,19 @@ func (p *MetaCommandHandler) cmdHelp(args []string, out io.Writer) {
 	writeWithPager(out, content.String(), p.pager)
 }
 
+// formatAliases renders a command's alias list as a parenthesized suffix
+// like " (,foo, ,bar)", or "" when the command has no aliases. Shared by the
+// ,help and debug-help command renderers.
+func formatAliases(aliases []string) string {
+	if len(aliases) == 0 {
+		return ""
+	}
+	return " (," + strings.Join(aliases, ", ,") + ")"
+}
+
 func (p *MetaCommandHandler) cmdHelpSpecific(name string, out io.Writer) {
 	for _, cmd := range metaCommands {
-		if cmd.name == name || containsString(cmd.aliases, name) {
+		if cmd.name == name || slices.Contains(cmd.aliases, name) {
 			var content strings.Builder
 			fmt.Fprintf(&content, ",%s — %s\n\n%s\n", cmd.name, cmd.summary, cmd.detail)
 			writeWithPager(out, content.String(), p.pager)
@@ -260,10 +296,6 @@ func (p *MetaCommandHandler) cmdHelpSpecific(name string, out io.Writer) {
 		}
 	}
 	fmt.Fprintf(out, "Unknown command: %s (type ,help for commands)\n", name)
-}
-
-func containsString(ss []string, s string) bool {
-	return slices.Contains(ss, s)
 }
 
 func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
@@ -295,42 +327,26 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	var content strings.Builder
 
 	// Walk phase environments first — the binding's value is the source of truth
-	env := p.env()
-	if env != nil {
-		topLevel := env.Namespace()
-		if topLevel != nil {
-			phases := topLevel.Phases()
-			phaseIndices := phases.Phases()
-			slices.SortFunc(phaseIndices, environment.Phase.Compare)
-
-			sym := values.NewSymbol(name)
-			for _, phase := range phaseIndices {
-				phaseEnv := phases.Get(phase)
-				if phaseEnv == nil {
-					continue
-				}
-				bnd := phaseEnv.GetBinding(sym, nil)
-				if bnd != nil {
-					// For foreign closures, prefer DocProvider's rich format
-					// (signature, types, category)
-					if bnd.BindingType() == environment.BindingTypeVariable {
-						isForeign := p.eng != nil &&
-							p.eng.FormLabel(wile.WrapValue(bnd.Value())) == "primitive"
-						if isForeign && p.docProv != nil {
-							info, found := p.docProv.LookupDoc(name)
-							if found {
-								formatPrimitiveDoc(&content, name, info, showExamples)
-								writeWithPager(out, content.String(), p.pager)
-								return
-							}
-						}
-					}
-					formatBindingDoc(&content, name, bnd, phase, p.eng, showExamples)
+	sym := values.NewSymbol(name)
+	bnd, phase, found := firstPhaseBinding(p.env(), sym)
+	if found {
+		// For foreign closures, prefer DocProvider's rich format
+		// (signature, types, category)
+		if bnd.BindingType() == environment.BindingTypeVariable {
+			isForeign := p.eng != nil &&
+				p.eng.FormLabel(wile.WrapValue(bnd.Value())) == "primitive"
+			if isForeign && p.docProv != nil {
+				info, lookupFound := p.docProv.LookupDoc(name)
+				if lookupFound {
+					formatPrimitiveDoc(&content, name, info, showExamples)
 					writeWithPager(out, content.String(), p.pager)
 					return
 				}
 			}
 		}
+		formatBindingDoc(&content, name, bnd, phase, p.eng, showExamples)
+		writeWithPager(out, content.String(), p.pager)
+		return
 	}
 
 	// Fallback: DocProvider for names not found in any phase environment
@@ -516,26 +532,12 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		val := bnd.Value()
 
 		// Try structured docstring for closures.
-		raw := callableDoc(val)
-		if raw != "" {
-			parsed := docparse.ParseDocstring(raw)
-			if parsed.HasStructuredMetadata() {
-				typeLabel := ""
-				if eng != nil {
-					typeLabel = eng.FormLabel(wile.WrapValue(val))
-				}
-				formatPrimitiveDoc(w, name, DocInfo{
-					Doc:        parsed.Doc,
-					Syntax:     parsed.Syntax,
-					TypeLabel:  typeLabel,
-					ParamNames: parsed.ParamNames,
-					ParamTypes: parsed.ParamTypes,
-					ReturnType: parsed.ReturnType,
-					Category:   parsed.Category,
-					Keywords:   parsed.Keywords,
-				}, showExamples)
-				return
-			}
+		typeLabel := ""
+		if eng != nil {
+			typeLabel = eng.FormLabel(wile.WrapValue(val))
+		}
+		if tryStructuredBindingDoc(w, name, callableDoc(val), typeLabel, showExamples) {
+			return
 		}
 
 		fmt.Fprintf(w, "%s: %s (%s)\n", name, val.SchemeString(), phaseName)
@@ -778,25 +780,9 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 	sym := values.NewSymbol(name)
 
 	var val values.Value
-	env := p.env()
-	if env != nil {
-		topLevel := env.Namespace()
-		if topLevel != nil {
-			phases := topLevel.Phases()
-			phaseIndices := phases.Phases()
-			slices.SortFunc(phaseIndices, environment.Phase.Compare)
-			for _, phase := range phaseIndices {
-				phaseEnv := phases.Get(phase)
-				if phaseEnv == nil {
-					continue
-				}
-				bnd := phaseEnv.GetBinding(sym, nil)
-				if bnd != nil {
-					val = bnd.Value()
-					break
-				}
-			}
-		}
+	bnd, _, found := firstPhaseBinding(p.env(), sym)
+	if found {
+		val = bnd.Value()
 	}
 
 	if val == nil {

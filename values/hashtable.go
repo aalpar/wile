@@ -184,32 +184,34 @@ func (p *Hashtable) Delete(key Value) error {
 	return nil
 }
 
-// Keys returns a list of all keys in the hash table.
-func (p *Hashtable) Keys() Tuple {
+// collectEntries walks every bucket and projects each entry to a Value,
+// returning the projections as a proper list. Keys and Values differ only
+// in which entry field they read.
+func (p *Hashtable) collectEntries(project func(e hashtableEntry) Value) Tuple {
 	if p.size == 0 {
 		return EmptyList
 	}
-	keys := make([]Value, 0, p.size)
+	out := make([]Value, 0, p.size)
 	for _, bucket := range p.buckets {
 		for _, e := range bucket {
-			keys = append(keys, e.key)
+			out = append(out, project(e))
 		}
 	}
-	return List(keys...)
+	return List(out...)
+}
+
+// Keys returns a list of all keys in the hash table.
+func (p *Hashtable) Keys() Tuple {
+	return p.collectEntries(func(e hashtableEntry) Value {
+		return e.key
+	})
 }
 
 // Values returns a list of all values in the hash table.
 func (p *Hashtable) Values() Tuple {
-	if p.size == 0 {
-		return EmptyList
-	}
-	vals := make([]Value, 0, p.size)
-	for _, bucket := range p.buckets {
-		for _, e := range bucket {
-			vals = append(vals, e.value)
-		}
-	}
-	return List(vals...)
+	return p.collectEntries(func(e hashtableEntry) Value {
+		return e.value
+	})
 }
 
 // Size returns the number of entries in the hash table.

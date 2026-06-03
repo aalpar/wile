@@ -139,7 +139,7 @@ func TestIsCommentToken(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			tok := NewTokenizerWithComments(strings.NewReader(tc.input), false)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
 			token, err := tok.Next()
 			c.Check(err, qt.IsNil)
 			c.Check(token.Type(), qt.Equals, tc.expectedType)

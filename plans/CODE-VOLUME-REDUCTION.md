@@ -10,8 +10,17 @@ confirmed**.
 **Phase 2 (cross-extension helpers) SHIPPED** (`cleanup/code-volume-phase2`, commit `369c4f98`;
 net −74 prod LOC; `make lint` 0 issues + `make covercheck` 41/41 ≥80% green).
 **Phase 3 (numeric/parse formatting) SHIPPED** (`cleanup/code-volume-phase3`; findings 11, 12,
-19, 25, 28, 39; `make lint` 0 issues + `make covercheck` 41/41 ≥80% green). Phases 4-5 pending
-(Phase 3/4 scope reconciled 2026-06-03 — see below).
+19, 25, 28, 39; `make lint` 0 issues + `make covercheck` 41/41 ≥80% green).
+**Phase 4 (intra-package dedup/over-abstraction) SHIPPED** (`cleanup/code-volume-phase4`; findings
+5, 13, 14, 16, 20, 21, 23, 24, 29, 32, 37, 40, 48 + F47 ride-along; `make lint` 0 issues +
+`make covercheck` 41/41 ≥80% green). **Two findings dropped as false positives** (verified against
+code): **F30** (`makeChar`/`makeStringComparePrimitive`) — the "single-use forwarders" are
+load-bearing import-boundary adapters; every registration file imports only `registry`+`values`
+(zero exceptions), and inlining would force `machine`+`helpers` imports into the declarative
+registration layer. **F42** (max-name-width ×3) — `repl/meta.go` does not import `registry`, so the
+generic-with-projection helper would add a package import plus three mandatory multi-line closures
+to replace three trivial inline `max-len` loops; net-negative on LOC, coupling, and readability.
+Phase 5 pending (Phase 3/4 scope reconciled 2026-06-03 — see below).
 **Related plans:**
 - `2026-05-08-dispatch-axis-as-data.md` — names the "parallel-variant" pattern (the
   factory theme). The factory work below is its continuation. See `FACTORY-AUDIT.md`.
@@ -278,12 +287,19 @@ make covercheck` green before claiming done. Preserve sentinels; tests via `erro
   `(*Parser).convertWrappedNumber` (unifies makeExact/makeInexact unwrap+rewrap scaffolding).
   Regenerated `axis-b-manifest.scm` (loc shifts only; count 465). Tail-F49 not taken (left for
   a `numeric_tower.go` ride-along).
-- **Phase 4 — Intra-package dedup/over-abstraction.** Findings 5 (reuse!), 13, 14, 16, 20,
-  21, 23, 24, 29, 30, 32, 37, 40, 42, 48. ~120 LOC. Per-package, low risk. **Changes from the
+- **Phase 4 — Intra-package dedup/over-abstraction.** ✅ SHIPPED (`cleanup/code-volume-phase4`).
+  Findings 5 (reuse `applyCallableError` at 3 inline sites), 13 (`quasiSegment` type + `segmentsToAppendArgs`
+  hoisted to package level, shared by list↔vector splice expanders), 14 (named-let reuses
+  `createBindingEnv` with tag prepended), 16 (`BindingTypeVariable` doc routed through existing
+  `tryStructuredBindingDoc`), 20 (`NewApplyFrame` delegates to `InitApplyFrame`), 21 (`firstPhaseBinding`
+  walk shared by `cmdDoc`↔`DisassembleBinding`), 23 (deleted 3 prod-dead scope-set wrappers, tests
+  redirected to `values.*`), 24 (`docOnlySpec` helper), 29 (deleted `NewTokenizerWithComments`
+  pass-through + stale doc, all callers → `NewTokenizer`), 32 (inlined `collectPatternVariables`
+  wrapper), 37 (`emitProcAndArgs` shared by validated-call↔apply), 40 (`containsString` → `slices.Contains`),
+  48 (`collectEntries` shared by hashtable `Keys`↔`Values`) + F47 ride-along (`formatAliases` shared by
+  `meta.go`↔`debug.go`). **F30 and F42 dropped as false positives** (see header). **Changes from the
   original list (see reconciliation):** F39 moved to Phase 3; **F41 dropped** (already resolved —
-  `expandAndCompileOptimized` is the shared core); **F47 demoted to tail** (2 LOC). F42 (3 LOC)
-  is a ride-along. Sequence by file: `repl/meta.go` (16/21/40/42), `machine/compilation`
-  (13/14/32/37), `engine.go` (24), `values/` (48).
+  `expandAndCompileOptimized` is the shared core); **F47 demoted to tail** (2 LOC, taken as ride-along).
 - **Phase 5 — Factory sweep.** Findings 6, 8, 38, 43 + the broader audit. → **`FACTORY-AUDIT.md`.**
   Defer until Phases 2-4 settle (they reshape `registry/helpers`, the factory sink).
 

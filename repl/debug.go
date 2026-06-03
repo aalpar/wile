@@ -297,10 +297,7 @@ func (p *DebugContext) cmdWhere(_ []string, out io.Writer) {
 func (p *DebugContext) cmdHelp(_ []string, out io.Writer) {
 	fmt.Fprintln(out, "Debug commands:")
 	for _, dc := range p.DebugCommands() {
-		aliases := ""
-		if len(dc.Aliases) > 0 {
-			aliases = " (," + strings.Join(dc.Aliases, ", ,") + ")"
-		}
+		aliases := formatAliases(dc.Aliases)
 		fmt.Fprintf(out, "  ,%-12s %s%s\n", dc.Name, dc.Summary, aliases)
 	}
 }

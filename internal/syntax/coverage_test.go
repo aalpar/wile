@@ -208,11 +208,11 @@ func TestHasScope(t *testing.T) {
 	scope2 := NewScope()
 	scope3 := NewScope()
 
-	qt.Assert(t, HasScope([]*Scope{}, scope1), qt.IsFalse)
-	qt.Assert(t, HasScope([]*Scope{scope1}, scope1), qt.IsTrue)
-	qt.Assert(t, HasScope([]*Scope{scope1}, scope2), qt.IsFalse)
-	qt.Assert(t, HasScope([]*Scope{scope1, scope2}, scope2), qt.IsTrue)
-	qt.Assert(t, HasScope([]*Scope{scope1, scope2}, scope3), qt.IsFalse)
+	qt.Assert(t, values.HasScope([]*Scope{}, scope1), qt.IsFalse)
+	qt.Assert(t, values.HasScope([]*Scope{scope1}, scope1), qt.IsTrue)
+	qt.Assert(t, values.HasScope([]*Scope{scope1}, scope2), qt.IsFalse)
+	qt.Assert(t, values.HasScope([]*Scope{scope1, scope2}, scope2), qt.IsTrue)
+	qt.Assert(t, values.HasScope([]*Scope{scope1, scope2}, scope3), qt.IsFalse)
 }
 
 func TestAddScopeToSet(t *testing.T) {
@@ -220,17 +220,17 @@ func TestAddScopeToSet(t *testing.T) {
 	scope2 := NewScope()
 
 	scopes := []*Scope{}
-	scopes = AddScopeToSet(scopes, scope1)
+	scopes = values.AddScopeToSet(scopes, scope1)
 	qt.Assert(t, len(scopes), qt.Equals, 1)
-	qt.Assert(t, HasScope(scopes, scope1), qt.IsTrue)
+	qt.Assert(t, values.HasScope(scopes, scope1), qt.IsTrue)
 
-	scopes = AddScopeToSet(scopes, scope2)
+	scopes = values.AddScopeToSet(scopes, scope2)
 	qt.Assert(t, len(scopes), qt.Equals, 2)
-	qt.Assert(t, HasScope(scopes, scope1), qt.IsTrue)
-	qt.Assert(t, HasScope(scopes, scope2), qt.IsTrue)
+	qt.Assert(t, values.HasScope(scopes, scope1), qt.IsTrue)
+	qt.Assert(t, values.HasScope(scopes, scope2), qt.IsTrue)
 
 	// Adding duplicate should not increase size
-	scopes = AddScopeToSet(scopes, scope1)
+	scopes = values.AddScopeToSet(scopes, scope1)
 	qt.Assert(t, len(scopes), qt.Equals, 2)
 }
 
@@ -240,17 +240,17 @@ func TestRemoveScopeFromSet(t *testing.T) {
 	scope3 := NewScope()
 
 	scopes := []*Scope{scope1, scope2, scope3}
-	scopes = RemoveScopeFromSet(scopes, scope2)
+	scopes = values.RemoveScopeFromSet(scopes, scope2)
 	qt.Assert(t, len(scopes), qt.Equals, 2)
-	qt.Assert(t, HasScope(scopes, scope1), qt.IsTrue)
-	qt.Assert(t, HasScope(scopes, scope2), qt.IsFalse)
-	qt.Assert(t, HasScope(scopes, scope3), qt.IsTrue)
+	qt.Assert(t, values.HasScope(scopes, scope1), qt.IsTrue)
+	qt.Assert(t, values.HasScope(scopes, scope2), qt.IsFalse)
+	qt.Assert(t, values.HasScope(scopes, scope3), qt.IsTrue)
 
-	scopes = RemoveScopeFromSet(scopes, scope1)
+	scopes = values.RemoveScopeFromSet(scopes, scope1)
 	qt.Assert(t, len(scopes), qt.Equals, 1)
 	qt.Assert(t, scopes[0], qt.Equals, scope3)
 
-	scopes = RemoveScopeFromSet(scopes, scope3)
+	scopes = values.RemoveScopeFromSet(scopes, scope3)
 	qt.Assert(t, len(scopes), qt.Equals, 0)
 }
 
