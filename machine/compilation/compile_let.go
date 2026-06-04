@@ -82,9 +82,12 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	// Emit init compilation + stores based on Kind.
 	switch v.Kind {
 	case validate.LetKindLet:
-		// Inits already on stack — store in reverse (LIFO).
+		// Inits already on stack — store in reverse (LIFO). Resolve the slot
+		// scope-aware: two hygienically-distinct same-named bindings occupy
+		// separate slots, so a bare-name (nil-scope) lookup would send every
+		// store to slot 0 and leave the others #!void.
 		for i := n - 1; i >= 0; i-- {
-			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, nil)
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, v.Bindings[i].Name.Scopes())
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile let: binding %q not found in local environment",
@@ -108,7 +111,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 				b.Name.Scopes(),
 				b.Name.SourceContext(),
 			)
-			li := childEnv.GetLocalIndex(b.Name.Sym, nil)
+			li := childEnv.GetLocalIndex(b.Name.Sym, b.Name.Scopes())
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile let*: binding %q not found in local environment",
@@ -126,7 +129,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 			if err != nil {
 				return err
 			}
-			li := childEnv.GetLocalIndex(b.Name.Sym, nil)
+			li := childEnv.GetLocalIndex(b.Name.Sym, b.Name.Scopes())
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile letrec*: binding %q not found in local environment",
@@ -146,7 +149,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 			p.AppendOperations(machine.NewOperationPush())
 		}
 		for i := n - 1; i >= 0; i-- {
-			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, nil)
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, v.Bindings[i].Name.Scopes())
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile letrec: binding %q not found in local environment",

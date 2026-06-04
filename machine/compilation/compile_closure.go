@@ -23,37 +23,10 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/werr"
 )
-
-// setScopesOnLastBinding attaches hygiene scopes to the most recently created local binding.
-//
-// This function is called after EnsureLocalBinding to preserve macro hygiene information.
-// EnsureLocalBinding doesn't accept scopes as a parameter, so scopes must be attached
-// separately. The scopes track which macro expansion introduced the binding, enabling
-// hygienic macro expansion per R6RS/R7RS.
-//
-// Usage: Called after each parameter binding is created in compileClosure and bindRestParameter.
-//
-// Example flow:
-//
-//	lenv.EnsureLocalBinding(param, BindingTypeVariable)  // creates binding without scopes
-//	setScopesOnLastBinding(paramScopes, lenv)            // attaches scopes to that binding
-//
-// If scopes is nil or empty, this is a no-op (the binding came from source code, not a macro).
-func setScopesOnLastBinding(scopes []*syntax.Scope, lenv *environment.LocalEnvironmentFrame) {
-	if len(scopes) == 0 {
-		return
-	}
-	bindings := lenv.Bindings()
-	if len(bindings) == 0 {
-		return
-	}
-	bindings[len(bindings)-1].EnsureMeta().Scopes = scopes
-}
 
 // compileClosureBody binds parameters, compiles the body, optimizes, and registers
 // the template and environment as literals. Returns the literal indices so the
@@ -75,17 +48,20 @@ func (p *CompileTimeContinuation) compileClosureBody(
 			param := paramSym.Sym
 			paramScopes := paramSym.Scopes()
 
-			_, ok := lenv.EnsureLocalBinding(param, environment.BindingTypeVariable)
-			if !ok {
+			// Scope-aware duplicate detection (Flatt's sets-of-scopes model):
+			// two formals that print the same but carry distinct intro scopes
+			// (from separate macro-expansion steps) are distinct bindings, not
+			// duplicates. MaybeCreateLocalBinding returns false only when a
+			// scope-compatible binding already exists — a genuine duplicate.
+			// This mirrors the let/define fix in PRs #606/#607 (SRFI-42 Bug A).
+			_, created := lenv.MaybeCreateLocalBinding(param, environment.BindingTypeVariable, paramScopes, nil)
+			if !created {
 				return 0, 0, werr.WrapForeignErrorf(
 					werr.ErrDuplicateBinding,
 					"duplicate parameter %q in %s", param.Key, errContext,
 				)
 			}
 
-			// Preserve hygiene scopes from the source — tracks which macro
-			// expansion introduced this binding (R7RS sets-of-scopes model).
-			setScopesOnLastBinding(paramScopes, lenv)
 			tpl.IncrementParameterCount()
 		}
 
@@ -203,16 +179,14 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, _ *CompileTimeContinua
 
 	// Create a local binding slot for the rest parameter. This slot comes after
 	// all required parameter slots. The VM knows to populate it with a list of
-	// excess arguments because tpl.isVariadic is set below.
-	_, ok := lenv.EnsureLocalBinding(rest, environment.BindingTypeVariable)
-	if !ok {
+	// excess arguments because tpl.isVariadic is set below. Scope-aware dedup
+	// (as for required params) keeps macro-introduced rest parameters distinct
+	// from same-named required formals carrying different intro scopes.
+	_, created := lenv.MaybeCreateLocalBinding(rest, environment.BindingTypeVariable, restScopes, nil)
+	if !created {
 		// Rest parameter name conflicts with a required parameter (e.g., (lambda (x . x) ...))
 		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "duplicate rest parameter %q in lambda", rest.Key)
 	}
-
-	// Preserve hygiene scopes for the rest parameter, same as required parameters.
-	// This ensures macro-introduced rest parameters maintain proper lexical identity.
-	setScopesOnLastBinding(restScopes, lenv)
 
 	// The rest parameter counts toward the total parameter count. For (lambda (a b . rest) ...),
 	// parameterCount becomes 3 (a, b, rest). The VM uses parameterCount together with

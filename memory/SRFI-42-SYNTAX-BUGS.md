@@ -183,3 +183,54 @@ After fixes, the full SRFI-42 reference implementation should load and pass:
 2. Bug A fix: `:parallel` with any variable names works → `(index i)` forms work everywhere
 3. Bug C fix: nested ellipsis produces correct results
 4. End-to-end: `(list-ec (: i 5) (* i i))` → `(0 1 4 9 16)` via dispatch
+
+## Follow-up (2026-06-03): Bug A fix was INCOMPLETE — three sibling sites missed
+
+The PR #606/#607 Bug A fix made the **let/letrec/define** duplicate-binding *detection*
+scope-aware (`internal/validate/validate_let.go`, `validate_define.go`). But the same
+bare-key / nil-scope pattern survived at two more sites, surfaced while implementing
+SRFI-26 `cut`/`cute` (which recursively inject the literal formal `x`/`a`):
+
+- **Lambda-formals duplicate detection** — `machine/compilation/compile_closure.go`
+  `compileClosureBody` + `bindRestParameter` used `EnsureLocalBinding` (returns slots[0],
+  ignores scopes), so `(lambda (x x) ...)` produced by two `<>` slots errored as a
+  duplicate. Fixed by switching to scope-aware `MaybeCreateLocalBinding`. The separate
+  `setScopesOnLastBinding` helper was deleted (scope-setting folds into the create call).
+
+- **Let value-store slot resolution** — `machine/compilation/compile_let.go` looked up the
+  store target with `GetLocalIndex(name, nil)` at all four binding-form sites. With two
+  same-name scope-distinct bindings, nil scopes → "first match" → BOTH stores hit slot 0;
+  the second slot was allocated (scope-aware `createLetCompileEnv`) but never written, so a
+  scope-aware *read* returned `#!void`. Repro: `(let ((a@s2 20)(a@s1 10)) (list a@s1 a@s2))`
+  → `(#!void 20)`. Fixed by passing `name.Scopes()` to `GetLocalIndex` at the store sites.
+
+- **Internal-define store slot resolution** — `machine/compilation/compile_validated.go`
+  `emitDefineStore` retrieved the slot with bare-key `EnsureLocalBinding`, while the declare
+  side (`declareDefineBinding` → `MaybeCreateLocalBinding`) created scope-distinct slots.
+  Two hygienically-distinct same-named internal defines in one body → both stores hit
+  slot 0, second slot `#!void`. Repro: a recursive macro emitting `(define a v)` per step
+  inside `(let () defs ... (- refs ...))` → `(- #!void 20)`. Fixed by threading
+  `v.Name().Scopes()` into `emitDefineStore` and retrieving via `GetLocalIndex(sym, scopes)`
+  in the local branch (the global branch needs no change — globals aren't multi-slot).
+  Found by the autonomous sweep below, not by cut/cute (which don't emit internal defines).
+
+Lesson: when fixing a bare-key→scope-aware bug, grep ALL of `EnsureLocalBinding` and
+`GetLocalIndex(..., nil)` across the compiler. Detection, *store*, and *load* are separate
+code paths; fixing one leaves the others latent. THREE sites carried the **value-binding
+store/create mismatch** defect (lambda formals, let store, internal-define store) — all now
+fixed, each verified by a same-name-distinct-scope repro yielding `#!void`.
+
+Remaining `GetLocalIndex(..., nil)` sites, by category (2026-06-03 audit):
+- **Definitively safe** — `compile_time_continuation.go` CompileSymbol (guarded by
+  `len(scopes)==0`, the no-locals-in-scope fast path) and `compile_validated.go` set!-store
+  (already scope-aware via the "M1 fix").
+- **Different mechanism, not audited for this class** — `compile_syntax_rules.go:314`
+  (definition-time free-identifier capture), `compile_syntax_form.go:128` (syntax-case
+  pattern-variable detection), `expander_let_syntax.go:184` (let-syntax keyword retrieval,
+  only in the `!created` fallback). These resolve distinct-name-per-form identifiers, so the
+  same-name-distinct-scope collision that drives this bug class doesn't arise in practice —
+  but they were NOT proven immune. If a future hygiene bug surfaces in macro keyword/
+  pattern-var resolution, start here.
+
+Tests: `lambda_formals_hygiene_test.go` (incl. `TestInternalDefineSameNameDistinctScopeBindings`,
+`TestLetSameNameDistinctScopeBindings`), `integration/testdata/srfi-26-tests.scm`.

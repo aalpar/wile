@@ -28,7 +28,7 @@ import (
 // nested closures, and mutation over closed-over variables.
 //
 // Source: compile_closure.go (compileClosure, compileClosureBody, compileBody,
-// bindRestParameter, setScopesOnLastBinding).
+// bindRestParameter).
 func TestCompileClosure(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic closure capture — call inner closure to retrieve captured value

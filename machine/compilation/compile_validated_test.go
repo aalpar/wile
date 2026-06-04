@@ -309,50 +309,6 @@ func (p *mockValidatedExpr) Source() *syntax.SourceContext {
 // Verify interface satisfaction at compile time.
 var _ validate.ValidatedExpr = (*mockValidatedExpr)(nil)
 
-// TestSetScopesOnLastBinding_EmptyBindings verifies the guard when
-// setScopesOnLastBinding is called on a LocalEnvironmentFrame with no bindings.
-func TestSetScopesOnLastBinding_EmptyBindings(t *testing.T) {
-	c := qt.New(t)
-
-	lenv := environment.NewLocalEnvironment(0)
-	scopes := []*syntax.Scope{syntax.NewScope()}
-
-	// Should not panic - the empty bindings guard handles this
-	setScopesOnLastBinding(scopes, lenv)
-	c.Assert(lenv.Bindings(), qt.HasLen, 0)
-}
-
-// TestSetScopesOnLastBinding_WithBinding verifies that scopes are applied
-// to the last binding in the environment.
-func TestSetScopesOnLastBinding_WithBinding(t *testing.T) {
-	c := qt.New(t)
-
-	lenv := environment.NewLocalEnvironment(0)
-	sym := values.NewSymbol("x")
-	lenv.EnsureLocalBinding(sym, environment.BindingTypeVariable)
-
-	scope := syntax.NewScope()
-	setScopesOnLastBinding([]*syntax.Scope{scope}, lenv)
-
-	bindings := lenv.Bindings()
-	c.Assert(bindings, qt.HasLen, 1)
-	c.Assert(bindings[0].Scopes(), qt.HasLen, 1)
-}
-
-// TestSetScopesOnLastBinding_NilScopes verifies that nil scopes is a no-op.
-func TestSetScopesOnLastBinding_NilScopes(t *testing.T) {
-	lenv := environment.NewLocalEnvironment(0)
-	sym := values.NewSymbol("x")
-	lenv.EnsureLocalBinding(sym, environment.BindingTypeVariable)
-
-	// Should not modify anything
-	setScopesOnLastBinding(nil, lenv)
-
-	bindings := lenv.Bindings()
-	qt.Assert(t, bindings, qt.HasLen, 1)
-	qt.Assert(t, bindings[0].Scopes(), qt.HasLen, 0)
-}
-
 // TestBindRestParameter_DuplicateRestParam verifies that a rest parameter
 // with the same name as a required parameter produces an error.
 func TestBindRestParameter_DuplicateRestParam(t *testing.T) {

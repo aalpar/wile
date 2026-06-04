@@ -17,6 +17,7 @@ package compilation
 import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/forms"
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -316,7 +317,7 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 	// Step 3: Store the compiled value into the binding and load void.
 	// After this, the binding holds the value and the value register contains void
 	// (since define returns an unspecified value per R7RS).
-	return p.emitDefineStore(sym)
+	return p.emitDefineStore(sym, v.Name().Scopes())
 }
 
 // emitDefineStore emits bytecode to store the compiled value into the defined binding.
@@ -327,16 +328,22 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 // and CompileValidatedDefineFn. The caller has already:
 //  1. Declared the binding via declareDefineBinding
 //  2. Compiled the value expression (leaving result in value register)
-func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol) error {
+func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*syntax.Scope) error {
 	// Push the value from the value register to the eval stack.
 	// Store operations consume from the stack, not the value register.
 	p.AppendOperations(machine.NewOperationPush())
 
 	if p.env.LocalEnvironment() != nil {
 		// Local context (inside a lambda body): store to local variable slot.
-		// EnsureLocalBinding returns the slot index; the binding was already
-		// declared by declareDefineBinding, so this just retrieves the index.
-		li, _ := p.env.EnsureLocalBinding(sym, environment.BindingTypeVariable)
+		// The binding was already declared by declareDefineBinding (scope-aware),
+		// so retrieve its slot scope-aware too. A bare-name lookup would send two
+		// hygienically-distinct same-named internal defines to slot 0, leaving the
+		// second slot #!void (the internal-define analogue of the let-store bug).
+		li := p.env.GetLocalIndex(sym, scopes)
+		if li == nil {
+			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
+				"compile define: binding %q not found in local environment", sym.Key)
+		}
 		p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
 	} else {
 		// Global context (top-level): store to global environment.
@@ -398,7 +405,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 4: Store the closure in the binding and load void as the result.
 	// define returns an unspecified value per R7RS; we use void.
-	return p.emitDefineStore(sym)
+	return p.emitDefineStore(sym, v.Name().Scopes())
 }
 
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
