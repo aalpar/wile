@@ -426,21 +426,22 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 // readLabelReference handles #n# — referencing a previously defined datum label.
 func (p *Parser) readLabelReference() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := strings.Trim(p.cur.String(), "#")
-	var i int64
-	i, p.err = strconv.ParseInt(s, 10, bits.UintSize)
+	var parsed uint64
+	parsed, p.err = strconv.ParseUint(s, 10, bits.UintSize)
 	if p.err != nil {
 		return nil, p.cur, p.err
 	}
+	labelNum := int(parsed)
 	// Look up the datum in the label table
 	if p.datumLabels != nil {
-		labeled, ok := p.datumLabels[int(i)]
+		labeled, ok := p.datumLabels[labelNum]
 		if ok {
 			// Return the actual datum, not a label reference
 			return labeled, p.cur, nil
 		}
 	}
 	// Label not found - return a SyntaxDatumLabel (will error at compile time)
-	q := p.wrapSyntaxDatumLabel(int(i), p.cur)
+	q := p.wrapSyntaxDatumLabel(labelNum, p.cur)
 	return q, p.cur, nil
 }
 
