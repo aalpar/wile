@@ -37,23 +37,12 @@ var PrimBoxQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimUnbox implements the unbox primitive.
 // Returns the value contained in a box.
-func PrimUnbox(mc machine.CallContext) error {
-	b, err := helpers.RequireArg[*values.Box](mc, 0, werr.ErrNotABox, "unbox")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(b.Unbox())
-	return nil
-}
+var PrimUnbox = helpers.MakeUnaryAccessor(werr.ErrNotABox, "unbox", func(b *values.Box) values.Value {
+	return b.Unbox()
+})
 
 // PrimSetBox implements the set-box! primitive.
 // Sets the value contained in a box.
-func PrimSetBox(mc machine.CallContext) error {
-	b, err := helpers.RequireArg[*values.Box](mc, 0, werr.ErrNotABox, "set-box!")
-	if err != nil {
-		return err
-	}
-	b.Value = mc.Arg(1)
-	mc.SetValue(values.Void)
-	return nil
-}
+var PrimSetBox = helpers.MakeBinarySetter(werr.ErrNotABox, "set-box!", func(b *values.Box, val values.Value) {
+	b.Value = val
+})

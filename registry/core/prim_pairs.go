@@ -63,6 +63,11 @@ func PrimCdr(mc machine.CallContext) error {
 }
 
 // PrimSetCar implements the set-car! primitive.
+// PrimSetCar is NOT converted to helpers.MakeBinarySetter: set-car!/set-cdr! are
+// core list mutation reachable from tight loops (Larceny destruc/maze), and the
+// factory's extra indirect call measured ~2% slower on a set-car!-dominated
+// microbenchmark. Kept as an explicit func per the FACTORY-AUDIT hot-path
+// exclusion. See ArgShape unification notes.
 func PrimSetCar(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-car!")
 	if err != nil {
@@ -75,6 +80,8 @@ func PrimSetCar(mc machine.CallContext) error {
 }
 
 // PrimSetCdr implements the set-cdr! primitive.
+// PrimSetCdr is kept as an explicit func for the same hot-path reason as
+// PrimSetCar above (set-cdr! measured ~2% slower through the factory closure).
 func PrimSetCdr(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-cdr!")
 	if err != nil {

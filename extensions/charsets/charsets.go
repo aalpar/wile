@@ -44,14 +44,9 @@ func primCharSetContains(mc machine.CallContext) error {
 	return nil
 }
 
-func primCharSetSize(mc machine.CallContext) error {
-	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "char-set-size")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(cs.Size())))
-	return nil
-}
+var primCharSetSize = helpers.MakeUnaryAccessor(werr.ErrNotACharSet, "char-set-size", func(cs *values.CharSet) values.Value {
+	return values.NewInteger(int64(cs.Size()))
+})
 
 func primCharSetCtor(mc machine.CallContext) error {
 	first, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "%char-set")

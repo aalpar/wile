@@ -136,34 +136,19 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 }
 
 // PrimProcessStdout implements the (process-stdout) primitive.
-func PrimProcessStdout(mc machine.CallContext) error {
-	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-stdout")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(proc.Stdout())
-	return nil
-}
+var PrimProcessStdout = helpers.MakeUnaryAccessor(werr.ErrNotAProcess, "process-stdout", func(proc *values.Process) values.Value {
+	return proc.Stdout()
+})
 
 // PrimProcessStderr implements the (process-stderr) primitive.
-func PrimProcessStderr(mc machine.CallContext) error {
-	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-stderr")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(proc.Stderr())
-	return nil
-}
+var PrimProcessStderr = helpers.MakeUnaryAccessor(werr.ErrNotAProcess, "process-stderr", func(proc *values.Process) values.Value {
+	return proc.Stderr()
+})
 
 // PrimProcessStdin implements the (process-stdin) primitive.
-func PrimProcessStdin(mc machine.CallContext) error {
-	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-stdin")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(proc.Stdin())
-	return nil
-}
+var PrimProcessStdin = helpers.MakeUnaryAccessor(werr.ErrNotAProcess, "process-stdin", func(proc *values.Process) values.Value {
+	return proc.Stdin()
+})
 
 // PrimProcessWait implements the (process-wait) primitive.
 // Blocks until the process exits and returns the exit code.

@@ -11,9 +11,21 @@
 manifest verified (464 entries, set unchanged — fn=/loc= shifts only). **Census finding:** the
 obvious |C|≥4 families were already factored (math `makeRealNumberPrimitive`/`makeComplexPrimitive`
 ×15, char/type/sequence `Make*` factories); the four seed families above were the genuine
-holdouts. A full wile-goast AST-diff sweep across `internal/extensions/*` and the special-form
-registration tables (open-question 3) was **not** run — deferred. Phase 3 (registry-SR Phase 5/6
-ArgShape/unification) remains gated on a 7th-variant trigger not reached by this census.
+holdouts. **Phase 0 census + Phase 3 (ArgShape) SHIPPED** (`cleanup/argshape-unification`, 2026-06-03). The
+full wile-goast AST-diff census ran over all 490 registered primitives (399 fingerprinted, 60 files;
+77 already factory-closures). It found the codebase already factors every same-package family
+(division→`realDivision`, assoc/member→`MemberLookup`/`AssocLookup`, file-open→`openFilePort`,
+predicates/transforms/sequence→existing `Make*`). The one surviving systemic family — the cross-type
+"extract typed arg → project/mutate → set" accessor pattern — exceeded the 7-variant trigger
+(clusters of 13/10/10/6/4), so Phase 3 fired: three generics in `registry/helpers`
+(`MakeUnaryAccessor`, `MakeUnarySideEffect`, `MakeBinarySetter`) collapsed **42 sites** across
+`registry/core`, `extensions/{threads,gointerop,process,charsets}`. Exported `Prim*` kept as `var`
+for embedder API stability. **`set-car!`/`set-cdr!` deliberately NOT converted** — measured ~2%
+regression on a set-car!-dominated microbench (factory adds one indirect call; reachable from
+Larceny destruc/maze), per the hot-path exclusion. `make lint` 0 + `make covercheck` 41/41 +
+axis-b manifest 464 (set unchanged). Cluster 7 (constants: eof-object, char-ready?, ...) left as
+distinct constants. The special-form registration tables (`internal/validate`,
+`machine/compilation`) were out of census scope (open-question 3 — primitive registry only).
 Originally deferred behind `CODE-VOLUME-REDUCTION.md` Phases 2-4 (which reshaped
 `registry/helpers`, the factory sink).
 **Type:** Systematic sweep — not a fixed finding list. Discovers the full set of

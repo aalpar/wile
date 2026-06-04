@@ -100,56 +100,30 @@ func PrimHashtableDelete(mc machine.CallContext) error {
 
 // PrimHashtableKeys implements the hashtable-keys primitive.
 // Returns a list of all keys in the hash table.
-func PrimHashtableKeys(mc machine.CallContext) error {
-	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-keys")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(ht.Keys())
-	return nil
-}
+var PrimHashtableKeys = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-keys", func(ht *values.Hashtable) values.Value {
+	return ht.Keys()
+})
 
 // PrimHashtableValues implements the hashtable-values primitive.
 // Returns a list of all values in the hash table.
-func PrimHashtableValues(mc machine.CallContext) error {
-	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-values")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(ht.Values())
-	return nil
-}
+var PrimHashtableValues = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-values", func(ht *values.Hashtable) values.Value {
+	return ht.Values()
+})
 
 // PrimHashtableSize implements the hashtable-size primitive.
 // Returns the number of entries in the hash table.
-func PrimHashtableSize(mc machine.CallContext) error {
-	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-size")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewInteger(int64(ht.Size())))
-	return nil
-}
+var PrimHashtableSize = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-size", func(ht *values.Hashtable) values.Value {
+	return values.NewInteger(int64(ht.Size()))
+})
 
 // PrimHashtableCopy implements the hashtable-copy primitive.
 // Returns a shallow copy of the hash table.
-func PrimHashtableCopy(mc machine.CallContext) error {
-	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-copy")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(ht.Copy())
-	return nil
-}
+var PrimHashtableCopy = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-copy", func(ht *values.Hashtable) values.Value {
+	return ht.Copy()
+})
 
 // PrimHashtableClear implements the hashtable-clear! primitive.
 // Removes all entries from the hash table.
-func PrimHashtableClear(mc machine.CallContext) error {
-	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-clear!")
-	if err != nil {
-		return err
-	}
+var PrimHashtableClear = helpers.MakeUnarySideEffect(werr.ErrNotAHashtable, "hashtable-clear!", func(ht *values.Hashtable) {
 	ht.Clear()
-	mc.SetValue(values.Void)
-	return nil
-}
+})

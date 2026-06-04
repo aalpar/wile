@@ -131,39 +131,21 @@ func PrimMakeThread(cc machine.CallContext) error {
 
 // PrimThreadName returns the thread's name
 // (thread-name thread) -> string or symbol
-func PrimThreadName(mc machine.CallContext) error {
-	thread, err := helpers.RequireArg[*values.Thread](mc, 0, werr.ErrNotAThread, "thread-name")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewString(thread.Name()))
-	return nil
-}
+var PrimThreadName = helpers.MakeUnaryAccessor(werr.ErrNotAThread, "thread-name", func(thread *values.Thread) values.Value {
+	return values.NewString(thread.Name())
+})
 
 // PrimThreadSpecific returns the thread's specific field
 // (thread-specific thread) -> value
-func PrimThreadSpecific(mc machine.CallContext) error {
-	thread, err := helpers.RequireArg[*values.Thread](mc, 0, werr.ErrNotAThread, "thread-specific")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.ValueOrVoid(thread.Specific()))
-	return nil
-}
+var PrimThreadSpecific = helpers.MakeUnaryAccessor(werr.ErrNotAThread, "thread-specific", func(thread *values.Thread) values.Value {
+	return values.ValueOrVoid(thread.Specific())
+})
 
 // PrimThreadSpecificSet sets the thread's specific field
 // (thread-specific-set! thread obj) -> void
-func PrimThreadSpecificSet(mc machine.CallContext) error {
-	thread, err := helpers.RequireArg[*values.Thread](mc, 0, werr.ErrNotAThread, "thread-specific-set!")
-	if err != nil {
-		return err
-	}
-	val := mc.Arg(1)
-
+var PrimThreadSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAThread, "thread-specific-set!", func(thread *values.Thread, val values.Value) {
 	thread.SetSpecific(val)
-	mc.SetValue(values.Void)
-	return nil
-}
+})
 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
@@ -221,16 +203,9 @@ func PrimThreadSleep(mc machine.CallContext) error {
 
 // PrimThreadTerminate forcefully terminates a thread
 // (thread-terminate! thread) -> void
-func PrimThreadTerminate(mc machine.CallContext) error {
-	thread, err := helpers.RequireArg[*values.Thread](mc, 0, werr.ErrNotAThread, "thread-terminate!")
-	if err != nil {
-		return err
-	}
-
+var PrimThreadTerminate = helpers.MakeUnarySideEffect(werr.ErrNotAThread, "thread-terminate!", func(thread *values.Thread) {
 	thread.Terminate()
-	mc.SetValue(values.Void)
-	return nil
-}
+})
 
 // PrimThreadJoin waits for a thread to terminate
 // (thread-join! thread [timeout [timeout-val]]) -> value
@@ -310,51 +285,28 @@ func PrimMakeMutex(mc machine.CallContext) error {
 
 // PrimMutexName returns the mutex's name
 // (mutex-name mutex) -> string or symbol
-func PrimMutexName(mc machine.CallContext) error {
-	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-name")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewString(mutex.Name()))
-	return nil
-}
+var PrimMutexName = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-name", func(mutex *values.Mutex) values.Value {
+	return values.NewString(mutex.Name())
+})
 
 // PrimMutexSpecific returns the mutex's specific field
 // (mutex-specific mutex) -> value
-func PrimMutexSpecific(mc machine.CallContext) error {
-	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-specific")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.ValueOrVoid(mutex.Specific()))
-	return nil
-}
+var PrimMutexSpecific = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-specific", func(mutex *values.Mutex) values.Value {
+	return values.ValueOrVoid(mutex.Specific())
+})
 
 // PrimMutexSpecificSet sets the mutex's specific field
 // (mutex-specific-set! mutex obj) -> void
-func PrimMutexSpecificSet(mc machine.CallContext) error {
-	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-specific-set!")
-	if err != nil {
-		return err
-	}
-	val := mc.Arg(1)
-
+var PrimMutexSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAMutex, "mutex-specific-set!", func(mutex *values.Mutex, val values.Value) {
 	mutex.SetSpecific(val)
-	mc.SetValue(values.Void)
-	return nil
-}
+})
 
 // PrimMutexState returns the mutex's state
 // (mutex-state mutex) -> symbol or thread
 // Returns: 'not-owned, 'abandoned, or the owner thread
-func PrimMutexState(mc machine.CallContext) error {
-	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-state")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(mutex.StateValue())
-	return nil
-}
+var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state", func(mutex *values.Mutex) values.Value {
+	return mutex.StateValue()
+})
 
 // PrimMutexLock acquires the mutex
 // (mutex-lock! mutex [timeout [thread]]) -> boolean
@@ -501,63 +453,33 @@ func PrimMakeConditionVariable(mc machine.CallContext) error {
 
 // PrimConditionVariableName returns the condition variable's name
 // (condition-variable-name cv) -> string or symbol
-func PrimConditionVariableName(mc machine.CallContext) error {
-	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, werr.ErrNotAConditionVariable, "condition-variable-name")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewString(cv.Name()))
-	return nil
-}
+var PrimConditionVariableName = helpers.MakeUnaryAccessor(werr.ErrNotAConditionVariable, "condition-variable-name", func(cv *values.ConditionVariable) values.Value {
+	return values.NewString(cv.Name())
+})
 
 // PrimConditionVariableSpecific returns the condition variable's specific field
 // (condition-variable-specific cv) -> value
-func PrimConditionVariableSpecific(mc machine.CallContext) error {
-	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, werr.ErrNotAConditionVariable, "condition-variable-specific")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.ValueOrVoid(cv.Specific()))
-	return nil
-}
+var PrimConditionVariableSpecific = helpers.MakeUnaryAccessor(werr.ErrNotAConditionVariable, "condition-variable-specific", func(cv *values.ConditionVariable) values.Value {
+	return values.ValueOrVoid(cv.Specific())
+})
 
 // PrimConditionVariableSpecificSet sets the condition variable's specific field
 // (condition-variable-specific-set! cv obj) -> void
-func PrimConditionVariableSpecificSet(mc machine.CallContext) error {
-	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, werr.ErrNotAConditionVariable, "condition-variable-specific-set!")
-	if err != nil {
-		return err
-	}
-	val := mc.Arg(1)
-
+var PrimConditionVariableSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAConditionVariable, "condition-variable-specific-set!", func(cv *values.ConditionVariable, val values.Value) {
 	cv.SetSpecific(val)
-	mc.SetValue(values.Void)
-	return nil
-}
+})
 
 // PrimConditionVariableSignal signals one waiting thread
 // (condition-variable-signal! cv) -> void
-func PrimConditionVariableSignal(mc machine.CallContext) error {
-	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, werr.ErrNotAConditionVariable, "condition-variable-signal!")
-	if err != nil {
-		return err
-	}
+var PrimConditionVariableSignal = helpers.MakeUnarySideEffect(werr.ErrNotAConditionVariable, "condition-variable-signal!", func(cv *values.ConditionVariable) {
 	cv.Signal()
-	mc.SetValue(values.Void)
-	return nil
-}
+})
 
 // PrimConditionVariableBroadcast signals all waiting threads
 // (condition-variable-broadcast! cv) -> void
-func PrimConditionVariableBroadcast(mc machine.CallContext) error {
-	cv, err := helpers.RequireArg[*values.ConditionVariable](mc, 0, werr.ErrNotAConditionVariable, "condition-variable-broadcast!")
-	if err != nil {
-		return err
-	}
+var PrimConditionVariableBroadcast = helpers.MakeUnarySideEffect(werr.ErrNotAConditionVariable, "condition-variable-broadcast!", func(cv *values.ConditionVariable) {
 	cv.Broadcast()
-	mc.SetValue(values.Void)
-	return nil
-}
+})
 
 // =============================================================================
 // Time Primitives
@@ -579,14 +501,9 @@ var PrimTimeQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimTimeToSeconds converts a time to seconds
 // (time->seconds time) -> number
-func PrimTimeToSeconds(mc machine.CallContext) error {
-	t, err := helpers.RequireArg[*values.Time](mc, 0, werr.ErrNotATime, "time->seconds")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewFloat(t.Seconds()))
-	return nil
-}
+var PrimTimeToSeconds = helpers.MakeUnaryAccessor(werr.ErrNotATime, "time->seconds", func(t *values.Time) values.Value {
+	return values.NewFloat(t.Seconds())
+})
 
 // PrimSecondsToTime converts seconds to a time
 // (seconds->time x) -> time

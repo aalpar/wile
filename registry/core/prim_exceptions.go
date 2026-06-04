@@ -316,25 +316,15 @@ func PrimErrorObjectQ(mc machine.CallContext) error {
 
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
-func PrimErrorObjectMessage(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-message")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(errObj.Message())
-	return nil
-}
+var PrimErrorObjectMessage = helpers.MakeUnaryAccessor(werr.ErrNotANativeError, "error-object-message", func(errObj *values.NativeError) values.Value {
+	return errObj.Message()
+})
 
 // PrimErrorObjectIrritants implements the error-object-irritants accessor.
 // Returns the list of irritant objects from an error object.
-func PrimErrorObjectIrritants(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-irritants")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(errObj.Irritants())
-	return nil
-}
+var PrimErrorObjectIrritants = helpers.MakeUnaryAccessor(werr.ErrNotANativeError, "error-object-irritants", func(errObj *values.NativeError) values.Value {
+	return errObj.Irritants()
+})
 
 // PrimReadErrorQ implements the read-error? predicate.
 // R7RS §6.11: Returns #t if obj is an error object raised during reading.

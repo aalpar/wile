@@ -15,7 +15,6 @@
 package core
 
 import (
-	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -30,11 +29,6 @@ var PrimOpaqueQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimOpaqueTag implements the opaque-tag primitive.
 // Returns the tag of an opaque value as a symbol.
-func PrimOpaqueTag(mc machine.CallContext) error {
-	o, err := helpers.RequireArg[*values.OpaqueValue](mc, 0, werr.ErrNotAnOpaqueValue, "opaque-tag")
-	if err != nil {
-		return err
-	}
-	mc.SetValue(values.NewSymbol(o.OpaqueTag()))
-	return nil
-}
+var PrimOpaqueTag = helpers.MakeUnaryAccessor(werr.ErrNotAnOpaqueValue, "opaque-tag", func(o *values.OpaqueValue) values.Value {
+	return values.NewSymbol(o.OpaqueTag())
+})
