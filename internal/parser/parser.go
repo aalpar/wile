@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/bits"
 	"strconv"
 	"strings"
 
@@ -376,12 +375,10 @@ func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxVal
 func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := schemeutil.TrimPrefixCI(p.cur.String(), "#")
 	is := strings.TrimSuffix(s, "=")
-	var i int64
-	i, p.err = strconv.ParseInt(is, 10, bits.UintSize)
+	labelNum, p.err := strconv.Atoi(is)
 	if p.err != nil {
 		return nil, p.cur, p.err
 	}
-	labelNum := int(i)
 	if p.datumLabels == nil {
 		p.datumLabels = make(map[int]syntax.SyntaxValue)
 	}
