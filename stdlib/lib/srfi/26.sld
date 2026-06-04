@@ -1,5 +1,0 @@
-(define-library (srfi 26)
-  (description "SRFI 26: Notation for Specializing Parameters without Currying — cut, cute.")
-  (export cut cute)
-  (import (scheme base))
-  (include "26.scm"))

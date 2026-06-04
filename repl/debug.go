@@ -173,7 +173,7 @@ func (p *DebugContext) breakpointAction(args []string, out io.Writer, verb strin
 		return
 	}
 
-	id, err := strconv.Atoi(args[0])
+	id, err := strconv.ParseUint(args[0], 10, 32)
 	if err != nil {
 		fmt.Fprintf(out, "Invalid breakpoint ID: %s\n", args[0])
 		return
