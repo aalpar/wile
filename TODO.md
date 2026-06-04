@@ -13,7 +13,7 @@ TODO
 **MCP Server**: Built-in MCP server mode (`wile --mcp`) with eval, doc, apropos, topic, libraries, and reset tools.
 **Examples**: 75 examples across 13 categories, 23 benchmarks (16 Gabriel + Larceny R7RS + Schelog + miniKanren)
 **Tests**: Go test suite comprehensive; Scheme test suite: 3,852 lines across 19 files (11 scheme + 8 algebra) + R7RS conformance suite
-**Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1), (srfi 13), (srfi 14), (srfi 132), (wile strings), (wile charsets); `(wile algebra)` umbrella with 27 sub-libraries — setoid/monoid/group/ring/field/lattice/boolean/heyting/category/closure/differential/galois/semiring/order, plus matrix (Path D, sparse+dense), polynomial (ring-parameterized), incidence (Möbius), unification (AC-matching), combinatorial-graph (1-WL + isomorphism), matching (Roth-Sotomayor + Hungarian), symbolic/abstract-domain/dataflow (wile-goast extraction), fca, pareto, interval, rewrite, graph; stdlib embedded in binary
+**Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1), (srfi 13), (srfi 14), (srfi 26), (srfi 132), (wile strings), (wile charsets); `(wile algebra)` umbrella with 27 sub-libraries — setoid/monoid/group/ring/field/lattice/boolean/heyting/category/closure/differential/galois/semiring/order, plus matrix (Path D, sparse+dense), polynomial (ring-parameterized), incidence (Möbius), unification (AC-matching), combinatorial-graph (1-WL + isomorphism), matching (Roth-Sotomayor + Hungarian), symbolic/abstract-domain/dataflow (wile-goast extraction), fca, pareto, interval, rewrite, graph; stdlib embedded in binary
 
 ### Ordering
 

@@ -128,6 +128,11 @@ func TestSRFI132(t *testing.T) {
 	runSchemeTest(t, "srfi-132-tests.scm", 2*time.Minute, "SRFI-132 sort library")
 }
 
+// TestSRFI26 runs the SRFI-26 (cut/cute specialization) integration tests.
+func TestSRFI26(t *testing.T) {
+	runSchemeTest(t, "srfi-26-tests.scm", 2*time.Minute, "SRFI-26 cut/cute")
+}
+
 // TestSRFI13Phase1 runs the SRFI-13 Phase-1 (top-five) integration tests.
 func TestSRFI13Phase1(t *testing.T) {
 	runSchemeTest(t, "srfi-13-tests-phase1.scm", 2*time.Minute, "SRFI-13 Phase 1 (top-five)")
