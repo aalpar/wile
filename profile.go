@@ -105,8 +105,11 @@ func (p Profile) authorizer() security.Authorizer {
 // WithProfile configures the engine with the named profile's
 // extensions and authorization constraints. WithProfile is additive:
 // it appends the profile's extensions to any already configured via
-// WithExtension/WithExtensions, and sets the profile's authorizer
-// only if one is defined (otherwise leaves any prior authorizer in place).
+// WithExtension/WithExtensions, and records the profile's authorizer
+// only if one is defined. An explicit WithAuthorizer always takes
+// precedence over the profile's authorizer regardless of option order
+// (see resolveAuthorizer), so profile and authorizer options compose
+// commutatively.
 //
 // Per-profile envMap behavior (all five current profiles):
 //   - Tiny: envMap untouched; profile registers no extensions, so envvars primitives are absent.
@@ -124,7 +127,7 @@ func WithProfile(p Profile) EngineOption {
 		cfg.extensions = append(cfg.extensions, p.extensions()...)
 		auth := p.authorizer()
 		if auth != nil {
-			cfg.authorizer = auth
+			cfg.profileAuthorizer = auth
 		}
 		if (p == Console || p == ConsoleWithLoad) && cfg.envMap == nil {
 			cfg.envMap = make(map[string]string)

@@ -132,8 +132,9 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	ns := environment.NewNamespace()
 	ns.SetRegistry(reg)
 	ns.SetLoadPathStack(sourceload.NewLoadStack())
-	if cfg.authorizer != nil {
-		ns.SetAuthorizer(cfg.authorizer)
+	auth := cfg.resolveAuthorizer()
+	if auth != nil {
+		ns.SetAuthorizer(auth)
 	}
 	if cfg.envMap != nil {
 		ns.SetEnvMap(cfg.envMap)

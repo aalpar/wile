@@ -36,13 +36,11 @@ func SandboxEnvPrefix(prefix string) SandboxOption {
 // Environment variable reads are prefix-filtered (default "WILE_").
 // Code loading and process execution are denied.
 //
-// When composed with a profile's built-in authorizer, the result is
-// the intersection (most-restrictive-wins) via security.All().
-//
-// Ordering matters: WithSandbox must appear AFTER WithProfile and any
-// WithAuthorizer calls. WithAuthorizer assigns the authorizer rather
-// than composing, so placing it after WithSandbox would silently
-// overwrite the sandbox restriction.
+// The sandbox layer is always intersected (most-restrictive-wins, via
+// security.All) on top of whatever base authorizer the profile and/or
+// WithAuthorizer resolve to. This holds regardless of option order — the
+// composition is performed once at engine construction by resolveAuthorizer,
+// so WithSandbox may appear before or after WithProfile/WithAuthorizer.
 func WithSandbox(opts ...SandboxOption) EngineOption {
 	scfg := &sandboxConfig{envPrefix: "WILE_"}
 	for _, opt := range opts {
@@ -52,10 +50,6 @@ func WithSandbox(opts ...SandboxOption) EngineOption {
 	sandboxAuth := security.SandboxAuthorizer(scfg.envPrefix)
 
 	return func(cfg *engineConfig) {
-		if cfg.authorizer != nil {
-			cfg.authorizer = security.All(cfg.authorizer, sandboxAuth)
-			return
-		}
-		cfg.authorizer = sandboxAuth
+		cfg.sandboxAuthorizer = sandboxAuth
 	}
 }
