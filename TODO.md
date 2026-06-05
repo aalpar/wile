@@ -41,6 +41,10 @@ Items that block production embedded use or prevent silent state corruption.
   2. **Implementation vs published standard** (R7RS-small first, then R6RS, SRFI, Racket, Chibi/Guile/Chicken where applicable): for each primitive whose name appears in a standard, verify the Wile implementation's domain (accepted params) and codomain (return shape) match the spec. Catches non-standard extensions masquerading as standard primitives (the open-output-bytevector one-arg branch).
   3. **Annotation vs standard**: cross-check ensures we don't document non-standard behavior as if it were standard.
   Wile-specific primitives (no entry in any adopted standard) need a **local spec** written before they can be audited — name, intended domain, intended codomain, error cases, any invariants. Without a spec there is nothing to drift *from*. Produce the spec inventory as a deliverable; treat missing specs as a debt sub-item. This audit becomes load-bearing the moment "Extension API contracts Phase 2+" (Tier 2) ships compile-time checking — unsound annotations then turn into wrongly-rejected programs, and the R7RS-compliance-as-baseline product claim starts to depend on evidence rather than assertion.
+- [ ] Bound expander recursion depth (machine/expander_*.go). The parser depth
+      limit (plans/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
+      stack-overflow surface, but programmatically-constructed deep syntax
+      (macro output, datum->syntax, quasiquote) can still overflow the expander.
 
 ---
 
