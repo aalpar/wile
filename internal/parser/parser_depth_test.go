@@ -25,3 +25,77 @@ func TestParser_DepthLimit_Trips(t *testing.T) {
 		t.Fatalf("expected ErrParseDepthExceeded, got: %v", err)
 	}
 }
+
+// Each compound form recurses through readSyntax and must be bounded.
+func TestParser_DepthLimit_AllForms(t *testing.T) {
+	cases := []struct {
+		name   string
+		prefix string // repeated to build nesting
+	}{
+		{"list", "("},
+		{"bracket", "["},
+		{"vector", "#("},
+		{"quote", "'"},
+		{"quasiquote", "`"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := environment.NewNamespace().Runtime()
+			src := strings.Repeat(tc.prefix, 50000)
+			p := NewParser(env, true, strings.NewReader(src))
+			_, err := p.ReadSyntax(context.TODO())
+			if !errors.Is(err, werr.ErrParseDepthExceeded) {
+				t.Fatalf("%s: expected ErrParseDepthExceeded, got: %v", tc.name, err)
+			}
+		})
+	}
+}
+
+// Nesting within the limit must parse without error.
+func TestParser_DepthLimit_WithinLimitOK(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	depth := 1000 // well under 10000
+	src := strings.Repeat("(", depth) + "1" + strings.Repeat(")", depth)
+	p := NewParser(env, true, strings.NewReader(src))
+	q, err := p.ReadSyntax(context.TODO())
+	if err != nil {
+		t.Fatalf("valid depth-%d nesting should parse, got: %v", depth, err)
+	}
+	if q == nil {
+		t.Fatal("expected a syntax value, got nil")
+	}
+}
+
+// The limit is configurable; SetMaxDepth(0) disables it for callers with
+// legitimately deep machine-generated data (bounded here so the test is cheap).
+func TestParser_DepthLimit_Configurable(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	src := strings.Repeat("(", 50) + "1" + strings.Repeat(")", 50)
+
+	// A tight limit trips.
+	p := NewParser(env, true, strings.NewReader(src))
+	p.SetMaxDepth(10)
+	if _, err := p.ReadSyntax(context.TODO()); !errors.Is(err, werr.ErrParseDepthExceeded) {
+		t.Fatalf("tight limit should trip, got: %v", err)
+	}
+
+	// SetMaxDepth(0) disables the check.
+	p2 := NewParser(env, true, strings.NewReader(src))
+	p2.SetMaxDepth(0)
+	if _, err := p2.ReadSyntax(context.TODO()); err != nil {
+		t.Fatalf("disabled limit should parse, got: %v", err)
+	}
+}
+
+// Depth must reset between successive top-level reads, so a long stream of
+// shallow expressions does not accumulate depth and falsely trip.
+func TestParser_DepthLimit_ResetsBetweenReads(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	src := strings.Repeat("(a) ", 20000) // 20000 shallow forms, depth never exceeds ~2
+	p := NewParser(env, true, strings.NewReader(src))
+	for i := 0; i < 20000; i++ {
+		if _, err := p.ReadSyntax(context.TODO()); err != nil {
+			t.Fatalf("read %d should succeed (depth must reset), got: %v", i, err)
+		}
+	}
+}
