@@ -813,9 +813,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSignedIntegerBase16, tokenizer.TokenizerStateUnsignedIntegerBase16:
 		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedInf:
-		return p.parseSignedInf()
+		stx, tok := p.parseSignedInf()
+		return stx, tok, nil
 	case tokenizer.TokenizerStateSignedNan:
-		return p.parseSignedNan()
+		stx, tok := p.parseSignedNan()
+		return stx, tok, nil
 	case tokenizer.TokenizerStateSignedImaginary, tokenizer.TokenizerStateUnsignedImaginary:
 		var q1 values.Number
 		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
@@ -828,9 +830,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginaryInf, tokenizer.TokenizerStateUnsignedImaginaryInf:
-		return p.parseImaginaryInf()
+		stx, tok := p.parseImaginaryInf()
+		return stx, tok, nil
 	case tokenizer.TokenizerStateSignedImaginaryNan, tokenizer.TokenizerStateUnsignedImaginaryNan:
-		return p.parseImaginaryNan()
+		stx, tok := p.parseImaginaryNan()
+		return stx, tok, nil
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		var q1 values.Number
 		q1, p.err = p.parseComplex(replaceHashDigits(p.cur.String()))

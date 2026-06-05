@@ -32,7 +32,8 @@ func TestEngine_WithMaxParseDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := strings.Repeat("(", 100) + "1" + strings.Repeat(")", 100)
-	if _, err := engine.EvalMultiple(ctx, src); err == nil {
+	_, err = engine.EvalMultiple(ctx, src)
+	if err == nil {
 		t.Fatal("depth 100 under a limit of 20 should error")
 	}
 }

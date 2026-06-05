@@ -641,7 +641,8 @@ func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
 }
 
 // parseSignedInf parses a signed infinity token (+inf.0 or -inf.0).
-func (p *Parser) parseSignedInf() (syntax.SyntaxValue, tokenizer.Token, error) {
+// It cannot fail, so it returns no error.
+func (p *Parser) parseSignedInf() (syntax.SyntaxValue, tokenizer.Token) {
 	s := p.cur.String()
 	var f float64
 	if strings.HasPrefix(s, "-") {
@@ -650,17 +651,19 @@ func (p *Parser) parseSignedInf() (syntax.SyntaxValue, tokenizer.Token, error) {
 		f = math.Inf(1)
 	}
 	q := p.wrapSyntax(values.NewFloat(f), p.cur)
-	return q, p.cur, nil
+	return q, p.cur
 }
 
 // parseSignedNan parses a signed NaN token (+nan.0 or -nan.0).
-func (p *Parser) parseSignedNan() (syntax.SyntaxValue, tokenizer.Token, error) {
+// It cannot fail, so it returns no error.
+func (p *Parser) parseSignedNan() (syntax.SyntaxValue, tokenizer.Token) {
 	q := p.wrapSyntax(values.NewFloat(math.NaN()), p.cur)
-	return q, p.cur, nil
+	return q, p.cur
 }
 
 // parseImaginaryInf parses an imaginary infinity token (+inf.0i or -inf.0i).
-func (p *Parser) parseImaginaryInf() (syntax.SyntaxValue, tokenizer.Token, error) {
+// It cannot fail, so it returns no error.
+func (p *Parser) parseImaginaryInf() (syntax.SyntaxValue, tokenizer.Token) {
 	s := p.cur.String()
 	var img float64
 	if strings.HasPrefix(s, "-") {
@@ -669,11 +672,12 @@ func (p *Parser) parseImaginaryInf() (syntax.SyntaxValue, tokenizer.Token, error
 		img = math.Inf(1)
 	}
 	q := p.wrapSyntax(values.NewComplexFromParts(0, img), p.cur)
-	return q, p.cur, nil
+	return q, p.cur
 }
 
 // parseImaginaryNan parses an imaginary NaN token (+nan.0i or -nan.0i).
-func (p *Parser) parseImaginaryNan() (syntax.SyntaxValue, tokenizer.Token, error) {
+// It cannot fail, so it returns no error.
+func (p *Parser) parseImaginaryNan() (syntax.SyntaxValue, tokenizer.Token) {
 	q := p.wrapSyntax(values.NewComplexFromParts(0, math.NaN()), p.cur)
-	return q, p.cur, nil
+	return q, p.cur
 }
