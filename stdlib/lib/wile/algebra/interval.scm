@@ -100,22 +100,45 @@
 
 ;; ─── Interval arithmetic ────────────────────────
 
+;; interval-bot is absorbing for arithmetic: an unreachable operand yields an
+;; unreachable result, matching sign-binop's bottom handling. This shared
+;; predicate keeps the bottom-detection logic in one place while each public
+;; operator retains its own docstring (the doc system reads define-form docs).
+(define (interval-bottom-operand? a b)
+  (or (eq? a 'interval-bot) (eq? b 'interval-bot)))
+
 (define (interval-add a b)
-  "Add two intervals: [a.lo+b.lo, a.hi+b.hi].\n\nParameters:\n  a : pair\n  b : pair\nReturns: pair\nCategory: algebra"
-  (cons (inf+ (car a) (car b)) (inf+ (cdr a) (cdr b))))
+  "Add two intervals: [a.lo+b.lo, a.hi+b.hi].\nReturns interval-bot if either operand is interval-bot (absorbing).\n\nParameters:\n  a : pair-or-symbol\n  b : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra"
+  (if (interval-bottom-operand? a b) 'interval-bot
+      (cons (inf+ (car a) (car b)) (inf+ (cdr a) (cdr b)))))
 
 (define (interval-sub a b)
-  "Subtract two intervals: [a.lo-b.hi, a.hi-b.lo].\n\nParameters:\n  a : pair\n  b : pair\nReturns: pair\nCategory: algebra"
-  (cons (inf- (car a) (cdr b)) (inf- (cdr a) (car b))))
+  "Subtract two intervals: [a.lo-b.hi, a.hi-b.lo].\nReturns interval-bot if either operand is interval-bot (absorbing).\n\nParameters:\n  a : pair-or-symbol\n  b : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra"
+  (if (interval-bottom-operand? a b) 'interval-bot
+      (cons (inf- (car a) (cdr b)) (inf- (cdr a) (car b)))))
 
 (define (interval-mul a b)
-  "Multiply two intervals using four-corner product.\nComputes all products of endpoint combinations and takes min/max.\n\nParameters:\n  a : pair\n  b : pair\nReturns: pair\nCategory: algebra"
-  (let* ((corners (list (inf* (car a) (car b))
-                        (inf* (car a) (cdr b))
-                        (inf* (cdr a) (car b))
-                        (inf* (cdr a) (cdr b))))
-         (lo (let loop ((cs (cdr corners)) (m (car corners)))
-               (if (null? cs) m (loop (cdr cs) (inf-min m (car cs))))))
-         (hi (let loop ((cs (cdr corners)) (m (car corners)))
-               (if (null? cs) m (loop (cdr cs) (inf-max m (car cs)))))))
-    (cons lo hi)))
+  "Multiply two intervals using four-corner product.\nComputes all products of endpoint combinations and takes min/max.\nReturns interval-bot if either operand is interval-bot (absorbing).\n\nParameters:\n  a : pair-or-symbol\n  b : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra"
+  (if (interval-bottom-operand? a b) 'interval-bot
+      (let* ((corners (list (inf* (car a) (car b))
+                            (inf* (car a) (cdr b))
+                            (inf* (cdr a) (car b))
+                            (inf* (cdr a) (cdr b))))
+             (lo (let loop ((cs (cdr corners)) (m (car corners)))
+                   (if (null? cs) m (loop (cdr cs) (inf-min m (car cs))))))
+             (hi (let loop ((cs (cdr corners)) (m (car corners)))
+                   (if (null? cs) m (loop (cdr cs) (inf-max m (car cs)))))))
+        (cons lo hi))))
+
+;; ─── Abstraction and widening ───────────────────
+
+(define (abstract-interval n)
+  "Abstract an integer N into the interval domain as the point interval [n,n].\nThe interval analog of abstract-sign.\n\nExamples:\n  (abstract-interval 5)   => (5 . 5)\n  (abstract-interval -2)  => (-2 . -2)\n\nParameters:\n  n : integer\nReturns: pair\nCategory: algebra\nKeywords: abstraction, interval, abstract interpretation, point interval\n\nSee also: `interval-widen', `interval-lattice'."
+  (cons n n))
+
+(define (interval-widen cur next)
+  "Interval widening operator: keep a bound if stable, else jump to infinity.\nWidening forces ascending chains finite so fixpoint iteration over the\ninfinite-height interval lattice terminates (Cousot & Cousot 1977). Returns\nan interval at least as large as the join of CUR and NEXT. interval-bot is\nabsorbed in either position. A lower bound that does not decrease is kept,\nelse it drops to neg-inf; an upper bound that does not increase is kept,\nelse it rises to pos-inf.\n\nExamples:\n  (interval-widen '(0 . 0) '(0 . 1))      => (0 . pos-inf)\n  (interval-widen '(0 . 5) '(0 . 5))      => (0 . 5)\n  (interval-widen 'interval-bot '(0 . 1)) => (0 . 1)\n\nParameters:\n  cur : pair-or-symbol\n  next : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra\nKeywords: widening, abstract interpretation, termination, infinite chains, acceleration\n\nSee also: `abstract-interval', `interval-lattice', `fixpoint/widen'."
+  (cond ((eq? cur 'interval-bot) next)
+        ((eq? next 'interval-bot) cur)
+        (else (cons (if (inf<= (car cur) (car next)) (car cur) 'neg-inf)
+                    (if (inf<= (cdr next) (cdr cur)) (cdr cur) 'pos-inf)))))

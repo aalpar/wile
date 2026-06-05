@@ -145,5 +145,48 @@
   ;; negative * negative: [-3,-1] * [-4,-2] corners: 12,6,4,2 => [2, 12]
   (test '(2 . 12) (interval-mul '(-3 . -1) '(-4 . -2))))
 
+;;; ── Bottom-absorbing arithmetic ─────────────────
+
+(test-group "interval arithmetic absorbs interval-bot"
+  (test 'interval-bot (interval-add 'interval-bot '(1 . 3)))
+  (test 'interval-bot (interval-add '(1 . 3) 'interval-bot))
+  (test 'interval-bot (interval-sub 'interval-bot '(1 . 3)))
+  (test 'interval-bot (interval-mul '(1 . 3) 'interval-bot))
+  (test 'interval-bot (interval-mul 'interval-bot 'interval-bot)))
+
+;;; ── Abstraction ─────────────────────────────────
+
+(test-group "abstract-interval"
+  (test '(5 . 5) (abstract-interval 5))
+  (test '(-2 . -2) (abstract-interval -2))
+  (test '(0 . 0) (abstract-interval 0)))
+
+;;; ── Widening ────────────────────────────────────
+
+(test-group "interval-widen"
+  ;; unstable upper bound jumps to pos-inf
+  (test '(0 . pos-inf) (interval-widen '(0 . 0) '(0 . 1)))
+  ;; unstable lower bound drops to neg-inf
+  (test '(neg-inf . 0) (interval-widen '(0 . 0) '(-1 . 0)))
+  ;; both unstable
+  (test '(neg-inf . pos-inf) (interval-widen '(0 . 0) '(-1 . 1)))
+  ;; stable interval preserved
+  (test '(0 . 5) (interval-widen '(0 . 5) '(0 . 5)))
+  ;; widening with a tighter next keeps the wider current (>= join)
+  (test '(0 . 5) (interval-widen '(0 . 5) '(1 . 4)))
+  ;; interval-bot absorbed either position
+  (test '(0 . 1) (interval-widen 'interval-bot '(0 . 1)))
+  (test '(0 . 1) (interval-widen '(0 . 1) 'interval-bot)))
+
+;;; ── Widening drives fixpoint/widen to convergence ──
+
+(test-group "fixpoint/widen with interval-widen terminates"
+  ;; x := 0; x := x + 1 (the motivating ascending chain)
+  (test '(0 . pos-inf)
+        (fixpoint/widen (interval-lattice)
+                        (lambda (iv) (interval-add iv '(1 . 1)))
+                        '(0 . 0)
+                        interval-widen)))
+
 (test-end)
 (test-exit)
