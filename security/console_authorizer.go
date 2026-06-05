@@ -14,21 +14,18 @@
 
 package security
 
-import (
-	"path/filepath"
-	"strings"
-)
-
 // ConsoleAuthorizer returns an Authorizer for the Console profile.
 // File operations are restricted to /tmp. Environment variable reads
 // are allowed (the envvars primitive handles virtual-vs-OS routing).
 // Code loading and process execution are denied.
+//
+// Containment is symlink-resolved (see containedInRoot), so a symlink staged
+// inside /tmp that points outside /tmp does not escape the sandbox.
 func ConsoleAuthorizer() Authorizer {
 	return AuthorizerFunc(func(req AccessRequest) error {
 		switch req.Resource {
 		case ResourceFile:
-			cleaned := filepath.Clean(req.Target)
-			if !strings.HasPrefix(cleaned, "/tmp/") && cleaned != "/tmp" {
+			if !containedInRoot("/tmp", req.Target) {
 				return ErrAccessDenied
 			}
 			return nil

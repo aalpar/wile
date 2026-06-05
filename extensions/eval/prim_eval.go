@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry/helpers"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -52,6 +53,14 @@ func PrimEval(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "eval")
 	if err != nil {
 		return err
+	}
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionEval,
+		Target:   "<eval>",
+	})
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "eval: code evaluation denied")
 	}
 	argList, ok := mc.Arg(0).(values.Tuple)
 	if !ok || argList.IsEmptyList() {
@@ -473,6 +482,15 @@ func PrimExpandOnce(cc machine.CallContext) error {
 //
 //	expand -> compile -> (execute via calling the returned thunk)
 func PrimCompile(mc machine.CallContext) error {
+	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionEval,
+		Target:   "<compile>",
+	})
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "compile: code evaluation denied")
+	}
+
 	expr := mc.Arg(0)
 
 	// Accept either syntax object or datum

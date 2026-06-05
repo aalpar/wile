@@ -14,23 +14,32 @@
 
 package security
 
-import (
-	"path/filepath"
-	"strings"
-)
-
 // ConsoleWithLoadAuthorizer returns an Authorizer for the ConsoleWithLoad
 // profile. File operations and code loading are both restricted to /tmp.
 // Environment variable reads are allowed. Process execution is denied.
 //
 // This is the security envelope wile-goast and similar embedders use to
 // run sandboxed (eval ...) and (load ...) on Scheme files staged in /tmp.
+//
+// Containment is symlink-resolved (see containedInRoot), so a symlink staged
+// inside /tmp that points outside /tmp does not escape the sandbox. Dynamic
+// code evaluation (code:eval, from (eval <datum>)/(compile <datum>)) has no
+// path to restrict and is allowed here so the profile's documented sandboxed
+// (eval ...) keeps working; the side effects of evaluated code remain gated
+// at their own file/process/env sinks.
 func ConsoleWithLoadAuthorizer() Authorizer {
 	return AuthorizerFunc(func(req AccessRequest) error {
 		switch req.Resource {
-		case ResourceFile, ResourceCode:
-			cleaned := filepath.Clean(req.Target)
-			if !strings.HasPrefix(cleaned, "/tmp/") && cleaned != "/tmp" {
+		case ResourceCode:
+			if req.Action == ActionEval {
+				return nil
+			}
+			if !containedInRoot("/tmp", req.Target) {
+				return ErrAccessDenied
+			}
+			return nil
+		case ResourceFile:
+			if !containedInRoot("/tmp", req.Target) {
 				return ErrAccessDenied
 			}
 			return nil

@@ -15,32 +15,23 @@
 package security
 
 import (
-	"path/filepath"
-	"strings"
-
 	"github.com/aalpar/wile/werr"
 )
 
 // FilesystemRoot returns an Authorizer that restricts file and code
 // operations to paths under root. Non-file/code resources are allowed.
 //
-// Paths are cleaned and resolved to absolute form before comparison.
-// Symlink traversal is NOT followed — this is a lexical check only.
-// For production use with symlinks, resolve the root and targets with
-// filepath.EvalSymlinks before constructing the authorizer.
+// Containment is symlink-resolved (see containedInRoot): both root and target
+// are canonicalised, so a symlink under root that points outside it is
+// followed and rejected, while the root itself may legitimately be a symlink.
+// Paths that do not exist yet (e.g. a file about to be created) are still
+// admitted as long as their existing ancestry stays within root.
 func FilesystemRoot(root string) Authorizer {
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		absRoot = filepath.Clean(root)
-	}
-	if !strings.HasSuffix(absRoot, string(filepath.Separator)) {
-		absRoot += string(filepath.Separator)
-	}
-	return &filesystemRootAuthorizer{root: absRoot}
+	return &filesystemRootAuthorizer{root: root}
 }
 
 type filesystemRootAuthorizer struct {
-	root string // always absolute, always ends with separator
+	root string
 }
 
 func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
@@ -50,14 +41,8 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	default:
 		return nil
 	}
-	absTarget, err := filepath.Abs(req.Target)
-	if err != nil {
-		return werr.WrapForeignErrorWithCause(ErrAccessDenied, err, "resolve %q", req.Target)
-	}
-	// Target is allowed if it equals the root dir itself or is under it.
-	targetWithSep := absTarget + string(filepath.Separator)
-	if !strings.HasPrefix(targetWithSep, p.root) {
-		return werr.WrapForeignErrorf(ErrAccessDenied, "path %q outside root %q", absTarget, strings.TrimSuffix(p.root, string(filepath.Separator)))
+	if !containedInRoot(p.root, req.Target) {
+		return werr.WrapForeignErrorf(ErrAccessDenied, "path %q outside root %q", req.Target, p.root)
 	}
 	return nil
 }

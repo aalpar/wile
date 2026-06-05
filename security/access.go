@@ -47,7 +47,8 @@ const (
 	ActionWrite     = "write"
 	ActionDelete    = "delete"
 	ActionStat      = "stat"
-	ActionLoad      = "load"
+	ActionLoad      = "load" // load+run code from a resolved file path
+	ActionEval      = "eval" // compile+run code from an in-memory datum (eval/compile)
 	ActionExit      = "exit"
 	ActionExec      = "exec"       // structured process execution (process-spawn)
 	ActionExecShell = "exec-shell" // shell command execution (system)
