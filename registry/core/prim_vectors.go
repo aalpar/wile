@@ -28,8 +28,9 @@ func PrimMakeVector(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if size.Value < 0 {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-vector: size must be non-negative")
+	err = helpers.ValidateMakeLength(size.Value, "make-vector")
+	if err != nil {
+		return err
 	}
 	var fill values.Value = values.FalseValue
 	v, ok, err := helpers.ParseOptionalArg(mc.Arg(1), "make-vector")

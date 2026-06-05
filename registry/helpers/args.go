@@ -170,6 +170,29 @@ func ValidateStartEnd(start, end, length int64, name string) error {
 	return nil
 }
 
+// MaxMakeLength caps the element count of a single make-vector, make-string,
+// make-bytevector, or make-list allocation. It is a sanity ceiling (2^32
+// entries) that protects an embedder running untrusted Scheme from a
+// resource-exhaustion crash via e.g. (make-vector 9999999999). It is a count
+// ceiling, not a byte budget — 2^32 entries can still be large — but it blocks
+// the absurd allocations that would otherwise OOM the host process.
+const MaxMakeLength int64 = 1 << 32
+
+// ValidateMakeLength validates the requested element count n for a make-*
+// allocator named op. The count must be non-negative (R7RS: an exact
+// non-negative integer) and at most MaxMakeLength. Validate before any int
+// conversion so a 64-bit count cannot truncate.
+func ValidateMakeLength(n int64, op string) error {
+	if n < 0 {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "%s: length must be non-negative", op)
+	}
+	if n > MaxMakeLength {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"%s: length %d exceeds maximum %d", op, n, MaxMakeLength)
+	}
+	return nil
+}
+
 // ParseSubrange extracts optional [start [end]] from a rest list, validates
 // bounds against length, and returns the range as int values.
 // This bundles ParseOptionalStartEnd + ValidateStartEnd + int conversion

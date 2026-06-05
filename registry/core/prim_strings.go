@@ -57,8 +57,9 @@ func PrimMakeString(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if kInt.Value < 0 {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-string: length must be non-negative")
+	err = helpers.ValidateMakeLength(kInt.Value, "make-string")
+	if err != nil {
+		return err
 	}
 	ch, err := helpers.OptionalArg[*values.Character](mc.Arg(1), values.NewCharacter(0), werr.ErrNotACharacter, "make-string")
 	if err != nil {

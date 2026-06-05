@@ -31,8 +31,9 @@ func PrimMakeBytevector(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if size.Value < 0 {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-bytevector: size must be non-negative")
+	err = helpers.ValidateMakeLength(size.Value, "make-bytevector")
+	if err != nil {
+		return err
 	}
 	fillInt, err := helpers.OptionalArg[*values.Integer](mc.Arg(1), values.NewInteger(0), werr.ErrNotAnInteger, "make-bytevector")
 	if err != nil {
