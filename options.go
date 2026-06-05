@@ -57,10 +57,19 @@ type engineConfig struct {
 	libraryPaths       []string
 	libraryEnabled     bool // true when WithLibraryPaths was called
 	importObserver     func(LibraryImportEvent)
-	authorizer         security.Authorizer
-	namespace          *environment.Namespace // pre-built namespace (via WithNamespace)
-	resolverFactories  []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
-	envMap             map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
+
+	// Authorizer accumulation is split across three intent-specific fields
+	// resolved once, order-independently, by resolveAuthorizer. A single
+	// shared field would be order-dependent because WithProfile/WithAuthorizer
+	// assign while WithSandbox composes — two non-commutative write semantics.
+	profileAuthorizer     security.Authorizer // set by WithProfile (last non-nil wins)
+	explicitAuthorizer    security.Authorizer // set by WithAuthorizer (nil is meaningful: "open")
+	explicitAuthorizerSet bool                // true once WithAuthorizer was called, even with nil
+	sandboxAuthorizer     security.Authorizer // set by WithSandbox (always composed last)
+
+	namespace         *environment.Namespace // pre-built namespace (via WithNamespace)
+	resolverFactories []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
+	envMap            map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
 
 	// contractEnforcement installs type-checking validators on primitives
 	// whose specs declare ParamTypes. Enabled via WithContractEnforcement.
@@ -245,8 +254,15 @@ func WithoutCore() EngineOption {
 // injected into every context passed to Eval, Compile, Run, and Call,
 // gating runtime primitives and compile-time code loading.
 //
-// Without this option, all operations are allowed (open by default).
-// The authorizer is immutable after engine construction.
+// An explicit WithAuthorizer takes precedence over any profile's built-in
+// authorizer regardless of option order: WithAuthorizer(a) and WithProfile(p)
+// resolve to a (then intersected with any WithSandbox layer) no matter which
+// is written first. Passing nil is meaningful — it opens the engine, overriding
+// a profile authorizer (symmetric with WithEnvMap(nil)).
+//
+// Without this option, all operations are allowed (open by default) unless a
+// profile or sandbox supplies an authorizer. The authorizer is immutable after
+// engine construction.
 //
 // Example:
 //
@@ -255,8 +271,28 @@ func WithoutCore() EngineOption {
 //	)
 func WithAuthorizer(auth security.Authorizer) EngineOption {
 	return func(cfg *engineConfig) {
-		cfg.authorizer = auth
+		cfg.explicitAuthorizer = auth
+		cfg.explicitAuthorizerSet = true
 	}
+}
+
+// resolveAuthorizer computes the engine's effective authorizer from the three
+// intent-specific config fields, order-independently. Precedence: an explicit
+// WithAuthorizer (even nil) overrides a profile's built-in authorizer; a
+// WithSandbox layer is always intersected on top via security.All. Returns nil
+// when no authorizer applies (open by default).
+func (p *engineConfig) resolveAuthorizer() security.Authorizer {
+	base := p.profileAuthorizer
+	if p.explicitAuthorizerSet {
+		base = p.explicitAuthorizer
+	}
+	if p.sandboxAuthorizer == nil {
+		return base
+	}
+	if base == nil {
+		return p.sandboxAuthorizer
+	}
+	return security.All(base, p.sandboxAuthorizer)
 }
 
 // WithNamespace uses a pre-built namespace instead of building one from

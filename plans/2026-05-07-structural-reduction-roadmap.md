@@ -168,8 +168,35 @@ files closely).
 
 ### B.1 — `wile/` root (3.9K LOC, 19 files, Ca=0)
 
-**Different value proposition**: nobody depends on it (Ca=0), but it's the
-**embedding API** — what every external user sees. Worth analyzing for
+**Status (2026-06-05): analyzed + implemented.** The 2026-05-07 "expected
+findings" below were aesthetic guesses made before reading the code; the
+rigorous `/structural-reduction` pass retired most of them and surfaced one
+finding the predictions missed — an *order-dependent, security-relevant*
+authorizer-config bug:
+
+- **Shipped — authorizer accumulation was order-dependent.** `WithProfile`,
+  `WithAuthorizer`, and `WithSandbox` all wrote one `engineConfig.authorizer`
+  field under two non-commutative operations (assign vs. `security.All`
+  compose), so `WithAuthorizer(custom)` followed by `WithProfile(Console)`
+  silently discarded `custom`. Fixed by splitting into three intent-specific
+  fields (`profileAuthorizer` / `explicitAuthorizer`+`Set` / `sandboxAuthorizer`)
+  resolved once, order-independently, by `resolveAuthorizer`. Two prose
+  ordering caveats deleted. `authorizer_precedence_test.go` adds the regression
+  guard. (branch `refactor/wile-authorizer-precedence`)
+- **Declined — FFI arg/ret dispatch symmetry.** `ffi_arg_converters.go` /
+  `ffi_ret_converters.go` share a `reflect.Kind` switch skeleton, but the
+  per-kind bodies are genuine inverses (a bidirectional Scheme↔Go isomorphism),
+  not duplication. Unifying only the scaffolding saves ~15 LOC while coupling
+  two converters that evolve independently. Abstraction doesn't pay rent.
+- **Deferred — `engineConfig` `*Set` bool triples; `Engine.exportIndex`
+  sub-record.** Both real but low-impact; `machine/` F7 already showed
+  sub-record extraction yields ~0 measurable benefit. Re-open only if a
+  consuming need arises.
+- **Retired predictions**: "Engine field saturation" (struct is 17 fields,
+  already tight) and "WithX proliferation" (21 options, each distinct).
+
+**Original value proposition** (pre-analysis): nobody depends on it (Ca=0), but
+it's the **embedding API** — what every external user sees. Worth analyzing for
 **API design quality** rather than internal coupling.
 
 **Expected findings**:
