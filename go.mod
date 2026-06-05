@@ -2,6 +2,12 @@ module github.com/aalpar/wile
 
 go 1.24.0
 
+// Build with go1.26.4+: go1.26.3 has reachable stdlib vulnerabilities
+// GO-2026-5039 (net/textproto) and GO-2026-5037 (crypto/x509). The language
+// directive stays at 1.24.0 so consumers are not forced onto a newer language
+// version; only the build toolchain is pinned.
+toolchain go1.26.4
+
 require (
 	github.com/ergochat/readline v0.1.3 // cli
 	github.com/frankban/quicktest v1.14.6 // test
