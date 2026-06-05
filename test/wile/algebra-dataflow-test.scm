@@ -3,6 +3,7 @@
 (import (scheme base)
         (chibi test)
         (wile algebra lattice)
+        (wile algebra interval)
         (wile algebra dataflow))
 
 (test-begin "dataflow")
@@ -250,6 +251,62 @@
     (test #t (analysis-out result 1))
     (test #t (analysis-out result 2))
     (test #t (analysis-out result 0))))
+
+;;; --- widen wrapper record ----------------------------------------------
+
+(test-group "widen — record"
+  (test #t (widen? (widen interval-widen)))
+  (test #f (widen? 'interval-widen))
+  (test #f (widen? (init-state 5)))
+  (test interval-widen (widen-op (widen interval-widen))))
+
+;;; --- Interval analysis: widening forces termination --------------------
+
+(test-group "run-analysis — interval increment loop converges under widening"
+  ;; Self-looping header models `x := 0; while(?) x := x + 1`.
+  ;; Block 0: entry, identity (out = seeded [0,0]).
+  ;; Block 1: loop header with a self back-edge; transfer x := x + 1.
+  ;; Over the infinite-height interval lattice this only terminates with
+  ;; a widening operator. The result proves x >= 0 at the header.
+  (let* ((loop-cfg '((0 () (1))
+                     (1 (0 1) (1))))
+         (L (interval-lattice))
+         (xfer (lambda (blk in)
+                 (if (= (car blk) 1)
+                     (interval-add in '(1 . 1))
+                     in)))
+         (result (run-analysis 'forward L xfer loop-cfg test-protocol
+                                (init-state (abstract-interval 0))
+                                (widen interval-widen))))
+    ;; in[1] = [0, +inf): lower bound pinned at 0 (proves x >= 0),
+    ;; upper bound widened to infinity.
+    (test '(0 . pos-inf) (analysis-in result 1))
+    (test '(1 . pos-inf) (analysis-out result 1))))
+
+(test-group "run-analysis — duplicate (widen ...) rejected"
+  (let* ((L (interval-lattice))
+         (xfer (lambda (blk in) in)))
+    (test-error (run-analysis 'forward L xfer linear-cfg test-protocol
+                              (widen interval-widen) (widen interval-widen)))))
+
+;;; --- No-widen regression: finite-height behavior unchanged -------------
+
+(test-group "run-analysis — widening absent leaves MFP unchanged"
+  ;; A finite-height (truth) analysis run *without* (widen ...) is pure MFP.
+  ;; Supplying a widen operator on a CFG with a loop header must still
+  ;; converge to the same fixpoint (widening an idempotent-join lattice at
+  ;; the header cannot raise the result above top).
+  (let* ((cyclic-cfg '((0 (1) (1)) (1 (0) (0))))
+         (L (truth-value-lattice))
+         (xfer (lambda (blk in) (or in #t)))
+         (plain  (run-analysis 'forward L xfer cyclic-cfg test-protocol
+                                (init-state #t)))
+         (widened (run-analysis 'forward L xfer cyclic-cfg test-protocol
+                                (init-state #t)
+                                (widen (lambda (cur next) (or cur next))))))
+    (test (analysis-out plain 0) (analysis-out widened 0))
+    (test (analysis-out plain 1) (analysis-out widened 1))
+    (test #t (analysis-out widened 0))))
 
 (test-end)
 (test-exit)

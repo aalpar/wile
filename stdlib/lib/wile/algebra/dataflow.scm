@@ -130,6 +130,16 @@ Category: algebra"
   init-state?
   (value init-state-value))
 
+;; `(widen OP)` is the optional widening-operator wrapper for run-analysis,
+;; mirroring the `(init-state ...)` plumbing. OP is a binary operator
+;; (current-iterate next-iterate) -> widened, applied at loop headers in
+;; place of raw join so analyses over infinite-height lattices (intervals)
+;; terminate. Absent ⇒ pure MFP (raw join everywhere), behavior unchanged.
+(define-record-type <widen>
+  (widen op)
+  widen?
+  (op widen-op))
+
 ;; ─── Reverse postorder ────────────────────
 
 (define (reverse-postorder blocks protocol)
@@ -262,6 +272,12 @@ Optional args may appear in any order:
   - `'check-monotone` — enable monotonicity-violation detection
     during iteration; raises if `transfer` produces a lower out-state
     on re-visit.
+  - `(widen OP)` — tagged widening operator `(lambda (cur next) widened)`
+    applied at loop headers (back-edge targets) in place of raw join.
+    Required for termination on infinite-height lattices such as the
+    interval lattice; without it those analyses do not converge. When
+    absent, behavior is identical to pure MFP (raw join everywhere).
+    See `interval-widen` for the standard interval operator.
 
 Returns a per-block result alist shaped `((idx in out) ...)`. Use
 `analysis-in` / `analysis-out` / `analysis-states` to query.
@@ -295,18 +311,22 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
   (unless (cfg-protocol? protocol)
     (error "run-analysis: expected cfg-protocol" protocol))
   (let*-values
-      (((initial-state check-mono)
-        (let loop ((args args) (initial #f) (check-mono #f))
+      (((initial-state check-mono widen-fn)
+        (let loop ((args args) (initial #f) (check-mono #f) (widen-fn #f))
           (cond
-            ((null? args) (values (or initial (lattice-bottom lattice)) check-mono))
+            ((null? args) (values (or initial (lattice-bottom lattice)) check-mono widen-fn))
             ((init-state? (car args))
              (when initial
                (error "run-analysis: multiple (init-state ...) arguments" args))
-             (loop (cdr args) (init-state-value (car args)) check-mono))
+             (loop (cdr args) (init-state-value (car args)) check-mono widen-fn))
+            ((widen? (car args))
+             (when widen-fn
+               (error "run-analysis: multiple (widen ...) arguments" args))
+             (loop (cdr args) initial check-mono (widen-op (car args))))
             ((eq? (car args) 'check-monotone)
-             (loop (cdr args) initial #t))
+             (loop (cdr args) initial #t widen-fn))
             (else
-             (error "run-analysis: unexpected optional argument (use `(init-state x)` for initial state)"
+             (error "run-analysis: unexpected optional argument (use `(init-state x)` or `(widen op)`)"
                     (car args)))))))
     (let* ((blocks (cfg-blocks-of protocol fn))
            (forward? (eq? direction 'forward))
@@ -337,6 +357,25 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                                  (cfg-succs-of protocol b)
                                  (cfg-preds-of protocol b))
                              '())))
+           ;; Widening points: a block is a back-edge target (loop header)
+           ;; iff some flow-predecessor sits at or after it in flow order
+           ;; (rank-of p >= rank-of b). Widening at these points forces
+           ;; termination on infinite-height lattices (design §5). Computed
+           ;; once, and only when a widen operator was supplied — pure MFP
+           ;; pays nothing.
+           (widening-points
+             (if widen-fn
+                 (filter-map
+                   (lambda (b)
+                     (let ((idx (cfg-index-of protocol b)))
+                       (and (let any-back ((ps (flow-preds b)))
+                              (cond ((null? ps) #f)
+                                    ((>= (rank-of (car ps)) (rank-of idx)) #t)
+                                    (else (any-back (cdr ps)))))
+                            idx)))
+                   blocks)
+                 '()))
+           (widening-point? (lambda (idx) (and widen-fn (memv idx widening-points) #t)))
            (entry-idx (if (null? blocks) #f (cfg-index-of protocol (car blocks))))
            (exit-idxs (filter-map
                         (lambda (b)
@@ -388,16 +427,23 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                    (rest-wl (cdr wl))
                    (blk (block-ref idx))
                    (pred-idxs (flow-preds blk))
-                   (in-val (if (null? pred-idxs)
-                               (if (memv idx seed-idxs) initial-state bot)
-                               (let join-preds ((ps pred-idxs)
-                                                (acc (if (memv idx seed-idxs)
-                                                         initial-state
-                                                         bot)))
-                                 (if (null? ps) acc
-                                     (join-preds (cdr ps)
-                                       (lattice-join lattice acc
-                                         (get-out (car ps))))))))
+                   (joined-in (if (null? pred-idxs)
+                                  (if (memv idx seed-idxs) initial-state bot)
+                                  (let join-preds ((ps pred-idxs)
+                                                   (acc (if (memv idx seed-idxs)
+                                                            initial-state
+                                                            bot)))
+                                    (if (null? ps) acc
+                                        (join-preds (cdr ps)
+                                          (lattice-join lattice acc
+                                            (get-out (car ps))))))))
+                   ;; At loop headers, widen the previous in-state against the
+                   ;; newly joined one instead of taking the raw join — bounds
+                   ;; the ascending chain so infinite-height lattices converge.
+                   ;; Elsewhere (and always under pure MFP) this is the raw join.
+                   (in-val (if (widening-point? idx)
+                               (widen-fn (get-in idx) joined-in)
+                               joined-in))
                    (out-val (transfer blk in-val))
                    (old-out (get-out idx)))
               (when (and check-mono

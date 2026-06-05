@@ -11,6 +11,7 @@
           cfg-preds-of
           cfg-succs-of
           init-state init-state? init-state-value
+          widen widen? widen-op
           reverse-postorder
           run-analysis
           analysis-in
