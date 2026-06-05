@@ -21,6 +21,8 @@
 (import (scheme base) (scheme write)
         (wile algebra lattice)
         (wile algebra abstract-domain)
+        (wile algebra interval)
+        (wile algebra galois)
         (wile algebra dataflow))
 (include "../lib/check.scm")
 
@@ -213,5 +215,61 @@
         "seeded in-state at entry")
 (check= (analysis-out seeded 'b0)   'pos
         "entry out-state still driven by transfer")
+
+;; ----------------------------------------------------------------
+;; Part 9: An infinite-height domain -- intervals -- and widening.
+;;
+;; The sign lattice has finite height, so Kleene iteration always
+;; terminates. The interval lattice does not: [0,0] < [0,1] < [0,2]
+;; < ... ascends forever. Running a loop that increments a variable
+;; through run-analysis on intervals would never converge with raw
+;; join. The fix is a *widening* operator, supplied via (widen OP):
+;; at loop headers it jumps unstable bounds to infinity, forcing the
+;; chain finite. Cousot & Cousot (1977).
+;;
+;; CFG: b0 (x := 0) --> b1 (loop header, x := x + 1, self back-edge).
+;; ----------------------------------------------------------------
+
+(define iv-cfg
+  '((b0 ()      (b1))
+    (b1 (b0 b1) (b1))))
+
+(define iv-proto (make-cfg-protocol (lambda (fn) fn) car cadr caddr))
+
+(define (iv-transfer blk in)
+  (if (eq? (car blk) 'b1)
+      (interval-add in '(1 . 1))   ; x := x + 1
+      in))                          ; entry: identity (out = seed)
+
+(define iv-result
+  (run-analysis 'forward (interval-lattice) iv-transfer iv-cfg iv-proto
+                (init-state (abstract-interval 0))   ; x starts at [0,0]
+                (widen interval-widen)))             ; <-- the key
+
+;; The analysis terminates and proves 0 <= x at the loop header: the
+;; lower bound is pinned at 0, the upper bound widened to +inf.
+(check= (analysis-in iv-result 'b1) '(0 . pos-inf)
+        "interval widening: x >= 0 proven at the loop header")
+
+;; ----------------------------------------------------------------
+;; Part 10: Why we may trust that answer -- the Galois connection.
+;;
+;; An abstract result is only meaningful if it soundly over-
+;; approximates every concrete execution. The Galois connection
+;; (alpha, gamma) between finite integer SETS and intervals is that
+;; soundness certificate: alpha abstracts a set to its tightest
+;; interval, gamma concretizes back, and gc-sound? checks the two
+;; adjunction laws (S subset of gamma(alpha(S)); alpha(gamma(iv)) <= iv).
+;; ----------------------------------------------------------------
+
+(define iv-gc (interval-galois-connection))
+
+(check= (gc-alpha iv-gc '(0 3 5)) '(0 . 5)
+        "alpha: tightest interval enclosing the set")
+(check= (gc-gamma iv-gc '(0 . 3)) '(0 1 2 3)
+        "gamma: concretize a bounded interval to its set")
+(check= (gc-sound? iv-gc '((0 1 2) (-3 -1 2) ()) '((0 . 3) (-2 . 2) interval-bot))
+        #t
+        "Galois laws hold -- the interval result is a sound abstraction")
 
 (display "chapter 09 complete") (newline)

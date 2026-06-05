@@ -838,9 +838,15 @@ Intervals are ordinary pairs: build with `cons lo hi`; access with `car` and `cd
 
 ### Interval arithmetic
 
-- `(interval-add a b)` -- sum; componentwise `inf+`
-- `(interval-sub a b)` -- difference
-- `(interval-mul a b)` -- product via four-corner multiplication (min and max of the four endpoint products)
+- `(interval-add a b)` -- sum; componentwise `inf+`. Returns `interval-bot` if either operand is `interval-bot` (absorbing)
+- `(interval-sub a b)` -- difference. `interval-bot`-absorbing
+- `(interval-mul a b)` -- product via four-corner multiplication (min and max of the four endpoint products). `interval-bot`-absorbing
+
+### Abstraction, widening, and the Galois connection
+
+- `(abstract-interval n)` -- abstract an integer `n` to the point interval `(n . n)`; the interval analog of `abstract-sign`
+- `(interval-widen cur next)` -- widening operator (Cousot & Cousot 1977): keep a bound if stable, else jump to infinity (lower → `neg-inf`, upper → `pos-inf`); `interval-bot` is absorbed in either position. Forces ascending chains finite so fixpoint iteration over the infinite-height interval lattice terminates. Pass to `run-analysis` via `(widen interval-widen)`, or to `fixpoint/widen` directly
+- `(interval-galois-connection)` -- the Galois connection between finite integer sets (containment order) and the interval lattice: `alpha(S) = [min S, max S]` (`interval-bot` for `()`), `gamma([a,b]) = {x : a <= x <= b}` (sentinel `'unbounded` for unbounded intervals). The soundness certificate for an interval dataflow result; passes `gc-sound?`
 
 ---
 
@@ -1042,6 +1048,7 @@ Pre-built abstract interpretation domains. Currently hosts the sign domain: a 5-
 - `(abstract-sign n)` -- abstract a concrete integer to its sign: `'neg`, `'zero`, or `'pos`
 - `(sign? s)` -- test whether s is a valid sign value
 - `(sign-binop op a b)` -- apply sign operator; `op` is `'add`, `'sub`, or `'mul`; `flat-bottom` is strict (any operand bottom yields bottom); `mul` annihilates at zero even with `flat-top`; otherwise `flat-top` propagates
+- `(sign-galois-connection)` -- the Galois connection between finite integer sets (containment order) and the sign lattice: `alpha(S)` is the join of the per-element signs; `gamma` maps `'zero` → `{0}`, `'neg`/`'pos`/`'flat-top` → the typed sentinels `'all-neg`/`'all-pos`/`'all-int`, `'flat-bottom` → `{}`. Passes `gc-sound?` on all five signs
 
 ---
 
@@ -1066,7 +1073,8 @@ Monotone framework (MFP) worklist dataflow solver with CFG-protocol abstraction.
 
 ### Solver
 
-- `(run-analysis direction lattice transfer fn protocol . args)` -- run MFP analysis; `direction` is `'forward` or `'backward`; `transfer` is `(lambda (block in-state) out-state)`; `args` may contain `(init-state x)` and/or `'check-monotone`; returns per-block result alist `((idx in out) ...)`
+- `(run-analysis direction lattice transfer fn protocol . args)` -- run MFP analysis; `direction` is `'forward` or `'backward`; `transfer` is `(lambda (block in-state) out-state)`; `args` may contain `(init-state x)`, `'check-monotone`, and/or `(widen OP)`; returns per-block result alist `((idx in out) ...)`
+- `(widen op)` -- tagged wrapper for the optional widening operator passed to `run-analysis`. `op` is `(lambda (cur next) widened)`, applied at loop headers (back-edge targets) in place of raw join. Required for termination on infinite-height lattices (e.g. the interval lattice via `interval-widen`); absent ⇒ pure MFP (raw join everywhere, behavior unchanged). Accessors: `widen?`, `widen-op`
 
 ### Result accessors
 

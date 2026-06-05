@@ -180,6 +180,7 @@
     ;; Interval arithmetic
     interval-lattice
     interval-add interval-sub interval-mul
+    abstract-interval interval-widen interval-galois-connection
     inf<= inf-min inf-max inf+ inf- inf*
     ;; Graph algorithms
     make-graph-analysis graph-analysis?
@@ -292,13 +293,14 @@
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph
     ;; Abstract interpretation — pre-built domains
-    sign-lattice sign? abstract-sign sign-binop
+    sign-lattice sign? abstract-sign sign-binop sign-galois-connection
     ;; MFP dataflow solver
     make-cfg-protocol cfg-protocol?
     cfg-protocol-blocks-of-fn cfg-protocol-index-of-fn
     cfg-protocol-preds-of-fn cfg-protocol-succs-of-fn
     cfg-blocks-of cfg-index-of cfg-preds-of cfg-succs-of
     init-state init-state? init-state-value
+    widen widen? widen-op
     reverse-postorder run-analysis
     analysis-in analysis-out analysis-states
     ;; SAT
