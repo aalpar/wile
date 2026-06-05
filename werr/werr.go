@@ -155,6 +155,7 @@ var (
 
 	// Recursion depth
 	ErrCallDepthExceeded     = NewStaticError("call depth exceeded")
+	ErrParseDepthExceeded    = NewStaticError("parse nesting depth exceeded")
 	ErrContinuationUnderflow = NewStaticError("continuation underflow")
 
 	// Escape continuations
