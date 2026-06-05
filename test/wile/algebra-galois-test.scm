@@ -4,6 +4,8 @@
         (chibi test)
         (wile algebra order)
         (wile algebra lattice)
+        (wile algebra interval)
+        (wile algebra abstract-domain)
         (wile algebra galois))
 
 (test-begin "galois-connections")
@@ -75,6 +77,38 @@
   (test #t (gc-sound? sign-gc
              '(-3 -1 0 1 5)           ; concrete samples
              '(neg zero pos))))       ; abstract samples
+
+;;; --- Pre-built interval connection: P(Z) <-> interval -------------------
+
+(test-group "interval-galois-connection — alpha/gamma"
+  (let ((gc (interval-galois-connection)))
+    (test '(0 . 5) (gc-alpha gc '(0 3 5)))
+    (test '(-3 . 2) (gc-alpha gc '(-3 -1 2)))
+    (test 'interval-bot (gc-alpha gc '()))
+    (test '(0 1 2 3) (gc-gamma gc '(0 . 3)))
+    (test '() (gc-gamma gc 'interval-bot))
+    (test 'unbounded (gc-gamma gc (cons 0 'pos-inf)))))
+
+(test-group "interval-galois-connection — gc-sound?"
+  (test #t (gc-sound? (interval-galois-connection)
+             '((0 1 2) (-3 -1 2) () (5))          ; finite int sets
+             '((0 . 3) (-2 . 2) interval-bot))))  ; bounded intervals
+
+;;; --- Pre-built sign connection: P(Z) <-> sign --------------------------
+
+(test-group "sign-galois-connection — alpha/gamma"
+  (let ((gc (sign-galois-connection)))
+    (test 'pos (gc-alpha gc '(1 2 3)))
+    (test 'neg (gc-alpha gc '(-1 -2)))
+    (test 'flat-top (gc-alpha gc '(-1 1)))
+    (test 'flat-bottom (gc-alpha gc '()))
+    (test '(0) (gc-gamma gc 'zero))
+    (test 'all-pos (gc-gamma gc 'pos))))
+
+(test-group "sign-galois-connection — gc-sound?"
+  (test #t (gc-sound? (sign-galois-connection)
+             '((1 2) (-1 -3) (0) (-1 0 1) ())      ; finite int sets
+             '(neg zero pos flat-bottom flat-top)))) ; all five signs
 
 (test-end)
 (test-exit)

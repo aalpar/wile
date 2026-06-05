@@ -142,3 +142,40 @@
         ((eq? next 'interval-bot) cur)
         (else (cons (if (inf<= (car cur) (car next)) (car cur) 'neg-inf)
                     (if (inf<= (cdr next) (cdr cur)) (cdr cur) 'pos-inf)))))
+
+;; ─── Galois connection: P(Z) <-> interval ───────
+
+;; Concrete domain: finite sets of integers as sorted lists. The empty set
+;; abstracts to interval-bot. gamma of an unbounded interval returns the
+;; sentinel 'unbounded rather than enumerating; the containment order treats
+;; it as top. The soundness check (gc-sound?) samples bounded abstract
+;; elements, so gamma is only enumerated on finite ranges.
+
+(define (%int-range a b)
+  ;; Inclusive integer list [a..b]; assumes finite a <= b.
+  (let loop ((i b) (acc '()))
+    (if (< i a) acc (loop (- i 1) (cons i acc)))))
+
+(define (%interval-subset-leq a b)
+  ;; Containment on finite int sets, with 'unbounded as top.
+  (cond ((eq? b 'unbounded) #t)
+        ((eq? a 'unbounded) #f)
+        (else (let loop ((xs a))
+                (cond ((null? xs) #t)
+                      ((member (car xs) b) (loop (cdr xs)))
+                      (else #f))))))
+
+(define (interval-galois-connection)
+  "Construct the Galois connection between finite integer sets and the interval lattice.\nConcrete domain: finite sets of integers (sorted lists), ordered by containment.\nAbstract domain: the interval lattice. alpha(S) = [min S, max S] (interval-bot\nfor the empty set); gamma([a,b]) = {x : a <= x <= b} for bounded intervals,\nor the sentinel 'unbounded otherwise. This is the soundness certificate for an\ninterval dataflow result: the abstract answer over-approximates the concrete\nset of reachable values. Passes gc-sound? on finite sets and bounded intervals.\n\nReturns: galois-connection\nCategory: algebra\nKeywords: Galois connection, interval, abstract interpretation, soundness, abstraction\n\nSee also: `make-galois-connection', `gc-sound?', `interval-lattice'."
+  (make-galois-connection
+    (lambda (s)
+      (if (null? s) 'interval-bot
+          (let loop ((xs (cdr s)) (lo (car s)) (hi (car s)))
+            (if (null? xs) (cons lo hi)
+                (loop (cdr xs) (min lo (car xs)) (max hi (car xs)))))))
+    (lambda (iv)
+      (cond ((eq? iv 'interval-bot) '())
+            ((or (eq? (car iv) 'neg-inf) (eq? (cdr iv) 'pos-inf)) 'unbounded)
+            (else (%int-range (car iv) (cdr iv)))))
+    (make-partial-order %interval-subset-leq)
+    (interval-lattice)))

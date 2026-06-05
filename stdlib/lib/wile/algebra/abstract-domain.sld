@@ -3,7 +3,10 @@
   (export sign-lattice
           sign?
           abstract-sign
-          sign-binop)
+          sign-binop
+          sign-galois-connection)
   (import (scheme base)
-          (wile algebra lattice))
+          (wile algebra lattice)
+          (wile algebra order)
+          (wile algebra galois))
   (include "abstract-domain.scm"))

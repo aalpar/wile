@@ -131,3 +131,55 @@ See also: `sign?', `sign-lattice', `abstract-sign'."
              ((neg)  (case b ((neg) 'pos)  ((zero) 'zero) ((pos) 'neg)))
              ((zero) 'zero)
              ((pos)  (case b ((neg) 'neg)  ((zero) 'zero) ((pos) 'pos))))))))))
+
+;; ─── Galois connection: P(Z) <-> sign ───────────
+
+;; Concrete domain: finite sets of integers as lists. gamma of an unbounded
+;; sign returns a typed sentinel ('all-neg / 'all-pos / 'all-int) — the set
+;; of all integers of that sign — so the laws hold genuinely: extensiveness
+;; needs gamma(pos) to contain every positive, reductiveness needs
+;; alpha(gamma(pos)) = pos. alpha therefore inverts the sentinels too.
+
+(define (%sign-of-set s)
+  ;; alpha for a finite int set: join of per-element signs (flat-bottom for ()).
+  (let ((L (sign-lattice)))
+    (let loop ((xs s) (acc 'flat-bottom))
+      (if (null? xs) acc
+          (loop (cdr xs) (lattice-join L acc (abstract-sign (car xs))))))))
+
+(define (%all-positive? xs)
+  (let loop ((xs xs))
+    (cond ((null? xs) #t) ((> (car xs) 0) (loop (cdr xs))) (else #f))))
+
+(define (%all-negative? xs)
+  (let loop ((xs xs))
+    (cond ((null? xs) #t) ((< (car xs) 0) (loop (cdr xs))) (else #f))))
+
+(define (%sign-subset-leq a b)
+  ;; Containment on finite int sets, with typed sentinels as tops.
+  (cond ((eq? b 'all-int) #t)
+        ((eq? b 'all-pos) (and (pair? a) (%all-positive? a)))
+        ((eq? b 'all-neg) (and (pair? a) (%all-negative? a)))
+        ((null? a) #t)
+        ((or (eq? a 'all-int) (eq? a 'all-pos) (eq? a 'all-neg)) (eq? a b))
+        (else (let loop ((xs a))
+                (cond ((null? xs) #t)
+                      ((member (car xs) b) (loop (cdr xs)))
+                      (else #f))))))
+
+(define (sign-galois-connection)
+  "Construct the Galois connection between finite integer sets and the sign lattice.\nConcrete domain: finite sets of integers (lists), ordered by containment.\nAbstract domain: the sign lattice {flat-bottom, neg, zero, pos, flat-top}.\nalpha(S) is the join of the per-element signs; gamma maps each sign to its\nconcrete extent — 'zero -> {0}, 'neg/'pos/'flat-top -> the typed sentinels\n'all-neg/'all-pos/'all-int, 'flat-bottom -> {}. Passes gc-sound? on finite\nsets and all five signs.\n\nReturns: galois-connection\nCategory: algebra\nKeywords: Galois connection, sign domain, abstract interpretation, soundness\n\nSee also: `make-galois-connection', `gc-sound?', `sign-lattice'."
+  (make-galois-connection
+    (lambda (c)
+      (cond ((eq? c 'all-pos) 'pos)
+            ((eq? c 'all-neg) 'neg)
+            ((eq? c 'all-int) 'flat-top)
+            (else (%sign-of-set c))))
+    (lambda (s)
+      (cond ((eq? s 'flat-bottom) '())
+            ((eq? s 'zero) '(0))
+            ((eq? s 'neg) 'all-neg)
+            ((eq? s 'pos) 'all-pos)
+            (else 'all-int)))
+    (make-partial-order %sign-subset-leq)
+    (sign-lattice)))
