@@ -49,6 +49,8 @@ type engineConfig struct {
 	extensions         []registry.Extension
 	maxCallDepth       int
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
+	maxParseDepth      int
+	parseDepthSet      bool // true if WithMaxParseDepth was explicitly called
 	maxStackSize       uint64
 	inlineThreshold    int
 	inlineThresholdSet bool // true if WithInlineThreshold was explicitly called
@@ -154,6 +156,21 @@ func WithMaxCallDepth(n int) EngineOption {
 		}
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true
+	}
+}
+
+// WithMaxParseDepth sets the maximum structural nesting depth the parser
+// will accept. When input nests deeper, ErrParseDepthExceeded is returned
+// instead of crashing with a fatal Go stack overflow. A value of 0 means
+// unlimited (negative values are clamped to 0). When not called, the parser
+// uses DefaultMaxParseDepth (10000).
+func WithMaxParseDepth(n int) EngineOption {
+	return func(cfg *engineConfig) {
+		if n < 0 {
+			n = 0
+		}
+		cfg.maxParseDepth = n
+		cfg.parseDepthSet = true
 	}
 }
 

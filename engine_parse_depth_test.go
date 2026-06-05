@@ -24,3 +24,15 @@ func TestEngine_DeepNesting_DoesNotCrash(t *testing.T) {
 	}
 	t.Logf("got expected error: %v", err)
 }
+
+func TestEngine_WithMaxParseDepth(t *testing.T) {
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx, wile.WithMaxParseDepth(20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := strings.Repeat("(", 100) + "1" + strings.Repeat(")", 100)
+	if _, err := engine.EvalMultiple(ctx, src); err == nil {
+		t.Fatal("depth 100 under a limit of 20 should error")
+	}
+}

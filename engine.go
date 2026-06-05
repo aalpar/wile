@@ -63,6 +63,7 @@ type Engine struct {
 	closers                 []registry.Closeable
 	closed                  bool
 	maxCallDepth            int
+	maxParseDepth           int
 	maxStackSize            uint64
 	inlineThreshold         int
 	contractEnforcement     bool // propagated to RegisterPrimitive via cfg
@@ -201,6 +202,12 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		cfg.maxCallDepth = DefaultMaxCallDepth
 	}
 
+	// Apply default parse depth when the caller did not set one explicitly.
+	// WithMaxParseDepth(0) means unlimited — parseDepthSet tracks the opt-in.
+	if !cfg.parseDepthSet {
+		cfg.maxParseDepth = parser.DefaultMaxParseDepth
+	}
+
 	// Apply default inline threshold when the caller did not set one explicitly.
 	// WithInlineThreshold(0) disables inlining — inlineThresholdSet tracks
 	// whether the caller opted in, so we don't override an explicit zero.
@@ -258,6 +265,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		registry:                reg,
 		closers:                 closers,
 		maxCallDepth:            cfg.maxCallDepth,
+		maxParseDepth:           cfg.maxParseDepth,
 		maxStackSize:            cfg.maxStackSize,
 		inlineThreshold:         cfg.inlineThreshold,
 		contractEnforcement:     cfg.contractEnforcement,
@@ -409,6 +417,7 @@ func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source
 func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
+	pr.SetMaxDepth(p.maxParseDepth)
 
 	var lastResult = Void
 	for {
