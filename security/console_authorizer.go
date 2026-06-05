@@ -20,19 +20,29 @@ package security
 // Code loading and process execution are denied.
 //
 // Containment is symlink-resolved (see containedInRoot), so a symlink staged
-// inside /tmp that points outside /tmp does not escape the sandbox.
+// inside /tmp that points outside /tmp does not escape the sandbox. The
+// authorizer also reports /tmp as its ConfinementRoot, so file primitives
+// open through os.Root for race-free containment.
 func ConsoleAuthorizer() Authorizer {
-	return AuthorizerFunc(func(req AccessRequest) error {
-		switch req.Resource {
-		case ResourceFile:
-			if !containedInRoot("/tmp", req.Target) {
-				return ErrAccessDenied
-			}
-			return nil
-		case ResourceEnv:
-			return nil
-		default:
+	return consoleAuthorizer{}
+}
+
+type consoleAuthorizer struct{}
+
+func (consoleAuthorizer) Authorize(req AccessRequest) error {
+	switch req.Resource {
+	case ResourceFile:
+		if !containedInRoot("/tmp", req.Target) {
 			return ErrAccessDenied
 		}
-	})
+		return nil
+	case ResourceEnv:
+		return nil
+	default:
+		return ErrAccessDenied
+	}
+}
+
+func (consoleAuthorizer) ConfinementRoot() (string, bool) {
+	return "/tmp", true
 }

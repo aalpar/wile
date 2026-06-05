@@ -41,7 +41,7 @@ func PrimCreateDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	err = os.Mkdir(path.Value, 0o755)
+	err = confinedMkdir(mc.Authorizer(), path.Value, 0o755)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "create-directory", path.Value)
 	}
@@ -64,7 +64,7 @@ func PrimDeleteDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(path.Value)
+	info, err := confinedStat(mc.Authorizer(), path.Value)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "delete-directory", path.Value)
 	}
@@ -74,7 +74,7 @@ func PrimDeleteDirectory(mc machine.CallContext) error {
 			"delete-directory: not a directory: %s", path.Value,
 		)
 	}
-	err = os.Remove(path.Value)
+	err = confinedRemove(mc.Authorizer(), path.Value)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "delete-directory", path.Value)
 	}
@@ -98,7 +98,7 @@ func PrimDirectoryFiles(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	entries, err := os.ReadDir(path.Value)
+	entries, err := confinedReadDir(mc.Authorizer(), path.Value)
 	if err != nil {
 		return werr.WrapForeignFileError(err, "directory-files", path.Value)
 	}

@@ -1,0 +1,169 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package files
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/aalpar/wile/security"
+)
+
+// When the engine's authorizer confines file access to a root directory, the
+// file primitives open paths through os.Root instead of the bare os package.
+// os.Root resolves every component relative to a directory descriptor and
+// refuses symlink/.. escapes atomically, which closes the TOCTOU gap between
+// the policy check (security.CheckWithAuthorizer) and the open: a path
+// component swapped after the check can no longer redirect the open outside
+// the root. When the authorizer imposes no root (e.g. an unrestricted engine),
+// the helpers fall back to the plain os operation on the original path.
+
+// relWithinRoot expresses target relative to root. It tolerates root itself
+// being a symlink (e.g. macOS /tmp -> /private/tmp) by retrying against the
+// resolved root, so a target written either way maps to a clean relative name.
+// os.Root enforces real containment at the syscall level regardless; this only
+// computes the name handed to it.
+func relWithinRoot(root, target string) (string, error) {
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+	rel, relErr := filepath.Rel(root, abs)
+	if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return rel, nil
+	}
+	realRoot, evalErr := filepath.EvalSymlinks(root)
+	if evalErr != nil {
+		return rel, relErr
+	}
+	return filepath.Rel(realRoot, abs)
+}
+
+// openConfinementRoot opens an *os.Root for the authorizer's confinement root
+// and returns target expressed relative to it. confined is false when auth
+// imposes no root — callers then use the plain os operation on the original
+// path. When confined and err is nil the caller MUST Close the returned root.
+func openConfinementRoot(auth security.Authorizer, target string) (root *os.Root, rel string, confined bool, err error) {
+	dir, ok := security.ConfinementRootOf(auth)
+	if !ok {
+		return nil, "", false, nil
+	}
+	root, err = os.OpenRoot(dir)
+	if err != nil {
+		return nil, "", false, err
+	}
+	rel, err = relWithinRoot(dir, target)
+	if err != nil {
+		root.Close() //nolint:errcheck
+		return nil, "", false, err
+	}
+	return root, rel, true, nil
+}
+
+// confinedOpen opens name for reading, race-free when auth confines file
+// access. The returned *os.File holds an independent descriptor and stays
+// valid after the root is closed.
+func confinedOpen(auth security.Authorizer, name string) (*os.File, error) {
+	root, rel, confined, err := openConfinementRoot(auth, name)
+	if err != nil {
+		return nil, err
+	}
+	if !confined {
+		return os.Open(name)
+	}
+	defer root.Close() //nolint:errcheck
+	return root.Open(rel)
+}
+
+// confinedCreate creates/truncates name for writing, race-free when confined.
+func confinedCreate(auth security.Authorizer, name string) (*os.File, error) {
+	root, rel, confined, err := openConfinementRoot(auth, name)
+	if err != nil {
+		return nil, err
+	}
+	if !confined {
+		return os.Create(name)
+	}
+	defer root.Close() //nolint:errcheck
+	return root.Create(rel)
+}
+
+// confinedOpenForAction dispatches to confinedOpen or confinedCreate by action.
+func confinedOpenForAction(auth security.Authorizer, name, action string) (*os.File, error) {
+	if action == security.ActionWrite {
+		return confinedCreate(auth, name)
+	}
+	return confinedOpen(auth, name)
+}
+
+// confinedStat stats name, race-free when confined.
+func confinedStat(auth security.Authorizer, name string) (os.FileInfo, error) {
+	root, rel, confined, err := openConfinementRoot(auth, name)
+	if err != nil {
+		return nil, err
+	}
+	if !confined {
+		return os.Stat(name)
+	}
+	defer root.Close() //nolint:errcheck
+	return root.Stat(rel)
+}
+
+// confinedRemove removes name, race-free when confined.
+func confinedRemove(auth security.Authorizer, name string) error {
+	root, rel, confined, err := openConfinementRoot(auth, name)
+	if err != nil {
+		return err
+	}
+	if !confined {
+		return os.Remove(name)
+	}
+	defer root.Close() //nolint:errcheck
+	return root.Remove(rel)
+}
+
+// confinedMkdir creates directory name, race-free when confined.
+func confinedMkdir(auth security.Authorizer, name string, perm os.FileMode) error {
+	root, rel, confined, err := openConfinementRoot(auth, name)
+	if err != nil {
+		return err
+	}
+	if !confined {
+		return os.Mkdir(name, perm)
+	}
+	defer root.Close() //nolint:errcheck
+	return root.Mkdir(rel, perm)
+}
+
+// confinedReadDir lists directory entries of name, race-free when confined.
+// os.Root has no ReadDir, so the directory is opened within the root and read
+// through its descriptor.
+func confinedReadDir(auth security.Authorizer, name string) ([]os.DirEntry, error) {
+	root, rel, confined, err := openConfinementRoot(auth, name)
+	if err != nil {
+		return nil, err
+	}
+	if !confined {
+		return os.ReadDir(name)
+	}
+	defer root.Close() //nolint:errcheck
+	dir, err := root.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close() //nolint:errcheck
+	return dir.ReadDir(-1)
+}

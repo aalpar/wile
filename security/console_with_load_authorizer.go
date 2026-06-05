@@ -28,25 +28,33 @@ package security
 // (eval ...) keeps working; the side effects of evaluated code remain gated
 // at their own file/process/env sinks.
 func ConsoleWithLoadAuthorizer() Authorizer {
-	return AuthorizerFunc(func(req AccessRequest) error {
-		switch req.Resource {
-		case ResourceCode:
-			if req.Action == ActionEval {
-				return nil
-			}
-			if !containedInRoot("/tmp", req.Target) {
-				return ErrAccessDenied
-			}
+	return consoleWithLoadAuthorizer{}
+}
+
+type consoleWithLoadAuthorizer struct{}
+
+func (consoleWithLoadAuthorizer) Authorize(req AccessRequest) error {
+	switch req.Resource {
+	case ResourceCode:
+		if req.Action == ActionEval {
 			return nil
-		case ResourceFile:
-			if !containedInRoot("/tmp", req.Target) {
-				return ErrAccessDenied
-			}
-			return nil
-		case ResourceEnv:
-			return nil
-		default:
+		}
+		if !containedInRoot("/tmp", req.Target) {
 			return ErrAccessDenied
 		}
-	})
+		return nil
+	case ResourceFile:
+		if !containedInRoot("/tmp", req.Target) {
+			return ErrAccessDenied
+		}
+		return nil
+	case ResourceEnv:
+		return nil
+	default:
+		return ErrAccessDenied
+	}
+}
+
+func (consoleWithLoadAuthorizer) ConfinementRoot() (string, bool) {
+	return "/tmp", true
 }

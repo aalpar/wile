@@ -46,3 +46,7 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	}
 	return nil
 }
+
+func (p *filesystemRootAuthorizer) ConfinementRoot() (string, bool) {
+	return p.root, true
+}
