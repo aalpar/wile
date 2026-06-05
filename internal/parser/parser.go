@@ -46,6 +46,12 @@ const (
 	ConstUnsyntaxSplicing = "unsyntax-splicing"
 )
 
+// DefaultMaxParseDepth bounds structural nesting depth during parsing.
+// Without a bound, adversarial input such as deeply nested parentheses
+// triggers a fatal, unrecoverable Go stack overflow that kills the host
+// process. 0 means unlimited. Mirrors the VM's DefaultMaxCallDepth.
+const DefaultMaxParseDepth int = 10000
+
 // Parser represents a R7RS compliant Scheme syntax parser.
 type Parser struct {
 	rdr         io.RuneReader // the rune reader
@@ -57,6 +63,8 @@ type Parser struct {
 	foldCase    bool                       // R7RS §2.1: #!fold-case mode for identifiers
 	file        string                     // source file name for error reporting
 	datumLabels map[int]syntax.SyntaxValue // R7RS §2.4 datum labels (#n= and #n#)
+	depth       int                        // current structural nesting depth
+	maxDepth    int                        // max nesting depth; 0 = unlimited
 }
 
 // NewParser creates a new parser for the given reader and environment.
@@ -71,8 +79,19 @@ func NewParserWithFile(env *environment.EnvironmentFrame, skipComments bool, rdr
 		rdr:         rdr,
 		skipComment: skipComments,
 		file:        file,
+		maxDepth:    DefaultMaxParseDepth,
 	}
 	return q
+}
+
+// SetMaxDepth sets the maximum structural nesting depth allowed during
+// parsing. A value of 0 (or negative, clamped to 0) disables the limit.
+// Mirrors MachineContext.SetMaxCallDepth.
+func (p *Parser) SetMaxDepth(n int) {
+	if n < 0 {
+		n = 0
+	}
+	p.maxDepth = n
 }
 
 func (p *Parser) curr() tokenizer.Token {
@@ -659,6 +678,16 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 }
 
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
+	p.depth++
+	defer func() {
+		p.depth--
+	}()
+	if p.maxDepth > 0 && p.depth > p.maxDepth {
+		p.err = NewParserErrorWithWrapf(werr.ErrParseDepthExceeded, p.cur,
+			"nesting depth exceeds maximum of %d", p.maxDepth)
+		return nil, p.cur, p.err
+	}
+
 	var q syntax.SyntaxValue
 
 	// Skip comments when skipComment is enabled
