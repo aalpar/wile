@@ -179,7 +179,7 @@ func (p *DebugContext) breakpointAction(args []string, out io.Writer, verb strin
 		return
 	}
 
-	if action(id) {
+	if action(int(id)) {
 		fmt.Fprintf(out, "Breakpoint %d %sd\n", id, verb)
 	} else {
 		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
