@@ -111,6 +111,11 @@ func (p Profile) authorizer() security.Authorizer {
 // (see resolveAuthorizer), so profile and authorizer options compose
 // commutatively.
 //
+// Across multiple WithProfile calls the last profile that defines an
+// authorizer wins; a later profile with no authorizer (e.g. Tiny,
+// Small, KitchenSink) does not clear an earlier one. This fails safe —
+// a prior restriction is retained rather than silently dropped.
+//
 // Per-profile envMap behavior (all five current profiles):
 //   - Tiny: envMap untouched; profile registers no extensions, so envvars primitives are absent.
 //   - Console: allocates empty envMap when unset; sandboxes to the virtual map (no os.Getenv fallthrough).

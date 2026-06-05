@@ -37,8 +37,10 @@ func denyTarget(tag string) security.Authorizer {
 }
 
 // deniedTags probes auth with one file:read request per tag and returns the
-// tags that were denied. A nil authorizer denies nothing.
-func deniedTags(auth security.Authorizer, tags ...string) []string {
+// tags that were denied. Only an ErrAccessDenied counts as a denial; any other
+// error fails the test so an unexpected failure cannot masquerade as a denial.
+// A nil authorizer denies nothing.
+func deniedTags(c *qt.C, auth security.Authorizer, tags ...string) []string {
 	if auth == nil {
 		return nil
 	}
@@ -49,9 +51,12 @@ func deniedTags(auth security.Authorizer, tags ...string) []string {
 			Action:   security.ActionRead,
 			Target:   tag,
 		})
-		if err != nil {
-			denied = append(denied, tag)
+		if err == nil {
+			continue
 		}
+		c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+			qt.Commentf("tag %q: unexpected non-deny error: %v", tag, err))
+		denied = append(denied, tag)
 	}
 	return denied
 }
@@ -118,7 +123,7 @@ func TestResolveAuthorizer(t *testing.T) {
 				return
 			}
 			c.Assert(got, qt.IsNotNil)
-			c.Assert(deniedTags(got, probes...), qt.DeepEquals, tc.wantDeniedTags)
+			c.Assert(deniedTags(c, got, probes...), qt.DeepEquals, tc.wantDeniedTags)
 		})
 	}
 }
@@ -169,6 +174,69 @@ func TestAuthorizerOptions_ExplicitBeatsProfile_OrderIndependent(t *testing.T) {
 		c.Assert(got.Authorize(codeEval), qt.IsNil,
 			qt.Commentf("%s: explicit authorizer must override the profile regardless of order", o.name))
 	}
+}
+
+// TestAuthorizerOptions_NilAndMultiProfile pins two option-level contracts the
+// field-level matrix cannot reach: WithAuthorizer(nil) must open the engine even
+// over a profile that defines an authorizer (the option still sets
+// explicitAuthorizerSet), and a later profile with no authorizer must not clear
+// an earlier profile's authorizer.
+func TestAuthorizerOptions_NilAndMultiProfile(t *testing.T) {
+	c := qt.New(t)
+
+	codeEval := security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionEval,
+		Target:   "(noop)",
+	}
+
+	build := func(opts ...EngineOption) security.Authorizer {
+		cfg := &engineConfig{}
+		for _, opt := range opts {
+			opt(cfg)
+		}
+		return cfg.resolveAuthorizer()
+	}
+
+	// WithAuthorizer(nil) opens the engine, overriding the profile, in either
+	// order — the nil is meaningful (symmetric with WithEnvMap(nil)).
+	c.Assert(build(WithProfile(Console), WithAuthorizer(nil)), qt.IsNil)
+	c.Assert(build(WithAuthorizer(nil), WithProfile(Console)), qt.IsNil)
+
+	// A later authorizer-less profile (Tiny) must not clear Console's
+	// authorizer — the prior restriction is retained (fails safe).
+	got := build(WithProfile(Console), WithProfile(Tiny))
+	c.Assert(got, qt.IsNotNil)
+	c.Assert(errors.Is(got.Authorize(codeEval), security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("Console authorizer must survive a later authorizer-less profile"))
+}
+
+// TestSandboxOption_MultipleCallsAccumulate guards against the regression where
+// a second WithSandbox would overwrite the first instead of composing with it,
+// silently widening access. Two sandboxes with disjoint env prefixes must
+// intersect: a var permitted by one layer is still denied by the other.
+func TestSandboxOption_MultipleCallsAccumulate(t *testing.T) {
+	c := qt.New(t)
+
+	build := func(opts ...EngineOption) security.Authorizer {
+		cfg := &engineConfig{}
+		for _, opt := range opts {
+			opt(cfg)
+		}
+		return cfg.resolveAuthorizer()
+	}
+	envRead := func(target string) security.AccessRequest {
+		return security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionRead, Target: target}
+	}
+
+	got := build(WithSandbox(SandboxEnvPrefix("A_")), WithSandbox(SandboxEnvPrefix("B_")))
+	c.Assert(got, qt.IsNotNil)
+	// Last-wins (the pre-fix regression) would leave only the B_ restriction,
+	// allowing B_X. Accumulation denies it via the surviving A_ layer.
+	c.Assert(errors.Is(got.Authorize(envRead("B_X")), security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("second sandbox must not widen the first: B_X must stay denied by the A_ layer"))
+	c.Assert(errors.Is(got.Authorize(envRead("A_X")), security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("A_X must be denied by the B_ layer"))
 }
 
 // TestSandboxOption_OrderIndependent verifies WithSandbox intersects its

@@ -41,6 +41,11 @@ func SandboxEnvPrefix(prefix string) SandboxOption {
 // WithAuthorizer resolve to. This holds regardless of option order — the
 // composition is performed once at engine construction by resolveAuthorizer,
 // so WithSandbox may appear before or after WithProfile/WithAuthorizer.
+//
+// Multiple WithSandbox calls accumulate: each layer is intersected with the
+// previously recorded sandbox authorizer, so restrictions only ever tighten
+// (a second call cannot silently widen the first). Intersection is order-
+// independent for the allow/deny decision.
 func WithSandbox(opts ...SandboxOption) EngineOption {
 	scfg := &sandboxConfig{envPrefix: "WILE_"}
 	for _, opt := range opts {
@@ -50,6 +55,10 @@ func WithSandbox(opts ...SandboxOption) EngineOption {
 	sandboxAuth := security.SandboxAuthorizer(scfg.envPrefix)
 
 	return func(cfg *engineConfig) {
+		if cfg.sandboxAuthorizer != nil {
+			cfg.sandboxAuthorizer = security.All(cfg.sandboxAuthorizer, sandboxAuth)
+			return
+		}
 		cfg.sandboxAuthorizer = sandboxAuth
 	}
 }

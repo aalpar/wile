@@ -281,18 +281,18 @@ func WithAuthorizer(auth security.Authorizer) EngineOption {
 // WithAuthorizer (even nil) overrides a profile's built-in authorizer; a
 // WithSandbox layer is always intersected on top via security.All. Returns nil
 // when no authorizer applies (open by default).
-func (cfg *engineConfig) resolveAuthorizer() security.Authorizer {
-	base := cfg.profileAuthorizer
-	if cfg.explicitAuthorizerSet {
-		base = cfg.explicitAuthorizer
+func (p *engineConfig) resolveAuthorizer() security.Authorizer {
+	base := p.profileAuthorizer
+	if p.explicitAuthorizerSet {
+		base = p.explicitAuthorizer
 	}
-	if cfg.sandboxAuthorizer == nil {
+	if p.sandboxAuthorizer == nil {
 		return base
 	}
 	if base == nil {
-		return cfg.sandboxAuthorizer
+		return p.sandboxAuthorizer
 	}
-	return security.All(base, cfg.sandboxAuthorizer)
+	return security.All(base, p.sandboxAuthorizer)
 }
 
 // WithNamespace uses a pre-built namespace instead of building one from
