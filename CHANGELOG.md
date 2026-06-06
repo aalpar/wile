@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`(wile algebra cfl)` — context-free-language reachability.** New algebra
+  sub-library: a path over a labeled directed graph "counts" iff its edge-label
+  string lies in the language of a context-free grammar — generalizing semiring
+  path-algebra (Boolean/tropical reachability) to grammar-constrained
+  composition, the basis of context-sensitive (interprocedural, field-sensitive)
+  program analysis. Typed production kernels (`cfl-epsilon`/`-terminal`/`-unary`/
+  `-binary`), a Reps–Horwitz–Sagiv worklist solver (`cfl-solve` +
+  `cfl-reachable?`/`-from`/`-pairs`/`cfl-derives?`), a `dyck-grammar` preset for
+  matched-delimiter analysis, and `validate-cfl-grammar`/`-graph`.
 - **REPL startup version header.** Entering the interactive REPL now prints
   a `Wile Scheme <version> (<sha>)` header line. Suppressed by `-q`/`--quiet`;
   file and `-e` execution remain header-free so script output stays clean.
