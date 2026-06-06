@@ -96,3 +96,169 @@ Returns: cfl-graph
 Category: algebra
 Keywords: graph, labeled, directed, CFL"
   (%make-cfl-graph nodes edges))
+
+;; ─── Solution record ──────────────────────────────────────────────────────
+(define-record-type <cfl-solution>
+  (%make-cfl-solution nodes n nt->idx node->idx start-idx R outx)
+  cfl-solution?
+  (nodes     sol-nodes)      ; vector of node values, index = node-idx
+  (n         sol-n)          ; node count
+  (nt->idx   sol-nt->idx)    ; hashtable: nonterminal symbol -> idx
+  (node->idx sol-node->idx)  ; hashtable: node -> idx
+  (start-idx sol-start-idx)  ; idx of the grammar start nonterminal
+  (R         sol-R)          ; hashtable: encoded-triple -> #t  (membership)
+  (outx      sol-outx))      ; hashtable: encoded-pair(s,A) -> list of t-idx
+
+(define (cfl-solve grammar graph)
+  "Close the (s,A,t) derivation relation for GRAMMAR over GRAPH and return a
+cfl-solution queryable by cfl-reachable?/-from/-pairs and cfl-derives?.
+Runs the Reps-Horwitz-Sagiv worklist; terminates on finite graphs.
+Parameters:
+  grammar : cfl-grammar
+  graph : cfl-graph
+Returns: cfl-solution
+Category: algebra
+Keywords: CFL, reachability, worklist, context-sensitive"
+  (let* ((node-list (cfl-graph-nodes graph))
+         (nodes     (list->vector node-list))
+         (n         (vector-length nodes))
+         (node->idx (make-hashtable))
+         (nts       (cfl-grammar-nonterminals grammar))
+         (m         (length nts))
+         (nt->idx   (make-hashtable))
+         (prods     (cfl-grammar-productions grammar))
+         (unary-rhs (make-hashtable))   ; A-idx -> list of B-idx          (B -> A)
+         (bin-rhs1  (make-hashtable))   ; A-idx -> list of (B-idx . C-idx) (B -> A C)
+         (bin-rhs2  (make-hashtable))   ; A-idx -> list of (B-idx . C-idx) (B -> C A)
+         (R         (make-hashtable))
+         (outx      (make-hashtable))
+         (inx       (make-hashtable))   ; encoded-pair(A,t) -> list of s-idx
+         (work      '()))
+    ;; index nodes and nonterminals
+    (let loop ((i 0)) (when (< i n) (hashtable-set! node->idx (vector-ref nodes i) i) (loop (+ i 1))))
+    (let loop ((i 0) (xs nts)) (unless (null? xs) (hashtable-set! nt->idx (car xs) i) (loop (+ i 1) (cdr xs))))
+    (let ((nidx  (lambda (v)   (hashtable-ref node->idx v #f)))
+          (ntidx (lambda (sym) (hashtable-ref nt->idx sym #f))))
+      ;; encoders (all keys are integers; pairs are not hashable)
+      (define (enc3 s a t) (+ (* (+ (* s m) a) n) t))   ; triple (s,A,t)
+      (define (encSA s a)  (+ (* s m) a))               ; pair (s,A) for outx
+      (define (encAt a t)  (+ (* a n) t))               ; pair (A,t) for inx
+      (define (push-list! ht k v) (hashtable-set! ht k (cons v (hashtable-ref ht k '()))))
+      (define (add! s a t)
+        (let ((key (enc3 s a t)))
+          (unless (hashtable-ref R key #f)
+            (hashtable-set! R key #t)
+            (push-list! outx (encSA s a) t)
+            (push-list! inx  (encAt a t) s)
+            (set! work (cons (vector s a t) work)))))
+      ;; build production indices by RHS
+      (for-each
+        (lambda (p)
+          (case (cfl-production-kind p)
+            ((unary)
+             (push-list! unary-rhs (ntidx (cfl-production-rhs1 p)) (ntidx (cfl-production-lhs p))))
+            ((binary)
+             (let ((b (ntidx (cfl-production-lhs p)))
+                   (a (ntidx (cfl-production-rhs1 p)))
+                   (c (ntidx (cfl-production-rhs2 p))))
+               (push-list! bin-rhs1 a (cons b c))
+               (push-list! bin-rhs2 c (cons b a))))
+            (else #f)))
+        prods)
+      ;; seed: epsilon self-loops and terminal edges
+      (for-each
+        (lambda (p)
+          (case (cfl-production-kind p)
+            ((epsilon)
+             (let ((a (ntidx (cfl-production-lhs p))))
+               (let loop ((i 0)) (when (< i n) (add! i a i) (loop (+ i 1))))))
+            ((terminal)
+             (let ((a (ntidx (cfl-production-lhs p)))
+                   (lbl (cfl-production-rhs1 p)))
+               (for-each
+                 (lambda (e)        ; e = (from label to)
+                   (when (equal? (cadr e) lbl)
+                     (add! (nidx (car e)) a (nidx (caddr e)))))
+                 (cfl-graph-edges graph))))
+            (else #f)))
+        prods)
+      ;; propagate to fixpoint
+      (let loop ()
+        (unless (null? work)
+          (let* ((tr (car work)) (s (vector-ref tr 0)) (a (vector-ref tr 1)) (t (vector-ref tr 2)))
+            (set! work (cdr work))
+            (for-each (lambda (b) (add! s b t)) (hashtable-ref unary-rhs a '()))
+            (for-each
+              (lambda (bc)                 ; B -> A C : (t,C,e) => (s,B,e)
+                (for-each (lambda (e) (add! s (car bc) e))
+                          (hashtable-ref outx (encSA t (cdr bc)) '())))
+              (hashtable-ref bin-rhs1 a '()))
+            (for-each
+              (lambda (bc)                 ; B -> C A : (e,C,s) => (e,B,t)
+                (for-each (lambda (e) (add! e (car bc) t))
+                          (hashtable-ref inx (encAt (cdr bc) s) '())))
+              (hashtable-ref bin-rhs2 a '())))
+          (loop)))
+      (%make-cfl-solution nodes n nt->idx node->idx (ntidx (cfl-grammar-start grammar)) R outx))))
+
+;; ─── Queries ──────────────────────────────────────────────────────────────
+(define (%sol-enc3 sol s a t) (+ (* (+ (* s (hashtable-size (sol-nt->idx sol))) a) (sol-n sol)) t))
+
+(define (cfl-reachable? sol s t)
+  "True iff T is reachable from S deriving the grammar's START symbol.
+Parameters:
+  sol : cfl-solution
+  s : node
+  t : node
+Returns: boolean
+Category: algebra
+Keywords: CFL, reachability, query"
+  (let ((si (hashtable-ref (sol-node->idx sol) s #f))
+        (ti (hashtable-ref (sol-node->idx sol) t #f)))
+    (and si ti (sol-start-idx sol)
+         (hashtable-ref (sol-R sol) (%sol-enc3 sol si (sol-start-idx sol) ti) #f)
+         #t)))
+
+(define (cfl-reachable-from sol s)
+  "List of nodes T with (S, START, T) — START-reachable targets from S.
+Parameters:
+  sol : cfl-solution
+  s : node
+Returns: list of nodes
+Category: algebra
+Keywords: CFL, reachability, query"
+  (let ((si (hashtable-ref (sol-node->idx sol) s #f))
+        (m  (hashtable-size (sol-nt->idx sol))))
+    (if (and si (sol-start-idx sol))
+        (map (lambda (ti) (vector-ref (sol-nodes sol) ti))
+             (hashtable-ref (sol-outx sol) (+ (* si m) (sol-start-idx sol)) '()))
+        '())))
+
+(define (cfl-reachable-pairs sol)
+  "All (s . t) pairs reachable under START.
+Parameters:
+  sol : cfl-solution
+Returns: list of (s . t)
+Category: algebra
+Keywords: CFL, reachability, query"
+  (let loop ((i 0) (acc '()))
+    (if (>= i (sol-n sol))
+        (reverse acc)
+        (let* ((s (vector-ref (sol-nodes sol) i))
+               (ts (cfl-reachable-from sol s)))
+          (loop (+ i 1) (append (reverse (map (lambda (t) (cons s t)) ts)) acc))))))
+
+(define (cfl-derives? sol s a t)
+  "True iff (S, A, T) is derivable for nonterminal A (the full relation).
+Parameters:
+  sol : cfl-solution
+  s : node
+  a : nonterminal symbol
+  t : node
+Returns: boolean
+Category: algebra
+Keywords: CFL, derives, query"
+  (let ((si (hashtable-ref (sol-node->idx sol) s #f))
+        (ai (hashtable-ref (sol-nt->idx sol) a #f))
+        (ti (hashtable-ref (sol-node->idx sol) t #f)))
+    (and si ai ti (hashtable-ref (sol-R sol) (%sol-enc3 sol si ai ti) #f) #t)))

@@ -316,7 +316,9 @@
     cfl-grammar-start cfl-grammar-productions
     cfl-grammar-nonterminals cfl-grammar-terminals
     make-cfl-graph cfl-graph?
-    cfl-graph-nodes cfl-graph-edges)
+    cfl-graph-nodes cfl-graph-edges
+    cfl-solve cfl-solution?
+    cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
