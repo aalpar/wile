@@ -90,6 +90,7 @@ One per sub-library not featured in a deep chapter. Each is ~50-100 lines: const
 | [`quick-tour/pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm) | `pareto` | Factor comparison over booleans and numbers, two-objective car dominance, frontier |
 | [`quick-tour/matching.scm`](../../examples/algebra/tutorial/quick-tour/matching.scm) | `matching` | Gale-Shapley proposer/receiver optima, stability and blocking pairs, Hungarian min-cost assignment |
 | [`quick-tour/sat.scm`](../../examples/algebra/tutorial/quick-tour/sat.scm) | `sat` | CDCL CNF and S-expression satisfiability, model extraction, SAT-backed Boolean equivalence |
+| [`quick-tour/cfl.scm`](../../examples/algebra/tutorial/quick-tour/cfl.scm) | `cfl` | CFL/Dyck reachability; interprocedural call/return matching vs plain Boolean reachability |
 
 ## Structure of each file
 

@@ -1173,6 +1173,36 @@ A CNF formula is a list of clauses; each clause is a list of nonzero exact integ
 
 ---
 
+## CFL Reachability -- `(wile algebra cfl)`
+
+Context-free-language reachability: a path counts iff its edge-label string lies in `L(A)` for nonterminal `A`. Generalizes semiring path-algebra (Boolean reachability, tropical shortest-path) to grammar-constrained composition — the basis of context-sensitive program analysis (interprocedural call/return matching, field-sensitivity). Solver: Reps–Horwitz–Sagiv (1995) worklist over `(s, A, t)` triples; terminates on finite graphs, `O(n³·|G|)`.
+
+### Grammar (typed production kernels)
+- `(cfl-epsilon A)` / `(cfl-terminal A t)` / `(cfl-unary A B)` / `(cfl-binary A B C)` -- the four normal-form productions; grammars are normalized by construction
+- `(make-cfl-grammar start productions)` / `cfl-grammar?` / `cfl-grammar-start` / `cfl-grammar-productions`
+- `(cfl-grammar-nonterminals g)` / `(cfl-grammar-terminals g)` -- derived symbol sets
+- `(validate-cfl-grammar g)` -- `#t` or violation list; checks terminal/nonterminal disjointness, defined start, RHS-nonterminal
+
+### Graph
+- `(make-cfl-graph nodes edges)` -- edges are `(from label to)` triples; nodes/labels are hashable atoms
+- `cfl-graph?` / `cfl-graph-nodes` / `cfl-graph-edges` / `(validate-cfl-graph G)`
+
+### Solve + query
+- `(cfl-solve grammar graph)` -- closes the relation; returns `<cfl-solution>`
+- `(cfl-reachable? sol s t)` -- start-symbol reachability
+- `(cfl-reachable-from sol s)` -- start-reachable targets
+- `(cfl-reachable-pairs sol)` -- all `(s . t)` under start
+- `(cfl-derives? sol s A t)` -- full relation, any nonterminal
+
+### Dyck preset
+- `(dyck-grammar bracket-pairs)` -- balanced-delimiter grammar from `(open . close)` pairs; the interprocedural / field-sensitive entry point
+
+### References
+- Reps, Horwitz, Sagiv (1995). "Precise interprocedural dataflow analysis via graph reachability." POPL.
+- Melski, Reps (2000). "Interconvertibility of set constraints and CFL-reachability." TCS.
+
+---
+
 ## Cross-Reference: Sub-library to Import Path
 
 | Section | Import Path |
@@ -1206,6 +1236,7 @@ A CNF formula is a list of clauses; each clause is a list of nonzero exact integ
 | Dataflow | `(wile algebra dataflow)` |
 | Matching | `(wile algebra matching)` |
 | SAT | `(wile algebra sat)` |
+| CFL Reachability | `(wile algebra cfl)` |
 
 ## Umbrella Re-exports
 
