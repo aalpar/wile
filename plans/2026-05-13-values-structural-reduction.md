@@ -3,7 +3,7 @@
 **Date**: 2026-05-13
 **Source**: `/structural-reduction ./values` analysis (Tier A.1 of the
 roadmap — `plans/2026-05-07-structural-reduction-roadmap.md`)
-**Status**: Planning — analysis only. No implementation yet.
+**Status**: **Tier A.1 complete — Phases 0–4 shipped** (PRs #747–#752; closeout commit `1518ba1f`). vmCore extraction declined. This file is retained as the analysis of record.
 **Priority**: **High** (Tier 5 tech debt; the highest-leverage remaining
 SR target — 226 importing files across 32 packages, `Ca=32`).
 

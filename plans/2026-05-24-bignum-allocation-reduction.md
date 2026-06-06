@@ -1,6 +1,6 @@
 # Bignum Allocation Reduction for Tight-Loop Arithmetic
 
-**Status:** Design draft — not started.
+**Status:** **Shipped** (part of the PRs #757–#759 cluster per `plans/CLAUDE.md`). Verified on master: `values/numeric_scratch.go` (the in-place scratch API) exists, and `bigint-counting-semiring` (Sub-path 4A) is exported from `(wile algebra semiring)` (feat commit `326a183a`, PR #758).
 
 **Scope:** Reduce heap allocations in `(*BigInteger).Add` / `.Multiply` / `.Subtract` / `.Negate` and the corresponding dispatch-closure tables. Add an internal in-place arithmetic API for callers operating in tight loops (Bellman-Ford-shaped algorithms on **DAGs**, large-bignum exponentiation, accumulator patterns). No change to the public R7RS-immutable `Number` interface; in-place ops are an internal-only optimization that must not leak into Scheme-visible semantics.
 

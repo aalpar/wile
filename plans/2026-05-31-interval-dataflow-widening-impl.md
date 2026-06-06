@@ -1,6 +1,6 @@
 # Interval Dataflow + Galois Connections — Implementation Plan
 
-**Status**: Ready to implement. Companion to `2026-05-31-interval-dataflow-widening-design.md`.
+**Status**: **Shipped (PR #765, merged 2026-06-06).** All 4 phases landed, plus crosscheck revisions (see "Post-review revisions" below). One follow-up deferred: the `max-iterations` silent-non-termination guard. Companion to `2026-05-31-interval-dataflow-widening-design.md`.
 **Date**: 2026-06-05.
 **Flow**: branch `feat/interval-dataflow-widening` → 4 phases (one commit each) → `make ci` → PR → dual review.
 

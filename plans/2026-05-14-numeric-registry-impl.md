@@ -1,7 +1,7 @@
 # Numeric registry — implementation plan (Phase 3, `values/` SR)
 
 **Date**: 2026-05-14
-**Status**: Plan locked in pending PR 1 start.
+**Status**: **Shipped (PR #752, merged).** All PRs landed; `values/numeric_registry.go` on master.
 **Design source**: `plans/2026-05-14-numeric-registry-design.md`
   (Q-resolutions baked in: Q-a cold-path only; Q-b drop wile-goast
   scope; Q-c→Q-i resolved C3 — registry's `ToFloat64` covers only

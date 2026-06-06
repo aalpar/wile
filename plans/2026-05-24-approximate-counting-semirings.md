@@ -1,6 +1,6 @@
 # Approximate Counting Semirings
 
-**Status:** Design refined 2026-05-26 — implementation strategy locked: **pure Scheme, no Go extension**. Plan's Go pseudocode in §Design/Modular kept as illustration of intent; actual implementation uses Wile's numeric tower (which handles bignum-when-needed transparently), collapsing the plan's two-path construction-time dispatch into one path. `canonicalize` is an internal helper, not exported.
+**Status:** **Shipped.** `saturating-counting-semiring`, `modular-counting-semiring`, and `log-counting-semiring` are exported from `(wile algebra semiring)` on master (feat commit `83763da9`; pure-Scheme per the locked strategy). Listed under Completed Plans → Algebra in `plans/CLAUDE.md`. Implementation notes below: pure Scheme, no Go extension; actual implementation uses Wile's numeric tower (which handles bignum-when-needed transparently), collapsing the plan's two-path construction-time dispatch into one path. `canonicalize` is an internal helper, not exported.
 
 **Scope:** Add explicit overflow-aware counting semiring constructors to `(wile algebra semiring)`. Existing `counting-semiring` (exact, bignum-backed) stays unchanged. New constructors provide bounded-carrier alternatives with documented trade-offs.
 

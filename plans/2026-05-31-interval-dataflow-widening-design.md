@@ -1,6 +1,6 @@
 # Interval Dataflow + Galois Connections — Design
 
-**Status**: Design draft. Implementation plan to follow in a separate `-impl.md` file.
+**Status**: **Realized (PR #765, merged 2026-06-06).** Implemented per `2026-05-31-interval-dataflow-widening-impl.md`; the §6.4 single-`'unbounded`-sentinel gamma was superseded during review by typed sentinels (see the impl plan's "Post-review revisions").
 **Date**: 2026-05-31.
 **Related work**:
 - `(wile algebra dataflow)` (`stdlib/lib/wile/algebra/dataflow.scm`) — the MFP worklist solver this work extends.

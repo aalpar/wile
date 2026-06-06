@@ -1,5 +1,7 @@
 # SAT Solver Implementation Plan
 
+**Status**: **Shipped.** `extensions/sat/` + `(wile algebra sat)` are on master (design+impl per `plans/CLAUDE.md` Completed Plans → Algebra Libraries). Reference docs added 2026-06-05.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship a CDCL SAT solver as a Wile extension (`extensions/sat/`) with a Scheme front-end at `(wile algebra sat)`, closing the De Morgan / complement-law gap in `symbolic-boolean-equivalent?` via new `boolean-decide-*` primitives. Targets MiniSat-class performance on moderate instances.

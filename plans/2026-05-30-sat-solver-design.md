@@ -1,6 +1,6 @@
 # SAT Solver — Design
 
-**Status**: Design draft. Implementation plan to follow in a separate `-impl.md` file.
+**Status**: **Realized — shipped.** `extensions/sat/` (CDCL kernel) + `(wile algebra sat)` front-end are on master; see `2026-05-30-sat-solver-impl.md`.
 **Date**: 2026-05-30.
 **Related work**: `(wile algebra symbolic)` (`stdlib/lib/wile/algebra/symbolic.scm:670-734`) — the existing axiomatic primitives this work complements; `(wile algebra boolean)` (`stdlib/lib/wile/algebra/boolean.scm`) — the *Boolean-algebra-as-structure* library (distinct concept; not touched by this work); `extensions/algebragraph/` — precedent for Go-kernel + Scheme-frontend extension layout.
 
