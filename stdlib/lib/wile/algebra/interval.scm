@@ -104,22 +104,22 @@
 ;; unreachable result, matching sign-binop's bottom handling. This shared
 ;; predicate keeps the bottom-detection logic in one place while each public
 ;; operator retains its own docstring (the doc system reads define-form docs).
-(define (interval-bottom-operand? a b)
+(define (%interval-bottom-operand? a b)
   (or (eq? a 'interval-bot) (eq? b 'interval-bot)))
 
 (define (interval-add a b)
   "Add two intervals: [a.lo+b.lo, a.hi+b.hi].\nReturns interval-bot if either operand is interval-bot (absorbing).\n\nParameters:\n  a : pair-or-symbol\n  b : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra"
-  (if (interval-bottom-operand? a b) 'interval-bot
+  (if (%interval-bottom-operand? a b) 'interval-bot
       (cons (inf+ (car a) (car b)) (inf+ (cdr a) (cdr b)))))
 
 (define (interval-sub a b)
   "Subtract two intervals: [a.lo-b.hi, a.hi-b.lo].\nReturns interval-bot if either operand is interval-bot (absorbing).\n\nParameters:\n  a : pair-or-symbol\n  b : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra"
-  (if (interval-bottom-operand? a b) 'interval-bot
+  (if (%interval-bottom-operand? a b) 'interval-bot
       (cons (inf- (car a) (cdr b)) (inf- (cdr a) (car b)))))
 
 (define (interval-mul a b)
   "Multiply two intervals using four-corner product.\nComputes all products of endpoint combinations and takes min/max.\nReturns interval-bot if either operand is interval-bot (absorbing).\n\nParameters:\n  a : pair-or-symbol\n  b : pair-or-symbol\nReturns: pair-or-symbol\nCategory: algebra"
-  (if (interval-bottom-operand? a b) 'interval-bot
+  (if (%interval-bottom-operand? a b) 'interval-bot
       (let* ((corners (list (inf* (car a) (car b))
                             (inf* (car a) (cdr b))
                             (inf* (cdr a) (car b))
@@ -145,37 +145,68 @@
 
 ;; ─── Galois connection: P(Z) <-> interval ───────
 
-;; Concrete domain: finite sets of integers as sorted lists. The empty set
-;; abstracts to interval-bot. gamma of an unbounded interval returns the
-;; sentinel 'unbounded rather than enumerating; the containment order treats
-;; it as top. The soundness check (gc-sound?) samples bounded abstract
-;; elements, so gamma is only enumerated on finite ranges.
+;; Concrete domain: subsets of the integers. Bounded sets are finite int
+;; lists; unbounded extents use *typed* sentinels so gamma is invertible —
+;; alpha(gamma(iv)) = iv on the FULL interval lattice, including the one-sided
+;; intervals widening produces (e.g. (0 . pos-inf)). Sentinels:
+;;   (all-ge . n) = {x : x >= n}     <- gamma of (n . pos-inf)
+;;   (all-le . n) = {x : x <= n}     <- gamma of (neg-inf . n)
+;;   all-int      = all integers      <- gamma of (neg-inf . pos-inf)
+;;   ()           = empty set         <- gamma of interval-bot
+;; This mirrors the typed-sentinel design of sign-galois-connection so the
+;; soundness certificate covers what an interval dataflow actually emits.
 
 (define (%int-range a b)
   ;; Inclusive integer list [a..b]; assumes finite a <= b.
   (let loop ((i b) (acc '()))
     (if (< i a) acc (loop (- i 1) (cons i acc)))))
 
+(define (%iv-sentinel? x)
+  (or (eq? x 'all-int)
+      (and (pair? x) (memq (car x) '(all-ge all-le)))))
+
+(define (%iv-every pred xs)
+  (let loop ((xs xs))
+    (cond ((null? xs) #t) ((pred (car xs)) (loop (cdr xs))) (else #f))))
+
 (define (%interval-subset-leq a b)
-  ;; Containment on finite int sets, with 'unbounded as top.
-  (cond ((eq? b 'unbounded) #t)
-        ((eq? a 'unbounded) #f)
-        (else (let loop ((xs a))
-                (cond ((null? xs) #t)
-                      ((member (car xs) b) (loop (cdr xs)))
-                      (else #f))))))
+  ;; Containment on the concrete domain (finite sets + typed sentinels),
+  ;; a genuine partial order: reflexive, with () below everything.
+  (cond ((equal? a b) #t)                                  ; reflexivity
+        ((null? a) #t)                                      ; empty subset of all
+        ((eq? b 'all-int) #t)                               ; all-int is top
+        ((%iv-sentinel? a)                                  ; sentinel a vs (non-equal) b
+         (cond ((and (pair? a) (pair? b) (eq? (car a) 'all-ge) (eq? (car b) 'all-ge))
+                (>= (cdr a) (cdr b)))                       ; {>=m} subset {>=n} iff m>=n
+               ((and (pair? a) (pair? b) (eq? (car a) 'all-le) (eq? (car b) 'all-le))
+                (<= (cdr a) (cdr b)))
+               (else #f)))
+        ((and (pair? b) (eq? (car b) 'all-ge))             ; finite a vs {x>=n}
+         (%iv-every (lambda (x) (>= x (cdr b))) a))
+        ((and (pair? b) (eq? (car b) 'all-le))             ; finite a vs {x<=n}
+         (%iv-every (lambda (x) (<= x (cdr b))) a))
+        (else                                               ; both finite sets
+         (%iv-every (lambda (x) (member x b)) a))))
 
 (define (interval-galois-connection)
-  "Construct the Galois connection between finite integer sets and the interval lattice.\nConcrete domain: finite sets of integers (sorted lists), ordered by containment.\nAbstract domain: the interval lattice. alpha(S) = [min S, max S] (interval-bot\nfor the empty set); gamma([a,b]) = {x : a <= x <= b} for bounded intervals,\nor the sentinel 'unbounded otherwise. This is the soundness certificate for an\ninterval dataflow result: the abstract answer over-approximates the concrete\nset of reachable values. Passes gc-sound? on finite sets and bounded intervals.\n\nReturns: galois-connection\nCategory: algebra\nKeywords: Galois connection, interval, abstract interpretation, soundness, abstraction\n\nSee also: `make-galois-connection', `gc-sound?', `interval-lattice'."
+  "Construct the Galois connection between integer sets and the interval lattice.\nConcrete domain: subsets of the integers, ordered by containment. Bounded sets\nare finite lists; unbounded extents use typed sentinels ((all-ge . n),\n(all-le . n), all-int) so the connection is a closed loop on the FULL interval\nlattice. alpha(S) = [min S, max S] (interval-bot for the empty set); gamma maps\nbounded [a,b] to {a..b}, (n . pos-inf) to (all-ge . n), (neg-inf . n) to\n(all-le . n), and top to all-int. This is the soundness certificate for an\ninterval dataflow result — including the one-sided intervals widening produces\n(e.g. (0 . pos-inf)). Passes gc-sound? over the full lattice.\n\nReturns: galois-connection\nCategory: algebra\nKeywords: Galois connection, interval, abstract interpretation, soundness, abstraction\n\nSee also: `make-galois-connection', `gc-sound?', `interval-lattice', `interval-widen'."
   (make-galois-connection
-    (lambda (s)
-      (if (null? s) 'interval-bot
-          (let loop ((xs (cdr s)) (lo (car s)) (hi (car s)))
-            (if (null? xs) (cons lo hi)
-                (loop (cdr xs) (min lo (car xs)) (max hi (car xs)))))))
+    ;; alpha: concrete -> interval. Inverts the gamma sentinels.
+    (lambda (c)
+      (cond ((eq? c 'all-int) (cons 'neg-inf 'pos-inf))
+            ((and (pair? c) (eq? (car c) 'all-ge)) (cons (cdr c) 'pos-inf))
+            ((and (pair? c) (eq? (car c) 'all-le)) (cons 'neg-inf (cdr c)))
+            ((null? c) 'interval-bot)
+            (else
+             (let loop ((xs (cdr c)) (lo (car c)) (hi (car c)))
+               (if (null? xs) (cons lo hi)
+                   (loop (cdr xs) (min lo (car xs)) (max hi (car xs))))))))
+    ;; gamma: interval -> concrete. Typed sentinels for unbounded extents.
     (lambda (iv)
       (cond ((eq? iv 'interval-bot) '())
-            ((or (eq? (car iv) 'neg-inf) (eq? (cdr iv) 'pos-inf)) 'unbounded)
+            ((and (eq? (car iv) 'neg-inf) (eq? (cdr iv) 'pos-inf)) 'all-int)
+            ((eq? (cdr iv) 'pos-inf) (cons 'all-ge (car iv)))
+            ((eq? (car iv) 'neg-inf) (cons 'all-le (cdr iv)))
             (else (%int-range (car iv) (cdr iv)))))
     (make-partial-order %interval-subset-leq)
     (interval-lattice)))

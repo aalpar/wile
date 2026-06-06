@@ -157,11 +157,15 @@ See also: `sign?', `sign-lattice', `abstract-sign'."
 
 (define (%sign-subset-leq a b)
   ;; Containment on finite int sets, with typed sentinels as tops.
-  (cond ((eq? b 'all-int) #t)
+  ;; A genuine partial order: reflexive, with () below everything. Reflexivity
+  ;; and the empty-set case are tested FIRST so the sentinel-membership branches
+  ;; (which would mis-handle a sentinel or empty `a`) never see them.
+  (cond ((equal? a b) #t)                                  ; reflexivity (incl. sentinels)
+        ((null? a) #t)                                      ; empty subset of everything
+        ((eq? b 'all-int) #t)                               ; all-int is top
         ((eq? b 'all-pos) (and (pair? a) (%all-positive? a)))
         ((eq? b 'all-neg) (and (pair? a) (%all-negative? a)))
-        ((null? a) #t)
-        ((or (eq? a 'all-int) (eq? a 'all-pos) (eq? a 'all-neg)) (eq? a b))
+        ((symbol? a) #f)                                    ; sentinel a (not = b) not below a finite/narrower b
         (else (let loop ((xs a))
                 (cond ((null? xs) #t)
                       ((member (car xs) b) (loop (cdr xs)))

@@ -362,15 +362,31 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
            ;; (rank-of p >= rank-of b). Widening at these points forces
            ;; termination on infinite-height lattices (design §5). Computed
            ;; once, and only when a widen operator was supplied — pure MFP
-           ;; pays nothing.
+           ;; pays nothing. For irreducible CFGs this flags a sound superset
+           ;; of the natural-loop headers (RPO-rank back-edges), which costs
+           ;; precision but never termination.
+           ;;
+           ;; rank-or-false tolerates indices absent from the RPO rank-map —
+           ;; blocks (or predecessors) unreachable from entry. Pure MFP already
+           ;; tolerates such orphans (their out-state stays bottom and joins
+           ;; harmlessly), so the widening detector must not crash on them. An
+           ;; orphan cannot lie on a cycle reachable from entry, so it is never
+           ;; a widening point.
+           (rank-or-false (lambda (idx)
+                            (let ((e (assv idx rank-map)))
+                              (and e (cdr e)))))
            (widening-points
              (if widen-fn
                  (filter-map
                    (lambda (b)
-                     (let ((idx (cfg-index-of protocol b)))
-                       (and (let any-back ((ps (flow-preds b)))
+                     (let* ((idx (cfg-index-of protocol b))
+                            (ridx (rank-or-false idx)))
+                       (and ridx
+                            (let any-back ((ps (flow-preds b)))
                               (cond ((null? ps) #f)
-                                    ((>= (rank-of (car ps)) (rank-of idx)) #t)
+                                    ((let ((rp (rank-or-false (car ps))))
+                                       (and rp (>= rp ridx)))
+                                     #t)
                                     (else (any-back (cdr ps)))))
                             idx)))
                    blocks)

@@ -125,3 +125,17 @@ Gate: `make ci` (full).
 ## Validation summary
 
 Per-phase `make lint && make covercheck`; final `make ci`. The headline acceptance test: the motivating loop, non-terminating today on the interval lattice, terminates under `(widen interval-widen)` and returns the expected bounded-below interval — with a `gc-sound?`-backed Galois connection certifying the result over-approximates the concrete reachable set.
+
+## Post-review revisions (crosscheck, PR #765)
+
+A 5-lens crosscheck found three correctness gaps in un-sampled territory, all fixed:
+
+1. **`widening-points` crashed on a flow-predecessor unreachable from entry** — `rank-of` errors on indices absent from the RPO `rank-map`. Pure MFP tolerates orphan preds (their out-state stays bottom and joins harmlessly); the widening detector now does too (`rank-or-false`). Regression-guarded.
+2. **Interval Galois certificate didn't cover widening outputs.** The original `gamma` collapsed every unbounded interval to one opaque `'unbounded` sentinel, so `alpha(gamma((0 . pos-inf)))` crashed and the reductive law was uncheckable on exactly the intervals widening produces. **Revised the design**: `gamma` now uses *typed* sentinels (`(all-ge . n)`, `(all-le . n)`, `all-int`) that `alpha` inverts — mirroring `sign-galois-connection`. `gc-sound?` now passes over the full lattice. (This supersedes the design's §6.4 single-`'unbounded`-sentinel sketch.)
+3. **`%sign-subset-leq` was not a valid partial order** (reflexivity failed for `'all-pos`/`'all-neg`; `'()` wasn't below the sentinel tops). Reordered so reflexivity + empty-set are tested first. `validate-partial-order` tests now lock the axioms for both the sign and interval concrete orders.
+
+Plus: `interval-bottom-operand?` → `%interval-bottom-operand?` (private-helper `%` convention); new dataflow tests for the non-self-loop header, decrement loop, and acyclic "widen fires nowhere" cases.
+
+## Deferred follow-up
+
+- **Silent non-termination guard.** Omitting `(widen ...)` on an infinite-height lattice loops forever with no error (the library can't detect lattice height). Out of scope for this PR. Candidate fix: an opt-in `(max-iterations N)` arg to `run-analysis` that raises `"no fixpoint after N passes — infinite-height lattice without (widen ...)?"`, converting a silent hang into an actionable error. Tracked for a separate change.

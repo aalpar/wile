@@ -308,5 +308,72 @@
     (test (analysis-out plain 1) (analysis-out widened 1))
     (test #t (analysis-out widened 0))))
 
+;;; --- Widening at a non-self-loop header (header != latch) ---------------
+
+(test-group "run-analysis — widening at a separate-latch loop header"
+  ;; 0 -> 1 (header) -> 2 (latch, x:=x+1) -> back to 1. The back-edge is
+  ;; 2 -> 1, so the widening point is block 1, NOT a self-loop. Exercises the
+  ;; rank-based back-edge detection on the canonical loop shape.
+  (let* ((loop-cfg '((0 ()    (1))
+                     (1 (0 2)  (2))
+                     (2 (1)    (1))))
+         (L (interval-lattice))
+         (xfer (lambda (blk in)
+                 (if (= (car blk) 2)
+                     (interval-add in '(1 . 1))   ; latch increments
+                     in)))
+         (result (run-analysis 'forward L xfer loop-cfg test-protocol
+                                (init-state (abstract-interval 0))
+                                (widen interval-widen))))
+    (test '(0 . pos-inf) (analysis-in result 1))))
+
+;;; --- Decrement loop: lower bound widens to neg-inf ---------------------
+
+(test-group "run-analysis — decrement loop widens lower bound to neg-inf"
+  (let* ((loop-cfg '((0 () (1))
+                     (1 (0 1) (1))))
+         (L (interval-lattice))
+         (xfer (lambda (blk in)
+                 (if (= (car blk) 1)
+                     (interval-sub in '(1 . 1))   ; x := x - 1
+                     in)))
+         (result (run-analysis 'forward L xfer loop-cfg test-protocol
+                                (init-state (abstract-interval 0))
+                                (widen interval-widen))))
+    (test '(neg-inf . 0) (analysis-in result 1))))
+
+;;; --- Acyclic CFG: a supplied widen operator fires nowhere --------------
+
+(test-group "run-analysis — widen on acyclic CFG matches pure MFP"
+  ;; A diamond has no back-edges, so no widening points: supplying a widen
+  ;; operator must produce byte-identical results to pure MFP. The widen op
+  ;; below would corrupt the result if it ever fired (returns top).
+  (let* ((L (interval-lattice))
+         (xfer (lambda (blk in) (interval-add in '(1 . 1))))
+         (plain   (run-analysis 'forward L xfer diamond-cfg test-protocol
+                                 (init-state (abstract-interval 0))))
+         (widened (run-analysis 'forward L xfer diamond-cfg test-protocol
+                                 (init-state (abstract-interval 0))
+                                 (widen (lambda (cur next) (cons 'neg-inf 'pos-inf))))))
+    (test (analysis-out plain 3) (analysis-out widened 3))))
+
+;;; --- Regression: widening tolerates unreachable-from-entry preds --------
+
+(test-group "run-analysis — widening with an unreachable predecessor (regression)"
+  ;; Block 1's preds include 9, which is unreachable from entry 0 (not in the
+  ;; RPO rank-map). Pure MFP tolerates this; the widening detector must too
+  ;; (it previously crashed calling rank-of on the orphan index).
+  (let* ((cfg '((0 () (1))
+                (1 (0 9) ())
+                (9 () (1))))
+         (L (interval-lattice))
+         (xfer (lambda (blk in) in)))
+    (test '(0 . 0)
+          (analysis-in
+            (run-analysis 'forward L xfer cfg test-protocol
+                          (init-state (abstract-interval 0))
+                          (widen interval-widen))
+            1))))
+
 (test-end)
 (test-exit)

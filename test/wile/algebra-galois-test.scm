@@ -87,12 +87,33 @@
     (test 'interval-bot (gc-alpha gc '()))
     (test '(0 1 2 3) (gc-gamma gc '(0 . 3)))
     (test '() (gc-gamma gc 'interval-bot))
-    (test 'unbounded (gc-gamma gc (cons 0 'pos-inf)))))
+    ;; typed sentinels for unbounded extents (invertible)
+    (test '(all-ge . 0) (gc-gamma gc (cons 0 'pos-inf)))
+    (test '(all-le . 5) (gc-gamma gc (cons 'neg-inf 5)))
+    (test 'all-int (gc-gamma gc (cons 'neg-inf 'pos-inf)))
+    ;; alpha inverts the sentinels — closes the round-trip on widening outputs
+    (test '(0 . pos-inf) (gc-alpha gc '(all-ge . 0)))
+    (test '(neg-inf . 5) (gc-alpha gc '(all-le . 5)))
+    (test '(neg-inf . pos-inf) (gc-alpha gc 'all-int))))
 
-(test-group "interval-galois-connection — gc-sound?"
+(test-group "interval-galois-connection — gc-sound? over the full lattice"
+  ;; Includes the one-sided intervals widening produces — the reductive law
+  ;; alpha(gamma(a)) <= a now holds for (0 . pos-inf), not just bounded ones.
   (test #t (gc-sound? (interval-galois-connection)
-             '((0 1 2) (-3 -1 2) () (5))          ; finite int sets
-             '((0 . 3) (-2 . 2) interval-bot))))  ; bounded intervals
+             '((0 1 2) (-3 -1 2) () (5))                       ; finite int sets
+             (list '(0 . 3) '(-2 . 2) 'interval-bot
+                   (cons 0 'pos-inf) (cons 'neg-inf 0)
+                   (cons 'neg-inf 'pos-inf)))))                ; + unbounded
+
+(test-group "interval/sign concrete orders are valid partial orders"
+  ;; Locks the partial-order axioms (reflexivity, antisymmetry, transitivity)
+  ;; on sentinel-bearing samples — gc-sound? alone does not exercise these.
+  (test #t (validate-partial-order
+             (gc-concrete-po (interval-galois-connection))
+             (list '() '(0 1) '(all-ge . 0) '(all-le . 0) 'all-int)))
+  (test #t (validate-partial-order
+             (gc-concrete-po (sign-galois-connection))
+             (list '() '(1) '(-1) 'all-pos 'all-neg 'all-int))))
 
 ;;; --- Pre-built sign connection: P(Z) <-> sign --------------------------
 
