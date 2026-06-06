@@ -307,7 +307,16 @@
     sat? sat-model
     sat-cnf? sat-cnf-model
     boolean-decide-sat? boolean-decide-equivalent?
-    cnf->flat)
+    cnf->flat
+    ;; CFL reachability
+    cfl-epsilon cfl-terminal cfl-unary cfl-binary
+    cfl-production? cfl-production-kind cfl-production-lhs
+    cfl-production-rhs1 cfl-production-rhs2
+    make-cfl-grammar cfl-grammar?
+    cfl-grammar-start cfl-grammar-productions
+    cfl-grammar-nonterminals cfl-grammar-terminals
+    make-cfl-graph cfl-graph?
+    cfl-graph-nodes cfl-graph-edges)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -335,4 +344,5 @@
           (wile algebra combinatorial-graph)
           (wile algebra abstract-domain)
           (wile algebra dataflow)
-          (wile algebra sat)))
+          (wile algebra sat)
+          (wile algebra cfl)))
