@@ -219,6 +219,7 @@ for the full chapter list with prerequisites.
 - [`pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm)
 - [`matching.scm`](../../examples/algebra/tutorial/quick-tour/matching.scm)
 - [`sat.scm`](../../examples/algebra/tutorial/quick-tour/sat.scm)
+- [`cfl.scm`](../../examples/algebra/tutorial/quick-tour/cfl.scm)
 
 ## See Also
 

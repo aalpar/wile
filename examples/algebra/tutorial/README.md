@@ -52,6 +52,7 @@ featured in a deep chapter. Read them a la carte.
 | `quick-tour/pareto.scm` | `pareto` |
 | `quick-tour/matching.scm` | `matching` (two-sided / stable marriage) |
 | `quick-tour/sat.scm` | `sat` |
+| `quick-tour/cfl.scm` | `cfl` (context-free-language reachability) |
 
 ## How it works
 
