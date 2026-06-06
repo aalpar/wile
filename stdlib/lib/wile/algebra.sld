@@ -315,8 +315,10 @@
     make-cfl-grammar cfl-grammar?
     cfl-grammar-start cfl-grammar-productions
     cfl-grammar-nonterminals cfl-grammar-terminals
+    validate-cfl-grammar
     make-cfl-graph cfl-graph?
     cfl-graph-nodes cfl-graph-edges
+    validate-cfl-graph
     cfl-solve cfl-solution?
     cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?
     dyck-grammar)
