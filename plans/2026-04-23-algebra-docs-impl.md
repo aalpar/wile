@@ -1,11 +1,24 @@
 +++
 title = "Implementation plan — algebra tutorial + reference catch-up"
 date  = "2026-04-23"
-status = "Planned — not started"
+status = "Shipped (PR #706); post-ship sat + matching catch-up done 2026-06-05"
 parent = "2026-04-14-algebra-documentation-impl.md (shipped)"
 +++
 
 # Implementation Plan — Algebra Tutorial + Reference Catch-up
+
+> **Status note (2026-06-05).** Phases 1–9 shipped in PR #706 (tutorial
+> scaffold, 11 deep chapters, quick-tours, overview/index refresh, legacy
+> `examples/algebra/*.scm` retired). PR #765 later added the `interval`
+> quick-tour with the widening/Galois example. Two sub-libraries that
+> shipped *after* this plan was authored — `(wile algebra matching)`
+> (2026-05-02) and `(wile algebra sat)` (2026-05-30) — were left
+> undocumented in the tutorial. The 2026-06-05 catch-up closes that gap:
+> `quick-tour/matching.scm`, `quick-tour/sat.scm`, the `## SAT` reference
+> section + cross-ref row (matching's reference section already existed),
+> and the README / tutorial.md / overview.md index tables. The success
+> criterion "every `*.sld` has a chapter or quick-tour" now holds for all
+> 28 sub-libraries.
 
 Ships the user-facing algebra documentation to match the library's current
 surface. Three deliverables, one PR:

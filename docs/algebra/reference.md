@@ -1140,6 +1140,39 @@ Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure pe
 
 ---
 
+## SAT -- `(wile algebra sat)`
+
+A CDCL satisfiability solver (watched literals, 1-UIP conflict analysis, VSIDS, Luby restarts). All decision procedures return `#t`, `#f`, or `'unknown` -- the last only when an optional conflict budget is exhausted. The solver backs `boolean-decide-equivalent?` in this library and closes the De Morgan / complement-law / distributivity gaps that the purely-axiomatic `symbolic-boolean-equivalent?` in `(wile algebra symbolic)` cannot decide.
+
+### CNF decision
+
+A CNF formula is a list of clauses; each clause is a list of nonzero exact integers, where `n` is the positive literal of variable `n` and `-n` its negation. A clause is a disjunction; the formula is their conjunction.
+
+- `(sat-cnf? <clauses> [<budget>])` -- decide CNF satisfiability; `<budget>` is the conflict budget (default 1000000, `#f` for unlimited). Returns `#t` / `#f` / `'unknown`
+- `(sat-cnf-model)` -- the witness from the most recent `sat-cnf?` call as a vector indexed `1..N` (index 0 unused), or `#f` if none / last result was unsatisfiable
+
+### S-expression decision
+
+- `(sat? <formula> [<budget>])` -- decide satisfiability of a Boolean S-expression over `and`, `or`, `not`, `xor`, `iff`, `=>` with symbols as variables. Returns `#t` / `#f` / `'unknown`
+- `(sat-model)` -- the witness from the most recent `sat?` call as an alist `((<sym> . #t/#f) ...)`, or `#f` if none
+
+### Boolean reasoning
+
+- `(boolean-decide-sat? <formula>)` -- SAT-backed satisfiability; equivalent to `(sat? <formula>)` at the default budget
+- `(boolean-decide-equivalent? <a> <b>)` -- decide `A == B` by testing whether `~(A <-> B)` is unsatisfiable. Returns `#t` / `#f` / `'unknown`
+
+### CNF encoding
+
+- `(cnf->flat <clauses>)` -- convert a clause list to a flat vector with `0` terminators (e.g. `'((1 -2 3) (-1 4))` → `#(1 -2 3 0 -1 4 0)`)
+
+### References
+
+- Marques-Silva & Sakallah (1999). GRASP / 1-UIP conflict-driven clause learning.
+- Moskewicz et al. (2001). Chaff -- watched literals, VSIDS.
+- Biere et al., eds. (2009). *Handbook of Satisfiability*.
+
+---
+
 ## Cross-Reference: Sub-library to Import Path
 
 | Section | Import Path |
@@ -1172,6 +1205,7 @@ Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure pe
 | Abstract Domain | `(wile algebra abstract-domain)` |
 | Dataflow | `(wile algebra dataflow)` |
 | Matching | `(wile algebra matching)` |
+| SAT | `(wile algebra sat)` |
 
 ## Umbrella Re-exports
 

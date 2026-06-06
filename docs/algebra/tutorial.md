@@ -88,6 +88,8 @@ One per sub-library not featured in a deep chapter. Each is ~50-100 lines: const
 | [`quick-tour/interval.scm`](../../examples/algebra/tutorial/quick-tour/interval.scm) | `interval` | Infinity-aware arithmetic, four-corner multiplication, interval lattice with containment ordering |
 | [`quick-tour/matrix.scm`](../../examples/algebra/tutorial/quick-tour/matrix.scm) | `matrix` | 2x2 counting-semiring arithmetic, identity, powers, Boolean adjacency reachability |
 | [`quick-tour/pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm) | `pareto` | Factor comparison over booleans and numbers, two-objective car dominance, frontier |
+| [`quick-tour/matching.scm`](../../examples/algebra/tutorial/quick-tour/matching.scm) | `matching` | Gale-Shapley proposer/receiver optima, stability and blocking pairs, Hungarian min-cost assignment |
+| [`quick-tour/sat.scm`](../../examples/algebra/tutorial/quick-tour/sat.scm) | `sat` | CDCL CNF and S-expression satisfiability, model extraction, SAT-backed Boolean equivalence |
 
 ## Structure of each file
 

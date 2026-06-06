@@ -50,6 +50,8 @@ featured in a deep chapter. Read them a la carte.
 | `quick-tour/interval.scm` | `interval` |
 | `quick-tour/matrix.scm` | `matrix` |
 | `quick-tour/pareto.scm` | `pareto` |
+| `quick-tour/matching.scm` | `matching` (two-sided / stable marriage) |
+| `quick-tour/sat.scm` | `sat` |
 
 ## How it works
 
