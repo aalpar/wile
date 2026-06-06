@@ -322,7 +322,10 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
             ((widen? (car args))
              (when widen-fn
                (error "run-analysis: multiple (widen ...) arguments" args))
-             (loop (cdr args) initial check-mono (widen-op (car args))))
+             (let ((op (widen-op (car args))))
+               (unless (procedure? op)
+                 (error "run-analysis: (widen OP) requires a procedure" op))
+               (loop (cdr args) initial check-mono op)))
             ((eq? (car args) 'check-monotone)
              (loop (cdr args) initial #t widen-fn))
             (else

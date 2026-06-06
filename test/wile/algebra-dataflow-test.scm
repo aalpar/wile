@@ -289,6 +289,12 @@
     (test-error (run-analysis 'forward L xfer linear-cfg test-protocol
                               (widen interval-widen) (widen interval-widen)))))
 
+(test-group "run-analysis — (widen OP) requires a procedure"
+  (let* ((L (interval-lattice))
+         (xfer (lambda (blk in) in)))
+    (test-error (run-analysis 'forward L xfer linear-cfg test-protocol (widen #f)))
+    (test-error (run-analysis 'forward L xfer linear-cfg test-protocol (widen 42)))))
+
 ;;; --- No-widen regression: finite-height behavior unchanged -------------
 
 (test-group "run-analysis — widening absent leaves MFP unchanged"
