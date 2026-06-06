@@ -11,12 +11,10 @@
     cfl-grammar-nonterminals cfl-grammar-terminals
     ;; Graph
     make-cfl-graph cfl-graph?
-    cfl-graph-nodes cfl-graph-edges)
-    ;; later tasks extend this export list:
-    ;; validate-cfl-grammar validate-cfl-graph
-    ;; cfl-solve cfl-solution?
-    ;; cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?
-    ;; dyck-grammar
+    cfl-graph-nodes cfl-graph-edges
+    ;; Solver + query
+    cfl-solve cfl-solution?
+    cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?)
   (import (scheme base)
           (wile algebra setoid))   ; validation-helper idiom (validate-* siblings)
   (include "cfl.scm"))
