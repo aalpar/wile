@@ -11,7 +11,7 @@
         (wile algebra matching))
 (include "../lib/check.scm")
 
-;; -- Part 1: Preference profiles ----------------------------------
+;; -- Preference profiles --
 ;;
 ;; A profile pairs an agent set with a ranks-of function mapping each
 ;; agent to its preference list (most-preferred first). Here three
@@ -28,7 +28,7 @@
 (check= (preference-profile-rank-of mp 'a 'x) 1           "a ranks x first")
 (check= (preference-profile-rank-of mp 'a 'z) 3           "a ranks z last")
 
-;; -- Part 2: Gale-Shapley, both orientations ----------------------
+;; -- Gale-Shapley, both orientations --
 ;;
 ;; The deferred-acceptance algorithm is optimal for the *proposing*
 ;; side and pessimal for the other. Swapping who proposes yields a
@@ -53,7 +53,7 @@
 (check-false (bipartite-matching-equal? M-prop M-recv)
              "the two optima are distinct matchings")
 
-;; -- Part 3: Stability is the whole point -------------------------
+;; -- Stability is the whole point --
 ;;
 ;; A matching is unstable iff some pair blocks it: both members prefer
 ;; each other to their current partners. blocking-pairs lists them
@@ -63,7 +63,7 @@
 (check-false (stable? unstable mp wp)                 "the hand-built matching is unstable")
 (check= (blocking-pairs unstable mp wp) '((b . z))    "b and z block it (both prefer each other)")
 
-;; -- Part 4: Minimum-cost assignment (Hungarian) ------------------
+;; -- Minimum-cost assignment (Hungarian) --
 ;;
 ;; When you want to *minimize total cost* rather than satisfy
 ;; preferences, tropical-assignment runs Kuhn-Munkres. Here cost =
