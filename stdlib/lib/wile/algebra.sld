@@ -318,7 +318,8 @@
     make-cfl-graph cfl-graph?
     cfl-graph-nodes cfl-graph-edges
     cfl-solve cfl-solution?
-    cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?)
+    cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?
+    dyck-grammar)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)

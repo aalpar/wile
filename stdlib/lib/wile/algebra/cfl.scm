@@ -262,3 +262,35 @@ Keywords: CFL, derives, query"
         (ai (hashtable-ref (sol-nt->idx sol) a #f))
         (ti (hashtable-ref (sol-node->idx sol) t #f)))
     (and si ai ti (hashtable-ref (sol-R sol) (%sol-enc3 sol si ai ti) #f) #t)))
+
+;; ─── Dyck preset ──────────────────────────────────────────────────────
+(define (dyck-grammar bracket-pairs)
+  "Build the Dyck (matched-delimiter) grammar over BRACKET-PAIRS, a list of
+(open-label . close-label) pairs. The start symbol S derives exactly the
+balanced strings. This is the program-analysis entry point: one pair per call
+site (call/return) or per field (open/close) yields interprocedural /
+field-sensitive reachability.
+
+For start S and each pair i this generates the normalized productions
+S -> eps, S -> S S, S -> Oi Ti, Ti -> S Ci, Oi -> open_i, Ci -> close_i.
+The internal nonterminal names (O<i>/T<i>/C<i>) are deterministic but are not
+a public contract — query results via cfl-reachable?, not internal names.
+Parameters:
+  bracket-pairs : list of (open . close)
+Returns: cfl-grammar
+Category: algebra
+Keywords: Dyck, balanced, brackets, interprocedural, context-sensitive"
+  (define (nm prefix i)
+    (string->symbol (string-append prefix (number->string i))))
+  (let loop ((pairs bracket-pairs) (i 0)
+             (prods (list (cfl-epsilon 'S) (cfl-binary 'S 'S 'S))))
+    (if (null? pairs)
+        (make-cfl-grammar 'S prods)
+        (let ((o (nm "O" i)) (tt (nm "T" i)) (c (nm "C" i))
+              (open (caar pairs)) (close (cdar pairs)))
+          (loop (cdr pairs) (+ i 1)
+                (append (list (cfl-binary 'S o tt)
+                              (cfl-binary tt 'S c)
+                              (cfl-terminal o open)
+                              (cfl-terminal c close))
+                        prods))))))

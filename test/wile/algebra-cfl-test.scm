@@ -63,5 +63,20 @@
   (test #f (and (member 'b2 (cfl-reachable-from sol 'a1)) #t))
   (test #t (cfl-derives? sol 'a1 'S 'a2)))
 
+(test-group "dyck-grammar preset"
+  (define G
+    (make-cfl-graph '(a1 a2 b2 p)
+      '((a1 call1 p) (p return1 a2) (p return2 b2))))
+  (define sol (cfl-solve (dyck-grammar '((call1 . return1) (call2 . return2))) G))
+  (test #t (cfl-reachable? sol 'a1 'a2))    ; matched
+  (test #f (cfl-reachable? sol 'a1 'b2))    ; mismatched
+  ;; nested: [[ ]] over a line graph
+  (define Gn
+    (make-cfl-graph '(x0 x1 x2 x3 x4)
+      '((x0 open x1) (x1 open x2) (x2 close x3) (x3 close x4))))
+  (define soln (cfl-solve (dyck-grammar '((open . close))) Gn))
+  (test #t (cfl-reachable? soln 'x0 'x4))   ; open open close close — balanced
+  (test #f (cfl-reachable? soln 'x0 'x3)))  ; open open close — unbalanced
+
 (test-end)
 (test-exit)
