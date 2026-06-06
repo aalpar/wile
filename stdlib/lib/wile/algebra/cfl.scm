@@ -263,6 +263,63 @@ Keywords: CFL, derives, query"
         (ti (hashtable-ref (sol-node->idx sol) t #f)))
     (and si ai ti (hashtable-ref (sol-R sol) (%sol-enc3 sol si ai ti) #f) #t)))
 
+;; ─── Validators ──────────────────────────────────────────────────────
+(define (validate-cfl-grammar g)
+  "Return #t if G is well-formed, else a list of violation descriptions.
+Checks: (1) the start symbol has at least one production; (2) the
+terminal and nonterminal symbol sets are disjoint; (3) every RHS symbol
+in unary and binary productions is a defined nonterminal.
+Parameters:
+  g : cfl-grammar
+Returns: any
+Category: algebra
+Keywords: validation, grammar, CFL, well-formed"
+  (let* ((fail! (make-violation-reporter))
+         (nts   (cfl-grammar-nonterminals g))
+         (terms (cfl-grammar-terminals g))
+         (nt?   (lambda (x) (and (memv x nts) #t))))
+    (unless (nt? (cfl-grammar-start g))
+      (fail! 'start-undefined (cfl-grammar-start g)))
+    (for-each
+      (lambda (t)
+        (when (nt? t)
+          (fail! 'terminal-nonterminal-collision t)))
+      terms)
+    (for-each
+      (lambda (p)
+        (case (cfl-production-kind p)
+          ((unary)
+           (unless (nt? (cfl-production-rhs1 p))
+             (fail! 'rhs-not-nonterminal (cfl-production-rhs1 p))))
+          ((binary)
+           (unless (nt? (cfl-production-rhs1 p))
+             (fail! 'rhs-not-nonterminal (cfl-production-rhs1 p)))
+           (unless (nt? (cfl-production-rhs2 p))
+             (fail! 'rhs-not-nonterminal (cfl-production-rhs2 p))))
+          (else #f)))
+      (cfl-grammar-productions g))
+    (fail!)))
+
+(define (validate-cfl-graph G)
+  "Return #t if every edge in G references declared nodes, else a
+violation list. Each violation identifies an undeclared from- or
+to-node.
+Parameters:
+  G : cfl-graph
+Returns: any
+Category: algebra
+Keywords: validation, graph, CFL, well-formed"
+  (let ((fail!  (make-violation-reporter))
+        (nodes  (cfl-graph-nodes G)))
+    (for-each
+      (lambda (e)
+        (unless (member (car e) nodes)
+          (fail! 'edge-from-undeclared (car e)))
+        (unless (member (caddr e) nodes)
+          (fail! 'edge-to-undeclared (caddr e))))
+      (cfl-graph-edges G))
+    (fail!)))
+
 ;; ─── Dyck preset ──────────────────────────────────────────────────────
 (define (dyck-grammar bracket-pairs)
   "Build the Dyck (matched-delimiter) grammar over BRACKET-PAIRS, a list of

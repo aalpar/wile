@@ -9,9 +9,11 @@
     make-cfl-grammar cfl-grammar?
     cfl-grammar-start cfl-grammar-productions
     cfl-grammar-nonterminals cfl-grammar-terminals
+    validate-cfl-grammar
     ;; Graph
     make-cfl-graph cfl-graph?
     cfl-graph-nodes cfl-graph-edges
+    validate-cfl-graph
     ;; Solver + query
     cfl-solve cfl-solution?
     cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?

@@ -78,5 +78,34 @@
   (test #t (cfl-reachable? soln 'x0 'x4))   ; open open close close — balanced
   (test #f (cfl-reachable? soln 'x0 'x3)))  ; open open close — unbalanced
 
+(test-group "validation"
+  ;; well-formed grammar/graph -> #t
+  (define ok-g (make-cfl-grammar 'S (list (cfl-epsilon 'S) (cfl-terminal 'S 'a))))
+  (test #t (validate-cfl-grammar ok-g))
+  (test #t (validate-cfl-graph (make-cfl-graph '(n0 n1) '((n0 a n1)))))
+  ;; terminal/nonterminal collision: 'a is both a terminal and a nonterminal LHS
+  (define bad-g
+    (make-cfl-grammar 'S (list (cfl-terminal 'S 'a) (cfl-epsilon 'a))))
+  (test #t (pair? (validate-cfl-grammar bad-g)))   ; returns violation list
+  ;; start with no production
+  (test #t (pair? (validate-cfl-grammar (make-cfl-grammar 'Q (list (cfl-epsilon 'S))))))
+  ;; binary RHS that is not a nonterminal (undefined symbol Z)
+  (test #t (pair? (validate-cfl-grammar
+                    (make-cfl-grammar 'S (list (cfl-binary 'S 'Z 'S) (cfl-epsilon 'S))))))
+  ;; edge to undeclared node
+  (test #t (pair? (validate-cfl-graph (make-cfl-graph '(n0) '((n0 a n1)))))))
+
+(test-group "general (non-Dyck) grammar — even-length a-paths"
+  ;; S -> eps | P S ;  P -> A A ;  A -> a
+  ;; S derives exactly the paths whose a-edge count is even.
+  (define even-a
+    (make-cfl-grammar 'S
+      (list (cfl-epsilon 'S) (cfl-binary 'S 'P 'S) (cfl-binary 'P 'A 'A) (cfl-terminal 'A 'a))))
+  (define G (make-cfl-graph '(n0 n1 n2 n3) '((n0 a n1) (n1 a n2) (n2 a n3))))
+  (define sol (cfl-solve even-a G))
+  (test #t (cfl-reachable? sol 'n0 'n2))   ; two a-edges: even
+  (test #f (cfl-reachable? sol 'n0 'n3))   ; three a-edges: odd
+  (test #t (cfl-reachable? sol 'n0 'n0)))  ; zero: even (epsilon)
+
 (test-end)
 (test-exit)
