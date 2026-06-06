@@ -101,13 +101,13 @@ Keywords: graph, labeled, directed, CFL"
 (define-record-type <cfl-solution>
   (%make-cfl-solution nodes n nt->idx node->idx start-idx R outx)
   cfl-solution?
-  (nodes     sol-nodes)      ; vector of node values, index = node-idx
-  (n         sol-n)          ; node count
-  (nt->idx   sol-nt->idx)    ; hashtable: nonterminal symbol -> idx
-  (node->idx sol-node->idx)  ; hashtable: node -> idx
-  (start-idx sol-start-idx)  ; idx of the grammar start nonterminal
-  (R         sol-R)          ; hashtable: encoded-triple -> #t  (membership)
-  (outx      sol-outx))      ; hashtable: encoded-pair(s,A) -> list of t-idx
+  (nodes     cfl-solution-nodes)      ; vector of node values, index = node-idx
+  (n         cfl-solution-n)          ; node count
+  (nt->idx   cfl-solution-nt->idx)    ; hashtable: nonterminal symbol -> idx
+  (node->idx cfl-solution-node->idx)  ; hashtable: node -> idx
+  (start-idx cfl-solution-start-idx)  ; idx of the grammar start nonterminal
+  (R         cfl-solution-R)          ; hashtable: encoded-triple -> #t  (membership)
+  (outx      cfl-solution-outx))      ; hashtable: encoded-pair(s,A) -> list of t-idx
 
 (define (cfl-solve grammar graph)
   "Close the (s,A,t) derivation relation for GRAMMAR over GRAPH and return a
@@ -139,6 +139,17 @@ Keywords: CFL, reachability, worklist, context-sensitive"
     (let loop ((i 0) (xs nts)) (unless (null? xs) (hashtable-set! nt->idx (car xs) i) (loop (+ i 1) (cdr xs))))
     (let ((nidx  (lambda (v)   (hashtable-ref node->idx v #f)))
           (ntidx (lambda (sym) (hashtable-ref nt->idx sym #f))))
+      ;; Raising variants: malformed input (an edge naming an undeclared node,
+      ;; or a production RHS that is not a defined nonterminal) fails fast with
+      ;; a domain error instead of feeding #f into the integer encoders. This
+      ;; mirrors run-analysis' block-ref guard in dataflow.scm. `validate-cfl-
+      ;; grammar`/`validate-cfl-graph` remain the way to collect all violations.
+      (define (nidx! v)
+        (or (hashtable-ref node->idx v #f)
+            (error "cfl-solve: graph edge references an undeclared node" v)))
+      (define (ntidx! sym)
+        (or (hashtable-ref nt->idx sym #f)
+            (error "cfl-solve: production references an undefined nonterminal" sym)))
       ;; encoders (all keys are integers; pairs are not hashable)
       (define (enc3 s a t) (+ (* (+ (* s m) a) n) t))   ; triple (s,A,t)
       (define (encSA s a)  (+ (* s m) a))               ; pair (s,A) for outx
@@ -156,11 +167,11 @@ Keywords: CFL, reachability, worklist, context-sensitive"
         (lambda (p)
           (case (cfl-production-kind p)
             ((unary)
-             (push-list! unary-rhs (ntidx (cfl-production-rhs1 p)) (ntidx (cfl-production-lhs p))))
+             (push-list! unary-rhs (ntidx! (cfl-production-rhs1 p)) (ntidx (cfl-production-lhs p))))
             ((binary)
              (let ((b (ntidx (cfl-production-lhs p)))
-                   (a (ntidx (cfl-production-rhs1 p)))
-                   (c (ntidx (cfl-production-rhs2 p))))
+                   (a (ntidx! (cfl-production-rhs1 p)))
+                   (c (ntidx! (cfl-production-rhs2 p))))
                (push-list! bin-rhs1 a (cons b c))
                (push-list! bin-rhs2 c (cons b a))))
             (else #f)))
@@ -178,7 +189,7 @@ Keywords: CFL, reachability, worklist, context-sensitive"
                (for-each
                  (lambda (e)        ; e = (from label to)
                    (when (equal? (cadr e) lbl)
-                     (add! (nidx (car e)) a (nidx (caddr e)))))
+                     (add! (nidx! (car e)) a (nidx! (caddr e)))))
                  (cfl-graph-edges graph))))
             (else #f)))
         prods)
@@ -202,10 +213,19 @@ Keywords: CFL, reachability, worklist, context-sensitive"
       (%make-cfl-solution nodes n nt->idx node->idx (ntidx (cfl-grammar-start grammar)) R outx))))
 
 ;; ─── Queries ──────────────────────────────────────────────────────────────
-(define (%sol-enc3 sol s a t) (+ (* (+ (* s (hashtable-size (sol-nt->idx sol))) a) (sol-n sol)) t))
+(define (%sol-enc3 sol s a t) (+ (* (+ (* s (hashtable-size (cfl-solution-nt->idx sol))) a) (cfl-solution-n sol)) t))
+
+(define (%node-index! sol v)
+  ;; Node queries treat an unknown node as a caller error: a typo'd node must
+  ;; not silently read as "not reachable" in a precision tool. (The nonterminal
+  ;; argument of cfl-derives? keeps the tolerant #f, since the grammar's
+  ;; nonterminal space is not always a public contract.)
+  (or (hashtable-ref (cfl-solution-node->idx sol) v #f)
+      (error "cfl: unknown node (not in the solution's graph)" v)))
 
 (define (cfl-reachable? sol s t)
   "True iff T is reachable from S deriving the grammar's START symbol.
+Raises if S or T is not a node in SOL's graph.
 Parameters:
   sol : cfl-solution
   s : node
@@ -213,25 +233,26 @@ Parameters:
 Returns: boolean
 Category: algebra
 Keywords: CFL, reachability, query"
-  (let ((si (hashtable-ref (sol-node->idx sol) s #f))
-        (ti (hashtable-ref (sol-node->idx sol) t #f)))
-    (and si ti (sol-start-idx sol)
-         (hashtable-ref (sol-R sol) (%sol-enc3 sol si (sol-start-idx sol) ti) #f)
+  (let ((si (%node-index! sol s))
+        (ti (%node-index! sol t)))
+    (and (cfl-solution-start-idx sol)
+         (hashtable-ref (cfl-solution-R sol) (%sol-enc3 sol si (cfl-solution-start-idx sol) ti) #f)
          #t)))
 
 (define (cfl-reachable-from sol s)
   "List of nodes T with (S, START, T) — START-reachable targets from S.
+Raises if S is not a node in SOL's graph.
 Parameters:
   sol : cfl-solution
   s : node
 Returns: list of nodes
 Category: algebra
 Keywords: CFL, reachability, query"
-  (let ((si (hashtable-ref (sol-node->idx sol) s #f))
-        (m  (hashtable-size (sol-nt->idx sol))))
-    (if (and si (sol-start-idx sol))
-        (map (lambda (ti) (vector-ref (sol-nodes sol) ti))
-             (hashtable-ref (sol-outx sol) (+ (* si m) (sol-start-idx sol)) '()))
+  (let ((si (%node-index! sol s))
+        (m  (hashtable-size (cfl-solution-nt->idx sol))))
+    (if (cfl-solution-start-idx sol)
+        (map (lambda (ti) (vector-ref (cfl-solution-nodes sol) ti))
+             (hashtable-ref (cfl-solution-outx sol) (+ (* si m) (cfl-solution-start-idx sol)) '()))
         '())))
 
 (define (cfl-reachable-pairs sol)
@@ -242,14 +263,17 @@ Returns: list of (s . t)
 Category: algebra
 Keywords: CFL, reachability, query"
   (let loop ((i 0) (acc '()))
-    (if (>= i (sol-n sol))
+    (if (>= i (cfl-solution-n sol))
         (reverse acc)
-        (let* ((s (vector-ref (sol-nodes sol) i))
+        (let* ((s (vector-ref (cfl-solution-nodes sol) i))
                (ts (cfl-reachable-from sol s)))
           (loop (+ i 1) (append (reverse (map (lambda (t) (cons s t)) ts)) acc))))))
 
 (define (cfl-derives? sol s a t)
   "True iff (S, A, T) is derivable for nonterminal A (the full relation).
+Raises if S or T is not a node in SOL's graph. Returns #f if A is not a
+nonterminal of the grammar (the nonterminal space is not always a public
+contract, e.g. dyck-grammar's internal names).
 Parameters:
   sol : cfl-solution
   s : node
@@ -258,10 +282,10 @@ Parameters:
 Returns: boolean
 Category: algebra
 Keywords: CFL, derives, query"
-  (let ((si (hashtable-ref (sol-node->idx sol) s #f))
-        (ai (hashtable-ref (sol-nt->idx sol) a #f))
-        (ti (hashtable-ref (sol-node->idx sol) t #f)))
-    (and si ai ti (hashtable-ref (sol-R sol) (%sol-enc3 sol si ai ti) #f) #t)))
+  (let ((si (%node-index! sol s))
+        (ai (hashtable-ref (cfl-solution-nt->idx sol) a #f))
+        (ti (%node-index! sol t)))
+    (and ai (hashtable-ref (cfl-solution-R sol) (%sol-enc3 sol si ai ti) #f) #t)))
 
 ;; ─── Validators ──────────────────────────────────────────────────────
 (define (validate-cfl-grammar g)
@@ -277,7 +301,7 @@ Keywords: validation, grammar, CFL, well-formed"
   (let* ((fail! (make-violation-reporter))
          (nts   (cfl-grammar-nonterminals g))
          (terms (cfl-grammar-terminals g))
-         (nt?   (lambda (x) (and (memv x nts) #t))))
+         (nt?   (lambda (x) (and (member x nts) #t))))
     (unless (nt? (cfl-grammar-start g))
       (fail! 'start-undefined (cfl-grammar-start g)))
     (for-each

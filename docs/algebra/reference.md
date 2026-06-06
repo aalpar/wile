@@ -1188,11 +1188,11 @@ Context-free-language reachability: a path counts iff its edge-label string lies
 - `cfl-graph?` / `cfl-graph-nodes` / `cfl-graph-edges` / `(validate-cfl-graph G)`
 
 ### Solve + query
-- `(cfl-solve grammar graph)` -- closes the relation; returns `<cfl-solution>`
-- `(cfl-reachable? sol s t)` -- start-symbol reachability
-- `(cfl-reachable-from sol s)` -- start-reachable targets
+- `(cfl-solve grammar graph)` -- closes the relation; returns `<cfl-solution>`. Fails fast (domain error) on a malformed grammar/graph: an edge naming an undeclared node, or a production RHS that is not a defined nonterminal.
+- `(cfl-reachable? sol s t)` -- start-symbol reachability; raises if `s` or `t` is not a node
+- `(cfl-reachable-from sol s)` -- start-reachable targets; raises if `s` is not a node
 - `(cfl-reachable-pairs sol)` -- all `(s . t)` under start
-- `(cfl-derives? sol s A t)` -- full relation, any nonterminal
+- `(cfl-derives? sol s A t)` -- full relation, any nonterminal; raises on an unknown node, returns `#f` for an unknown nonterminal `A`
 
 ### Dyck preset
 - `(dyck-grammar bracket-pairs)` -- balanced-delimiter grammar from `(open . close)` pairs; the interprocedural / field-sensitive entry point

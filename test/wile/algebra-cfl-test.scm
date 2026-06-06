@@ -86,14 +86,19 @@
   ;; terminal/nonterminal collision: 'a is both a terminal and a nonterminal LHS
   (define bad-g
     (make-cfl-grammar 'S (list (cfl-terminal 'S 'a) (cfl-epsilon 'a))))
-  (test #t (pair? (validate-cfl-grammar bad-g)))   ; returns violation list
+  ;; assert the SPECIFIC violation, not merely that some list came back
+  (test #t (and (member '(terminal-nonterminal-collision a)
+                        (validate-cfl-grammar bad-g)) #t))
   ;; start with no production
-  (test #t (pair? (validate-cfl-grammar (make-cfl-grammar 'Q (list (cfl-epsilon 'S))))))
+  (test #t (and (member '(start-undefined Q)
+                        (validate-cfl-grammar (make-cfl-grammar 'Q (list (cfl-epsilon 'S))))) #t))
   ;; binary RHS that is not a nonterminal (undefined symbol Z)
-  (test #t (pair? (validate-cfl-grammar
-                    (make-cfl-grammar 'S (list (cfl-binary 'S 'Z 'S) (cfl-epsilon 'S))))))
+  (test #t (and (member '(rhs-not-nonterminal Z)
+                        (validate-cfl-grammar
+                          (make-cfl-grammar 'S (list (cfl-binary 'S 'Z 'S) (cfl-epsilon 'S))))) #t))
   ;; edge to undeclared node
-  (test #t (pair? (validate-cfl-graph (make-cfl-graph '(n0) '((n0 a n1)))))))
+  (test #t (and (member '(edge-to-undeclared n1)
+                        (validate-cfl-graph (make-cfl-graph '(n0) '((n0 a n1))))) #t)))
 
 (test-group "general (non-Dyck) grammar — even-length a-paths"
   ;; S -> eps | P S ;  P -> A A ;  A -> a
@@ -106,6 +111,26 @@
   (test #t (cfl-reachable? sol 'n0 'n2))   ; two a-edges: even
   (test #f (cfl-reachable? sol 'n0 'n3))   ; three a-edges: odd
   (test #t (cfl-reachable? sol 'n0 'n0)))  ; zero: even (epsilon)
+
+(test-group "error handling — fail-fast on malformed input and unknown nodes"
+  ;; cfl-solve raises on an edge naming an undeclared node (n1 not declared)
+  (test #t (guard (e (#t #t))
+             (cfl-solve (make-cfl-grammar 'S (list (cfl-terminal 'S 'a)))
+                        (make-cfl-graph '(n0) '((n0 a n1))))
+             #f))
+  ;; cfl-solve raises on a production RHS that is not a defined nonterminal (Z)
+  (test #t (guard (e (#t #t))
+             (cfl-solve (make-cfl-grammar 'S (list (cfl-binary 'S 'Z 'S) (cfl-epsilon 'S)))
+                        (make-cfl-graph '(n0) '()))
+             #f))
+  ;; queries raise on an unknown node — a typo must not silently read as "not reachable"
+  (define sol (cfl-solve (dyck-grammar '((call1 . return1)))
+                         (make-cfl-graph '(a1 a2 p) '((a1 call1 p) (p return1 a2)))))
+  (test #t (guard (e (#t #t)) (cfl-reachable? sol 'nope 'a2) #f))
+  (test #t (guard (e (#t #t)) (cfl-reachable-from sol 'nope) #f))
+  (test #t (guard (e (#t #t)) (cfl-derives? sol 'nope 'S 'a2) #f))
+  ;; cfl-derives? keeps the tolerant #f for an unknown nonterminal (NOT a raise)
+  (test #f (cfl-derives? sol 'a1 'no-such-nonterminal 'a2)))
 
 (test-end)
 (test-exit)
