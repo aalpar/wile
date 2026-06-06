@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-14
 **Source**: Side discussion during the port unification design
-(`plans/2026-05-14-port-unification-design.md`). Independent of port
+(`memory/2026-05-14-port-unification-design.md`). Independent of port
 unification; can ship before, during, or after.
 **Status**: Design.
 **Priority**: Medium. Quality-of-implementation; not a conformance bug.
@@ -348,7 +348,7 @@ Independent of port unification. May land before or after.
 
 ## Cross-references
 
-- Port unification design: `plans/2026-05-14-port-unification-design.md`
+- Port unification design: `memory/2026-05-14-port-unification-design.md`
   (this plan was raised during that review).
 - Engine.Close pattern: `engine.go:1054-1068`.
 - Closeable interface: `registry/extension.go:39-45`.

@@ -327,9 +327,9 @@ Tracked through `WORKSPACE-ROADMAP.md`. Separate PR in `aalpar/wile-goast`:
 
 ## References
 
-- `plans/2026-05-26-scc-condensation.md` — parent plan; Phase 4b deferred there is implemented here.
-- `plans/2026-05-24-bignum-allocation-reduction.md` — Phase 3 (shipped) provides the carrier accessor and `bigint-counting-semiring` constructor this dispatch keys on.
-- `plans/2026-05-24-approximate-counting-semirings.md` — alternative response at the algebraic layer (orthogonal to this work).
+- `memory/2026-05-26-scc-condensation.md` — parent plan; Phase 4b deferred there is implemented here.
+- `memory/2026-05-24-bignum-allocation-reduction.md` — Phase 3 (shipped) provides the carrier accessor and `bigint-counting-semiring` constructor this dispatch keys on.
+- `memory/2026-05-24-approximate-counting-semirings.md` — alternative response at the algebraic layer (orthogonal to this work).
 - `plans/WORKSPACE-ROADMAP.md` — cross-project sequencing for the wile-goast switch.
 - `memory/feedback-counting-semiring-on-cycles.md` — the original incident motivating SCC condensation.
 - `memory/feedback-blas-style-dispatch.md` — BLAS-style dispatch convention (correctness monotone in optimization) — this plan follows the same pattern.

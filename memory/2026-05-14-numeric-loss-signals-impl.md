@@ -13,7 +13,7 @@
 
   Numeric-registry prerequisite shipped earlier in PR #752
   (commit `082836d1`, merged 2026-05-13).
-**Design source**: `plans/2026-05-14-numeric-loss-signals-design.md`
+**Design source**: `memory/2026-05-14-numeric-loss-signals-design.md`
   (refined 2026-05-14; resolutions: Q-1 saturate ±Inf, Q-2
   real-triple + per-component complex, Q-3 `extensions/math/`,
   Q-4 engine-level opt-in, Q-5 yes-tighten-helpers, Q-6 NaN/Inf
@@ -74,7 +74,7 @@ positional 4-tuple (slot types disambiguate roles); `ToComplex128WithAccuracy`
 returns a `Complex128Result` struct (two `big.Accuracy` slots of
 the same type would otherwise admit silent realAcc/imagAcc swap
 bugs). Design rationale + rejected alternatives documented at
-`plans/2026-05-14-numeric-loss-signals-design.md` §"Decision record:
+`memory/2026-05-14-numeric-loss-signals-design.md` §"Decision record:
 return shape — hybrid (positional + struct)".
 
 | Function | Signature | Behavior |
@@ -2075,9 +2075,9 @@ fails the entire CI run on divergence.
 
 ## Cross-references
 
-- `plans/2026-05-14-numeric-loss-signals-design.md` — design
+- `memory/2026-05-14-numeric-loss-signals-design.md` — design
   source (refined; all Q-1…Q-6 resolved).
-- `plans/2026-05-14-numeric-registry-design.md` /
+- `memory/2026-05-14-numeric-registry-design.md` /
   `2026-05-14-numeric-registry-impl.md` — prerequisite plans
   (Phase 3 of values-SR; this plan branches from master after
   those close).

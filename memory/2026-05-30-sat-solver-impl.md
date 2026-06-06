@@ -10,7 +10,7 @@
 
 **Tech Stack:** Go 1.24 (CDCL kernel). R7RS Scheme (front-end). Wile registry/extension framework (`registry.PrimitiveSpec`, `registry.NewDescribedExtension`). `werr.WrapForeignErrorf` for all error returns. Table-driven Go tests (`registry/CLAUDE.md` convention). Standard `go test -bench` for perf guards.
 
-**Design reference:** `plans/2026-05-30-sat-solver-design.md`. Implementation must match decisions there; this plan only sequences the work.
+**Design reference:** `memory/2026-05-30-sat-solver-design.md`. Implementation must match decisions there; this plan only sequences the work.
 
 **Test scaffolding convention:** For tests that exercise primitives through a running Engine, use the helper pair already established by `extensions/algebragraph/prim_count_paths_test.go` (`newEngine(t)` returns a `*wile.Engine` with only this extension wired in; a sibling helper executes a Scheme source string and returns the result). The plan calls this helper `runSrc` in pseudo-code so substring scanners don't flag it; **in the actual source file, mirror the helper names used by `prim_count_paths_test.go` verbatim** so the convention stays consistent across extensions.
 
@@ -85,7 +85,7 @@ Goal: extension package builds, registers, and can parse a flat CNF vector into 
 //
 // The Scheme front-end at (wile algebra sat) wraps these primitives with a
 // Tseitin transform and exposes sat?, sat-cnf?, boolean-decide-sat?, and
-// boolean-decide-equivalent?. See plans/2026-05-30-sat-solver-design.md.
+// boolean-decide-equivalent?. See memory/2026-05-30-sat-solver-design.md.
 package sat
 ```
 
@@ -2402,7 +2402,7 @@ git commit -m "bench(sat): pigeonhole and random 3-SAT regression guards"
   CDCL kernel in `extensions/sat/` (watched-literal propagation, 1-UIP
   analysis, VSIDS, Luby restarts). Closes De Morgan, complement-law,
   distributivity, bound-identity gaps in `symbolic-boolean-equivalent?`.
-  `plans/2026-05-30-sat-solver-design.md`, `-impl.md`.
+  `memory/2026-05-30-sat-solver-design.md`, `-impl.md`.
 ```
 
 - [ ] **Step 2: Add a line to `plans/CLAUDE.md`**

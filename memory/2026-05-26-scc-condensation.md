@@ -279,7 +279,7 @@ The Scheme side does the name↔index mapping (Scheme node identifiers are arbit
 **Phase 4b — `graph.scm` dispatch wiring (deferred):**
 
 - Update `stdlib/lib/wile/algebra/graph.scm`'s dispatch so bigint-carrier semirings route through these primitives transparently. Project the Go result back to the existing alist shape on `graph-query` / `graph-query-all`. Attach `'cyclic-scc-entry-count` metadata on entries that fall in non-trivial SCCs (per Open Q-2 default).
-- **Gating dependency:** the `(semiring-carrier S)` accessor and `bigint-counting-semiring` constructor that signal fast-path eligibility live in `plans/2026-05-24-bignum-allocation-reduction.md` Phase 3 (also not yet shipped). Without those, no semiring carries the metadata that would distinguish fast-path-eligible callers from existing pure-Scheme callers. Wiring the dispatch before the carrier slot lands would require either a parallel ad-hoc detection mechanism (technical debt) or a backward-incompatible change to `make-graph-analysis` (worse).
+- **Gating dependency:** the `(semiring-carrier S)` accessor and `bigint-counting-semiring` constructor that signal fast-path eligibility live in `memory/2026-05-24-bignum-allocation-reduction.md` Phase 3 (also not yet shipped). Without those, no semiring carries the metadata that would distinguish fast-path-eligible callers from existing pure-Scheme callers. Wiring the dispatch before the carrier slot lands would require either a parallel ad-hoc detection mechanism (technical debt) or a backward-incompatible change to `make-graph-analysis` (worse).
 - Soft-dispatch mechanism: at library load time, probe `(guard (e (#t #f)) (begin (count-paths-cyclic 1 '() 0) #t))` to detect whether the algebragraph extension is loaded. Combined with the carrier check, this lets the library gracefully fall through to Scheme when either piece is missing.
 - Tests in `test/wile/algebra-graph-test.scm` (new):
   - All existing tests pass unchanged.
@@ -332,8 +332,8 @@ The Scheme side does the name↔index mapping (Scheme node identifiers are arbit
 - Tarjan, R. E. (1972). *Depth-first search and linear graph algorithms.* SIAM J. Comput. 1(2): 146-160.
 - Pearce, D. J. (2005). *An Improved Algorithm for Finding the Strongly Connected Components of a Directed Graph.* Technical report, Victoria University of Wellington.
 - Cormen et al., *Introduction to Algorithms*, 3rd ed., §22.5 — SCC and condensation; the textbook treatment of the DAG-of-SCCs result.
-- `plans/2026-05-24-bignum-allocation-reduction.md` — ships the monotone DAG kernel this plan composes with.
-- `plans/2026-05-24-approximate-counting-semirings.md` — alternative response to the cyclic-counting problem at the algebraic layer.
+- `memory/2026-05-24-bignum-allocation-reduction.md` — ships the monotone DAG kernel this plan composes with.
+- `memory/2026-05-24-approximate-counting-semirings.md` — alternative response to the cyclic-counting problem at the algebraic layer.
 - `plans/2026-05-24-graph-worklist-bellman-ford.md` — orthogonal convergence-detection work for non-counting carriers.
 - `plans/2026-04-18-gonum-integration-directions.md` — adjacent SCC use case (belief DSL) and possible future implementation source.
 - `feedback-counting-semiring-on-cycles.md` — incident memory (3-hour hang on `machine` package counting query).

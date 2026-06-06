@@ -187,7 +187,7 @@ var checks [TypeCount]checkFunc
 // box?, promise?) but the extension-API vocabulary does not currently
 // expose them as ValueType constants. Extending ValueType to cover
 // them is tracked alongside Finding 3 in
-// plans/2026-05-13-values-structural-reduction.md.
+// memory/2026-05-13-values-structural-reduction.md.
 //
 // The empty-list singleton (emptyListType) is resolved via IsEmptyList
 // in SchemeTypeName. Other Value-implementing types that are neither

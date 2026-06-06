@@ -22,5 +22,5 @@
 //
 // The Scheme front-end at (wile algebra sat) wraps these primitives with a
 // Tseitin transform and exposes sat?, sat-cnf?, boolean-decide-sat?, and
-// boolean-decide-equivalent?. See plans/2026-05-30-sat-solver-design.md.
+// boolean-decide-equivalent?. See memory/2026-05-30-sat-solver-design.md.
 package sat

@@ -239,7 +239,7 @@ Add to the existing graph + semiring tests:
 
 - Approximate counting semirings — sibling plan `2026-05-24-approximate-counting-semirings.md` consumes this work but ships separately.
 - Bignum allocation reduction in the numeric tower — sibling plan `2026-05-24-bignum-allocation-reduction.md` (Phase 5 shipped; remaining phases tracked separately).
-- SCC condensation primitive — already shipped via `plans/2026-05-26-scc-condensation.md` (PR #757).
+- SCC condensation primitive — already shipped via `memory/2026-05-26-scc-condensation.md` (PR #757).
 - Worklist Bellman-Ford replacement of textbook B-F — already shipped via topo-order + worklist dispatch in the PR #757/#758 wave. See "What this plan was, and what it became" above.
 
 ## References

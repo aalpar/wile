@@ -49,7 +49,7 @@ For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting
 
 The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. See `values/CLAUDE.md` §"In-Place Arithmetic on BigInteger" for the helpers' contract (aliasing, storage reuse) and microbench numbers.
 
-The fast path applies only to `*BigInteger`. Other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but separate plans (see `plans/2026-05-24-bignum-allocation-reduction.md` §"Out of scope" for the scoping rationale).
+The fast path applies only to `*BigInteger`. Other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but separate plans (see `memory/2026-05-24-bignum-allocation-reduction.md` §"Out of scope" for the scoping rationale).
 
 ### Out of Scope
 
@@ -231,7 +231,7 @@ imag-acc)` and the symbols apply to each component independently.
   used by every primitive.
 - `extensions/math/CLAUDE.local.md` — primitive inventory and design
   notes.
-- `plans/2026-05-14-numeric-loss-signals-design.md` — design rationale,
+- `memory/2026-05-14-numeric-loss-signals-design.md` — design rationale,
   Q-1 through Q-6 resolutions.
 
 ---

@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-14
 **Status**: **Shipped (PR #752, merged).** `values/numeric_registry.go` is on master; see `2026-05-14-numeric-registry-impl.md`.
-**Source plan**: `plans/2026-05-13-values-structural-reduction.md`
+**Source plan**: `memory/2026-05-13-values-structural-reduction.md`
   (Opportunity 3 / Finding 3 — the 12-item ADDING-A-NEW-NUMERIC-TYPE
   guide collapses to one `NumericTypeSpec` record per kind.)
 **Phase**: 3 of the values-SR sequence. Phases 0–2 closed via PRs
@@ -568,7 +568,7 @@ implementation plan at `2026-05-14-numeric-registry-impl.md`.
 
 ## Cross-references
 
-- `plans/2026-05-13-values-structural-reduction.md` — Phase 3
+- `memory/2026-05-13-values-structural-reduction.md` — Phase 3
   parent (Opportunity 3 / Finding 3).
 - `plans/CLAUDE.md` — implementation completion workflow; this
   design phase precedes the impl plan.

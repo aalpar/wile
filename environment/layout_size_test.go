@@ -20,7 +20,7 @@ import (
 )
 
 // TestEnvironmentFrameLayout records the in-memory size of the hot VM structs.
-// It is a baseline guard for plans/2026-06-02-environment-frame-hot-cold-layout.md:
+// It is a baseline guard for memory/2026-06-02-environment-frame-hot-cold-layout.md:
 // the EnvironmentFrame is allocated/reset on every closure application, so its
 // size directly drives apply-path allocation cost. When the hot/cold layout
 // change lands, these expected sizes will flip and this test must be updated to

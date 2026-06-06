@@ -94,7 +94,7 @@ func ToFloat64(v values.Value) (float64, error) {
 // Use this only where lossy conversion is semantically correct because the
 // result is inherently inexact — e.g. (atan y x) per R7RS §6.2.6. Callers that
 // need a lossless guarantee must use ToFloat64. See
-// plans/2026-05-14-numeric-loss-signals-design.md §R8.
+// memory/2026-05-14-numeric-loss-signals-design.md §R8.
 func ToFloat64Lossy(v values.Value) (float64, error) {
 	n, err := screenReal(v)
 	if err != nil {

@@ -284,7 +284,7 @@ Note: an earlier draft of this plan named the predicate `approximate-semiring?` 
 ## Out of scope
 
 - Worklist Bellman-Ford optimization (sibling plan `2026-05-24-graph-worklist-bellman-ford.md`).
-- SCC condensation primitive — shipped in `plans/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`). Complementary, not exclusive: condensation gives exact counts with entry-count semantics on non-trivial SCCs; the approximate carriers in this plan give bounded-precision counts with original semantics. A caller chooses which trade-off fits.
+- SCC condensation primitive — shipped in `memory/2026-05-26-scc-condensation.md` (`algebra/graph/scc.go` + `CountPathsCyclic`). Complementary, not exclusive: condensation gives exact counts with entry-count semantics on non-trivial SCCs; the approximate carriers in this plan give bounded-precision counts with original semantics. A caller chooses which trade-off fits.
 - Tarjan / Kosaraju SCC implementations (separate).
 - Other approximate semirings (probabilistic, Viterbi-with-backpointers, expectation semiring) — feasible follow-ups, not required for v1.
 - Bignum performance work in Wile's numeric tower (allocation reduction, in-place arithmetic) — sibling plan `2026-05-24-bignum-allocation-reduction.md`. Helps the *exact* counting case, orthogonal to providing approximate alternatives here. (Karatsuba was originally listed; verified during audit that `math/big` already provides it.)

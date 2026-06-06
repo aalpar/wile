@@ -211,7 +211,7 @@ func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
 // This is the optimized Apply path: single allocation instead of two.
 // n=0 isolates the struct allocation + field-copy cost with no local bindings
 // to copy — the cost the hot/cold layout change in
-// plans/2026-06-02-environment-frame-hot-cold-layout.md targets.
+// memory/2026-06-02-environment-frame-hot-cold-layout.md targets.
 func BenchmarkNewApplyFrame(b *testing.B) {
 	for _, n := range []int{0, 1, 5, 10, 25, 50} {
 		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {

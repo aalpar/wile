@@ -64,7 +64,7 @@ available and uniformly thrown away.
 The cost of this silent discarding is well-documented in this
 plan series:
 
-- The numeric-registry design (`plans/2026-05-14-numeric-registry-design.md`)
+- The numeric-registry design (`memory/2026-05-14-numeric-registry-design.md`)
   champions "fail loud at startup" (line 281): *"validateNumericRegistry
   is a startup assertion: forget the spec, the program panics before
   serving traffic, not silently months later."*
@@ -1088,10 +1088,10 @@ Phase 3 done when:
 
 ## Cross-references
 
-- `plans/2026-05-14-numeric-registry-design.md` — Phase 3 of
+- `memory/2026-05-14-numeric-registry-design.md` — Phase 3 of
   values-SR. Q-i resolved C3 (conservative); this plan fills the
   precision-loss gap left by that resolution.
-- `plans/2026-05-14-numeric-registry-impl.md` — established the
+- `memory/2026-05-14-numeric-registry-impl.md` — established the
   `NumericTypeSpec` shape (PR #752 merged 2026-05-13). This plan
   replaces the spec's `toFloat64`/`toComplex128` fields with
   loss-signal-aware variants; no `ToFloat64Lossy` involved (the

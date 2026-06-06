@@ -110,7 +110,7 @@ func TestCountPathsCyclic_MachineScaleSmoke(t *testing.T) {
 		qt.Commentf("expected exactly 12 non-trivial SCCs (one per back-edge); got %d", nontrivial))
 
 	// Scale: the 3-hour incident must reduce to milliseconds. The acceptance
-	// gate in plans/2026-05-26-scc-condensation.md asks for "under 1 second";
+	// gate in memory/2026-05-26-scc-condensation.md asks for "under 1 second";
 	// we assert under 250ms here so a regression that's still "fast" but
 	// quadratic-ish would be caught.
 	c.Assert(elapsed < 250*time.Millisecond, qt.IsTrue,

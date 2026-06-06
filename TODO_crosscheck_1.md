@@ -8,7 +8,7 @@
 
 ## Context
 
-The PR closes follow-up #2 from `plans/2026-05-14-port-unification-impl.md`:
+The PR closes follow-up #2 from `memory/2026-05-14-port-unification-impl.md`:
 `write-string` was the only R7RS textual-write primitive that accepted
 binary output ports. The fix inlines an `AsByteWriter` check in
 `PrimWriteString` rather than routing through the existing
@@ -242,7 +242,7 @@ from raw accessors.
 
 ## Cross-references
 
-- Parent plan: `plans/2026-05-14-port-unification-impl.md` (follow-up #2)
-- Parent SR plan: `plans/2026-05-13-values-structural-reduction.md`
+- Parent plan: `memory/2026-05-14-port-unification-impl.md` (follow-up #2)
+- Parent SR plan: `memory/2026-05-13-values-structural-reduction.md`
 - Five-lens grounding-posture protocol:
   `/Users/aalpar/.claude/plugins/marketplaces/local/plugins/crosscheck/skills/crosscheck/SKILL.md`

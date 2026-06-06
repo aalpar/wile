@@ -349,7 +349,7 @@ Two monoidal operations where times distributes over plus.
 
 #### Counting variants
 
-The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `plans/2026-05-24-approximate-counting-semirings.md`.
+The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `memory/2026-05-24-approximate-counting-semirings.md`.
 
 - `(bigint-counting-semiring)` -- same arithmetic as `counting-semiring`, but carrier `'big-int` opts into the `count-paths-in-dag` Go kernel when consumed by `make-graph-analysis` under three conditions (carrier `'big-int`, unit weights, atomic node ids); advisory -- never changes results, only dispatch cost
 - `(modular-counting-semiring P)` -- carrier is Z/PZ; plus and times are arithmetic mod `P` (an exact integer >= 2); carrier `'modular`. For fingerprints, parity, and Schwartz-Zippel identity testing -- NOT approximate counts (a true count divisible by `P` reads as 0). Not cycle-safe: Z/PZ has no absorbing top, so worklist iteration on cycles hits the safety cap. `mersenne-31` (`2^31 - 1`) and `mersenne-61` (`2^61 - 1`) are provided as named modulus choices
@@ -875,7 +875,7 @@ Counting on cyclic graphs has no finite answer in the strict counting semiring `
 - **Counting semiring on a DAG:** topological-order single-pass propagation. Each edge relaxed exactly once. Counts exact (bignum-promoted as needed).
 - **Counting semiring on a cyclic graph:** worklist Bellman-Ford does not terminate (over-counts on each re-pop). Use one of:
   - **SCC condensation** via `(import (wile algebragraph))` and `count-paths-cyclic` (see below). Gives exact counts per SCC, with "entry count" semantics on non-trivial SCCs (the path-count to the SCC, not within it).
-  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `plans/2026-05-24-approximate-counting-semirings.md`.
+  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `memory/2026-05-24-approximate-counting-semirings.md`.
 
 ## SCC Condensation Fast Path -- `(wile algebragraph)`
 

@@ -1507,7 +1507,7 @@ The plan here is the same as C.3–C.5 but for the syntax phase. There is no sep
 
 - [x] **Step Z.3: Re-read the analysis findings.**
 
-  Open `plans/2026-05-29-car-cdr-consolidation.md` (this file) and verify each numbered finding from the original analysis maps to a completed task:
+  Open `memory/2026-05-29-car-cdr-consolidation.md` (this file) and verify each numbered finding from the original analysis maps to a completed task:
 
   - Finding 1 (Uncons family) → Phase B tasks B.1, B.2
   - Finding 2 (ForEachList adoption) → Phase A

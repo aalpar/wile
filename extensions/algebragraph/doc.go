@@ -29,5 +29,5 @@
 // surface. The Scheme library probes for them at load time and falls back to
 // pure-Scheme dispatch if the extension is not loaded.
 //
-// See plans/2026-05-26-scc-condensation.md for the design.
+// See memory/2026-05-26-scc-condensation.md for the design.
 package algebragraph

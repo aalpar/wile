@@ -1,7 +1,7 @@
 ;;; bench-bigint-counting-unit-weight.scm
 ;;;
 ;;; Acceptance benchmark for sub-path 4A of the bignum-allocation-reduction
-;;; plan (plans/2026-05-24-bignum-allocation-reduction.md). Compares
+;;; plan (memory/2026-05-24-bignum-allocation-reduction.md). Compares
 ;;; `counting-semiring' (existing slow path, fixnum-with-overflow-promotion)
 ;;; against `bigint-counting-semiring' (new fast path via
 ;;; `count-paths-in-dag') on the same DAG.

@@ -3,8 +3,8 @@
 **Date**: 2026-05-14 (revised after critique pass — fixes
 constructor-count drift, `portKind`-type drift, I8 ownership,
 SchemeString format, build-order of `ErrInvariantViolation`)
-**Design**: `plans/2026-05-14-port-unification-design.md`
-**Parent**: `plans/2026-05-13-values-structural-reduction.md` (Phase 2 of
+**Design**: `memory/2026-05-14-port-unification-design.md`
+**Parent**: `memory/2026-05-13-values-structural-reduction.md` (Phase 2 of
 the values SR roadmap).
 **Status**: **Phases 1–4 implemented in PR #749.** See
 "Implementation outcome" section at end of this document for the
@@ -24,8 +24,8 @@ Before the first implementation commit:
    `make bench-gabriel > /tmp/port-bench-baseline.txt`.
 4. Branch from master: `git switch -c feat/values-sr-phase2-port-unification`.
 5. Commit 1 — the plan files: `git add
-   plans/2026-05-14-port-unification-design.md
-   plans/2026-05-14-port-unification-impl.md && git commit -m "docs:
+   memory/2026-05-14-port-unification-design.md
+   memory/2026-05-14-port-unification-impl.md && git commit -m "docs:
    port unification design + impl plan (values SR Phase 2)"`.
 
 ## Phase 1 — Introduce `*PortObject` and accessors (non-breaking parallel)
@@ -872,8 +872,8 @@ surprises). Aligns with the design's "1–2 focused-day" estimate.
 
 ## Cross-references
 
-- Design: `plans/2026-05-14-port-unification-design.md`.
-- Parent SR plan: `plans/2026-05-13-values-structural-reduction.md`.
+- Design: `memory/2026-05-14-port-unification-design.md`.
+- Parent SR plan: `memory/2026-05-13-values-structural-reduction.md`.
 - Tier A.1 of SR roadmap: `plans/2026-05-07-structural-reduction-roadmap.md`.
 - Phase 0 precedent (PR #747), Phase 1 precedent (PR #748).
 - Workflow: `plans/CLAUDE.md` § Implementation Completion Workflow.
@@ -913,7 +913,7 @@ Five commits on `feat/values-sr-phase2-port-unification`:
 ### Deviations from the original plan
 
 Four design decisions emerged during implementation. Each is
-documented in `plans/2026-05-14-port-unification-design.md` under
+documented in `memory/2026-05-14-port-unification-design.md` under
 **Mid-flight design refinements** (M1–M4):
 
 - **M1 — Slot-level guarding wrappers.** The accessor model

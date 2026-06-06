@@ -9,7 +9,7 @@ invariant is **false** (see "The enabling invariant" below — `phases` is NOT
 redundant with `namespace.phases`). What shipped: the Phase-0 size guard + copy-cost
 benchmarks, and a regression test pinning the false invariant
 (`TestNamespace_ChildRuntimePhasesNotFoldable` in `environment/namespace_test.go`).
-**Related**: `plans/2026-05-09-environment-structural-reduction.md` (Finding 1 deletes
+**Related**: `memory/2026-05-09-environment-structural-reduction.md` (Finding 1 deletes
 `GlobalEnvironmentFrame.namespace`; this plan is the per-frame-layout sibling).
 
 ## Motivation
@@ -214,7 +214,7 @@ misses (warmup, new recursion depth).
 **What the change is still good for (structural, not speed):** a smaller, clearer
 `EnvironmentFrame` with an explicit hot/cold split, less pool memory, and one fewer
 field (`phases`, Phase 1) — fold it into the structural-reduction effort
-(`plans/2026-05-09-environment-structural-reduction.md`), not the `perf/env-slimming`
+(`memory/2026-05-09-environment-structural-reduction.md`), not the `perf/env-slimming`
 performance goal. Phase 1 (drop redundant `phases`) is the only step with a clean
 cost/benefit: zero hot-path risk, removes a denormalized field.
 
@@ -275,7 +275,7 @@ needed to justify *stopping* the perf-motivated layout change.
 - `LocalEnvironmentFrame` internal layout. (Aside: its hot sub-field is `bindings`
   (34 reads); `keys` (15) is mostly compile-time; `keysShared` is the cold CoW flag.
   Worth a separate look only if Phase-3 numbers point there.)
-- The structural-reduction findings in `plans/2026-05-09-environment-structural-reduction.md`
+- The structural-reduction findings in `memory/2026-05-09-environment-structural-reduction.md`
   (dead `GlobalEnvironmentFrame.namespace`, `BindingMeta` accessors). Independent; can land
   in any order, though deleting the dead global namespace field first slightly simplifies
   Phase 2's audit.

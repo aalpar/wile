@@ -20,7 +20,7 @@ package environment
 //
 // The first use case is Flatt-style maximal-resolution over scope-tagged
 // bindings (EnvironmentFrame.GetBinding and EnvironmentFrame.GetLocalIndex —
-// see plans/2026-05-09-environment-structural-reduction.md, Finding 6 +
+// see memory/2026-05-09-environment-structural-reduction.md, Finding 6 +
 // Opportunity 1). In that setting the weight is the size of a binding's
 // scope set: the parent-chain walk is innermost-first, so first-seen-on-tie
 // corresponds to "innermost wins" — which is exactly Flatt's tie-breaking

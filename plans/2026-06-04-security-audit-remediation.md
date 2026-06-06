@@ -48,7 +48,7 @@ Console sandbox**, because parsing precedes any authorizer gate. The VM's
 **Fix:** a depth counter at the single recursion chokepoint `readSyntax`
 (`internal/parser/parser.go`), returning a catchable `werr.ErrParseDepthExceeded`
 past `DefaultMaxParseDepth` (10000); `0` disables it. Configurable per engine via
-`WithMaxParseDepth`. Plan: `plans/2026-06-04-parser-depth-limit-impl.md`.
+`WithMaxParseDepth`. Plan: `memory/2026-06-04-parser-depth-limit-impl.md`.
 
 **Verify:** `(` × 2,000,000 now yields a parse error and non-zero exit, no fatal
 crash. Engine-level regression test `TestEngine_DeepNesting_DoesNotCrash`.

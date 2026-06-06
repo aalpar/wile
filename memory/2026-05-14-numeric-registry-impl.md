@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-14
 **Status**: **Shipped (PR #752, merged).** All PRs landed; `values/numeric_registry.go` on master.
-**Design source**: `plans/2026-05-14-numeric-registry-design.md`
+**Design source**: `memory/2026-05-14-numeric-registry-design.md`
   (Q-resolutions baked in: Q-a cold-path only; Q-b drop wile-goast
   scope; Q-c→Q-i resolved C3 — registry's `ToFloat64` covers only
   the 5 reducible kinds, FFI excluded; Q-d D1 leave `Eqv` as a
@@ -288,7 +288,7 @@ ADDING-A-NEW-NUMERIC-TYPE guide.
    value methods** per Q-f.
 4. **ADDING guide rewrite.** Replace the 12-item list with the
    collapsed 4-item version. Update
-   `plans/2026-05-13-values-structural-reduction.md` Finding 3's
+   `memory/2026-05-13-values-structural-reduction.md` Finding 3's
    "leakage sites" annotation to reference this PR as the
    resolution.
 5. **Lint + ci.** No bench gate (extensions are cold paths).
@@ -341,14 +341,14 @@ which the registry doesn't touch.
 - [ ] PR 2 merged: cross-package cold paths migrated; FFI behavior
       delta documented and tested.
 - [ ] PR 3 merged: math extension migrated; ADDING guide rewritten.
-- [ ] Parent plan `plans/2026-05-13-values-structural-reduction.md`
+- [ ] Parent plan `memory/2026-05-13-values-structural-reduction.md`
       Finding 3 / Opportunity 3 marked complete; this plan moves
       to "Completed Plans" in `plans/CLAUDE.md`.
 
 ## Cross-references
 
-- `plans/2026-05-14-numeric-registry-design.md` — design source.
-- `plans/2026-05-13-values-structural-reduction.md` — parent plan
+- `memory/2026-05-14-numeric-registry-design.md` — design source.
+- `memory/2026-05-13-values-structural-reduction.md` — parent plan
   (Tier A.1 of the SR roadmap).
 - `plans/CLAUDE.md` — implementation completion workflow.
 - `values/numeric_kind.go` — current ADDING guide that will be

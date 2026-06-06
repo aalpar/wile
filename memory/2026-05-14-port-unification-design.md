@@ -1,7 +1,7 @@
 # Port unification — Phase 2 of `values/` structural reduction
 
 **Date**: 2026-05-14
-**Source**: Opportunity 2 of `plans/2026-05-13-values-structural-reduction.md`.
+**Source**: Opportunity 2 of `memory/2026-05-13-values-structural-reduction.md`.
 Phase 0 (PR #747 — quick wins) and Phase 1 (PR #748 — mutex state) have
 shipped; this is the next phase per the parent plan's recommended phasing.
 **Status**: **Implemented in PR #749.** Design (revised 2026-05-14 after
@@ -759,7 +759,7 @@ the asymmetry in the ADDING guide; verify with a sibling test.
 
 ## Cross-references
 
-- Parent plan: `plans/2026-05-13-values-structural-reduction.md`
+- Parent plan: `memory/2026-05-13-values-structural-reduction.md`
   (Opportunity 2 + Recommended Phasing).
 - Roadmap: `plans/2026-05-07-structural-reduction-roadmap.md`
   (Tier A.1).

@@ -80,7 +80,7 @@ func TestParseValueType(t *testing.T) {
 
 	// "exact-integer" used to alias TypeInteger via TypeExactInteger.
 	// The alias was removed in the values/ Phase 0 structural reduction
-	// (see plans/2026-05-13-values-structural-reduction.md Finding 4).
+	// (see memory/2026-05-13-values-structural-reduction.md Finding 4).
 	// The name must now flow through as an unresolved NamedTypeConstraint —
 	// asserting type tag (not just Name()) so a future re-introduction
 	// of the alias would fail this test rather than silently masquerading.

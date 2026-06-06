@@ -1,7 +1,7 @@
 ;;; bench-cyclic-counting-approximate.scm
 ;;;
 ;;; Acceptance benchmark for Phase 5 of the approximate-counting-semirings
-;;; plan (plans/2026-05-24-approximate-counting-semirings.md). Verifies
+;;; plan (memory/2026-05-24-approximate-counting-semirings.md). Verifies
 ;;; that `modular-counting-semiring' and `saturating-counting-semiring'
 ;;; tractably handle the cyclic-counting case that hangs the exact
 ;;; `counting-semiring' (3-hour incident on the 539-node machine package,

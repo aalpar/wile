@@ -112,7 +112,7 @@
 ;; intermediate exceeds fixnum, then collapses back via min/modulo); log uses
 ;; float64 throughout.
 ;;
-;; See plans/2026-05-24-approximate-counting-semirings.md for the design and
+;; See memory/2026-05-24-approximate-counting-semirings.md for the design and
 ;; the trade-off matrix.
 
 (define (modular-counting-semiring P)

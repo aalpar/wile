@@ -489,7 +489,7 @@ Add under the appropriate section of `TODO.md`:
 
 ```markdown
 - [ ] Bound expander recursion depth (machine/expander_*.go). The parser depth
-      limit (plans/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
+      limit (memory/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
       stack-overflow surface, but programmatically-constructed deep syntax
       (macro output, datum->syntax, quasiquote) can still overflow the expander.
 ```

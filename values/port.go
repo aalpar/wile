@@ -236,7 +236,7 @@ func (p *PortObject) AsByteVectorExtractor() (ByteVectorExtractor, bool) {
 // interface for the caller to invoke. The asymmetry is a deliberate
 // deferral — converging the two extractor APIs (either both
 // returning the interface, or both returning the resolved value) is
-// tracked as a follow-up in plans/2026-05-14-port-unification-impl.md
+// tracked as a follow-up in memory/2026-05-14-port-unification-impl.md
 // under "Deferred follow-ups".
 func (p *PortObject) StringContent() (string, bool) {
 	if p == nil || p.sext == nil {

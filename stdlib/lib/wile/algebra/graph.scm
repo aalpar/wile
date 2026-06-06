@@ -185,7 +185,7 @@
   "Return the symbol naming GA's fast-path strategy, or #f if none.\n\nKnown strategies:\n  'bigint-counting — bigint-carrier semiring + #f weight-fn,\n                         dispatches to `count-paths-in-dag' on acyclic\n                         input or `count-paths-cyclic' on cyclic input\n                         (the dispatcher pre-detects).\n\nExamples:\n  (graph-analysis-fast-path-kind (make-graph-analysis (bigint-counting-semiring) '() #f))\n  => bigint-counting\n\nParameters:\n  ga : graph-analysis\nReturns: symbol-or-false\nCategory: algebra\n\nSee also: `graph-analysis-fast-path?', `make-graph-analysis'."
   (ga-fast-path-kind ga))
 
-;; --- SCC side-query API (Open Q-2 of plans/2026-05-26-scc-condensation.md) ---
+;; --- SCC side-query API (Open Q-2 of memory/2026-05-26-scc-condensation.md) ---
 ;;
 ;; `graph-query' / `graph-query-all' remain shape-stable: the alist they
 ;; return is (name . count) on every node, whether the node lives in a

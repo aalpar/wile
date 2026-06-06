@@ -92,7 +92,7 @@ func PrimAtan(mc machine.CallContext) error {
 		// atan2 inherently returns an inexact result, so silent lossy
 		// conversion of *Rational / *BigFloat operands is load-bearing
 		// for R7RS §6.2.6 semantics — hence ToFloat64Lossy, not the
-		// strict ToFloat64. See plans/2026-05-14-numeric-loss-signals-design.md §R8.
+		// strict ToFloat64. See memory/2026-05-14-numeric-loss-signals-design.md §R8.
 		y, err := helpers.ToFloat64Lossy(o)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "atan: %v", err)

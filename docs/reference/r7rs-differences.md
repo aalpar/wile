@@ -203,7 +203,7 @@ silent-truncation behavior for embedders that depended on it. This
 is purely an embedder-API concern; Scheme programs are unaffected.
 
 See `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go Types"
-and `plans/2026-05-14-numeric-loss-signals-design.md` for the
+and `memory/2026-05-14-numeric-loss-signals-design.md` for the
 underlying design.
 
 

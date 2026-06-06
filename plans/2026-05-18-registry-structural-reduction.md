@@ -1333,10 +1333,10 @@ deferred)**: revisit when triggered.
 - `plans/2026-05-08-dispatch-axis-as-data.md` — Phase unification
   (PR #728) addressed Instance B; this plan picks up the remaining
   registry-package instances under the same lens.
-- `plans/2026-05-13-values-structural-reduction.md` — Tier A.1
+- `memory/2026-05-13-values-structural-reduction.md` — Tier A.1
   template + format precedent. Phase 2 (port unification) is the
   direct parallel for Finding 3.
-- `plans/2026-05-09-environment-structural-reduction.md` — Tier A.2
+- `memory/2026-05-09-environment-structural-reduction.md` — Tier A.2
   precedent.
 - `plans/2026-05-06-machine-structural-reduction.md` — Tier A.0.
 - `memory/MEMORY.md` — Architecture Quick Reference.

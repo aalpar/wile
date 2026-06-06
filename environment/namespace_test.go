@@ -123,7 +123,7 @@ func TestNamespace_Phases(t *testing.T) {
 //
 // This guards against re-attempting the "phases is redundant with
 // namespace.phases" fold sketched in
-// plans/2026-06-02-environment-frame-hot-cold-layout.md (Phase 1/2). That fold
+// memory/2026-06-02-environment-frame-hot-cold-layout.md (Phase 1/2). That fold
 // is unsafe precisely because of this divergence: deriving phases from the
 // Namespace would route a library's phase environments into the importer's
 // registry and collapse the isolation NewChildRuntime exists to provide.

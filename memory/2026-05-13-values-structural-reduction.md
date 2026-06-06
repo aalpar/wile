@@ -1155,7 +1155,7 @@ sequenced by risk:
 
 - `plans/2026-05-07-structural-reduction-roadmap.md` — Tier A.1
   (this plan completes the analysis side of A.1).
-- `plans/2026-05-09-environment-structural-reduction.md` — Tier A.2
+- `memory/2026-05-09-environment-structural-reduction.md` — Tier A.2
   precedent for the SR plan format. Closed via PR #730.
 - `plans/2026-05-06-machine-structural-reduction.md` — Tier A.0;
   Finding 7 stages 1-2 closed via PRs #742-#745.
