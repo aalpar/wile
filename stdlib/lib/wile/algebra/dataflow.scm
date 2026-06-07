@@ -439,39 +439,64 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
         (let loop ((is idxs) (w wl))
           (if (null? is) w
               (loop (cdr is) (worklist-insert w (car is))))))
+      ;; Per-block re-visit cap. MFP terminates because each block's in-state
+      ;; ascends at most (lattice height) times before stabilizing; on an
+      ;; infinite-height lattice (e.g. interval) WITHOUT a (widen OP) that chain
+      ;; never converges and the worklist spins forever. run-analysis cannot see
+      ;; the lattice height, so this is a backstop, not a tight bound: no finite
+      ;; lattice we ship is anywhere near 100000 tall, and the interval-without-
+      ;; widening case ascends past it long before that. Counting raw pops over-
+      ;; approximates ascents — fine for a guard whose only job is to turn a
+      ;; silent hang into a remedy-pointing error. Mirrors graph.scm's worklist
+      ;; cap, but per-block so the error can name the offending widening point.
+      (define max-revisits 100000)
+      (define visits (make-hashtable))
       (let loop ((wl (worklist-insert-all '() seed-idxs)))
         (if (null? wl)
             states
             (let* ((idx (car wl))
-                   (rest-wl (cdr wl))
-                   (blk (block-ref idx))
-                   (pred-idxs (flow-preds blk))
-                   (joined-in (if (null? pred-idxs)
-                                  (if (memv idx seed-idxs) initial-state bot)
-                                  (let join-preds ((ps pred-idxs)
-                                                   (acc (if (memv idx seed-idxs)
-                                                            initial-state
-                                                            bot)))
-                                    (if (null? ps) acc
-                                        (join-preds (cdr ps)
-                                          (lattice-join lattice acc
-                                            (get-out (car ps))))))))
-                   ;; At loop headers, widen the previous in-state against the
-                   ;; newly joined one instead of taking the raw join — bounds
-                   ;; the ascending chain so infinite-height lattices converge.
-                   ;; Elsewhere (and always under pure MFP) this is the raw join.
-                   (in-val (if (widening-point? idx)
-                               (widen-fn (get-in idx) joined-in)
-                               joined-in))
-                   (out-val (transfer blk in-val))
-                   (old-out (get-out idx)))
-              (when (and check-mono
-                         (not (lattice-leq? lattice old-out out-val)))
-                (error "run-analysis: monotonicity violation"
-                       (list 'block idx 'in in-val
-                             'old-out old-out 'new-out out-val)))
-              (set-state! idx in-val out-val)
-              (if (lattice-leq? lattice out-val old-out)
-                  (loop rest-wl)
-                  (loop (worklist-insert-all rest-wl
-                          (flow-succs blk))))))))))
+                   (vc (+ 1 (hashtable-ref visits idx 0))))
+              (when (> vc max-revisits)
+                ;; idx is the caller's protocol index — an opaque value (symbol,
+                ;; integer, …), so it goes in the irritants, not the message
+                ;; (mirrors the monotonicity-violation error below).
+                (error (string-append
+                        "run-analysis: a block exceeded "
+                        (number->string max-revisits)
+                        " revisits without converging — the lattice likely has"
+                        " infinite height (e.g. interval); supply (widen OP) to"
+                        " bound the ascending chain at loop headers")
+                       (list 'block idx 'direction direction)))
+              (hashtable-set! visits idx vc)
+              (let* ((rest-wl (cdr wl))
+                     (blk (block-ref idx))
+                     (pred-idxs (flow-preds blk))
+                     (joined-in (if (null? pred-idxs)
+                                    (if (memv idx seed-idxs) initial-state bot)
+                                    (let join-preds ((ps pred-idxs)
+                                                     (acc (if (memv idx seed-idxs)
+                                                              initial-state
+                                                              bot)))
+                                      (if (null? ps) acc
+                                          (join-preds (cdr ps)
+                                            (lattice-join lattice acc
+                                              (get-out (car ps))))))))
+                     ;; At loop headers, widen the previous in-state against the
+                     ;; newly joined one instead of taking the raw join — bounds
+                     ;; the ascending chain so infinite-height lattices converge.
+                     ;; Elsewhere (and always under pure MFP) this is the raw join.
+                     (in-val (if (widening-point? idx)
+                                 (widen-fn (get-in idx) joined-in)
+                                 joined-in))
+                     (out-val (transfer blk in-val))
+                     (old-out (get-out idx)))
+                (when (and check-mono
+                           (not (lattice-leq? lattice old-out out-val)))
+                  (error "run-analysis: monotonicity violation"
+                         (list 'block idx 'in in-val
+                               'old-out old-out 'new-out out-val)))
+                (set-state! idx in-val out-val)
+                (if (lattice-leq? lattice out-val old-out)
+                    (loop rest-wl)
+                    (loop (worklist-insert-all rest-wl
+                            (flow-succs blk)))))))))))

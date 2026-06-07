@@ -701,8 +701,12 @@
 ;; is for worklist variants that may re-pop slightly more under
 ;; particular insertion orders. When the cap fires the function raises
 ;; an error pointing the caller at (wile algebragraph) count-paths-cyclic
-;; for the exact-cyclic-counting case, or at the approximate-counting
-;; semirings (saturating/modular/log) for bounded-carrier alternatives.
+;; for the exact-cyclic-counting case, or at saturating-counting-semiring
+;; for the bounded-approximate case. Only saturating is named: it is the
+;; sole counting carrier that converges on cycles (its CAP is an absorbing
+;; top). modular and log lack an absorbing element and hit this same cap —
+;; recommending them would steer the caller back into the trap. See
+;; semiring-cycle-safe? for the authoritative cycle-safe carrier set.
 (define (compute-via-worklist ga source)
   (let* ((S   (ga-semiring ga))
          (adj (ga-adjacency ga))
@@ -731,8 +735,10 @@
            "(e.g. (counting-semiring)) on a cyclic graph. Remedies: "
            "(a) (import (wile algebragraph)) and use (count-paths-cyclic ...) "
            "for exact counts via SCC condensation; "
-           "(b) use a bounded-carrier semiring (saturating, modular, log) "
-           "from (wile algebra semiring) if approximate counts suffice.")))
+           "(b) use (saturating-counting-semiring CAP) from (wile algebra "
+           "semiring) if approximate counts suffice — it is the only counting "
+           "carrier that converges on cycles (modular and log share this "
+           "non-convergence; see semiring-cycle-safe?).")))
         (else
           (let* ((node (car worklist))
                  (rest (cdr worklist))

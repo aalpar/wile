@@ -283,6 +283,23 @@
     (test '(0 . pos-inf) (analysis-in result 1))
     (test '(1 . pos-inf) (analysis-out result 1))))
 
+(test-group "run-analysis — interval loop WITHOUT widening caps, never hangs"
+  ;; Same self-looping increment CFG as above, but with NO (widen ...). Over
+  ;; the infinite-height interval lattice the in-state ascends forever
+  ;; ([0,0] < [0,1] < [0,2] < ...), so MFP never reaches a fixpoint. The
+  ;; per-block re-visit cap must turn that silent non-termination into a
+  ;; remedy-pointing error instead of spinning. (Runs to the 100000-revisit
+  ;; cap before raising — a few seconds.)
+  (let* ((loop-cfg '((0 () (1))
+                     (1 (0 1) (1))))
+         (L (interval-lattice))
+         (xfer (lambda (blk in)
+                 (if (= (car blk) 1)
+                     (interval-add in '(1 . 1))
+                     in))))
+    (test-error (run-analysis 'forward L xfer loop-cfg test-protocol
+                              (init-state (abstract-interval 0))))))
+
 (test-group "run-analysis — duplicate (widen ...) rejected"
   (let* ((L (interval-lattice))
          (xfer (lambda (blk in) in)))

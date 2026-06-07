@@ -210,7 +210,18 @@ Keywords: CFL, reachability, worklist, context-sensitive"
                           (hashtable-ref inx (encAt (cdr bc) s) '())))
               (hashtable-ref bin-rhs2 a '())))
           (loop)))
-      (%make-cfl-solution nodes n nt->idx node->idx (ntidx (cfl-grammar-start grammar)) R outx))))
+      ;; An undefined start symbol is grammar malformedness, not a tolerated
+      ;; query miss: every (s,START,t) lookup would silently read #f, so
+      ;; cfl-reachable? returns #f and cfl-reachable-from returns '() for
+      ;; every input — a precision tool reporting "nothing reachable" for a
+      ;; typo'd start. Fail fast here, mirroring nidx!/ntidx! above. (The
+      ;; nonterminal argument of cfl-derives? keeps its tolerant #f; the
+      ;; grammar's full nonterminal space is not always a public contract,
+      ;; but the start symbol always is.)
+      (let ((start-idx (or (ntidx (cfl-grammar-start grammar))
+                           (error "cfl-solve: grammar start symbol is not a declared nonterminal"
+                                  (cfl-grammar-start grammar)))))
+        (%make-cfl-solution nodes n nt->idx node->idx start-idx R outx)))))
 
 ;; ─── Queries ──────────────────────────────────────────────────────────────
 (define (%sol-enc3 sol s a t) (+ (* (+ (* s (hashtable-size (cfl-solution-nt->idx sol))) a) (cfl-solution-n sol)) t))
