@@ -914,7 +914,12 @@ def validate_interval(args):
     def ivlit(a):  # Scheme literal for an interval operand (a quoted pair)
         return f"'({lit(a[0])} . {lit(a[1])})"
 
-    samples = [(1, 2), (-1, 2), (-3, -1), (0, 0), (NEG, 5), (-5, POS), (NEG, POS)]
+    # (POS, POS) is a degenerate point-at-infinity interval; paired with the
+    # others it exercises inf_add(POS, NEG) and inf_sub(POS, POS) — the documented
+    # widening quirks (pos-inf + neg-inf = pos-inf, pos-inf - pos-inf = pos-inf)
+    # that the finite/one-sided samples never reach.
+    samples = [(1, 2), (-1, 2), (-3, -1), (0, 0),
+               (NEG, 5), (-5, POS), (NEG, POS), (POS, POS)]
     cases = []
     for a in samples:
         for b in samples:
