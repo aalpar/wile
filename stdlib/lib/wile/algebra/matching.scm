@@ -449,13 +449,20 @@
       (cond
         (seen
          ;; p is revisited.  The cycle is all path entries from the FRONT up to and
-         ;; including `seen`, then reversed to oldest-first order.
+         ;; including `seen`.  `path` is newest-first; cons-accumulating while we
+         ;; walk toward `seen` already yields the entries in oldest-first (walk)
+         ;; order — which is exactly what apply-rotation expects: proposer mᵢ is
+         ;; reassigned to the receiver of m_{i+1}, i.e. to successor(mᵢ).  An extra
+         ;; reverse here would flip the cycle backwards: for length-≥3 cycles that
+         ;; traverses the rotation in reverse, collapsing M_top straight to M_bot
+         ;; and hiding every interior stable matching.  (A 2-cycle is its own
+         ;; inverse, so the orientation bug is invisible at size 2.)
          (let ((cycle-path
                  (let collect ((xs path) (acc '()))
                    (cond
-                     ((null? xs) (reverse acc))  ; safety — seen must be in path
+                     ((null? xs) acc)  ; safety — seen must be in path
                      ((eq? (car xs) seen)
-                      (reverse (cons (car xs) acc)))
+                      (cons (car xs) acc))
                      (else
                       (collect (cdr xs) (cons (car xs) acc)))))))
            (make-rotation
