@@ -616,6 +616,56 @@ def validate_tropical_semiring(args):
     return failures
 
 
+def validate_polynomial(args):
+    """Validate (wile algebra) polynomials against Sage PolynomialRing."""
+    print("  polynomial...", end=" ", flush=True)
+    Rz = PolynomialRing(ZZ, 'x')
+    Rq = PolynomialRing(QQ, 'x')
+    coeff_samples = [[], [5], [1, 1], [2, -1], [1, 2, 3], [0, 0, 1], [-1, 0, 1]]
+
+    def zlit(cs):
+        return "'(" + " ".join(str(int(c)) for c in cs) + ")"
+
+    def zcoeffs(p):
+        return [int(c) for c in p.list()]
+
+    def qcoeffs(p):
+        return [format_rational_for_wile(QQ(c)) for c in p.list()]
+
+    cases = []
+    P = "(make-poly (integer-ring) "
+    for ca in coeff_samples:
+        pa = Rz(ca)
+        cases.append((f"(poly-coeffs (poly-negate {P}{zlit(ca)})))", zcoeffs(-pa)))
+        cases.append((f"(poly-coeffs (poly-derivative {P}{zlit(ca)})))",
+                      zcoeffs(pa.derivative())))
+        cases.append((f"(poly-degree {P}{zlit(ca)}))", int(pa.degree())))
+        cases.append((f"(poly-leading-coeff {P}{zlit(ca)}))",
+                      int(pa.list()[-1]) if pa != 0 else int(0)))
+        for x in [-2, -1, 0, 1, 2, 3]:
+            cases.append((f"(poly-eval {P}{zlit(ca)}) {x})", int(pa(x))))
+        for cb in coeff_samples:
+            pb = Rz(cb)
+            cases.append((f"(poly-coeffs (poly-plus {P}{zlit(ca)}) {P}{zlit(cb)})))",
+                          zcoeffs(pa + pb)))
+            cases.append((f"(poly-coeffs (poly-minus {P}{zlit(ca)}) {P}{zlit(cb)})))",
+                          zcoeffs(pa - pb)))
+            cases.append((f"(poly-coeffs (poly-times {P}{zlit(ca)}) {P}{zlit(cb)})))",
+                          zcoeffs(pa * pb)))
+
+    # gcd over QQ (Wile requires a field; Sage gcd over QQ is monic — matches).
+    Q = "(make-poly (field->ring (rational-field)) "
+    gcd_pairs = [([-1, 0, 1], [-1, 1]), ([1, 2, 1], [1, 1]), ([1, 0, 0, 1], [1, 1])]
+    for ca, cb in gcd_pairs:
+        g = (Rq(ca).gcd(Rq(cb))).monic()
+        cases.append((f"(poly-coeffs (poly-gcd {Q}{zlit(ca)}) {Q}{zlit(cb)}) (rational-field)))",
+                      qcoeffs(g)))
+
+    return check_or_snapshot(
+        args, "sage-structures-polynomial-test.scm",
+        "sage-structures-polynomial", ["(wile algebra)"], cases, "Sage-builtin")
+
+
 # ---------------------------------------------------------------------------
 # Phase 1 entry point
 # ---------------------------------------------------------------------------
@@ -629,6 +679,7 @@ def run_phase1(args):
     total_failures += validate_powerset_lattice(args)
     total_failures += validate_boolean_semiring(args)
     total_failures += validate_tropical_semiring(args)
+    total_failures += validate_polynomial(args)
     if total_failures > 0:
         print(f"\nPhase 1: {total_failures} total failures")
     else:
