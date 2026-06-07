@@ -837,6 +837,96 @@ def validate_group(args):
         ["(wile algebra)"], cases, "hybrid", preamble=preamble)
 
 
+def validate_interval(args):
+    """Validate (wile algebra) interval arithmetic against a Python reference
+    that mirrors Wile's inf-aware endpoint formulas."""
+    print("  interval...", end=" ", flush=True)
+    NEG, POS = "neg-inf", "pos-inf"
+
+    # Finite endpoints arrive as Sage Integer (preparser); coerce results back
+    # to Python int so to_wile_display's isinstance(v, int) check matches.
+    def inf_add(a, b):
+        if (a == POS and b == NEG) or (a == NEG and b == POS):
+            return POS
+        if a == POS or b == POS:
+            return POS
+        if a == NEG or b == NEG:
+            return NEG
+        return int(a + b)
+
+    def inf_sub(a, b):  # a - b, mirrors interval.scm inf- (cond order matters)
+        if (a == POS and b == POS) or (a == NEG and b == NEG):
+            return POS
+        if a == POS:
+            return POS
+        if a == NEG:
+            return NEG
+        if b == POS:
+            return NEG
+        if b == NEG:
+            return POS
+        return int(a - b)
+
+    def inf_mul(a, b):
+        def sign(x):
+            return 0 if (x != POS and x != NEG and x == 0) else (
+                1 if (x == POS or (x != NEG and x > 0)) else -1)
+        if a == 0 or b == 0:
+            return int(0)
+        if a in (POS, NEG) or b in (POS, NEG):
+            s = sign(a) * sign(b)
+            return POS if s > 0 else NEG
+        return int(a * b)
+
+    def iv_add(a, b):
+        return ("pair", (inf_add(a[0], b[0]), inf_add(a[1], b[1])))
+
+    def iv_sub(a, b):
+        return ("pair", (inf_sub(a[0], b[1]), inf_sub(a[1], b[0])))
+
+    def iv_mul(a, b):
+        corners = [inf_mul(a[0], b[0]), inf_mul(a[0], b[1]),
+                   inf_mul(a[1], b[0]), inf_mul(a[1], b[1])]
+        return ("pair", (inf_min(corners), inf_max(corners)))
+
+    def inf_le(x, y):
+        if x == NEG or y == POS:
+            return True
+        if y == NEG or x == POS:
+            return False
+        return x <= y
+
+    def inf_min(xs):
+        m = xs[0]
+        for x in xs[1:]:
+            m = x if inf_le(x, m) else m
+        return m
+
+    def inf_max(xs):
+        m = xs[0]
+        for x in xs[1:]:
+            m = x if inf_le(m, x) else m
+        return m
+
+    def lit(x):
+        return x if isinstance(x, str) else str(int(x))
+
+    def ivlit(a):  # Scheme literal for an interval operand (a quoted pair)
+        return f"'({lit(a[0])} . {lit(a[1])})"
+
+    samples = [(1, 2), (-1, 2), (-3, -1), (0, 0), (NEG, 5), (-5, POS), (NEG, POS)]
+    cases = []
+    for a in samples:
+        for b in samples:
+            cases.append((f"(interval-add {ivlit(a)} {ivlit(b)})", iv_add(a, b)))
+            cases.append((f"(interval-sub {ivlit(a)} {ivlit(b)})", iv_sub(a, b)))
+            cases.append((f"(interval-mul {ivlit(a)} {ivlit(b)})", iv_mul(a, b)))
+
+    return check_or_snapshot(
+        args, "sage-structures-interval-test.scm",
+        "sage-structures-interval", ["(wile algebra)"], cases, "Python-reference")
+
+
 # ---------------------------------------------------------------------------
 # Phase 1 entry point
 # ---------------------------------------------------------------------------
@@ -854,6 +944,7 @@ def run_phase1(args):
     total_failures += validate_semiring_matrix(args)
     total_failures += validate_graph(args)
     total_failures += validate_group(args)
+    total_failures += validate_interval(args)
     if total_failures > 0:
         print(f"\nPhase 1: {total_failures} total failures")
     else:
