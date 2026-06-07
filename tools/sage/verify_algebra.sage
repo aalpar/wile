@@ -666,6 +666,45 @@ def validate_polynomial(args):
         "sage-structures-polynomial", ["(wile algebra)"], cases, "Sage-builtin")
 
 
+def validate_graph(args):
+    """Validate (wile algebra combinatorial-graph) invariants against Sage."""
+    print("  graph...", end=" ", flush=True)
+    # (wile preset ctor, Sage graph) pairs — both 0-indexed.
+    # All presets get spanning-tree-count.
+    presets = [
+        ("(complete-graph 3)", graphs.CompleteGraph(3)),
+        ("(complete-graph 4)", graphs.CompleteGraph(4)),
+        ("(cycle-graph 4)",    graphs.CycleGraph(4)),
+        ("(cycle-graph 5)",    graphs.CycleGraph(5)),
+        ("(path-graph 4)",     graphs.PathGraph(4)),
+        ("(complete-bipartite-graph 2 3)", graphs.CompleteBipartiteGraph(2, 3)),
+        ("(petersen-graph)",   graphs.PetersenGraph()),
+    ]
+    # Chromatic polynomial only for graphs within Wile's deletion-contraction
+    # cap (|V|+|E| <= 20).  K_n / C_n / tree have closed-form fast paths and
+    # always work; K_{2,3} (5V+6E=11) falls through to general case and fits.
+    # Petersen (10V+15E=25) exceeds the cap and raises, so it is excluded.
+    chrom_presets = [
+        ("(complete-graph 3)", graphs.CompleteGraph(3)),
+        ("(complete-graph 4)", graphs.CompleteGraph(4)),
+        ("(cycle-graph 4)",    graphs.CycleGraph(4)),
+        ("(cycle-graph 5)",    graphs.CycleGraph(5)),
+        ("(path-graph 4)",     graphs.PathGraph(4)),
+        ("(complete-bipartite-graph 2 3)", graphs.CompleteBipartiteGraph(2, 3)),
+    ]
+    cases = []
+    for ctor, G in presets:
+        cases.append((f"(graph-spanning-tree-count {ctor})",
+                      int(G.spanning_trees_count())))
+    for ctor, G in chrom_presets:
+        # chromatic polynomial: Wile = ascending integer coeff list.
+        chrom = [int(c) for c in G.chromatic_polynomial().coefficients(sparse=False)]
+        cases.append((f"(graph-chromatic-polynomial {ctor})", chrom))
+    return check_or_snapshot(
+        args, "sage-structures-graph-test.scm",
+        "sage-structures-graph", ["(wile algebra)"], cases, "Sage-builtin")
+
+
 # ---------------------------------------------------------------------------
 # Phase 1 entry point
 # ---------------------------------------------------------------------------
@@ -680,6 +719,7 @@ def run_phase1(args):
     total_failures += validate_boolean_semiring(args)
     total_failures += validate_tropical_semiring(args)
     total_failures += validate_polynomial(args)
+    total_failures += validate_graph(args)
     if total_failures > 0:
         print(f"\nPhase 1: {total_failures} total failures")
     else:
