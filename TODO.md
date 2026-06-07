@@ -45,6 +45,27 @@ Items that block production embedded use or prevent silent state corruption.
       limit (memory/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
       stack-overflow surface, but programmatically-constructed deep syntax
       (macro output, datum->syntax, quasiquote) can still overflow the expander.
+- [ ] **Stable-matching selectors fail + matching tests don't gate CI** [High, M]:
+      `test/wile/algebra-matching-test.scm` carries 3–4 failing assertions on
+      master that go undetected because the file ends with `(test-end "matching")`
+      and **no `(test-exit)`** — and `tools/sh/cover-scm.sh` gates `make covercheck`
+      on each test file's *process exit code*, not on `(chibi test)` assertion
+      counts, so the file exits 0 regardless of failures. Every other
+      `test/wile/algebra-*-test.scm` has `(test-exit)`. Failing groups (verified
+      against a fresh build, 2026-06-06):
+      - "rotations on cyclic 3x3 (multiple stable matchings)" — `expected 2 but got 1`
+      - "egalitarian and sex-equal selectors — 3x3 with interior optimum" —
+        `expected #t but got #f` and `expected #f but got #t`
+      These are real correctness bugs in `egalitarian-stable-matching` /
+      `sex-equal-stable-matching` (or the rotation enumeration they rest on), **not**
+      introduced by PR #767 (algebra non-termination guards), which discovered them
+      during crosscheck (tests + errors + code lenses independently flagged).
+      Fix sequence: (1) debug the selectors against the Roth–Sotomayor
+      rotation-poset definition; (2) once green, add `(test-exit)` to the matching
+      file so the suite gates CI like its siblings; (3) sweep all
+      `stdlib/lib/**/*-test.scm` and `test/**/*-test.scm` for the same
+      missing-`(test-exit)` gap — any file without it silently ignores assertion
+      failures under `cover-scm.sh`. Provenance: PR #767 crosscheck, 2026-06-06.
 
 ---
 
