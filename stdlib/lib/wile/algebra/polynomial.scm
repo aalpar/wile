@@ -173,8 +173,28 @@
       ;; first iteration, so vector size is (deg-p - deg-d) + 1.
       ;; Clamp to 0 when deg-p < deg-d (no iterations run).
       (let ((cap (max 0 (+ 1 (- deg-p deg-d)))))
+        ;; Each legitimate long-division step drops the remainder degree by at
+        ;; least 1, so at most `cap` iterations run. If F's reciprocal is not a
+        ;; true inverse (e.g. a "field" built over the integers), the leading
+        ;; term never cancels, the degree is frozen, and the loop spins forever.
+        ;; Cap at `cap` (strict >, since a valid run uses up to cap iterations)
+        ;; to turn that silent hang into a remedy-pointing error.
         (let loop ((rem p)
-                   (q-coeffs-rev '()))
+                   (q-coeffs-rev '())
+                   (iters 0))
+          (when (> iters cap)
+            (error (string-append
+                    "poly-divmod: exceeded " (number->string cap)
+                    " iterations without the remainder degree decreasing — F's"
+                    " reciprocal is not a true multiplicative inverse of the"
+                    " divisor's leading coefficient, so the leading term never"
+                    " cancels (a common mistake is building a field over a"
+                    " non-field like the integers). Remedy: supply a genuine"
+                    " field (e.g. (rational-field) or a GF(p) field) and run"
+                    " (validate-field F samples) before dividing")
+                   (list 'divisor-leading-coeff (poly-leading-coeff d)
+                         'reciprocal-result lead-d-inv
+                         'remainder-degree (poly-degree rem))))
           (let ((deg-r (poly-degree rem)))
             (if (< deg-r deg-d)
                 (values (make-poly R (reverse-pad q-coeffs-rev R cap))
@@ -187,7 +207,7 @@
                                   (append (make-list shift (ring-zero R))
                                           (list coeff))))
                        (rem*    (poly-minus rem (poly-times term d))))
-                  (loop rem* (cons (cons shift coeff) q-coeffs-rev))))))))))
+                  (loop rem* (cons (cons shift coeff) q-coeffs-rev) (+ iters 1))))))))))
 
 ;; Internal helper: given a list of (shift . coeff) entries produced
 ;; by long division, materialize the quotient's ascending coefficient

@@ -113,11 +113,24 @@
   (case-lambda
     ((L f x)
      "Compute the least fixpoint of F starting from X in lattice L.\nIterates F(F(...F(X)...)) until the result stabilizes according\nto lattice-equal?. This is Kleene iteration; F must be monotone\nand L must have no infinite ascending chains for termination.\nWith four arguments, limits iteration to FUEL steps and returns\n#f if the fixpoint is not reached.\n\nExamples:\n  (fixpoint (powerset-lattice '(1 2 3))\n            (lambda (s) (if (member 2 s) s (cons 2 s)))\n            '())  => (2)\n\nParameters:\n  L : any\n  f : procedure\n  x : any\nReturns: any\nCategory: algebra\nKeywords: fixed point, lfp, Kleene iteration, abstract interpretation, dataflow, convergence\n\nSee also: `fixpoint/widen', `lattice-equal?'."
-     (let loop ((current x))
+     ;; Backstop cap (mirrors dataflow.scm's max-revisits=100000). The lattice
+     ;; height is opaque here — f keeps ascending on an infinite-height lattice
+     ;; (integers, intervals) and Kleene iteration never converges. Turn that
+     ;; silent hang into a remedy-pointing error. Steps are O(1), so the cap
+     ;; fires promptly. The 4-arg (fixpoint L f x FUEL) form below opts out.
+     (let loop ((current x) (steps 0))
+       (when (>= steps 100000)
+         (error (string-append
+                 "fixpoint: exceeded 100000 iterations without converging — the"
+                 " lattice likely has infinite ascending chains (e.g. integers or"
+                 " intervals) and f keeps ascending. Remedies: use (fixpoint/widen"
+                 " L f x WIDEN) with a chain-finite widening operator, or the 4-arg"
+                 " (fixpoint L f x FUEL) form which returns #f after FUEL steps")
+                (list 'current current 'iterations steps)))
        (let ((next (f current)))
          (if (lattice-equal? L current next)
              current
-             (loop next)))))
+             (loop next (+ steps 1))))))
     ((L f x fuel)
      (let loop ((current x) (remaining fuel))
        (if (<= remaining 0) #f

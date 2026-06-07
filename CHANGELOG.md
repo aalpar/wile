@@ -31,6 +31,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   instead of `Wile Scheme <version> ()`. The `--version` flag, the REPL header,
   and `,version` now share a single `versionString()` formatter.
 
+### Fixed
+
+- **Algebra solvers: caller-reachable silent non-termination now raises.** Six
+  paths that could loop forever with no output and no error now raise a
+  remedy-pointing error, extending the cap-guard discipline of
+  `(wile algebra dataflow)`/`graph` to the rest of the algebra libraries:
+  - `(wile algebra group)` — `subgroup-generated`, `enumerate-finite-group`,
+    and `orbit` on an infinite or infinitely-generated group (e.g. the integers
+    under `+`). `orbit` gains an optional `(max-size . N)` matching
+    `subgroup-generated`; both fall back to a large default cap when none is
+    given.
+  - `(wile algebra lattice)` — the 3-arg `fixpoint` (Kleene iteration) on an
+    infinite-height lattice; the error points at `fixpoint/widen` or the 4-arg
+    fuel form.
+  - `(wile algebra matching)` — `tropical-assignment` / `kuhn-munkres-square`
+    on a cost matrix with no finite perfect assignment (every completion forced
+    through a `+inf.0` pair).
+  - `(wile algebra combinatorial-graph)` — `enumerate-finite-graph` on a tier-2
+    neighbor-fn that describes an infinite graph.
+  - `(wile algebra polynomial)` — `poly-divmod` / `poly-gcd` when `F`'s
+    reciprocal is not a true inverse (a "field" built over a non-field such as
+    the integers); the error points at `validate-field`.
+  `(wile algebra matrix)`'s already-guarded `semiring-matrix-closure` error now
+  names a cycle-safe-semiring remedy. Caveat: the group/graph element-count caps
+  use O(n) membership, so on a genuinely infinite structure the *default* cap
+  raises only after ~cap² work; pass an explicit small `(max-size . N)` for a
+  fast, precise failure.
+
 ## [1.16.0] - 2026-05-19
 
 ### Removed

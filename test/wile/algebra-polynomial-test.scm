@@ -206,5 +206,21 @@
     (let ((p (make-poly (field->ring (rational-field)) '(1/2 1/3))))
       (test '(1 2/3) (poly-coeffs (ring-plus PR p p))))))
 
+(test-group "poly-divmod / poly-gcd — non-field reciprocal caps (no silent hang)"
+  ;; make-field accepts any reciprocal procedure without checking it inverts.
+  ;; A field built over the integers with (quotient 1 x) does NOT invert, so
+  ;; the leading term never cancels, the remainder degree is frozen, and long
+  ;; division would spin forever. The degree-bound cap raises instead. A real
+  ;; field still divides correctly.
+  (let* ((Zfake (make-field + * 0 1 - (lambda (x) (quotient 1 x))))
+         (Rf    (field->ring Zfake)))
+    (test-error (poly-divmod (make-poly Rf '(1 0 1)) (make-poly Rf '(1 2)) Zfake))
+    (test-error (poly-gcd    (make-poly Rf '(1 0 1)) (make-poly Rf '(1 2)) Zfake)))
+  (let ((Rq (field->ring (rational-field))))
+    (call-with-values
+      (lambda () (poly-divmod (make-poly Rq '(-1 0 1)) (make-poly Rq '(-1 1)) (rational-field)))
+      (lambda (q r)
+        (test '(1 1) (poly-coeffs q))))))
+
 (test-end)
 (test-exit)

@@ -526,5 +526,16 @@
     (test #t (finite-lattice? T))
     (test #t (distributive? T))))
 
+(test-group "fixpoint — infinite ascending chain caps (no silent hang)"
+  ;; The 3-arg fixpoint is Kleene iteration with no widening. Over an
+  ;; infinite-height lattice (integers under <=) a strictly-increasing f never
+  ;; converges; the backstop cap turns that silent hang into an error. Steps
+  ;; are O(1), so the cap fires promptly.
+  (let ((L (make-lattice max min 0 100 <=)))
+    (test-error (fixpoint L (lambda (x) (+ x 1)) 0))
+    ;; The 4-arg fuel form and a converging case still behave.
+    (test #f (fixpoint L (lambda (x) (+ x 1)) 0 10))
+    (test 5  (fixpoint L (lambda (x) (min 5 (+ x 1))) 0))))
+
 (test-end)
 (test-exit)

@@ -614,7 +614,24 @@
               (vector-set! minv j +inf.0)
               (vector-set! used j #f)
               (init-loop (+ j 1))))
-          (let phase-loop ()
+          (let phase-loop ((phase 0))
+            ;; A correct augmenting search marks one new column per phase, so a
+            ;; feasible path completes in at most n phases per row. More than n
+            ;; means delta never decreased — the reachable frontier is all
+            ;; +inf.0 and the instance has no finite perfect assignment, so the
+            ;; loop would spin forever. Raise instead. Strict > n: a legitimate
+            ;; run reaches exactly n phases in the worst case.
+            (when (> phase n)
+              (error (string-append
+                      "kuhn-munkres-square: row " (number->string i)
+                      " exceeded " (number->string n)
+                      " augmenting-path phases without reaching a free column — the"
+                      " cost matrix has no finite perfect assignment (some row or"
+                      " column is reachable only at +inf.0). Remedy: ensure every"
+                      " row and column has at least one finite-cost cell, or use"
+                      " tropical-assignment with unequal-size sides (which pads with"
+                      " finite synthetic columns and returns a partial matching)")
+                     (list 'row i 'dimension n)))
             (vector-set! used j0 #t)
             (let ((i0 (vector-ref p j0))
                   (delta +inf.0)
@@ -644,7 +661,7 @@
                   (update-loop (+ j 1))))
               (set! j0 j1)
               (when (not (= (vector-ref p j0) 0))
-                (phase-loop))))
+                (phase-loop (+ phase 1)))))
           (let augment-loop ()
             (let ((j1 (vector-ref way j0)))
               (vector-set! p j0 (vector-ref p j1))
