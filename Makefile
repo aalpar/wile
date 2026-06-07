@@ -415,6 +415,24 @@ covercheck: cover-scm
 	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
 	@bash $(SH_TOOLS_DIR)/covercheck.sh 80 $(GO_BUILD_DIR)/coverage.out
 
+# Run the SageMath algebra oracle live against the built binary (both phases).
+# Requires SageMath on PATH. Deliberately NOT part of `make ci` — CI has no
+# Sage dependency; the static snapshots in test/wile/sage-generated/ run via
+# cover-scm.
+#   make sage-verify
+.PHONY: sage-verify
+sage-verify: build
+	@command -v sage >/dev/null 2>&1 || { echo "sage not found on PATH; install SageMath >= 10.8 to run the algebra oracle" >&2; exit 1; }
+	WILE=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) sage tools/sage/verify_algebra.sage
+
+# Regenerate the static .scm snapshots in test/wile/sage-generated/.
+# A deliberate act: review and commit the regenerated files.
+#   make sage-snapshot
+.PHONY: sage-snapshot
+sage-snapshot: build
+	@command -v sage >/dev/null 2>&1 || { echo "sage not found on PATH; install SageMath >= 10.8 to regenerate snapshots" >&2; exit 1; }
+	WILE=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) sage tools/sage/verify_algebra.sage --snapshot
+
 # Run golangci-lint on all packages.
 #   make lint
 .PHONY: lint
