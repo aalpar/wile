@@ -964,6 +964,9 @@ def validate_heyting(args):
 
     def join(a, b):    return union(a, b)
     def meet(a, b):    return intersect(a, b)
+    # Wile derives negate as implies(a, bottom) = union(set-diff(U,a), '());
+    # union(x, '()) == x in both content and order, so set_diff(U,a) is the
+    # equivalent shortcut (heyting.scm:47).
     def neg(a):        return set_diff(universe, a)
     def implies(a, b): return union(set_diff(universe, a), b)
 
