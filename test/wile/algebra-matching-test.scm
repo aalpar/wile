@@ -476,3 +476,4 @@
                  '(1 2) '(a b)))))
 
 (test-end "matching")
+(test-exit)

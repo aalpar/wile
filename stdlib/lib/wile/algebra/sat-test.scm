@@ -88,4 +88,9 @@
 
 (if (zero? fail-count)
     (begin (display "OK: ") (display test-count) (display " tests passed") (newline))
-    (begin (display "FAIL: ") (display fail-count) (display "/") (display test-count) (newline)))
+    (begin (display "FAIL: ") (display fail-count) (display "/") (display test-count) (newline)
+           ;; Raise so the process exits non-zero — cover-scm.sh gates make
+           ;; covercheck on the exit code, so a silent display alone would let
+           ;; failures pass CI (the same gap (test-exit) closes for chibi-test
+           ;; files; this file uses a custom `check` harness instead).
+           (error "sat-test: assertions failed" fail-count test-count)))

@@ -155,3 +155,4 @@
         and))))
 
 (test-end)
+(test-exit)

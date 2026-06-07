@@ -686,3 +686,4 @@
   (test 30 z))
 
 (test-end)
+(test-exit)

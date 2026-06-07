@@ -31,3 +31,4 @@
   (test #f (not #t)))
 
 (test-end)
+(test-exit)

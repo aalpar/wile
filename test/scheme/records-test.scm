@@ -302,3 +302,4 @@
               (npt-x (line-end l))))))
 
 (test-end)
+(test-exit)

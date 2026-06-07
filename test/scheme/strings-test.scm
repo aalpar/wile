@@ -176,3 +176,4 @@
   (test-error (string-for-each (lambda (c) c) 42)))
 
 (test-end)
+(test-exit)

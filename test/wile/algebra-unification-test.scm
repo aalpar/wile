@@ -363,3 +363,4 @@
           (length (ac-unify lhs rhs-rev theory proto)))))
 
 (test-end "unification")
+(test-exit)

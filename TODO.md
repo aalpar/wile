@@ -45,27 +45,30 @@ Items that block production embedded use or prevent silent state corruption.
       limit (memory/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
       stack-overflow surface, but programmatically-constructed deep syntax
       (macro output, datum->syntax, quasiquote) can still overflow the expander.
-- [ ] **Stable-matching selectors fail + matching tests don't gate CI** [High, M]:
-      `test/wile/algebra-matching-test.scm` carries 3–4 failing assertions on
-      master that go undetected because the file ends with `(test-end "matching")`
-      and **no `(test-exit)`** — and `tools/sh/cover-scm.sh` gates `make covercheck`
-      on each test file's *process exit code*, not on `(chibi test)` assertion
-      counts, so the file exits 0 regardless of failures. Every other
-      `test/wile/algebra-*-test.scm` has `(test-exit)`. Failing groups (verified
-      against a fresh build, 2026-06-06):
-      - "rotations on cyclic 3x3 (multiple stable matchings)" — `expected 2 but got 1`
-      - "egalitarian and sex-equal selectors — 3x3 with interior optimum" —
-        `expected #t but got #f` and `expected #f but got #t`
-      These are real correctness bugs in `egalitarian-stable-matching` /
-      `sex-equal-stable-matching` (or the rotation enumeration they rest on), **not**
-      introduced by PR #767 (algebra non-termination guards), which discovered them
-      during crosscheck (tests + errors + code lenses independently flagged).
-      Fix sequence: (1) debug the selectors against the Roth–Sotomayor
-      rotation-poset definition; (2) once green, add `(test-exit)` to the matching
-      file so the suite gates CI like its siblings; (3) sweep all
-      `stdlib/lib/**/*-test.scm` and `test/**/*-test.scm` for the same
-      missing-`(test-exit)` gap — any file without it silently ignores assertion
-      failures under `cover-scm.sh`. Provenance: PR #767 crosscheck, 2026-06-06.
+- [x] **Stable-matching selectors fail + matching tests don't gate CI** [High, M, Done]:
+      **Root cause** (single bug, two symptoms): `walk-for-cycle` in
+      `stdlib/lib/wile/algebra/matching.scm` stored each rotation cycle in
+      *newest-first* (reversed) order because an extra `(reverse …)` undid the
+      oldest-first ordering the cons-accumulation already produced. `apply-rotation`
+      reads a cycle as "proposer mᵢ → receiver of m_{i+1}" (= successor(mᵢ)), which
+      only holds in oldest-first order. A 2-cycle is its own inverse, so the 2×2
+      fixtures masked it; for length-≥3 cycles the reversed traversal ran the
+      rotation backwards, collapsing M_top straight to M_bot and hiding the interior
+      matching. That made `rotations` return 1 instead of 2 ("expected 2 but got 1")
+      and made `enumerate-stable-matchings` (hence the Conway lattice) miss interior
+      stable matchings, so `sex-equal-stable-matching` couldn't find the |Δ|=0
+      optimum M₁ ("expected #t but got #f" / "expected #f but got #t"). **Fix**:
+      removed the stray `reverse` so the cycle is oldest-first. Verified `rotations`
+      now returns both ρ₁ (M_top→M₁) and ρ₂ (M₁→M_bot). **CI-gate gap**: added
+      `(test-exit)` to `algebra-matching-test.scm` and swept every `*-test.scm` under
+      `test/` and `stdlib/lib/` — 12 chibi-test files lacked `(test-exit)`
+      (characters, control, eval, exceptions, lazy, macros, numbers, ports, records,
+      smoke, strings scheme tests + algebra-unification); all now gated.
+      `stdlib/lib/wile/algebra/sat-test.scm` uses a custom `check` harness (not chibi
+      test) that displayed "FAIL:" but exited 0 — same silent-failure class, fixed by
+      raising `(error …)` in its FAIL branch. `stdlib/lib/wile/er-macro-test.scm` is a
+      macro fixture with no assertions (left as-is). `make lint` + `make covercheck`
+      green (53/53 scheme files, 0 failed). Provenance: PR #767 crosscheck, 2026-06-06.
 
 ---
 

@@ -661,3 +661,4 @@
   (test #t (u8-ready? (open-input-bytevector #u8()))))
 
 (test-end)
+(test-exit)

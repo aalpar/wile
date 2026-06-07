@@ -139,3 +139,4 @@
               (force p)))))
 
 (test-end)
+(test-exit)

@@ -325,3 +325,4 @@
           (lambda () (set! after-ran #t)))))))
 
 (test-end)
+(test-exit)

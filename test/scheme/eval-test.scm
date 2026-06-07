@@ -89,3 +89,4 @@
       list)))
 
 (test-end)
+(test-exit)

@@ -133,3 +133,4 @@
   (test-error (digit-value 5)))
 
 (test-end)
+(test-exit)
