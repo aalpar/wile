@@ -699,6 +699,8 @@ git commit -m "test(sage): interval arithmetic oracle (inf-aware Python referenc
 - Modify: `tools/sage/verify_algebra.sage` (+`validate_heyting`, register)
 - Create (generated): `test/wile/sage-generated/sage-structures-heyting-test.scm`
 
+> CORRECTION (during implementation): The Step 1 description below claims Wile's set ops "preserve universe order". That is FALSE. Wile's `union`/`intersect`/`set-diff` in `heyting.scm:85-99` traverse the first operand (`a`) in arrival order and append elements from `b` not in `a` — preserving **operand-traversal order**, not universe order. For example, `(heyting-join H '(a c) '(b))` → `(a c b)`, not `(a b c)`. The shipped validator replicates Wile's operand-traversal order by driving the oracle's `join`/`meet`/`neg`/`implies` to match that order rather than sorting. The `in_order` helper in the code below reflects what was originally written (universe-sorted inputs); the actual implementation used operand-replica logic to match Wile. See commit history for the final shipped form.
+
 - [ ] **Step 1: Add `validate_heyting`**
 
 Wile `(powerset-heyting universe)`: subsets as lists; join=union, meet=intersection, implies=(¬a ∪ b), negate=¬a, leq?=subset. Wile's set ops preserve universe order, so driving with universe-ordered operands makes results universe-ordered and deterministic.
@@ -765,7 +767,7 @@ def validate_heyting(args):
 - [ ] **Step 3: Run live**
 
 Run: `make sage-verify`
-Expected: `heyting... OK (N cases)`, no `FAIL`. Spot values: `(heyting-leq? H '(a) '(a b)) => #t`; `(heyting-meet H '(a b) '(b c)) => (b)`; `(heyting-negate H '(a)) => (b c)`. If a set-valued op `FAIL`s on ordering, confirm Wile returns results in universe order for universe-ordered inputs (`heyting.scm:85-99`); if not, switch those ops to compare via a sorted helper rather than raw `equal?`.
+Expected: `heyting... OK (N cases)`, no `FAIL`. Spot values: `(heyting-leq? H '(a) '(a b)) => #t`; `(heyting-meet H '(a b) '(b c)) => (b)`; `(heyting-negate H '(a)) => (b c)`. If a set-valued op `FAIL`s on ordering, note that Wile preserves operand-traversal order (not universe order — see CORRECTION note above); the reference implementation must replicate that order, not sort results.
 
 - [ ] **Step 4: Regenerate snapshot, run under wile**
 

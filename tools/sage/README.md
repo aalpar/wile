@@ -9,21 +9,23 @@ Cross-validates Wile's `(wile algebra)` libraries against SageMath.
 
 ## Usage
 
-    # Run both phases live (no file output)
-    sage tools/sage/verify_algebra.sage
+Preferred (via make; selects the host binary and guards on Sage):
 
-    # Structure validation only
-    sage tools/sage/verify_algebra.sage --phase structures
+    make sage-verify      # run both phases live against the built binary
+    make sage-snapshot    # regenerate static .scm snapshots in test/wile/sage-generated/
 
-    # Rewriting soundness only
-    sage tools/sage/verify_algebra.sage --phase rewriting
+Direct invocation (advanced):
 
-    # Generate static .scm test files for CI
-    sage tools/sage/verify_algebra.sage --snapshot
+    sage tools/sage/verify_algebra.sage                    # both phases, live
+    sage tools/sage/verify_algebra.sage --phase structures # structures only
+    sage tools/sage/verify_algebra.sage --phase rewriting  # rewriting only
+    sage tools/sage/verify_algebra.sage --snapshot         # write .scm files
+    sage tools/sage/verify_algebra.sage --seed 123         # custom RNG seed
 
-    # Custom RNG seed for exploration
-    sage tools/sage/verify_algebra.sage --seed 123
+Set `WILE=<path>` to point at a specific wile binary (the make targets do this
+for you). Snapshots are static and require no Sage at CI time.
 
 ## Design
 
-See `plans/2026-04-12-sage-algebra-validation-design.md`.
+See `memory/2026-04-12-sage-algebra-validation-design.md` and the coverage
+extension `plans/2026-06-07-sage-oracle-coverage-design.md`.

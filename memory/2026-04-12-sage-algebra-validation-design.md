@@ -57,6 +57,20 @@ Sage computes the expected values; Wile must match.
 | `tropical-semiring` | `TropicalSemiring()` | plus=min, times=+ |
 | `counting-semiring` | `ZZ` (as semiring) | plus=+, times=* |
 
+### Coverage Extension (June 2026)
+
+Six additional structures were added by the oracle coverage extension
+(`plans/2026-06-07-sage-oracle-coverage-design.md`). Each generates a snapshot in
+`test/wile/sage-generated/` with an `;;; Oracle source:` header line indicating
+how expected values were computed:
+
+- `polynomial` — `Sage-builtin`: Sage `PolynomialRing(ZZ/QQ)` for negate, derivative, degree, leading-coeff, eval, plus, minus, times, gcd.
+- `graph` — `Sage-builtin`: Sage graph invariants for spanning-tree count and chromatic polynomial across seven preset graphs.
+- `semiring-matrix` — `hybrid`: counting-semiring ops via Sage `Matrix(ZZ)`; tropical permanent and boolean closure via in-harness Python reference.
+- `group` — `hybrid`: cyclic group ops via Sage `Zmod(n)`; Burnside necklace counts via `euler_phi` + orbit formula.
+- `heyting` — `Python-reference`: powerset Heyting algebra (join/meet/implies/negate/leq?) against an in-harness Python reference that replicates Wile's operand-traversal order (not universe order; see Task 7 correction in the plan).
+- `interval` — `Python-reference`: interval arithmetic (add/sub/mul with inf-aware endpoints) against an in-harness Python reference mirroring Wile's infinity conventions.
+
 ### Test Vector Generation
 
 - Numeric (ring, field, modular): all pairs from sample range (e.g., -10..10)
