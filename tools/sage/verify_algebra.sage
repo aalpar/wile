@@ -932,6 +932,65 @@ def validate_interval(args):
         "sage-structures-interval", ["(wile algebra)"], cases, "Python-reference")
 
 
+def validate_heyting(args):
+    """Validate (wile algebra) powerset Heyting algebra against a Python
+    reference. The reference replicates Wile's set-op traversal order exactly
+    (union/intersect/set-diff in heyting.scm preserve operand order, NOT
+    universe order), so set-valued results match Wile's (display ...) output
+    element-for-element. Verifies VALUES; the order is Wile's deterministic
+    own order, reproduced rather than re-sorted."""
+    print("  heyting...", end=" ", flush=True)
+    universe = ["a", "b", "c"]          # the carrier universe (in this order)
+
+    def subsets(u):
+        out = [[]]
+        for x in u:
+            out += [s + [x] for s in out]
+        # each subset emitted in universe order (matches Wile operand literals)
+        return [[x for x in u if x in set(s)] for s in out]
+
+    subs = subsets(universe)
+
+    # Replicas of Wile's heyting.scm set ops (lines ~85-99). These preserve
+    # operand traversal order; do NOT canonicalise to universe order.
+    def union(a, b):       # cons a-not-in-b (a's order), then append b
+        return [x for x in a if x not in b] + list(b)
+
+    def intersect(a, b):   # a's elements that are in b, in a's order
+        return [x for x in a if x in b]
+
+    def set_diff(a, b):    # a's elements not in b, in a's order
+        return [x for x in a if x not in b]
+
+    def join(a, b):    return union(a, b)
+    def meet(a, b):    return intersect(a, b)
+    def neg(a):        return set_diff(universe, a)
+    def implies(a, b): return union(set_diff(universe, a), b)
+
+    def slit(s):  # Scheme quoted list of symbols in universe order
+        return "'(" + " ".join(s) + ")"
+
+    def H():
+        return f"(powerset-heyting '({' '.join(universe)}))"
+
+    cases = []
+    for a in subs:
+        cases.append((f"(heyting-negate {H()} {slit(a)})", neg(a)))
+        for b in subs:
+            cases.append((f"(heyting-leq? {H()} {slit(a)} {slit(b)})",
+                          set(a) <= set(b)))
+            cases.append((f"(heyting-join {H()} {slit(a)} {slit(b)})",
+                          join(a, b)))
+            cases.append((f"(heyting-meet {H()} {slit(a)} {slit(b)})",
+                          meet(a, b)))
+            cases.append((f"(heyting-implies {H()} {slit(a)} {slit(b)})",
+                          implies(a, b)))
+
+    return check_or_snapshot(
+        args, "sage-structures-heyting-test.scm",
+        "sage-structures-heyting", ["(wile algebra)"], cases, "Python-reference")
+
+
 # ---------------------------------------------------------------------------
 # Phase 1 entry point
 # ---------------------------------------------------------------------------
@@ -950,6 +1009,7 @@ def run_phase1(args):
     total_failures += validate_graph(args)
     total_failures += validate_group(args)
     total_failures += validate_interval(args)
+    total_failures += validate_heyting(args)
     if total_failures > 0:
         print(f"\nPhase 1: {total_failures} total failures")
     else:
