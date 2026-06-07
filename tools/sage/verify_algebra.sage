@@ -774,6 +774,87 @@ def validate_graph(args):
         "sage-structures-graph", ["(wile algebra)"], cases, "Sage-builtin")
 
 
+def validate_group(args):
+    """Validate (wile algebra) groups. cyclic ops -> Sage Zmod(n);
+    burnside-count -> Sage orbit counting under cyclic rotation."""
+    print("  group...", end=" ", flush=True)
+    cases = []
+
+    # --- cyclic group Z/nZ: group-op/-inverse/-order via Sage Zmod(n) ---
+    for n in [2, 3, 5, 6]:
+        Zn = Zmod(n)
+        cases.append((f"(group-order (cyclic-group {n}))", int(n)))
+        for a in range(n):
+            cases.append((f"(group-inverse (cyclic-group {n}) {a})",
+                          int(Zn(-a))))
+            for b in range(n):
+                cases.append((f"(group-op (cyclic-group {n}) {a} {b})",
+                              int(Zn(a + b))))
+
+    # --- Burnside: count distinct k-colourings of an n-cycle under rotation ---
+    # Wile: permutation-action of the rotation group on colourings, then
+    # burnside-count. Sage oracle: necklace count = (1/n) * sum_d phi(d) k^(n/d).
+    def necklace_count(n, k):
+        from sage.all import euler_phi, divisors
+        return int(sum(euler_phi(d) * k ** (n // d) for d in divisors(n)) // n)
+
+    # Build the rotation group action in Wile and oracle the orbit count.
+    # rotation r maps colouring vector index i -> (i+1) mod n; colourings are
+    # all length-n lists over 0..k-1. The Wile expression constructs the cyclic
+    # rotation action on colourings and counts orbits with burnside-count.
+    for n, k in [(3, 2), (4, 2), (4, 3), (5, 2), (6, 2)]:
+        wile_expr = (
+            f"(let* ((n {n}) (k {k})"
+            f"       (colourings (all-tuples n k))"
+            f"       (G (cyclic-group n))"
+            f"       (act (make-group-action G (lambda (c) #t)"
+            f"              (lambda (r c) (rotate-list c r)))))"
+            f"  (burnside-count act colourings))")
+        cases.append((wile_expr, necklace_count(n, k)))
+
+    # check_or_snapshot cannot inject a preamble, and the Burnside cases need
+    # two helpers (rotate-list, all-tuples) that do not exist in (wile algebra).
+    # Emit them as a snapshot preamble and prepend them to the live (begin ...).
+    preamble = (
+        "(define (rotate-list lst r)\n"
+        "  (let ((n (length lst)))\n"
+        "    (if (= n 0) lst\n"
+        "        (let loop ((i 0) (acc '()))\n"
+        "          (if (= i n) (reverse acc)\n"
+        "              (loop (+ i 1)\n"
+        "                    (cons (list-ref lst (modulo (+ i r) n)) acc)))))))\n"
+        "(define (all-tuples n k)\n"
+        "  (if (= n 0) '(())\n"
+        "      (let ((rest (all-tuples (- n 1) k)))\n"
+        "        (apply append\n"
+        "          (map (lambda (d) (map (lambda (t) (cons d t)) rest))\n"
+        "               (let lp ((i 0) (a '()))\n"
+        "                 (if (= i k) (reverse a) (lp (+ i 1) (cons i a)))))))))\n")
+    if not args.snapshot:
+        imp = "(import (wile algebra))"
+        disp = " ".join(f"(display {e}) (display #\\newline)" for e, _ in cases)
+        output = run_wile(f"{imp} {preamble} (begin {disp})")
+        results = output.split("\n") if output else []
+        failures = 0
+        if len(results) != len(cases):
+            print(f"\n    ERROR: expected {len(cases)} lines, got {len(results)}")
+            return len(cases)
+        for i, (e, expected) in enumerate(cases):
+            if results[i].strip() != to_wile_display(expected):
+                failures += 1
+                print(f"\n    FAIL: {e}\n      got {results[i].strip()!r}, "
+                      f"expected {to_wile_display(expected)!r}")
+        print(f"OK ({len(cases)} cases)" if failures == 0
+              else f"\n    {failures}/{len(cases)} FAILED")
+        return failures
+    else:
+        body = preamble + "\n" + "".join(
+            f"(test {to_wile_test_literal(exp)} {e})\n" for e, exp in cases)
+        write_snapshot("sage-structures-group-test.scm", "sage-structures-group",
+                       ["(wile algebra)"], body, args.seed, "hybrid")
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # Phase 1 entry point
 # ---------------------------------------------------------------------------
@@ -790,6 +871,7 @@ def run_phase1(args):
     total_failures += validate_polynomial(args)
     total_failures += validate_semiring_matrix(args)
     total_failures += validate_graph(args)
+    total_failures += validate_group(args)
     if total_failures > 0:
         print(f"\nPhase 1: {total_failures} total failures")
     else:
