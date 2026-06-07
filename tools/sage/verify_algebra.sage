@@ -17,7 +17,7 @@ import sys
 import os
 import random
 from datetime import date
-from itertools import combinations
+from itertools import combinations, permutations
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -697,13 +697,12 @@ def validate_semiring_matrix(args):
                 [[int(x) for x in row] for row in (MA * MB)]))
 
     # --- tropical semiring (min,+): Python reference for permanent ---
-    import itertools
     Trop = "(tropical-semiring)"
     trop_mats = [[[4, 1], [2, 5]], [[0, 3], [7, 0]], [[2, 9], [9, 2]]]
     def tperm(M):
         n = len(M)
         return min(sum(M[i][p[i]] for i in range(n))
-                   for p in itertools.permutations(range(n)))
+                   for p in permutations(range(n)))
     for A in trop_mats:
         cases.append((
             f"(let ((S {Trop})) (semiring-matrix-permanent (semiring-matrix-from-rows S {ilit(A)})))",
