@@ -462,9 +462,10 @@
 (test-group "tropical-assignment — infeasible instance caps (no silent hang)"
   ;; The docstring invites +inf.0 to forbid a (proposer, receiver) pair.
   ;; Forbidding ALL pairs leaves no finite perfect assignment, and the
-  ;; Hungarian phase-loop would spin forever. The per-row phase cap (n) raises
-  ;; instead — covering the equal-size case and the unequal-size case (where no
-  ;; synthetic columns are padded). A feasible instance still solves.
+  ;; Hungarian phase-loop would spin forever. The per-row phase cap raises
+  ;; instead — covering the equal-size case and the unequal-size case (3
+  ;; proposers, 2 receivers: padded to a 3x3 square, but both real receivers
+  ;; are +inf.0, so no completion exists). A feasible instance still solves.
   (test-error (tropical-assignment (lambda (p r) +inf.0) '(1 2) '(a b)))
   (test-error (tropical-assignment (lambda (p r) +inf.0) '(1 2 3) '(a b)))
   (test 2 (cdr (tropical-assignment
