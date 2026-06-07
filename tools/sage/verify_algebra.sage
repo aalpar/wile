@@ -666,6 +666,76 @@ def validate_polynomial(args):
         "sage-structures-polynomial", ["(wile algebra)"], cases, "Sage-builtin")
 
 
+def validate_semiring_matrix(args):
+    """Validate (wile algebra) semiring matrices. counting -> Sage Matrix(ZZ);
+    tropical/boolean -> in-harness Python reference."""
+    print("  semiring-matrix...", end=" ", flush=True)
+    cases = []
+
+    def rows_lit(rows, fmt):
+        return "'(" + " ".join("(" + " ".join(fmt(x) for x in r) + ")"
+                               for r in rows) + ")"
+
+    # --- counting semiring: Sage Matrix(ZZ) ---
+    Cnt = "(counting-semiring)"
+    int_mats = [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[1, 1], [0, 1]], [[2, 0], [1, 3]]]
+    def ilit(rows): return rows_lit(rows, lambda x: str(int(x)))
+    for A in int_mats:
+        MA = Matrix(ZZ, A)
+        cases.append((
+            f"(let ((S {Cnt})) (semiring-matrix-permanent (semiring-matrix-from-rows S {ilit(A)})))",
+            int(MA.permanent())))
+        for k in [0, 1, 2, 3]:
+            cases.append((
+                f"(let ((S {Cnt})) (semiring-matrix->rows (semiring-matrix-power (semiring-matrix-from-rows S {ilit(A)}) {k})))",
+                [[int(x) for x in row] for row in (MA ** k)]))
+        for B in int_mats:
+            MB = Matrix(ZZ, B)
+            cases.append((
+                f"(let ((S {Cnt})) (semiring-matrix->rows (semiring-matrix-mul "
+                f"(semiring-matrix-from-rows S {ilit(A)}) (semiring-matrix-from-rows S {ilit(B)}))))",
+                [[int(x) for x in row] for row in (MA * MB)]))
+
+    # --- tropical semiring (min,+): Python reference for permanent ---
+    import itertools
+    Trop = "(tropical-semiring)"
+    trop_mats = [[[4, 1], [2, 5]], [[0, 3], [7, 0]], [[2, 9], [9, 2]]]
+    def tperm(M):
+        n = len(M)
+        return min(sum(M[i][p[i]] for i in range(n))
+                   for p in itertools.permutations(range(n)))
+    for A in trop_mats:
+        cases.append((
+            f"(let ((S {Trop})) (semiring-matrix-permanent (semiring-matrix-from-rows S {ilit(A)})))",
+            int(tperm(A))))
+
+    # --- boolean semiring: Python reference for closure (reflexive-transitive) ---
+    Bool = "(boolean-semiring)"
+    def blit(rows): return rows_lit(rows, lambda b: "#t" if b else "#f")
+    bool_mats = [
+        [[False, True, False], [False, False, True], [False, False, False]],
+        [[True, False], [True, False]],
+    ]
+    def bclosure(M):
+        n = len(M)
+        # reflexive-transitive closure (I + M + M^2 + ...), Floyd-Warshall style
+        R = [[(M[i][j] or i == j) for j in range(n)] for i in range(n)]
+        for k in range(n):
+            for i in range(n):
+                for j in range(n):
+                    if R[i][k] and R[k][j]:
+                        R[i][j] = True
+        return R
+    for A in bool_mats:
+        cases.append((
+            f"(let ((S {Bool})) (semiring-matrix->rows (semiring-matrix-closure (semiring-matrix-from-rows S {blit(A)}))))",
+            bclosure(A)))
+
+    return check_or_snapshot(
+        args, "sage-structures-semiring-matrix-test.scm",
+        "sage-structures-semiring-matrix", ["(wile algebra)"], cases, "hybrid")
+
+
 def validate_graph(args):
     """Validate (wile algebra combinatorial-graph) invariants against Sage."""
     print("  graph...", end=" ", flush=True)
@@ -719,6 +789,7 @@ def run_phase1(args):
     total_failures += validate_boolean_semiring(args)
     total_failures += validate_tropical_semiring(args)
     total_failures += validate_polynomial(args)
+    total_failures += validate_semiring_matrix(args)
     total_failures += validate_graph(args)
     if total_failures > 0:
         print(f"\nPhase 1: {total_failures} total failures")
