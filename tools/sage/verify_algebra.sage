@@ -126,14 +126,17 @@ def to_wile_test_literal(v):
         return str(v)
     return "'" + to_wile_display(v)
 
-def check_or_snapshot(args, filename, test_name, imports, cases, oracle_source):
+def check_or_snapshot(args, filename, test_name, imports, cases, oracle_source,
+                      preamble=""):
     """cases: list of (expr_str, expected_python_value). Each expr is a
-    self-contained Scheme expression evaluated under `imports`."""
+    self-contained Scheme expression evaluated under `imports`.
+    `preamble`: optional Scheme definitions injected before the cases in both
+    the live run and the snapshot (e.g. helper procedures a validator needs)."""
     failures = 0
     if not args.snapshot:
         imp = " ".join(f"(import {i})" for i in imports)
         disp = " ".join(f"(display {e}) (display #\\newline)" for e, _ in cases)
-        output = run_wile(f"{imp} (begin {disp})")
+        output = run_wile(f"{imp} {preamble} (begin {disp})")
         results = output.split("\n") if output else []
         if len(results) != len(cases):
             print(f"\n    ERROR: expected {len(cases)} lines, got {len(results)}")
@@ -147,7 +150,7 @@ def check_or_snapshot(args, filename, test_name, imports, cases, oracle_source):
         print(f"OK ({len(cases)} cases)" if failures == 0
               else f"\n    {failures}/{len(cases)} FAILED")
     else:
-        body = "".join(
+        body = (preamble + "\n" if preamble else "") + "".join(
             f"(test {to_wile_test_literal(exp)} {e})\n" for e, exp in cases)
         write_snapshot(filename, test_name, imports, body, args.seed, oracle_source)
     return failures
@@ -812,9 +815,8 @@ def validate_group(args):
             f"  (burnside-count act colourings))")
         cases.append((wile_expr, necklace_count(n, k)))
 
-    # check_or_snapshot cannot inject a preamble, and the Burnside cases need
-    # two helpers (rotate-list, all-tuples) that do not exist in (wile algebra).
-    # Emit them as a snapshot preamble and prepend them to the live (begin ...).
+    # The Burnside cases need two helpers (rotate-list, all-tuples) that do not
+    # exist in (wile algebra); inject them via check_or_snapshot's preamble.
     preamble = (
         "(define (rotate-list lst r)\n"
         "  (let ((n (length lst)))\n"
@@ -830,29 +832,9 @@ def validate_group(args):
         "          (map (lambda (d) (map (lambda (t) (cons d t)) rest))\n"
         "               (let lp ((i 0) (a '()))\n"
         "                 (if (= i k) (reverse a) (lp (+ i 1) (cons i a)))))))))\n")
-    if not args.snapshot:
-        imp = "(import (wile algebra))"
-        disp = " ".join(f"(display {e}) (display #\\newline)" for e, _ in cases)
-        output = run_wile(f"{imp} {preamble} (begin {disp})")
-        results = output.split("\n") if output else []
-        failures = 0
-        if len(results) != len(cases):
-            print(f"\n    ERROR: expected {len(cases)} lines, got {len(results)}")
-            return len(cases)
-        for i, (e, expected) in enumerate(cases):
-            if results[i].strip() != to_wile_display(expected):
-                failures += 1
-                print(f"\n    FAIL: {e}\n      got {results[i].strip()!r}, "
-                      f"expected {to_wile_display(expected)!r}")
-        print(f"OK ({len(cases)} cases)" if failures == 0
-              else f"\n    {failures}/{len(cases)} FAILED")
-        return failures
-    else:
-        body = preamble + "\n" + "".join(
-            f"(test {to_wile_test_literal(exp)} {e})\n" for e, exp in cases)
-        write_snapshot("sage-structures-group-test.scm", "sage-structures-group",
-                       ["(wile algebra)"], body, args.seed, "hybrid")
-        return 0
+    return check_or_snapshot(
+        args, "sage-structures-group-test.scm", "sage-structures-group",
+        ["(wile algebra)"], cases, "hybrid", preamble=preamble)
 
 
 # ---------------------------------------------------------------------------
