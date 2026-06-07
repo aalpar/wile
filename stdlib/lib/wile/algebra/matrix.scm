@@ -1082,7 +1082,16 @@
           ;; updates, so the guard is (>= iter max-iter) rather than >.
           (let loop ((T I) (iter 0))
             (if (>= iter max-iter)
-                (error "semiring-matrix-closure: did not converge" max-iter)
+                (error (string-append
+                        "semiring-matrix-closure: did not converge within "
+                        (number->string max-iter)
+                        " iterations — the series M* = I + M + M^2 + ... does not"
+                        " saturate for this semiring (e.g. a non-idempotent counting"
+                        " carrier on a cyclic matrix). Remedies: use an idempotent /"
+                        " cycle-safe semiring (boolean, tropical, or"
+                        " saturating-counting-semiring), or raise the optional"
+                        " max-iterations argument if convergence is merely slow")
+                       (list 'max-iterations max-iter))
                 (let ((T* (semiring-matrix-add I (semiring-matrix-mul M T))))
                   (if (equal? (smat-data T) (smat-data T*))
                       T

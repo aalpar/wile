@@ -358,6 +358,17 @@
 
 ;;; -- BFS closure (tier-2 → tier-1) --
 
+;; Default backstop for the tier-2 BFS closure when the caller supplies no
+;; (max-size . N). A tier-2 neighbor-fn can describe an infinite graph (e.g.
+;; a successor over the integers), in which case the frontier never empties
+;; and the closure hangs silently. This cap turns that into a remedy-pointing
+;; error (mirrors dataflow.scm/graph.scm). Membership is O(n) per step
+;; (setoid-member? over `seen`), so on a truly infinite generator the cap
+;; surfaces only after ~cap^2 work; a caller who wants a fast, precise failure
+;; should pass an explicit small (max-size . N). 100000 is beyond any
+;; realistic interactive finite graph.
+(define %default-graph-closure-cap 100000)
+
 (define (enumerate-finite-graph G . opts)
   "Promote a finitely-generated graph to a finite graph by enumerating its\nvertices via BFS closure from the seed under the neighbor-fn.\nIdempotent: if G is already tier-1 (has an enumerated adjacency), G is\nreturned unchanged.\n\nThe enumerated result preserves G's directed?, multi?, self-loops?,\nsetoid AND the original seed/neighbor-fn (so the result stays a tier-2\ngraph with a precomputed adjacency — the adjacency and the generator\nare internally coherent, bypassing the Q-d rejection that applies to\nuser-constructed tier-1/tier-2 coexistence).\n\nOptional trailing alist entries:\n  (max-size . N) — abort with an error if closure exceeds N vertices\n\nParameters:\n  G : graph\n  opts : alist\nReturns: graph\nCategory: algebra\nKeywords: enumerate, BFS closure, tier promotion\n\nSee also: `finite-graph?', `finitely-generated-graph?'."
   (cond
@@ -367,7 +378,10 @@
      (let* ((S        (graph-setoid G))
             (seed     (graph-seed G))
             (nfn      (graph-neighbor-fn G))
-            (max-size (assv-or opts 'max-size #f)))
+            (max-size (assv-or opts 'max-size #f))
+            ;; No max-size: fall back to the default cap so an infinite
+            ;; neighbor-fn raises instead of hanging.
+            (cap      (or max-size %default-graph-closure-cap)))
        (let loop ((frontier (list seed))
                   (seen     (list seed))
                   (size     1)
@@ -405,9 +419,19 @@
                        (map car nbrs)))
                    (new-vs* (setoid-dedup S new-vs))
                    (new-size (+ size (length new-vs*))))
-              (when (and max-size (> new-size max-size))
-                (error "enumerate-finite-graph: closure exceeded max-size"
-                       max-size))
+              (when (> new-size cap)
+                (if max-size
+                    (error "enumerate-finite-graph: closure exceeded max-size"
+                           (list 'max-size max-size 'seed seed))
+                    (error (string-append
+                            "enumerate-finite-graph: closure exceeded the default cap of "
+                            (number->string %default-graph-closure-cap)
+                            " vertices without terminating — the neighbor-fn likely"
+                            " generates an infinite graph (e.g. a successor over the"
+                            " integers). Remedies: pass an explicit (max-size . N) to"
+                            " bound the closure, or supply a neighbor-fn with a finite"
+                            " reachable set")
+                           (list 'seed seed 'cap %default-graph-closure-cap))))
               (loop (append rest new-vs*)
                     (append seen new-vs*)
                     new-size
