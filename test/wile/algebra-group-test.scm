@@ -566,7 +566,16 @@
     (test-error (orbit AZ 0 '(max-size . 100)))
     ;; A finite orbit of an infinite group (Z acting on Z/12Z) still enumerates.
     (let ((A12 (make-group-action Z integer? (lambda (g x) (modulo (+ g x) 12)))))
-      (test 12 (length (orbit A12 0))))))
+      (test 12 (length (orbit A12 0)))))
+  ;; orbit's explicit (max-size . N) also caps the finite element-enumeration
+  ;; branch (a group with an elements list but no generators takes that path);
+  ;; the option means the same thing on both branches.
+  (let* ((Z4 (make-group (lambda (a b) (modulo (+ a b) 4)) 0
+                         (lambda (k) (modulo (- 4 k) 4))
+                         (cons 'elements '(0 1 2 3))))
+         (A4 (make-group-action Z4 integer? (lambda (g x) (modulo (+ g x) 4)))))
+    (test-error (orbit A4 0 '(max-size . 1)))
+    (test 4 (length (orbit A4 0)))))
 
 (test-end)
 (test-exit)

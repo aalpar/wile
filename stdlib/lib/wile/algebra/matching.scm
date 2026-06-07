@@ -626,11 +626,12 @@
                       "kuhn-munkres-square: row " (number->string i)
                       " exceeded " (number->string n)
                       " augmenting-path phases without reaching a free column — the"
-                      " cost matrix has no finite perfect assignment (some row or"
-                      " column is reachable only at +inf.0). Remedy: ensure every"
-                      " row and column has at least one finite-cost cell, or use"
-                      " tropical-assignment with unequal-size sides (which pads with"
-                      " finite synthetic columns and returns a partial matching)")
+                      " cost matrix has no finite perfect assignment (every"
+                      " completion is forced through a +inf.0 / forbidden cell)."
+                      " Remedy: ensure the finite-cost cells admit a complete"
+                      " assignment — every proposer must reach a receiver at finite"
+                      " cost, and collectively the proposers must reach enough"
+                      " distinct finite-cost receivers to cover them all")
                      (list 'row i 'dimension n)))
             (vector-set! used j0 #t)
             (let ((i0 (vector-ref p j0))
