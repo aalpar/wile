@@ -374,7 +374,7 @@ Keywords: partition, balanced cut, kernighan-lin, fiduccia-mattheyses, package s
 
 ## Verification (definition of done)
 
-- [ ] `make lint && make covercheck` both pass (CLAUDE.md: the build is not clean until both pass).
+- [x] `make lint` (0 issues) && `make covercheck` (all 41 packages ≥80%) both pass.
 - [x] New `graph-partition` tests pass (4 groups; 326 total in `algebra-combinatorial-graph-test.scm`).
 - [x] `(import (wile algebra))` exposes `graph-partition` (umbrella re-export wired; verified).
 - [x] No new external dependency introduced (Scheme-only change).
