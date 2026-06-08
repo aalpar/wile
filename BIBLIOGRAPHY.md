@@ -791,7 +791,10 @@ Graph invariants computed by the `combinatorial-graph` library rest on classical
 results: spanning-tree count via Kirchhoff's Matrix-Tree theorem, the chromatic
 polynomial via Whitney/Tutte deletion-contraction, the Tutte polynomial,
 canonical labeling for isomorphism (McKay–Piperno), bipartite matching
-(Hopcroft–Karp), and strongly-connected components (Tarjan).
+(Hopcroft–Karp), and strongly-connected components (Tarjan). The `graph-partition`
+balanced-cut primitive uses Kernighan–Lin pair-swaps (Fiduccia–Mattheyses is the
+linear-time single-move variant; not used because it deadlocks under a tight
+balance from a balanced seed — see `plans/2026-06-08-balanced-graph-partition-design.md`).
 
 - **Reference**: Chris Godsil, Gordon Royle, *Algebraic Graph Theory*, Springer, 2001 (ISBN 978-0-387-95220-8)
 - **Reference**: Reinhard Diestel, *Graph Theory*, 5th edition, Springer, 2017 (ISBN 978-3-662-53621-6)
@@ -801,6 +804,8 @@ canonical labeling for isomorphism (McKay–Piperno), bipartite matching
 - **Paper**: Brendan D. McKay, Adolfo Piperno, "Practical graph isomorphism, II", *J. Symbolic Comput.* 60, 2014
 - **Paper**: John E. Hopcroft, Richard M. Karp, "An n^{5/2} algorithm for maximum matchings in bipartite graphs", *SIAM J. Comput.* 2(4), 1973
 - **Paper**: Robert E. Tarjan, "Depth-first search and linear graph algorithms", *SIAM J. Comput.* 1(2), 1972
+- **Paper**: Brian W. Kernighan, Shen Lin, "An efficient heuristic procedure for partitioning graphs", *Bell System Technical Journal* 49(2), 1970 (`graph-partition` balanced cut)
+- **Paper**: C. M. Fiduccia, R. M. Mattheyses, "A linear-time heuristic for improving network partitions", *19th Design Automation Conf.*, 1982 (single-move variant; rejected, see design doc §5)
 - **Location**: `stdlib/lib/wile/algebra/combinatorial-graph.scm`, `graph.scm`, `incidence.scm`
 
 ### Polynomial Rings & Computer Algebra (von zur Gathen & Gerhard 2013)

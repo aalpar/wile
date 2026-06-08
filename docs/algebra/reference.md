@@ -949,6 +949,12 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 
 - `(graph-maximum-bipartite-matching G)` -- Hopcroft-Karp matching as an alist of pairs; raises if not bipartite
 
+### Partition (balanced cut)
+
+- `(graph-partition G [opts...])` -- two-way partition minimizing cut weight at a fixed balance, via Kernighan-Lin pair-swaps. Returns an alist with keys `group-a`, `group-b`, `cut-weight`, `sizes` (`(NA . NB)`), and `normalized-cut` (`cut-weight / total-edge-weight`; a cost, lower is better; `0.0` if no edges).
+  - **This is a *balanced* cut, NOT a minimum cut.** A global minimum cut degenerates to isolating a single vertex, so KL holds the partition sizes (set by the seed) and optimizes only the cut. The s–t and global min-cut algorithms (Ford-Fulkerson, Dinic, Karger, Stoer-Wagner) were considered and rejected; see `plans/2026-06-08-balanced-graph-partition-design.md` §4 for why.
+  - Opts (trailing alist entries): `(method . 'kernighan-lin)` (default; only value), `(balance . 0.25)` (imbalance tolerance in `(0,1)`, bounding the seed ratio KL preserves), `(weight . PROC)` (`edge-data -> non-negative number`; default unit weight), `(seed . ALIST)` (`vertex -> 'a|'b`; default balanced `⌈n/2⌉` split).
+
 ### Validation
 
 - `(validate-graph G)` / `(assert-graph G)` / `(with-graph G ...)` -- standard validation pattern
