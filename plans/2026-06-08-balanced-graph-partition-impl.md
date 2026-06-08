@@ -64,7 +64,7 @@ objective, the rejected-algorithm rationale, and the KL/FM decision live there).
 
 **Files:** modify `combinatorial-graph.scm`.
 
-- [ ] **Step 1: `%weight-of` and `%cut-weight`.**
+- [x] **Step 1: `%weight-of` and `%cut-weight`.**
 
 ```scheme
 ;; Weight accessor: (weight-fn edge-data) -> non-negative number. Default 1.
@@ -101,13 +101,13 @@ objective, the rejected-algorithm rationale, and the KL/FM decision live there).
         (graph-edges G)))
 ```
 
-- [ ] **Step 2: `%default-seed` — deterministic balanced bipartition.**
+- [x] **Step 2: `%default-seed` — deterministic balanced bipartition.**
 
 Split `(graph-vertices G)` (adjacency-order, deterministic) into first ⌈n/2⌉ → `'a`, rest → `'b`.
 Returns an alist `vertex → 'a|'b`. The consumer (Phase 2) overrides this via `'seed` with the
 FCA-derived bipartition; the default exists so the primitive is callable standalone.
 
-- [ ] **Step 3: `%partition-gain`, `%edge-weight`, `%allowed-diff`.**
+- [x] **Step 3: `%partition-gain`, `%edge-weight`, `%allowed-diff`.**
 
 `%partition-gain` is the per-vertex gain `D(v)` = (opposite-side incident weight) − (same-side
 incident weight). KL's *swap* gain is `D(v) + D(u) − 2·w(v,u)`, where `%edge-weight` supplies
@@ -151,7 +151,7 @@ there is no `%movable?`.
        (min (exact (floor (* tol n))) (- n 2))))
 ```
 
-- [ ] **Step 4: `%default-seed`, `%validate-seed`, and `%kl-refine` — the KL pass loop.**
+- [x] **Step 4: `%default-seed`, `%validate-seed`, and `%kl-refine` — the KL pass loop.**
 
 A *pass* makes a sequence of pair-swaps, then keeps the best prefix:
 - Unlock all. Repeatedly pick the unlocked `(v∈A, u∈B)` maximizing `D(v)+D(u)−2·w(v,u)` (D computed
@@ -257,7 +257,7 @@ is finite ⇒ termination. The `guard` is a graceful backstop (returns the curre
 
 **Files:** modify `combinatorial-graph.scm`, `combinatorial-graph.sld`.
 
-- [ ] **Step 1: opts discipline + validation (mirror `make-graph`).**
+- [x] **Step 1: opts discipline + validation (mirror `make-graph`).**
 
 ```scheme
 (define (graph-partition G . opts)
@@ -300,7 +300,7 @@ Keywords: partition, balanced cut, kernighan-lin, fiduccia-mattheyses, package s
     ))
 ```
 
-- [ ] **Step 2: result projection.** Build `group-a`/`group-b` by iterating `(graph-vertices G)`
+- [x] **Step 2: result projection.** Build `group-a`/`group-b` by iterating `(graph-vertices G)`
   in order and bucketing each vertex by `(%side-of (graph-setoid G) side v)` — this preserves
   deterministic adjacency order, so **no sort is needed** (the first draft said "sorted", which was
   both unnecessary work and ambiguous for setoid-typed vertices). Report `(sizes . (NA . NB))` as
@@ -314,28 +314,28 @@ Keywords: partition, balanced cut, kernighan-lin, fiduccia-mattheyses, package s
   `balance` tolerance — same key, two meanings) and `quality`→`normalized-cut` (the value is a
   *cost*; naming a cost "quality" inverts the usual higher-is-better reading). Design doc §6 updated
   to match.
-- [ ] **Step 3: degenerate-input guards.** `n < 2` → single group, `cut-weight 0`,
+- [x] **Step 3: degenerate-input guards.** `n < 2` → single group, `cut-weight 0`,
   `normalized-cut 0.0`, `sizes (n . 0)`. Empty graph (`n = 0`) → both groups empty, `sizes (0 . 0)`.
   Disconnected graph → KL still runs (it just holds the seed ratio; an all-isolated graph yields
   the seed split at cut 0). How `n = 2` and small/odd `n` interact with the balance bound is
   governed by Q-1 (the `%allowed-diff` clamp, applied to the seed).
-- [ ] **Step 4: export.** Add `graph-partition` to `combinatorial-graph.sld` `(export ...)` and to
+- [x] **Step 4: export.** Add `graph-partition` to `combinatorial-graph.sld` `(export ...)` and to
   the umbrella `algebra.sld` export list.
 
 ## Task 3 — Tests (`test/wile/algebra-combinatorial-graph-test.scm`)
 
-- [ ] **Step 1: planted balanced cut.** Two K₃ cliques joined by one light bridge edge; assert
+- [x] **Step 1: planted balanced cut.** Two K₃ cliques joined by one light bridge edge; assert
   `graph-partition` recovers the two cliques and `cut-weight` equals the bridge weight.
   **Order the adjacency so the default ⌈n/2⌉ seed does NOT already coincide with the planted cut**
   (e.g. interleave the two cliques' vertices). Otherwise FM starts on the answer, does zero work,
   and the test exercises only `%default-seed` — not the refinement it is meant to verify.
-- [ ] **Step 2: seed-imbalance rejection (KL balance semantics).** A 3/1 seed under `tol = 0.25`
+- [x] **Step 2: seed-imbalance rejection (KL balance semantics).** A 3/1 seed under `tol = 0.25`
   (allowed_diff = 1) is rejected by `%validate-seed` (`test-error`) — demonstrating that `balance`
   bounds the seed ratio KL preserves. (The earlier "FM tolerance permits 60/12" framing no longer
   applies: with KL an unequal split is *seeded*, not discovered at search time.)
-- [ ] **Step 3: determinism.** Same graph + same seed ⇒ `equal?` results across two calls
+- [x] **Step 3: determinism.** Same graph + same seed ⇒ `equal?` results across two calls
   (Scheme values — assert with `equal?`, not "byte-identical").
-- [ ] **Step 4: degeneracy guard (designed 2026-06-08).**
+- [x] **Step 4: degeneracy guard (designed 2026-06-08).**
 
 > The test that validates the entire §4 rationale: on a star, the global min-cut isolates one leaf
 > (cut 1); the balanced partition must refuse that and pay a larger cut. Designed at the user's
@@ -378,7 +378,9 @@ Keywords: partition, balanced cut, kernighan-lin, fiduccia-mattheyses, package s
 - [x] New `graph-partition` tests pass (4 groups; 326 total in `algebra-combinatorial-graph-test.scm`).
 - [x] `(import (wile algebra))` exposes `graph-partition` (umbrella re-export wired; verified).
 - [x] No new external dependency introduced (Scheme-only change).
-- [ ] Branch → PR per CLAUDE.md (never commit to master); do not merge without instruction.
+- [x] Branch `feat/graph-partition` pushed to origin (6 commits). PR intentionally **not** opened
+  per user instruction (2026-06-08); branch carries two unrelated commits (fca perf, threading
+  benchmark) that would need separating before any future PR. Not merged.
 
 ## Open questions (from 2026-06-08 review)
 
