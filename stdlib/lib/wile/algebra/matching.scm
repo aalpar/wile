@@ -686,7 +686,7 @@
       result)))
 
 (define (egalitarian-stable-matching prop-prefs recv-prefs)
-  "Return the stable matching minimizing total-sum-of-ranks across both sides.\nNP-hard in general (Iwama-Manlove 1999); v1 brute-forces the enumerated stable set,\nso practical only for ~10 agents per side. See `stable-matching-lattice` for the\nunderlying enumeration.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: egalitarian, stable matching, minimum sum rank, NP-hard"
+  "Return the stable matching minimizing total-sum-of-ranks across both sides.\nSolvable in polynomial time (Irving-Leather-Gusfield 1987) via minimum-weight\nclosed subsets of the rotation poset; v1 brute-forces the enumerated stable set\ninstead, so practical only for ~10 agents per side. See `stable-matching-lattice`\nfor the underlying enumeration.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: egalitarian, stable matching, minimum sum rank, polynomial"
   (let* ((L (stable-matching-lattice prop-prefs recv-prefs))
          (matchings (lattice-elements L)))
     (define (sum-rank M)
@@ -710,7 +710,7 @@
               (else (loop (cdr xs) best best-score)))))))))
 
 (define (sex-equal-stable-matching prop-prefs recv-prefs)
-  "Return the stable matching minimizing |sum-rank-proposers − sum-rank-receivers|.\nNP-hard in general; same brute-force caveat as egalitarian-stable-matching.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: sex-equal, stable matching, balanced, NP-hard"
+  "Return the stable matching minimizing |sum-rank-proposers − sum-rank-receivers|.\nNP-hard (Kato 1993), unlike the polynomial egalitarian variant; v1 brute-forces\nthe enumerated stable set, so practical only for ~10 agents per side.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: sex-equal, stable matching, balanced, NP-hard"
   (let* ((L (stable-matching-lattice prop-prefs recv-prefs))
          (matchings (lattice-elements L)))
     (define (imbalance M)

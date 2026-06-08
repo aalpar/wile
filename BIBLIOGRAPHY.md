@@ -683,6 +683,169 @@ Used for Unicode case mapping operations.
 
 - **Documentation**: https://pkg.go.dev/golang.org/x/text/cases
 
+## Algebra & Combinatorics
+
+Canonical references for the `(wile algebra ...)` libraries — graph and
+combinatorial abstract algebra. Many of these are also cited inline in the
+relevant library docstrings; this section is the consolidated index.
+
+### Lattice Theory & Birkhoff Representation (Birkhoff 1937)
+
+Finite distributive lattices are, up to isomorphism, the downset lattices of
+their poset of join-irreducibles (Birkhoff's representation theorem). Wile uses
+this both directly (`lattice` Birkhoff representation/reconstruction roundtrip)
+and structurally — the Conway lattice of stable matchings is built by treating
+rotations as join-irreducibles. Heyting algebras add relative pseudo-complement
+(`⇒`) over a bounded distributive lattice.
+
+- **Paper**: Garrett Birkhoff, "Rings of sets", *Duke Math. J.* 3(3), 1937
+- **Reference**: Garrett Birkhoff, *Lattice Theory*, 3rd edition, AMS Colloquium Publications, 1967
+- **Reference**: B. A. Davey, H. A. Priestley, *Introduction to Lattices and Order*, 2nd edition, Cambridge University Press, 2002 (ISBN 978-0-521-78451-1)
+- **Reference**: George Grätzer, *Lattice Theory: Foundation*, Birkhäuser, 2011 (ISBN 978-3-0348-0017-4)
+- **Location**: `stdlib/lib/wile/algebra/lattice.scm`, `heyting.scm`, `order.scm`
+
+### Formal Concept Analysis (Ganter & Wille 1999)
+
+A formal context (objects × attributes × incidence) induces a complete lattice
+of concepts via the Galois connection between extents and intents. This is the
+mathematical foundation of the `fca` library and connects to the lattice and
+Galois-connection libraries.
+
+- **Reference**: Bernhard Ganter, Rudolf Wille, *Formal Concept Analysis: Mathematical Foundations*, Springer, 1999 (ISBN 978-3-540-62771-5)
+- **Location**: `stdlib/lib/wile/algebra/fca.scm`, `galois.scm`
+
+### Incidence Algebras & Möbius Functions (Rota 1964)
+
+The incidence algebra of a locally-finite poset, with its Möbius function as the
+multiplicative inverse of the zeta function, unifies inclusion-exclusion,
+number-theoretic Möbius inversion, and combinatorial counting. Foundation of the
+`incidence` library.
+
+- **Paper**: Gian-Carlo Rota, "On the foundations of combinatorial theory I: Theory of Möbius functions", *Z. Wahrscheinlichkeitstheorie* 2, 1964
+- **Reference**: Richard P. Stanley, *Enumerative Combinatorics, Vol. 1*, 2nd edition, Cambridge University Press, 2011 (Ch. 3; ISBN 978-1-107-60262-5)
+- **Location**: `stdlib/lib/wile/algebra/incidence.scm`
+
+### Group Actions & Pólya–Burnside Enumeration (Pólya 1937)
+
+The number of orbits of a finite group action equals the average number of
+fixed points over the group (the Cauchy–Frobenius / "Burnside" lemma); Pólya's
+enumeration theorem refines this for colorings (e.g. counting necklaces — `k`
+colorings of an `n`-cycle up to rotation). Foundation of the `group` library's
+orbit/stabilizer/`burnside-count` operations; the necklace closed form
+`(1/n)·Σ_{d|n} φ(d)·k^(n/d)` is used as the independent oracle in the Sage
+validation harness.
+
+- **Reference**: William Burnside, *Theory of Groups of Finite Order*, 2nd edition, Cambridge University Press, 1911
+- **Paper**: George Pólya, "Kombinatorische Anzahlbestimmungen für Gruppen, Graphen und chemische Verbindungen", *Acta Math.* 68, 1937
+- **Paper**: J. Howard Redfield, "The theory of group-reduced distributions", *Amer. J. Math.* 49(3), 1927
+- **Reference**: David S. Dummit, Richard M. Foote, *Abstract Algebra*, 3rd edition, Wiley, 2004 (ISBN 978-0-471-43334-7)
+- **Location**: `stdlib/lib/wile/algebra/group.scm`; `tools/sage/verify_algebra.sage` (`validate_group`)
+
+### Stable Matching & the Assignment Problem (Gale & Shapley 1962)
+
+Gale–Shapley deferred acceptance produces a stable matching; the set of stable
+matchings forms a distributive lattice (Conway), traversed by rotations
+(Gusfield–Irving). Egalitarian stable matching (minimize total rank-sum) is
+**polynomial** (Irving–Leather–Gusfield 1987); the sex-equal variant (minimize
+|rank-sum difference|) is **NP-hard** (Kato 1993). The minimum-cost assignment
+(`tropical-assignment`) uses the Hungarian algorithm. Foundation of the
+`matching` library.
+
+- **Paper**: David Gale, Lloyd S. Shapley, "College admissions and the stability of marriage", *Amer. Math. Monthly* 69(1), 1962
+- **Reference**: Dan Gusfield, Robert W. Irving, *The Stable Marriage Problem: Structure and Algorithms*, MIT Press, 1989 (ISBN 978-0-262-07118-5)
+- **Reference**: Alvin E. Roth, Marilda Sotomayor, *Two-Sided Matching: A Study in Game-Theoretic Modeling and Analysis*, Cambridge University Press, 1990 (ISBN 978-0-521-43788-2)
+- **Reference**: Donald E. Knuth, *Stable Marriage and Its Relation to Other Combinatorial Problems*, AMS, 1997 (orig. *Mariages Stables*, 1976)
+- **Paper**: Robert W. Irving, Paul Leather, Dan Gusfield, "An efficient algorithm for the 'optimal' stable marriage", *JACM* 34(3), 1987 (egalitarian, polynomial)
+- **Paper**: Akiko Kato, "Complexity of the sex-equal stable marriage problem", *Japan J. Indust. Appl. Math.* 10(1), 1993 (sex-equal, NP-hard)
+- **Paper**: Harold W. Kuhn, "The Hungarian method for the assignment problem", *Naval Res. Logist. Quart.* 2, 1955
+- **Paper**: Roy Jonker, Anton Volgenant, "A shortest augmenting path algorithm for dense and sparse linear assignment problems", *Computing* 38, 1987
+- **Location**: `stdlib/lib/wile/algebra/matching.scm`
+
+### Semirings, Dioids & Path Algebra (Gondran & Minoux 2008)
+
+Path problems on graphs (reachability, shortest paths, path counting,
+transitive closure) are instances of matrix algebra over a semiring: the
+Kleene star `M* = I + M + M² + …` generalizes all of them. Foundation of the
+`semiring` and `matrix` libraries and the semiring-parameterized `graph` path
+analytics.
+
+- **Reference**: Michel Gondran, Michel Minoux, *Graphs, Dioids and Semirings: New Models and Algorithms*, Springer, 2008 (ISBN 978-0-387-75449-9)
+- **Paper**: Daniel J. Lehmann, "Algebraic structures for transitive closure", *Theoret. Comput. Sci.* 4(1), 1977
+- **Paper**: Roland C. Backhouse, Bernard A. Carré, "Regular algebra applied to path-finding problems", *J. Inst. Math. Appl.* 15(2), 1975
+- **Reference**: Jonathan S. Golan, *Semirings and their Applications*, Kluwer, 1999 (ISBN 978-0-7923-5786-5)
+- **Location**: `stdlib/lib/wile/algebra/semiring.scm`, `matrix.scm`, `graph.scm`
+
+### Tropical / Max-Plus Algebra (Maclagan & Sturmfels 2015)
+
+The tropical (min,+) and max-plus semirings linearize shortest-path and
+scheduling problems; the tropical permanent is the minimum-cost perfect
+assignment. Used by the `tropical-semiring` carrier and `matrix` permanent.
+
+- **Reference**: Diane Maclagan, Bernd Sturmfels, *Introduction to Tropical Geometry*, AMS, 2015 (ISBN 978-0-8218-5198-2)
+- **Reference**: Peter Butkovič, *Max-linear Systems: Theory and Algorithms*, Springer, 2010 (ISBN 978-1-84996-298-5)
+- **Location**: `stdlib/lib/wile/algebra/semiring.scm`, `matrix.scm`
+
+### Algebraic & Combinatorial Graph Theory (Godsil & Royle 2001)
+
+Graph invariants computed by the `combinatorial-graph` library rest on classical
+results: spanning-tree count via Kirchhoff's Matrix-Tree theorem, the chromatic
+polynomial via Whitney/Tutte deletion-contraction, the Tutte polynomial,
+canonical labeling for isomorphism (McKay–Piperno), bipartite matching
+(Hopcroft–Karp), and strongly-connected components (Tarjan).
+
+- **Reference**: Chris Godsil, Gordon Royle, *Algebraic Graph Theory*, Springer, 2001 (ISBN 978-0-387-95220-8)
+- **Reference**: Reinhard Diestel, *Graph Theory*, 5th edition, Springer, 2017 (ISBN 978-3-662-53621-6)
+- **Paper**: Gustav Kirchhoff, "Über die Auflösung der Gleichungen, auf welche man bei der Untersuchung der linearen Vertheilung galvanischer Ströme geführt wird", *Ann. Phys. Chem.* 72, 1847 (Matrix-Tree theorem)
+- **Paper**: William T. Tutte, "A contribution to the theory of chromatic polynomials", *Canad. J. Math.* 6, 1954
+- **Paper**: Hassler Whitney, "The coloring of graphs", *Ann. of Math.* 33(4), 1932
+- **Paper**: Brendan D. McKay, Adolfo Piperno, "Practical graph isomorphism, II", *J. Symbolic Comput.* 60, 2014
+- **Paper**: John E. Hopcroft, Richard M. Karp, "An n^{5/2} algorithm for maximum matchings in bipartite graphs", *SIAM J. Comput.* 2(4), 1973
+- **Paper**: Robert E. Tarjan, "Depth-first search and linear graph algorithms", *SIAM J. Comput.* 1(2), 1972
+- **Location**: `stdlib/lib/wile/algebra/combinatorial-graph.scm`, `graph.scm`, `incidence.scm`
+
+### Polynomial Rings & Computer Algebra (von zur Gathen & Gerhard 2013)
+
+Ring-parameterized univariate polynomial arithmetic — addition, multiplication,
+Horner evaluation, Euclidean division, and GCD — follows the standard
+computer-algebra treatment. Foundation of the `polynomial` library over the
+`ring` abstraction.
+
+- **Reference**: Joachim von zur Gathen, Jürgen Gerhard, *Modern Computer Algebra*, 3rd edition, Cambridge University Press, 2013 (ISBN 978-1-107-03903-2)
+- **Reference**: Donald E. Knuth, *The Art of Computer Programming, Vol. 2: Seminumerical Algorithms*, 3rd edition, Addison-Wesley, 1997 (ISBN 978-0-201-89684-8)
+- **Reference**: Serge Lang, *Algebra*, 3rd edition, Springer, 2002 (ISBN 978-0-387-95385-4)
+- **Location**: `stdlib/lib/wile/algebra/polynomial.scm`, `ring.scm`
+
+### Term Rewriting & Unification (Baader & Nipkow 1998)
+
+Equational reasoning, normalization by rewriting, and associative-commutative
+unification underpin the `rewrite`, `unification`, and `symbolic` libraries.
+
+- **Reference**: Franz Baader, Tobias Nipkow, *Term Rewriting and All That*, Cambridge University Press, 1998 (ISBN 978-0-521-77920-3)
+- **Paper**: Donald E. Knuth, Peter B. Bendix, "Simple word problems in universal algebras", in J. Leech (ed.), *Computational Problems in Abstract Algebra*, Pergamon, 1970
+- **Paper**: Mark E. Stickel, "A unification algorithm for associative-commutative functions", *JACM* 28(3), 1981
+- **Location**: `stdlib/lib/wile/algebra/rewrite.scm`, `unification.scm`, `symbolic.scm`
+
+### Satisfiability — DPLL & CDCL (Marques-Silva & Sakallah 1999)
+
+The `sat` library implements conflict-driven clause learning, the modern
+descendant of the DPLL procedure, and closes the axiomatic-equivalence gap via
+`boolean-decide-equivalent?`.
+
+- **Paper**: Martin Davis, George Logemann, Donald Loveland, "A machine program for theorem-proving", *CACM* 5(7), 1962 (DPLL)
+- **Paper**: João P. Marques-Silva, Karem A. Sakallah, "GRASP: A search algorithm for propositional satisfiability", *IEEE Trans. Computers* 48(5), 1999 (CDCL)
+- **Reference**: Armin Biere, Marijn Heule, Hans van Maaren, Toby Walsh (eds.), *Handbook of Satisfiability*, 2nd edition, IOS Press, 2021 (ISBN 978-1-64368-160-3)
+- **Location**: `stdlib/lib/wile/algebra/sat.scm`
+
+### Universal Algebra (Burris & Sankappanavar 1981)
+
+The common foundation under every `(wile algebra ...)` structure: signatures,
+homomorphisms, subalgebras, and the validate-X law-checking discipline are
+universal-algebra constructions. Category theory grounds the `category` library.
+
+- **Reference**: Stanley Burris, H. P. Sankappanavar, *A Course in Universal Algebra*, Millennium edition, 2012 (orig. Springer GTM 78, 1981; freely available)
+- **Reference**: Saunders Mac Lane, *Categories for the Working Mathematician*, 2nd edition, Springer, 1998 (ISBN 978-0-387-98403-2)
+- **Location**: `stdlib/lib/wile/algebra/` (all structures), `category.scm`, `setoid.scm`
+
 ## Citation Format
 
 When citing R7RS sections in code comments, use the format `R7RS §X.Y.Z`:
