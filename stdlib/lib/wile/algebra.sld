@@ -289,6 +289,8 @@
     graph-chromatic-polynomial graph-tutte-polynomial
     ;; Combinatorial graphs — matching
     graph-maximum-bipartite-matching
+    ;; Combinatorial graphs — partition (balanced cut)
+    graph-partition
     ;; Combinatorial graphs — presets
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph

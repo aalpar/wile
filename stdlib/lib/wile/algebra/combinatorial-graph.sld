@@ -23,6 +23,8 @@
     graph-tutte-polynomial
     ;; Matching
     graph-maximum-bipartite-matching
+    ;; Partition (balanced cut, Kernighan-Lin)
+    graph-partition
     ;; Presets
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph)

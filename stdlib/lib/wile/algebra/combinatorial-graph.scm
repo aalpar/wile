@@ -1874,3 +1874,243 @@
                      (cons i (reverse (vector-ref adj-table i))))
                    (iota 10))))
     (make-graph adj)))
+
+;;; ── Balanced graph partition (Kernighan-Lin) ───────────────────────────────
+;;;
+;;; graph-partition cleaves a weighted graph into two groups minimizing cut
+;;; weight at a fixed balance. This is a BALANCED cut, not a global minimum cut:
+;;; a global min-cut degenerates to isolating a single vertex, so the partition
+;;; sizes are held by the seed and the cut is optimized via Kernighan-Lin
+;;; pair-swaps (one vertex from each side per step, preserving |A| and |B|).
+;;; Design: plans/2026-06-08-balanced-graph-partition-design.md.
+
+;; Edge-weight accessor over edge-data; weight-fn is always a procedure.
+(define (%weight-of weight-fn edge-data)
+  (weight-fn edge-data))
+
+;; Side lookup. `side` is an alist vertex -> 'a | 'b keyed under G's setoid S.
+;; Vertices may be arbitrary atoms, so match with setoid-assoc — the same
+;; equality the rest of this file uses (cf. graph-neighbors).
+(define (%side-of S side v)
+  (let ((p (setoid-assoc S v side)))
+    (and p (cdr p))))
+
+;; Total weight of edges crossing the partition. graph-edges yields each
+;; undirected edge once as (u v edge-data), so each crossing edge counts once.
+(define (%cut-weight G side weight-fn)
+  (let ((S (graph-setoid G)))
+    (fold
+      (lambda (e acc)
+        (let ((u (car e)) (v (cadr e)) (d (caddr e)))
+          (if (eq? (%side-of S side u) (%side-of S side v))
+              acc
+              (+ acc (%weight-of weight-fn d)))))
+      0
+      (graph-edges G))))
+
+;; Total weight over all edges — denominator for the normalized-cut metric.
+(define (%total-weight G weight-fn)
+  (fold (lambda (e acc) (+ acc (%weight-of weight-fn (caddr e))))
+        0
+        (graph-edges G)))
+
+;; Allowed integer size-difference under the balance tolerance:
+;;   clamp(floor(tol*n), n mod 2, n-2)
+;; Lower floor (n mod 2) keeps the most-balanced split admissible for odd n;
+;; upper cap (n-2) keeps both groups non-empty. Used to validate the seed ratio
+;; (KL preserves it), not to gate moves.
+(define (%allowed-diff tol n)
+  (max (modulo n 2)
+       (min (exact (floor (* tol n))) (- n 2))))
+
+;; FM/KL gain D(v) = (weight of v's edges to the OPPOSITE side)
+;;                 - (weight of v's edges to the SAME side).
+;; A self-loop never crosses the cut, so it contributes 0 (skipped).
+(define (%partition-gain G side weight-fn v)
+  (let* ((S  (graph-setoid G))
+         (my (%side-of S side v)))
+    (fold
+      (lambda (nbr acc)
+        (let ((u (car nbr)) (d (cdr nbr)))
+          (cond
+            ((setoid-equiv? S u v) acc)
+            ((eq? (%side-of S side u) my)
+             (- acc (%weight-of weight-fn d)))
+            (else
+             (+ acc (%weight-of weight-fn d))))))
+      0
+      (graph-neighbors G v))))
+
+;; Total weight of edges directly between v and u (sums parallel edges).
+(define (%edge-weight G weight-fn S v u)
+  (fold (lambda (nbr acc)
+          (if (setoid-equiv? S (car nbr) u)
+              (+ acc (%weight-of weight-fn (cdr nbr)))
+              acc))
+        0
+        (graph-neighbors G v)))
+
+;; Deterministic balanced seed: first ceil(n/2) vertices (adjacency order) -> 'a.
+(define (%default-seed G)
+  (let* ((vs   (graph-vertices G))
+         (n    (length vs))
+         (half (quotient (+ n 1) 2)))
+    (let loop ((vs vs) (i 0) (acc '()))
+      (if (null? vs)
+          (reverse acc)
+          (loop (cdr vs) (+ i 1)
+                (cons (cons (car vs) (if (< i half) 'a 'b)) acc))))))
+
+;; Validate a caller seed: covers every vertex with a value in {a,b}, both sides
+;; non-empty, and imbalance within the balance tolerance (KL holds this ratio).
+(define (%validate-seed G seed tol)
+  (let* ((S  (graph-setoid G))
+         (vs (graph-vertices G))
+         (n  (length vs)))
+    (for-each
+      (lambda (v)
+        (let ((p (setoid-assoc S v seed)))
+          (unless (and p (memq (cdr p) '(a b)))
+            (error "graph-partition: seed must assign every vertex a side in {a,b}"
+                   (list 'fix "provide (vertex . a) or (vertex . b) for every vertex")
+                   v))))
+      vs)
+    (let* ((na (count (lambda (v) (eq? (%side-of S seed v) 'a)) vs))
+           (nb (- n na)))
+      (when (or (zero? na) (zero? nb))
+        (error "graph-partition: seed must place at least one vertex on each side"
+               (list 'fix "both 'a and 'b sides must be non-empty")))
+      (when (> (abs (- na nb)) (%allowed-diff tol n))
+        (error "graph-partition: seed imbalance exceeds the balance tolerance"
+               (list 'fix "raise 'balance or supply a more balanced seed")
+               (list 'sizes na nb 'allowed (%allowed-diff tol n)))))
+    seed))
+
+;; Kernighan-Lin refinement: passes of pair-swaps keeping the best prefix; repeat
+;; while a pass strictly reduces the cut. side0 covers every vertex; swaps hold
+;; |A|,|B| invariant, so the seed's ratio is preserved.
+(define (%kl-refine G side0 weight-fn)
+  (let* ((S  (graph-setoid G))
+         (vs (graph-vertices G))
+         (n  (length vs)))
+
+    (define (a-side side) (filter (lambda (v) (eq? (%side-of S side v) 'a)) vs))
+    (define (b-side side) (filter (lambda (v) (eq? (%side-of S side v) 'b)) vs))
+
+    (define (swap side v u)            ; v: A->B, u: B->A
+      (map (lambda (e)
+             (cond ((setoid-equiv? S (car e) v) (cons (car e) 'b))
+                   ((setoid-equiv? S (car e) u) (cons (car e) 'a))
+                   (else e)))
+           side))
+
+    (define (remove-v x lst)           ; drop first setoid-equiv to x
+      (let loop ((lst lst) (acc '()))
+        (cond ((null? lst) (reverse acc))
+              ((setoid-equiv? S (car lst) x) (append (reverse acc) (cdr lst)))
+              (else (loop (cdr lst) (cons (car lst) acc))))))
+
+    ;; best unlocked (v in A, u in B) by swap gain D(v)+D(u)-2w(v,u); D computed
+    ;; once per vertex. Deterministic: earliest v, then earliest u, strict >.
+    (define (best-pair side a-un b-un)
+      (let ((da (map (lambda (v) (cons v (%partition-gain G side weight-fn v))) a-un))
+            (db (map (lambda (u) (cons u (%partition-gain G side weight-fn u))) b-un)))
+        (let outer ((as da) (bv #f) (bu #f) (bg #f))
+          (if (null? as)
+              (values bv bu bg)
+              (let* ((vp (car as)) (v (car vp)) (dv (cdr vp)))
+                (let inner ((bs db) (bv bv) (bu bu) (bg bg))
+                  (if (null? bs)
+                      (outer (cdr as) bv bu bg)
+                      (let* ((up (car bs)) (u (car up)) (du (cdr up))
+                             (g  (- (+ dv du)
+                                    (* 2 (%edge-weight G weight-fn S v u)))))
+                        (if (or (not bg) (> g bg))
+                            (inner (cdr bs) v u g)
+                            (inner (cdr bs) bv bu bg))))))))))
+
+    ;; one pass -> (values best-prefix-side best-cumulative-gain)
+    (define (one-pass side)
+      (let loop ((side side) (a-un (a-side side)) (b-un (b-side side))
+                 (cum 0) (best-side side) (best-gain 0))
+        (if (or (null? a-un) (null? b-un))
+            (values best-side best-gain)
+            (let-values (((v u g) (best-pair side a-un b-un)))
+              (let* ((side* (swap side v u))
+                     (cum*  (+ cum g)))
+                (if (> cum* best-gain)
+                    (loop side* (remove-v v a-un) (remove-v u b-un) cum* side* cum*)
+                    (loop side* (remove-v v a-un) (remove-v u b-un) cum* best-side best-gain)))))))
+
+    (let pass ((side side0) (guard n))
+      (if (<= guard 0)
+          side
+          (let-values (((side* gain) (one-pass side)))
+            (if (> gain 0)
+                (pass side* (- guard 1))
+                side))))))
+
+(define (graph-partition G . opts)
+  "Partition weighted graph G into two groups minimizing cut weight at a fixed
+balance, via Kernighan-Lin pair-swaps.
+
+This is a BALANCED cut, not a minimum cut: a global min-cut degenerates to
+isolating a single vertex, so KL holds the partition sizes (set by the seed)
+and optimizes only the cut. See
+plans/2026-06-08-balanced-graph-partition-design.md.
+
+Opts (trailing alist):
+  (method . 'kernighan-lin)  default; only value in Phase 1.
+  (balance . 0.25)           imbalance tolerance in (0,1); bounds the seed ratio
+                             that KL preserves. Allowed |A|-|B| =
+                             clamp(floor(balance*|V|), |V| mod 2, |V|-2).
+  (weight . PROC)            edge-data -> non-negative number; default unit weight.
+  (seed . ALIST)             vertex -> 'a|'b initial bipartition; default balanced.
+
+Examples:
+  (graph-partition (complete-bipartite-graph 3 3))
+
+Parameters:
+  G : graph
+  opts : alist
+Returns: alist with keys group-a group-b cut-weight sizes normalized-cut
+  (normalized-cut = cut-weight / total-edge-weight; a cost, lower is better; 0.0 if no edges)
+Category: algebra
+Keywords: partition, balanced cut, kernighan-lin, min cut, package split, graph clustering
+
+See also: `graph-bipartition', `graph-connected-components'."
+  (validate-opts-keys "graph-partition" opts '(method balance weight seed))
+  (let ((method  (assv-or opts 'method  'kernighan-lin))
+        (balance (assv-or opts 'balance 0.25))
+        (weight  (assv-or opts 'weight  (lambda (ignored) 1)))
+        (seed    (assv-or opts 'seed    #f)))
+    (assert-procedure "graph-partition" weight)
+    (unless (and (real? balance) (< 0 balance) (< balance 1))
+      (error "graph-partition: balance must be in (0,1)"
+             (list 'fix "pass an imbalance tolerance such as 0.25 (1 is excluded: it would empty a side)")
+             balance))
+    (unless (eq? method 'kernighan-lin)
+      (error "graph-partition: only 'kernighan-lin is available in Phase 1"
+             (list 'fix "'normalized-cut is Phase 3, gated on the gonum eigensolver")
+             method))
+    (let* ((S  (graph-setoid G))
+           (vs (graph-vertices G))
+           (n  (length vs)))
+      (if (< n 2)
+          (list (cons 'group-a vs)
+                (cons 'group-b '())
+                (cons 'cut-weight 0)
+                (cons 'sizes (cons n 0))
+                (cons 'normalized-cut 0.0))
+          (let* ((seed* (if seed (%validate-seed G seed balance) (%default-seed G)))
+                 (side  (%kl-refine G seed* weight))
+                 (ga    (filter (lambda (v) (eq? (%side-of S side v) 'a)) vs))
+                 (gb    (filter (lambda (v) (eq? (%side-of S side v) 'b)) vs))
+                 (cut   (%cut-weight G side weight))
+                 (total (%total-weight G weight))
+                 (ncut  (if (zero? total) 0.0 (exact->inexact (/ cut total)))))
+            (list (cons 'group-a ga)
+                  (cons 'group-b gb)
+                  (cons 'cut-weight cut)
+                  (cons 'sizes (cons (length ga) (length gb)))
+                  (cons 'normalized-cut ncut)))))))

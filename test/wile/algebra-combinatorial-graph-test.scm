@@ -1018,5 +1018,53 @@
     (test 'b (caar pred-b))
     (test '(4 5 6) (cdar pred-b))))
 
+;;; ===== graph-partition (balanced cut via Kernighan-Lin) ===============
+
+(test-group "graph-partition/planted-balanced-cut"
+  ;; Two triangles {a,b,c} {d,e,f} joined by the single bridge c-d. Entries are
+  ;; INTERLEAVED so the default ceil(n/2) seed is not the answer -> exercises KL.
+  (let* ((two-tri (make-graph '((a . ((b) (c)))
+                                (d . ((e) (f)))
+                                (b . ((c)))
+                                (e . ((f)))
+                                (c . ((d)))
+                                (f . ()))
+                              '(symmetrize? . #t)))
+         (r  (graph-partition two-tri '(balance . 0.25)))
+         (ga (cdr (assq 'group-a r)))
+         (gb (cdr (assq 'group-b r))))
+    (test 1 (cdr (assq 'cut-weight r)))          ; only the bridge is severed
+    (test '(3 . 3) (cdr (assq 'sizes r)))        ; balance preserved by KL
+    (test #t (or (and (member 'a ga) (member 'b ga) (member 'c ga) #t)
+                 (and (member 'a gb) (member 'b gb) (member 'c gb) #t)))))
+
+(test-group "graph-partition/determinism"
+  (let ((g (make-graph '((a . ((b) (c))) (d . ((e) (f))) (b . ((c)))
+                        (e . ((f))) (c . ((d))) (f . ()))
+                       '(symmetrize? . #t))))
+    (test #t (equal? (graph-partition g '(balance . 0.25))
+                     (graph-partition g '(balance . 0.25))))))
+
+(test-group "graph-partition/seed-imbalance-exceeds-tolerance"
+  ;; KL holds the seed ratio, so a seed more imbalanced than 'balance is rejected.
+  (let ((g (make-graph '((a . ((b))) (b . ((c))) (c . ((d))) (d . ()))
+                       '(symmetrize? . #t))))
+    (test-error                                  ; 3/1 seed, diff 2 > allowed 1 at tol 0.25
+      (graph-partition g '(balance . 0.25)
+                         '(seed . ((a . a) (b . a) (c . a) (d . b)))))))
+
+(test-group "graph-partition/degeneracy-guard"
+  ;; Star: hub h + 6 leaves. The GLOBAL MIN-CUT isolates one leaf (cut = 1).
+  ;; A balanced partition must NOT do that — the property that disqualifies
+  ;; global min-cut (design 2026-06-08, §4.4).
+  (let* ((star (make-graph '((h . ((l1) (l2) (l3) (l4) (l5) (l6)))
+                             (l1 . ((h))) (l2 . ((h))) (l3 . ((h)))
+                             (l4 . ((h))) (l5 . ((h))) (l6 . ((h))))
+                           '(symmetrize? . #t)))
+         (p  (graph-partition star '(balance . 0.34)))
+         (sz (cdr (assq 'sizes p))))             ; n=7 -> allowed_diff 2 -> 4/3
+    (test #t (>= (min (car sz) (cdr sz)) 2))     ; not a 1/6 min-cut
+    (test 3 (cdr (assq 'cut-weight p)))))        ; pays cut 3 vs degenerate min-cut 1
+
 (test-end)
 (test-exit)
