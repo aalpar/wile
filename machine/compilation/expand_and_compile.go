@@ -28,13 +28,18 @@ import (
 //
 // A single MacroEvaluator is shared across both phases. If resolver is non-nil,
 // it is set on the compiler for include/load file resolution. inlineThreshold
-// controls procedure inlining (0 disables). Errors are wrapped with phase
-// context ("expansion" or "compilation"); callers may add site-specific context
-// on top. Callers may call tpl.Optimize() on the returned template if desired.
-func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int) (*machine.NativeTemplate, error) {
+// controls procedure inlining (0 disables). maxExpandDepth bounds expander
+// recursion to prevent a fatal Go stack overflow on deeply nested syntax
+// (0 disables the bound; pass DefaultMaxExpandDepth for the standard limit).
+// Errors are wrapped with phase context ("expansion" or "compilation"); callers
+// may add site-specific context on top. Callers may call tpl.Optimize() on the
+// returned template if desired.
+func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
 	evaluator := machine.NewVMMacroEvaluator()
 
-	expanded, err := NewExpanderTimeContinuation(ctx, env, evaluator).ExpandExpression(stx)
+	expander := NewExpanderTimeContinuation(ctx, env, evaluator)
+	expander.SetMaxDepth(maxExpandDepth)
+	expanded, err := expander.ExpandExpression(stx)
 	if err != nil {
 		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "expansion"))
 	}

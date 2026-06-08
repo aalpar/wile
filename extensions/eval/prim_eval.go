@@ -95,7 +95,7 @@ func PrimEval(cc machine.CallContext) error {
 	sctx := syntax.NewZeroValueSourceContext()
 	stx := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 
-	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold)
+	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
@@ -169,7 +169,7 @@ func PrimLoad(cc machine.CallContext) error {
 			return werr.WrapForeignErrorf(err, "load: parse error in %s", filename.Value)
 		}
 
-		tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold)
+		tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "load: in %s", filename.Value)
 		}
@@ -507,7 +507,7 @@ func PrimCompile(mc machine.CallContext) error {
 	// Expand and compile to bytecode template.
 	env := mc.EnvironmentFrame()
 
-	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, syntaxVal, nil, compilation.DefaultInlineThreshold)
+	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, syntaxVal, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "compile")
 	}

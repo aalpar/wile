@@ -210,7 +210,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	}
 
 	// Create expander with child expand environment for body expansion
-	childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv, p.evaluator)
+	childExpander := p.newChildExpander(childExpandEnv)
 
 	// Expand all body expressions and check for defines
 	var expandedExprs []syntax.SyntaxValue

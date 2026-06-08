@@ -225,7 +225,7 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 	var initExpander *ExpanderTimeContinuation
 	if scopeInits {
 		childEnv := p.createBindingEnv(scopedNames)
-		initExpander = NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
+		initExpander = p.newChildExpander(childEnv)
 	} else {
 		initExpander = p
 	}
@@ -323,7 +323,7 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		// Add scope to init so references can resolve to preceding bindings.
 		scopedInit := syntax.AddScopeToSyntax(initExpr, scope)
 
-		currentExpander := NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
+		currentExpander := p.newChildExpander(childEnv)
 		expandedInit, err := currentExpander.ExpandExpression(scopedInit)
 		if err != nil {
 			return nil, nil, wrapSourcedError(bPair.SourceContext(), werr.WrapForeignErrorf(err, "let*: failed to expand init expression"))
@@ -380,7 +380,7 @@ func (p *ExpanderTimeContinuation) expandBindingBody(
 		return nil, wrapSourcedError(bodyStx.SourceContext(), werr.WrapForeignErrorf(err, "binding body: failed to collect expressions"))
 	}
 
-	childExpander := NewExpanderTimeContinuation(p.ctx, env, p.evaluator)
+	childExpander := p.newChildExpander(env)
 	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(bodyExprs)
 	if err != nil {
 		return nil, wrapSourcedError(bodyStx.SourceContext(), werr.WrapForeignErrorf(err, "binding body: failed to expand"))

@@ -50,6 +50,39 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// DefaultMaxExpandDepth bounds structural recursion depth during macro
+// expansion. Without a bound, deeply nested syntax — reachable not from text
+// (the parser caps that, see internal/parser DefaultMaxParseDepth) but from
+// programmatically-constructed syntax such as macro output, datum->syntax, and
+// quasiquote — triggers a fatal, unrecoverable Go stack overflow that kills the
+// host process. 0 means unlimited. Mirrors the VM's DefaultMaxCallDepth and the
+// parser's DefaultMaxParseDepth.
+//
+// Chosen empirically: the expander overflows the Go stack between ~400k (heavy
+// macro-re-expansion paths) and ~800k (light procedure-call nesting) levels;
+// 50000 leaves an order-of-magnitude margin below the crash while sitting far
+// above any practical program. A flat recursive macro (and/or/cond with N
+// clauses) accumulates expansion depth linearly in N, but such forms are
+// O(N^2) to expand and unusable well before 50000 clauses, so the bound does
+// not regress any program anyone actually runs. Callers with genuinely deeper
+// machine-generated syntax opt out via SetMaxDepth(0) / WithMaxExpandDepth(0).
+const DefaultMaxExpandDepth int = 50000
+
+// expandDepthGuard bounds total structural recursion across one expansion run.
+//
+// A single ExpandExpression tree-walk spawns child ExpanderTimeContinuation
+// objects for lambda/let/let-syntax bodies (see newChildExpander). Those child
+// frames stay live on the Go stack while the parent recurses, so the bound must
+// reflect cumulative Go-stack depth, not per-object depth. The guard is shared
+// by pointer across a parent and all its children so depth accumulates
+// regardless of how many continuation objects a single run creates. (This is
+// why a per-object int — sufficient for the parser, which has one object per
+// parse — is not sufficient here.)
+type expandDepthGuard struct {
+	depth int
+	max   int // 0 = unlimited
+}
+
 // ExpanderTimeContinuation is a continuation used during the expansion phase.
 //
 // It walks the syntax tree, detecting and expanding macro invocations.
@@ -63,16 +96,54 @@ type ExpanderTimeContinuation struct {
 	// evaluator abstracts VM execution for transformer invocation
 	// so the expander can be tested without the concrete VM.
 	evaluator machine.MacroEvaluator
+	// depthGuard bounds structural recursion. Shared by pointer with child
+	// expanders (newChildExpander) so the whole run shares one counter.
+	depthGuard *expandDepthGuard
 }
 
-// NewExpanderTimeContinuation creates a new ExpanderTimeContinuation.
+// NewExpanderTimeContinuation creates a new ExpanderTimeContinuation. The
+// returned expander begins a fresh expansion run with its own depth guard
+// defaulted to DefaultMaxExpandDepth; override via SetMaxDepth.
 func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
-		ctx:       ctx,
-		env:       env,
-		evaluator: evaluator,
+		ctx:        ctx,
+		env:        env,
+		evaluator:  evaluator,
+		depthGuard: &expandDepthGuard{max: DefaultMaxExpandDepth},
 	}
 	return q
+}
+
+// newChildExpander creates a child expander for a nested body (lambda, let,
+// let-syntax, etc.) that shares this expander's depth guard. The child is part
+// of the same continuous Go recursion as its parent, so it must accumulate into
+// the same depth counter rather than reset to zero.
+//
+// It is otherwise identical to the expander the call sites previously built with
+// NewExpanderTimeContinuation(p.ctx, env, p.evaluator): ctx and evaluator carry
+// over, env is the nested-body environment, and libraryScope is deliberately
+// left nil (these body sites never propagated it — where library scope must
+// flow into a nested expander, the code sets it explicitly, e.g.
+// compile_time_continuation_include.go). Sharing only the depth guard keeps the
+// hygiene behavior unchanged.
+func (p *ExpanderTimeContinuation) newChildExpander(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
+	q := &ExpanderTimeContinuation{
+		ctx:        p.ctx,
+		env:        env,
+		evaluator:  p.evaluator,
+		depthGuard: p.depthGuard,
+	}
+	return q
+}
+
+// SetMaxDepth sets the maximum structural recursion depth allowed during
+// expansion for this run. A value of 0 (or negative, clamped to 0) disables
+// the limit. Mirrors the parser's SetMaxDepth and MachineContext.SetMaxCallDepth.
+func (p *ExpanderTimeContinuation) SetMaxDepth(n int) {
+	if n < 0 {
+		n = 0
+	}
+	p.depthGuard.max = n
 }
 
 // Context returns the context associated with this expander continuation.
@@ -87,11 +158,33 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 }
 
 // ExpandExpression expands a syntax expression.
+//
+// This is the single recursion chokepoint of the expander: every descent into a
+// sub-expression — nested cars, argument lists, primitive-form bodies (via child
+// expanders), and macro re-expansion — funnels through here. The depth guard
+// therefore bounds total Go-stack recursion for the whole expansion run,
+// returning a catchable ErrExpandDepthExceeded instead of letting deeply nested
+// (programmatically-constructed) syntax crash the host with a fatal Go stack
+// overflow. See expandDepthGuard and DefaultMaxExpandDepth.
 func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	// Context cancellation takes precedence over the depth bound: an explicitly
+	// cancelled run reports ctx.Err(), not ErrExpandDepthExceeded, even when both
+	// conditions are live at this entry. Checked before touching the depth
+	// counter so the increment/decrement stays symmetric on the cancel path.
 	select {
 	case <-p.ctx.Done():
 		return nil, p.ctx.Err()
 	default:
+	}
+	g := p.depthGuard
+	g.depth++
+	defer func() {
+		g.depth--
+	}()
+	if g.max > 0 && g.depth > g.max {
+		return nil, wrapSourcedError(expr.SourceContext(),
+			werr.WrapForeignErrorf(werr.ErrExpandDepthExceeded,
+				"expand: nesting depth exceeds maximum of %d", g.max))
 	}
 	var result syntax.SyntaxValue
 	var err error

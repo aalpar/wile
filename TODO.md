@@ -41,10 +41,30 @@ Items that block production embedded use or prevent silent state corruption.
   2. **Implementation vs published standard** (R7RS-small first, then R6RS, SRFI, Racket, Chibi/Guile/Chicken where applicable): for each primitive whose name appears in a standard, verify the Wile implementation's domain (accepted params) and codomain (return shape) match the spec. Catches non-standard extensions masquerading as standard primitives (the open-output-bytevector one-arg branch).
   3. **Annotation vs standard**: cross-check ensures we don't document non-standard behavior as if it were standard.
   Wile-specific primitives (no entry in any adopted standard) need a **local spec** written before they can be audited — name, intended domain, intended codomain, error cases, any invariants. Without a spec there is nothing to drift *from*. Produce the spec inventory as a deliverable; treat missing specs as a debt sub-item. This audit becomes load-bearing the moment "Extension API contracts Phase 2+" (Tier 2) ships compile-time checking — unsound annotations then turn into wrongly-rejected programs, and the R7RS-compliance-as-baseline product claim starts to depend on evidence rather than assertion.
-- [ ] Bound expander recursion depth (machine/expander_*.go). The parser depth
-      limit (memory/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
-      stack-overflow surface, but programmatically-constructed deep syntax
-      (macro output, datum->syntax, quasiquote) can still overflow the expander.
+- [x] **Bound expander recursion depth** [Medium, Done]: The parser depth limit
+      (memory/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
+      stack-overflow surface, but programmatically-constructed deep syntax (macro
+      output, `datum->syntax`, quasiquote) could still overflow the expander with a
+      fatal, unrecoverable Go stack overflow. **Fixed**: added `werr.ErrExpandDepthExceeded`
+      and a shared `expandDepthGuard` on `machine/compilation`'s `ExpanderTimeContinuation`,
+      incremented/decremented at the single recursion chokepoint `ExpandExpression`
+      (which every descent — nested cars, argument lists, primitive-form bodies via
+      child expanders, and macro re-expansion — funnels through). Unlike the parser
+      (one object per parse), the expander spawns child expanders for lambda/let/
+      let-syntax bodies, so the guard is **shared by pointer** across a run via
+      `newChildExpander` (which otherwise reproduces the prior construction exactly —
+      `libraryScope` deliberately stays nil to preserve hygiene behavior). Default
+      `DefaultMaxExpandDepth = 50000` (0 = unlimited), chosen empirically: the
+      expander overflows the Go stack between ~400k (heavy macro-re-expansion) and
+      ~800k (light call nesting) levels, so 50000 leaves an order-of-magnitude margin
+      while sitting far above any practical program (flat recursive macros like
+      `and`/`or` are O(N²) to expand and unusable well before 50000 clauses).
+      Configurable via `WithMaxExpandDepth` (threaded engine→`ExpandAndCompile` like
+      `inlineThreshold`) and `ExpanderTimeContinuation.SetMaxDepth`. Mirrors the VM's
+      `DefaultMaxCallDepth` and the parser's `DefaultMaxParseDepth` triad. Tests:
+      `machine/compilation/expander_depth_test.go` (trip, default-protects,
+      within-limit, shared-across-child-expanders, unlimited, decrement-on-return),
+      `engine_expand_depth_test.go` (end-to-end via recursive macro + the option).
 - [x] **Stable-matching selectors fail + matching tests don't gate CI** [High, M, Done]:
       **Root cause** (single bug, two symptoms): `walk-for-cycle` in
       `stdlib/lib/wile/algebra/matching.scm` stored each rotation cycle in

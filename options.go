@@ -51,6 +51,8 @@ type engineConfig struct {
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
 	maxParseDepth      int
 	parseDepthSet      bool // true if WithMaxParseDepth was explicitly called
+	maxExpandDepth     int
+	expandDepthSet     bool // true if WithMaxExpandDepth was explicitly called
 	maxStackSize       uint64
 	inlineThreshold    int
 	inlineThresholdSet bool // true if WithInlineThreshold was explicitly called
@@ -180,6 +182,31 @@ func WithMaxParseDepth(n int) EngineOption {
 		}
 		cfg.maxParseDepth = n
 		cfg.parseDepthSet = true
+	}
+}
+
+// WithMaxExpandDepth sets the maximum structural recursion depth the macro
+// expander will accept. The parser already bounds nesting in textual input
+// (see WithMaxParseDepth); this bounds programmatically-constructed deep syntax
+// — macro output, datum->syntax, and quasiquote — which reaches the expander
+// without passing through the parser. When expansion nests deeper,
+// ErrExpandDepthExceeded is returned instead of crashing with a fatal Go stack
+// overflow. A value of 0 means unlimited (negative values are clamped to 0).
+// When not called, the expander uses DefaultMaxExpandDepth (50000).
+//
+// Scope: this bound applies to expansion of top-level program text run through
+// the engine. Expansion triggered from within running Scheme — (eval ...),
+// (load ...), (compile ...), (expand ...) — always uses DefaultMaxExpandDepth
+// regardless of this option, because the primitive layer has no channel to the
+// engine's configured value. Those paths are still protected from the fatal
+// stack overflow (by the default); they are simply not retunable per-engine.
+func WithMaxExpandDepth(n int) EngineOption {
+	return func(cfg *engineConfig) {
+		if n < 0 {
+			n = 0
+		}
+		cfg.maxExpandDepth = n
+		cfg.expandDepthSet = true
 	}
 }
 

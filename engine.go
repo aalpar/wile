@@ -64,6 +64,7 @@ type Engine struct {
 	closed                  bool
 	maxCallDepth            int
 	maxParseDepth           int
+	maxExpandDepth          int
 	maxStackSize            uint64
 	inlineThreshold         int
 	contractEnforcement     bool // propagated to RegisterPrimitive via cfg
@@ -209,6 +210,12 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		cfg.maxParseDepth = parser.DefaultMaxParseDepth
 	}
 
+	// Apply default expand depth when the caller did not set one explicitly.
+	// WithMaxExpandDepth(0) means unlimited — expandDepthSet tracks the opt-in.
+	if !cfg.expandDepthSet {
+		cfg.maxExpandDepth = compilation.DefaultMaxExpandDepth
+	}
+
 	// Apply default inline threshold when the caller did not set one explicitly.
 	// WithInlineThreshold(0) disables inlining — inlineThresholdSet tracks
 	// whether the caller opted in, so we don't override an explicit zero.
@@ -267,6 +274,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		closers:                 closers,
 		maxCallDepth:            cfg.maxCallDepth,
 		maxParseDepth:           cfg.maxParseDepth,
+		maxExpandDepth:          cfg.maxExpandDepth,
 		maxStackSize:            cfg.maxStackSize,
 		inlineThreshold:         cfg.inlineThreshold,
 		contractEnforcement:     cfg.contractEnforcement,
@@ -393,7 +401,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 	}
 	env := ns.Runtime()
 
-	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx, nil, p.inlineThreshold)
+	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx, nil, p.inlineThreshold, p.maxExpandDepth)
 	if err != nil {
 		return nil, wrapCompilationError("expand/compile error", err)
 	}
@@ -707,8 +715,8 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 // expandAndCompileOptimized runs the expand → compile → optimize pipeline for a
 // single syntax value. Thin wrapper around compilation.ExpandAndCompile that adds
 // the Optimize() call used by the public Engine API.
-func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int) (*machine.NativeTemplate, error) {
-	tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold)
+func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
+	tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
 	if err != nil {
 		return nil, err
 	}
@@ -717,7 +725,7 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 }
 
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
-	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold)
+	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold, p.maxExpandDepth)
 	if err != nil {
 		return nil, wrapCompilationError("expand/compile error", err)
 	}
@@ -828,7 +836,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
 func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) error {
-	tpl, err := expandAndCompileOptimized(ctx, env, stx, resolver, compilation.DefaultInlineThreshold)
+	tpl, err := expandAndCompileOptimized(ctx, env, stx, resolver, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 	if err != nil {
 		return err
 	}
