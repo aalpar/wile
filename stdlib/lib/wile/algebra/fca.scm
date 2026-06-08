@@ -122,16 +122,48 @@
 ;; Each entry is (object attr1 attr2 ...).
 (define (context-from-alist entries)
   "Build an FCA context from an association list.\nEach entry is (object attr1 attr2 ...).\n\nParameters:\n  entries : list\nReturns: fca-context\nCategory: algebra\n\nExamples:\n  (context-from-alist '((\"f1\" \"A.x\" \"B.y\") (\"f2\" \"A.x\")))"
-  (let* ((objs (map car entries))
-         (attrs (sort-strings
-                  (let loop ((es entries) (acc '()))
-                    (if (null? es) acc
-                      (loop (cdr es) (append (cdr (car es)) acc))))))
-         (incidence
-           (lambda (o a)
-             (let ((entry (assoc o entries)))
-               (and entry (member? a (cdr entry)))))))
-    (make-context objs attrs incidence)))
+  ;; The entries ARE the obj->attrs relation already indexed by object, so
+  ;; read it off directly rather than handing make-context an O(objects)
+  ;; `assoc` incidence closure it would invoke objects*attributes times
+  ;; (that composition is O(objects^2 * attributes)). This is linear in the
+  ;; size of the relation. Semantics preserved exactly: first entry wins per
+  ;; duplicate object key, and the attribute set is the union over ALL
+  ;; entries (a duplicate object's later attributes still join the attribute
+  ;; universe even though they are not incident to that object).
+  (let ((obj->attrs (make-hashtable))
+        (attr->objs (make-hashtable))
+        (obj-acc '())
+        (attr-acc '()))
+    (for-each
+      (lambda (entry)
+        (let ((o (car entry))
+              (as (cdr entry)))
+          (set! attr-acc (append as attr-acc))
+          (if (not (hashtable-ref obj->attrs o #f))
+            (begin
+              (hashtable-set! obj->attrs o (sort-strings as))
+              (set! obj-acc (cons o obj-acc))))))
+      entries)
+    (let ((objs (sort-strings obj-acc))
+          (attrs (sort-strings attr-acc)))
+      ;; Seed every attribute bucket so attributes with empty extent carry an
+      ;; explicit '() entry, matching make-context's exhaustive construction.
+      (for-each (lambda (a) (hashtable-set! attr->objs a '())) attrs)
+      ;; Invert obj->attrs. Iterate objects in ascending order, prepend, then
+      ;; reverse, so each attribute bucket comes out sorted ascending.
+      (for-each
+        (lambda (o)
+          (for-each
+            (lambda (a)
+              (hashtable-set! attr->objs a
+                (cons o (hashtable-ref attr->objs a '()))))
+            (hashtable-ref obj->attrs o '())))
+        objs)
+      (for-each
+        (lambda (a)
+          (hashtable-set! attr->objs a (reverse (hashtable-ref attr->objs a '()))))
+        attrs)
+      (make-fca-context objs attrs obj->attrs attr->objs))))
 
 ;;; ── Derivation operators (Galois connection) ───────────
 
