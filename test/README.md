@@ -161,4 +161,4 @@ See `test/COMPATIBILITY.md` for detailed guidance on cross-implementation testin
 
 - `test/COMPATIBILITY.md` — Cross-implementation testing guide
 - `CONTRIBUTING.md` — Full test guidelines and conventions
-- `lib/chibi/test.scm` — Test framework implementation
+- `lib/chibi/test.sld` — Test framework implementation

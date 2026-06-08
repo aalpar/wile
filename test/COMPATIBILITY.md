@@ -94,7 +94,7 @@ make test-scheme SCHEME=chibi-scheme    # Chibi-Scheme
 The target Scheme doesn't have `(chibi test)`. Options:
 
 1. Install chibi-test for that Scheme (if available)
-2. Bundle `stdlib/lib/chibi/test.scm` with your distribution
+2. Bundle `stdlib/lib/chibi/test.sld` with your distribution
 3. Use a different test framework (SRFI-64)
 
 ### Test syntax not supported

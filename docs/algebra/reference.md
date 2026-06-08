@@ -1125,8 +1125,8 @@ Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure pe
 - `(apply-rotation <M> <rho>)` -- apply rotation to matching; each proposer shifts to next receiver in cycle
 - `(rotations <prop-prefs> <recv-prefs>)` -- enumerate exposed rotations; these are the join-irreducibles of the Conway lattice
 - `(stable-matching-lattice <prop-prefs> <recv-prefs>)` -- Conway distributive lattice of all stable matchings under proposer-utility order; brute-force, exponential in `|rotations|`
-- `(egalitarian-stable-matching <prop-prefs> <recv-prefs>)` -- minimum sum-of-ranks across both sides; NP-hard in general (Iwama-Manlove 1999), brute force
-- `(sex-equal-stable-matching <prop-prefs> <recv-prefs>)` -- minimum |Δ-sum-rank|; same NP-hard caveat
+- `(egalitarian-stable-matching <prop-prefs> <recv-prefs>)` -- minimum sum-of-ranks across both sides; polynomial in general (Irving-Leather-Gusfield 1987), but v1 brute-forces the enumerated stable set
+- `(sex-equal-stable-matching <prop-prefs> <recv-prefs>)` -- minimum |Δ-sum-rank|; NP-hard (Kato 1993), unlike the polynomial egalitarian variant; same brute-force caveat
 
 ### References
 
@@ -1136,7 +1136,8 @@ Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure pe
 - Roth & Sotomayor (1990). *Two-Sided Matching*. Cambridge.
 - Gusfield & Irving (1989). *The Stable Marriage Problem*. MIT Press.
 - Kuhn (1955) / Munkres (1957). Hungarian algorithm.
-- Iwama-Manlove et al. (1999). NP-hardness of sex-equal stable matching.
+- Irving-Leather-Gusfield (1987). "An efficient algorithm for the 'optimal' stable marriage." *JACM* 34(3). (Egalitarian: polynomial.)
+- Kato (1993). "Complexity of the sex-equal stable marriage problem." *Japan J. Indust. Appl. Math.* 10(1). (Sex-equal: NP-hard.)
 
 ---
 
