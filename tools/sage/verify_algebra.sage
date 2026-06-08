@@ -126,30 +126,44 @@ def to_wile_test_literal(v):
         return str(v)
     return "'" + to_wile_display(v)
 
+def run_live_check(imports, preamble, cases):
+    """Run `cases` under Wile and compare each result against its expected
+    value. Returns the failure count (0 = all pass) and prints per-case FAIL
+    lines plus an OK/FAILED summary."""
+    imp = " ".join(f"(import {i})" for i in imports)
+    disp = " ".join(f"(display {e}) (display #\\newline)" for e, _ in cases)
+    output = run_wile(f"{imp} {preamble} (begin {disp})")
+    results = output.split("\n") if output else []
+    if len(results) != len(cases):
+        print(f"\n    ERROR: expected {len(cases)} lines, got {len(results)}")
+        return len(cases)
+    failures = 0
+    for i, (e, expected) in enumerate(cases):
+        want = to_wile_display(expected)
+        got = results[i].strip()
+        if got != want:
+            failures += 1
+            print(f"\n    FAIL: {e}\n      got {got!r}, expected {want!r}")
+    print(f"OK ({len(cases)} cases)" if failures == 0
+          else f"\n    {failures}/{len(cases)} FAILED")
+    return failures
+
 def check_or_snapshot(args, filename, test_name, imports, cases, oracle_source,
                       preamble=""):
     """cases: list of (expr_str, expected_python_value). Each expr is a
     self-contained Scheme expression evaluated under `imports`.
     `preamble`: optional Scheme definitions injected before the cases in both
-    the live run and the snapshot (e.g. helper procedures a validator needs)."""
-    failures = 0
-    if not args.snapshot:
-        imp = " ".join(f"(import {i})" for i in imports)
-        disp = " ".join(f"(display {e}) (display #\\newline)" for e, _ in cases)
-        output = run_wile(f"{imp} {preamble} (begin {disp})")
-        results = output.split("\n") if output else []
-        if len(results) != len(cases):
-            print(f"\n    ERROR: expected {len(cases)} lines, got {len(results)}")
-            return len(cases)
-        for i, (e, expected) in enumerate(cases):
-            want = to_wile_display(expected)
-            got = results[i].strip()
-            if got != want:
-                failures += 1
-                print(f"\n    FAIL: {e}\n      got {got!r}, expected {want!r}")
-        print(f"OK ({len(cases)} cases)" if failures == 0
-              else f"\n    {failures}/{len(cases)} FAILED")
-    else:
+    the live run and the snapshot (e.g. helper procedures a validator needs).
+
+    The live Wile cross-check runs in BOTH modes: in check mode it is the
+    check; in snapshot mode it guards the fixture so a Wile/Sage disagreement
+    is never baked into a committed snapshot. This mirrors the rewriting
+    validators' "not writing snapshot due to N failures" guard."""
+    failures = run_live_check(imports, preamble, cases)
+    if args.snapshot:
+        if failures > 0:
+            print(f"    WARNING: not writing snapshot due to {failures} failures")
+            return failures
         body = (preamble + "\n" if preamble else "") + "".join(
             f"(test {to_wile_test_literal(exp)} {e})\n" for e, exp in cases)
         write_snapshot(filename, test_name, imports, body, args.seed, oracle_source)
