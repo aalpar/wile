@@ -159,7 +159,7 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
 ;;; treedist(i, j): fill the forest-distance table FD for the keyroot pair
 ;;; (i, j) and write out tree-distances TD[di][dj] for every (di, dj) that sits
 ;;; at its own subtree root relative to (i, j). The cost closures are
-;;; index-based: (relabel di dj), (delete di), (insert dj).
+;;; index-based: (relabel-cost di dj), (delete-cost di), (insert-cost dj).
 ;;;
 ;;; FD is windowed to the absolute index range [l(i)-1 .. i] × [l(j)-1 .. j];
 ;;; row/col 0 of the window (absolute l-1) is the empty forest, seeded by
@@ -170,7 +170,7 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
 ;; writes the root-branch cells into the shared TD table as a side effect, so
 ;; the forward pass (which discards fd) and the backtracker (which walks it)
 ;; share one recurrence.
-(define (%ted-forest-window t1 t2 i j td relabel delete insert)
+(define (%ted-forest-window t1 t2 i j td relabel-cost delete-cost insert-cost)
   (let ((l1 (ted-tree-l t1))
         (l2 (ted-tree-l t2)))
     (let ((li (vector-ref l1 i))
@@ -186,11 +186,11 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
         (fd-set! (- li 1) (- lj 1) 0)
         (let loop ((di li))
           (when (<= di i)
-            (fd-set! di (- lj 1) (+ (fd-ref (- di 1) (- lj 1)) (delete di)))
+            (fd-set! di (- lj 1) (+ (fd-ref (- di 1) (- lj 1)) (delete-cost di)))
             (loop (+ di 1))))
         (let loop ((dj lj))
           (when (<= dj j)
-            (fd-set! (- li 1) dj (+ (fd-ref (- li 1) (- dj 1)) (insert dj)))
+            (fd-set! (- li 1) dj (+ (fd-ref (- li 1) (- dj 1)) (insert-cost dj)))
             (loop (+ dj 1))))
         ;; Body: the three-way min. The keyroot branch condition
         ;; (l(di)=l(i) ∧ l(dj)=l(j)) decides relabel-vs-compose.
@@ -198,15 +198,15 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
           (when (<= di i)
             (let iloop ((dj lj))
               (when (<= dj j)
-                (let ((cost-del (+ (fd-ref (- di 1) dj) (delete di)))
-                      (cost-ins (+ (fd-ref di (- dj 1)) (insert dj))))
+                (let ((cost-del (+ (fd-ref (- di 1) dj) (delete-cost di)))
+                      (cost-ins (+ (fd-ref di (- dj 1)) (insert-cost dj))))
                   (if (and (= (vector-ref l1 di) li)
                            (= (vector-ref l2 dj) lj))
                       ;; Both at subtree root → relabel/match the two roots,
                       ;; and this forest distance IS the tree distance.
                       (let ((m (min cost-del
                                     cost-ins
-                                    (+ (fd-ref (- di 1) (- dj 1)) (relabel di dj)))))
+                                    (+ (fd-ref (- di 1) (- dj 1)) (relabel-cost di dj)))))
                         (fd-set! di dj m)
                         (%2d-set! td di dj m))
                       ;; Otherwise compose: distance of the forest left of these
@@ -221,7 +221,7 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
             (oloop (+ di 1))))
         (values fd roff coff)))))
 
-(define (%ted-tree-distance-table t1 t2 relabel delete insert)
+(define (%ted-tree-distance-table t1 t2 relabel-cost delete-cost insert-cost)
   "Fill the full TD[0..n1][0..n2] tree-distance table by running the
 forest-distance recurrence over every (keyroot₁ × keyroot₂) pair, ascending.
 Ascending order guarantees each composed sub-tree distance is ready when read.
@@ -234,7 +234,7 @@ TD[n1][n2] is the edit distance between the whole trees."
           (for-each
             (lambda (j)
               ;; fd window discarded here; only its TD side effects persist.
-              (%ted-forest-window t1 t2 i j td relabel delete insert))
+              (%ted-forest-window t1 t2 i j td relabel-cost delete-cost insert-cost))
             (ted-tree-keyroots t2)))
         (ted-tree-keyroots t1))
       td)))
@@ -251,7 +251,7 @@ TD[n1][n2] is the edit distance between the whole trees."
 ;;; Zhang-Shasha recovery; any minimizer path yields a mapping whose summed
 ;;; cost equals the scalar distance.
 
-(define (%ted-backtrack t1 t2 td relabel delete insert)
+(define (%ted-backtrack t1 t2 td relabel-cost delete-cost insert-cost)
   (let ((l1 (ted-tree-l t1))
         (l2 (ted-tree-l t2))
         (nodes1 (ted-tree-nodes t1))
@@ -261,7 +261,7 @@ TD[n1][n2] is the edit distance between the whole trees."
       (set! acc (cons pair acc)))
     (define (rec i j)
       (call-with-values
-        (lambda () (%ted-forest-window t1 t2 i j td relabel delete insert))
+        (lambda () (%ted-forest-window t1 t2 i j td relabel-cost delete-cost insert-cost))
         (lambda (fd roff coff)
           (define (fd-ref a b)
             (%2d-ref fd (- a roff) (- b coff)))
@@ -272,11 +272,11 @@ TD[n1][n2] is the edit distance between the whole trees."
                 ((and (< di li) (< dj lj))
                  #t)                          ; reached the empty forest
                 ((and (>= di li)
-                      (= (fd-ref di dj) (+ (fd-ref (- di 1) dj) (delete di))))
+                      (= (fd-ref di dj) (+ (fd-ref (- di 1) dj) (delete-cost di))))
                  (emit! (cons (vector-ref nodes1 di) #f))
                  (loop (- di 1) dj))
                 ((and (>= dj lj)
-                      (= (fd-ref di dj) (+ (fd-ref di (- dj 1)) (insert dj))))
+                      (= (fd-ref di dj) (+ (fd-ref di (- dj 1)) (insert-cost dj))))
                  (emit! (cons #f (vector-ref nodes2 dj)))
                  (loop di (- dj 1)))
                 ((and (= (vector-ref l1 di) li)
@@ -348,7 +348,7 @@ TD[n1][n2] is the edit distance between the whole trees."
        (every procedure? spec)))
 
 ;; Resolve the `cost` option into the three index-based DP cost closures,
-;; returned as (values relabel delete insert). SPEC is #f (unit default), an
+;; returned as (values relabel-cost delete-cost insert-cost). SPEC is #f (unit default), an
 ;; alist ((relabel . fn) (insert . fn) (delete . fn)) with any subset present,
 ;; or a positional list (relabel-fn insert-fn delete-fn).
 (define (%resolve-costs spec tt1 tt2 label-equal?)
@@ -440,7 +440,7 @@ See also: `make-term-protocol', `graph-maximum-common-subgraph'."
       (call-with-values
         (lambda ()
           (%resolve-costs (assv-or opts 'cost #f) tt1 tt2 label-equal?))
-        (lambda (relabel delete insert)
-          (let ((td (%ted-tree-distance-table tt1 tt2 relabel delete insert)))
+        (lambda (relabel-cost delete-cost insert-cost)
+          (let ((td (%ted-tree-distance-table tt1 tt2 relabel-cost delete-cost insert-cost)))
             (values (%2d-ref td (ted-tree-n tt1) (ted-tree-n tt2))
-                    (%ted-backtrack tt1 tt2 td relabel delete insert))))))))
+                    (%ted-backtrack tt1 tt2 td relabel-cost delete-cost insert-cost))))))))

@@ -1210,6 +1210,40 @@ Context-free-language reachability: a path counts iff its edge-label string lies
 
 ---
 
+## Tree Edit Distance -- `(wile algebra tree)`
+
+Ordered, labeled, rooted tree edit distance (Zhang & Shasha 1989): the minimum-cost sequence of node relabel / insert / delete operations transforming one term tree into another, with **child order significant**. The AST-level sibling of combinatorial-graph's maximum-common-subgraph — where MCS finds the largest shared substructure of two unrooted graphs, tree edit distance measures how far apart two ordered trees are. ASTs are ordered (`(- a b)` ≠ `(- b a)`), and the ordered case is polynomial, `O(n·m·min(depth,leaves)₁·min(depth,leaves)₂)`; unordered tree edit distance is NP-hard and out of scope.
+
+Nodes are navigated through the `(wile algebra rewrite)` `<term-protocol>`: a node's **label** is `(term-get-operator proto node)` when compound, else the node itself; its **children** are `(term-get-operands proto node)` when compound, else `()`. The same trees that flow through AC-matching flow through edit distance.
+
+### Distance + mapping
+- `(tree-edit-distance t1 t2 proto . opts)` -- returns `(values cost mapping)`. `cost` is the minimum edit cost; `mapping` is an alist of node correspondences:
+  - `(a . b)` -- `a` in T1 matched/relabeled to `b` in T2
+  - `(a . #f)` -- `a` deleted from T1
+  - `(#f . b)` -- `b` inserted into T2
+
+  The cost summed over `mapping` equals `cost`. Under unit costs the distance is a metric (`d(T,T)=0`, symmetric, triangle inequality).
+
+### Options (trailing alist)
+- `(cost . SPEC)` -- override unit costs. `SPEC` is an alist `((relabel . fn) (insert . fn) (delete . fn))` with any subset present (missing ops keep unit cost), or a positional list `(relabel-fn insert-fn delete-fn)`. `relabel-fn` takes `(node-a node-b)`; `insert-fn` / `delete-fn` take one node; each returns a non-negative number. The result is a metric only when the override is itself a metric.
+- `(label-equal? . fn)` -- equality used by the default relabel cost (`0` when equal, else `1`). Defaults to `equal?`. Ignored when a custom relabel cost is given.
+
+Default unit cost model: relabel = 0 when labels equal else 1; insert = delete = 1.
+
+### Example
+```scheme
+(define proto
+  (make-term-protocol pair? car cdr
+    (lambda (t a) (cons (car t) a)) (lambda (a b) #f)))
+(tree-edit-distance '(f a b) '(f a c) proto)  ;; => 1, ((... ) (b . c) (a . a))
+(tree-edit-distance '(f a b) '(f b a) proto)  ;; => 2  (ordered — not 0)
+```
+
+### References
+- Zhang, K., Shasha, D. (1989). "Simple fast algorithms for the editing distance between trees and related problems." SIAM J. Comput. 18(6).
+
+---
+
 ## Cross-Reference: Sub-library to Import Path
 
 | Section | Import Path |
@@ -1244,6 +1278,7 @@ Context-free-language reachability: a path counts iff its edge-label string lies
 | Matching | `(wile algebra matching)` |
 | SAT | `(wile algebra sat)` |
 | CFL Reachability | `(wile algebra cfl)` |
+| Tree Edit Distance | `(wile algebra tree)` |
 
 ## Umbrella Re-exports
 
