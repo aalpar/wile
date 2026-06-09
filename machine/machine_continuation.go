@@ -143,6 +143,17 @@ func (p *MachineContinuation) CallDepth() int {
 }
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
+	// Allocates from the process-global continuation pool (not a per-thread one):
+	// Copy has no *MachineContext receiver, so it cannot reach the caller's
+	// threadPools. The resulting frame may later be released via
+	// mc.releaseContinuation into a per-thread pool, causing slow asymmetric
+	// drift between the global and per-thread pools over a program's life. This
+	// is benign — a *MachineContinuation is valid in any freelist of its type,
+	// access is same-goroutine sequential (Copy runs on the executing thread;
+	// thread-confinement forbids cross-goroutine release), and the drift is an
+	// allocation-accounting wrinkle, not a correctness or race issue. A
+	// receiver-aware Copy is deliberately not worth threading through this
+	// delimited-continuation copy path. See machine/pool.go (threadPools).
 	q := acquireContinuation()
 	q.env = p.env
 	q.template = p.template

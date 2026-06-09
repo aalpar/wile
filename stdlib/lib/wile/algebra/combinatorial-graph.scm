@@ -137,8 +137,7 @@
              (else adjacency))))
     (unless (list? adj)
       (error "make-graph: adjacency must be a list" adj))
-    (when (and nfn (not (procedure? nfn)))
-      (error "make-graph: neighbor-fn must be a procedure" nfn))
+    (when nfn (assert-procedure "make-graph" nfn)) ; neighbor-fn is optional; check only when present
     ;; Tier-1 and tier-2 are mutually exclusive (Q-d).
     (when (and (pair? adj) (or seed nfn))
       (error "make-graph: non-empty adjacency conflicts with seed/neighbor-fn"
@@ -2069,6 +2068,9 @@ Opts (trailing alist):
 
 Examples:
   (graph-partition (complete-bipartite-graph 3 3))
+  ;; Each opt is its own trailing arg (the `make-X . opts` convention), not one
+  ;; combined alist:
+  (graph-partition g '(balance . 0.3) (cons 'weight (lambda (d) (car d))))
 
 Parameters:
   G : graph

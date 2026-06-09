@@ -139,10 +139,9 @@
         (let ((o (car entry))
               (as (cdr entry)))
           (set! attr-acc (append as attr-acc))
-          (if (not (hashtable-ref obj->attrs o #f))
-            (begin
-              (hashtable-set! obj->attrs o (sort-strings as))
-              (set! obj-acc (cons o obj-acc))))))
+          (unless (hashtable-ref obj->attrs o #f)
+            (hashtable-set! obj->attrs o (sort-strings as))
+            (set! obj-acc (cons o obj-acc)))))
       entries)
     (let ((objs (sort-strings obj-acc))
           (attrs (sort-strings attr-acc)))

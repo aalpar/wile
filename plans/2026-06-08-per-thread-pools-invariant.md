@@ -29,8 +29,10 @@ The pool reference is a plain `MachineContext` field (like `parentMC`, `thread`,
 `MachineContinuation` and save/restored on every continuation op; a pooled
 reference riding there would be swapped around by `Restore`.
 
-With per-thread pools there is no mutex: each freelist is touched by exactly one
-goroutine.
+With per-thread pools each freelist's mutex is uncontended: the `FreeList` still
+carries its `sync.Mutex` (`machine/pool_generic.go`), but the lock is touched by
+exactly one goroutine, so it never serializes and its cache line never ping-pongs
+between cores. The win is the removal of *contention*, not of the lock itself.
 
 ## Why this is safe — the invariant
 

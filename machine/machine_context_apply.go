@@ -82,6 +82,13 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.pc = 0
 	// Signal in-place reconfiguration so the foreign-call dispatchers continue
 	// execution even when tpl == the caller's template (self-application).
+	//
+	// The flag is ONLY meaningful within the clear→call→read window of
+	// applyForeign / callForeignCached (each clears it before invoking the
+	// primitive and reads it immediately after). On the bytecode OpApply path no
+	// one reads it, so a stale `true` set here is always cleared by the next
+	// foreign dispatch before any reader sees it. A future opcode must not read
+	// this field outside that window without first establishing its own clear.
 	p.reconfigured = true
 	return p, nil
 }
