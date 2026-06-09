@@ -96,7 +96,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	if mc.cont != nil {
 		depth = mc.cont.callDepth + 1
 	}
-	q := acquireContinuation()
+	q := mc.acquireContinuation()
 	q.env = mc.env
 	q.template = mc.template
 	q.copyValueRegisterFrom(&mc.vmState)

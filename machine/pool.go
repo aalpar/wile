@@ -43,19 +43,20 @@ var pools = NewPoolManager()
 // stackPool recycles Stack allocations. Stacks are created on every
 // non-tail call (SaveContinuation) and discarded on return (Restore).
 // Pooling avoids repeated heap allocation of the backing slice.
-var stackPool = registerFreeList(pools, NewFreeList("stack",
-	func() *Stack {
-		s := make(Stack, 0, stackInitialCap)
-		return &s
-	},
-	func(s *Stack) {
-		full := (*s)[:cap(*s)]
-		for i := range full {
-			full[i] = nil
-		}
-		*s = full[:0]
-	},
-))
+var stackPool = registerFreeList(pools, NewFreeList("stack", newStackPoolEntry, resetStackPoolEntry))
+
+func newStackPoolEntry() *Stack {
+	s := make(Stack, 0, stackInitialCap)
+	return &s
+}
+
+func resetStackPoolEntry(s *Stack) {
+	full := (*s)[:cap(*s)]
+	for i := range full {
+		full[i] = nil
+	}
+	*s = full[:0]
+}
 
 // subContextPool recycles MachineContext structs used as sub-contexts.
 // Sub-contexts are created by NewSubContext for every foreign function
@@ -66,7 +67,9 @@ var subContextPool = registerPool(pools, NewPool("sub_context",
 		return &MachineContext{}
 	},
 	func(mc *MachineContext) {
-		releaseStack(mc.evals)
+		// The eval stack is released explicitly by ReleaseSubContext /
+		// ReleaseTopLevelContext (which know mc's per-thread pool) before this
+		// reset runs; here we only zero the struct.
 		*mc = MachineContext{}
 	},
 ))
@@ -76,15 +79,18 @@ var subContextPool = registerPool(pools, NewPool("sub_context",
 // return (RestoreAndRelease). Only the normal-return path pools frames;
 // call/cc, escape, and composable continuation paths must not pool because
 // the frame may be re-invoked.
-var continuationPool = registerFreeList(pools, NewFreeList("continuation",
-	func() *MachineContinuation {
-		return &MachineContinuation{}
-	},
-	func(cont *MachineContinuation) {
-		releaseStack(cont.evals)
-		*cont = MachineContinuation{}
-	},
-))
+var continuationPool = registerFreeList(pools, NewFreeList("continuation", newContinuationPoolEntry, resetContinuationPoolEntry))
+
+func newContinuationPoolEntry() *MachineContinuation {
+	return &MachineContinuation{}
+}
+
+// resetContinuationPoolEntry zeros the frame. The eval stack is released
+// explicitly by releaseContinuation (which knows the per-thread pool) before
+// this reset runs.
+func resetContinuationPoolEntry(cont *MachineContinuation) {
+	*cont = MachineContinuation{}
+}
 
 // defaultBindingsCap is the pre-allocated binding capacity for fresh env
 // frames from the pool. Most lambdas take 1-3 parameters; cap 4 covers
@@ -104,16 +110,121 @@ const defaultBindingsCap = 4
 // 1000+ times per second, giving sync.Pool a <1% hit rate. A freelist
 // survives GC, so after warmup (one full recursion depth) every acquire
 // is a hit and copyForApplyInto reuses the retained bindings capacity.
-var envFramePool = registerFreeList(pools, NewFreeList("env_frame",
-	func() *environment.EnvironmentFrame {
-		f := &environment.EnvironmentFrame{}
-		f.PreAllocateBindings(defaultBindingsCap)
-		return f
-	},
-	func(f *environment.EnvironmentFrame) {
-		f.ResetForPool()
-	},
-))
+var envFramePool = registerFreeList(pools, NewFreeList("env_frame", newEnvFramePoolEntry, resetEnvFramePoolEntry))
+
+// newEnvFramePoolEntry / resetEnvFramePoolEntry are the env-frame freelist
+// factory and reset. Extracted as named functions so the process-global
+// envFramePool and each per-thread threadPools.envFrames share identical
+// behavior.
+func newEnvFramePoolEntry() *environment.EnvironmentFrame {
+	f := &environment.EnvironmentFrame{}
+	f.PreAllocateBindings(defaultBindingsCap)
+	return f
+}
+
+func resetEnvFramePoolEntry(f *environment.EnvironmentFrame) {
+	f.ResetForPool()
+}
+
+// threadPools holds a thread's (goroutine's) private allocation freelists.
+// It is minted once at each thread root (NewMachineContext, NewThreadSubContext,
+// AcquireTopLevelContext) and inherited by reference through NewSubContext, so
+// every same-goroutine context shares one set and no two goroutines ever touch
+// the same freelist — removing the mutex and atomic-counter contention that
+// process-global pools impose on parallel threads.
+//
+// Safe only because continuations are thread-confined (a frame allocated by one
+// thread is never released by another); see
+// plans/2026-06-08-per-thread-pools-invariant.md.
+//
+// The three freelists hit on every non-tail closure call (env frame +
+// continuation frame + eval stack) are all per-thread. A nil threadPools
+// (cold/expand-time contexts without a root) falls back to the global pools.
+type threadPools struct {
+	envFrames     *FreeList[environment.EnvironmentFrame]
+	continuations *FreeList[MachineContinuation]
+	stacks        *FreeList[Stack]
+}
+
+// newThreadPools mints a fresh, unregistered set of per-thread freelists.
+// Per-thread pools are deliberately NOT registered with the global PoolManager:
+// they are single-goroutine and must not share its lock or aggregate counters.
+func newThreadPools() *threadPools {
+	return &threadPools{
+		envFrames:     NewFreeList("env_frame", newEnvFramePoolEntry, resetEnvFramePoolEntry),
+		continuations: NewFreeList("continuation", newContinuationPoolEntry, resetContinuationPoolEntry),
+		stacks:        NewFreeList("stack", newStackPoolEntry, resetStackPoolEntry),
+	}
+}
+
+// envFramePoolFor returns this context's env-frame freelist: the per-thread one
+// when present, else the process-global fallback.
+func (p *MachineContext) envFramePoolFor() *FreeList[environment.EnvironmentFrame] {
+	if p.pools != nil {
+		return p.pools.envFrames
+	}
+	return envFramePool
+}
+
+// acquireEnvFrame returns a zeroed EnvironmentFrame from this context's pool.
+func (p *MachineContext) acquireEnvFrame() *environment.EnvironmentFrame {
+	return p.envFramePoolFor().Acquire()
+}
+
+// releaseEnvFrame returns an EnvironmentFrame to this context's pool. Nil-safe.
+// Must NOT be called on frames stored in shared continuations.
+func (p *MachineContext) releaseEnvFrame(f *environment.EnvironmentFrame) {
+	if f == nil {
+		return
+	}
+	p.envFramePoolFor().Release(f)
+}
+
+// stackPoolFor / continuationPoolFor return this context's freelist: the
+// per-thread one when present, else the process-global fallback.
+func (p *MachineContext) stackPoolFor() *FreeList[Stack] {
+	if p.pools != nil {
+		return p.pools.stacks
+	}
+	return stackPool
+}
+
+func (p *MachineContext) continuationPoolFor() *FreeList[MachineContinuation] {
+	if p.pools != nil {
+		return p.pools.continuations
+	}
+	return continuationPool
+}
+
+// acquireStack returns a zeroed-length Stack from this context's pool.
+func (p *MachineContext) acquireStack() *Stack {
+	return p.stackPoolFor().Acquire()
+}
+
+// releaseStack returns a Stack to this context's pool. Nil-safe.
+func (p *MachineContext) releaseStack(s *Stack) {
+	if s == nil {
+		return
+	}
+	p.stackPoolFor().Release(s)
+}
+
+// acquireContinuation returns a zeroed MachineContinuation from this context's pool.
+func (p *MachineContext) acquireContinuation() *MachineContinuation {
+	return p.continuationPoolFor().Acquire()
+}
+
+// releaseContinuation releases the frame's eval stack to this context's stack
+// pool, then returns the frame to this context's continuation pool. Nil-safe.
+// Must NOT be called on shared (call/cc-captured) frames.
+func (p *MachineContext) releaseContinuation(cont *MachineContinuation) {
+	if cont == nil {
+		return
+	}
+	p.releaseStack(cont.evals)
+	cont.evals = nil
+	p.continuationPoolFor().Release(cont)
+}
 
 // acquireStack returns a zeroed-length Stack from the pool.
 func acquireStack() *Stack {
@@ -145,9 +256,11 @@ func ReleaseSubContext(mc *MachineContext) {
 	}
 	if mc.envPooled {
 		mc.counters.EnvFramePoolReleases++
-		releaseEnvFrame(mc.env)
+		mc.releaseEnvFrame(mc.env)
 		mc.env = nil
 	}
+	mc.releaseStack(mc.evals) // to mc's per-thread pool before the reset zeros it
+	mc.evals = nil
 	subContextPool.Release(mc)
 }
 
@@ -160,9 +273,10 @@ func ReleaseSubContext(mc *MachineContext) {
 func AcquireTopLevelContext(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineContext {
 	mc := subContextPool.Acquire()
 	mc.ctx = ctx
+	mc.pools = newThreadPools() // top-level execution root: its own freelists
 	mc.env = env
 	mc.template = tpl
-	mc.evals = acquireStack()
+	mc.evals = mc.acquireStack()
 	mc.counters.opcodeHits = newOpcodeHits()
 	mc.counters.callCounts = newCallCounts()
 	return mc
@@ -176,9 +290,11 @@ func ReleaseTopLevelContext(mc *MachineContext) {
 	}
 	if mc.envPooled {
 		mc.counters.EnvFramePoolReleases++
-		releaseEnvFrame(mc.env)
+		mc.releaseEnvFrame(mc.env)
 		mc.env = nil
 	}
+	mc.releaseStack(mc.evals) // to mc's per-thread pool before the reset zeros it
+	mc.evals = nil
 	subContextPool.Release(mc)
 }
 
@@ -212,6 +328,8 @@ func releaseContinuation(cont *MachineContinuation) {
 	if cont == nil {
 		return
 	}
+	releaseStack(cont.evals)
+	cont.evals = nil
 	continuationPool.Release(cont)
 }
 

@@ -66,7 +66,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		}
 		p.envPooled = false
 	} else {
-		env = acquireEnvFrame()
+		env = p.acquireEnvFrame()
 		mcls.env.InitApplyFrame(env)
 		bnds = env.LocalEnvironment().Bindings()
 		p.envPooled = true
@@ -101,7 +101,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 
 	// Acquire a fresh frame to prevent concurrent SRFI-18 threads from
 	// racing on shared binding slots when calling the same ForeignClosure.
-	env := acquireEnvFrame()
+	env := p.acquireEnvFrame()
 	fcls.env.InitApplyFrame(env)
 	bnds := env.LocalEnvironment().Bindings()
 	p.envPooled = true

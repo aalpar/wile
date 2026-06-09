@@ -95,6 +95,13 @@ type MachineContext struct {
 	// unchanged even though Apply ran. Cleared before each foreign call.
 	reconfigured bool
 
+	// pools holds this thread's private allocation freelists, minted at the
+	// thread root and inherited by reference through NewSubContext (same
+	// goroutine). nil means fall back to the process-global pools. Like the
+	// fields above and unlike vmState, it describes the executing context and
+	// must NOT be saved into continuations. See threadPools in pool.go.
+	pools *threadPools
+
 	timer *timerState // nil = no timer active; both handler and cancel set together
 }
 
@@ -157,6 +164,7 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 		},
 		cont:     cont.parent,
 		counters: VMCounters{opcodeHits: newOpcodeHits(), callCounts: newCallCounts()},
+		pools:    newThreadPools(), // thread root: its own freelists
 	}
 	// Shallow copy: the singleValue / multiValues fields are transferred
 	// by reference, not deep-cloned — they're passed between contexts.

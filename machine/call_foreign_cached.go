@@ -61,7 +61,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 
 	// Acquire a fresh frame to prevent concurrent SRFI-18 threads from
 	// racing on shared binding slots when calling the same ForeignClosure.
-	env := acquireEnvFrame()
+	env := mc.acquireEnvFrame()
 	fcls.env.InitApplyFrame(env)
 	bnds := env.LocalEnvironment().Bindings()
 	mc.envPooled = true

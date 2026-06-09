@@ -57,7 +57,7 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 		p.counters.StackPoolReleases++
 		oldEvals := p.evals
 		p.evals = cont.evals.Copy()
-		releaseStack(oldEvals)
+		p.releaseStack(oldEvals)
 	}
 }
 
@@ -101,14 +101,14 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 			p.counters.StackPoolReleases++
 			oldEvals := p.evals
 			p.evals = cont.evals.Copy()
-			releaseStack(oldEvals)
+			p.releaseStack(oldEvals)
 		}
 		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
 		p.marks = cloneMarks(cont.marks)
 		if oldEnvPooled && oldEnv != p.env {
 			p.counters.EnvFramePoolReleases++
-			releaseEnvFrame(oldEnv)
+			p.releaseEnvFrame(oldEnv)
 		}
 		return
 	}
@@ -131,7 +131,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		p.counters.StackPoolReleases++
 		oldEvals := p.evals
 		p.evals = cont.evals // transfer, not copy
-		releaseStack(oldEvals)
+		p.releaseStack(oldEvals)
 		// Break the evals reference before pooling so the transferred stack
 		// (now p.evals) is not released again inside releaseContinuation.
 		cont.evals = nil
@@ -143,9 +143,9 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	// the live env.
 	if oldEnvPooled && oldEnv != p.env {
 		p.counters.EnvFramePoolReleases++
-		releaseEnvFrame(oldEnv)
+		p.releaseEnvFrame(oldEnv)
 	}
-	releaseContinuation(cont)
+	p.releaseContinuation(cont)
 }
 
 // PopContinuation pops the current continuation from the machine context and returns it.
@@ -215,7 +215,7 @@ func (p *MachineContext) SaveContinuation(off int) error {
 		p.counters.InlineEvalsSaved++
 	} else {
 		// Standard path: stack transferred to continuation, acquire new for mc.
-		p.evals = acquireStack()
+		p.evals = p.acquireStack()
 	}
 	p.cont = cont
 	p.marks = nil // callee starts with no marks
@@ -311,7 +311,7 @@ func (p *MachineContext) CaptureInterruptContinuation() *MachineContinuation {
 	// releasing liveFrame to prevent releaseContinuation from returning p.evals
 	// to the stack pool while p still owns it.
 	liveFrame.evals = nil
-	releaseContinuation(liveFrame)
+	p.releaseContinuation(liveFrame)
 	return segment
 }
 

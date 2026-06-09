@@ -44,9 +44,10 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
 	mc.ctx = p.ctx
+	mc.pools = p.pools // same goroutine: share the parent thread's freelists
 	// envPooled: zero value (false) — sub-context env is top-level, not from pool.
 	mc.env = p.env.TopLevel()
-	mc.evals = acquireStack()
+	mc.evals = mc.acquireStack()
 	mc.threadID = p.threadID
 	mc.parentMC = p
 	mc.escapeCont = p.escapeCont
@@ -141,6 +142,7 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 		exceptionHandler: params.ExceptionHandler,
 		maxCallDepth:     params.MaxCallDepth,
 		maxStackSize:     params.MaxStackSize,
+		pools:            newThreadPools(), // new goroutine: its own freelists
 		// thread will be set by SetThread below
 	}
 	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()

@@ -839,17 +839,20 @@ func TestRestoreAndRelease_SameEnvIdentity_SkipsRelease(t *testing.T) {
 func TestReleaseTopLevelContext_ReleasesPooledEnvFrame(t *testing.T) {
 	// Simulate: after Run() halts, mc.env is a pooled frame.
 	// ReleaseTopLevelContext must release it before zeroing the MC.
-	env := acquireEnvFrame()
 	tpl := NewEmptyNativeTemplate()
 	ctx := context.Background()
-	mc := AcquireTopLevelContext(ctx, tpl, env)
+	mc := AcquireTopLevelContext(ctx, tpl, newEnvFramePoolEntry())
 	mc.envPooled = true // as set by Apply
 
-	before := envFramePool.Stats()
+	// AcquireTopLevelContext mints a per-thread pool, and ReleaseTopLevelContext
+	// releases mc.env to *that* pool (mc.releaseEnvFrame), not the global one.
+	// Capture it before release zeros the MC.
+	pool := mc.pools.envFrames
+	before := pool.Stats()
 	ReleaseTopLevelContext(mc)
-	after := envFramePool.Stats()
+	after := pool.Stats()
 
-	// The pooled env frame should have been released.
+	// The pooled env frame should have been released to the context's pool.
 	released := after.Releases - before.Releases
 	qt.Assert(t, released, qt.Equals, uint64(1))
 }
