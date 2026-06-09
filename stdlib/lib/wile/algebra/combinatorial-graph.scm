@@ -1783,6 +1783,169 @@
                  A)
                (outer)))))))))
 
+;;; ====================================================================
+;;; Maximum common connected induced subgraph (MCCIS) via McGregor (1982)
+;;; branch-and-bound with a bipartite-matching (assignment) relaxation
+;;; bound (foundations doc §4.2, plan 2026-06-09-mcs-combinatorial-graph-impl).
+;;;
+;;; A correspondence M : V(G) ⊇ D → V(H) is an injective vertex mapping
+;;; that is INDUCED-preserving — for every (a→b), (a'→b') in M:
+;;;   edge?(G,a,a') = edge?(H,b,b')   (both directions when directed),
+;;;   plus self-loop agreement edge?(G,a,a) = edge?(H,b,b).
+;;; Default search keeps D connected (clones are connected fragments);
+;;; (disconnected? . #t) relaxes that. Objective: maximize |M|.
+;;; ====================================================================
+
+;; Setoid-aware list removal — the search threads each graph's own setoid,
+;; so vertices must be removed by equivalence, not by equal?.
+(define (%mcs-remove S x lst)
+  (filter
+    (lambda (y) (not (setoid-equiv? S x y)))
+    lst))
+
+;; Adjacency in the underlying undirected sense (either direction). Used for
+;; connectivity of the mapped domain in a digraph: an induced connected
+;; subgraph is one whose underlying undirected graph is connected.
+(define (%mcs-adjacent? G u v)
+  (or (graph-edge? G u v)
+      (graph-edge? G v u)))
+
+;; Can mapping M be extended by (a→b) while staying induced-consistent?
+;; M is an alist ((g . h) ...). a is unmapped in G, b unmapped in H.
+(define (%mcs-consistent? G H M a b)
+  (and
+    ;; self-loop agreement: a loop is part of induced structure.
+    (eq? (graph-edge? G a a) (graph-edge? H b b))
+    (every
+      (lambda (pr)
+        (let ((a* (car pr))
+              (b* (cdr pr)))
+          (and (eq? (graph-edge? G a a*) (graph-edge? H b b*))
+               (eq? (graph-edge? G a* a) (graph-edge? H b* b)))))
+      M)))
+
+;; Frontier: unmapped G-vertices adjacent to the mapped domain. Restricting
+;; growth to the frontier is exactly what enforces connectivity.
+(define (%mcs-frontier G dom rem-g)
+  (filter
+    (lambda (g)
+      (any
+        (lambda (d) (%mcs-adjacent? G g d))
+        dom))
+    rem-g))
+
+;; Build the bipartite compatibility graph used by the bound. Relabel the
+;; remaining G-vertices to integers 0..n-1 and the remaining H-vertices to
+;; n..n+m-1 (two disjoint integer ranges) so the matcher never has to compare
+;; a G-vertex against an H-vertex, and so two graphs that happen to share a
+;; vertex name don't collide. An edge (i, n+j) means "g_i could still pair
+;; with h_j" under compatible?.
+;;
+;; NOTE: full-graph degree is deliberately NOT used to filter candidate pairs.
+;; In an INDUCED common subgraph a matched vertex's degree is measured WITHIN
+;; the shared subgraph, not in the full graph, so a degree mismatch in the
+;; full graphs does not rule out a pair. Filtering on it would break the
+;; bound's admissibility. compatible? (labels/types) is the only filter.
+(define (%mcs-compat-graph rem-g rem-h compatible?)
+  (let* ((gv (list->vector rem-g))
+         (hv (list->vector rem-h))
+         (n  (vector-length gv))
+         (m  (vector-length hv))
+         (gi (iota n))
+         (hj (iota m)))
+    (let ((left
+           (map
+             (lambda (i)
+               (cons i
+                     (filter-map
+                       (lambda (j)
+                         (and (compatible? (vector-ref gv i) (vector-ref hv j))
+                              (cons (+ n j) #f)))
+                       hj)))
+             gi))
+          (right
+           (map
+             (lambda (j)
+               (cons (+ n j)
+                     (filter-map
+                       (lambda (i)
+                         (and (compatible? (vector-ref gv i) (vector-ref hv j))
+                              (cons i #f)))
+                       gi)))
+             hj)))
+      ;; symmetric adjacency (both sides listed) — undirected, no symmetrize?
+      (make-graph (append left right)))))
+
+;; %mcs-upper-bound — the assignment-relaxation bound (foundations §4.2).
+;;
+;; Returns an UPPER bound on the maximum number of ADDITIONAL pairs that any
+;; extension of the current mapping could achieve, given the still-unmapped
+;; vertices rem-g and rem-h.
+;;
+;; Admissibility (the load-bearing property): any set of future extensions is,
+;; in particular, an injective assignment rem-g → rem-h respecting compatible?.
+;; A maximum bipartite matching is the LARGEST such injective assignment once
+;; the induced constraints are RELAXED (dropped entirely). Dropping constraints
+;; can only admit more assignments, never fewer — so the matching size is ≥ the
+;; true achievable count. It can over-count, never under-count. That one-sided
+;; error is what makes the branch-and-bound prune sound: we never discard a
+;; branch that could have beaten the incumbent.
+;;
+;; With the default compatible? (always true) this reduces to min(|rem-g|,
+;; |rem-h|) — the max matching of a complete bipartite graph. A real
+;; compatible? (matching node labels/types) tightens it.
+(define (%mcs-upper-bound rem-g rem-h compatible?)
+  (if (or (null? rem-g) (null? rem-h))
+      0
+      (length
+        (graph-maximum-bipartite-matching
+          (%mcs-compat-graph rem-g rem-h compatible?)))))
+
+;; Branch-and-bound driver. Closes over the best mapping seen (the incumbent).
+;; v1 accepts permutation redundancy in the growth order (frontier vertices may
+;; be added in different orders along different paths); for the exact-on-small-
+;; graphs regime this is fine. A fixed-G-vertex-order branching that eliminates
+;; the redundancy is a v2 optimization.
+(define (%mcs-search G H compatible? connected?)
+  (let ((Sg   (graph-setoid G))
+        (Sh   (graph-setoid H))
+        (best '()))
+    (define (extend M rem-g rem-h)
+      (when (> (length M) (length best))
+        (set! best M))
+      ;; Prune: if even the relaxed bound can't beat the incumbent, stop.
+      (when (> (+ (length M) (%mcs-upper-bound rem-g rem-h compatible?))
+               (length best))
+        (let ((cand-g
+                (if (and connected? (pair? M))
+                    (%mcs-frontier G (map car M) rem-g)
+                    rem-g)))
+          (for-each
+            (lambda (g)
+              (for-each
+                (lambda (h)
+                  (when (and (compatible? g h)
+                             (%mcs-consistent? G H M g h))
+                    (extend (cons (cons g h) M)
+                            (%mcs-remove Sg g rem-g)
+                            (%mcs-remove Sh h rem-h))))
+                rem-h))
+            cand-g))))
+    (extend '() (graph-vertices G) (graph-vertices H))
+    (reverse best)))
+
+(define (graph-maximum-common-subgraph G H . opts)
+  "Return a maximum common connected induced subgraph (MCCIS) of G and H as a\nvertex correspondence ((g-vertex . h-vertex) ...). The correspondence is the\nlargest injective mapping whose mapped G-vertices and their images induce\nisomorphic subgraphs — for every pair of mapped vertices, an edge exists in G\niff the corresponding edge exists in H (induced subgraph isomorphism), and the\nmapped G-vertices form a connected subgraph.\n\nOptions (trailing alist):\n  (disconnected? . BOOL)  — #t drops the connectivity requirement, returning a\n                            maximum common INDUCED subgraph (pieces may be\n                            disconnected). Default #f.\n  (compatible? . PROC)    — (lambda (g-vertex h-vertex) -> boolean) gating which\n                            vertex pairs may be matched (e.g. node-type/label\n                            equality for clone detection). Default: all pairs\n                            compatible (pure topology). A real predicate also\n                            tightens the search bound.\n\nExact (branch-and-bound with a bipartite-matching relaxation bound). MCS is\nNP-hard; intended for small graphs (per-function CFGs/ASTs). The empty\ncorrespondence is trivially common; any single compatible pair beats it.\nDirected graphs are supported (the induced check is direction-aware).\nEdge-data and multi-edge multiplicity are ignored in v1 (topology only).\n\nExamples:\n  (length (graph-maximum-common-subgraph (complete-graph 3) (complete-graph 3)))\n    => 3\n  (length (graph-maximum-common-subgraph (cycle-graph 4) (path-graph 4)))\n    => 3\n  (length (graph-maximum-common-subgraph (complete-graph 3) (path-graph 3)))\n    => 2\n\nParameters:\n  G : graph\n  H : graph\n  opts : alist\nReturns: list of pairs ((g-vertex . h-vertex) ...)\nCategory: algebra\nKeywords: maximum common subgraph, MCS, MCCIS, induced subgraph isomorphism, clone detection, branch and bound\n\nSee also: `graph-isomorphic?', `graph-maximum-bipartite-matching'."
+  (validate-opts-keys "graph-maximum-common-subgraph" opts
+    '(disconnected? compatible?))
+  (let ((disconnected? (assv-or opts 'disconnected? #f))
+        (compatible?   (assv-or opts 'compatible?   #f)))
+    (when compatible?
+      (assert-procedure "graph-maximum-common-subgraph" compatible?))
+    (%mcs-search G H
+                 (or compatible? (lambda (g h) #t))
+                 (not disconnected?))))
+
 (define (complete-graph n)
   "Return K_n, the complete graph on n vertices 0..n-1 (every pair adjacent).\nChromatic = x(x-1)...(x-n+1); spanning-tree count = n^(n-2) (Cayley).\n\nExamples:\n  (graph-order (complete-graph 4))  => 4\n  (graph-size  (complete-graph 4))  => 6\n\nParameters:\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: K_n, complete graph, clique"
   (unless (and (integer? n) (>= n 0))

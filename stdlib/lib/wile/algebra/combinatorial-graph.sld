@@ -23,6 +23,8 @@
     graph-tutte-polynomial
     ;; Matching
     graph-maximum-bipartite-matching
+    ;; Common subgraph (maximum common induced subgraph; connected by default)
+    graph-maximum-common-subgraph
     ;; Partition (balanced cut, Kernighan-Lin)
     graph-partition
     ;; Presets
