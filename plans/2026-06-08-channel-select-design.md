@@ -102,6 +102,43 @@ panic on send-to-closed; `ChannelSelect` converts that to `ok=false`. Surfacing
 `channel-try-receive`, which already returns three values via `mc.SetValues`
 (`prim_gointerop.go:134`).
 
+## Prior art — this is a narrow slice of Concurrent ML
+
+This design is not novel, and the plan should say so. Reifying a blocking channel
+operation as a first-class value and choosing among several is exactly
+**Concurrent ML** (Reppy, *CML: A Higher-Order Concurrent Language*, PLDI 1991).
+CML represents a pending operation as an *event* — `recvEvt ch`, `sendEvt ch v` —
+combines events with `choose`, and performs the atomic multi-way commit with
+`sync`. Racket ships this directly as `sync` / `choice-evt` / `handle-evt`.
+
+The mapping onto this design is one-to-one:
+
+| Concurrent ML | This design |
+|---------------|-------------|
+| `recvEvt ch` / `sendEvt ch v` | `(select-recv ch)` / `(select-send ch v)` |
+| `choose [e1 e2 ...]` + `sync` | `(channel-select (list e1 e2 ...))` |
+| (no event) — `default` arm | `(select-default)` |
+
+`channel-select` is `choose` and `sync` fused into a single call, and the
+descriptor records are events. What this design **deliberately omits** is CML's
+event *algebra*: `wrap` / `handle-evt` (post-process the result of whichever
+event fires) and `guard` (compute an event lazily at sync time). Those are what
+make CML events compose across abstraction boundaries — e.g. wrapping a
+`recvEvt` so a library can hand out an event that decodes the received message
+without exposing the channel. Wile's descriptors are events *without* the
+combinators: first-class and selectable, but not transformable.
+
+This omission is a deliberate v1 scope cut, not an oversight. Adding `wrap`/
+`guard` later is a clean extension — they are pure Scheme over the same
+`channel-select` call and would still bottom out in the one atomic
+`reflect.Select` commit. The reason the commit *must* be a runtime primitive
+(rather than synthesized from `channel-receive` + threads) is the standard
+result that blocking operations do not compose: "block on any of N, commit to
+one, retract the rest" requires registering on all wait queues atomically, which
+no composition of single-channel blocking primitives provides. CML solved this
+with a runtime; Go solved it with `select` / `reflect.Select`; this design
+borrows Go's. Add Reppy 1991 to `BIBLIOGRAPHY.md` when this lands.
+
 ## API
 
 ### Layer 1 — descriptor constructors (gointerop primitives)
@@ -212,6 +249,83 @@ as one of the cases. This is consistent with the memory note that Wile threads
 buy concurrency for blocking I/O, not CPU parallelism
 (`vm-no-cpu-parallelism.md`): `select` is a *blocking-coordination* tool, which
 is precisely where threads pay off.
+
+## Future work — v2: Racket-style event combinators
+
+Deferred until a consumer asks (demand-justified, like every other scope cut
+here). Recorded now so the extension path is on the record rather than
+rediscovered later.
+
+The v1 surface reifies *events* (`select-recv` / `select-send` / `select-default`)
+and *synchronizes* them (`channel-select`), but it does not let events be
+**transformed or combined**. Concurrent ML's `wrap` / `guard` and Racket's
+`handle-evt` / `guard-evt` / `choose-evt` / `sync` close that gap — and the key
+fact is that **they are pure Scheme over the v1 `channel-select` primitive.** No
+Go change. The atomic multi-way commit stays where it must (`reflect.Select`);
+everything added in v2 is bookkeeping above the composability frontier.
+
+An event becomes *descriptors paired with a result handler*; `sync` flattens all
+events into one descriptor list, selects once, and dispatches the winning index
+to its handler:
+
+```scheme
+;; event = (cases . handlers): two parallel lists; handler i pairs with case i.
+(define (sync . events)
+  (let ((cases    (append-map event-cases    events))    ; choose-evt
+        (handlers (append-map event-handlers events)))
+    (let-values (((i val ok) (channel-select cases)))     ; the one Go-side commit
+      ((list-ref handlers i) val ok))))                   ; handle-evt / wrap
+
+(define (recv-evt ch)   (event (list (select-recv ch))   (list (lambda (v ok) v))))
+(define (send-evt ch v) (event (list (select-send ch v)) (list (lambda (_ ok) ok))))
+
+(define (handle-evt ev f)              ; CML wrap — post-process the sync result
+  (event (event-cases ev)
+         (map (lambda (h) (lambda (v ok) (f (h v ok)))) (event-handlers ev))))
+
+(define (choose-evt . evs)             ; combine: append both lists, indices line up
+  (event (append-map event-cases evs) (append-map event-handlers evs)))
+
+(define (guard-evt thunk) ...)         ; CML guard — sync forces thunk at sync time
+```
+
+`choose-evt` appends cases *and* handlers, so the index `channel-select` returns
+lands on the matching handler by construction. `handle-evt` wraps the handler.
+`sync/timeout` is `choose-evt` plus a `select-default` (poll) or a timer-channel
+case. Even `nack-guard-evt` is reachable in pure Scheme — the winning index is
+known, so negative acks can be sent to the losers' nack channels — at the cost
+of more plumbing. `guard-evt` is the one combinator that needs `sync` to
+recognize a deferred event and force its thunk before flattening; a tagged
+event variant handles it.
+
+**The boundary, stated honestly.** `reflect.Select` multiplexes **Go channels
+only**. So v2 buys Racket's combinator *surface*, not Racket's universe of
+heterogeneous waitables. Racket's `sync` accepts semaphores, ports, `alarm-evt`,
+`thread-dead-evt`, and custom `prop:evt` objects; here every event must reduce
+to a channel recv/send. That is the same discipline Go imposes, and the same
+escape hatch applies: model the waitable as a channel.
+
+- Timeout → a timer channel (`time.After`-shaped: a thread that sleeps then sends).
+- Counting semaphore → a buffered channel of capacity N (send = release, receive
+  = acquire); "acquire one of several" becomes "receive from one of several",
+  which `reflect.Select` commits and retracts correctly.
+- Cancellation → a channel close (a closed channel is always receive-ready).
+
+The genuine gap is a resource that *cannot* be channel-modeled — e.g. acquiring
+one of two raw Go `sync.Mutex` locks. A blocking `Lock()` is not selectable, and
+a helper thread that performs it **commits the acquire un-retractably** (the
+orphan-commit hazard: the loser thread has already taken a lock the program did
+not want). Racket sidesteps this by making semaphores native waitables; Wile's
+equivalent is "use a channel-backed semaphore instead of a raw mutex." v2 should
+document this as the one place the channel-modelability requirement bites, and
+point users at channel-backed synchronization for select-participating
+resources.
+
+**Scope when v2 lands.** A new embedded `.scm` in the gointerop extension
+(alongside `select_macro.scm`) defining `event` (record), `sync`, `recv-evt`,
+`send-evt`, `choose-evt`, `handle-evt`, `guard-evt`, and `sync/timeout`. Pure
+Scheme; no new Go primitive. Tests parallel to v1. Add Reppy 1991 plus the
+Racket `racket/base` synchronization reference to `BIBLIOGRAPHY.md`.
 
 ## Verification gates
 
