@@ -289,6 +289,8 @@
     graph-chromatic-polynomial graph-tutte-polynomial
     ;; Combinatorial graphs — matching
     graph-maximum-bipartite-matching
+    ;; Combinatorial graphs — common subgraph (MCCIS)
+    graph-maximum-common-subgraph
     ;; Combinatorial graphs — partition (balanced cut)
     graph-partition
     ;; Combinatorial graphs — presets
