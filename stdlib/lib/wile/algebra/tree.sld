@@ -1,0 +1,10 @@
+(define-library (wile algebra tree)
+  (description "Ordered, labeled, rooted tree edit distance (Zhang & Shasha 1989). The AST-level sibling of (wile algebra combinatorial-graph)'s maximum-common-subgraph: minimum-cost relabel/insert/delete sequence transforming one term tree into another, with child order significant. Nodes are navigated through the (wile algebra rewrite) <term-protocol>, so the same trees that flow through AC-matching flow through edit distance.")
+  (export
+    ;; Ordered tree edit distance (Zhang-Shasha)
+    tree-edit-distance)
+  (import (scheme base)
+          (srfi 1)
+          (wile algebra setoid)
+          (wile algebra rewrite))
+  (include "tree.scm"))

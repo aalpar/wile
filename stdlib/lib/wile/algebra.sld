@@ -332,7 +332,9 @@
     validate-cfl-graph
     cfl-solve cfl-solution?
     cfl-reachable? cfl-reachable-from cfl-reachable-pairs cfl-derives?
-    dyck-grammar)
+    dyck-grammar
+    ;; Ordered tree edit distance (Zhang-Shasha)
+    tree-edit-distance)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -361,4 +363,5 @@
           (wile algebra abstract-domain)
           (wile algebra dataflow)
           (wile algebra sat)
-          (wile algebra cfl)))
+          (wile algebra cfl)
+          (wile algebra tree)))
