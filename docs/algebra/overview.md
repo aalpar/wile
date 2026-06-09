@@ -183,7 +183,7 @@ for the full chapter list with prerequisites.
    The algebraic tower: lattice, semiring, group, ring, field, differential
    ring, Boolean algebra. Forgetful projections in depth.
 3. **[`03-rewriting-basics.scm`](../../examples/algebra/tutorial/chapters/03-rewriting-basics.scm)** --
-   Term protocols, all seven axiom types, composed normalizers.
+   Term protocols, the seven core axiom types, composed normalizers.
 4. **[`04-boolean-simplifier.scm`](../../examples/algebra/tutorial/chapters/04-boolean-simplifier.scm)** --
    `boolean->theory`, recursive normalizer with traces, Heyting vs Boolean.
 5. **[`05-symbolic-differentiation.scm`](../../examples/algebra/tutorial/chapters/05-symbolic-differentiation.scm)** --

@@ -171,13 +171,15 @@
 
    Returns #t / #f / 'unknown.
 
-   This closes the De Morgan / complement-law / bound-identity / distributivity
-   gap left by symbolic-boolean-equivalent? in (wile algebra symbolic).
+   This closes the distributivity gap left by symbolic-boolean-equivalent? in
+   (wile algebra symbolic), which since the AC re-architecture already decides
+   De Morgan, complement-law, and bound-identity equivalences but still lacks a
+   distributivity axiom.
 
    Examples:
-     (boolean-decide-equivalent? '(not (and x y))
-                                  '(or (not x) (not y))) => #t
-     (boolean-decide-equivalent? '(or x y) '(and x y))   => #f"
+     (boolean-decide-equivalent? '(or x (and y z))
+                                  '(and (or x y) (or x z))) => #t  ; distributivity
+     (boolean-decide-equivalent? '(or x y) '(and x y))     => #f"
   (let ((result (sat? `(not (iff ,a ,b)))))
     (cond
       ((eq? result #f) #t)        ; UNSAT proven → equivalent

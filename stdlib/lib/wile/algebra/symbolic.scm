@@ -149,7 +149,11 @@ Category: algebra"
     cdr
     (lambda (term new-args)
       (cons (car term) new-args))
-    compare))
+    compare
+    ;; Operator constructor: lets head-changing rules (De Morgan) and the AC
+    ;; complement-fold mint a compound with an arbitrary head operator.
+    (lambda (operator operands)
+      (cons operator operands))))
 
 ;; ─── Recursive normalizer ─────────────────
 
@@ -274,12 +278,23 @@ Keywords: monoid, projection, theory, identity, associativity"
       (list op-symbol))))
 
 (define (lattice->theory L join-sym meet-sym)
-  "Project lattice L into a theory with 10 axioms covering identity,
-commutativity, idempotence, absorption, and associativity for both
-join and meet operations. Join identity is bottom, meet identity is top.
+  "Project lattice L into a theory with 4 axioms: an AC (associative-commutative)
+axiom for each of join and meet, plus the two absorption laws. Each AC axiom
+flattens nested same-operator nodes, drops the identity, collapses to the
+annihilator when present, dedups (idempotence), and sorts — subsuming
+commutativity, associativity, idempotence, identity, and annihilation for that
+operator in one terminating step. Join identity is bottom (annihilator top);
+meet identity is top (annihilator bottom).
 
-Note: identity predicates use equal?, which is type-sensitive for numbers.
-See monoid->theory for details.
+The annihilation laws (a join top = top, a meet bot = bot) require a *bounded*
+lattice; make-lattice always carries bottom and top, so they always apply.
+
+Replaces the earlier 10-axiom projection whose pairwise commutativity +
+associativity did not terminate on terms with three or more leaves under one
+operator. AC normalization sorts once and cannot ping-pong.
+
+Note: identity/annihilator detection uses equal?, which is type-sensitive for
+numbers. See monoid->theory for details.
 
 Parameters:
   L : lattice
@@ -287,54 +302,30 @@ Parameters:
   meet-sym : symbol
 Returns: theory
 Category: algebra
-Keywords: lattice, projection, theory, absorption, idempotence, commutativity"
+Keywords: lattice, projection, theory, AC normalization, absorption, bounded"
   (let ((bot (lattice-bottom L))
         (top (lattice-top L))
         (join-str (symbol->string join-sym))
         (meet-str (symbol->string meet-sym)))
     (make-theory
       (list
-        ;; Identity axioms
-        (make-named-axiom "identity-join"
-          (string-append join-str "(a, bot) = a")
-          (make-identity-axiom join-sym
-            (lambda (x)
-              (equal? x bot))))
-        (make-named-axiom "identity-meet"
-          (string-append meet-str "(a, top) = a")
-          (make-identity-axiom meet-sym
-            (lambda (x)
-              (equal? x top))))
-        ;; Commutativity axioms
-        (make-named-axiom "commutativity-join"
-          (string-append join-str "(a, b) = " join-str "(b, a)")
-          (make-commutativity-axiom join-sym))
-        (make-named-axiom "commutativity-meet"
-          (string-append meet-str "(a, b) = " meet-str "(b, a)")
-          (make-commutativity-axiom meet-sym))
-        ;; Idempotence axioms
-        (make-named-axiom "idempotence-join"
-          (string-append join-str "(a, a) = a")
-          (make-idempotence-axiom join-sym))
-        (make-named-axiom "idempotence-meet"
-          (string-append meet-str "(a, a) = a")
-          (make-idempotence-axiom meet-sym))
-        ;; Absorption axioms
+        ;; Join: associative, commutative, idempotent; identity bot, annihilator top
+        (make-named-axiom "ac-join"
+          (string-append join-str ": AC, identity " join-str "(a, bot) = a, "
+                         "annihilator " join-str "(a, top) = top")
+          (make-ac-axiom join-sym #t bot top #f))
+        ;; Meet: associative, commutative, idempotent; identity top, annihilator bot
+        (make-named-axiom "ac-meet"
+          (string-append meet-str ": AC, identity " meet-str "(a, top) = a, "
+                         "annihilator " meet-str "(a, bot) = bot")
+          (make-ac-axiom meet-sym #t top bot #f))
+        ;; Absorption axioms (cross-operator)
         (make-named-axiom "absorption-join/meet"
           (string-append join-str "(a, " meet-str "(a, b)) = a")
           (make-absorption-axiom join-sym meet-sym))
         (make-named-axiom "absorption-meet/join"
           (string-append meet-str "(a, " join-str "(a, b)) = a")
-          (make-absorption-axiom meet-sym join-sym))
-        ;; Associativity axioms
-        (make-named-axiom "associativity-join"
-          (string-append join-str "(a, " join-str "(b, c)) = "
-                         join-str "(" join-str "(a, b), c)")
-          (make-associativity-axiom join-sym))
-        (make-named-axiom "associativity-meet"
-          (string-append meet-str "(a, " meet-str "(b, c)) = "
-                         meet-str "(" meet-str "(a, b), c)")
-          (make-associativity-axiom meet-sym)))
+          (make-absorption-axiom meet-sym join-sym)))
       (list join-sym meet-sym))))
 
 (define (group->theory G op-symbol inv-symbol)
@@ -484,9 +475,9 @@ Keywords: field, projection, theory, reciprocal, involution"
 
 (define (heyting->theory H join-sym meet-sym)
   "Project Heyting algebra H into a theory via its underlying lattice.
-Produces the same 10 lattice axioms. Heyting implication is not
-included as a rewrite axiom — it is a derived operation, not an
-equational simplification rule.
+Produces the same 4 AC lattice axioms (ac-join, ac-meet, and the two
+absorption laws). Heyting implication is not included as a rewrite axiom —
+it is a derived operation, not an equational simplification rule.
 
 Parameters:
   H : heyting-algebra
@@ -504,9 +495,32 @@ Keywords: Heyting, projection, theory, intuitionistic, lattice"
   (lattice->theory (heyting->lattice H) join-sym meet-sym))
 
 (define (boolean->theory B join-sym meet-sym comp-sym)
-  "Project Boolean algebra B into a theory with 11 axioms: the 10 lattice
-axioms from the underlying lattice plus complement involution.
-Uses theory-merge to combine lattice theory with involution theory.
+  "Project Boolean algebra B into a theory with 7 axioms:
+
+  ac-join   join is AC; identity bot, annihilator top, with complement folding
+            (a join comp(a) = top) detected across the whole flat operand list
+  ac-meet   meet is AC; identity top, annihilator bot, with complement folding
+            (a meet comp(a) = bot)
+  absorption-join/meet, absorption-meet/join   the two absorption laws
+  negation  comp(comp(a)) = a, comp(bot) = top, comp(top) = bot
+  de-morgan-join   comp(join(a,b)) = meet(comp(a), comp(b))
+  de-morgan-meet   comp(meet(a,b)) = join(comp(a), comp(b))
+
+Because the AC axioms fold complement detection over the *flattened* operand
+list, n-way contradictions and tautologies reduce: a meet b meet comp(a) = bot,
+a join b join comp(a) = top. De Morgan pushes negation toward the leaves
+(negation normal form); the negation axiom then folds comp over bot/top.
+
+This is NOT a Boolean decision procedure: there is no distributivity axiom, so
+equivalences that require distributing (e.g. consensus, factoring) are not
+detected. Use (wile algebra sat) when you need a decision procedure. Complement
+and absorption are recognized between any operands sharing one flattened
+operator, but cross-nesting that De Morgan or distribution would be needed to
+expose is not.
+
+Replaces the earlier 11-axiom projection (10 lattice + complement-involution);
+the lattice fragment is now the 4-axiom AC lattice->theory shape, here rebuilt
+with complement folding wired into the join/meet AC axioms.
 
 Parameters:
   B : boolean-algebra
@@ -515,16 +529,45 @@ Parameters:
   comp-sym : symbol
 Returns: theory
 Category: algebra
-Keywords: Boolean, projection, theory, complement, involution, lattice"
-  (let ((lattice-th (lattice->theory (boolean->lattice B) join-sym meet-sym))
-        (involution-th (make-theory
-                         (list (make-named-axiom "complement-involution"
-                                 (string-append (symbol->string comp-sym)
-                                                "(" (symbol->string comp-sym)
-                                                "(a)) = a")
-                                 (make-involution-axiom comp-sym)))
-                         '())))
-    (theory-merge lattice-th involution-th)))
+Keywords: Boolean, projection, theory, complement, De Morgan, negation normal form"
+  (let ((bot (boolean-bottom B))
+        (top (boolean-top B))
+        (join-str (symbol->string join-sym))
+        (meet-str (symbol->string meet-sym))
+        (comp-str (symbol->string comp-sym)))
+    (make-theory
+      (list
+        ;; AC join/meet with complement folding
+        (make-named-axiom "ac-join"
+          (string-append join-str ": AC, identity bot, annihilator top, "
+                         join-str "(a, " comp-str "(a)) = top")
+          (make-ac-axiom join-sym #t bot top comp-sym))
+        (make-named-axiom "ac-meet"
+          (string-append meet-str ": AC, identity top, annihilator bot, "
+                         meet-str "(a, " comp-str "(a)) = bot")
+          (make-ac-axiom meet-sym #t top bot comp-sym))
+        ;; Absorption (cross-operator)
+        (make-named-axiom "absorption-join/meet"
+          (string-append join-str "(a, " meet-str "(a, b)) = a")
+          (make-absorption-axiom join-sym meet-sym))
+        (make-named-axiom "absorption-meet/join"
+          (string-append meet-str "(a, " join-str "(a, b)) = a")
+          (make-absorption-axiom meet-sym join-sym))
+        ;; Boolean negation: double-negation + complement of the bounds
+        (make-named-axiom "negation"
+          (string-append comp-str "(" comp-str "(a)) = a; "
+                         comp-str "(bot) = top; " comp-str "(top) = bot")
+          (make-negation-axiom comp-sym bot top))
+        ;; De Morgan (negation normal form)
+        (make-named-axiom "de-morgan-join"
+          (string-append comp-str "(" join-str "(a, b)) = "
+                         meet-str "(" comp-str "(a), " comp-str "(b))")
+          (make-de-morgan-axiom comp-sym join-sym meet-sym))
+        (make-named-axiom "de-morgan-meet"
+          (string-append comp-str "(" meet-str "(a, b)) = "
+                         join-str "(" comp-str "(a), " comp-str "(b))")
+          (make-de-morgan-axiom comp-sym meet-sym join-sym)))
+      (list join-sym meet-sym))))
 
 ;; ─── Equivalence discovery ────────────────
 
@@ -612,29 +655,30 @@ Category: algebra"
 
 ;; ─── Boolean normalization facade ─────────
 ;;
-;; Named entry points for a recursive-normalizer instance wired to the
-;; lattice+complement fragment of Boolean algebra. Applies commutativity,
-;; associativity, identity, idempotence, and absorption of join/meet
-;; (from `lattice->theory`), plus complement-involution (from
-;; `boolean->theory`).
+;; Named entry points for a recursive-normalizer instance wired to the full
+;; 7-axiom `boolean->theory`: AC-normalized join/meet (commutativity,
+;; associativity, idempotence, identity, annihilation, and n-way complement
+;; folding), the two absorption laws, Boolean negation (double-negation plus
+;; complement of the bounds), and both De Morgan laws (negation normal form).
 ;;
-;; NOT applied by the current theory: De Morgan, complement laws
-;; (x ∧ ¬x = ⊥), bound identities (x ∨ ⊤ = ⊤, x ∧ ⊥ = ⊥). A future
-;; extension to `boolean->theory` that wires those axioms would extend
-;; reach; this facade tracks whatever `boolean->theory` exposes.
+;; Carrier choice: a two-element Boolean algebra over {#f, #t}. `boolean->theory`
+;; reads only the carrier's bottom/top *values* (never its operations — the
+;; projection is purely syntactic over opaque S-expression atoms), so the
+;; carrier exists only to fix the bottom/top literals that surface in normal
+;; forms. {#f, #t} makes a contradiction normalize to #f and a tautology to #t —
+;; canonical Scheme booleans rather than the empty-list / singleton-set
+;; artifacts a powerset carrier would leak. `#f` as a rewrite result is safe:
+;; make-recursive-normalizer signals "no rewrite" with a private sentinel and
+;; an empty trace, never with #f.
 ;;
-;; Note on the trivial 1-atom Boolean algebra used below: `boolean->theory`
-;; extracts only the *equational* laws from its Boolean-algebra argument;
-;; the carrier's cardinality is irrelevant because the normalizer operates
-;; purely syntactically (atoms are opaque S-expressions, never evaluated
-;; against the carrier). The minimal Boolean algebra (1 atom, 2 elements)
-;; and the free Boolean algebra on any number of atoms share the same
-;; equational theory — which is what drives normalization.
+;; Not a Boolean decision procedure: there is no distributivity axiom, so
+;; distribution-dependent equivalences are not decided. See `boolean->theory`
+;; for the precise boundary, and (wile algebra sat) for a decision procedure.
 ;;
-;; Extracted from wile-goast's goast/boolean-simplify.scm L23-69, where
-;; this facade was originally built for Go AST condition and belief
-;; selector normalization. The wile-goast projections that convert Go
-;; AST nodes or belief selectors into symbolic terms stay in wile-goast.
+;; Extracted from wile-goast's goast/boolean-simplify.scm, where this facade was
+;; originally built for Go AST condition and belief selector normalization. The
+;; wile-goast projections that convert Go AST nodes or belief selectors into
+;; symbolic terms stay in wile-goast.
 
 (define *symbolic-boolean-normalizer* #f)
 
@@ -656,79 +700,127 @@ See also: `symbolic-boolean-normalize', `sexp-term-protocol'."
         (sb (let ((p (open-output-string))) (write b p) (get-output-string p))))
     (string<? sa sb)))
 
-(define (ensure-symbolic-boolean-normalizer!)
-  ;; Lazy singleton — built on first call, cached thereafter. Partial
-  ;; failure during construction leaves the normalizer #f so the next
-  ;; call retries.
-  (unless *symbolic-boolean-normalizer*
-    (let* ((B (powerset-boolean '(_)))
-           (th (boolean->theory B 'or 'and 'not))
-           (proto (sexp-term-protocol sexp-atom-compare))
-           (norm (make-recursive-normalizer th proto)))
-      (set! *symbolic-boolean-normalizer* norm))))
+;; Default fuel for the cached Boolean normalizer. The recursive normalizer
+;; charges roughly one unit per rewrite step, and a left-nested N-level term
+;; needs ~N steps to flatten, so the budget bounds the term size/depth that
+;; fully normalizes. 1000 covers far more than realistic Boolean conditions;
+;; deeper terms partially normalize (still sound) — pass an explicit fuel to
+;; raise the ceiling.
+(define *symbolic-boolean-fuel* 1000)
 
-(define (symbolic-boolean-normalize term)
+(define (build-symbolic-boolean-normalizer fuel)
+  "Construct a Boolean normalizer over the 2-element {#f, #t} Boolean algebra
+with the given FUEL. boolean->theory reads only the carrier's bottom/top, so a
+contradiction normalizes to #f and a tautology to #t.
+
+Parameters:
+  fuel : integer
+Returns: procedure
+Category: algebra"
+  (let* ((B (make-boolean-algebra
+              (lambda (a b)
+                (or a b))                 ; join
+              (lambda (a b)
+                (and a b))                ; meet
+              #f                          ; bottom
+              #t                          ; top
+              (lambda (a b)
+                (or (not a) b))           ; leq: a <= b  (a implies b)
+              (lambda (a)
+                (not a))))                ; complement
+         (th (boolean->theory B 'or 'and 'not))
+         (proto (sexp-term-protocol sexp-atom-compare)))
+    (make-recursive-normalizer th proto fuel)))
+
+(define (ensure-symbolic-boolean-normalizer!)
+  ;; Lazy singleton at the default fuel — built on first call, cached
+  ;; thereafter. Partial failure during construction leaves the normalizer #f
+  ;; so the next call retries.
+  (unless *symbolic-boolean-normalizer*
+    (set! *symbolic-boolean-normalizer*
+          (build-symbolic-boolean-normalizer *symbolic-boolean-fuel*))))
+
+(define (symbolic-boolean-normalize term . fuel-opt)
   "Normalize an S-expression boolean term under the Boolean-algebra
 equational theory produced by `boolean->theory`. Treats `(and ...)`,
 `(or ...)`, `(not ...)` as Boolean operators; every other form (symbol,
 number, non-Boolean compound) is an opaque atom.
 
-Applies the axioms currently exposed by `boolean->theory`:
-commutativity, associativity, identity, idempotence, and absorption of
-`and`/`or` (from `lattice->theory`), plus complement-involution.
+Applies the full `boolean->theory` (see that docstring): AC-normalized
+`and`/`or` (commutativity, associativity, idempotence, identity,
+annihilation, and n-way complement folding), absorption, Boolean negation
+(double-negation and complement of the bounds), and both De Morgan laws.
+A contradiction normalizes to #f (bottom); a tautology to #t (top).
 
-Not applied under the current theory: De Morgan, complement laws
-(x ∧ ¬x ⇒ ⊥), bound identities (x ∨ ⊤ ⇒ ⊤, x ∧ ⊥ ⇒ ⊥). Terms
-requiring those laws to simplify will normalize partially or not at
-all. If consumers need those laws, extend `boolean->theory` rather
-than wrap this facade.
+This is NOT a decision procedure: there is no distributivity axiom, so
+distribution-dependent equivalences are not detected. Use (wile algebra sat)
+when you need one.
+
+The optional FUEL argument bounds the rewrite iterations (default
+*symbolic-boolean-fuel*, 1000). Deeply nested terms cost roughly one unit per
+nesting level; if the budget is exhausted the result is partially normalized
+(still truth-table sound) and the trace ends in a `fuel-exhausted-step?` entry.
+Raise FUEL for very large terms.
 
 Returns two values: the canonical normal form, and the rewrite trace
 (a list of `<rewrite-step>` records documenting each rewrite applied).
 
 Parameters:
   term : any
+  fuel : integer (optional)
 Returns: any
 Category: algebra
-Keywords: boolean, normalize, canonical form, simplify
+Keywords: boolean, normalize, canonical form, simplify, negation normal form
 
 Examples:
-  (symbolic-boolean-normalize '(and x (or x y)))  ; absorption
-  ;  => x, (trace ...)
-  (symbolic-boolean-normalize '(not (not x)))     ; involution
-  ;  => x, (trace ...)
-  (symbolic-boolean-normalize '(or x x))          ; idempotence
-  ;  => x, (trace ...)
+  (symbolic-boolean-normalize '(and x (or x y)))  ; absorption  => x
+  (symbolic-boolean-normalize '(not (not x)))     ; negation    => x
+  (symbolic-boolean-normalize '(and x (not x)))   ; complement  => #f
+  (symbolic-boolean-normalize '(not (and x y)))   ; De Morgan   => (or (not x) (not y))
 
 See also: `symbolic-boolean-equivalent?', `boolean->theory',
 `make-recursive-normalizer'."
-  (ensure-symbolic-boolean-normalizer!)
-  (*symbolic-boolean-normalizer* term))
+  (if (pair? fuel-opt)
+      ((build-symbolic-boolean-normalizer (car fuel-opt)) term)
+      (begin
+        (ensure-symbolic-boolean-normalizer!)
+        (*symbolic-boolean-normalizer* term))))
 
-(define (symbolic-boolean-equivalent? term1 term2)
+(define (symbolic-boolean-equivalent? term1 term2 . fuel-opt)
   "Test whether two S-expression boolean terms normalize to the same
 canonical form under `symbolic-boolean-normalize`. Both terms are
 normalized and compared with `equal?`.
 
-Because `symbolic-boolean-normalize` applies only the axioms currently
-exposed by `boolean->theory` (see that docstring), this predicate
-decides equivalence up to those axioms — not full Boolean-algebra
-equivalence. Notably, pairs differing only by De Morgan or complement
-laws will return `#f`.
+This decides equivalence up to the `boolean->theory` axioms (see that
+docstring) — including De Morgan and complement laws, so De Morgan duals
+and shared contradictions/tautologies now compare equal. It is NOT full
+Boolean-algebra equivalence: without distributivity, distribution-dependent
+pairs may still compare `#f`. Use (wile algebra sat) for a decision procedure.
+
+The optional FUEL argument is forwarded to both normalizations. A `#f` result
+on two genuinely-equivalent very large terms can be a false negative caused by
+fuel exhaustion (one side normalized further than the other before the budget
+ran out); raise FUEL in that case.
 
 Parameters:
   term1 : any
   term2 : any
+  fuel : integer (optional)
 Returns: boolean
 Category: algebra
 Keywords: boolean, equivalent, equational theory
 
 Examples:
-  (symbolic-boolean-equivalent? '(and a b) '(and b a))  => #t
-  (symbolic-boolean-equivalent? '(or x y) '(and x y))   => #f
+  (symbolic-boolean-equivalent? '(and a b) '(and b a))            => #t
+  (symbolic-boolean-equivalent? '(not (and a b)) '(or (not a) (not b))) => #t
+  (symbolic-boolean-equivalent? '(or x y) '(and x y))            => #f
 
 See also: `symbolic-boolean-normalize'."
-  (ensure-symbolic-boolean-normalizer!)
-  (let-values (((n1 _t1) (*symbolic-boolean-normalizer* term1))
-               ((n2 _t2) (*symbolic-boolean-normalizer* term2)))
-    (equal? n1 n2)))
+  (let ((norm (if (pair? fuel-opt)
+                  (build-symbolic-boolean-normalizer (car fuel-opt))
+                  (begin
+                    (ensure-symbolic-boolean-normalizer!)
+                    *symbolic-boolean-normalizer*))))
+    (let-values (((n1 _t1) (norm term1))
+                 ((n2 _t2) (norm term2)))
+      (equal? n1 n2))))

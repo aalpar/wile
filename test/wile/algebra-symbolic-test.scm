@@ -190,7 +190,7 @@
 (test-group "lattice->theory-construction"
   (let* ((L (make-lattice max min 0 100 <=))
          (th (lattice->theory L 'join 'meet)))
-    (test 10 (length (theory-axioms th)))
+    (test 4 (length (theory-axioms th)))
     (test '(join meet) (theory-associative-ops th))))
 
 (test-group "lattice->theory-absorption"
@@ -205,7 +205,7 @@
 (test-group "boolean->theory-construction"
   (let* ((B (powerset-boolean '(x y z)))
          (th (boolean->theory B 'or 'and 'not)))
-    (test 11 (length (theory-axioms th)))))
+    (test 7 (length (theory-axioms th)))))
 
 (test-group "boolean->theory-absorption"
   (let* ((B (powerset-boolean '(x y z)))
@@ -374,7 +374,7 @@
 (test-group "heyting->theory-construction"
   (let* ((H (powerset-heyting '(a b c)))
          (th (heyting->theory H 'join 'meet)))
-    (test 10 (length (theory-axioms th)))
+    (test 4 (length (theory-axioms th)))
     (test '(join meet) (theory-associative-ops th))))
 
 (test-group "heyting->theory-absorption"
@@ -539,6 +539,53 @@
              '(calls "Lock")))
   (test #f (symbolic-boolean-equivalent?
              '(calls "Lock") '(calls "Unlock"))))
+
+;; ─── Free-Boolean: AC normalization + De Morgan + complement ──
+
+(define (bn-normal t)
+  (let-values (((nf _trace) (symbolic-boolean-normalize t)))
+    nf))
+
+(define (bn-terminated? t)
+  ;; #t when normalization reached a fixpoint (no fuel-exhausted marker)
+  (let-values (((_nf trace) (symbolic-boolean-normalize t)))
+    (not (and (pair? trace)
+              (fuel-exhausted-step? (list-ref trace (- (length trace) 1)))))))
+
+(test-group "symbolic-boolean-normalize — AC termination regression"
+  ;; Pairwise commutativity + associativity used to ping-pong forever on any
+  ;; >=3-leaf AC tree (fuel-exhausted at 100). AC normalization sorts once and
+  ;; reaches a fixpoint. De Morgan amplified the old bug by manufacturing flat
+  ;; multi-leaf and/or trees from negated inputs.
+  (test #t (bn-terminated? '(and (and a b) c)))
+  (test #t (bn-terminated? '(and a (and b c))))
+  (test #t (bn-terminated? '(or (or a b) (or c d))))
+  (test #t (bn-terminated? '(not (or (or a b) (or c d))))))
+
+(test-group "symbolic-boolean-normalize — complement and bounds"
+  (test #f (bn-normal '(and x (not x))))          ; contradiction => bottom (#f)
+  (test #t (bn-normal '(or x (not x))))           ; tautology    => top (#t)
+  (test #f (bn-normal '(and a (and b (not a)))))  ; n-way contradiction => bottom
+  (test #t (bn-normal '(not (and x (not x))))))   ; bound folds under not => top
+
+(test-group "symbolic-boolean-normalize — De Morgan"
+  (test '(or (not x) (not y)) (bn-normal '(not (and x y))))
+  (test '(and (not x) (not y)) (bn-normal '(not (or x y)))))
+
+(test-group "symbolic-boolean-equivalent? — De Morgan and complement"
+  (test #t (symbolic-boolean-equivalent? '(not (and a b)) '(or (not a) (not b))))
+  (test #t (symbolic-boolean-equivalent? '(not (or a b)) '(and (not a) (not b))))
+  ;; TODO(you): write the assertion that validates the core design property —
+  ;; that the AC complement-fold collapses EVERY shared contradiction to the same
+  ;; bottom regardless of nesting or operand order, so the confluence gap that
+  ;; the pairwise binary matcher left open is closed. Pick two structurally
+  ;; different n-way contradictions and assert they are equivalent, e.g.
+  ;;   (test #t (symbolic-boolean-equivalent?
+  ;;              '(and a (and b (not a)))
+  ;;              '(and (not p) (and p q))))
+  ;; (Both normalize to #f.) This is the test that proves flatten-then-fold —
+  ;; not a better pairwise comparator — is what made the normalizer confluent.
+  )
 
 (test-end)
 (test-exit)

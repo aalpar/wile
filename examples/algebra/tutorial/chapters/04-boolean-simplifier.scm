@@ -5,7 +5,8 @@
 ;; What you will learn:
 ;;   - How a *theory* differs from a bag of axioms (named axioms + trace).
 ;;   - How `boolean->theory` projects a Boolean algebra into a rewriting
-;;     theory with 11 axioms.
+;;     theory with 7 axioms (AC normalization + absorption + negation +
+;;     De Morgan).
 ;;   - How `make-recursive-normalizer` differs from `make-normalizer` --
 ;;     recursive, fueled, and trace-emitting.
 ;;   - Why Heyting algebras cannot simplify (not (not x)) and Boolean
@@ -41,15 +42,17 @@
 ;;
 ;; `boolean->theory` projects B into an *equational theory*: a collection
 ;; of named axioms over three operator symbols (join, meet, complement
-;; -- we pass our choice of symbols). The result has 11 axioms: the 10
-;; axioms from the underlying lattice plus complement-involution
-;; (not (not x) = x).
+;; -- we pass our choice of symbols). The result has 7 axioms: an AC
+;; (associative-commutative) axiom for each of join and meet -- each one
+;; folding commutativity, associativity, idempotence, identity,
+;; annihilation, and complement laws in a single terminating pass -- the
+;; two absorption laws, Boolean negation, and the two De Morgan laws.
 ;; ----------------------------------------------------------------
 
 (define bool-theory (boolean->theory B 'or 'and 'not))
 (check-true (theory? bool-theory)  "boolean->theory built a theory")
-(check= (length (theory-axioms bool-theory)) 11
-        "11 axioms (10 lattice + complement-involution)")
+(check= (length (theory-axioms bool-theory)) 7
+        "7 axioms (ac-join, ac-meet, 2 absorption, negation, 2 De Morgan)")
 
 ;; ----------------------------------------------------------------
 ;; Part 3: A compare function that handles mixed atom types.
@@ -86,7 +89,7 @@
 ;; Involution: (not (not x)) collapses to x.
 (define-values (nf1 tr1) (normalize '(not (not x))))
 (check= nf1 'x  "double negation eliminated")
-;; Exactly one rewrite step for single (not (not x)) -- the involution rule.
+;; Exactly one rewrite step for single (not (not x)) -- the negation rule.
 (check= (length tr1) 1  "trace records exactly one step")
 
 ;; Absorption: (and x (or x y)) collapses to x.
@@ -121,8 +124,7 @@
 (check= (step-before step) '(not (not x))   "step-before shows input")
 (check= (step-after  step)  'x              "step-after shows output")
 
-;; The rule name is a string. For complement-involution it matches the
-;; name we pass through `boolean->theory`.
+;; The rule name is a string. For the negation axiom it is "negation".
 (check-true (string? (step-rule-name step))     "rule name is a string")
 (check-true (string? (step-general-form step))  "general form is a string")
 
@@ -132,11 +134,12 @@
 ;; Heyting algebras generalize Boolean: every Boolean algebra is a
 ;; Heyting algebra, but not vice versa. Heyting models intuitionistic
 ;; logic; Boolean models classical logic. The concrete difference:
-;; Boolean has complement-involution (not not x = x), Heyting does not.
+;; Boolean has negation laws (not not x = x, De Morgan, complement),
+;; Heyting does not.
 ;; ----------------------------------------------------------------
 
 ;; Project B to a Heyting algebra. Derive its theory -- only lattice
-;; axioms, no complement-involution.
+;; axioms, no negation.
 (define H (boolean->heyting B))
 (check-true (heyting-algebra? H)   "H is a Heyting algebra")
 
@@ -165,8 +168,9 @@
 ;;
 ;; The library bundles the most common pattern ("normalize this S-expr
 ;; as a Boolean term using a standard theory") into a single procedure.
-;; It uses operators `and`, `or`, `not`. Internally, it builds the same
-;; `boolean->theory` we built in Part 2 and calls a recursive normalizer.
+;; It uses operators `and`, `or`, `not`. Internally it builds the same
+;; `boolean->theory` projection, but over a two-element {#f, #t} Boolean
+;; algebra, so a contradiction normalizes to #f and a tautology to #t.
 ;;
 ;; Returns (values result trace) like the general normalizer. Use it
 ;; when you want Boolean simplification without choosing operator names
@@ -192,34 +196,39 @@
              "and-x-y not equivalent to x under this theory")
 
 ;; ----------------------------------------------------------------
-;; Part 8: What `symbolic-boolean-normalize` does *not* simplify.
+;; Part 8: De Morgan, complement laws, and the bounds.
 ;;
-;; The current theory applies commutativity, associativity, identity,
-;; idempotence, absorption, and complement-involution. It does NOT
-;; apply De Morgan, complement laws (x /\ ~x = 0), or bound identities
-;; (x \/ top = top). Terms needing those laws normalize only partially.
-;;
-;; This matters when picking a tool: if you need full Boolean ring
-;; normalization, extend `boolean->theory` rather than wrapping the
-;; facade.
+;; The 7-axiom theory applies De Morgan, complement laws, and bound
+;; folding, so these terms simplify fully. A contradiction collapses to
+;; bottom (#f) and a tautology to top (#t). What it still does NOT do is
+;; distribute -- there is no distributivity axiom -- so it is not a
+;; Boolean decision procedure. Reach for (wile algebra sat) when you need
+;; one.
 ;; ----------------------------------------------------------------
 
-;; De Morgan would rewrite (not (and x y)) to (or (not x) (not y)). It
-;; does not. The term stays as-is.
-(define-values (de-morgan-attempt _dm-trace)
+;; De Morgan rewrites (not (and x y)) to (or (not x) (not y)).
+(define-values (de-morgan-nf _dm-trace)
   (symbolic-boolean-normalize '(not (and x y))))
-(check= de-morgan-attempt '(not (and x y))
-        "De Morgan not applied (outside current theory)")
+(check= de-morgan-nf '(or (not x) (not y))
+        "De Morgan: not(x and y) = (not x) or (not y)")
 
-;; Complement law x /\ ~x = 0 also does not collapse to bottom -- no
-;; "is-negation-of" predicate in the theory. The term stays a conjunction
-;; (commutativity may reorder the operands under the compare function,
-;; but the logical content is unchanged).
-(define-values (comp-attempt _c-trace)
+;; The complement law collapses a contradiction to bottom (#f)...
+(define-values (comp-nf _c-trace)
   (symbolic-boolean-normalize '(and x (not x))))
-(check-true (eq? (car comp-attempt) 'and)
-            "complement law not applied (still an `and`)")
-(check-true (= (length comp-attempt) 3)
-            "complement law not applied (still two operands)")
+(check= comp-nf #f
+        "complement: x and not-x = bottom (#f)")
+
+;; ...and a tautology to top (#t). Even n-way contradictions collapse,
+;; because AC normalization folds complement over the whole flattened
+;; operand list -- not just two adjacent operands.
+(define-values (taut-nf _t-trace)
+  (symbolic-boolean-normalize '(or x (not x))))
+(check= taut-nf #t
+        "complement: x or not-x = top (#t)")
+
+(define-values (nway-nf _n-trace)
+  (symbolic-boolean-normalize '(and a (and b (not a)))))
+(check= nway-nf #f
+        "n-way contradiction also collapses to bottom")
 
 (display "chapter 04 complete") (newline)

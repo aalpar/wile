@@ -29,14 +29,15 @@
 ;; ----------------------------------------------------------------
 ;; Part 1: Build a Boolean theory and its sub-theories.
 ;;
-;; Boolean theory has 11 axioms. We'll use it as the source for
-;; equivalence-discovery experiments.
+;; Boolean theory has 7 named axioms: two AC axioms (for or/and), two
+;; absorption laws, negation, and two De Morgan laws. We'll use it as the
+;; source for equivalence-discovery experiments.
 ;; ----------------------------------------------------------------
 
 (define B (powerset-boolean '(a b c)))
 (define bool-theory (boolean->theory B 'or 'and 'not))
-(check= (length (theory-axioms bool-theory))  11
-        "bool-theory has 11 named axioms")
+(check= (length (theory-axioms bool-theory))  7
+        "bool-theory has 7 named axioms")
 
 (define (bool-atom-compare a b)
   (cond ((and (symbol? a) (symbol? b))
@@ -73,14 +74,14 @@
 
 ;; ----------------------------------------------------------------
 ;; Part 3: discover-equivalences on (not (not x)) -- only the
-;; complement-involution axiom collapses it.
+;; negation axiom (double negation) collapses it.
 ;; ----------------------------------------------------------------
 
 (define discoveries-2 (discover-equivalences bool-theory proto '(not (not x))))
 (define forms-2 (map car discoveries-2))
 
 (check-true (member 'x forms-2)
-            "involution collapses (not (not x)) to x")
+            "negation collapses (not (not x)) to x")
 (check-true (member '(not (not x)) forms-2)
             "other sub-theories leave the double-not alone")
 
@@ -93,27 +94,27 @@
 ;; `theory-merge` combines axiom lists (merges associative-ops too).
 ;; ----------------------------------------------------------------
 
-;; Filter to just commutativity and idempotence. Note the axioms coming
-;; out of boolean->theory use the lattice-internal names "join" and
-;; "meet", not the operator symbols we passed in (`or` and `and`). Pass
-;; the internal names to theory-filter.
-(define comm-idemp-only
-  (theory-filter bool-theory '("commutativity-join" "commutativity-meet"
-                                "idempotence-join" "idempotence-meet")))
-(check= (length (theory-axioms comm-idemp-only))  4
-        "filter keeps exactly the four named axioms")
+;; Filter to just the two AC axioms. Note the axioms coming out of
+;; boolean->theory use the lattice-internal names "ac-join" and "ac-meet",
+;; not the operator symbols we passed in (`or` and `and`). Pass the
+;; internal names to theory-filter.
+(define ac-only
+  (theory-filter bool-theory '("ac-join" "ac-meet")))
+(check= (length (theory-axioms ac-only))  2
+        "filter keeps exactly the two AC axioms")
 
-;; Exclude complement-involution.
-(define no-involution
-  (theory-exclude bool-theory '("complement-involution")))
-(check= (length (theory-axioms no-involution))  10
-        "exclude removes complement-involution (11 -> 10)")
+;; Exclude the negation axiom.
+(define no-negation
+  (theory-exclude bool-theory '("negation")))
+(check= (length (theory-axioms no-negation))  6
+        "exclude removes negation (7 -> 6)")
 
-;; Normalizing (not (not x)) under no-involution does not collapse.
-(define no-inv-norm (make-recursive-normalizer no-involution proto))
-(define-values (nf-noinv _tr-noinv) (no-inv-norm '(not (not x))))
-(check= nf-noinv  '(not (not x))
-        "without involution: (not (not x)) stays")
+;; Normalizing (not (not x)) under no-negation does not collapse -- the
+;; negation axiom is what folds double negation.
+(define no-neg-norm (make-recursive-normalizer no-negation proto))
+(define-values (nf-noneg _tr-noneg) (no-neg-norm '(not (not x))))
+(check= nf-noneg  '(not (not x))
+        "without negation: (not (not x)) stays")
 
 ;; ----------------------------------------------------------------
 ;; Part 5: prioritize -- moves named axioms to the front of rule order.
@@ -123,27 +124,27 @@
 ;; rules are still in the theory -- just lower priority.
 ;; ----------------------------------------------------------------
 
-(define idempotence-first
-  (theory-prioritize bool-theory '("idempotence-or")))
-(check= (length (theory-axioms idempotence-first))
+(define ac-join-first
+  (theory-prioritize bool-theory '("ac-join")))
+(check= (length (theory-axioms ac-join-first))
         (length (theory-axioms bool-theory))
         "prioritize does not add or remove axioms")
 
 ;; ----------------------------------------------------------------
 ;; Part 6: theory-merge.
 ;;
-;; Combining a small "just involution" theory with a fresh axiom to
+;; Combining a small "just negation" theory with a fresh axiom to
 ;; demonstrate merging. merge preserves associative-ops from both.
 ;; ----------------------------------------------------------------
 
-(define involution-only
-  (theory-filter bool-theory '("complement-involution")))
+(define negation-only
+  (theory-filter bool-theory '("negation")))
 
 (define idemp-or-axiom
   (make-named-axiom "idempotence-or" "x or x = x" (make-idempotence-axiom 'or)))
 (define idemp-only (make-theory (list idemp-or-axiom) '()))
 
-(define merged (theory-merge involution-only idemp-only))
+(define merged (theory-merge negation-only idemp-only))
 
 (check-true (theory? merged)                         "merged is a theory")
 (check-true (>= (length (theory-axioms merged)) 2)

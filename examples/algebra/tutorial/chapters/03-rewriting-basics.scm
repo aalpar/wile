@@ -3,7 +3,8 @@
 ;;
 ;; What you will learn:
 ;;   - What a *term protocol* is and why rewriting is defined against it.
-;;   - The seven axiom types the library ships and the shape of each.
+;;   - The seven core single-operator axiom types and the shape of each
+;;     (chapter 04 adds the AC, De Morgan, and negation axioms).
 ;;   - How `axiom->rules` compiles axioms into rewrite procedures.
 ;;   - How `make-normalizer` composes several axioms into one
 ;;     single-step rewriter and what its #f return means.

@@ -590,12 +590,14 @@ Axiom-driven term rewriting via abstract term protocols.
 
 ### Term Protocol
 
-- `(make-term-protocol compound-term? get-operator get-operands make-term compare)` -- create a protocol; compound-term? tests if a value has substructure; get-operator and get-operands extract parts; make-term rebuilds a term with new operands preserving metadata; compare orders atoms for commutativity normalization
+- `(make-term-protocol compound-term? get-operator get-operands make-term compare [make-op-term])` -- create a protocol; compound-term? tests if a value has substructure; get-operator and get-operands extract parts; make-term rebuilds a term with new operands preserving metadata; compare orders operands and **must be a strict total order consistent with `equal?`** (AC normalization relies on this for termination and confluence); the optional `make-op-term` (operator operands -> term) lets head-changing rules (De Morgan) build a term with an arbitrary head operator
 - `(term-protocol? x)` -- test whether x is a term protocol
 - `(term-compound? proto x)` -- test whether x is a compound term
 - `(term-get-operator proto term)` -- extract operator from compound term
 - `(term-get-operands proto term)` -- extract operand list from compound term
-- `(term-make-term proto term new-args)` -- rebuild term with new operands
+- `(term-make-term proto term new-args)` -- rebuild term with new operands, preserving the head operator
+- `(term-make-op-term proto operator operands)` -- build a compound term with an arbitrary head operator; errors if the protocol has no operator constructor
+- `(term-can-make-op? proto)` -- test whether proto can construct a term from an operator and operands
 - `(term-compare proto a b)` -- test whether a sorts before b
 
 ### Axiom Constructors
@@ -607,6 +609,10 @@ Axiom-driven term rewriting via abstract term protocols.
 - `(make-involution-axiom op)` -- involution: op(op(x)) = x (unary operator)
 - `(make-absorption-axiom op-outer op-inner)` -- absorption: op-outer(a, op-inner(a, b)) = a
 - `(make-associativity-axiom op)` -- associativity: op(op(a, b), c) = op(a, op(b, c)); right-associates
+- `(make-ac-axiom op idempotent identity annihilator complement-op)` -- associative-commutative normalization in one pass: flatten nested op-nodes, drop the identity, collapse to the annihilator (a literal one, or an x / complement-op(x) pair anywhere in the flat list), dedup if idempotent, sort, rebuild right-nested. Pass `ac-absent` for an absent identity or annihilator, and `#f` for complement-op to disable complement folding. Subsumes commutativity + associativity + idempotence for the operator and terminates where pairwise comm+assoc does not
+- `(make-de-morgan-axiom comp-op from-op to-op)` -- De Morgan: comp-op(from-op(a, b)) = to-op(comp-op(a), comp-op(b)); pushes negation toward the leaves (negation normal form)
+- `(make-negation-axiom comp-op bottom top)` -- Boolean negation folds: comp-op(comp-op(x)) = x, comp-op(bottom) = top, comp-op(top) = bottom
+- `ac-absent` -- sentinel passed to `make-ac-axiom` for an absent identity or annihilator (distinct from every term value, including `#f`)
 
 ### Axiom Predicates
 
@@ -617,7 +623,10 @@ Axiom-driven term rewriting via abstract term protocols.
 - `(involution-axiom? x)` -- test for involution axiom
 - `(absorption-axiom? x)` -- test for absorption axiom
 - `(associativity-axiom? x)` -- test for associativity axiom
-- `(directional-axiom? x)` -- test whether x is directional (currently only associativity)
+- `(ac-axiom? x)` -- test for AC axiom
+- `(de-morgan-axiom? x)` -- test for De Morgan axiom
+- `(negation-axiom? x)` -- test for negation axiom
+- `(directional-axiom? x)` -- test whether x is directional (associativity and De Morgan axioms)
 - `(axiom? x)` -- test whether x is any recognized axiom type
 
 ### Rule Compilation
@@ -686,9 +695,9 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 - `(semiring->theory S plus-sym times-sym)` -- 6 axioms: identity and associativity for both ops, additive commutativity, multiplicative absorbing element
 - `(ring->theory R plus-sym times-sym neg-sym)` -- 7 axioms: 6 semiring axioms plus negation involution
 - `(field->theory F plus-sym times-sym neg-sym recip-sym)` -- 8 axioms: 7 ring axioms plus reciprocal involution
-- `(lattice->theory L join-sym meet-sym)` -- 10 axioms: identity, commutativity, idempotence, absorption, and associativity for both join and meet
-- `(heyting->theory H join-sym meet-sym)` -- 10 axioms: same as lattice->theory via the underlying lattice; implication is not included
-- `(boolean->theory B join-sym meet-sym comp-sym)` -- 11 axioms: 10 lattice axioms plus complement involution
+- `(lattice->theory L join-sym meet-sym)` -- 4 axioms: an AC (associative-commutative) axiom for each of join and meet (each folding commutativity, associativity, idempotence, identity, and annihilation in one terminating pass), plus the two absorption laws
+- `(heyting->theory H join-sym meet-sym)` -- 4 axioms: same as lattice->theory via the underlying lattice; implication is not included
+- `(boolean->theory B join-sym meet-sym comp-sym)` -- 7 axioms: AC join/meet with complement folding (`a ∧ ¬a = ⊥`, `a ∨ ¬a = ⊤`, detected across the whole flattened operand list so n-way contradictions reduce), the two absorption laws, Boolean negation (`¬¬a = a`, `¬⊥ = ⊤`, `¬⊤ = ⊥`), and the two De Morgan laws
 
 ### Equivalence Discovery
 
@@ -701,7 +710,7 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 
 ### Boolean normalization facade
 
-- `(symbolic-boolean-normalize term)` -- apply the standard Boolean theory (`boolean->theory` on a 1-atom Boolean algebra, operators `and` / `or` / `not`); returns `(values result trace)`; covers commutativity, associativity, identity, idempotence, absorption, and complement-involution but not De Morgan or complement laws
+- `(symbolic-boolean-normalize term)` -- apply the full 7-axiom `boolean->theory` over a two-element `{#f, #t}` Boolean algebra (operators `and` / `or` / `not`); returns `(values result trace)`; covers AC normalization (commutativity, associativity, idempotence, identity, annihilation), absorption, complement laws (a contradiction normalizes to `#f`, a tautology to `#t`, including n-way), Boolean negation, and De Morgan. Not a decision procedure: there is no distributivity axiom — use `(wile algebra sat)` for that
 - `(symbolic-boolean-equivalent? t1 t2)` -- true iff both terms normalize to the same form under the standard Boolean theory
 
 ---

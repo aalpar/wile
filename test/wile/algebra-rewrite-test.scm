@@ -46,13 +46,20 @@
   (test #t (axiom? (make-involution-axiom 'neg)))
   (test #t (axiom? (make-absorption-axiom 'and 'or)))
   (test #t (axiom? (make-associativity-axiom '+)))
+  (test #t (axiom? (make-ac-axiom '+ #f ac-absent ac-absent #f)))
+  (test #t (axiom? (make-de-morgan-axiom 'not 'or 'and)))
+  (test #t (axiom? (make-negation-axiom 'not 'bot 'top)))
   (test #f (axiom? 42))
   (test #f (axiom? "not an axiom")))
 
 (test-group "directional-axiom"
   (test #t (directional-axiom? (make-associativity-axiom '+)))
+  (test #t (directional-axiom? (make-de-morgan-axiom 'not 'or 'and)))
   (test #f (directional-axiom? (make-identity-axiom '+ zero?)))
-  (test #f (directional-axiom? (make-commutativity-axiom '+))))
+  (test #f (directional-axiom? (make-commutativity-axiom '+)))
+  ;; AC and negation reduce / canonicalize, so they are NOT directional
+  (test #f (directional-axiom? (make-ac-axiom '+ #f ac-absent ac-absent #f)))
+  (test #f (directional-axiom? (make-negation-axiom 'not 'bot 'top))))
 
 ;; ─── Identity ───────────────────────────────
 
@@ -172,6 +179,69 @@
   (test 4 (length (axiom->rules (make-absorption-axiom 'and 'or) proto)))
   ;; Associativity produces 1 rule
   (test 1 (length (axiom->rules (make-associativity-axiom '+) proto))))
+
+;; ─── Operator-constructing protocol (for head-changing rules) ──
+
+(define op-proto
+  (make-term-protocol pair? car cdr
+    (lambda (term new-args)
+      (cons (car term) new-args))
+    (lambda (a b)
+      (cond
+        ((and (symbol? a) (symbol? b))
+         (string<? (symbol->string a) (symbol->string b)))
+        ((symbol? a) #t)
+        ((symbol? b) #f)
+        (else #f)))
+    (lambda (op args)
+      (cons op args))))
+
+(define (apply1 axiom pr term)
+  ;; Apply the single compiled rule of AXIOM to TERM.
+  ((car (axiom->rules axiom pr)) term))
+
+(test-group "term-make-op-term"
+  (test #f (term-can-make-op? proto))
+  (test #t (term-can-make-op? op-proto))
+  (test '(and a b) (term-make-op-term op-proto 'and '(a b)))
+  (test-error (term-make-op-term proto 'and '(a b))))
+
+(test-group "ac-axiom"
+  ;; flatten + sort (no identity / annihilator / complement)
+  (test '(+ a (+ b c))
+        (apply1 (make-ac-axiom '+ #f ac-absent ac-absent #f) proto '(+ (+ a b) c)))
+  ;; already canonical => no-match
+  (test #t (no-match? (apply1 (make-ac-axiom '+ #f ac-absent ac-absent #f)
+                              proto '(+ a (+ b c)))))
+  ;; identity drop: (+ a 0) => a
+  (test 'a (apply1 (make-ac-axiom '+ #f 0 ac-absent #f) proto '(+ a 0)))
+  ;; idempotence: (or a a) => a
+  (test 'a (apply1 (make-ac-axiom 'or #t ac-absent ac-absent #f) proto '(or a a)))
+  ;; annihilator: (and a F) => F
+  (test 'F (apply1 (make-ac-axiom 'and #f ac-absent 'F #f) proto '(and a F)))
+  ;; n-way complement fold across the flat list => annihilator (needs op-proto)
+  (test 'bot (apply1 (make-ac-axiom 'and #t 'top 'bot 'not)
+                     op-proto '(and a (and b (not a)))))
+  ;; complement folding requires an operator-constructing protocol
+  (test-error (axiom->rules (make-ac-axiom 'and #t 'top 'bot 'not) proto)))
+
+(test-group "de-morgan-axiom"
+  (test '(and (not a) (not b))
+        (apply1 (make-de-morgan-axiom 'not 'or 'and) op-proto '(not (or a b))))
+  (test '(or (not a) (not b))
+        (apply1 (make-de-morgan-axiom 'not 'and 'or) op-proto '(not (and a b))))
+  ;; matches only the named from-op
+  (test #t (no-match? (apply1 (make-de-morgan-axiom 'not 'or 'and)
+                              op-proto '(not (and a b)))))
+  ;; requires an operator-constructing protocol
+  (test-error (axiom->rules (make-de-morgan-axiom 'not 'or 'and) proto)))
+
+(test-group "negation-axiom"
+  (let ((neg (make-negation-axiom 'not 'bot 'top)))
+    (test 'a   (apply1 neg op-proto '(not (not a))))   ; double negation
+    (test 'top (apply1 neg op-proto '(not bot)))       ; comp(bot) => top
+    (test 'bot (apply1 neg op-proto '(not top)))       ; comp(top) => bot
+    (test #t (no-match? (apply1 neg op-proto '(not a))))))
 
 (test-end)
 (test-exit)

@@ -1304,6 +1304,13 @@ def compute_bool(term, env):
     term is either a string (variable name) or (op, [args]).
     env maps variable names to Python booleans.
     """
+    # Bounds produced by complement / identity / annihilator folding under the
+    # {#f, #t} carrier that symbolic-boolean-normalize uses: a contradiction
+    # normalizes to #f, a tautology to #t.
+    if term == '#f':
+        return False
+    if term == '#t':
+        return True
     if isinstance(term, str):
         return env[term]
     op, args = term
@@ -1341,33 +1348,21 @@ def validate_rewriting_boolean(args, num_terms=500):
     # Generate random terms
     terms = [random_term(operators, leaves, 4) for _ in range(num_terms)]
 
-    # Build batch Scheme code
+    # Build batch Scheme code. We exercise the public facade
+    # symbolic-boolean-normalize, which normalizes under the full 7-axiom
+    # boolean->theory over a 2-element {#f, #t} Boolean algebra, so a
+    # contradiction normalizes to #f and a tautology to #t.
     scheme_lines = []
     scheme_lines.append("(import (wile algebra)")
     scheme_lines.append("        (wile algebra symbolic)")
     scheme_lines.append("        (wile algebra rewrite))")
-    scheme_lines.append("")
-    scheme_lines.append("(define proto")
-    scheme_lines.append("  (sexp-term-protocol")
-    scheme_lines.append("    (lambda (a b)")
-    scheme_lines.append("      (cond")
-    scheme_lines.append("        ((and (symbol? a) (symbol? b))")
-    scheme_lines.append("         (string<? (symbol->string a) (symbol->string b)))")
-    scheme_lines.append("        ((symbol? a) #t)")
-    scheme_lines.append("        ((symbol? b) #f)")
-    scheme_lines.append("        (else #f)))))")
-    scheme_lines.append("")
-    scheme_lines.append("(define norm")
-    scheme_lines.append("  (make-recursive-normalizer")
-    scheme_lines.append("    (boolean->theory (powerset-boolean '(x y z)) 'or 'and 'not)")
-    scheme_lines.append("    proto))")
     scheme_lines.append("")
 
     scheme_lines.append("(begin")
     for term in terms:
         sexp = term_to_sexp(term)
         scheme_lines.append(
-            f"  (let-values (((result trace) (norm '{sexp})))"
+            f"  (let-values (((result trace) (symbolic-boolean-normalize '{sexp})))"
             f" (write result) (display #\\newline))")
     scheme_lines.append(")")
 
@@ -1413,24 +1408,10 @@ def validate_rewriting_boolean(args, num_terms=500):
         print(f"    WARNING: not writing snapshot due to {failures} failures")
     elif args.snapshot and len(snapshot_cases) > 0:
         body = ""
-        body += "(define proto\n"
-        body += "  (sexp-term-protocol\n"
-        body += "    (lambda (a b)\n"
-        body += "      (cond\n"
-        body += "        ((and (symbol? a) (symbol? b))\n"
-        body += "         (string<? (symbol->string a) (symbol->string b)))\n"
-        body += "        ((symbol? a) #t)\n"
-        body += "        ((symbol? b) #f)\n"
-        body += "        (else #f)))))\n\n"
-        body += "(define norm\n"
-        body += "  (make-recursive-normalizer\n"
-        body += "    (boolean->theory (powerset-boolean '(x y z)) 'or 'and 'not)\n"
-        body += "    proto))\n\n"
-
         for term, normalized_sexp in snapshot_cases[:100]:
             original_sexp = term_to_sexp(term)
             body += (f";; {original_sexp} normalizes to {normalized_sexp}\n"
-                     f"(let-values (((result trace) (norm '{original_sexp})))\n"
+                     f"(let-values (((result trace) (symbolic-boolean-normalize '{original_sexp})))\n"
                      f"  (test '{normalized_sexp} result))\n\n")
 
         write_snapshot(
@@ -1456,6 +1437,11 @@ def compute_lattice(term, env):
     term is either a string (variable name) or (op, [args]).
     env maps variable names to Python frozensets.
     """
+    # Bounds from identity / annihilator folding over the powerset carrier:
+    # bottom is the empty set (), top is the full universe (1 2 3), which
+    # parse_sexp yields as an int-headed compound. Neither is join/meet.
+    if term == ():
+        return frozenset()
     if isinstance(term, str):
         return env[term]
     op, args = term
@@ -1463,6 +1449,9 @@ def compute_lattice(term, env):
         return compute_lattice(args[0], env) | compute_lattice(args[1], env)
     if op == 'meet':
         return compute_lattice(args[0], env) & compute_lattice(args[1], env)
+    if isinstance(op, int):
+        # set literal (i j k ...) -> {i, j, k, ...}; only the top element appears
+        return frozenset([op] + list(args))
     raise ValueError(f"compute_lattice: unknown operator {op}")
 
 
