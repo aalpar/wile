@@ -18,11 +18,45 @@
     (lambda (term new-args) (cons (car term) new-args))
     (lambda (a b) #f)))
 
-;; Scalar distance only (drops the mapping, which arrives in Phase 3).
+;; Scalar distance only (drops the mapping).
 (define (ted t1 t2)
   (call-with-values
     (lambda () (tree-edit-distance t1 t2 proto))
     (lambda (cost mapping) cost)))
+
+;; Node mapping only (drops the scalar cost).
+(define (ted-map t1 t2)
+  (call-with-values
+    (lambda () (tree-edit-distance t1 t2 proto))
+    (lambda (cost mapping) mapping)))
+
+;; Label of a node under the s-expression protocol.
+(define (label x)
+  (if (pair? x) (car x) x))
+
+;; Unit cost implied by one mapping entry.
+(define (entry-cost p)
+  (let ((a (car p)) (b (cdr p)))
+    (cond
+      ((not a) 1)                              ; insert
+      ((not b) 1)                              ; delete
+      ((equal? (label a) (label b)) 0)         ; match
+      (else 1))))                              ; relabel
+
+(define (mapping-cost m)
+  (apply + (map entry-cost m)))
+
+(define (count-deletes m)
+  (count (lambda (p) (not (cdr p))) m))
+
+(define (count-inserts m)
+  (count (lambda (p) (not (car p))) m))
+
+(define (count-relabels m)
+  (count
+    (lambda (p)
+      (and (car p) (cdr p) (not (equal? (label (car p)) (label (cdr p))))))
+    m))
 
 (test-begin "tree-edit-distance")
 
@@ -77,6 +111,57 @@
               (<= (ted t1 t3)
                   (+ (ted t1 t2) (ted t2 t3)))))
           fixtures))
+      fixtures))
+  fixtures)
+
+;;; --- Phase 3: node mapping ---------------------------------------------
+
+;; d(T,T): every node matched to its counterpart, no inserts/deletes, and
+;; every matched pair has equal labels (identity mapping).
+(let ((m (ted-map '(h (f a b) (g c)) '(h (f a b) (g c)))))
+  (test 0 (count-deletes m))
+  (test 0 (count-inserts m))
+  (test 0 (count-relabels m))
+  (test 0 (mapping-cost m)))
+
+;; Single relabel: one differing-label pair, no inserts/deletes.
+(let ((m (ted-map '(f a b) '(f a c))))
+  (test 0 (count-deletes m))
+  (test 0 (count-inserts m))
+  (test 1 (count-relabels m))
+  ;; the relabel pairs the differing leaves b and c
+  (test-assert (member '(b . c) m)))
+
+;; Delete: exactly one (_ . #f), no inserts.
+(let ((m (ted-map '(f a b) '(f a))))
+  (test 1 (count-deletes m))
+  (test 0 (count-inserts m))
+  (test-assert (member '(b . #f) m)))
+
+;; Insert: exactly one (#f . _), no deletes.
+(let ((m (ted-map '(f a) '(f a b))))
+  (test 0 (count-deletes m))
+  (test 1 (count-inserts m))
+  (test-assert (member '(#f . b) m)))
+
+;; Deep relabel: the differing leaf deep in the tree is the only relabel.
+(let ((m (ted-map '(f (g a) b) '(f (g c) b))))
+  (test 0 (count-deletes m))
+  (test 0 (count-inserts m))
+  (test 1 (count-relabels m))
+  (test-assert (member '(a . c) m)))
+
+;; Mapping-consistency invariant: the cost implied by the mapping equals the
+;; returned scalar distance, for every fixture pair. A backtracker that picks
+;; a non-minimizing branch would break this even with a correct scalar DP.
+(for-each
+  (lambda (t1)
+    (for-each
+      (lambda (t2)
+        (call-with-values
+          (lambda () (tree-edit-distance t1 t2 proto))
+          (lambda (cost m)
+            (test cost (mapping-cost m)))))
       fixtures))
   fixtures)
 

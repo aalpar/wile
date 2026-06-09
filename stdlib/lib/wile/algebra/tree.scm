@@ -165,7 +165,12 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
 ;;; row/col 0 of the window (absolute l-1) is the empty forest, seeded by
 ;;; cumulative delete / insert.
 
-(define (%ted-fill-forest t1 t2 i j td relabel delete insert)
+;; Returns (values fd roff coff): the windowed forest-distance table plus the
+;; row/col offsets that map an absolute postorder index into the window. Also
+;; writes the root-branch cells into the shared TD table as a side effect, so
+;; the forward pass (which discards fd) and the backtracker (which walks it)
+;; share one recurrence.
+(define (%ted-forest-window t1 t2 i j td relabel delete insert)
   (let ((l1 (ted-tree-l t1))
         (l2 (ted-tree-l t2)))
     (let ((li (vector-ref l1 i))
@@ -213,7 +218,8 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
                                        (%2d-ref td di dj)))))
                         (fd-set! di dj m))))
                 (iloop (+ dj 1))))
-            (oloop (+ di 1))))))))
+            (oloop (+ di 1))))
+        (values fd roff coff)))))
 
 (define (%ted-tree-distance-table t1 t2 relabel delete insert)
   "Fill the full TD[0..n1][0..n2] tree-distance table by running the
@@ -227,10 +233,64 @@ TD[n1][n2] is the edit distance between the whole trees."
         (lambda (i)
           (for-each
             (lambda (j)
-              (%ted-fill-forest t1 t2 i j td relabel delete insert))
+              ;; fd window discarded here; only its TD side effects persist.
+              (%ted-forest-window t1 t2 i j td relabel delete insert))
             (ted-tree-keyroots t2)))
         (ted-tree-keyroots t1))
       td)))
+
+;;; -- Backtracking → node mapping --
+;;;
+;;; Recover the node correspondence by re-walking the forest windows. The full
+;;; TD table is already populated, so each window is recomputed on demand and
+;;; walked from its top-right corner toward the empty-forest base, picking the
+;;; branch that achieved the minimum:
+;;;   delete   → (node1 . #f)        insert  → (#f . node2)
+;;;   relabel  → (node1 . node2)     compose → recurse into the matched subtree
+;;; Branch order (delete, insert, then diagonal/compose) matches the canonical
+;;; Zhang-Shasha recovery; any minimizer path yields a mapping whose summed
+;;; cost equals the scalar distance.
+
+(define (%ted-backtrack t1 t2 td relabel delete insert)
+  (let ((l1 (ted-tree-l t1))
+        (l2 (ted-tree-l t2))
+        (nodes1 (ted-tree-nodes t1))
+        (nodes2 (ted-tree-nodes t2))
+        (acc '()))
+    (define (emit! pair)
+      (set! acc (cons pair acc)))
+    (define (rec i j)
+      (call-with-values
+        (lambda () (%ted-forest-window t1 t2 i j td relabel delete insert))
+        (lambda (fd roff coff)
+          (define (fd-ref a b)
+            (%2d-ref fd (- a roff) (- b coff)))
+          (let ((li (vector-ref l1 i))
+                (lj (vector-ref l2 j)))
+            (let loop ((di i) (dj j))
+              (cond
+                ((and (< di li) (< dj lj))
+                 #t)                          ; reached the empty forest
+                ((and (>= di li)
+                      (= (fd-ref di dj) (+ (fd-ref (- di 1) dj) (delete di))))
+                 (emit! (cons (vector-ref nodes1 di) #f))
+                 (loop (- di 1) dj))
+                ((and (>= dj lj)
+                      (= (fd-ref di dj) (+ (fd-ref di (- dj 1)) (insert dj))))
+                 (emit! (cons #f (vector-ref nodes2 dj)))
+                 (loop di (- dj 1)))
+                ((and (= (vector-ref l1 di) li)
+                      (= (vector-ref l2 dj) lj))
+                 ;; relabel/match the two subtree roots
+                 (emit! (cons (vector-ref nodes1 di) (vector-ref nodes2 dj)))
+                 (loop (- di 1) (- dj 1)))
+                (else
+                 ;; compose: di,dj root a matched subtree — recurse, then jump
+                 ;; the forest pointer left of both subtrees.
+                 (rec di dj)
+                 (loop (- (vector-ref l1 di) 1) (- (vector-ref l2 dj) 1)))))))))
+    (rec (ted-tree-n t1) (ted-tree-n t2))
+    (reverse acc)))
 
 ;;; -- Index-based cost closures (default unit costs) --
 ;;;
@@ -254,15 +314,14 @@ TD[n1][n2] is the edit distance between the whole trees."
   (lambda (dj)
     1))
 
-;;; -- Public entry (Phase 2: scalar distance; mapping lands in Phase 3) --
+;;; -- Public entry (Phase 3: scalar distance + node mapping) --
 
 (define (tree-edit-distance t1 t2 proto . opts)
   (let ((tt1 (%ted-preprocess proto t1))
         (tt2 (%ted-preprocess proto t2)))
-    (let ((td (%ted-tree-distance-table
-                tt1 tt2
-                (%unit-relabel tt1 tt2 equal?)
-                (%unit-delete)
-                (%unit-insert))))
-      (values (%2d-ref td (ted-tree-n tt1) (ted-tree-n tt2))
-              '()))))
+    (let ((relabel (%unit-relabel tt1 tt2 equal?))
+          (delete (%unit-delete))
+          (insert (%unit-insert)))
+      (let ((td (%ted-tree-distance-table tt1 tt2 relabel delete insert)))
+        (values (%2d-ref td (ted-tree-n tt1) (ted-tree-n tt2))
+                (%ted-backtrack tt1 tt2 td relabel delete insert))))))
