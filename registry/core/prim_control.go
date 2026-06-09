@@ -71,17 +71,23 @@ func PrimApply(cc machine.CallContext) error {
 		}
 	}
 
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err := sub.ApplyCallable(proc, prefixArgs...)
+	// Run proc in place rather than in a sub-context. ApplyCallable reconfigures
+	// the VM (mc.reconfigured / template repoint), and the foreign-call
+	// dispatcher continues execution into proc instead of restoring. proc
+	// returns through the continuation already on mc.cont — the frame saved for
+	// this (apply ...) call (non-tail) or the caller's caller (tail) — so
+	// (apply f args) in tail position is a proper tail call, and proc's result
+	// (including multiple values) flows back naturally. This avoids a per-call
+	// sub-context plus a pooled eval stack acquisition on every apply.
+	//
+	// Unlike PrimCallCC, apply needs no mc.Parent() gate: it generates no
+	// continuation abort of its own. Any control effect inside proc (call/cc,
+	// raise, an invoked continuation) is handled by proc's own machinery and
+	// propagates through mc exactly as if proc had been called directly.
+	_, err := mc.ApplyCallable(proc, prefixArgs...)
 	if err != nil {
 		return err
 	}
-	err = sub.Run()
-	if err != nil {
-		return err
-	}
-	mc.SetValues(sub.GetValues()...)
 	return nil
 }
 
