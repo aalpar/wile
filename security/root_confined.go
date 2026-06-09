@@ -28,9 +28,22 @@ type RootConfined interface {
 
 // ConfinementRootOf reports the filesystem confinement root that applies to
 // auth, if any. It unwraps All() composites, returning the first member that
-// confines to a root (a composite is an intersection, so any single member's
-// root still bounds file access). Returns ok=false when nothing confines auth
-// to a root — callers then fall back to unconfined os operations.
+// confines to a root.
+//
+// This is a defense-in-depth bound, not the exact confinement. A composite is
+// an intersection, so the true confinement is the intersection of every
+// member's root, which is always a subset of the first member's root. The
+// os.Root layer this drives is therefore never wider than that member's
+// subtree, but for a multi-root composite it may be looser than the full
+// intersection. That is safe: the policy layer (Authorize) enforces the full
+// intersection and runs before any open, so returning the first root cannot
+// widen access. (If multi-root composites ever need exact os.Root containment,
+// return the deepest containing root for nested members and ok=false for
+// disjoint ones — the profiles currently construct only single-root
+// composites, so first-member-wins suffices.)
+//
+// Returns ok=false when nothing confines auth to a root — callers then fall
+// back to unconfined os operations, still gated by the policy layer.
 func ConfinementRootOf(auth Authorizer) (string, bool) {
 	switch a := auth.(type) {
 	case RootConfined:
