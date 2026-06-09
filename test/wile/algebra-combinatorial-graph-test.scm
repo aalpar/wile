@@ -1066,5 +1066,109 @@
     (test #t (>= (min (car sz) (cdr sz)) 2))     ; not a 1/6 min-cut
     (test 3 (cdr (assq 'cut-weight p)))))        ; pays cut 3 vs degenerate min-cut 1
 
+;;; ===== Maximum common (connected) induced subgraph ====================
+
+;; Independent brute-force oracle: exhaustive search, NO bound. The admissibility
+;; test below asserts the production branch-and-bound returns the same SIZE as
+;; this — if the bound ever under-estimates and prunes a true optimum, the two
+;; diverge and the test fails. Reimplemented from the exported predicates so it
+;; shares no code (and thus no bug) with the production search.
+(define (brute-mccis G H connected?)
+  (define (consistent? M a b)
+    (and (eq? (graph-edge? G a a) (graph-edge? H b b))
+         (every
+           (lambda (pr)
+             (and (eq? (graph-edge? G a (car pr)) (graph-edge? H b (cdr pr)))
+                  (eq? (graph-edge? G (car pr) a) (graph-edge? H (cdr pr) b))))
+           M)))
+  (define (adj? u v) (or (graph-edge? G u v) (graph-edge? G v u)))
+  (define (frontier dom rem)
+    (filter (lambda (g) (any (lambda (d) (adj? g d)) dom)) rem))
+  (define best 0)
+  (define (search M rem-g rem-h)
+    (set! best (max best (length M)))
+    (let ((cand (if (and connected? (pair? M)) (frontier (map car M) rem-g) rem-g)))
+      (for-each
+        (lambda (g)
+          (for-each
+            (lambda (h)
+              (when (consistent? M g h)
+                (search (cons (cons g h) M) (delete g rem-g) (delete h rem-h))))
+            rem-h))
+        cand)))
+  (search '() (graph-vertices G) (graph-vertices H))
+  best)
+
+;; Two disjoint edges (2·K2): a four-vertex graph with two components.
+(define two-k2
+  (make-graph '((a . ((b))) (b . ((a)) ) (c . ((d))) (d . ((c))))
+              '(symmetrize? . #t)))
+
+(test-group "MCS — induced-correspondence validity"
+  ;; Every pair returned must actually be induced-consistent.
+  (let* ((G (cycle-graph 4))
+         (H (path-graph 4))
+         (M (graph-maximum-common-subgraph G H)))
+    (test #t
+      (every
+        (lambda (p1)
+          (every
+            (lambda (p2)
+              (or (eq? p1 p2)
+                  (eq? (graph-edge? G (car p1) (car p2))
+                       (graph-edge? H (cdr p1) (cdr p2)))))
+            M))
+        M))
+    ;; injective on both sides
+    (test (length M) (length (delete-duplicates (map car M))))
+    (test (length M) (length (delete-duplicates (map cdr M))))))
+
+(test-group "MCS — known sizes (connected, induced)"
+  (test 3 (length (graph-maximum-common-subgraph (complete-graph 3) (complete-graph 3))))
+  (test 4 (length (graph-maximum-common-subgraph (path-graph 4) (path-graph 4))))
+  ;; C4 has no induced P4; 3 consecutive C4 vertices induce P3 ⊆ P4.
+  (test 3 (length (graph-maximum-common-subgraph (cycle-graph 4) (path-graph 4))))
+  ;; triangle vs path: only a shared edge (K3's 3-subset is a triangle, not a path).
+  (test 2 (length (graph-maximum-common-subgraph (complete-graph 3) (path-graph 3)))))
+
+(test-group "MCS — connected vs disconnected"
+  ;; Two disjoint edges: connected caps at one edge (2 vertices); disconnected
+  ;; recovers both edges (4 vertices).
+  (test 2 (length (graph-maximum-common-subgraph two-k2 two-k2)))
+  (test 4 (length (graph-maximum-common-subgraph two-k2 two-k2 '(disconnected? . #t)))))
+
+(test-group "MCS — edge cases"
+  ;; Empty graph → empty correspondence.
+  (test 0 (length (graph-maximum-common-subgraph (empty-graph 0) (complete-graph 3))))
+  ;; Edgeless graphs: every vertex pair is induced-consistent (no edges to
+  ;; disagree on), so connected caps at 1 but disconnected matches min(|V|).
+  (test 1 (length (graph-maximum-common-subgraph (empty-graph 3) (empty-graph 4))))
+  (test 3 (length (graph-maximum-common-subgraph (empty-graph 3) (empty-graph 4)
+                                                 '(disconnected? . #t))))
+  ;; compatible? gate: forbid every pairing → empty correspondence.
+  (test 0 (length (graph-maximum-common-subgraph
+                    (complete-graph 3) (complete-graph 3)
+                    (cons 'compatible? (lambda (g h) #f))))))
+
+(test-group "MCS — admissibility regression (B&B size = brute-force size)"
+  ;; The bound must never under-estimate; if it did, the pruned branch-and-bound
+  ;; would return a smaller mapping than the exhaustive oracle on some fixture.
+  (let ((pairs
+          (list (list (complete-graph 3) (complete-graph 3))
+                (list (path-graph 4)     (path-graph 4))
+                (list (cycle-graph 4)    (path-graph 4))
+                (list (complete-graph 3) (path-graph 3))
+                (list (cycle-graph 5)    (cycle-graph 4))
+                (list (petersen-graph)   (cycle-graph 5))
+                (list two-k2             two-k2))))
+    (for-each
+      (lambda (gh)
+        (let ((G (car gh)) (H (cadr gh)))
+          (test (brute-mccis G H #t)
+                (length (graph-maximum-common-subgraph G H)))
+          (test (brute-mccis G H #f)
+                (length (graph-maximum-common-subgraph G H '(disconnected? . #t))))))
+      pairs)))
+
 (test-end)
 (test-exit)
