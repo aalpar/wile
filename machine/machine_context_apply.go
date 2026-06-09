@@ -403,7 +403,11 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 		return p, err
 	}
 
-	// Reject cross-thread composable continuation invocation
+	// Reject cross-thread composable continuation invocation. Load-bearing for
+	// the per-thread allocation pool design (no goroutine releases another's
+	// frames); see plans/2026-06-08-per-thread-pools-invariant.md and
+	// TestCrossThreadContinuationIsAllocatorInvariant. Do not relax without
+	// reworking allocation.
 	if p.threadID != cc.threadID {
 		return p, werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 			"composable continuation: captured in thread %d, invoked from thread %d",

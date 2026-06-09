@@ -85,6 +85,12 @@ func (p *MachineContext) applyCapturedContinuation(
 	capt *CapturedContinuation,
 	args []values.Value,
 ) (*MachineContext, error) {
+	// Thread confinement: a continuation captured in one thread cannot be
+	// invoked from another. Load-bearing for the per-thread allocation pool
+	// design — it guarantees no goroutine ever releases a frame allocated by
+	// another. Do not relax without reworking allocation; see
+	// plans/2026-06-08-per-thread-pools-invariant.md and the regression test
+	// TestCrossThreadContinuationIsAllocatorInvariant.
 	if p.ThreadID() != capt.threadID {
 		return p, werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 			"call/cc: continuation captured in thread %d, invoked from thread %d",
