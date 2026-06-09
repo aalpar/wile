@@ -85,6 +85,16 @@ type MachineContext struct {
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
 	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 
+	// reconfigured is set by Apply when it repoints the VM (template/env/pc) to
+	// execute a closure in place. The foreign-call dispatchers (applyForeign,
+	// callForeignCached) consult it to decide whether a primitive reconfigured
+	// the VM for continued execution. It is the reliable signal where the older
+	// "template != savedTemplate" inference is a false negative: when a
+	// procedure applies *itself* (proc.template == caller.template, e.g.
+	// (call/cc f) evaluated inside f, or self-recursive apply), the template is
+	// unchanged even though Apply ran. Cleared before each foreign call.
+	reconfigured bool
+
 	timer *timerState // nil = no timer active; both handler and cancel set together
 }
 

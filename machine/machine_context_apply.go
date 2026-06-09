@@ -80,6 +80,9 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	p.template = tpl
 	p.env = env
 	p.pc = 0
+	// Signal in-place reconfiguration so the foreign-call dispatchers continue
+	// execution even when tpl == the caller's template (self-application).
+	p.reconfigured = true
 	return p, nil
 }
 
@@ -128,6 +131,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	// double-restoring from an already-consumed SaveContinuation frame.
 	savedTemplate := p.template
 	savedCont := p.cont
+	p.reconfigured = false
 
 	err = fcls.fn(p)
 	if err != nil {
@@ -149,9 +153,13 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 		}
 	}
 
-	// If the foreign function changed the template (e.g., via Apply/ApplyCallable),
-	// the VM state is configured for continued execution — do not restore continuation.
-	if p.template != savedTemplate {
+	// If the foreign function reconfigured the VM for continued execution
+	// (e.g., via Apply/ApplyCallable), do not restore the continuation. The
+	// reconfigured flag is authoritative for in-place Apply (it catches
+	// self-application, where the template is unchanged); the template
+	// comparison additionally covers continuation-restore paths that repoint
+	// the template without going through Apply (applyComposableContinuation).
+	if p.reconfigured || p.template != savedTemplate {
 		return p, nil
 	}
 

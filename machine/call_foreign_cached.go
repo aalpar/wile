@@ -82,6 +82,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 
 	savedTemplate := mc.template
 	savedCont := mc.cont
+	mc.reconfigured = false
 	err = fcls.fn(mc)
 	if err != nil {
 		return nil, applyCallableError(mc, err)
@@ -98,11 +99,14 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		}
 	}
 
-	// If the foreign function changed the template (e.g., PrimCallCC inline
-	// mode calling Apply on a MachineClosure), let the VM continue from
-	// wherever it pointed — the closure's RestoreContinuation will handle
-	// the SaveContinuation frame.
-	if mc.template != savedTemplate {
+	// If the foreign function reconfigured the VM for continued execution
+	// (e.g., PrimCallCC inline mode calling Apply on a MachineClosure), let the
+	// VM continue from wherever it pointed — the closure's RestoreContinuation
+	// will handle the SaveContinuation frame. The reconfigured flag is
+	// authoritative for in-place Apply (it catches self-application, where the
+	// template is unchanged); the template comparison additionally covers
+	// continuation-restore paths that repoint the template without Apply.
+	if mc.reconfigured || mc.template != savedTemplate {
 		return mc, nil
 	}
 
