@@ -32,6 +32,10 @@
 ;;;   children : vector 1..n — list of child postorder indices, left-to-right
 ;;;   l        : vector 1..n — l(i), postorder index of i's leftmost-leaf descendant
 ;;;   keyroots : ascending list of LR-keyroot indices (the subtree roots the DP loops over)
+;;;
+;;; %ted-preprocess is the sole constructor: it always populates all six fields,
+;;; so a <ted-tree> is never observed half-built (%tree-postorder returns the
+;;; four base tables as plain values, not a partial record).
 
 (define-record-type <ted-tree>
   (%make-ted-tree n nodes labels children l keyroots)
@@ -45,9 +49,15 @@
 
 (define (%tree-postorder proto t)
   "Number T's nodes 1..n in left-to-right postorder under PROTO.
-Returns a <ted-tree> with n/nodes/labels/children filled and l/keyroots
-left #f (filled by %tree-l and %tree-keyroots). Child order is preserved
-exactly — this is what makes the distance ordered."
+Returns (values n nodes labels children) — the base tables only. The derived
+l/keyroots tables are computed separately (%tree-l, %tree-keyroots), and the
+complete <ted-tree> is assembled solely by %ted-preprocess; the record is never
+exposed in a half-initialized state. Child order is preserved exactly — this is
+what makes the distance ordered.
+
+Raises if any node value is #f: #f is the reserved no-node sentinel in the
+result mapping ((a . #f) = delete, (#f . b) = insert), so a tree that contained
+#f as a node could not be projected to an unambiguous mapping."
   (let ((counter 0)
         (nodes-acc '())     ; reverse-postorder accumulators (id n first)
         (labels-acc '())
@@ -69,6 +79,11 @@ exactly — this is what makes the distance ordered."
           (let ((first-id (walk (car kids))))
             (cons first-id (walk-children (cdr kids))))))
     (define (walk node)
+      ;; #f is the no-node sentinel of the result mapping; reject it as a node
+      ;; value at the boundary rather than emit an ambiguous mapping pair later.
+      (when (eq? node #f)
+        (error "tree-edit-distance: #f cannot be a tree node (reserved as the no-node mapping sentinel)"
+               (list 'fix "ensure tree nodes are never #f, or wrap #f leaves in a distinct marker")))
       (let ((child-ids (walk-children (kids-of node))))
         (set! counter (+ counter 1))
         (set! nodes-acc (cons node nodes-acc))
@@ -87,25 +102,24 @@ exactly — this is what makes the distance ordered."
           (vector-set! labels-vec id (car ls))
           (vector-set! children-vec id (car cs))
           (loop (- id 1) (cdr ns) (cdr ls) (cdr cs))))
-      (%make-ted-tree n nodes-vec labels-vec children-vec #f #f))))
+      (values n nodes-vec labels-vec children-vec))))
 
-(define (%tree-l base)
-  "Compute the l(i) leftmost-leaf-descendant table for preprocessed BASE.
+(define (%tree-l n children)
+  "Compute the l(i) leftmost-leaf-descendant table for N postorder-numbered
+nodes whose CHILDREN vector holds each node's child postorder-index list.
 l(leaf) = leaf; l(internal) = l(leftmost child). A single ascending sweep
 suffices because every child's postorder index is smaller than its parent's,
 so l(first-child) is already filled when node i is reached."
-  (let ((n (ted-tree-n base))
-        (children (ted-tree-children base)))
-    (let ((l (make-vector (+ n 1) 0)))
-      (let loop ((i 1))
-        (when (<= i n)
-          (let ((kids (vector-ref children i)))
-            (vector-set! l i
-              (if (null? kids)
-                  i
-                  (vector-ref l (car kids)))))
-          (loop (+ i 1))))
-      l)))
+  (let ((l (make-vector (+ n 1) 0)))
+    (let loop ((i 1))
+      (when (<= i n)
+        (let ((kids (vector-ref children i)))
+          (vector-set! l i
+            (if (null? kids)
+                i
+                (vector-ref l (car kids)))))
+        (loop (+ i 1))))
+    l))
 
 (define (%tree-keyroots l)
   "LR-keyroots from the l-table: { k : no k' > k has l(k') = l(k) }.
@@ -128,15 +142,15 @@ DP iterates over; the rest are covered as the forest-distance fall-through."
 
 (define (%ted-preprocess proto t)
   "Run the full Zhang-Shasha preprocessing pipeline on T under PROTO,
-returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
-  (let ((base (%tree-postorder proto t)))
-    (let ((l (%tree-l base)))
-      (%make-ted-tree (ted-tree-n base)
-                      (ted-tree-nodes base)
-                      (ted-tree-labels base)
-                      (ted-tree-children base)
-                      l
-                      (%tree-keyroots l)))))
+returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots). This is
+the SOLE constructor of a <ted-tree>: %tree-postorder yields the base tables,
+%tree-l/%tree-keyroots derive the rest, and the record is built once with every
+field populated — there is no half-initialized intermediate."
+  (call-with-values
+    (lambda () (%tree-postorder proto t))
+    (lambda (n nodes labels children)
+      (let ((l (%tree-l n children)))
+        (%make-ted-tree n nodes labels children l (%tree-keyroots l))))))
 
 ;;; -- 2D table helpers (vector of row-vectors, 0-based) --
 
@@ -404,8 +418,9 @@ MAPPING is an alist of node correspondences:
   (a . #f)  a deleted from T1
   (#f . b)  b inserted into T2
 The cost summed over MAPPING equals COST. #f is the reserved no-node sentinel,
-so node values themselves must not be #f (the scalar COST is unaffected — the DP
-works on postorder indices — but the MAPPING projection would be ambiguous).
+so a tree containing #f as a node value raises an error (the scalar distance
+would be fine — the DP works on postorder indices — but the MAPPING projection
+would be ambiguous, so it is rejected at the boundary rather than silently).
 
 Options (trailing alist):
   (cost . SPEC)        override unit costs. SPEC is an alist

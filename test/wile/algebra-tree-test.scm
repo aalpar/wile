@@ -282,6 +282,12 @@
 (test-error
   (tree-edit-distance 'a 'b proto
                       (cons 'cost (list (lambda (a b) 0) (lambda (n) 1)))))
+;; #f is the reserved no-node mapping sentinel, so a tree node valued #f is
+;; rejected at the boundary (enforced, not merely documented) — both as a bare
+;; leaf and nested inside a compound.
+(test-error (tree-edit-distance #f 'a proto))
+(test-error (tree-edit-distance '(f #f) '(f a) proto))
+(test-error (tree-edit-distance '(f a) '(f #f) proto))
 
 (test-end)
 (test-exit)
