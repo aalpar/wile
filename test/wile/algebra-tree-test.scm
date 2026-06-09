@@ -36,6 +36,12 @@
     (lambda () (tree-edit-distance t1 t2 proto))
     (lambda (cost mapping) mapping)))
 
+;; Node mapping with trailing options.
+(define (ted-map-opts t1 t2 . opts)
+  (call-with-values
+    (lambda () (apply tree-edit-distance t1 t2 proto opts))
+    (lambda (cost mapping) mapping)))
+
 ;; Label of a node under the s-expression protocol.
 (define (label x)
   (if (pair? x) (car x) x))
@@ -89,7 +95,11 @@
         '(f a b) '(f a c) '(g a b) '(f b a)
         '(f a) '(f a b c)
         '(f (g a) b) '(f (g c) b)
-        '(h (f a b) (g c))))
+        '(h (f a b) (g c))
+        ;; ≥3-deep, two internal-node children — forces multi-level compose
+        ;; recursion in %ted-backtrack and the keyroot/non-keyroot branch with
+        ;; non-flat operands. Flows through identity/symmetry/triangle/cost.
+        '(h (f (g a) b) (k c))))
 
 ;; Identity: d(T, T) = 0.
 (for-each
@@ -195,6 +205,47 @@
       (ted-cost '(f a b) '(g a c)
                 (cons 'label-equal? (lambda (a b) #t))))
 
+;; Partial-subset alist forms. relabel-only: a free relabel closure drives the
+;; leaf distance to 0 (the unit default would give 1) — proves the relabel
+;; subset is applied. insert-only: insert costs 9 while root/a match free.
+(test 0                                  ; relabel always free → d(x,y)=0
+      (ted-cost 'x 'y
+                (cons 'cost (list (cons 'relabel (lambda (a b) 0))))))
+(test 9                                  ; insert b costs 9; root/a matched free
+      (ted-cost '(f a) '(f a b)
+                (cons 'cost (list (cons 'insert (lambda (n) 9))))))
+
+;; %wrap-relabel contract: relabel-fn receives the NODES (not labels) in the
+;; order (t1-node t2-node). This relabel is free ONLY for the exact ordered
+;; pair (x . y); a swapped-argument bug would miss it and fall back to 5,
+;; making delete+insert (cost 2) the minimizer instead of 0.
+(test 0
+      (ted-cost 'x 'y
+                (cons 'cost
+                      (list (lambda (a b) (if (and (equal? a 'x) (equal? b 'y)) 0 5))
+                            (lambda (n) 1)
+                            (lambda (n) 1)))))
+
+;; Asymmetric-cost mapping (not just scalar): the cheapest path under
+;; insert=2/delete=7 still recovers a delete of b, and the mapping is consistent.
+(let ((m (ted-map-opts '(f a b) '(f a) asym-cost)))
+  (test-assert (member '(b . #f) m))
+  (test 1 (count-deletes m))
+  (test 0 (count-inserts m)))
+
+;;; --- Compose/recurse mapping content (multi-level subtree match) -------
+;; Identical 3-deep tree: the backtracker's compose branch must pair each
+;; matched subtree ROOT with its counterpart (not merely sum to cost 0). A
+;; backtracker that mis-attributes subtree roots could still sum to 0 and pass
+;; the cost-consistency loop — only an explicit content assertion catches it.
+(let ((m (ted-map '(h (f (g a) b) (k c)) '(h (f (g a) b) (k c)))))
+  (test 0 (mapping-cost m))
+  (test 0 (count-deletes m))
+  (test 0 (count-inserts m))
+  (test-assert (member (cons '(f (g a) b) '(f (g a) b)) m))  ; f-subtree root ↔ itself
+  (test-assert (member (cons '(g a) '(g a)) m))              ; deep g-subtree root ↔ itself
+  (test-assert (member (cons '(k c) '(k c)) m)))             ; k-subtree root ↔ itself
+
 ;;; --- Phase 4: edge cases -----------------------------------------------
 
 ;; Two leaves: 0 when equal, 1 when not.
@@ -222,6 +273,15 @@
 (test-error (tree-edit-distance 'a 'b proto '(label-equal? . 7)))
 ;; A malformed cost spec is rejected.
 (test-error (tree-edit-distance 'a 'b proto '(cost . 99)))
+;; A typo'd cost-alist key must surface, not silently fall back to unit cost
+;; (options-alist discipline — the inner cost alist is key-validated too).
+(test-error
+  (tree-edit-distance 'a 'b proto
+                      (cons 'cost (list (cons 'delte (lambda (n) 1))))))
+;; A positional cost spec of the wrong arity (not 3 procedures) is rejected.
+(test-error
+  (tree-edit-distance 'a 'b proto
+                      (cons 'cost (list (lambda (a b) 0) (lambda (n) 1)))))
 
 (test-end)
 (test-exit)

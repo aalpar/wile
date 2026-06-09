@@ -1222,7 +1222,7 @@ Nodes are navigated through the `(wile algebra rewrite)` `<term-protocol>`: a no
   - `(a . #f)` -- `a` deleted from T1
   - `(#f . b)` -- `b` inserted into T2
 
-  The cost summed over `mapping` equals `cost`. Under unit costs the distance is a metric (`d(T,T)=0`, symmetric, triangle inequality).
+  The cost summed over `mapping` equals `cost`. Under unit costs the distance is a metric (`d(T,T)=0`, symmetric, triangle inequality). `#f` is the reserved no-node sentinel, so node values themselves must not be `#f` — the scalar `cost` is unaffected (the DP works on postorder indices), but the `mapping` projection would be ambiguous.
 
 ### Options (trailing alist)
 - `(cost . SPEC)` -- override unit costs. `SPEC` is an alist `((relabel . fn) (insert . fn) (delete . fn))` with any subset present (missing ops keep unit cost), or a positional list `(relabel-fn insert-fn delete-fn)`. `relabel-fn` takes `(node-a node-b)`; `insert-fn` / `delete-fn` take one node; each returns a non-negative number. The result is a metric only when the override is itself a metric.

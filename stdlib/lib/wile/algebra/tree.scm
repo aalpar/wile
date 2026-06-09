@@ -358,6 +358,14 @@ TD[n1][n2] is the edit distance between the whole trees."
              (%unit-delete)
              (%unit-insert)))
     ((%cost-alist? spec)
+     ;; The cost procedures arrive inside SPEC rather than as positional args,
+     ;; so the identifier-capturing `assert-procedure` does not fit; %cost-alist?
+     ;; already enforces `procedure?` on each value. Keys, however, MUST be
+     ;; validated here — without this a typo'd key (e.g. (delte . fn)) would
+     ;; pass %cost-alist? and then silently fall through assv-or to unit cost,
+     ;; violating the options-alist discipline in algebra/CLAUDE.md ("unknown
+     ;; keys must raise, not silently fall through to the fallback").
+     (validate-opts-keys "tree-edit-distance cost" spec '(relabel insert delete))
      (let ((rl (assv-or spec 'relabel #f))
            (ins (assv-or spec 'insert #f))
            (del (assv-or spec 'delete #f)))
@@ -395,7 +403,9 @@ MAPPING is an alist of node correspondences:
   (a . b)   a in T1 matched/relabeled to b in T2
   (a . #f)  a deleted from T1
   (#f . b)  b inserted into T2
-The cost summed over MAPPING equals COST.
+The cost summed over MAPPING equals COST. #f is the reserved no-node sentinel,
+so node values themselves must not be #f (the scalar COST is unaffected — the DP
+works on postorder indices — but the MAPPING projection would be ambiguous).
 
 Options (trailing alist):
   (cost . SPEC)        override unit costs. SPEC is an alist
