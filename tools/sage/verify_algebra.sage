@@ -102,14 +102,17 @@ def write_snapshot(filename, test_name, imports, body, seed, oracle_source="Sage
 
 def to_wile_display(v):
     """Format a Python value as the string Wile prints via (display v).
-    Supported: bool, int, str (a bare symbol/number token like 'neg-inf' or
-    '1/3'), list (Scheme list), and ('pair', (lo, hi)) for a cons pair."""
+    Supported: bool, int, str (a quoted symbol token like 'neg-inf'),
+    ('num', token) for a bare self-evaluating number literal like 1/3,
+    list (Scheme list), and ('pair', (lo, hi)) for a cons pair."""
     if isinstance(v, bool):
         return "#t" if v else "#f"
     if isinstance(v, int):
         return str(v)
     if isinstance(v, str):
         return v
+    if isinstance(v, tuple) and len(v) == 2 and v[0] == "num":
+        return v[1]
     if isinstance(v, tuple) and len(v) == 2 and v[0] == "pair":
         lo, hi = v[1]
         return f"({to_wile_display(lo)} . {to_wile_display(hi)})"
@@ -119,11 +122,15 @@ def to_wile_display(v):
 
 def to_wile_test_literal(v):
     """Format a Python value as the EXPECTED arg of (test EXPECTED expr).
-    Scalars are bare; compound values (lists, pairs, symbols) are quoted."""
+    Scalars (bool, int) and number literals (('num', token), e.g. 1/3) are
+    bare and self-evaluating; compound values (lists, pairs, symbols) are
+    quoted so they compare by equal? against Wile's result."""
     if isinstance(v, bool):
         return "#t" if v else "#f"
     if isinstance(v, int):
         return str(v)
+    if isinstance(v, tuple) and len(v) == 2 and v[0] == "num":
+        return v[1]
     return "'" + to_wile_display(v)
 
 def run_live_check(imports, preamble, cases):
@@ -178,67 +185,21 @@ def validate_integer_ring(args):
     print("  integer-ring...", end=" ", flush=True)
     samples = list(range(-10, 11))
     cases = []
-    failures = 0
-
     for a in samples:
         for b in samples:
-            expected_plus = ZZ(a) + ZZ(b)
-            expected_times = ZZ(a) * ZZ(b)
-            expected_minus = ZZ(a) - ZZ(b)
-            cases.append((a, b, "ring-plus", int(expected_plus)))
-            cases.append((a, b, "ring-times", int(expected_times)))
-            cases.append((a, b, "ring-minus", int(expected_minus)))
-        expected_neg = -ZZ(a)
-        cases.append((a, None, "ring-negate", int(expected_neg)))
-
-    if not args.snapshot:
-        scheme = "(import (wile algebra)) (let ((R (integer-ring))) "
-        tests = []
-        for a, b, op, expected in cases:
-            if b is not None:
-                tests.append(f"(display ({op} R {a} {b})) (display #\\newline)")
-            else:
-                tests.append(f"(display ({op} R {a})) (display #\\newline)")
-        scheme += " ".join(tests) + ")"
-        output = run_wile(scheme)
-        results = output.strip().split("\n")
-        if len(results) != len(cases):
-            print(f"\n    ERROR: expected {len(cases)} output lines, got {len(results)}")
-            return len(cases)
-        for i, (a, b, op, expected) in enumerate(cases):
-            try:
-                actual = int(results[i])
-            except (ValueError, IndexError) as e:
-                failures += 1
-                print(f"\n    FAIL: cannot parse output line {i}: {results[i]!r} ({e})")
-                continue
-            if actual != expected:
-                failures += 1
-                if b is not None:
-                    print(f"\n    FAIL: ({op} R {a} {b}) = {actual}, expected {expected}")
-                else:
-                    print(f"\n    FAIL: ({op} R {a}) = {actual}, expected {expected}")
-        if failures == 0:
-            print(f"OK ({len(cases)} cases)")
-        else:
-            print(f"\n    {failures}/{len(cases)} FAILED")
-    else:
-        body = "(let ((R (integer-ring)))\n"
-        for a, b, op, expected in cases:
-            if b is not None:
-                body += f"  (test {expected} ({op} R {a} {b}))\n"
-            else:
-                body += f"  (test {expected} ({op} R {a}))\n"
-        body += ")\n"
-        write_snapshot(
-            "sage-structures-integer-ring-test.scm",
-            "sage-structures-integer-ring",
-            ["(wile algebra)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+            cases.append((f"(ring-plus R {a} {b})", int(ZZ(a) + ZZ(b))))
+            cases.append((f"(ring-times R {a} {b})", int(ZZ(a) * ZZ(b))))
+            cases.append((f"(ring-minus R {a} {b})", int(ZZ(a) - ZZ(b))))
+        cases.append((f"(ring-negate R {a})", int(-ZZ(a))))
+    return check_or_snapshot(
+        args,
+        "sage-structures-integer-ring-test.scm",
+        "sage-structures-integer-ring",
+        ["(wile algebra)"],
+        cases,
+        "Sage-builtin",
+        preamble="(define R (integer-ring))",
+    )
 
 
 def format_rational_for_wile(q):
@@ -256,9 +217,12 @@ def format_rational_expected(q):
 
 
 def validate_rational_field(args):
-    """Validate Wile's (rational-field) against Sage's QQ."""
-    print("  rational-field...", end=" ", flush=True)
+    """Validate Wile's (rational-field) against Sage's QQ.
 
+    Expected values are exact rationals asserted directly as self-evaluating
+    number literals (the ('num', ...) sentinel), e.g. (test 1/3 (field-plus ...)),
+    so the fixture compares by equal? rather than string-matching display output."""
+    print("  rational-field...", end=" ", flush=True)
     # Sample values: QQ(n)/QQ(d) for n in -3..3, d in 1..3, deduplicated
     sample_set = set()
     for n in range(-3, 4):
@@ -266,162 +230,71 @@ def validate_rational_field(args):
             sample_set.add(QQ(n) / QQ(d))
     samples = sorted(sample_set)
 
+    def lit(q):
+        return ("num", format_rational_expected(q))
+
     cases = []
     for a in samples:
+        wa = format_rational_for_wile(a)
         for b in samples:
-            expected_plus = a + b
-            cases.append((a, b, "field-plus", expected_plus))
-            expected_times = a * b
-            cases.append((a, b, "field-times", expected_times))
+            wb = format_rational_for_wile(b)
+            cases.append((f"(field-plus F {wa} {wb})", lit(a + b)))
+            cases.append((f"(field-times F {wa} {wb})", lit(a * b)))
             if b != 0:
-                expected_div = a / b
-                cases.append((a, b, "field-divide", expected_div))
-        expected_neg = -a
-        cases.append((a, None, "field-negate", expected_neg))
+                cases.append((f"(field-divide F {wa} {wb})", lit(a / b)))
+        cases.append((f"(field-negate F {wa})", lit(-a)))
         if a != 0:
-            expected_recip = 1 / a
-            cases.append((a, None, "field-reciprocal", expected_recip))
-
-    failures = 0
-
-    if not args.snapshot:
-        scheme = "(import (wile algebra)) (let ((F (rational-field))) "
-        tests = []
-        for a, b, op, expected in cases:
-            wa = format_rational_for_wile(a)
-            if b is not None:
-                wb = format_rational_for_wile(b)
-                tests.append(f"(display ({op} F {wa} {wb})) (display #\\newline)")
-            else:
-                tests.append(f"(display ({op} F {wa})) (display #\\newline)")
-        scheme += " ".join(tests) + ")"
-        output = run_wile(scheme)
-        results = output.strip().split("\n")
-        if len(results) != len(cases):
-            print(f"\n    ERROR: expected {len(cases)} output lines, got {len(results)}")
-            return len(cases)
-        for i, (a, b, op, expected) in enumerate(cases):
-            actual_str = results[i]
-            expected_str = format_rational_expected(expected)
-            if actual_str != expected_str:
-                failures += 1
-                wa = format_rational_for_wile(a)
-                if b is not None:
-                    wb = format_rational_for_wile(b)
-                    print(f"\n    FAIL: ({op} F {wa} {wb}) = {actual_str}, expected {expected_str}")
-                else:
-                    print(f"\n    FAIL: ({op} F {wa}) = {actual_str}, expected {expected_str}")
-        if failures == 0:
-            print(f"OK ({len(cases)} cases)")
-        else:
-            print(f"\n    {failures}/{len(cases)} FAILED")
-    else:
-        body = "(let ((F (rational-field)))\n"
-        for a, b, op, expected in cases:
-            wa = format_rational_for_wile(a)
-            exp_str = format_rational_expected(expected)
-            # For snapshot tests: use string comparison since test framework
-            # needs to match Wile's display output for rationals
-            if b is not None:
-                wb = format_rational_for_wile(b)
-                body += f"  (test \"{exp_str}\" (number->string ({op} F {wa} {wb})))\n"
-            else:
-                body += f"  (test \"{exp_str}\" (number->string ({op} F {wa})))\n"
-        body += ")\n"
-        write_snapshot(
-            "sage-structures-rational-field-test.scm",
-            "sage-structures-rational-field",
-            ["(wile algebra)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+            cases.append((f"(field-reciprocal F {wa})", lit(1 / a)))
+    return check_or_snapshot(
+        args,
+        "sage-structures-rational-field-test.scm",
+        "sage-structures-rational-field",
+        ["(wile algebra)"],
+        cases,
+        "Sage-builtin",
+        preamble="(define F (rational-field))",
+    )
 
 
 def validate_modular_ring(args):
-    """Validate Wile's (modular-ring N) against Sage's Zmod(N)."""
+    """Validate Wile's (modular-ring N) against Sage's Zmod(N).
+
+    One ring per modulus is bound in the preamble (R2, R3, ...) so all moduli's
+    cases share a single flat (test ...) fixture."""
     print("  modular-ring...", end=" ", flush=True)
     moduli = [2, 3, 5, 7, 12]
-    failures = 0
-
-    # Build cases per modulus
-    all_cases = {}
+    preamble = "\n".join(f"(define R{N} (modular-ring {N}))" for N in moduli)
+    cases = []
     for N in moduli:
         R_sage = Zmod(N)
-        samples = list(range(N))
-        cases = []
-        for a in samples:
-            for b in samples:
-                expected_plus = int(R_sage(a) + R_sage(b))
-                cases.append((a, b, "ring-plus", expected_plus))
-                expected_times = int(R_sage(a) * R_sage(b))
-                cases.append((a, b, "ring-times", expected_times))
-                expected_minus = int(R_sage(a) - R_sage(b))
-                cases.append((a, b, "ring-minus", expected_minus))
-            expected_neg = int(-R_sage(a))
-            cases.append((a, None, "ring-negate", expected_neg))
-        all_cases[N] = cases
-
-    if not args.snapshot:
-        for N in moduli:
-            mod_cases = all_cases[N]
-            scheme = f"(import (wile algebra)) (let ((R (modular-ring {N}))) "
-            tests = []
-            for a, b, op, expected in mod_cases:
-                if b is not None:
-                    tests.append(f"(display ({op} R {a} {b})) (display #\\newline)")
-                else:
-                    tests.append(f"(display ({op} R {a})) (display #\\newline)")
-            scheme += " ".join(tests) + ")"
-            output = run_wile(scheme)
-            results = output.strip().split("\n")
-            if len(results) != len(mod_cases):
-                print(f"\n    ERROR [mod {N}]: expected {len(mod_cases)} output lines, got {len(results)}")
-                failures += len(mod_cases)
-                continue
-            for i, (a, b, op, expected) in enumerate(mod_cases):
-                try:
-                    actual = int(results[i])
-                except (ValueError, IndexError) as e:
-                    failures += 1
-                    print(f"\n    FAIL [mod {N}]: cannot parse output line {i}: {results[i]!r} ({e})")
-                    continue
-                if actual != expected:
-                    failures += 1
-                    if b is not None:
-                        print(f"\n    FAIL [mod {N}]: ({op} R {a} {b}) = {actual}, expected {expected}")
-                    else:
-                        print(f"\n    FAIL [mod {N}]: ({op} R {a}) = {actual}, expected {expected}")
-        total_cases = sum(len(c) for c in all_cases.values())
-        if failures == 0:
-            print(f"OK ({total_cases} cases across {len(moduli)} moduli)")
-        else:
-            print(f"\n    {failures}/{total_cases} FAILED")
-    else:
-        body = ""
-        for N in moduli:
-            cases = all_cases[N]
-            body += f"(let ((R (modular-ring {N})))\n"
-            for a, b, op, expected in cases:
-                if b is not None:
-                    body += f"  (test {expected} ({op} R {a} {b}))\n"
-                else:
-                    body += f"  (test {expected} ({op} R {a}))\n"
-            body += ")\n\n"
-        write_snapshot(
-            "sage-structures-modular-ring-test.scm",
-            "sage-structures-modular-ring",
-            ["(wile algebra)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+        for a in range(N):
+            for b in range(N):
+                cases.append((f"(ring-plus R{N} {a} {b})", int(R_sage(a) + R_sage(b))))
+                cases.append((f"(ring-times R{N} {a} {b})", int(R_sage(a) * R_sage(b))))
+                cases.append((f"(ring-minus R{N} {a} {b})", int(R_sage(a) - R_sage(b))))
+            cases.append((f"(ring-negate R{N} {a})", int(-R_sage(a))))
+    return check_or_snapshot(
+        args,
+        "sage-structures-modular-ring-test.scm",
+        "sage-structures-modular-ring",
+        ["(wile algebra)"],
+        cases,
+        "Sage-builtin",
+        preamble=preamble,
+    )
 
 
 def validate_powerset_lattice(args):
-    """Validate Wile's (powerset-lattice) against Python set operations."""
+    """Validate Wile's (powerset-lattice) against Python set operations.
+
+    Intentionally NOT routed through check_or_snapshot (TODO #215 exempts it):
+    Wile's lattice-join/meet return sets in input-order, not a canonical order,
+    so the live check compares the full set (order-insensitive, via parse_set)
+    while the snapshot asserts only cardinality (length) to stay robust against
+    that ordering. check_or_snapshot uses one expression for both modes and
+    cannot express that divergence without weakening the live set-membership
+    check. The other five structure validators have scalar results and migrate
+    cleanly; this one keeps its hand-rolled dual mode."""
     print("  powerset-lattice...", end=" ", flush=True)
     universe = [1, 2, 3]
     subsets = []
@@ -524,113 +397,46 @@ def validate_powerset_lattice(args):
 def validate_boolean_semiring(args):
     """Validate Wile's (boolean-semiring) against truth tables."""
     print("  boolean-semiring...", end=" ", flush=True)
+    def tf(v):
+        return "#t" if v else "#f"
     cases = []
-    failures = 0
-
     for a in [False, True]:
         for b in [False, True]:
-            cases.append((a, b, "semiring-plus", a or b))
-            cases.append((a, b, "semiring-times", a and b))
-
-    def fmt_bool(v):
-        return "#t" if v else "#f"
-
-    if not args.snapshot:
-        scheme = "(import (wile algebra)) (let ((S (boolean-semiring))) "
-        tests = []
-        for a, b, op, expected in cases:
-            tests.append(
-                f"(display ({op} S {fmt_bool(a)} {fmt_bool(b)}))"
-                f" (display #\\newline)")
-        scheme += " ".join(tests) + ")"
-        output = run_wile(scheme)
-        results = output.strip().split("\n")
-        if len(results) != len(cases):
-            print(f"\n    ERROR: expected {len(cases)} output lines, got {len(results)}")
-            return len(cases)
-        for i, (a, b, op, expected) in enumerate(cases):
-            expected_str = fmt_bool(expected)
-            if results[i] != expected_str:
-                failures += 1
-                print(f"\n    FAIL: ({op} S {fmt_bool(a)} {fmt_bool(b)})"
-                      f" = {results[i]}, expected {expected_str}")
-        if failures == 0:
-            print(f"OK ({len(cases)} cases)")
-        else:
-            print(f"\n    {failures}/{len(cases)} FAILED")
-    else:
-        body = "(let ((S (boolean-semiring)))\n"
-        for a, b, op, expected in cases:
-            body += (f"  (test {fmt_bool(expected)}"
-                     f" ({op} S {fmt_bool(a)} {fmt_bool(b)}))\n")
-        body += ")\n"
-        write_snapshot(
-            "sage-structures-boolean-semiring-test.scm",
-            "sage-structures-boolean-semiring",
-            ["(wile algebra)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+            cases.append((f"(semiring-plus S {tf(a)} {tf(b)})", a or b))
+            cases.append((f"(semiring-times S {tf(a)} {tf(b)})", a and b))
+    return check_or_snapshot(
+        args,
+        "sage-structures-boolean-semiring-test.scm",
+        "sage-structures-boolean-semiring",
+        ["(wile algebra)"],
+        cases,
+        "Sage-builtin",
+        preamble="(define S (boolean-semiring))",
+    )
 
 
 def validate_tropical_semiring(args):
-    """Validate Wile's (tropical-semiring) against Sage's TropicalSemiring."""
+    """Validate Wile's (tropical-semiring) against Sage's TropicalSemiring.
+
+    Samples 0..10 stay finite (away from the tropical zero, +inf), so every
+    result is an integer."""
     print("  tropical-semiring...", end=" ", flush=True)
     T = TropicalSemiring(ZZ)
     samples = list(range(0, 11))
     cases = []
-    failures = 0
-
     for a in samples:
         for b in samples:
-            tp = T(a) + T(b)  # min
-            tt = T(a) * T(b)  # +
-            cases.append((a, b, "semiring-plus", int(tp.lift())))
-            cases.append((a, b, "semiring-times", int(tt.lift())))
-
-    if not args.snapshot:
-        scheme = "(import (wile algebra)) (let ((S (tropical-semiring))) "
-        tests = []
-        for a, b, op, expected in cases:
-            tests.append(
-                f"(display ({op} S {a} {b})) (display #\\newline)")
-        scheme += " ".join(tests) + ")"
-        output = run_wile(scheme)
-        results = output.strip().split("\n")
-        if len(results) != len(cases):
-            print(f"\n    ERROR: expected {len(cases)} output lines, got {len(results)}")
-            return len(cases)
-        for i, (a, b, op, expected) in enumerate(cases):
-            try:
-                actual = int(results[i])
-            except (ValueError, IndexError) as e:
-                failures += 1
-                print(f"\n    FAIL: cannot parse output line {i}: {results[i]!r} ({e})")
-                continue
-            if actual != expected:
-                failures += 1
-                print(f"\n    FAIL: ({op} S {a} {b})"
-                      f" = {actual}, expected {expected}")
-        if failures == 0:
-            print(f"OK ({len(cases)} cases)")
-        else:
-            print(f"\n    {failures}/{len(cases)} FAILED")
-    else:
-        body = "(let ((S (tropical-semiring)))\n"
-        for a, b, op, expected in cases:
-            body += f"  (test {expected} ({op} S {a} {b}))\n"
-        body += ")\n"
-        write_snapshot(
-            "sage-structures-tropical-semiring-test.scm",
-            "sage-structures-tropical-semiring",
-            ["(wile algebra)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+            cases.append((f"(semiring-plus S {a} {b})", int((T(a) + T(b)).lift())))   # min
+            cases.append((f"(semiring-times S {a} {b})", int((T(a) * T(b)).lift())))  # +
+    return check_or_snapshot(
+        args,
+        "sage-structures-tropical-semiring-test.scm",
+        "sage-structures-tropical-semiring",
+        ["(wile algebra)"],
+        cases,
+        "Sage-builtin",
+        preamble="(define S (tropical-semiring))",
+    )
 
 
 def validate_polynomial(args):
@@ -1155,18 +961,150 @@ def _parse_tokens(tokens, pos):
 
 
 # ---------------------------------------------------------------------------
+# Shared run -> parse -> soundness -> snapshot loop for the rewriting validators
+# ---------------------------------------------------------------------------
+
+# Both number-keyed normalizers (integer ring, rational field) sort numeric
+# atoms ascending and treat compounds as "greater"; the lattice normalizer sorts
+# symbol atoms lexicographically. These fragments are emitted verbatim into both
+# the batch run and the snapshot, so the committed fixture re-normalizes offline
+# exactly as the live check did.
+_PROTO_NUMBER_FIRST = """(define proto
+  (sexp-term-protocol
+    (lambda (a b)
+      (cond
+        ((and (number? a) (number? b)) (< a b))
+        ((number? a) #t)
+        ((number? b) #f)
+        (else #f)))))"""
+
+_PROTO_SYMBOL_FIRST = """(define proto
+  (sexp-term-protocol
+    (lambda (a b)
+      (cond
+        ((and (symbol? a) (symbol? b))
+         (string<? (symbol->string a) (symbol->string b)))
+        ((symbol? a) #t)
+        ((symbol? b) #f)
+        (else #f)))))"""
+
+
+def _norm_setup(proto, theory_expr):
+    """Scheme binding `proto` and a `norm` normalizer over THEORY_EXPR. Shared
+    between the batch run (setup_scheme) and the snapshot preamble so a fixture
+    re-normalizes exactly as the live check did."""
+    return (proto + "\n\n"
+            "(define norm\n"
+            "  (make-recursive-normalizer\n"
+            f"    {theory_expr}\n"
+            "    proto))")
+
+
+def check_rewriting_or_snapshot(
+        args, *, label, filename, test_name, terms, run_op,
+        term_to_sexp_fn, soundness_fn, fail_detail_fn,
+        snapshot_case_fn, setup_scheme="", snapshot_preamble=""):
+    """Run Wile's normalizer over TERMS, check each result against a soundness
+    oracle, and (in snapshot mode) emit a fixture of passing cases.
+
+    The four rewriting validators differ only in the normalizer (`setup_scheme` +
+    `run_op`), the term serializer (`term_to_sexp_fn`), the oracle
+    (`soundness_fn`), and the snapshot body (`snapshot_preamble` +
+    `snapshot_case_fn`). This owns the batch run, the length guard, the per-term
+    parse + check, the 5-failure print cap, the don't-snapshot-on-failure guard,
+    and the 100-case write cap. Unlike `check_or_snapshot`, the expected value
+    here comes from running Wile and judging the output with a soundness oracle,
+    not from a precomputed Python value compared by equality.
+
+    run_op : Scheme head applied to each quoted term, e.g. "norm" or
+        "symbolic-boolean-normalize". Its `result` (first of the two
+        let-values) is written one term per line.
+    soundness_fn(original_term, normalized_term) -> (ok, info). `info` rides to
+        snapshot_case_fn on pass and to fail_detail_fn on failure (never both for
+        one case), so each validator threads whatever its renderers need.
+    fail_detail_fn(i, original_term, normalized_sexp, info) -> str.
+    snapshot_case_fn(original_term, normalized_sexp, info) -> str (one case)."""
+    print(f"  {label}...", end=" ", flush=True)
+    imports = ["(wile algebra)", "(wile algebra symbolic)", "(wile algebra rewrite)"]
+
+    lines = ["(import (wile algebra)",
+             "        (wile algebra symbolic)",
+             "        (wile algebra rewrite))",
+             ""]
+    if setup_scheme:
+        lines.append(setup_scheme)
+        lines.append("")
+    lines.append("(begin")
+    for term in terms:
+        sexp = term_to_sexp_fn(term)
+        lines.append(
+            f"  (let-values (((result trace) ({run_op} '{sexp})))"
+            f" (write result) (display #\\newline))")
+    lines.append(")")
+
+    output = run_wile("\n".join(lines))
+    result_lines = output.strip().split("\n")
+
+    count = len(terms)
+    if len(result_lines) != count:
+        print(f"\n    ERROR: expected {count} output lines, got {len(result_lines)}")
+        return count
+
+    failures = 0
+    snapshot_cases = []
+    for i, term in enumerate(terms):
+        normalized_sexp = result_lines[i].strip()
+        normalized_term = parse_sexp(normalized_sexp)
+        ok, info = soundness_fn(term, normalized_term)
+        if ok:
+            snapshot_cases.append((term, normalized_sexp, info))
+        else:
+            failures += 1
+            if args.verbose or failures <= 5:
+                print(fail_detail_fn(i, term, normalized_sexp, info))
+
+    if failures == 0:
+        print(f"OK ({count} terms)")
+    else:
+        print(f"\n    {failures}/{count} FAILED")
+
+    if args.snapshot and failures > 0:
+        print(f"    WARNING: not writing snapshot due to {failures} failures")
+    elif args.snapshot and snapshot_cases:
+        body = snapshot_preamble
+        for term, normalized_sexp, info in snapshot_cases[:100]:
+            body += snapshot_case_fn(term, normalized_sexp, info)
+        write_snapshot(filename, test_name, imports, body, args.seed)
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Task 6: Integer ring rewriting soundness
 # ---------------------------------------------------------------------------
 
+# term-value evaluator emitted into the integer-ring fixture so each test can
+# reduce the normalized symbolic term to the integer Sage computed.
+_TERM_VALUE_INT = """;; Evaluate a normalized term to its integer value.
+;; The normalizer produces symbolic terms (not arithmetic results),
+;; so we need this to compare against Sage's computed values.
+(define (term-value t)
+  (cond
+    ((number? t) t)
+    ((not (pair? t)) (error "term-value: unexpected atom" t))
+    ((eq? (car t) '+)
+     (+ (term-value (cadr t)) (term-value (caddr t))))
+    ((eq? (car t) '*)
+     (* (term-value (cadr t)) (term-value (caddr t))))
+    ((eq? (car t) 'neg)
+     (- (term-value (cadr t))))
+    (else (error "term-value: unknown operator" (car t)))))"""
+
+
 def validate_rewriting_integer_ring(args, num_terms=1000):
     """Validate that Wile's integer ring rewriting preserves value."""
-    print("  integer-ring rewriting...", end=" ", flush=True)
-    failures = 0
-
     operators = [('+', 2), ('*', 2), ('neg', 1)]
     leaves = list(range(-5, 6))  # -5..5
-
-    # Generate random terms
     terms = [random_term(operators, leaves, 4) for _ in range(num_terms)]
 
     sage_ops = {
@@ -1176,122 +1114,40 @@ def validate_rewriting_integer_ring(args, num_terms=1000):
         '_leaf': lambda x: ZZ(x),
     }
 
-    # Build batch Scheme code: normalize all terms in one subprocess call
-    scheme_lines = []
-    scheme_lines.append("(import (wile algebra)")
-    scheme_lines.append("        (wile algebra symbolic)")
-    scheme_lines.append("        (wile algebra rewrite))")
-    scheme_lines.append("")
-    scheme_lines.append("(define proto")
-    scheme_lines.append("  (sexp-term-protocol")
-    scheme_lines.append("    (lambda (a b)")
-    scheme_lines.append("      (cond")
-    scheme_lines.append("        ((and (number? a) (number? b)) (< a b))")
-    scheme_lines.append("        ((number? a) #t)")
-    scheme_lines.append("        ((number? b) #f)")
-    scheme_lines.append("        (else #f)))))")
-    scheme_lines.append("")
-    scheme_lines.append("(define norm")
-    scheme_lines.append("  (make-recursive-normalizer")
-    scheme_lines.append("    (ring->theory (integer-ring) '+ '* 'neg)")
-    scheme_lines.append("    proto))")
-    scheme_lines.append("")
+    theory = "(ring->theory (integer-ring) '+ '* 'neg)"
+    setup = _norm_setup(_PROTO_NUMBER_FIRST, theory)
 
-    # Emit each normalization as a separate let-values + write + newline
-    scheme_lines.append("(begin")
-    for term in terms:
-        sexp = term_to_sexp(term)
-        scheme_lines.append(
-            f"  (let-values (((result trace) (norm '{sexp})))"
-            f" (write result) (display #\\newline))")
-    scheme_lines.append(")")
+    def soundness(term, normalized_term):
+        ov = int(compute_term_sage(term, sage_ops))
+        nv = int(compute_term_sage(normalized_term, sage_ops))
+        return (ov == nv, (ov, nv))
 
-    scheme_code = "\n".join(scheme_lines)
+    def fail_detail(i, term, normalized_sexp, info):
+        ov, nv = info
+        return (f"\n    FAIL [{i}]: {term_to_sexp(term)} = {ov}, "
+                f"normalized to {normalized_sexp} = {nv}")
 
-    # Run Wile
-    output = run_wile(scheme_code)
-    result_lines = output.strip().split("\n")
+    def snapshot_case(term, normalized_sexp, info):
+        original_sexp = term_to_sexp(term)
+        expected = info[0]
+        return (f";; Original: {original_sexp} = {expected}\n"
+                f"(let-values (((result trace) (norm '{original_sexp})))\n"
+                f"  (test {expected} (term-value result)))\n\n")
 
-    if len(result_lines) != num_terms:
-        print(f"\n    ERROR: expected {num_terms} output lines, got {len(result_lines)}")
-        return num_terms  # treat all as failures
-
-    # Check each term
-    snapshot_cases = []
-    for i, term in enumerate(terms):
-        original_value = int(compute_term_sage(term, sage_ops))
-        normalized_sexp = result_lines[i].strip()
-
-        # Parse Wile's normalized output back to a term
-        normalized_term = parse_sexp(normalized_sexp)
-
-        # Evaluate the normalized term in Sage
-        normalized_value = int(compute_term_sage(normalized_term, sage_ops))
-
-        if original_value != normalized_value:
-            failures += 1
-            if args.verbose or failures <= 5:
-                print(f"\n    FAIL [{i}]: {term_to_sexp(term)} = {original_value}, "
-                      f"normalized to {normalized_sexp} = {normalized_value}")
-        else:
-            snapshot_cases.append((term, normalized_sexp, original_value))
-
-    if failures == 0:
-        print(f"OK ({num_terms} terms)")
-    else:
-        print(f"\n    {failures}/{num_terms} FAILED")
-
-    # Snapshot mode: write up to 100 passing cases
-    if args.snapshot and failures > 0:
-        print(f"    WARNING: not writing snapshot due to {failures} failures")
-    elif args.snapshot and len(snapshot_cases) > 0:
-        body = ""
-        # Term evaluator: recursively compute integer value from symbolic term
-        body += ";; Evaluate a normalized term to its integer value.\n"
-        body += ";; The normalizer produces symbolic terms (not arithmetic results),\n"
-        body += ";; so we need this to compare against Sage's computed values.\n"
-        body += "(define (term-value t)\n"
-        body += "  (cond\n"
-        body += "    ((number? t) t)\n"
-        body += "    ((not (pair? t)) (error \"term-value: unexpected atom\" t))\n"
-        body += "    ((eq? (car t) '+)\n"
-        body += "     (+ (term-value (cadr t)) (term-value (caddr t))))\n"
-        body += "    ((eq? (car t) '*)\n"
-        body += "     (* (term-value (cadr t)) (term-value (caddr t))))\n"
-        body += "    ((eq? (car t) 'neg)\n"
-        body += "     (- (term-value (cadr t))))\n"
-        body += "    (else (error \"term-value: unknown operator\" (car t)))))\n\n"
-
-        body += "(define proto\n"
-        body += "  (sexp-term-protocol\n"
-        body += "    (lambda (a b)\n"
-        body += "      (cond\n"
-        body += "        ((and (number? a) (number? b)) (< a b))\n"
-        body += "        ((number? a) #t)\n"
-        body += "        ((number? b) #f)\n"
-        body += "        (else #f)))))\n\n"
-        body += "(define norm\n"
-        body += "  (make-recursive-normalizer\n"
-        body += "    (ring->theory (integer-ring) '+ '* 'neg)\n"
-        body += "    proto))\n\n"
-
-        for term, normalized_sexp, expected in snapshot_cases[:100]:
-            original_sexp = term_to_sexp(term)
-            body += (f";; Original: {original_sexp} = {expected}\n"
-                     f"(let-values (((result trace) (norm '{original_sexp})))\n"
-                     f"  (test {expected} (term-value result)))\n\n")
-
-        write_snapshot(
-            "sage-rewriting-integer-ring-test.scm",
-            "sage-rewriting-integer-ring",
-            ["(wile algebra)",
-             "(wile algebra symbolic)",
-             "(wile algebra rewrite)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+    return check_rewriting_or_snapshot(
+        args,
+        label="integer-ring rewriting",
+        filename="sage-rewriting-integer-ring-test.scm",
+        test_name="sage-rewriting-integer-ring",
+        terms=terms,
+        run_op="norm",
+        term_to_sexp_fn=term_to_sexp,
+        soundness_fn=soundness,
+        fail_detail_fn=fail_detail,
+        snapshot_case_fn=snapshot_case,
+        setup_scheme=setup,
+        snapshot_preamble=_TERM_VALUE_INT + "\n\n" + setup + "\n\n",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1338,93 +1194,46 @@ def truth_table(term):
 
 
 def validate_rewriting_boolean(args, num_terms=500):
-    """Validate that Wile's boolean algebra rewriting preserves truth tables."""
-    print("  boolean-algebra rewriting...", end=" ", flush=True)
-    failures = 0
+    """Validate that Wile's boolean algebra rewriting preserves truth tables.
 
+    Exercises the public facade `symbolic-boolean-normalize`, which normalizes
+    under the full boolean->theory over a 2-element {#f, #t} Boolean algebra, so
+    a contradiction normalizes to #f and a tautology to #t. The fixture asserts
+    the structural normal form directly (no term-value evaluator)."""
     operators = [('or', 2), ('and', 2), ('not', 1)]
     leaves = ['p', 'q', 'r']
-
-    # Generate random terms
     terms = [random_term(operators, leaves, 4) for _ in range(num_terms)]
 
-    # Build batch Scheme code. We exercise the public facade
-    # symbolic-boolean-normalize, which normalizes under the full 7-axiom
-    # boolean->theory over a 2-element {#f, #t} Boolean algebra, so a
-    # contradiction normalizes to #f and a tautology to #t.
-    scheme_lines = []
-    scheme_lines.append("(import (wile algebra)")
-    scheme_lines.append("        (wile algebra symbolic)")
-    scheme_lines.append("        (wile algebra rewrite))")
-    scheme_lines.append("")
+    def soundness(term, normalized_term):
+        ott = truth_table(term)
+        ntt = truth_table(normalized_term)
+        return (ott == ntt, (ott, ntt))
 
-    scheme_lines.append("(begin")
-    for term in terms:
-        sexp = term_to_sexp(term)
-        scheme_lines.append(
-            f"  (let-values (((result trace) (symbolic-boolean-normalize '{sexp})))"
-            f" (write result) (display #\\newline))")
-    scheme_lines.append(")")
+    def fail_detail(i, term, normalized_sexp, info):
+        ott, ntt = info
+        return (f"\n    FAIL [{i}]: {term_to_sexp(term)}\n"
+                f"      original tt:   {ott}\n"
+                f"      normalized to: {normalized_sexp}\n"
+                f"      normalized tt: {ntt}")
 
-    scheme_code = "\n".join(scheme_lines)
+    def snapshot_case(term, normalized_sexp, info):
+        original_sexp = term_to_sexp(term)
+        return (f";; {original_sexp} normalizes to {normalized_sexp}\n"
+                f"(let-values (((result trace) (symbolic-boolean-normalize '{original_sexp})))\n"
+                f"  (test '{normalized_sexp} result))\n\n")
 
-    # Run Wile
-    output = run_wile(scheme_code)
-    result_lines = output.strip().split("\n")
-
-    if len(result_lines) != num_terms:
-        print(f"\n    ERROR: expected {num_terms} output lines, got {len(result_lines)}")
-        return num_terms
-
-    # Check each term: truth tables must match
-    snapshot_cases = []
-    for i, term in enumerate(terms):
-        original_tt = truth_table(term)
-        normalized_sexp = result_lines[i].strip()
-
-        # Parse Wile's normalized output back to a term
-        normalized_term = parse_sexp(normalized_sexp)
-
-        # Compute truth table of normalized term
-        normalized_tt = truth_table(normalized_term)
-
-        if original_tt != normalized_tt:
-            failures += 1
-            if args.verbose or failures <= 5:
-                print(f"\n    FAIL [{i}]: {term_to_sexp(term)}")
-                print(f"      original tt:   {original_tt}")
-                print(f"      normalized to: {normalized_sexp}")
-                print(f"      normalized tt: {normalized_tt}")
-        else:
-            snapshot_cases.append((term, normalized_sexp))
-
-    if failures == 0:
-        print(f"OK ({num_terms} terms)")
-    else:
-        print(f"\n    {failures}/{num_terms} FAILED")
-
-    # Snapshot mode: write up to 100 passing cases
-    if args.snapshot and failures > 0:
-        print(f"    WARNING: not writing snapshot due to {failures} failures")
-    elif args.snapshot and len(snapshot_cases) > 0:
-        body = ""
-        for term, normalized_sexp in snapshot_cases[:100]:
-            original_sexp = term_to_sexp(term)
-            body += (f";; {original_sexp} normalizes to {normalized_sexp}\n"
-                     f"(let-values (((result trace) (symbolic-boolean-normalize '{original_sexp})))\n"
-                     f"  (test '{normalized_sexp} result))\n\n")
-
-        write_snapshot(
-            "sage-rewriting-boolean-algebra-test.scm",
-            "sage-rewriting-boolean-algebra",
-            ["(wile algebra)",
-             "(wile algebra symbolic)",
-             "(wile algebra rewrite)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+    return check_rewriting_or_snapshot(
+        args,
+        label="boolean-algebra rewriting",
+        filename="sage-rewriting-boolean-algebra-test.scm",
+        test_name="sage-rewriting-boolean-algebra",
+        terms=terms,
+        run_op="symbolic-boolean-normalize",
+        term_to_sexp_fn=term_to_sexp,
+        soundness_fn=soundness,
+        fail_detail_fn=fail_detail,
+        snapshot_case_fn=snapshot_case,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1476,117 +1285,44 @@ def lattice_table(term):
 
 
 def validate_rewriting_lattice(args, num_terms=500):
-    """Validate that Wile's lattice rewriting preserves semantic equivalence."""
-    print("  lattice rewriting...", end=" ", flush=True)
-    failures = 0
-
+    """Validate that Wile's lattice rewriting preserves semantic equivalence.
+    Asserts the structural normal form directly (no term-value evaluator)."""
     operators = [('join', 2), ('meet', 2)]
     leaves = ['a', 'b', 'c']
-
-    # Generate random terms
     terms = [random_term(operators, leaves, 4) for _ in range(num_terms)]
 
-    # Build batch Scheme code
-    scheme_lines = []
-    scheme_lines.append("(import (wile algebra)")
-    scheme_lines.append("        (wile algebra symbolic)")
-    scheme_lines.append("        (wile algebra rewrite))")
-    scheme_lines.append("")
-    scheme_lines.append("(define proto")
-    scheme_lines.append("  (sexp-term-protocol")
-    scheme_lines.append("    (lambda (a b)")
-    scheme_lines.append("      (cond")
-    scheme_lines.append("        ((and (symbol? a) (symbol? b))")
-    scheme_lines.append("         (string<? (symbol->string a) (symbol->string b)))")
-    scheme_lines.append("        ((symbol? a) #t)")
-    scheme_lines.append("        ((symbol? b) #f)")
-    scheme_lines.append("        (else #f)))))")
-    scheme_lines.append("")
-    scheme_lines.append("(define norm")
-    scheme_lines.append("  (make-recursive-normalizer")
-    scheme_lines.append("    (lattice->theory (powerset-lattice '(1 2 3)) 'join 'meet)")
-    scheme_lines.append("    proto))")
-    scheme_lines.append("")
+    theory = "(lattice->theory (powerset-lattice '(1 2 3)) 'join 'meet)"
+    setup = _norm_setup(_PROTO_SYMBOL_FIRST, theory)
 
-    scheme_lines.append("(begin")
-    for term in terms:
-        sexp = term_to_sexp(term)
-        scheme_lines.append(
-            f"  (let-values (((result trace) (norm '{sexp})))"
-            f" (write result) (display #\\newline))")
-    scheme_lines.append(")")
+    def soundness(term, normalized_term):
+        olt = lattice_table(term)
+        nlt = lattice_table(normalized_term)
+        return (olt == nlt, None)
 
-    scheme_code = "\n".join(scheme_lines)
+    def fail_detail(i, term, normalized_sexp, info):
+        return (f"\n    FAIL [{i}]: {term_to_sexp(term)}\n"
+                f"      normalized to: {normalized_sexp}")
 
-    # Run Wile
-    output = run_wile(scheme_code)
-    result_lines = output.strip().split("\n")
+    def snapshot_case(term, normalized_sexp, info):
+        original_sexp = term_to_sexp(term)
+        return (f";; {original_sexp} normalizes to {normalized_sexp}\n"
+                f"(let-values (((result trace) (norm '{original_sexp})))\n"
+                f"  (test '{normalized_sexp} result))\n\n")
 
-    if len(result_lines) != num_terms:
-        print(f"\n    ERROR: expected {num_terms} output lines, got {len(result_lines)}")
-        return num_terms
-
-    # Check each term: lattice tables must match
-    snapshot_cases = []
-    for i, term in enumerate(terms):
-        original_lt = lattice_table(term)
-        normalized_sexp = result_lines[i].strip()
-
-        # Parse Wile's normalized output back to a term
-        normalized_term = parse_sexp(normalized_sexp)
-
-        # Compute lattice table of normalized term
-        normalized_lt = lattice_table(normalized_term)
-
-        if original_lt != normalized_lt:
-            failures += 1
-            if args.verbose or failures <= 5:
-                print(f"\n    FAIL [{i}]: {term_to_sexp(term)}")
-                print(f"      normalized to: {normalized_sexp}")
-        else:
-            snapshot_cases.append((term, normalized_sexp))
-
-    if failures == 0:
-        print(f"OK ({num_terms} terms)")
-    else:
-        print(f"\n    {failures}/{num_terms} FAILED")
-
-    # Snapshot mode: write up to 100 passing cases
-    if args.snapshot and failures > 0:
-        print(f"    WARNING: not writing snapshot due to {failures} failures")
-    elif args.snapshot and len(snapshot_cases) > 0:
-        body = ""
-        body += "(define proto\n"
-        body += "  (sexp-term-protocol\n"
-        body += "    (lambda (a b)\n"
-        body += "      (cond\n"
-        body += "        ((and (symbol? a) (symbol? b))\n"
-        body += "         (string<? (symbol->string a) (symbol->string b)))\n"
-        body += "        ((symbol? a) #t)\n"
-        body += "        ((symbol? b) #f)\n"
-        body += "        (else #f)))))\n\n"
-        body += "(define norm\n"
-        body += "  (make-recursive-normalizer\n"
-        body += "    (lattice->theory (powerset-lattice '(1 2 3)) 'join 'meet)\n"
-        body += "    proto))\n\n"
-
-        for term, normalized_sexp in snapshot_cases[:100]:
-            original_sexp = term_to_sexp(term)
-            body += (f";; {original_sexp} normalizes to {normalized_sexp}\n"
-                     f"(let-values (((result trace) (norm '{original_sexp})))\n"
-                     f"  (test '{normalized_sexp} result))\n\n")
-
-        write_snapshot(
-            "sage-rewriting-lattice-test.scm",
-            "sage-rewriting-lattice",
-            ["(wile algebra)",
-             "(wile algebra symbolic)",
-             "(wile algebra rewrite)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+    return check_rewriting_or_snapshot(
+        args,
+        label="lattice rewriting",
+        filename="sage-rewriting-lattice-test.scm",
+        test_name="sage-rewriting-lattice",
+        terms=terms,
+        run_op="norm",
+        term_to_sexp_fn=term_to_sexp,
+        soundness_fn=soundness,
+        fail_detail_fn=fail_detail,
+        snapshot_case_fn=snapshot_case,
+        setup_scheme=setup,
+        snapshot_preamble=setup + "\n\n",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1612,10 +1348,10 @@ def parse_rational_leaf(x):
 
 
 def validate_rewriting_rational_field(args, num_terms=500):
-    """Validate that Wile's rational field rewriting preserves value."""
-    print("  rational-field rewriting...", end=" ", flush=True)
-    failures = 0
+    """Validate that Wile's rational field rewriting preserves value.
 
+    Leaves can be `recip`'d, so terms are generated lazily and any whose Sage
+    evaluation divides by zero are skipped before the batch run."""
     operators = [('+', 2), ('*', 2), ('neg', 1), ('recip', 1)]
     # Small non-zero rationals to minimize division-by-zero in nested recip
     rational_leaves = [1, -1, 2, -2, 3, 1/2, -1/2, 1/3]
@@ -1643,9 +1379,8 @@ def validate_rewriting_rational_field(args, num_terms=500):
         except ZeroDivisionError:
             continue
 
-    actual_count = len(terms)
-    if actual_count < num_terms:
-        print(f"\n    WARNING: only generated {actual_count}/{num_terms}"
+    if len(terms) < num_terms:
+        print(f"    WARNING: only generated {len(terms)}/{num_terms}"
               f" valid terms ({attempts} attempts)")
 
     # Format a QQ leaf for Scheme output
@@ -1662,129 +1397,62 @@ def validate_rewriting_rational_field(args, num_terms=500):
         op, args = term
         return "(" + op + " " + " ".join(rational_term_to_sexp(a) for a in args) + ")"
 
-    # Build batch Scheme code
-    scheme_lines = []
-    scheme_lines.append("(import (wile algebra)")
-    scheme_lines.append("        (wile algebra symbolic)")
-    scheme_lines.append("        (wile algebra rewrite))")
-    scheme_lines.append("")
-    scheme_lines.append("(define proto")
-    scheme_lines.append("  (sexp-term-protocol")
-    scheme_lines.append("    (lambda (a b)")
-    scheme_lines.append("      (cond")
-    scheme_lines.append("        ((and (number? a) (number? b)) (< a b))")
-    scheme_lines.append("        ((number? a) #t)")
-    scheme_lines.append("        ((number? b) #f)")
-    scheme_lines.append("        (else #f)))))")
-    scheme_lines.append("")
-    scheme_lines.append("(define norm")
-    scheme_lines.append("  (make-recursive-normalizer")
-    scheme_lines.append("    (field->theory (rational-field) '+ '* 'neg 'recip)")
-    scheme_lines.append("    proto))")
-    scheme_lines.append("")
+    term_value = (";; Evaluate a normalized term to its rational value.\n"
+                  "(define (term-value t)\n"
+                  "  (cond\n"
+                  "    ((number? t) t)\n"
+                  "    ((not (pair? t)) (error \"term-value: unexpected atom\" t))\n"
+                  "    ((eq? (car t) '+)\n"
+                  "     (+ (term-value (cadr t)) (term-value (caddr t))))\n"
+                  "    ((eq? (car t) '*)\n"
+                  "     (* (term-value (cadr t)) (term-value (caddr t))))\n"
+                  "    ((eq? (car t) 'neg)\n"
+                  "     (- (term-value (cadr t))))\n"
+                  "    ((eq? (car t) 'recip)\n"
+                  "     (/ 1 (term-value (cadr t))))\n"
+                  "    (else (error \"term-value: unknown operator\" (car t)))))")
 
-    scheme_lines.append("(begin")
-    for term in terms:
-        sexp = rational_term_to_sexp(term)
-        scheme_lines.append(
-            f"  (let-values (((result trace) (norm '{sexp})))"
-            f" (write result) (display #\\newline))")
-    scheme_lines.append(")")
+    theory = "(field->theory (rational-field) '+ '* 'neg 'recip)"
+    setup = _norm_setup(_PROTO_NUMBER_FIRST, theory)
 
-    scheme_code = "\n".join(scheme_lines)
-
-    # Run Wile
-    output = run_wile(scheme_code)
-    result_lines = output.strip().split("\n")
-
-    if len(result_lines) != actual_count:
-        print(f"\n    ERROR: expected {actual_count} output lines, got {len(result_lines)}")
-        return actual_count
-
-    # Check each term
-    snapshot_cases = []
-    for i, term in enumerate(terms):
-        original_value = compute_term_sage(term, sage_ops)
-        normalized_sexp = result_lines[i].strip()
-
-        # Parse Wile's normalized output back to a term
-        normalized_term = parse_sexp(normalized_sexp)
-
-        # Evaluate the normalized term in Sage
+    def soundness(term, normalized_term):
+        ov = compute_term_sage(term, sage_ops)
         try:
-            normalized_value = compute_term_sage(normalized_term, sage_ops)
+            nv = compute_term_sage(normalized_term, sage_ops)
         except ZeroDivisionError:
-            failures += 1
-            if args.verbose or failures <= 5:
-                print(f"\n    FAIL [{i}]: normalized form causes division by zero")
-                print(f"      original: {rational_term_to_sexp(term)}")
-                print(f"      normalized to: {normalized_sexp}")
-            continue
+            return (False, ('zerodiv', ov))
+        return (ov == nv, ('val', ov, nv))
 
-        if original_value != normalized_value:
-            failures += 1
-            if args.verbose or failures <= 5:
-                print(f"\n    FAIL [{i}]: {rational_term_to_sexp(term)} = {original_value}, "
-                      f"normalized to {normalized_sexp} = {normalized_value}")
-        else:
-            snapshot_cases.append((term, normalized_sexp, original_value))
+    def fail_detail(i, term, normalized_sexp, info):
+        if info[0] == 'zerodiv':
+            return (f"\n    FAIL [{i}]: normalized form causes division by zero\n"
+                    f"      original: {rational_term_to_sexp(term)}\n"
+                    f"      normalized to: {normalized_sexp}")
+        ov, nv = info[1], info[2]
+        return (f"\n    FAIL [{i}]: {rational_term_to_sexp(term)} = {ov}, "
+                f"normalized to {normalized_sexp} = {nv}")
 
-    if failures == 0:
-        print(f"OK ({actual_count} terms)")
-    else:
-        print(f"\n    {failures}/{actual_count} FAILED")
+    def snapshot_case(term, normalized_sexp, info):
+        original_sexp = rational_term_to_sexp(term)
+        expected_str = format_rational_expected(info[1])
+        return (f";; Original: {original_sexp} = {expected_str}\n"
+                f"(let-values (((result trace) (norm '{original_sexp})))\n"
+                f"  (test \"{expected_str}\" (number->string (term-value result))))\n\n")
 
-    # Snapshot mode: write up to 100 passing cases
-    if args.snapshot and failures > 0:
-        print(f"    WARNING: not writing snapshot due to {failures} failures")
-    elif args.snapshot and len(snapshot_cases) > 0:
-        body = ""
-        body += ";; Evaluate a normalized term to its rational value.\n"
-        body += "(define (term-value t)\n"
-        body += "  (cond\n"
-        body += "    ((number? t) t)\n"
-        body += "    ((not (pair? t)) (error \"term-value: unexpected atom\" t))\n"
-        body += "    ((eq? (car t) '+)\n"
-        body += "     (+ (term-value (cadr t)) (term-value (caddr t))))\n"
-        body += "    ((eq? (car t) '*)\n"
-        body += "     (* (term-value (cadr t)) (term-value (caddr t))))\n"
-        body += "    ((eq? (car t) 'neg)\n"
-        body += "     (- (term-value (cadr t))))\n"
-        body += "    ((eq? (car t) 'recip)\n"
-        body += "     (/ 1 (term-value (cadr t))))\n"
-        body += "    (else (error \"term-value: unknown operator\" (car t)))))\n\n"
-
-        body += "(define proto\n"
-        body += "  (sexp-term-protocol\n"
-        body += "    (lambda (a b)\n"
-        body += "      (cond\n"
-        body += "        ((and (number? a) (number? b)) (< a b))\n"
-        body += "        ((number? a) #t)\n"
-        body += "        ((number? b) #f)\n"
-        body += "        (else #f)))))\n\n"
-        body += "(define norm\n"
-        body += "  (make-recursive-normalizer\n"
-        body += "    (field->theory (rational-field) '+ '* 'neg 'recip)\n"
-        body += "    proto))\n\n"
-
-        for term, normalized_sexp, expected in snapshot_cases[:100]:
-            original_sexp = rational_term_to_sexp(term)
-            expected_str = format_rational_expected(expected)
-            body += (f";; Original: {original_sexp} = {expected_str}\n"
-                     f"(let-values (((result trace) (norm '{original_sexp})))\n"
-                     f"  (test \"{expected_str}\" (number->string (term-value result))))\n\n")
-
-        write_snapshot(
-            "sage-rewriting-rational-field-test.scm",
-            "sage-rewriting-rational-field",
-            ["(wile algebra)",
-             "(wile algebra symbolic)",
-             "(wile algebra rewrite)"],
-            body,
-            args.seed,
-        )
-
-    return failures
+    return check_rewriting_or_snapshot(
+        args,
+        label="rational-field rewriting",
+        filename="sage-rewriting-rational-field-test.scm",
+        test_name="sage-rewriting-rational-field",
+        terms=terms,
+        run_op="norm",
+        term_to_sexp_fn=rational_term_to_sexp,
+        soundness_fn=soundness,
+        fail_detail_fn=fail_detail,
+        snapshot_case_fn=snapshot_case,
+        setup_scheme=setup,
+        snapshot_preamble=term_value + "\n\n" + setup + "\n\n",
+    )
 
 
 # ---------------------------------------------------------------------------
