@@ -314,14 +314,133 @@ TD[n1][n2] is the edit distance between the whole trees."
   (lambda (dj)
     1))
 
-;;; -- Public entry (Phase 3: scalar distance + node mapping) --
+;;; -- Custom cost wrapping --
+;;;
+;;; User-supplied cost procedures operate on the visible NODES; the DP works in
+;;; postorder indices, so each is wrapped to translate index → node. relabel-fn
+;;; takes (node-a node-b); delete-fn / insert-fn take a single node.
+
+(define (%wrap-relabel fn tt1 tt2)
+  (let ((nodes1 (ted-tree-nodes tt1))
+        (nodes2 (ted-tree-nodes tt2)))
+    (lambda (di dj)
+      (fn (vector-ref nodes1 di) (vector-ref nodes2 dj)))))
+
+(define (%wrap-delete fn tt1)
+  (let ((nodes1 (ted-tree-nodes tt1)))
+    (lambda (di)
+      (fn (vector-ref nodes1 di)))))
+
+(define (%wrap-insert fn tt2)
+  (let ((nodes2 (ted-tree-nodes tt2)))
+    (lambda (dj)
+      (fn (vector-ref nodes2 dj)))))
+
+(define (%cost-alist? spec)
+  (and (pair? spec)
+       (every
+         (lambda (e)
+           (and (pair? e) (symbol? (car e)) (procedure? (cdr e))))
+         spec)))
+
+(define (%proc-list? spec)
+  (and (pair? spec)
+       (every procedure? spec)))
+
+;; Resolve the `cost` option into the three index-based DP cost closures,
+;; returned as (values relabel delete insert). SPEC is #f (unit default), an
+;; alist ((relabel . fn) (insert . fn) (delete . fn)) with any subset present,
+;; or a positional list (relabel-fn insert-fn delete-fn).
+(define (%resolve-costs spec tt1 tt2 label-equal?)
+  (cond
+    ((not spec)
+     (values (%unit-relabel tt1 tt2 label-equal?)
+             (%unit-delete)
+             (%unit-insert)))
+    ((%cost-alist? spec)
+     (let ((rl (assv-or spec 'relabel #f))
+           (ins (assv-or spec 'insert #f))
+           (del (assv-or spec 'delete #f)))
+       (values (if rl (%wrap-relabel rl tt1 tt2) (%unit-relabel tt1 tt2 label-equal?))
+               (if del (%wrap-delete del tt1) (%unit-delete))
+               (if ins (%wrap-insert ins tt2) (%unit-insert)))))
+    ((%proc-list? spec)
+     (unless (= 3 (length spec))
+       (error "tree-edit-distance: positional cost spec needs exactly 3 procedures"
+              (list 'fix "pass (relabel-fn insert-fn delete-fn), or an alist ((relabel . fn) (insert . fn) (delete . fn))")
+              spec))
+     (values (%wrap-relabel (list-ref spec 0) tt1 tt2)
+             (%wrap-delete (list-ref spec 2) tt1)
+             (%wrap-insert (list-ref spec 1) tt2)))
+    (else
+     (error "tree-edit-distance: invalid cost spec"
+            (list 'fix "pass (relabel-fn insert-fn delete-fn), or an alist ((relabel . fn) (insert . fn) (delete . fn))")
+            spec))))
+
+;;; -- Public entry --
 
 (define (tree-edit-distance t1 t2 proto . opts)
-  (let ((tt1 (%ted-preprocess proto t1))
-        (tt2 (%ted-preprocess proto t2)))
-    (let ((relabel (%unit-relabel tt1 tt2 equal?))
-          (delete (%unit-delete))
-          (insert (%unit-insert)))
-      (let ((td (%ted-tree-distance-table tt1 tt2 relabel delete insert)))
-        (values (%2d-ref td (ted-tree-n tt1) (ted-tree-n tt2))
-                (%ted-backtrack tt1 tt2 td relabel delete insert))))))
+  "Ordered tree edit distance between term trees T1 and T2 under PROTO.
+Returns (values COST MAPPING): the minimum total cost of relabel / insert /
+delete operations transforming T1 into T2, and the node correspondence
+realizing it. Child order is significant (Zhang & Shasha 1989) — ASTs are
+ordered, so (- a b) and (- b a) are distance 2 apart, not 0.
+
+PROTO is a <term-protocol> (from (wile algebra rewrite)): a node's label is
+(term-get-operator proto node) when compound, else the node itself; its
+children are (term-get-operands proto node) when compound, else (). The same
+trees that flow through AC-matching flow through edit distance.
+
+MAPPING is an alist of node correspondences:
+  (a . b)   a in T1 matched/relabeled to b in T2
+  (a . #f)  a deleted from T1
+  (#f . b)  b inserted into T2
+The cost summed over MAPPING equals COST.
+
+Options (trailing alist):
+  (cost . SPEC)        override unit costs. SPEC is an alist
+                       ((relabel . fn) (insert . fn) (delete . fn)) with any
+                       subset present (missing ops keep unit cost), or a
+                       positional list (relabel-fn insert-fn delete-fn).
+                       relabel-fn takes (node-a node-b); insert-fn / delete-fn
+                       take one node. Each returns a non-negative number.
+  (label-equal? . fn)  equality used by the default relabel cost (0 when equal,
+                       else 1). Defaults to equal?. Ignored when a custom
+                       relabel cost is given.
+
+The result is a metric only when the override is itself a metric; the default
+unit costs are.
+
+Examples:
+  (define proto
+    (make-term-protocol pair? car cdr
+      (lambda (t a) (cons (car t) a)) (lambda (a b) #f)))
+  (tree-edit-distance '(f a b) '(f a c) proto)   => 1, ((... ) (b . c) (a . a))
+  (tree-edit-distance '(f a b) '(f b a) proto)   => 2  (ordered!)
+
+Parameters:
+  t1 : any
+  t2 : any
+  proto : term-protocol
+  opts : alist
+Returns: two values — a number and an alist
+Category: algebra
+Keywords: tree edit distance, Zhang-Shasha, ordered tree, AST diff, structural diff, edit script
+
+See also: `make-term-protocol', `graph-maximum-common-subgraph'."
+  (unless (term-protocol? proto)
+    (error "tree-edit-distance: proto must be a term-protocol"
+           (list 'fix "construct one with make-term-protocol from (wile algebra rewrite)")
+           proto))
+  (validate-opts-keys "tree-edit-distance" opts '(cost label-equal?))
+  (let ((label-equal? (assv-or opts 'label-equal? equal?)))
+    (assert-procedure "tree-edit-distance" label-equal?)
+    (let ((tt1 (%ted-preprocess proto t1))
+          (tt2 (%ted-preprocess proto t2)))
+      (call-with-values
+        (lambda ()
+          (%resolve-costs (assv-or opts 'cost #f) tt1 tt2 label-equal?))
+        (lambda (relabel delete insert)
+          (let ((td (%ted-tree-distance-table tt1 tt2 relabel delete insert)))
+            (values (%2d-ref td (ted-tree-n tt1) (ted-tree-n tt2))
+                    (%ted-backtrack tt1 tt2 td relabel delete insert))))))))

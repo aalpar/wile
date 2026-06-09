@@ -24,6 +24,12 @@
     (lambda () (tree-edit-distance t1 t2 proto))
     (lambda (cost mapping) cost)))
 
+;; Scalar distance with trailing options (cost spec, label-equal?, ...).
+(define (ted-cost t1 t2 . opts)
+  (call-with-values
+    (lambda () (apply tree-edit-distance t1 t2 proto opts))
+    (lambda (cost mapping) cost)))
+
 ;; Node mapping only (drops the scalar cost).
 (define (ted-map t1 t2)
   (call-with-values
@@ -164,6 +170,58 @@
             (test cost (mapping-cost m)))))
       fixtures))
   fixtures)
+
+;;; --- Phase 4: cost model -----------------------------------------------
+
+;; Custom delete cost via the alist form (missing ops keep unit cost).
+(test 10
+      (ted-cost '(f a b) '(f a)
+                (cons 'cost (list (cons 'delete (lambda (n) 10))))))
+
+;; Positional cost spec (relabel-fn insert-fn delete-fn) with asymmetric
+;; insert/delete costs, so the two assertions below pin the positional ORDER
+;; (a swapped parse would flip the 2 and the 7).
+(define asym-cost
+  (cons 'cost
+        (list (lambda (a b) (if (equal? (label a) (label b)) 0 1)) ; relabel
+              (lambda (n) 2)                                        ; insert
+              (lambda (n) 7))))                                     ; delete
+(test 2 (ted-cost '(f a) '(f a b) asym-cost))   ; pure insert of b → 2
+(test 7 (ted-cost '(f a b) '(f a) asym-cost))   ; pure delete of b → 7
+
+;; label-equal? override: treat all labels as equal → only structural
+;; insert/delete remain, and same-shape trees collapse to distance 0.
+(test 0
+      (ted-cost '(f a b) '(g a c)
+                (cons 'label-equal? (lambda (a b) #t))))
+
+;;; --- Phase 4: edge cases -----------------------------------------------
+
+;; Two leaves: 0 when equal, 1 when not.
+(test 0 (ted 'a 'a))
+(test 1 (ted 'a 'b))
+
+;; Leaf vs larger tree. d('f, '(f a b)): match the leaf to the root f (label
+;; equal, cost 0) then insert a and b → 2. Symmetric.
+(test 2 (ted 'f '(f a b)))
+(test 2 (ted '(f a b) 'f))
+;; d('z, '(f a b)): relabel z→f (1) + insert a + insert b (2) = 3, cheaper than
+;; deleting z and inserting all three (4).
+(test 3 (ted 'z '(f a b)))
+
+;; Identical larger tree → 0.
+(test 0 (ted '(h (f a b) (g c)) '(h (f a b) (g c))))
+
+;;; --- Phase 4: input validation -----------------------------------------
+
+;; PROTO must be a term-protocol.
+(test-error (tree-edit-distance 'a 'b 42))
+;; Unknown option keys are rejected (typo guard).
+(test-error (tree-edit-distance 'a 'b proto '(bogus . 1)))
+;; A non-procedure label-equal? is rejected up front.
+(test-error (tree-edit-distance 'a 'b proto '(label-equal? . 7)))
+;; A malformed cost spec is rejected.
+(test-error (tree-edit-distance 'a 'b proto '(cost . 99)))
 
 (test-end)
 (test-exit)
