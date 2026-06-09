@@ -138,8 +138,131 @@ returning a complete <ted-tree> (n/nodes/labels/children/l/keyroots)."
                       l
                       (%tree-keyroots l)))))
 
-;;; -- Public entry (Phase 1: preprocessing only; DP lands in Phase 2) --
+;;; -- 2D table helpers (vector of row-vectors, 0-based) --
+
+(define (%make-2d rows cols init)
+  (let ((m (make-vector rows)))
+    (let loop ((i 0))
+      (when (< i rows)
+        (vector-set! m i (make-vector cols init))
+        (loop (+ i 1))))
+    m))
+
+(define (%2d-ref m i j)
+  (vector-ref (vector-ref m i) j))
+
+(define (%2d-set! m i j x)
+  (vector-set! (vector-ref m i) j x))
+
+;;; -- Forest-distance recurrence (Zhang & Shasha 1989) --
+;;;
+;;; treedist(i, j): fill the forest-distance table FD for the keyroot pair
+;;; (i, j) and write out tree-distances TD[di][dj] for every (di, dj) that sits
+;;; at its own subtree root relative to (i, j). The cost closures are
+;;; index-based: (relabel di dj), (delete di), (insert dj).
+;;;
+;;; FD is windowed to the absolute index range [l(i)-1 .. i] × [l(j)-1 .. j];
+;;; row/col 0 of the window (absolute l-1) is the empty forest, seeded by
+;;; cumulative delete / insert.
+
+(define (%ted-fill-forest t1 t2 i j td relabel delete insert)
+  (let ((l1 (ted-tree-l t1))
+        (l2 (ted-tree-l t2)))
+    (let ((li (vector-ref l1 i))
+          (lj (vector-ref l2 j)))
+      (let ((roff (- li 1))                 ; absolute di → window row (di - roff)
+            (coff (- lj 1))                  ; absolute dj → window col (dj - coff)
+            (fd (%make-2d (+ (- i li) 2) (+ (- j lj) 2) 0)))
+        (define (fd-ref a b)
+          (%2d-ref fd (- a roff) (- b coff)))
+        (define (fd-set! a b v)
+          (%2d-set! fd (- a roff) (- b coff) v))
+        ;; Base: empty forest vs empty forest, then cumulative delete / insert.
+        (fd-set! (- li 1) (- lj 1) 0)
+        (let loop ((di li))
+          (when (<= di i)
+            (fd-set! di (- lj 1) (+ (fd-ref (- di 1) (- lj 1)) (delete di)))
+            (loop (+ di 1))))
+        (let loop ((dj lj))
+          (when (<= dj j)
+            (fd-set! (- li 1) dj (+ (fd-ref (- li 1) (- dj 1)) (insert dj)))
+            (loop (+ dj 1))))
+        ;; Body: the three-way min. The keyroot branch condition
+        ;; (l(di)=l(i) ∧ l(dj)=l(j)) decides relabel-vs-compose.
+        (let oloop ((di li))
+          (when (<= di i)
+            (let iloop ((dj lj))
+              (when (<= dj j)
+                (let ((cost-del (+ (fd-ref (- di 1) dj) (delete di)))
+                      (cost-ins (+ (fd-ref di (- dj 1)) (insert dj))))
+                  (if (and (= (vector-ref l1 di) li)
+                           (= (vector-ref l2 dj) lj))
+                      ;; Both at subtree root → relabel/match the two roots,
+                      ;; and this forest distance IS the tree distance.
+                      (let ((m (min cost-del
+                                    cost-ins
+                                    (+ (fd-ref (- di 1) (- dj 1)) (relabel di dj)))))
+                        (fd-set! di dj m)
+                        (%2d-set! td di dj m))
+                      ;; Otherwise compose: distance of the forest left of these
+                      ;; subtrees, plus the (already computed) sub-tree distance.
+                      (let ((m (min cost-del
+                                    cost-ins
+                                    (+ (fd-ref (- (vector-ref l1 di) 1)
+                                               (- (vector-ref l2 dj) 1))
+                                       (%2d-ref td di dj)))))
+                        (fd-set! di dj m))))
+                (iloop (+ dj 1))))
+            (oloop (+ di 1))))))))
+
+(define (%ted-tree-distance-table t1 t2 relabel delete insert)
+  "Fill the full TD[0..n1][0..n2] tree-distance table by running the
+forest-distance recurrence over every (keyroot₁ × keyroot₂) pair, ascending.
+Ascending order guarantees each composed sub-tree distance is ready when read.
+TD[n1][n2] is the edit distance between the whole trees."
+  (let ((n1 (ted-tree-n t1))
+        (n2 (ted-tree-n t2)))
+    (let ((td (%make-2d (+ n1 1) (+ n2 1) 0)))
+      (for-each
+        (lambda (i)
+          (for-each
+            (lambda (j)
+              (%ted-fill-forest t1 t2 i j td relabel delete insert))
+            (ted-tree-keyroots t2)))
+        (ted-tree-keyroots t1))
+      td)))
+
+;;; -- Index-based cost closures (default unit costs) --
+;;;
+;;; The DP works in postorder indices; these closures translate to the
+;;; user-visible nodes/labels. Default unit model: relabel = 0 when labels are
+;;; equal else 1, delete = insert = 1. Phase 4 swaps in custom closures.
+
+(define (%unit-relabel t1 t2 label-equal?)
+  (let ((lab1 (ted-tree-labels t1))
+        (lab2 (ted-tree-labels t2)))
+    (lambda (di dj)
+      (if (label-equal? (vector-ref lab1 di) (vector-ref lab2 dj))
+          0
+          1))))
+
+(define (%unit-delete)
+  (lambda (di)
+    1))
+
+(define (%unit-insert)
+  (lambda (dj)
+    1))
+
+;;; -- Public entry (Phase 2: scalar distance; mapping lands in Phase 3) --
 
 (define (tree-edit-distance t1 t2 proto . opts)
-  (error "tree-edit-distance: not implemented"
-         (list 'fix "forward DP lands in Phase 2")))
+  (let ((tt1 (%ted-preprocess proto t1))
+        (tt2 (%ted-preprocess proto t2)))
+    (let ((td (%ted-tree-distance-table
+                tt1 tt2
+                (%unit-relabel tt1 tt2 equal?)
+                (%unit-delete)
+                (%unit-insert))))
+      (values (%2d-ref td (ted-tree-n tt1) (ted-tree-n tt2))
+              '()))))
