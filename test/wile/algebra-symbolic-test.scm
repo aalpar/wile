@@ -319,7 +319,7 @@
 (test-group "semiring->theory-construction"
   (let* ((S (make-semiring + * 0 1))
          (th (semiring->theory S '+ '*)))
-    (test 6 (length (theory-axioms th)))
+    (test 4 (length (theory-axioms th)))
     (test '(+ *) (theory-associative-ops th))))
 
 (test-group "semiring->theory-absorbing"
@@ -338,12 +338,39 @@
     (let-values (((result trace) (norm '(+ x 0))))
       (test 'x result))))
 
+;; A write-based comparator (orders atoms by their printed form) places
+;; compound terms before atoms — the exact order under which the *old* pairwise
+;; commutativity + associativity pair failed to terminate on three-leaf + terms.
+;; The AC axiom sorts once and reaches a fixpoint regardless of comparator, so
+;; both input bracketings normalize to the same canonical form and the result is
+;; idempotent. This guards the comparator-dependence footgun AC normalization
+;; closes.
+(define write-proto
+  (sexp-term-protocol
+    (lambda (a b)
+      (let ((sa (let ((p (open-output-string))) (write a p) (get-output-string p)))
+            (sb (let ((p (open-output-string))) (write b p) (get-output-string p))))
+        (string<? sa sb)))))
+
+(test-group "semiring->theory-ac-write-comparator-termination"
+  (let* ((R (integer-ring))
+         (th (ring->theory R '+ '* 'neg))
+         (norm (make-recursive-normalizer th write-proto)))
+    (let-values (((r1 t1) (norm '(+ (+ a b) c)))
+                 ((r2 t2) (norm '(+ c (+ b a)))))
+      ;; Both bracketings/orderings reach the same canonical AC normal form.
+      (test r1 r2)
+      ;; The normal form is stable: re-normalizing is a no-op (fixpoint reached,
+      ;; not a fuel-exhausted intermediate).
+      (let-values (((r3 t3) (norm r1)))
+        (test r1 r3)))))
+
 ;; ─── ring->theory ──────────────────────────
 
 (test-group "ring->theory-construction"
   (let* ((R (integer-ring))
          (th (ring->theory R '+ '* 'neg)))
-    (test 7 (length (theory-axioms th)))))
+    (test 5 (length (theory-axioms th)))))
 
 (test-group "ring->theory-cross-rule-normalization"
   ;; (+ (* 0 y) (+ x 0)) → x  using absorbing(×) + identity(+)
@@ -359,7 +386,7 @@
 (test-group "field->theory-construction"
   (let* ((F (rational-field))
          (th (field->theory F '+ '* 'neg 'recip)))
-    (test 8 (length (theory-axioms th)))))
+    (test 6 (length (theory-axioms th)))))
 
 (test-group "field->theory-reciprocal-involution"
   (let* ((F (rational-field))

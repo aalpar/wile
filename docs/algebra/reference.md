@@ -692,9 +692,9 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 
 - `(monoid->theory M op-symbol)` -- 2 axioms: identity, associativity; identity predicate uses `equal?` against M's identity element
 - `(group->theory G op-symbol inv-symbol)` -- 3 axioms: identity, associativity (from monoid), inverse involution
-- `(semiring->theory S plus-sym times-sym)` -- 6 axioms: identity and associativity for both ops, additive commutativity, multiplicative absorbing element
-- `(ring->theory R plus-sym times-sym neg-sym)` -- 7 axioms: 6 semiring axioms plus negation involution
-- `(field->theory F plus-sym times-sym neg-sym recip-sym)` -- 8 axioms: 7 ring axioms plus reciprocal involution
+- `(semiring->theory S plus-sym times-sym)` -- 4 axioms: an AC (associative-commutative) axiom for addition (folding additive commutativity, associativity, and identity in one terminating pass), plus multiplicative identity, associativity, and absorbing element. Multiplication stays associative-only (a semiring imposes no `×` commutativity)
+- `(ring->theory R plus-sym times-sym neg-sym)` -- 5 axioms: 4 semiring axioms plus negation involution
+- `(field->theory F plus-sym times-sym neg-sym recip-sym)` -- 6 axioms: 5 ring axioms plus reciprocal involution
 - `(lattice->theory L join-sym meet-sym)` -- 4 axioms: an AC (associative-commutative) axiom for each of join and meet (each folding commutativity, associativity, idempotence, identity, and annihilation in one terminating pass), plus the two absorption laws
 - `(heyting->theory H join-sym meet-sym)` -- 4 axioms: same as lattice->theory via the underlying lattice; implication is not included
 - `(boolean->theory B join-sym meet-sym comp-sym)` -- 7 axioms: AC join/meet with complement folding (`a ∧ ¬a = ⊥`, `a ∨ ¬a = ⊤`, detected across the whole flattened operand list so n-way contradictions reduce), the two absorption laws, Boolean negation (`¬¬a = a`, `¬⊥ = ⊤`, `¬⊤ = ⊥`), and the two De Morgan laws

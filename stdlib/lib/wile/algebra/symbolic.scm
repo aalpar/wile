@@ -357,9 +357,22 @@ Keywords: group, projection, theory, inverse, involution"
         '()))))
 
 (define (semiring->theory S plus-sym times-sym)
-  "Project semiring S into a theory with 6 axioms: identity and
-associativity for both operations, commutativity for addition,
-and absorbing element for multiplication.
+  "Project semiring S into a theory with 4 axioms: a single AC
+(associative-commutative) axiom for addition, plus multiplicative identity,
+associativity, and absorbing element.
+
+Addition is associative AND commutative, so it collapses to one AC axiom that
+flattens nested + nodes, drops the additive identity (semiring zero), and sorts
+in a single terminating step — subsuming commutativity, associativity, and
+identity for + at once. Multiplication is only associative (a semiring imposes
+no commutativity on ×), so it keeps separate identity, associativity, and
+absorbing axioms; associativity alone terminates, so there is no AC ping-pong to
+collapse.
+
+AC normalization is comparator-independent: it sorts once and cannot ping-pong,
+unlike a pairwise commutativity + associativity pair, which fails to terminate
+on three-or-more-leaf + terms under a comparator that orders compounds before
+atoms.
 
 Note: equal? is type-sensitive for numbers (0 and 0.0 are not equal?).
 If terms mix exact and inexact numbers, construct the theory manually
@@ -371,7 +384,7 @@ Parameters:
   times-sym : symbol
 Returns: theory
 Category: algebra
-Keywords: semiring, projection, theory, absorbing"
+Keywords: semiring, projection, theory, absorbing, AC normalization"
   (if (not (semiring? S))
       (error "semiring->theory: expected semiring" S))
   (if (not (symbol? plus-sym))
@@ -384,30 +397,20 @@ Keywords: semiring, projection, theory, absorbing"
         (times-str (symbol->string times-sym)))
     (make-theory
       (list
-        ;; Additive identity
-        (make-named-axiom "identity-plus"
-          (string-append plus-str "(a, 0) = a")
-          (make-identity-axiom plus-sym
-            (lambda (x) (equal? x z))))
+        ;; Addition: AC, identity +(a, 0) = a; not idempotent, no annihilator
+        (make-named-axiom "ac-plus"
+          (string-append plus-str ": AC, identity " plus-str "(a, 0) = a")
+          (make-ac-axiom plus-sym #f z ac-absent #f))
         ;; Multiplicative identity
         (make-named-axiom "identity-times"
           (string-append times-str "(a, 1) = a")
           (make-identity-axiom times-sym
             (lambda (x) (equal? x o))))
-        ;; Additive commutativity
-        (make-named-axiom "commutativity-plus"
-          (string-append plus-str "(a, b) = " plus-str "(b, a)")
-          (make-commutativity-axiom plus-sym))
         ;; Multiplicative absorbing element
         (make-named-axiom "absorbing-times"
           (string-append times-str "(a, 0) = 0")
           (make-absorbing-axiom times-sym
             (lambda (x) (equal? x z))))
-        ;; Additive associativity
-        (make-named-axiom "associativity-plus"
-          (string-append plus-str "(a, " plus-str "(b, c)) = "
-                         plus-str "(" plus-str "(a, b), c)")
-          (make-associativity-axiom plus-sym))
         ;; Multiplicative associativity
         (make-named-axiom "associativity-times"
           (string-append times-str "(a, " times-str "(b, c)) = "
@@ -416,7 +419,7 @@ Keywords: semiring, projection, theory, absorbing"
       (list plus-sym times-sym))))
 
 (define (ring->theory R plus-sym times-sym neg-sym)
-  "Project ring R into a theory with 7 axioms: the 6 semiring axioms
+  "Project ring R into a theory with 5 axioms: the 4 semiring axioms
 plus involution for negation.
 
 Parameters:
@@ -442,7 +445,7 @@ Keywords: ring, projection, theory, negation, involution"
         '()))))
 
 (define (field->theory F plus-sym times-sym neg-sym recip-sym)
-  "Project field F into a theory with 8 axioms: the 7 ring axioms
+  "Project field F into a theory with 6 axioms: the 5 ring axioms
 plus involution for reciprocal.
 
 Note: the reciprocal involution recip(recip(a)) = a is valid for all
