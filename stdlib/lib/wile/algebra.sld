@@ -1,5 +1,12 @@
 (define-library (wile algebra)
   (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields, incidence algebras, combinatorial graphs. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
+  ;; INVARIANT: this umbrella must re-export EVERY symbol exported by every
+  ;; leaf (wile algebra X) library. Adding an export to a leaf .sld is a
+  ;; two-file edit — add it to the leaf AND mirror it here, under the matching
+  ;; section below. Enforced by TestAlgebraUmbrellaCoversLeafExports
+  ;; (algebra_umbrella_drift_test.go); a missing mirror fails `make ci` (the
+  ;; per-library Scheme suite cannot catch it — it imports the leaf directly).
+  ;; See stdlib/lib/wile/algebra/CLAUDE.md § "Export wiring".
   (export
     ;; Setoids
     make-setoid setoid?

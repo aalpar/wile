@@ -28,6 +28,32 @@ The older `assert-X` wrappers (`assert-group`, `assert-graph`) are retained
 as thin conveniences but new structures should not add their own — use the
 generic `assert-validation` instead.
 
+## Export wiring — leaf `.sld` + umbrella mirror
+
+Adding a new export to any `(wile algebra X)` leaf library is a **two-file
+edit**, not one:
+
+1. The leaf `combinatorial-graph.sld` (or `group.sld`, etc.) — the `export`
+   list of the library that defines the binding.
+2. The umbrella `stdlib/lib/wile/algebra.sld` — which must re-export **every**
+   symbol from **every** leaf, under the matching `;;`-comment section.
+
+This coupling is enforced by `TestAlgebraUmbrellaCoversLeafExports`
+(`algebra_umbrella_drift_test.go`): it diffs the umbrella's exports against the
+union of all leaf exports and fails on any leaf symbol the umbrella omits.
+
+**Why the per-library Scheme suite won't catch a missing mirror.** A leaf test
+imports the leaf directly — `(import (wile algebra combinatorial-graph))` — so
+the new binding resolves and every test passes locally. The umbrella gap is
+invisible from there; only the Go drift test, which inspects the umbrella, sees
+it. A missing mirror therefore passes the leaf suite and **fails `make ci`** —
+a wasted round-trip. Mirror the export when you add it, not after CI tells you.
+
+The umbrella sections mirror the leaf section comments (e.g. `;; Combinatorial
+graphs — matching`), so place the new umbrella entry under the same heading you
+used in the leaf. There is no auto-generation — the drift test is a checker, not
+a generator; the mirror is maintained by hand.
+
 ## Shared plumbing — `(wile algebra setoid)`
 
 Every leaf library imports `(wile algebra setoid)` (even those whose domain
