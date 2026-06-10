@@ -341,4 +341,10 @@
         (let ((half (quotient n 2)))
           (merge (msort lst half)
                  (msort (list-tail lst half) (- n half))))))
-  (msort lst (length lst)))
+  ;; Detect the common list-first habit -- (sort lst less?) -- carried over
+  ;; from list-first dialects. wile is comparator-first. The swap is
+  ;; unambiguous: the comparator slot holds a non-procedure while the list
+  ;; slot holds a procedure (a procedure is never a valid sort input).
+  (if (and (not (procedure? less?)) (procedure? lst))
+      (error "sort: arguments look swapped -- wile is comparator-first: (sort less? lst), not (sort lst less?)" less? lst)
+      (msort lst (length lst))))

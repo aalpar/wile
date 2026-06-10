@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/bits"
 	"strconv"
 	"strings"
 
@@ -445,7 +444,7 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 func (p *Parser) readLabelReference() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := strings.Trim(p.cur.String(), "#")
 	var parsed uint64
-	parsed, p.err = strconv.ParseUint(s, 10, bits.UintSize)
+	parsed, p.err = strconv.ParseUint(s, 10, 31)
 	if p.err != nil {
 		return nil, p.cur, p.err
 	}
