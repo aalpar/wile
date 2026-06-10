@@ -1016,43 +1016,90 @@ func (p *MachineContext) CurrentSource() *syntax.SourceContext {
 	return nil
 }
 
+// foreignBoundaryName labels the synthetic frame CaptureStackTrace emits where
+// a Scheme→Go→Scheme call crosses a sub-context boundary (parentMC hop). It
+// marks that the frames above and below it are separated by a Go primitive's
+// call into Scheme — the breadcrumb that would otherwise be lost when a trace
+// is taken inside a sub-context (apply's in-place path excepted, as it creates
+// no sub-context).
+const foreignBoundaryName = "<foreign-call boundary>"
+
 // CaptureStackTrace walks the continuation chain and builds a stack trace.
+//
+// The walk spans sub-context boundaries via parentMC. When a trace is captured
+// inside a sub-context — e.g. a parameter converter, eval/load, or an exception
+// thunk that runs Scheme via NewSubContext — the inner frames alone would
+// truncate at that sub-context's nil-rooted continuation chain. Hopping parentMC
+// restores the full logical Scheme stack, inserting a foreignBoundaryName frame
+// at each crossing.
+//
+// This deliberately diverges from SliceContinuationAt, which walks the same
+// cont.parent chain for *control* capture and MUST stop at the boundary to keep
+// a captured continuation re-runnable (it cannot reproduce the Go residual
+// between the inner and outer frames). A stack trace is read-only — it
+// re-executes nothing — so spanning the boundary is both safe and desirable.
+//
+// The walk stops at a context with isolatedMarks set (a re-invoked continuation
+// running a grafted chain), mirroring findParameterInMarks: the trace then shows
+// the continuation's own extent, not the invoker's.
 func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 	trace := make(StackTrace, 0, 16)
+	depth := 0
 
-	// Current frame
-	if p.template != nil {
-		trace = append(trace, StackFrame{
-			FunctionName: p.template.Name(),
-			CurrentLoc:   p.template.SourceAt(p.pc),
-		})
-	}
-
-	// Walk continuation chain.
-	// Continuation PCs are return addresses (one past the call instruction),
-	// so pc-1 gives the call site source location.
-	cont := p.cont
-	depth := 1
-	for cont != nil && depth < maxDepth {
-		frame := StackFrame{}
-		if cont.template != nil {
-			frame.FunctionName = cont.template.Name()
-			frame.CurrentLoc = cont.template.SourceAt(cont.pc - 1)
+	for mc := p; mc != nil; mc = mc.parentMC {
+		// Synthetic boundary frame between a sub-context and the parent
+		// context whose Go primitive bridged them. Never before the innermost
+		// context.
+		if mc != p {
+			if depth >= maxDepth {
+				break
+			}
+			trace = append(trace, StackFrame{FunctionName: foreignBoundaryName})
+			depth++
 		}
-		trace = append(trace, frame)
-		cont = cont.parent
-		depth++
-	}
 
-	if cont == nil {
-		return trace
-	}
+		// Live (current) frame of this context.
+		if mc.template != nil && depth < maxDepth {
+			trace = append(trace, StackFrame{
+				FunctionName: mc.template.Name(),
+				CurrentLoc:   mc.template.SourceAt(mc.pc),
+			})
+			depth++
+		}
 
-	remaining := countFrames(cont)
-	if remaining > 0 {
-		trace = append(trace, StackFrame{
-			FunctionName: fmt.Sprintf("... %d more frames ...", remaining),
-		})
+		// Saved frames. Continuation PCs are return addresses (one past the
+		// call instruction), so pc-1 gives the call site source location.
+		cont := mc.cont
+		for cont != nil && depth < maxDepth {
+			frame := StackFrame{}
+			if cont.template != nil {
+				frame.FunctionName = cont.template.Name()
+				frame.CurrentLoc = cont.template.SourceAt(cont.pc - 1)
+			}
+			trace = append(trace, frame)
+			cont = cont.parent
+			depth++
+		}
+
+		// Depth budget exhausted within this context's saved chain: report how
+		// many frames remain in THIS context and stop. Frames in parent
+		// contexts beyond the budget are not counted — this matches the
+		// single-context truncation behavior the hop preserves.
+		if cont != nil {
+			remaining := countFrames(cont)
+			if remaining > 0 {
+				trace = append(trace, StackFrame{
+					FunctionName: fmt.Sprintf("... %d more frames ...", remaining),
+				})
+			}
+			return trace
+		}
+
+		// A re-invoked continuation running on a grafted chain must not cross
+		// into the invoker's frames.
+		if mc.isolatedMarks {
+			break
+		}
 	}
 
 	return trace
