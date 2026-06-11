@@ -83,6 +83,7 @@ func (p *Tokenizer) readHexEscapeToken() {
 	if p.err != nil {
 		return
 	}
+	// code point validated - x will always be a valid Unicode code point that can be converted to a rune without error
 	p.value += string(rune(x))
 }
 
@@ -205,6 +206,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 			p.err = err
 			return utf8.RuneError
 		}
+		// code point validated - x will always be a valid Unicode code point that can be converted to a rune without error
 		return rune(x)
 
 	case isUnicodeLetter(p.curr()):

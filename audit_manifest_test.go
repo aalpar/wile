@@ -18,7 +18,7 @@
 // return-type pass, and memory/2026-04-20-paramtypes-audit-design.md
 // §3.1 for the ParamTypes extension.
 //
-// Writes plans/axis-b-manifest.scm — an S-expression list of
+// Writes testdata/axis-b-manifest.scm — an S-expression list of
 // (name return-type param-types go-function go-source-location) tuples.
 // Run with WILE_AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
 //
@@ -52,7 +52,11 @@ var errResolveImpl = werr.NewStaticError("audit manifest: resolveImpl")
 
 const (
 	// axisBManifestPath is the repo-relative path of the committed manifest.
-	axisBManifestPath = "plans/axis-b-manifest.scm"
+	// It lives under testdata/ — the Go-conventional home for golden
+	// fixtures — because this test both generates it (WILE_AXIS_B_UPDATE=1)
+	// and golden-asserts the committed copy. The audit/ analyzer scripts
+	// consume it as their default input dataset.
+	axisBManifestPath = "testdata/axis-b-manifest.scm"
 
 	// axisBUpdateEnvVar toggles regeneration of the committed manifest.
 	// Set to any non-empty value to overwrite axisBManifestPath with the

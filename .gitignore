@@ -30,6 +30,8 @@ Thumbs.db
 /wile
 
 # Anthropic files
+AGENTS.md
+CLAUDE.md
 .claude/
 *.local.md
 *.mcp.json

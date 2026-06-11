@@ -2,7 +2,10 @@
 # Includes Go toolchain and GNU development tools
 #
 # Build from docker/ directory:
-#   ./build.sh
+#   make build              # native platform
+#   make build ARCH=amd64   # x86-64 (via emulation on arm64 hosts)
+# Or from the repo root:
+#   make docker-build DOCKER_PLATFORM=linux/amd64
 # Or manually:
 #   docker build -f Dockerfile -t wile ..
 #

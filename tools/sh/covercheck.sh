@@ -33,6 +33,7 @@ EXCLUDED_PKGS=(
 	"registry/testhelpers"
 	"examples/embedding"
 	"examples/embedding/source-tracking"
+	"examples/embedding/stack-trace"
 	"integration"
 	"ruleguard"
 	"stdlib"
