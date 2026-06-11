@@ -51,6 +51,8 @@ type Options struct {
 	MCPTimeout   float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no timeout)" default:"30"`
 	CPUProfile   string   `long:"cpuprofile" description:"Write CPU profile to file"`
 	MemProfile   string   `long:"memprofile" description:"Write memory profile to file"`
+	MutexProfile string   `long:"mutexprofile" description:"Write mutex contention profile to file"`
+	BlockProfile string   `long:"blockprofile" description:"Write goroutine blocking profile to file"`
 	Cover        string   `long:"cover" description:"Write Scheme-level coverage report to file (Go cover format)"`
 	CoverStdlib  bool     `long:"cover-stdlib" description:"Include stdlib files in --cover output (default excludes scheme/, wile/, srfi/)"`
 	CoverSummary string   `long:"cover-summary" description:"Write human-readable coverage summary to file"`
@@ -244,6 +246,18 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	// Mutex and block profiling must be armed before any work runs: unlike CPU
+	// profiling (start/stop bracketing), these accumulate samples globally at the
+	// configured rate and are snapshotted at exit. Fraction/rate 1 captures every
+	// event, which is appropriate for the short, deliberate profiling runs these
+	// flags target (e.g. attributing pool-mutex contention under parallel load).
+	if opts.MutexProfile != "" {
+		goruntime.SetMutexProfileFraction(1)
+	}
+	if opts.BlockProfile != "" {
+		goruntime.SetBlockProfileRate(1)
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
@@ -364,6 +378,14 @@ func main() {
 		if err != nil {
 			Failf(err, "Cannot write memory profile")
 		}
+	}
+
+	// Mutex/block profiling (written at exit after all work is done)
+	if opts.MutexProfile != "" {
+		writeNamedProfile("mutex", opts.MutexProfile)
+	}
+	if opts.BlockProfile != "" {
+		writeNamedProfile("block", opts.BlockProfile)
 	}
 
 	// Coverage reporting (written at exit after all work is done)
@@ -500,6 +522,31 @@ func Printf(fmtstr string, args ...any) {
 		os.Exit(EX_IOERR)
 	}
 	os.Stdout.Sync() //nolint:errcheck
+}
+
+// writeNamedProfile snapshots a runtime profile registered with pprof (e.g.
+// "mutex", "block") to path. Called at exit so the snapshot reflects all work
+// done. The named profiles must be armed earlier via SetMutexProfileFraction /
+// SetBlockProfileRate; this only writes the accumulated samples.
+func writeNamedProfile(name, path string) {
+	p := pprof.Lookup(name)
+	if p == nil {
+		Failf(werr.ErrInternal, fmt.Sprintf("Unknown profile %q", name))
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		Failf(err, fmt.Sprintf("Cannot create %s profile", name))
+	}
+	defer func() {
+		closeErr := f.Close()
+		if closeErr != nil {
+			Failf(closeErr, fmt.Sprintf("Cannot close %s profile", name))
+		}
+	}()
+	err = p.WriteTo(f, 0)
+	if err != nil {
+		Failf(err, fmt.Sprintf("Cannot write %s profile", name))
+	}
 }
 
 func Failf(err error, messes ...string) {

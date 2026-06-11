@@ -1,19 +1,22 @@
 ;;; parallel-matrix-mul.scm — does SRFI-18 threading speed up matrix multiply?
 ;;;
-;;; FINDING (2026-06-08, 16-core darwin): NO. Wile's VM does not provide CPU
-;;; parallelism for compute-bound Scheme. Adding threads makes work *slower*,
-;;; monotonically with thread count. Root cause: every closure `Apply`
-;;; acquires/releases an environment frame (and non-tail calls a continuation
-;;; frame + eval stack) from process-global, mutex-guarded freelists in
-;;; machine/pool.go. Concurrent threads serialize on those mutexes; GC and
-;;; allocation pressure add further contention. See the pure-compute control
-;;; (`bench-threads`) which has nothing to do with matrices and shows the same
-;;; inversion.
+;;; FINDING (updated 2026-06-10, 16-core darwin): YES, up to a point. Per-thread
+;;; allocation pools (machine/pool.go, shipped 7180e5cf) removed the global-
+;;; freelist mutex contention that used to make threading *slower*. Threading now
+;;; gives real CPU parallelism — roughly 2.5× on 8 threads (matrix-mul 2737→1120
+;;; ms). Beyond 8 it stops improving (16 ≈ 8) because the residual ceiling is
+;;; Go-runtime allocation-lock contention (mheap.lock via span allocation +
+;;; madvise page scavenging + goroutine stack growth), driven by allocation
+;;; volume — NOT a Wile pool mutex. See plans/2026-06-10-pool-parallel-scaling
+;;; Phase 0 for the profile attribution; the next lever is allocation reduction
+;;; (number unboxing, cons cells), not the pools. The pure-compute control
+;;; (`bench-threads`) has nothing to do with matrices and shows the same shape.
 ;;;
 ;;; Run:  wile --file examples/benchmarks/parallel-matrix-mul.scm
 ;;;
-;;; This benchmark is kept as a regression marker: if a future VM change makes
-;;; the parallel rows here BEAT the 1-thread row, threading became worthwhile.
+;;; Kept as a regression marker — polarity is now flipped: parallelism WORKS, so a
+;;; REGRESSION is the parallel rows STOPPING to beat the 1-thread row. If a future
+;;; change makes 8-thread no faster than 1-thread, the per-thread pools regressed.
 
 (import (wile algebra matrix) (wile algebra semiring) (wile threads) (scheme time)
         (scheme base) (scheme write))
