@@ -93,3 +93,65 @@ func TestBuildReclaimGraph_UnlistedPrimitiveNotReclaimable(t *testing.T) {
 		t.Fatalf("a define calling an unlisted (non-whitelisted) primitive must not be reclaimable")
 	}
 }
+
+// TestClassifyFrameReclaim_TierBUnlocksTopLevel is the Phase-2 measurement core:
+// the optimistic top-level tier (b) flips a same-unit top-level-define edge from
+// mutable to immutable, so a function whose only constraint is a call to another
+// (safe) top-level define becomes reclaimable. This is the difference Phase 2
+// measures as recovered_toplevel − recovered_local.
+func TestClassifyFrameReclaim_TierBUnlocksTopLevel(t *testing.T) {
+	env := envWithImported(t, "*")
+	// (define (sq x) (* x x)) (define (use) (sq 3))
+	sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
+	use := defineFn("use", call(symRef("sq"), lit()))
+	unit := []ValidatedExpr{sq, use}
+
+	a := ClassifyFrameReclaim(unit, env, TierLocal)
+	if !a["sq"] || a["use"] {
+		t.Fatalf("tier (a): want sq reclaimable, use not — got sq=%v use=%v", a["sq"], a["use"])
+	}
+	b := ClassifyFrameReclaim(unit, env, TierTopLevel)
+	if !b["sq"] || !b["use"] {
+		t.Fatalf("tier (b): want both reclaimable (use→sq immutable, sq safe) — got sq=%v use=%v", b["sq"], b["use"])
+	}
+}
+
+// TestClassifyFrameReclaim_SelfRecursiveTopLevel covers the Gabriel-shaped case:
+// a self-recursive top-level define (fib/tak) is non-reclaimable under tier (a)
+// because its self-edge is mutable, but reclaimable under tier (b).
+func TestClassifyFrameReclaim_SelfRecursiveTopLevel(t *testing.T) {
+	env := envWithImported(t, "+", "-")
+	// (define (fib n) (+ (fib (- n 1)) (fib (- n 2))))
+	fib := defineFn("fib",
+		call(symRef("+"),
+			call(symRef("fib"), call(symRef("-"), symRef("n"), lit())),
+			call(symRef("fib"), call(symRef("-"), symRef("n"), lit()))))
+	unit := []ValidatedExpr{fib}
+	if ClassifyFrameReclaim(unit, env, TierLocal)["fib"] {
+		t.Fatalf("tier (a): a self-recursive top-level define must NOT be reclaimable (mutable self-edge)")
+	}
+	if !ClassifyFrameReclaim(unit, env, TierTopLevel)["fib"] {
+		t.Fatalf("tier (b): a self-recursive top-level define over safe primitives MUST be reclaimable")
+	}
+}
+
+// TestClassifyFrameReclaim_TierBRespectsSetBang is the soundness guard on tier
+// (b): a top-level define that is set! anywhere in the unit is NOT immutable, so
+// its callers stay non-reclaimable even under tier (b). set! on a callee's
+// binding does not, however, make the callee's OWN frame escapable.
+func TestClassifyFrameReclaim_TierBRespectsSetBang(t *testing.T) {
+	env := envWithImported(t, "*")
+	// (define (sq x) (* x x)) (define (use) (sq 3)) (set! sq #f)
+	sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
+	use := defineFn("use", call(symRef("sq"), lit()))
+	mut := setBang("sq", lit())
+	unit := []ValidatedExpr{sq, use, mut}
+
+	b := ClassifyFrameReclaim(unit, env, TierTopLevel)
+	if b["use"] {
+		t.Fatalf("tier (b): use must NOT be reclaimable when its callee sq is set! in-unit")
+	}
+	if !b["sq"] {
+		t.Fatalf("tier (b): sq's own frame stays reclaimable — set! mutates the binding, not the frame")
+	}
+}
