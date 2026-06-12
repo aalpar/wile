@@ -267,6 +267,17 @@ func (p *MachineContext) Authorizer() security.Authorizer {
 	return ns.Authorizer()
 }
 
+// ImmutableLiterals returns the engine-scoped immutable-literal set from this
+// context's namespace, or nil if none is set. The five list/vector mutators
+// consult it to enforce R7RS §4.1.2 constant immutability.
+func (p *MachineContext) ImmutableLiterals() *environment.ImmutableLiterals {
+	ns := p.env.Namespace()
+	if ns == nil {
+		return nil
+	}
+	return ns.ImmutableLiterals()
+}
+
 func (p *MachineContext) Arg(index int) values.Value {
 	return p.env.GetLocalBindingByIndex(index).Value()
 }

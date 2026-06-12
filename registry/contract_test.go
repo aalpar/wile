@@ -41,6 +41,10 @@ func (p *stubCallContext) Context() context.Context                        { ret
 func (p *stubCallContext) EnvironmentFrame() *environment.EnvironmentFrame { return nil }
 func (p *stubCallContext) Thread() *values.Thread                          { return nil }
 
+func (p *stubCallContext) ImmutableLiterals() *environment.ImmutableLiterals {
+	return nil
+}
+
 // Compile-time assertion: stubCallContext satisfies CallContext.
 var _ machine.CallContext = (*stubCallContext)(nil)
 

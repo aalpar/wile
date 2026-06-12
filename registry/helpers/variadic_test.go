@@ -55,6 +55,9 @@ func (p *stubCallContext) EnvironmentFrame() *environment.EnvironmentFrame {
 func (p *stubCallContext) Thread() *values.Thread {
 	return nil
 }
+func (p *stubCallContext) ImmutableLiterals() *environment.ImmutableLiterals {
+	return nil
+}
 
 var _ machine.CallContext = (*stubCallContext)(nil)
 
