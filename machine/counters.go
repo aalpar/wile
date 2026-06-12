@@ -214,9 +214,6 @@ func (p VMCounters) OpcodeHistogram() string {
 	return b.String()
 }
 
-// CallHistogram returns a formatted histogram of per-callee call counts
-// (both foreign primitives and named Scheme procedures), sorted by frequency
-// (descending). Returns empty string when profiling is disabled.
 // CallCounts returns the per-callee call-count map for this context, or nil when
 // call counting was disabled. Keys are foreign primitive names and named Scheme
 // procedures (NativeTemplate.Name); values are invocation counts. The map is the
@@ -225,6 +222,9 @@ func (p VMCounters) CallCounts() map[string]uint64 {
 	return p.callCounts
 }
 
+// CallHistogram returns a formatted histogram of per-callee call counts
+// (both foreign primitives and named Scheme procedures), sorted by frequency
+// (descending). Returns empty string when profiling is disabled.
 func (p VMCounters) CallHistogram() string {
 	if p.callCounts == nil {
 		return ""

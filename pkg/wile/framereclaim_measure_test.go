@@ -28,6 +28,15 @@ package wile
 // tier (b) is worth building; small ⇒ stop at tier (a) and this plan collapses
 // into the narrower self-tail plan.
 //
+// Measurement caveat (surfaced per row): LastCounters does NOT aggregate
+// sub-context counters (engine.go), and NewSubContext does not allocate a
+// callCounts map, so named calls executed inside a sub-context (apply, map,
+// for-each, eval) are NOT counted. A row with sub-contexts > 0 therefore reports
+// LOWER-BOUND weights. The benchmarks that drive the verdict (fib/tak/takl/
+// ackermann/divrec) are direct self-recursion through Apply (sub-contexts == 0),
+// so the headline gap is unaffected; the subctx column makes any biased row
+// visible rather than silently mixed into the aggregate.
+//
 // It is gated behind WILE_FRAME_RECLAIM_MEASURE because it RUNS the benchmarks
 // at full iteration counts (seconds), which has no place in `go test ./...`. The
 // production code it exercises (validate.ClassifyFrameReclaim, the tier-b builder,
@@ -58,8 +67,17 @@ var canonicalGabriel = []string{
 	"diviter", "divrec", "deriv", "ackermann", "sieve", "nqueens", "primes", "peval",
 }
 
+// importPrelude makes the standard primitives the hot benchmark functions call
+// (+, -, *, less-than, =, car, cdr) IMMUTABLE by importing them. KitchenSink
+// binds these ambiently in the base namespace where they are mutable (not
+// imported), so without this the classifier cannot trust ANY primitive and
+// recovers 0 percent by construction, independent of tier. Importing
+// (scheme base) rebinds them as imported/immutable, the prerequisite for
+// measuring the actual top-level-define tier-a vs tier-b gap.
 const importPrelude = "(import (scheme base) (scheme inexact) (scheme write) (scheme time))"
 
+// newBenchmarkEngine builds an engine with KitchenSink plus the embedded stdlib
+// so importing (scheme base) resolves, then runs the prelude.
 func newBenchmarkEngine(ctx context.Context) (*Engine, error) {
 	eng, err := NewEngine(ctx,
 		WithProfile(KitchenSink),
@@ -78,12 +96,13 @@ func newBenchmarkEngine(ctx context.Context) (*Engine, error) {
 
 // frameReclaimRow is one benchmark's measured result.
 type frameReclaimRow struct {
-	name       string
-	nodes      int    // top-level function defines the classifier reasons about
-	localOK    uint64 // Σ calls to defines reclaimable under tier (a)
-	toplevelOK uint64 // Σ calls to defines reclaimable under tier (a∪b)
-	nodeCalls  uint64 // Σ calls to all top-level defines (the denominator)
-	envsCopied uint64 // total frame acquisitions (context, all closures)
+	name        string
+	nodes       int    // top-level function defines the classifier reasons about
+	localOK     uint64 // Σ calls to defines reclaimable under tier (a)
+	toplevelOK  uint64 // Σ calls to defines reclaimable under tier (a∪b)
+	nodeCalls   uint64 // Σ calls to all top-level defines (the denominator)
+	envsCopied  uint64 // total frame acquisitions (context, all closures)
+	subContexts uint64 // sub-contexts created — when >0, node-call weights undercount
 }
 
 func TestFrameReclaimMeasure(t *testing.T) {
@@ -129,12 +148,18 @@ func measureBenchmark(ctx context.Context, t *testing.T, name string) (frameRecl
 		return frameReclaimRow{}, fmt.Errorf("classify: %w", err)
 	}
 
-	counts, envsCopied, err := runForCounts(ctx, wrapped)
+	counters, err := runForCounts(ctx, wrapped)
 	if err != nil {
 		return frameReclaimRow{}, fmt.Errorf("run: %w", err)
 	}
+	counts := counters.CallCounts()
 
-	row := frameReclaimRow{name: name, nodes: len(verdictA), envsCopied: envsCopied}
+	row := frameReclaimRow{
+		name:        name,
+		nodes:       len(verdictA),
+		envsCopied:  counters.EnvsCopied,
+		subContexts: counters.SubContextsCreated,
+	}
 	for fnName := range verdictA {
 		c := counts[fnName]
 		row.nodeCalls += c
@@ -144,6 +169,19 @@ func measureBenchmark(ctx context.Context, t *testing.T, name string) (frameRecl
 		if verdictB[fnName] {
 			row.toplevelOK += c
 		}
+	}
+
+	// Guard the silent phantom: classifier found defines but the join produced
+	// zero matching calls. With no sub-contexts there is no undercounting excuse,
+	// so this means the verdict keys (Sym.Key) and counter keys (tpl.Name)
+	// diverged — the whole row would print n/a and be read as "no recovery". Fail
+	// loudly. With sub-contexts present it is the documented undercount, not a
+	// key mismatch; warn instead (the subctx column flags the row).
+	if row.nodes > 0 && row.nodeCalls == 0 {
+		if row.subContexts == 0 {
+			return frameReclaimRow{}, fmt.Errorf("%s: %d top-level defines but zero matched calls and no sub-contexts — verdict/counter key formats diverged (Sym.Key vs tpl.Name); join is degenerate", name, row.nodes)
+		}
+		t.Logf("WARNING %s: zero matched node-calls but %d sub-contexts — defines likely ran in sub-contexts (uncounted); row is a lower bound", name, row.subContexts)
 	}
 	return row, nil
 }
@@ -183,25 +221,24 @@ func classifyBenchmark(ctx context.Context, wrapped string) (map[string]bool, ma
 }
 
 // runForCounts runs the wrapped benchmark with per-callee counting enabled and
-// returns the call-count map plus total frame acquisitions.
-func runForCounts(ctx context.Context, wrapped string) (map[string]uint64, uint64, error) {
+// returns the resulting VM counters snapshot.
+func runForCounts(ctx context.Context, wrapped string) (machine.VMCounters, error) {
 	machine.SetCallCounting(true)
 	defer machine.SetCallCounting(false)
 
 	eng, err := newBenchmarkEngine(ctx)
 	if err != nil {
-		return nil, 0, err
+		return machine.VMCounters{}, err
 	}
 	expr, err := eng.Parse(ctx, wrapped)
 	if err != nil {
-		return nil, 0, fmt.Errorf("parse: %w", err)
+		return machine.VMCounters{}, fmt.Errorf("parse: %w", err)
 	}
 	_, err = eng.Eval(ctx, expr)
 	if err != nil {
-		return nil, 0, fmt.Errorf("eval: %w", err)
+		return machine.VMCounters{}, fmt.Errorf("eval: %w", err)
 	}
-	counters := eng.LastCounters()
-	return counters.CallCounts(), counters.EnvsCopied, nil
+	return eng.LastCounters(), nil
 }
 
 // formatFrameReclaimTable renders the per-benchmark rows and the aggregate gate.
@@ -213,19 +250,29 @@ func formatFrameReclaimTable(rows []frameReclaimRow, sumLocal, sumTop, sumNode u
 	var b strings.Builder
 	b.WriteString("Escape-gated frame reclamation — Phase 2 measurement (canonical Gabriel)\n")
 	b.WriteString("weight = dynamic calls to each top-level define (≈ frame allocations)\n\n")
-	fmt.Fprintf(&b, "%-12s %6s %12s %12s %12s %10s\n",
-		"benchmark", "#defs", "node-calls", "recov_local", "recov_top", "gap")
-	b.WriteString(strings.Repeat("-", 70) + "\n")
+	fmt.Fprintf(&b, "%-12s %6s %12s %8s %12s %12s %10s\n",
+		"benchmark", "#defs", "node-calls", "subctx", "recov_local", "recov_top", "gap")
+	b.WriteString(strings.Repeat("-", 78) + "\n")
+	biased := false
 	for _, r := range rows {
-		fmt.Fprintf(&b, "%-12s %6d %12d %11s %11s %9s\n",
-			r.name, r.nodes, r.nodeCalls,
+		flag := ""
+		if r.subContexts > 0 {
+			flag = "*"
+			biased = true
+		}
+		fmt.Fprintf(&b, "%-12s %6d %12d %7d%1s %11s %11s %9s\n",
+			r.name, r.nodes, r.nodeCalls, r.subContexts, flag,
 			pct(r.localOK, r.nodeCalls), pct(r.toplevelOK, r.nodeCalls),
 			pct(r.toplevelOK-r.localOK, r.nodeCalls))
 	}
-	b.WriteString(strings.Repeat("-", 70) + "\n")
-	fmt.Fprintf(&b, "%-12s %6s %12d %11s %11s %9s\n",
-		"AGGREGATE", "", sumNode,
+	b.WriteString(strings.Repeat("-", 78) + "\n")
+	fmt.Fprintf(&b, "%-12s %6s %12d %8s %11s %11s %9s\n",
+		"AGGREGATE", "", sumNode, "",
 		pct(sumLocal, sumNode), pct(sumTop, sumNode), pct(sumTop-sumLocal, sumNode))
+	if biased {
+		b.WriteString("\n* sub-contexts > 0: named calls in apply/map/for-each/eval are NOT counted\n")
+		b.WriteString("  (LastCounters does not aggregate sub-contexts); these rows are lower bounds.\n")
+	}
 	b.WriteString("\nDecision gate: a large aggregate gap ⇒ build tier (b) / Phase 7;\n")
 	b.WriteString("a small gap ⇒ stop at tier (a) (this plan collapses to the self-tail plan).\n")
 	return b.String()

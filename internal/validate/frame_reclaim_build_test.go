@@ -155,3 +155,67 @@ func TestClassifyFrameReclaim_TierBRespectsSetBang(t *testing.T) {
 		t.Fatalf("tier (b): sq's own frame stays reclaimable — set! mutates the binding, not the frame")
 	}
 }
+
+// TestClassifyFrameReclaim_TierBSetBangNestedInBody exercises the recursive
+// descent of collectMutatedTopLevelNames: a set! buried inside ANOTHER function's
+// body (not a top-level unit element) must still mark its target mutable. The
+// top-level-only TestClassifyFrameReclaim_TierBRespectsSetBang finds the set! on
+// the first walk iteration and never reaches the WalkSubExprs recursion; this
+// pins that the recursion actually descends into define bodies.
+func TestClassifyFrameReclaim_TierBSetBangNestedInBody(t *testing.T) {
+	env := envWithImported(t, "*")
+	// (define (sq x) (* x x)) (define (use) (sq 3)) (define (mut) (set! sq #f))
+	sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
+	use := defineFn("use", call(symRef("sq"), lit()))
+	mut := defineFn("mut", setBang("sq", lit()))
+	unit := []ValidatedExpr{sq, use, mut}
+
+	b := ClassifyFrameReclaim(unit, env, TierTopLevel)
+	if b["use"] {
+		t.Fatalf("tier (b): use must NOT be reclaimable when sq is set! inside another function body")
+	}
+}
+
+// TestClassifyFrameReclaim_BeginWrappedUnit pins the production input shape: the
+// measurement harness wraps each program as a single top-level (begin define...)
+// before classifying, relying on collectTopLevelDefines to flatten one level. A
+// flat slice (every other test) does not exercise that branch.
+func TestClassifyFrameReclaim_BeginWrappedUnit(t *testing.T) {
+	env := envWithImported(t, "*")
+	sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
+	use := defineFn("use", call(symRef("sq"), lit()))
+	begin := &ValidatedBegin{
+		validatedBase: validatedBase{formName: "begin"},
+		body:          []ValidatedExpr{sq, use},
+	}
+	unit := []ValidatedExpr{begin}
+
+	a := ClassifyFrameReclaim(unit, env, TierLocal)
+	if !a["sq"] || a["use"] {
+		t.Fatalf("begin-wrapped tier (a): want sq reclaimable, use not — got sq=%v use=%v", a["sq"], a["use"])
+	}
+	b := ClassifyFrameReclaim(unit, env, TierTopLevel)
+	if !b["sq"] || !b["use"] {
+		t.Fatalf("begin-wrapped tier (b): want both reclaimable — got sq=%v use=%v", b["sq"], b["use"])
+	}
+}
+
+// TestBuildReclaimGraph_QuasiquoteNotReclaimable is the soundness guard for the
+// quasiquote blind spot: a quasiquote template is raw unvalidated syntax that the
+// sub-expression walk does not descend into, so an unquoted (call/cc …) inside it
+// is invisible. The classifier conservatively treats any quasiquote in a body as
+// a capture risk, so a define containing one must NOT be reclaimable.
+func TestBuildReclaimGraph_QuasiquoteNotReclaimable(t *testing.T) {
+	env := envWithImported(t)
+	// (define (g) `(,(...)))  — modelled as a body containing a quasiquote whose
+	// template may capture/escape/set! at runtime, unseen by the walk.
+	g := defineFn("g", &ValidatedQuasiquote{validatedBase: validatedBase{formName: "quasiquote"}})
+	nodes, byName := buildReclaimGraph([]ValidatedExpr{g}, env)
+	vA := mayCapture(nodes)
+	if frameReclaimable(byName["g"], vA) {
+		t.Fatalf("a define whose body contains a quasiquote must not be reclaimable (tier a)")
+	}
+	if ClassifyFrameReclaim([]ValidatedExpr{g}, env, TierTopLevel)["g"] {
+		t.Fatalf("a define whose body contains a quasiquote must not be reclaimable (tier b)")
+	}
+}
