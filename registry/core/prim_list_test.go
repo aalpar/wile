@@ -1024,7 +1024,7 @@ func TestSetCarBang(t *testing.T) {
 		{Name: "set-car! on list", Code: `(let ((lst (list 1 2 3))) (set-car! lst 10) lst)`, Expected: values.List(values.NewInteger(10), values.NewInteger(2), values.NewInteger(3))},
 		{Name: "set-car! with different type", Code: `(let ((p (cons 1 2))) (set-car! p "hello") (car p))`, Expected: values.NewString("hello")},
 		{Name: "set-car! preserves cdr", Code: `(let ((p (cons 1 2))) (set-car! p 10) (cdr p))`, Expected: values.NewInteger(2)},
-		{Name: "set-car! on nested list", Code: `(let ((lst '((1 2) (3 4)))) (set-car! lst '(10 20)) (car lst))`, Expected: values.List(values.NewInteger(10), values.NewInteger(20))},
+		{Name: "set-car! on nested list", Code: `(let ((lst (list (list 1 2) (list 3 4)))) (set-car! lst '(10 20)) (car lst))`, Expected: values.List(values.NewInteger(10), values.NewInteger(20))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

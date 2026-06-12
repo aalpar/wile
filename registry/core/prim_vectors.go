@@ -74,6 +74,10 @@ func PrimVectorRef(mc machine.CallContext) error {
 func PrimVectorSet(mc machine.CallContext) error {
 	return helpers.SequenceSet(mc, werr.ErrNotAVector, "vector-set!",
 		func(v *values.Vector, idx int, mc machine.CallContext) error {
+			set := mc.ImmutableLiterals()
+			if set != nil && set.Contains(v) {
+				return werr.WrapForeignErrorf(werr.ErrImmutableVector, "vector-set!: cannot mutate immutable literal vector")
+			}
 			return v.Set(idx, mc.Arg(2))
 		},
 	)
@@ -176,6 +180,10 @@ func PrimVectorFill(mc machine.CallContext) error {
 	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "vector-fill!")
 	if err != nil {
 		return err
+	}
+	set := mc.ImmutableLiterals()
+	if set != nil && set.Contains(v) {
+		return werr.WrapForeignErrorf(werr.ErrImmutableVector, "vector-fill!: cannot mutate immutable literal vector")
 	}
 	fillArg := mc.Arg(1)
 	rest := mc.Arg(2)
