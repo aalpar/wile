@@ -536,9 +536,48 @@ func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext
 	if err != nil {
 		return err
 	}
+	// R7RS §4.1.2 makes quoted-literal pairs and vectors immutable. Mark them
+	// in the engine-scoped side-set before interning so the list/vector
+	// mutators can reject set-car! etc. on this datum.
+	ns := p.env.Namespace()
+	if ns != nil {
+		markLiteralImmutable(validated, ns.ImmutableLiterals(), make(map[values.Value]struct{}))
+	}
 	litIdx := p.template.MaybeAppendLiteral(validated)
 	p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 	return nil
+}
+
+// markLiteralImmutable recursively records every pair and vector reachable from
+// v in the engine-scoped immutable-literal set. R7RS §4.1.2 makes quoted-literal
+// constants immutable; structure sharing (per-template equal? dedup) means one
+// mark on the canonical instance covers all sharing siblings. The visited map
+// makes cyclic literals (#0=(1 . #0#)) terminate.
+func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, visited map[values.Value]struct{}) {
+	if set == nil {
+		return
+	}
+	switch obj := v.(type) {
+	case *values.Pair:
+		_, seen := visited[obj]
+		if seen {
+			return
+		}
+		visited[obj] = struct{}{}
+		set.Mark(obj)
+		markLiteralImmutable(obj.Car(), set, visited)
+		markLiteralImmutable(obj.Cdr(), set, visited)
+	case *values.Vector:
+		_, seen := visited[obj]
+		if seen {
+			return
+		}
+		visited[obj] = struct{}{}
+		set.Mark(obj)
+		for _, elem := range *obj {
+			markLiteralImmutable(elem, set, visited)
+		}
+	}
 }
 
 // CompileValidatedQuasiquote compiles a validated (quasiquote template) form.

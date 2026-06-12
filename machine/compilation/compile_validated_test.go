@@ -371,3 +371,39 @@ func TestCompileValidatedCaseLambda_VariadicClause(t *testing.T) {
 	mc = compileAndRun(t, env, "(g 1 2 3)")
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(2))
 }
+
+// TestMarkLiteralImmutable_RecursiveAndCyclic verifies the quote-hook marker
+// records every reachable pair/vector by pointer identity, descends into nested
+// structure and vectors, and terminates on cyclic literals.
+func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
+	set := &environment.ImmutableLiterals{}
+
+	// (1 #(2 3)) — a top pair whose cadr is a vector.
+	vec := values.NewVector(values.NewInteger(2), values.NewInteger(3))
+	inner := values.NewCons(vec, values.EmptyList)
+	top := values.NewCons(values.NewInteger(1), inner)
+
+	markLiteralImmutable(top, set, make(map[values.Value]struct{}))
+
+	for _, v := range []values.Value{top, inner, vec} {
+		if !set.Contains(v) {
+			t.Fatalf("expected %T to be marked immutable", v)
+		}
+	}
+	// Atoms are not marked (membership is for pairs/vectors only).
+	if set.Contains(values.NewInteger(1)) {
+		t.Fatalf("atoms must not be marked")
+	}
+
+	// Cyclic literal: #0=(1 . #0#). Must terminate.
+	cyc := values.NewCons(values.NewInteger(1), values.EmptyList)
+	cyc.SetCdr(cyc)
+	cycSet := &environment.ImmutableLiterals{}
+	markLiteralImmutable(cyc, cycSet, make(map[values.Value]struct{}))
+	if !cycSet.Contains(cyc) {
+		t.Fatalf("cyclic pair must be marked")
+	}
+
+	// nil set is a no-op (no panic).
+	markLiteralImmutable(top, nil, make(map[values.Value]struct{}))
+}
