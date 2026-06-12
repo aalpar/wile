@@ -83,7 +83,7 @@ This difference is observable only when code mutates a parameter via `(p val)` i
 
 ---
 
-## Mutable Pair and Vector Literals
+## Immutable Pair and Vector Literals
 
 **Affected Primitives:** `set-car!`, `set-cdr!`, `list-set!`, `vector-set!`, `vector-fill!`
 
@@ -92,32 +92,26 @@ This difference is observable only when code mutates a parameter via `(p val)` i
 
 R7RS §1.3.2 clarifies "it is an error" as a case implementations are not required to detect, but "encouraged to detect ... so as to help the programmer detect them."
 
-**Wile Behavior:** Mutation of pair and vector literals silently succeeds. Mutation of string literals correctly raises an error (strings have an internal immutability flag; pairs and vectors do not).
+**Wile Behavior:** Mutating a pair or vector literal **raises an error** (`ErrImmutablePair` / `ErrImmutableVector`), matching the long-standing immutable-string behavior. Wile detects the case R7RS encourages detecting.
 
 ```scheme
-(set-car! '(a b c) 999)        ; silently mutates
-(vector-set! '#(1 2 3) 0 'x)   ; silently mutates
-(string-set! "abc" 0 #\X)      ; correctly raises error
+(set-car! '(a b c) 999)        ; raises ErrImmutablePair
+(vector-set! '#(1 2 3) 0 'x)   ; raises ErrImmutableVector
+(string-set! "abc" 0 #\X)      ; raises ErrImmutableString
 ```
 
-Compounding factor: `(eq? '(a b c) '(a b c)) → #t`. Wile shares structure for same-shape literals (R7RS-permissible), so mutating one literal is visible through all syntactically identical quotations.
+Because Wile shares structure for same-shape literals (`(eq? '(a b c) '(a b c)) → #t`, R7RS-permissible), detection also prevents non-local corruption: mutating one literal through a shared instance — which would have been visible through every syntactically identical quotation — is now rejected rather than silently propagated.
 
-**Rationale:**
+**Implementation:**
 
-Wile's `*values.Pair` and `*values.Vector` types have no immutability flag, unlike `*values.String`. Adding one would require:
-1. A flag field on `Pair` / `Vector` (+1 word each, ~8 bytes × many allocations)
-2. Wrap `SetCar`/`SetCdr`/`Set` with a check
-3. Mark quoted-literal results as immutable in the compiler (`QuoteOp` / constant folding path)
-4. Update any internal code that reuses literal structures for scratch storage
+`*values.Pair` (`[2]Value`) and `*values.Vector` (`[]Value`) are not structs, so an inline `immutable` flag like `*values.String`'s is not available without growing the 32-byte cons cell ~25% (the dominant heap object). Instead, an engine-scoped side-set (`environment.ImmutableLiterals`, a `sync.Map` keyed by pointer identity) records literal pairs/vectors. The set is populated once at compile time when the quote hook interns a literal (`machine/compilation/compile_validated.go`, `markLiteralImmutable`) and read on the cold mutation path by the five mutator primitives. Membership is by pointer identity, so structure-shared siblings are covered by a single mark, and only literals — never `list`/`cons`/`make-vector` allocations — are members. Internal Go `SetCar`/`Set` calls bypass the guard (it lives in the primitive, not in `values`), so scratch reuse of literal structure is unaffected.
 
-Given no demand signal and R7RS's explicit permission not to detect, the current behavior is acceptable.
+**Workaround (for programs that must mutate):**
 
-**Workaround:**
-
-Programs that must mutate should construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allocation not shared with any literal:
+Construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allocation not shared with any literal:
 
 ```scheme
-;; Wrong — may or may not be detected across Schemes:
+;; Error — literal is immutable:
 (let ((xs '(1 2 3))) (set-car! xs 99) xs)
 
 ;; Right — guaranteed mutable, no aliasing with literals:
@@ -125,9 +119,7 @@ Programs that must mutate should construct with `list`, `cons`, `make-vector`, o
 (let ((v (vector-copy '#(1 2 3)))) (vector-set! v 0 99) v)
 ```
 
-**Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations and fragile due to literal structure sharing. The standard practice (construct before mutating) avoids the issue entirely.
-
-**Estimated implementation effort:** 4-8 hours across pair.go, vector.go, compile_quote.go, plus tests.
+**Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations; Wile now rejects them rather than silently corrupting shared structure.
 
 ---
 
