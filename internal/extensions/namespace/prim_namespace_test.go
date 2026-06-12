@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	wile "github.com/aalpar/wile"
+	wile "github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
 )

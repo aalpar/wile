@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING: the public `wile` package moved to `github.com/aalpar/wile/pkg/wile`.**
+  The module path (`github.com/aalpar/wile`) and the package name (`wile`) are
+  unchanged, so call sites (`wile.NewEngine`, `wile.Engine`, `wile.WithProfile`,
+  …) are untouched. Only the import line changes. Migration: replace
+  `import "github.com/aalpar/wile"` with `import "github.com/aalpar/wile/pkg/wile"`
+  (subpackage imports like `.../values`, `.../security`, `.../extensions/...` are
+  unaffected). This empties the module root of loose `.go` files so the
+  repository view is scannable. `wile.StdLibFS` is preserved exactly, now
+  re-exporting the internal `stdlib` package's embed rather than embedding the
+  library tree a second time.
 - **`--version` output drops the empty `()` suffix** when no build SHA is
   available (e.g. some `go install` builds): prints `Wile Scheme <version>`
   instead of `Wile Scheme <version> ()`. The `--version` flag, the REPL header,

@@ -19,7 +19,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"

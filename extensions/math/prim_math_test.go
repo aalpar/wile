@@ -26,8 +26,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile"
 	extmath "github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
 )

@@ -23,7 +23,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 

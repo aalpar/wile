@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile"
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"

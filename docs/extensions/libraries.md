@@ -260,7 +260,7 @@ import (
     "context"
     "fmt"
 
-    "github.com/aalpar/wile"
+    "github.com/aalpar/wile/pkg/wile"
     "github.com/aalpar/wile/extensions/math"
     "github.com/aalpar/wile/extensions/process"
     "github.com/aalpar/wile/extensions/system"

@@ -80,7 +80,7 @@ complete CLI flag set, meta commands, and debugger commands.
 ## Embedding
 
 ```go
-import "github.com/aalpar/wile"
+import "github.com/aalpar/wile/pkg/wile"
 
 engine, _ := wile.NewEngine(ctx)
 engine.Define("width", wile.NewInteger(800))
@@ -91,7 +91,7 @@ fmt.Println(result.SchemeString())   // 480000
 The full embedding API — value constructors, engine options, primitive
 registration, profiles, sandboxing — is documented in
 [`docs/embedding/api-design.md`](docs/embedding/api-design.md) and at
-[pkg.go.dev/github.com/aalpar/wile](https://pkg.go.dev/github.com/aalpar/wile).
+[pkg.go.dev/github.com/aalpar/wile/pkg/wile](https://pkg.go.dev/github.com/aalpar/wile/pkg/wile).
 Worked examples live in [`examples/embedding/`](examples/embedding/).
 
 ## Documentation

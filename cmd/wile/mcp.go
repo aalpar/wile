@@ -30,9 +30,9 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/aalpar/wile"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/repl"
 	"github.com/aalpar/wile/stdlib"

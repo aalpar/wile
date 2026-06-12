@@ -44,7 +44,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 func main() {

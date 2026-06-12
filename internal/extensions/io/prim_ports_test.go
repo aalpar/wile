@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile"
 	extio "github.com/aalpar/wile/internal/extensions/io"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"

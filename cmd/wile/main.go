@@ -29,9 +29,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/repl"
 	"github.com/aalpar/wile/stdlib"

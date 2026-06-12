@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/internal/extensions/envvars"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 

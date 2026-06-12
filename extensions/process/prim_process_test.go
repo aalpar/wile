@@ -21,9 +21,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile"
 	extprocess "github.com/aalpar/wile/extensions/process"
 	extio "github.com/aalpar/wile/internal/extensions/io"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )

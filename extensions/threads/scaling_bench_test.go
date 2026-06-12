@@ -58,8 +58,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aalpar/wile"
 	extthreads "github.com/aalpar/wile/extensions/threads"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 // scalingThreadCounts is the sweep. Includes 1 as the single-thread baseline that

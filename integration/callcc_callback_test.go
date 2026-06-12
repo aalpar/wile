@@ -29,7 +29,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
 )

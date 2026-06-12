@@ -153,7 +153,7 @@ buildtest: examples
 #   make readme-check
 .PHONY: readme-check
 readme-check:
-	$(GO_TEST) -v -run TestREADMEGoSnippetsCompile .
+	$(GO_TEST) -v -run TestREADMEGoSnippetsCompile ./pkg/wile
 
 # Run all tests with verbose output.
 #   make test

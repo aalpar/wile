@@ -41,6 +41,12 @@ var rawFS embed.FS
 // "scheme/base.sld", "srfi/1.sld", etc.
 var FS fs.FS
 
+// LibFS is the embedded standard library filesystem with the "lib/" prefix
+// retained. Library paths resolve as "lib/scheme/base.sld", etc. This is the
+// shape consumed by [github.com/aalpar/wile/pkg/wile.StdLibFS], which re-exports
+// it so the public embedder API needs no second embed of the same tree.
+var LibFS fs.FS = rawFS
+
 func init() {
 	sub, err := fs.Sub(rawFS, "lib")
 	if err != nil {

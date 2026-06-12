@@ -22,8 +22,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile"
 	extcharsets "github.com/aalpar/wile/extensions/charsets"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"

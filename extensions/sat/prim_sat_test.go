@@ -21,8 +21,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/extensions/sat"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 // newEngine builds a Wile engine with only the sat extension.

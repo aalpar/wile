@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aalpar/wile"
 	extsystem "github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 

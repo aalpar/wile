@@ -73,7 +73,7 @@ For users of the `wile` package:
 import (
     "context"
 
-    "github.com/aalpar/wile"
+    "github.com/aalpar/wile/pkg/wile"
     "github.com/aalpar/wile/coverage"
 )
 

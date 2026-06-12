@@ -20,8 +20,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/extensions/algebragraph"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 // newEngine builds a Wile engine with only the algebragraph extension.

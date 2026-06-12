@@ -21,9 +21,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aalpar/wile"
 	exteval "github.com/aalpar/wile/extensions/eval"
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
+	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
