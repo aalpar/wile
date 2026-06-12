@@ -140,6 +140,9 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	if cfg.envMap != nil {
 		ns.SetEnvMap(cfg.envMap)
 	}
+	if cfg.immutableTopLevel {
+		ns.SetImmutableTopLevel(true)
+	}
 
 	env := ns.Runtime()
 	err = applyBaseEnvironment(ctx, env, reg, applyOptionsFromConfig(cfg)...)

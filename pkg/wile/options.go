@@ -86,6 +86,12 @@ type engineConfig struct {
 	// coverageCollector, when non-nil, receives every NativeTemplate produced
 	// by the compiler so per-s-expression execution can be tracked.
 	coverageCollector *coverage.Collector
+
+	// immutableTopLevel enables opt-in top-level-define immutability: a
+	// defined-once, never-set!-in-unit top-level define becomes rebind-stable
+	// and a later set!/redefine of it is rejected. Off by default (strict R7RS).
+	// Enabled via WithImmutableTopLevel; propagated to the Namespace in NewEngine.
+	immutableTopLevel bool
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -405,6 +411,29 @@ func WithEnv(key, value string) EngineOption {
 func WithCoverage(c *coverage.Collector) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.coverageCollector = c
+	}
+}
+
+// WithImmutableTopLevel enables opt-in top-level-define immutability. When set,
+// a top-level define that is defined-once and never set! within its compilation
+// unit is marked rebind-stable (BindingMeta.Stable), and a subsequent set! or
+// redefinition of such a binding is rejected with ErrImmutableBinding.
+//
+// This is a documented deviation from strict R7RS §4.1.6/§5.3 (which permit
+// top-level set!/redefinition); it is OFF by default. Enabling it unlocks the
+// frame-reclamation optimizer's top-level payoff (sibling escape-gated plan) at
+// the cost of forbidding rebinding of stable top-level definitions — the
+// "compile for speed" contract used by sealed-module Schemes.
+//
+// The setting is engine-scoped (held on the root Namespace and read via
+// root-delegation), so it applies to ALL compilation under the engine, including
+// imported libraries: a library's defined-once, never-set!-in-unit top-level
+// definitions also become stable. This is benign — library exports are already
+// immutable to importers, and a library that set!s its own binding within its
+// unit keeps that binding non-stable.
+func WithImmutableTopLevel() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.immutableTopLevel = true
 	}
 }
 
