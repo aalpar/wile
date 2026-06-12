@@ -388,7 +388,6 @@ func TestValidatedLet_Getters(t *testing.T) {
 			c.Assert(len(vl.Bindings), qt.Equals, 1)
 			c.Assert(vl.Bindings[0].Name, qt.Equals, sym)
 			c.Assert(vl.Bindings[0].Mutable, qt.IsFalse)
-			c.Assert(vl.Bindings[0].Captured, qt.IsFalse)
 			c.Assert(vl.Bindings[0].Escapes, qt.IsFalse)
 			c.Assert(len(vl.Body()), qt.Equals, 1)
 		})

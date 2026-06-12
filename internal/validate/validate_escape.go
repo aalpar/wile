@@ -28,8 +28,8 @@ import (
 // operator position of a call, not the target of a set!).
 //
 // set! targets are NOT marked as escaped — mutation is tracked by Mutable.
-// The three fields (Mutable, Captured, Escapes) form an implicational base:
-// each carries information not derivable from the others.
+// Mutable and Escapes are orthogonal: each carries information not derivable
+// from the other.
 //
 // walkInits should be true for let*, letrec, and letrec* (where inits see the
 // bindings) and false for plain let (where inits are in the outer scope).
