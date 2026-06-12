@@ -117,6 +117,8 @@ var (
 	ErrCodepointOutOfRange     = NewStaticError("codepoint out of range")
 	ErrIndexOutOfRange         = NewStaticError("index out of range")
 	ErrImmutableString         = NewStaticError("cannot mutate immutable string")
+	ErrImmutablePair           = NewStaticError("cannot mutate immutable pair")
+	ErrImmutableVector         = NewStaticError("cannot mutate immutable vector")
 	ErrImmutableBinding        = NewStaticError("cannot mutate immutable binding")
 	ErrInvariantViolation      = NewStaticError("invariant violation")
 
