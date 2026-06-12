@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // VMCounters holds performance counters for a single MachineContext execution.
@@ -78,10 +79,25 @@ func newOpcodeHits() *[opCount]uint64 {
 	return nil
 }
 
-// newCallCounts returns a map for per-callee call counting if
-// WILE_OPCODE_HITS is set, nil otherwise.
+// callCountingForced enables per-callee call counting independently of the
+// process-global WILE_OPCODE_HITS gate. WILE_OPCODE_HITS also turns on the
+// per-opcode hot-path histogram (a write on every dispatched instruction); a
+// profiler that only wants the call distribution should not pay that. This flag
+// lets such a caller enable just the cheap per-callee map via SetCallCounting.
+var callCountingForced atomic.Bool
+
+// SetCallCounting enables or disables per-callee call counting for MachineContexts
+// created AFTER this call, independently of WILE_OPCODE_HITS. It is intended for
+// measurement harnesses and embedders profiling call distribution; the counts
+// are exposed via VMCounters.CallCounts. Existing contexts are unaffected.
+func SetCallCounting(on bool) {
+	callCountingForced.Store(on)
+}
+
+// newCallCounts returns a map for per-callee call counting when WILE_OPCODE_HITS
+// is set OR call counting was force-enabled via SetCallCounting; nil otherwise.
 func newCallCounts() map[string]uint64 {
-	if opcodeHitsEnabled() {
+	if opcodeHitsEnabled() || callCountingForced.Load() {
 		return make(map[string]uint64)
 	}
 	return nil
@@ -201,6 +217,14 @@ func (p VMCounters) OpcodeHistogram() string {
 // CallHistogram returns a formatted histogram of per-callee call counts
 // (both foreign primitives and named Scheme procedures), sorted by frequency
 // (descending). Returns empty string when profiling is disabled.
+// CallCounts returns the per-callee call-count map for this context, or nil when
+// call counting was disabled. Keys are foreign primitive names and named Scheme
+// procedures (NativeTemplate.Name); values are invocation counts. The map is the
+// live counter map, not a copy — read it after the run completes.
+func (p VMCounters) CallCounts() map[string]uint64 {
+	return p.callCounts
+}
+
 func (p VMCounters) CallHistogram() string {
 	if p.callCounts == nil {
 		return ""

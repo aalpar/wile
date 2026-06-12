@@ -44,6 +44,33 @@ func TestCallHistogram_NilMap(t *testing.T) {
 	qt.Assert(t, c.CallHistogram(), qt.Equals, "")
 }
 
+func TestCallCounts_Accessor(t *testing.T) {
+	var c VMCounters
+	// nil when counting disabled.
+	qt.Assert(t, c.CallCounts(), qt.IsNil)
+
+	c.callCounts = make(map[string]uint64)
+	c.RecordCall("tak")
+	c.RecordCall("tak")
+	qt.Assert(t, c.CallCounts()["tak"], qt.Equals, uint64(2))
+}
+
+func TestSetCallCounting_TogglesNewCallCounts(t *testing.T) {
+	// Independent of WILE_OPCODE_HITS: force-enable allocates the map, restore
+	// disables it. Restore at the end so other tests in this binary are
+	// unaffected (newCallCounts is also driven by the env-gated path).
+	restore := callCountingForced.Load()
+	defer SetCallCounting(restore)
+
+	SetCallCounting(false)
+	if !opcodeHitsEnabled() {
+		qt.Assert(t, newCallCounts(), qt.IsNil)
+	}
+
+	SetCallCounting(true)
+	qt.Assert(t, newCallCounts(), qt.IsNotNil)
+}
+
 func TestCallHistogram_SortedByFrequency(t *testing.T) {
 	var c VMCounters
 	c.callCounts = map[string]uint64{
