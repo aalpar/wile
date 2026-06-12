@@ -66,7 +66,8 @@ func exprReferencesCaptureOperator(
 	// referencesCapture node is unsafe regardless of its other facts. Refining to
 	// "only quasiquotes that actually contain unquote/unquote-splicing" needs a
 	// nesting-aware raw-syntax walk and is deferred (precision, not soundness).
-	if _, ok := expr.(*ValidatedQuasiquote); ok {
+	_, isQuasi := expr.(*ValidatedQuasiquote)
+	if isQuasi {
 		return true
 	}
 
