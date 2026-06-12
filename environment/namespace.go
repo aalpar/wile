@@ -109,6 +109,14 @@ type Namespace struct {
 	// Children access via LoadPathStack() which delegates to parent.
 	loadPathStack PathTracker
 
+	// immutableLiterals is the engine-scoped set of immutable literal
+	// pair/vector objects (R7RS §4.1.2). Delegated to root (see the field
+	// inheritance policy comment above): only the root Namespace holds it
+	// (nil in children); children read it via ImmutableLiterals() which
+	// resolves through root(). Engine-scoped so a literal compiled under any
+	// child is checkable by any mutator anywhere in the namespace tree.
+	immutableLiterals *ImmutableLiterals
+
 	// phases is the phase registry for O(1) access to any phase environment.
 	phases *PhaseRegistry
 
@@ -191,8 +199,9 @@ type ModuleInstance struct {
 // Call SetLoadPathStack before any file loading operations.
 func NewNamespace() *Namespace {
 	q := &Namespace{
-		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
-		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
+		syntaxInterns:     make(map[values.Value]syntax.SyntaxValue),
+		scopeRegistry:     make(map[*syntax.Scope]*EnvironmentFrame),
+		immutableLiterals: &ImmutableLiterals{},
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
 	return q
@@ -308,6 +317,13 @@ func (p *Namespace) FileResolver() FileResolver {
 // Delegated to root: the resolver always lives on the root Namespace.
 func (p *Namespace) SetFileResolver(resolver FileResolver) {
 	p.root().fileResolver = resolver
+}
+
+// ImmutableLiterals returns the engine-scoped set of immutable literal
+// pair/vector objects (R7RS §4.1.2). Defined once on the root Namespace;
+// children delegate through root(), so every mutator sees the same set.
+func (p *Namespace) ImmutableLiterals() *ImmutableLiterals {
+	return p.root().immutableLiterals
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.
