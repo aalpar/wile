@@ -267,16 +267,15 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if binding == nil {
 		return sym
 	}
-	// Top-level define supersedes an imported binding (R7RS §5.3.1). The
-	// define overwrites the value in the same slot. Drop import *provenance*,
-	// but stability is independent — a define that supersedes an import and is
-	// never set! is still Stable. Recompute Stable for the superseding define
-	// rather than clearing it (the old unconditional clear was a false negative
-	// the moment MayCapture reads the bit).
+	// Top-level define supersedes an imported binding (R7RS §5.3.1): the define
+	// overwrites the value in the same slot, so drop the import *provenance* and
+	// a subsequent set! on this binding is permitted. The rebind-stability proof
+	// slot (BindingMeta.Stable) is independent of provenance and is written only
+	// by a completed unit-closure proof — which does not exist yet (sibling
+	// escape-gated plan). A superseding define is not proven stable, so nothing
+	// is asserted on Stable here.
 	if binding.IsImported() {
-		m := binding.EnsureMeta()
-		m.Imported = false
-		m.Stable = false // TODO(part2): recompute via stableForDefine(v)
+		binding.EnsureMeta().Imported = false
 	}
 	m := binding.EnsureMeta()
 	m.Scopes = symbolScopes
@@ -490,11 +489,12 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
-	// R7RS 5.2: reject set! on immutable bindings (Imported ∨ Stable). Gating on
-	// IsImmutable rather than IsImported lets a never-set! top-level define
-	// (marked Stable in Part 2) reject set! too; with no Stable defines yet this
-	// is identical to IsImported — a safe no-op until Part 2 populates Stable.
-	if binding.IsImmutable() {
+	// R7RS §5.2: reject set! on imported bindings. This is the only binding-level
+	// set! restriction — a program-defined top-level variable is mutable (R7RS
+	// §4.1.6). Stability (BindingMeta.Stable) is a rebind-stability *proof
+	// result* for the frame optimizer, NOT a set! permission; it is deliberately
+	// not consulted here. "Mutable unless imported."
+	if binding.IsImported() {
 		return werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
 			"set!: cannot mutate imported binding %q",

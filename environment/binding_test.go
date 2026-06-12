@@ -207,27 +207,27 @@ func TestBinding_Copy_PreservesImportedAndStable(t *testing.T) {
 	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
-// TestBinding_StableAndImmutable pins the orthogonal split: Imported ⟹ Stable
-// ⟹ Immutable; a bare Stable (non-imported) is also Stable+Immutable; neither
-// flag means mutable.
-func TestBinding_StableAndImmutable(t *testing.T) {
-	// Imported implies stable and immutable.
+// TestBinding_StableEvidenceVsConclusion pins that Imported is standing
+// evidence for the Stable conclusion, the Stable flag carries an independently
+// proven conclusion, and neither is a set!-permission (that is IsImported).
+func TestBinding_StableEvidenceVsConclusion(t *testing.T) {
+	// Imported is evidence: IsStable holds, IsImported holds.
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
 	b.EnsureMeta().Imported = true
-	qt.Assert(t, b.IsImmutable(), qt.IsTrue)
 	qt.Assert(t, b.IsStable(), qt.IsTrue)
+	qt.Assert(t, b.IsImported(), qt.IsTrue)
 
-	// A bare Stable (not imported) is immutable and stable but not imported.
+	// A proven Stable conclusion without import: stable but not imported, so
+	// set! is still permitted (IsImported false).
 	b2 := NewBinding(values.NewInteger(2), BindingTypeVariable)
 	b2.EnsureMeta().Stable = true
 	qt.Assert(t, b2.IsStable(), qt.IsTrue)
-	qt.Assert(t, b2.IsImmutable(), qt.IsTrue)
 	qt.Assert(t, b2.IsImported(), qt.IsFalse)
 
-	// Neither: mutable, not stable.
+	// Neither: not stable, not imported.
 	b3 := NewBinding(values.NewInteger(3), BindingTypeVariable)
-	qt.Assert(t, b3.IsImmutable(), qt.IsFalse)
 	qt.Assert(t, b3.IsStable(), qt.IsFalse)
+	qt.Assert(t, b3.IsImported(), qt.IsFalse)
 }
 
 func TestBinding_Copy_WithSource(t *testing.T) {

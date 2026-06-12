@@ -27,13 +27,19 @@ type BindingMeta struct {
 	Source   *syntax.SourceContext
 	Doc      string
 	Imported bool
-	// Stable is true when the binding will not be rebound: defined-once,
-	// never set!, and unit-closed. Imported ⟹ Stable, but a defined-once
-	// top-level define is also Stable without being Imported. Read by the
-	// frame optimizer's MayCapture (sibling escape-gated plan). Distinct from
-	// the retired "Constant" flag, which conflated provenance, rebind-stability,
-	// and compile-time-value-known (the last is now an unborn "Foldable"
-	// concern).
+	// Stable is the conclusion of a rebind-stability proof: the binding will
+	// not be rebound. It is set ONLY by a completed proof, never as a synonym
+	// for evidence. Imported (above) is *evidence* sufficient for that
+	// conclusion — R7RS forbids set! on imports — so IsStable() treats Imported
+	// as standing evidence and this flag carries the conclusion when a proof
+	// discharges it by other means (defined-once ∧ ¬set! ∧ unit-closed for a
+	// top-level define). That proof is not yet implemented (sibling escape-gated
+	// plan); until it lands, this flag stays false for non-imported bindings —
+	// asserting it from partial evidence (e.g. in-unit ¬set! without
+	// unit-closure) would be a false conclusion. Read by the frame optimizer's
+	// MayCapture. Distinct from set!-permission (which is Imported alone) and
+	// from the retired "Constant" flag (which conflated provenance, stability,
+	// and compile-time-value-known).
 	Stable bool
 }
 
@@ -151,21 +157,17 @@ func (p *Binding) IsImported() bool {
 	return p.meta.Imported
 }
 
-// IsStable reports whether this binding will not be rebound (defined-once ∧
-// ¬set! ∧ unit-closed). Imported bindings are always Stable. Renamed from the
+// IsStable reports the rebind-stability conclusion: the binding will not be
+// rebound. Imported is standing evidence for that conclusion (R7RS forbids set!
+// on imports); Stable carries it when a proof discharges it by other means.
+// This is NOT a set!-permission — that is IsImported alone (R7RS §5.2). Read by
+// the frame optimizer's MayCapture (sibling escape-gated plan). Renamed from the
 // retired IsConstant, which falsely asserted "value known at compile time".
 func (p *Binding) IsStable() bool {
 	if p.meta == nil {
 		return false
 	}
 	return p.meta.Imported || p.meta.Stable
-}
-
-// IsImmutable reports whether set! on this binding is forbidden. Today this is
-// exactly the Stable set (Imported ∨ declared-Stable); kept as a distinct name
-// so the set! gate reads intent rather than the underlying flag.
-func (p *Binding) IsImmutable() bool {
-	return p.IsStable()
 }
 
 // Copy creates a deep copy of this binding. The meta struct is copied so

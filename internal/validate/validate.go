@@ -33,50 +33,7 @@ func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, 
 	result := &ValidationResult{}
 	validated := validateExpr(ctx, env, expr, result)
 	result.Expr = validated
-	finalizeStability(result)
 	return result
-}
-
-// finalizeStability stamps StableInUnit on every ValidatedDefine once the
-// unit's set! set is complete. A define is in-unit-stable iff its name is
-// defined exactly once in the unit and is never a global set! target. Both
-// predicates are conservative (uncertain ⇒ false ⇒ binding stays mutable ⇒
-// heap), matching the cross-unit hazard left to the sibling escape-gated plan.
-func finalizeStability(result *ValidationResult) {
-	if result.Expr == nil {
-		return
-	}
-	// First pass: count define occurrences per symbol key (defined-once check).
-	counts := make(map[string]int)
-	walkValidatedDefines(result.Expr, func(d *ValidatedDefine) {
-		if d.Name() != nil && d.Name().Sym != nil {
-			counts[d.Name().Sym.Key]++
-		}
-	})
-	// Second pass: stamp StableInUnit.
-	walkValidatedDefines(result.Expr, func(d *ValidatedDefine) {
-		if d.Name() == nil || d.Name().Sym == nil {
-			return
-		}
-		key := d.Name().Sym.Key
-		d.StableInUnit = counts[key] == 1 && !result.isSymbolMutated(key)
-	})
-}
-
-// walkValidatedDefines visits every ValidatedDefine reachable from expr,
-// including expr itself and defines nested in begin/lambda/let bodies. The set!
-// target is not a child (WalkSubExprs skips it), so it is never miswalked.
-func walkValidatedDefines(expr ValidatedExpr, fn func(*ValidatedDefine)) {
-	if expr == nil {
-		return
-	}
-	d, ok := expr.(*ValidatedDefine)
-	if ok {
-		fn(d)
-	}
-	WalkSubExprs(expr, func(child ValidatedExpr, _ ChildRole) {
-		walkValidatedDefines(child, fn)
-	})
 }
 
 // validateBodySlice validates a contiguous slice of elements as body expressions.

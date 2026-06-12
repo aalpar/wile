@@ -58,14 +58,6 @@ type ValidationResult struct {
 	Expr            ValidatedExpr     // nil if validation failed
 	Errors          []ValidationError // All errors encountered
 	mutatedBindings map[environment.BindingID]bool
-	// mutatedSymbols records set! targets by symbol key for the top-level
-	// define-stability finalization. BindingID (mutatedBindings) names only
-	// local bindings; top-level defines create global bindings in the compiler,
-	// invisible to the validator's local resolver — so set! to a global is
-	// tracked here by name instead. Populated only for set! targets that do NOT
-	// resolve to a local (precise), or unconditionally when no env is available
-	// to distinguish (conservative). See finalizeStability.
-	mutatedSymbols map[string]bool
 }
 
 // markMutated records that a local binding is targeted by set!.
@@ -82,20 +74,6 @@ func (p *ValidationResult) markMutated(bid environment.BindingID) {
 // isMutated returns true if the binding was targeted by set!.
 func (p *ValidationResult) isMutated(bid environment.BindingID) bool {
 	return p.mutatedBindings[bid]
-}
-
-// markMutatedSymbol records that the named symbol is targeted by set! at the
-// global (or unresolved) level. Used by the top-level define-stability pass.
-func (p *ValidationResult) markMutatedSymbol(key string) {
-	if p.mutatedSymbols == nil {
-		p.mutatedSymbols = make(map[string]bool)
-	}
-	p.mutatedSymbols[key] = true
-}
-
-// isSymbolMutated returns true if a set! targeted the named symbol globally.
-func (p *ValidationResult) isSymbolMutated(key string) bool {
-	return p.mutatedSymbols[key]
 }
 
 // Ok returns true if no validation errors were encountered.

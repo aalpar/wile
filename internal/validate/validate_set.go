@@ -45,22 +45,11 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 	// Uses BindingID (frame + slot) for stable identity — *Binding pointers
 	// into []Binding become stale when append reallocates the backing array.
 	// Opportunistic: if resolution fails, the compiler catches the error.
-	//
-	// Local vs global: ResolveBindingID resolves locals only. A target that
-	// resolves is a local mutation (tracked by BindingID). A target that does
-	// NOT resolve is a global/top-level mutation — recorded by symbol key for
-	// the define-stability pass, since top-level define bindings are created in
-	// the compiler and are invisible to the validator's local resolver. With no
-	// env to distinguish, fall back to marking the symbol (conservative).
 	if env != nil {
 		bid, ok := env.ResolveBindingID(name.Sym, name.Scopes())
 		if ok {
 			result.markMutated(bid)
-		} else {
-			result.markMutatedSymbol(name.Sym.Key)
 		}
-	} else {
-		result.markMutatedSymbol(name.Sym.Key)
 	}
 
 	return &ValidatedSetBang{
