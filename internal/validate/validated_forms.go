@@ -100,6 +100,15 @@ type ValidatedDefine struct {
 	name              *syntax.SyntaxSymbol
 	subExp            ValidatedExpr // For (define name expr), nil for function form
 	IsFunction        bool          // True for (define (name ...) ...)
+	// StableInUnit is true when this define's binding is never set! within the
+	// compilation unit the validator saw, and the name is defined exactly once
+	// in that unit. It is the cheap, in-unit half of the Stable predicate
+	// (Imported ⟹ Stable; defined-once ∧ ¬set!-in-unit ⟹ in-unit-Stable). The
+	// cross-unit / eval / load / cross-thread set! the validator cannot see is
+	// closed separately (sibling escape-gated plan: Option A unit-closure proof
+	// or Option B runtime store-trap). Stamped by finalizeStability once the
+	// unit's mutation set is complete; read by the compiler's stableForDefine.
+	StableInUnit bool
 }
 
 // Name returns the name being defined.
