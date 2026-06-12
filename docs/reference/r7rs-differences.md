@@ -4,17 +4,18 @@ This document catalogs differences between the current implementation and the R7
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
-**Last Updated:** 2026-02-12
+**Last Updated:** 2026-06-12
 
 ---
 
 ## Summary
 
-Four known differences exist:
+Five known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
-4. Pair and vector literals are **mutable** (R7RS permits "it is an error" detection or non-detection). String literals are correctly immutable. Asymmetric by type.
+4. Pair and vector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals.
+5. **Opt-in** (`WithImmutableTopLevel`, off by default): a defined-once, never-`set!`-in-unit top-level `define` becomes immutable, so a later `set!`/redefinition **raises an error**. Strict R7RS (mutable/redefinable top level) is the default.
 
 ---
 
@@ -120,6 +121,32 @@ Construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allo
 ```
 
 **Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations; Wile now rejects them rather than silently corrupting shared structure.
+
+---
+
+## Immutable Top-Level Definitions (opt-in, off by default)
+
+**Affected:** `set!` and re-`define` of top-level variables. **Disabled by default** — strict R7RS top-level mutability is the standard behavior. Enabled per-engine via the `WithImmutableTopLevel()` option.
+
+**R7RS §4.1.6 / §5.3.1:** top-level variables are mutable (`set!`) and redefinable.
+
+**Wile Behavior (when enabled):** A top-level `define` that is *defined exactly once* and *never `set!` within its compilation unit* is marked rebind-stable. A subsequent `set!` or redefinition of such a binding **raises `ErrImmutableBinding`** at compile time:
+
+```scheme
+;; With WithImmutableTopLevel():
+(define f 5)
+(set! f 6)        ; raises ErrImmutableBinding — f is stable
+(define f 7)      ; raises ErrImmutableBinding — redefinition of a stable binding
+
+;; Still mutable: a define that IS set! within its own unit is not stable.
+(begin (define g 5) (set! g 6) g)   ; => 6, permitted
+```
+
+**Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer (`plans/2026-06-11-escape-gated-frame-allocation.local.md`). The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), this option *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`). The payoff is opt-in because the contract is a deviation.
+
+**Implementation:** Pure compile-time. `set!` requires its target already bound (an unbound `set!` is already a compile error), and a binding's stability is finalized at its `define` — which necessarily precedes any `set!` referencing it — so the existing compile-time `set!` gate always sees the final stability and no runtime trap is needed. The validator computes in-unit stability syntactically by symbol name (conservative: a same-name local `set!` marks the top-level name non-stable — a false match costs optimization, never soundness); the compiler stamps `BindingMeta.Stable` and enforces the redefinition guard. Imported-binding `set!` rejection (always on) is unchanged.
+
+**Impact:** **NONE by default.** When enabled: programs that rebind their own never-mutated top-level definitions are rejected; the common case (define-once, call-many) is unaffected and gains the optimization.
 
 ---
 
