@@ -52,6 +52,12 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 		}
 	}
 
+	// Also record the set! target by symbol Key. Unlike the BindingID path
+	// above, this is unconditional and binding-creation-independent, so a
+	// top-level set! inside a (begin ...) unit is captured even though the
+	// global binding does not yet exist at validation time. Powers StableInUnit.
+	result.markMutatedKey(name.Key())
+
 	return &ValidatedSetBang{
 		validatedBase: validatedBase{formName: "set!", source: source},
 		Name:          name,
