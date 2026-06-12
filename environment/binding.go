@@ -27,7 +27,14 @@ type BindingMeta struct {
 	Source   *syntax.SourceContext
 	Doc      string
 	Imported bool
-	Constant bool
+	// Stable is true when the binding will not be rebound: defined-once,
+	// never set!, and unit-closed. Imported ⟹ Stable, but a defined-once
+	// top-level define is also Stable without being Imported. Read by the
+	// frame optimizer's MayCapture (sibling escape-gated plan). Distinct from
+	// the retired "Constant" flag, which conflated provenance, rebind-stability,
+	// and compile-time-value-known (the last is now an unborn "Foldable"
+	// concern).
+	Stable bool
 }
 
 // Binding represents a variable binding in the environment.
@@ -89,7 +96,7 @@ func (p *Binding) SetValue(value values.Value) {
 // Meta returns the BindingMeta pointer, or nil if no metadata has been
 // attached. Callers that read metadata fields should nil-check the
 // returned pointer; the convenience getters (Scopes, Source, Doc,
-// IsImported, IsConstant) wrap this pattern.
+// IsImported, IsStable) wrap this pattern.
 func (p *Binding) Meta() *BindingMeta {
 	return p.meta
 }
@@ -144,12 +151,21 @@ func (p *Binding) IsImported() bool {
 	return p.meta.Imported
 }
 
-// IsConstant returns whether this binding's value is known at compile time.
-func (p *Binding) IsConstant() bool {
+// IsStable reports whether this binding will not be rebound (defined-once ∧
+// ¬set! ∧ unit-closed). Imported bindings are always Stable. Renamed from the
+// retired IsConstant, which falsely asserted "value known at compile time".
+func (p *Binding) IsStable() bool {
 	if p.meta == nil {
 		return false
 	}
-	return p.meta.Constant
+	return p.meta.Imported || p.meta.Stable
+}
+
+// IsImmutable reports whether set! on this binding is forbidden. Today this is
+// exactly the Stable set (Imported ∨ declared-Stable); kept as a distinct name
+// so the set! gate reads intent rather than the underlying flag.
+func (p *Binding) IsImmutable() bool {
+	return p.IsStable()
 }
 
 // Copy creates a deep copy of this binding. The meta struct is copied so
@@ -167,7 +183,7 @@ func (p *Binding) Copy() *Binding {
 			Source:   p.meta.Source,
 			Doc:      p.meta.Doc,
 			Imported: p.meta.Imported,
-			Constant: p.meta.Constant,
+			Stable:   p.meta.Stable,
 		}
 	}
 	return b

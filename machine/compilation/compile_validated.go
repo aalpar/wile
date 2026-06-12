@@ -267,13 +267,16 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if binding == nil {
 		return sym
 	}
-	// Top-level define supersedes an imported binding (R7RS §5.3.1).
-	// The define overwrites the value in the same slot; clear the import
-	// flags so that subsequent set! on this binding is permitted.
+	// Top-level define supersedes an imported binding (R7RS §5.3.1). The
+	// define overwrites the value in the same slot. Drop import *provenance*,
+	// but stability is independent — a define that supersedes an import and is
+	// never set! is still Stable. Recompute Stable for the superseding define
+	// rather than clearing it (the old unconditional clear was a false negative
+	// the moment MayCapture reads the bit).
 	if binding.IsImported() {
 		m := binding.EnsureMeta()
 		m.Imported = false
-		m.Constant = false
+		m.Stable = false // TODO(part2): recompute via stableForDefine(v)
 	}
 	m := binding.EnsureMeta()
 	m.Scopes = symbolScopes
@@ -487,8 +490,11 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
-	// R7RS 5.2: reject set! on imported bindings.
-	if binding.IsImported() {
+	// R7RS 5.2: reject set! on immutable bindings (Imported ∨ Stable). Gating on
+	// IsImmutable rather than IsImported lets a never-set! top-level define
+	// (marked Stable in Part 2) reject set! too; with no Stable defines yet this
+	// is identical to IsImported — a safe no-op until Part 2 populates Stable.
+	if binding.IsImmutable() {
 		return werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
 			"set!: cannot mutate imported binding %q",

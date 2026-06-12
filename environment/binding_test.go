@@ -188,23 +188,46 @@ func TestBinding_EnsureMeta_Imported(t *testing.T) {
 	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
-func TestBinding_EnsureMeta_Constant(t *testing.T) {
+func TestBinding_EnsureMeta_Stable(t *testing.T) {
 	b := NewBinding(values.NewInteger(42), BindingTypeVariable)
-	qt.Assert(t, b.IsConstant(), qt.IsFalse)
-	b.EnsureMeta().Constant = true
-	qt.Assert(t, b.IsConstant(), qt.IsTrue)
+	qt.Assert(t, b.IsStable(), qt.IsFalse)
+	b.EnsureMeta().Stable = true
+	qt.Assert(t, b.IsStable(), qt.IsTrue)
 }
 
-func TestBinding_Copy_PreservesImportedAndConstant(t *testing.T) {
+func TestBinding_Copy_PreservesImportedAndStable(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
 	m := b.EnsureMeta()
 	m.Imported = true
-	m.Constant = true
+	m.Stable = true
 	cp := b.Copy()
 	qt.Assert(t, cp.IsImported(), qt.IsTrue)
-	qt.Assert(t, cp.IsConstant(), qt.IsTrue)
+	qt.Assert(t, cp.IsStable(), qt.IsTrue)
 	cp.EnsureMeta().Imported = false
 	qt.Assert(t, b.IsImported(), qt.IsTrue)
+}
+
+// TestBinding_StableAndImmutable pins the orthogonal split: Imported ⟹ Stable
+// ⟹ Immutable; a bare Stable (non-imported) is also Stable+Immutable; neither
+// flag means mutable.
+func TestBinding_StableAndImmutable(t *testing.T) {
+	// Imported implies stable and immutable.
+	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
+	b.EnsureMeta().Imported = true
+	qt.Assert(t, b.IsImmutable(), qt.IsTrue)
+	qt.Assert(t, b.IsStable(), qt.IsTrue)
+
+	// A bare Stable (not imported) is immutable and stable but not imported.
+	b2 := NewBinding(values.NewInteger(2), BindingTypeVariable)
+	b2.EnsureMeta().Stable = true
+	qt.Assert(t, b2.IsStable(), qt.IsTrue)
+	qt.Assert(t, b2.IsImmutable(), qt.IsTrue)
+	qt.Assert(t, b2.IsImported(), qt.IsFalse)
+
+	// Neither: mutable, not stable.
+	b3 := NewBinding(values.NewInteger(3), BindingTypeVariable)
+	qt.Assert(t, b3.IsImmutable(), qt.IsFalse)
+	qt.Assert(t, b3.IsStable(), qt.IsFalse)
 }
 
 func TestBinding_Copy_WithSource(t *testing.T) {

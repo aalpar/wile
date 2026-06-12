@@ -30,17 +30,21 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// markBindingImported sets the Imported and Constant flags on a binding
+// markBindingImported sets the Imported and Stable flags on a binding
 // installed by library import. A nil binding is silently ignored.
+//
+// Stable is about *rebinding*, not value materialization — an imported binding
+// will not be rebound regardless of whether its value is realized yet, so
+// Stable is set unconditionally (unlike the retired Constant, which keyed on
+// b.Value() != nil). Imported already implies Stable via IsStable; setting the
+// field too keeps the stored state self-consistent for the clone path.
 func markBindingImported(b *environment.Binding) {
 	if b == nil {
 		return
 	}
 	m := b.EnsureMeta()
 	m.Imported = true
-	if b.Value() != nil {
-		m.Constant = true
-	}
+	m.Stable = true
 }
 
 // ImportSet represents a parsed import specification.

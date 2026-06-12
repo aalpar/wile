@@ -100,9 +100,9 @@ func TestSetBangOnShadowedImportAllowed(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "99")
 }
 
-// TestImportedBindingConstantFlag verifies that after importing (scheme base),
-// the binding for "cons" has both IsImported and IsConstant flags set.
-func TestImportedBindingConstantFlag(t *testing.T) {
+// TestImportedBindingStableFlag verifies that after importing (scheme base),
+// the binding for "cons" has both IsImported and IsStable flags set.
+func TestImportedBindingStableFlag(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newEngineWithStdlib(t)
@@ -115,5 +115,5 @@ func TestImportedBindingConstantFlag(t *testing.T) {
 	binding := env.GetGlobalBinding(gi)
 	c.Assert(binding, qt.IsNotNil, qt.Commentf("cons should be bound after import"))
 	c.Assert(binding.IsImported(), qt.IsTrue, qt.Commentf("cons should be marked imported"))
-	c.Assert(binding.IsConstant(), qt.IsTrue, qt.Commentf("cons should be marked constant"))
+	c.Assert(binding.IsStable(), qt.IsTrue, qt.Commentf("cons should be marked stable"))
 }
