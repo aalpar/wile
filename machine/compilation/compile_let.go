@@ -51,7 +51,7 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 			lenv := environment.NewLocalEnvironment(0)
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			tpl.SetName(name)
-			return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, &selfTailInfo{name: name, arity: arity}, false)
+			return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, selfTailReuse(name, arity))
 		}
 	}
 	return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)

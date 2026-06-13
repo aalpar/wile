@@ -180,6 +180,13 @@ func letMutatesName(v *ValidatedLet, name string) bool {
 // selfName is the closure's own bound name (a define name, or a named-let loop
 // variable) as a symbol Key. isCaptureOp is the resolved capture-operator identity
 // test (see frame_reclaim_build.go); in isolation tests a name-only stub is used.
+//
+// THIS UNEXPORTED FORM IS FAIL-OPEN IN ISOLATION and is TEST-ONLY. It checks only
+// the in-body capture/escape facts; it does NOT run bodyCalleesAllCaptureSafe, so
+// a body that calls a capturing helper (the map/for-each hazard) would pass here.
+// Soundness requires the interprocedural callee check too, which is why every
+// PRODUCTION caller goes through the exported BodyIsSelfTailReusable (which ANDs
+// bodyCalleesAllCaptureSafe). Do not call this directly from compiler code.
 func bodyIsSelfTailReusable(
 	proc ValidatedBodyAndParams,
 	selfName string,

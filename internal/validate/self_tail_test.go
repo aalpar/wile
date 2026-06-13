@@ -298,4 +298,21 @@ func TestBodyIsSelfTailReusable_CalleeSafety(t *testing.T) {
 	if BodyIsSelfTailReusable(withCallback, "loop", envWithImported(t, ">=", "proc")) {
 		t.Errorf("a loop calling an unknown (non-capture-safe) callee must not be reusable")
 	}
+
+	// Negative: a computed operator — ((car fns) i) — could resolve to any
+	// (capturing) procedure, so it disqualifies even though `car` itself is
+	// capture-safe. Pins the non-*ValidatedSymbol operator branch.
+	computedOp := fnWith("loop", params("i", "n"),
+		ifx(call(symRef(">="), symRef("i"), symRef("n")),
+			symRef("i"),
+			&ValidatedBegin{
+				validatedBase: validatedBase{formName: "begin"},
+				body: []ValidatedExpr{
+					call(call(symRef("car"), symRef("fns")), symRef("i")),
+					call(symRef("loop"), call(symRef("+"), symRef("i"), lit()), symRef("n")),
+				},
+			}))
+	if BodyIsSelfTailReusable(computedOp, "loop", envWithImported(t, ">=", "+", "car", "fns")) {
+		t.Errorf("a loop with a computed-operator call must not be reusable")
+	}
 }

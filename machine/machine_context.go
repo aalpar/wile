@@ -430,6 +430,19 @@ func (p *MachineContext) Run() error {
 			mc.envPooled = false
 			mc.pc++
 
+		case OpReleaseEnvFrame:
+			// Release the current frame back to the pool before a reclaimable tail
+			// call: it is dead (the call's args are already on the eval stack) and
+			// the emit-time proof (no capture, no escaping closure, only capture-safe
+			// callees) guarantees no continuation can still reach it. The next
+			// acquire (the tail call's own frame) reuses it. envPooled gates release
+			// to genuinely pool-owned frames and prevents a double release.
+			if mc.envPooled {
+				mc.releaseEnvFrame(mc.env)
+				mc.envPooled = false
+			}
+			mc.pc++
+
 		case OpApply:
 			var err error
 			mc, err = mc.drainAndApply(mc.GetValue())
@@ -527,19 +540,6 @@ func (p *MachineContext) Run() error {
 			mc.envPooled = false
 			mc.pc++
 
-		case OpReleaseEnvFrame:
-			// Release the current frame back to the pool before a reclaimable tail
-			// call: it is dead (the call's args are already on the eval stack) and
-			// the emit-time proof (no capture, no escaping closure, only capture-safe
-			// callees) guarantees no continuation can still reach it. The next
-			// acquire (the tail call's own frame) reuses it. envPooled gates release
-			// to genuinely pool-owned frames and prevents a double release.
-			if mc.envPooled {
-				mc.releaseEnvFrame(mc.env)
-				mc.envPooled = false
-			}
-			mc.pc++
-
 		case OpSelfTailCall:
 			// In-place self-recursive tail call: the args were already evaluated
 			// onto the eval stack with the OLD slot values intact, so draining then
@@ -549,7 +549,11 @@ func (p *MachineContext) Run() error {
 			// depth-0) guarantees the live frame is reachable only through mc.env.
 			argCount := int(instr.Arg)
 			if argCount > 0 {
-				vs := mc.evals.Drain()
+				// DrainN (not Drain) takes EXACTLY argCount from the stack top, in slot
+				// order, with no allocation: it leaves any residue below intact rather
+				// than silently mis-binding it, and a count/stack mismatch panics with a
+				// wrapped ErrStackUnderflow instead of a raw out-of-range index.
+				vs := mc.evals.DrainN(argCount)
 				bindArgs(mc.env.LocalEnvironment().Bindings(), vs, argCount, false, nil)
 			}
 			mc.pc = 0

@@ -161,6 +161,27 @@ func (p *Stack) Drain() []values.Value {
 	return view
 }
 
+// DrainN returns the top n values (in stack order: first-pushed first) and
+// removes them, leaving any values beneath them on the stack. Like Drain it
+// returns a non-allocating view, not a copy — the caller must consume it before
+// pushing. A request larger than the stack panics with a wrapped sentinel rather
+// than letting a downstream index run out of range. Used by OpSelfTailCall, which
+// must consume exactly the call's argument count and never silently discard
+// anything beneath it.
+func (p *Stack) DrainN(n int) []values.Value {
+	l := len(*p)
+	if n > l {
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow,
+			"DrainN: requested %d elements from stack of length %d", n, l))
+	}
+	if n == 0 {
+		return nil
+	}
+	view := (*p)[l-n : l : l]
+	*p = (*p)[:l-n]
+	return view
+}
+
 // PopAll removes and returns all values from the stack.
 // The caller gets exclusive ownership of the returned slice.
 // The stack retains its backing array for reuse (avoids re-allocation on

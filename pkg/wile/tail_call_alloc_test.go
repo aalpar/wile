@@ -62,6 +62,50 @@ import (
 // (values/integer.go, verified) so the counter itself allocates no boxed Integer
 // — env-frame allocation is the only size-dependent signal.
 
+// TestReclaimableLoopAcrossContinuationReentry is the behavioral counterpart to
+// the allocation-slope probes: it runs a frame-reclaimable self-tail loop
+// (accumulate) WITH the optimization armed (WithImmutableTopLevel), inside a
+// program that captures a continuation and re-enters it multiple times, and
+// asserts the RESULTING VALUE. A slope probe only catches over-firing if it
+// collapses the slope; this catches the subtler failure the design exists to
+// prevent — a reused/released frame corrupting a re-entered continuation would
+// change the value, not merely the allocation count.
+//
+// accumulate (Stable, capture-safe callees) emits OpSelfTailCall and runs on every
+// re-entry; tag walks 0→1→2 across two re-entries, so visits=3, accumulate=50, and
+// the result is 3*50=150 iff the optimization left the continuation intact.
+func TestReclaimableLoopAcrossContinuationReentry(t *testing.T) {
+	ctx := context.Background()
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithSourceFS(stdlib.FS),
+		WithLibraryPaths(),
+		WithImmutableTopLevel(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const program = `
+(define (accumulate i n acc)
+  (if (>= i n) acc (accumulate (+ i 1) n (+ acc 1))))
+(let ((k #f) (visits 0))
+  (let ((tag (call/cc (lambda (c) (set! k c) 0))))
+    (set! visits (+ visits 1))
+    (let ((s (accumulate 0 50 0)))
+      (if (< tag 2)
+          (k (+ tag 1))
+          (* visits s)))))`
+	result, err := engine.EvalMultiple(ctx, program)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	if got != "150" {
+		t.Errorf("reclaimable loop across continuation re-entry = %s, want 150 "+
+			"(a corrupted re-entered continuation would change this)", got)
+	}
+}
+
 // allocsForRun compiles code once (after running setup into the engine's global
 // scope) and returns the average heap allocations of a single Engine.Run.
 //

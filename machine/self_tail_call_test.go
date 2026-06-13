@@ -63,7 +63,11 @@ func TestOpSelfTailCall_RebindsSlotsAndJumpsToZero(t *testing.T) {
 	if g0 != 6 || g1 != 11 {
 		t.Fatalf("slots after self-tail rebind = %d,%d; want 6,11", g0, g1)
 	}
-	if mc.evals.Drain() != nil && len(mc.evals.Drain()) != 0 {
-		t.Errorf("eval stack must be empty after the self-tail call drained its args")
+	// Drain ONCE — it is destructive — and assert on the result. (A two-call form
+	// would empty the stack on the first call and always see empty on the second,
+	// making the check tautological.)
+	remaining := mc.evals.Drain()
+	if len(remaining) != 0 {
+		t.Errorf("eval stack must be empty after the self-tail call drained its args, got %d", len(remaining))
 	}
 }

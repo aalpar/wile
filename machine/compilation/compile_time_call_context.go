@@ -51,28 +51,55 @@ import (
 type CompileTimeCallContext struct {
 	ctx    context.Context
 	inTail bool
-	// selfTail, when non-nil, marks that the current position is in the body of a
-	// closure proven self-tail-reusable (validate.BodyIsSelfTailReusable, plus
-	// Stable for a top-level self). It carries the self name and arity so a tail
-	// call matching them can be emitted as OpSelfTailCall (in-place frame reuse).
-	// It is preserved through tail-transparent forms (if branches, begin/body
+	// frameReuse is the single frame-reuse disposition of the current position —
+	// at most ONE mode, never a contradiction. It is set on a closure body proven
+	// safe, preserved through tail-transparent forms (if branches, begin/body
 	// tails), dropped by NotInTail(), and cleared on entry to a frame-pushing form
-	// (let) — so a set selfTail at a call site means a DEPTH-0 tail self call.
-	selfTail *selfTailInfo
-	// releasable marks that the current position is in the body of a closure proven
-	// frame-releasable (validate.BodyIsFrameReleasable: no capture, no escaping
-	// closure, only capture-safe callees). A general tail call here may release the
-	// dead parameter frame to the pool (OpReleaseEnvFrame) before applying. Threaded
-	// exactly like selfTail: preserved through if/begin tails, dropped by NotInTail,
-	// cleared on a let descent — so a set releasable at a call site is DEPTH-0.
-	releasable bool
+	// (let) via WithoutFrameReuse — so a non-none frameReuse at a call site means a
+	// DEPTH-0 tail call. The emit site discriminates on frameReuse.kind.
+	frameReuse frameReuse
 }
 
-// selfTailInfo identifies the enclosing self-tail-reusable closure: its bound
-// name (symbol Key) and required-parameter count.
-type selfTailInfo struct {
+// frameReuseKind discriminates how a depth-0 tail call may reuse the parameter
+// frame. A closure is armed with exactly one kind (self-tail takes precedence
+// over release), so the previously-representable contradiction "self-tail AND
+// releasable at once" is now unrepresentable.
+type frameReuseKind uint8
+
+const (
+	// frameReuseNone — the frame must not be reused here.
+	frameReuseNone frameReuseKind = iota
+	// frameReuseSelfTail — a depth-0 tail call to name/arity rebinds the frame in
+	// place (OpSelfTailCall); requires a Stable self binding.
+	frameReuseSelfTail
+	// frameReuseRelease — a depth-0 general tail call releases the dead frame to
+	// the pool (OpReleaseEnvFrame) before applying.
+	frameReuseRelease
+)
+
+// frameReuse describes the parameter frame's reuse disposition. name and arity
+// are meaningful only for frameReuseSelfTail; the zero value is frameReuseNone.
+type frameReuse struct {
+	kind  frameReuseKind
 	name  string
 	arity int
+}
+
+// noFrameReuse is the frameReuseNone disposition (the zero value), named for use
+// at sites that explicitly arm no reuse (anonymous lambdas, case-lambda clauses, a
+// define that qualifies for neither mode).
+func noFrameReuse() frameReuse {
+	return frameReuse{kind: frameReuseNone}
+}
+
+// selfTailReuse arms the self-tail (in-place rebind) mode for name with arity.
+func selfTailReuse(name string, arity int) frameReuse {
+	return frameReuse{kind: frameReuseSelfTail, name: name, arity: arity}
+}
+
+// releaseReuse arms the frame-release mode.
+func releaseReuse() frameReuse {
+	return frameReuse{kind: frameReuseRelease}
 }
 
 // NewCompileTimeCallContext creates a new compile-time context.
@@ -105,28 +132,25 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
 		ctx:    p.ctx,
 		inTail: false,
-		// selfTail and releasable intentionally dropped: a non-tail position can
-		// never be a rewritable self-tail call or a frame-release site.
+		// frameReuse intentionally dropped (zero value = frameReuseNone): a non-tail
+		// position can never be a rewritable self-tail call or a frame-release site.
 	}
 }
 
-// WithSelfTail returns a copy marking the current (tail) position as the body of
-// a self-tail-reusable closure named name with arity required parameters.
-// Preserves inTail, ctx, and releasable.
-func (p CompileTimeCallContext) WithSelfTail(name string, arity int) CompileTimeCallContext {
+// WithFrameReuse returns a copy armed with the given frame-reuse disposition.
+// Preserves inTail and ctx.
+func (p CompileTimeCallContext) WithFrameReuse(fr frameReuse) CompileTimeCallContext {
 	q := p
-	q.selfTail = &selfTailInfo{name: name, arity: arity}
+	q.frameReuse = fr
 	return q
 }
 
-// WithoutFrameReuse returns a copy with BOTH frame-reuse contexts cleared. Used
-// when descending into a frame-pushing form (let): its body runs in a pushed
-// frame, so a call there is no longer at the parameter-frame depth — neither the
-// in-place OpSelfTailCall nor OpReleaseEnvFrame (which both act on the parameter
-// frame) may fire.
+// WithoutFrameReuse returns a copy with the frame-reuse context cleared. Used when
+// descending into a frame-pushing form (let): its body runs in a pushed frame, so
+// a call there is no longer at the parameter-frame depth — neither the in-place
+// OpSelfTailCall nor OpReleaseEnvFrame (both act on the parameter frame) may fire.
 func (p CompileTimeCallContext) WithoutFrameReuse() CompileTimeCallContext {
 	q := p
-	q.selfTail = nil
-	q.releasable = false
+	q.frameReuse = noFrameReuse()
 	return q
 }
