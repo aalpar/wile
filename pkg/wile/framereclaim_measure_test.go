@@ -51,6 +51,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/machine"
@@ -77,13 +78,21 @@ var canonicalGabriel = []string{
 const importPrelude = "(import (scheme base) (scheme inexact) (scheme write) (scheme time))"
 
 // newBenchmarkEngine builds an engine with KitchenSink plus the embedded stdlib
-// so importing (scheme base) resolves, then runs the prelude.
-func newBenchmarkEngine(ctx context.Context) (*Engine, error) {
-	eng, err := NewEngine(ctx,
+// so importing (scheme base) resolves, then runs the prelude. When immutable is
+// set, WithImmutableTopLevel() is enabled so the compiler stamps the producer's
+// Stable bit on defined-once, never-set! top-level defines — the prerequisite
+// for the classifier's tier-(b) (recovered_toplevel) verdict. With it off, no
+// same-unit define is Stable and the classifier recovers only tier-(a).
+func newBenchmarkEngine(ctx context.Context, immutable bool) (*Engine, error) {
+	opts := []EngineOption{
 		WithProfile(KitchenSink),
 		WithSourceFS(stdlib.FS),
 		WithLibraryPaths(),
-	)
+	}
+	if immutable {
+		opts = append(opts, WithImmutableTopLevel())
+	}
+	eng, err := NewEngine(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,9 +152,17 @@ func measureBenchmark(ctx context.Context, t *testing.T, name string) (frameRecl
 	// line numbers aligned for any diagnostics.
 	wrapped := "(begin " + string(src) + "\n)"
 
-	verdictA, verdictB, err := classifyBenchmark(ctx, wrapped)
+	// recovered_local: compile WITHOUT WithImmutableTopLevel — no same-unit
+	// define is Stable, so the classifier recovers only tier-(a).
+	verdictA, err := classifyCompiled(ctx, wrapped, false)
 	if err != nil {
-		return frameReclaimRow{}, fmt.Errorf("classify: %w", err)
+		return frameReclaimRow{}, fmt.Errorf("classify (flag off): %w", err)
+	}
+	// recovered_toplevel: compile WITH the flag — defined-once, never-set!
+	// top-level defines carry Stable, so same-unit edges are immutable (tier-b).
+	verdictB, err := classifyCompiled(ctx, wrapped, true)
+	if err != nil {
+		return frameReclaimRow{}, fmt.Errorf("classify (flag on): %w", err)
 	}
 
 	counters, err := runForCounts(ctx, wrapped)
@@ -186,38 +203,110 @@ func measureBenchmark(ctx context.Context, t *testing.T, name string) (frameRecl
 	return row, nil
 }
 
-// classifyBenchmark parses, expands, and validates the wrapped source against a
-// fresh KitchenSink namespace, then classifies its top-level defines under both
-// tiers. A separate engine from the dynamic run avoids any expansion side effects
-// leaking into the measured run.
-func classifyBenchmark(ctx context.Context, wrapped string) (map[string]bool, map[string]bool, error) {
-	eng, err := newBenchmarkEngine(ctx)
+// classifyCompiled expands the wrapped source ONCE against a fresh KitchenSink
+// namespace, builds the validated tree from that expansion, compiles the SAME
+// expanded syntax to stamp the producer's Stable bit on every same-unit define,
+// then classifies the tree against the stamped env. immutable selects
+// WithImmutableTopLevel: off ⇒ no define is Stable (tier-a / recovered_local);
+// on ⇒ defined-once, never-set! defines are Stable (tier-b / recovered_toplevel).
+//
+// The single shared expansion is load-bearing: the validated call-site symbols
+// and the compiler's stamped binding scopes derive from the same syntax, so
+// GetBinding(callSite, scopes).IsStable() resolves to the binding the compiler
+// stamped (plan OQ-1 — split-key resolution consistency). A separate engine from
+// the dynamic run avoids any expansion side effects leaking into the measured run.
+func classifyCompiled(ctx context.Context, wrapped string, immutable bool) (map[string]bool, error) {
+	eng, err := newBenchmarkEngine(ctx, immutable)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	env := eng.Environment()
 
 	pr := parser.NewParser(env, true, strings.NewReader(wrapped))
 	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse: %w", err)
+		return nil, fmt.Errorf("parse: %w", err)
 	}
 
-	expander := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator())
+	evaluator := machine.NewVMMacroEvaluator()
+	expander := compilation.NewExpanderTimeContinuation(ctx, env, evaluator)
 	expanded, err := expander.ExpandExpression(stx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("expand: %w", err)
+		return nil, fmt.Errorf("expand: %w", err)
 	}
 
+	// Validated tree (for the classifier) from the single expansion.
 	result := validate.ValidateExpression(ctx, env, expanded)
 	if !result.Ok() {
-		return nil, nil, fmt.Errorf("validate: %s", result.Error())
+		return nil, fmt.Errorf("validate: %s", result.Error())
+	}
+	unit := []validate.ValidatedExpr{result.Expr}
+
+	// Compile the SAME expanded syntax to stamp Stable on each same-unit define.
+	// This is the producer side of the seam: declareDefineBinding sets m.Stable =
+	// v.StableInUnit when ImmutableTopLevel is on. CompileExpression mirrors
+	// compilation.ExpandAndCompile minus Optimize() (irrelevant to binding stamps).
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cctx := compilation.NewCompileTimeCallContext(ctx, false)
+	compiler := compilation.NewCompileTimeContinuation(tpl, env, evaluator)
+	err = compiler.CompileExpression(cctx, expanded)
+	if err != nil {
+		return nil, fmt.Errorf("compile: %w", err)
 	}
 
-	unit := []validate.ValidatedExpr{result.Expr}
-	verdictA := validate.ClassifyFrameReclaim(unit, env, validate.TierLocal)
-	verdictB := validate.ClassifyFrameReclaim(unit, env, validate.TierTopLevel)
-	return verdictA, verdictB, nil
+	// Positive control (plan Task 3 CROSSCHECK, errors lens — CRITICAL): the stamp
+	// must have landed exactly as the flag dictates. Without this, a broken stamp
+	// path leaves every binding non-Stable, IsStable() is uniformly false, and
+	// recovered_toplevel reads ~1.6% — a number that looks like a measurement but
+	// is an artifact of unstamped bindings, with no error raised. Fail loudly.
+	err = assertStampLanded(env, result.Expr, immutable)
+	if err != nil {
+		return nil, err
+	}
+
+	return validate.ClassifyFrameReclaim(unit, env), nil
+}
+
+// assertStampLanded is the positive control: the first top-level function
+// define's binding must report IsStable() == immutable in the compiled env. In
+// the flag-on env it confirms the producer stamped Stable (StableInUnit holds
+// for a defined-once, never-set! benchmark define); in the flag-off env it
+// confirms nothing was stamped. A mismatch means the stamp path or the flag
+// plumbing regressed and the verdict is not a real measurement.
+func assertStampLanded(env *environment.EnvironmentFrame, expr validate.ValidatedExpr, immutable bool) error {
+	def := firstFunctionDefine(expr)
+	if def == nil {
+		return fmt.Errorf("positive control: no top-level function define found in unit")
+	}
+	name := def.Name()
+	b := env.GetBinding(name.Sym, name.Scopes())
+	if b == nil {
+		return fmt.Errorf("positive control: first define %q has no binding after compile — stamp path broke", name.Sym.Key)
+	}
+	if b.IsStable() != immutable {
+		return fmt.Errorf("positive control: first define %q IsStable()=%v, want %v (WithImmutableTopLevel=%v) — stamp/flag mismatch; recovered verdict would be an artifact", name.Sym.Key, b.IsStable(), immutable, immutable)
+	}
+	return nil
+}
+
+// firstFunctionDefine returns the first top-level function define in expr,
+// flattening a top-level (begin ...) one level (R7RS body semantics — the
+// harness always wraps the program in a begin). Returns nil if none.
+func firstFunctionDefine(expr validate.ValidatedExpr) *validate.ValidatedDefine {
+	var body []validate.ValidatedExpr
+	begin, ok := expr.(*validate.ValidatedBegin)
+	if ok {
+		body = begin.Body()
+	} else {
+		body = []validate.ValidatedExpr{expr}
+	}
+	for _, e := range body {
+		d, ok := e.(*validate.ValidatedDefine)
+		if ok && d.IsFunction {
+			return d
+		}
+	}
+	return nil
 }
 
 // runForCounts runs the wrapped benchmark with per-callee counting enabled and
@@ -226,7 +315,7 @@ func runForCounts(ctx context.Context, wrapped string) (machine.VMCounters, erro
 	machine.SetCallCounting(true)
 	defer machine.SetCallCounting(false)
 
-	eng, err := newBenchmarkEngine(ctx)
+	eng, err := newBenchmarkEngine(ctx, false)
 	if err != nil {
 		return machine.VMCounters{}, err
 	}
