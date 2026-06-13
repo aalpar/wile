@@ -43,6 +43,38 @@ func (p *OperationApply) EqualTo(o values.Value) bool {
 	return SameType(p, v, ok)
 }
 
+// --- SelfTailCall ---
+
+// OperationSelfTailCall is the in-place self-recursive tail call: it drains the
+// ArgCount already-evaluated argument values off the eval stack, writes them into
+// the current frame's parameter slots 0..ArgCount-1 (parallel assignment — the
+// args are on the stack, so old slot values stay intact during evaluation), and
+// resets pc=0. No frame acquire, no SaveContinuation, no continuation growth.
+//
+// Emitted only behind validate.bodyIsSelfTailReusable + a depth-0 self-tail call
+// site; that proof (no capture, no escaping closure, non-variadic) is what makes
+// reusing the live frame sound (escape-gated plan Phase 4).
+type OperationSelfTailCall struct {
+	OperationBase
+	ArgCount int
+}
+
+// NewOperationSelfTailCall returns a self-tail-call op rebinding argCount slots.
+func NewOperationSelfTailCall(argCount int) *OperationSelfTailCall {
+	return &OperationSelfTailCall{
+		OperationBase: NewOperationBaseWithGoName("operation:self-tail-call", "SelfTailCall"),
+		ArgCount:      argCount,
+	}
+}
+
+// EqualTo returns true if o is also an OperationSelfTailCall with the same arity.
+func (p *OperationSelfTailCall) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationSelfTailCall)
+	return FieldMatches(p, v, ok, func(op *OperationSelfTailCall) int {
+		return op.ArgCount
+	})
+}
+
 // --- ForeignFunctionCall ---
 
 // OperationForeignFunctionCall executes a Go function within the VM loop.

@@ -527,6 +527,20 @@ func (p *MachineContext) Run() error {
 			mc.envPooled = false
 			mc.pc++
 
+		case OpSelfTailCall:
+			// In-place self-recursive tail call: the args were already evaluated
+			// onto the eval stack with the OLD slot values intact, so draining then
+			// writing them into the current frame's parameter slots is a parallel
+			// assignment. No frame acquire, no SaveContinuation — the emit-time proof
+			// (bodyIsSelfTailReusable: no capture, no escaping closure, non-variadic,
+			// depth-0) guarantees the live frame is reachable only through mc.env.
+			argCount := int(instr.Arg)
+			if argCount > 0 {
+				vs := mc.evals.Drain()
+				bindArgs(mc.env.LocalEnvironment().Bindings(), vs, argCount, false, nil)
+			}
+			mc.pc = 0
+
 		// --- Wave 3: two-operand operations (bit-packed slot|depth) ---
 
 		case OpLoadLocal:
