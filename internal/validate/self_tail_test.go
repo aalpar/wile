@@ -226,3 +226,38 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 		})
 	}
 }
+
+// TestBodyIsSelfTailReusable_CalleeSafety covers the interprocedural half of
+// capture-safety added at the exported boundary: a loop is reusable only if every
+// call operator is the self name or a capture-safe, non-rebindable primitive. This
+// is the fix for the map/for-each corruption — a loop that calls an unknown user
+// callback could have that callee capture the continuation pinning the frame.
+func TestBodyIsSelfTailReusable_CalleeSafety(t *testing.T) {
+	// (define (loop i n) (if (>= i n) i (loop (+ i 1) n)))
+	counter := fnWith("loop", params("i", "n"),
+		ifx(call(symRef(">="), symRef("i"), symRef("n")),
+			symRef("i"),
+			call(symRef("loop"), call(symRef("+"), symRef("i"), lit()), symRef("n"))))
+
+	// Positive: + and >= are imported (capture-safe whitelist ∧ Stable).
+	if !BodyIsSelfTailReusable(counter, "loop", envWithImported(t, "+", ">=")) {
+		t.Errorf("counter over imported capture-safe primitives must be reusable")
+	}
+
+	// Negative: + is rebindable (not imported/Stable) — a set! could turn it into
+	// a capturer, so the frame is no longer safe to reuse.
+	if BodyIsSelfTailReusable(counter, "loop", envWithImported(t, ">=")) {
+		t.Errorf("a rebindable primitive callee must block reuse")
+	}
+
+	// Negative: the loop calls an unknown user function (the map/for-each hazard).
+	// proc is imported here, but it is not on the capture-safe whitelist, so it may
+	// capture the continuation that pins the frame.
+	withCallback := fnWith("loop", params("i", "n"),
+		ifx(call(symRef(">="), symRef("i"), symRef("n")),
+			symRef("i"),
+			call(symRef("loop"), call(symRef("proc"), symRef("i")), symRef("n"))))
+	if BodyIsSelfTailReusable(withCallback, "loop", envWithImported(t, ">=", "proc")) {
+		t.Errorf("a loop calling an unknown (non-capture-safe) callee must not be reusable")
+	}
+}

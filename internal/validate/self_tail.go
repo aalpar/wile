@@ -33,7 +33,96 @@ func BodyIsSelfTailReusable(
 	selfName string,
 	env *environment.EnvironmentFrame,
 ) bool {
-	return bodyIsSelfTailReusable(proc, selfName, makeIsCaptureOp(env))
+	return bodyIsSelfTailReusable(proc, selfName, makeIsCaptureOp(env)) &&
+		bodyCalleesAllCaptureSafe(proc.Body(), selfName, env)
+}
+
+// bodyCalleesAllCaptureSafe reports whether every call operator in body is either
+// the self name or a confirmed capture-safe, non-rebindable primitive. This is the
+// interprocedural half of capture-safety that the textual bodyReferencesCaptureOperator
+// cannot see: a loop that calls an unknown function — a user callback (map/for-each's
+// `proc`), a computed operator, a non-whitelisted or set!-able primitive — could have
+// that callee capture the continuation that pins the frame, so in-place reuse would
+// corrupt a re-entered continuation. A capture-safe primitive (IsCaptureSafePrimitiveName)
+// that is also Stable (Imported ∨ frozen, so not rebindable to a capturing procedure)
+// cannot. Self calls are safe by the co-inductive assumption that the function under
+// analysis does not itself capture.
+//
+// This is conservative — it refuses a loop that calls a provably-non-capturing user
+// helper — but it is SOUND, which the kill criterion demands; the precise call-graph
+// treatment is the classifier's job (ClassifyFrameReclaim), not this local predicate.
+func bodyCalleesAllCaptureSafe(body []ValidatedExpr, selfName string, env *environment.EnvironmentFrame) bool {
+	if env == nil {
+		return false
+	}
+	safe := true
+	walkBodySeq(body, nameSet(nil), func(proc ValidatedExpr, bound nameSet) {
+		if !safe {
+			return
+		}
+		sym, ok := proc.(*ValidatedSymbol)
+		if !ok {
+			safe = false // computed operator ⇒ unknown ⇒ could capture
+			return
+		}
+		name := sym.Symbol.Sym.Key
+		if name == selfName && !bound.has(name) {
+			return // the genuine self call
+		}
+		if bound.has(name) || !IsCaptureSafePrimitiveName(name) {
+			safe = false // shadowed local, or a non-whitelisted callee
+			return
+		}
+		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
+		if b == nil || !b.IsStable() {
+			safe = false // rebindable primitive ⇒ could be set! to a capturer
+		}
+	})
+	return safe
+}
+
+// LetBindingSelfTailReusable reports the arity and eligibility of the i-th
+// binding of a recursively-scoped let (letrec / letrec* / named-let) for in-place
+// self-tail reuse — the local-binding analogue of selfTailForDefine. ok is true iff
+//
+//   - the binding's Init is a lambda whose body is self-tail-reusable on the
+//     binding name (bodyIsSelfTailReusable), AND
+//   - the binding name is immutable across the WHOLE let: never set! in any
+//     binding init or in the let body.
+//
+// The second clause is the local immutability story. bodyIsSelfTailReusable only
+// inspects the lambda's own body, but a sibling init or the let body could set!
+// the name, which would make a hardcoded jump-to-pc=0 unsound. A lexical letrec
+// binding cannot be mutated from outside the let, so set!-freedom within the let
+// is sufficient (no IsStable() is needed, unlike a top-level define).
+//
+// PRECONDITION: the caller must ensure v.Kind is recursive (letrec-family) so the
+// lambda can see itself; in a plain let/let* the name is not in scope in the init.
+func LetBindingSelfTailReusable(v *ValidatedLet, i int, env *environment.EnvironmentFrame) (int, bool) {
+	lam, ok := v.Bindings[i].Init.(*ValidatedLambda)
+	if !ok {
+		return 0, false
+	}
+	name := v.Bindings[i].Name.Sym.Key
+	if !BodyIsSelfTailReusable(lam, name, env) {
+		return 0, false
+	}
+	if letMutatesName(v, name) {
+		return 0, false
+	}
+	return len(lam.Params().Required), true
+}
+
+// letMutatesName reports whether name is set! anywhere in the let's binding inits
+// or body (shadow-aware). Covers the sibling-init and let-body mutation paths that
+// the per-lambda predicate does not see.
+func letMutatesName(v *ValidatedLet, name string) bool {
+	for _, b := range v.Bindings {
+		if exprMutatesName(b.Init, name, nameSet(nil)) {
+			return true
+		}
+	}
+	return seqMutatesName(v.Body(), name, nameSet(nil))
 }
 
 // bodyIsSelfTailReusable reports whether a closure named selfName may have its
