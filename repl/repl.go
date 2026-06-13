@@ -226,11 +226,11 @@ func (p *REPL) Run(ctx context.Context) error {
 		}
 		inputBuffer.WriteString(line)
 
-		// Try to parse the accumulated input
-		input := inputBuffer.String()
-		rdr := strings.NewReader(input)
-
-		expr, parseErr := p.eng.ReadExpression(ctx, rdr)
+		// Parse every complete expression in the accumulated input. A trailing
+		// incomplete form keeps the buffer and prompts for continuation; an
+		// otherwise-complete line evaluates all of its forms (not just the
+		// first), so a pasted multi-form line is never silently truncated.
+		exprs, parseErr := p.eng.ReadExpressions(ctx, strings.NewReader(inputBuffer.String()))
 		if parseErr != nil {
 			if wile.IsIncompleteInput(parseErr) {
 				// Incomplete expression - prompt for more input
@@ -244,27 +244,12 @@ func (p *REPL) Run(ctx context.Context) error {
 			continue
 		}
 
-		// Successfully parsed - evaluate
+		// Successfully parsed - evaluate each form in order.
 		inputBuffer.Reset()
 		rl.SetPrompt(p.prompt)
 
-		// Compile
-		cc, compileErr := p.eng.Compile(ctx, expr)
-		if compileErr != nil {
-			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
-			continue
-		}
-
-		// Run
-		val, runErr := p.eng.Run(ctx, cc)
-		if runErr != nil {
-			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
-			continue
-		}
-
-		// Print result (unless void)
-		if !val.IsVoid() {
-			fmt.Fprintln(p.out, val.SchemeString())
+		for _, expr := range exprs {
+			p.evalAndPrint(ctx, expr)
 		}
 	}
 }
@@ -300,10 +285,8 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 
 		inputBuffer.WriteString(line)
 		inputBuffer.WriteString("\n")
-		input := inputBuffer.String()
-		rdr := strings.NewReader(input)
 
-		expr, parseErr := p.eng.ReadExpression(ctx, rdr)
+		exprs, parseErr := p.eng.ReadExpressions(ctx, strings.NewReader(inputBuffer.String()))
 		if parseErr != nil {
 			if wile.IsIncompleteInput(parseErr) {
 				fmt.Fprint(p.out, p.contPrompt)
@@ -316,25 +299,30 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 		}
 
 		inputBuffer.Reset()
-
-		cc, compileErr := p.eng.Compile(ctx, expr)
-		if compileErr != nil {
-			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
-			fmt.Fprint(p.out, p.prompt)
-			continue
-		}
-
-		val, runErr := p.eng.Run(ctx, cc)
-		if runErr != nil {
-			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
-			fmt.Fprint(p.out, p.prompt)
-			continue
-		}
-
-		if !val.IsVoid() {
-			fmt.Fprintf(p.out, "%s\n", val.SchemeString())
+		for _, expr := range exprs {
+			p.evalAndPrint(ctx, expr)
 		}
 		fmt.Fprint(p.out, p.prompt)
+	}
+}
+
+// evalAndPrint compiles and runs one parsed expression, printing its non-void
+// result. Compile and run errors are reported to errOut but do not abort the
+// caller's loop: when several forms arrive on one line each is attempted, so a
+// failure in one never silently swallows the forms that follow it.
+func (p *REPL) evalAndPrint(ctx context.Context, expr *wile.Expression) {
+	cc, compileErr := p.eng.Compile(ctx, expr)
+	if compileErr != nil {
+		fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
+		return
+	}
+	val, runErr := p.eng.Run(ctx, cc)
+	if runErr != nil {
+		fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
+		return
+	}
+	if !val.IsVoid() {
+		fmt.Fprintf(p.out, "%s\n", val.SchemeString())
 	}
 }
 

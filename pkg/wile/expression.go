@@ -93,6 +93,47 @@ func (p *Engine) ReadExpression(ctx context.Context, r io.Reader) (*Expression, 
 	return &Expression{stx: stx}, nil
 }
 
+// ReadExpressions parses every complete expression available in r, in order,
+// reusing a single parser so the tokenizer's one-rune lookahead is preserved
+// across forms (a fresh parser per form would drop the inter-form delimiter).
+//
+// On clean end-of-input it returns the parsed expressions and a nil error. If
+// the input ends partway through an expression, it returns the complete
+// expressions parsed so far together with an error satisfying IsIncompleteInput
+// — the REPL uses that signal to keep accumulating lines. A genuine syntax
+// error is returned wrapped, with the expressions parsed before it.
+//
+// Unlike ReadExpression (exactly one form) this is the multi-form read the REPL
+// needs to evaluate every expression on a pasted or piped line rather than
+// silently dropping all but the first.
+func (p *Engine) ReadExpressions(ctx context.Context, r io.Reader) ([]*Expression, error) {
+	rr, ok := r.(io.RuneReader)
+	if !ok {
+		rr = bufio.NewReader(r)
+	}
+	pr := parser.NewParser(p.env, true, rr)
+	var q []*Expression
+	for {
+		stx, err := pr.ReadSyntax(ctx)
+		if err != nil {
+			// Order matters: an expression left unbalanced at end-of-input
+			// surfaces as a *wrapped* io.EOF, so it satisfies both
+			// IsIncompleteInput and isEOF. Test incompleteness first or the
+			// partial trailing form is silently dropped — the very bug this
+			// method exists to fix. A bare io.EOF (clean boundary between
+			// forms) is incomplete=false and ends the read.
+			if IsIncompleteInput(err) {
+				return q, wrapCompilationError("parse error", err)
+			}
+			if isEOF(err) {
+				return q, nil
+			}
+			return q, wrapCompilationError("parse error", err)
+		}
+		q = append(q, &Expression{stx: stx})
+	}
+}
+
 // MustParse is like Parse but panics on error.
 func (p *Engine) MustParse(ctx context.Context, code string) *Expression {
 	return p.mustParse(ctx, code, "")
