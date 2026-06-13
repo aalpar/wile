@@ -23,6 +23,7 @@ import (
 var (
 	_ Value        = (*String)(nil)
 	_ Hashable     = (*String)(nil)
+	_ Immutable    = (*String)(nil)
 	_ fmt.Stringer = (*String)(nil)
 )
 

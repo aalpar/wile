@@ -73,8 +73,7 @@ func PrimSetCar(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	set := mc.ImmutableLiterals()
-	if set != nil && set.Contains(p) {
+	if mc.ImmutableLiterals().IsImmutable(p) {
 		return werr.WrapForeignErrorf(werr.ErrImmutablePair, "set-car!: cannot mutate immutable literal pair")
 	}
 	val := mc.Arg(1)
@@ -91,8 +90,7 @@ func PrimSetCdr(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	set := mc.ImmutableLiterals()
-	if set != nil && set.Contains(p) {
+	if mc.ImmutableLiterals().IsImmutable(p) {
 		return werr.WrapForeignErrorf(werr.ErrImmutablePair, "set-cdr!: cannot mutate immutable literal pair")
 	}
 	val := mc.Arg(1)

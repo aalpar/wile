@@ -232,8 +232,7 @@ func PrimListSet(mc machine.CallContext) error {
 		current = next
 	}
 
-	set := mc.ImmutableLiterals()
-	if set != nil && set.Contains(current) {
+	if mc.ImmutableLiterals().IsImmutable(current) {
 		return werr.WrapForeignErrorf(werr.ErrImmutablePair, "list-set!: cannot mutate immutable literal pair")
 	}
 	current.SetCar(val)

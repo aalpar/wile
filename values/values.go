@@ -221,6 +221,26 @@ type Tuple interface {
 }
 
 // ---------------------------------------------------------------------------
+// Immutable — values that carry their own mutability constraint
+// ---------------------------------------------------------------------------
+
+// Immutable is implemented by value types that store their immutability as an
+// intrinsic, per-instance property — currently only *String (R7RS §6.7: literal
+// strings and symbol->string results are immutable).
+//
+// It exists so callers can ask "may this value be mutated in place?" without
+// knowing the storage mechanism. Pair and Vector deliberately do NOT implement
+// it: they are raw [2]Value / []Value types whose immutability is tracked in an
+// engine-scoped side-set (see environment.ImmutableLiterals) to keep the
+// dominant heap objects word-for-word minimal. The uniform query that spans
+// both mechanisms is (*environment.ImmutableLiterals).IsImmutable.
+type Immutable interface {
+	Value
+	// IsImmutable reports whether in-place mutation of this value is forbidden.
+	IsImmutable() bool
+}
+
+// ---------------------------------------------------------------------------
 // Indexable — random-access containers
 // ---------------------------------------------------------------------------
 

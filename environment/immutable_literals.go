@@ -55,3 +55,28 @@ func (p *ImmutableLiterals) Contains(v values.Value) bool {
 	_, ok := p.m.Load(v)
 	return ok
 }
+
+// IsImmutable reports whether in-place mutation of v is forbidden, spanning
+// both immutability mechanisms with a single query:
+//
+//   - Values that carry an intrinsic flag (values.Immutable, currently *String)
+//     answer from that flag. This works even when p is nil, since the flag does
+//     not depend on the side-set.
+//   - Pair and Vector answer from this engine-scoped side-set by pointer
+//     identity (the literals marked at compile time per R7RS §4.1.2).
+//   - Every other value — including non-aggregate scalars and unmarked,
+//     runtime-constructed pairs/vectors — is not constrained, so the result is
+//     false.
+//
+// Mutation gate sites that already hold a concrete *Pair/*Vector use this in
+// place of the inline `set != nil && set.Contains(v)` guard. *String primitives
+// keep self-enforcing inside their mutators (SetChar/Fill), which is the correct
+// layer for a value that owns its own bit; this predicate is the canonical
+// answer for any caller that must ask without knowing the type.
+func (p *ImmutableLiterals) IsImmutable(v values.Value) bool {
+	q, ok := v.(values.Immutable)
+	if ok {
+		return q.IsImmutable()
+	}
+	return p != nil && p.Contains(v)
+}
