@@ -274,25 +274,37 @@ func classifyCompiled(ctx context.Context, wrapped string, immutable bool) (map[
 // confirms nothing was stamped. A mismatch means the stamp path or the flag
 // plumbing regressed and the verdict is not a real measurement.
 func assertStampLanded(env *environment.EnvironmentFrame, expr validate.ValidatedExpr, immutable bool) error {
-	def := firstFunctionDefine(expr)
-	if def == nil {
+	defs := topLevelFunctionDefines(expr)
+	if len(defs) == 0 {
 		return fmt.Errorf("positive control: no top-level function define found in unit")
 	}
-	name := def.Name()
-	b := env.GetBinding(name.Sym, name.Scopes())
-	if b == nil {
-		return fmt.Errorf("positive control: first define %q has no binding after compile — stamp path broke", name.Sym.Key)
-	}
-	if b.IsStable() != immutable {
-		return fmt.Errorf("positive control: first define %q IsStable()=%v, want %v (WithImmutableTopLevel=%v) — stamp/flag mismatch; recovered verdict would be an artifact", name.Sym.Key, b.IsStable(), immutable, immutable)
+	// Range over EVERY top-level function define the classifier reads, not just
+	// the first: a stamp path that stamped the head but mis-stamped a later
+	// define would otherwise pass the control while that define's verdict is an
+	// artifact. The producer stamps Stable ONLY when StableInUnit holds
+	// (defined-once ∧ never-set!, errors.go finalizeStability), so the expected
+	// bit is immutable ∧ def.StableInUnit — NOT immutable alone. This stays
+	// correct if a future benchmark's define is legitimately non-Stable (set! or
+	// twice-defined): the producer declines to stamp it and the control accepts.
+	for _, def := range defs {
+		name := def.Name()
+		b := env.GetBinding(name.Sym, name.Scopes())
+		if b == nil {
+			return fmt.Errorf("positive control: define %q has no binding after compile — stamp path broke", name.Sym.Key)
+		}
+		want := immutable && def.StableInUnit
+		if b.IsStable() != want {
+			return fmt.Errorf("positive control: define %q IsStable()=%v, want %v (WithImmutableTopLevel=%v, StableInUnit=%v) — stamp/flag mismatch; recovered verdict would be an artifact", name.Sym.Key, b.IsStable(), want, immutable, def.StableInUnit)
+		}
 	}
 	return nil
 }
 
-// firstFunctionDefine returns the first top-level function define in expr,
+// topLevelFunctionDefines returns every top-level function define in expr,
 // flattening a top-level (begin ...) one level (R7RS body semantics — the
-// harness always wraps the program in a begin). Returns nil if none.
-func firstFunctionDefine(expr validate.ValidatedExpr) *validate.ValidatedDefine {
+// harness always wraps the program in a begin). The classifier reasons about
+// exactly this set, so the positive control must cover all of it.
+func topLevelFunctionDefines(expr validate.ValidatedExpr) []*validate.ValidatedDefine {
 	var body []validate.ValidatedExpr
 	begin, ok := expr.(*validate.ValidatedBegin)
 	if ok {
@@ -300,13 +312,14 @@ func firstFunctionDefine(expr validate.ValidatedExpr) *validate.ValidatedDefine 
 	} else {
 		body = []validate.ValidatedExpr{expr}
 	}
+	var defs []*validate.ValidatedDefine
 	for _, e := range body {
 		d, ok := e.(*validate.ValidatedDefine)
 		if ok && d.IsFunction {
-			return d
+			defs = append(defs, d)
 		}
 	}
-	return nil
+	return defs
 }
 
 // runForCounts runs the wrapped benchmark with per-callee counting enabled and

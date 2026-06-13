@@ -346,3 +346,54 @@ func TestBuildReclaimGraph_ImmutableEdgeImpliesStable(t *testing.T) {
 		t.Fatalf("expected at least one immutable edge (use→sq) to exercise the invariant")
 	}
 }
+
+// TestClassifyFrameReclaim_LocalShadowNotReclaimable pins the OQ-1 fix: a local
+// binding (parameter or let) that shadows a Stable top-level define name in
+// operator position must NOT yield a reclaimable verdict — the real callee is
+// the local (arbitrary, possibly continuation-capturing), not the Stable
+// top-level define. The classifier resolves against a flat env that cannot see
+// the local frame, so env.GetBinding would otherwise return the global Stable
+// binding and mark the edge immutable (a false positive at the wrong callee).
+// The call-site walk tracks shadowing names to reject these.
+func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
+	// Top-level (define (sq x) (* x x)), always stamped Stable below.
+	mkSq := func() *ValidatedDefine {
+		return defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
+	}
+
+	// (a) PARAMETER shadow: (define (use sq) (sq 3)) — sq is use's parameter.
+	useParam := &ValidatedDefine{
+		validatedBase: validatedBase{formName: "define"},
+		validatedProcBase: validatedProcBase{
+			params: &ValidatedParams{Required: []*syntax.SyntaxSymbol{syntax.NewSyntaxSymbol("sq", nil)}},
+			body:   []ValidatedExpr{call(symRef("sq"), lit())},
+		},
+		name:       syntax.NewSyntaxSymbol("use", nil),
+		IsFunction: true,
+	}
+	envA := envWithImported(t, "*")
+	stampStable(t, envA, "sq")
+	if ClassifyFrameReclaim([]ValidatedExpr{mkSq(), useParam}, envA)["use"] {
+		t.Fatalf("parameter shadow: use must NOT be reclaimable — (sq 3) calls the param, not the Stable top-level sq")
+	}
+
+	// (b) LET shadow: (define (use) (let ((sq #f)) (sq))) — sq is let-bound.
+	useLet := defineFn("use",
+		nestedLet([]ValidatedLetBinding{{Name: syntax.NewSyntaxSymbol("sq", nil), Init: lit()}},
+			call(symRef("sq"))))
+	envB := envWithImported(t, "*")
+	stampStable(t, envB, "sq")
+	if ClassifyFrameReclaim([]ValidatedExpr{mkSq(), useLet}, envB)["use"] {
+		t.Fatalf("let shadow: use must NOT be reclaimable — (sq) calls the let binding, not the Stable top-level sq")
+	}
+
+	// (c) CONTROL: genuine same-unit call, no shadow — (define (use) (sq 3)) is
+	// reclaimable (sq Stable ⇒ immutable edge to a safe node). Proves the shadow
+	// guard does not over-reject legitimate same-unit calls.
+	useReal := defineFn("use", call(symRef("sq"), lit()))
+	envC := envWithImported(t, "*")
+	stampStable(t, envC, "sq")
+	if !ClassifyFrameReclaim([]ValidatedExpr{mkSq(), useReal}, envC)["use"] {
+		t.Fatalf("control: a genuine same-unit call to Stable sq MUST be reclaimable")
+	}
+}

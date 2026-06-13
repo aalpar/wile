@@ -82,6 +82,11 @@ func makeIsCaptureOp(env *environment.EnvironmentFrame) func(*syntax.SyntaxSymbo
 // stamped Stable (WithImmutableTopLevel off, or a non-compiled env) yields
 // mutable same-unit edges (tier-(a) behavior); an env whose defines ARE Stable
 // (WithImmutableTopLevel on, compiled) yields immutable edges (tier-(b)).
+//
+// PRECONDITION: env must be the post-compile env for unit (bindings stamped). An
+// un-stamped (validate-only) env reports IsStable()==false uniformly, yielding
+// the conservative tier-(a) verdict with no diagnostic — sound for the optimizer
+// but a silent artifact for a measurement (guard with a positive control).
 func ClassifyFrameReclaim(
 	unit []ValidatedExpr,
 	env *environment.EnvironmentFrame,
@@ -132,7 +137,7 @@ func buildReclaimGraph(
 	// Pass 2: resolve each define's constraining call sites to edges (needs the
 	// full node set so same-unit callees resolve).
 	for i, d := range defs {
-		defNodes[i].callees = resolveCallEdges(d.Body(), env, byName)
+		defNodes[i].callees = resolveCallEdges(d, env, byName)
 	}
 
 	nodes := make([]*reclaimNode, 0, len(byName))
@@ -156,34 +161,41 @@ func collectTopLevelDefines(unit []ValidatedExpr, fn func(*ValidatedDefine)) {
 	}
 }
 
-// resolveCallEdges walks body and emits one reclaimEdge per call site that
+// resolveCallEdges walks d's body and emits one reclaimEdge per call site that
 // imposes a capture constraint. A call to a capture-safe primitive imposes no
 // constraint and contributes no edge, so a function calling only such
 // primitives has zero edges and is trivially safe.
+//
+// The walk threads a nameSet of locally-bound (shadowing) names so an operator
+// shadowed by an enclosing lambda/let/internal-define is not mistaken for the
+// same-Key top-level define or primitive (OQ-1). The seed is d's OWN parameters;
+// d's own name is deliberately NOT seeded so a self-recursive call resolves to
+// this top-level node.
 func resolveCallEdges(
-	body []ValidatedExpr,
+	d *ValidatedDefine,
 	env *environment.EnvironmentFrame,
 	byName map[string]*reclaimNode,
 ) []reclaimEdge {
 	var edges []reclaimEdge
-	for _, e := range body {
-		walkCallSites(e, func(proc ValidatedExpr) {
-			edge, constrains := classifyCallee(proc, env, byName)
-			if constrains {
-				edges = append(edges, edge)
-			}
-		})
+	collect := func(proc ValidatedExpr, bound nameSet) {
+		edge, constrains := classifyCallee(proc, env, byName, bound)
+		if constrains {
+			edges = append(edges, edge)
+		}
 	}
+	walkBodySeq(d.Body(), nameSet(nil).withParams(d.Params()), collect)
 	return edges
 }
 
-// classifyCallee maps a call operator to (edge, constrains). constrains==false
-// means the call imposes no capture constraint (a confirmed capture-safe
-// primitive) and contributes no edge.
+// classifyCallee maps a call operator to (edge, constrains) under the set of
+// names lexically shadowed at the call site. constrains==false means the call
+// imposes no capture constraint (a confirmed capture-safe primitive) and
+// contributes no edge.
 func classifyCallee(
 	proc ValidatedExpr,
 	env *environment.EnvironmentFrame,
 	byName map[string]*reclaimNode,
+	bound nameSet,
 ) (reclaimEdge, bool) {
 	sym, ok := proc.(*ValidatedSymbol)
 	if !ok {
@@ -191,12 +203,23 @@ func classifyCallee(
 	}
 	name := sym.Symbol.Sym.Key
 
+	// Lexical shadow guard (OQ-1): an operator bound by an enclosing local scope
+	// resolves to that local, NOT the same-Key top-level define or imported
+	// primitive. The classifier resolves against a flat env with no local frames,
+	// so without this guard env.GetBinding(name) would return the global (Stable)
+	// binding and mark the edge immutable — a false positive at the wrong callee
+	// (e.g. (define (use h) (let ((sq h)) (sq 3))) with a Stable top-level sq).
+	// A shadowed operator is therefore unresolved ⇒ unsafe.
+	if bound.has(name) {
+		return reclaimEdge{target: nil}, true
+	}
+
 	// Same-unit top-level define: resolvable. Its edge is immutable iff the
 	// callee binding IsStable() — the producer's Stable bit, the single source
 	// of truth (StableInUnit = defined-once ∧ never-set!, made sound by Option-B
 	// enforcement). A non-stamped binding (flag off, or non-compiled env) ⇒
 	// mutable edge ⇒ unsafe, the sound tier-(a) default. Mirror the primitive
-	// lookup below: assignment then test, not a compound if (CLAUDE.md).
+	// lookup below: assignment then test, not a compound if.
 	target, ok := byName[name]
 	if ok {
 		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
@@ -218,22 +241,134 @@ func classifyCallee(
 }
 
 // walkCallSites invokes fn with the operator of every ValidatedCall and
-// ValidatedApply reachable from expr (including nested and closure-body calls).
-func walkCallSites(expr ValidatedExpr, fn func(proc ValidatedExpr)) {
+// ValidatedApply reachable from expr, paired with the nameSet of names lexically
+// shadowed (locally bound) at that site. Binding forms (lambda, case-lambda,
+// let, internal define) extend the shadow set for their sub-scopes; every other
+// form descends with the inherited set.
+func walkCallSites(expr ValidatedExpr, bound nameSet, fn func(proc ValidatedExpr, bound nameSet)) {
 	if expr == nil {
 		return
 	}
 
-	call, ok := expr.(*ValidatedCall)
-	if ok {
-		fn(call.Proc())
-	}
-	app, ok := expr.(*ValidatedApply)
-	if ok {
-		fn(app.Proc)
-	}
+	switch e := expr.(type) {
+	case *ValidatedCall:
+		fn(e.Proc(), bound)
+		for _, arg := range e.Body() {
+			walkCallSites(arg, bound, fn)
+		}
 
-	WalkSubExprs(expr, func(child ValidatedExpr, _ ChildRole) {
-		walkCallSites(child, fn)
-	})
+	case *ValidatedApply:
+		fn(e.Proc, bound)
+		for _, arg := range e.PrefixArgs {
+			walkCallSites(arg, bound, fn)
+		}
+		walkCallSites(e.FinalList, bound, fn)
+
+	case *ValidatedLambda:
+		walkBodySeq(e.Body(), bound.withParams(e.Params()), fn)
+
+	case *ValidatedCaseLambda:
+		for _, clause := range e.Clauses() {
+			walkBodySeq(clause.Body(), bound.withParams(clause.Params()), fn)
+		}
+
+	case *ValidatedLet:
+		// Conservative: the let's bound names shadow in the body AND (over-
+		// approximating plain-let scoping) in the inits. Over-approximation only
+		// drops a same-name-init edge to unsafe (a leak, sound), never the reverse.
+		inner := bound.withLetBindings(e.Bindings)
+		for _, b := range e.Bindings {
+			walkCallSites(b.Init, inner, fn)
+		}
+		walkBodySeq(e.Body(), inner, fn)
+
+	case *ValidatedBegin:
+		// A begin in a body context can splice internal defines into the sequence.
+		walkBodySeq(e.Body(), bound, fn)
+
+	case *ValidatedDefine:
+		if e.IsFunction {
+			walkBodySeq(e.Body(), bound.withParams(e.Params()), fn)
+		} else {
+			walkCallSites(e.SubExp(), bound, fn)
+		}
+
+	default:
+		WalkSubExprs(expr, func(child ValidatedExpr, _ ChildRole) {
+			walkCallSites(child, bound, fn)
+		})
+	}
+}
+
+// walkBodySeq walks a body sequence, first hoisting every internal define's name
+// into scope (letrec* — internal defines are mutually visible across the whole
+// body, including their own bodies and earlier siblings), then descending each
+// expression with that augmented shadow set.
+func walkBodySeq(body []ValidatedExpr, bound nameSet, fn func(proc ValidatedExpr, bound nameSet)) {
+	var defined []string
+	for _, e := range body {
+		d, ok := e.(*ValidatedDefine)
+		if ok {
+			defined = append(defined, d.Name().Sym.Key)
+		}
+	}
+	inner := bound
+	if len(defined) > 0 {
+		inner = bound.with(defined...)
+	}
+	for _, e := range body {
+		walkCallSites(e, inner, fn)
+	}
+}
+
+// nameSet is a set of identifier Keys lexically bound in an enclosing local
+// scope. A call operator whose name is in the set is shadowed by a local binding
+// and therefore is NOT the same-Key top-level define or imported primitive.
+type nameSet map[string]struct{}
+
+// with returns a copy of s extended with names. Copy-on-extend keeps sibling
+// scopes independent — a name bound in one let does not leak to its siblings.
+func (s nameSet) with(names ...string) nameSet {
+	out := make(nameSet, len(s)+len(names))
+	for k := range s {
+		out[k] = struct{}{}
+	}
+	for _, n := range names {
+		out[n] = struct{}{}
+	}
+	return out
+}
+
+// withParams returns a copy of s extended with a parameter list's required and
+// rest names. A nil params list returns s unchanged.
+func (s nameSet) withParams(p *ValidatedParams) nameSet {
+	if p == nil {
+		return s
+	}
+	names := make([]string, 0, len(p.Required)+1)
+	for _, req := range p.Required {
+		names = append(names, req.Sym.Key)
+	}
+	if p.Rest != nil {
+		names = append(names, p.Rest.Sym.Key)
+	}
+	return s.with(names...)
+}
+
+// withLetBindings returns a copy of s extended with a let form's bound names.
+func (s nameSet) withLetBindings(bindings []ValidatedLetBinding) nameSet {
+	if len(bindings) == 0 {
+		return s
+	}
+	names := make([]string, 0, len(bindings))
+	for _, b := range bindings {
+		names = append(names, b.Name.Sym.Key)
+	}
+	return s.with(names...)
+}
+
+// has reports whether name is lexically shadowed in this scope.
+func (s nameSet) has(name string) bool {
+	_, ok := s[name]
+	return ok
 }
