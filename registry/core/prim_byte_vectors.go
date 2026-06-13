@@ -107,6 +107,9 @@ func PrimBytevectorU8Ref(mc machine.CallContext) error {
 func PrimBytevectorU8Set(mc machine.CallContext) error {
 	return helpers.SequenceSet(mc, werr.ErrNotAByteVector, "bytevector-u8-set!",
 		func(bv *values.ByteVector, idx int, mc machine.CallContext) error {
+			if mc.ImmutableLiterals().IsImmutable(bv) {
+				return werr.WrapForeignErrorf(werr.ErrImmutableBytevector, "bytevector-u8-set!: cannot mutate immutable literal bytevector")
+			}
 			byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), werr.ErrNotAnInteger, "bytevector-u8-set!")
 			if err != nil {
 				return err
@@ -164,6 +167,9 @@ func PrimBytevectorCopyBang(mc machine.CallContext) error {
 	}
 	if atIdx.Value < 0 || atIdx.Value+int64(end-start) > int64(len(*toBv)) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
+	}
+	if mc.ImmutableLiterals().IsImmutable(toBv) {
+		return werr.WrapForeignErrorf(werr.ErrImmutableBytevector, "bytevector-copy!: cannot mutate immutable literal bytevector")
 	}
 
 	// Use copy with correct slice bounds - handles overlapping regions correctly

@@ -26,9 +26,9 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestImmutableLiteral_MutatorsRaise verifies the five list/vector mutators
-// reject a quoted literal (R7RS §4.1.2) with the per-type sentinel, matching
-// the existing immutable-string behavior.
+// TestImmutableLiteral_MutatorsRaise verifies the list/vector/bytevector
+// mutators reject a quoted literal (R7RS §4.1.2) with the per-type sentinel,
+// matching the existing immutable-string behavior.
 func TestImmutableLiteral_MutatorsRaise(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -40,6 +40,8 @@ func TestImmutableLiteral_MutatorsRaise(t *testing.T) {
 		{"list-set! on literal", `(list-set! '(a b c) 1 'x)`, werr.ErrImmutablePair},
 		{"vector-set! on literal", `(vector-set! '#(1 2 3) 0 9)`, werr.ErrImmutableVector},
 		{"vector-fill! on literal", `(vector-fill! '#(1 2 3) 0)`, werr.ErrImmutableVector},
+		{"bytevector-u8-set! on literal", `(bytevector-u8-set! '#u8(1 2 3) 0 9)`, werr.ErrImmutableBytevector},
+		{"bytevector-copy! on literal", `(bytevector-copy! '#u8(1 2 3) 0 (bytevector 9))`, werr.ErrImmutableBytevector},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -65,6 +67,10 @@ func TestImmutableLiteral_AllocatedStillMutable(t *testing.T) {
 			Code: `(let ((v (make-vector 2 0))) (vector-set! v 0 9) (vector-ref v 0))`, Expected: values.NewInteger(9)},
 		{Name: "vector-fill! on allocated vector",
 			Code: `(let ((v (make-vector 2 0))) (vector-fill! v 7) (vector-ref v 1))`, Expected: values.NewInteger(7)},
+		{Name: "bytevector-u8-set! on allocated bytevector",
+			Code: `(let ((b (make-bytevector 2 0))) (bytevector-u8-set! b 0 9) (bytevector-u8-ref b 0))`, Expected: values.NewInteger(9)},
+		{Name: "bytevector-copy! on allocated bytevector",
+			Code: `(let ((b (make-bytevector 2 0))) (bytevector-copy! b 0 (bytevector 7)) (bytevector-u8-ref b 0))`, Expected: values.NewInteger(7)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

@@ -629,6 +629,10 @@ func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, vi
 		for _, elem := range *obj {
 			markLiteralImmutable(elem, set, visited)
 		}
+	case *values.ByteVector:
+		// Elements are *Byte leaves (no nested aggregates), so mark the
+		// bytevector itself without recursing. R7RS §4.1.2.
+		set.Mark(obj)
 	}
 }
 
