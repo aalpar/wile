@@ -59,7 +59,7 @@ func exprReferencesCaptureOperator(
 	// *ValidatedQuasiquote with the no-sub-expression literals). An unquoted
 	// expression inside it — `(,(call/cc …)), `(,(lambda () x)), `(,(set! g …)) —
 	// can capture, escape, or mutate at runtime, invisibly to this scan and to
-	// walkCallSites/collectMutatedTopLevelNames. Because the subtree is
+	// walkCallSites. Because the subtree is
 	// un-analysable here, conservatively treat EVERY quasiquote as a capture risk
 	// — the sound-by-default stance that an un-analysed subtree counts as unsafe.
 	// Flagging it here (rather than in the escaping/edge/set! scans) suffices: a
