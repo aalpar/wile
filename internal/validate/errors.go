@@ -58,6 +58,15 @@ type ValidationResult struct {
 	Expr            ValidatedExpr     // nil if validation failed
 	Errors          []ValidationError // All errors encountered
 	mutatedBindings map[environment.BindingID]bool
+
+	// mutatedKeys and definedKeyCount track set! targets and define occurrences
+	// by symbol Key across the whole unit, independent of binding creation.
+	// Top-level global bindings are created by the compiler, not the validator,
+	// so mutatedBindings (keyed by BindingID) cannot see a top-level set! inside
+	// a (begin ...) unit. These power StableInUnit, computed syntactically and
+	// conservatively by Key (over-match ⇒ non-stable). See finalizeStability.
+	mutatedKeys     map[string]bool
+	definedKeyCount map[string]int
 }
 
 // markMutated records that a local binding is targeted by set!.
@@ -74,6 +83,42 @@ func (p *ValidationResult) markMutated(bid environment.BindingID) {
 // isMutated returns true if the binding was targeted by set!.
 func (p *ValidationResult) isMutated(bid environment.BindingID) bool {
 	return p.mutatedBindings[bid]
+}
+
+// markMutatedKey records that a symbol named key is a set! target somewhere in
+// the unit. Recorded by symbol Key (not BindingID) so a top-level set! is
+// captured even before the compiler creates the binding. Over-approximates: a
+// set! to any same-Key binding (including a local shadow) marks the Key.
+func (p *ValidationResult) markMutatedKey(key string) {
+	if p.mutatedKeys == nil {
+		p.mutatedKeys = make(map[string]bool)
+	}
+	p.mutatedKeys[key] = true
+}
+
+// recordDefinedKey counts a define of a symbol named key in the unit. Used to
+// enforce defined-once: a Key defined twice (e.g. a top-level redefinition or a
+// same-name internal define) is not in-unit-stable.
+func (p *ValidationResult) recordDefinedKey(key string) {
+	if p.definedKeyCount == nil {
+		p.definedKeyCount = make(map[string]int)
+	}
+	p.definedKeyCount[key]++
+}
+
+// finalizeStability stamps StableInUnit on every top-level define once the unit
+// is fully validated (so mutatedKeys/definedKeyCount are complete). A define is
+// in-unit-stable iff its name is defined exactly once and never set! in the
+// unit. Top-level only: internal/local defines never reach the compiler's
+// global Stable stamp, so they are intentionally not visited here.
+func (p *ValidationResult) finalizeStability() {
+	if p.Expr == nil {
+		return
+	}
+	collectTopLevelDefines([]ValidatedExpr{p.Expr}, func(d *ValidatedDefine) {
+		key := d.name.Key()
+		d.StableInUnit = p.definedKeyCount[key] == 1 && !p.mutatedKeys[key]
+	})
 }
 
 // Ok returns true if no validation errors were encountered.

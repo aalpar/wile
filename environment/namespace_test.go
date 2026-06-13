@@ -555,3 +555,27 @@ func TestNamespace_ImmutableLiteralsSharedViaParent(t *testing.T) {
 		t.Fatalf("scheme-report child must delegate ImmutableLiterals to root")
 	}
 }
+
+// TestNamespace_ImmutableTopLevelDelegatesToRoot verifies the opt-in
+// top-level-define immutability flag defaults off, lives on the root, and is
+// seen identically by children — so the compiler/validator query one setting.
+func TestNamespace_ImmutableTopLevelDelegatesToRoot(t *testing.T) {
+	root := NewNamespace()
+	if root.ImmutableTopLevel() {
+		t.Fatalf("immutable top-level must default off")
+	}
+
+	child := root.NewChildNamespace()
+	root.SetImmutableTopLevel(true)
+	if !root.ImmutableTopLevel() {
+		t.Fatalf("root must report the setting after SetImmutableTopLevel(true)")
+	}
+	if !child.ImmutableTopLevel() {
+		t.Fatalf("child must delegate ImmutableTopLevel to root")
+	}
+
+	report := root.NewSchemeReportNamespace()
+	if !report.ImmutableTopLevel() {
+		t.Fatalf("scheme-report child must delegate ImmutableTopLevel to root")
+	}
+}

@@ -117,6 +117,15 @@ type Namespace struct {
 	// child is checkable by any mutator anywhere in the namespace tree.
 	immutableLiterals *ImmutableLiterals
 
+	// immutableTopLevel, when true, makes the engine treat a top-level define
+	// that is defined-once and never set! within its compilation unit as
+	// rebind-stable (BindingMeta.Stable) and then forbid a later set!/redefine
+	// of such a binding. Opt-in (off by default = strict R7RS) via the
+	// WithImmutableTopLevel engine option; it gates the frame-reclamation
+	// optimizer's top-level payoff. Delegated to root like loadPathStack so the
+	// compiler and validator see one engine-scoped setting.
+	immutableTopLevel bool
+
 	// phases is the phase registry for O(1) access to any phase environment.
 	phases *PhaseRegistry
 
@@ -324,6 +333,19 @@ func (p *Namespace) SetFileResolver(resolver FileResolver) {
 // children delegate through root(), so every mutator sees the same set.
 func (p *Namespace) ImmutableLiterals() *ImmutableLiterals {
 	return p.root().immutableLiterals
+}
+
+// ImmutableTopLevel reports whether opt-in top-level-define immutability is
+// enabled for this engine. Delegated to root, so every compiler/validator query
+// sees one engine-scoped setting. See immutableTopLevel.
+func (p *Namespace) ImmutableTopLevel() bool {
+	return p.root().immutableTopLevel
+}
+
+// SetImmutableTopLevel enables or disables opt-in top-level-define immutability.
+// Set once at engine construction (WithImmutableTopLevel). Delegated to root.
+func (p *Namespace) SetImmutableTopLevel(on bool) {
+	p.root().immutableTopLevel = on
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.

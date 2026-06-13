@@ -121,14 +121,13 @@ func WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, role ChildRol
 		// ADDING A NEW ValidatedExpr TYPE
 		//
 		// This switch is the SINGLE registration point for tree-walking
-		// analysis in the validate package. Both markCapturedBindings
-		// and markEscapedBindings traverse through WalkBindingRefs,
-		// which in turn dispatches through this switch via WalkSubExprs.
-		// A new ValidatedExpr type without a case here will silently
-		// skip both analyses — bindings referenced inside the new form
-		// will not be marked Captured or Escapes, and the compiler will
-		// receive valid-but-under-marked bytecode (closures missing
-		// capture slots, stack allocation where heap is needed).
+		// analysis in the validate package. markEscapedBindings traverses
+		// through WalkBindingRefs, which in turn dispatches through this
+		// switch via WalkSubExprs. A new ValidatedExpr type without a case
+		// here will silently skip the analysis — bindings referenced inside
+		// the new form will not be marked Escapes, and the compiler will
+		// receive valid-but-under-marked bytecode (stack allocation where
+		// heap is needed).
 		//
 		// When adding a new ValidatedExpr type with child expressions:
 		//   1. Add a case above with the correct ChildRole for each

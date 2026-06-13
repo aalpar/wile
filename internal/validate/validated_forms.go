@@ -100,6 +100,16 @@ type ValidatedDefine struct {
 	name              *syntax.SyntaxSymbol
 	subExp            ValidatedExpr // For (define name expr), nil for function form
 	IsFunction        bool          // True for (define (name ...) ...)
+
+	// StableInUnit reports that this define's name is defined exactly once and
+	// never set! within the compilation unit the validator saw, computed
+	// syntactically by symbol Key (conservative over-approximation: a same-Key
+	// local set! or shadowing define marks it non-stable — a false match costs
+	// optimization, never soundness). It is the in-unit evidence the compiler
+	// consumes (only for top-level/global defines) to populate
+	// BindingMeta.Stable when opt-in top-level immutability is enabled. Stamped
+	// by finalizeStability after the whole unit is validated.
+	StableInUnit bool
 }
 
 // Name returns the name being defined.
@@ -303,14 +313,12 @@ func (p LetKind) Sequential() bool {
 
 // ValidatedLetBinding represents a single (name init-expr) binding pair.
 // Mutable is true if the binding is targeted by set! in the body.
-// Captured is true if the binding is referenced from inside an escaping closure.
 // Escapes is true if the binding is referenced in a non-call position.
 type ValidatedLetBinding struct {
-	Name     *syntax.SyntaxSymbol
-	Init     ValidatedExpr
-	Mutable  bool
-	Captured bool
-	Escapes  bool
+	Name    *syntax.SyntaxSymbol
+	Init    ValidatedExpr
+	Mutable bool
+	Escapes bool
 }
 
 // ValidatedLet represents all four R7RS binding forms: let, let*, letrec,

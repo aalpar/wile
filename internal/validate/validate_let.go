@@ -141,7 +141,6 @@ func validateLetBindingsAndBody(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
-	markCapturedBindings(childEnv, bindings, body, false)
 	markEscapedBindings(childEnv, bindings, body, false)
 
 	return &ValidatedLet{
@@ -283,7 +282,6 @@ func validateLetStarFlat(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
-	markCapturedBindings(childEnv, bindings, body, true)
 	markEscapedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
@@ -345,7 +343,6 @@ func validateLetStarNested(
 		vb := validated[i]
 		bindings := []ValidatedLetBinding{vb.binding}
 		markMutableBindings(vb.childEnv, bindings, result)
-		markCapturedBindings(vb.childEnv, bindings, innerBody, true)
 		markEscapedBindings(vb.childEnv, bindings, innerBody, true)
 		node := &ValidatedLet{
 			validatedBase: validatedBase{formName: formName, source: source},
@@ -434,7 +431,6 @@ func validateLetrecBindingsAndBody(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
-	markCapturedBindings(childEnv, bindings, body, true)
 	markEscapedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
@@ -505,7 +501,6 @@ func validateNamedLet(
 	tagBindings := []ValidatedLetBinding{{Name: tag, Init: lambdaInit}}
 	tagBody := []ValidatedExpr{callExpr}
 	markMutableBindings(tagEnv, tagBindings, result)
-	markCapturedBindings(tagEnv, tagBindings, tagBody, true)
 	markEscapedBindings(tagEnv, tagBindings, tagBody, true)
 
 	return &ValidatedLet{

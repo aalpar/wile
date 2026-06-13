@@ -33,6 +33,7 @@ func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, 
 	result := &ValidationResult{}
 	validated := validateExpr(ctx, env, expr, result)
 	result.Expr = validated
+	result.finalizeStability()
 	return result
 }
 

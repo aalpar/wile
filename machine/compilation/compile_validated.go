@@ -249,7 +249,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallCo
 // declareDefineBinding creates the binding for a define form before compiling its value.
 // This early declaration enables self-recursive definitions like (define (fact n) ... (fact (- n 1)) ...).
 // Returns the symbol for use by the caller when storing the compiled value.
-func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) *values.Symbol {
+func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) (*values.Symbol, error) {
 	// Get the symbol for the name (validator guarantees it's a SyntaxSymbol)
 	sym := v.Name().Sym
 	symbolScopes := v.Name().Scopes()
@@ -257,23 +257,42 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
 		_, _ = p.env.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
-		return sym
+		return sym, nil
 	}
 	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-	if created && len(symbolScopes) == 0 && symbolSource == nil {
-		return sym
+
+	// Opt-in top-level immutability (WithImmutableTopLevel): when enabled, a
+	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
+	// later redefine of an already-stable binding is rejected. When disabled,
+	// behavior is identical to before (the fast path below still fires).
+	ns := p.env.Namespace()
+	immTop := ns != nil && ns.ImmutableTopLevel()
+
+	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
+		return sym, nil
 	}
 	binding := p.env.GetGlobalBinding(gi)
 	if binding == nil {
-		return sym
+		return sym, nil
+	}
+	if immTop {
+		// Redefine guard: a second top-level define of an already-stable binding
+		// would rebind a procedure the frame optimizer may have proven stable in
+		// an earlier unit. Reject it (defined-once across units). Keyed on the
+		// Stable field specifically, NOT IsStable(): an imported binding (Stable
+		// field false) must still be supersedable by a define (R7RS §5.3.1).
+		m := binding.Meta()
+		if !created && m != nil && m.Stable {
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrImmutableBinding,
+				"define: cannot redefine immutable top-level binding %q",
+				sym.Key,
+			)
+		}
 	}
 	// Top-level define supersedes an imported binding (R7RS §5.3.1): the define
 	// overwrites the value in the same slot, so drop the import *provenance* and
-	// a subsequent set! on this binding is permitted. The rebind-stability proof
-	// slot (BindingMeta.Stable) is independent of provenance and is written only
-	// by a completed unit-closure proof — which does not exist yet (sibling
-	// escape-gated plan). A superseding define is not proven stable, so nothing
-	// is asserted on Stable here.
+	// a subsequent set! on this binding is permitted.
 	if binding.IsImported() {
 		binding.EnsureMeta().Imported = false
 	}
@@ -282,7 +301,14 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if symbolSource != nil {
 		m.Source = symbolSource
 	}
-	return sym
+	if immTop {
+		// Discharge the rebind-stability conclusion from in-unit evidence: the
+		// language now forbids the cross-unit set!/redefine that StableInUnit
+		// alone could not rule out (the set! gate + the redefine guard above),
+		// so StableInUnit becomes a sound basis for Stable. Off by default.
+		m.Stable = v.StableInUnit
+	}
+	return sym, nil
 }
 
 // compileValidatedDefineVar compiles the simple variable form of define.
@@ -305,13 +331,16 @@ func (p *CompileTimeContinuation) compileValidatedDefineVar(ctctx CompileTimeCal
 	// For variable defines, this still happens early, but since the value expression
 	// cannot reference itself (unlike function defines), the order is less critical.
 	// The binding is created but not yet populated with a value.
-	sym := p.declareDefineBinding(v)
+	sym, err := p.declareDefineBinding(v)
+	if err != nil {
+		return err
+	}
 
 	// Step 2: Compile the value expression.
 	// The expression is NOT in tail position because define is a definition, not
 	// an expression that returns a meaningful value. The result goes into the
 	// value register, ready to be stored.
-	err := p.compileValidated(ctctx.NotInTail(), v.SubExp())
+	err = p.compileValidated(ctctx.NotInTail(), v.SubExp())
 	if err != nil {
 		return err
 	}
@@ -386,7 +415,10 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	// Step 1: Declare the binding early for self-recursion support.
 	// This must happen before compiling the body so that references to the
 	// function name within the body resolve correctly.
-	sym := p.declareDefineBinding(v)
+	sym, err := p.declareDefineBinding(v)
+	if err != nil {
+		return err
+	}
 
 	// Step 2: Set up the closure's environment and bytecode template.
 	// The local environment holds parameter bindings; compileClosure creates
@@ -400,7 +432,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err := p.compileClosure(ctctx, tpl, lenv, v)
+	err = p.compileClosure(ctctx, tpl, lenv, v)
 	if err != nil {
 		return err
 	}
@@ -489,15 +521,29 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
-	// R7RS §5.2: reject set! on imported bindings. This is the only binding-level
-	// set! restriction — a program-defined top-level variable is mutable (R7RS
-	// §4.1.6). Stability (BindingMeta.Stable) is a rebind-stability *proof
-	// result* for the frame optimizer, NOT a set! permission; it is deliberately
-	// not consulted here. "Mutable unless imported."
+	// R7RS §5.2: reject set! on imported bindings. By default this is the only
+	// binding-level set! restriction — a program-defined top-level variable is
+	// mutable (R7RS §4.1.6), "mutable unless imported."
 	if binding.IsImported() {
 		return werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
 			"set!: cannot mutate imported binding %q",
+			sym.Key,
+		)
+	}
+
+	// Opt-in (WithImmutableTopLevel): also reject set! on a rebind-stable
+	// top-level binding. set! requires its target already bound (above), and a
+	// binding's Stable is finalized at its define — which necessarily precedes
+	// any set! referencing it — so this gate always sees the final Stable, and
+	// no runtime trap is needed. A documented deviation from R7RS §4.1.6, off by
+	// default. The imported clause already covers imports; this adds the
+	// proven-stable program-defined case.
+	ns := p.env.Namespace()
+	if ns != nil && ns.ImmutableTopLevel() && binding.IsStable() {
+		return werr.WrapForeignErrorf(
+			werr.ErrImmutableBinding,
+			"set!: cannot mutate immutable top-level binding %q",
 			sym.Key,
 		)
 	}

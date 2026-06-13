@@ -62,9 +62,9 @@ func extendEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.Synt
 // its BindingID, returning a BindingID → bindings-slice-index map.
 // Bindings whose names fail to resolve under childEnv are silently
 // dropped — best-effort, matching the prior walker behavior. Used by
-// markCapturedBindings / markEscapedBindings (consumers of
-// WalkBindingRefs); a candidate for any future analysis that needs to
-// map BindingID → index across a let-binding slice.
+// markEscapedBindings (a consumer of WalkBindingRefs); a candidate for
+// any future analysis that needs to map BindingID → index across a
+// let-binding slice.
 func buildBindingIdxMap(
 	childEnv *environment.EnvironmentFrame,
 	bindings []ValidatedLetBinding,

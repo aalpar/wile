@@ -60,6 +60,9 @@ func validateDefineVariable(ctx context.Context, env *environment.EnvironmentFra
 		return nil
 	}
 
+	// Record the define by Key for defined-once tracking (StableInUnit).
+	result.recordDefinedKey(name.Key())
+
 	return &ValidatedDefine{
 		validatedBase: validatedBase{formName: "define", source: source},
 		name:          name,
@@ -94,6 +97,9 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 	}
 
 	docstring, body := extractDocstring(body)
+
+	// Record the define by Key for defined-once tracking (StableInUnit).
+	result.recordDefinedKey(name.Key())
 
 	return &ValidatedDefine{
 		validatedBase:     validatedBase{formName: "define", source: source},

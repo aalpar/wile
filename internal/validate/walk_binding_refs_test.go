@@ -208,10 +208,10 @@ func TestWalkBindingRefs_CallProcInsideClosureBody(t *testing.T) {
 // TestBuildBindingIdxMap_SilentlyDropsUnresolvable pins the documented
 // best-effort contract: any binding whose Name fails ResolveBindingID
 // under childEnv is silently dropped from the returned map. The
-// markCapturedBindings / markEscapedBindings helpers rely on this
-// behavior — if a future refactor changed it (e.g. to panic or return
-// an error), the consumers' "best-effort: stays non-captured" promise
-// would silently break.
+// markEscapedBindings helper relies on this behavior — if a future
+// refactor changed it (e.g. to panic or return an error), the
+// consumer's "best-effort: stays non-escaped" promise would silently
+// break.
 func TestBuildBindingIdxMap_SilentlyDropsUnresolvable(t *testing.T) {
 	env, bindings := makeTestEnvAndBindings("x") // x is registered in env
 	// Append a binding whose Name was NEVER registered with env.
