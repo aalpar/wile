@@ -174,6 +174,38 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 					call(symRef("s"), symRef("i")))),
 			self: "s", want: false,
 		},
+		{
+			// set! on the self name means a subsequent self-call must dispatch to
+			// the new value — OpSelfTailCall's hardcoded jump-to-0 would be wrong.
+			name: "negative: self name is set! in the body (binding is mutable)",
+			proc: fnWith("loop", params("i"),
+				&ValidatedBegin{
+					validatedBase: validatedBase{formName: "begin"},
+					body: []ValidatedExpr{
+						setBang("loop", symRef("other")),
+						ifx(call(symRef("done?"), symRef("i")),
+							symRef("i"),
+							call(symRef("loop"), call(symRef("+"), symRef("i"), lit()))),
+					},
+				}),
+			self: "loop", want: false,
+		},
+		{
+			// A set! to a shadowing let binding of the same name does NOT mutate the
+			// enclosing self, so reuse stays sound (precision: shadow-aware).
+			name: "positive: set! targets a shadowing let binding, not self",
+			proc: fnWith("s", params("i"),
+				&ValidatedBegin{
+					validatedBase: validatedBase{formName: "begin"},
+					body: []ValidatedExpr{
+						nestedLet([]ValidatedLetBinding{letBind("s")}, setBang("s", lit())),
+						ifx(call(symRef("done?"), symRef("i")),
+							symRef("i"),
+							call(symRef("s"), call(symRef("+"), symRef("i"), lit()))),
+					},
+				}),
+			self: "s", want: true,
+		},
 	}
 
 	for _, tc := range tests {

@@ -62,7 +62,98 @@ func bodyIsSelfTailReusable(
 	if bodyCreatesEscapingClosure(body) {
 		return false
 	}
+	// The self BINDING must be immutable in the body: a set! on selfName means a
+	// later self-call must dispatch to the new value, which OpSelfTailCall's
+	// hardcoded jump-to-0 cannot do. (For a top-level self binding the producer
+	// must ALSO be Stable against cross-unit redefinition — checked at the emit
+	// site, where the resolved binding is available; this clause covers the
+	// in-body half, which is the whole story for a lexical named-let loop.)
+	if bodyMutatesName(body, selfName) {
+		return false
+	}
 	return tailSeqHasSelfCall(body, 0, nameSet(nil), selfName, len(p.Required))
+}
+
+// bodyMutatesName reports whether any set! reachable from body assigns to name,
+// accounting for lexical shadowing: a set! to a lambda/let/internal-define
+// binding of the same name targets that inner binding, not the enclosing one.
+func bodyMutatesName(body []ValidatedExpr, name string) bool {
+	return seqMutatesName(body, name, nameSet(nil))
+}
+
+// seqMutatesName walks a body sequence for a set! of name. Internal-define names
+// are hoisted into the shadow set first (letrec* — a same-name internal define
+// shadows the enclosing name across the whole sequence).
+func seqMutatesName(body []ValidatedExpr, name string, bound nameSet) bool {
+	inner := bound
+	var defined []string
+	for _, e := range body {
+		d, ok := e.(*ValidatedDefine)
+		if ok {
+			defined = append(defined, d.Name().Sym.Key)
+		}
+	}
+	if len(defined) > 0 {
+		inner = bound.with(defined...)
+	}
+	for _, e := range body {
+		if exprMutatesName(e, name, inner) {
+			return true
+		}
+	}
+	return false
+}
+
+// exprMutatesName reports whether expr contains a set! of name that is not
+// lexically shadowed. Binding forms (lambda, case-lambda, let, internal define)
+// extend the shadow set for their sub-scopes; every other form descends with the
+// inherited set (none of them introduces a variable binding).
+func exprMutatesName(expr ValidatedExpr, name string, bound nameSet) bool {
+	if expr == nil {
+		return false
+	}
+	switch v := expr.(type) {
+	case *ValidatedSetBang:
+		if v.Name.Sym.Key == name && !bound.has(name) {
+			return true
+		}
+		return exprMutatesName(v.SubExp(), name, bound)
+	case *ValidatedLambda:
+		return seqMutatesName(v.Body(), name, bound.withParams(v.Params()))
+	case *ValidatedCaseLambda:
+		for _, clause := range v.Clauses() {
+			if seqMutatesName(clause.Body(), name, bound.withParams(clause.Params())) {
+				return true
+			}
+		}
+		return false
+	case *ValidatedLet:
+		// Inits run in the outer scope; the body in the let-extended scope.
+		for _, b := range v.Bindings {
+			if exprMutatesName(b.Init, name, bound) {
+				return true
+			}
+		}
+		return seqMutatesName(v.Body(), name, bound.withLetBindings(v.Bindings))
+	case *ValidatedBegin:
+		return seqMutatesName(v.Body(), name, bound)
+	case *ValidatedDefine:
+		if v.IsFunction {
+			return seqMutatesName(v.Body(), name, bound.withParams(v.Params()))
+		}
+		return exprMutatesName(v.SubExp(), name, bound)
+	default:
+		found := false
+		WalkSubExprs(expr, func(child ValidatedExpr, _ ChildRole) {
+			if found {
+				return
+			}
+			if exprMutatesName(child, name, bound) {
+				found = true
+			}
+		})
+		return found
+	}
 }
 
 // tailSeqHasSelfCall reports whether the tail position of a body sequence
