@@ -432,7 +432,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err = p.compileClosure(ctctx, tpl, lenv, v)
+	err = p.compileClosure(ctctx, tpl, lenv, v, p.selfTailForDefine(v))
 	if err != nil {
 		return err
 	}
@@ -442,6 +442,31 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	return p.emitDefineStore(sym, v.Name().Scopes())
 }
 
+// selfTailForDefine returns the self-tail context for a function-form define, or
+// nil if the define is not eligible for the in-place OpSelfTailCall optimization.
+//
+// Two conditions, both required for soundness:
+//   - The body is self-tail-reusable (no capture/escape, non-variadic, no in-body
+//     set! of the name, has a depth-0 tail self call) — validate.BodyIsSelfTailReusable.
+//   - The binding is Stable, i.e. immutable against cross-unit redefinition. The
+//     op hardcodes a jump to pc=0 of this template, which is only correct if the
+//     name can never be rebound to a different procedure. A top-level define is
+//     Stable only under WithImmutableTopLevel (defined-once, never set!); an
+//     internal define resolves to a non-Stable local binding here and is excluded
+//     — sound, because an internal define can also be set! by a sibling, which the
+//     in-body predicate cannot see.
+func (p *CompileTimeContinuation) selfTailForDefine(v *validate.ValidatedDefine) *selfTailInfo {
+	name := v.Name()
+	binding := p.env.GetBinding(name.Sym, name.Scopes())
+	if binding == nil || !binding.IsStable() {
+		return nil
+	}
+	if !validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
+		return nil
+	}
+	return &selfTailInfo{name: name.Sym.Key, arity: len(v.Params().Required)}
+}
+
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
 func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
 	// Create local environment and template for lambda body.
@@ -449,7 +474,8 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 	lenv := environment.NewLocalEnvironment(0)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	err := p.compileClosure(ctctx, tpl, lenv, v)
+	// Anonymous lambdas have no self name to recurse on — no self-tail context.
+	err := p.compileClosure(ctctx, tpl, lenv, v, nil)
 	if err != nil {
 		return err
 	}
@@ -476,7 +502,8 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 		lenv := environment.NewLocalEnvironment(0)
 		tpl := machine.NewNativeTemplate(0, 0, false)
 
-		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause")
+		// case-lambda clauses are anonymous arity dispatch — no self-tail context.
+		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", nil)
 		if err != nil {
 			return err
 		}
@@ -712,7 +739,47 @@ func (p *CompileTimeContinuation) emitProcAndArgs(ctctx CompileTimeCallContext, 
 	return nil
 }
 
+// tryEmitSelfTailCall emits OpSelfTailCall for a depth-0 tail call to the
+// enclosing self-tail-reusable closure, returning (true, nil) if it did so.
+//
+// The selfTail context is armed only on a closure body proven safe (and, for a
+// top-level self, Stable) and is cleared on every let descent and dropped by
+// NotInTail(), so a set selfTail at an inTail call site whose operator name and
+// arity match the enclosing closure is exactly a DEPTH-0 tail self call. The
+// emit evaluates the arguments (non-tail, pushing each onto the eval stack in
+// slot order — old parameter values stay intact, making the op's drain-and-bind a
+// parallel assignment), then the op rebinds the parameter slots and loops to pc=0.
+func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) (bool, error) {
+	if !ctctx.inTail || ctctx.selfTail == nil {
+		return false, nil
+	}
+	sym, ok := v.Proc().(*validate.ValidatedSymbol)
+	if !ok {
+		return false, nil
+	}
+	if sym.Symbol.Sym.Key != ctctx.selfTail.name || len(v.Body()) != ctctx.selfTail.arity {
+		return false, nil
+	}
+	for _, arg := range v.Body() {
+		err := p.compileValidated(ctctx.NotInTail(), arg)
+		if err != nil {
+			return false, err
+		}
+		p.AppendOperations(machine.NewOperationPush())
+	}
+	p.AppendOperations(machine.NewOperationSelfTailCall(ctctx.selfTail.arity))
+	return true, nil
+}
+
 func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
+	emitted, err := p.tryEmitSelfTailCall(ctctx, v)
+	if err != nil {
+		return err
+	}
+	if emitted {
+		return nil
+	}
+
 	inlined, err := p.tryInlineCall(ctctx, v)
 	if err != nil {
 		return err

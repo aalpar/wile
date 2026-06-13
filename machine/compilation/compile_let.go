@@ -159,7 +159,11 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 		}
 	}
 
-	err := p.compileValidatedSequence(ctctx, v.Body())
+	// The let body runs in the pushed frame (OpPushEnv above), so it is no longer
+	// at the enclosing closure's parameter-frame depth: clear any self-tail context
+	// so a self call inside the body is NOT rewritten to the in-place OpSelfTailCall
+	// (which rebinds the parameter frame). Tail position itself is preserved.
+	err := p.compileValidatedSequence(ctctx.WithoutSelfTail(), v.Body())
 	if err != nil {
 		return err
 	}

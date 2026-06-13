@@ -39,6 +39,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	lenv *environment.LocalEnvironmentFrame,
 	v validate.ValidatedBodyAndParams,
 	errContext string,
+	selfTail *selfTailInfo,
 ) (machine.LiteralIndex, machine.LiteralIndex, error) {
 	// Phase 1: Bind required parameters to the local environment.
 	// Each parameter becomes a local variable slot populated by the VM at call time.
@@ -81,7 +82,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 
 	// Phase 4: Compile body expressions into child template. The last expression
 	// is compiled in tail position for proper tail-call optimization.
-	err := p.compileBody(ctctx, v, childEnv, tpl)
+	err := p.compileBody(ctctx, v, childEnv, tpl, selfTail)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -94,8 +95,8 @@ func (p *CompileTimeContinuation) compileClosureBody(
 
 // compileClosure compiles a complete closure (lambda or define-fn body).
 // Binds parameters, compiles body, and emits MakeClosure operations.
-func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *machine.NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure) error {
-	tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda")
+func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, tpl *machine.NativeTemplate, lenv *environment.LocalEnvironmentFrame, v validate.ValidatedProcedure, selfTail *selfTailInfo) error {
+	tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, v, "lambda", selfTail)
 	if err != nil {
 		return err
 	}
@@ -117,10 +118,16 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 //
 // R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names are visible
 // throughout the body, enabling forward references between defines.
-func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate) error {
+func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, selfTail *selfTailInfo) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
 	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true)
+	// The body is the closure's parameter-frame depth-0 tail. If the closure was
+	// proven self-tail-reusable, arm the self-tail context here; it flows through
+	// if/begin to the tail self call sites and is cleared on any let descent.
+	if selfTail != nil {
+		lambdaBodyContext = lambdaBodyContext.WithSelfTail(selfTail.name, selfTail.arity)
+	}
 
 	body := clause.Body()
 

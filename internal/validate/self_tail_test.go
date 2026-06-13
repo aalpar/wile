@@ -191,6 +191,15 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 			self: "loop", want: false,
 		},
 		{
+			// A parameter named the same as the function shadows the self name in
+			// the body, so (loop x) calls the PARAMETER, not the function — there is
+			// no real self-tail call to rewrite.
+			name: "negative: a parameter shadows the self name",
+			proc: fnWith("loop", params("loop"),
+				call(symRef("loop"), symRef("x"))),
+			self: "loop", want: false,
+		},
+		{
 			// A set! to a shadowing let binding of the same name does NOT mutate the
 			// enclosing self, so reuse stays sound (precision: shadow-aware).
 			name: "positive: set! targets a shadowing let binding, not self",

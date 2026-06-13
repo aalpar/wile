@@ -15,8 +15,26 @@
 package validate
 
 import (
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
+
+// BodyIsSelfTailReusable is the compiler entry point: it builds the production
+// capture-operator identity test from env (hygiene-correct: a locally-shadowed
+// call/cc is not the primitive) and runs the self-tail-reuse safety predicate.
+// selfName is the closure's own bound name as a symbol Key.
+//
+// NOTE: this is the IN-BODY safety half. The caller must additionally ensure the
+// self BINDING is immutable against cross-unit redefinition — for a top-level
+// define that means IsStable() at the emit site; for a lexical named-let loop the
+// in-body ¬set! this predicate checks is the whole story.
+func BodyIsSelfTailReusable(
+	proc ValidatedBodyAndParams,
+	selfName string,
+	env *environment.EnvironmentFrame,
+) bool {
+	return bodyIsSelfTailReusable(proc, selfName, makeIsCaptureOp(env))
+}
 
 // bodyIsSelfTailReusable reports whether a closure named selfName may have its
 // activation (parameter) frame reused in place at its self-recursive tail calls
@@ -62,23 +80,21 @@ func bodyIsSelfTailReusable(
 	if bodyCreatesEscapingClosure(body) {
 		return false
 	}
+	// Seed the shadow set with the parameter names: a parameter named the same as
+	// the function shadows the self reference, so a call to it is not a self-call
+	// (e.g. (define (loop loop) (loop x)) invokes the parameter).
+	seed := nameSet(nil).withParams(p)
+
 	// The self BINDING must be immutable in the body: a set! on selfName means a
 	// later self-call must dispatch to the new value, which OpSelfTailCall's
 	// hardcoded jump-to-0 cannot do. (For a top-level self binding the producer
 	// must ALSO be Stable against cross-unit redefinition — checked at the emit
 	// site, where the resolved binding is available; this clause covers the
 	// in-body half, which is the whole story for a lexical named-let loop.)
-	if bodyMutatesName(body, selfName) {
+	if seqMutatesName(body, selfName, seed) {
 		return false
 	}
-	return tailSeqHasSelfCall(body, 0, nameSet(nil), selfName, len(p.Required))
-}
-
-// bodyMutatesName reports whether any set! reachable from body assigns to name,
-// accounting for lexical shadowing: a set! to a lambda/let/internal-define
-// binding of the same name targets that inner binding, not the enclosing one.
-func bodyMutatesName(body []ValidatedExpr, name string) bool {
-	return seqMutatesName(body, name, nameSet(nil))
+	return tailSeqHasSelfCall(body, 0, seed, selfName, len(p.Required))
 }
 
 // seqMutatesName walks a body sequence for a set! of name. Internal-define names

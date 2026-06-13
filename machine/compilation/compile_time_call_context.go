@@ -51,6 +51,21 @@ import (
 type CompileTimeCallContext struct {
 	ctx    context.Context
 	inTail bool
+	// selfTail, when non-nil, marks that the current position is in the body of a
+	// closure proven self-tail-reusable (validate.BodyIsSelfTailReusable, plus
+	// Stable for a top-level self). It carries the self name and arity so a tail
+	// call matching them can be emitted as OpSelfTailCall (in-place frame reuse).
+	// It is preserved through tail-transparent forms (if branches, begin/body
+	// tails), dropped by NotInTail(), and cleared on entry to a frame-pushing form
+	// (let) — so a set selfTail at a call site means a DEPTH-0 tail self call.
+	selfTail *selfTailInfo
+}
+
+// selfTailInfo identifies the enclosing self-tail-reusable closure: its bound
+// name (symbol Key) and required-parameter count.
+type selfTailInfo struct {
+	name  string
+	arity int
 }
 
 // NewCompileTimeCallContext creates a new compile-time context.
@@ -83,5 +98,26 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
 		ctx:    p.ctx,
 		inTail: false,
+		// selfTail intentionally dropped: a non-tail position can never be a
+		// rewritable self-tail call.
 	}
+}
+
+// WithSelfTail returns a copy marking the current (tail) position as the body of
+// a self-tail-reusable closure named name with arity required parameters.
+// Preserves inTail and ctx.
+func (p CompileTimeCallContext) WithSelfTail(name string, arity int) CompileTimeCallContext {
+	q := p
+	q.selfTail = &selfTailInfo{name: name, arity: arity}
+	return q
+}
+
+// WithoutSelfTail returns a copy with the self-tail context cleared. Used when
+// descending into a frame-pushing form (let): its body runs in a pushed frame, so
+// a self call there is no longer at the parameter-frame depth and must not be
+// rewritten to the in-place OpSelfTailCall.
+func (p CompileTimeCallContext) WithoutSelfTail() CompileTimeCallContext {
+	q := p
+	q.selfTail = nil
+	return q
 }
