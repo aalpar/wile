@@ -53,6 +53,49 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 	c.Assert(binding.Value(), qt.IsNotNil)
 }
 
+// Apply with WithStableBasePrimitives — the producer side of Phase 2.6. The
+// frame-reclaim classifier's trust of base primitives is only as sound as this
+// stamp, so pin it directly here rather than relying on the engine-level
+// classifier pipeline to infer it. The stamp is scoped to the capture-safe set
+// (validate.IsCaptureSafePrimitiveName): a capture-safe name is stamped under
+// the option; a non-capture-safe name is left mutable even under the option.
+func TestApply_StableBasePrimitives(t *testing.T) {
+	cases := []struct {
+		name       string
+		primName   string
+		opt        bool
+		wantStable bool
+	}{
+		{"capture-safe name + option → Stable", "car", true, true},
+		{"capture-safe name, no option → not Stable", "car", false, false},
+		{"non-capture-safe name + option → left mutable", "frobnicate", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			reg := NewRegistry()
+			reg.AddPrimitive(PrimitiveSpec{
+				Name:       tc.primName,
+				ParamCount: 0,
+				Impl:       noopImpl,
+			}, PhaseSetRuntime)
+
+			topLevel := environment.NewNamespace()
+			env := topLevel.Runtime()
+			var opts []ApplyOption
+			if tc.opt {
+				opts = append(opts, WithStableBasePrimitives())
+			}
+			err := reg.Apply(context.Background(), env, opts...)
+			c.Assert(err, qt.IsNil)
+
+			b := env.GetBinding(values.NewSymbol(tc.primName), nil)
+			c.Assert(b, qt.IsNotNil)
+			c.Assert(b.IsStable(), qt.Equals, tc.wantStable)
+		})
+	}
+}
+
 // Apply with expand-time primitives
 
 func TestApply_ExpandTimePrimitive(t *testing.T) {

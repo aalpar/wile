@@ -432,7 +432,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err = p.compileClosure(ctctx, tpl, lenv, v)
+	err = p.compileClosure(ctctx, tpl, lenv, v, p.frameReuseForDefine(v))
 	if err != nil {
 		return err
 	}
@@ -442,6 +442,35 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	return p.emitDefineStore(sym, v.Name().Scopes())
 }
 
+// frameReuseForDefine returns the frame-reuse disposition for a function-form
+// define. At most one mode is armed; self-tail (in-place rebind) takes precedence
+// over release when a define qualifies for both — the only cost is forgoing the
+// once-per-invocation release of a base-case general tail call, negligible vs. the
+// per-iteration in-place reuse.
+//
+//   - frameReuseSelfTail requires BOTH a self-tail-reusable body
+//     (validate.BodyIsSelfTailReusable: no capture/escape, non-variadic, no in-body
+//     set! of the name, a depth-0 tail self call) AND a Stable binding — the op
+//     hardcodes a jump to pc=0, sound only if the name can never be rebound. A
+//     top-level define is Stable only under WithImmutableTopLevel; an internal
+//     define resolves to a non-Stable local here and is excluded (also sound — a
+//     sibling could set! it, which the in-body predicate cannot see).
+//   - frameReuseRelease needs NO IsStable() check: OpReleaseEnvFrame does a normal
+//     apply (re-resolving the callee), so the define's own rebindability is
+//     irrelevant; only the body's capture/escape/callee-safety matters, which
+//     validate.BodyIsFrameReleasable checks (callee stability enforced there).
+func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefine) frameReuse {
+	name := v.Name()
+	binding := p.env.GetBinding(name.Sym, name.Scopes())
+	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
+		return selfTailReuse(name.Sym.Key, len(v.Params().Required))
+	}
+	if validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
+		return releaseReuse()
+	}
+	return noFrameReuse()
+}
+
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
 func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
 	// Create local environment and template for lambda body.
@@ -449,7 +478,8 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 	lenv := environment.NewLocalEnvironment(0)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	err := p.compileClosure(ctctx, tpl, lenv, v)
+	// Anonymous lambdas have no self name to recurse on — no frame-reuse context.
+	err := p.compileClosure(ctctx, tpl, lenv, v, noFrameReuse())
 	if err != nil {
 		return err
 	}
@@ -476,7 +506,8 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 		lenv := environment.NewLocalEnvironment(0)
 		tpl := machine.NewNativeTemplate(0, 0, false)
 
-		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause")
+		// case-lambda clauses are anonymous arity dispatch — no frame-reuse context.
+		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", noFrameReuse())
 		if err != nil {
 			return err
 		}
@@ -712,7 +743,47 @@ func (p *CompileTimeContinuation) emitProcAndArgs(ctctx CompileTimeCallContext, 
 	return nil
 }
 
+// tryEmitSelfTailCall emits OpSelfTailCall for a depth-0 tail call to the
+// enclosing self-tail-reusable closure, returning (true, nil) if it did so.
+//
+// The selfTail context is armed only on a closure body proven safe (and, for a
+// top-level self, Stable) and is cleared on every let descent and dropped by
+// NotInTail(), so a set selfTail at an inTail call site whose operator name and
+// arity match the enclosing closure is exactly a DEPTH-0 tail self call. The
+// emit evaluates the arguments (non-tail, pushing each onto the eval stack in
+// slot order — old parameter values stay intact, making the op's drain-and-bind a
+// parallel assignment), then the op rebinds the parameter slots and loops to pc=0.
+func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) (bool, error) {
+	if !ctctx.inTail || ctctx.frameReuse.kind != frameReuseSelfTail {
+		return false, nil
+	}
+	sym, ok := v.Proc().(*validate.ValidatedSymbol)
+	if !ok {
+		return false, nil
+	}
+	if sym.Symbol.Sym.Key != ctctx.frameReuse.name || len(v.Body()) != ctctx.frameReuse.arity {
+		return false, nil
+	}
+	for _, arg := range v.Body() {
+		err := p.compileValidated(ctctx.NotInTail(), arg)
+		if err != nil {
+			return false, err
+		}
+		p.AppendOperations(machine.NewOperationPush())
+	}
+	p.AppendOperations(machine.NewOperationSelfTailCall(ctctx.frameReuse.arity))
+	return true, nil
+}
+
 func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
+	emitted, err := p.tryEmitSelfTailCall(ctctx, v)
+	if err != nil {
+		return err
+	}
+	if emitted {
+		return nil
+	}
+
 	inlined, err := p.tryInlineCall(ctctx, v)
 	if err != nil {
 		return err
@@ -732,6 +803,17 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	err = p.emitProcAndArgs(ctctx, v.Proc(), v.Body())
 	if err != nil {
 		return err
+	}
+
+	// Reclaimable general tail call: the parameter frame is dead now (proc + args
+	// are on the eval stack), and the enclosing body was proven frame-releasable
+	// (no capture/escape, only capture-safe callees), so release it to the pool
+	// before applying — the callee's acquire reuses it. Emitted after the args
+	// (which still read the frame) and before Pull+Apply. The frameReuseRelease
+	// disposition is depth-0 (cleared on let descent), so p.env is the parameter
+	// frame. A frameReuseSelfTail body takes the OpSelfTailCall path above instead.
+	if ctctx.inTail && ctctx.frameReuse.kind == frameReuseRelease {
+		p.AppendOperations(machine.NewOperationReleaseEnvFrame())
 	}
 
 	// Pull the procedure and apply

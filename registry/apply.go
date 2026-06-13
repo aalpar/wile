@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -31,6 +32,7 @@ type ApplyOption func(*applyConfig)
 // and be set via an ApplyOption constructor.
 type applyConfig struct {
 	contractEnforcement bool
+	stableBase          bool
 }
 
 // WithContractEnforcement installs a type-checking validator on each
@@ -41,6 +43,30 @@ type applyConfig struct {
 func WithContractEnforcement() ApplyOption {
 	return func(cfg *applyConfig) {
 		cfg.contractEnforcement = true
+	}
+}
+
+// WithStableBasePrimitives stamps the capture-safe core primitives
+// (validate.IsCaptureSafePrimitiveName: +, -, car, cdr, cons, <, …) Stable when
+// they are bound ambiently, so the frame-reclaim classifier may trust calls to
+// them as non-rebindable without an explicit (import (scheme base)). Imported
+// primitives are already immutable; this closes the ambient-registration path,
+// where Registry.Apply binds primitives directly into the base namespace without
+// an Imported flag (Phase 2 finding #1).
+//
+// Scope is deliberately the capture-safe set, NOT every primitive: the
+// classifier only ever trusts those names, so stamping any other primitive would
+// freeze it for zero benefit. Non-capture-safe primitives (sqrt, vector-ref,
+// apply, string-upcase, …) stay R7RS-mutable even under the flag.
+//
+// Disabled by default. The engine appends it only under WithImmutableTopLevel(),
+// where the set!/redefine enforcement (compile_validated.go) makes Stable a
+// guarantee the classifier may rest a verdict on. The deviation it introduces —
+// the capture-safe base primitives become non-rebindable — is exactly the opt-in
+// optimization contract.
+func WithStableBasePrimitives() ApplyOption {
+	return func(cfg *applyConfig) {
+		cfg.stableBase = true
 	}
 }
 
@@ -96,7 +122,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 			if !reg.Phases.Has(pt.phase) {
 				continue
 			}
-			err := registerPhasePrimitive(pt.env, pt.phase, reg.Spec, cfg.contractEnforcement)
+			err := registerPhasePrimitive(pt.env, pt.phase, reg.Spec, cfg)
 			if err != nil {
 				return err
 			}
@@ -137,9 +163,9 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 // versions had two near-identical helpers differing only in target env
 // and error message; collapsed per Instance C of the dispatch-axis-as-data
 // finding (plans/2026-05-08-dispatch-axis-as-data.md).
-func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, contractEnforcement bool) error {
+func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
 	sym := values.NewSymbol(spec.Name)
-	phaseEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	gi, _ := phaseEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(
 		phaseEnv,
@@ -149,13 +175,34 @@ func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase enviro
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
-	if contractEnforcement {
+	if cfg.contractEnforcement {
 		closure.SetValidator(BuildValidator(spec))
 	}
 
 	err := phaseEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
+	}
+
+	// Opt-in (WithStableBasePrimitives): mark the binding Stable so the
+	// frame-reclaim classifier trusts it as non-rebindable, but ONLY for the
+	// capture-safe core primitives the classifier could ever trust
+	// (validate.IsCaptureSafePrimitiveName — the single source of truth shared
+	// with the classifier's own gate). Stamping any other primitive would freeze
+	// it (set!/redefine rejected) for zero classifier benefit. The set!-gate
+	// (compile_validated.go) then makes the trust a guarantee. A nil binding here
+	// is an invariant violation — SetOwnGlobalValue just succeeded against this
+	// same gi — so surface it rather than silently skipping the stamp.
+	if cfg.stableBase && validate.IsCaptureSafePrimitiveName(spec.Name) {
+		b := phaseEnv.GetGlobalBinding(gi)
+		if b == nil {
+			return werr.WrapForeignErrorf(
+				werr.ErrNoSuchBinding,
+				"registerPhasePrimitive: binding for %s vanished before Stable stamp at phase %s",
+				spec.Name, phase,
+			)
+		}
+		b.EnsureMeta().Stable = true
 	}
 	return nil
 }

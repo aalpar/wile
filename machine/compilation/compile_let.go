@@ -35,6 +35,28 @@ import (
 // let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
 // letrec:  OpPushEnv | <inits> Push... | StoreLocal(reverse) | body | OpPopEnv
 // letrec*: OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
+// compileLetrecBindingInit compiles the i-th binding's init for a letrec/letrec*
+// (and the desugared named-let). When the init is a lambda eligible for in-place
+// self-tail reuse — its body is self-tail-reusable on the binding name and the
+// name is immutable across the let — it is compiled with a self-tail context so
+// the lambda's depth-0 tail self calls emit OpSelfTailCall. Otherwise the init
+// compiles normally (non-tail). p.env is the let frame here, so the lambda body's
+// self reference resolves to the letrec binding.
+func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCallContext, v *validate.ValidatedLet, i int) error {
+	lam, isLam := v.Bindings[i].Init.(*validate.ValidatedLambda)
+	if isLam {
+		arity, ok := validate.LetBindingSelfTailReusable(v, i, p.env)
+		if ok {
+			name := v.Bindings[i].Name.Sym.Key
+			lenv := environment.NewLocalEnvironment(0)
+			tpl := machine.NewNativeTemplate(0, 0, false)
+			tpl.SetName(name)
+			return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, selfTailReuse(name, arity))
+		}
+	}
+	return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
+}
+
 func (p *CompileTimeContinuation) CompileValidatedLet(
 	ctctx CompileTimeCallContext,
 	v *validate.ValidatedLet,
@@ -124,8 +146,9 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	case validate.LetKindLetrecStar:
 		// Sequential: all bindings visible from the start (letrec*
 		// region includes all inits). Bindings already in env.
-		for _, b := range v.Bindings {
-			err := p.compileValidated(ctctx.NotInTail(), b.Init)
+		for i := range v.Bindings {
+			b := v.Bindings[i]
+			err := p.compileLetrecBindingInit(ctctx, v, i)
 			if err != nil {
 				return err
 			}
@@ -141,8 +164,8 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 
 	case validate.LetKindLetrec:
 		// Delayed assignment: compile all inits, push all, then store all.
-		for _, b := range v.Bindings {
-			err := p.compileValidated(ctctx.NotInTail(), b.Init)
+		for i := range v.Bindings {
+			err := p.compileLetrecBindingInit(ctctx, v, i)
 			if err != nil {
 				return err
 			}
@@ -159,7 +182,11 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 		}
 	}
 
-	err := p.compileValidatedSequence(ctctx, v.Body())
+	// The let body runs in the pushed frame (OpPushEnv above), so it is no longer
+	// at the enclosing closure's parameter-frame depth: clear any self-tail context
+	// so a self call inside the body is NOT rewritten to the in-place OpSelfTailCall
+	// (which rebinds the parameter frame). Tail position itself is preserved.
+	err := p.compileValidatedSequence(ctctx.WithoutFrameReuse(), v.Body())
 	if err != nil {
 		return err
 	}

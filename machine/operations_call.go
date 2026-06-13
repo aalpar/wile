@@ -43,6 +43,63 @@ func (p *OperationApply) EqualTo(o values.Value) bool {
 	return SameType(p, v, ok)
 }
 
+// --- SelfTailCall ---
+
+// OperationSelfTailCall is the in-place self-recursive tail call: it drains the
+// ArgCount already-evaluated argument values off the eval stack, writes them into
+// the current frame's parameter slots 0..ArgCount-1 (parallel assignment — the
+// args are on the stack, so old slot values stay intact during evaluation), and
+// resets pc=0. No frame acquire, no SaveContinuation, no continuation growth.
+//
+// Emitted only behind validate.bodyIsSelfTailReusable + a depth-0 self-tail call
+// site; that proof (no capture, no escaping closure, non-variadic) is what makes
+// reusing the live frame sound (escape-gated plan Phase 4).
+type OperationSelfTailCall struct {
+	OperationBase
+	ArgCount int
+}
+
+// NewOperationSelfTailCall returns a self-tail-call op rebinding argCount slots.
+func NewOperationSelfTailCall(argCount int) *OperationSelfTailCall {
+	return &OperationSelfTailCall{
+		OperationBase: NewOperationBaseWithGoName("operation:self-tail-call", "SelfTailCall"),
+		ArgCount:      argCount,
+	}
+}
+
+// EqualTo returns true if o is also an OperationSelfTailCall with the same arity.
+func (p *OperationSelfTailCall) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationSelfTailCall)
+	return FieldMatches(p, v, ok, func(op *OperationSelfTailCall) int {
+		return op.ArgCount
+	})
+}
+
+// --- ReleaseEnvFrame ---
+
+// OperationReleaseEnvFrame releases the current pool-owned env frame back to the
+// FreeList immediately before a tail call in a frame-releasable body (no capture,
+// no escaping closure, only capture-safe callees). The frame is dead at this point
+// — the tail call's args are already on the eval stack — so the next acquire
+// reuses it, giving O(1) steady-state frame allocation for fib-shaped recursion.
+// A no-op when the frame is not pool-owned (parentless thunk, continuation-shared).
+type OperationReleaseEnvFrame struct {
+	OperationBase
+}
+
+// NewOperationReleaseEnvFrame returns a release-env-frame op.
+func NewOperationReleaseEnvFrame() *OperationReleaseEnvFrame {
+	return &OperationReleaseEnvFrame{
+		OperationBase: NewOperationBaseWithGoName("operation:release-env-frame", "ReleaseEnvFrame"),
+	}
+}
+
+// EqualTo returns true if o is also an OperationReleaseEnvFrame (identity by type).
+func (p *OperationReleaseEnvFrame) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationReleaseEnvFrame)
+	return SameType(p, v, ok)
+}
+
 // --- ForeignFunctionCall ---
 
 // OperationForeignFunctionCall executes a Go function within the VM loop.

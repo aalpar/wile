@@ -47,6 +47,7 @@ const (
 	OpLoadVoid
 	OpDrop
 	OpPopEnv
+	OpReleaseEnvFrame // Release the current (dead, pool-owned) env frame before a reclaimable tail call
 	OpApply
 	OpUnpackListToStack
 	OpRestoreContinuation
@@ -59,7 +60,8 @@ const (
 	OpLoadGlobal
 	OpStoreGlobal
 	OpPeekK
-	OpPushEnv // Push new env frame with Arg local slots
+	OpPushEnv      // Push new env frame with Arg local slots
+	OpSelfTailCall // Self-recursive tail call: rebind Arg param slots in place, pc=0
 
 	// Wave 3: two-operand operations (Arg = bit-packed slot|depth)
 	OpLoadLocal
@@ -198,6 +200,8 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpStoreGlobal:           {name: "StoreGlobal", operandKind: OperandLiteralIdx},
 	OpPeekK:                 {name: "PeekK", operandKind: OperandRaw, writesValue: true},
 	OpPushEnv:               {name: "PushEnv", operandKind: OperandRaw},
+	OpSelfTailCall:          {name: "SelfTailCall", operandKind: OperandRaw},
+	OpReleaseEnvFrame:       {name: "ReleaseEnvFrame"},
 	OpLoadLocal:             {name: "LoadLocal", operandKind: OperandLocalIdx, writesValue: true},
 	OpStoreLocal:            {name: "StoreLocal", operandKind: OperandLocalIdx},
 	OpPushLiteral:           {name: "PushLiteral", operandKind: OperandLiteralIdx},

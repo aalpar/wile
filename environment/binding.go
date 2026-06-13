@@ -44,6 +44,14 @@ type BindingMeta struct {
 	// optimizer's MayCapture. Distinct from set!-permission (Imported alone,
 	// unless the option is on) and from the retired "Constant" flag (which
 	// conflated provenance, stability, and compile-time-value-known).
+	//
+	// A second writer also discharges it: under the same WithImmutableTopLevel
+	// option, registry.WithStableBasePrimitives stamps the ambient capture-safe
+	// core primitives (+, car, <, …) Stable at registration (registry/apply.go),
+	// backed by the same set!/redefine enforcement. Both writers mean the same
+	// thing — "non-rebindable" — which is why the redefine guard treats a Stable
+	// ambient primitive as frozen, stricter than an Imported binding (which a
+	// top-level define may still supersede per R7RS §5.3.1).
 	Stable bool
 }
 
