@@ -81,6 +81,33 @@ func bodyCalleesAllCaptureSafe(body []ValidatedExpr, selfName string, env *envir
 	return safe
 }
 
+// BodyIsFrameReleasable reports whether proc's activation frame may be released to
+// the pool at its tail calls (the OpReleaseEnvFrame optimization — fib-shaped
+// general tail recursion). Unlike OpSelfTailCall it does NOT rebind in place or
+// hardcode a jump: it releases the dead frame and performs a normal apply (which
+// re-resolves the callee). So it needs neither the define's stability nor a
+// self-tail call — only that the body can never expose its frame to a continuation:
+//
+//   - no capture operator in the body (no call/cc &c.),
+//   - no escaping closure, and
+//   - every callee is the self name or a capture-safe, non-rebindable primitive
+//     (bodyCalleesAllCaptureSafe) — a callee that could capture would pin the frame.
+//
+// This is a conservative, per-body approximation of the interprocedural classifier
+// (ClassifyFrameReclaim): it covers self-recursion over capture-safe primitives
+// (fib, tak) but refuses a tail call to another user-defined function (mutual
+// recursion), which the full call graph would admit. Sound either way; the
+// call-graph precision is a later refinement.
+func BodyIsFrameReleasable(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+	if env == nil {
+		return false
+	}
+	body := proc.Body()
+	return !bodyReferencesCaptureOperator(body, makeIsCaptureOp(env)) &&
+		!bodyCreatesEscapingClosure(body) &&
+		bodyCalleesAllCaptureSafe(body, selfName, env)
+}
+
 // LetBindingSelfTailReusable reports the arity and eligibility of the i-th
 // binding of a recursively-scoped let (letrec / letrec* / named-let) for in-place
 // self-tail reuse — the local-binding analogue of selfTailForDefine. ok is true iff

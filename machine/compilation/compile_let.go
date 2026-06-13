@@ -51,7 +51,7 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 			lenv := environment.NewLocalEnvironment(0)
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			tpl.SetName(name)
-			return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, &selfTailInfo{name: name, arity: arity})
+			return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, &selfTailInfo{name: name, arity: arity}, false)
 		}
 	}
 	return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
@@ -186,7 +186,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	// at the enclosing closure's parameter-frame depth: clear any self-tail context
 	// so a self call inside the body is NOT rewritten to the in-place OpSelfTailCall
 	// (which rebinds the parameter frame). Tail position itself is preserved.
-	err := p.compileValidatedSequence(ctctx.WithoutSelfTail(), v.Body())
+	err := p.compileValidatedSequence(ctctx.WithoutFrameReuse(), v.Body())
 	if err != nil {
 		return err
 	}

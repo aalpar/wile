@@ -59,6 +59,13 @@ type CompileTimeCallContext struct {
 	// tails), dropped by NotInTail(), and cleared on entry to a frame-pushing form
 	// (let) — so a set selfTail at a call site means a DEPTH-0 tail self call.
 	selfTail *selfTailInfo
+	// releasable marks that the current position is in the body of a closure proven
+	// frame-releasable (validate.BodyIsFrameReleasable: no capture, no escaping
+	// closure, only capture-safe callees). A general tail call here may release the
+	// dead parameter frame to the pool (OpReleaseEnvFrame) before applying. Threaded
+	// exactly like selfTail: preserved through if/begin tails, dropped by NotInTail,
+	// cleared on a let descent — so a set releasable at a call site is DEPTH-0.
+	releasable bool
 }
 
 // selfTailInfo identifies the enclosing self-tail-reusable closure: its bound
@@ -98,26 +105,28 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
 		ctx:    p.ctx,
 		inTail: false,
-		// selfTail intentionally dropped: a non-tail position can never be a
-		// rewritable self-tail call.
+		// selfTail and releasable intentionally dropped: a non-tail position can
+		// never be a rewritable self-tail call or a frame-release site.
 	}
 }
 
 // WithSelfTail returns a copy marking the current (tail) position as the body of
 // a self-tail-reusable closure named name with arity required parameters.
-// Preserves inTail and ctx.
+// Preserves inTail, ctx, and releasable.
 func (p CompileTimeCallContext) WithSelfTail(name string, arity int) CompileTimeCallContext {
 	q := p
 	q.selfTail = &selfTailInfo{name: name, arity: arity}
 	return q
 }
 
-// WithoutSelfTail returns a copy with the self-tail context cleared. Used when
-// descending into a frame-pushing form (let): its body runs in a pushed frame, so
-// a self call there is no longer at the parameter-frame depth and must not be
-// rewritten to the in-place OpSelfTailCall.
-func (p CompileTimeCallContext) WithoutSelfTail() CompileTimeCallContext {
+// WithoutFrameReuse returns a copy with BOTH frame-reuse contexts cleared. Used
+// when descending into a frame-pushing form (let): its body runs in a pushed
+// frame, so a call there is no longer at the parameter-frame depth — neither the
+// in-place OpSelfTailCall nor OpReleaseEnvFrame (which both act on the parameter
+// frame) may fire.
+func (p CompileTimeCallContext) WithoutFrameReuse() CompileTimeCallContext {
 	q := p
 	q.selfTail = nil
+	q.releasable = false
 	return q
 }

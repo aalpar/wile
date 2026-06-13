@@ -47,6 +47,7 @@ const (
 	OpLoadVoid
 	OpDrop
 	OpPopEnv
+	OpReleaseEnvFrame // Release the current (dead, pool-owned) env frame before a reclaimable tail call
 	OpApply
 	OpUnpackListToStack
 	OpRestoreContinuation
@@ -200,6 +201,7 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpPeekK:                 {name: "PeekK", operandKind: OperandRaw, writesValue: true},
 	OpPushEnv:               {name: "PushEnv", operandKind: OperandRaw},
 	OpSelfTailCall:          {name: "SelfTailCall", operandKind: OperandRaw},
+	OpReleaseEnvFrame:       {name: "ReleaseEnvFrame"},
 	OpLoadLocal:             {name: "LoadLocal", operandKind: OperandLocalIdx, writesValue: true},
 	OpStoreLocal:            {name: "StoreLocal", operandKind: OperandLocalIdx},
 	OpPushLiteral:           {name: "PushLiteral", operandKind: OperandLiteralIdx},

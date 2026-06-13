@@ -432,7 +432,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err = p.compileClosure(ctctx, tpl, lenv, v, p.selfTailForDefine(v))
+	err = p.compileClosure(ctctx, tpl, lenv, v, p.selfTailForDefine(v), p.releasableForDefine(v))
 	if err != nil {
 		return err
 	}
@@ -467,6 +467,16 @@ func (p *CompileTimeContinuation) selfTailForDefine(v *validate.ValidatedDefine)
 	return &selfTailInfo{name: name.Sym.Key, arity: len(v.Params().Required)}
 }
 
+// releasableForDefine reports whether a function-form define's frame may be
+// released at its general tail calls (OpReleaseEnvFrame — fib-shaped recursion).
+// Unlike selfTailForDefine this needs NO IsStable() check: OpReleaseEnvFrame does
+// a normal apply (re-resolving the callee), so the define's own rebindability is
+// irrelevant; only the body's capture/escape/callee-safety matters, which
+// validate.BodyIsFrameReleasable checks (callee stability is enforced there).
+func (p *CompileTimeContinuation) releasableForDefine(v *validate.ValidatedDefine) bool {
+	return validate.BodyIsFrameReleasable(v, v.Name().Sym.Key, p.env)
+}
+
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
 func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
 	// Create local environment and template for lambda body.
@@ -474,8 +484,8 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 	lenv := environment.NewLocalEnvironment(0)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	// Anonymous lambdas have no self name to recurse on — no self-tail context.
-	err := p.compileClosure(ctctx, tpl, lenv, v, nil)
+	// Anonymous lambdas have no self name to recurse on — no frame-reuse context.
+	err := p.compileClosure(ctctx, tpl, lenv, v, nil, false)
 	if err != nil {
 		return err
 	}
@@ -502,8 +512,8 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 		lenv := environment.NewLocalEnvironment(0)
 		tpl := machine.NewNativeTemplate(0, 0, false)
 
-		// case-lambda clauses are anonymous arity dispatch — no self-tail context.
-		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", nil)
+		// case-lambda clauses are anonymous arity dispatch — no frame-reuse context.
+		tpli, envi, err := p.compileClosureBody(ctctx, tpl, lenv, clause, "case-lambda clause", nil, false)
 		if err != nil {
 			return err
 		}
@@ -799,6 +809,17 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	err = p.emitProcAndArgs(ctctx, v.Proc(), v.Body())
 	if err != nil {
 		return err
+	}
+
+	// Reclaimable general tail call: the parameter frame is dead now (proc + args
+	// are on the eval stack), and the enclosing body was proven frame-releasable
+	// (no capture/escape, only capture-safe callees), so release it to the pool
+	// before applying — the callee's acquire reuses it. Emitted after the args
+	// (which still read the frame) and before Pull+Apply. Gated on inTail +
+	// releasable, which is depth-0 (cleared on let descent), so p.env is the
+	// parameter frame. Self-tail calls never reach here (handled above).
+	if ctctx.inTail && ctctx.releasable {
+		p.AppendOperations(machine.NewOperationReleaseEnvFrame())
 	}
 
 	// Pull the procedure and apply

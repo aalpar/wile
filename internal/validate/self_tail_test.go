@@ -227,6 +227,44 @@ func TestBodyIsSelfTailReusable(t *testing.T) {
 	}
 }
 
+// TestBodyIsFrameReleasable covers the fib-shaped release predicate: a body whose
+// frame can be released at its tail calls because it never exposes the frame to a
+// continuation (no capture, no escape, only self + capture-safe primitive callees).
+// No self-tail call is required (fib's tail call is the foreign +).
+func TestBodyIsFrameReleasable(t *testing.T) {
+	// (define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))
+	fib := fnWith("fib", params("n"),
+		ifx(call(symRef("<="), symRef("n"), lit()),
+			symRef("n"),
+			call(symRef("+"),
+				call(symRef("fib"), call(symRef("-"), symRef("n"), lit())),
+				call(symRef("fib"), call(symRef("-"), symRef("n"), lit())))))
+
+	// Positive: <= + - imported (capture-safe ∧ Stable); fib is self.
+	if !BodyIsFrameReleasable(fib, "fib", envWithImported(t, "<=", "+", "-")) {
+		t.Errorf("fib over capture-safe primitives + self must be frame-releasable")
+	}
+
+	// Negative: a tail call to another user function (mutual recursion) — refused
+	// conservatively (the callee could capture).
+	mutual := fnWith("ping", params("n"),
+		ifx(call(symRef("<="), symRef("n"), lit()),
+			symRef("n"),
+			call(symRef("pong"), call(symRef("-"), symRef("n"), lit()))))
+	if BodyIsFrameReleasable(mutual, "ping", envWithImported(t, "<=", "-", "pong")) {
+		t.Errorf("a tail call to another user function must not be frame-releasable (v1)")
+	}
+
+	// Negative: call/cc in the body pins the frame.
+	captures := fnWith("c", params("n"),
+		ifx(call(symRef("<="), symRef("n"), lit()),
+			symRef("n"),
+			call(symRef("call/cc"), symRef("k"))))
+	if BodyIsFrameReleasable(captures, "c", envWithImported(t, "<=", "call/cc", "k")) {
+		t.Errorf("a body that calls call/cc must not be frame-releasable")
+	}
+}
+
 // TestBodyIsSelfTailReusable_CalleeSafety covers the interprocedural half of
 // capture-safety added at the exported boundary: a loop is reusable only if every
 // call operator is the self name or a capture-safe, non-rebindable primitive. This

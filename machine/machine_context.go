@@ -527,6 +527,19 @@ func (p *MachineContext) Run() error {
 			mc.envPooled = false
 			mc.pc++
 
+		case OpReleaseEnvFrame:
+			// Release the current frame back to the pool before a reclaimable tail
+			// call: it is dead (the call's args are already on the eval stack) and
+			// the emit-time proof (no capture, no escaping closure, only capture-safe
+			// callees) guarantees no continuation can still reach it. The next
+			// acquire (the tail call's own frame) reuses it. envPooled gates release
+			// to genuinely pool-owned frames and prevents a double release.
+			if mc.envPooled {
+				mc.releaseEnvFrame(mc.env)
+				mc.envPooled = false
+			}
+			mc.pc++
+
 		case OpSelfTailCall:
 			// In-place self-recursive tail call: the args were already evaluated
 			// onto the eval stack with the OLD slot values intact, so draining then

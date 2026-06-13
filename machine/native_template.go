@@ -148,6 +148,8 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationDrop()
 	case OpPopEnv:
 		return NewOperationPopEnv()
+	case OpReleaseEnvFrame:
+		return NewOperationReleaseEnvFrame()
 	case OpApply:
 		return NewOperationApply()
 	case OpUnpackListToStack:
