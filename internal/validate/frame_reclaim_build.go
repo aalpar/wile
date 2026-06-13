@@ -46,6 +46,18 @@ var captureSafePrimitiveNames = map[string]struct{}{
 	// extend as measured need arises
 }
 
+// IsCaptureSafePrimitiveName reports whether name is a core primitive the
+// frame-reclaim classifier trusts as capture-safe — it cannot invoke a Scheme
+// procedure or capture a continuation. This is the authoritative set for two
+// callers: the classifier's own trust gate (classifyCallee) and the registry's
+// WithStableBasePrimitives freeze. Only these primitives are ever trusted, so
+// only these need stamping Stable under the optimization flag — stamping any
+// other primitive would freeze it for no classifier benefit.
+func IsCaptureSafePrimitiveName(name string) bool {
+	_, ok := captureSafePrimitiveNames[name]
+	return ok
+}
+
 // makeIsCaptureOp returns a fail-safe capture-operator identity test bound to
 // env. A symbol is a capture operator iff its name is a capture-operator name
 // AND it resolves to an imported binding. Hygiene is delegated to
@@ -227,12 +239,17 @@ func classifyCallee(
 		return reclaimEdge{target: target, immutable: immutable}, true
 	}
 
-	// Capture-safe core primitive, confirmed imported: no constraint, no edge.
-	// The IsImported gate rejects a non-imported shadow of the same name.
+	// Capture-safe core primitive, confirmed non-rebindable: no constraint, no
+	// edge. The gate is IsStable() (Imported ∨ Stable): an imported primitive is
+	// immutable by R7RS, and under WithStableBasePrimitives an ambient base
+	// primitive is stamped Stable (Phase 2.6) — both are non-rebindable, so a
+	// call to either cannot be hijacked into a capturing procedure. A
+	// non-stable shadow of the same name (set!-able, or no opt-in) is rejected
+	// and falls through to the unsafe default below.
 	_, safe := captureSafePrimitiveNames[name]
 	if safe {
 		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
-		if b != nil && b.IsImported() {
+		if b != nil && b.IsStable() {
 			return reclaimEdge{}, false
 		}
 	}

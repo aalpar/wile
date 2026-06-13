@@ -162,6 +162,13 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 	if cfg.contractEnforcement {
 		opts = append(opts, registry.WithContractEnforcement())
 	}
+	// Phase 2.6: under opt-in top-level immutability, ambient base primitives are
+	// also stamped Stable so the frame-reclaim classifier trusts calls to them
+	// without an explicit (import (scheme base)). Threads to both the bootstrap
+	// env and the library env factory via every applyOptionsFromConfig call site.
+	if cfg.immutableTopLevel {
+		opts = append(opts, registry.WithStableBasePrimitives())
+	}
 	return opts
 }
 
