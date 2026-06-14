@@ -254,6 +254,26 @@ func TestMachineContext_ParentMC(t *testing.T) {
 	c.Assert(mc.ParentMC(), qt.IsNil)
 }
 
+// TestNewThreadSubContext_SeversParentLink is the CI-safe regression guard for the
+// SRFI-18 thread-terminate data race: a thread sub-context must NOT hold a live
+// pointer to its concurrent parent (parentMC), or CaptureStackTrace /
+// findParameterInMarks / the pool counter would read the parent's still-mutating
+// VM fields across the goroutine boundary. (make ci does not run -race on the
+// threads package, so this pins the fix without it.)
+func TestNewThreadSubContext_SeversParentLink(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	parent := machine.NewMachineContext(context.Background(), cont)
+
+	params := parent.CaptureSubContextParams()
+	thread := values.NewThread(nil, "test")
+	sub := machine.NewThreadSubContext(params, thread)
+
+	c.Assert(sub.ParentMC(), qt.IsNil)
+}
+
 func TestMachineContext_EscapeCont(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()

@@ -89,12 +89,17 @@ func (p *MachineContext) NewSubContextWithTemplate(
 	return mc
 }
 
-// SubContextParams holds the parent state needed to create a thread's sub-context.
-// This is used to avoid race conditions when creating sub-contexts across goroutine boundaries.
+// SubContextParams holds the parent state copied into a thread's sub-context
+// across the goroutine boundary. It deliberately carries NO pointer to the parent
+// MachineContext: a thread runs CONCURRENTLY with its parent, so a live parentMC
+// link would let the thread's parentMC walks (CaptureStackTrace,
+// findParameterInMarks, the subContextPool release counter) read the parent's
+// still-mutating VM fields — an unsynchronized data race (see TODO.md Tier 1;
+// reproduced by TestMutexAbandonedOnTermination under -race). Only values safe to
+// snapshot once at spawn time are captured here.
 type SubContextParams struct {
 	Ctx              context.Context
 	Env              *environment.EnvironmentFrame
-	ParentMC         *MachineContext
 	EscapeCont       *MachineContinuation
 	ExceptionHandler *ExceptionHandler
 	MaxCallDepth     int
@@ -112,7 +117,6 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 	return SubContextParams{
 		Ctx:              p.ctx,
 		Env:              p.env.TopLevel(),
-		ParentMC:         p,
 		EscapeCont:       p.escapeCont,
 		ExceptionHandler: p.exceptionHandler,
 		MaxCallDepth:     p.maxCallDepth,
@@ -137,7 +141,13 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 			windingStack: params.WindingStack,
 			// threadID will be set by SetThread below
 		},
-		parentMC:         params.ParentMC,
+		// parentMC is intentionally nil (zero value): a thread is an independent
+		// root, NOT a synchronous sub-context. Severing it stops every parentMC walk
+		// (stack trace, parameter marks, pool counter) at the thread boundary, which
+		// is what makes them race-free across the goroutine boundary — and is also
+		// the correct semantics (a thread's stack trace is its own, and SRFI-18
+		// parameter inheritance is a creation-time snapshot, not a live link to the
+		// concurrently-evolving parent). See SubContextParams above.
 		escapeCont:       params.EscapeCont,
 		exceptionHandler: params.ExceptionHandler,
 		maxCallDepth:     params.MaxCallDepth,
