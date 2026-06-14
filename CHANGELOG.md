@@ -40,9 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   available (e.g. some `go install` builds): prints `Wile Scheme <version>`
   instead of `Wile Scheme <version> ()`. The `--version` flag, the REPL header,
   and `,version` now share a single `versionString()` formatter.
+- **SRFI-18 threads no longer inherit `parameterize` bindings from the spawning
+  thread.** A spawned thread now starts from the top-level dynamic environment.
+  The previous inheritance was an unsynchronized live read of the parent thread's
+  state rather than a snapshot taken at creation, so it was both racy and
+  unspecified by SRFI-18; a correct creation-time snapshot may be reintroduced
+  later if a use case warrants it. (#772)
 
 ### Fixed
 
+- **Data race when one SRFI-18 thread terminates another.** Capturing the
+  terminated thread's exception backtrace could read that thread's still-running
+  VM state from another goroutine (detectable under the Go race detector). Thread
+  contexts are now independent execution roots, so backtrace and dynamic-state
+  walks stop at the thread boundary instead of crossing into the concurrently
+  running parent. (#772)
 - **Algebra solvers: caller-reachable silent non-termination now raises.** Six
   paths that could loop forever with no output and no error now raise a
   remedy-pointing error, extending the cap-guard discipline of
