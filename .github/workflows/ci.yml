@@ -59,3 +59,20 @@ jobs:
           name: benchmark-results-${{ github.sha }}
           path: examples/benchmarks/canonical-results-*.csv
           retention-days: 90
+
+  # Race-detector gate. Runs in parallel with `ci` so the main job stays fast.
+  # The `ci` job's `make ci` does NOT build with -race; without this job a
+  # concurrency regression (e.g. the SRFI-18 thread-terminate race that
+  # TestMutexAbandonedOnTermination catches only under -race) would merge green.
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: go.sum
+
+      - name: Test (race detector)
+        run: make test-race

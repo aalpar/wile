@@ -602,12 +602,23 @@ func TestSubContextPool_ConcurrentAccess(t *testing.T) {
 	const goroutines = 16
 	const iterations = 100
 
-	parent := &MachineContext{}
+	// Each goroutine gets its OWN parent. In production a parentMC counter is
+	// only ever touched by the single goroutine that owns the sub-context chain:
+	// synchronous sub-contexts walk parentMC on their own goroutine, and thread
+	// roots have parentMC == nil. A single shared parent would make the
+	// non-atomic increment in ReleaseSubContext (pool.go) race — an artifact of
+	// the test, not a production condition. Per-goroutine parents model reality
+	// and let us assert the EXACT release count with no lost writes.
+	parents := make([]*MachineContext, goroutines)
+	for i := range parents {
+		parents[i] = &MachineContext{}
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
-	for range goroutines {
+	for g := range goroutines {
+		parent := parents[g]
 		go func() {
 			defer wg.Done()
 			for range iterations {
@@ -620,10 +631,13 @@ func TestSubContextPool_ConcurrentAccess(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Counter won't be exactly goroutines*iterations because concurrent
-	// uint64 increments without atomics can lose writes. But it should be
-	// non-zero, confirming the counter path executes.
-	qt.Assert(t, parent.counters.SubContextPoolReleases > 0, qt.IsTrue)
+	// This still hammers subContextPool Acquire/Release across 16 goroutines —
+	// the actual concurrency target. Each parent was touched by exactly one
+	// goroutine, so the count is exact (wg.Wait() establishes happens-before
+	// for these reads); no atomics needed, no lost writes.
+	for _, parent := range parents {
+		qt.Assert(t, parent.counters.SubContextPoolReleases, qt.Equals, uint64(iterations))
+	}
 }
 
 func TestContinuationPool_ConcurrentAccess(t *testing.T) {
