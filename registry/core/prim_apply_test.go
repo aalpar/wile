@@ -276,7 +276,15 @@ func TestApplyTailRecursion_NoStackOverflow(t *testing.T) {
 					(apply f (list (- n 1)))))
 			(f 1000000))
 	`
-	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 30*time.Second)
+	// The race detector slows each VM step by roughly an order of magnitude,
+	// so the 1,000,000-iteration loop needs a wider deadline under -race. The
+	// iteration count is the meaningful assertion (it exceeds the historical
+	// ~300K stack-overflow point); the deadline is only a hang guard.
+	timeout := 30 * time.Second
+	if raceEnabled {
+		timeout = 180 * time.Second
+	}
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, timeout)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
 }
