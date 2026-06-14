@@ -248,6 +248,24 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	// output goes to discard.
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
 
+	// Pre-import standard libraries so their bindings are available from
+	// the first eval call and discoverable via apropos/doc.
+	for _, lib := range []string{"(srfi 1)", "(wile algebra)"} {
+		code := "(import " + lib + ")"
+		expr, parseErr := eng.ParseWithSource(ctx, code, "<mcp-init>")
+		if parseErr != nil {
+			return werr.WrapForeignErrorf(werr.ErrEngineInit, "preimport %s: %v", lib, parseErr)
+		}
+		compiled, compErr := eng.Compile(ctx, expr)
+		if compErr != nil {
+			return werr.WrapForeignErrorf(werr.ErrEngineInit, "preimport %s: %v", lib, compErr)
+		}
+		_, runErr := eng.Run(ctx, compiled)
+		if runErr != nil {
+			return werr.WrapForeignErrorf(werr.ErrEngineInit, "preimport %s: %v", lib, runErr)
+		}
+	}
+
 	reg, ok := eng.Environment().Namespace().Registry().(*registry.Registry)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrEngineInit,
