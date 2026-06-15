@@ -266,15 +266,16 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// later redefine of an already-stable binding is rejected. When disabled,
 	// behavior is identical to before (the fast path below still fires).
 	//
-	// Q3 (layered-environment): enforce ONLY in the namespace's own user runtime global
-	// (ns.Runtime() == p.env) — the per-Engine user top-level. User-loaded libraries stay
-	// mutable: a library body compiles against a flat NewChildRuntime frame that shares
-	// its parent's namespace, so ns.Runtime() != p.env there, and a library's cross-form
-	// (define x)/(set! x) must work (R2). The sealed base (bootstrap procedures) likewise
-	// is not ns.Runtime(), so those defines are not frozen — their immutability comes from
-	// the carve's shadow semantics, not the Stable stamp.
+	// Q3 (layered-environment): enforce in the namespace's own user runtime global
+	// (the per-Engine user top-level) AND in its sealed base (immutable primitives +
+	// bootstrap procedures — the optimizer's Stable anchors; capture-safe procedures like
+	// zero?/not must stay Stable here or the frame-reclaim classifier stops trusting them).
+	// EXEMPT user-loaded libraries: a library body compiles against a flat NewChildRuntime
+	// frame that shares its parent's namespace (so it is neither ns.Runtime() nor
+	// ns.SealedBase()), keeping a library's cross-form (define x)/(set! x) mutable (R2).
 	ns := p.env.Namespace()
-	immTop := ns != nil && ns.ImmutableTopLevel() && ns.Runtime() == p.env
+	immTop := ns != nil && ns.ImmutableTopLevel() &&
+		(ns.Runtime() == p.env || ns.SealedBase() == p.env)
 
 	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
 		return sym, nil

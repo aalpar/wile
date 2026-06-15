@@ -62,6 +62,29 @@ func TestSealedBase_G2_StdlibProcedureDocs(t *testing.T) {
 	qt.Assert(t, found, qt.IsTrue)
 }
 
+// TestSealedBase_CaptureSafeAnchorsAreStable pins the "sealed base holds the optimizer's
+// Stable anchors" invariant under the immutable default. Capture-safe callees — BOTH Go
+// primitives (car, +) AND Scheme bootstrap procedures (zero?, not) — must be Stable in the
+// sealed base, or the frame-reclaim classifier stops trusting them and the GC payoff
+// silently shrinks for loops using them as base-case predicates. (Regression guard for the
+// Q3 enforcement scope: the sealed base must be enforced, only libraries stay mutable.)
+func TestSealedBase_CaptureSafeAnchorsAreStable(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
+	qt.Assert(t, err, qt.IsNil)
+	defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
+	base := eng.Environment().Namespace().SealedBase()
+	for _, name := range []string{"car", "+", "zero?", "not", "null?", "pair?"} {
+		t.Run(name, func(t *testing.T) {
+			gi := base.GlobalEnvironment().GetGlobalIndex(values.NewSymbol(name))
+			qt.Assert(t, gi, qt.IsNotNil) // owned by the sealed base
+			bnd := base.GetGlobalBinding(gi)
+			qt.Assert(t, bnd, qt.IsNotNil)
+			qt.Assert(t, bnd.IsStable(), qt.IsTrue) // trusted anchor for the reclaim classifier
+		})
+	}
+}
+
 // TestSealedBase_PrimitiveGlobalIndexPinsSealedBase verifies compiled references resolve
 // through the frame-pinned GlobalIndex into the sealed base, for primitives, stdlib
 // procedures, and user defines (in the mutable child reaching the sealed base).
