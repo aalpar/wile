@@ -166,6 +166,19 @@ func isExtendedExponentMarker(c rune) bool {
 	return c == 'e' || c == 'E' || c == 's' || c == 'S' || c == 'f' || c == 'F' || c == 'd' || c == 'D' || c == 'l' || c == 'L'
 }
 
+// isExponentMarkerForRadix reports whether c begins an exponent in a literal of
+// the given radix. Exponent markers are a decimal-only grammar (R7RS §7.1.1:
+// <suffix> appears only in <decimal 10>); in radixes 2/8/16 the same letters
+// are either ordinary digits (e/d/f in hex, consumed by the digit reader before
+// any marker check) or simply invalid. Gating on decimal keeps a binary/octal/
+// hex integer from mis-reading a trailing e/s/f/d/l as scientific notation.
+//
+// Decimal is r == 10 (explicit #d) or r == 0 (the unset default radix, used for
+// a bare number with no #-prefix); see integerStateForRadix.
+func isExponentMarkerForRadix(c rune, r int) bool {
+	return (r == 0 || r == 10) && isExtendedExponentMarker(c)
+}
+
 // isComplexPolar returns true if c is '@'.
 func isComplexPolar(c rune) bool {
 	return c == '@'

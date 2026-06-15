@@ -283,7 +283,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 	case p.curr() == '/':
 		p.state = signedState(signed, TokenizerStateSignedRationalFraction, TokenizerStateUnsignedRationalFraction)
 		p.readDiv(r) //nolint:errcheck
-	case isExtendedExponentMarker(p.curr()):
+	case isExponentMarkerForRadix(p.curr(), r):
 		p.state = signedState(signed, TokenizerStateSignedScientificNotation, TokenizerStateUnsignedScientificNotation)
 		p.mayReadExponent(r) //nolint:errcheck
 	}
@@ -480,7 +480,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		switch {
 		case isDot(p.curr()):
 			p.readDecimalFractionWithExponent(r)
-		case isExtendedExponentMarker(p.curr()):
+		case isExponentMarkerForRadix(p.curr(), r):
 			p.mayReadExponent(r) // nolint:errcheck
 		case p.curr() == '/':
 			p.readDiv(r) // nolint:errcheck
@@ -490,7 +490,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 }
 
 func (p *Tokenizer) mayReadExponent(r int) {
-	if !isExtendedExponentMarker(p.curr()) {
+	if !isExponentMarkerForRadix(p.curr(), r) {
 		return
 	}
 	p.next() // consume exponent marker

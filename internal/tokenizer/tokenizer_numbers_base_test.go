@@ -338,6 +338,38 @@ func TestDigitFunction(t *testing.T) {
 	}
 }
 
+// TestRadixExponentMarkerNotConsumed pins that exponent markers (e/s/f/d/l)
+// are radix-aware: they are meaningful only in radix 10. In a non-decimal
+// radix the integer token must stop before such a marker instead of mis-reading
+// it as scientific notation. (#x1e2 is the control: there e IS a hex digit, so
+// the digit reader consumes the whole "1e2" before any marker check runs.)
+func TestRadixExponentMarkerNotConsumed(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		input      string
+		markerType TokenizerState
+		intString  string
+	}{
+		{"#b1e2", TokenizerStateMarkerBase2, "1"},    // e: not a binary digit, not an exponent
+		{"#b1s2", TokenizerStateMarkerBase2, "1"},    // s: precision marker, decimal-only
+		{"#o1e2", TokenizerStateMarkerBase8, "1"},    // e: not an octal digit
+		{"#x1s2", TokenizerStateMarkerBase16, "1"},   // s: not a hex digit, not an exponent
+		{"#x1e2", TokenizerStateMarkerBase16, "1e2"}, // control: e is a hex digit
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			marker, err := tok.Next()
+			c.Assert(err, qt.IsNil)
+			c.Assert(marker.Type(), qt.Equals, tc.markerType)
+			intTok, err := tok.Next()
+			c.Assert(err, qt.IsNil)
+			c.Assert(intTok.String(), qt.Equals, tc.intString)
+		})
+	}
+}
+
 func TestRadixPrefixes(t *testing.T) {
 	c := qt.New(t)
 
