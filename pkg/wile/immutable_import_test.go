@@ -31,10 +31,14 @@ import (
 func newEngineWithStdlib(t *testing.T) *wile.Engine {
 	t.Helper()
 	ctx := context.Background()
+	// These tests cover R7RS-permissive top-level mutation (define-supersede-import,
+	// top-level set!) which is the opt-out behavior under the immutable default. Imported
+	// bindings stay Stable via the import mechanism regardless of this flag.
 	eng, err := wile.NewEngine(ctx,
 		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
+		wile.WithMutableTopLevel(),
 	)
 	qt.Assert(t, err, qt.IsNil)
 	return eng

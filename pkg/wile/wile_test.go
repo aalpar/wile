@@ -531,7 +531,8 @@ func TestCall_ParameterTooManyArgs(t *testing.T) {
 
 func TestCall_ComposableContinuation(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background())
+	// Opt out of the immutable default: this test set!s a top-level saved-k cell.
+	engine, err := NewEngine(context.Background(), WithMutableTopLevel())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()

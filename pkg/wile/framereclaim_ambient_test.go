@@ -51,8 +51,12 @@ func classifyAmbient(ctx context.Context, t *testing.T, wrapped string, immutabl
 		WithSourceFS(stdlib.FS),
 		WithLibraryPaths(),
 	}
+	// The default is now immutable; make the flag explicit both ways so the flag-off
+	// control is genuinely mutable.
 	if immutable {
 		opts = append(opts, WithImmutableTopLevel())
+	} else {
+		opts = append(opts, WithMutableTopLevel())
 	}
 	eng, err := NewEngine(ctx, opts...)
 	if err != nil {
@@ -192,8 +196,12 @@ func TestStableBasePrimitivesEnforcement(t *testing.T) {
 				WithSourceFS(stdlib.FS),
 				WithLibraryPaths(),
 			}
+			// Immutable is now the default; make the flag explicit both ways so the
+			// flag-off rows are genuinely mutable.
 			if tc.immutable {
 				opts = append(opts, WithImmutableTopLevel())
+			} else {
+				opts = append(opts, WithMutableTopLevel())
 			}
 			eng, err := NewEngine(ctx, opts...)
 			if err != nil {

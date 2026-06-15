@@ -126,7 +126,8 @@ func TestSealedBase_SetBangBehavior(t *testing.T) {
 // thread captures the one mutable runtime, not a per-thread copy or the sealed base.
 func TestSealedBase_ThreadSharesMutableGlobalSeesSealedBase(t *testing.T) {
 	ctx := context.Background()
-	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
+	// Opt out of the immutable default: the thread mutates a top-level cell via set!.
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths(), WithMutableTopLevel())
 	qt.Assert(t, err, qt.IsNil)
 	defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
 	// KitchenSink binds the SRFI-18 thread primitives ambiently — no import needed.

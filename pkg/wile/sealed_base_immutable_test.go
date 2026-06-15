@@ -65,6 +65,22 @@ func TestSealedBase_R1_RedefineIsShadowUnderImmutability(t *testing.T) {
 	}
 }
 
+// TestSealedBase_R1a_ZeroRedefine: zero? is a capture-safe name AND a Scheme bootstrap
+// procedure (so it lives in the sealed base). Under WithImmutableTopLevel a user redefine
+// lands as a child-frame shadow (created=true) and succeeds — the carve obviates the
+// scoping plan's "shrink the capture-safe set" workaround, which would have cost reclaim
+// coverage. No production change needed if this passes.
+func TestSealedBase_R1a_ZeroRedefine(t *testing.T) {
+	ctx := context.Background()
+	eng := newSealedImmutableEngine(t)
+	defer func() {
+		qt.Assert(t, eng.Close(), qt.IsNil)
+	}()
+	result, err := eng.EvalMultiple(ctx, `(define zero? (lambda (x) (eqv? x 'additive-id))) (zero? 'additive-id)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.TrueValue)
+}
+
 // TestSealedBase_R2_LibraryCrossFormSetBang: a real .scm library whose body (define
 // *cell*) then (set! *cell* ...) across forms must work under immutability. This is the
 // form-by-form library-body case (the actual R2), loaded from a file FS — not a top-level

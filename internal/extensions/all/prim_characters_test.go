@@ -28,8 +28,12 @@ import (
 // newEngine creates a Wile engine with all standard extensions loaded.
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
+	// These suites exercise records/promises/strings/chars on a SHARED engine and
+	// redefine bindings across cases; opt out of the immutable default to keep that
+	// historical mutable-top-level behavior. Immutability is covered by dedicated tests.
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithProfile(wile.KitchenSink),
+		wile.WithMutableTopLevel(),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
 	return engine

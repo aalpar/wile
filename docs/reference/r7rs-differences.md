@@ -15,7 +15,7 @@ Five known differences exist:
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 4. Pair and vector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals.
-5. **Opt-in** (`WithImmutableTopLevel`, off by default): a defined-once, never-`set!`-in-unit top-level `define` becomes immutable, so a later `set!`/redefinition **raises an error**. Strict R7RS (mutable/redefinable top level) is the default.
+5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 
 ---
 
@@ -124,29 +124,69 @@ Construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allo
 
 ---
 
-## Immutable Top-Level Definitions (opt-in, off by default)
+## Immutable Top-Level Definitions (default; opt out with `WithMutableTopLevel`)
 
-**Affected:** `set!` and re-`define` of top-level variables. **Disabled by default** — strict R7RS top-level mutability is the standard behavior. Enabled per-engine via the `WithImmutableTopLevel()` option.
+**Affected:** `set!` and re-`define` of top-level variables. **Enabled by default.** Opt out per-engine with `WithMutableTopLevel()` to restore strict R7RS top-level mutability. `WithImmutableTopLevel()` remains as an explicit (now-redundant) selector for the default.
 
 **R7RS §4.1.6 / §5.3.1:** top-level variables are mutable (`set!`) and redefinable.
 
-**Wile Behavior (when enabled):** A top-level `define` that is *defined exactly once* and *never `set!` within its compilation unit* is marked rebind-stable. A subsequent `set!` or redefinition of such a binding **raises `ErrImmutableBinding`** at compile time:
+**Wile Behavior (default):** A top-level `define` in the user program that is *defined exactly once* and *never `set!` within its compilation unit* is marked rebind-stable. A subsequent `set!` of such a binding **raises `ErrImmutableBinding`** at compile time:
 
 ```scheme
-;; With WithImmutableTopLevel():
+;; Default (immutable top level):
 (define f 5)
 (set! f 6)        ; raises ErrImmutableBinding — f is stable
-(define f 7)      ; raises ErrImmutableBinding — redefinition of a stable binding
 
 ;; Still mutable: a define that IS set! within its own unit is not stable.
 (begin (define g 5) (set! g 6) g)   ; => 6, permitted
+
+;; Opt out for strict R7RS mutability:
+;;   wile.NewEngine(ctx, wile.WithMutableTopLevel())
 ```
 
-**Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer (`plans/2026-06-11-escape-gated-frame-allocation.local.md`). The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), this option *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`). The payoff is opt-in because the contract is a deviation.
+**Why this is now the default (the layered-environment carve).** Each engine splits its
+runtime bindings into an immutable **sealed base** (Go primitives + sealed stdlib
+procedures) parented by a **mutable runtime** (user defines). Resolution walks
+`mutable-runtime → sealed-base`. This dissolves the two blockers that previously kept
+immutability opt-in:
 
-**Implementation:** Pure compile-time. `set!` requires its target already bound (an unbound `set!` is already a compile error), and a binding's stability is finalized at its `define` — which necessarily precedes any `set!` referencing it — so the existing compile-time `set!` gate always sees the final stability and no runtime trap is needed. The validator computes in-unit stability syntactically by symbol name (conservative: a same-name local `set!` marks the top-level name non-stable — a false match costs optimization, never soundness); the compiler stamps `BindingMeta.Stable` and enforces the redefinition guard. Imported-binding `set!` rejection (always on) is unchanged.
+- A user or stdlib **re-`define` of a sealed name is a shadow, not a rebind.** `(define
+  car …)` or `(import (scheme cxr))` creates a *new* binding in the mutable child (the
+  name is absent from that frame's own map), so the redefinition guard never fires. The
+  sealed `car` is untouched.
+- **Enforcement is scoped to the user program.** Only defines landing in the engine's own
+  user runtime are frozen. **User-loaded libraries stay mutable** — a library body's
+  cross-form `(define *x* …)` / `(set! *x* …)` works — and the sealed base's own bootstrap
+  procedures are not frozen by the stamp (their immutability comes from the shadow
+  semantics above).
 
-**Impact:** **NONE by default.** When enabled: programs that rebind their own never-mutated top-level definitions are rejected; the common case (define-once, call-many) is unaffected and gains the optimization.
+**Redefine-visibility deviation (Chez two-environment model).** Because a sealed binding
+is resolved and pinned at *compile time*, an already-compiled closure over a sealed name
+keeps seeing the **sealed** value after a later shadow:
+
+```scheme
+(define (use-car p) (car p))   ; car pinned to the sealed base at compile time
+(define car (lambda (x) 99))   ; a shadow in the mutable runtime
+(use-car '(7 8))               ; => 7  (the REAL car — the shadow is not observed)
+(car '(7 8))                   ; => 99 (this call compiled AFTER the shadow)
+```
+
+This mirrors Chez's sealed-base + interaction-environment split: code already compiled
+against the base does not observe later interactive redefines. It is an intentional,
+documented deviation from R7RS's single mutable top level.
+
+**define/set! asymmetry on sealed names.** `(define caar …)` *introduces* a child-frame
+shadow (closures keep the sealed binding); `(set! caar …)` *mutates the existing* binding
+in place (closures observe it) — and under the default, `set!` of a `Stable` sealed name
+(a capture-safe primitive such as `car`) is rejected with `ErrImmutableBinding`. This is
+ordinary Scheme semantics (`define` introduces, `set!` mutates) applied to the
+sealed/mutable split.
+
+**Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer (`plans/2026-06-11-escape-gated-frame-allocation.local.md`). The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), the engine *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`).
+
+**Implementation:** Pure compile-time. Enforcement is gated on the define landing in the namespace's own user runtime frame (`compile_validated.go`); the compiler stamps `BindingMeta.Stable` and enforces the redefinition/`set!` guards there. Imported-binding `set!` rejection (always on) is unchanged.
+
+**Impact:** Programs that rebind their own never-mutated top-level definitions via `set!` are rejected by default; the common case (define-once, call-many) is unaffected and gains the optimization. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 
 ---
 

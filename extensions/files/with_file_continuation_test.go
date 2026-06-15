@@ -31,9 +31,12 @@ import (
 // newTestEngine creates a Wile engine with core + io + files extensions for testing.
 func newTestEngine(t *testing.T) *wile.Engine {
 	t.Helper()
+	// Opt out of the immutable default: these continuation-safety tests redefine
+	// top-level bindings (e.g. orig-port) on a shared engine.
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extio.Extension),
 		wile.WithExtension(extfiles.Extension),
+		wile.WithMutableTopLevel(),
 	)
 	qt.Assert(t, err, qt.IsNil)
 	return engine

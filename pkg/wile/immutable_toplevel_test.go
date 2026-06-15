@@ -49,25 +49,27 @@ func newImmutableTopLevelLibraryEngine(t *testing.T) *wile.Engine {
 	return eng
 }
 
-// --- Flag OFF (default): strict R7RS, status quo preserved ---
+// --- Flag OFF via WithMutableTopLevel() opt-out: strict R7RS, status quo preserved ---
+// Immutability is now the default; these pin the opt-out path that restores mutable
+// top-level set!/redefine.
 
-func TestImmutableTopLevel_OffByDefault_CrossFormSetBangAllowed(t *testing.T) {
+func TestImmutableTopLevel_OptOut_CrossFormSetBangAllowed(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx)
+	eng, err := wile.NewEngine(ctx, wile.WithMutableTopLevel())
 	c.Assert(err, qt.IsNil)
 
-	// Two separate top-level forms (two compilation units). With the option off,
+	// Two separate top-level forms (two compilation units). With the opt-out,
 	// f never becomes Stable, so the later set! is permitted.
 	result, err := eng.EvalMultiple(ctx, `(define f 5) (set! f 6) f`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "6")
 }
 
-func TestImmutableTopLevel_OffByDefault_RedefineAllowed(t *testing.T) {
+func TestImmutableTopLevel_OptOut_RedefineAllowed(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx)
+	eng, err := wile.NewEngine(ctx, wile.WithMutableTopLevel())
 	c.Assert(err, qt.IsNil)
 
 	result, err := eng.EvalMultiple(ctx, `(define f 5) (define f 6) f`)

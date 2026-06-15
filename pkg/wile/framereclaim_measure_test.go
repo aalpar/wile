@@ -89,8 +89,12 @@ func newBenchmarkEngine(ctx context.Context, immutable bool) (*Engine, error) {
 		WithSourceFS(stdlib.FS),
 		WithLibraryPaths(),
 	}
+	// The default is now immutable; make the immutable flag explicit in BOTH directions
+	// so the flag-off control is genuinely mutable.
 	if immutable {
 		opts = append(opts, WithImmutableTopLevel())
+	} else {
+		opts = append(opts, WithMutableTopLevel())
 	}
 	eng, err := NewEngine(ctx, opts...)
 	if err != nil {

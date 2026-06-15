@@ -108,7 +108,7 @@ type extSnapshot struct {
 //	)
 //	eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns))
 func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Namespace, error) {
-	cfg := &engineConfig{}
+	cfg := newEngineConfig()
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -162,10 +162,10 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 	if cfg.contractEnforcement {
 		opts = append(opts, registry.WithContractEnforcement())
 	}
-	// Phase 2.6: under opt-in top-level immutability, ambient base primitives are
-	// also stamped Stable so the frame-reclaim classifier trusts calls to them
-	// without an explicit (import (scheme base)). Threads to both the bootstrap
-	// env and the library env factory via every applyOptionsFromConfig call site.
+	// Under top-level immutability (the default), ambient base primitives are also
+	// stamped Stable so the frame-reclaim classifier trusts calls to them without an
+	// explicit (import (scheme base)). Threads to both the bootstrap env and the library
+	// env factory via every applyOptionsFromConfig call site.
 	if cfg.immutableTopLevel {
 		opts = append(opts, registry.WithStableBasePrimitives())
 	}
@@ -202,7 +202,7 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 // The WithNamespace path (pre-built namespace) skips steps 2-5 and trusts that
 // the caller bootstrapped correctly. NewNamespace() performs steps 2-4.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
-	cfg := &engineConfig{}
+	cfg := newEngineConfig()
 	for _, opt := range opts {
 		opt(cfg)
 	}
