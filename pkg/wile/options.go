@@ -437,6 +437,17 @@ func WithImmutableTopLevel() EngineOption {
 	}
 }
 
+// WithMutableTopLevel selects strict R7RS mutable/redefinable top-level bindings,
+// the inverse of WithImmutableTopLevel. It exists as an explicit opt-out so callers
+// can request mutable semantics independent of the engine default (which Phase 4 of
+// the layered-environment work flips to immutable). Opting out forfeits the
+// frame-reclaim GC win for user recursion.
+func WithMutableTopLevel() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.immutableTopLevel = false
+	}
+}
+
 // WithEnvMap sets the complete virtual environment variable map.
 // Replaces any previously set virtual env vars.
 //

@@ -16,6 +16,7 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	valuestest "github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // TestSealedBase_G2_StdlibProcedureDocs is the G2 regression. Post-carve, Scheme-defined
@@ -86,4 +88,56 @@ func TestSealedBase_PrimitiveGlobalIndexPinsSealedBase(t *testing.T) {
 			qt.Assert(t, result.Internal(), valuestest.SchemeEquals, tc.expected)
 		})
 	}
+}
+
+// TestSealedBase_SetBangBehavior pins the set! enforcement states. The sealed base is
+// per-namespace and OWNED (nothing shares it within an Engine), so a flag-off set! of a
+// non-Stable sealed name mutates that owned binding in place — equivalent to today's
+// per-namespace mutation, NOT corruption. A flag-on set! of a Stable sealed name (a
+// capture-safe primitive) is rejected (compile_validated.go:574).
+func TestSealedBase_SetBangBehavior(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("flag-off set! of non-Stable sealed proc mutates the owned base", func(t *testing.T) {
+		// caar is a bootstrap procedure in the sealed base; it is NOT capture-safe, so it
+		// is never stamped Stable. set! resolves it to the sealed binding and mutates in
+		// place — harmless because the optimizer only ever trusts Stable bindings.
+		eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithMutableTopLevel())
+		qt.Assert(t, err, qt.IsNil)
+		defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
+		result, err := eng.EvalMultiple(ctx, `(set! caar (lambda (x) 'mutated)) (caar '((1 2) 3))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewSymbol("mutated"))
+	})
+
+	t.Run("flag-on set! of a Stable sealed name is rejected", func(t *testing.T) {
+		// car is capture-safe, so under WithImmutableTopLevel it is Stable; set! rejected.
+		eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithImmutableTopLevel())
+		qt.Assert(t, err, qt.IsNil)
+		defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
+		_, err = eng.EvalMultiple(ctx, `(set! car (lambda (x) 'mutated))`)
+		qt.Assert(t, errors.Is(err, werr.ErrImmutableBinding), qt.IsTrue)
+	})
+}
+
+// TestSealedBase_ThreadSharesMutableGlobalSeesSealedBase verifies a top-level define in
+// the parent is visible to a spawned SRFI-18 thread (shared mutable global), and that
+// primitives (sealed base) resolve inside the thread. Run under -race to confirm the
+// thread captures the one mutable runtime, not a per-thread copy or the sealed base.
+func TestSealedBase_ThreadSharesMutableGlobalSeesSealedBase(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
+	qt.Assert(t, err, qt.IsNil)
+	defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
+	// KitchenSink binds the SRFI-18 thread primitives ambiently — no import needed.
+	code := `
+      (define shared 41)
+      (define result #f)
+      (define th (make-thread (lambda () (set! result (+ shared 1)))))
+      (thread-start! th)
+      (thread-join! th)
+      result`
+	result, err := eng.EvalMultiple(ctx, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewInteger(42))
 }
