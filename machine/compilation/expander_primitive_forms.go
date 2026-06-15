@@ -265,6 +265,13 @@ func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr s
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand alternative"))
 	}
 
+	// Bail (return the form unchanged) on extra trailing args so the validator
+	// reports the over-arity error — symmetric with the under-arity bail above.
+	extra, ok := altPair.SyntaxCdr().(*syntax.SyntaxPair)
+	if ok && !syntax.IsSyntaxEmptyList(extra) {
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	}
+
 	// Build (if test conseq alt)
 	args := syntax.SyntaxList(sym.SourceContext(), expandedTest, expandedConseq, expandedAlt)
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
@@ -289,6 +296,13 @@ func (p *ExpanderTimeContinuation) expandSetForm(sym *syntax.SyntaxSymbol, expr 
 	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "set!: failed to expand value"))
+	}
+
+	// Bail (return the form unchanged) on extra trailing args so the validator
+	// reports the over-arity error — symmetric with the under-arity bail above.
+	extra, ok := cdrPair.SyntaxCdr().(*syntax.SyntaxPair)
+	if ok && !syntax.IsSyntaxEmptyList(extra) {
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
 	// Build (set! var expanded-value)
@@ -397,6 +411,13 @@ func (p *ExpanderTimeContinuation) expandWithContinuationMarkForm(sym *syntax.Sy
 	expandedBody, err := p.ExpandExpression(bodyPair.SyntaxCar())
 	if err != nil {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand body"))
+	}
+
+	// Bail (return the form unchanged) on extra trailing args so the validator
+	// reports the over-arity error — symmetric with the under-arity bails above.
+	extra, ok := bodyPair.SyntaxCdr().(*syntax.SyntaxPair)
+	if ok && !syntax.IsSyntaxEmptyList(extra) {
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
 	args := syntax.SyntaxList(sym.SourceContext(), expandedKey, expandedVal, expandedBody)

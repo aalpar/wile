@@ -56,9 +56,7 @@ func TestIf_Degenerate(t *testing.T) {
 	tcs := []degenerateErrorCase{
 		{Name: "no args", Code: `(if)`, WantErr: "if"},
 		{Name: "test only", Code: `(if #t)`, WantErr: "if"},
-		// NOTE: (if #t 1 2 3) is silently accepted — the expander reconstructs
-		// the form with only 3 args, dropping extras before the validator sees it.
-		// This is a known gap in expander_primitive_forms.go:expandIfForm.
+		{Name: "too many args", Code: `(if #t 1 2 3)`, WantErr: "if"},
 	}
 	runDegenerateErrorTests(t, tcs)
 }
@@ -72,9 +70,7 @@ func TestSetBang_Degenerate(t *testing.T) {
 		{Name: "no args", Code: `(set!)`, WantErr: "set!"},
 		{Name: "missing value", Code: `(begin (define x 0) (set! x))`, WantErr: "set!"},
 		{Name: "non-symbol target", Code: `(set! 42 1)`, WantErr: "set!"},
-		// NOTE: (set! x 1 2) is silently accepted — the expander reconstructs
-		// the form with only 2 args, dropping extras before the validator sees it.
-		// This is a known gap in expander_primitive_forms.go:expandSetForm.
+		{Name: "too many args", Code: `(begin (define x 0) (set! x 1 2))`, WantErr: "set!"},
 	}
 	runDegenerateErrorTests(t, tcs)
 }
@@ -126,9 +122,7 @@ func TestWithContinuationMark_Degenerate(t *testing.T) {
 		{Name: "no args", Code: `(with-continuation-mark)`, WantErr: "with-continuation-mark"},
 		{Name: "one arg", Code: `(with-continuation-mark 'key)`, WantErr: "with-continuation-mark"},
 		{Name: "two args", Code: `(with-continuation-mark 'key 'val)`, WantErr: "with-continuation-mark"},
-		// NOTE: (with-continuation-mark k v b extra) is silently accepted — the expander
-		// reconstructs with only 3 args, dropping extras before the validator sees it.
-		// This is a known gap in expander_primitive_forms.go:expandWithContinuationMarkForm.
+		{Name: "four args", Code: `(with-continuation-mark 'key 'val 1 2)`, WantErr: "with-continuation-mark"},
 	}
 	runDegenerateErrorTests(t, tcs)
 }
