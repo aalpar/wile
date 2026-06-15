@@ -68,6 +68,27 @@ func TestParseCNF_Int32OverflowBoundary(t *testing.T) {
 	}
 }
 
+func TestParseCNF_MaxVarsBoundary(t *testing.T) {
+	// A variable index above maxVars must be rejected before newSolver
+	// allocates O(numVars) arrays. maxVars+1 is below the int32-overflow
+	// guard (1<<30), so this exercises the allocation bound specifically.
+	input := values.NewVector(values.NewInteger(int64(maxVars) + 1))
+	_, _, err := parseCNF(input)
+	if err == nil {
+		t.Fatalf("parseCNF: expected error for var maxVars+1, got nil")
+	}
+	const want = "too many variables"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err.Error(), want)
+	}
+	// maxVars itself must still be accepted.
+	if _, n, err := parseCNF(values.NewVector(values.NewInteger(int64(maxVars)))); err != nil {
+		t.Errorf("parseCNF: maxVars must be accepted, got error: %v", err)
+	} else if n != maxVars {
+		t.Errorf("parseCNF: got numVars %d, want %d", n, maxVars)
+	}
+}
+
 func mkVec(xs ...int64) *values.Vector {
 	vs := make([]values.Value, len(xs))
 	for i, x := range xs {

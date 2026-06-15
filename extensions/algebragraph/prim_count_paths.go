@@ -24,9 +24,17 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// maxNodes bounds num-nodes so a public caller cannot drive the kernel into an
+// oversized allocation. CountPathsInDAG allocates several O(numNodes) arrays —
+// the dominant being counts []*big.Int, one new(big.Int) per node — so a
+// num-nodes of 2^40 from a two-token call OOMs the host. At 1<<22 nodes the
+// worst-case allocation is a few hundred MB, far beyond any realistic embedded
+// graph yet no longer a host-OOM DoS. Kept symmetric with sat.maxVars.
+const maxNodes = 1 << 22
+
 // extractNumNodes pulls a non-negative int from an exact-integer argument.
-// Returns ErrInvalidArgument if the value is not an exact integer or is
-// negative or exceeds int range.
+// Returns ErrInvalidArgument if the value is not an exact integer, is
+// negative, exceeds int range, or exceeds maxNodes.
 //
 // Uses values.ExactInteger (not helpers.RequireArg[*values.Integer])
 // because the contract here is "exact integer fitting int64" — which
@@ -42,6 +50,10 @@ func extractNumNodes(v values.Value, primName string) (int, error) {
 	if n < 0 {
 		return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"%s: num-nodes: must be non-negative, got %d", primName, n)
+	}
+	if n > int64(maxNodes) {
+		return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"%s: num-nodes: %d exceeds maximum (too many nodes; limit %d)", primName, n, maxNodes)
 	}
 	return int(n), nil
 }

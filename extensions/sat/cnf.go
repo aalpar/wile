@@ -30,6 +30,15 @@ type clauseRef int32
 // noClauseRef is the sentinel for "no clause".
 const noClauseRef clauseRef = -1
 
+// maxVars bounds the inferred variable count so a public caller cannot drive
+// newSolver into an oversized allocation. The dominant per-variable cost is the
+// watches table — make([][]clauseRef, 2*(numVars+1)), ~48 bytes/var of slice
+// headers alone — so the int32-overflow guard (1<<30) still permits a ~48GB
+// allocation from a two-element vector like #(1073741823 0). At 1<<22 variables
+// the worst-case allocation is a few hundred MB, well beyond any realistic
+// embedded SAT instance yet no longer a host-OOM DoS.
+const maxVars int32 = 1 << 22
+
 // clause is a single CNF clause.
 type clause struct {
 	learnt   bool
@@ -87,6 +96,10 @@ func parseCNF(v *values.Vector) ([]clause, int32, error) {
 		if abs >= (1 << 30) {
 			return nil, 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 				"parseCNF: variable index %d overflows int32", abs)
+		}
+		if abs > int64(maxVars) {
+			return nil, 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"parseCNF: variable index %d exceeds maximum (too many variables; limit %d)", abs, maxVars)
 		}
 		if abs > int64(maxVar) {
 			maxVar = int32(abs)
