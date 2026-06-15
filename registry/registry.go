@@ -154,10 +154,18 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 	}
 }
 
-// validateParamTypes panics if ParamTypes is non-empty but inconsistent with ParamCount.
-// For non-variadic: len(ParamTypes) must equal ParamCount.
-// For variadic: len(ParamTypes) must be in [1, ParamCount].
+// validateParamTypes panics if a spec is internally inconsistent.
+// A variadic spec must have ParamCount >= 1: the rest parameter occupies
+// slot ParamCount-1, so ParamCount:0 would make bindArgs index bnds[:-1]
+// and panic on first call (machine/arity.go).
+// For ParamTypes (when non-empty): non-variadic requires len == ParamCount;
+// variadic requires len in [1, ParamCount].
 func validateParamTypes(spec PrimitiveSpec) {
+	if spec.IsVariadic && spec.ParamCount < 1 {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"AddPrimitive %q: variadic spec requires ParamCount >= 1, got %d",
+			spec.Name, spec.ParamCount))
+	}
 	n := len(spec.ParamTypes)
 	if n == 0 {
 		return

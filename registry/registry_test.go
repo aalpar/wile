@@ -272,6 +272,21 @@ func TestRegistryBuilder_Build(t *testing.T) {
 	c.Assert(r.BindingCount(), qt.Equals, 1)
 }
 
+func TestRegistry_VariadicParamCountZeroPanics(t *testing.T) {
+	c := qt.New(t)
+
+	// A variadic primitive's rest parameter occupies slot paramCount-1, so
+	// ParamCount must be >= 1. {ParamCount:0, IsVariadic:true} would make
+	// bindArgs index bnds[:-1] and panic on first call; the registration
+	// chokepoint must reject it up front instead.
+	r := NewRegistry()
+	c.Assert(func() {
+		r.AddPrimitives([]PrimitiveSpec{
+			{Name: "bad-variadic", ParamCount: 0, IsVariadic: true},
+		}, PhaseSetRuntime)
+	}, qt.PanicMatches, ".*variadic.*ParamCount.*")
+}
+
 func TestRegistry_PrimitiveByName(t *testing.T) {
 	c := qt.New(t)
 
@@ -279,7 +294,7 @@ func TestRegistry_PrimitiveByName(t *testing.T) {
 	r.AddPrimitives([]PrimitiveSpec{
 		{Name: "car", ParamCount: 1, Impl: nil, Doc: "Returns the car.", ParamNames: []string{"pair"}, Category: "pairs"},
 		{Name: "cdr", ParamCount: 1, Impl: nil, Doc: "Returns the cdr.", ParamNames: []string{"pair"}, Category: "pairs"},
-		{Name: "+", ParamCount: 0, IsVariadic: true, Impl: nil, Doc: "Returns the sum.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "+", ParamCount: 1, IsVariadic: true, Impl: nil, Doc: "Returns the sum.", ParamNames: []string{"z"}, Category: "arithmetic"},
 	}, PhaseSetRuntime)
 
 	tcs := []struct {
