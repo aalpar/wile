@@ -97,18 +97,13 @@ func (p *Completer) collectBindingNames() []string {
 	seen := make(map[string]bool)
 	var names []string
 
-	phases := topLevel.Phases()
-	phaseIndices := phases.Phases()
-	slices.SortFunc(phaseIndices, environment.Phase.Compare)
-
-	for _, phase := range phaseIndices {
-		phaseEnv := phases.Get(phase)
-		if phaseEnv == nil {
-			continue
+	collect := func(frame *environment.EnvironmentFrame) {
+		if frame == nil {
+			return
 		}
-		global := phaseEnv.GlobalEnvironment()
+		global := frame.GlobalEnvironment()
 		if global == nil {
-			continue
+			return
 		}
 		for sym := range global.Keys() {
 			name := sym.Key
@@ -118,6 +113,21 @@ func (p *Completer) collectBindingNames() []string {
 			}
 		}
 	}
+
+	phases := topLevel.Phases()
+	phaseIndices := phases.Phases()
+	slices.SortFunc(phaseIndices, environment.Phase.Compare)
+
+	for _, phase := range phaseIndices {
+		collect(phases.Get(phase))
+	}
+
+	// Post-carve, primitives and bootstrap procedures live in the sealed base — the
+	// parent of the runtime phase frame, which is NOT a phase-registry entry, so the
+	// phase walk above never reaches it (its key map carries no parent walk). Collect
+	// it explicitly so completion still offers car/caar/map/zero?/call-cc, mirroring
+	// Namespace.BoundSymbolNames.
+	collect(topLevel.SealedBase())
 
 	sort.Strings(names)
 	return names

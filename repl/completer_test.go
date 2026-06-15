@@ -119,8 +119,16 @@ func TestCompleter_BindingNames_WithEngine(t *testing.T) {
 	sc := repl.NewCompleter(eng, nil)
 	names := sc.BindingNames()
 	c.Assert(len(names) > 0, qt.IsTrue)
-	c.Assert(slices.Contains(names, "car"), qt.IsTrue,
-		qt.Commentf("expected 'car' in binding names"))
+	// Regression guard for the sealed-base carve: completion must include names that
+	// live ONLY in the sealed base — bootstrap procedures like caar/cadr — not just
+	// dual-registered expand-phase primitives like `car`. Before the fix,
+	// collectBindingNames walked only the phase frames' own key maps (no parent walk),
+	// so every sealed-base name was silently dropped while `car` survived via the
+	// expand phase — which is exactly why asserting only `car` failed to catch it.
+	for _, name := range []string{"car", "caar", "cadr"} {
+		c.Assert(slices.Contains(names, name), qt.IsTrue,
+			qt.Commentf("expected %q in completion binding names (sealed-base carve regression)", name))
+	}
 }
 
 func TestCompleter_SchemeBindingNilEngine(t *testing.T) {

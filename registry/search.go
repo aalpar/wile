@@ -194,14 +194,14 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 
 	seen := make(map[string]bool)
 	var q []DocSearchResult
-	for _, phase := range phaseIndices {
-		phaseEnv := phases.Get(phase)
-		if phaseEnv == nil {
-			continue
+
+	collect := func(frame *environment.EnvironmentFrame) {
+		if frame == nil {
+			return
 		}
-		global := phaseEnv.GlobalEnvironment()
+		global := frame.GlobalEnvironment()
 		if global == nil {
-			continue
+			return
 		}
 		// Keys() and Bindings() are separate locked snapshots. A concurrent
 		// define could add a key whose index exceeds the bindings snapshot
@@ -253,6 +253,16 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 			}
 		}
 	}
+
+	for _, phase := range phaseIndices {
+		collect(phases.Get(phase))
+	}
+	// Post-carve, primitives and bootstrap procedures live in the sealed base — the
+	// parent of the runtime phase frame, which is NOT a phase-registry entry, so the
+	// phase walk above never reaches it. Collect it so ,apropos still surfaces
+	// binding-level docs on sealed entries, mirroring Namespace.BoundSymbolNames.
+	collect(ns.SealedBase())
+
 	return q
 }
 
