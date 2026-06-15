@@ -132,10 +132,9 @@ func PrimLoad(cc machine.CallContext) error {
 		return err
 	}
 
-	// Use the mutable runtime top-level environment: loaded defines must land in the
-	// user-visible mutable global (and become shadows of sealed-base names under the
-	// immutable default), NOT in the sealed base that TopLevel() now returns.
-	env := mc.EnvironmentFrame().Namespace().Runtime()
+	// Loaded defines must land in the user-visible mutable global (becoming shadows of
+	// sealed-base names under the immutable default), so use MutableRuntime().
+	env := mc.EnvironmentFrame().MutableRuntime()
 
 	// Resolve and open via the shared FileResolver (same as include).
 	resolver := env.FileResolver()

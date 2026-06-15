@@ -46,10 +46,10 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.ctx = p.ctx
 	mc.pools = p.pools // same goroutine: share the parent thread's freelists
 	// envPooled: zero value (false) — sub-context env is top-level, not from pool.
-	// Capture the mutable runtime (reaches the sealed base via its parent walk), not the
-	// sealed base that TopLevel() now returns: load/eval/call-with-exit run here and their
-	// defines must land in the user-visible mutable global.
-	mc.env = p.env.Namespace().Runtime()
+	// Capture the mutable runtime: load/eval/call-with-exit run here and their defines
+	// must land in the user-visible mutable global (it reaches the sealed base via its
+	// parent walk).
+	mc.env = p.env.MutableRuntime()
 	mc.evals = mc.acquireStack()
 	mc.threadID = p.threadID
 	mc.parentMC = p
@@ -120,9 +120,9 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 	return SubContextParams{
 		Ctx: p.ctx,
 		// SRFI-18 threads share the engine's one mutable runtime global (and see the
-		// sealed base through its parent). A thread store into the sealed base that
-		// TopLevel() now returns would corrupt shared state.
-		Env:              p.env.Namespace().Runtime(),
+		// sealed base through its parent). MutableRuntime() captures that shared global;
+		// capturing the sealed base instead would corrupt shared state.
+		Env:              p.env.MutableRuntime(),
 		EscapeCont:       p.escapeCont,
 		ExceptionHandler: p.exceptionHandler,
 		MaxCallDepth:     p.maxCallDepth,

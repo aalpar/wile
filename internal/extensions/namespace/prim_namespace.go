@@ -192,7 +192,23 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		return err
 	}
 
-	ns.Runtime().GlobalEnvironment().DeleteBinding(sym)
+	// DeleteBinding removes only from the mutable runtime's own frame. Post-carve,
+	// primitives and bootstrap procedures live in the immutable, engine-shared sealed
+	// base (a parent), which this must NOT mutate. If nothing was removed here and the
+	// name is owned by the sealed base, the undefine cannot be honored — reject it rather
+	// than silently returning success while the binding stays bound. A user-level shadow
+	// is still removable (DeleteBinding returns true); a name bound nowhere is a no-op.
+	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym)
+	if !deleted {
+		base := ns.SealedBase()
+		if base != nil && base.GlobalEnvironment().GetGlobalIndex(sym) != nil {
+			return werr.WrapForeignErrorf(
+				werr.ErrImmutableBinding,
+				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",
+				sym.Key,
+			)
+		}
+	}
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -216,9 +232,8 @@ func PrimNamespaceRequire(mc machine.CallContext) error {
 	}
 	specVal := mc.Arg(1)
 
-	// Import source = the mutable runtime (reaches the sealed base via its parent walk);
-	// TopLevel() now returns the sealed base alone.
-	callerEnv := mc.EnvironmentFrame().Namespace().Runtime()
+	// Import source = the mutable runtime (it reaches the sealed base via its parent walk).
+	callerEnv := mc.EnvironmentFrame().MutableRuntime()
 	targetEnv := ns.Runtime()
 
 	err = compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, targetEnv, machine.NewVMMacroEvaluator(), "namespace-require")

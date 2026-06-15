@@ -244,6 +244,26 @@ func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
 	qt.Assert(t, env.Compile(), qt.Not(qt.Equals), env.Expand())
 }
 
+// TestEnvironmentFrame_MutableRuntime pins the MutableRuntime() contract: it returns the
+// namespace's mutable runtime global (the user top level) — equal to Namespace().Runtime(),
+// the chain it replaced — and is DISTINCT from TopLevel(), which post-carve returns the
+// immutable sealed-base root. This is the named alternative to the .Namespace().Runtime()
+// band-aid; calling TopLevel() where MutableRuntime() is meant would target the frozen base.
+func TestEnvironmentFrame_MutableRuntime(t *testing.T) {
+	ns := NewNamespace()
+	runtime := ns.Runtime()
+
+	qt.Assert(t, runtime.MutableRuntime(), qt.Equals, ns.Runtime())
+	qt.Assert(t, runtime.MutableRuntime(), qt.Equals, runtime.Namespace().Runtime())
+
+	// Distinct from the sealed-base root that TopLevel() returns after the carve.
+	qt.Assert(t, runtime.MutableRuntime() != runtime.TopLevel(), qt.IsTrue)
+	qt.Assert(t, runtime.TopLevel(), qt.Equals, ns.SealedBase())
+
+	// Reached from the sealed base too, it still resolves to the one mutable child.
+	qt.Assert(t, ns.SealedBase().MutableRuntime(), qt.Equals, ns.Runtime())
+}
+
 func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	// Test the indexed phase hierarchy:
 	// TopLevel is phase 0, Expand is phase 1, Compile is phase 2

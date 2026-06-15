@@ -70,7 +70,7 @@ func PrimCallWithExit(cc machine.CallContext) error {
 			Values: []values.Value{val},
 		}
 	}
-	exitClosure := machine.NewForeignClosure(mc.EnvironmentFrame().Namespace().Runtime(), 1, false, exitFn)
+	exitClosure := machine.NewForeignClosure(mc.EnvironmentFrame().MutableRuntime(), 1, false, exitFn)
 
 	// Run proc in a sub-context with the exit closure as its argument.
 	// The sub-context inherits the current winding stack so dynamic-wind

@@ -268,6 +268,23 @@ func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
 	return p.AtPhase(PhaseRuntime)
 }
 
+// MutableRuntime returns the per-Engine MUTABLE runtime global of this frame's
+// namespace — the user top level where user defines land and where eval/load and
+// SRFI-18 threads store top-level state. It is the lexical CHILD of the immutable
+// sealed base; resolution from it reaches sealed primitives via the parent walk.
+//
+// Use this, NOT TopLevel(), when a primitive needs the frame for user-visible
+// top-level mutations: after the layered-environment carve TopLevel() returns the
+// immutable sealed-base root (home of the optimizer's Stable anchors), so storing a
+// user define or thread state through TopLevel() would target the frozen base. This
+// names the recurring intent that was previously spelled `.Namespace().Runtime()` at
+// every call site. (It resolves the namespace's runtime, which for a flat library
+// frame is the engine's mutable global rather than the library's own transient frame —
+// unlike the receiver-relative Runtime().)
+func (p *EnvironmentFrame) MutableRuntime() *EnvironmentFrame {
+	return p.namespace.Runtime()
+}
+
 // Expand returns the expand phase environment (phase 1), creating it if needed.
 // This is where syntax bindings from define-syntax are stored.
 func (p *EnvironmentFrame) Expand() *EnvironmentFrame {

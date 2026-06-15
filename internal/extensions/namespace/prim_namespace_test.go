@@ -129,6 +129,17 @@ func TestNamespaceUndefine(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "#f")
 }
 
+// TestNamespaceUndefineSealedRejected pins A4: undefining a sealed-base binding (a
+// primitive or bootstrap procedure) is rejected rather than silently succeeding.
+// Post-carve those bindings live in the immutable, engine-shared sealed base, so
+// DeleteBinding on the mutable runtime removes nothing — previously the primitive
+// returned Void while the binding stayed bound (a silent no-op). caar is a bootstrap
+// procedure owned by the sealed base of the interaction environment.
+func TestNamespaceUndefineSealedRejected(t *testing.T) {
+	eng := newEngine(t)
+	schemeEvalExpectError(t, eng, `(namespace-undefine! (interaction-environment) 'caar)`)
+}
+
 func TestNamespaceBoundNames(t *testing.T) {
 	eng := newEngine(t)
 
