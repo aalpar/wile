@@ -29,9 +29,6 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
-	"io"
-	"strings"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/extensions/algebragraph"
@@ -49,8 +46,6 @@ import (
 	"github.com/aalpar/wile/internal/extensions/envvars"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
@@ -243,6 +238,14 @@ func NewNamespaceFrame(ctx context.Context) (*environment.EnvironmentFrame, erro
 
 // NewTopLevelWithRegistry creates a top-level environment and returns both
 // the environment frame and the primitive registry for doc introspection.
+//
+// Top-level immutability is deliberately NOT enabled here. This is the policy-free
+// bootstrap building block (sealed base + mutable runtime, fully populated); the
+// immutable-top-level default is a PRODUCT policy applied by the public Engine
+// (pkg/wile NewEngine via SetImmutableTopLevel). Callers using this internal
+// constructor directly (test helpers, internal tooling) therefore get a mutable
+// top level, which is the right default for redefine-heavy test code. Embedders use
+// the public Engine and get the immutable default.
 func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame, *registry.Registry, error) {
 	// Create Namespace (per-instance symbol interning)
 	topLevel := environment.NewNamespace()
@@ -320,48 +323,19 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 //  2. Macro-expanded (which is a no-op for define-syntax at top level)
 //  3. Compiled to bytecode
 //  4. Executed to register the syntax transformer
+//
+// loadBootstrapMacros and loadBootstrapProcedures delegate to the shared
+// compilation.LoadBootstrapSources pipeline (parse → expand → compile → optimize →
+// pooled execute), differing only in target frame and error-context kind. Procedures
+// MUST load after macros (procedures use bootstrap macros); the caller enforces order.
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	return loadBootstrapSources(ctx, env, sources, resolver, "macro")
+	return compilation.LoadBootstrapSources(ctx, env, sources, resolver, "macro")
 }
 
 // loadBootstrapProcedures loads runtime-procedure sources (define forms) into the given
 // target frame — the sealed base for an engine root/profile, or a flat library frame.
 // `define` forms write to the target frame's own global; the target's Expand()/Compile()
 // resolve through the shared phase registry, so the macros loaded earlier are visible.
-// MUST run after loadBootstrapMacros (procedures use bootstrap macros).
 func loadBootstrapProcedures(ctx context.Context, target *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	return loadBootstrapSources(ctx, target, sources, resolver, "procedure")
-}
-
-// loadBootstrapSources is the shared parse → expand/compile → execute pipeline for
-// bootstrap sources. The macro and procedure loaders differ only in their target frame
-// and the source kind named in error context.
-func loadBootstrapSources(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver, kind string) error {
-	for _, source := range sources {
-		rdr := strings.NewReader(source)
-		p := parser.NewParser(env, true, rdr)
-
-		for {
-			stx, err := p.ReadSyntax(ctx)
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "error parsing bootstrap %s", kind)
-			}
-
-			tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap %s", kind)
-			}
-
-			cont := machine.NewMachineContinuation(nil, tpl, env)
-			mc := machine.NewMachineContext(ctx, cont)
-			err = mc.Run()
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "error running bootstrap %s", kind)
-			}
-		}
-	}
-	return nil
+	return compilation.LoadBootstrapSources(ctx, target, sources, resolver, "procedure")
 }

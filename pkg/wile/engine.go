@@ -837,52 +837,18 @@ func newFileResolver(factories []resolverFactory, env *environment.EnvironmentFr
 	return compilation.NewChainFileResolver(resolvers)
 }
 
+// loadBootstrapMacros and loadBootstrapProcedures delegate to the shared
+// compilation.LoadBootstrapSources pipeline (parse → expand → compile → optimize →
+// pooled execute). They differ only in target frame and error-context kind; macros MUST
+// load before procedures (procedures use bootstrap macros). See compilation/load_bootstrap.go.
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	return loadBootstrapSources(ctx, env, sources, resolver)
+	return compilation.LoadBootstrapSources(ctx, env, sources, resolver, "macro")
 }
 
 // loadBootstrapProcedures loads runtime-procedure sources (define forms) into the given
 // target frame — the sealed base for an engine root/profile, or a flat library frame.
-// MUST run after loadBootstrapMacros (procedures use bootstrap macros).
 func loadBootstrapProcedures(ctx context.Context, target *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	return loadBootstrapSources(ctx, target, sources, resolver)
-}
-
-// loadBootstrapSources runs the parse → expand/compile → execute pipeline for bootstrap
-// sources against env. The macro and procedure loaders differ only in their target frame.
-func loadBootstrapSources(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	for _, source := range sources {
-		reader := strings.NewReader(source)
-		pr := parser.NewParser(env, true, reader)
-
-		for {
-			stx, err := pr.ReadSyntax(ctx)
-			if err != nil {
-				if isEOF(err) {
-					break
-				}
-				return err
-			}
-
-			err = runBootstrapMacroStx(ctx, env, stx, resolver)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
-func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) error {
-	tpl, err := expandAndCompileOptimized(ctx, env, stx, resolver, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
-	if err != nil {
-		return err
-	}
-
-	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
-	defer machine.ReleaseTopLevelContext(mc)
-	return mc.Run()
+	return compilation.LoadBootstrapSources(ctx, target, sources, resolver, "procedure")
 }
 
 // trackTemplateTree registers tpl and every *machine.NativeTemplate
@@ -985,6 +951,16 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 	// frame (ns.Phases().Get(0)) would silently drop every stdlib procedure doc (G2).
 	base := ns.SealedBase()
 	if base == nil {
+		return
+	}
+
+	// Skip flat library frames (NewChildRuntime): they share the root namespace, so this
+	// base is the ROOT's sealed base — already indexed at root bootstrap, and
+	// AddDocOnlyPrimitive dedups the re-add anyway. applyBaseEnvironment runs once per
+	// (import ...), so without this guard every import re-parses ~all root docstrings for
+	// nothing (E3). A namespace-owning runtime frame (engine root / profile child) has
+	// SealedBaseTarget() != env (it returns the sealed base); a library frame returns env.
+	if env.SealedBaseTarget() == env {
 		return
 	}
 
