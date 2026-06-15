@@ -45,14 +45,18 @@ func runSteps(t *testing.T, steps ...string) values.Value {
 	return result
 }
 
-// TestCharacterization_UserDefineShadowsPrimitive pins the contracts the carve must
-// preserve or deliberately change.
+// TestCharacterization_UserDefineShadowsPrimitive pins the post-carve sealed-base
+// (Chez two-environment) semantics.
 //
-// Cases 1-2 are resolution contracts that MUST stay green through Phases 1-3.
-// Case 3 is the redefine-VISIBILITY contract that WILL change in Phase 1 (Chez
-// sealed-base semantics): today an already-compiled closure over a sealed name
-// sees a later redefine; post-carve it sees the sealed value. The expected value
-// below is TODAY'S observed value; Phase 1 Step 4 flips it.
+// Case 1: a direct (car ...) call compiled AFTER a (define car ...) resolves to the
+// user shadow — a redefine still takes effect for code compiled after it.
+//
+// Cases 2-3: use-car is compiled BEFORE the shadow, so its `car` reference is pinned to
+// the sealed base at compile time (GetGlobalIndex sets gi.Env to the sealed-base frame).
+// It keeps calling the REAL car even after the shadow, so (use-car '(7 8)) = 7. This is
+// the documented R7RS deviation: an already-compiled closure does NOT observe a later
+// redefine of a sealed-base name. PRE-carve both cases were 99 (the redefine mutated the
+// single shared merged-frame slot in place).
 func TestCharacterization_UserDefineShadowsPrimitive(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -65,16 +69,16 @@ func TestCharacterization_UserDefineShadowsPrimitive(t *testing.T) {
 			expected: values.NewInteger(42),
 		},
 		{
-			name:     "primitive intact through define-then-shadow",
+			name:     "closure keeps sealed binding through define-then-shadow (POST-carve)",
 			steps:    []string{`(define (use-car p) (car p))`, `(define car (lambda (x) 99))`, `(use-car '(7 8))`},
-			expected: values.NewInteger(99),
+			expected: values.NewInteger(7),
 		},
 		// Redefine-visibility: call the closure FIRST, then shadow, then call again.
-		// This is the interleaving that exposes the cached-binding-pointer change.
+		// use-car keeps the sealed car (compile-time pinned), so the final call = 7.
 		{
-			name:     "closure observes redefine (PRE-carve behavior)",
+			name:     "closure keeps sealed binding through redefine (POST-carve)",
 			steps:    []string{`(define (use-car p) (car p))`, `(use-car '(1 2))`, `(define car (lambda (x) 99))`, `(use-car '(7 8))`},
-			expected: values.NewInteger(99),
+			expected: values.NewInteger(7),
 		},
 	}
 	for _, tc := range tcs {
@@ -85,13 +89,42 @@ func TestCharacterization_UserDefineShadowsPrimitive(t *testing.T) {
 	}
 }
 
-// TestCharacterization_RuntimeFrameTopology pins the CURRENT topology so the carve
-// is a visible, deliberate change: today the runtime frame is the root (parent nil).
-//
-// Phase 1 Step 4 INVERTS this test (after the carve, Runtime() is the mutable child
-// whose parent is the sealed base — IsTopLevel() becomes false).
+// TestCharacterization_RuntimeFrameTopology pins the post-carve topology: Runtime()
+// is the mutable child; SealedBase() is the structural root (parent nil). This is the
+// inversion of the pre-carve assertion (Runtime() was the root) — the carve is a
+// visible, deliberate topology change.
 func TestCharacterization_RuntimeFrameTopology(t *testing.T) {
 	ns := environment.NewNamespace()
-	rt := ns.Runtime()
-	qt.Assert(t, rt.IsTopLevel(), qt.IsTrue) // parent == nil today
+	qt.Assert(t, ns.Runtime().IsTopLevel(), qt.IsFalse)      // parent is the sealed base now
+	qt.Assert(t, ns.SealedBase().IsTopLevel(), qt.IsTrue)    // sealed base is the true root
+	qt.Assert(t, ns.Runtime() != ns.SealedBase(), qt.IsTrue) // distinct frames
+}
+
+// TestSealedBase_PrimitivesLiveInSealedBase verifies a core Go primitive binding is
+// OWNED by the sealed base (present in its OWN global frame) and ABSENT from the mutable
+// runtime's OWN frame — so a user (define car ...) shadows via created=true. Uses the
+// non-walking, non-mutating GlobalEnvironmentFrame.GetGlobalIndex own-frame probe.
+func TestSealedBase_PrimitivesLiveInSealedBase(t *testing.T) {
+	ns := testhelpers.NewBootstrappedNamespace(t)
+	carSym := values.NewSymbol("car")
+
+	inRuntime := ns.Runtime().GlobalEnvironment().GetGlobalIndex(carSym)
+	inSealed := ns.SealedBase().GlobalEnvironment().GetGlobalIndex(carSym)
+
+	qt.Assert(t, inRuntime, qt.IsNil)   // absent from the mutable runtime's own frame → a define here shadows
+	qt.Assert(t, inSealed, qt.IsNotNil) // present in the sealed base's own frame
+}
+
+// TestSealedBase_BootstrapProcedureInSealedBase verifies a Scheme-defined bootstrap
+// procedure (caar) lands in the sealed base, not the mutable runtime — so a later
+// (import (scheme cxr)) re-export or user redefine is a shadow, not a Stable rebind.
+func TestSealedBase_BootstrapProcedureInSealedBase(t *testing.T) {
+	ns := testhelpers.NewBootstrappedNamespace(t)
+	caarSym := values.NewSymbol("caar")
+
+	inRuntime := ns.Runtime().GlobalEnvironment().GetGlobalIndex(caarSym)
+	inSealed := ns.SealedBase().GlobalEnvironment().GetGlobalIndex(caarSym)
+
+	qt.Assert(t, inRuntime, qt.IsNil)   // shadowable (absent from mutable runtime's own frame)
+	qt.Assert(t, inSealed, qt.IsNotNil) // owned by the sealed base
 }

@@ -694,7 +694,18 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // Each step wraps errors with ErrEngineInit. Additional registry.ApplyOption
 // values are forwarded to the registry Apply call.
 func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, opts ...registry.ApplyOption) error {
-	err := reg.Apply(ctx, env, opts...)
+	// Runtime primitives + bootstrap procedures are routed to the sealed-base frame for
+	// a namespace-owning runtime env (engine root / profile child); a flat library env
+	// receives them in its own frame. SealedBaseTarget() picks the right frame for each
+	// case, keeping the carve decision in one place. WithRuntimeTarget(self) is a no-op,
+	// so the library path is unchanged. A fresh slice avoids racing the shared opts
+	// backing array across concurrent library-env creation.
+	runtimeTarget := env.SealedBaseTarget()
+	applyOpts := make([]registry.ApplyOption, 0, len(opts)+1)
+	applyOpts = append(applyOpts, opts...)
+	applyOpts = append(applyOpts, registry.WithRuntimeTarget(runtimeTarget))
+
+	err := reg.Apply(ctx, env, applyOpts...)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
 	}
@@ -704,11 +715,16 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register phase handlers")
 	}
 
-	macroSources := reg.MacroSources()
+	// Macros (define-syntax) load into the mutable expand frame FIRST; procedures
+	// (define) use bootstrap macros (let/and), so they load into the sealed base AFTER.
 	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-	err = loadBootstrapMacros(ctx, env, macroSources, bootstrapResolver)
+	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap macros")
+	}
+	err = loadBootstrapProcedures(ctx, runtimeTarget, reg.ProcedureSources(), bootstrapResolver)
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap procedures")
 	}
 
 	// Inject documentation into bootstrap macro bindings (expand-time).
@@ -822,6 +838,19 @@ func newFileResolver(factories []resolverFactory, env *environment.EnvironmentFr
 }
 
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
+	return loadBootstrapSources(ctx, env, sources, resolver)
+}
+
+// loadBootstrapProcedures loads runtime-procedure sources (define forms) into the given
+// target frame — the sealed base for an engine root/profile, or a flat library frame.
+// MUST run after loadBootstrapMacros (procedures use bootstrap macros).
+func loadBootstrapProcedures(ctx context.Context, target *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
+	return loadBootstrapSources(ctx, target, sources, resolver)
+}
+
+// loadBootstrapSources runs the parse → expand/compile → execute pipeline for bootstrap
+// sources against env. The macro and procedure loaders differ only in their target frame.
+func loadBootstrapSources(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
 	for _, source := range sources {
 		reader := strings.NewReader(source)
 		pr := parser.NewParser(env, true, reader)
@@ -950,12 +979,16 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 		return
 	}
 
-	runtime := ns.Phases().Get(0)
-	if runtime == nil {
+	// Post-carve, Scheme-defined bootstrap procedures with structured docstrings live in
+	// the sealed base, not the mutable runtime child (which is empty at bootstrap time).
+	// Read the sealed base so their docs are indexed; reading the mutable child's own
+	// frame (ns.Phases().Get(0)) would silently drop every stdlib procedure doc (G2).
+	base := ns.SealedBase()
+	if base == nil {
 		return
 	}
 
-	global := runtime.GlobalEnvironment()
+	global := base.GlobalEnvironment()
 	keys := global.Keys()
 	bindings := global.Bindings()
 

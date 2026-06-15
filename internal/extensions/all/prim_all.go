@@ -127,7 +127,7 @@ func PrimRecordConstructor(mc machine.CallContext) error {
 	}
 
 	// Create the constructor closure
-	closure := newRecordConstructorClosure(mc.EnvironmentFrame().TopLevel(), rt, argIndices)
+	closure := newRecordConstructorClosure(mc.EnvironmentFrame().Namespace().Runtime(), rt, argIndices)
 	mc.SetValue(closure)
 	return nil
 }
@@ -140,7 +140,7 @@ func PrimRecordPredicate(mc machine.CallContext) error {
 		return err
 	}
 
-	closure := newRecordPredicateClosure(mc.EnvironmentFrame().TopLevel(), rt)
+	closure := newRecordPredicateClosure(mc.EnvironmentFrame().Namespace().Runtime(), rt)
 	mc.SetValue(closure)
 	return nil
 }
@@ -166,7 +166,7 @@ func resolveRecordField(
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "%s: unknown field %s", name, fieldTag.SchemeString())
 	}
 
-	mc.SetValue(makeClosure(mc.EnvironmentFrame().TopLevel(), rt, idx))
+	mc.SetValue(makeClosure(mc.EnvironmentFrame().Namespace().Runtime(), rt, idx))
 	return nil
 }
 

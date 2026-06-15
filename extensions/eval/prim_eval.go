@@ -132,8 +132,10 @@ func PrimLoad(cc machine.CallContext) error {
 		return err
 	}
 
-	// Use the current top-level environment
-	env := mc.EnvironmentFrame().TopLevel()
+	// Use the mutable runtime top-level environment: loaded defines must land in the
+	// user-visible mutable global (and become shadows of sealed-base names under the
+	// immutable default), NOT in the sealed base that TopLevel() now returns.
+	env := mc.EnvironmentFrame().Namespace().Runtime()
 
 	// Resolve and open via the shared FileResolver (same as include).
 	resolver := env.FileResolver()
@@ -364,7 +366,9 @@ func PrimEnvironment(mc machine.CallContext) error {
 	// Create child top-level environment sharing the caller's symbol interning
 	// and library registry for R7RS §6.5 symbol identity.
 	callerTopLevel := mc.EnvironmentFrame().Namespace()
-	callerEnv := mc.EnvironmentFrame().TopLevel()
+	// Import source = the mutable runtime (reaches the sealed base via its parent walk,
+	// so resolution is preserved); TopLevel() now returns the sealed base alone.
+	callerEnv := callerTopLevel.Runtime()
 	newTopLevel := callerTopLevel.NewChildNamespace()
 	newTopLevel.Name = "environment"
 	newEnv := newTopLevel.Runtime()

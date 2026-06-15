@@ -84,9 +84,9 @@ type BindingSpec struct {
 //  6. Registry.Apply (registry/apply.go) — materialize the new category into the environment
 //     at the appropriate lifecycle step
 //
-// All six categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
-// macroSources, globalValues) follow this pattern. Forgetting any step is a
-// silent aliasing or drift hazard — Clone, Without, WithoutCategory, and
+// All seven categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
+// macroSources, procedureSources, globalValues) follow this pattern. Forgetting any
+// step is a silent aliasing or drift hazard — Clone, Without, WithoutCategory, and
 // WithoutBindings all assume deepCopy covers every field.
 //
 // Note: the `docs []DocEntry` slice was removed in Phase 1
@@ -111,18 +111,23 @@ type Registry struct {
 	docPrimitives []PrimitiveSpec
 	initFuncs     []InitFunc
 	macroSources  []string
-	globalValues  []GlobalValue
+	// procedureSources holds runtime-procedure source (define forms) to be loaded
+	// into the sealed-base frame, separate from macroSources (define-syntax forms)
+	// which load into the mutable expand frame. The file boundary is the phase boundary.
+	procedureSources []string
+	globalValues     []GlobalValue
 }
 
 // NewRegistry creates a new empty registry.
 func NewRegistry() *Registry {
 	q := &Registry{
-		primitives:    make([]PrimitiveRegistration, 0, 128),
-		bindingSpecs:  make([]BindingSpec, 0, 48),
-		docPrimitives: make([]PrimitiveSpec, 0, 16),
-		initFuncs:     make([]InitFunc, 0, 8),
-		macroSources:  make([]string, 0, 4),
-		globalValues:  make([]GlobalValue, 0, 4),
+		primitives:       make([]PrimitiveRegistration, 0, 128),
+		bindingSpecs:     make([]BindingSpec, 0, 48),
+		docPrimitives:    make([]PrimitiveSpec, 0, 16),
+		initFuncs:        make([]InitFunc, 0, 8),
+		macroSources:     make([]string, 0, 4),
+		procedureSources: make([]string, 0, 4),
+		globalValues:     make([]GlobalValue, 0, 4),
 	}
 	return q
 }
@@ -216,6 +221,15 @@ func (p *Registry) AddMacroSource(source string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.macroSources = append(p.macroSources, source)
+}
+
+// AddProcedureSource registers a runtime-procedure source (define forms) to be
+// loaded into the sealed-base frame, separate from macro sources (define-syntax
+// forms) which load into the mutable expand frame.
+func (p *Registry) AddProcedureSource(source string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.procedureSources = append(p.procedureSources, source)
 }
 
 // AddGlobalValue registers a named value to be bound as a global variable.
@@ -319,6 +333,15 @@ func (p *Registry) MacroSources() []string {
 	return q
 }
 
+// ProcedureSources returns copies of procedure source strings.
+func (p *Registry) ProcedureSources() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]string, len(p.procedureSources))
+	copy(q, p.procedureSources)
+	return q
+}
+
 // Primitives returns a copy of the primitive registrations.
 func (p *Registry) Primitives() []PrimitiveRegistration {
 	p.mu.RLock()
@@ -408,7 +431,7 @@ func (p *Registry) Clone() *Registry {
 	return p.deepCopy()
 }
 
-// deepCopy returns a Registry whose 6 category slices are independent
+// deepCopy returns a Registry whose 7 category slices are independent
 // copies of p's. Element types are not transitively cloned — the copy is
 // one level deep (slice header + backing array). Callers may overwrite
 // individual slices on the returned Registry to express filter-style
@@ -421,18 +444,20 @@ func (p *Registry) deepCopy() *Registry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := &Registry{
-		primitives:    make([]PrimitiveRegistration, len(p.primitives)),
-		bindingSpecs:  make([]BindingSpec, len(p.bindingSpecs)),
-		docPrimitives: make([]PrimitiveSpec, len(p.docPrimitives)),
-		initFuncs:     make([]InitFunc, len(p.initFuncs)),
-		macroSources:  make([]string, len(p.macroSources)),
-		globalValues:  make([]GlobalValue, len(p.globalValues)),
+		primitives:       make([]PrimitiveRegistration, len(p.primitives)),
+		bindingSpecs:     make([]BindingSpec, len(p.bindingSpecs)),
+		docPrimitives:    make([]PrimitiveSpec, len(p.docPrimitives)),
+		initFuncs:        make([]InitFunc, len(p.initFuncs)),
+		macroSources:     make([]string, len(p.macroSources)),
+		procedureSources: make([]string, len(p.procedureSources)),
+		globalValues:     make([]GlobalValue, len(p.globalValues)),
 	}
 	copy(q.primitives, p.primitives)
 	copy(q.bindingSpecs, p.bindingSpecs)
 	copy(q.docPrimitives, p.docPrimitives)
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
+	copy(q.procedureSources, p.procedureSources)
 	copy(q.globalValues, p.globalValues)
 	return q
 }

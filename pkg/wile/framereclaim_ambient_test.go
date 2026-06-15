@@ -155,15 +155,18 @@ func TestAmbientStableSoundnessControls(t *testing.T) {
 	}
 }
 
-// TestStableBasePrimitivesEnforcement pins the dialect-deviation boundary: under
-// WithImmutableTopLevel, ambient base primitives are Stable and BOTH the set!-gate
-// and the redefine-guard (compile_validated.go) reject mutating/superseding them;
-// with the flag off, R7RS-permissive ambient mutation and define-supersede still
-// succeed. No import prelude — the stamp alone drives it. The define-redefine
-// freeze is intentionally stricter than R7RS §5.3.1's import-supersede rule: a
-// Stable ambient primitive must stay frozen for the classifier's trust to remain
-// valid (an imported binding, by contrast, the redefine-guard still lets a define
-// supersede).
+// TestStableBasePrimitivesEnforcement pins the sealed-base define/set! asymmetry under
+// WithImmutableTopLevel. The capture-safe base primitives live in the immutable sealed
+// base and are Stable, so:
+//   - (set! car ...) resolves to the sealed binding and is REJECTED (the set!-gate,
+//     compile_validated.go:574) — mutating the existing binding is forbidden.
+//   - (define car ...) creates a child-frame SHADOW in the mutable runtime (the name is
+//     absent from the mutable child's own frame, so created=true and the redefine-guard
+//     does not fire) — it SUCCEEDS. This is the carve dissolving R1: a redefine is now a
+//     shadow, not a rebind of a Stable binding.
+//
+// With the flag off, both succeed (R7RS-permissive). A non-capture-safe primitive
+// (vector-ref) is never stamped Stable, so set! on it stays permitted even under the flag.
 func TestStableBasePrimitivesEnforcement(t *testing.T) {
 	ctx := context.Background()
 	cases := []struct {
@@ -174,7 +177,7 @@ func TestStableBasePrimitivesEnforcement(t *testing.T) {
 	}{
 		{"flag on rejects set! on capture-safe primitive", "(set! car (lambda (x) x))", true, true},
 		{"flag off permits set! on capture-safe primitive", "(set! car (lambda (x) x))", false, false},
-		{"flag on rejects define-redefine of capture-safe primitive", "(define car (lambda (x) x))", true, true},
+		{"flag on permits define-shadow of capture-safe primitive", "(define car (lambda (x) x))", true, false},
 		{"flag off permits define-redefine of capture-safe primitive", "(define car (lambda (x) x))", false, false},
 		// Narrow-scope control: a non-capture-safe primitive (vector-ref) is NOT
 		// stamped even under the flag, so it stays R7RS-mutable. This pins the

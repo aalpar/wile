@@ -179,6 +179,15 @@ type Namespace struct {
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
 
+	// sealedBase is the per-NAMESPACE immutable runtime frame (phase 0): Go primitives
+	// + sealed stdlib runtime procedures, parent nil. It is the lexical parent of
+	// `runtime` (the mutable user global). Holds the optimizer's Stable anchors.
+	// PER-NAMESPACE, NOT root-delegated: a profile child (NewProfileEnvironment) carves
+	// its OWN sealed base populated by its own curated registry apply, so delegating to
+	// root would corrupt the engine root's base. Every namespace OWNS its sealed base;
+	// a report namespace copies the parent's into its own (see NewSchemeReportNamespace).
+	sealedBase *EnvironmentFrame
+
 	// envMap is an optional virtual environment variable map.
 	// When non-nil, envvars primitives read from this map instead of
 	// the process environment (os.Getenv/os.Environ), bypassing the
@@ -257,16 +266,37 @@ func (p *Namespace) Runtime() *EnvironmentFrame {
 	return p.runtime
 }
 
+// SealedBase returns this Namespace's immutable sealed-base runtime frame (phase 0),
+// the lexical parent of the mutable runtime global. PER-NAMESPACE (NOT root-delegated,
+// unlike immutableLiterals): each Namespace OWNS its sealed base so a profile child's
+// curated apply does not write into the engine root's base. Report namespaces copy the
+// parent's sealed base into their own (see NewSchemeReportNamespace).
+func (p *Namespace) SealedBase() *EnvironmentFrame {
+	return p.sealedBase
+}
+
 // BoundSymbolNames returns a freshly-consed list of every symbol bound in the
-// namespace's runtime global environment. It is the shared body of the
-// environment-bound-names and namespace-bound-names primitives. Iteration
-// order follows the global frame's key map and is therefore unspecified.
+// namespace's runtime, spanning BOTH the mutable runtime global (user defines) and
+// the sealed base (primitives + sealed stdlib procedures). It is the shared body of
+// the environment-bound-names and namespace-bound-names primitives. Post-carve the
+// sealed base must be included or primitives like `car` vanish from the result (the
+// key map carries no parent walk). Iteration order is unspecified; a name shadowed in
+// both frames appears once (deduped via the seen set).
 func (p *Namespace) BoundSymbolNames() values.Value {
-	keys := p.runtime.GlobalEnvironment().Keys()
+	seen := map[string]struct{}{}
 	var result values.Value = values.EmptyList
-	for key := range keys {
-		sym := values.NewSymbol(key.Key)
-		result = values.NewCons(sym, result)
+	for _, frame := range []*EnvironmentFrame{p.runtime, p.sealedBase} {
+		if frame == nil {
+			continue
+		}
+		for key := range frame.GlobalEnvironment().Keys() {
+			_, dup := seen[key.Key]
+			if dup {
+				continue
+			}
+			seen[key.Key] = struct{}{}
+			result = values.NewCons(values.NewSymbol(key.Key), result)
+		}
 	}
 	return result
 }
@@ -750,12 +780,28 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		parent:            p,
 	}
 
-	// Copy the parent's global bindings into the child's runtime frame.
-	// Syntax interning delegates through q → p via the Namespace.parent
-	// chain; the GlobalEnvironmentFrame itself does not carry a Namespace
-	// back-pointer.
-	copiedGlobal := p.runtime.global.Copy()
-	initRuntimeFrame(q, copiedGlobal)
+	// R7RS scheme-report-environment is a frozen, INDEPENDENT snapshot (pre-carve it
+	// deep-copied the whole merged global). Copy BOTH the parent's sealed base (standard
+	// bindings: prims + sealed stdlib) and the parent's runtime (user defines made
+	// before this call) into q's OWN two-level stack. Pre-call user defines are visible,
+	// post-call ones are not, prims resolve for eval — and q aliases nothing (a set!
+	// inside the report env touches only its own copy). Syntax interning delegates
+	// through q → p via the Namespace.parent chain.
+	q.sealedBase = &EnvironmentFrame{
+		parent:     nil,
+		global:     p.sealedBase.global.Copy(),
+		phaseLevel: PhaseRuntime,
+		namespace:  q,
+	}
+	q.runtime = &EnvironmentFrame{
+		parent:     q.sealedBase,
+		global:     p.runtime.global.Copy(),
+		phaseLevel: PhaseRuntime,
+		namespace:  q,
+	}
+	q.phases = newPhaseRegistryForNamespace(q)
+	q.runtime.phases = q.phases
+	q.sealedBase.phases = q.phases
 	return q
 }
 
@@ -832,18 +878,34 @@ func newPhaseRegistryForNamespace(ns *Namespace) *PhaseRegistry {
 	return q
 }
 
-// initRuntimeFrame creates a runtime EnvironmentFrame with a GlobalEnvironmentFrame
-// and PhaseRegistry wired to the given Namespace. Used by all Namespace
-// constructors to eliminate boilerplate divergence.
-func initRuntimeFrame(ns *Namespace, global *GlobalEnvironmentFrame) {
-	ns.runtime = &EnvironmentFrame{
+// initRuntimeFrame builds the per-Engine runtime layer: an immutable sealed-base frame
+// (parent nil, fresh global, holds primitives + sealed stdlib) parented by a mutable
+// runtime frame (user defines, using the caller-supplied global). Runtime() returns the
+// mutable child; SealedBase() returns the parent. The caller-supplied global stays the
+// MUTABLE runtime's global (preserving the prior merged-frame meaning and the
+// copy/child contract of NewSchemeReportNamespace); the sealed base gets a fresh global.
+//
+// newPhaseRegistryForNamespace reads ns.runtime for envs[PhaseRuntime], so expand/compile
+// frames parent to the mutable child (unchanged). The sealed base shares the same
+// PhaseRegistry (ns.phases) so AtPhase/Expand/Compile resolve identically whether reached
+// from the mutable child or the sealed base — the sealed base is reached only via the
+// parent walk during global resolution.
+func initRuntimeFrame(ns *Namespace, mutableGlobal *GlobalEnvironmentFrame) {
+	ns.sealedBase = &EnvironmentFrame{
 		parent:     nil,
-		global:     global,
+		global:     newGlobalEnvironmentFrameForNamespace(ns),
 		phaseLevel: PhaseRuntime,
 		namespace:  ns,
 	}
-	ns.phases = newPhaseRegistryForNamespace(ns)
+	ns.runtime = &EnvironmentFrame{
+		parent:     ns.sealedBase,
+		global:     mutableGlobal,
+		phaseLevel: PhaseRuntime,
+		namespace:  ns,
+	}
+	ns.phases = newPhaseRegistryForNamespace(ns) // envs[PhaseRuntime] = ns.runtime
 	ns.runtime.phases = ns.phases
+	ns.sealedBase.phases = ns.phases
 }
 
 // newPhaseRegistryForChild creates a PhaseRegistry for a child environment

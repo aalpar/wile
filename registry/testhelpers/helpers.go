@@ -25,9 +25,22 @@ import (
 	"testing"
 	"time"
 
+	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/values"
 )
+
+// NewBootstrappedNamespace builds a fully bootstrapped namespace and returns it for
+// frame-topology assertions (e.g. sealed-base vs mutable-runtime placement). Mirrors
+// RunSchemeCode's setup but exposes the *Namespace, which RunSchemeCode does not.
+func NewBootstrappedNamespace(t *testing.T) *environment.Namespace {
+	t.Helper()
+	env, err := bootstrap.NewNamespaceFrame(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	return env.Namespace()
+}
 
 // panicNonError wraps a recovered non-error panic value as an error.
 type panicNonError struct {

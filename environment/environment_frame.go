@@ -831,3 +831,18 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 func (p *EnvironmentFrame) Namespace() *Namespace {
 	return p.namespace
 }
+
+// SealedBaseTarget returns the frame that should receive sealed (immutable) runtime
+// bindings — primitives and bootstrap procedures — when a registry is applied with this
+// frame as its target. For a namespace-owning runtime frame (this frame == its
+// namespace's Runtime()) that is the namespace's sealed base; for a flat library frame
+// (NewChildRuntime, which shares its parent's namespace and has no sealed-base parent to
+// reach) it is the frame itself. This single predicate keeps the carve decision in one
+// place across the engine-root, profile-child, and library-env apply paths.
+func (p *EnvironmentFrame) SealedBaseTarget() *EnvironmentFrame {
+	ns := p.namespace
+	if ns != nil && ns.runtime == p {
+		return ns.sealedBase
+	}
+	return p
+}

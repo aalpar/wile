@@ -22,24 +22,34 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// BootstrapFS embeds bootstrap.scm and the files it includes.
-// bootstrap.scm uses (include ...) directives to load bootstrap_macros.scm
-// and bootstrap_procedures.scm. The engine passes this FS to an
-// EmbedFileResolver so the compiler's include form can resolve them.
+// BootstrapFS embeds the two bootstrap sources. bootstrap.scm is retained on disk as
+// documentation of load order (it (include)s both files) but is no longer registered
+// as a source — the two files are registered directly through separate channels so
+// they target different frames. The embedded FS is still passed to an EmbedFileResolver
+// so any (include ...) directives resolve.
 //
 //go:embed bootstrap.scm bootstrap_macros.scm bootstrap_procedures.scm
 var BootstrapFS embed.FS
 
-// addBootstrapSources registers bootstrap.scm as a single macro source.
-// The (include ...) directives inside it are resolved by the compiler
-// against BootstrapFS via EmbedFileResolver.
+// addBootstrapSources registers bootstrap_macros.scm (define-syntax forms) as a macro
+// source and bootstrap_procedures.scm (define forms) as a procedure source. The split
+// is the phase boundary: macros load into the mutable expand frame, procedures into the
+// immutable sealed base. Macros MUST load before procedures (procedures use let/and from
+// the macros file) — the loader enforces order, this only registers the sources.
 func addBootstrapSources(r *registry.Registry) error {
-	source, err := fs.ReadFile(BootstrapFS, "bootstrap.scm")
+	macros, err := fs.ReadFile(BootstrapFS, "bootstrap_macros.scm")
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(
-			werr.ErrFileNotFound, err, "bootstrap: reading bootstrap.scm",
+			werr.ErrFileNotFound, err, "bootstrap: reading bootstrap_macros.scm",
 		)
 	}
-	r.AddMacroSource(string(source))
+	procs, err := fs.ReadFile(BootstrapFS, "bootstrap_procedures.scm")
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound, err, "bootstrap: reading bootstrap_procedures.scm",
+		)
+	}
+	r.AddMacroSource(string(macros))
+	r.AddProcedureSource(string(procs))
 	return nil
 }

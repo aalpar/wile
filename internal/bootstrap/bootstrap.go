@@ -168,8 +168,11 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		}
 	}
 
-	// Apply registry to environment
-	err = reg.Apply(ctx, env)
+	// Apply registry to environment. Runtime primitives are routed to the sealed-base
+	// frame (immutable) for a namespace-owning runtime env; a flat library env receives
+	// them in its own frame. SealedBaseTarget() picks the right frame for each case.
+	runtimeTarget := env.SealedBaseTarget()
+	err = reg.Apply(ctx, env, registry.WithRuntimeTarget(runtimeTarget))
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error applying registry to environment")
 	}
@@ -184,11 +187,18 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		return nil, werr.WrapForeignErrorf(err, "error registering phase handlers")
 	}
 
-	// Load bootstrap macros from registry
+	// Load bootstrap macros into the mutable expand frame FIRST: bootstrap procedures
+	// use bootstrap macros (let/and), so the macros must exist before the procedures
+	// compile. Procedures then load into the sealed-base frame (runtimeTarget), after
+	// macros. Both resolve macros through the shared phase registry.
 	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
 	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
+	}
+	err = loadBootstrapProcedures(ctx, runtimeTarget, reg.ProcedureSources(), bootstrapResolver)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap procedures")
 	}
 
 	// Set the default file resolver for runtime include/load operations,
@@ -311,6 +321,22 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 //  3. Compiled to bytecode
 //  4. Executed to register the syntax transformer
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
+	return loadBootstrapSources(ctx, env, sources, resolver, "macro")
+}
+
+// loadBootstrapProcedures loads runtime-procedure sources (define forms) into the given
+// target frame — the sealed base for an engine root/profile, or a flat library frame.
+// `define` forms write to the target frame's own global; the target's Expand()/Compile()
+// resolve through the shared phase registry, so the macros loaded earlier are visible.
+// MUST run after loadBootstrapMacros (procedures use bootstrap macros).
+func loadBootstrapProcedures(ctx context.Context, target *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
+	return loadBootstrapSources(ctx, target, sources, resolver, "procedure")
+}
+
+// loadBootstrapSources is the shared parse → expand/compile → execute pipeline for
+// bootstrap sources. The macro and procedure loaders differ only in their target frame
+// and the source kind named in error context.
+func loadBootstrapSources(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver, kind string) error {
 	for _, source := range sources {
 		rdr := strings.NewReader(source)
 		p := parser.NewParser(env, true, rdr)
@@ -321,19 +347,19 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 				break
 			}
 			if err != nil {
-				return werr.WrapForeignErrorf(err, "error parsing bootstrap macros")
+				return werr.WrapForeignErrorf(err, "error parsing bootstrap %s", kind)
 			}
 
 			tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 			if err != nil {
-				return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap macro")
+				return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap %s", kind)
 			}
 
 			cont := machine.NewMachineContinuation(nil, tpl, env)
 			mc := machine.NewMachineContext(ctx, cont)
 			err = mc.Run()
 			if err != nil {
-				return werr.WrapForeignErrorf(err, "error running bootstrap macro")
+				return werr.WrapForeignErrorf(err, "error running bootstrap %s", kind)
 			}
 		}
 	}

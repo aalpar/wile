@@ -276,14 +276,18 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, expand.GlobalEnvironment(), qt.Not(qt.Equals), runtime.GlobalEnvironment())
 	qt.Assert(t, compile.GlobalEnvironment(), qt.Not(qt.Equals), expand.GlobalEnvironment())
 
-	// Phase environments parent to TopLevel for interning access
+	// Phase environments parent to the mutable runtime frame for interning access.
 	qt.Assert(t, expand.Parent(), qt.Equals, topLevel)
 	qt.Assert(t, compile.Parent(), qt.Equals, topLevel)
 
-	// TopLevel() should return the root from any frame
-	qt.Assert(t, runtime.TopLevel(), qt.Equals, topLevel)
-	qt.Assert(t, expand.TopLevel(), qt.Equals, topLevel)
-	qt.Assert(t, compile.TopLevel(), qt.Equals, topLevel)
+	// After the sealed-base carve, TopLevel() returns the structural root — the
+	// immutable sealed base that parents the mutable runtime — from any frame.
+	sealedBase := topLevel.Namespace().SealedBase()
+	qt.Assert(t, sealedBase, qt.IsNotNil)
+	qt.Assert(t, sealedBase.IsTopLevel(), qt.IsTrue)
+	qt.Assert(t, runtime.TopLevel(), qt.Equals, sealedBase)
+	qt.Assert(t, expand.TopLevel(), qt.Equals, sealedBase)
+	qt.Assert(t, compile.TopLevel(), qt.Equals, sealedBase)
 
 	// Phase accessors should be cached (same instance returned)
 	qt.Assert(t, topLevel.Runtime(), qt.Equals, runtime)

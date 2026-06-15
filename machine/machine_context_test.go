@@ -226,8 +226,9 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 	qt.Assert(t, subCtx.GetValues(), qt.IsNil)
 	qt.Assert(t, subCtx.evals.Len(), qt.Equals, 0)
 	qt.Assert(t, subCtx.cont, qt.IsNil)
-	// But shares top-level environment
-	qt.Assert(t, subCtx.env, qt.Equals, env.TopLevel())
+	// But shares the mutable runtime top-level environment (post sealed-base carve,
+	// NewSubContext captures Namespace().Runtime(), not the sealed base TopLevel()).
+	qt.Assert(t, subCtx.env, qt.Equals, env.Namespace().Runtime())
 }
 
 func TestMachineContext_Restore(t *testing.T) {
@@ -1666,7 +1667,10 @@ func TestRunDispatch_OpPopEnv_TopLevel(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendInstruction(Instruction{Op: OpPopEnv})
 
-	env := environment.NewNamespace().Runtime()
+	// The sealed base is the true parent-nil root post-carve; the mutable runtime now
+	// parents to it, so OpPopEnv on the runtime would succeed. Pop the sealed base to
+	// exercise the nil-parent error path.
+	env := environment.NewNamespace().SealedBase()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 

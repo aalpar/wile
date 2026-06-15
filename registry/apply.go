@@ -33,6 +33,7 @@ type ApplyOption func(*applyConfig)
 type applyConfig struct {
 	contractEnforcement bool
 	stableBase          bool
+	runtimeTarget       *environment.EnvironmentFrame
 }
 
 // WithContractEnforcement installs a type-checking validator on each
@@ -67,6 +68,17 @@ func WithContractEnforcement() ApplyOption {
 func WithStableBasePrimitives() ApplyOption {
 	return func(cfg *applyConfig) {
 		cfg.stableBase = true
+	}
+}
+
+// WithRuntimeTarget routes PhaseRuntime primitive registration and global values
+// into the given frame instead of env. Used by bootstrap to seat primitives in the
+// immutable sealed base while expand-phase prims stay in env.Expand() and compile-time
+// bindings stay in env.Compile(). Defaults to env (backward compatible — a flat library
+// env passes its own frame, the engine root passes its sealed base).
+func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
+	return func(c *applyConfig) {
+		c.runtimeTarget = frame
 	}
 }
 
@@ -107,31 +119,52 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 		}
 	}
 
-	// Register runtime and expand primitives. Both create a ForeignClosure
-	// in a phase-specific environment frame; only the frame differs. Iterate
-	// the phase axis as data instead of replicating the loop body.
+	// Register runtime and expand primitives. Both create a ForeignClosure; the phase
+	// axis is iterated as data instead of replicating the loop body. Two frames matter
+	// per phase:
+	//   - bindingEnv: where the binding lives. PhaseRuntime → the sealed base when
+	//     WithRuntimeTarget is set (immutable), else env. PhaseExpand → env.Expand().
+	//   - closureEnv: what the ForeignClosure captures as its lexical env — the frame a
+	//     foreign fn resolves user code against via mc.EnvironmentFrame(). This MUST be a
+	//     frame that reaches user defines: the MUTABLE runtime (env), NOT the sealed base.
+	//     Primitives like compile/expand/free-identifier=? resolve user-level names
+	//     through this env; capturing the sealed base would hide every user define. Only
+	//     the binding location is sealed for immutability — resolution stays merged.
+	// For a flat library env (no carve) bindingEnv == closureEnv == env, so behavior is
+	// unchanged. Compile-time bindings stay on env.Compile() (the carve is phase-0-only).
+	runtimeEnv := env
+	if cfg.runtimeTarget != nil {
+		runtimeEnv = cfg.runtimeTarget
+	}
+	expandEnv := env.Expand()
 	phaseTargets := []struct {
-		phase environment.Phase
-		env   *environment.EnvironmentFrame
+		phase      environment.Phase
+		bindingEnv *environment.EnvironmentFrame
+		closureEnv *environment.EnvironmentFrame
 	}{
-		{environment.PhaseRuntime, env},
-		{environment.PhaseExpand, env.Expand()},
+		{environment.PhaseRuntime, runtimeEnv, env},
+		{environment.PhaseExpand, expandEnv, expandEnv},
 	}
 	for _, pt := range phaseTargets {
 		for _, reg := range p.primitives {
 			if !reg.Phases.Has(pt.phase) {
 				continue
 			}
-			err := registerPhasePrimitive(pt.env, pt.phase, reg.Spec, cfg)
+			err := registerPhasePrimitive(pt.bindingEnv, pt.closureEnv, pt.phase, reg.Spec, cfg)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	// Register global values
+	// Register global values into the runtime target (sealed base when carving).
+	// The only AddGlobalValue callers are the three I/O port parameters
+	// (current-input/output/error-port); the binding to the parameter object is
+	// constant, so sealing it is correct — parameterize changes the dynamic value via
+	// continuation marks, not the binding. None are capture-safe, so none get the Stable
+	// stamp: a user (set! current-output-port ...) stays permitted.
 	for _, gv := range p.globalValues {
-		err := registerGlobalValue(env, gv.Name, gv.Value)
+		err := registerGlobalValue(runtimeEnv, gv.Name, gv.Value)
 		if err != nil {
 			return err
 		}
@@ -156,19 +189,20 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 	return nil
 }
 
-// registerPhasePrimitive installs a ForeignClosure for spec in phaseEnv.
-// The phase parameter is used only for error message context; the actual
-// target frame is phaseEnv (chosen by the caller). This is the single
-// registration helper shared by Runtime and Expand phases — earlier
-// versions had two near-identical helpers differing only in target env
-// and error message; collapsed per Instance C of the dispatch-axis-as-data
-// finding (plans/2026-05-08-dispatch-axis-as-data.md).
-func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
+// registerPhasePrimitive installs a ForeignClosure for spec. The binding (and any
+// Stable stamp) lives in bindingEnv; the closure captures closureEnv as its lexical env
+// (the frame a foreign fn resolves user code against). These differ only for sealed
+// runtime primitives: the binding is sealed (bindingEnv = sealed base) while the closure
+// resolves through the mutable runtime (closureEnv = env) so compile/expand/identifier
+// primitives still see user defines. The phase parameter is error-message context only.
+// This is the single registration helper shared by Runtime and Expand phases — collapsed
+// per Instance C of the dispatch-axis-as-data finding (plans/2026-05-08-dispatch-axis-as-data.md).
+func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
 	sym := values.NewSymbol(spec.Name)
-	gi, _ := phaseEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	gi, _ := bindingEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(
-		phaseEnv,
+		closureEnv,
 		spec.ParamCount,
 		spec.IsVariadic,
 		spec.Impl,
@@ -179,7 +213,7 @@ func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase enviro
 		closure.SetValidator(BuildValidator(spec))
 	}
 
-	err := phaseEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+	err := bindingEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
 	}
@@ -194,7 +228,7 @@ func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase enviro
 	// is an invariant violation — SetOwnGlobalValue just succeeded against this
 	// same gi — so surface it rather than silently skipping the stamp.
 	if cfg.stableBase && validate.IsCaptureSafePrimitiveName(spec.Name) {
-		b := phaseEnv.GetGlobalBinding(gi)
+		b := bindingEnv.GetGlobalBinding(gi)
 		if b == nil {
 			return werr.WrapForeignErrorf(
 				werr.ErrNoSuchBinding,

@@ -52,7 +52,9 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 	argsVal := mc.Arg(0)
 
 	callerTopLevel := mc.EnvironmentFrame().Namespace()
-	callerEnv := mc.EnvironmentFrame().TopLevel()
+	// Import source = the mutable runtime (reaches the sealed base via its parent walk);
+	// TopLevel() now returns the sealed base alone.
+	callerEnv := callerTopLevel.Runtime()
 	newNS := callerTopLevel.NewChildNamespace()
 	newNS.Name = "namespace"
 
@@ -214,7 +216,9 @@ func PrimNamespaceRequire(mc machine.CallContext) error {
 	}
 	specVal := mc.Arg(1)
 
-	callerEnv := mc.EnvironmentFrame().TopLevel()
+	// Import source = the mutable runtime (reaches the sealed base via its parent walk);
+	// TopLevel() now returns the sealed base alone.
+	callerEnv := mc.EnvironmentFrame().Namespace().Runtime()
 	targetEnv := ns.Runtime()
 
 	err = compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, targetEnv, machine.NewVMMacroEvaluator(), "namespace-require")
