@@ -365,15 +365,29 @@ func (p *Namespace) ImmutableLiterals() *ImmutableLiterals {
 	return p.root().immutableLiterals
 }
 
-// ImmutableTopLevel reports whether opt-in top-level-define immutability is
-// enabled for this engine. Delegated to root, so every compiler/validator query
-// sees one engine-scoped setting. See immutableTopLevel.
+// ImmutableTopLevel reports whether top-level-define immutability is enforced for
+// THIS namespace. It is a property of the engine's PRIMARY (root) namespace only —
+// the home of compiled-program top-level defines, which are the frame-reclaim
+// optimizer's Stable anchors. CHILD namespaces (parent != nil) are mutable
+// interaction/eval scratch spaces — (environment ...), scheme-report-environment,
+// profile children — modeled on Chez's mutable interaction-environment (see
+// plans/2026-06-13-immutable-toplevel-by-default-scoping.local.md:357-370): a define
+// there shadows/redefines freely and its bindings are never stamped Stable. This is
+// the "compilation units only" scope: immutability is for the compiled program, not
+// for interactive eval. Reclaim soundness is preserved because set! of a Stable
+// anchor copied into a child is still rejected by the set!-gate, which keys on
+// IsStable() directly (compile_validated.go) rather than on this flag.
 func (p *Namespace) ImmutableTopLevel() bool {
-	return p.root().immutableTopLevel
+	if p.parent != nil {
+		return false
+	}
+	return p.immutableTopLevel
 }
 
-// SetImmutableTopLevel enables or disables opt-in top-level-define immutability.
-// Set once at engine construction (WithImmutableTopLevel). Delegated to root.
+// SetImmutableTopLevel enables or disables top-level-define immutability for the
+// engine. Set once at engine construction (WithImmutableTopLevel / WithMutableTopLevel).
+// Stored on the root; child namespaces ignore it and are always mutable
+// (see ImmutableTopLevel).
 func (p *Namespace) SetImmutableTopLevel(on bool) {
 	p.root().immutableTopLevel = on
 }
@@ -783,25 +797,11 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 	// R7RS scheme-report-environment is a frozen, INDEPENDENT snapshot (pre-carve it
 	// deep-copied the whole merged global). Copy BOTH the parent's sealed base (standard
 	// bindings: prims + sealed stdlib) and the parent's runtime (user defines made
-	// before this call) into q's OWN two-level stack. Pre-call user defines are visible,
-	// post-call ones are not, prims resolve for eval — and q aliases nothing (a set!
-	// inside the report env touches only its own copy). Syntax interning delegates
-	// through q → p via the Namespace.parent chain.
-	q.sealedBase = &EnvironmentFrame{
-		parent:     nil,
-		global:     p.sealedBase.global.Copy(),
-		phaseLevel: PhaseRuntime,
-		namespace:  q,
-	}
-	q.runtime = &EnvironmentFrame{
-		parent:     q.sealedBase,
-		global:     p.runtime.global.Copy(),
-		phaseLevel: PhaseRuntime,
-		namespace:  q,
-	}
-	q.phases = newPhaseRegistryForNamespace(q)
-	q.runtime.phases = q.phases
-	q.sealedBase.phases = q.phases
+	// before this call) into q's OWN two-level stack via the shared wireRuntimeFrames
+	// topology. Pre-call user defines are visible, post-call ones are not, prims resolve
+	// for eval — and q aliases nothing (a set! inside the report env touches only its own
+	// copy). Syntax interning delegates through q → p via the Namespace.parent chain.
+	wireRuntimeFrames(q, p.sealedBase.global.Copy(), p.runtime.global.Copy())
 	return q
 }
 
@@ -878,22 +878,31 @@ func newPhaseRegistryForNamespace(ns *Namespace) *PhaseRegistry {
 	return q
 }
 
-// initRuntimeFrame builds the per-Engine runtime layer: an immutable sealed-base frame
-// (parent nil, fresh global, holds primitives + sealed stdlib) parented by a mutable
-// runtime frame (user defines, using the caller-supplied global). Runtime() returns the
-// mutable child; SealedBase() returns the parent. The caller-supplied global stays the
-// MUTABLE runtime's global (preserving the prior merged-frame meaning and the
-// copy/child contract of NewSchemeReportNamespace); the sealed base gets a fresh global.
+// initRuntimeFrame builds the per-Engine runtime layer for a freshly-constructed
+// namespace: a fresh sealed-base global (primitives + sealed stdlib are applied into it
+// later) and the caller-supplied mutableGlobal for the user runtime. Runtime() returns
+// the mutable child; SealedBase() returns the parent. The two-frame topology and phase
+// wiring live in wireRuntimeFrames.
+func initRuntimeFrame(ns *Namespace, mutableGlobal *GlobalEnvironmentFrame) {
+	wireRuntimeFrames(ns, newGlobalEnvironmentFrameForNamespace(ns), mutableGlobal)
+}
+
+// wireRuntimeFrames builds the two-level phase-0 stack and its shared PhaseRegistry: an
+// immutable sealed-base frame (parent nil, sealedGlobal) parented by a mutable runtime
+// frame (mutableGlobal). It is the single source of truth for the sealed-base/mutable-
+// runtime topology and phase wiring; initRuntimeFrame and NewSchemeReportNamespace differ
+// ONLY in whether the two globals are fresh (engine construction) or copied from a parent
+// (the frozen scheme-report snapshot).
 //
-// newPhaseRegistryForNamespace reads ns.runtime for envs[PhaseRuntime], so expand/compile
-// frames parent to the mutable child (unchanged). The sealed base shares the same
+// Order matters: newPhaseRegistryForNamespace reads ns.runtime for envs[PhaseRuntime], so
+// the runtime frame is set before it is called. The sealed base shares the same
 // PhaseRegistry (ns.phases) so AtPhase/Expand/Compile resolve identically whether reached
 // from the mutable child or the sealed base — the sealed base is reached only via the
 // parent walk during global resolution.
-func initRuntimeFrame(ns *Namespace, mutableGlobal *GlobalEnvironmentFrame) {
+func wireRuntimeFrames(ns *Namespace, sealedGlobal, mutableGlobal *GlobalEnvironmentFrame) {
 	ns.sealedBase = &EnvironmentFrame{
 		parent:     nil,
-		global:     newGlobalEnvironmentFrameForNamespace(ns),
+		global:     sealedGlobal,
 		phaseLevel: PhaseRuntime,
 		namespace:  ns,
 	}

@@ -114,3 +114,54 @@ func TestSealedBase_R2_LibraryCrossFormSetBang(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewInteger(1))
 }
+
+// TestSealedBase_B3_RedefineInEvalEnvironmentPermitted is the B3 regression: under the
+// immutable default, redefining a binding inside a first-class eval environment —
+// (environment ...) or scheme-report-environment — is PERMITTED. Those are mutable
+// interaction/eval scratch spaces (child namespaces), NOT the immutable engine root,
+// per the "compilation units only" scope. Before the fix the child inherited
+// immutability via root delegation, so the second eval'd define was rejected with
+// ErrImmutableBinding.
+func TestSealedBase_B3_RedefineInEvalEnvironmentPermitted(t *testing.T) {
+	ctx := context.Background()
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"environment scheme base", `(define e (environment '(scheme base))) (eval '(define zz 1) e) (eval '(define zz 2) e) (eval 'zz e)`},
+		{"scheme-report-environment", `(define e (scheme-report-environment 7)) (eval '(define zz 1) e) (eval '(define zz 2) e) (eval 'zz e)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := newSealedImmutableEngine(t)
+			defer func() {
+				qt.Assert(t, eng.Close(), qt.IsNil)
+			}()
+			result, err := eng.EvalMultiple(ctx, tc.code)
+			qt.Assert(t, err, qt.IsNil) // previously: ErrImmutableBinding on the second define
+			qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewInteger(2))
+		})
+	}
+}
+
+// TestSealedBase_C1_ProfileChildSetBangConsistent is the C1 regression: in a profile
+// child created by (environment '(wile <profile>)), set! of a base name behaves
+// consistently. The child is a mutable eval scratch space, so neither a Go primitive
+// (car) nor a Scheme bootstrap procedure (caar) is stamped Stable there, and set! on
+// either is PERMITTED. Before "compilation units only" the child inherited immutability
+// and stamped bootstrap procedures Stable, so (set! caar ...) was rejected while
+// (set! car ...) was permitted — an origin-dependent divergence from the engine root.
+func TestSealedBase_C1_ProfileChildSetBangConsistent(t *testing.T) {
+	ctx := context.Background()
+	for _, name := range []string{"car", "caar"} {
+		t.Run(name, func(t *testing.T) {
+			eng := newSealedImmutableEngine(t)
+			defer func() {
+				qt.Assert(t, eng.Close(), qt.IsNil)
+			}()
+			code := `(eval '(set! ` + name + ` (lambda (x) 'replaced)) (environment '(wile kitchen-sink)))`
+			_, err := eng.EvalMultiple(ctx, code)
+			qt.Assert(t, err, qt.IsNil) // mutable profile child: set! permitted for car AND caar
+		})
+	}
+}

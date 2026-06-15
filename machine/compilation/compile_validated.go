@@ -572,15 +572,20 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		)
 	}
 
-	// Opt-in (WithImmutableTopLevel): also reject set! on a rebind-stable
-	// top-level binding. set! requires its target already bound (above), and a
-	// binding's Stable is finalized at its define — which necessarily precedes
-	// any set! referencing it — so this gate always sees the final Stable, and
-	// no runtime trap is needed. A documented deviation from R7RS §4.1.6, off by
-	// default. The imported clause already covers imports; this adds the
-	// proven-stable program-defined case.
-	ns := p.env.Namespace()
-	if ns != nil && ns.ImmutableTopLevel() && binding.IsStable() {
+	// Reject set! on a rebind-stable binding. A Stable binding is a frame-reclaim
+	// optimizer anchor: the optimizer may release a caller's frame at a tail call
+	// trusting the anchor never becomes a continuation-capturing procedure, so an
+	// in-place mutation would be unsound. This keys on IsStable() DIRECTLY, not on
+	// the namespace's ImmutableTopLevel() flag, so a Stable anchor copied into a
+	// MUTABLE interaction/eval child namespace (e.g. scheme-report-environment, which
+	// snapshots the immutable base) stays set!-protected — the child permits
+	// define-shadow but never in-place mutation of an anchor. IsStable() is only ever
+	// set under immutability (WithStableBasePrimitives / the immTop define stamp), so
+	// in a fully-mutable engine nothing is Stable and this never fires (R7RS §4.1.6
+	// mutability preserved). set! requires its target already bound (above) and Stable
+	// is finalized at the define, so this always sees the final value — no runtime
+	// trap needed. The imported clause above already covers imports.
+	if binding.IsStable() {
 		return werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
 			"set!: cannot mutate immutable top-level binding %q",

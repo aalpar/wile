@@ -284,6 +284,19 @@ func main() {
 	if coverageCollector != nil {
 		engineOpts = append(engineOpts, wile.WithCoverage(coverageCollector))
 	}
+
+	// An interactive session (the REPL, or -i after loading files/-e) uses a MUTABLE
+	// top level: the REPL is Wile's interaction environment (Chez model), where
+	// redefining a binding across input lines must work. Pure batch execution (a file
+	// or -e program with no -i) keeps the immutable default so the frame-reclaim
+	// optimizer's top-level payoff applies to the compiled program. This mirrors the
+	// runREPL entry condition below; positional script args were already folded into
+	// opts.File above, so `wile foo.scm` is correctly treated as batch.
+	enterREPL := (len(opts.File) == 0 && len(opts.Eval) == 0) || opts.Interactive
+	if enterREPL {
+		engineOpts = append(engineOpts, wile.WithMutableTopLevel())
+	}
+
 	eng, err0 := wile.NewEngine(ctx, engineOpts...)
 	if err0 != nil {
 		Failf(err0, "Cannot create engine")
@@ -490,9 +503,13 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 }
 
 // runEval evaluates expressions supplied via -e flags.
-// All expressions are joined and evaluated together via EvalMultipleWithSource.
+// All -e expressions are joined and wrapped in a single (begin ...) so they form ONE
+// compilation unit, exactly like runFile. This makes mutually-recursive defines and
+// redefine-within-the-batch work, and keeps the -e path from diverging from file
+// execution under the immutable top-level default (B2). A space (not newline) after
+// "begin" preserves source line numbers.
 func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
-	combined := strings.Join(exprs, "\n")
+	combined := "(begin " + strings.Join(exprs, "\n") + "\n)"
 	result, err := eng.EvalMultipleWithSource(ctx, combined, "<eval>")
 	if err != nil {
 		Failf(err)

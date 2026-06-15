@@ -154,11 +154,18 @@ immutability opt-in:
   car …)` or `(import (scheme cxr))` creates a *new* binding in the mutable child (the
   name is absent from that frame's own map), so the redefinition guard never fires. The
   sealed `car` is untouched.
-- **Enforcement is scoped to the user program.** Only defines landing in the engine's own
-  user runtime are frozen. **User-loaded libraries stay mutable** — a library body's
-  cross-form `(define *x* …)` / `(set! *x* …)` works — and the sealed base's own bootstrap
-  procedures are not frozen by the stamp (their immutability comes from the shadow
-  semantics above).
+- **Enforcement is scoped to the compiled program (the engine's root namespace).** Defines
+  landing in the engine's own user runtime are frozen, and the sealed base's *defined-once*
+  bootstrap procedures (`map`, `assoc`, the `cxr` accessors, …) **are** stamped `Stable` and
+  frozen too: a top-level `(set! map …)` is rejected. (Go primitives are stamped `Stable`
+  only when they are *capture-safe*, so `(set! car …)` is rejected but `(set! vector-ref …)`
+  — not capture-safe — stays permitted.) Two contexts stay **mutable**: **user-loaded
+  libraries** — a library body's cross-form `(define *x* …)` / `(set! *x* …)` works — and
+  **interactive / first-class eval environments** — the REPL, the `--mcp` session, and the
+  namespaces built by `(environment …)` / `scheme-report-environment` are mutable scratch
+  spaces (Chez interaction-environment model), where a redefine is a permitted shadow. The
+  frame-reclaim GC payoff therefore applies to compiled programs (files, `-e` batches), not
+  to interactive redefinition.
 
 **Redefine-visibility deviation (Chez two-environment model).** Because a sealed binding
 is resolved and pinned at *compile time*, an already-compiled closure over a sealed name
@@ -177,14 +184,14 @@ documented deviation from R7RS's single mutable top level.
 
 **define/set! asymmetry on sealed names.** `(define caar …)` *introduces* a child-frame
 shadow (closures keep the sealed binding); `(set! caar …)` *mutates the existing* binding
-in place (closures observe it) — and under the default, `set!` of a `Stable` sealed name
-(a capture-safe primitive such as `car`) is rejected with `ErrImmutableBinding`. This is
-ordinary Scheme semantics (`define` introduces, `set!` mutates) applied to the
-sealed/mutable split.
+in place (closures observe it) — and in the compiled program, `set!` of a `Stable` sealed
+name (a capture-safe primitive such as `car`, or any defined-once bootstrap procedure such
+as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme semantics
+(`define` introduces, `set!` mutates) applied to the sealed/mutable split.
 
 **Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer (`plans/2026-06-11-escape-gated-frame-allocation.local.md`). The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), the engine *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`).
 
-**Implementation:** Pure compile-time. Enforcement is gated on the define landing in the namespace's own user runtime frame (`compile_validated.go`); the compiler stamps `BindingMeta.Stable` and enforces the redefinition/`set!` guards there. Imported-binding `set!` rejection (always on) is unchanged.
+**Implementation:** Pure compile-time, scoped to the engine's **root** namespace. The redefinition guard fires only for a define landing in the root's own user runtime or sealed base (`compile_validated.go`); child namespaces report `ImmutableTopLevel() == false`, so REPL / `(environment …)` / `scheme-report-environment` redefines are permitted. The compiler stamps `BindingMeta.Stable`; the `set!` guard keys on `IsStable()` **directly** (not on the namespace flag), so a `Stable` anchor copied into a mutable child stays `set!`-protected — preserving frame-reclaim soundness while still allowing define-shadow. Imported-binding `set!` rejection (always on) is unchanged.
 
 **Impact:** Programs that rebind their own never-mutated top-level definitions via `set!` are rejected by default; the common case (define-once, call-many) is unaffected and gains the optimization. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 

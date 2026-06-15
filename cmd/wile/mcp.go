@@ -237,6 +237,10 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(buildLibraryPaths()...),
+		// The MCP eval tool is a persistent interaction session (state carries across
+		// calls), so it uses a MUTABLE top level — redefining a binding across eval
+		// calls is a primary workflow, like the REPL (B1).
+		wile.WithMutableTopLevel(),
 	)
 	if err != nil {
 		return err
