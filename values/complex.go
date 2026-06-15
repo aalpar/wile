@@ -315,10 +315,16 @@ func (p *Complex) IsVoid() bool {
 }
 
 // EqualTo returns true if both complex numbers have the same value.
+//
+// The *BigComplex case delegates to BigComplex.EqualTo so the two cross-kind
+// directions share one comparison and cannot disagree — (equal? c bc) and
+// (equal? bc c) must not flip with operand order (R7RS §6.2.6).
 func (p *Complex) EqualTo(v Value) bool {
-	other, ok := v.(*Complex)
-	if ok {
+	switch other := v.(type) {
+	case *Complex:
 		return p.Value == other.Value
+	case *BigComplex:
+		return other.EqualTo(p)
 	}
 	return false
 }

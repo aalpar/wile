@@ -425,6 +425,33 @@ func TestBigComplex_EqualTo(t *testing.T) {
 	c.Assert(bc1.EqualTo(values.NewInteger(3)), qt.IsFalse)
 }
 
+// TestComplex_EqualTo_SymmetricWithBigComplex pins R7RS equality symmetry
+// across the Complex/BigComplex kinds: (equal? a b) must not flip with operand
+// order. Complex.EqualTo previously matched only *Complex and returned false
+// for any *BigComplex, while BigComplex.EqualTo cross-compared to *Complex —
+// so the two directions disagreed.
+func TestComplex_EqualTo_SymmetricWithBigComplex(t *testing.T) {
+	c := qt.New(t)
+
+	bc := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+	cplx := values.NewComplexFromParts(3.0, 4.0)
+
+	// Equal values: both directions must agree.
+	c.Assert(bc.EqualTo(cplx), qt.IsTrue)
+	c.Assert(cplx.EqualTo(bc), qt.IsTrue)
+
+	// Unequal values: both directions must agree.
+	bcDiff := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigIntegerFromInt64(2),
+	)
+	c.Assert(bcDiff.EqualTo(cplx), qt.IsFalse)
+	c.Assert(cplx.EqualTo(bcDiff), qt.IsFalse)
+}
+
 func TestBigComplex_SchemeString(t *testing.T) {
 	c := qt.New(t)
 
