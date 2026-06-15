@@ -143,6 +143,30 @@ func TestSealedBase_SetBangBehavior(t *testing.T) {
 	})
 }
 
+// TestSealedBase_SetBangPortParameterPermitted pins the port-parameter corner of the
+// sealed-base carve under the immutable default. The three I/O port parameters
+// (current-output-port etc.) are registered as global values into the sealed base
+// (registry/apply.go:160-171) but are NOT capture-safe, so they are never stamped Stable.
+// The set! gate rejects only Stable sealed bindings (compile_validated.go:583), so a user
+// (set! current-output-port ...) stays PERMITTED even under the immutable default — and,
+// because the binding is non-Stable, it is not compile-time-pinned, so the mutation is
+// observable on a subsequent read of the same binding. This is the documented intent at
+// registry/apply.go:165; the test locks it against regression.
+func TestSealedBase_SetBangPortParameterPermitted(t *testing.T) {
+	ctx := context.Background()
+	// No WithMutableTopLevel: exercise the immutable DEFAULT. The point is that a
+	// non-Stable sealed binding stays settable even with top-level immutability on.
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
+	qt.Assert(t, err, qt.IsNil)
+	defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
+
+	// set! resolves through the parent walk to the sealed-base binding, mutates it, and a
+	// subsequent read of the same binding observes the new value (non-Stable => not pinned).
+	result, err := eng.EvalMultiple(ctx, `(set! current-output-port 'replaced) current-output-port`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewSymbol("replaced"))
+}
+
 // TestSealedBase_ThreadSharesMutableGlobalSeesSealedBase verifies a top-level define in
 // the parent is visible to a spawned SRFI-18 thread (shared mutable global), and that
 // primitives (sealed base) resolve inside the thread. Run under -race to confirm the

@@ -550,8 +550,7 @@ func (p *Registry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
 
 // Without returns a new Registry with the named primitives removed.
 // Names that don't match any registered primitive are silently ignored.
-// Compile-time bindings, init funcs, macro sources, and global values
-// are copied unchanged.
+// All non-primitive fields are copied unchanged via deepCopy.
 func (p *Registry) Without(names ...string) *Registry {
 	return p.filterPrimitives(names, func(reg PrimitiveRegistration) string {
 		return reg.Spec.Name
@@ -560,8 +559,7 @@ func (p *Registry) Without(names ...string) *Registry {
 
 // WithoutCategory returns a new Registry with all primitives in the
 // named categories removed. Categories are matched against PrimitiveSpec.Category.
-// Compile-time bindings, init funcs, macro sources, and global values
-// are copied unchanged.
+// All non-primitive fields are copied unchanged via deepCopy.
 func (p *Registry) WithoutCategory(categories ...string) *Registry {
 	return p.filterPrimitives(categories, func(reg PrimitiveRegistration) string {
 		return reg.Spec.Category
@@ -587,7 +585,7 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 // WithoutBindings returns a new Registry with the named compile-time
 // bindings removed. Use after Without to fully erase a name that exists
 // as both a primitive and a compile-time binding (e.g., set!).
-// Primitives, init funcs, macro sources, and global values are copied unchanged.
+// All other fields are copied unchanged via deepCopy.
 //
 // Post-Phase-1: only real bindings (DocOnly=false) are removed. DocOnly
 // entries with the same name are preserved — they carry documentation

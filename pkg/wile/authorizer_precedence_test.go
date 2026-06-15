@@ -115,7 +115,7 @@ func TestResolveAuthorizer(t *testing.T) {
 
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			cfg := &engineConfig{}
+			cfg := newEngineConfig()
 			tc.mutate(cfg)
 			got := cfg.resolveAuthorizer()
 			if tc.wantNil {
@@ -143,7 +143,7 @@ func TestAuthorizerOptions_ExplicitBeatsProfile_OrderIndependent(t *testing.T) {
 	}
 
 	build := func(opts ...EngineOption) security.Authorizer {
-		cfg := &engineConfig{}
+		cfg := newEngineConfig()
 		for _, opt := range opts {
 			opt(cfg)
 		}
@@ -191,7 +191,7 @@ func TestAuthorizerOptions_NilAndMultiProfile(t *testing.T) {
 	}
 
 	build := func(opts ...EngineOption) security.Authorizer {
-		cfg := &engineConfig{}
+		cfg := newEngineConfig()
 		for _, opt := range opts {
 			opt(cfg)
 		}
@@ -219,7 +219,7 @@ func TestSandboxOption_MultipleCallsAccumulate(t *testing.T) {
 	c := qt.New(t)
 
 	build := func(opts ...EngineOption) security.Authorizer {
-		cfg := &engineConfig{}
+		cfg := newEngineConfig()
 		for _, opt := range opts {
 			opt(cfg)
 		}
@@ -251,7 +251,7 @@ func TestSandboxOption_OrderIndependent(t *testing.T) {
 	fileWrite := security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionWrite, Target: "/tmp/x"}
 
 	build := func(opts ...EngineOption) security.Authorizer {
-		cfg := &engineConfig{}
+		cfg := newEngineConfig()
 		for _, opt := range opts {
 			opt(cfg)
 		}
