@@ -265,8 +265,16 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
 	// later redefine of an already-stable binding is rejected. When disabled,
 	// behavior is identical to before (the fast path below still fires).
+	//
+	// Q3 (layered-environment): enforce ONLY in the namespace's own user runtime global
+	// (ns.Runtime() == p.env) — the per-Engine user top-level. User-loaded libraries stay
+	// mutable: a library body compiles against a flat NewChildRuntime frame that shares
+	// its parent's namespace, so ns.Runtime() != p.env there, and a library's cross-form
+	// (define x)/(set! x) must work (R2). The sealed base (bootstrap procedures) likewise
+	// is not ns.Runtime(), so those defines are not frozen — their immutability comes from
+	// the carve's shadow semantics, not the Stable stamp.
 	ns := p.env.Namespace()
-	immTop := ns != nil && ns.ImmutableTopLevel()
+	immTop := ns != nil && ns.ImmutableTopLevel() && ns.Runtime() == p.env
 
 	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
 		return sym, nil

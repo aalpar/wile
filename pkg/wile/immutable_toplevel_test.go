@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/pkg/wile"
+	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -30,6 +31,20 @@ import (
 func newImmutableTopLevelEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	eng, err := wile.NewEngine(context.Background(), wile.WithImmutableTopLevel())
+	qt.Assert(t, err, qt.IsNil)
+	return eng
+}
+
+// newImmutableTopLevelLibraryEngine builds an immutable-top-level engine that can
+// resolve (import ...) against the embedded stdlib, so library-load paths can be
+// exercised under immutability.
+func newImmutableTopLevelLibraryEngine(t *testing.T) *wile.Engine {
+	t.Helper()
+	eng, err := wile.NewEngine(context.Background(),
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+		wile.WithImmutableTopLevel())
 	qt.Assert(t, err, qt.IsNil)
 	return eng
 }
@@ -163,4 +178,38 @@ func TestImmutableTopLevel_On_DefineValuesMultiStillWorks(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `(define-values (p q) (values 1 2)) (+ p q)`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
+}
+
+// TestImmutableTopLevel_On_CxrReExportImport is the regression guard for commit
+// d8911c15. The cxr accessors (caar..cddddr) are defined ambiently in
+// registry/core/bootstrap_procedures.scm and stamped Stable under immutability.
+// (scheme cxr) was previously re-defining them, so (import (scheme cxr)) collided
+// with the already-Stable ambient binding -> ErrImmutableBinding. After making
+// cxr.sld a pure re-export manifest, the import resolves the single ambient
+// binding instead. (scheme r5rs) reaches the same accessors via its transitive
+// (scheme cxr) import; importing (scheme base) AND (scheme cxr) together must not
+// collide either, since both now export the same binding rather than two copies.
+func TestImmutableTopLevel_On_CxrReExportImport(t *testing.T) {
+	cases := []struct {
+		name     string
+		src      string
+		expected string
+	}{
+		{"cxr-2level", `(import (scheme cxr)) (caar '((1 2) 3))`, "1"},
+		{"cxr-4level", `(import (scheme cxr)) (cddddr '(1 2 3 4 5 6))`, "(5 6)"},
+		{"r5rs-transitive", `(import (scheme r5rs)) (caddr '(1 2 3 4))`, "3"},
+		{"base-and-cxr-together", `(import (scheme base) (scheme cxr)) (caar '((9)))`, "9"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := context.Background()
+			eng := newImmutableTopLevelLibraryEngine(t)
+
+			result, err := eng.EvalMultiple(ctx, tc.src)
+			c.Assert(err, qt.IsNil,
+				qt.Commentf("cxr re-export import must not collide with the Stable ambient binding"))
+			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
 }
