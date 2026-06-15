@@ -267,7 +267,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		c.Assert(ss.SourceContext().Origin, qt.Equals, origin)
 	})
 
-	c.Run("global binding with existing scopes clears them", func(c *qt.C) {
+	c.Run("global binding strips existing scopes and adds intro scope", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
 		freeIds := map[string]FreeIdResolver{
 			"baz": mockFreeIdResolver{global: globalIdx},
@@ -280,9 +280,16 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("baz", srcCtx)
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
+		// The recorded global is kept as a fallback (resolved after scope-set
+		// local resolution in CompileSymbol).
 		c.Assert(ss.ResolvedBinding, qt.Equals, globalIdx)
-		// Scopes should be cleared when applying global binding
-		c.Assert(len(ss.Scopes()), qt.Equals, 0)
+		// The use-site/template scopes are stripped, but the intro scope is
+		// carried so a binding co-introduced by the same template can shadow the
+		// global (R1 fix — see plans/2026-06-15-macro-hygiene-global-shadow-fix).
+		scopes := ss.Scopes()
+		c.Assert(len(scopes), qt.Equals, 1)
+		c.Assert(scopes[0], qt.Equals, introScope)
+		c.Assert(scopes[0], qt.Not(qt.Equals), existingScope)
 	})
 
 	c.Run("non-free with existing scopes clears them", func(c *qt.C) {

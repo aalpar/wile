@@ -269,11 +269,20 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		return syntax.NewSyntaxSymbol(key, scopedCtx)
 	}
 
-	// Global binding — library scope (if any) lets CompileSymbol redirect via
-	// the TLE scope registry; otherwise carry the binding directly.
+	// Global binding — carry the intro scope (as the non-free path does above)
+	// so this reference shares a scope with a binding co-introduced by the same
+	// template; CompileSymbol's scope-set local match (GetLocalIndex) can then
+	// pair them, letting the introduced binder shadow the global. The recorded
+	// global / library scope is only a fallback, consulted AFTER that local match
+	// (see CompileSymbol; Change 2). Previously this reference lacked the intro
+	// scope, so it could not match the co-introduced binder.
+	// See plans/2026-06-15-macro-hygiene-global-shadow-fix.local.md (Change 1).
 	globalBinding := resolution.GetGlobal()
 	if globalBinding != nil {
 		newSym := syntax.NewSyntaxSymbol(key, templateCtx)
+		if opts.IntroScope != nil {
+			newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
+		}
 		libScope := resolution.GetLibraryScope()
 		if libScope != nil {
 			return newSym.AddScope(libScope).(*syntax.SyntaxSymbol)

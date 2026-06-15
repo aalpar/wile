@@ -35,6 +35,8 @@ package machine_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -566,4 +568,181 @@ func TestScopeResolution_LetSyntaxShadowing(t *testing.T) {
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.want)
 		})
 	}
+}
+
+// TestScopeResolution_GlobalShadowsIntroducedBinder tests that a syntax-rules
+// template identifier introduced by the template's OWN binding form (e.g. the
+// `tmp` in `(let ((tmp x)) ... tmp)`) resolves to that introduced binding —
+// even when a same-named GLOBAL is visible at macro-definition time. This is
+// the R1 macro-hygiene bug (plans/2026-06-15-macro-hygiene-global-shadow-fix).
+//
+// Root cause: CompileSymbol consulted the symbol's ResolvedBinding pin (a global
+// recorded at definition time) BEFORE its scope-set local match (GetLocalIndex),
+// so the template's own binding never got a vote. The classic swap! returned
+// (20 999) instead of (20 10).
+//
+// Trigger condition (verified empirically): the colliding global must be visible
+// at macro-DEFINITION time. Bootstrap or/and are defined before any user global,
+// so they take the intro-scope path and are unaffected — they serve as recursion
+// regression guards here.
+//
+// Path exercise:
+//
+//	Compiler: CompileSymbol — GetLocalIndex (scope-set local match) must run
+//	          BEFORE the ResolvedBinding fallback. A co-introduced binder carries
+//	          the same intro scope as the reference, so it wins; a genuinely free
+//	          identifier carries only {intro} (≠ any use-site local scope) and
+//	          falls through to its def-time global (referential transparency).
+func TestScopeResolution_GlobalShadowsIntroducedBinder(t *testing.T) {
+	tcs := []struct {
+		name  string
+		setup []string
+		code  string
+		want  values.Value
+	}{
+		{
+			// Headline. Bug: (20 999). Correct: (20 10).
+			name: "swap! introduced tmp shadows global tmp",
+			setup: []string{
+				"(define tmp 999)",
+				`(define-syntax swap!
+				   (syntax-rules ()
+				     ((swap! a b)
+				      (let ((tmp a))
+				        (set! a b)
+				        (set! b tmp)))))`,
+				"(define p 10)",
+				"(define q 20)",
+				"(swap! p q)",
+			},
+			code: "(list p q)",
+			want: values.List(values.NewInteger(20), values.NewInteger(10)),
+		},
+		{
+			// T2: introduced t binds per-invocation; global t=999 must not leak.
+			// Bug: (999 999). Correct: (1 2).
+			name: "introduced binder shadows global per invocation",
+			setup: []string{
+				"(define t 999)",
+				`(define-syntax m
+				   (syntax-rules ()
+				     ((m v) (let ((t v)) t))))`,
+			},
+			code: "(list (m 1) (m 2))",
+			want: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			// Mixed: the same name n is FREE (refers to global 100) in one
+			// position and BOUND (by the template's let) in another. Resolution
+			// must be per-occurrence. Bug: 200 (bound n leaked to the global).
+			// Correct: 100 + 5 = 105. Approach A (name-level) cannot express this.
+			name: "same name free and bound in one template",
+			setup: []string{
+				"(define n 100)",
+				`(define-syntax mix
+				   (syntax-rules ()
+				     ((mix v) (+ n (let ((n v)) n)))))`,
+			},
+			code: "(mix 5)",
+			want: values.NewInteger(105),
+		},
+		{
+			// Recursive user macro whose temp `acc` collides with a global
+			// visible at definition time. Each expansion gets a fresh intro
+			// scope (distinct temps); the macro name recurses via the free-id
+			// fallback. Bug: 2997 (acc leaked to global at each level).
+			// Correct: 1+2+3 = 6.
+			name: "recursive macro with global-colliding temp",
+			setup: []string{
+				"(define acc 999)",
+				`(define-syntax my-sum
+				   (syntax-rules ()
+				     ((my-sum) 0)
+				     ((my-sum a b ...)
+				      (let ((acc a)) (+ acc (my-sum b ...))))))`,
+			},
+			code: "(my-sum 1 2 3)",
+			want: values.NewInteger(6),
+		},
+		{
+			// Over-correction guard (T3): a GENUINELY free identifier must still
+			// resolve to its definition-time global even when shadowed at the use
+			// site. The fix must not regress referential transparency.
+			name: "free identifier still resolves to def-time global",
+			setup: []string{
+				"(define z 1)",
+				`(define-syntax getz
+				   (syntax-rules ()
+				     ((getz) z)))`,
+			},
+			code: "(let ((z 2)) (getz))",
+			want: values.NewInteger(1),
+		},
+		{
+			// Recursion regression guard: bootstrap or expands to
+			// (let ((x ...)) (if x x (or ...))). A user global x (defined AFTER
+			// bootstrap) must not break or's recursion.
+			name:  "bootstrap or unaffected by global colliding its temp",
+			setup: []string{"(define x 999)"},
+			code:  "(or #f #f 42)",
+			want:  values.NewInteger(42),
+		},
+		{
+			name:  "bootstrap and unaffected by global x",
+			setup: []string{"(define x 999)"},
+			code:  "(and 1 2 3)",
+			want:  values.NewInteger(3),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := scopeResolutionEnv(t)
+			for _, s := range tc.setup {
+				_, err := evalScope(t, env, s)
+				qt.Assert(t, err, qt.IsNil)
+			}
+			result, err := evalScope(t, env, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+// TestScopeResolution_CrossLibraryIntroducedBinderShadow guards the libScope
+// sub-branch of the R1 fix. A macro defined in library A that introduces a
+// binder (`tmp`) whose name ALSO names a global exported by A must let the
+// introduced binder shadow when the macro is expanded in an importing context.
+//
+// Unlike the ResolvedBinding path, the library-scope redirect in CompileSymbol
+// (GetGlobalIndexFromLibraryScopes) is already ordered AFTER GetLocalIndex, so
+// this case is correct at HEAD (returns 7, not 999). This is therefore a
+// regression guard: it ensures Change 1's intro-scope addition to the libScope
+// branch does not break the already-correct behavior.
+func TestScopeResolution_CrossLibraryIntroducedBinderShadow(t *testing.T) {
+	tmpDir := t.TempDir()
+	libContent := `(define-library (r1shadow)
+  (export use-tmp tmp)
+  (begin
+    (define tmp 999)
+    (define-syntax use-tmp
+      (syntax-rules ()
+        ((use-tmp v) (let ((tmp v)) tmp))))))`
+	err := os.WriteFile(filepath.Join(tmpDir, "r1shadow.sld"), []byte(libContent), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
+	qt.Assert(t, err, qt.IsNil)
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	reg := compilation.NewLibraryRegistry()
+	reg.SetSearchPaths([]string{tmpDir})
+	env.SetLibraryRegistry(reg)
+
+	_, err = evalScope(t, env, "(import (r1shadow))")
+	qt.Assert(t, err, qt.IsNil)
+
+	// The introduced tmp (=7) shadows the library's exported global tmp (=999).
+	result, err := evalScope(t, env, "(use-tmp 7)")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(7))
 }

@@ -139,33 +139,15 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 }
 
 // CompileSymbol compiles a syntax symbol expression.
+//
+// Resolution order (Flatt 2016 "sets of scopes"): a scope-set local match wins
+// over everything, including a ResolvedBinding pin carried from macro expansion.
+// This lets a binding co-introduced by a template — which carries the same intro
+// scope as the reference — shadow a same-named global. The ResolvedBinding and
+// library-scope fallbacks fire only when no lexical binding shadows.
+// See plans/2026-06-15-macro-hygiene-global-shadow-fix.local.md (Change 2).
 func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
 	sym := expr.Sym
-	// Check for pre-resolved binding from macro expansion
-	// This handles cross-library hygiene: free identifiers in macro templates
-	// carry their definition-time GlobalIndex so they resolve correctly
-	// even when the macro is used in a different library context.
-	if expr.ResolvedBinding != nil {
-		gi, ok := expr.ResolvedBinding.(*environment.GlobalIndex)
-		if ok && gi != nil {
-			bd := gi.Env.GetOwnGlobalBinding(gi)
-			if bd != nil {
-				idx := p.template.AppendCachedBinding(bd)
-				p.AppendOperations(
-					machine.NewOperationLoadCachedBinding(idx),
-				)
-				return nil
-			}
-			// Binding not yet defined at compile time — fall back to runtime resolution
-			i := p.template.MaybeAppendLiteral(gi)
-			p.AppendOperations(
-				machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
-			)
-			return nil
-		}
-		// If ResolvedBinding is set but not a GlobalIndex (or is nil),
-		// fall through to normal resolution
-	}
 
 	// Get the scopes from the syntax symbol for hygiene checking.
 	// Both this path and the expander's hasLocalVariableBinding (expander_time_continuation.go)
@@ -191,6 +173,13 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 			return nil
 		}
 
+		// A pre-resolved global binding (cross-library hygiene / ER rename) is
+		// consulted after the local check but before the use-site global, so a
+		// free template identifier keeps its definition-site identity.
+		if p.tryResolvedBinding(expr) {
+			return nil
+		}
+
 		// Try global binding
 		gi := p.env.GetGlobalIndex(sym)
 		if gi == nil {
@@ -213,14 +202,24 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		return nil
 	}
 
-	// Sym has scopes (from macro expansion), use scope-aware binding resolution
-	// Check if it's a local binding with matching scopes
+	// Sym has scopes (from macro expansion); use scope-aware binding resolution.
+	// Check for a local binding with matching scopes FIRST: a binding
+	// co-introduced by the same template carries the same intro scope as this
+	// reference, so it must shadow the pinned/global fallbacks below (R1 fix —
+	// previously the ResolvedBinding pin short-circuited ahead of this check).
 	li := p.env.GetLocalIndex(sym, symbolScopes)
 	if li != nil {
 		// Found a local binding with matching scopes
 		p.AppendOperations(
 			machine.NewOperationLoadLocalByLocalIndexImmediate(li),
 		)
+		return nil
+	}
+
+	// No lexical binding shadows. A free template identifier carrying a
+	// definition-time GlobalIndex (cross-library hygiene / ER rename) resolves to
+	// that binding now, before the library-scope and scoped-global fallbacks.
+	if p.tryResolvedBinding(expr) {
 		return nil
 	}
 
@@ -256,6 +255,41 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 
 	// No binding found that matches the scopes
 	return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
+}
+
+// tryResolvedBinding emits a load for the symbol's pre-resolved global binding,
+// if it carries one, returning true when it consumed the symbol. Free
+// identifiers in macro templates carry their definition-time
+// *environment.GlobalIndex (cross-library hygiene; ER renames) so they resolve
+// to the definition-site binding regardless of the use-site library context.
+//
+// This is a FALLBACK: callers consult it only AFTER scope-set local resolution
+// (GetLocalIndex), so a binding co-introduced by the same template shadows the
+// recorded global. A ResolvedBinding that is not a *GlobalIndex (or is nil)
+// returns false so the caller falls through to normal resolution.
+// See plans/2026-06-15-macro-hygiene-global-shadow-fix.local.md (Change 2).
+func (p *CompileTimeContinuation) tryResolvedBinding(expr *syntax.SyntaxSymbol) bool {
+	if expr.ResolvedBinding == nil {
+		return false
+	}
+	gi, ok := expr.ResolvedBinding.(*environment.GlobalIndex)
+	if !ok || gi == nil {
+		return false
+	}
+	bd := gi.Env.GetOwnGlobalBinding(gi)
+	if bd != nil {
+		idx := p.template.AppendCachedBinding(bd)
+		p.AppendOperations(
+			machine.NewOperationLoadCachedBinding(idx),
+		)
+		return true
+	}
+	// Binding not yet defined at compile time — fall back to runtime resolution.
+	i := p.template.MaybeAppendLiteral(gi)
+	p.AppendOperations(
+		machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
+	)
+	return true
 }
 
 // CompileMeta compiles a meta expression.
