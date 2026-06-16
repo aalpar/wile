@@ -61,7 +61,8 @@ func TestCurrentOutputPort(t *testing.T) {
 
 func TestDisplayWithBuffer(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -88,7 +89,8 @@ func TestDisplayWithBuffer(t *testing.T) {
 
 func TestWriteWithBuffer(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -115,7 +117,8 @@ func TestWriteWithBuffer(t *testing.T) {
 
 func TestWriteCharWithBuffer(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -142,7 +145,8 @@ func TestWriteCharWithBuffer(t *testing.T) {
 
 func TestNewlineWithBuffer(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -169,7 +173,8 @@ func TestNewlineWithBuffer(t *testing.T) {
 
 func TestReadToken(t *testing.T) {
 	// Save the current input port
-	savedPort := ioext.GetCurrentInputPort()
+	savedPort, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentInputPort(savedPort) }()
 
 	// Create a buffer with input data
@@ -198,7 +203,8 @@ func TestReadToken(t *testing.T) {
 
 func TestReadSyntax(t *testing.T) {
 	// Save the current input port
-	savedPort := ioext.GetCurrentInputPort()
+	savedPort, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentInputPort(savedPort) }()
 
 	// Create a buffer with input data
@@ -228,7 +234,8 @@ func TestReadSyntax(t *testing.T) {
 
 func TestRead(t *testing.T) {
 	// Save the current input port
-	savedPort := ioext.GetCurrentInputPort()
+	savedPort, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentInputPort(savedPort) }()
 
 	// Create a buffer with input data
@@ -279,7 +286,8 @@ func TestReadWithPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Store port for the test
-	savedPort := ioext.GetCurrentInputPort()
+	savedPort, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentInputPort(savedPort) }()
 	ioext.SetCurrentInputPort(port)
 
@@ -290,7 +298,8 @@ func TestReadWithPort(t *testing.T) {
 
 func TestDisplayWithSymbol(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -318,7 +327,8 @@ func TestDisplayWithSymbol(t *testing.T) {
 
 func TestWriteWithString(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -345,7 +355,8 @@ func TestWriteWithString(t *testing.T) {
 
 func TestWriteCharWithUnicode(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -372,7 +383,8 @@ func TestWriteCharWithUnicode(t *testing.T) {
 
 func TestReadMultipleTokens(t *testing.T) {
 	// Save the current input port
-	savedPort := ioext.GetCurrentInputPort()
+	savedPort, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentInputPort(savedPort) }()
 
 	// Create a buffer with multiple tokens
@@ -401,7 +413,8 @@ func TestReadMultipleTokens(t *testing.T) {
 
 func TestDisplayWithInteger(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -428,7 +441,8 @@ func TestDisplayWithInteger(t *testing.T) {
 
 func TestDisplayWithBoolean(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -455,7 +469,8 @@ func TestDisplayWithBoolean(t *testing.T) {
 
 func TestWriteWithSymbol(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -483,27 +498,32 @@ func TestWriteWithSymbol(t *testing.T) {
 
 func TestGetCurrentInputPortInitialization(t *testing.T) {
 	// Test GetCurrentInputPort when currentInputPort is nil
-	savedPort := ioext.GetCurrentInputPort()
+	savedPort, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	ioext.ResetCurrentInputPort()
 	defer func() { ioext.SetCurrentInputPort(savedPort) }()
 
-	port := ioext.GetCurrentInputPort()
+	port, err := ioext.GetCurrentInputPort()
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port, qt.IsNotNil)
 }
 
 func TestGetCurrentOutputPortInitialization(t *testing.T) {
 	// Test GetCurrentOutputPort when currentOutputPort is nil
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	ioext.ResetCurrentOutputPort()
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
-	port := ioext.GetCurrentOutputPort()
+	port, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port, qt.IsNotNil)
 }
 
 func TestDisplayWithList(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output
@@ -532,7 +552,8 @@ func TestDisplayWithList(t *testing.T) {
 
 func TestWriteWithList(t *testing.T) {
 	// Save the current output port
-	savedPort := ioext.GetCurrentOutputPort()
+	savedPort, err := ioext.GetCurrentOutputPort()
+	qt.Assert(t, err, qt.IsNil)
 	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
 
 	// Create a buffer to capture output

@@ -141,16 +141,15 @@ func currentTextualOutputPort(name string, v values.Value) (*values.PortObject, 
 	return p, nil
 }
 
-// GetCurrentInputPort returns the base input port from the parameter.
+// GetCurrentInputPort returns the base input port from the parameter, or a
+// wrapped sentinel error if the parameter does not hold a textual input port.
 // This is a test convenience for save/restore; production code should use
 // resolveCurrentInputPort which checks continuation marks from parameterize.
-func GetCurrentInputPort() *values.PortObject {
+// Unlike resolveCurrentInputPort it does not panic — its callers run outside
+// the VM's recover, so a panic would crash them.
+func GetCurrentInputPort() (*values.PortObject, error) {
 	InitState()
-	p, err := currentTextualInputPort("current-input-port", currentInputPortParam.Value())
-	if err != nil {
-		panic(err)
-	}
-	return p
+	return currentTextualInputPort("current-input-port", currentInputPortParam.Value())
 }
 
 // GetCurrentInputPortParam returns the current-input-port parameter object.
@@ -171,16 +170,15 @@ func ResetCurrentInputPort() {
 	}
 }
 
-// GetCurrentOutputPort returns the base output port from the parameter.
+// GetCurrentOutputPort returns the base output port from the parameter, or a
+// wrapped sentinel error if the parameter does not hold a textual output port.
 // This is a test convenience for save/restore; production code should use
 // resolveCurrentOutputPort which checks continuation marks from parameterize.
-func GetCurrentOutputPort() *values.PortObject {
+// Unlike resolveCurrentOutputPort it does not panic — its callers run outside
+// the VM's recover, so a panic would crash them.
+func GetCurrentOutputPort() (*values.PortObject, error) {
 	InitState()
-	p, err := currentTextualOutputPort("current-output-port", currentOutputPortParam.Value())
-	if err != nil {
-		panic(err)
-	}
-	return p
+	return currentTextualOutputPort("current-output-port", currentOutputPortParam.Value())
 }
 
 // GetCurrentOutputPortParam returns the current-output-port parameter object.
