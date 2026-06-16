@@ -70,6 +70,34 @@ func noBareSentinelPanic(m dsl.Matcher) { //nolint:unused // loaded by gocritic 
 		Report(`panic with bare sentinel: wrap with werr.WrapForeignErrorf(werr.$err, "site: context")`)
 }
 
+// noStringifiedErrorPanic flags panics that stringify an error via .Error(),
+// discarding the error chain so a recover()/errors.Is/As cannot see the
+// underlying failure.
+//
+// This deliberately targets only the .Error() pattern. Pure string and
+// fmt.Sprintf panics that report a programmer-error invariant ("can't happen"
+// — e.g. a missing table entry) carry no error to lose and are left alone.
+//
+// There is no m["err"].Type filter: ruleguard cannot resolve the builtin
+// error interface (Implements("error") silently matches nothing), and a
+// ".Error()" call whose string result is concatenated into a panic message
+// is the stringify-an-error antipattern by construction — a non-error type
+// reaching that shape is not a realistic case.
+//
+//	// Wrong:
+//	panic("stdlib: failed to create sub-FS: " + err.Error())
+//
+//	// Right (preserves err in the chain):
+//	panic(werr.WrapForeignErrorf(err, "stdlib: failed to create sub-FS"))
+func noStringifiedErrorPanic(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(
+		`panic($msg + $err.Error())`,
+		`panic($err.Error())`,
+	).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`panic stringifies an error via .Error(): wrap it instead — panic(werr.WrapForeignErrorf(err, "site: context")) — so the error chain survives`)
+}
+
 // noDirectValueRegisterAccess flags direct reads or writes of the
 // machine/vmState value-register fields (singleValue, multiValues) outside
 // machine/vm_state.go. The fields form a split-representation register

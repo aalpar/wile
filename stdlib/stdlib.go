@@ -31,6 +31,8 @@ package stdlib
 import (
 	"embed"
 	"io/fs"
+
+	"github.com/aalpar/wile/werr"
 )
 
 //go:embed lib
@@ -50,7 +52,7 @@ var LibFS fs.FS = rawFS
 func init() {
 	sub, err := fs.Sub(rawFS, "lib")
 	if err != nil {
-		panic("stdlib: failed to create sub-FS: " + err.Error())
+		panic(werr.WrapForeignErrorf(err, "stdlib: failed to create sub-FS"))
 	}
 	FS = sub
 }

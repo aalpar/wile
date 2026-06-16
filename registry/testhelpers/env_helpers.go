@@ -31,6 +31,7 @@ import (
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -209,7 +210,7 @@ func NewMinimalNamespace(env *environment.EnvironmentFrame) *environment.Environ
 	}
 	err := compilation.RegisterAllPhaseHandlers(env)
 	if err != nil {
-		panic("NewMinimalNamespace: " + err.Error())
+		panic(werr.WrapForeignErrorf(err, "NewMinimalNamespace"))
 	}
 	return env
 }
