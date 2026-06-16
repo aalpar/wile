@@ -115,6 +115,36 @@ func TestCheck_SelectiveDeny(t *testing.T) {
 	}
 }
 
+// TestDenyWrappingConvention pins R14's documented convention against the real
+// authorizers: CheckWithAuthorizer supplies the operation context for every
+// denial, so a plain authorizer returns the bare ErrAccessDenied sentinel; an
+// authorizer adds an inner reason only when it isn't derivable from the
+// operation fields (FilesystemRoot reports the confining root). errors.Is
+// matches either form.
+func TestDenyWrappingConvention(t *testing.T) {
+	c := qt.New(t)
+
+	// Bare-sentinel authorizer: the outer wrap alone carries the context.
+	bareErr := CheckWithAuthorizer(ReadOnly(), AccessRequest{
+		Resource: ResourceFile,
+		Action:   ActionWrite,
+		Target:   "/tmp/x",
+	})
+	c.Assert(errors.Is(bareErr, ErrAccessDenied), qt.IsTrue)
+	c.Assert(bareErr.Error(), qt.Contains, `write file "/tmp/x"`)
+
+	// Documented exception: FilesystemRoot adds the confining root, which the
+	// action/resource/target fields alone cannot convey.
+	rootErr := CheckWithAuthorizer(FilesystemRoot("/app/data"), AccessRequest{
+		Resource: ResourceFile,
+		Action:   ActionRead,
+		Target:   "/etc/passwd",
+	})
+	c.Assert(errors.Is(rootErr, ErrAccessDenied), qt.IsTrue)
+	c.Assert(rootErr.Error(), qt.Contains, `read file "/etc/passwd"`)
+	c.Assert(rootErr.Error(), qt.Contains, `outside root "/app/data"`)
+}
+
 func TestFromContext_NoAuthorizer(t *testing.T) {
 	c := qt.New(t)
 	auth := FromContext(context.Background())

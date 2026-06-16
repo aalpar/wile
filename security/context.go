@@ -50,6 +50,11 @@ func Check(ctx context.Context, req AccessRequest) error {
 
 // CheckWithAuthorizer checks authorization using an explicit authorizer.
 // Returns nil if auth is nil (open by default).
+//
+// On denial it wraps the authorizer's error with the operation's action,
+// resource, and target — supplying the context that lets authorizers return
+// the bare ErrAccessDenied sentinel (see the Authorizer deny-error wrapping
+// convention).
 func CheckWithAuthorizer(auth Authorizer, req AccessRequest) error {
 	if auth == nil {
 		return nil
