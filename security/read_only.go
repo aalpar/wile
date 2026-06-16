@@ -14,9 +14,33 @@
 
 package security
 
-// ReadOnly returns an Authorizer that allows read and stat operations
-// but denies write, delete, and exit.
+// ReadOnly returns an Authorizer that allows read and stat operations but
+// denies everything else — including write, delete, exit, and code load.
+//
+// ReadOnly does NOT permit ActionLoad: loading a file compiles and runs its
+// contents, which is not a read-only operation. Callers that genuinely need to
+// load code under an otherwise read-only policy should use ReadOnlyWithLoad.
+//
+// ReadOnly applies NO path confinement — it allows reads of any path the host
+// process can reach. Compose it with FilesystemRoot via All(...) to bound which
+// paths may be read.
 func ReadOnly() Authorizer {
+	return AuthorizerFunc(func(req AccessRequest) error {
+		switch req.Action {
+		case ActionRead, ActionStat:
+			return nil
+		default:
+			return ErrAccessDenied
+		}
+	})
+}
+
+// ReadOnlyWithLoad returns an Authorizer identical to ReadOnly but also
+// permitting ActionLoad (loading and running code from a resolved file path).
+//
+// Like ReadOnly it applies NO path confinement; compose it with FilesystemRoot
+// via All(...) to bound which paths may be read or loaded.
+func ReadOnlyWithLoad() Authorizer {
 	return AuthorizerFunc(func(req AccessRequest) error {
 		switch req.Action {
 		case ActionRead, ActionStat, ActionLoad:

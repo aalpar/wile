@@ -53,7 +53,41 @@ func TestReadOnly(t *testing.T) {
 	}{
 		{"file read", AccessRequest{ResourceFile, ActionRead, "/tmp/x"}, true},
 		{"file stat", AccessRequest{ResourceFile, ActionStat, "/tmp/x"}, true},
-		{"code load", AccessRequest{ResourceCode, ActionLoad, "lib.sld"}, true},
+		// ReadOnly applies no path confinement: it reads any path the host can.
+		{"file read any path (no confinement)", AccessRequest{ResourceFile, ActionRead, "/etc/passwd"}, true},
+		// R11: ReadOnly must NOT permit loading (and running) code.
+		{"code load denied", AccessRequest{ResourceCode, ActionLoad, "lib.sld"}, false},
+		{"file write", AccessRequest{ResourceFile, ActionWrite, "/tmp/x"}, false},
+		{"file delete", AccessRequest{ResourceFile, ActionDelete, "/tmp/x"}, false},
+		{"process exit", AccessRequest{ResourceProcess, ActionExit, ""}, false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			err := auth.Authorize(tc.req)
+			if tc.allow {
+				c.Assert(err, qt.IsNil)
+			} else {
+				c.Assert(errors.Is(err, ErrAccessDenied), qt.IsTrue)
+			}
+		})
+	}
+}
+
+// TestReadOnlyWithLoad pins R11's explicit opt-in: ReadOnlyWithLoad is ReadOnly
+// plus ActionLoad, for callers that genuinely need to load code under an
+// otherwise read-only policy.
+func TestReadOnlyWithLoad(t *testing.T) {
+	c := qt.New(t)
+	auth := ReadOnlyWithLoad()
+
+	tcs := []struct {
+		name  string
+		req   AccessRequest
+		allow bool
+	}{
+		{"file read", AccessRequest{ResourceFile, ActionRead, "/tmp/x"}, true},
+		{"file stat", AccessRequest{ResourceFile, ActionStat, "/tmp/x"}, true},
+		{"code load allowed", AccessRequest{ResourceCode, ActionLoad, "lib.sld"}, true},
 		{"file write", AccessRequest{ResourceFile, ActionWrite, "/tmp/x"}, false},
 		{"file delete", AccessRequest{ResourceFile, ActionDelete, "/tmp/x"}, false},
 		{"process exit", AccessRequest{ResourceProcess, ActionExit, ""}, false},
