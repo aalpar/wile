@@ -433,11 +433,14 @@ sage-snapshot: build
 	@command -v sage >/dev/null 2>&1 || { echo "sage not found on PATH; install SageMath >= 10.8 to regenerate snapshots" >&2; exit 1; }
 	WILE=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) sage tools/sage/verify_algebra.sage --snapshot
 
-# Run golangci-lint on all packages.
+# Run golangci-lint plus the project's standalone linters on all packages.
+# singlelinefunclint enforces the no-single-line-function rule (a positional
+# property the gocritic/ruleguard DSL cannot express).
 #   make lint
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) -v run ./...
+	$(GO) run ./cmd/singlelinefunclint .
 
 # Run golangci-lint with --fix to auto-correct fixable issues.
 #   make fix

@@ -27,6 +27,7 @@ MODULE="github.com/aalpar/wile"
 EXCLUDED_PKGS=(
 	"cmd/wile"
 	"cmd/typeswitchlint"
+	"cmd/singlelinefunclint"
 	"internal/testutil"
 	"repl"
 	"machine/testutil"
