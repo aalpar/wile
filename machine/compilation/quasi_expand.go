@@ -75,15 +75,30 @@ func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, b
 // At depth=1, unquotes are evaluated. At depth>1, they produce literal unquote forms.
 // Vector handling is NOT done here — the quasiquote caller handles vectors separately.
 func (p *CompileTimeContinuation) expandQuasi(
-	ctx context.Context, stx syntax.SyntaxValue, depth int, kw quasiKeywords,
-) syntax.SyntaxValue {
+	ctx context.Context, stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *expandDepthGuard,
+) (syntax.SyntaxValue, error) {
 	srcCtx := stx.SourceContext()
+
+	// Context cancellation takes precedence over the depth bound (mirrors
+	// ExpandExpression). The guard then bounds Go-stack recursion: deeply nested
+	// quasiquote from macro/datum->syntax output would otherwise overflow.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	exceeded := g.enter()
+	defer g.leave()
+	if exceeded {
+		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(werr.ErrExpandDepthExceeded,
+			"quasiquote: nesting depth exceeds maximum of %d", g.max))
+	}
 
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
 			quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-			return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
+			return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 		}
 
 		carSymName, ok := p.getSymbolName(v.SyntaxCar())
@@ -93,13 +108,16 @@ func (p *CompileTimeContinuation) expandQuasi(
 				if depth == 1 {
 					if v.Length() == 2 {
 						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
-						return cdr.SyntaxCar()
+						return cdr.SyntaxCar(), nil
 					}
 				}
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
-					processedArg := p.expandQuasi(ctx, arg, depth-1, kw)
+					processedArg, err := p.expandQuasi(ctx, arg, depth-1, kw, g)
+					if err != nil {
+						return nil, err
+					}
 					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.buildQuasiSyntaxList(srcCtx,
@@ -107,16 +125,19 @@ func (p *CompileTimeContinuation) expandQuasi(
 							syntax.NewSyntaxSymbol(kw.unquote, srcCtx),
 						),
 						processedArg,
-					)
+					), nil
 				}
 				quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
+				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 
 			case kw.splicing:
 				if depth > 1 && v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
-					processedArg := p.expandQuasi(ctx, arg, depth-1, kw)
+					processedArg, err := p.expandQuasi(ctx, arg, depth-1, kw, g)
+					if err != nil {
+						return nil, err
+					}
 					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.buildQuasiSyntaxList(srcCtx,
@@ -124,16 +145,19 @@ func (p *CompileTimeContinuation) expandQuasi(
 							syntax.NewSyntaxSymbol(kw.splicing, srcCtx),
 						),
 						processedArg,
-					)
+					), nil
 				}
 				quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
+				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 
 			case kw.nesting:
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
-					processedBody := p.expandQuasi(ctx, body, depth+1, kw)
+					processedBody, err := p.expandQuasi(ctx, body, depth+1, kw, g)
+					if err != nil {
+						return nil, err
+					}
 					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.buildQuasiSyntaxList(srcCtx,
@@ -141,34 +165,34 @@ func (p *CompileTimeContinuation) expandQuasi(
 							syntax.NewSyntaxSymbol(kw.nesting, srcCtx),
 						),
 						processedBody,
-					)
+					), nil
 				}
 				quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
+				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 			}
 		}
 
 		// Regular list - delegate to list expansion
-		return p.expandQuasiList(ctx, v, depth, kw)
+		return p.expandQuasiList(ctx, v, depth, kw, g)
 
 	case *syntax.SyntaxSymbol:
 		quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-		return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
+		return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 
 	case *syntax.SyntaxVector:
-		return p.expandQuasiquoteVector(ctx, v, depth, kw)
+		return p.expandQuasiquoteVector(ctx, v, depth, kw, g)
 
 	default:
 		quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
-		return p.buildQuasiSyntaxList(srcCtx, quoteSym, stx)
+		return p.buildQuasiSyntaxList(srcCtx, quoteSym, stx), nil
 	}
 }
 
 // expandQuasiList handles list expansion for both quasiquote and quasisyntax.
 // It detects splicing, dotted-pair unquote (quasiquote only), and improper lists.
 func (p *CompileTimeContinuation) expandQuasiList(
-	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords,
-) syntax.SyntaxValue {
+	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard,
+) (syntax.SyntaxValue, error) {
 	srcCtx := pair.SourceContext()
 
 	// Scan for splicing at depth 1
@@ -185,11 +209,11 @@ func (p *CompileTimeContinuation) expandQuasiList(
 		return nil
 	})
 	if err != nil && !errors.Is(err, werr.ErrStopIteration) {
-		panic(werr.WrapForeignErrorf(err, "quasi: error scanning list at %s", srcCtx.SchemeString()))
+		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(err, "quasi: error scanning list"))
 	}
 
 	if hasSplice {
-		return p.expandQuasiListWithSplice(ctx, pair, depth, kw)
+		return p.expandQuasiListWithSplice(ctx, pair, depth, kw, g)
 	}
 
 	// No splice path: build (list elem1 elem2 ...)
@@ -221,12 +245,16 @@ func (p *CompileTimeContinuation) expandQuasiList(
 							result,
 						)
 					}
-					return result
+					return result, nil
 				}
 			}
 		}
 
-		elems = append(elems, p.expandQuasi(ctx, carSyntax, depth, kw))
+		expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
+		if err != nil {
+			return nil, err
+		}
+		elems = append(elems, expandedCar)
 		cdr := current.SyntaxCdr()
 		if syntax.IsSyntaxEmptyList(cdr) {
 			break
@@ -239,7 +267,10 @@ func (p *CompileTimeContinuation) expandQuasiList(
 
 		// Improper list: build nested cons from already-expanded elements + expanded tail.
 		// elems[0] is the "list" symbol; elems[1:] are the already-expanded elements.
-		expandedTail := p.expandQuasi(ctx, cdr, depth, kw)
+		expandedTail, err := p.expandQuasi(ctx, cdr, depth, kw, g)
+		if err != nil {
+			return nil, err
+		}
 		result := expandedTail
 		for i := len(elems) - 1; i >= 1; i-- {
 			result = p.buildQuasiSyntaxList(srcCtx,
@@ -248,10 +279,10 @@ func (p *CompileTimeContinuation) expandQuasiList(
 				result,
 			)
 		}
-		return result
+		return result, nil
 	}
 
-	return p.buildQuasiSyntaxList(srcCtx, elems...)
+	return p.buildQuasiSyntaxList(srcCtx, elems...), nil
 }
 
 // quasiSegmentKind distinguishes a run of literal elements from a single
@@ -297,8 +328,8 @@ func (p *CompileTimeContinuation) segmentsToAppendArgs(srcCtx *syntax.SourceCont
 // or unsyntax-splicing). It segments the list into normal and splice segments,
 // then builds (append seg1 seg2 ...).
 func (p *CompileTimeContinuation) expandQuasiListWithSplice(
-	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords,
-) syntax.SyntaxValue {
+	ctx context.Context, pair *syntax.SyntaxPair, depth int, kw quasiKeywords, g *expandDepthGuard,
+) (syntax.SyntaxValue, error) {
 	srcCtx := pair.SourceContext()
 
 	var segments []quasiSegment
@@ -323,7 +354,11 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 				flushNormal()
 				if carPair.Length() != 2 {
 					// Malformed - treat as normal
-					currentElems = append(currentElems, p.expandQuasi(ctx, carSyntax, depth, kw))
+					expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
+					if err != nil {
+						return nil, err
+					}
+					currentElems = append(currentElems, expandedCar)
 				} else {
 					cdrPair := carPair.SyntaxCdr().(*syntax.SyntaxPair)
 					expr := cdrPair.SyntaxCar()
@@ -333,7 +368,15 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 			}
 		}
 
-		currentElems = append(currentElems, p.expandQuasi(ctx, carSyntax, depth, kw))
+		// Block-scoped so the declarations are not in scope at `next:` (a goto
+		// may not jump over an in-scope variable declaration).
+		{
+			expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
+			if err != nil {
+				return nil, err
+			}
+			currentElems = append(currentElems, expandedCar)
+		}
 
 	next:
 		cdr := current.SyntaxCdr()
@@ -347,7 +390,11 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 			// Improper list: expand the dotted tail and preserve it
 			// as the final append argument. R7RS append with a non-list
 			// final argument produces an improper list.
-			improperTail = p.expandQuasi(ctx, cdr, depth, kw)
+			var err error
+			improperTail, err = p.expandQuasi(ctx, cdr, depth, kw, g)
+			if err != nil {
+				return nil, err
+			}
 			break
 		}
 	}
@@ -359,5 +406,5 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		appendArgs = append(appendArgs, improperTail)
 	}
 
-	return p.buildQuasiSyntaxList(srcCtx, appendArgs...)
+	return p.buildQuasiSyntaxList(srcCtx, appendArgs...), nil
 }

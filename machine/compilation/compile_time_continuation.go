@@ -66,6 +66,25 @@ type CompileTimeContinuation struct {
 	// inlineThreshold is the maximum body length (in top-level expressions)
 	// for inlining eligibility. 0 disables inlining.
 	inlineThreshold int
+	// quasiMaxDepth bounds structural recursion in the quasiquote/quasisyntax
+	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
+	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
+	quasiMaxDepth int
+}
+
+// effectiveQuasiMaxDepth returns the recursion bound for quasiquote/quasisyntax
+// expansion: the per-continuation override when set, else DefaultMaxExpandDepth.
+func (p *CompileTimeContinuation) effectiveQuasiMaxDepth() int {
+	if p.quasiMaxDepth > 0 {
+		return p.quasiMaxDepth
+	}
+	return DefaultMaxExpandDepth
+}
+
+// newQuasiDepthGuard builds a fresh depth guard for one top-level quasiquote or
+// quasisyntax expansion (or needs-runtime analysis) on this continuation.
+func (p *CompileTimeContinuation) newQuasiDepthGuard() *expandDepthGuard {
+	return &expandDepthGuard{max: p.effectiveQuasiMaxDepth()}
 }
 
 // NewCompileTimeContinuation creates a new CompileTimeContinuation.

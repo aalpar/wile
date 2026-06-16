@@ -83,6 +83,22 @@ type expandDepthGuard struct {
 	max   int // 0 = unlimited
 }
 
+// enter records one level of recursion and reports whether the bound is now
+// exceeded. Pair each enter with a deferred leave so depth stays symmetric on
+// every return path (including the exceeded one). Used by the quasiquote
+// expander, whose mutual recursion is otherwise unbounded — a parallel hole to
+// ExpandExpression's guard above, reachable from programmatically-constructed
+// (macro/datum->syntax) quasiquote forms the parser's depth cap cannot reach.
+func (g *expandDepthGuard) enter() (exceeded bool) {
+	g.depth++
+	return g.max > 0 && g.depth > g.max
+}
+
+// leave undoes one enter.
+func (g *expandDepthGuard) leave() {
+	g.depth--
+}
+
 // ExpanderTimeContinuation is a continuation used during the expansion phase.
 //
 // It walks the syntax tree, detecting and expanding macro invocations.

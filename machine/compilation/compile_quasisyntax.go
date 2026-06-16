@@ -61,7 +61,10 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 	// Transform to equivalent code and compile
 	// The expansion produces regular Scheme values (list, etc), so we wrap with datum->syntax
 	// to convert the result back to syntax objects.
-	expanded := p.expandQuasisyntax(ctctx.ctx, stx, depth)
+	expanded, err := p.expandQuasisyntax(ctctx.ctx, stx, depth)
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
 
 	// Wrap: (datum->syntax #f expanded)
 	wrapped := p.buildQuasiSyntaxList(srcCtx,
@@ -72,8 +75,24 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 	return p.CompileExpression(ctctx, wrapped)
 }
 
-// quasisyntaxNeedsRuntime checks if a quasisyntax template contains unsyntax at the given depth.
+// quasisyntaxNeedsRuntime checks if a quasisyntax template contains unsyntax at
+// the given depth. It creates a fresh recursion guard; the actual walk lives in
+// quasisyntaxNeedsRuntimeGuarded.
 func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue, depth int) bool {
+	return p.quasisyntaxNeedsRuntimeGuarded(stx, depth, p.newQuasiDepthGuard())
+}
+
+func (p *CompileTimeContinuation) quasisyntaxNeedsRuntimeGuarded(stx syntax.SyntaxValue, depth int, g *expandDepthGuard) bool {
+	// Bound this analysis the same way the expander is bounded. When the input
+	// is too deep to walk safely, report "needs runtime" so the depth-guarded
+	// expander runs and converts the over-depth into a catchable error rather
+	// than letting this predicate overflow the Go stack first.
+	if g.enter() {
+		g.leave()
+		return true
+	}
+	defer g.leave()
+
 	switch v := stx.(type) {
 	case *syntax.SyntaxPair:
 		if values.IsEmptyList(v) {
@@ -92,7 +111,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
-					return p.quasisyntaxNeedsRuntime(arg, depth-1)
+					return p.quasisyntaxNeedsRuntimeGuarded(arg, depth-1, g)
 				}
 				return false
 			case "quasisyntax":
@@ -104,7 +123,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
-					return p.quasisyntaxNeedsRuntime(body, depth+1)
+					return p.quasisyntaxNeedsRuntimeGuarded(body, depth+1, g)
 				}
 				return false
 			}
@@ -115,7 +134,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 		for !syntax.IsSyntaxEmptyList(current) {
 			car := current.SyntaxCar()
 			carSyntax := car
-			if p.quasisyntaxNeedsRuntime(carSyntax, depth) {
+			if p.quasisyntaxNeedsRuntimeGuarded(carSyntax, depth, g) {
 				return true
 			}
 			cdr := current.SyntaxCdr()
@@ -138,14 +157,14 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntime(stx syntax.SyntaxValue
 
 // expandQuasisyntax transforms quasisyntax template into equivalent Scheme code.
 // Delegates to the unified expandQuasi with quasisyntax keywords.
-func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syntax.SyntaxValue, depth int) syntax.SyntaxValue {
-	return p.expandQuasi(ctx, stx, depth, quasisyntaxKW)
+func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syntax.SyntaxValue, depth int) (syntax.SyntaxValue, error) {
+	return p.expandQuasi(ctx, stx, depth, quasisyntaxKW, p.newQuasiDepthGuard())
 }
 
 // expandQuasisyntaxList handles list expansion for quasisyntax.
 // Delegates to the unified expandQuasiList with quasisyntax keywords.
-func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pair *syntax.SyntaxPair, depth int) syntax.SyntaxValue {
-	return p.expandQuasiList(ctx, pair, depth, quasisyntaxKW)
+func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pair *syntax.SyntaxPair, depth int) (syntax.SyntaxValue, error) {
+	return p.expandQuasiList(ctx, pair, depth, quasisyntaxKW, p.newQuasiDepthGuard())
 }
 
 // CompileUnsyntax errors - unsyntax outside of quasisyntax
