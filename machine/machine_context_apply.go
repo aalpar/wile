@@ -342,7 +342,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 		return p.returnImmediate(), nil
 
 	default:
-		err := p.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
+		err := p.WrapError(werr.ErrWrongNumberOfArguments, fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
 		return p, err
 	}
 }
@@ -406,7 +406,7 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // to a Production Programming Environment" (ICFP 2007).
 func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation, args []values.Value) (*MachineContext, error) {
 	if len(args) != 1 {
-		err := p.Error(fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
+		err := p.WrapError(werr.ErrWrongNumberOfArguments, fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
 		return p, err
 	}
 

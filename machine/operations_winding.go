@@ -16,6 +16,7 @@ package machine
 
 import (
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // --- PushWind ---
@@ -46,7 +47,7 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	beforeVal := mc.evals.PeekK(2)
 	before, ok := beforeVal.(Closure)
 	if !ok {
-		err := mc.Error("dynamic-wind: before must be a procedure")
+		err := mc.WrapError(werr.ErrNotAProcedure, "dynamic-wind: before must be a procedure")
 		return mc, err
 	}
 
@@ -54,7 +55,7 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	afterVal := mc.evals.PeekK(0)
 	after, ok := afterVal.(Closure)
 	if !ok {
-		err := mc.Error("dynamic-wind: after must be a procedure")
+		err := mc.WrapError(werr.ErrNotAProcedure, "dynamic-wind: after must be a procedure")
 		return mc, err
 	}
 

@@ -49,6 +49,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // envBindingChecker implements match.BindingChecker for R7RS auxiliary syntax hygiene.
@@ -106,7 +107,7 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 	// Get the clauses from the value register
 	clausesVal := mc.GetValue()
 	if clausesVal == nil {
-		return nil, mc.Error("syntax-rules: no clauses in value register")
+		return nil, mc.WrapError(werr.ErrInternal, "syntax-rules: no clauses in value register")
 	}
 
 	// Extract from wrapper
@@ -114,14 +115,14 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 	if !ok {
 		// The value register might have the input if operations aren't running correctly
 		// Check if this is actually being called as the second operation
-		return nil, mc.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mc.PC()))
+		return nil, mc.WrapError(werr.ErrInternal, fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mc.PC()))
 	}
 	clauses := wrapper.Clauses
 
 	// Get the input form from local parameter 0 (transformer is called with input as argument)
 	inputVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 	if inputVal == nil {
-		return nil, mc.Error("syntax-rules: invalid input form")
+		return nil, mc.WrapError(werr.ErrInvalidSyntax, "syntax-rules: invalid input form")
 	}
 
 	// Convert input to syntax value if needed
@@ -218,7 +219,7 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 	}
 
 	// No clauses matched
-	return nil, mc.Error("syntax-rules: no matching clause for input")
+	return nil, mc.WrapError(werr.ErrInvalidSyntax, "syntax-rules: no matching clause for input")
 }
 
 func (p *OperationSyntaxRulesTransform) EqualTo(other values.Value) bool {

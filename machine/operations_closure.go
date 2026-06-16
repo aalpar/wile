@@ -127,7 +127,7 @@ func (p *OperationMakeCaseLambdaClosure) Apply(mc *MachineContext) (*MachineCont
 	for i := 0; i < p.closureCount; i++ {
 		cls, ok := elements[i].(*MachineClosure)
 		if !ok {
-			err := mc.Error(fmt.Sprintf("expected closure in case-lambda, got %T", elements[i]))
+			err := mc.WrapError(werr.ErrNotAClosure, fmt.Sprintf("expected closure in case-lambda, got %T", elements[i]))
 			return mc, err
 		}
 		closures[i] = cls

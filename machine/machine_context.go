@@ -1230,7 +1230,11 @@ func (p *MachineContext) resolveLocalBinding(instr Instruction) (*environment.Bi
 	return bd, nil
 }
 
-// Error creates a SchemeError with the current source location and stack trace.
+// Error creates a SchemeError with the current source location and stack
+// trace but no sentinel cause, so errors.Is cannot match the result against
+// any error family. Prefer WrapError(sentinel, msg) at any site whose failure
+// has a sentinel — every production call site does (R9). Reach for Error only
+// when no sentinel genuinely applies.
 func (p *MachineContext) Error(msg string) *SchemeError {
 	source := p.CurrentSource()
 	trace := p.CaptureStackTrace(20)

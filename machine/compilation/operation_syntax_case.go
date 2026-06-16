@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // OperationSyntaxCaseMatch performs pattern matching for syntax-case.
@@ -73,11 +74,11 @@ func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
 func loadSyntaxCaseState(mc *machine.MachineContext) (*syntaxCaseState, error) {
 	raw := mc.SyntaxCaseState()
 	if raw == nil {
-		return nil, mc.Error("syntax-case: no state on MachineContext (no expansion in flight)")
+		return nil, mc.WrapError(werr.ErrInternal, "syntax-case: no state on MachineContext (no expansion in flight)")
 	}
 	sc, ok := raw.(*syntaxCaseState)
 	if !ok {
-		return nil, mc.Error(fmt.Sprintf(
+		return nil, mc.WrapError(werr.ErrInternal, fmt.Sprintf(
 			"syntax-case: unexpected state type %T from MachineContext.SyntaxCaseState()", raw))
 	}
 	return sc, nil
@@ -94,7 +95,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 	clauseVal := mc.GetValue()
 	clause, ok := clauseVal.(*SyntaxCaseClause)
 	if !ok {
-		return nil, mc.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
+		return nil, mc.WrapError(werr.ErrInternal, fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
 	}
 
 	// Get input from per-context state (set by OperationStoreSyntaxCaseInput).
@@ -105,7 +106,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		return nil, err
 	}
 	if sc.input == nil {
-		return nil, mc.Error("syntax-case: state has no input (OperationStoreSyntaxCaseInput not run?)")
+		return nil, mc.WrapError(werr.ErrInternal, "syntax-case: state has no input (OperationStoreSyntaxCaseInput not run?)")
 	}
 	input := sc.input
 
@@ -172,7 +173,7 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 		return nil, err
 	}
 	if sc.bindings == nil {
-		return nil, mc.Error("syntax-case: state has no bindings (OperationSyntaxCaseMatch did not succeed?)")
+		return nil, mc.WrapError(werr.ErrInternal, "syntax-case: state has no bindings (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
 	// Create a new local environment frame with slots for pattern variables
@@ -267,11 +268,11 @@ func (p *OperationSyntaxCaseNoMatch) Apply(mc *machine.MachineContext) (*machine
 	if raw != nil {
 		sc, ok := raw.(*syntaxCaseState)
 		if ok && sc.input != nil {
-			return nil, mc.Error(fmt.Sprintf(
+			return nil, mc.WrapError(werr.ErrInvalidSyntax, fmt.Sprintf(
 				"syntax-case: no matching clause for input %s", sc.input.SchemeString()))
 		}
 	}
-	return nil, mc.Error("syntax-case: no matching clause (input unavailable)")
+	return nil, mc.WrapError(werr.ErrInvalidSyntax, "syntax-case: no matching clause (input unavailable)")
 }
 
 func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
@@ -301,14 +302,14 @@ func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*mach
 		return nil, err
 	}
 	if sc.matcher == nil {
-		return nil, mc.Error("syntax: state has no matcher (OperationSyntaxCaseMatch did not succeed?)")
+		return nil, mc.WrapError(werr.ErrInternal, "syntax: state has no matcher (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
 	// Get the template from value register
 	templateVal := mc.GetValue()
 	template, ok := templateVal.(syntax.SyntaxValue)
 	if !ok {
-		return nil, mc.Error(fmt.Sprintf("syntax: expected syntax template, got %T", templateVal))
+		return nil, mc.WrapError(werr.ErrInternal, fmt.Sprintf("syntax: expected syntax template, got %T", templateVal))
 	}
 
 	// Expand the template using the matcher (handles ellipsis)
