@@ -121,6 +121,19 @@ func PrimCurrentDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return werr.WrapForeignFileError(err, "current-directory", ".")
 	}
+	// Gate the working directory as a file stat so a confining authorizer can
+	// withhold it: DenyAll denies it (honouring "deny everything"), and
+	// FilesystemRoot denies it when the cwd lies outside the root (preventing a
+	// host-path leak out of the sandbox). The check runs after Getwd so the path
+	// is available to evaluate but before SetValue so a denial leaks nothing.
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceFile,
+		Action:   security.ActionStat,
+		Target:   wd,
+	})
+	if err != nil {
+		return err
+	}
 	mc.SetValue(values.NewString(wd))
 	return nil
 }
@@ -136,10 +149,15 @@ func PrimSetCurrentDirectory(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	// Gate as a file write of the destination path (not an opaque
+	// {process,write,"cwd"} request, which path-confining authorizers like
+	// FilesystemRoot never inspect — letting chdir escape the root). With
+	// ResourceFile+Target=path, containment authorizers evaluate the
+	// destination, confining the new working directory to the sandbox root.
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
-		Resource: security.ResourceProcess,
+		Resource: security.ResourceFile,
 		Action:   security.ActionWrite,
-		Target:   "cwd",
+		Target:   path.Value,
 	})
 	if err != nil {
 		return err

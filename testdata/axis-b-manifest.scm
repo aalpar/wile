@@ -370,7 +370,7 @@
  ("set-box!" "void" ("any" "any") "github.com/aalpar/wile/registry/core.init.MakeBinarySetter[...].func44" "registry/helpers/accessor.go:63")
  ("set-car!" "void" ("pair" "any") "github.com/aalpar/wile/registry/core.PrimSetCar" "registry/core/prim_pairs.go:71")
  ("set-cdr!" "void" ("pair" "any") "github.com/aalpar/wile/registry/core.PrimSetCdr" "registry/core/prim_pairs.go:88")
- ("set-current-directory!" "void" ("string") "github.com/aalpar/wile/extensions/files.PrimSetCurrentDirectory" "extensions/files/prim_directory.go:134")
+ ("set-current-directory!" "void" ("string") "github.com/aalpar/wile/extensions/files.PrimSetCurrentDirectory" "extensions/files/prim_directory.go:147")
  ("sin" "number" ("number") "github.com/aalpar/wile/extensions/math.init.makeComplexPrimitive.func10" "extensions/math/prim_transcendental.go:33")
  ("sqrt" "number" ("number") "github.com/aalpar/wile/extensions/math.PrimSqrt" "extensions/math/prim_transcendental.go:121")
  ("string" "string" ("...character") "github.com/aalpar/wile/registry/core.PrimString" "registry/core/prim_strings.go:30")
