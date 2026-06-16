@@ -434,13 +434,15 @@ sage-snapshot: build
 	WILE=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) sage tools/sage/verify_algebra.sage --snapshot
 
 # Run golangci-lint plus the project's standalone linters on all packages.
-# singlelinefunclint enforces the no-single-line-function rule (a positional
-# property the gocritic/ruleguard DSL cannot express).
+# These enforce conventions the gocritic/ruleguard DSL cannot express:
+#   - singlelinefunclint: the no-single-line-function rule (a positional rule).
+#   - typeswitchlint: exhaustiveness of //exhaustive-marked values.Value switches.
 #   make lint
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) -v run ./...
 	$(GO) run ./cmd/singlelinefunclint .
+	$(GO) run ./cmd/typeswitchlint .
 
 # Run golangci-lint with --fix to auto-correct fixable issues.
 #   make fix

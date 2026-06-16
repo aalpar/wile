@@ -12,14 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Command typeswitchlint finds type switch statements on values.Value or
-// values.Number that may be missing cases for concrete types.
+// Command typeswitchlint checks that type switches over values.Value are
+// exhaustive — but only the ones that opt in with an //exhaustive marker.
 //
-// It works by parsing Go source files with go/ast, finding type switch
-// statements, extracting case types, and comparing against a known list
-// of concrete types. Switches with a default branch are reported as
-// informational rather than warnings, since the default may already
-// handle unknown types.
+// Most type switches over values.Value are intentionally partial (eqv? only
+// compares numeric pairs; a transcendental op only handles the real tower).
+// Flagging every such switch produces pure noise, so this tool checks a
+// switch only when it is annotated:
+//
+//	//exhaustive
+//	switch v := x.(type) {
+//	case *values.Integer: ...
+//	}
+//
+// or with a trailing marker on the switch line:
+//
+//	switch v := x.(type) { //exhaustive
+//
+// For a marked switch, every exported values.Value type that is not cased is
+// reported, and the tool exits non-zero — so it can gate `make lint`. A
+// default clause does NOT excuse a missing case: marking a switch exhaustive
+// is a declaration that the cases enumerate the whole domain.
+//
+// Scope: completeness is checked against the value types DEFINED IN package
+// values (the data types), addressed as values.X from another package. It
+// does not know about Value implementers defined elsewhere (closures,
+// continuations, parameters), nor about unexported singletons (voidType,
+// eofType, emptyListType) that cannot be named in a cross-package case. The
+// known-type list is kept honest by TestKnownValueTypesMatchesSource, which
+// derives the real set from the values source and fails on drift.
 //
 // Usage:
 //
@@ -40,9 +61,10 @@ import (
 	"strings"
 )
 
-// knownValueTypes lists all concrete types that implement values.Value.
-// This list must be updated when a new value type is added.
-// See also: values/values.go "ADDING A NEW VALUE TYPE" guide.
+// knownValueTypes lists the exported concrete types in package values that
+// implement values.Value. It is asserted complete and current against the
+// values source by TestKnownValueTypesMatchesSource — do not hand-edit it to
+// silence that test; fix the underlying type set or the derivation.
 var knownValueTypes = []string{
 	// Numeric tower
 	"*values.Integer",
@@ -52,25 +74,24 @@ var knownValueTypes = []string{
 	"*values.Rational",
 	"*values.Complex",
 	"*values.BigComplex",
-	// Core values
+	// Core data
 	"*values.Boolean",
 	"*values.Character",
+	"*values.CharSet",
 	"*values.String",
 	"*values.Symbol",
 	"*values.Byte",
 	"*values.Pair",
 	"*values.Vector",
 	"*values.ByteVector",
+	"*values.SyntaxVector",
 	"*values.Hashtable",
 	"*values.Record",
 	"*values.RecordType",
 	"*values.Box",
 	"*values.Promise",
-	// Ports — single concrete type after Phase 2 of values SR
-	// (port unification). Embedders that need to distinguish port
-	// flavors should call the PortKind() method or the
-	// capability-checking AsX() accessors on *PortObject, not type
-	// switch on Go types.
+	"*values.OpaqueValue",
+	// Ports — single concrete type after the port-unification SR pass.
 	"*values.PortObject",
 	// Concurrency
 	"*values.Thread",
@@ -83,23 +104,23 @@ var knownValueTypes = []string{
 	"*values.AtomicBox",
 	"*values.AtomicInt64",
 	"*values.Time",
-	// Advanced
+	"*values.Process",
+	// Advanced / internal-facing
 	"*values.CompileTimeValue",
-	"*values.SchemeEnvironment",
 	"*values.NativeError",
-	"*values.ForeignError",
-	"*values.StaticError",
+	"*values.SourceContext",
+	"*values.SourceIndexes",
 }
 
 type switchInfo struct {
-	file       string
-	line       int
-	caseTypes  []string
-	hasDefault bool
+	file      string
+	line      int
+	caseTypes []string
+	hasValues bool // at least one case names a values.* type
 }
 
 func main() {
-	verbose := flag.Bool("v", false, "show INFO switches (with default) in addition to WARNINGs")
+	verbose := flag.Bool("v", false, "list every checked //exhaustive switch, not only those with gaps")
 	flag.Parse()
 	dirs := flag.Args()
 	if len(dirs) == 0 {
@@ -107,58 +128,47 @@ func main() {
 	}
 
 	var switches []switchInfo
-	skipped := 0
 	for _, dir := range dirs {
-		s, sk, err := scanDir(dir)
+		s, err := scanDir(dir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error scanning %s: %v\n", dir, err)
-			os.Exit(1)
+			os.Exit(2)
 		}
 		switches = append(switches, s...)
-		skipped += sk
 	}
 
-	if len(switches) == 0 {
-		fmt.Println("No type switches found.")
-		return
-	}
-
-	reported := 0
+	gaps := 0
 	for _, sw := range switches {
+		if !sw.hasValues {
+			fmt.Printf("WARNING: %s:%d — //exhaustive switch has no values.* cases; "+
+				"typeswitchlint only checks switches over values.Value (cased as values.X)\n",
+				sw.file, sw.line)
+			gaps++
+			continue
+		}
 		missing := findMissing(sw.caseTypes, knownValueTypes)
 		if len(missing) == 0 {
+			if *verbose {
+				fmt.Printf("OK: %s:%d — %d cases, exhaustive\n", sw.file, sw.line, len(sw.caseTypes))
+			}
 			continue
 		}
-		if sw.hasDefault && !*verbose {
-			continue
-		}
-		reported++
-		level := "WARNING"
-		if sw.hasDefault {
-			level = "INFO"
-		}
-		fmt.Printf("%s: %s:%d — %d cases, missing %d types",
-			level, sw.file, sw.line, len(sw.caseTypes), len(missing))
-		if sw.hasDefault {
-			fmt.Print(" (has default)")
-		}
-		fmt.Println()
+		gaps++
+		fmt.Printf("WARNING: %s:%d — %d cases, missing %d value type(s):\n",
+			sw.file, sw.line, len(sw.caseTypes), len(missing))
 		for _, m := range missing {
 			fmt.Printf("  - %s\n", m)
 		}
 	}
 
-	summary := fmt.Sprintf("\n%d type switches scanned, %d with potential gaps",
-		len(switches), reported)
-	if skipped > 0 {
-		summary += fmt.Sprintf(", %d files skipped due to errors", skipped)
+	fmt.Printf("\n%d //exhaustive switch(es) checked, %d with gaps.\n", len(switches), gaps)
+	if gaps > 0 {
+		os.Exit(1)
 	}
-	fmt.Println(summary + ".")
 }
 
-func scanDir(root string) ([]switchInfo, int, error) {
+func scanDir(root string) ([]switchInfo, error) {
 	var result []switchInfo
-	skipped := 0
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -173,23 +183,33 @@ func scanDir(root string) ([]switchInfo, int, error) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		switches, err := scanFile(path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", path, err)
-			skipped++
+		switches, scanErr := scanFile(path)
+		if scanErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", path, scanErr)
 			return nil
 		}
 		result = append(result, switches...)
 		return nil
 	})
-	return result, skipped, err
+	return result, err
 }
 
 func scanFile(path string) ([]switchInfo, error) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
+	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
+	}
+
+	// Lines carrying an //exhaustive marker. A switch opts in when a marker
+	// sits on its own line (trailing) or the line immediately above it.
+	markerLines := map[int]bool{}
+	for _, group := range file.Comments {
+		for _, c := range group.List {
+			if isExhaustiveMarker(c.Text) {
+				markerLines[fset.Position(c.Slash).Line] = true
+			}
+		}
 	}
 
 	var result []switchInfo
@@ -198,43 +218,43 @@ func scanFile(path string) ([]switchInfo, error) {
 		if !ok {
 			return true
 		}
-		cases, hasDefault := extractCaseTypes(ts)
-		// Heuristic: match any case type containing "values." — relies on
-		// the codebase convention of importing values without alias.
-		valuesCase := false
-		for _, c := range cases {
-			if strings.Contains(c, "values.") {
-				valuesCase = true
-				break
-			}
-		}
-		if !valuesCase {
+		pos := fset.Position(ts.Switch)
+		if !markerLines[pos.Line] && !markerLines[pos.Line-1] {
 			return true
 		}
-		pos := fset.Position(ts.Pos())
+		cases, hasValues := extractCaseTypes(ts)
 		result = append(result, switchInfo{
-			file:       pos.Filename,
-			line:       pos.Line,
-			caseTypes:  cases,
-			hasDefault: hasDefault,
+			file:      pos.Filename,
+			line:      pos.Line,
+			caseTypes: cases,
+			hasValues: hasValues,
 		})
 		return true
 	})
 	return result, nil
 }
 
-func extractCaseTypes(ts *ast.TypeSwitchStmt) (types []string, hasDefault bool) {
+// isExhaustiveMarker reports whether a comment is the opt-in marker. It
+// accepts "//exhaustive", "// exhaustive", and a trailing reason
+// ("//exhaustive: dispatch must cover every value type").
+func isExhaustiveMarker(text string) bool {
+	t := strings.TrimSpace(strings.TrimPrefix(text, "//"))
+	return t == "exhaustive" || strings.HasPrefix(t, "exhaustive:") || strings.HasPrefix(t, "exhaustive ")
+}
+
+func extractCaseTypes(ts *ast.TypeSwitchStmt) (types []string, hasValues bool) {
 	for _, stmt := range ts.Body.List {
 		cc, ok := stmt.(*ast.CaseClause)
 		if !ok {
 			continue
 		}
-		if cc.List == nil {
-			hasDefault = true
-			continue
-		}
+		// A default clause has a nil List and contributes no case types.
 		for _, expr := range cc.List {
-			types = append(types, typeExprString(expr))
+			s := typeExprString(expr)
+			types = append(types, s)
+			if strings.Contains(s, "values.") {
+				hasValues = true
+			}
 		}
 	}
 	return
