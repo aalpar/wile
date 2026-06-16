@@ -40,10 +40,16 @@ func NewTokenizerErrorWithWrap(err error, mess string) *TokenizerError {
 	return q
 }
 
-// Is implements errors.Is for TokenizerError.
+// Is implements errors.Is for TokenizerError. Two tokenizer errors match
+// when they carry the same message, so errors.Is can distinguish the message
+// constants (e.g. errors.Is(err, NewTokenizerError(MessageUnterminatedString)));
+// a wrapped cause is still reached through Unwrap.
 func (p *TokenizerError) Is(err error) bool {
-	_, ok := err.(*TokenizerError)
-	return ok
+	other, ok := err.(*TokenizerError)
+	if !ok {
+		return false
+	}
+	return p.mess == other.mess
 }
 
 func (p *TokenizerError) Error() string {

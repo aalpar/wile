@@ -66,10 +66,17 @@ func NewParserErrorWithWrapf(err error, tok tokenizer.Token, mess string, vs ...
 	return q
 }
 
-// Is implements errors.Is for ParserError.
+// Is implements errors.Is for ParserError. Two parser errors match when they
+// carry the same message (the token is positional and is not part of error
+// identity — see EqualTo for value-level equality that includes it), so
+// errors.Is can distinguish parser failures; a wrapped cause is still reached
+// through Unwrap.
 func (p *ParserError) Is(err error) bool {
-	_, ok := err.(*ParserError)
-	return ok
+	other, ok := err.(*ParserError)
+	if !ok {
+		return false
+	}
+	return p.mess == other.mess
 }
 
 func (p *ParserError) Error() string {

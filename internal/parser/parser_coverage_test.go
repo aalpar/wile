@@ -876,8 +876,9 @@ func TestParserError_Is(t *testing.T) {
 	c := qt.New(t)
 	tok := makeTestToken("x")
 	pe := NewParserError(tok, "msg")
-	c.Assert(pe.Is(&ParserError{}), qt.IsTrue)
-	c.Assert(pe.Is(werr.ErrNotAnInteger), qt.IsFalse)
+	c.Assert(pe.Is(&ParserError{}), qt.IsFalse)            // different message ("" vs "msg")
+	c.Assert(pe.Is(NewParserError(tok, "msg")), qt.IsTrue) // same message
+	c.Assert(pe.Is(werr.ErrNotAnInteger), qt.IsFalse)      // different type
 }
 
 func TestParserError_Unwrap(t *testing.T) {

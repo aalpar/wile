@@ -1044,9 +1044,10 @@ func TestParserError(t *testing.T) {
 	c.Assert(err2.Error(), qt.Equals, "wrapped error")
 	c.Assert(err2.Unwrap(), qt.Equals, innerErr)
 
-	// Test Is
-	c.Assert(err1.Is(err2), qt.IsTrue)
-	c.Assert(err1.Is(innerErr), qt.IsFalse)
+	// Test Is: parser errors match by message identity, not merely by type.
+	c.Assert(err1.Is(err2), qt.IsFalse)                             // different messages
+	c.Assert(err1.Is(NewParserError(nil, "test error")), qt.IsTrue) // same message
+	c.Assert(err1.Is(innerErr), qt.IsFalse)                         // different type
 }
 
 // ============================================================================

@@ -1195,7 +1195,7 @@ func TestTokenizer_read(t *testing.T) {
 		{
 			bs:    "-nan,0",
 			scan:  "-nan",
-			err0:  &TokenizerError{mess: "expected decimal fraction"},
+			err0:  &TokenizerError{mess: MessageExpectingDecimalFraction},
 			state: TokenizerStateSymbol,
 		},
 		{
@@ -2040,8 +2040,9 @@ func TestTokenizerError_Is(t *testing.T) {
 	err1 := NewTokenizerError("test error")
 	err2 := NewTokenizerError("another error")
 
-	c.Assert(err1.Is(err2), qt.IsTrue)    // Both are TokenizerError
-	c.Assert(err1.Is(io.EOF), qt.IsFalse) // Not a TokenizerError
+	c.Assert(err1.Is(err2), qt.IsFalse)                           // different messages
+	c.Assert(err1.Is(NewTokenizerError("test error")), qt.IsTrue) // same message
+	c.Assert(err1.Is(io.EOF), qt.IsFalse)                         // not a TokenizerError
 }
 
 func TestTokenizerError_Unwrap(t *testing.T) {
