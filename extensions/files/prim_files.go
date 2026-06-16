@@ -182,7 +182,10 @@ func callWithFile(
 
 // PrimCallWithInputFile implements the call-with-input-file primitive.
 func PrimCallWithInputFile(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-input-file")
+	if err != nil {
+		return err
+	}
 	return callWithFile(mc, "call-with-input-file", security.ActionRead,
 		func(f *os.File) values.Value {
 			return values.NewCharacterInputPortFromReader(f)
@@ -191,7 +194,10 @@ func PrimCallWithInputFile(cc machine.CallContext) error {
 
 // PrimCallWithOutputFile implements the call-with-output-file primitive.
 func PrimCallWithOutputFile(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-output-file")
+	if err != nil {
+		return err
+	}
 	return callWithFile(mc, "call-with-output-file", security.ActionWrite,
 		func(f *os.File) values.Value {
 			return values.NewCharacterOutputPortFromWriter(f)

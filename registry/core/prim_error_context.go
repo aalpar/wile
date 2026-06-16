@@ -25,7 +25,10 @@ import (
 // Returns the ErrorContext from the nearest continuation mark, or #f if
 // not currently inside an exception handler dispatch.
 func PrimCurrentErrorContext(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "current-error-context")
+	if err != nil {
+		return err
+	}
 	cms := mc.CollectContinuationMarks(machine.DefaultPromptTag)
 	mc.SetValue(cms.First(machine.ErrorContextKey(), values.FalseValue))
 	return nil

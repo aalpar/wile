@@ -298,7 +298,10 @@ var PrimOnceQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // PrimOnceDo executes the thunk only once
 // (once-do! once thunk) -> boolean (true if executed, false if already done)
 func PrimOnceDo(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "once-do!")
+	if err != nil {
+		return err
+	}
 	once, err := helpers.RequireArg[*values.Once](mc, 0, werr.ErrNotAOnce, "once-do!")
 	if err != nil {
 		return err

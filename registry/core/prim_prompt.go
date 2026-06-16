@@ -68,7 +68,10 @@ var PrimContinuationPromptTagQ = helpers.MakeTypePredicate(func(o values.Value) 
 //
 // Follows Racket's call-with-continuation-prompt.
 func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-continuation-prompt")
+	if err != nil {
+		return err
+	}
 	thunk := mc.Arg(0)
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
@@ -192,7 +195,10 @@ func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 //
 // Racket §10.4: continuation-prompt-available?
 func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "continuation-prompt-available?")
+	if err != nil {
+		return err
+	}
 	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "continuation-prompt-available?")
 	if err != nil {
 		return err
@@ -213,7 +219,10 @@ func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
 //
 // Follows Racket's call-with-composable-continuation.
 func PrimCallWithComposableContinuation(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-composable-continuation")
+	if err != nil {
+		return err
+	}
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 

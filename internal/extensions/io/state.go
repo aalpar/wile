@@ -213,7 +213,10 @@ func GetCurrentErrorPortParam() *machine.Parameter {
 // OperationForeignFunctionCall's recover and converted to a Scheme
 // exception.
 func resolveCurrentOutputPort(cc machine.CallContext) *values.PortObject {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "current-output-port")
+	if err != nil {
+		panic(err)
+	}
 	InitState()
 	v := mc.ResolveParameterValue(currentOutputPortParam)
 	p, err := currentTextualOutputPort("current-output-port", v)
@@ -230,7 +233,10 @@ func resolveCurrentOutputPort(cc machine.CallContext) *values.PortObject {
 // OperationForeignFunctionCall's recover and converted to a Scheme
 // exception.
 func resolveCurrentInputPort(cc machine.CallContext) *values.PortObject {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "current-input-port")
+	if err != nil {
+		panic(err)
+	}
 	InitState()
 	v := mc.ResolveParameterValue(currentInputPortParam)
 	p, err := currentTextualInputPort("current-input-port", v)

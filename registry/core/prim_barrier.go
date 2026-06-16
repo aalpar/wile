@@ -37,7 +37,10 @@ import (
 //
 // See plans/CALL_WITH_EXIT_AND_WITH_BAFFLE.md for full semantics and test cases.
 func PrimCallWithContinuationBarrier(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-continuation-barrier")
+	if err != nil {
+		return err
+	}
 	thunk := mc.Arg(0)
 
 	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "call-with-continuation-barrier")

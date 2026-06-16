@@ -356,7 +356,10 @@ func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.V
 // and the result is memoized; on subsequent forces, the memoized result
 // is returned.
 func PrimForce(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "force")
+	if err != nil {
+		return err
+	}
 	o := mc.Arg(0)
 	promise, ok := o.(*values.Promise)
 	if !ok {

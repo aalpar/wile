@@ -38,7 +38,10 @@ import (
 //
 // Inspired by S7 Scheme's call-with-exit and Guile's call-with-escape-continuation.
 func PrimCallWithExit(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-exit")
+	if err != nil {
+		return err
+	}
 	proc := mc.Arg(0)
 
 	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-exit")
@@ -55,7 +58,10 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	// Checking valid before thread is intentional: a cross-thread call to an expired
 	// exit procedure gets the "outside dynamic extent" error, which is more informative.
 	exitFn := func(innerCC machine.CallContext) error {
-		innerMC := innerCC.(*machine.MachineContext)
+		innerMC, err := machine.RequireMachineContext(innerCC, "call-with-exit")
+		if err != nil {
+			return err
+		}
 		if !valid.Load() {
 			return werr.WrapForeignErrorf(werr.ErrExpiredEscape,
 				"call-with-exit: exit procedure called outside dynamic extent")

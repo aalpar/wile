@@ -28,7 +28,10 @@ import (
 // (with-exception-handler handler thunk)
 // Installs handler as exception handler during thunk execution.
 func PrimWithExceptionHandler(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "with-exception-handler")
+	if err != nil {
+		return err
+	}
 	handler, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "with-exception-handler")
 	if err != nil {
 		return err
@@ -78,8 +81,7 @@ func PrimWithExceptionHandler(cc machine.CallContext) error {
 // so that (current-error-context) can retrieve it inside the handler.
 // Returns the handler's return value, or an error if the handler raised an exception
 // or escaped via continuation.
-func callExceptionHandler(cc machine.CallContext, condition values.Value, handler values.Callable, errCtx *machine.ErrorContext) (values.Value, error) {
-	mc := cc.(*machine.MachineContext)
+func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Callable, errCtx *machine.ErrorContext) (values.Value, error) {
 	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
@@ -115,8 +117,7 @@ func callExceptionHandler(cc machine.CallContext, condition values.Value, handle
 // resumeFromContinuation resumes execution from a captured continuation with the given value.
 // Returns the result of the resumed execution, or an error.
 // If cont is nil (raise-continuable was in tail position), returns value directly.
-func resumeFromContinuation(cc machine.CallContext, cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
-	mc := cc.(*machine.MachineContext)
+func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
 	if cont == nil {
 		// raise-continuable was in tail position - no continuation to resume
 		// The handler's return value becomes the final result
@@ -139,8 +140,7 @@ func resumeFromContinuation(cc machine.CallContext, cont *machine.MachineContinu
 
 // handleException processes an exception by calling the handler and, for continuable
 // exceptions, resuming execution from the raise-continuable call site per R7RS §6.11.
-func handleException(cc machine.CallContext, excErr *machine.ErrExceptionEscape, handler values.Callable) error {
-	mc := cc.(*machine.MachineContext)
+func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Callable) error {
 	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
 	mc.PopExceptionHandler()
 
@@ -222,7 +222,10 @@ func handleException(cc machine.CallContext, excErr *machine.ErrExceptionEscape,
 // (raise obj)
 // Raises a non-continuable exception with obj as the condition.
 func PrimRaise(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "raise")
+	if err != nil {
+		return err
+	}
 	obj := mc.Arg(0)
 
 	return &machine.ErrExceptionEscape{
@@ -241,7 +244,10 @@ func PrimRaise(cc machine.CallContext) error {
 // If the handler returns, its return value becomes the value of raise-continuable,
 // and execution continues from the call site per R7RS §6.11.
 func PrimRaiseContinuable(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "raise-continuable")
+	if err != nil {
+		return err
+	}
 	obj := mc.Arg(0)
 
 	// Copy continuation to prevent mutation issues during handler execution.
@@ -266,7 +272,10 @@ func PrimRaiseContinuable(cc machine.CallContext) error {
 // (error message irritant ...)
 // Creates an error object with the given message and irritants, then raises it.
 func PrimError(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "error")
+	if err != nil {
+		return err
+	}
 	message := mc.Arg(0)
 	irritantsList := mc.Arg(1)
 
@@ -283,7 +292,7 @@ func PrimError(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList,
 			"error: irritants must be a proper list but got %T", irritantsList)
 	}
-	err := helpers.ForEachList(mc.Context(), irritantsTuple, "error", func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err = helpers.ForEachList(mc.Context(), irritantsTuple, "error", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		irritants = append(irritants, v)
 		return nil
 	})

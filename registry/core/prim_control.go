@@ -27,7 +27,10 @@ import (
 // PrimApply implements the apply primitive.
 // Applies a procedure to a list of arguments.
 func PrimApply(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "apply")
+	if err != nil {
+		return err
+	}
 	proc := mc.Arg(0)
 	restVal := mc.Arg(1)
 
@@ -84,7 +87,7 @@ func PrimApply(cc machine.CallContext) error {
 	// continuation abort of its own. Any control effect inside proc (call/cc,
 	// raise, an invoked continuation) is handled by proc's own machinery and
 	// propagates through mc exactly as if proc had been called directly.
-	_, err := mc.ApplyCallable(proc, prefixArgs...)
+	_, err = mc.ApplyCallable(proc, prefixArgs...)
 	if err != nil {
 		return err
 	}
@@ -141,7 +144,10 @@ func PrimApply(cc machine.CallContext) error {
 // sub-context. Used when call/cc is invoked inside another foreign function's sub-context
 // (e.g., inside apply or dynamic-wind) where there's no saved continuation to return to.
 func PrimCallCC(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call/cc")
+	if err != nil {
+		return err
+	}
 	proc := mc.Arg(0)
 
 	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call/cc")
@@ -236,7 +242,10 @@ func PrimValues(mc machine.CallContext) error {
 // PrimCallWithValues implements the call-with-values primitive.
 // Calls producer, passes results to consumer.
 func PrimCallWithValues(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-values")
+	if err != nil {
+		return err
+	}
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 

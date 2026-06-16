@@ -36,7 +36,10 @@ import (
 // (prim_barrier.go): a fresh sub-context isolates the thunk's execution
 // while inheriting the parent's environment and winding stack.
 func PrimWithTimeout(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "with-timeout")
+	if err != nil {
+		return err
+	}
 
 	msVal, err := helpers.RequireType[*values.Integer](
 		mc.Arg(0), werr.ErrNotAnInteger, "with-timeout",

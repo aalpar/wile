@@ -24,7 +24,10 @@ import (
 // PrimCurrentContinuationMarks implements (current-continuation-marks [prompt-tag]).
 // Walks the continuation chain and returns a ContinuationMarkSet snapshot.
 func PrimCurrentContinuationMarks(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "current-continuation-marks")
+	if err != nil {
+		return err
+	}
 	tag := machine.DefaultPromptTag
 	v, ok, err := helpers.ParseOptionalArg(mc.Arg(0), "current-continuation-marks")
 	if err != nil {
@@ -160,7 +163,10 @@ var PrimContinuationQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // In tail position, with-continuation-mark writes to mc.marks. In non-tail
 // position, SaveContinuation moves mc.marks to mc.cont before the call.
 func PrimCallWithImmediateContMark(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "call-with-immediate-continuation-mark")
+	if err != nil {
+		return err
+	}
 	key := mc.Arg(0)
 	proc := mc.Arg(1)
 	val := mc.GetImmediateMark(key)
@@ -176,7 +182,7 @@ func PrimCallWithImmediateContMark(cc machine.CallContext) error {
 	}
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	_, err := sub.ApplyCallable(proc, val)
+	_, err = sub.ApplyCallable(proc, val)
 	if err != nil {
 		return err
 	}

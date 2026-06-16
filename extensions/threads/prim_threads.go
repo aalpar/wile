@@ -82,7 +82,10 @@ var PrimThreadQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // PrimMakeThread creates a new thread
 // (make-thread thunk [name]) -> thread
 func PrimMakeThread(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "make-thread")
+	if err != nil {
+		return err
+	}
 	thunk, ok := mc.Arg(0).(values.Callable)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,

@@ -30,7 +30,10 @@ import (
 // If a converter is provided, it is applied to the initial value and to
 // any value passed when setting the parameter.
 func PrimMakeParameter(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "make-parameter")
+	if err != nil {
+		return err
+	}
 	init := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -87,7 +90,10 @@ func PrimParameterRawSet(mc machine.CallContext) error {
 // Used by the parameterize macro to pre-convert the value before storing
 // it as a continuation mark. This is an internal primitive.
 func PrimParameterConvert(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, err := machine.RequireMachineContext(cc, "%parameter-convert")
+	if err != nil {
+		return err
+	}
 	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "%parameter-convert")
 	if err != nil {
 		return err
