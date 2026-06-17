@@ -55,3 +55,31 @@ func TestEngine_EvalMultiple_ForwardReferenceFails(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil,
 		qt.Commentf("EvalMultiple should fail the forward reference that EvalProgram allows"))
 }
+
+// TestEngine_EvalProgram_StructuralWrap covers the cases where building the
+// (begin ...) wrapper structurally (parse-then-wrap) is more robust than the old
+// string surgery ("(begin " + code + "\n)").
+func TestEngine_EvalProgram_StructuralWrap(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("trailing line comment without newline", func(t *testing.T) {
+		// A naive string wrap "(begin " + code + ")" would let the trailing comment
+		// swallow the synthetic close paren; the structural wrapper has no such paren.
+		eng, err := wile.NewEngine(ctx)
+		qt.Assert(t, err, qt.IsNil)
+		result, err := eng.EvalProgram(ctx,
+			"(define x 41)\n(+ x 1) ; eof comment, no newline", "<test>")
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, result.SchemeString(), qt.Equals, "42")
+	})
+
+	t.Run("empty and comment-only programs are void", func(t *testing.T) {
+		eng, err := wile.NewEngine(ctx)
+		qt.Assert(t, err, qt.IsNil)
+		for _, src := range []string{"", "   \n\t ", "; just a comment", "#| block |#"} {
+			result, evalErr := eng.EvalProgram(ctx, src, "<test>")
+			qt.Assert(t, evalErr, qt.IsNil, qt.Commentf("src=%q", src))
+			qt.Assert(t, result.IsVoid(), qt.IsTrue, qt.Commentf("src=%q", src))
+		}
+	})
+}

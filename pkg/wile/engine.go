@@ -438,24 +438,54 @@ func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source
 	return p.evalMultiple(ctx, code, source)
 }
 
-// EvalProgram evaluates code as a single compilation unit by wrapping it in a
-// top-level (begin ...), so all top-level defines are mutually visible — a
-// (define (f) (g)) may precede (define (g) ...). This is the forward-reference
-// behavior of loading a file, and the recommended entry point for evaluating a
-// whole program or script. source labels the code in diagnostics; pass "" if none.
+// EvalProgram evaluates code as a single compilation unit: it parses every
+// top-level form, splices them into one (begin form ...), and compiles that as a
+// unit so all top-level defines are mutually visible — a (define (f) (g)) may
+// precede (define (g) ...). This is the forward-reference behavior of loading a
+// file, and the recommended entry point for evaluating a whole program or script.
+// source labels the code in diagnostics; pass "" if none.
 //
 // It contrasts with [Engine.EvalMultiple], which compiles and runs each top-level
-// form independently. Source line numbers are preserved: the wrap uses a space
-// (not a newline) after begin.
+// form independently. The (begin ...) wrapper is built structurally rather than by
+// concatenating source text, so every form keeps its own source location.
 func (p *Engine) EvalProgram(ctx context.Context, code string, source string) (Value, error) {
-	return p.evalMultiple(ctx, wrapBeginUnit(code), source)
+	pr := parser.NewParserWithFile(p.env, true, strings.NewReader(code), source)
+	pr.SetMaxDepth(p.maxParseDepth)
+
+	var forms []syntax.SyntaxValue
+	for {
+		stx, err := pr.ReadSyntax(ctx)
+		if err != nil {
+			if isEOF(err) {
+				break
+			}
+			return nil, wrapCompilationError("parse error", err)
+		}
+		forms = append(forms, stx)
+	}
+	if len(forms) == 0 {
+		// No forms (empty input, or only whitespace/comments) — like (begin).
+		return Void, nil
+	}
+
+	compiled, err := p.compileExpr(ctx, wrapInBegin(forms))
+	if err != nil {
+		return nil, err
+	}
+	return p.runCompiled(ctx, compiled)
 }
 
-// wrapBeginUnit wraps source text in a top-level (begin ...) form so it compiles
-// as one unit. The space after "begin" (not a newline) plus the trailing newline
-// before ")" keep every wrapped expression on its original source line.
-func wrapBeginUnit(code string) string {
-	return "(begin " + code + "\n)"
+// wrapInBegin splices forms into a single top-level (begin form ...) syntax
+// structure — the same shape the expander builds for bodies (see
+// machine/compilation/expander_lambda.go). Building the wrapper structurally,
+// rather than concatenating "(begin " onto source text, keeps each form's real
+// source location and avoids the trailing-line-comment and line-shift hazards of
+// string surgery. begin is dispatched by name, so the synthetic head (borrowing
+// the first form's source context) resolves to the special form.
+func wrapInBegin(forms []syntax.SyntaxValue) syntax.SyntaxValue {
+	srcCtx := forms[0].SourceContext()
+	beginSym := syntax.NewSyntaxSymbol("begin", srcCtx)
+	return syntax.NewSyntaxCons(beginSym, syntax.SyntaxList(srcCtx, forms...), srcCtx)
 }
 
 func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
