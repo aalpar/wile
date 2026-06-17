@@ -335,18 +335,9 @@ func main() {
 					if absErr != nil {
 						Failf(absErr, "cannot resolve path")
 					}
-					code := "(begin " + string(content) + "\n)"
 					loadErr := eng.WithLoadPath(absPath, func() error {
-						expr, parseErr := eng.ParseWithSource(ctx, code, fn)
-						if parseErr != nil {
-							return parseErr
-						}
-						compiled, compileErr := eng.Compile(ctx, expr)
-						if compileErr != nil {
-							return compileErr
-						}
-						_, runErr := eng.Run(ctx, compiled)
-						return runErr
+						_, evalErr := eng.EvalProgram(ctx, string(content), fn)
+						return evalErr
 					})
 					if loadErr != nil {
 						Failf(loadErr)
@@ -474,24 +465,14 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 		Failf(absErr, "cannot resolve path")
 	}
 
-	// Wrap in (begin ...) so all defines are mutually recursive and all
-	// expressions share a single continuation chain. Using a space (not
-	// newline) after "begin" avoids shifting source line numbers.
-	code := "(begin " + string(content) + "\n)"
-
+	// EvalProgram wraps the file in a single (begin ...) unit so all top-level
+	// defines are mutually visible and share one continuation chain; run with the
+	// file's directory on the load path so relative include/load resolves.
 	var result wile.Value
 	loadErr := eng.WithLoadPath(absPath, func() error {
-		expr, parseErr := eng.ParseWithSource(ctx, code, filename)
-		if parseErr != nil {
-			return parseErr
-		}
-		compiled, compileErr := eng.Compile(ctx, expr)
-		if compileErr != nil {
-			return compileErr
-		}
-		var runErr error
-		result, runErr = eng.Run(ctx, compiled)
-		return runErr
+		var evalErr error
+		result, evalErr = eng.EvalProgram(ctx, string(content), filename)
+		return evalErr
 	})
 	if loadErr != nil {
 		Failf(loadErr)
@@ -503,14 +484,12 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 }
 
 // runEval evaluates expressions supplied via -e flags.
-// All -e expressions are joined and wrapped in a single (begin ...) so they form ONE
-// compilation unit, exactly like runFile. This makes mutually-recursive defines and
-// redefine-within-the-batch work, and keeps the -e path from diverging from file
-// execution under the immutable top-level default (B2). A space (not newline) after
-// "begin" preserves source line numbers.
+// The -e expressions are joined and evaluated as ONE compilation unit via
+// EvalProgram, exactly like runFile: mutually-recursive defines and
+// redefine-within-the-batch work, and the -e path does not diverge from file
+// execution under the immutable top-level default (B2).
 func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
-	combined := "(begin " + strings.Join(exprs, "\n") + "\n)"
-	result, err := eng.EvalMultipleWithSource(ctx, combined, "<eval>")
+	result, err := eng.EvalProgram(ctx, strings.Join(exprs, "\n"), "<eval>")
 	if err != nil {
 		Failf(err)
 	}

@@ -18,6 +18,9 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompilationError wraps errors from parsing, expanding, or compiling Scheme code.
@@ -90,8 +93,17 @@ func (p *RuntimeError) Error() string {
 	b.WriteString(p.Message)
 
 	if p.Cause != nil {
-		b.WriteString(": ")
-		b.WriteString(p.Cause.Error())
+		// Suppress the cause when it merely restates the message verbatim. A
+		// sentinel attached to Cause purely so callers can errors.Is it (e.g.
+		// werr.ErrNotAProcedure, whose text is exactly "not a procedure") must not
+		// render as "not a procedure: not a procedure".
+		causeStr := p.Cause.Error()
+		if causeStr != p.Message {
+			if p.Message != "" {
+				b.WriteString(": ")
+			}
+			b.WriteString(causeStr)
+		}
 	}
 
 	if p.StackTrace != "" {
@@ -113,11 +125,6 @@ func (p *RuntimeError) IsSchemeException() bool {
 	return p != nil && p.Condition != nil
 }
 
-// newRuntimeError creates a RuntimeError with only a message.
-func newRuntimeError(msg string) *RuntimeError {
-	return &RuntimeError{Message: msg}
-}
-
 // newRuntimeErrorWithCause creates a RuntimeError with a message and an underlying cause.
 func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
 	return &RuntimeError{Message: msg, Cause: cause}
@@ -127,30 +134,28 @@ func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
 // is a valid prefix of an expression that needs more input to complete.
 // This is useful for REPL implementations that accumulate multi-line input.
 //
-// Detection uses errors.Is where possible (wrapped io.EOF for truncated
-// input). String matching is used only for tokenizer/parser errors whose
-// types are internal and cannot be matched structurally from public code.
-// Returns false for nil and bare io.EOF.
+// Detection is structural (errors.Is), not string matching:
+//   - wrapped io.EOF — a truncated token at end of stream;
+//   - io.ErrUnexpectedEOF — the parser ran out of input inside a form
+//     (wrapMidParseEOF; covers unclosed lists/vectors/block comments);
+//   - werr.ErrIncompleteInput — the tokenizer hit EOF inside an unterminated
+//     string or extended symbol;
+//   - parser.ErrUnknownTokenType — a partial token from premature EOF.
+//
+// Returns false for nil and bare io.EOF (a clean end of stream).
 func IsIncompleteInput(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Bare io.EOF means "stream ended normally" — not incomplete.
-	// Wrapped io.EOF (e.g. CompilationError{Cause: io.EOF}) means
-	// the parser ran out of input mid-expression.
+	// Bare io.EOF means "stream ended normally" — not incomplete. Wrapped io.EOF
+	// (e.g. CompilationError{Cause: io.EOF}) means the parser ran out of input
+	// mid-expression.
 	if err != io.EOF && errors.Is(err, io.EOF) {
 		return true
 	}
-	// The tokenizer and parser live in internal packages, so their error
-	// types cannot be matched with errors.Is/As from public code. Fall
-	// back to string matching for these specific patterns:
-	//   - "unterminated" — tokenizer: unterminated string/symbol
-	//   - "unclosed"     — tokenizer: unclosed block comment
-	//   - "unknown token type" — parser: partial token from premature EOF
-	errStr := err.Error()
-	return strings.Contains(errStr, "unterminated") ||
-		strings.Contains(errStr, "unclosed") ||
-		strings.Contains(errStr, "unknown token type")
+	return errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, werr.ErrIncompleteInput) ||
+		errors.Is(err, parser.ErrUnknownTokenType)
 }
 
 // isEOF checks if an error represents end of input.

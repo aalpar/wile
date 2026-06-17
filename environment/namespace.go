@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sort"
 	"sync"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -299,6 +300,42 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 		}
 	}
 	return result
+}
+
+// BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding
+// name visible across all instantiated phases (runtime, expand, compile) plus
+// the sealed base. Unlike BoundSymbolNames — which spans only the runtime
+// global and the sealed base, returning a Scheme list for the bound-names
+// primitives — this also walks the expand and compile phases, so macro and
+// special-form keywords appear. It is the set a REPL wants for tab completion.
+// Iteration order across phases does not change the result set (only names are
+// collected); the output is sorted for determinism.
+func (p *Namespace) BoundNamesAcrossPhases() []string {
+	seen := map[string]struct{}{}
+	var names []string
+	collect := func(frame *EnvironmentFrame) {
+		if frame == nil {
+			return
+		}
+		global := frame.GlobalEnvironment()
+		if global == nil {
+			return
+		}
+		for key := range global.Keys() {
+			_, dup := seen[key.Key]
+			if dup {
+				continue
+			}
+			seen[key.Key] = struct{}{}
+			names = append(names, key.Key)
+		}
+	}
+	for _, phase := range p.phases.Phases() {
+		collect(p.phases.Get(phase))
+	}
+	collect(p.sealedBase)
+	sort.Strings(names)
+	return names
 }
 
 // AtPhase returns the environment for the given phase level, creating it if needed.

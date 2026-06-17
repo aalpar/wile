@@ -429,8 +429,33 @@ func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 // EvalMultipleWithSource evaluates multiple expressions, returning the last result.
 // The source parameter identifies where the code came from (e.g. a filename)
 // and appears in error messages and stack traces.
+//
+// Each top-level form is compiled and run independently, so a forward reference
+// between two separate defines — (define (f) (g)) before (define (g) ...) —
+// fails to compile. Use [Engine.EvalProgram] for whole-program/file semantics
+// where all top-level defines are mutually visible.
 func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source string) (Value, error) {
 	return p.evalMultiple(ctx, code, source)
+}
+
+// EvalProgram evaluates code as a single compilation unit by wrapping it in a
+// top-level (begin ...), so all top-level defines are mutually visible — a
+// (define (f) (g)) may precede (define (g) ...). This is the forward-reference
+// behavior of loading a file, and the recommended entry point for evaluating a
+// whole program or script. source labels the code in diagnostics; pass "" if none.
+//
+// It contrasts with [Engine.EvalMultiple], which compiles and runs each top-level
+// form independently. Source line numbers are preserved: the wrap uses a space
+// (not a newline) after begin.
+func (p *Engine) EvalProgram(ctx context.Context, code string, source string) (Value, error) {
+	return p.evalMultiple(ctx, wrapBeginUnit(code), source)
+}
+
+// wrapBeginUnit wraps source text in a top-level (begin ...) form so it compiles
+// as one unit. The space after "begin" (not a newline) plus the trailing newline
+// before ")" keep every wrapped expression on its original source line.
+func wrapBeginUnit(code string) string {
+	return "(begin " + code + "\n)"
 }
 
 func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
@@ -533,7 +558,7 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 	// Composable continuations require the VM winding stack.
 	_, isCC := callee.(*machine.ComposableContinuation)
 	if isCC {
-		return nil, newRuntimeError("cannot call composable continuation from Go")
+		return nil, newRuntimeErrorWithCause("cannot call composable continuation from Go", werr.ErrComposableContinuationFromGo)
 	}
 
 	// Reject non-procedures before entering the VM.
@@ -543,7 +568,7 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 	// Callable path below handles closures and case-lambdas.
 	callable, isCallable := callee.(values.Callable)
 	if !isCallable {
-		return nil, newRuntimeError("not a procedure")
+		return nil, newRuntimeErrorWithCause("not a procedure", werr.ErrNotAProcedure)
 	}
 
 	return p.callCallable(ctx, callable, unwrappedArgs)
@@ -598,19 +623,46 @@ func (p *Engine) callParameter(ctx context.Context, param *machine.Parameter, ar
 		return Void, nil
 
 	default:
-		return nil, newRuntimeError(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
+		return nil, newRuntimeErrorWithCause(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)), werr.ErrWrongNumberOfArguments)
 	}
 }
 
-// Environment returns the underlying environment for advanced use.
+// Environment returns the underlying environment frame.
+//
+// This is an advanced escape hatch: it exposes the internal
+// environment.EnvironmentFrame type for white-box embedders that need direct
+// access to phase frames, the namespace, or the sealed base. That type is
+// internal and may change between minor versions, so it is not part of the
+// stable API surface. Prefer the typed Engine methods (Get, Define,
+// LoadedLibraries, …) where they suffice.
 func (p *Engine) Environment() *environment.EnvironmentFrame {
 	return p.env
 }
 
 // Namespace returns the Namespace for advanced use.
 // This provides access to per-instance symbol interning and phase management.
+//
+// Like Environment, this is an advanced escape hatch exposing an internal type
+// (environment.Namespace) that may change between minor versions; it is not
+// part of the stable API surface.
 func (p *Engine) Namespace() *environment.Namespace {
 	return p.namespace
+}
+
+// BoundNames returns a sorted, deduplicated list of every binding name visible
+// in the engine across all phases (runtime, expand, compile) and the sealed
+// base. It includes macro and special-form keywords, not only runtime value
+// bindings, so it is broader than the (environment-bound-names) primitive — it
+// is the set a REPL wants for tab completion. Returns nil if the engine has no
+// namespace.
+//
+// This is the stable, typed alternative to walking Environment().Namespace()
+// phase frames directly.
+func (p *Engine) BoundNames() []string {
+	if p.namespace == nil {
+		return nil
+	}
+	return p.namespace.BoundNamesAcrossPhases()
 }
 
 // SetDebugger attaches a debugger to the engine. Subsequent [Engine.Run]
@@ -631,7 +683,7 @@ func (p *Engine) Registry() *registry.Registry {
 // filesystem discovery with registry-known libraries (synthetic extensions).
 // Returns a sorted, deduplicated list. If the library system is not enabled
 // (no WithLibraryPaths call), returns an empty list.
-func (p *Engine) AvailableLibraries(ctx context.Context) ([]compilation.LibraryName, error) {
+func (p *Engine) AvailableLibraries(ctx context.Context) ([]LibraryName, error) {
 	_ = ctx // reserved for future cancellation support
 
 	regSearcher := p.env.LibraryRegistry()
@@ -644,7 +696,15 @@ func (p *Engine) AvailableLibraries(ctx context.Context) ([]compilation.LibraryN
 			"AvailableLibraries: library registry has unexpected type %T", regSearcher)
 	}
 
-	return compilation.DiscoverAvailableLibraries(p.env.FileResolver(), reg)
+	internal, err := compilation.DiscoverAvailableLibraries(p.env.FileResolver(), reg)
+	if err != nil {
+		return nil, err
+	}
+	q := make([]LibraryName, len(internal))
+	for i, name := range internal {
+		q[i] = LibraryName{Parts: append([]string(nil), name.Parts...)}
+	}
+	return q, nil
 }
 
 // internal helpers

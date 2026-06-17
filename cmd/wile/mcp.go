@@ -31,7 +31,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	ioext "github.com/aalpar/wile/internal/extensions/io"
-	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/repl"
@@ -343,19 +342,10 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(&buf))
 	defer ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
 
-	// Wrap in (begin ...) so all defines have mutual visibility,
-	// matching the file execution pattern in runFile.
-	wrapped := "(begin " + code + "\n)"
-
-	expr, parseErr := p.engine.ParseWithSource(ctx, wrapped, "<mcp-eval>")
-	if parseErr != nil {
-		return mcp.NewToolResultError(parseErr.Error()), nil
-	}
-	compiled, compileErr := p.engine.Compile(ctx, expr)
-	if compileErr != nil {
-		return mcp.NewToolResultError(compileErr.Error()), nil
-	}
-	val, evalErr := p.engine.Run(ctx, compiled)
+	// EvalProgram wraps in (begin ...) so all defines have mutual visibility,
+	// matching file execution. A parse/compile failure surfaces via evalErr below
+	// (with no captured stdout — identical to the prior explicit handling).
+	val, evalErr := p.engine.EvalProgram(ctx, code, "<mcp-eval>")
 
 	var result evalResult
 	output := buf.String()
@@ -634,10 +624,11 @@ func (p *mcpServer) handleSessionResource(_ context.Context, _ mcp.ReadResourceR
 	if p.engine != nil {
 		state.Initialized = true
 		state.PrimitiveCount = len(p.engine.Registry().Primitives())
-		reg, ok := p.engine.Environment().LibraryRegistry().(*compilation.LibraryRegistry)
-		if ok {
-			state.LibraryCount = len(reg.All())
-		}
+		// LoadedLibraries is the public accessor. A misconfigured registry
+		// (unexpected concrete type) returns an error and no libraries, which
+		// matches the prior type-assertion guard's "skip on mismatch" behavior.
+		libs, _ := p.engine.LoadedLibraries()
+		state.LibraryCount = len(libs)
 	}
 
 	data, err := json.Marshal(state)
@@ -663,14 +654,14 @@ func (p *mcpServer) handleLibrariesResource(ctx context.Context, _ mcp.ReadResou
 	}
 
 	libs := make([]libraryInfo, 0)
-	reg, ok := p.engine.Environment().LibraryRegistry().(*compilation.LibraryRegistry)
-	if ok {
-		for _, lib := range reg.All() {
-			libs = append(libs, libraryInfo{
-				Name:        lib.Name.SchemeString(),
-				Description: lib.Description,
-			})
-		}
+	// LoadedLibraries returns the same loaded set the registry holds, already
+	// projected to public wile.LibraryInfo (Name in Scheme form, Description).
+	loaded, _ := p.engine.LoadedLibraries()
+	for _, lib := range loaded {
+		libs = append(libs, libraryInfo{
+			Name:        lib.Name,
+			Description: lib.Description,
+		})
 	}
 
 	data, err := json.Marshal(libs)

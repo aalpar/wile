@@ -17,11 +17,8 @@ package repl
 import (
 	"os"
 	"path/filepath"
-	"slices"
-	"sort"
 	"strings"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -78,59 +75,16 @@ func (p *Completer) extractSymbolPrefix(line string) string {
 	return line[i+1:]
 }
 
-// collectBindingNames walks all phase environments and returns unique binding names.
+// collectBindingNames returns the engine's bound names for completion: every
+// name across all phases (runtime, expand, compile) plus the sealed base, so
+// macros and special-form keywords complete alongside primitives and bootstrap
+// procedures (car/caar/map/zero?/call-cc). Delegates to Engine.BoundNames so the
+// REPL does not reach into environment internals.
 func (p *Completer) collectBindingNames() []string {
 	if p.eng == nil {
 		return nil
 	}
-
-	env := p.eng.Environment()
-	if env == nil {
-		return nil
-	}
-
-	topLevel := env.Namespace()
-	if topLevel == nil {
-		return nil
-	}
-
-	seen := make(map[string]bool)
-	var names []string
-
-	collect := func(frame *environment.EnvironmentFrame) {
-		if frame == nil {
-			return
-		}
-		global := frame.GlobalEnvironment()
-		if global == nil {
-			return
-		}
-		for sym := range global.Keys() {
-			name := sym.Key
-			if !seen[name] {
-				seen[name] = true
-				names = append(names, name)
-			}
-		}
-	}
-
-	phases := topLevel.Phases()
-	phaseIndices := phases.Phases()
-	slices.SortFunc(phaseIndices, environment.Phase.Compare)
-
-	for _, phase := range phaseIndices {
-		collect(phases.Get(phase))
-	}
-
-	// Post-carve, primitives and bootstrap procedures live in the sealed base — the
-	// parent of the runtime phase frame, which is NOT a phase-registry entry, so the
-	// phase walk above never reaches it (its key map carries no parent walk). Collect
-	// it explicitly so completion still offers car/caar/map/zero?/call-cc, mirroring
-	// Namespace.BoundSymbolNames.
-	collect(topLevel.SealedBase())
-
-	sort.Strings(names)
-	return names
+	return p.eng.BoundNames()
 }
 
 // completeFromList returns completions matching the given prefix.

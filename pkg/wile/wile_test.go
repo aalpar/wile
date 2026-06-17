@@ -508,7 +508,10 @@ func TestCall_NotAProcedure(t *testing.T) {
 
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
-	c.Assert(rtErr.Message, qt.Equals, "not a procedure")
+	c.Assert(errors.Is(err, werr.ErrNotAProcedure), qt.IsTrue)
+	// The sentinel cause restates the message verbatim, so Error() must not
+	// render it twice ("not a procedure", not "not a procedure: not a procedure").
+	c.Assert(rtErr.Error(), qt.Equals, "not a procedure")
 }
 
 func TestCall_ParameterTooManyArgs(t *testing.T) {
@@ -527,6 +530,10 @@ func TestCall_ParameterTooManyArgs(t *testing.T) {
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
 	c.Assert(rtErr.Message, qt.Contains, "expected 0 or 1 arguments")
+	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
+	// Here the cause differs from the message, so Error() appends the sentinel
+	// category — exercising the other branch of the duplicate guard.
+	c.Assert(rtErr.Error(), qt.Contains, "wrong number of arguments")
 }
 
 func TestCall_ComposableContinuation(t *testing.T) {
@@ -556,7 +563,7 @@ func TestCall_ComposableContinuation(t *testing.T) {
 	_, err = engine.Call(ctx, proc, NewInteger(1))
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
-	c.Assert(rtErr.Message, qt.Equals, "cannot call composable continuation from Go")
+	c.Assert(errors.Is(err, werr.ErrComposableContinuationFromGo), qt.IsTrue)
 }
 
 func TestCall_CallCCNonTailEscape(t *testing.T) {
@@ -933,12 +940,54 @@ func TestEval_AlreadyCancelledContext(t *testing.T) {
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
+	// Parse under a live context — the cancellation under test is Eval's. (Parse
+	// now honors ctx too (R24), so MustParse with a cancelled context would itself
+	// fail; see TestParse_AlreadyCancelledContext.)
+	expr := engine.MustParse(context.Background(), "(+ 1 2)")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2)"))
+	_, err = engine.Eval(ctx, expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
+}
+
+// TestParse_AlreadyCancelledContext pins R24: parse entry points honor ctx, so an
+// already-cancelled context surfaces as a parse error rather than being ignored.
+func TestParse_AlreadyCancelledContext(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = engine.Parse(ctx, "(+ 1 2)")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
+}
+
+// TestEngine_MaxParseDepth_ReachesParseEntries verifies the WithMaxParseDepth
+// override is threaded onto the engine's parse entry points (R24): a nesting depth
+// the default (10000) accepts is rejected under a small override. Before R24, Parse
+// used the parser's own default and silently ignored the engine's configured value.
+func TestEngine_MaxParseDepth_ReachesParseEntries(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	const deep = `((((((1))))))` // nesting depth 6
+
+	def, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = def.Parse(ctx, deep)
+	c.Assert(err, qt.IsNil)
+
+	lim, err := NewEngine(ctx, WithMaxParseDepth(3))
+	c.Assert(err, qt.IsNil)
+	_, err = lim.Parse(ctx, deep)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrParseDepthExceeded), qt.IsTrue)
 }
 
 func TestEval_CancelDuringComputation(t *testing.T) {

@@ -18,10 +18,28 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/werr"
 )
+
+// LibraryName identifies an R7RS library by its structured name parts.
+// For example, the library (scheme base) has Parts ["scheme", "base"].
+//
+// LibraryName is the public projection of the engine's internal library
+// identifier: it carries the parts without exposing the machine/compilation
+// type in the API surface. The Parts slice is owned by the caller (a fresh
+// copy per value), so mutating it cannot affect engine state.
+type LibraryName struct {
+	Parts []string
+}
+
+// String returns the Scheme representation of the library name,
+// e.g. "(scheme base)".
+func (p LibraryName) String() string {
+	return "(" + strings.Join(p.Parts, " ") + ")"
+}
 
 // LibraryInfo holds read-only metadata about a Scheme library.
 type LibraryInfo struct {

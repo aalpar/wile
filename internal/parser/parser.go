@@ -148,7 +148,13 @@ func (p *Parser) Text() string {
 }
 
 // ReadSyntax reads and returns the next syntax value from the input.
-func (p *Parser) ReadSyntax(_ context.Context) (syntax.SyntaxValue, error) {
+// It honors ctx: a cancelled or deadline-exceeded context returns its error
+// before reading the next form, so a long multi-form parse can be interrupted.
+func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
+	cerr := ctx.Err()
+	if cerr != nil {
+		return nil, cerr
+	}
 	if p.toks == nil {
 		p.toks = tokenizer.NewTokenizer(p.rdr, false)
 		p.cur, p.err = p.toks.Next()

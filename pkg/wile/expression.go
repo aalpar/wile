@@ -86,6 +86,7 @@ func (p *Engine) ReadExpression(ctx context.Context, r io.Reader) (*Expression, 
 		rr = bufio.NewReader(r)
 	}
 	pr := parser.NewParser(p.env, true, rr)
+	pr.SetMaxDepth(p.maxParseDepth)
 	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {
 		return nil, wrapCompilationError("parse error", err)
@@ -112,6 +113,7 @@ func (p *Engine) ReadExpressions(ctx context.Context, r io.Reader) ([]*Expressio
 		rr = bufio.NewReader(r)
 	}
 	pr := parser.NewParser(p.env, true, rr)
+	pr.SetMaxDepth(p.maxParseDepth)
 	var q []*Expression
 	for {
 		stx, err := pr.ReadSyntax(ctx)
@@ -155,6 +157,7 @@ func (p *Engine) mustParse(ctx context.Context, code string, source string) *Exp
 func (p *Engine) parse(ctx context.Context, code string, source string) (*Expression, error) {
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
+	pr.SetMaxDepth(p.maxParseDepth)
 
 	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {

@@ -16,6 +16,7 @@ package wile_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -23,6 +24,46 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 	"github.com/aalpar/wile/stdlib"
 )
+
+// TestLibraryName_String pins the public projection type's Scheme-form
+// rendering. LibraryName is the owned wile-package type that AvailableLibraries
+// returns instead of leaking machine/compilation.LibraryName (R19).
+func TestLibraryName_String(t *testing.T) {
+	name := wile.LibraryName{Parts: []string{"scheme", "base"}}
+	qt.Assert(t, name.String(), qt.Equals, "(scheme base)")
+
+	single := wile.LibraryName{Parts: []string{"wile"}}
+	qt.Assert(t, single.String(), qt.Equals, "(wile)")
+}
+
+// TestEngine_AvailableLibraries_OwnedType verifies AvailableLibraries returns
+// the owned []wile.LibraryName (no machine/compilation type in the signature),
+// with usable Parts and a Scheme-form String. The owned Parts slice is a copy,
+// so mutating it cannot reach engine state.
+func TestEngine_AvailableLibraries_OwnedType(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	libs, libErr := eng.AvailableLibraries(ctx)
+	qt.Assert(t, libErr, qt.IsNil)
+	qt.Assert(t, len(libs) > 0, qt.IsTrue)
+
+	var foundWile bool
+	for _, lib := range libs {
+		if len(lib.Parts) >= 1 && lib.Parts[0] == "wile" {
+			foundWile = true
+			qt.Assert(t, lib.String(), qt.Equals, "("+strings.Join(lib.Parts, " ")+")",
+				qt.Commentf("String() should render the Scheme form"))
+		}
+	}
+	qt.Assert(t, foundWile, qt.IsTrue,
+		qt.Commentf("should discover at least one (wile ...) library"))
+}
 
 func TestEngine_LoadedLibraries_Empty(t *testing.T) {
 	ctx := context.Background()

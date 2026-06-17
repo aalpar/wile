@@ -194,6 +194,15 @@ func WithMaxCallDepth(n int) EngineOption {
 // instead of crashing with a fatal Go stack overflow. A value of 0 means
 // unlimited (negative values are clamped to 0). When not called, the parser
 // uses DefaultMaxParseDepth (10000).
+//
+// Scope: this bound is threaded onto the engine's own parse entry points —
+// Parse, ParseWithSource, ReadExpression, ReadExpressions, EvalMultiple,
+// EvalProgram, and file/-e execution. Parsing triggered from within running
+// Scheme — (read ...), (read-syntax ...), (eval ...), (compile ...) — uses
+// DefaultMaxParseDepth regardless of this option, because the primitive layer
+// has no channel to the engine's configured value (mirrors WithMaxExpandDepth).
+// Those paths are still protected from the fatal stack overflow by the default;
+// they are simply not retunable per-engine.
 func WithMaxParseDepth(n int) EngineOption {
 	return func(cfg *engineConfig) {
 		if n < 0 {

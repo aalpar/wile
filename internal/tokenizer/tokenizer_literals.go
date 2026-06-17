@@ -20,6 +20,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var stringEscapes = map[rune]string{
@@ -120,7 +122,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 			p.next()
 			if p.err != nil {
 				if errors.Is(p.err, io.EOF) {
-					p.err = NewTokenizerError(unterminatedMsg)
+					p.err = NewTokenizerErrorWithWrap(werr.ErrIncompleteInput, unterminatedMsg)
 				}
 				return false
 			}

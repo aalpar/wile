@@ -15,12 +15,15 @@
 package wile
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"io"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestIsIncompleteInput(t *testing.T) {
@@ -55,31 +58,38 @@ func TestIsIncompleteInput(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "unterminated string literal",
-			err:  errors.New("unterminated string literal"),
-			want: true,
-		},
-		{
-			name: "unclosed block comment",
-			err:  errors.New("unclosed block comment"),
-			want: true,
-		},
-		{
-			name: "unknown token type",
-			err:  errors.New("unknown token type: StringStart"),
-			want: true,
-		},
-		{
-			name: "CompilationError wrapping unterminated",
+			// Mid-parse EOF: source ended inside a form (wrapMidParseEOF wraps
+			// io.ErrUnexpectedEOF). Covers unclosed lists/vectors/block comments.
+			name: "CompilationError wrapping io.ErrUnexpectedEOF",
 			err: &CompilationError{
-				Message: "parse error",
-				Cause:   errors.New("unterminated string"),
+				Message: "inside list",
+				Cause:   io.ErrUnexpectedEOF,
 			},
 			want: true,
 		},
 		{
-			name: "plain error",
-			err:  errors.New("undefined variable"),
+			// Tokenizer hit EOF inside an unterminated string/symbol.
+			name: "CompilationError wrapping ErrIncompleteInput",
+			err: &CompilationError{
+				Message: "parse error",
+				Cause:   werr.ErrIncompleteInput,
+			},
+			want: true,
+		},
+		{
+			// Parser produced a partial token from premature EOF.
+			name: "CompilationError wrapping ErrUnknownTokenType",
+			err: &CompilationError{
+				Message: "parse error",
+				Cause:   parser.ErrUnknownTokenType,
+			},
+			want: true,
+		},
+		{
+			// Detection is structural (R20), not substring-based: an error carrying
+			// a non-incomplete sentinel does not match regardless of its message.
+			name: "non-incomplete sentinel does not match",
+			err:  werr.ErrInvalidArgument,
 			want: false,
 		},
 	}
@@ -89,4 +99,39 @@ func TestIsIncompleteInput(t *testing.T) {
 			c.Assert(IsIncompleteInput(tc.err), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestIsIncompleteInput_RealParse proves structural detection wires through the
+// real tokenizer → parser → engine chain: genuinely-incomplete inputs are
+// reported incomplete, while a complete-but-malformed parse is not.
+func TestIsIncompleteInput_RealParse(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+
+	incomplete := []struct {
+		name string
+		src  string
+	}{
+		{"unterminated string", `"abc`},
+		{"unclosed list", `(foo bar`},
+		{"unclosed vector", `#(1 2`},
+		{"unclosed block comment", `#| comment`},
+	}
+	for _, tc := range incomplete {
+		c.Run("incomplete/"+tc.name, func(c *qt.C) {
+			_, perr := eng.Parse(ctx, tc.src)
+			c.Assert(perr, qt.IsNotNil)
+			c.Assert(IsIncompleteInput(perr), qt.IsTrue,
+				qt.Commentf("err = %v", perr))
+		})
+	}
+
+	// A stray close paren is a complete (malformed) token, not incomplete input —
+	// the REPL should surface it, not wait for more.
+	_, perr := eng.Parse(ctx, `)`)
+	c.Assert(perr, qt.IsNotNil)
+	c.Assert(IsIncompleteInput(perr), qt.IsFalse,
+		qt.Commentf("err = %v", perr))
 }

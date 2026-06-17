@@ -16,6 +16,7 @@ package environment_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -127,4 +128,30 @@ func TestSealedBase_BootstrapProcedureInSealedBase(t *testing.T) {
 
 	qt.Assert(t, inRuntime, qt.IsNil)   // shadowable (absent from mutable runtime's own frame)
 	qt.Assert(t, inSealed, qt.IsNotNil) // owned by the sealed base
+}
+
+// TestBoundNamesAcrossPhases verifies the all-phases name walk that backs
+// Engine.BoundNames and REPL completion: it must span the sealed base (so
+// primitives like car and bootstrap procedures like caar appear, not just the
+// mutable runtime's own frame), return sorted output, and deduplicate names that
+// occur in more than one frame.
+func TestBoundNamesAcrossPhases(t *testing.T) {
+	ns := testhelpers.NewBootstrappedNamespace(t)
+	names := ns.BoundNamesAcrossPhases()
+
+	qt.Assert(t, len(names) > 0, qt.IsTrue)
+	qt.Assert(t, sort.StringsAreSorted(names), qt.IsTrue,
+		qt.Commentf("BoundNamesAcrossPhases must return sorted output"))
+
+	seen := map[string]bool{}
+	for _, n := range names {
+		qt.Assert(t, seen[n], qt.IsFalse, qt.Commentf("duplicate name %q", n))
+		seen[n] = true
+	}
+
+	// Sealed-base coverage: car is a Go primitive, caar a Scheme bootstrap
+	// procedure — both live in the sealed base, not the mutable runtime's own
+	// frame, so a runtime-only walk would miss them.
+	qt.Assert(t, seen["car"], qt.IsTrue, qt.Commentf("primitive car must appear"))
+	qt.Assert(t, seen["caar"], qt.IsTrue, qt.Commentf("bootstrap caar must appear"))
 }
