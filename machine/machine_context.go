@@ -1062,6 +1062,12 @@ func (p *MachineContext) CurrentSource() *syntax.SourceContext {
 // no sub-context).
 const foreignBoundaryName = "<foreign-call boundary>"
 
+// defaultBacktraceDepth bounds the number of frames CaptureStackTrace walks when
+// building the backtrace attached to a user-facing Scheme error or exception.
+// Deep enough to locate the fault, shallow enough to keep error messages
+// readable; a presentation choice, not a correctness one.
+const defaultBacktraceDepth = 20
+
 // CaptureStackTrace walks the continuation chain and builds a stack trace.
 //
 // The walk spans sub-context boundaries via parentMC. When a trace is captured
@@ -1233,14 +1239,14 @@ func (p *MachineContext) resolveLocalBinding(instr Instruction) (*environment.Bi
 // when no sentinel genuinely applies.
 func (p *MachineContext) Error(msg string) *SchemeError {
 	source := p.CurrentSource()
-	trace := p.CaptureStackTrace(20)
+	trace := p.CaptureStackTrace(defaultBacktraceDepth)
 	return NewSchemeError(msg, source, trace.String())
 }
 
 // WrapError wraps an existing error with the current source location and stack trace.
 func (p *MachineContext) WrapError(err error, msg string) *SchemeError {
 	source := p.CurrentSource()
-	trace := p.CaptureStackTrace(20)
+	trace := p.CaptureStackTrace(defaultBacktraceDepth)
 	if msg == "" {
 		msg = err.Error()
 	}

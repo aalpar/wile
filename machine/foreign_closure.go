@@ -37,7 +37,7 @@ func goErrorToSchemeException(mc *MachineContext, err error) error {
 		Continuable: false,
 		Handled:     false,
 		Source:      mc.CurrentSource(),
-		StackTrace:  mc.CaptureStackTrace(20),
+		StackTrace:  mc.CaptureStackTrace(defaultBacktraceDepth),
 	}
 }
 
