@@ -22,33 +22,19 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// ToComplex128 converts a Scheme number to a Go complex128.
-// This supports all numeric types: Integer, BigInteger, Float,
-// BigFloat, Rational, Complex, and BigComplex.
+// ToComplex128 converts a Scheme number to a Go complex128, supporting every
+// numeric kind (Integer, BigInteger, Float, BigFloat, Rational, Complex,
+// BigComplex). Non-numbers are rejected with werr.ErrNotANumber.
+//
+// The per-kind conversion is the numeric registry's single source of truth
+// (values.NumberToComplex128Lossy); this helper only adds the Value→Number
+// screening + error that the registry function (taking a typed Number) omits.
 func ToComplex128(v values.Value) (complex128, error) {
-	switch n := v.(type) {
-	case *values.Integer:
-		return complex(float64(n.Value), 0), nil
-	case *values.BigInteger:
-		f, _ := n.BigInt().Float64()
-		return complex(f, 0), nil
-	case *values.Float:
-		return complex(n.Value, 0), nil
-	case *values.BigFloat:
-		f, _ := n.BigFloatValue().Float64()
-		return complex(f, 0), nil
-	case *values.Rational:
-		f, _ := n.Rat().Float64()
-		return complex(f, 0), nil
-	case *values.Complex:
-		return n.Value, nil
-	case *values.BigComplex:
-		r := n.RealAsBigFloat().Float64Truncated()
-		i := n.ImagAsBigFloat().Float64Truncated()
-		return complex(r, i), nil
-	default:
+	n, ok := v.(values.Number)
+	if !ok {
 		return 0, werr.WrapForeignErrorf(werr.ErrNotANumber, "expected a number but got %T", v)
 	}
+	return values.NumberToComplex128Lossy(n), nil
 }
 
 // ComplexOrFloat returns a Float if the imaginary part is zero,
