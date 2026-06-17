@@ -101,9 +101,11 @@ func NewExtension(name string, fn func(*Registry) error, opts ...ExtensionOption
 	return q
 }
 
-// NewDescribedExtension creates an Extension with a human-readable
-// description. Retained as a thin forwarder for backward compatibility;
-// new code should use NewExtension(..., WithDescription(desc)) directly.
+// NewDescribedExtension creates an Extension with a name, human-readable
+// description, and registration function. It is the canonical constructor for
+// simple extensions and is used by every shipped extension. It is shorthand for
+// NewExtension(name, fn, WithDescription(description)); reach for the option form
+// directly only when composing additional options.
 func NewDescribedExtension(name, description string, fn func(*Registry) error) Extension {
 	return NewExtension(name, fn, WithDescription(description))
 }

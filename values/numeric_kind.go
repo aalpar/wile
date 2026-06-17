@@ -25,10 +25,13 @@ package values
 //  7. registry/helpers/value_conv.go  — update ToComplex128, ToFloat64
 //  8. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
 //  9. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
-//  10. wile-goast/goast/mapper.go     — (EXTERNAL REPO) update numberToAST if the type maps to a Go literal
-//  11. ffi.go                        — update schemeToReflectValue (line ~300)
-//  12. internal/parser/parser_number.go — if the type can be parsed from source
-//  13. registry/helpers/equality.go   — update Eqv if the type has special eqv? semantics
+//  10. internal/parser/parser_number.go — if the type can be parsed from source
+//  11. registry/helpers/equality.go   — update Eqv if the type has special eqv? semantics
+//
+// Several historically-manual cold paths are now derived from the item-3 registry
+// (Simplify, ExactnessOf, NumberToFloat64, NumberToComplex128Lossy), so the
+// registration in item 3 is usually enough — the surviving sites above are the
+// ones the registry does not yet cover.
 //
 // The dispatch tables (item 2) are tested by TestAllDispatchEntriesPopulated.
 // The NumericTypeSpec registration (item 3) is enforced eagerly at package
