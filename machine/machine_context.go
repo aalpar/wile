@@ -1333,7 +1333,7 @@ func (p *MachineContext) SetThread(t *values.Thread) {
 // Updates an existing entry with the same key, or appends a new one.
 func (p *MachineContext) SetMark(key, val values.Value) {
 	for i := range p.marks {
-		if eqIdentity(p.marks[i].key, key) {
+		if values.EqIdentity(p.marks[i].key, key) {
 			p.marks[i].val = val
 			return
 		}
@@ -1348,7 +1348,7 @@ func (p *MachineContext) SetMark(key, val values.Value) {
 // never be called with a nil val, as nil would be indistinguishable from absent.
 func (p *MachineContext) GetMark(key values.Value) values.Value {
 	for _, e := range p.marks {
-		if eqIdentity(e.key, key) {
+		if values.EqIdentity(e.key, key) {
 			return e.val
 		}
 	}
@@ -1369,7 +1369,7 @@ func (p *MachineContext) GetImmediateMark(key values.Value) values.Value {
 	}
 	if p.cont != nil {
 		for _, e := range p.cont.marks {
-			if eqIdentity(e.key, key) {
+			if values.EqIdentity(e.key, key) {
 				return e.val
 			}
 		}
@@ -1383,7 +1383,7 @@ func (p *MachineContext) GetImmediateMark(key values.Value) values.Value {
 // Deletion uses swap-with-last for O(1) removal; insertion order is not preserved.
 func (p *MachineContext) DeleteMark(key values.Value) {
 	for i := range p.marks {
-		if eqIdentity(p.marks[i].key, key) {
+		if values.EqIdentity(p.marks[i].key, key) {
 			p.marks[i] = p.marks[len(p.marks)-1]
 			p.marks[len(p.marks)-1] = markEntry{}
 			p.marks = p.marks[:len(p.marks)-1]

@@ -212,7 +212,7 @@ type vmState struct {
 	// nil when no marks are set on this frame (zero-cost common case).
 	// Lazily allocated by SetMark on first use.
 	//
-	// Stored as a flat slice rather than a map. Key lookup uses eqIdentity
+	// Stored as a flat slice rather than a map. Key lookup uses values.EqIdentity
 	// (eq? semantics: symbol identity by name, all other types by pointer).
 	// Mark counts per frame are typically 0–3, so O(n) scan is O(1) in practice
 	// and avoids the Go-map comparability requirement that caused panics for

@@ -23,7 +23,7 @@ import (
 //
 // The frames slice contains per-frame mark slices, nearest frame first.
 // Only frames with non-nil marks are included. Each frame is a []markEntry
-// searched with eqIdentity (eq? semantics).
+// searched with values.EqIdentity (eq? semantics).
 type ContinuationMarkSet struct {
 	frames [][]markEntry
 }
@@ -46,12 +46,12 @@ func (p *ContinuationMarkSet) EqualTo(o values.Value) bool {
 
 // ToList returns a list of values for key across all frames, nearest first.
 // Returns the empty list if no frame contains the key.
-// Uses eq? semantics (eqIdentity) for key comparison.
+// Uses eq? semantics (values.EqIdentity) for key comparison.
 func (p *ContinuationMarkSet) ToList(key values.Value) values.Tuple {
 	var collected []values.Value
 	for _, frame := range p.frames {
 		for _, e := range frame {
-			if eqIdentity(e.key, key) {
+			if values.EqIdentity(e.key, key) {
 				collected = append(collected, e.val)
 				break
 			}
@@ -62,11 +62,11 @@ func (p *ContinuationMarkSet) ToList(key values.Value) values.Tuple {
 
 // First returns the value for key from the nearest frame, or defaultVal
 // if no frame contains the key.
-// Uses eq? semantics (eqIdentity) for key comparison.
+// Uses eq? semantics (values.EqIdentity) for key comparison.
 func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 	for _, frame := range p.frames {
 		for _, e := range frame {
-			if eqIdentity(e.key, key) {
+			if values.EqIdentity(e.key, key) {
 				return e.val
 			}
 		}
@@ -77,7 +77,7 @@ func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 // ToListStar returns a list of vectors for multiple keys across all frames.
 // Each vector corresponds to a frame that has at least one of the requested keys.
 // Vector positions correspond to the keys slice; noneVal fills missing keys.
-// Uses eq? semantics (eqIdentity) for key comparison.
+// Uses eq? semantics (values.EqIdentity) for key comparison.
 //
 // Racket §10.5: continuation-mark-set->list*
 func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Value) values.Tuple {
@@ -88,7 +88,7 @@ func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Val
 		for i, key := range keys {
 			vec[i] = noneVal
 			for _, e := range frame {
-				if eqIdentity(e.key, key) {
+				if values.EqIdentity(e.key, key) {
 					vec[i] = e.val
 					found = true
 					break

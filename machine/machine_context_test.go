@@ -2280,7 +2280,7 @@ func TestRunDispatch_OpPushCachedBinding(t *testing.T) {
 // Test helper only.
 func markGet(marks []markEntry, key values.Value) values.Value {
 	for _, e := range marks {
-		if eqIdentity(e.key, key) {
+		if values.EqIdentity(e.key, key) {
 			return e.val
 		}
 	}
@@ -2291,7 +2291,7 @@ func markGet(marks []markEntry, key values.Value) values.Value {
 // Panics if key is not present. Test helper only.
 func markSet(marks []markEntry, key values.Value, val values.Value) {
 	for i := range marks {
-		if eqIdentity(marks[i].key, key) {
+		if values.EqIdentity(marks[i].key, key) {
 			marks[i].val = val
 			return
 		}

@@ -209,6 +209,24 @@ func EqualTo(a, b Value) bool {
 	return equalToDeep(a, b, visited)
 }
 
+// EqIdentity implements R7RS eq? semantics: pointer identity for all types
+// except symbols, which compare by name/key (R7RS §6.1, §6.5). It is the single
+// source of truth for eq?-identity — machine (the VM's promoted OpEqQ and
+// continuation-mark scans) and registry/helpers both route through it. Living in
+// values/ dissolves the machine↛registry import barrier that previously forced a
+// duplicate copy. Kept small and branch-light so it inlines into the hot callers.
+func EqIdentity(a, b Value) bool {
+	sa, ok := a.(*Symbol)
+	if ok {
+		sb, ok2 := b.(*Symbol)
+		if ok2 {
+			return sa.Key == sb.Key
+		}
+		return false
+	}
+	return a == b
+}
+
 // equalToDeep dispatches compound types to cycle-aware helpers,
 // and delegates everything else to a.EqualTo(b).
 //

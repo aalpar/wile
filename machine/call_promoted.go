@@ -41,21 +41,6 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// eqIdentity implements R7RS eq? semantics: pointer equality for all types,
-// key equality for symbols. This duplicates registry/helpers.EqIdentity to
-// avoid a circular dependency (machine cannot import registry).
-func eqIdentity(a, b values.Value) bool {
-	sa, ok := a.(*values.Symbol)
-	if ok {
-		sb, ok2 := b.(*values.Symbol)
-		if ok2 {
-			return sa.Key == sb.Key
-		}
-		return false
-	}
-	return a == b
-}
-
 // inlineEq pops two arguments from the eval stack and sets the value register
 // to the eq? result. Returns nil on success.
 func inlineEq(mc *MachineContext) error {
@@ -63,7 +48,7 @@ func inlineEq(mc *MachineContext) error {
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++
-	mc.SetValue(values.BoolToBoolean(eqIdentity(a, b)))
+	mc.SetValue(values.BoolToBoolean(values.EqIdentity(a, b)))
 	return nil
 }
 

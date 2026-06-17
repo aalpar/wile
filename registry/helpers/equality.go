@@ -86,16 +86,10 @@ func Eqv(a, b values.Value) bool {
 	return false
 }
 
-// EqIdentity implements eq? semantics: pointer identity for all types
-// except symbols, which compare by name (R7RS §6.1, §6.5).
+// EqIdentity implements eq? semantics: pointer identity for all types except
+// symbols, which compare by name (R7RS §6.1, §6.5). Thin re-export of
+// values.EqIdentity — the single source of truth — retained for API stability
+// (registry/helpers is a public package; memq/assq pass it as a comparator value).
 func EqIdentity(a, b values.Value) bool {
-	sa, ok := a.(*values.Symbol)
-	if ok {
-		sb, ok2 := b.(*values.Symbol)
-		if ok2 {
-			return sa.Key == sb.Key
-		}
-		return false
-	}
-	return a == b
+	return values.EqIdentity(a, b)
 }
