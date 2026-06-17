@@ -301,8 +301,9 @@ func ReleaseTopLevelContext(mc *MachineContext) {
 // acquireMacroContext returns a pooled MachineContext initialized for running
 // a macro transformer closure. Callers must defer ReleaseSubContext(mc).
 //
-// This replaces NewMachineContextFromMachineClosure for the two macro expansion
-// call sites, eliminating the intermediate MachineContinuation allocation.
+// It builds the context directly from the closure's template and env for the
+// two macro expansion call sites, eliminating the intermediate
+// MachineContinuation allocation a continuation-based constructor would incur.
 func acquireMacroContext(ctx context.Context, cls *MachineClosure) *MachineContext {
 	mc := acquireSubContext()
 	mc.ctx = ctx

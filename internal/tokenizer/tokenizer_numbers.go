@@ -516,12 +516,10 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
 }
 
-// SignedImaginaryPart reads an optional imaginary part for complex numbers.
+// mayReadSignedImaginaryPart reads an optional imaginary part for complex numbers.
 // Called when current character is '+' or '-' after reading a real number.
 // Handles patterns like: +3i, +3.5i, +i, -2i, -inf.0i, -nan.0i
-// The complexState parameter specifies which state to set on success
-// (SignedComplex or UnsignedComplex depending on whether the real part was signed).
-func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
+func (p *Tokenizer) mayReadSignedImaginaryPart(r int) {
 	p.mayConsumeSign()
 	if p.err != nil {
 		return
@@ -750,7 +748,7 @@ func (p *Tokenizer) readSignedComplexSuffix(r int) {
 		p.state = TokenizerStateSignedImaginary
 	case isExplicitSign(p.curr()):
 		p.state = TokenizerStateSignedComplex
-		p.mayReadSignedImaginaryPart(true, r)
+		p.mayReadSignedImaginaryPart(r)
 	case isComplexPolar(p.curr()):
 		p.state = TokenizerStateSignedComplexPolar
 		p.mayReadPolarPart(r)

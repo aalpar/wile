@@ -736,21 +736,6 @@ func TestMachineContext_ApplyCaseLambda_NoMatchErrorSentinel(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
-func TestNewMachineContextFromMachineClosure(t *testing.T) {
-	topEnv := environment.NewNamespace().Runtime()
-	lenv := environment.NewLocalEnvironment(2)
-	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
-	tpl := NewNativeTemplate(2, 0, false)
-
-	cls := NewClosureWithTemplate(tpl, env)
-	mc := NewMachineContextFromMachineClosure(context.Background(), cls)
-
-	qt.Assert(t, mc.template, qt.Equals, tpl)
-	qt.Assert(t, mc.env, qt.Equals, env)
-	qt.Assert(t, mc.pc, qt.Equals, 0)
-	qt.Assert(t, mc.cont, qt.IsNil)
-}
-
 func TestMachineContext_Error(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)

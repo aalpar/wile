@@ -38,7 +38,7 @@ func TestToLowerASCII(t *testing.T) {
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			got := ToLowerASCII(tt.in)
+			got := toLowerASCII(tt.in)
 			c.Assert(got, qt.Equals, tt.want)
 		})
 	}
@@ -62,7 +62,7 @@ func TestHasPrefixCI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			got := HasPrefixCI(tt.s, tt.prefix)
+			got := hasPrefixCI(tt.s, tt.prefix)
 			c.Assert(got, qt.Equals, tt.want)
 		})
 	}
@@ -86,7 +86,7 @@ func TestHasSuffixCI(t *testing.T) {
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			got := HasSuffixCI(tt.s, tt.suffix)
+			got := hasSuffixCI(tt.s, tt.suffix)
 			c.Assert(got, qt.Equals, tt.want)
 		})
 	}

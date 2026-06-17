@@ -41,40 +41,40 @@ func IndexExponentMarker(s string) int {
 	return strings.IndexAny(s, "eEsSfFdDlL")
 }
 
-// ToLowerASCII converts an ASCII byte to lowercase.
+// toLowerASCII converts an ASCII byte to lowercase.
 // Non-ASCII bytes are returned unchanged.
-func ToLowerASCII(c byte) byte {
+func toLowerASCII(c byte) byte {
 	if c >= 'A' && c <= 'Z' {
 		return c + ('a' - 'A')
 	}
 	return c
 }
 
-// HasPrefixCI reports whether s begins with prefix, using ASCII case-insensitive
+// hasPrefixCI reports whether s begins with prefix, using ASCII case-insensitive
 // comparison. Only ASCII letters (A-Z, a-z) are treated as case-insensitive;
 // all other bytes must match exactly.
-func HasPrefixCI(s, prefix string) bool {
+func hasPrefixCI(s, prefix string) bool {
 	if len(s) < len(prefix) {
 		return false
 	}
 	for i := 0; i < len(prefix); i++ {
-		if ToLowerASCII(s[i]) != ToLowerASCII(prefix[i]) {
+		if toLowerASCII(s[i]) != toLowerASCII(prefix[i]) {
 			return false
 		}
 	}
 	return true
 }
 
-// HasSuffixCI reports whether s ends with suffix, using ASCII case-insensitive
+// hasSuffixCI reports whether s ends with suffix, using ASCII case-insensitive
 // comparison. Only ASCII letters (A-Z, a-z) are treated as case-insensitive;
 // all other bytes must match exactly.
-func HasSuffixCI(s, suffix string) bool {
+func hasSuffixCI(s, suffix string) bool {
 	if len(s) < len(suffix) {
 		return false
 	}
 	start := len(s) - len(suffix)
 	for i := 0; i < len(suffix); i++ {
-		if ToLowerASCII(s[start+i]) != ToLowerASCII(suffix[i]) {
+		if toLowerASCII(s[start+i]) != toLowerASCII(suffix[i]) {
 			return false
 		}
 	}
@@ -85,7 +85,7 @@ func HasSuffixCI(s, suffix string) bool {
 // using ASCII case-insensitive comparison. If s doesn't start with prefix
 // (case-insensitively), s is returned unchanged.
 func TrimPrefixCI(s, prefix string) string {
-	if HasPrefixCI(s, prefix) {
+	if hasPrefixCI(s, prefix) {
 		return s[len(prefix):]
 	}
 	return s
@@ -95,7 +95,7 @@ func TrimPrefixCI(s, prefix string) string {
 // using ASCII case-insensitive comparison. If s doesn't end with suffix
 // (case-insensitively), s is returned unchanged.
 func TrimSuffixCI(s, suffix string) string {
-	if HasSuffixCI(s, suffix) {
+	if hasSuffixCI(s, suffix) {
 		return s[:len(s)-len(suffix)]
 	}
 	return s

@@ -46,8 +46,8 @@
 // # Comparisons
 //
 //   - [Eqv]: R7RS eqv? semantics for memv/assv
-//   - [CharCompare], [CharCompareVariadic]: character comparisons
-//   - [StringCompare], [StringCompareVariadic]: string comparisons
+//   - [CharCompareVariadic]: character comparisons
+//   - [StringCompareVariadic]: string comparisons
 //
 // # Type Conversion
 //

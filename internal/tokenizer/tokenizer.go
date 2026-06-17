@@ -21,7 +21,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/werr"
 )
 
 // Error messages returned by the tokenizer.
@@ -50,12 +49,6 @@ const (
 	MessageInvalidCharacterMnemonic              = "invalid character mnemonic"
 	MessageUnterminatedExtendedSymbol            = "unterminated extended symbol"
 	MessageUnterminatedString                    = "unterminated string"
-)
-
-// ErrNotAnUnsignedByteMarker is returned when parsing fails on an unsigned byte marker.
-var (
-	ErrNotAnUnsignedByteMarker = werr.NewStaticError("not an unsigned byte marker")
-	ErrNotALiteral             = werr.NewStaticError("not a literal")
 )
 
 // TokenizerState represents the type of token recognized by the tokenizer.

@@ -23,23 +23,6 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// CharCompare is a helper for binary character comparison primitives.
-// It extracts two characters from the primitive's arguments and applies the comparator.
-func CharCompare(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
-	c1 := mc.Arg(0)
-	c2 := mc.Arg(1)
-	ch1, ok := c1.(*values.Character)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
-	}
-	ch2, ok := c2.(*values.Character)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharacter, "%s: expected a character but got %T", name, c2)
-	}
-	mc.SetValue(values.BoolToBoolean(cmp(ch1.Value, ch2.Value)))
-	return nil
-}
-
 // CharCompareVariadic is a helper for variadic character comparison primitives.
 // It extracts characters from the variadic args and applies the comparator pairwise.
 func CharCompareVariadic(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {

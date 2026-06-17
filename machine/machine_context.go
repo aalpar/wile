@@ -172,10 +172,6 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 	return q
 }
 
-func NewMachineContextFromMachineClosure(ctx context.Context, cls *MachineClosure) *MachineContext {
-	return NewMachineContext(ctx, NewMachineContinuation(nil, cls.template, cls.env))
-}
-
 func (p *MachineContext) Parent() *MachineContinuation {
 	return p.cont
 }

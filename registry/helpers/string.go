@@ -20,23 +20,6 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// StringCompare is a helper for binary string comparison primitives.
-// It extracts two strings from the primitive's arguments and applies the comparator.
-func StringCompare(mc machine.CallContext, name string, cmp func(a, b string) bool) error {
-	s1 := mc.Arg(0)
-	s2 := mc.Arg(1)
-	str1, ok := s1.(*values.String)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString, "%s: expected a string but got %T", name, s1)
-	}
-	str2, ok := s2.(*values.String)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString, "%s: expected a string but got %T", name, s2)
-	}
-	mc.SetValue(values.BoolToBoolean(cmp(str1.Value, str2.Value)))
-	return nil
-}
-
 // StringCompareVariadic is a helper for variadic string comparison primitives.
 // It extracts strings from the variadic args and applies the comparator pairwise.
 func StringCompareVariadic(mc machine.CallContext, name string, cmp func(a, b string) bool) error {
