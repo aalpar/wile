@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/internal/forms"
 )
 
 func TestTypeSwitchFormsRegistered(t *testing.T) {
@@ -82,5 +84,22 @@ func TestVerifyExpanders_SyntaxCompilersHaveExpanders(t *testing.T) {
 	for _, e := range syntaxCompilerEntries {
 		qt.Assert(t, expanderNames[e.Name], qt.IsTrue,
 			qt.Commentf("syntax compiler %q has no primitive expander entry", e.Name))
+	}
+}
+
+// TestTypeSwitchFormsAreKnownForms cross-checks typeSwitchForms against the form
+// registry: every Tier 1 form the map claims compileValidated's type switch
+// handles must be an actually-registered form. typeSwitchForms is hand-maintained
+// to mirror that switch; VerifyCompilers iterates forms.Names() only, so it catches
+// a switch form MISSING from the map (reported as "missing compiler") but NOT a
+// phantom map entry that names no real form. This closes that remaining direction.
+func TestTypeSwitchFormsAreKnownForms(t *testing.T) {
+	known := make(map[string]bool)
+	for _, name := range forms.Names() {
+		known[name] = true
+	}
+	for name := range typeSwitchForms {
+		qt.Assert(t, known[name], qt.IsTrue,
+			qt.Commentf("typeSwitchForms lists %q, which is not a registered form (forms.Names())", name))
 	}
 }
