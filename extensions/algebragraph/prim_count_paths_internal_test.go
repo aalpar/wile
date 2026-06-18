@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // TestExtractNumNodes_RejectsOversized pins the allocation bound at the

@@ -19,8 +19,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 )
 
 func newTplWithSources(sources ...*syntax.SourceContext) *machine.NativeTemplate {

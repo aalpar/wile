@@ -18,8 +18,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )

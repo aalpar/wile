@@ -22,9 +22,9 @@ import (
 	"time"
 
 	extsystem "github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/values/valuestest"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )

@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/pkg/stdlib"
 )
 
 // Phase 3 (TDD RED) allocation tests for the escape-gated frame-reclamation

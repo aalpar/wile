@@ -20,12 +20,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/schemeutil"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry/helpers"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/schemeutil"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // ensureInexactDecimal ensures a float string has a decimal point, even in

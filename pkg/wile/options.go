@@ -19,11 +19,11 @@ import (
 	"maps"
 
 	"github.com/aalpar/wile/coverage"
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // LibraryImportEvent records what happened when a library was imported.
@@ -268,7 +268,7 @@ func WithInlineThreshold(n int) EngineOption {
 // Without this option, (import ...) raises a configuration error.
 //
 // Paths are searched in order: user-supplied paths first, then the defaults
-// ("." and "./stdlib/lib"). An empty call WithLibraryPaths() enables library support
+// ("." and "./pkg/stdlib/lib"). An empty call WithLibraryPaths() enables library support
 // with defaults only.
 //
 // Example:
@@ -276,7 +276,7 @@ func WithInlineThreshold(n int) EngineOption {
 //	eng, err := wile.NewEngine(ctx,
 //	    wile.WithLibraryPaths("/app/libs", "./vendor"),
 //	)
-//	// search order: /app/libs, ./vendor, ., ./stdlib/lib
+//	// search order: /app/libs, ./vendor, ., ./pkg/stdlib/lib
 func WithLibraryPaths(paths ...string) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.libraryEnabled = true

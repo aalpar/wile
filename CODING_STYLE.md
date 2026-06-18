@@ -493,7 +493,7 @@ func TestInteger_Add(t *testing.T) {
 
 ### Testing Framework
 
-Use `quicktest` (`qt`) with `valuestest.SchemeEquals` custom checker (import `"github.com/aalpar/wile/values/valuestest"`):
+Use `quicktest` (`qt`) with `valuestest.SchemeEquals` custom checker (import `"github.com/aalpar/wile/pkg/values/valuestest"`):
 
 ```go
 qt.Assert(t, actual, qt.Equals, expected)
@@ -532,9 +532,9 @@ import (
     "io"
     "strings"
 
-    "github.com/aalpar/wile/environment"
-    "github.com/aalpar/wile/internal/syntax"
-    "github.com/aalpar/wile/values"
+    "github.com/aalpar/wile/pkg/environment"
+    "github.com/aalpar/wile/pkg/internal/syntax"
+    "github.com/aalpar/wile/pkg/values"
 
     "github.com/jessevdk/go-flags"
 )

@@ -99,7 +99,7 @@ func TestFindMissing(t *testing.T) {
 // hand-maintained knownValueTypes list matches exactly. A new value type, a
 // rename, or a removal breaks this test until knownValueTypes is corrected.
 func TestKnownValueTypesMatchesSource(t *testing.T) {
-	derived, err := exportedValueTypes(filepath.Join("..", "..", "values"))
+	derived, err := exportedValueTypes(filepath.Join("..", "..", "pkg", "values"))
 	if err != nil {
 		t.Fatalf("deriving value types: %v", err)
 	}

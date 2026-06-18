@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/stdlib"
 )
 
 // TestAlgebraGraphLoadsUnderSmallProfile pins the regression where the

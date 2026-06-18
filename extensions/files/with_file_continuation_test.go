@@ -23,9 +23,9 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	extfiles "github.com/aalpar/wile/extensions/files"
-	extio "github.com/aalpar/wile/internal/extensions/io"
+	extio "github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
 )
 
 // newTestEngine creates a Wile engine with core + io + files extensions for testing.

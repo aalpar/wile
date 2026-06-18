@@ -15,12 +15,12 @@
 package introspection
 
 import (
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/registry/helpers"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // PrimEnvironmentQ implements the (environment?) predicate.

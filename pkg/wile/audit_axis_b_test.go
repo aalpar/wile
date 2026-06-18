@@ -50,11 +50,11 @@ func TestAxisBSmoke(t *testing.T) {
 	}
 	c := qt.New(t)
 
-	// This test lives at pkg/wile/; the audit/ scripts and testdata/ manifest
-	// live at the module root, two directories up.
+	// This test lives at pkg/wile/; the audit scripts live at tools/audit/
+	// and the testdata/ manifest at the module root, two directories up.
 	_, thisFile, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
-	script := filepath.Join(repoRoot, "audit", "wile-axis-b.scm")
+	script := filepath.Join(repoRoot, "tools", "audit", "wile-axis-b.scm")
 
 	_, err := os.Stat(script)
 	c.Assert(err, qt.IsNil, qt.Commentf("script missing: %s", script))

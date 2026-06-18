@@ -17,7 +17,7 @@
 // reflow this file.
 package testdata
 
-import "github.com/aalpar/wile/values"
+import "github.com/aalpar/wile/pkg/values"
 
 func markedAbove(x values.Value) int {
 	//exhaustive

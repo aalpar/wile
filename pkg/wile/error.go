@@ -19,8 +19,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // CompilationError wraps errors from parsing, expanding, or compiling Scheme code.

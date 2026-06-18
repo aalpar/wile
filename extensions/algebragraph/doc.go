@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package algebragraph exposes the Go-side graph kernels in algebra/graph
+// Package algebragraph exposes the Go-side graph kernels in extensions/algebra/graph
 // as Scheme primitives. It is the FFI surface that lets (wile algebra graph)
 // route bigint-carrier semiring queries through the in-place monotone kernel
 // and SCC condensation, instead of the all-Scheme worklist fallback.

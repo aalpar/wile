@@ -15,8 +15,8 @@
 package wile
 
 import (
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/registry"
 )
 
 // PrimitiveSpec defines a primitive to be registered.

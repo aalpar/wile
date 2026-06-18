@@ -181,9 +181,9 @@ env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 ```go
 import (
     "context"
-    "github.com/aalpar/wile/environment"
-    "github.com/aalpar/wile/internal/bootstrap"
-    "github.com/aalpar/wile/machine/compilation"
+    "github.com/aalpar/wile/pkg/environment"
+    "github.com/aalpar/wile/pkg/internal/bootstrap"
+    "github.com/aalpar/wile/pkg/machine/compilation"
 )
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {

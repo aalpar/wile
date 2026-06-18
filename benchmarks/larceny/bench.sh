@@ -32,7 +32,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 WILE_ROOT="$(cd "$DIR/../.." && pwd)"
 SCHEME="${WILE_SCHEME:-$WILE_ROOT/dist/wile}"
-LIBDIR="$WILE_ROOT/stdlib/lib"
+LIBDIR="$WILE_ROOT/pkg/stdlib/lib"
 SRC="$DIR/src"
 INPUTS="$DIR/inputs"
 TMP="$DIR/tmp"

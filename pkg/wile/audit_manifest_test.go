@@ -44,8 +44,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 var errResolveImpl = werr.NewStaticError("audit manifest: resolveImpl")
@@ -402,13 +402,13 @@ func TestFormatManifest(t *testing.T) {
 				{
 					Name:       "car",
 					ReturnType: "any",
-					GoFunction: "github.com/aalpar/wile/registry/core.primCar",
+					GoFunction: "github.com/aalpar/wile/pkg/registry/core.primCar",
 					SourceFile: "registry/core/lists.go",
 					SourceLine: 42,
 				},
 			},
 			expected: "(" +
-				`("car" "any" () "github.com/aalpar/wile/registry/core.primCar" "registry/core/lists.go:42")` +
+				`("car" "any" () "github.com/aalpar/wile/pkg/registry/core.primCar" "registry/core/lists.go:42")` +
 				")\n",
 		},
 		{
@@ -545,12 +545,12 @@ func TestManifestSanity(t *testing.T) {
 		paramTypes     []string // nil = skip check; otherwise exact match
 	}{
 		// Core primitives — registered as plain Go functions.
-		{name: "car", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"pair"}},
-		{name: "cdr", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"pair"}},
-		{name: "cons", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"any", "any"}},
+		{name: "car", pkgSubstr: "wile/pkg/registry/core", sourceContains: "pkg/registry/core/", paramTypes: []string{"pair"}},
+		{name: "cdr", pkgSubstr: "wile/pkg/registry/core", sourceContains: "pkg/registry/core/", paramTypes: []string{"pair"}},
+		{name: "cons", pkgSubstr: "wile/pkg/registry/core", sourceContains: "pkg/registry/core/", paramTypes: []string{"any", "any"}},
 		// `+` is variadic: ParamCount=1, IsVariadic=true, ParamTypes=[TypeNumber].
 		// The lone slot is the rest-element type; rendered with "..." prefix.
-		{name: "+", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"...number"}},
+		{name: "+", pkgSubstr: "wile/pkg/registry/core", sourceContains: "pkg/registry/core/", paramTypes: []string{"...number"}},
 
 		// Extension primitives — one per major extension package. If any
 		// of these starts resolving to the wrong package, it means the
@@ -562,7 +562,7 @@ func TestManifestSanity(t *testing.T) {
 		// wrapper out of extensions/math would surface here.
 		{name: "file-exists?", pkgSubstr: "wile/extensions/files", sourceContains: "extensions/files/"},
 		{name: "sin", pkgSubstr: "wile/extensions/math", sourceContains: "extensions/math/"},
-		{name: "read-char", pkgSubstr: "wile/internal/extensions/io", sourceContains: "internal/extensions/io/"},
+		{name: "read-char", pkgSubstr: "wile/pkg/extensions/io", sourceContains: "pkg/extensions/io/"},
 		{name: "current-time", pkgSubstr: "wile/extensions/threads", sourceContains: "extensions/threads/"},
 	}
 	for _, tc := range tcs {

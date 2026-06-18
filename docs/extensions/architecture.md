@@ -58,10 +58,10 @@ R7RS library system is enabled — automatically importable from Scheme via
 package myext
 
 import (
-    "github.com/aalpar/wile/machine"
-    "github.com/aalpar/wile/registry"
-    "github.com/aalpar/wile/values"
-    "github.com/aalpar/wile/werr"
+    "github.com/aalpar/wile/pkg/machine"
+    "github.com/aalpar/wile/pkg/registry"
+    "github.com/aalpar/wile/pkg/values"
+    "github.com/aalpar/wile/pkg/werr"
 )
 
 // Extension is the package's entry point.
@@ -538,10 +538,10 @@ Extensions should depend only on public packages:
 
 ```
 extensions/myext
-  ├── github.com/aalpar/wile/registry       ← Extension, Registry, PrimitiveSpec
-  ├── github.com/aalpar/wile/machine        ← MachineContext, ForeignFunction
-  ├── github.com/aalpar/wile/values         ← Value types, error types
-  └── github.com/aalpar/wile/registry/helpers  ← Type conversion helpers
+  ├── github.com/aalpar/wile/pkg/registry       ← Extension, Registry, PrimitiveSpec
+  ├── github.com/aalpar/wile/pkg/machine        ← MachineContext, ForeignFunction
+  ├── github.com/aalpar/wile/pkg/values         ← Value types, error types
+  └── github.com/aalpar/wile/pkg/registry/helpers  ← Type conversion helpers
 ```
 
 No circular dependencies between extensions. Each is independently importable.

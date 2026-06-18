@@ -22,7 +22,7 @@ if [ ! -x "$SCHEME" ]; then
 fi
 
 # Discover all test files
-TEST_FILES=$(find test stdlib/lib -name '*-test.scm' 2>/dev/null | sort)
+TEST_FILES=$(find test pkg/stdlib/lib -name '*-test.scm' 2>/dev/null | sort)
 
 if [ -z "$TEST_FILES" ]; then
     echo "No test files found"

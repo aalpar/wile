@@ -51,12 +51,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/validate"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/validate"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/stdlib"
 )
 
 // canonicalGabriel mirrors examples/benchmarks/run-canonical.sh. All sixteen are

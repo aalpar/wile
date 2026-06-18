@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/pkg/stdlib"
 )
 
 // Phase 6 measurement for escape-gated frame reclamation. The optimization is

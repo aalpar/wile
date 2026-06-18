@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	extmath "github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )

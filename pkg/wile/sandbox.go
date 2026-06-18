@@ -14,7 +14,7 @@
 
 package wile
 
-import "github.com/aalpar/wile/security"
+import "github.com/aalpar/wile/pkg/security"
 
 // SandboxOption configures the sandbox modifier.
 type SandboxOption func(*sandboxConfig)

@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/extensions/math"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/registry"
 
 	qt "github.com/frankban/quicktest"
 )

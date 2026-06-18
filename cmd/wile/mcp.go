@@ -30,13 +30,13 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	ioext "github.com/aalpar/wile/internal/extensions/io"
+	ioext "github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/repl"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/repl"
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
 )
 
 type mcpServer struct {

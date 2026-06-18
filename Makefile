@@ -99,7 +99,7 @@ install-base: build
 	cp $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(PREFIX)/bin/$(MY_BIN)
 	@echo "Installed $(MY_BIN) to $(PREFIX)/bin/$(MY_BIN)"
 	@mkdir -p $(DATADIR)
-	cp -R stdlib/lib $(DATADIR)/
+	cp -R pkg/stdlib/lib $(DATADIR)/
 	@echo "Installed libraries to $(DATADIR)/lib/"
 
 .PHONY: install-darwin
@@ -243,11 +243,11 @@ KANREN_BENCH=examples/benchmarks/kanren-benchmark.scm
 .PHONY: bench-kanren
 bench-kanren: build
 	@if command -v gtime >/dev/null 2>&1; then \
-		SCHEME_LIBRARY_PATH=stdlib/lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
+		SCHEME_LIBRARY_PATH=pkg/stdlib/lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
 	elif [ -x /usr/bin/time ]; then \
-		SCHEME_LIBRARY_PATH=stdlib/lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
+		SCHEME_LIBRARY_PATH=pkg/stdlib/lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
 	else \
-		SCHEME_LIBRARY_PATH=stdlib/lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH); \
+		SCHEME_LIBRARY_PATH=pkg/stdlib/lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH); \
 	fi
 
 # Run canonical Gabriel benchmark suite (16 benchmarks).
@@ -321,7 +321,7 @@ profile-zebra:
 # Writes per-package profiles to ./build/profiles/cpu/ then merges into cpu.prof.
 # View with: go tool pprof -http=:8080 ./build/profiles/cpu.prof
 #   make profile-cpu
-#   make profile-cpu PKG=./values/...    # Profile a single package
+#   make profile-cpu PKG=./pkg/values/...    # Profile a single package
 
 .PHONY: profile-cpu
 profile-cpu:
@@ -344,7 +344,7 @@ profile-cpu:
 # Writes per-package profiles to ./build/profiles/mem/ then merges into mem.prof.
 # View with: go tool pprof -http=:8080 ./build/profiles/mem.prof
 #   make profile-mem
-#   make profile-mem PKG=./values/...    # Profile a single package
+#   make profile-mem PKG=./pkg/values/...    # Profile a single package
 .PHONY: profile-mem
 profile-mem:
 	@mkdir -p $(PROFILE_DIR)/mem
@@ -402,8 +402,8 @@ coverhtml:
 	open $(GO_BUILD_DIR)/coverage.html 2>/dev/null || xdg-open $(GO_BUILD_DIR)/coverage.html 2>/dev/null || echo "Open $(GO_BUILD_DIR)/coverage.html in your browser"
 
 # Run tests with coverage and enforce per-package threshold (80%).
-# Excluded packages: cmd, repl, forms, extensions/*, internal/testutil,
-# registry/testhelpers, examples/embedding, integration.
+# Excluded packages: cmd/*, pkg/repl, pkg/testutil, pkg/machine/testutil,
+# pkg/registry/testhelpers, pkg/stdlib, examples/embedding, integration, tools/ruleguard.
 # cover-scm runs as a prerequisite so the Scheme-side sweep happens
 # alongside the Go suite; the two profiles are produced separately
 # (build/scheme-coverage.out vs build/coverage.out) and are not

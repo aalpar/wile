@@ -15,8 +15,8 @@
 package sat
 
 import (
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // literal is a packed boolean literal: 2*var + sign, where sign=0 means

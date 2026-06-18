@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/pkg/machine"
 )
 
 // templateTreeHasOpcode recursively searches a NativeTemplate and its

@@ -15,8 +15,8 @@
 package process
 
 import (
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // Extension is the process execution extension.

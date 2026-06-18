@@ -22,10 +22,10 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	extprocess "github.com/aalpar/wile/extensions/process"
-	extio "github.com/aalpar/wile/internal/extensions/io"
+	extio "github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/values"
 )
 
 func newEngine(t *testing.T) *wile.Engine {

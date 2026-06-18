@@ -20,16 +20,16 @@ import (
 	"errors"
 	"io"
 
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/schemeutil"
-	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/registry/helpers"
-	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/schemeutil"
+	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // ProfileFactory is the callback used by (environment '(wile <name>)) to

@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aalpar/wile/security"
+	"github.com/aalpar/wile/pkg/security"
 )
 
 // When the engine's authorizer confines file access to a root directory, the

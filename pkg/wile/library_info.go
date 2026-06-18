@@ -20,8 +20,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // LibraryName identifies an R7RS library by its structured name parts.

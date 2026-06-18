@@ -15,9 +15,9 @@
 package wile
 
 import (
-	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/security"
+	"github.com/aalpar/wile/pkg/internal/bootstrap"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/security"
 )
 
 // Profile identifies a named environment configuration.

@@ -30,7 +30,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/pkg/machine"
 )
 
 // Entry is one covered (or not covered) s-expression.

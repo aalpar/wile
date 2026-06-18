@@ -24,7 +24,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/extensions/charsets"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // runeSlice is a quick.Generator-friendly wrapper that produces small

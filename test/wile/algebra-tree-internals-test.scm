@@ -13,7 +13,7 @@
         (wile algebra setoid)
         (wile algebra rewrite))
 
-(include "stdlib/lib/wile/algebra/tree.scm")
+(include "pkg/stdlib/lib/wile/algebra/tree.scm")
 
 ;;; Built-in s-expression protocol: (op c1 c2 ...) is compound with label op
 ;;; and children c1..; an atom is a leaf labeled by itself.

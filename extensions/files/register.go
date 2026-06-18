@@ -18,8 +18,8 @@ package files
 import (
 	_ "embed"
 
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // withFileMacroSource contains with-input-from-file and with-output-to-file macros.

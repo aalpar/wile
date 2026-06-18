@@ -22,9 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aalpar/wile/internal/testutil"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/testutil"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )

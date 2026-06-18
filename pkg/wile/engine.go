@@ -23,17 +23,17 @@ import (
 	"sync"
 
 	"github.com/aalpar/wile/coverage"
-	"github.com/aalpar/wile/docparse"
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/machine/compilation/sourceload"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/registry/core"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/docparse"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
+	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // ErrEngineClosed is returned when Close is called on an already-closed engine.

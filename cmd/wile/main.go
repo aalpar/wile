@@ -31,11 +31,11 @@ import (
 
 	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/repl"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/repl"
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/werr"
 
 	"github.com/jessevdk/go-flags"
 )

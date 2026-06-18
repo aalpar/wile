@@ -15,8 +15,8 @@
 package wile
 
 import (
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // BreakpointInfo holds read-only breakpoint state for display.

@@ -7,8 +7,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/stdlib"
 )
 
 func TestDocRegistrationObserver_ImportUpdatesLiveRegistry(t *testing.T) {

@@ -22,9 +22,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/values"
-	valuestest "github.com/aalpar/wile/values/valuestest"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/values"
+	valuestest "github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestSealedBase_G2_StdlibProcedureDocs is the G2 regression. Post-carve, Scheme-defined
