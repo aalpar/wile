@@ -47,7 +47,7 @@ This promotion is correct per R7RS but has practical consequences:
 
 For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting-semiring path queries on DAGs — `values/numeric_scratch.go` provides unexported in-place arithmetic helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`). These reuse the destination's existing `[]Word` backing rather than allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op (the path through `(*BigInteger).Add`).
 
-The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. See `values/CLAUDE.md` §"In-Place Arithmetic on BigInteger" for the helpers' contract (aliasing, storage reuse) and microbench numbers.
+The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `extensions/algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. See `pkg/values/CLAUDE.md` §"In-Place Arithmetic on BigInteger" for the helpers' contract (aliasing, storage reuse) and microbench numbers.
 
 The fast path applies only to `*BigInteger`. Other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but separate plans (see `memory/2026-05-24-bignum-allocation-reduction.md` §"Out of scope" for the scoping rationale).
 

@@ -292,49 +292,49 @@
 
 ;; Maps the fully-qualified Go pointer-type strings that go-ssa-narrow
 ;; emits into the wile-facing type names from values/value_type.go. Keep
-;; synchronized with wile/values/value_type.go typeNames table.
+;; synchronized with wile/pkg/values/value_type.go typeNames table.
 (define go-type->wile-type-table
   '(;; Numbers
-    ("*github.com/aalpar/wile/values.Integer"             . "integer")
-    ("*github.com/aalpar/wile/values.BigInteger"          . "integer")
-    ("*github.com/aalpar/wile/values.Float"               . "flonum")
-    ("*github.com/aalpar/wile/values.BigFloat"            . "flonum")
-    ("*github.com/aalpar/wile/values.Rational"            . "rational")
-    ("*github.com/aalpar/wile/values.Complex"             . "complex")
-    ("*github.com/aalpar/wile/values.BigComplex"          . "complex")
+    ("*github.com/aalpar/wile/pkg/values.Integer"             . "integer")
+    ("*github.com/aalpar/wile/pkg/values.BigInteger"          . "integer")
+    ("*github.com/aalpar/wile/pkg/values.Float"               . "flonum")
+    ("*github.com/aalpar/wile/pkg/values.BigFloat"            . "flonum")
+    ("*github.com/aalpar/wile/pkg/values.Rational"            . "rational")
+    ("*github.com/aalpar/wile/pkg/values.Complex"             . "complex")
+    ("*github.com/aalpar/wile/pkg/values.BigComplex"          . "complex")
     ;; Basic values
-    ("*github.com/aalpar/wile/values.Boolean"             . "boolean")
-    ("*github.com/aalpar/wile/values.Character"           . "character")
-    ("*github.com/aalpar/wile/values.String"              . "string")
-    ("*github.com/aalpar/wile/values.Symbol"              . "symbol")
-    ("*github.com/aalpar/wile/values.Byte"                . "byte")
+    ("*github.com/aalpar/wile/pkg/values.Boolean"             . "boolean")
+    ("*github.com/aalpar/wile/pkg/values.Character"           . "character")
+    ("*github.com/aalpar/wile/pkg/values.String"              . "string")
+    ("*github.com/aalpar/wile/pkg/values.Symbol"              . "symbol")
+    ("*github.com/aalpar/wile/pkg/values.Byte"                . "byte")
     ;; Collections
-    ("*github.com/aalpar/wile/values.Pair"                . "pair")
-    ("*github.com/aalpar/wile/values.Vector"              . "vector")
-    ("*github.com/aalpar/wile/values.ByteVector"          . "bytevector")
-    ("*github.com/aalpar/wile/values.Hashtable"           . "hashtable")
+    ("*github.com/aalpar/wile/pkg/values.Pair"                . "pair")
+    ("*github.com/aalpar/wile/pkg/values.Vector"              . "vector")
+    ("*github.com/aalpar/wile/pkg/values.ByteVector"          . "bytevector")
+    ("*github.com/aalpar/wile/pkg/values.Hashtable"           . "hashtable")
     ;; Ports — map to textual/binary input/output per R7RS
-    ("*github.com/aalpar/wile/values.CharacterInputPort"  . "textual-input-port")
-    ("*github.com/aalpar/wile/values.CharacterOutputPort" . "textual-output-port")
-    ("*github.com/aalpar/wile/values.BinaryInputPort"     . "binary-input-port")
-    ("*github.com/aalpar/wile/values.BinaryOutputPort"    . "binary-output-port")
-    ("*github.com/aalpar/wile/values.StringInputPort"     . "textual-input-port")
-    ("*github.com/aalpar/wile/values.StringOutputPort"    . "textual-output-port")
-    ("*github.com/aalpar/wile/values.ByteVectorInputPort" . "binary-input-port")
-    ("*github.com/aalpar/wile/values.ByteVectorOutputPort" . "binary-output-port")
+    ("*github.com/aalpar/wile/pkg/values.CharacterInputPort"  . "textual-input-port")
+    ("*github.com/aalpar/wile/pkg/values.CharacterOutputPort" . "textual-output-port")
+    ("*github.com/aalpar/wile/pkg/values.BinaryInputPort"     . "binary-input-port")
+    ("*github.com/aalpar/wile/pkg/values.BinaryOutputPort"    . "binary-output-port")
+    ("*github.com/aalpar/wile/pkg/values.StringInputPort"     . "textual-input-port")
+    ("*github.com/aalpar/wile/pkg/values.StringOutputPort"    . "textual-output-port")
+    ("*github.com/aalpar/wile/pkg/values.ByteVectorInputPort" . "binary-input-port")
+    ("*github.com/aalpar/wile/pkg/values.ByteVectorOutputPort" . "binary-output-port")
     ;; Closures and procedures
-    ("*github.com/aalpar/wile/values.MachineClosure"      . "procedure")
-    ("*github.com/aalpar/wile/values.CaseLambdaClosure"   . "procedure")
-    ("*github.com/aalpar/wile/machine.MachineClosure"     . "procedure")
+    ("*github.com/aalpar/wile/pkg/values.MachineClosure"      . "procedure")
+    ("*github.com/aalpar/wile/pkg/values.CaseLambdaClosure"   . "procedure")
+    ("*github.com/aalpar/wile/pkg/machine.MachineClosure"     . "procedure")
     ;; Singletons (Void / EofObject / EmptyList) — record their wile form
-    ("*github.com/aalpar/wile/values.voidType"            . "void")
-    ("github.com/aalpar/wile/values.emptyListType"        . "list")
+    ("*github.com/aalpar/wile/pkg/values.voidType"            . "void")
+    ("github.com/aalpar/wile/pkg/values.emptyListType"        . "list")
     ;; Opaque / record / advanced
-    ("*github.com/aalpar/wile/values.Record"              . "record")
-    ("*github.com/aalpar/wile/values.RecordType"          . "record-type")
-    ("*github.com/aalpar/wile/values.Promise"             . "promise")
-    ("*github.com/aalpar/wile/values.Box"                 . "box")
-    ("*github.com/aalpar/wile/values.OpaqueValue"         . "opaque")))
+    ("*github.com/aalpar/wile/pkg/values.Record"              . "record")
+    ("*github.com/aalpar/wile/pkg/values.RecordType"          . "record-type")
+    ("*github.com/aalpar/wile/pkg/values.Promise"             . "promise")
+    ("*github.com/aalpar/wile/pkg/values.Box"                 . "box")
+    ("*github.com/aalpar/wile/pkg/values.OpaqueValue"         . "opaque")))
 
 ;; go-type->wile-type returns the wile-facing name for a Go type string,
 ;; or the original string if unmapped (so unmapped types are visible in the

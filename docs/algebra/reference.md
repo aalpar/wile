@@ -888,7 +888,7 @@ Counting on cyclic graphs has no finite answer in the strict counting semiring `
 
 ## SCC Condensation Fast Path -- `(wile algebragraph)`
 
-Auto-generated extension library exposing the Go-side graph kernels in `algebra/graph/`. Available under the `KitchenSink` profile or via explicit `WithExtension(algebragraph.Extension)`. Designed for callers who want exact path counts on arbitrary directed graphs, including cyclic ones.
+Auto-generated extension library exposing the Go-side graph kernels in `extensions/algebra/graph/`. Available under the `KitchenSink` profile or via explicit `WithExtension(algebragraph.Extension)`. Designed for callers who want exact path counts on arbitrary directed graphs, including cyclic ones.
 
 Inputs use integer-indexed nodes; the caller is responsible for mapping symbolic names to indices.
 

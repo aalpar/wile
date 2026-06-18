@@ -37,7 +37,7 @@ import (
 // getSchemeLibPath returns the path to the stdlib/lib/ directory containing scheme libraries
 func getSchemeLibPath() string {
 	_, filename, _, _ := runtime.Caller(0)
-	// machine/library_scheme_test.go -> stdlib/lib/
+	// pkg/machine/library_scheme_test.go -> pkg/stdlib/lib/
 	return filepath.Join(filepath.Dir(filename), "..", "stdlib", "lib")
 }
 

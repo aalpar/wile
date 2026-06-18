@@ -30,7 +30,6 @@ EXCLUDED_PKGS=(
 	"cmd/singlelinefunclint"
 	"pkg/testutil"
 	"pkg/repl"
-	"pkg/machine/testutil"
 	"pkg/registry/testhelpers"
 	"examples/embedding"
 	"examples/embedding/source-tracking"
@@ -52,7 +51,7 @@ is_excluded() {
 
 # Compute per-package coverage from the raw coverage profile.
 # Each line (after the mode: header) looks like:
-#   github.com/aalpar/wile/values/integer.go:42.15,44.2 3 1
+#   github.com/aalpar/wile/pkg/values/integer.go:42.15,44.2 3 1
 # Fields: file:startLine.startCol,endLine.endCol numStatements count
 # We aggregate numStatements and covered (count>0) per package directory.
 
