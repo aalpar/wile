@@ -30,12 +30,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/validate"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/internal/validate"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // classifyAmbient mirrors classifyCompiled (framereclaim_measure_test.go) but

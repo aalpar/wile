@@ -22,9 +22,9 @@ import (
 	"testing"
 
 	extfiles "github.com/aalpar/wile/extensions/files"
-	extio "github.com/aalpar/wile/internal/extensions/io"
+	extio "github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )

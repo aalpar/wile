@@ -17,7 +17,7 @@ package wile
 import (
 	"context"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // IsList returns true if v is a proper list (including the empty list).

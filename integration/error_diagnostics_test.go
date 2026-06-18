@@ -17,9 +17,9 @@ package integration_test
 import (
 	"testing"
 
-	"github.com/aalpar/wile/registry/testhelpers"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )

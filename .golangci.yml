@@ -54,7 +54,7 @@ linters:
       settings:
         ruleguard:
           failOn: dsl,import
-          rules: '${config-path}/ruleguard/rules.go'
+          rules: '${config-path}/tools/ruleguard/rules.go'
     revive:
       rules:
         - name: blank-imports
@@ -85,7 +85,7 @@ linters:
       - path: cmd/
         linters:
           - unparam
-      - path: security/
+      - path: pkg/security/
         linters:
           - gocritic
 

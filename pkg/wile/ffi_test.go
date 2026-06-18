@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )

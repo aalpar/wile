@@ -27,9 +27,9 @@ import (
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
-	"github.com/aalpar/wile/internal/extensions/envvars"
-	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/internal/extensions/envvars"
+	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )

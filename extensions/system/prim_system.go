@@ -19,9 +19,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // ProgramStartTime is used for current-jiffy to measure elapsed time.

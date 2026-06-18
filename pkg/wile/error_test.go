@@ -22,8 +22,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestIsIncompleteInput(t *testing.T) {

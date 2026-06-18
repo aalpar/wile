@@ -22,9 +22,9 @@ fi
 
 cd "$(dirname "$0")/../.."
 
-TEST_FILES=$(find test stdlib/lib -name '*-test.scm' 2>/dev/null | sort)
+TEST_FILES=$(find test pkg/stdlib/lib -name '*-test.scm' 2>/dev/null | sort)
 if [ -z "$TEST_FILES" ]; then
-    echo "No *-test.scm files found under test/ or stdlib/lib/" >&2
+    echo "No *-test.scm files found under test/ or pkg/stdlib/lib/" >&2
     exit 1
 fi
 

@@ -20,8 +20,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/syntax"
 )
 
 // Expression represents a single parsed Scheme expression.

@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // FormLabel returns a human-readable type label for a value:

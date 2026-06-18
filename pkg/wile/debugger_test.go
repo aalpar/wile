@@ -19,8 +19,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
 )
 
 func TestDebugger_BreakpointCRUD(t *testing.T) {

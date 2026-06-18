@@ -31,7 +31,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // callHeadRe extracts the head symbol of a parenthesized call.

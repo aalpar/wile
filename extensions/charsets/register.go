@@ -15,7 +15,7 @@
 package charsets
 
 import (
-	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/pkg/registry"
 )
 
 // Extension is the SRFI-14 Character-Set Library extension.

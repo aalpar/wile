@@ -17,7 +17,7 @@ package wile
 import (
 	"math/big"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // Value represents a Scheme value in the public API.

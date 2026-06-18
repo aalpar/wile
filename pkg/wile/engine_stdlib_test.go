@@ -6,8 +6,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/stdlib"
 )
 
 func TestEngine_EmbeddedStdlib_SchemeBase(t *testing.T) {

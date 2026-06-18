@@ -20,8 +20,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/security"
 )
 
 // Audit reproduction: under the Console profile (file access restricted to

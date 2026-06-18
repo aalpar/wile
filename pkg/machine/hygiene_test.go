@@ -1,0 +1,751 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package machine_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/values/valuestest"
+
+	qt "github.com/frankban/quicktest"
+)
+
+// Helper function to parse a string into syntax using the given environment.
+// Using the same environment ensures consistent symbol resolution.
+func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
+	reader := strings.NewReader(input)
+	p := parser.NewParser(env, true, reader)
+	stx, err := p.ReadSyntax(context.TODO())
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	return stx
+}
+
+// Helper function to create a test environment with basic primitives
+func createHygieneTestEnv() *environment.EnvironmentFrame {
+	env := environment.NewNamespace().Runtime()
+
+	// Register all phase handlers (expanders + syntax compilers)
+	err := compilation.RegisterAllPhaseHandlers(env)
+	if err != nil {
+		panic("failed to register phase handlers: " + err.Error())
+	}
+
+	return env
+}
+
+func TestBasicHygiene_SwapMacro(t *testing.T) {
+	// This test demonstrates hygienic macro expansion with the classic swap! example.
+	// The swap! macro uses a temporary variable 'tmp' which should not capture
+	// any user-defined 'tmp' variable due to hygiene.
+
+	env := createHygieneTestEnv()
+
+	// First, define 'let' as a macro since it's a derived expression in R7RS
+	// Using a simplified single-body form with begin wrapper
+	letMacro := parseString(t, env, `
+		(define-syntax let1
+		  (syntax-rules ()
+		    ((let1 ((name val) ...) body)
+		     ((lambda (name ...) body) val ...))))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, letMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile let1 macro: %v", err)
+	}
+
+	// Define the swap! macro - wrap body in begin for single-body let
+	defineSyntaxForm := parseString(t, env, `
+		(define-syntax swap!
+		  (syntax-rules ()
+		    ((swap! x y)
+		     (let1 ((tmp x))
+		       (begin
+		         (set! x y)
+		         (set! y tmp))))))
+	`)
+
+	// Compile the define-syntax for swap!
+	ctc = compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx = compilation.NewCompileTimeCallContext(context.Background(), false)
+	args = extractDefineSyntaxArgs(t, defineSyntaxForm)
+	err = ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile swap! macro: %v", err)
+	}
+
+	// Test case: User has their own 'tmp' variable
+	testForm := parseString(t, env, `
+		(let1 ((tmp 5) (a 1) (b 2))
+		  (begin
+		    (swap! a b)
+		    tmp))
+	`)
+
+	// Expand the macro
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	if err != nil {
+		t.Fatalf("failed to expand: %v", err)
+	}
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	// Compile the expanded form
+	ctc2 := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx2 := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = ctc2.CompileExpression(ctctx2, expanded)
+	if err != nil {
+		t.Fatalf("failed to compile: %v", err)
+	}
+}
+
+// TestLetMacroExpansion tests the let macro expansion with ellipsis
+func TestLetMacroExpansion(t *testing.T) {
+	env := createHygieneTestEnv()
+
+	// First test a simpler macro without nested ellipsis
+	// (define-syntax my-list
+	//   (syntax-rules ()
+	//     ((my-list x ...) (list x ...))))
+	simpleMacro := parseString(t, env, `
+		(define-syntax my-list
+		  (syntax-rules ()
+		    ((my-list x ...) (list x ...))))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, simpleMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile my-list macro: %v", err)
+	}
+
+	// Test: (my-list 1 2 3) -> (list 1 2 3)
+	testForm := parseString(t, env, `(my-list 1 2 3)`)
+
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	if err != nil {
+		t.Fatalf("failed to expand my-list: %v", err)
+	}
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	expectedForm := parseString(t, env, `(list 1 2 3)`)
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
+}
+
+// TestLetMacroSimple tests a simplified let macro without body ellipsis
+func TestLetMacroSimple(t *testing.T) {
+	env := createHygieneTestEnv()
+
+	// Simplified let that only takes a single body expression
+	// (define-syntax let1
+	//   (syntax-rules ()
+	//     ((let1 ((name val) ...) body)
+	//      ((lambda (name ...) body) val ...))))
+	simpleMacro := parseString(t, env, `
+		(define-syntax let1
+		  (syntax-rules ()
+		    ((let1 ((name val) ...) body)
+		     ((lambda (name ...) body) val ...))))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, simpleMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile let1 macro: %v", err)
+	}
+
+	// Test: (let1 ((x 1)) x) -> ((lambda (x) x) 1)
+	testForm := parseString(t, env, `(let1 ((x 1)) x)`)
+
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	if err != nil {
+		t.Fatalf("failed to expand let1: %v", err)
+	}
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	expectedForm := parseString(t, env, `((lambda (x) x) 1)`)
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
+}
+
+// TestMultipleElementsWithTrailingEllipsis tests patterns like (bindSymbolWithScopes a b ...)
+func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
+	env := createHygieneTestEnv()
+
+	// A simpler test: (begin-with-first e1 e2 ...) -> (begin e1 e2 ...)
+	// This tests the pattern: first mandatory element, then zero or more
+	simpleMacro := parseString(t, env, `
+		(define-syntax begin-with-first
+		  (syntax-rules ()
+		    ((begin-with-first e1 e2 ...)
+		     (begin e1 e2 ...))))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, simpleMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile macro: %v", err)
+	}
+
+	// Test with just one expression: (begin-with-first x) -> (begin x)
+	testForm := parseString(t, env, `(begin-with-first x)`)
+
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	if err != nil {
+		t.Fatalf("failed to expand: %v", err)
+	}
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	expectedForm := parseString(t, env, `(begin x)`)
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
+
+	// Test with multiple expressions: (begin-with-first x y z) -> (begin x y z)
+	testForm2 := parseString(t, env, `(begin-with-first x y z)`)
+	expanded2, err := etc.ExpandExpression(testForm2)
+	if err != nil {
+		t.Fatalf("failed to expand with multiple: %v", err)
+	}
+
+	t.Logf("Expanded2: %s", expanded2.SchemeString())
+
+	expectedForm2 := parseString(t, env, `(begin x y z)`)
+	qt.Assert(t, expanded2.UnwrapAll(), valuestest.SchemeEquals, expectedForm2.UnwrapAll())
+}
+
+// TestLetMacroFull tests the full R7RS let macro with multiple body expressions
+func TestLetMacroFull(t *testing.T) {
+	env := createHygieneTestEnv()
+
+	// Test that let is now a core form: expansion preserves the (let ...) syntax
+	// rather than transforming it to ((lambda ...) ...).
+	// Uses my-let (a user-defined macro) to verify macro expansion still works.
+	letMacro := parseString(t, env, `
+		(define-syntax my-let
+		  (syntax-rules ()
+		    ((my-let ((name val) ...) body ...)
+		     ((lambda (name ...) (begin body ...)) val ...))))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, letMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	if err != nil {
+		t.Fatalf("failed to compile my-let macro: %v", err)
+	}
+
+	// Test: (my-let ((x 1)) x) -> ((lambda (x) (begin x)) 1)
+	testForm := parseString(t, env, `(my-let ((x 1)) x)`)
+
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	if err != nil {
+		t.Fatalf("failed to expand my-let: %v", err)
+	}
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	expectedForm := parseString(t, env, `((lambda (x) (begin x)) 1)`)
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
+}
+
+func TestScopeCreation(t *testing.T) {
+	// Test that scopes are being created and added during expansion
+	env := createHygieneTestEnv()
+
+	// Define a simple macro without arguments
+	defineSyntaxForm := parseString(t, env, `
+		(define-syntax bindSymbolWithScopes
+		  (syntax-rules ()
+		    ((bindSymbolWithScopes) 'expanded)))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Use the macro
+	useForm := parseString(t, env, "(bindSymbolWithScopes)")
+
+	// Get the transformer from expand phase (syntax bindings live in expand phase)
+	fooSym := values.NewSymbol("bindSymbolWithScopes")
+	binding := env.Expand().GetBinding(fooSym, nil)
+	qt.Assert(t, binding, qt.Not(qt.IsNil))
+
+	_, ok := binding.Value().(*machine.MachineClosure)
+	if !ok {
+		t.Fatalf("expected machine.MachineClosure, got %T", binding.Value())
+	}
+
+	// Note: Testing the actual macro expansion would require running the
+	// transformer, which needs access to machine internals.
+	// The key test here is that:
+	// 1. The macro compiles successfully
+	// 2. It's bound as a syntax transformer (machine.MachineClosure)
+	// 3. The OperationSyntaxRulesTransform operation adds intro scopes
+	//    during expansion (tested in the implementation)
+
+	// Test that we can expand using the compilation.ExpanderTimeContinuation
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+
+	// Debug: Check what the binding actually contains
+	qt.Assert(t, binding.Value(), qt.Not(qt.IsNil))
+	t.Logf("Binding type: %v, wrt type: %T", binding.BindingType(), binding.Value())
+
+	// Check the closure template
+	closure := binding.Value().(*machine.MachineClosure)
+	_ = closure // We can't access private fields, but at least verify it's the right type
+
+	defer func() {
+		r := recover()
+		if r != nil {
+			t.Fatalf("panic during expansion: %v", r)
+		}
+	}()
+
+	expanded, err := etc.ExpandExpression(useForm)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Check that expansion succeeded
+	qt.Assert(t, expanded, qt.Not(qt.IsNil))
+
+	// Check semantic equality by comparing unwrapped values (ignoring syntax metadata)
+	// The expected form is (quote expanded)
+	expandedForm := parseString(t, env, "'expanded")
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expandedForm.UnwrapAll())
+
+	// Verify the expansion is structurally correct
+	// Note: Free identifiers (like 'quote' and 'expanded') do NOT get intro scope
+	// because they need to resolve to their original bindings. Only pattern variables
+	// and identifiers introduced by the macro that could cause capture get intro scope.
+	expandedPair, ok := expanded.(*syntax.SyntaxPair)
+	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected SyntaxPair, got %T", expanded))
+
+	// The expansion (quote expanded) should have the quote symbol as car
+	quoteSym, ok := expandedPair.Car().(*syntax.SyntaxSymbol)
+	if ok {
+		// Free identifiers like 'quote' should NOT have intro scope
+		// This is correct behavior - they need to resolve to their original bindings
+		qt.Assert(t, quoteSym.Key(), qt.Equals, "quote")
+	}
+}
+
+// TestAuxiliarySyntaxShadowing tests R7RS auxiliary syntax hygiene.
+// Per R7RS §4.3.2, literals like => and else in syntax-rules should be
+// hygienic - if locally shadowed by let-syntax, they should be treated
+// as regular expressions, not as the special auxiliary syntax.
+//
+// Note: We use let-syntax for shadowing because it properly adds scopes
+// to the body (implementing Flatt's "sets of scopes" model). Regular let
+// is a runtime binding that doesn't affect compile-time scope sets.
+func TestAuxiliarySyntaxShadowing(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    string // Optional setup code (macros to define before test)
+		code     string
+		expected string
+	}{
+		{
+			name: "shadowed => via let-syntax treated as expression",
+			// When => is shadowed via let-syntax, it gets a new scope.
+			// The cond pattern's => has different scopes, so it doesn't match.
+			// The clause falls through to (test result1 result2 ...) pattern.
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test => result))
+				     (let ((temp test))
+				       (if temp (result temp))))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With => shadowed, (test => 'ok) doesn't match the arrow pattern
+			// because the => has an extra scope from let-syntax.
+			// let-syntax wraps its body in (begin ...).
+			code:     "(let-syntax ((=> (syntax-rules () ((_) #f)))) (my-cond (#t => 'ok)))",
+			expected: "(begin (if #t (begin => (quote ok))))", // => doesn't match arrow, falls through
+		},
+		{
+			name: "unshadowed => still works as arrow",
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test => result))
+				     (let ((temp test))
+				       (if temp (result temp))))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			code:     "(my-cond (#t => (lambda (x) 'yes)))",
+			expected: "(let ((temp #t)) (if temp ((lambda (x) (quote yes)) temp)))",
+		},
+		{
+			name: "shadowed else via let-syntax not treated as else clause",
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With else shadowed via let-syntax, it has a new scope.
+			// (else 'matched) doesn't match the else pattern, treated as regular test.
+			// let-syntax wraps its body in (begin ...).
+			code:     "(let-syntax ((else (syntax-rules () ((_) #f)))) (my-cond (else 'matched)))",
+			expected: "(begin (if else (begin (quote matched))))", // else is the test expression
+		},
+		// R7RS §4.3.2: Regular let binding also shadows auxiliary syntax.
+		// Core let adds a scope to the binding name and body, making =>
+		// have different scopes than the pattern literal in my-cond.
+		{
+			name: "shadowed => via regular let treated as expression",
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test => result))
+				     (let ((temp test))
+				       (if temp (result temp))))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With => bound via core let, it gets the let scope.
+			// (test => 'ok) doesn't match the arrow pattern, falls through.
+			code:     "(let ((=> #f)) (my-cond (#t => 'ok)))",
+			expected: "(let ((=> #f)) (if #t (begin => (quote ok))))",
+		},
+		{
+			name: "shadowed else via regular let not treated as else clause",
+			setup: `
+				(define-syntax my-cond
+				  (syntax-rules (else =>)
+				    ((my-cond (else result1 result2 ...))
+				     (begin result1 result2 ...))
+				    ((my-cond (test result1 result2 ...))
+				     (if test (begin result1 result2 ...)))))
+			`,
+			// With else bound via core let, it has the let scope.
+			// (else 'matched) doesn't match the else pattern.
+			code:     "(let ((else #f)) (my-cond (else 'matched)))",
+			expected: "(let ((else #f)) (if else (begin (quote matched))))",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := createHygieneTestEnv()
+
+			// Setup: compile any macro definitions
+			if tt.setup != "" {
+				setupForms := parseMultipleForms(t, env, tt.setup)
+				for _, form := range setupForms {
+					// Skip nil forms (from empty strings between forms)
+					if form == nil {
+						continue
+					}
+
+					// Expand and compile each setup form
+					etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+					expanded, err := etc.ExpandExpression(form)
+					if err != nil {
+						t.Fatalf("failed to expand setup: %v", err)
+					}
+
+					// If it's a define-syntax, compile it
+					pair, ok := expanded.(*syntax.SyntaxPair)
+					if ok {
+						car := pair.Car()
+						if car != nil {
+							sym, ok := car.(*syntax.SyntaxSymbol)
+							if ok && sym.Key() == "define-syntax" {
+								ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+								ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+								args := extractDefineSyntaxArgs(t, expanded)
+								err := ctc.CompileDefineSyntax(ctctx, args)
+								if err != nil {
+									t.Fatalf("failed to compile setup define-syntax: %v", err)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Parse the test code
+			testForm := parseString(t, env, tt.code)
+
+			// Expand the test form
+			etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+			expanded, err := etc.ExpandExpression(testForm)
+			if err != nil {
+				t.Fatalf("failed to expand: %v", err)
+			}
+
+			t.Logf("Expanded: %s", expanded.SchemeString())
+
+			// Parse expected form and compare
+			expectedForm := parseString(t, env, tt.expected)
+			qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll(),
+				qt.Commentf("expanded: %s, expected: %s", expanded.SchemeString(), expectedForm.SchemeString()))
+		})
+	}
+}
+
+// parseMultipleForms parses a string containing multiple Scheme forms
+func parseMultipleForms(t *testing.T, env *environment.EnvironmentFrame, input string) []syntax.SyntaxValue {
+	reader := strings.NewReader(input)
+	p := parser.NewParser(env, true, reader)
+	var forms []syntax.SyntaxValue
+	for {
+		stx, err := p.ReadSyntax(context.TODO())
+		if err != nil {
+			// EOF or other error
+			break
+		}
+		if stx != nil {
+			forms = append(forms, stx)
+		}
+	}
+	return forms
+}
+
+// TestBoundIdentifierHygieneInNestedSyntaxRules tests R7RS conformance for
+// bound-identifier=? semantics in nested syntax-rules. This corresponds to
+// r7rs-tests.scm lines 585-592.
+//
+// R7RS §4.3.2 requires that identifiers appearing in patterns be compared to
+// literals using bound-identifier=?, not just by name. When a pattern variable
+// from an outer macro is substituted into an inner macro's pattern, and the
+// substituted identifier has the same name as a literal in the inner macro,
+// they should only match if they have the same scopes.
+func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
+	env := createHygieneTestEnv()
+
+	// The outer macro 'm' captures input 'x' and substitutes it into the inner
+	// macro 'n'. The inner macro has 'k' as a literal. When (m k) is called:
+	// - 'x' captures 'k' from the use site (with use-site scopes)
+	// - In the template, 'x' in pattern (n x) is substituted with the captured 'k'
+	// - The literal 'k' in (syntax-rules (k) ...) has template scopes
+	// - These are different scopes, so they're NOT bound-identifier=?
+	// - Therefore 'k' in (n k) is treated as a pattern variable
+	// - Pattern (n x) matches input (n z), returning 'bound-identifier=?
+	outerMacro := parseString(t, env, `
+		(define-syntax m
+		  (syntax-rules ()
+		    ((m x) (let-syntax
+		               ((n (syntax-rules (k)
+		                     ((n x) 'bound-identifier=?)
+		                     ((n y) 'free-identifier=?))))
+		             (n z)))))
+	`)
+
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, outerMacro)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to compile outer macro"))
+
+	// Test: (m k) should expand to 'bound-identifier=?
+	testForm := parseString(t, env, `(m k)`)
+
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to expand (m k)"))
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	// The expected result is (begin (quote bound-identifier=?))
+	// The outer begin comes from let-syntax body wrapping
+	expectedForm := parseString(t, env, `(begin (quote bound-identifier=?))`)
+	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll(),
+		qt.Commentf("expected (begin (quote bound-identifier=?)), got: %s", expanded.SchemeString()))
+}
+
+// TestVectorInMacroTemplate verifies that symbols in vectors receive intro scope.
+// This is the basic case: macro template contains #(symbol symbol), and the
+// symbols should get the intro scope, not bind to outer shadowing variables.
+func TestVectorInMacroTemplate(t *testing.T) {
+	// This test uses macro expansion at a lower level than Engine.Eval to test
+	// the hygiene system directly.
+	c := qt.New(t)
+	env := createHygieneTestEnv()
+
+	// Define a macro that produces a vector with a symbol reference
+	macroCode := `
+		(define-syntax vector-macro
+		  (syntax-rules ()
+		    ((vector-macro)
+		     (let ((tmp 1))
+		       (vector 'tmp tmp)))))
+	`
+
+	macroForm := parseString(t, env, macroCode)
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, macroForm)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile vector-macro"))
+
+	// Test code: outer let shadows tmp, but macro's tmp should use intro scope
+	testCode := `
+		(let ((tmp 2))
+		  (vector-macro))
+	`
+
+	testForm := parseString(t, env, testCode)
+
+	// Expand - this is the critical part that tests SyntaxVector.AddScope
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	c.Assert(err, qt.IsNil, qt.Commentf("failed to expand"))
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	// The expanded form should have proper hygiene:
+	// The macro-introduced let binding should be distinct from the outer binding
+	// This is tested by checking that the expanded form, when compiled and executed,
+	// produces the correct result (1, not 2)
+
+	// For full verification, we would need to compile and execute, but the
+	// expansion itself proves that AddScope was called on the vector elements.
+	// The test passes if expansion doesn't fail and the structure is correct.
+
+	// Verify the expanded form contains a vector
+	// The exact structure will be complex due to let expansion, but we can
+	// verify it contains a vector constructor call
+	expandedStr := expanded.SchemeString()
+	c.Assert(strings.Contains(expandedStr, "vector"), qt.IsTrue,
+		qt.Commentf("expanded form should contain 'vector', got: %s", expandedStr))
+}
+
+// TestNestedVectorInMacroTemplate verifies deeply nested vectors propagate scopes
+func TestNestedVectorInMacroTemplate(t *testing.T) {
+	c := qt.New(t)
+	env := createHygieneTestEnv()
+
+	// Define a macro that produces nested vectors with symbols
+	macroCode := `
+		(define-syntax nested-vector-macro
+		  (syntax-rules ()
+		    ((nested-vector-macro)
+		     (let ((x 1) (y 2))
+		       (vector (vector x y) (vector y x))))))
+	`
+
+	macroForm := parseString(t, env, macroCode)
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, macroForm)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile nested-vector-macro"))
+
+	// Test code: outer let shadows x and y, but macro should use intro scope
+	testCode := `
+		(let ((x 99) (y 88))
+		  (nested-vector-macro))
+	`
+
+	testForm := parseString(t, env, testCode)
+
+	// Expand - this tests that nested vectors propagate scopes correctly
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	c.Assert(err, qt.IsNil, qt.Commentf("failed to expand"))
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	// Verify the expanded form contains nested vector calls
+	expandedStr := expanded.SchemeString()
+	c.Assert(strings.Contains(expandedStr, "vector"), qt.IsTrue,
+		qt.Commentf("expanded form should contain 'vector', got: %s", expandedStr))
+}
+
+// TestVectorWithIdentifiers verifies identifiers in vectors are treated correctly.
+// This test ensures that when a macro template contains a vector with identifiers,
+// those identifiers receive proper hygiene scopes through AddScope propagation.
+func TestVectorWithIdentifiers(t *testing.T) {
+	c := qt.New(t)
+	env := createHygieneTestEnv()
+
+	// Define a macro that produces a vector with multiple identifiers
+	macroCode := `
+		(define-syntax vec-test
+		  (syntax-rules ()
+		    ((vec-test)
+		     (let ((a 1) (b 2) (c 3))
+		       (vector a b c)))))
+	`
+
+	macroForm := parseString(t, env, macroCode)
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, macroForm)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile vec-test macro"))
+
+	// Test code: outer let shadows the identifiers
+	testCode := `
+		(let ((a 99) (b 88) (c 77))
+		  (vec-test))
+	`
+
+	testForm := parseString(t, env, testCode)
+
+	// Expand - this tests that vector elements receive intro scope
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	expanded, err := etc.ExpandExpression(testForm)
+	c.Assert(err, qt.IsNil, qt.Commentf("failed to expand"))
+
+	t.Logf("Expanded: %s", expanded.SchemeString())
+
+	// Verify the expanded form contains a vector
+	expandedStr := expanded.SchemeString()
+	c.Assert(strings.Contains(expandedStr, "vector"), qt.IsTrue,
+		qt.Commentf("expanded form should contain 'vector', got: %s", expandedStr))
+}

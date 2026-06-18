@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/pkg/machine"
 )
 
 // TestPeepholeCensus compiles all Gabriel benchmarks and counts instruction

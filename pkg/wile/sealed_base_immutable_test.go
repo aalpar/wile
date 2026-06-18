@@ -21,9 +21,9 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/values"
-	valuestest "github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
+	valuestest "github.com/aalpar/wile/pkg/values/valuestest"
 )
 
 // newSealedImmutableEngine builds an immutable-top-level engine that can resolve

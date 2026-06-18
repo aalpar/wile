@@ -17,8 +17,8 @@ package wile
 import (
 	"reflect"
 
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // makeRetConverter creates a converter for a single Go return type.

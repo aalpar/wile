@@ -25,7 +25,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	exteval "github.com/aalpar/wile/extensions/eval"
-	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/wile"
 )
 

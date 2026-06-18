@@ -40,7 +40,7 @@ func getSchemeBinary() string {
 
 // getLibPath returns the path to the stdlib/lib/ directory.
 func getLibPath() string {
-	return filepath.Join(getProjectRoot(), "stdlib", "lib")
+	return filepath.Join(getProjectRoot(), "pkg", "stdlib", "lib")
 }
 
 // getTestDataPath returns the path to the testdata directory.

@@ -23,11 +23,11 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	extcharsets "github.com/aalpar/wile/extensions/charsets"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/values/valuestest"
-	"github.com/aalpar/wile/werr"
 )
 
 // newEngine builds a fresh Wile engine with only the charsets extension loaded.

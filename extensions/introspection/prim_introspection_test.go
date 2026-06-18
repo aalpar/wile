@@ -19,10 +19,10 @@ import (
 	"testing"
 
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/values/valuestest"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )

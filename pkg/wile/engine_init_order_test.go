@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/registry/core"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
 
 	qt "github.com/frankban/quicktest"
 )

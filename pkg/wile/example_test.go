@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/aalpar/wile/internal/extensions/io"
+	"github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
 )
 
 func ExampleNewEngine() {

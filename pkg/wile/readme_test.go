@@ -120,13 +120,13 @@ func writeREADMETestGoMod(t *testing.T, dir, repoRoot string) {
 func assembleREADMESource(blocks []string) string {
 	// Collect all imports (standard set + any found in blocks).
 	imports := map[string]bool{
-		`"context"`:                         true,
-		`"fmt"`:                             true,
-		`"log"`:                             true,
-		`"github.com/aalpar/wile/pkg/wile"`: true,
-		`"github.com/aalpar/wile/values"`:   true,
+		`"context"`:                           true,
+		`"fmt"`:                               true,
+		`"log"`:                               true,
+		`"github.com/aalpar/wile/pkg/wile"`:   true,
+		`"github.com/aalpar/wile/pkg/values"`: true,
 		`"github.com/aalpar/wile/extensions/files"`: true,
-		`"github.com/aalpar/wile/security"`:         true,
+		`"github.com/aalpar/wile/pkg/security"`:     true,
 	}
 
 	// Strip import lines from blocks and collect them.

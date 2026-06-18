@@ -19,9 +19,9 @@ import (
 	"math/big"
 	"math/cmplx"
 
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // PrimMakeRectangular implements make-rectangular.

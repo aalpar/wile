@@ -21,8 +21,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/stdlib"
 )
 
 // TestLibraryName_String pins the public projection type's Scheme-form

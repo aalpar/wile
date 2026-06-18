@@ -26,9 +26,9 @@ import (
 	exteval "github.com/aalpar/wile/extensions/eval"
 	extfiles "github.com/aalpar/wile/extensions/files"
 	extsystem "github.com/aalpar/wile/extensions/system"
-	extio "github.com/aalpar/wile/internal/extensions/io"
+	extio "github.com/aalpar/wile/pkg/extensions/io"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/security"
 )
 
 // TestPrivilegedExtensionsDenyUnderDenyAll pins R12: every privileged extension

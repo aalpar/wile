@@ -20,8 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/werr"
 )
 
 // A recursive macro whose output grows structural nesting one level per input

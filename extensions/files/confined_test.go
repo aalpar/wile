@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aalpar/wile/security"
+	"github.com/aalpar/wile/pkg/security"
 )
 
 // confinedOpen via os.Root must refuse to open a path that escapes the root

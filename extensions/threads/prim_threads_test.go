@@ -20,9 +20,9 @@ import (
 	"time"
 
 	extthreads "github.com/aalpar/wile/extensions/threads"
-	"github.com/aalpar/wile/internal/testutil"
+	"github.com/aalpar/wile/pkg/testutil"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )

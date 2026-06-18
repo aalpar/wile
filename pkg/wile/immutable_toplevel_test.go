@@ -21,11 +21,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/stdlib"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
 )
 
 func newImmutableTopLevelEngine(t *testing.T) *wile.Engine {

@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
-	"github.com/aalpar/wile/values"
 )
 
 func main() {

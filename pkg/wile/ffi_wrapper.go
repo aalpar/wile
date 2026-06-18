@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // makeWrapper generates the ForeignFunction closure that bridges between

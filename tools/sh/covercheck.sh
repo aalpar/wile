@@ -28,16 +28,16 @@ EXCLUDED_PKGS=(
 	"cmd/wile"
 	"cmd/typeswitchlint"
 	"cmd/singlelinefunclint"
-	"internal/testutil"
-	"repl"
-	"machine/testutil"
-	"registry/testhelpers"
+	"pkg/testutil"
+	"pkg/repl"
+	"pkg/machine/testutil"
+	"pkg/registry/testhelpers"
 	"examples/embedding"
 	"examples/embedding/source-tracking"
 	"examples/embedding/stack-trace"
 	"integration"
-	"ruleguard"
-	"stdlib"
+	"tools/ruleguard"
+	"pkg/stdlib"
 )
 
 is_excluded() {

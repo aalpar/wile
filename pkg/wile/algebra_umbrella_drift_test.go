@@ -22,9 +22,9 @@ import (
 func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
 	c := qt.New(t)
 
-	// stdlib/ lives at the module root; this package is at pkg/wile/.
-	const umbrellaPath = "../../stdlib/lib/wile/algebra.sld"
-	const leafDir = "../../stdlib/lib/wile/algebra"
+	// stdlib/ lives at pkg/stdlib; this package is at pkg/wile/ (sibling under pkg/).
+	const umbrellaPath = "../stdlib/lib/wile/algebra.sld"
+	const leafDir = "../stdlib/lib/wile/algebra"
 
 	umbrellaExports, err := readSldExports(umbrellaPath)
 	c.Assert(err, qt.IsNil, qt.Commentf("reading umbrella %s", umbrellaPath))

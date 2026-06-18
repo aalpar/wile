@@ -17,11 +17,11 @@ package algebragraph
 import (
 	"context"
 
-	"github.com/aalpar/wile/algebra/graph"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry/helpers"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/extensions/algebra/graph"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // maxNodes bounds num-nodes so a public caller cannot drive the kernel into an

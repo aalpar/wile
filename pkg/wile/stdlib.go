@@ -3,7 +3,7 @@ package wile
 import (
 	"io/fs"
 
-	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/pkg/stdlib"
 )
 
 // StdLibFS provides the standard Scheme libraries shipped with wile

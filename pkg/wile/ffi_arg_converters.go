@@ -20,9 +20,9 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
+	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // makeArgConverter creates a converter for a single Go parameter type.
