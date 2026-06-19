@@ -252,6 +252,31 @@ func TestNamedLetEnvFrameAllocations(t *testing.T) {
 	}
 }
 
+// TestMutualRecursionEnvFrameAllocations is Lever A's headline probe: ping and pong
+// are mutually tail-recursive top-level defines. The per-body predicate refuses each
+// one's tail call to the OTHER (not self, not a capture-safe primitive), so today every
+// cross-call leaks a frame (slope ~1.0). The interprocedural classifier proves both safe
+// (asserted); wiring its verdict into codegen drops the slope to ~0.
+func TestMutualRecursionEnvFrameAllocations(t *testing.T) {
+	const def = "(begin " +
+		"(define (ping n) (if (= n 0) 'done (pong (- n 1)))) " +
+		"(define (pong n) (if (= n 0) 'done (ping (- n 1))))\n)"
+	assertReclaimable(t, def, "ping", true)
+	assertReclaimable(t, def, "pong", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(ping 10000)")
+	big := allocsForRun(t, def, "(ping 30000)")
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("mutual-recursion allocs: ping(10000)=%.0f, ping(30000)=%.0f, slope=%.3f frames/call",
+		small, big, slope)
+	if slope > 0.1 {
+		t.Errorf("mutual recursion leaks env frames: %.3f frames/call (want < 0.1); "+
+			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
+	}
+}
+
 // TestNonTailRecursionControl is the control proving the fix is *specific* to
 // tail-position frames. Non-tail recursion keeps every frame in the chain
 // simultaneously live, so it genuinely allocates O(depth) frames per run — and
