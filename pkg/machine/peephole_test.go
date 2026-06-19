@@ -1043,6 +1043,99 @@ func TestFusePromotedCompoundArgs(t *testing.T) {
 	}
 }
 
+// walkCallArgs is the argument-region scanner shared by the promoted-tail
+// passes. These cases pin its contract directly: a malformed SaveContinuation
+// offset — notably a negative one, which a len-only bound check would index out
+// of range and panic on — is rejected as ok=false, while a bare terminator
+// opcode is returned as termIdx with ok=true for the caller to validate.
+func TestWalkCallArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		code        []Instruction
+		start       int
+		wantTermIdx int
+		wantArgs    int
+		wantOK      bool
+	}{
+		{
+			name:   "negative SaveContinuation offset is rejected without panicking",
+			code:   []Instruction{{Op: OpSaveContinuation, Arg: -1}, {Op: OpPush}},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name:   "non-advancing (zero) offset is rejected",
+			code:   []Instruction{{Op: OpSaveContinuation, Arg: 0}, {Op: OpPush}},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name:   "forward offset past the end is rejected",
+			code:   []Instruction{{Op: OpSaveContinuation, Arg: 5}, {Op: OpPush}},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name: "offset not landing on a result push is rejected",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 2}, {Op: OpPush}, {Op: OpPullApply}, {Op: OpPush},
+			},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name: "two simple push args, terminator is PullApply",
+			code: []Instruction{
+				{Op: OpPush}, {Op: OpPushLocal}, {Op: OpPullApply},
+			},
+			start:       0,
+			wantTermIdx: 2,
+			wantArgs:    2,
+			wantOK:      true,
+		},
+		{
+			name: "compound arg skipped via forward offset, ReleaseEnvFrame terminator",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 3}, {Op: OpPushLocal}, {Op: OpPullApply},
+				{Op: OpPush}, {Op: OpReleaseEnvFrame}, {Op: OpPullApply},
+			},
+			start:       0,
+			wantTermIdx: 4,
+			wantArgs:    1,
+			wantOK:      true,
+		},
+		{
+			name: "bare branch terminator is returned with ok=true (caller validates)",
+			code: []Instruction{
+				{Op: OpPush}, {Op: OpBranch},
+			},
+			start:       0,
+			wantTermIdx: 1,
+			wantArgs:    1,
+			wantOK:      true,
+		},
+		{
+			name: "running off the end without a terminator is rejected",
+			code: []Instruction{
+				{Op: OpPush}, {Op: OpPushLocal},
+			},
+			start:  0,
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			termIdx, argCount, ok := walkCallArgs(tt.code, tt.start)
+			qt.Assert(t, ok, qt.Equals, tt.wantOK)
+			if tt.wantOK {
+				qt.Assert(t, termIdx, qt.Equals, tt.wantTermIdx)
+				qt.Assert(t, argCount, qt.Equals, tt.wantArgs)
+			}
+		})
+	}
+}
+
 // --- FuseCallGeneric (pass 3) ---
 
 func TestFuseCallGeneric(t *testing.T) {

@@ -640,8 +640,15 @@ func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
 // to its result push). It returns termIdx — the index of the first instruction
 // that is not an argument, i.e. the start of the call's terminator region
 // (ReleaseEnvFrame and/or PullApply) — the argument count, and whether the
-// argument structure was recognized. Any unrecognized opcode mid-arguments
-// (e.g. a bare branch) yields ok=false.
+// argument structure was recognized.
+//
+// The first opcode that is neither a push nor a SaveContinuation block ends the
+// argument region: it is returned as termIdx with ok=true. walkCallArgs does NOT
+// verify that termIdx points at a legitimate terminator — a bare branch lands
+// here just as ReleaseEnvFrame/PullApply would, and confirming the terminator
+// shape is the caller's job. ok is false only when a SaveContinuation offset is
+// malformed (non-forward, out of range, or not landing on a result push) or the
+// code ends before any terminator opcode is reached.
 func walkCallArgs(code []Instruction, start int) (termIdx, argCount int, ok bool) {
 	j := start
 	for j < len(code) {
@@ -654,8 +661,12 @@ func walkCallArgs(code []Instruction, start int) (termIdx, argCount int, ok bool
 		if op == OpSaveContinuation {
 			// Compound arg: the offset targets the result push, one past the
 			// inner PullApply. Skip the whole subexpression by jumping to it.
+			// The offset must point strictly forward: resume <= j catches a zero
+			// or negative offset, the latter of which would otherwise index
+			// code[resume] out of bounds below (the >= len(code) guard alone does
+			// not cover a negative resume).
 			resume := j + int(code[j].Arg)
-			if resume >= len(code) || !isPushOp(code[resume].Op) {
+			if resume <= j || resume >= len(code) || !isPushOp(code[resume].Op) {
 				return 0, 0, false
 			}
 			argCount++
