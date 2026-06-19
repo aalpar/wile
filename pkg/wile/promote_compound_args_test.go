@@ -40,6 +40,7 @@ func TestPromoteCompoundArgsFib(t *testing.T) {
 
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithLibraryPaths())
 	c.Assert(err, qt.IsNil)
+	defer eng.Close()
 
 	_, err = eng.EvalMultiple(ctx, "(define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))")
 	c.Assert(err, qt.IsNil)
