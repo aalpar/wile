@@ -865,6 +865,408 @@ func TestFuseCallForeignCached(t *testing.T) {
 	}
 }
 
+// --- FusePromotedCompoundArgs (pass 4) ---
+
+// makePromotedBinding builds a *Binding holding a *ForeignClosure whose name
+// matches a promoted primitive (e.g. "+"), so promotedOpForName resolves it.
+func makePromotedBinding(name string) *environment.Binding {
+	env := environment.NewNamespace().Runtime()
+	fc := NewForeignClosure(env, 2, false, func(_ CallContext) error {
+		return nil
+	})
+	fc.SetName(name)
+	return environment.NewBinding(fc, environment.BindingTypeVariable)
+}
+
+// runPromotedCompoundPass runs only the pass-4 fusion in isolation so the
+// expected output is deterministic (passes 1–3 would otherwise rewrite the
+// inner calls used to build compound arguments).
+func runPromotedCompoundPass(tpl *NativeTemplate) {
+	plan := NewEditPlan(tpl)
+	fusePromotedCompoundArgs(tpl, plan)
+	plan.Apply()
+}
+
+// TestFusePromotedCompoundArgs covers the tail-position promotion of a
+// primitive call whose arguments are compound subexpressions — the shape
+// fuseCallForeignCached rejects (it requires all-push args). The canonical
+// case is fib's (+ (fib (- n 1)) (fib (- n 2))): two SaveContinuation-delimited
+// arguments around a tail `+`.
+func TestFusePromotedCompoundArgs(t *testing.T) {
+	plus := makePromotedBinding("+")
+	machine := makeMachineClosureBinding()
+	unnamedForeign := makeForeignBinding()
+
+	tests := []struct {
+		name           string
+		code           []Instruction
+		cachedBindings []*environment.Binding
+		wantOps        []OpCode
+		wantArg        map[int]int32
+	}{
+		{
+			// Without OpReleaseEnvFrame ahead of the apply there is no
+			// frame-reclaim proof, so the call must NOT be promoted: an argument
+			// might capture a continuation that re-enters needing this frame's
+			// locals (the `map` hazard — its callback can call/cc). This is the
+			// exact shape that previously miscompiled.
+			name: "no ReleaseEnvFrame proof: not promoted",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1: arg1 → resume 4
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3: inner apply
+				{Op: OpPush},                      // 4: arg1 result
+				{Op: OpSaveContinuation, Arg: 3},  // 5: arg2 → resume 8
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7: inner apply
+				{Op: OpPush},                      // 8: arg2 result
+				{Op: OpPullApply},                 // 9: + apply (no preceding ReleaseEnvFrame)
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpPullApply,
+			},
+		},
+		{
+			// The real immutable-top-level fib shape: a frame-reclaim
+			// OpReleaseEnvFrame sits between the last arg push and the tail
+			// PullApply. It is stack-neutral, must be skipped during the arg
+			// walk, and must remain ahead of the promoted tail op.
+			name: "frame-reclaim ReleaseEnvFrame before tail apply is preserved",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1: arg1 → resume 4
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4: arg1 result
+				{Op: OpSaveContinuation, Arg: 3},  // 5: arg2 → resume 8
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8: arg2 result
+				{Op: OpReleaseEnvFrame},           // 9: frame-reclaim before tail +
+				{Op: OpPullApply},                 // 10: + apply
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpReleaseEnvFrame, OpAddTail,
+			},
+			wantArg: map[int]int32{0: 3, 4: 3, 9: 1},
+		},
+		{
+			name: "wrong arity (three compound args) is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1 → 4
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5 → 8
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpSaveContinuation, Arg: 3},  // 9 → 12
+				{Op: OpPushLocal, Arg: 2},         // 10
+				{Op: OpPullApply},                 // 11
+				{Op: OpPush},                      // 12
+				{Op: OpPullApply},                 // 13
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpPullApply,
+			},
+		},
+		{
+			name: "non-promoted foreign callee is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0}, // unnamed foreign → not promoted
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPullApply},
+				{Op: OpPush},
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPullApply},
+				{Op: OpPush},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{unnamedForeign, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpPullApply,
+			},
+		},
+		{
+			name: "non-tail (preceded by SaveContinuation) is left alone",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 10}, // outer non-tail context
+				{Op: OpPushCachedBinding, Arg: 1}, // + — callee, but preceded by SaveCont
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPullApply},
+				{Op: OpPush},
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPullApply},
+				{Op: OpPush},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpSaveContinuation, OpPushCachedBinding, OpSaveContinuation, OpPushLocal,
+				OpPullApply, OpPush, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpPullApply,
+			},
+		},
+		{
+			// A branch targeting the tail PullApply makes it a control-flow join:
+			// the inline op's fixed Pop(arity) would run on a stack shaped by the
+			// branch predecessor, so the fusion must bail. Exercises the
+			// targets[pullIdx] guard. A Branch-family op is required — a
+			// SaveContinuation resume must land on a push, never on the apply.
+			name: "branch targeting the tail apply (control-flow join) is left alone",
+			code: []Instruction{
+				{Op: OpBranchOnFalseValue, Arg: 11}, // 0: → 11, the tail apply
+				{Op: OpPushCachedBinding, Arg: 1},   // 1: + (preceded by a branch, so tail)
+				{Op: OpSaveContinuation, Arg: 3},    // 2: arg1 → resume 5
+				{Op: OpPushLocal, Arg: 0},           // 3
+				{Op: OpPullApply},                   // 4
+				{Op: OpPush},                        // 5: arg1 result
+				{Op: OpSaveContinuation, Arg: 3},    // 6: arg2 → resume 9
+				{Op: OpPushLocal, Arg: 1},           // 7
+				{Op: OpPullApply},                   // 8
+				{Op: OpPush},                        // 9: arg2 result
+				{Op: OpReleaseEnvFrame},             // 10
+				{Op: OpPullApply},                   // 11: + apply (branch target)
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpBranchOnFalseValue, OpPushCachedBinding, OpSaveContinuation, OpPushLocal,
+				OpPullApply, OpPush, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// ReleaseEnvFrame as the final instruction: pullIdx == len(code), so
+			// the pullIdx >= len(code) bound must decline (and must not index
+			// code[pullIdx] out of range).
+			name: "ReleaseEnvFrame as the final instruction is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1: arg1 → resume 4
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5: arg2 → resume 8
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9: termIdx, last instr (pullIdx 10 == len)
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame,
+			},
+		},
+		{
+			// ReleaseEnvFrame followed by a non-PullApply op: the in-range
+			// counterpart to the case above, exercising the
+			// code[pullIdx].Op != OpPullApply arm of the terminator check.
+			name: "ReleaseEnvFrame not followed by PullApply is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9: termIdx
+				{Op: OpPush},                      // 10: pullIdx — not a PullApply
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame, OpPush,
+			},
+		},
+		{
+			// Callee binding holds a *MachineClosure, not a *ForeignClosure, so the
+			// type assertion fails and the call stays on the generic path.
+			name: "callee binding is not a ForeignClosure is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0}, // 0: machine closure (index 0)
+				{Op: OpSaveContinuation, Arg: 3},  // 1
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9
+				{Op: OpPullApply},                 // 10
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// Callee push references a cached-binding index past the end of the
+			// slice; the int(bindingIdx) >= len(cachedBindings) bound must decline
+			// before indexing.
+			name: "callee binding index out of range is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 5}, // 0: 5 >= len(cachedBindings) == 2
+				{Op: OpSaveContinuation, Arg: 3},  // 1
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9
+				{Op: OpPullApply},                 // 10
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// Fewer than two instructions: the len(code) < 2 early return.
+			name: "code shorter than two instructions is left alone",
+			code: []Instruction{
+				{Op: OpPullApply}, // 0
+			},
+			cachedBindings: []*environment.Binding{plus},
+			wantOps:        []OpCode{OpPullApply},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := NewEmptyNativeTemplate()
+			tpl.code = make([]Instruction, len(tt.code))
+			copy(tpl.code, tt.code)
+			tpl.sourceRefs = make([]uint32, len(tt.code))
+			tpl.cachedBindings = tt.cachedBindings
+
+			runPromotedCompoundPass(tpl)
+
+			qt.Assert(t, opcodes(tpl), qt.DeepEquals, tt.wantOps)
+			for idx, expectedArg := range tt.wantArg {
+				qt.Assert(t, tpl.code[idx].Arg, qt.Equals, expectedArg,
+					qt.Commentf("instruction %d (%s)", idx, tpl.code[idx].Op))
+			}
+		})
+	}
+}
+
+// walkCallArgs is the argument-region scanner shared by the promoted-tail
+// passes. These cases pin its contract directly: a malformed SaveContinuation
+// offset — notably a negative one, which a len-only bound check would index out
+// of range and panic on — is rejected as ok=false, while a bare terminator
+// opcode is returned as termIdx with ok=true for the caller to validate.
+func TestWalkCallArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		code        []Instruction
+		start       int
+		wantTermIdx int
+		wantArgs    int
+		wantOK      bool
+	}{
+		{
+			name:   "negative SaveContinuation offset is rejected without panicking",
+			code:   []Instruction{{Op: OpSaveContinuation, Arg: -1}, {Op: OpPush}},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name:   "non-advancing (zero) offset is rejected",
+			code:   []Instruction{{Op: OpSaveContinuation, Arg: 0}, {Op: OpPush}},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name:   "forward offset past the end is rejected",
+			code:   []Instruction{{Op: OpSaveContinuation, Arg: 5}, {Op: OpPush}},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name: "offset not landing on a result push is rejected",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 2}, {Op: OpPush}, {Op: OpPullApply}, {Op: OpPush},
+			},
+			start:  0,
+			wantOK: false,
+		},
+		{
+			name: "two simple push args, terminator is PullApply",
+			code: []Instruction{
+				{Op: OpPush}, {Op: OpPushLocal}, {Op: OpPullApply},
+			},
+			start:       0,
+			wantTermIdx: 2,
+			wantArgs:    2,
+			wantOK:      true,
+		},
+		{
+			name: "compound arg skipped via forward offset, ReleaseEnvFrame terminator",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 3}, {Op: OpPushLocal}, {Op: OpPullApply},
+				{Op: OpPush}, {Op: OpReleaseEnvFrame}, {Op: OpPullApply},
+			},
+			start:       0,
+			wantTermIdx: 4,
+			wantArgs:    1,
+			wantOK:      true,
+		},
+		{
+			name: "bare branch terminator is returned with ok=true (caller validates)",
+			code: []Instruction{
+				{Op: OpPush}, {Op: OpBranch},
+			},
+			start:       0,
+			wantTermIdx: 1,
+			wantArgs:    1,
+			wantOK:      true,
+		},
+		{
+			name: "running off the end without a terminator is rejected",
+			code: []Instruction{
+				{Op: OpPush}, {Op: OpPushLocal},
+			},
+			start:  0,
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			termIdx, argCount, ok := walkCallArgs(tt.code, tt.start)
+			qt.Assert(t, ok, qt.Equals, tt.wantOK)
+			if tt.wantOK {
+				qt.Assert(t, termIdx, qt.Equals, tt.wantTermIdx)
+				qt.Assert(t, argCount, qt.Equals, tt.wantArgs)
+			}
+		})
+	}
+}
+
 // --- FuseCallGeneric (pass 3) ---
 
 func TestFuseCallGeneric(t *testing.T) {

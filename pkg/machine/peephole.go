@@ -65,6 +65,10 @@ func (p *NativeTemplate) Optimize() {
 	fuseCallGeneric(p, plan3)
 	plan3.Apply()
 
+	plan4 := NewEditPlan(p)
+	fusePromotedCompoundArgs(p, plan4)
+	plan4.Apply()
+
 	p.optimizeSubTemplates()
 }
 
@@ -514,4 +518,163 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 			tpl.sourceRefs[pullIdx],
 		)
 	}
+}
+
+// fusePromotedCompoundArgs promotes a TAIL call to a promoted primitive whose
+// arguments are compound subexpressions — the case the all-push fusions in
+// fuseCallForeignCached reject. The dominant example is fib's tail addition:
+//
+//	(+ (fib (- n 1)) (fib (- n 2)))
+//
+// whose operands are nested calls, so SaveContinuation/PullApply (non-push)
+// ops sit between the `+` callee push and its PullApply. fuseCallForeignCached
+// only counts push-family args and bails the moment it sees a non-push op, so
+// `+` stays on the generic apply path while `-` and `<=` (leaf operands) are
+// promoted to inline Sub/NumLe.
+//
+// Pattern (tail position — callee push not preceded by SaveContinuation/push):
+//
+//	code[i]    = PushCachedBinding(idx)   -- promoted *ForeignClosure
+//	<arg_1> .. <arg_k>                    -- each arg: one push, OR a
+//	                                         SaveContinuation(off)..PullApply..Push block
+//	code[t]    = ReleaseEnvFrame          -- REQUIRED (the frame-reclaim proof)
+//	code[t+1]  = PullApply                -- k == promoted arity
+//
+// Rewrite: delete the callee push, replace the trailing PullApply with the
+// tail promoted op. The arguments and the ReleaseEnvFrame are left intact, so
+// interior continuation resume points stay valid; only the callee push is
+// removed (the inline op uses fixed Pop(arity) and never reads a callee off
+// the stack) and the final dispatch is replaced. Offsets are recomputed by
+// EditPlan.Apply.
+//
+// The REQUIRED OpReleaseEnvFrame is the safety gate. Codegen emits it only
+// after proving this env frame is dead at the tail call — no capture, no
+// escaping closure, only capture-safe callees. That same proof is what makes
+// promotion sound: if no argument can capture a continuation that re-enters
+// this frame, the inline tail op (which pops the eval stack and returns,
+// abandoning the frame) cannot corrupt a live continuation. fib's `+` carries
+// the proof; a tail `cons` inside `map` does NOT (its callback `f` is an
+// unknown callee that may call/cc), so it is correctly left on the generic path
+// — without this gate, re-entering a continuation captured in `f` fails to find
+// the loop's list local.
+//
+// Runs after fuseCallForeignCached, so all-push promoted calls are already
+// fused and never reach here. Soundness against `set!`-redefinition of the
+// primitive is preserved by execPromoted's runtime fallback (callPromotedFallback,
+// which PopN(arity)s — matching the k values the compound args leave on the stack).
+func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
+	code := tpl.code
+	if len(code) < 2 {
+		return
+	}
+	targets := branchTargets(code)
+
+	for i := 0; i < len(code); i++ {
+		if code[i].Op != OpPushCachedBinding {
+			continue
+		}
+
+		// Tail position only: a callee push preceded by SaveContinuation or
+		// another push is a non-tail call or an argument, not a tail callee.
+		// The non-tail case would also need its outer SaveContinuation removed
+		// (the inline op has no continuation to restore); that is left for a
+		// follow-up. Tail covers the fib hot path.
+		if i > 0 && (code[i-1].Op == OpSaveContinuation || isPushOp(code[i-1].Op)) {
+			continue
+		}
+
+		bindingIdx := code[i].Arg
+		if int(bindingIdx) >= len(tpl.cachedBindings) {
+			continue
+		}
+		fcls, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
+		if !ok {
+			continue
+		}
+		_, promotedTailOp, promotedArity := promotedOpForName(fcls.name)
+		if promotedTailOp == OpInvalid {
+			continue
+		}
+
+		termIdx, argCount, walked := walkCallArgs(code, i+1)
+		if !walked || argCount != promotedArity {
+			continue
+		}
+
+		// Safety gate: only promote when the tail apply is immediately preceded
+		// by OpReleaseEnvFrame — the codegen's proof that this env frame is dead
+		// (no capture, no escaping closure, only capture-safe callees). Without
+		// the proof an argument may capture a continuation that re-enters needing
+		// this frame's locals, which the inline tail op (it pops the eval stack
+		// and returns, abandoning the frame) cannot preserve. This is exactly
+		// what distinguishes fib's `+` (proof present) from a tail `cons` inside
+		// `map`, whose unknown callback may call/cc (no proof) — the latter must
+		// stay on the generic apply path.
+		if code[termIdx].Op != OpReleaseEnvFrame {
+			continue
+		}
+		pullIdx := termIdx + 1
+		if pullIdx >= len(code) || code[pullIdx].Op != OpPullApply {
+			continue
+		}
+
+		// The inline op pops exactly `arity` values, so the apply cannot be a
+		// control-flow join (a branch into it would arrive with a wrong stack).
+		if targets[pullIdx] {
+			continue
+		}
+
+		plan.Delete(i, i+1)
+		plan.Replace(pullIdx, pullIdx+1,
+			[]Instruction{{Op: promotedTailOp, Arg: bindingIdx}},
+			tpl.sourceRefs[pullIdx],
+		)
+		i = pullIdx // skip past the claimed call
+	}
+}
+
+// walkCallArgs walks the argument sequence of a call beginning at position
+// start (the instruction just after the callee push). Each argument is either
+// a single push-family instruction or a SaveContinuation(off)..PullApply..Push
+// block (a compound subexpression, skipped by following the continuation offset
+// to its result push). It returns termIdx — the index of the first instruction
+// that is not an argument, i.e. the start of the call's terminator region
+// (ReleaseEnvFrame and/or PullApply) — the argument count, and whether the
+// argument structure was recognized.
+//
+// The first opcode that is neither a push nor a SaveContinuation block ends the
+// argument region: it is returned as termIdx with ok=true. walkCallArgs does NOT
+// verify that termIdx points at a legitimate terminator — a bare branch lands
+// here just as ReleaseEnvFrame/PullApply would, and confirming the terminator
+// shape is the caller's job. ok is false only when a SaveContinuation offset is
+// malformed (non-forward, out of range, or not landing on a result push) or the
+// code ends before any terminator opcode is reached.
+func walkCallArgs(code []Instruction, start int) (termIdx, argCount int, ok bool) {
+	j := start
+	for j < len(code) {
+		op := code[j].Op
+		if isPushOp(op) {
+			argCount++
+			j++
+			continue
+		}
+		if op == OpSaveContinuation {
+			// Compound arg: the offset targets the result push, one past the
+			// inner PullApply. Skip the whole subexpression by jumping to it.
+			// The offset must point strictly forward: resume <= j catches a zero
+			// or negative offset, the latter of which would otherwise index
+			// code[resume] out of bounds below (the >= len(code) guard alone does
+			// not cover a negative resume).
+			resume := j + int(code[j].Arg)
+			if resume <= j || resume >= len(code) || !isPushOp(code[resume].Op) {
+				return 0, 0, false
+			}
+			argCount++
+			j = resume + 1
+			continue
+		}
+		// First non-argument opcode: the terminator region begins here.
+		return j, argCount, true
+	}
+	return 0, 0, false
 }
