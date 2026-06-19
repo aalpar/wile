@@ -1022,6 +1022,137 @@ func TestFusePromotedCompoundArgs(t *testing.T) {
 				OpPullApply, OpPush, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpPullApply,
 			},
 		},
+		{
+			// A branch targeting the tail PullApply makes it a control-flow join:
+			// the inline op's fixed Pop(arity) would run on a stack shaped by the
+			// branch predecessor, so the fusion must bail. Exercises the
+			// targets[pullIdx] guard. A Branch-family op is required — a
+			// SaveContinuation resume must land on a push, never on the apply.
+			name: "branch targeting the tail apply (control-flow join) is left alone",
+			code: []Instruction{
+				{Op: OpBranchOnFalseValue, Arg: 11}, // 0: → 11, the tail apply
+				{Op: OpPushCachedBinding, Arg: 1},   // 1: + (preceded by a branch, so tail)
+				{Op: OpSaveContinuation, Arg: 3},    // 2: arg1 → resume 5
+				{Op: OpPushLocal, Arg: 0},           // 3
+				{Op: OpPullApply},                   // 4
+				{Op: OpPush},                        // 5: arg1 result
+				{Op: OpSaveContinuation, Arg: 3},    // 6: arg2 → resume 9
+				{Op: OpPushLocal, Arg: 1},           // 7
+				{Op: OpPullApply},                   // 8
+				{Op: OpPush},                        // 9: arg2 result
+				{Op: OpReleaseEnvFrame},             // 10
+				{Op: OpPullApply},                   // 11: + apply (branch target)
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpBranchOnFalseValue, OpPushCachedBinding, OpSaveContinuation, OpPushLocal,
+				OpPullApply, OpPush, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// ReleaseEnvFrame as the final instruction: pullIdx == len(code), so
+			// the pullIdx >= len(code) bound must decline (and must not index
+			// code[pullIdx] out of range).
+			name: "ReleaseEnvFrame as the final instruction is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1: arg1 → resume 4
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5: arg2 → resume 8
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9: termIdx, last instr (pullIdx 10 == len)
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame,
+			},
+		},
+		{
+			// ReleaseEnvFrame followed by a non-PullApply op: the in-range
+			// counterpart to the case above, exercising the
+			// code[pullIdx].Op != OpPullApply arm of the terminator check.
+			name: "ReleaseEnvFrame not followed by PullApply is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 1}, // 0: +
+				{Op: OpSaveContinuation, Arg: 3},  // 1
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9: termIdx
+				{Op: OpPush},                      // 10: pullIdx — not a PullApply
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame, OpPush,
+			},
+		},
+		{
+			// Callee binding holds a *MachineClosure, not a *ForeignClosure, so the
+			// type assertion fails and the call stays on the generic path.
+			name: "callee binding is not a ForeignClosure is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0}, // 0: machine closure (index 0)
+				{Op: OpSaveContinuation, Arg: 3},  // 1
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9
+				{Op: OpPullApply},                 // 10
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// Callee push references a cached-binding index past the end of the
+			// slice; the int(bindingIdx) >= len(cachedBindings) bound must decline
+			// before indexing.
+			name: "callee binding index out of range is left alone",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 5}, // 0: 5 >= len(cachedBindings) == 2
+				{Op: OpSaveContinuation, Arg: 3},  // 1
+				{Op: OpPushLocal, Arg: 0},         // 2
+				{Op: OpPullApply},                 // 3
+				{Op: OpPush},                      // 4
+				{Op: OpSaveContinuation, Arg: 3},  // 5
+				{Op: OpPushLocal, Arg: 1},         // 6
+				{Op: OpPullApply},                 // 7
+				{Op: OpPush},                      // 8
+				{Op: OpReleaseEnvFrame},           // 9
+				{Op: OpPullApply},                 // 10
+			},
+			cachedBindings: []*environment.Binding{machine, plus},
+			wantOps: []OpCode{
+				OpPushCachedBinding, OpSaveContinuation, OpPushLocal, OpPullApply, OpPush,
+				OpSaveContinuation, OpPushLocal, OpPullApply, OpPush, OpReleaseEnvFrame, OpPullApply,
+			},
+		},
+		{
+			// Fewer than two instructions: the len(code) < 2 early return.
+			name: "code shorter than two instructions is left alone",
+			code: []Instruction{
+				{Op: OpPullApply}, // 0
+			},
+			cachedBindings: []*environment.Binding{plus},
+			wantOps:        []OpCode{OpPullApply},
+		},
 	}
 
 	for _, tt := range tests {
