@@ -46,6 +46,11 @@ func benchReclaim(b *testing.B, immutable bool, setup, code string) {
 	opts := []EngineOption{WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithLibraryPaths()}
 	if immutable {
 		opts = append(opts, WithImmutableTopLevel())
+	} else {
+		// Immutable top level is the DEFAULT (options.go), so the flag-off arm MUST
+		// opt out explicitly — otherwise both arms run the optimized path and the A/B
+		// delta collapses to a false ~0, making every lever's measure step inert.
+		opts = append(opts, WithMutableTopLevel())
 	}
 	eng, err := NewEngine(ctx, opts...)
 	if err != nil {
