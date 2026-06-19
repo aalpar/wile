@@ -66,6 +66,12 @@ type CompileTimeContinuation struct {
 	// inlineThreshold is the maximum body length (in top-level expressions)
 	// for inlining eligibility. 0 disables inlining.
 	inlineThreshold int
+	// frameReclaimVerdict is the interprocedural ClassifyFrameReclaim result for the
+	// top-level unit (name -> reclaimable), computed once in CompileValidatedBegin and
+	// consulted by frameReuseForDefine. nil on child/closure compilers, library/transformer
+	// compiles, and single-expression (non-begin) programs — there frameReuseForDefine falls
+	// back to the per-body predicate (status quo).
+	frameReclaimVerdict map[string]bool
 	// quasiMaxDepth bounds structural recursion in the quasiquote/quasisyntax
 	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
 	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
