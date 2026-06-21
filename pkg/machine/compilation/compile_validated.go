@@ -448,6 +448,13 @@ func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallCon
 	if ns != nil && ns.ImmutableTopLevel() && ns.Runtime() == p.env && p.frameReclaimVerdict == nil {
 		flipped := p.prestampTopLevelStable(v.Body())
 		p.frameReclaimVerdict = validate.ClassifyFrameReclaim(v.Body(), p.env)
+		// Revert SYNCHRONOUSLY, never via defer: the revert MUST complete before Pass 2
+		// (compileValidatedSequence) below, whose declareDefineBinding reads this same
+		// Stable field in its redefine guard. A deferred revert would run at function
+		// return — after Pass 2 — leaving the bindings Stable during Pass 2 and
+		// reintroducing the "cannot redefine immutable top-level binding" collision this
+		// revert exists to prevent. ClassifyFrameReclaim is error-free and does not panic
+		// over validated input, so no failure can intervene between stamp and revert.
 		for _, b := range flipped {
 			b.EnsureMeta().Stable = false
 		}
@@ -478,6 +485,10 @@ func (p *CompileTimeContinuation) prestampTopLevelStable(body []validate.Validat
 			name := v.Name()
 			b := p.env.GetBinding(name.Sym, name.Scopes())
 			if b == nil {
+				// Skipping is sound: the classifier resolves the callee via the same
+				// GetBinding (frame_reclaim_build.go), so a name that fails to resolve
+				// here also fails there, where it yields a mutable => unsafe edge. A
+				// skipped stamp can only forgo an optimization, never forge a verdict.
 				continue
 			}
 			m := b.EnsureMeta()

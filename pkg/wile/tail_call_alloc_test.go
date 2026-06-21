@@ -21,35 +21,36 @@ import (
 	"github.com/aalpar/wile/pkg/stdlib"
 )
 
-// Phase 3 (TDD RED) allocation tests for the escape-gated frame-reclamation
-// optimizer (plans/2026-06-11-escape-gated-frame-allocation.local.md §"Phase 3").
+// Allocation-slope tests for the escape-gated frame-reclamation optimizer
+// (plans/2026-06-11-escape-gated-frame-allocation.local.md). Authored as Phase-3
+// TDD RED probes; Phase 4 codegen has since SHIPPED and turned them green, so they
+// now guard both directions: a leak creeping back (slope rising) and the release
+// over-firing on a still-live frame (a control's slope collapsing).
 //
-// Every function whose body ends in a tail call currently leaks its own env
+// Every function whose body ends in a tail call would otherwise leak its own env
 // frame to GC instead of releasing it to the FreeList pool (~1 frame/call). The
-// Phase-1 classifier (validate.ClassifyFrameReclaim, DONE) already proves at
-// compile time which functions can never expose their frame to a continuation;
-// Phase 4 codegen (OpApplyTailReleasing for general tail calls, OpSelfTailCall
-// for self/depth-0 loops, NOT YET BUILT) will release the proven-safe frames.
-// These tests pin the leak by measuring the *slope* of heap allocations against
-// problem size:
+// Phase-1 classifier (validate.ClassifyFrameReclaim) proves at compile time which
+// functions can never expose their frame to a continuation; Phase 4 codegen
+// (OpReleaseEnvFrame for general tail calls, OpSelfTailCall for self/depth-0 loops
+// — both SHIPPED) releases the proven-safe frames. These tests pin the behavior by
+// measuring the *slope* of heap allocations against problem size:
 //
-//   - leaked (today):   slope ≈ 1–2 frames per tail call  → FAILS the < 0.1 assertions
-//   - released (Phase 4): slope ≈ 0    (O(1) frames total) → PASSES
+//   - leaked (pre-Phase-4): slope ≈ 1–2 frames per tail call → FAILS the < 0.1 assertions
+//   - released (now):       slope ≈ 0   (O(1) frames total)  → PASSES
 //
-// EXPECTED STATE: the leak probes are RED until Phase 4 wires the release
-// opcodes. They are RED *for the right reason* — the classifier proves these
-// shapes reclaimable (asserted below via classifyAmbient) and a memory profile
-// confirms every size-dependent allocation is an env frame component
-// (newEnvFramePoolEntry + EnvironmentFrame.PreAllocateBindings, both owned by the
-// pool entry the release recycles). After Phase 4 the leak probes must go green
-// and the Phase-5 continuation suite must stay green.
+// EXPECTED STATE: the reclaimable probes are GREEN (Phase 4 wires the release
+// opcodes). They pass *for the right reason* — the classifier proves these shapes
+// reclaimable (asserted below via classifyAmbient) and a memory profile confirms
+// every size-dependent allocation is an env frame component (newEnvFramePoolEntry +
+// EnvironmentFrame.PreAllocateBindings, both owned by the pool entry the release
+// recycles). The Phase-5 continuation suite must stay green.
 //
 // The negative controls are the inverse: self-tail loops the classifier REFUSES
 // to release (call/cc in body, escaping closure, mutated callee). They allocate
-// today and must KEEP allocating after Phase 4 — a collapsed slope there means
-// the release opcode over-fired on a frame a continuation can still reach (the
-// exact corruption that killed the abandoned runtime recycler, see
-// tail-frame-recycling.local.md Phase 3). They PASS before and after Phase 4.
+// and must KEEP allocating — a collapsed slope there means the release opcode
+// over-fired on a frame a continuation can still reach (the exact corruption that
+// killed the abandoned runtime recycler, see tail-frame-recycling.local.md
+// Phase 3). They PASS regardless of the optimization.
 //
 // Engine config: KitchenSink + WithImmutableTopLevel(). The flag is load-bearing,
 // not incidental — it stamps the producer's Stable bit on defined-once,
@@ -255,8 +256,9 @@ func TestNamedLetEnvFrameAllocations(t *testing.T) {
 // TestMutualRecursionEnvFrameAllocations is Lever A's headline probe: ping and pong
 // are mutually tail-recursive top-level defines. The per-body predicate refuses each
 // one's tail call to the OTHER (not self, not a capture-safe primitive), so today every
-// cross-call leaks a frame (slope ~1.0). The interprocedural classifier proves both safe
-// (asserted); wiring its verdict into codegen drops the slope to ~0.
+// cross-call leaks a frame: slope ~2.0 (env-frame pool entry + bindings slice, the same
+// two allocations the other leak probes in this file observe). The interprocedural
+// classifier proves both safe (asserted); wiring its verdict into codegen drops it to ~0.
 func TestMutualRecursionEnvFrameAllocations(t *testing.T) {
 	const def = "(begin " +
 		"(define (ping n) (if (= n 0) 'done (pong (- n 1)))) " +
@@ -273,6 +275,35 @@ func TestMutualRecursionEnvFrameAllocations(t *testing.T) {
 		small, big, slope)
 	if slope > 0.1 {
 		t.Errorf("mutual recursion leaks env frames: %.3f frames/call (want < 0.1); "+
+			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
+	}
+}
+
+// TestThreeCycleEnvFrameAllocations extends the mutual-recursion probe to a 3-node
+// cycle (a->b->c->a). It exercises the interprocedural verdict arm at a depth a
+// 2-cycle does not: the greatest-fixpoint must converge over three mutually
+// dependent nodes (each node's safety depends transitively on the other two). Each
+// define's only non-self callee is another user define, so BodyIsFrameReleasable
+// refuses all three — the release comes SOLELY from frameReclaimVerdict. Slope ~2.0
+// before the verdict is wired, ~0 after.
+func TestThreeCycleEnvFrameAllocations(t *testing.T) {
+	const def = "(begin " +
+		"(define (cyc-a n) (if (= n 0) 'done (cyc-b (- n 1)))) " +
+		"(define (cyc-b n) (if (= n 0) 'done (cyc-c (- n 1)))) " +
+		"(define (cyc-c n) (if (= n 0) 'done (cyc-a (- n 1))))\n)"
+	assertReclaimable(t, def, "cyc-a", true)
+	assertReclaimable(t, def, "cyc-b", true)
+	assertReclaimable(t, def, "cyc-c", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(cyc-a 10000)")
+	big := allocsForRun(t, def, "(cyc-a 30000)")
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("3-cycle allocs: cyc-a(10000)=%.0f, cyc-a(30000)=%.0f, slope=%.3f frames/call",
+		small, big, slope)
+	if slope > 0.1 {
+		t.Errorf("3-cycle leaks env frames: %.3f frames/call (want < 0.1); "+
 			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
 	}
 }
