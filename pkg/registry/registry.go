@@ -41,6 +41,16 @@ type PrimitiveSpec struct {
 	ParamTypes []values.TypeConstraint
 	ReturnType values.TypeConstraint // optional: return type (nil = unspecified)
 	Keywords   []string              // optional: searchable tags
+	// InvokesProcedure marks a primitive that may call back into a Scheme
+	// procedure (apply, map, sort, for-each, call/cc, dynamic-wind, …) and could
+	// thereby transitively capture a continuation. Default false = "does not invoke
+	// a Scheme procedure" = capture-safe: the frame-reclaim classifier may trust a
+	// tail call to it as non-capturing. The flipped default is a SOUNDNESS
+	// COMMITMENT — an unannotated procedure-invoking primitive would be wrongly
+	// trusted — guarded by the registry completeness test (frame_reclaim). It flows
+	// to BindingMeta.CaptureSafe at registration; the classifier reads the binding
+	// flag because pkg/internal/validate must not import pkg/registry.
+	InvokesProcedure bool
 }
 
 // PrimitiveRegistration holds a primitive and its phases.

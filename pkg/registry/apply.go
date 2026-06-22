@@ -218,24 +218,33 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
 	}
 
+	// A nil binding here is an invariant violation — SetOwnGlobalValue just
+	// succeeded against this same gi — so surface it rather than silently skipping
+	// the stamps below.
+	b := bindingEnv.GetGlobalBinding(gi)
+	if b == nil {
+		return werr.WrapForeignErrorf(
+			werr.ErrNoSuchBinding,
+			"registerPhasePrimitive: binding for %s vanished after registration at phase %s",
+			spec.Name, phase,
+		)
+	}
+
+	// CaptureSafe is a static capability — does this primitive invoke a Scheme
+	// procedure? — stamped unconditionally from !spec.InvokesProcedure, independent
+	// of the immutable-top-level flag (unlike Stable below). The frame-reclaim
+	// classifier pairs it with IsStable() to trust a primitive callee. (No reader
+	// until the classifier consults it; see validate's classifyCallee.)
+	b.EnsureMeta().CaptureSafe = !spec.InvokesProcedure
+
 	// Opt-in (WithStableBasePrimitives): mark the binding Stable so the
 	// frame-reclaim classifier trusts it as non-rebindable, but ONLY for the
 	// capture-safe core primitives the classifier could ever trust
 	// (validate.IsCaptureSafePrimitiveName — the single source of truth shared
 	// with the classifier's own gate). Stamping any other primitive would freeze
 	// it (set!/redefine rejected) for zero classifier benefit. The set!-gate
-	// (compile_validated.go) then makes the trust a guarantee. A nil binding here
-	// is an invariant violation — SetOwnGlobalValue just succeeded against this
-	// same gi — so surface it rather than silently skipping the stamp.
+	// (compile_validated.go) then makes the trust a guarantee.
 	if cfg.stableBase && validate.IsCaptureSafePrimitiveName(spec.Name) {
-		b := bindingEnv.GetGlobalBinding(gi)
-		if b == nil {
-			return werr.WrapForeignErrorf(
-				werr.ErrNoSuchBinding,
-				"registerPhasePrimitive: binding for %s vanished before Stable stamp at phase %s",
-				spec.Name, phase,
-			)
-		}
 		b.EnsureMeta().Stable = true
 	}
 	return nil

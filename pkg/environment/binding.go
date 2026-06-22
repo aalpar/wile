@@ -53,6 +53,18 @@ type BindingMeta struct {
 	// ambient primitive as frozen, stricter than an Imported binding (which a
 	// top-level define may still supersede per R7RS §5.3.1).
 	Stable bool
+	// CaptureSafe marks a binding to a primitive that cannot invoke a Scheme
+	// procedure and therefore cannot transitively capture a continuation — stamped
+	// at registration from !PrimitiveSpec.InvokesProcedure (registry/apply.go). It
+	// is the classifier-readable form of that static capability, because
+	// pkg/internal/validate cannot import pkg/registry — mirroring how Stable
+	// carries the rebind-stability conclusion across the same boundary. The
+	// frame-reclaim classifier trusts a primitive callee only when CaptureSafe AND
+	// Stable both hold: CaptureSafe is the static "cannot capture" capability,
+	// Stable the "cannot be rebound to something that can" guarantee. A user define
+	// (BindingTypeVariable) never carries this flag, so a Stable user shadow of a
+	// primitive name is not mistaken for the primitive itself.
+	CaptureSafe bool
 }
 
 // Binding represents a variable binding in the environment.
@@ -182,6 +194,18 @@ func (p *Binding) IsStable() bool {
 	return p.meta.Imported || p.meta.Stable
 }
 
+// IsCaptureSafe reports whether this binding is a primitive that cannot invoke a
+// Scheme procedure (stamped from !PrimitiveSpec.InvokesProcedure at registration).
+// The frame-reclaim classifier pairs it with IsStable() — capture-safe AND
+// non-rebindable — to trust a primitive callee. Returns false when no metadata is
+// set: the conservative default, an unstamped binding is never trusted.
+func (p *Binding) IsCaptureSafe() bool {
+	if p.meta == nil {
+		return false
+	}
+	return p.meta.CaptureSafe
+}
+
 // Copy creates a deep copy of this binding. The meta struct is copied so
 // that mutations through EnsureMeta on the original do not affect the
 // copy. This method is only used during compilation/expansion, never on
@@ -193,11 +217,12 @@ func (p *Binding) Copy() *Binding {
 	}
 	if p.meta != nil {
 		b.meta = &BindingMeta{
-			Scopes:   p.meta.Scopes,
-			Source:   p.meta.Source,
-			Doc:      p.meta.Doc,
-			Imported: p.meta.Imported,
-			Stable:   p.meta.Stable,
+			Scopes:      p.meta.Scopes,
+			Source:      p.meta.Source,
+			Doc:         p.meta.Doc,
+			Imported:    p.meta.Imported,
+			Stable:      p.meta.Stable,
+			CaptureSafe: p.meta.CaptureSafe,
 		}
 	}
 	return b
