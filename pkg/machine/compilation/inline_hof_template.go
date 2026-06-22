@@ -26,20 +26,48 @@ import (
 )
 
 // inlineHOFTemplateSource maps each curated tail HOF to a Scheme template-lambda
-// whose body is the HOF's single-list reclaiming loop, callback as the first
-// parameter. Each is a transcription of the HOF's single-list clause from
-// registry/core/bootstrap_procedures.scm (for-each ≈ line 122); the inline-vs-real
-// equivalence test guards drift. v1 = for-each (P3); widened in P6.
+// whose body is the HOF's single-sequence reclaiming loop, callback as the first
+// parameter. Each is a transcription of the HOF's single-sequence case-lambda
+// clause from pkg/registry/core/bootstrap_procedures.scm (for-each/vector-*/
+// string-* defines) — except fold, whose single-list clause is the (null? lists)
+// then-branch of pkg/stdlib/lib/srfi/1/fold.scm. The inline-vs-real equivalence
+// test for each HOF guards transcription drift. v1 = for-each (P3); the vector/
+// string index loops and fold's arity-3 list fold were widened in P6.
+//
+// The callback is the FIRST parameter of every template (matching the
+// inlineHOFCallbackParam index 0), so tryInlineHOFCall's synthetic-let stamps it
+// CaptureSafe. In the index loops the callback is called in non-tail position
+// (an argument to vector-set!/string-set!, or for side effects); only the trailing
+// (loop (+ i 1)) is the self-tail call. bodyCalleesAllCaptureSafe still passes
+// because every callee — <, vector-ref/string-ref, vector-set!/string-set!, +,
+// the stamped callback, and loop — is capture-safe, so the loop reclaims.
 //
 // Built once per Namespace (BuildInlineHOFTemplates) through the real expander +
-// validator, so the body's free identifiers (car/cdr/null?) carry definition-env
-// hygiene and resolve to the sealed-base globals even when a call site shadows
-// them locally. Inlined via the synthetic-let substrate (tryInlineHOFCall).
+// validator, so the body's free identifiers (car/cdr/null?, vector-length,
+// make-vector, etc.) carry definition-env hygiene and resolve to the sealed-base
+// globals even when a call site shadows them locally. Inlined via the
+// synthetic-let substrate (tryInlineHOFCall).
 var inlineHOFTemplateSource = map[string]string{
 	"for-each": `(lambda (f lst)
   (let loop ((lst lst))
     (if (null? lst) (if #f #f)
         (begin (f (car lst)) (loop (cdr lst))))))`,
+	"vector-map": `(lambda (f v)
+  (let ((len (vector-length v)))
+    (let ((result (make-vector len)))
+      (let loop ((i 0))
+        (if (< i len)
+            (begin
+              (vector-set! result i (f (vector-ref v i)))
+              (loop (+ i 1)))
+            result)))))`,
+	"vector-for-each": `(lambda (f v)
+  (let ((len (vector-length v)))
+    (let loop ((i 0))
+      (if (< i len)
+          (begin
+            (f (vector-ref v i))
+            (loop (+ i 1)))))))`,
 }
 
 // inlineHOFTemplateRegistry is the per-Namespace store of validated templates,
