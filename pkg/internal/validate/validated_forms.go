@@ -319,6 +319,13 @@ type ValidatedLetBinding struct {
 	Init    ValidatedExpr
 	Mutable bool
 	Escapes bool
+	// CaptureSafe requests that the compiler stamp this binding CaptureSafe+Stable
+	// when it creates it (callback specialization Strategy A, the unify path). Set
+	// only on a synthetic let-binding for a callback the call site has already
+	// proven capture-safe via CallbackIsCaptureSafe, so the inlined HOF loop calling
+	// it passes bodyCalleesAllCaptureSafe and reclaims. Never set by the validator
+	// on user source — only by the inline-HOF dispatch.
+	CaptureSafe bool
 }
 
 // ValidatedLet represents all four R7RS binding forms: let, let*, letrec,

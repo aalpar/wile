@@ -219,8 +219,27 @@ func (p *CompileTimeContinuation) createLetCompileEnv(
 			b.Name.Scopes(),
 			b.Name.SourceContext(),
 		)
+		if b.CaptureSafe {
+			stampLetBindingCaptureSafe(childEnv, b)
+		}
 	}
 	return childEnv
+}
+
+// stampLetBindingCaptureSafe stamps a freshly-created let binding CaptureSafe and
+// Stable (callback specialization Strategy A, unify path). The inline-HOF dispatch
+// sets ValidatedLetBinding.CaptureSafe only for a callback it has already proven
+// capture-safe (CallbackIsCaptureSafe), so the inlined loop calling this binding
+// passes bodyCalleesAllCaptureSafe and reclaims. Stable holds because the synthetic
+// let never set!s the binding; the proof required the callback's own stability.
+func stampLetBindingCaptureSafe(childEnv *environment.EnvironmentFrame, b validate.ValidatedLetBinding) {
+	bound := childEnv.GetBinding(b.Name.Sym, b.Name.Scopes())
+	if bound == nil {
+		return
+	}
+	m := bound.EnsureMeta()
+	m.CaptureSafe = true
+	m.Stable = true
 }
 
 // predeclareBodyDefines scans the body for define forms and pre-creates
