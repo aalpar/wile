@@ -15,6 +15,7 @@
 package wile_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -67,4 +68,69 @@ func TestInlineHOFStamp(t *testing.T) {
 				qt.Commentf("%q is not a curated inline HOF and must read -1", name))
 		})
 	}
+}
+
+// TestInlineHOFStamp_FoldViaImport pins that the import-gated curated HOF (fold,
+// srfi/1) acquires the InlineHOF capability when imported. fold is not bootstrap-
+// resident, so the post-bootstrap sweep cannot reach it; the import path stamps
+// the freshly-created target binding by export name instead. Orthogonality holds:
+// fold applies its callback (kons) and stays NOT capture-safe.
+func TestInlineHOFStamp_FoldViaImport(t *testing.T) {
+	eng := captureSafetyEngine(t)
+	ctx := context.Background()
+
+	// Before import, fold is unbound (or at least not a curated inline HOF).
+	preEnv := eng.Environment()
+	preBinding := preEnv.GetBinding(values.NewSymbol("fold"), nil)
+	if preBinding != nil {
+		qt.Assert(t, preBinding.InlineHOFParam(), qt.Equals, -1,
+			qt.Commentf("fold must not be a curated inline HOF before (import (srfi 1))"))
+	}
+
+	_, err := eng.EvalMultiple(ctx, "(import (srfi 1))")
+	qt.Assert(t, err, qt.IsNil)
+
+	env := eng.Environment()
+	b := env.GetBinding(values.NewSymbol("fold"), nil)
+	qt.Assert(t, b, qt.IsNotNil, qt.Commentf("fold must be bound after (import (srfi 1))"))
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0,
+		qt.Commentf("imported fold is a curated tail HOF; its callback (kons) is parameter 0"))
+	qt.Assert(t, b.IsCaptureSafe(), qt.IsFalse,
+		qt.Commentf("fold applies its callback and MUST stay NOT capture-safe"))
+}
+
+// TestInlineHOFStamp_RenamedImport pins that the capability follows the library
+// export, not the local alias: an import-rename of fold still stamps the renamed
+// binding, because the stamp keys on the external name.
+func TestInlineHOFStamp_RenamedImport(t *testing.T) {
+	eng := captureSafetyEngine(t)
+	ctx := context.Background()
+
+	_, err := eng.EvalMultiple(ctx, "(import (rename (srfi 1) (fold my-fold)))")
+	qt.Assert(t, err, qt.IsNil)
+
+	env := eng.Environment()
+	b := env.GetBinding(values.NewSymbol("my-fold"), nil)
+	qt.Assert(t, b, qt.IsNotNil, qt.Commentf("my-fold must be bound after the renamed import"))
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0,
+		qt.Commentf("the renamed fold still carries the capability (keyed on the export name)"))
+}
+
+// TestInlineHOFStamp_UserDefineNotStamped pins the soundness boundary: a user
+// procedure that merely shares a curated HOF's name but is NOT a library export
+// (a plain top-level define) is never stamped. The import path is the only library
+// seam; a user define lands in the mutable runtime and reads -1.
+func TestInlineHOFStamp_UserDefineNotStamped(t *testing.T) {
+	eng := captureSafetyEngine(t)
+	ctx := context.Background()
+
+	// Define a procedure named "fold" without importing srfi/1.
+	_, err := eng.EvalMultiple(ctx, "(define (fold a b) a)")
+	qt.Assert(t, err, qt.IsNil)
+
+	env := eng.Environment()
+	b := env.GetBinding(values.NewSymbol("fold"), nil)
+	qt.Assert(t, b, qt.IsNotNil)
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1,
+		qt.Commentf("a user define is not a library export and must NOT be stamped an inline HOF"))
 }

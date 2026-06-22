@@ -817,11 +817,12 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap procedures")
 	}
 
-	// Stamp the curated tail HOFs (for-each, vector-map, …) with the inert
-	// InlineHOF capability, now that the bootstrap procedures are bound. A
-	// post-load metadata sweep, like the doc injection below; inert until the
-	// compiler's inline-HOF dispatch consults it (callback specialization A).
-	stampInlineHOFs(runtimeTarget)
+	// Stamp the bootstrap-resident curated tail HOFs (for-each, vector-map, …)
+	// with the inert InlineHOF capability, now that the bootstrap procedures are
+	// bound. A post-load metadata sweep, like the doc injection below; inert until
+	// the compiler's inline-HOF dispatch consults it (callback specialization A).
+	// Import-gated HOFs (fold, srfi/1) are stamped on their import path instead.
+	compilation.StampInlineHOFs(runtimeTarget)
 
 	// Inject documentation into bootstrap macro bindings (expand-time).
 	// Must run after loadBootstrapMacros so define-syntax bindings exist.
@@ -832,40 +833,6 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 	registerSchemeDocstrings(env, reg)
 
 	return nil
-}
-
-// inlineHOFCallbackParam maps each curated tail higher-order procedure to the
-// parameter index of its callback. These are the procedures whose single-list
-// case-lambda clause may be inlined at a call site that independently proves the
-// callback capture-safe (callback specialization Strategy A). Every entry is a
-// bootstrap procedure (registry/core/bootstrap_procedures.scm) resident in the
-// sealed base, so a post-bootstrap sweep reaches them all.
-//
-// fold (srfi/1) is a deliberate omission: it is import-gated, not bootstrap-
-// resident, so this sweep cannot reach it. Its stamp belongs on the library-import
-// path and is deferred to the phase that wires fold's inline dispatch.
-var inlineHOFCallbackParam = map[string]int{
-	"for-each":        0,
-	"vector-map":      0,
-	"vector-for-each": 0,
-	"string-map":      0,
-	"string-for-each": 0,
-}
-
-// stampInlineHOFs marks the curated tail HOFs resident in frame with the inert
-// InlineHOF capability (consumed later by the compiler's inline-HOF dispatch).
-// Skip-if-absent and idempotent: a name not bound in frame is silently skipped, so
-// a frame that happens to lack a given bootstrap procedure is unaffected.
-func stampInlineHOFs(frame *environment.EnvironmentFrame) {
-	for name, idx := range inlineHOFCallbackParam {
-		b := frame.GetBinding(values.NewSymbol(name), nil)
-		if b == nil {
-			continue
-		}
-		m := b.EnsureMeta()
-		m.InlineHOF = true
-		m.InlineHOFCallbackParam = idx
-	}
 }
 
 // expandAndCompileOptimized runs the expand → compile → optimize pipeline for a
