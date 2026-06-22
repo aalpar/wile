@@ -36,7 +36,7 @@ func addContMarks(r *registry.Registry) error {
 		{Name: "continuation-mark-set?", ParamCount: 1, Impl: PrimContinuationMarkSetQ,
 			Doc: "Returns #t if OBJ is a continuation mark set.\n\nExamples:\n  (continuation-mark-set? (current-continuation-marks))  => #t\n  (continuation-mark-set? 42)  => #f", ParamNames: []string{"obj"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
-		{Name: "call-with-immediate-continuation-mark", ParamCount: 3, IsVariadic: true, Impl: PrimCallWithImmediateContMark,
+		{Name: "call-with-immediate-continuation-mark", InvokesProcedure: true, ParamCount: 3, IsVariadic: true, Impl: PrimCallWithImmediateContMark,
 			Doc: "Looks up KEY in the marks of the current frame (not parent frames), then calls PROC with the value or DEFAULT.\n\nExamples:\n  (with-continuation-mark 'k 42\n    (call-with-immediate-continuation-mark 'k values #f))  => 42", ParamNames: []string{"key", "proc", "default"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "continuation-marks", ParamCount: 2, IsVariadic: true, Impl: PrimContinuationMarks,

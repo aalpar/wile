@@ -30,33 +30,14 @@ var captureOperatorNames = map[string]struct{}{
 	"abort-current-continuation":        {},
 }
 
-// captureSafePrimitiveNames is the sound-by-default whitelist (plan Q-1): core
-// primitives that cannot invoke a Scheme procedure and therefore cannot
-// transitively capture. An UNLISTED primitive is treated as unsafe (unresolved
-// edge ⇒ heap). Membership is confirmed against an imported binding before it
-// is trusted, so a same-unit redefinition (caught earlier as a top-level node)
-// or a non-imported shadow does not slip through. Grow this set deliberately;
-// the principled long-term replacement is a PrimitiveSpec capability field
-// (logged as a follow-up).
-var captureSafePrimitiveNames = map[string]struct{}{
-	"+": {}, "-": {}, "*": {}, "/": {},
-	"=": {}, "<": {}, ">": {}, "<=": {}, ">=": {},
-	"zero?": {}, "null?": {}, "pair?": {}, "not": {},
-	"cons": {}, "car": {}, "cdr": {},
-	// extend as measured need arises
-}
-
-// IsCaptureSafePrimitiveName reports whether name is a core primitive the
-// frame-reclaim classifier trusts as capture-safe — it cannot invoke a Scheme
-// procedure or capture a continuation. This is the authoritative set for two
-// callers: the classifier's own trust gate (classifyCallee) and the registry's
-// WithStableBasePrimitives freeze. Only these primitives are ever trusted, so
-// only these need stamping Stable under the optimization flag — stamping any
-// other primitive would freeze it for no classifier benefit.
-func IsCaptureSafePrimitiveName(name string) bool {
-	_, ok := captureSafePrimitiveNames[name]
-	return ok
-}
+// The capture-safe primitive set is no longer a hand-maintained name whitelist.
+// A primitive's capture-safety is now a registration-time capability —
+// !PrimitiveSpec.InvokesProcedure — stamped onto its binding as
+// environment.BindingMeta.CaptureSafe (registry/apply.go) and read by classifyCallee
+// via Binding.IsCaptureSafe(). This package cannot import pkg/registry, so the flag
+// flows binding-side exactly as Stable does. The flipped default (most primitives
+// are capture-safe; the ~24 procedure-invoking ones are annotated InvokesProcedure:
+// true) is guarded by a registry completeness test.
 
 // makeIsCaptureOp returns a fail-safe capture-operator identity test bound to
 // env. A symbol is a capture operator iff its name is a capture-operator name
@@ -240,21 +221,21 @@ func classifyCallee(
 	}
 
 	// Capture-safe core primitive, confirmed non-rebindable: no constraint, no
-	// edge. The gate is IsStable() (Imported ∨ Stable): an imported primitive is
-	// immutable by R7RS, and under WithStableBasePrimitives an ambient base
-	// primitive is stamped Stable (Phase 2.6) — both are non-rebindable, so a
-	// call to either cannot be hijacked into a capturing procedure. A
-	// non-stable shadow of the same name (set!-able, or no opt-in) is rejected
-	// and falls through to the unsafe default below.
-	_, safe := captureSafePrimitiveNames[name]
-	if safe {
-		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
-		if b != nil && b.IsStable() {
-			return reclaimEdge{}, false
-		}
+	// edge. Two binding facts must both hold. CaptureSafe is the static "cannot
+	// invoke a Scheme procedure" capability, stamped at registration from
+	// !PrimitiveSpec.InvokesProcedure (registry/apply.go) — validate cannot import
+	// registry, so it reads the binding flag. IsStable() (Imported ∨ Stable)
+	// confirms the binding cannot be rebound to a capturing procedure: an imported
+	// primitive is immutable by R7RS, and under WithStableBasePrimitives an ambient
+	// capture-safe primitive is stamped Stable. A user shadow (BindingTypeVariable)
+	// carries neither flag, and a set!-able primitive fails IsStable() — both fall
+	// through to the unsafe default below.
+	b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
+	if b != nil && b.IsCaptureSafe() && b.IsStable() {
+		return reclaimEdge{}, false
 	}
 
-	return reclaimEdge{target: nil}, true // unknown ⇒ unresolved ⇒ unsafe
+	return reclaimEdge{target: nil}, true // unknown/unsafe ⇒ unresolved ⇒ unsafe
 }
 
 // walkCallSites invokes fn with the operator of every ValidatedCall and

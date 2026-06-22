@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -47,23 +46,26 @@ func WithContractEnforcement() ApplyOption {
 	}
 }
 
-// WithStableBasePrimitives stamps the capture-safe core primitives
-// (validate.IsCaptureSafePrimitiveName: +, -, car, cdr, cons, <, …) Stable when
-// they are bound ambiently, so the frame-reclaim classifier may trust calls to
-// them as non-rebindable without an explicit (import (scheme base)). Imported
-// primitives are already immutable; this closes the ambient-registration path,
-// where Registry.Apply binds primitives directly into the base namespace without
-// an Imported flag (Phase 2 finding #1).
+// WithStableBasePrimitives stamps every capture-safe primitive
+// (!spec.InvokesProcedure: +, -, car, cons, assq, vector-ref, sqrt, …) Stable when
+// it is bound ambiently, so the frame-reclaim classifier may trust calls to it as
+// non-rebindable without an explicit (import (scheme base)). Imported primitives
+// are already immutable; this closes the ambient-registration path, where
+// Registry.Apply binds primitives directly into the base namespace without an
+// Imported flag (Phase 2 finding #1).
 //
-// Scope is deliberately the capture-safe set, NOT every primitive: the
-// classifier only ever trusts those names, so stamping any other primitive would
-// freeze it for zero benefit. Non-capture-safe primitives (sqrt, vector-ref,
-// apply, string-upcase, …) stay R7RS-mutable even under the flag.
+// Scope is the capture-safe set, which must match CaptureSafe (stamped above from
+// the same !spec.InvokesProcedure): the classifier trusts a primitive callee only
+// when CaptureSafe AND Stable both hold, so a capture-safe primitive left
+// un-stamped here would be CaptureSafe yet never trusted. Procedure-invoking
+// primitives (apply, map, sort, eval, with-exception-handler, …) are
+// InvokesProcedure:true, so they are neither CaptureSafe nor stamped Stable and
+// stay R7RS-mutable even under the flag.
 //
 // Disabled by default. The engine appends it only under WithImmutableTopLevel(),
 // where the set!/redefine enforcement (compile_validated.go) makes Stable a
 // guarantee the classifier may rest a verdict on. The deviation it introduces —
-// the capture-safe base primitives become non-rebindable — is exactly the opt-in
+// capture-safe primitives become non-rebindable — is exactly the opt-in
 // optimization contract.
 func WithStableBasePrimitives() ApplyOption {
 	return func(cfg *applyConfig) {
@@ -238,13 +240,15 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	b.EnsureMeta().CaptureSafe = !spec.InvokesProcedure
 
 	// Opt-in (WithStableBasePrimitives): mark the binding Stable so the
-	// frame-reclaim classifier trusts it as non-rebindable, but ONLY for the
-	// capture-safe core primitives the classifier could ever trust
-	// (validate.IsCaptureSafePrimitiveName — the single source of truth shared
-	// with the classifier's own gate). Stamping any other primitive would freeze
-	// it (set!/redefine rejected) for zero classifier benefit. The set!-gate
-	// (compile_validated.go) then makes the trust a guarantee.
-	if cfg.stableBase && validate.IsCaptureSafePrimitiveName(spec.Name) {
+	// frame-reclaim classifier trusts it as non-rebindable, for every capture-safe
+	// primitive — !spec.InvokesProcedure, the same capability stamped into
+	// CaptureSafe above and read by the classifier's gate. The classifier trusts a
+	// primitive callee only when CaptureSafe AND Stable both hold, so the two stamps
+	// must cover the same set or a capture-safe primitive (e.g. assq) would be
+	// CaptureSafe yet not Stable and never trusted. Stamping a procedure-invoking
+	// primitive here would be pointless (it is not CaptureSafe) and is excluded. The
+	// set!-gate (compile_validated.go) then makes the trust a guarantee.
+	if cfg.stableBase && !spec.InvokesProcedure {
 		b.EnsureMeta().Stable = true
 	}
 	return nil

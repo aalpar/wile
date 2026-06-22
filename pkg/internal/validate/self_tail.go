@@ -41,12 +41,13 @@ func BodyIsSelfTailReusable(
 // the self name or a confirmed capture-safe, non-rebindable primitive. This is the
 // interprocedural half of capture-safety that the textual bodyReferencesCaptureOperator
 // cannot see: a loop that calls an unknown function — a user callback (map/for-each's
-// `proc`), a computed operator, a non-whitelisted or set!-able primitive — could have
-// that callee capture the continuation that pins the frame, so in-place reuse would
-// corrupt a re-entered continuation. A capture-safe primitive (IsCaptureSafePrimitiveName)
-// that is also Stable (Imported ∨ frozen, so not rebindable to a capturing procedure)
-// cannot. Self calls are safe by the co-inductive assumption that the function under
-// analysis does not itself capture.
+// `proc`), a computed operator, a procedure-invoking or set!-able primitive — could
+// have that callee capture the continuation that pins the frame, so in-place reuse
+// would corrupt a re-entered continuation. A primitive that is both CaptureSafe
+// (Binding.IsCaptureSafe(), stamped from !PrimitiveSpec.InvokesProcedure) and Stable
+// (Imported ∨ frozen, so not rebindable to a capturing procedure) cannot. Self calls
+// are safe by the co-inductive assumption that the function under analysis does not
+// itself capture.
 //
 // This is conservative — it refuses a loop that calls a provably-non-capturing user
 // helper — but it is SOUND, which the kill criterion demands; the precise call-graph
@@ -69,13 +70,17 @@ func bodyCalleesAllCaptureSafe(body []ValidatedExpr, selfName string, env *envir
 		if name == selfName && !bound.has(name) {
 			return // the genuine self call
 		}
-		if bound.has(name) || !IsCaptureSafePrimitiveName(name) {
-			safe = false // shadowed local, or a non-whitelisted callee
+		if bound.has(name) {
+			safe = false // shadowed local
 			return
 		}
 		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
-		if b == nil || !b.IsStable() {
-			safe = false // rebindable primitive ⇒ could be set! to a capturer
+		if b == nil || !b.IsCaptureSafe() || !b.IsStable() {
+			// Not a capture-safe, non-rebindable primitive: a user-defined callee
+			// (no CaptureSafe), an unresolved name, or a set!-able primitive. A
+			// same-unit define callee is rejected here (interprocedural mutual
+			// recursion is the classifier's job, not the per-body predicate's).
+			safe = false
 		}
 	})
 	return safe
@@ -105,6 +110,31 @@ func BodyIsFrameReleasable(proc ValidatedBodyAndParams, selfName string, env *en
 	body := proc.Body()
 	return !bodyReferencesCaptureOperator(body, makeIsCaptureOp(env)) &&
 		!bodyCreatesEscapingClosure(body) &&
+		bodyCalleesAllCaptureSafe(body, selfName, env)
+}
+
+// ProcedureBodyIsCaptureSafe reports whether CALLING proc can never capture the
+// caller's continuation — the property that lets the frame-reclaim classifier trust
+// proc as a callee. It is BodyIsFrameReleasable MINUS the escaping-closure check:
+// escape governs whether proc's OWN frame may be released, not whether a call to it
+// captures the caller's continuation. A procedure that merely builds and returns a
+// closure does not capture the caller's continuation when called, so it is safe as a
+// callee even though its own frame is not releasable.
+//
+// proc is capture-safe-as-callee iff its body runs no capture operator (call/cc &c.)
+// and every callee is itself capture-safe (bodyCalleesAllCaptureSafe, which resolves
+// each callee's IsCaptureSafe()/IsStable()). The compiler stamps a define's binding
+// CaptureSafe from this verdict (compile_define.go), so a proven-safe Scheme procedure
+// — stdlib (zero?, not) or a user helper — is trusted exactly like a capture-safe
+// primitive, without a hand-maintained whitelist. Conservative on forward references:
+// a callee not yet stamped reads IsCaptureSafe()==false, so proc is left unstamped
+// (sound — a missed stamp only forgoes the optimization).
+func ProcedureBodyIsCaptureSafe(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+	if env == nil {
+		return false
+	}
+	body := proc.Body()
+	return !bodyReferencesCaptureOperator(body, makeIsCaptureOp(env)) &&
 		bodyCalleesAllCaptureSafe(body, selfName, env)
 }
 

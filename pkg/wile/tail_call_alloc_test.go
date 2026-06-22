@@ -311,31 +311,35 @@ func TestThreeCycleEnvFrameAllocations(t *testing.T) {
 	}
 }
 
-// TestAssqCalleeEnvFrameAllocations is Lever E's headline probe: assq-loop's body
-// calls assq — a capture-safe primitive (PrimAssq uses the built-in helpers.EqIdentity,
-// never a user procedure, so it cannot transitively capture) that is NOT in the
-// 16-name captureSafePrimitiveNames whitelist. So today both bodyCalleesAllCaptureSafe
-// and the classifier read assq as an untrusted callee and refuse the loop, leaking
-// its self-tail frame (slope ~2.0). Once assq is declared capture-safe via
-// PrimitiveSpec.InvokesProcedure=false (the flipped default) flowing to
-// BindingMeta.CaptureSafe, both predicates trust it and the slope drops to ~0. The
-// only non-whitelisted callee is assq (= and - are whitelisted, assq-loop is self),
-// so assq is isolated as the cause — contrast TestTailLoopEnvFrameAllocations, the
-// same shape minus assq, which is already reclaimable.
-func TestAssqCalleeEnvFrameAllocations(t *testing.T) {
-	const def = "(begin (define (assq-loop n) " +
-		"(if (= n 0) n (begin (assq 'a '((a . 1) (b . 2))) (assq-loop (- n 1)))))\n)"
-	assertReclaimable(t, def, "assq-loop", true)
+// TestUnlistedPrimitiveCalleeEnvFrameAllocations is Lever E's headline probe: a
+// clean depth-0 self-tail loop (the exact shape as TestTailLoopEnvFrameAllocations,
+// which is already reclaimable) whose only extra callee is eq? — a capture-safe
+// primitive (PrimEqQ compares identity, never invokes a procedure) that is NOT in
+// the old 16-name captureSafePrimitiveNames whitelist. eq? sits in argument position
+// so the loop stays a clean self-tail, and it returns a cached boolean singleton (no
+// per-iteration allocation), making the env frame the sole size-dependent signal —
+// the ONLY difference from the known-slope-0 tail-loop is that one callee. Today both
+// bodyCalleesAllCaptureSafe and the classifier read eq? as untrusted and refuse the
+// loop, leaking its frame (slope ~2.0). Once eq? is trusted via the flipped
+// PrimitiveSpec.InvokesProcedure default flowing to BindingMeta.CaptureSafe, both
+// predicates trust it and the slope drops to ~0 — attributing the win cleanly to
+// Lever E. (assq, the audit's deriv-shaped example, and max are trusted identically;
+// eq? is used here because its boolean result needs no allocation, unlike assq's
+// quoted-list argument or max's variadic boxing, which would confound the slope.)
+func TestUnlistedPrimitiveCalleeEnvFrameAllocations(t *testing.T) {
+	const def = "(begin (define (eq-loop n acc) " +
+		"(if (= n 0) acc (eq-loop (- n 1) (eq? n acc))))\n)"
+	assertReclaimable(t, def, "eq-loop", true)
 
 	const smallTrips = 10000
 	const bigTrips = 30000
-	small := allocsForRun(t, def, "(assq-loop 10000)")
-	big := allocsForRun(t, def, "(assq-loop 30000)")
+	small := allocsForRun(t, def, "(eq-loop 10000 #f)")
+	big := allocsForRun(t, def, "(eq-loop 30000 #f)")
 	slope := allocSlope(small, big, smallTrips, bigTrips)
-	t.Logf("assq-callee allocs: assq-loop(10000)=%.0f, assq-loop(30000)=%.0f, slope=%.3f frames/iter",
+	t.Logf("unlisted-prim-callee allocs: eq-loop(10000)=%.0f, eq-loop(30000)=%.0f, slope=%.3f frames/iter",
 		small, big, slope)
 	if slope > 0.1 {
-		t.Errorf("assq-callee loop leaks env frames: %.3f frames/iter (want < 0.1); "+
+		t.Errorf("unlisted-prim-callee loop leaks env frames: %.3f frames/iter (want < 0.1); "+
 			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
 	}
 }
