@@ -311,6 +311,35 @@ func TestThreeCycleEnvFrameAllocations(t *testing.T) {
 	}
 }
 
+// TestAssqCalleeEnvFrameAllocations is Lever E's headline probe: assq-loop's body
+// calls assq — a capture-safe primitive (PrimAssq uses the built-in helpers.EqIdentity,
+// never a user procedure, so it cannot transitively capture) that is NOT in the
+// 16-name captureSafePrimitiveNames whitelist. So today both bodyCalleesAllCaptureSafe
+// and the classifier read assq as an untrusted callee and refuse the loop, leaking
+// its self-tail frame (slope ~2.0). Once assq is declared capture-safe via
+// PrimitiveSpec.InvokesProcedure=false (the flipped default) flowing to
+// BindingMeta.CaptureSafe, both predicates trust it and the slope drops to ~0. The
+// only non-whitelisted callee is assq (= and - are whitelisted, assq-loop is self),
+// so assq is isolated as the cause — contrast TestTailLoopEnvFrameAllocations, the
+// same shape minus assq, which is already reclaimable.
+func TestAssqCalleeEnvFrameAllocations(t *testing.T) {
+	const def = "(begin (define (assq-loop n) " +
+		"(if (= n 0) n (begin (assq 'a '((a . 1) (b . 2))) (assq-loop (- n 1)))))\n)"
+	assertReclaimable(t, def, "assq-loop", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(assq-loop 10000)")
+	big := allocsForRun(t, def, "(assq-loop 30000)")
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("assq-callee allocs: assq-loop(10000)=%.0f, assq-loop(30000)=%.0f, slope=%.3f frames/iter",
+		small, big, slope)
+	if slope > 0.1 {
+		t.Errorf("assq-callee loop leaks env frames: %.3f frames/iter (want < 0.1); "+
+			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
+	}
+}
+
 // TestNonTailRecursionControl is the control proving the fix is *specific* to
 // tail-position frames. Non-tail recursion keeps every frame in the chain
 // simultaneously live, so it genuinely allocates O(depth) frames per run — and
