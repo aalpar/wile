@@ -84,6 +84,9 @@ var inlineHOFTemplateSource = map[string]string{
           (begin
             (f (string-ref s i))
             (loop (+ i 1)))))))`,
+	"fold": `(lambda (kons knil ls)
+  (let lp ((ls ls) (acc knil))
+    (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc)))`,
 }
 
 // inlineHOFTemplateRegistry is the per-Namespace store of validated templates,
