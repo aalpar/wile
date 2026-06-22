@@ -287,7 +287,13 @@ func TestPromotedPrimitiveFallback(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			engine, err := NewEngine(ctx)
+			// WithMutableTopLevel: these cases set! a primitive (eq?, vector?) to
+			// exercise the VM's promoted-op fallback when a promoted binding is
+			// rebound. Under the immutable-top-level default (Lever E), capture-safe
+			// primitives are frozen, so the rebind would be rejected — but the
+			// fallback mechanism under test is flag-agnostic, so testing it requires
+			// the mutable top level where rebinding a primitive is permitted.
+			engine, err := NewEngine(ctx, WithMutableTopLevel())
 			if err != nil {
 				t.Fatal(err)
 			}

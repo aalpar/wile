@@ -37,8 +37,29 @@ func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFram
 			t.Fatalf("failed to create global binding %q", name)
 		}
 		b.EnsureMeta().Imported = true
+		// Model the registry's CaptureSafe stamp (Lever E): the post-whitelist
+		// classifier trusts a primitive callee on IsCaptureSafe()&&IsStable(). These
+		// unit tests lack the real registry, so a capture-safe primitive stand-in
+		// must carry the flag by hand, mirroring how markBindingImported propagates
+		// it on a real import. Procedure-invokers (map), capture operators (call/cc),
+		// and the non-primitive callee stand-ins (proc, fns, pong, k) used in the
+		// negative tests are deliberately absent — they must NOT be trusted.
+		if captureSafeTestPrims[name] {
+			b.EnsureMeta().CaptureSafe = true
+		}
 	}
 	return env
+}
+
+// captureSafeTestPrims is the set of primitive stand-in names these tests import
+// that invoke no Scheme procedure (arithmetic, comparison, pair accessors), i.e.
+// the names the real registry would stamp !InvokesProcedure ⇒ CaptureSafe. It is
+// test fixture data modelling that capability, not a production whitelist (Lever E
+// retired the production captureSafePrimitiveNames map).
+var captureSafeTestPrims = map[string]bool{
+	"+": true, "-": true, "*": true, "/": true,
+	"=": true, "<": true, ">": true, "<=": true, ">=": true,
+	"car": true, "cdr": true, "cons": true,
 }
 
 // stampStable creates (or reuses) a global binding for each name and stamps it
