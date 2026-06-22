@@ -296,6 +296,79 @@ func (p *FreeList[T]) SetEnabled(on bool) {
 	p.enabled.Store(on)
 }
 
+// unsyncFreeList is the single-goroutine variant of FreeList used by the
+// per-thread pools (threadPools). It drops the mutex, the atomic stat counters,
+// and the enabled flag that FreeList carries for the process-global pools —
+// none of which a per-thread freelist needs, because each one is owned by
+// exactly one goroutine: a frame allocated by a thread is never released by
+// another (the per-thread-pool invariant, pinned by
+// TestUnsyncFreeList_ConcurrentDistinctPools and
+// plans/2026-06-08-per-thread-pools-invariant.local.md). Removing that
+// synchronization is the bulk of the env-frame pool round-trip cost on hot
+// non-tail calls.
+//
+// Acquire/Release mirror FreeList's allocate-on-miss / reset-on-release
+// semantics minus the synchronization. Per-thread pools are never disabled, so
+// Release always recycles (no enabled check, no discard path).
+// The acquires/releases/misses counters are plain (non-atomic) uint64s: a
+// per-thread freelist is read and written by a single goroutine, so a memory
+// barrier would be pure cost. Stats() must therefore be read from the owning
+// goroutine.
+type unsyncFreeList[T any] struct {
+	free     []*T
+	newFn    func() *T
+	reset    func(*T)
+	acquires uint64
+	releases uint64
+	misses   uint64
+}
+
+// newUnsyncFreeList creates a single-goroutine freelist with the given
+// constructor and reset function.
+func newUnsyncFreeList[T any](newFn func() *T, resetFn func(*T)) *unsyncFreeList[T] {
+	return &unsyncFreeList[T]{
+		newFn: newFn,
+		reset: resetFn,
+	}
+}
+
+// Acquire returns a recycled object, or a freshly allocated one when the
+// freelist is empty. Single-goroutine: no lock, no atomics.
+func (p *unsyncFreeList[T]) Acquire() *T {
+	p.acquires++
+	n := len(p.free)
+	if n == 0 {
+		p.misses++
+		return p.newFn()
+	}
+	v := p.free[n-1]
+	p.free[n-1] = nil
+	p.free = p.free[:n-1]
+	return v
+}
+
+// Release resets v and returns it to the freelist. Single-goroutine: no lock.
+func (p *unsyncFreeList[T]) Release(v *T) {
+	p.releases++
+	p.reset(v)
+	p.free = append(p.free, v)
+}
+
+// Stats returns a point-in-time snapshot of this freelist's counters. Single-
+// goroutine: callers must read from the owning goroutine (per-thread invariant).
+func (p *unsyncFreeList[T]) Stats() PoolSnapshot {
+	var inFlight uint64
+	if p.acquires > p.releases {
+		inFlight = p.acquires - p.releases
+	}
+	return PoolSnapshot{
+		Acquires: p.acquires,
+		Releases: p.releases,
+		Misses:   p.misses,
+		InFlight: inFlight,
+	}
+}
+
 // registerPool registers a Pool[T] with a PoolManager and returns it,
 // enabling the var-init-chain pattern:
 //
