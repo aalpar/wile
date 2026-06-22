@@ -21,16 +21,16 @@ import (
 
 func addExceptions(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "with-exception-handler", ParamCount: 2, Impl: PrimWithExceptionHandler,
+		{Name: "with-exception-handler", InvokesProcedure: true, ParamCount: 2, Impl: PrimWithExceptionHandler,
 			Doc: "Installs HANDLER as the current exception handler for the dynamic extent of THUNK. HANDLER receives the raised object.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"oops\")))  => 42", ParamNames: []string{"handler", "thunk"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeProcedure}, ReturnType: values.TypeAny,
 			Keywords: []string{"try", "catch", "error handler", "trap"}},
 		// raise/error never return normally — ReturnType is a nominal TypeAny.
-		{Name: "raise", ParamCount: 1, Impl: PrimRaise,
+		{Name: "raise", InvokesProcedure: true, ParamCount: 1, Impl: PrimRaise,
 			Doc: "Raises OBJ as a non-continuable exception. If the handler returns, a secondary exception is raised.\n\nExamples:\n  (guard (e (#t e)) (raise \"oops\"))  => \"oops\"", ParamNames: []string{"obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny,
 			Keywords: []string{"throw", "signal", "error"}},
-		{Name: "raise-continuable", ParamCount: 1, Impl: PrimRaiseContinuable,
+		{Name: "raise-continuable", InvokesProcedure: true, ParamCount: 1, Impl: PrimRaiseContinuable,
 			Doc: "Raises OBJ as a continuable exception. The handler's return value becomes the result of the raise expression.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"note\")))  => 42", ParamNames: []string{"obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "error", ParamCount: 2, IsVariadic: true, Impl: PrimError,

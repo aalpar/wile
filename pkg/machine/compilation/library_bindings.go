@@ -30,19 +30,38 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// markBindingImported records import provenance on a binding installed by
-// library import. A nil binding is silently ignored.
+// markBindingImported records import provenance on a target binding installed by
+// library import, propagating the source binding's capture-safety. A nil target is
+// silently ignored.
 //
-// Only Imported (the evidence) is set. The Stable conclusion is NOT stored
-// here: IsStable() already treats Imported as standing evidence for stability,
-// so setting Stable too would conflate evidence with the proof result. The
-// Stable flag is reserved for a completed rebind-stability proof of a
-// non-imported binding (sibling escape-gated plan).
-func markBindingImported(b *environment.Binding) {
-	if b == nil {
+// Imported (the evidence) is set on the target. The Stable conclusion is NOT stored
+// here: IsStable() already treats Imported as standing evidence for stability, so
+// setting Stable too would conflate evidence with the proof result. The Stable flag
+// is reserved for a completed rebind-stability proof of a non-imported binding.
+//
+// CaptureSafe IS propagated from source, unlike Stable: it is a static capability of
+// the underlying primitive (does it invoke a Scheme procedure?), not a provenance or
+// a stability conclusion, so an imported primitive has exactly the same capture-safety
+// as its source. The frame-reclaim classifier reads IsCaptureSafe() on the imported
+// binding; without this propagation an (import (scheme base)) program loses the frame
+// optimization that the ambient WithStableBasePrimitives path keeps (the import path
+// creates a fresh binding, so the registration-time CaptureSafe stamp does not carry
+// over on its own).
+//
+// source is expected non-nil: every live caller resolves it from findLibraryBinding's
+// found==true path. A nil source is therefore a caller bug — it would silently drop
+// capture-safety (a leak-safe miss that surfaces only as an unexplained perf
+// regression on an imported program, never as corruption) — so the guard below is
+// defensive, not a supported "no propagation" mode.
+func markBindingImported(target, source *environment.Binding) {
+	if target == nil {
 		return
 	}
-	b.EnsureMeta().Imported = true
+	m := target.EnsureMeta()
+	m.Imported = true
+	if source != nil {
+		m.CaptureSafe = source.IsCaptureSafe()
+	}
 }
 
 // ImportSet represents a parsed import specification.
@@ -278,7 +297,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %s", localName, targetPhase)
 			}
 		}
-		markBindingImported(phaseEnv.GetBinding(localSym, nil))
+		markBindingImported(phaseEnv.GetBinding(localSym, nil), libBinding)
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
@@ -292,7 +311,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
 			}
-			markBindingImported(propagateEnv.GetBinding(propagateSym, nil))
+			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding)
 		}
 	}
 	return nil
@@ -357,7 +376,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 			}
 		}
-		markBindingImported(targetEnv.GetBinding(localSym, nil))
+		markBindingImported(targetEnv.GetBinding(localSym, nil), importedBinding)
 
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
@@ -367,7 +386,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
 			}
-			markBindingImported(expandEnv.GetBinding(localSym, nil))
+			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding)
 		}
 	}
 	return nil

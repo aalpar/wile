@@ -34,13 +34,13 @@ func addPrompts(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		// Prompt/abort/composable-continuation invocations return whatever
 		// the body/handler produces.
-		{Name: "call-with-continuation-prompt", ParamCount: 3, Impl: PrimCallWithContinuationPrompt,
+		{Name: "call-with-continuation-prompt", InvokesProcedure: true, ParamCount: 3, Impl: PrimCallWithContinuationPrompt,
 			Doc: "Calls THUNK with a delimited continuation prompt tagged with TAG. If THUNK aborts to TAG, HANDLER is called with the abort values.\n\nExamples:\n  (let ((tag (make-continuation-prompt-tag)))\n    (call-with-continuation-prompt\n      (lambda () (abort-current-continuation tag 42))\n      tag\n      (lambda (v) v)))  => 42", ParamNames: []string{"thunk", "tag", "handler"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny, values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "abort-current-continuation", ParamCount: 2, IsVariadic: true, Impl: PrimAbortCurrentContinuation,
 			Doc: "Aborts to the nearest prompt matching TAG, passing VAL and VALS to the prompt handler.\n\nExamples:\n  ;; See call-with-continuation-prompt for usage.", ParamNames: []string{"tag", "val", "vals"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "call-with-composable-continuation", ParamCount: 2, Impl: PrimCallWithComposableContinuation,
+		{Name: "call-with-composable-continuation", InvokesProcedure: true, ParamCount: 2, Impl: PrimCallWithComposableContinuation,
 			Doc: "Captures the continuation up to the nearest prompt matching TAG as a composable procedure, and passes it to PROC.\n\nExamples:\n  ;; See (wile control) for shift/reset built on this primitive.", ParamNames: []string{"proc", "tag"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "continuation-prompt-available?", ParamCount: 1, Impl: PrimContinuationPromptAvailableQ,

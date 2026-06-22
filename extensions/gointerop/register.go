@@ -152,7 +152,7 @@ func addOnce(r *registry.Registry) error {
 			Doc: "Returns #t if OBJ is a once object.", ParamNames: []string{"obj"}, Category: "once",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
-		{Name: "once-do!", ParamCount: 2, Impl: PrimOnceDo,
+		{Name: "once-do!", InvokesProcedure: true, ParamCount: 2, Impl: PrimOnceDo,
 			Doc: "Executes THUNK exactly once across all calls. Returns #t if this call executed THUNK.", ParamNames: []string{"once", "thunk"}, Category: "once",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeProcedure},
 			ReturnType: values.TypeBoolean},

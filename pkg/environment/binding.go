@@ -53,6 +53,26 @@ type BindingMeta struct {
 	// ambient primitive as frozen, stricter than an Imported binding (which a
 	// top-level define may still supersede per R7RS §5.3.1).
 	Stable bool
+	// CaptureSafe marks a binding whose callee cannot invoke a Scheme procedure and
+	// therefore cannot transitively capture a continuation. Two writers stamp it:
+	// a Go primitive at registration from !PrimitiveSpec.InvokesProcedure
+	// (registry/apply.go), and a Scheme procedure proven capture-safe at compile
+	// time (compile_define.go via validate.ProcedureBodyIsCaptureSafe — stdlib like
+	// zero?/not, or a user helper). It is the classifier-readable form of that
+	// capability, because pkg/internal/validate cannot import pkg/registry —
+	// mirroring how Stable carries the rebind-stability conclusion across the same
+	// boundary. The frame-reclaim classifier trusts a callee only when CaptureSafe
+	// AND Stable both hold: CaptureSafe is the "cannot capture" capability, Stable
+	// the "cannot be rebound to something that can" guarantee.
+	//
+	// INVARIANT — do NOT fold any sibling flag into IsCaptureSafe() the way IsStable
+	// ORs in Imported: Imported does NOT imply capture-safe (an imported `apply` or
+	// `map` is Imported yet invokes a procedure). IsCaptureSafe() reads this field
+	// alone, by design. A user redefinition of a primitive name (e.g.
+	// (define car <lambda>)) carries this flag ONLY if its own body proves
+	// capture-safe — a capturing redefinition is never stamped, which is how the
+	// classifier avoids trusting a capturing shadow by name.
+	CaptureSafe bool
 }
 
 // Binding represents a variable binding in the environment.
@@ -182,6 +202,21 @@ func (p *Binding) IsStable() bool {
 	return p.meta.Imported || p.meta.Stable
 }
 
+// IsCaptureSafe reports whether this binding's callee cannot invoke a Scheme
+// procedure — a Go primitive stamped from !PrimitiveSpec.InvokesProcedure at
+// registration, or a Scheme procedure proven capture-safe at compile time
+// (ProcedureBodyIsCaptureSafe). The frame-reclaim classifier pairs it with
+// IsStable() — capture-safe AND non-rebindable — to trust a callee. Returns false
+// when no metadata is set: the conservative default, an unstamped binding is never
+// trusted. Unlike IsStable (which ORs in Imported), this reads CaptureSafe alone:
+// Imported does NOT imply capture-safe (see the BindingMeta.CaptureSafe invariant).
+func (p *Binding) IsCaptureSafe() bool {
+	if p.meta == nil {
+		return false
+	}
+	return p.meta.CaptureSafe
+}
+
 // Copy creates a deep copy of this binding. The meta struct is copied so
 // that mutations through EnsureMeta on the original do not affect the
 // copy. This method is only used during compilation/expansion, never on
@@ -193,11 +228,12 @@ func (p *Binding) Copy() *Binding {
 	}
 	if p.meta != nil {
 		b.meta = &BindingMeta{
-			Scopes:   p.meta.Scopes,
-			Source:   p.meta.Source,
-			Doc:      p.meta.Doc,
-			Imported: p.meta.Imported,
-			Stable:   p.meta.Stable,
+			Scopes:      p.meta.Scopes,
+			Source:      p.meta.Source,
+			Doc:         p.meta.Doc,
+			Imported:    p.meta.Imported,
+			Stable:      p.meta.Stable,
+			CaptureSafe: p.meta.CaptureSafe,
 		}
 	}
 	return b

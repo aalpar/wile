@@ -311,6 +311,67 @@ func TestThreeCycleEnvFrameAllocations(t *testing.T) {
 	}
 }
 
+// TestUnlistedPrimitiveCalleeEnvFrameAllocations is Lever E's headline probe: a
+// clean depth-0 self-tail loop (the exact shape as TestTailLoopEnvFrameAllocations,
+// which is already reclaimable) whose only extra callee is eq? — a capture-safe
+// primitive (PrimEqQ compares identity, never invokes a procedure) that is NOT in
+// the old 16-name captureSafePrimitiveNames whitelist. eq? sits in argument position
+// so the loop stays a clean self-tail, and it returns a cached boolean singleton (no
+// per-iteration allocation), making the env frame the sole size-dependent signal —
+// the ONLY difference from the known-slope-0 tail-loop is that one callee. Today both
+// bodyCalleesAllCaptureSafe and the classifier read eq? as untrusted and refuse the
+// loop, leaking its frame (slope ~2.0). Once eq? is trusted via the flipped
+// PrimitiveSpec.InvokesProcedure default flowing to BindingMeta.CaptureSafe, both
+// predicates trust it and the slope drops to ~0 — attributing the win cleanly to
+// Lever E. (assq, the audit's deriv-shaped example, and max are trusted identically;
+// eq? is used here because its boolean result needs no allocation, unlike assq's
+// quoted-list argument or max's variadic boxing, which would confound the slope.)
+func TestUnlistedPrimitiveCalleeEnvFrameAllocations(t *testing.T) {
+	const def = "(begin (define (eq-loop n acc) " +
+		"(if (= n 0) acc (eq-loop (- n 1) (eq? n acc))))\n)"
+	assertReclaimable(t, def, "eq-loop", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(eq-loop 10000 #f)")
+	big := allocsForRun(t, def, "(eq-loop 30000 #f)")
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("unlisted-prim-callee allocs: eq-loop(10000)=%.0f, eq-loop(30000)=%.0f, slope=%.3f frames/iter",
+		small, big, slope)
+	if slope > 0.1 {
+		t.Errorf("unlisted-prim-callee loop leaks env frames: %.3f frames/iter (want < 0.1); "+
+			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
+	}
+}
+
+// TestProvenProcedureCalleeEnvFrameAllocations is the end-to-end probe for Lever E's
+// PROVE-THEM path (distinct from TestUnlistedPrimitiveCalleeEnvFrameAllocations, whose
+// eq? callee is a Go primitive trusted via the InvokesProcedure capability). Here the
+// trusted callee is zero? — a stdlib SCHEME procedure ((= z 0)) with no Go primitive
+// behind it, trusted only because ProcedureBodyIsCaptureSafe proves its body
+// capture-safe at compile time and stamps its binding CaptureSafe. zero? returns a
+// cached boolean (no per-iteration allocation), so the env frame is the sole
+// size-dependent signal. A regression where the compile-time proof stamps the binding
+// but the classifier fails to consume it for a Scheme-procedure callee (vs. a
+// primitive) would leave this slope at ~2.0; the proof path working drops it to ~0.
+func TestProvenProcedureCalleeEnvFrameAllocations(t *testing.T) {
+	const def = "(begin (define (z-loop n acc) " +
+		"(if (= n 0) acc (z-loop (- n 1) (zero? n))))\n)"
+	assertReclaimable(t, def, "z-loop", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(z-loop 10000 #f)")
+	big := allocsForRun(t, def, "(z-loop 30000 #f)")
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("proven-proc-callee allocs: z-loop(10000)=%.0f, z-loop(30000)=%.0f, slope=%.3f frames/iter",
+		small, big, slope)
+	if slope > 0.1 {
+		t.Errorf("proven-proc-callee loop leaks env frames: %.3f frames/iter (want < 0.1); "+
+			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
+	}
+}
+
 // TestNonTailRecursionControl is the control proving the fix is *specific* to
 // tail-position frames. Non-tail recursion keeps every frame in the chain
 // simultaneously live, so it genuinely allocates O(depth) frames per run — and

@@ -216,6 +216,21 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 		return err
 	}
 
+	// Step 1.5: Stamp CaptureSafe when CALLING this procedure can never capture the
+	// caller's continuation (its body runs no capture operator and all its callees are
+	// capture-safe). This lets the frame-reclaim classifier trust a proven capture-safe
+	// Scheme procedure — stdlib (zero?, not) or a user helper — as a callee, exactly
+	// like a capture-safe primitive, recovering the coverage the retired name whitelist
+	// hand-listed. CaptureSafe is a static capability stamped unconditionally; the
+	// classifier still pairs it with IsStable(), so a mutable/rebindable define is not
+	// trusted. Sound and conservative: a false verdict (e.g. a forward reference to a
+	// not-yet-stamped sibling) only forgoes the optimization.
+	name := v.Name()
+	binding := p.env.GetBinding(name.Sym, name.Scopes())
+	if binding != nil && validate.ProcedureBodyIsCaptureSafe(v, name.Sym.Key, p.env) {
+		binding.EnsureMeta().CaptureSafe = true
+	}
+
 	// Step 2: Set up the closure's environment and bytecode template.
 	// The local environment holds parameter bindings; compileClosure creates
 	// the child environment frame after binding parameters.

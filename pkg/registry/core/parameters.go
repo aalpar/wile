@@ -21,7 +21,7 @@ import (
 
 func addParameters(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "make-parameter", ParamCount: 2, IsVariadic: true, Impl: PrimMakeParameter,
+		{Name: "make-parameter", InvokesProcedure: true, ParamCount: 2, IsVariadic: true, Impl: PrimMakeParameter,
 			Doc: "Creates a new parameter object with INIT as its initial value. If CONVERTER is given, it is applied to INIT and all future values.\n\nExamples:\n  (let ((p (make-parameter 10))) (p))  => 10\n  (let ((p (make-parameter 10))) (parameterize ((p 20)) (p)))  => 20", ParamNames: []string{"init", "converter"}, Category: "parameters",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeProcedure}, ReturnType: values.TypeProcedure},
 		{Name: "parameter?", ParamCount: 1, Impl: PrimParameterQ,
@@ -34,7 +34,12 @@ func addParameters(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeVoid},
 		// Internal primitive: applies converter without setting the parameter value.
 		// Used by parameterize to pre-convert the value before storing as a continuation mark.
-		{Name: "%parameter-convert", ParamCount: 2, Impl: PrimParameterConvert,
+		// InvokesProcedure: it applies the parameter's user-supplied converter via
+		// ApplyCallable (prim_parameters.go), which may call call/cc and capture the
+		// caller's continuation — so it must NOT be trusted capture-safe by the
+		// frame-reclaim classifier. (make-parameter above carries the flag for the same
+		// reason; %parameter-raw-set! does not, as it invokes no procedure.)
+		{Name: "%parameter-convert", InvokesProcedure: true, ParamCount: 2, Impl: PrimParameterConvert,
 			Doc: "Internal: applies the parameter's converter to VAL without setting it. Used by parameterize to pre-convert.", ParamNames: []string{"param", "val"}, Category: "parameters",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime)

@@ -146,8 +146,13 @@ func TestAmbientStableSoundnessControls(t *testing.T) {
 	}{
 		{"call/cc via edge fallback", "(begin (define (bad k) (call/cc k))\n)", "bad"},
 		{"escaping lambda", "(begin (define (esc) (lambda () 1))\n)", "esc"},
-		{"non-whitelisted primitive", "(begin (define (uses-assq xs) (assq 'a xs))\n)", "uses-assq"},
-		{"shadowed whitelisted primitive", "(begin (define (f h) (let ((car h)) (car 3)))\n)", "f"},
+		// Procedure-invoking primitive callee: apply is InvokesProcedure:true ⇒ not
+		// CaptureSafe ⇒ a caller of it is NOT reclaimable. This is Lever E's soundness
+		// boundary — it replaced the old "non-whitelisted primitive (assq)" control,
+		// because assq is now PROVEN capture-safe and a caller of it IS reclaimable
+		// (the recovery E delivers). The boundary is now capability-based, not name-based.
+		{"procedure-invoking primitive callee", "(begin (define (uses-apply f xs) (apply f xs))\n)", "uses-apply"},
+		{"shadowed capture-safe primitive", "(begin (define (f h) (let ((car h)) (car 3)))\n)", "f"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -183,11 +188,16 @@ func TestStableBasePrimitivesEnforcement(t *testing.T) {
 		{"flag off permits set! on capture-safe primitive", "(set! car (lambda (x) x))", false, false},
 		{"flag on permits define-shadow of capture-safe primitive", "(define car (lambda (x) x))", true, false},
 		{"flag off permits define-redefine of capture-safe primitive", "(define car (lambda (x) x))", false, false},
-		// Narrow-scope control: a non-capture-safe primitive (vector-ref) is NOT
-		// stamped even under the flag, so it stays R7RS-mutable. This pins the
-		// "capture-safe set only" scope — the freeze does not extend to the whole
-		// stdlib.
-		{"flag on leaves non-capture-safe primitive mutable", "(set! vector-ref (lambda (v i) v))", true, false},
+		// Lever E widened the freeze from the old 16-name whitelist to EVERY
+		// capture-safe primitive (!InvokesProcedure). vector-ref invokes no Scheme
+		// procedure, so under the flag it is now stamped Stable and frozen — where
+		// the pre-E contract left it mutable. This pins the widened scope.
+		{"flag on rejects set! on any capture-safe primitive (vector-ref)", "(set! vector-ref (lambda (v i) v))", true, true},
+		// Scope boundary: a PROCEDURE-INVOKING primitive (apply) is InvokesProcedure
+		// ⇒ not capture-safe ⇒ NOT stamped Stable even under the flag, so it stays
+		// R7RS-mutable. The freeze covers the capture-safe set, not the whole stdlib —
+		// the mutable example is now a procedure-invoker (was vector-ref pre-E).
+		{"flag on leaves procedure-invoking primitive mutable", "(set! apply (lambda args args))", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

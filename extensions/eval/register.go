@@ -39,11 +39,11 @@ func addPrimitives(r *registry.Registry) error {
 		// eval returns whatever the expression produces; load returns the
 		// value of the last form. current-load-path/directory return a string
 		// or #f.
-		{Name: "eval", ParamCount: 1, IsVariadic: true, Impl: PrimEval,
+		{Name: "eval", InvokesProcedure: true, ParamCount: 1, IsVariadic: true, Impl: PrimEval,
 			Doc: "Evaluates expression in the current or given environment. With one argument, uses the current namespace.\n\nExamples:\n  (eval '(+ 1 2))                                   => 3\n  (eval '(* 6 7) (scheme-report-environment 7))      => 42", ParamNames: []string{"expr"}, Category: "eval",
 			Keywords:   []string{"evaluate", "execute", "interpret", "run expression"},
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "load", ParamCount: 1, Impl: PrimLoad,
+		{Name: "load", InvokesProcedure: true, ParamCount: 1, Impl: PrimLoad,
 			Doc: "Reads and evaluates all expressions from a Scheme source file in the current environment.\n\nExamples:\n  (load \"lib.scm\")  ; evaluates all forms in lib.scm", ParamNames: []string{"filename"}, Category: "eval",
 			Keywords:   []string{"source", "include file", "run file"},
 			ParamTypes: []values.TypeConstraint{values.TypeString}, ReturnType: values.TypeAny},
@@ -69,7 +69,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeAny},
 		// expand/expand-once produce syntax objects; no ValueType enum for
 		// those either.
-		{Name: "expand", ParamCount: 1, Impl: PrimExpand,
+		{Name: "expand", InvokesProcedure: true, ParamCount: 1, Impl: PrimExpand,
 			Doc: "Fully macro-expands a syntax object or datum. Returns the expanded syntax.\n\nExamples:\n  (expand '(and a b))  ; => expanded form using if", ParamNames: []string{"stx"}, Category: "eval",
 			Keywords:   []string{"macroexpand", "macro expansion", "expand macros"},
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
@@ -78,7 +78,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "expand-once", ParamCount: 1, Impl: PrimExpandOnce,
 			Doc: "Expands one level of macros. Returns two values: the expanded form and a boolean indicating whether expansion occurred.\n\nExamples:\n  (expand-once '(and a b))  ; => (values <one-step expansion> #t)", ParamNames: []string{"stx"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "compile", ParamCount: 1, Impl: PrimCompile,
+		{Name: "compile", InvokesProcedure: true, ParamCount: 1, Impl: PrimCompile,
 			Doc: "Compiles an expression to a callable thunk. The thunk can be called with no arguments to evaluate the expression.\n\nExamples:\n  (let ((f (compile '(+ 1 2)))) (f))  => 3", ParamNames: []string{"expr"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeProcedure},

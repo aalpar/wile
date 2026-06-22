@@ -57,27 +57,32 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 // frame-reclaim classifier's trust of base primitives is only as sound as this
 // stamp, so pin it directly here rather than relying on the engine-level
 // classifier pipeline to infer it. The stamp is scoped to the capture-safe set
-// (validate.IsCaptureSafePrimitiveName): a capture-safe name is stamped under
-// the option; a non-capture-safe name is left mutable even under the option.
+// (!spec.InvokesProcedure): a capture-safe primitive is stamped under the option;
+// a procedure-invoking primitive (InvokesProcedure:true) is left mutable even
+// under the option. This must match the CaptureSafe stamp (same predicate) — the
+// classifier trusts a callee only when both hold.
 func TestApply_StableBasePrimitives(t *testing.T) {
 	cases := []struct {
-		name       string
-		primName   string
-		opt        bool
-		wantStable bool
+		name             string
+		primName         string
+		invokesProcedure bool
+		opt              bool
+		wantStable       bool
 	}{
-		{"capture-safe name + option → Stable", "car", true, true},
-		{"capture-safe name, no option → not Stable", "car", false, false},
-		{"non-capture-safe name + option → left mutable", "frobnicate", true, false},
+		{"capture-safe core + option → Stable", "car", false, true, true},
+		{"capture-safe core, no option → not Stable", "car", false, false, false},
+		{"capture-safe non-core + option → Stable (widened from the 16-name set)", "frobnicate", false, true, true},
+		{"procedure-invoking + option → left mutable", "frobnicate", true, true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			reg := NewRegistry()
 			reg.AddPrimitive(PrimitiveSpec{
-				Name:       tc.primName,
-				ParamCount: 0,
-				Impl:       noopImpl,
+				Name:             tc.primName,
+				ParamCount:       0,
+				Impl:             noopImpl,
+				InvokesProcedure: tc.invokesProcedure,
 			}, PhaseSetRuntime)
 
 			topLevel := environment.NewNamespace()
@@ -92,6 +97,10 @@ func TestApply_StableBasePrimitives(t *testing.T) {
 			b := env.GetBinding(values.NewSymbol(tc.primName), nil)
 			c.Assert(b, qt.IsNotNil)
 			c.Assert(b.IsStable(), qt.Equals, tc.wantStable)
+			// CaptureSafe is the twin static stamp — applied unconditionally
+			// (independent of the option) from !InvokesProcedure. The classifier
+			// pairs it with IsStable(); pin it here so the two stamps stay aligned.
+			c.Assert(b.IsCaptureSafe(), qt.Equals, !tc.invokesProcedure)
 		})
 	}
 }

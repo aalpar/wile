@@ -126,7 +126,7 @@ func addPromises(r *registry.Registry) error {
 		{Name: "make-promise", ParamCount: 1, Impl: PrimMakePromise,
 			Doc: "Returns an eager (already-forced) promise wrapping OBJ. If OBJ is already a promise, returns it unchanged.\n\nExamples:\n  (force (make-promise 42))  => 42", ParamNames: []string{"obj"}, Category: "promises",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "force", ParamCount: 1, Impl: PrimForce,
+		{Name: "force", InvokesProcedure: true, ParamCount: 1, Impl: PrimForce,
 			Doc: "Forces evaluation of PROMISE and returns its memoized value. Non-promise arguments are returned unchanged.\n\nExamples:\n  (force (delay (+ 1 2)))  => 3\n  (force 42)              => 42", ParamNames: []string{"promise"}, Category: "promises",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "%make-lazy-promise", ParamCount: 1, Impl: PrimMakeLazyPromise,
