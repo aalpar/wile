@@ -141,34 +141,36 @@ func resetEnvFramePoolEntry(f *environment.EnvironmentFrame) {
 // continuation frame + eval stack) are all per-thread. A nil threadPools
 // (cold/expand-time contexts without a root) falls back to the global pools.
 type threadPools struct {
-	envFrames     *FreeList[environment.EnvironmentFrame]
-	continuations *FreeList[MachineContinuation]
-	stacks        *FreeList[Stack]
+	envFrames     *unsyncFreeList[environment.EnvironmentFrame]
+	continuations *unsyncFreeList[MachineContinuation]
+	stacks        *unsyncFreeList[Stack]
 }
 
 // newThreadPools mints a fresh, unregistered set of per-thread freelists.
 // Per-thread pools are deliberately NOT registered with the global PoolManager:
-// they are single-goroutine and must not share its lock or aggregate counters.
+// they are single-goroutine, so they use the lock-free unsyncFreeList (no mutex,
+// no atomic counters) and must not share its lock or aggregate counters.
 func newThreadPools() *threadPools {
 	return &threadPools{
-		envFrames:     NewFreeList("env_frame", newEnvFramePoolEntry, resetEnvFramePoolEntry),
-		continuations: NewFreeList("continuation", newContinuationPoolEntry, resetContinuationPoolEntry),
-		stacks:        NewFreeList("stack", newStackPoolEntry, resetStackPoolEntry),
+		envFrames:     newUnsyncFreeList(newEnvFramePoolEntry, resetEnvFramePoolEntry),
+		continuations: newUnsyncFreeList(newContinuationPoolEntry, resetContinuationPoolEntry),
+		stacks:        newUnsyncFreeList(newStackPoolEntry, resetStackPoolEntry),
 	}
 }
 
-// envFramePoolFor returns this context's env-frame freelist: the per-thread one
-// when present, else the process-global fallback.
-func (p *MachineContext) envFramePoolFor() *FreeList[environment.EnvironmentFrame] {
-	if p.pools != nil {
-		return p.pools.envFrames
-	}
-	return envFramePool
-}
+// Each acquire/release dispatches between the lock-free per-thread freelist (the
+// hot path, present once a context has a thread root) and the synchronized
+// process-global pool (the fallback for rootless cold/expand-time contexts where
+// p.pools is nil). The two pools are distinct concrete types — *unsyncFreeList
+// and *FreeList — so the branch lives in each method rather than behind a shared
+// accessor, keeping both calls statically dispatched.
 
 // acquireEnvFrame returns a zeroed EnvironmentFrame from this context's pool.
 func (p *MachineContext) acquireEnvFrame() *environment.EnvironmentFrame {
-	return p.envFramePoolFor().Acquire()
+	if p.pools != nil {
+		return p.pools.envFrames.Acquire()
+	}
+	return envFramePool.Acquire()
 }
 
 // releaseEnvFrame returns an EnvironmentFrame to this context's pool. Nil-safe.
@@ -177,28 +179,19 @@ func (p *MachineContext) releaseEnvFrame(f *environment.EnvironmentFrame) {
 	if f == nil {
 		return
 	}
-	p.envFramePoolFor().Release(f)
-}
-
-// stackPoolFor / continuationPoolFor return this context's freelist: the
-// per-thread one when present, else the process-global fallback.
-func (p *MachineContext) stackPoolFor() *FreeList[Stack] {
 	if p.pools != nil {
-		return p.pools.stacks
+		p.pools.envFrames.Release(f)
+		return
 	}
-	return stackPool
-}
-
-func (p *MachineContext) continuationPoolFor() *FreeList[MachineContinuation] {
-	if p.pools != nil {
-		return p.pools.continuations
-	}
-	return continuationPool
+	envFramePool.Release(f)
 }
 
 // acquireStack returns a zeroed-length Stack from this context's pool.
 func (p *MachineContext) acquireStack() *Stack {
-	return p.stackPoolFor().Acquire()
+	if p.pools != nil {
+		return p.pools.stacks.Acquire()
+	}
+	return stackPool.Acquire()
 }
 
 // releaseStack returns a Stack to this context's pool. Nil-safe.
@@ -206,12 +199,19 @@ func (p *MachineContext) releaseStack(s *Stack) {
 	if s == nil {
 		return
 	}
-	p.stackPoolFor().Release(s)
+	if p.pools != nil {
+		p.pools.stacks.Release(s)
+		return
+	}
+	stackPool.Release(s)
 }
 
 // acquireContinuation returns a zeroed MachineContinuation from this context's pool.
 func (p *MachineContext) acquireContinuation() *MachineContinuation {
-	return p.continuationPoolFor().Acquire()
+	if p.pools != nil {
+		return p.pools.continuations.Acquire()
+	}
+	return continuationPool.Acquire()
 }
 
 // releaseContinuation releases the frame's eval stack to this context's stack
@@ -223,7 +223,11 @@ func (p *MachineContext) releaseContinuation(cont *MachineContinuation) {
 	}
 	p.releaseStack(cont.evals)
 	cont.evals = nil
-	p.continuationPoolFor().Release(cont)
+	if p.pools != nil {
+		p.pools.continuations.Release(cont)
+		return
+	}
+	continuationPool.Release(cont)
 }
 
 // acquireStack returns a zeroed-length Stack from the pool.
