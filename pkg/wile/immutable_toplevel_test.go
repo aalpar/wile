@@ -108,30 +108,49 @@ func TestImmutableTopLevel_On_RedefineRejected(t *testing.T) {
 }
 
 // TestImmutableTopLevel_On_PrestampedUnitRedefineRejected pins the Lever A
-// pre-stamp/revert interaction with the redefine guard. Unit 1 is a begin-wrapped
+// pre-stamp/revert round trip against the redefine guard. Unit 1 is a begin-wrapped
 // unit, which fires the frame-reclaim pre-stamp pass (CompileValidatedBegin
-// transiently stamps the defines Stable to classify, then reverts before Pass 2).
-// The revert must restore the pre-pass state exactly: a botched revert that left
-// the bindings Stable too early would reject this very unit (the collision the
-// revert exists to prevent), while one that wrongly cleared the final per-define
-// stamp would let the later cross-unit redefine slip through. Unlike
-// TestImmutableTopLevel_On_RedefineRejected (two non-begin units, pre-stamp never
-// fires), this exercises the redefine guard ON the pre-stamped path.
+// transiently stamps the defines Stable to classify, then reverts SYNCHRONOUSLY
+// before Pass 2). The three assertions pin distinct properties:
+//   - Unit 1 compiling cleanly is the revert's load-bearing pin: a botched revert
+//     that left the bindings Stable into Pass 2 would make Pass 2's own redefine
+//     guard reject this very unit (the collision the revert exists to prevent).
+//   - a.IsStable() afterward confirms a's FINAL Stable bit survives the round trip.
+//     That bit is re-applied by Pass 2's per-define stamp (not the reverted
+//     pre-stamp), so this is the property the no-pre-stamp RedefineRejected test
+//     cannot exercise — it pins that the revert did not permanently clear it.
+//   - The cross-unit redefine then confirms that surviving Stable bit is enforced
+//     at compile time.
+//
+// Unlike TestImmutableTopLevel_On_RedefineRejected (two non-begin units, pre-stamp
+// never fires), this is the only test exercising the guard ON the pre-stamped path.
 func TestImmutableTopLevel_On_PrestampedUnitRedefineRejected(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	eng := newImmutableTopLevelEngine(t)
 
-	// Begin unit fires the pre-stamp/revert pass and must compile cleanly.
+	// Begin unit fires the pre-stamp/revert pass; a clean compile is the direct
+	// witness that the revert ran before Pass 2's redefine guard.
 	_, err := eng.EvalMultiple(ctx, `(begin (define a 1) (define b 2))`)
 	c.Assert(err, qt.IsNil)
 
-	// a is now Stable (defined-once, re-stamped by Pass 2 after the revert), so a
-	// cross-unit redefine must still be rejected — the revert did not disarm the guard.
+	// a's final Stable bit survives the pre-stamp+revert round trip (re-applied by
+	// Pass 2) — directly pinned, mirroring TestImmutableTopLevel_On_StableFlagReflectsInUnitMutation.
+	env := eng.Environment()
+	a := env.GetGlobalBinding(environment.NewGlobalIndex(values.NewSymbol("a")))
+	c.Assert(a, qt.IsNotNil)
+	c.Assert(a.IsStable(), qt.IsTrue,
+		qt.Commentf("a must remain Stable after the pre-stamp+revert round trip"))
+
+	// And that surviving Stable bit is enforced: a cross-unit redefine is rejected
+	// at compile time (sentinel + CompilationError, like CrossFormSetBangRejected).
 	_, err = eng.EvalMultiple(ctx, `(define a 3)`)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrImmutableBinding), qt.IsTrue,
 		qt.Commentf("expected ErrImmutableBinding after pre-stamped begin unit, got: %v", err))
+	var compErr *wile.CompilationError
+	c.Assert(errors.As(err, &compErr), qt.IsTrue,
+		qt.Commentf("expected compile-time rejection, got %T: %v", err, err))
 }
 
 // TestImmutableTopLevel_On_InUnitRedefineAllowed pins the boundary the pre-stamp

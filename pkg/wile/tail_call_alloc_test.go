@@ -280,12 +280,15 @@ func TestMutualRecursionEnvFrameAllocations(t *testing.T) {
 }
 
 // TestThreeCycleEnvFrameAllocations extends the mutual-recursion probe to a 3-node
-// cycle (a->b->c->a). It exercises the interprocedural verdict arm at a depth a
-// 2-cycle does not: the greatest-fixpoint must converge over three mutually
-// dependent nodes (each node's safety depends transitively on the other two). Each
-// define's only non-self callee is another user define, so BodyIsFrameReleasable
-// refuses all three — the release comes SOLELY from frameReclaimVerdict. Slope ~2.0
-// before the verdict is wired, ~0 after.
+// cycle (a->b->c->a). Like the 2-cycle, every node is structurally safe over
+// immutable edges, so the mayCapture fixpoint converges in a single sweep — this
+// does NOT exercise deeper solver convergence (a clean N-cycle forces no transitive
+// knockout; that needs an unsafe node to propagate). What it adds over the 2-cycle
+// is builder + codegen coverage: three same-unit forward references resolved into
+// the reclaim graph, and the frameReuseForDefine union emitting OpReleaseEnvFrame
+// for three mutually recursive bodies. Each define's only non-self callee is another
+// user define, so BodyIsFrameReleasable refuses all three — the release comes SOLELY
+// from frameReclaimVerdict. Slope ~2.0 before the verdict is wired, ~0 after.
 func TestThreeCycleEnvFrameAllocations(t *testing.T) {
 	const def = "(begin " +
 		"(define (cyc-a n) (if (= n 0) 'done (cyc-b (- n 1)))) " +
