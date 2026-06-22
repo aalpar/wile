@@ -261,7 +261,14 @@ func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefin
 	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
 		return selfTailReuse(name.Sym.Key, len(v.Params().Required))
 	}
-	if validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
+	// Release path: the interprocedural unit verdict (covers mutual recursion and
+	// define->define tail calls) UNION the per-body predicate (self-recursion over
+	// capture-safe primitives; also the only signal for internal defines and
+	// non-unit compiles, where frameReclaimVerdict is nil and reads false). Both are
+	// SOUND "safe" predicates, so their union is sound and can only ADD reclaimable
+	// frames over the shipped per-body gate — no continuation suite that passed
+	// before can regress.
+	if p.frameReclaimVerdict[name.Sym.Key] || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
 		return releaseReuse()
 	}
 	return noFrameReuse()

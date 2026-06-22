@@ -66,6 +66,19 @@ type CompileTimeContinuation struct {
 	// inlineThreshold is the maximum body length (in top-level expressions)
 	// for inlining eligibility. 0 disables inlining.
 	inlineThreshold int
+	// frameReclaimVerdict is the interprocedural ClassifyFrameReclaim result for the
+	// top-level unit (name -> reclaimable), computed once in CompileValidatedBegin and
+	// consulted by frameReuseForDefine. nil on child/closure compilers, library/transformer
+	// compiles, and single-expression (non-begin) programs — there frameReuseForDefine falls
+	// back to the per-body predicate (status quo).
+	//
+	// Keyed by Sym.Key (not BindingID like the inlineCandidates sibling above): its
+	// domain is top-level defines, where a GlobalEnvironmentFrame holds one slot per
+	// Key (keys are symbol values, not scope-multiplexed), so a Key uniquely names a
+	// global binding — and it must match ClassifyFrameReclaim's own map[string]bool
+	// return domain (keyed by Name().Sym.Key). inlineCandidates needs BindingID
+	// because its local let-bound bindings recur the same Key across nested scopes.
+	frameReclaimVerdict map[string]bool
 	// quasiMaxDepth bounds structural recursion in the quasiquote/quasisyntax
 	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
 	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
