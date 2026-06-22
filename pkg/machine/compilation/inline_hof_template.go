@@ -68,6 +68,22 @@ var inlineHOFTemplateSource = map[string]string{
           (begin
             (f (vector-ref v i))
             (loop (+ i 1)))))))`,
+	"string-map": `(lambda (f s)
+  (let ((len (string-length s)))
+    (let ((result (make-string len)))
+      (let loop ((i 0))
+        (if (< i len)
+            (begin
+              (string-set! result i (f (string-ref s i)))
+              (loop (+ i 1)))
+            result)))))`,
+	"string-for-each": `(lambda (f s)
+  (let ((len (string-length s)))
+    (let loop ((i 0))
+      (if (< i len)
+          (begin
+            (f (string-ref s i))
+            (loop (+ i 1)))))))`,
 }
 
 // inlineHOFTemplateRegistry is the per-Namespace store of validated templates,
