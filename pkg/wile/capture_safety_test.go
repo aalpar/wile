@@ -73,6 +73,9 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 		// promises / threads / files / gointerop
 		"force", "make-thread", "thread-start!",
 		"call-with-input-file", "call-with-output-file", "once-do!",
+		// %parameter-convert applies the parameter's user converter via ApplyCallable
+		// (the converter may call/cc) — the crosscheck-found omission this list now pins.
+		"%parameter-convert",
 	}
 	for _, name := range procedureInvokers {
 		t.Run("invoker/"+name, func(t *testing.T) {
@@ -109,4 +112,51 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 				qt.Commentf("%q does not invoke a Scheme procedure and must be CaptureSafe (the recovery Lever E unlocks)", name))
 		})
 	}
+
+	// Stdlib higher-order PROCEDURES (not Go primitives) that apply a user procedure
+	// MUST stay un-trusted: ProcedureBodyIsCaptureSafe must NOT stamp them, because
+	// their body calls the procedure parameter (an unknown callee that may capture).
+	// This is the soundness boundary of the prove-them generalization — without it a
+	// regression that wrongly stamped map/for-each would release a frame across a
+	// capturing callback. All are ambient under KitchenSink (bootstrap_procedures.scm).
+	stdlibHigherOrder := []string{"map", "for-each", "vector-map", "vector-for-each", "sort"}
+	for _, name := range stdlibHigherOrder {
+		t.Run("ho-proc/"+name, func(t *testing.T) {
+			c := qt.New(t)
+			b := env.GetBinding(values.NewSymbol(name), nil)
+			c.Assert(b, qt.IsNotNil, qt.Commentf("%q must be bound in KitchenSink", name))
+			c.Assert(b.IsCaptureSafe(), qt.IsFalse,
+				qt.Commentf("%q applies a user procedure (may capture) and MUST NOT be proven CaptureSafe", name))
+		})
+	}
+}
+
+// TestImportPropagatesCaptureSafe pins the import-propagation fix: markBindingImported
+// must carry CaptureSafe from the source onto the freshly-created imported binding. The
+// name→capability switch would otherwise silently break every (import (scheme base))
+// program — the import path creates a new binding the registration-time stamp does not
+// reach. Asserting IsImported()==true on the binding distinguishes propagation from the
+// ambient registration stamp. This is otherwise only covered indirectly (via the
+// measure harness).
+func TestImportPropagatesCaptureSafe(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng := captureSafetyEngine(t)
+	_, err := eng.EvalMultiple(ctx, "(import (scheme base))")
+	c.Assert(err, qt.IsNil)
+	env := eng.Environment()
+
+	// car: a capture-safe primitive; imported ⇒ CaptureSafe must propagate from source.
+	car := env.GetBinding(values.NewSymbol("car"), nil)
+	c.Assert(car, qt.IsNotNil)
+	c.Assert(car.IsImported(), qt.IsTrue,
+		qt.Commentf("car should be the imported binding after (import (scheme base))"))
+	c.Assert(car.IsCaptureSafe(), qt.IsTrue,
+		qt.Commentf("imported car must carry CaptureSafe from source — else import programs lose the frame optimization"))
+
+	// apply: a procedure-invoking primitive; must stay not-CaptureSafe across import.
+	app := env.GetBinding(values.NewSymbol("apply"), nil)
+	c.Assert(app, qt.IsNotNil)
+	c.Assert(app.IsCaptureSafe(), qt.IsFalse,
+		qt.Commentf("imported apply invokes a procedure and must NOT be CaptureSafe"))
 }

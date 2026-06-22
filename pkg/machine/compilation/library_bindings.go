@@ -46,7 +46,13 @@ import (
 // binding; without this propagation an (import (scheme base)) program loses the frame
 // optimization that the ambient WithStableBasePrimitives path keeps (the import path
 // creates a fresh binding, so the registration-time CaptureSafe stamp does not carry
-// over on its own). source may be nil (no propagation).
+// over on its own).
+//
+// source is expected non-nil: every live caller resolves it from findLibraryBinding's
+// found==true path. A nil source is therefore a caller bug — it would silently drop
+// capture-safety (a leak-safe miss that surfaces only as an unexplained perf
+// regression on an imported program, never as corruption) — so the guard below is
+// defensive, not a supported "no propagation" mode.
 func markBindingImported(target, source *environment.Binding) {
 	if target == nil {
 		return

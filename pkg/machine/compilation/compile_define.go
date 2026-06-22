@@ -226,9 +226,9 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	// trusted. Sound and conservative: a false verdict (e.g. a forward reference to a
 	// not-yet-stamped sibling) only forgoes the optimization.
 	name := v.Name()
-	captureSafeBinding := p.env.GetBinding(name.Sym, name.Scopes())
-	if captureSafeBinding != nil && validate.ProcedureBodyIsCaptureSafe(v, name.Sym.Key, p.env) {
-		captureSafeBinding.EnsureMeta().CaptureSafe = true
+	binding := p.env.GetBinding(name.Sym, name.Scopes())
+	if binding != nil && validate.ProcedureBodyIsCaptureSafe(v, name.Sym.Key, p.env) {
+		binding.EnsureMeta().CaptureSafe = true
 	}
 
 	// Step 2: Set up the closure's environment and bytecode template.

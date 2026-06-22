@@ -344,6 +344,34 @@ func TestUnlistedPrimitiveCalleeEnvFrameAllocations(t *testing.T) {
 	}
 }
 
+// TestProvenProcedureCalleeEnvFrameAllocations is the end-to-end probe for Lever E's
+// PROVE-THEM path (distinct from TestUnlistedPrimitiveCalleeEnvFrameAllocations, whose
+// eq? callee is a Go primitive trusted via the InvokesProcedure capability). Here the
+// trusted callee is zero? — a stdlib SCHEME procedure ((= z 0)) with no Go primitive
+// behind it, trusted only because ProcedureBodyIsCaptureSafe proves its body
+// capture-safe at compile time and stamps its binding CaptureSafe. zero? returns a
+// cached boolean (no per-iteration allocation), so the env frame is the sole
+// size-dependent signal. A regression where the compile-time proof stamps the binding
+// but the classifier fails to consume it for a Scheme-procedure callee (vs. a
+// primitive) would leave this slope at ~2.0; the proof path working drops it to ~0.
+func TestProvenProcedureCalleeEnvFrameAllocations(t *testing.T) {
+	const def = "(begin (define (z-loop n acc) " +
+		"(if (= n 0) acc (z-loop (- n 1) (zero? n))))\n)"
+	assertReclaimable(t, def, "z-loop", true)
+
+	const smallTrips = 10000
+	const bigTrips = 30000
+	small := allocsForRun(t, def, "(z-loop 10000 #f)")
+	big := allocsForRun(t, def, "(z-loop 30000 #f)")
+	slope := allocSlope(small, big, smallTrips, bigTrips)
+	t.Logf("proven-proc-callee allocs: z-loop(10000)=%.0f, z-loop(30000)=%.0f, slope=%.3f frames/iter",
+		small, big, slope)
+	if slope > 0.1 {
+		t.Errorf("proven-proc-callee loop leaks env frames: %.3f frames/iter (want < 0.1); "+
+			"%d->%.0f, %d->%.0f", slope, smallTrips, small, bigTrips, big)
+	}
+}
+
 // TestNonTailRecursionControl is the control proving the fix is *specific* to
 // tail-position frames. Non-tail recursion keeps every frame in the chain
 // simultaneously live, so it genuinely allocates O(depth) frames per run — and

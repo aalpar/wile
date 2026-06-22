@@ -47,7 +47,7 @@ type PrimitiveSpec struct {
 	// a Scheme procedure" = capture-safe: the frame-reclaim classifier may trust a
 	// tail call to it as non-capturing. The flipped default is a SOUNDNESS
 	// COMMITMENT — an unannotated procedure-invoking primitive would be wrongly
-	// trusted — guarded by the registry completeness test (frame_reclaim). It flows
+	// trusted — guarded by TestInvokesProcedureCompleteness (pkg/wile). It flows
 	// to BindingMeta.CaptureSafe at registration; the classifier reads the binding
 	// flag because pkg/internal/validate must not import pkg/registry.
 	InvokesProcedure bool

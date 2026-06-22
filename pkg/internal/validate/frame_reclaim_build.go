@@ -37,7 +37,9 @@ var captureOperatorNames = map[string]struct{}{
 // via Binding.IsCaptureSafe(). This package cannot import pkg/registry, so the flag
 // flows binding-side exactly as Stable does. The flipped default (most primitives
 // are capture-safe; the ~24 procedure-invoking ones are annotated InvokesProcedure:
-// true) is guarded by a registry completeness test.
+// true) is guarded by TestInvokesProcedureCompleteness (pkg/wile). A capture-safe
+// Scheme procedure (stdlib zero?/not, or a user helper) is additionally trusted by
+// compile-time proof — see ProcedureBodyIsCaptureSafe (self_tail.go).
 
 // makeIsCaptureOp returns a fail-safe capture-operator identity test bound to
 // env. A symbol is a capture operator iff its name is a capture-operator name

@@ -53,17 +53,25 @@ type BindingMeta struct {
 	// ambient primitive as frozen, stricter than an Imported binding (which a
 	// top-level define may still supersede per R7RS §5.3.1).
 	Stable bool
-	// CaptureSafe marks a binding to a primitive that cannot invoke a Scheme
-	// procedure and therefore cannot transitively capture a continuation — stamped
-	// at registration from !PrimitiveSpec.InvokesProcedure (registry/apply.go). It
-	// is the classifier-readable form of that static capability, because
-	// pkg/internal/validate cannot import pkg/registry — mirroring how Stable
-	// carries the rebind-stability conclusion across the same boundary. The
-	// frame-reclaim classifier trusts a primitive callee only when CaptureSafe AND
-	// Stable both hold: CaptureSafe is the static "cannot capture" capability,
-	// Stable the "cannot be rebound to something that can" guarantee. A user define
-	// (BindingTypeVariable) never carries this flag, so a Stable user shadow of a
-	// primitive name is not mistaken for the primitive itself.
+	// CaptureSafe marks a binding whose callee cannot invoke a Scheme procedure and
+	// therefore cannot transitively capture a continuation. Two writers stamp it:
+	// a Go primitive at registration from !PrimitiveSpec.InvokesProcedure
+	// (registry/apply.go), and a Scheme procedure proven capture-safe at compile
+	// time (compile_define.go via validate.ProcedureBodyIsCaptureSafe — stdlib like
+	// zero?/not, or a user helper). It is the classifier-readable form of that
+	// capability, because pkg/internal/validate cannot import pkg/registry —
+	// mirroring how Stable carries the rebind-stability conclusion across the same
+	// boundary. The frame-reclaim classifier trusts a callee only when CaptureSafe
+	// AND Stable both hold: CaptureSafe is the "cannot capture" capability, Stable
+	// the "cannot be rebound to something that can" guarantee.
+	//
+	// INVARIANT — do NOT fold any sibling flag into IsCaptureSafe() the way IsStable
+	// ORs in Imported: Imported does NOT imply capture-safe (an imported `apply` or
+	// `map` is Imported yet invokes a procedure). IsCaptureSafe() reads this field
+	// alone, by design. A user redefinition of a primitive name (e.g.
+	// (define car <lambda>)) carries this flag ONLY if its own body proves
+	// capture-safe — a capturing redefinition is never stamped, which is how the
+	// classifier avoids trusting a capturing shadow by name.
 	CaptureSafe bool
 }
 
@@ -194,11 +202,14 @@ func (p *Binding) IsStable() bool {
 	return p.meta.Imported || p.meta.Stable
 }
 
-// IsCaptureSafe reports whether this binding is a primitive that cannot invoke a
-// Scheme procedure (stamped from !PrimitiveSpec.InvokesProcedure at registration).
-// The frame-reclaim classifier pairs it with IsStable() — capture-safe AND
-// non-rebindable — to trust a primitive callee. Returns false when no metadata is
-// set: the conservative default, an unstamped binding is never trusted.
+// IsCaptureSafe reports whether this binding's callee cannot invoke a Scheme
+// procedure — a Go primitive stamped from !PrimitiveSpec.InvokesProcedure at
+// registration, or a Scheme procedure proven capture-safe at compile time
+// (ProcedureBodyIsCaptureSafe). The frame-reclaim classifier pairs it with
+// IsStable() — capture-safe AND non-rebindable — to trust a callee. Returns false
+// when no metadata is set: the conservative default, an unstamped binding is never
+// trusted. Unlike IsStable (which ORs in Imported), this reads CaptureSafe alone:
+// Imported does NOT imply capture-safe (see the BindingMeta.CaptureSafe invariant).
 func (p *Binding) IsCaptureSafe() bool {
 	if p.meta == nil {
 		return false

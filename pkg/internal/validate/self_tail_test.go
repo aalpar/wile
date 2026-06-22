@@ -265,6 +265,47 @@ func TestBodyIsFrameReleasable(t *testing.T) {
 	}
 }
 
+// TestProcedureBodyIsCaptureSafe directly pins the predicate the prove-them path
+// (compile_define.go) consults to stamp a define's binding CaptureSafe. The headline
+// case is its deliberate DIFFERENCE from BodyIsFrameReleasable: an escaping-closure
+// body is NOT frame-releasable (its own frame is pinned) yet IS capture-safe-as-callee
+// (calling it cannot capture the caller's continuation). The negatives are the
+// soundness boundary of the generalization — a capture operator or a procedure-invoking
+// callee must leave a body un-trusted.
+func TestProcedureBodyIsCaptureSafe(t *testing.T) {
+	// Positive: body calls only capture-safe primitives + self.
+	safe := fnWith("p", params("n"),
+		ifx(call(symRef("<="), symRef("n"), lit()),
+			symRef("n"),
+			call(symRef("p"), call(symRef("-"), symRef("n"), lit()))))
+	if !ProcedureBodyIsCaptureSafe(safe, "p", envWithImported(t, "<=", "-")) {
+		t.Errorf("body over capture-safe primitives + self must be capture-safe-as-callee")
+	}
+
+	// KEY: an escaping-closure body is capture-safe-as-callee (escape is irrelevant to
+	// callers) but NOT frame-releasable — the exact distinction the two predicates encode.
+	escapes := fnWith("mk", params("n"), lam(lit()))
+	env := envWithImported(t)
+	if !ProcedureBodyIsCaptureSafe(escapes, "mk", env) {
+		t.Errorf("a body that only returns a closure is capture-safe-as-callee (escape does not capture the caller)")
+	}
+	if BodyIsFrameReleasable(escapes, "mk", env) {
+		t.Errorf("guard: the same escaping body must NOT be frame-releasable (its own frame is pinned)")
+	}
+
+	// Negative: a capture operator in the body.
+	captures2 := fnWith("c", params("n"), call(symRef("call/cc"), symRef("k")))
+	if ProcedureBodyIsCaptureSafe(captures2, "c", envWithImported(t, "call/cc", "k")) {
+		t.Errorf("a body that calls call/cc must NOT be capture-safe-as-callee")
+	}
+
+	// Negative: a procedure-invoking callee — map applies a user proc that may capture.
+	usesMap := fnWith("u", params("f", "xs"), call(symRef("map"), symRef("f"), symRef("xs")))
+	if ProcedureBodyIsCaptureSafe(usesMap, "u", envWithImported(t, "map", "f", "xs")) {
+		t.Errorf("a body calling a procedure-invoking primitive (map) must NOT be capture-safe-as-callee")
+	}
+}
+
 // TestBodyIsSelfTailReusable_CalleeSafety covers the interprocedural half of
 // capture-safety added at the exported boundary: a loop is reusable only if every
 // call operator is the self name or a capture-safe, non-rebindable primitive. This
