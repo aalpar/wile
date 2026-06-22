@@ -428,3 +428,93 @@ func TestFreeList_ConcurrentAcquireRelease(t *testing.T) {
 	qt.Assert(t, snap.Releases, qt.Equals, expectedOps)
 	qt.Assert(t, snap.InFlight, qt.Equals, uint64(0))
 }
+
+// ---------------------------------------------------------------------------
+// unsyncFreeList[T] — the lock-free per-thread variant. Single-goroutine by the
+// per-thread-pool invariant (plans/2026-06-08-per-thread-pools-invariant.local.md);
+// these pin its allocate-on-miss / reset-on-release semantics and the pool
+// independence that licenses dropping FreeList's mutex and atomic counters.
+// ---------------------------------------------------------------------------
+
+func TestUnsyncFreeList_Acquire_ReturnsNewObject(t *testing.T) {
+	fl := newUnsyncFreeList(newTestItem, resetTestItem)
+
+	item := fl.Acquire()
+	qt.Assert(t, item, qt.IsNotNil)
+	qt.Assert(t, item.x, qt.Equals, 0)
+	qt.Assert(t, item.s, qt.Equals, "")
+}
+
+func TestUnsyncFreeList_Release_RecyclesDeterministically(t *testing.T) {
+	fl := newUnsyncFreeList(newTestItem, resetTestItem)
+
+	item := fl.Acquire()
+	item.x = 42
+	item.s = "hello"
+	fl.Release(item)
+
+	// Re-acquire returns the same object, reset — deterministic, no GC dependency.
+	item2 := fl.Acquire()
+	qt.Assert(t, item2, qt.IsNotNil)
+	qt.Assert(t, item2.x, qt.Equals, 0)
+	qt.Assert(t, item2.s, qt.Equals, "")
+}
+
+func TestUnsyncFreeList_Stats_TracksMissesAndInFlight(t *testing.T) {
+	fl := newUnsyncFreeList(newTestItem, resetTestItem)
+
+	// Three acquires from an empty freelist are three misses; release one.
+	a := fl.Acquire()
+	_ = fl.Acquire()
+	_ = fl.Acquire()
+	fl.Release(a)
+
+	// acquires (3) > releases (1) exercises the InFlight = acquires - releases
+	// branch, which balanced-round-trip VM tests (acquires == releases) never hit.
+	snap := fl.Stats()
+	qt.Assert(t, snap.Acquires, qt.Equals, uint64(3))
+	qt.Assert(t, snap.Releases, qt.Equals, uint64(1))
+	qt.Assert(t, snap.Misses, qt.Equals, uint64(3))
+	qt.Assert(t, snap.InFlight, qt.Equals, uint64(2))
+}
+
+func TestUnsyncFreeList_ConcurrentDistinctPools(t *testing.T) {
+	// The invariant that licenses dropping the mutex is that no two goroutines
+	// ever touch the SAME unsyncFreeList. This pins that model: N goroutines, each
+	// owning its OWN freelist, hammer acquire/release concurrently. Under -race,
+	// any accidental cross-goroutine sharing of a per-thread pool — the bug the
+	// removed mutex used to mask — would trip the detector here. Each goroutine
+	// writes only its own snaps[g] slot, so the result collection is race-free.
+	const goroutines = 16
+	const iterations = 200
+
+	snaps := make([]PoolSnapshot, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := range goroutines {
+		go func() {
+			defer wg.Done()
+			fl := newUnsyncFreeList(newTestItem, resetTestItem)
+			for range iterations {
+				item := fl.Acquire()
+				item.x = 1
+				fl.Release(item)
+			}
+			snaps[g] = fl.Stats()
+		}()
+	}
+	wg.Wait()
+
+	for g := range goroutines {
+		qt.Assert(t, snaps[g].Acquires, qt.Equals, uint64(iterations))
+		qt.Assert(t, snaps[g].Releases, qt.Equals, uint64(iterations))
+		qt.Assert(t, snaps[g].InFlight, qt.Equals, uint64(0))
+	}
+
+	// TODO(author): the deeper invariant — that the VM never lets a frame
+	// allocated on one goroutine be released on another — is exercised end-to-end
+	// by the SRFI-18 -race suite (extensions/threads). To pin it at the machine
+	// layer, drive N NewThreadSubContext roots (machine_context_subcontext.go),
+	// each running a non-tail-call workload, and assert -race clean. Left as the
+	// core-property test per the CLAUDE.local.md "leave the key test" convention.
+}

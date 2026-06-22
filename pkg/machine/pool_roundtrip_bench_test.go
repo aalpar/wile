@@ -27,9 +27,11 @@ import (
 // part a hypothetical "local call frame elide" (never allocate a separate frame)
 // could remove, versus the arg-binding setup that elision would still pay.
 //
-// Pool round-trip = FreeList.Acquire (uncontended mutex + slice pop) +
-//                   FreeList.Release (ResetForPool of a cap-4 frame + uncontended
-//                                     mutex + slice append).
+// newBenchMC roots a per-thread pool (AcquireTopLevelContext), so these drive the
+// lock-free unsyncFreeList path, not the synchronized global FreeList:
+// Pool round-trip = acquireEnvFrame -> unsyncFreeList.Acquire (slice pop) +
+//                   releaseEnvFrame -> unsyncFreeList.Release (ResetForPool of a
+//                                      cap-4 frame + slice append).
 
 // BenchmarkEnvFramePoolRoundTrip measures the PURE pool overhead: one
 // acquire + release on the steady-state hit path. This is the elidable cost

@@ -301,9 +301,11 @@ func (p *FreeList[T]) SetEnabled(on bool) {
 // and the enabled flag that FreeList carries for the process-global pools —
 // none of which a per-thread freelist needs, because each one is owned by
 // exactly one goroutine: a frame allocated by a thread is never released by
-// another (the per-thread-pool invariant,
-// plans/2026-06-08-per-thread-pools-invariant.md). Removing that synchronization
-// is the bulk of the env-frame pool round-trip cost on hot non-tail calls.
+// another (the per-thread-pool invariant, pinned by
+// TestUnsyncFreeList_ConcurrentDistinctPools and
+// plans/2026-06-08-per-thread-pools-invariant.local.md). Removing that
+// synchronization is the bulk of the env-frame pool round-trip cost on hot
+// non-tail calls.
 //
 // Acquire/Release mirror FreeList's allocate-on-miss / reset-on-release
 // semantics minus the synchronization. Per-thread pools are never disabled, so
