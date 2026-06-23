@@ -22,9 +22,62 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+// TestReader_InvalidUTF8IsLocatedError pins the boundary contract for lexical
+// errors: invalid UTF-8 must surface as a located *ParserError, not leak the
+// lower-layer *tokenizer.TokenizerError. The original cause stays matchable
+// through the wrap chain, and rendering the error must not panic even though
+// the failure has no located token. Found by FuzzReadSyntax.
+func TestReader_InvalidUTF8IsLocatedError(t *testing.T) {
+	recovered, err := readCatching("\x8b")
+	if recovered != nil {
+		t.Fatalf("reader panicked on invalid UTF-8: %v", recovered)
+	}
+	var perr *ParserError
+	if !errors.As(err, &perr) {
+		t.Fatalf("invalid UTF-8 gave %T, want *ParserError: %v", err, err)
+	}
+	var terr *tokenizer.TokenizerError
+	if !errors.As(err, &terr) {
+		t.Errorf("invalid UTF-8 error lost its *tokenizer.TokenizerError cause: %v", err)
+	}
+	// Tokenless render path: must not nil-deref, and must render without a
+	// position (no "at <nil>") via the nil-token branch in SchemeString.
+	s := perr.SchemeString()
+	if !strings.HasPrefix(s, "ParserError:") {
+		t.Errorf("tokenless render = %q, want a \"ParserError:\" prefix (no position)", s)
+	}
+}
+
+// TestReader_EmptyGraphicCharIsLocatedError pins the sentinel for the
+// empty-graphic-char crasher (#5): "#\0" reads as the character 0, then the
+// trailing NUL forms a graphic-char token with no rune, which previously indexed
+// rs[0] out of range. The fix returns a located ErrNotACharacter. It surfaces on
+// the datum AFTER "#\0", so a one-datum read would miss it — this reads to the
+// first error like the fuzz target does. Found by FuzzReadSyntax.
+func TestReader_EmptyGraphicCharIsLocatedError(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	p := NewParser(env, true, strings.NewReader("#\\0\x00"))
+	var got error
+	for range 4 {
+		_, err := p.ReadSyntax(context.TODO())
+		if err != nil {
+			got = err
+			break
+		}
+	}
+	var perr *ParserError
+	if !errors.As(got, &perr) {
+		t.Fatalf("got %T, want a located *ParserError: %v", got, got)
+	}
+	if !errors.Is(got, werr.ErrNotACharacter) {
+		t.Errorf("got %v; want errors.Is ErrNotACharacter", got)
+	}
+}
 
 // readCatching parses the first datum from src, recovering any panic so that a
 // reader crash on malformed input registers as a test failure instead of
@@ -70,6 +123,21 @@ func TestReader_MalformedInputIsLocatedErrorNotPanic(t *testing.T) {
 		{"dot with no car", "( . 5)", werr.ErrNotACons},
 		{"labeled list missing cdr datum", "#0=(1 . )", werr.ErrNotACons},
 		{"labeled list trailing missing cdr", "#0=(1 2 . )", werr.ErrNotACons},
+		// Found by FuzzReadWriteRoundTrip: a label assignment whose datum is a
+		// close/cons delimiter was silently mis-parsed into a nil-datum label
+		// (which then wrote as the non-re-readable "#<void>").
+		{"label assignment no datum (close paren)", "#0=)", werr.ErrNotACons},
+		{"label assignment no datum (close bracket)", "#0=]", werr.ErrNotACons},
+		// Found by FuzzReadSyntax (host panics / leaks on the parent commit). The
+		// fuzz corpus pins no-panic; these rows pin the *sentinel* so a regression
+		// that rejects the right input for the wrong reason is also caught.
+		{"quote form no datum", "' )", werr.ErrNotACons},
+		{"labeled list nil element (#d)", "#0=(#d)", werr.ErrNotACons},
+		{"exactness marker no number", "#e)", werr.ErrNotANumber},
+		{"rational zero denominator", "#b0/0", werr.ErrDivisionByZero},
+		// (the empty-graphic-char crasher "#\0<NUL>" surfaces on a later datum,
+		// not the first, so it is pinned by TestReader_EmptyGraphicCharIsLocatedError
+		// rather than this one-datum table.)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

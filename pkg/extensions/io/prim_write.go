@@ -46,20 +46,41 @@ func writeAndFlush(port *values.PortObject, bs []byte, errCtx string) error {
 // given renderer and writes the result to the optional textual output port.
 // write, display, write-simple, and write-shared (R7RS §6.13.3) differ only in
 // the renderer and the error-context name, so they share this factory.
-func makeWriteVariant(name string, render func(values.Value) string) machine.ForeignFunction {
+func makeWriteVariant(name string, render func(values.Value) (string, error)) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
 		obj := mc.Arg(0)
 		port, err := getOptionalTextualOutputPort(mc, 1)
 		if err != nil {
 			return err
 		}
-		err = writeAndFlush(port, []byte(render(obj)), name)
+		// render reports ErrWriteDepthExceeded when obj nests deeper than the
+		// writer's bound; surface it as a Scheme exception rather than emit
+		// output that could not be read back.
+		s, err := render(obj)
+		if err != nil {
+			return err
+		}
+		err = writeAndFlush(port, []byte(s), name)
 		if err != nil {
 			return err
 		}
 		mc.SetValue(values.Void)
 		return nil
 	}
+}
+
+// schemeStringRender adapts Value.SchemeString (which cannot fail) to the
+// render signature makeWriteVariant expects. write-simple uses it: it bypasses
+// the SchemeWriter's shared/circular analysis, so it has neither a datum-label
+// pass nor the SchemeWriter's nesting-depth bound.
+//
+// NOTE: SchemeString recurses into nested structure with no depth bound of its
+// own, so write-simple on a programmatically built, deeply nested value can
+// still overflow the host stack. That is a separate surface from the
+// SchemeWriter path (write/display/write-shared) bounded by DefaultMaxWriteDepth;
+// bounding SchemeString touches the core Value contract and is out of scope here.
+func schemeStringRender(v values.Value) (string, error) {
+	return v.SchemeString(), nil
 }
 
 // PrimWriteChar implements the write-char primitive.

@@ -128,6 +128,62 @@ mutable for interactive sessions. 10/15 items done; A4/B4/D1/D2/E1/E2 are follow
       `machine/compilation/expander_depth_test.go` (trip, default-protects,
       within-limit, shared-across-child-expanders, unlimited, decrement-on-return),
       `engine_expand_depth_test.go` (end-to-end via recursive macro + the option).
+- [x] **Bound writer recursion depth** [Medium, Done]: The fourth and final leg
+      of the recursion-depth quad (VM `DefaultMaxCallDepth`, parser
+      `DefaultMaxParseDepth`, expander `DefaultMaxExpandDepth`, now writer
+      `DefaultMaxWriteDepth`). `(write (make-list 10000000))` overflowed the host
+      Go stack with a fatal, unrecoverable crash. **Root cause was two distinct
+      surfaces, fixed separately** (the guiding invariant: *anything the writer
+      emits must be valid on read*): (1) **Length ≠ depth** — `SchemeWriter`'s two
+      analysis passes (`findShared`, `filterToCircular`) recursed once per
+      cdr-spine element while the output pass (`writePairContents`) already
+      iterated it, so a *flat* list of any length (nesting depth 1, perfectly
+      re-readable) overflowed the analysis passes. Both now walk the cdr-spine
+      iteratively, recursing only into cars/elements (genuine nesting). (2)
+      **Nesting bound** — car/element recursion is now capped at
+      `DefaultMaxWriteDepth = 10000`, counted identically to the parser's
+      `readSyntax` (root = 1, +1 per container descent) so the write and read
+      limits trip on exactly the same structures. Pass 1 (`findShared`) enforces
+      the bound, so passes 2–3 run only on depth-valid structure and stay within
+      `maxDepth` Go frames. Added `werr.ErrWriteDepthExceeded`; the three writer
+      entry points (`WriteValueToString`/`WriteSharedValueToString`/
+      `DisplayValueToString`) and `SchemeWriter.WriteString` now return
+      `(string, error)`, so `write`/`display`/`write-shared` raise a catchable
+      Scheme condition rather than emit unreadable output. Configurable via
+      `SchemeWriter.SetMaxDepth` (0 = unlimited). **No `WithMaxWriteDepth` engine
+      option**: unlike parse, the writer has no engine-owned entry point — it is
+      reached only through the io primitives — so per the parser's documented
+      `(read ...)` limitation the primitives use the default. `write-simple`
+      bypasses `SchemeWriter` (it uses `Value.SchemeString`, a separate unbounded
+      recursion left as a flagged out-of-scope surface). Tests:
+      `pkg/values/scheme_writer_test.go` (default-protects, configurable boundary,
+      unlimited, flat-not-bounded-by-depth, long-flat-no-overflow),
+      `pkg/wile/engine_write_depth_test.go` (end-to-end long-flat + deep-nested
+      raise).
+- [x] **Parser fuzz targets + reader crash-safety hardening** [Medium, Done]: Added
+      the first Go native fuzz targets in the repo — `FuzzReadSyntax` (untrusted-input
+      contract: never panic/overflow the host; every non-EOF error is a located
+      `*ParserError`) and `FuzzReadWriteRoundTrip` (write output must re-read) in
+      `pkg/parser/reader_fuzz_test.go`, seeded from `reader_robustness_test.go`. The
+      example-based reader tests enforced the contract only on inputs someone wrote
+      down; fuzzing found **8 pre-existing reader bugs in ~2 min, 5 of them host
+      panics**, all now fixed with committed regression corpus under
+      `pkg/parser/testdata/fuzz/`: (1) invalid UTF-8 and (3) bad datum-label numbers
+      leaked raw `*tokenizer.TokenizerError`/`*strconv.NumError` — closed as a CLASS by
+      a boundary catch-all `locateReaderErr` that lifts any non-EOF/non-`*ParserError`
+      to a located error; (2) `#0=)` silently mis-parsed to a nil-datum label; (4)
+      `' )` panicked (nil interface conversion in `readQuoteForm`); (5) `#\<NUL>`
+      panicked (`rs[0]` index in `parseCharacter`); (6) `#e)` panicked (nil deref in
+      `readExactnessMarker`); (7) `#b0/0` panicked (`big.Rat` div-by-zero); (8)
+      `#0=(#d)` panicked (nil list element in `readLabeledList`). Each
+      unguarded-`readSyntax`-caller fix follows the existing nil-at-delimiter guard
+      pattern; also made `ParserError.SchemeString` nil-token-safe. `FuzzReadSyntax`
+      now runs clean (180s, ~20M execs). Round-trip target additionally fixed: string
+      escaping (`String.SchemeString` used Go `%q` → proper R7RS `\xHH;`/mnemonics, a
+      real conformance bug) and `#0=()` empty labeled list (→ `()` not `(#<void>)`).
+      **Deferred** to #781: the numeric-tower external-representation round-trip tail
+      (`#m` big floats write without prefix; `1e+700` rejected on read; audit
+      `BigComplex`/`BigInteger`/etc.) — a distinct numeric-formatting conformance pass.
 - [x] **Stable-matching selectors fail + matching tests don't gate CI** [High, M, Done]:
       **Root cause** (single bug, two symptoms): `walk-for-cycle` in
       `stdlib/lib/wile/algebra/matching.scm` stored each rotation cycle in

@@ -105,6 +105,10 @@ func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.
 			if sign == -1 {
 				bigNum.Neg(bigNum)
 			}
+			if bigDen.Sign() == 0 {
+				return nil, p.cur, NewParserErrorWithWrap(werr.ErrDivisionByZero, p.cur,
+					"rational denominator is zero")
+			}
 			r := new(big.Rat).SetFrac(bigNum, bigDen)
 			q1 := values.Simplify(values.NewRationalFromRat(r))
 			if p.cur.HasHashDigit() {
@@ -139,6 +143,10 @@ func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid rational denominator: %s", parts[1])
 	}
 
+	if den == 0 {
+		return nil, p.cur, NewParserErrorWithWrap(werr.ErrDivisionByZero, p.cur,
+			"rational denominator is zero")
+	}
 	num *= sign
 	r := new(big.Rat).SetFrac64(num, den)
 	q1 := values.Simplify(values.NewRationalFromRat(r))

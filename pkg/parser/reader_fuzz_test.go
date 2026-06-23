@@ -1,0 +1,146 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package parser
+
+import (
+	"context"
+	"errors"
+	"io"
+	"strings"
+	"testing"
+
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
+)
+
+// fuzzSeeds is the seed corpus shared by the parser fuzz targets: a mix of
+// well-formed datums (one per datum class the reader accepts) and malformed
+// inputs — the confirmed crashers from reader_robustness_test.go plus other
+// pathological shapes. Under plain `go test` these run as a deterministic
+// corpus (so they double as regression cases); `go test -fuzz` mutates from
+// here to hunt for inputs nobody thought to write down.
+var fuzzSeeds = []string{
+	// Well-formed, spanning the datum classes.
+	"", " ", "42", "-7", "3.14", "1/2", "#xff", "1e3", "+inf.0", "+i", "2+3i",
+	"#t", "#f", "#\\a", "#\\space", "#\\x41", `"hello"`, `"a\tb"`, "foo", "|odd sym|",
+	"()", "(1 2 3)", "(1 . 2)", "((1 2) 3)", "#(1 2 3)", "#()", "#u8(0 255)",
+	"'(a b)", "`(a ,b ,@c)", "#;9 7", "(a #;b c)", "#!fold-case 1",
+	"#0=(1 . #0#)", "#0=#(1 #0#)", "(#0=(1 2) #0#)",
+	// Malformed — must surface a located *ParserError, never a panic or a host crash.
+	"(foo", "#u8(1 2]", "(( . ))", "((1 . ))", "( . 5)", "#0=(1 . )", "#0=(1 2 . )",
+	"#u8(1 2 3", "#0=#1#", strings.Repeat("(", 12000),
+}
+
+// readFuzzDatum reads a single datum from src with a fresh parser. Panics
+// propagate to the calling fuzz body's recover guard.
+func readFuzzDatum(src string) (syntax.SyntaxValue, error) {
+	env := environment.NewNamespace().Runtime()
+	p := NewParser(env, true, strings.NewReader(src))
+	return p.ReadSyntax(context.TODO())
+}
+
+// FuzzReadSyntax pins the reader's untrusted-input contract (R7RS §6.13.2, the
+// #779/#780 hardening): for ANY input the reader must terminate without
+// panicking or overflowing the host, consuming each top-level datum until a
+// clean io.EOF or a single located *ParserError. The example-based
+// reader_robustness_test.go enumerates the crashers someone anticipated; this
+// generates the ones they did not.
+func FuzzReadSyntax(f *testing.F) {
+	for _, s := range fuzzSeeds {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, src string) {
+		defer func() {
+			r := recover()
+			if r != nil {
+				t.Fatalf("reader panicked on %q: %v\n(must surface a located error, never crash the host)", src, r)
+			}
+		}()
+		env := environment.NewNamespace().Runtime()
+		p := NewParser(env, true, strings.NewReader(src))
+		// A clean end is io.EOF; any other error must be a located *ParserError.
+		// The parser cannot be reused after an error, so stop on the first one.
+		// Cap iterations as a non-advancement safety valve: a real input yields
+		// at most len(src) datums, so reaching the cap signals a stuck reader.
+		maxData := len(src) + 16
+		for range maxData {
+			v, err := p.ReadSyntax(context.TODO())
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			if err != nil {
+				var perr *ParserError
+				if !errors.As(err, &perr) {
+					t.Fatalf("reader returned %T for %q; want *ParserError or io.EOF: %v", err, src, err)
+				}
+				return
+			}
+			if v == nil {
+				t.Fatalf("ReadSyntax returned (nil, nil) for %q — violates the value | io.EOF | *ParserError contract", src)
+			}
+		}
+		// A real input yields at most len(src) datums, so exhausting the cap
+		// without an EOF/error/nil exit means the reader advanced past every
+		// byte yet never terminated — a stuck reader, which is a failure, not a
+		// silently-tolerated cap.
+		t.Fatalf("reader did not terminate after %d reads on %q (possible non-advancement)", maxData, src)
+	})
+}
+
+// FuzzReadWriteRoundTrip closes the "valid on read" loop with the writer: any
+// value the reader produces must, when written, yield output the reader
+// accepts again. This is exactly the invariant the writer depth bound exists to
+// keep total — a value the writer can render is one the reader can re-read.
+//
+// Equality (read = write∘read) is intentionally NOT asserted: float, quote-form,
+// and other representation round-trips are a stronger, separate property whose
+// failures would be representation gaps rather than the re-readability defect
+// this target hunts for. A depth-bounded value may legitimately refuse to write
+// (ErrWriteDepthExceeded); that is not a re-readability failure.
+//
+// KNOWN GAP: the numeric tower's external representations are not yet fully
+// round-trip-clean — e.g. #m big floats write without their prefix and 1e+700
+// is rejected on read. Running this target under -fuzz surfaces them; tracked
+// in issue #781. The committed seed/corpus stays green because no seed
+// exercises those numeric forms.
+func FuzzReadWriteRoundTrip(f *testing.F) {
+	for _, s := range fuzzSeeds {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, src string) {
+		defer func() {
+			r := recover()
+			if r != nil {
+				t.Fatalf("read/write/read panicked on %q: %v", src, r)
+			}
+		}()
+		v, err := readFuzzDatum(src)
+		if err != nil {
+			return // malformed or empty input (incl. io.EOF) is the other target's concern
+		}
+		if v == nil {
+			t.Fatalf("readFuzzDatum returned (nil, nil) for %q — violates the reader contract", src)
+		}
+		out, writeErr := values.WriteValueToString(v.UnwrapAll())
+		if writeErr != nil {
+			return // depth-bounded refusal, not a re-readability failure
+		}
+		_, rereadErr := readFuzzDatum(out)
+		if rereadErr != nil {
+			t.Fatalf("writer emitted non-re-readable output:\n  input:   %q\n  written: %q\n  reread:  %v", src, out, rereadErr)
+		}
+	})
+}

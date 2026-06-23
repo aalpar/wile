@@ -17,7 +17,28 @@ package values
 import (
 	"fmt"
 	"strings"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
+
+// DefaultMaxWriteDepth bounds structural nesting depth during writing.
+//
+// The writer descends recursively into the car of each pair and into vector
+// elements (the cdr-spine of a list is walked iteratively, so list *length*
+// is unbounded — only nesting *depth* is capped). Without a bound, a deeply
+// nested value — necessarily one built programmatically, since the reader caps
+// textual input at parser.DefaultMaxParseDepth — overflows the host Go stack
+// with a fatal, unrecoverable crash.
+//
+// The default deliberately equals the parser's DefaultMaxParseDepth: the
+// guiding invariant is "anything the writer emits must be valid on read." A
+// value nested deeper than the reader accepts could not be read back, so the
+// writer refuses it with ErrWriteDepthExceeded rather than emit unreadable
+// output. The depth count matches readSyntax exactly (root = 1, +1 per
+// container descent), so the write limit and the read limit trip on the same
+// structures. 0 means unlimited. Mirrors the VM's DefaultMaxCallDepth, the
+// parser's DefaultMaxParseDepth, and the expander's DefaultMaxExpandDepth.
+const DefaultMaxWriteDepth int = 10000
 
 // WriteMode controls how the SchemeWriter handles shared structure.
 //
@@ -65,6 +86,12 @@ type SchemeWriter struct {
 	displayMode bool
 	// writeMode controls whether to label all shared or only circular references.
 	writeMode WriteMode
+	// maxDepth caps structural nesting depth; 0 = unlimited. See DefaultMaxWriteDepth.
+	maxDepth int
+	// err records the first depth-limit violation seen during the findShared
+	// pass; the traversal unwinds and WriteString reports it. It is per-call
+	// working state, reset at the start of each WriteString (see there).
+	err error
 }
 
 // NewSchemeWriter creates a new SchemeWriter for cycle-aware output.
@@ -77,15 +104,47 @@ func NewSchemeWriter() *SchemeWriter {
 		needsLabelVector: make(map[*Vector]bool),
 		nextLabel:        0,
 		writeMode:        WriteModeWrite,
+		maxDepth:         DefaultMaxWriteDepth,
 	}
 	return q
 }
 
+// SetMaxDepth sets the maximum structural nesting depth the writer will descend
+// before reporting ErrWriteDepthExceeded. A value of 0 means unlimited; negative
+// values are clamped to 0. See DefaultMaxWriteDepth for the rationale. Mirrors
+// the parser's SetMaxDepth.
+func (p *SchemeWriter) SetMaxDepth(n int) {
+	if n < 0 {
+		n = 0
+	}
+	p.maxDepth = n
+}
+
 // WriteString writes a Scheme value to a string with cycle detection.
-// Circular and shared structures are represented using datum labels.
-func (p *SchemeWriter) WriteString(v Value) string {
-	// First pass: identify which objects are referenced multiple times
-	p.findShared(v)
+// Circular and shared structures are represented using datum labels. It
+// returns ErrWriteDepthExceeded if the value nests deeper than maxDepth (see
+// DefaultMaxWriteDepth); on that error the returned string is empty.
+func (p *SchemeWriter) WriteString(v Value) (string, error) {
+	// Reset all per-call working state so a SchemeWriter is safe to reuse across
+	// WriteString calls. Resetting err alone would not suffice — the label
+	// counter and the cycle/share maps also carry per-value state — so reuse
+	// would otherwise leak labels and sharing decisions from the prior value.
+	p.err = nil
+	p.nextLabel = 0
+	p.seenPairs = make(map[*Pair]int)
+	p.seenVectors = make(map[*Vector]int)
+	p.needsLabelPair = make(map[*Pair]bool)
+	p.needsLabelVector = make(map[*Vector]bool)
+
+	// First pass: identify which objects are referenced multiple times. This
+	// is also the depth-enforcing pass — it is the first traversal to descend
+	// the car/element recursion, so it trips the nesting bound before any
+	// deeper pass runs. Passes 2 and 3 below therefore execute only on
+	// depth-valid structure and stay within maxDepth Go stack frames.
+	p.findShared(v, 1)
+	if p.err != nil {
+		return "", p.err
+	}
 
 	// For WriteModeWrite, filter to only circular references
 	if p.writeMode == WriteModeWrite {
@@ -99,27 +158,55 @@ func (p *SchemeWriter) WriteString(v Value) string {
 	// Second pass: generate output with labels
 	q := &strings.Builder{}
 	p.write(q, v)
-	return q.String()
+	return q.String(), nil
 }
 
-// findShared traverses the value to find objects that are referenced multiple times.
-func (p *SchemeWriter) findShared(v Value) {
+// findShared traverses the value to find objects that are referenced multiple
+// times, and enforces the nesting-depth bound. depth is the structural nesting
+// level of v (the root is 1, incremented once per container descent), counted
+// identically to the parser's readSyntax so the write and read limits trip on
+// the same structures.
+//
+// The cdr-spine of a list is walked iteratively: list length is not nesting
+// depth (a flat list of any length reads back at depth 1), so it must not
+// consume the depth budget nor the Go stack. Only descent into a car or vector
+// element — genuine nesting — recurses and increments depth. On the first
+// depth violation p.err is set and the traversal unwinds.
+func (p *SchemeWriter) findShared(v Value, depth int) {
+	if p.maxDepth > 0 && depth > p.maxDepth {
+		// "writer:" not "write:" — this path also serves display/write-shared.
+		p.err = werr.WrapForeignErrorf(werr.ErrWriteDepthExceeded,
+			"writer: nesting depth exceeds maximum of %d", p.maxDepth)
+		return
+	}
 	switch val := v.(type) {
 	case *Pair:
-		if val == nil {
-			return
+		// Walk the cdr-spine in a loop; recurse only into cars (one level deeper).
+		for cur := val; cur != nil; {
+			_, found := p.seenPairs[cur]
+			if found {
+				// Seen before - mark as needing a label
+				p.needsLabelPair[cur] = true
+				return
+			}
+			// Mark as seen (with placeholder -1)
+			p.seenPairs[cur] = -1
+			p.findShared(cur.Car(), depth+1)
+			if p.err != nil {
+				return
+			}
+			cdr := cur.Cdr()
+			nextPair, ok := cdr.(*Pair)
+			if !ok {
+				// Improper tail: a non-pair, non-empty cdr is a sibling element
+				// at the same nesting level as the cars (depth+1).
+				if cdr != nil && !IsEmptyList(cdr) {
+					p.findShared(cdr, depth+1)
+				}
+				return
+			}
+			cur = nextPair
 		}
-		_, found := p.seenPairs[val]
-		if found {
-			// Seen before - mark as needing a label
-			p.needsLabelPair[val] = true
-			return
-		}
-		// Mark as seen (with placeholder -1)
-		p.seenPairs[val] = -1
-		// Recurse into car and cdr
-		p.findShared(val.Car())
-		p.findShared(val.Cdr())
 
 	case *Vector:
 		if val == nil || len(*val) == 0 {
@@ -132,7 +219,10 @@ func (p *SchemeWriter) findShared(v Value) {
 		}
 		p.seenVectors[val] = -1
 		for _, elem := range *val {
-			p.findShared(elem)
+			p.findShared(elem, depth+1)
+			if p.err != nil {
+				return
+			}
 		}
 	}
 }
@@ -152,22 +242,39 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 	walk = func(v Value) {
 		switch val := v.(type) {
 		case *Pair:
-			if val == nil {
-				return
+			// Walk the cdr-spine iteratively. Every pair on the spine is an
+			// ancestor of the cars explored below it, so all stay on the DFS
+			// stack until the spine terminates, then pop together. A back-edge
+			// into a still-on-stack pair (via cdr here, or via a car in the
+			// recursive walk) is the cycle. Only car descent recurses, so the
+			// Go stack tracks nesting depth — already bounded by pass 1 — not
+			// list length.
+			spine := []*Pair{}
+			for cur := val; cur != nil; {
+				if onStackPairs[cur] {
+					circularPairs[cur] = true
+					break
+				}
+				if visitedPairs[cur] {
+					break
+				}
+				visitedPairs[cur] = true
+				onStackPairs[cur] = true
+				spine = append(spine, cur)
+				walk(cur.Car())
+				cdr := cur.Cdr()
+				nextPair, ok := cdr.(*Pair)
+				if !ok {
+					if cdr != nil && !IsEmptyList(cdr) {
+						walk(cdr)
+					}
+					break
+				}
+				cur = nextPair
 			}
-			if onStackPairs[val] {
-				// Found a cycle — this object is circular
-				circularPairs[val] = true
-				return
+			for _, pr := range spine {
+				delete(onStackPairs, pr)
 			}
-			if visitedPairs[val] {
-				return
-			}
-			visitedPairs[val] = true
-			onStackPairs[val] = true
-			walk(val.Car())
-			walk(val.Cdr())
-			delete(onStackPairs, val)
 
 		case *Vector:
 			if val == nil || len(*val) == 0 {
@@ -348,7 +455,8 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 // WriteValueToString writes a Scheme value to a string with cycle detection.
 // Uses WriteModeWrite: datum labels only for circular references.
 // R7RS §6.13.3: write outputs datum labels only for objects that are part of a cycle.
-func WriteValueToString(v Value) string {
+// Returns ErrWriteDepthExceeded for values nested deeper than DefaultMaxWriteDepth.
+func WriteValueToString(v Value) (string, error) {
 	w := NewSchemeWriter()
 	return w.WriteString(v)
 }
@@ -356,7 +464,8 @@ func WriteValueToString(v Value) string {
 // WriteSharedValueToString writes a Scheme value to a string with shared structure detection.
 // Uses WriteModeWriteShared: datum labels for all multiply-referenced objects.
 // R7RS §6.13.3: write-shared outputs datum labels for all shared structure.
-func WriteSharedValueToString(v Value) string {
+// Returns ErrWriteDepthExceeded for values nested deeper than DefaultMaxWriteDepth.
+func WriteSharedValueToString(v Value) (string, error) {
 	w := NewSchemeWriter()
 	w.writeMode = WriteModeWriteShared
 	return w.WriteString(v)
@@ -364,7 +473,8 @@ func WriteSharedValueToString(v Value) string {
 
 // DisplayValueToString writes a Scheme value to a string for display with cycle detection.
 // Unlike WriteValueToString, strings are printed without quotes and characters without #\.
-func DisplayValueToString(v Value) string {
+// Returns ErrWriteDepthExceeded for values nested deeper than DefaultMaxWriteDepth.
+func DisplayValueToString(v Value) (string, error) {
 	w := NewSchemeWriter()
 	w.displayMode = true
 	return w.WriteString(v)

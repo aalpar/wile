@@ -160,7 +160,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		p.cur, p.err = p.toks.Next()
 	}
 	if p.err != nil {
-		return nil, p.err
+		return nil, p.locateReaderErr(p.err)
 	}
 	var (
 		q   syntax.SyntaxValue
@@ -171,7 +171,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		q, _, err = p.readSyntax()
 		if err != nil {
 			p.toks = nil
-			p.err = err
+			p.err = p.locateReaderErr(err)
 			return nil, p.err
 		}
 		// R7RS: unexpected close delimiter at top level is a read error
@@ -185,7 +185,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		// EOF is fine - it means there's nothing more to read
 		if p.err != nil && !errors.Is(p.err, io.EOF) {
 			p.toks = nil
-			return nil, p.err
+			return nil, p.locateReaderErr(p.err)
 		}
 		if !p.skipComment {
 			return q, nil
@@ -209,6 +209,25 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	}
 }
 
+// locateReaderErr lifts any lower-layer error escaping a read — a lexical
+// "rune error" from invalid UTF-8, a strconv failure parsing a datum-label
+// number, and so on — into a located *ParserError, so ReadSyntax presents
+// callers a single error surface: a value, io.EOF, or a *ParserError. Wrapping
+// specific error types is whack-a-mole (the reader bottoms out in tokenizer,
+// strconv, and math/big calls); this guarantees the contract for whatever
+// fails. A clean io.EOF and already-located errors pass through, and the
+// original cause stays matchable via errors.As/Is through the wrap chain.
+func (p *Parser) locateReaderErr(err error) error {
+	if err == nil || errors.Is(err, io.EOF) {
+		return err
+	}
+	var perr *ParserError
+	if errors.As(err, &perr) {
+		return err
+	}
+	return NewParserErrorWithWrap(err, p.cur, "malformed input")
+}
+
 // readLabeledList reads a list into a pre-created placeholder pair.
 // This enables circular references where the list refers to itself via datum labels.
 // The placeholder must already be registered in datumLabels before calling this.
@@ -219,7 +238,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 //  1. Pre-create a pair and register it as label 0
 //  2. Read the list contents, which may include #0# references
 //  3. Populate the pair with the read values
-func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenizer.TokenizerState) (syntax.SyntaxValue, error) {
+func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, labelNum int, opener tokenizer.TokenizerState) (syntax.SyntaxValue, error) {
 	expectedClose := p.matchingClose(opener)
 
 	// Skip the opening paren/bracket
@@ -230,8 +249,13 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 
 	// Handle empty list: () or []
 	if p.cur.Type() == expectedClose {
-		// Empty list - return the placeholder unchanged (nil . nil)
-		return placeholder, nil
+		// Empty labeled list (#0=()): bind the label to the empty list and
+		// return it. Returning the pre-created placeholder pair unchanged would
+		// leave a malformed (nil . nil) that renders as the non-re-readable
+		// "(#<void>)" — a #n# back-reference must resolve to () as well.
+		empty := p.wrapSyntaxEmptyList(p.cur)
+		p.datumLabels[labelNum] = empty
+		return empty, nil
 	}
 	// Check for bracket mismatch on close
 	err := p.checkDelimiterMatch(opener)
@@ -243,6 +267,13 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 	first, _, err := p.readSyntax()
 	if err != nil {
 		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
+	}
+	// readSyntax returns nil at a close/cons delimiter, and prefixes like #d
+	// re-read to one (e.g. "#0=(#d)", "#0=(.)"); a nil element must be a located
+	// error, not a SetCar(nil) that later panics on a nil interface conversion.
+	if first == nil {
+		return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+			"expected a datum in labeled list")
 	}
 	placeholder.SetCar(first)
 
@@ -310,6 +341,13 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		elem, _, err := p.readSyntax()
 		if err != nil {
 			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
+		}
+		// A nil element (close/cons delimiter, or a #d that re-read to one) must
+		// be a located error, not a SetCar(nil) panic — see the first-element
+		// guard above.
+		if elem == nil {
+			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+				"expected a datum in labeled list")
 		}
 		nextPair.SetCar(elem)
 
@@ -383,6 +421,14 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	if err != nil {
 		return nil, p.cur, err
 	}
+	// readSyntax returns a literal-nil at a close or cons delimiter; a quote
+	// form with no datum (e.g. "' )") must be a located error, not a quote
+	// wrapped around nil that panics in listSyntax. Mirrors the datum-label
+	// and dotted-pair guards.
+	if q == nil {
+		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACons, p.cur,
+			"%s form requires a datum", keyword)
+	}
 	sym := p.wrapSyntaxSymbol(keyword, t)
 	result := p.listSyntax(t, sym, q)
 	return result, p.cur, nil
@@ -399,6 +445,13 @@ func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxVal
 	q, tok, err := p.readSyntax()
 	if err != nil {
 		return nil, tok, err
+	}
+	// readSyntax returns nil at a close or cons delimiter; an exactness marker
+	// with no number (e.g. "#e)") must be a located error, not a nil deref in
+	// convert. Covers both #e and #i.
+	if q == nil {
+		return nil, tok, NewParserErrorWithWrapf(werr.ErrNotANumber, tok,
+			"%s number marker requires a datum", label)
 	}
 	result, err := convert(q)
 	if err != nil {
@@ -436,7 +489,7 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 		placeholder := p.wrapSyntaxPair(nil, nil, p.cur)
 		p.datumLabels[labelNum] = placeholder
 		// Now read the list contents, which can reference this label
-		v, p.err = p.readLabeledList(placeholder, opener)
+		v, p.err = p.readLabeledList(placeholder, labelNum, opener)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
@@ -454,6 +507,13 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 		v, _, p.err = p.readSyntax()
 		if p.err != nil {
 			return nil, p.cur, p.err
+		}
+		// readSyntax returns a literal-nil at a close or cons delimiter; a label
+		// assignment with no datum (e.g. "#0=)" or "#0=.") must be a located
+		// error, not a silently stored nil. Mirrors the dotted-pair guard above.
+		if v == nil {
+			return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+				"datum label assignment requires a datum")
 		}
 		p.datumLabels[labelNum] = v
 	}
@@ -744,6 +804,12 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCharGraphic:
 		s := schemeutil.TrimPrefixCI(p.cur.String(), values.PrefixCharacter)
 		rs := []rune(s)
+		// A graphic char token with no rune (malformed input, e.g. "#\<NUL>")
+		// must be a located error, not an rs[0] index-out-of-range panic.
+		if len(rs) == 0 {
+			return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACharacter, p.cur,
+				"empty character literal")
+		}
 		q := p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:

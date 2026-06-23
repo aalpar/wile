@@ -105,7 +105,7 @@ func addReadWrite(r *registry.Registry) error {
 			Doc: "Writes a newline character to PORT. Defaults to current-output-port.\n\nExamples:\n  (newline)  ; prints a blank line", ParamNames: []string{"port"}, Category: "io",
 			ParamTypes: []values.TypeConstraint{values.TypeTextualOutputPort},
 			ReturnType: values.TypeVoid},
-		{Name: "write-simple", ParamCount: 2, IsVariadic: true, Impl: makeWriteVariant("write-simple", values.Value.SchemeString),
+		{Name: "write-simple", ParamCount: 2, IsVariadic: true, Impl: makeWriteVariant("write-simple", schemeStringRender),
 			Doc: "Like write, but does not use datum labels for shared structure.\n\nExamples:\n  (let ((p (open-output-string))) (write-simple '(1 2) p) (get-output-string p))  => \"(1 2)\"", ParamNames: []string{"obj", "port"}, Category: "io",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeTextualOutputPort},
 			ReturnType: values.TypeVoid},
