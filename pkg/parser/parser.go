@@ -602,7 +602,14 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		}
 		pr0.SetCdr(pr)
 	case p.cur.Type() == expectedClose:
-		// Proper list terminated with matching delimiter
+		// R7RS §7.1.2: a zero-element list form — "( )" with whitespace, or a
+		// comment-only form — never ran the element loop, so q0/pr0 are
+		// unpopulated placeholders. Return the empty list directly rather than
+		// the (#<void>) orphan pair q0 would otherwise carry.
+		if !gotCar {
+			return p.wrapSyntaxEmptyList(p.cur), p.cur, nil
+		}
+		// Proper list terminated with matching delimiter.
 		pr = p.wrapSyntaxEmptyList(p.cur)
 		pr0.SetCdr(pr)
 	case p.isListCloser(p.cur.Type()):
@@ -735,6 +742,15 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 	}
 }
 
+// readSyntax reads one datum, dispatching on the current token type.
+//
+// Contract relied on by the compound readers (readList, readLabeledList,
+// readByteVector): at a close or cons delimiter readSyntax returns a
+// literal-nil SyntaxValue — the interface zero value, where both the type and
+// value words are nil — never a typed-nil (a nil concrete pointer boxed in the
+// interface). Their `stx == nil` / `cdr == nil` / `v == nil` guards depend on
+// this: a typed-nil satisfies `!= nil` and would slip past, re-introducing the
+// SetCdr(nil) / Unwrap() host crashes those guards exist to prevent.
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	p.depth++
 	defer func() {
@@ -945,7 +961,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(values.NewString(p.cur.Value()), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCloseParen, tokenizer.TokenizerStateCloseBracket:
-		// Close delimiters return nil to signal end of compound form
+		// Close delimiters return the untouched interface zero value q (a
+		// literal nil, not a typed-nil) to signal end of compound form. The
+		// compound readers' nil guards depend on this being a literal nil.
 		return q, p.cur, nil
 	}
 	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %q", p.cur.String())
