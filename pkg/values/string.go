@@ -16,6 +16,8 @@ package values
 
 import (
 	"fmt"
+	"strings"
+	"unicode"
 
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -69,7 +71,45 @@ func (p *String) EqualTo(v Value) bool {
 
 // SchemeString returns the Scheme representation of the string.
 func (p *String) SchemeString() string {
-	return fmt.Sprintf("%q", p.Value)
+	return schemeQuoteString(p.Value)
+}
+
+// schemeQuoteString renders s as an R7RS external string literal (§7.1.1) that
+// re-reads to an equal string. It emits the mnemonic escapes the reader
+// recognizes (\a \b \t \n \r \" \\) and \xHH; for other non-printable runes;
+// printable runes (including Unicode) pass through verbatim. Go's %q is
+// unsuitable: it emits \xHH without the terminating ';', plus \f, \v, and
+// \uHHHH/\UHHHHHHHH escapes — none of which Wile's reader accepts, so %q
+// output of a control character does not round-trip through read.
+func schemeQuoteString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\a':
+			b.WriteString(`\a`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		default:
+			if unicode.IsPrint(r) {
+				b.WriteRune(r)
+			} else {
+				fmt.Fprintf(&b, `\x%x;`, r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 func (p *String) String() string {

@@ -88,6 +88,16 @@ func (p *ParserError) Unwrap() error {
 }
 
 func (p *ParserError) SchemeString() string {
+	// A lexical error caught at the very first byte (e.g. invalid UTF-8) has no
+	// located token; render it without a position rather than nil-deref tok.
+	// Append the wrapped cause when present — without a position it is the only
+	// extra signal, and it is intentionally preserved on the error.
+	if p.tok == nil {
+		if p.err != nil {
+			return fmt.Sprintf("ParserError: %s: %s", p.mess, p.err)
+		}
+		return fmt.Sprintf("ParserError: %s", p.mess)
+	}
 	return fmt.Sprintf("ParserError at %s: %s", p.tok.String(), p.mess)
 }
 

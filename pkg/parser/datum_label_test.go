@@ -96,10 +96,30 @@ func TestReader_CircularVectorRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadSyntax error: %v", err)
 	}
-	got := values.WriteValueToString(q.UnwrapAll())
+	got, writeErr := values.WriteValueToString(q.UnwrapAll())
+	if writeErr != nil {
+		t.Fatalf("WriteValueToString error: %v", writeErr)
+	}
 	want := "#0=#(1 #0#)"
 	if got != want {
 		t.Fatalf("circular vector round-trip = %q, want %q", got, want)
+	}
+}
+
+// TestReader_EmptyLabeledListIsEmptyList: #0=() binds the label to the empty
+// list, not the pre-created (nil . nil) placeholder pair — which wrote as the
+// non-re-readable "(#<void>)". Found by FuzzReadWriteRoundTrip.
+func TestReader_EmptyLabeledListIsEmptyList(t *testing.T) {
+	q, err := readOneDatum("#0=()")
+	if err != nil {
+		t.Fatalf("ReadSyntax(#0=()) error: %v", err)
+	}
+	got, writeErr := values.WriteValueToString(q.UnwrapAll())
+	if writeErr != nil {
+		t.Fatalf("WriteValueToString error: %v", writeErr)
+	}
+	if got != "()" {
+		t.Fatalf("#0=() round-trips to %q, want \"()\"", got)
 	}
 }
 

@@ -15,12 +15,45 @@
 package values_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
+
+// mustRender invokes a writer entry point on a depth-valid value, failing the
+// test if it reports a depth error, and returns the rendered string.
+func mustRender(t *testing.T, render func(values.Value) (string, error), v values.Value) string {
+	t.Helper()
+	s, err := render(v)
+	qt.Assert(t, err, qt.IsNil)
+	return s
+}
+
+// nestList returns a value nested `depth` lists deep around an atom:
+// nestList(3) is ((( 0 ))). Its writer nesting depth — counted as the writer
+// counts it, root = 1, +1 per descent — is depth+1 (the innermost atom).
+func nestList(depth int) values.Value {
+	q := values.Value(values.NewInteger(0))
+	for range depth {
+		q = values.List(q)
+	}
+	return q
+}
+
+// flatList returns a proper list of n integers 0..n-1. Its nesting depth is 2
+// (the list, then its atom elements) regardless of n — length is not depth.
+func flatList(n int) values.Value {
+	elems := make([]values.Value, n)
+	for i := range elems {
+		elems[i] = values.NewInteger(int64(i))
+	}
+	return values.List(elems...)
+}
 
 func TestWriteValueToString_SimpleValues(t *testing.T) {
 	tcs := []struct {
@@ -43,7 +76,7 @@ func TestWriteValueToString_SimpleValues(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, values.WriteValueToString(tc.in), qt.Equals, tc.out)
+			qt.Assert(t, mustRender(t, values.WriteValueToString, tc.in), qt.Equals, tc.out)
 		})
 	}
 }
@@ -63,7 +96,7 @@ func TestWriteValueToString_Lists(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, values.WriteValueToString(tc.in), qt.Equals, tc.out)
+			qt.Assert(t, mustRender(t, values.WriteValueToString, tc.in), qt.Equals, tc.out)
 		})
 	}
 }
@@ -81,7 +114,7 @@ func TestWriteValueToString_Vectors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, values.WriteValueToString(tc.in), qt.Equals, tc.out)
+			qt.Assert(t, mustRender(t, values.WriteValueToString, tc.in), qt.Equals, tc.out)
 		})
 	}
 }
@@ -91,7 +124,7 @@ func TestWriteValueToString_CircularPair(t *testing.T) {
 	p := values.NewCons(values.NewInteger(1), values.EmptyList)
 	p[1] = p // make circular
 
-	result := values.WriteValueToString(p)
+	result := mustRender(t, values.WriteValueToString, p)
 	qt.Assert(t, result, qt.Equals, "#0=(1 . #0#)")
 }
 
@@ -100,7 +133,7 @@ func TestWriteValueToString_CircularVector(t *testing.T) {
 	v := values.NewVector(values.NewInteger(1), nil)
 	(*v)[1] = v // make circular
 
-	result := values.WriteValueToString(v)
+	result := mustRender(t, values.WriteValueToString, v)
 	qt.Assert(t, result, qt.Equals, "#0=#(1 #0#)")
 }
 
@@ -109,14 +142,14 @@ func TestWriteSharedValueToString_SharedStructure(t *testing.T) {
 	shared := values.List(values.NewInteger(1), values.NewInteger(2))
 	outer := values.List(shared, shared)
 
-	result := values.WriteSharedValueToString(outer)
+	result := mustRender(t, values.WriteSharedValueToString, outer)
 	qt.Assert(t, result, qt.Equals, "(#0=(1 2) #0#)")
 }
 
 func TestWriteSharedValueToString_NoSharing(t *testing.T) {
 	// No shared structure => no labels
 	l := values.List(values.NewInteger(1), values.NewInteger(2))
-	result := values.WriteSharedValueToString(l)
+	result := mustRender(t, values.WriteSharedValueToString, l)
 	qt.Assert(t, result, qt.Equals, "(1 2)")
 }
 
@@ -125,7 +158,7 @@ func TestWriteValueToString_SharedButNotCircular(t *testing.T) {
 	shared := values.List(values.NewInteger(1), values.NewInteger(2))
 	outer := values.List(shared, shared)
 
-	result := values.WriteValueToString(outer)
+	result := mustRender(t, values.WriteValueToString, outer)
 	qt.Assert(t, result, qt.Equals, "((1 2) (1 2))")
 }
 
@@ -140,7 +173,7 @@ func TestDisplayValueToString_Strings(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, values.DisplayValueToString(tc.in), qt.Equals, tc.out)
+			qt.Assert(t, mustRender(t, values.DisplayValueToString, tc.in), qt.Equals, tc.out)
 		})
 	}
 }
@@ -157,26 +190,26 @@ func TestDisplayValueToString_Characters(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, values.DisplayValueToString(tc.in), qt.Equals, tc.out)
+			qt.Assert(t, mustRender(t, values.DisplayValueToString, tc.in), qt.Equals, tc.out)
 		})
 	}
 }
 
 func TestDisplayValueToString_NonStringValues(t *testing.T) {
 	// Non-string/character values are the same as write
-	qt.Assert(t, values.DisplayValueToString(values.NewInteger(42)), qt.Equals, "42")
-	qt.Assert(t, values.DisplayValueToString(values.NewSymbol("foo")), qt.Equals, "foo")
-	qt.Assert(t, values.DisplayValueToString(values.TrueValue), qt.Equals, "#t")
+	qt.Assert(t, mustRender(t, values.DisplayValueToString, values.NewInteger(42)), qt.Equals, "42")
+	qt.Assert(t, mustRender(t, values.DisplayValueToString, values.NewSymbol("foo")), qt.Equals, "foo")
+	qt.Assert(t, mustRender(t, values.DisplayValueToString, values.TrueValue), qt.Equals, "#t")
 }
 
 func TestDisplayValueToString_List(t *testing.T) {
 	l := values.List(values.NewString("hello"), values.NewCharacter('!'))
-	result := values.DisplayValueToString(l)
+	result := mustRender(t, values.DisplayValueToString, l)
 	qt.Assert(t, result, qt.Equals, "(hello !)")
 }
 
 func TestWriteValueToString_NilPair(t *testing.T) {
-	result := values.WriteValueToString((*values.Pair)(nil))
+	result := mustRender(t, values.WriteValueToString, (*values.Pair)(nil))
 	qt.Assert(t, result, qt.Equals, "#<void>")
 }
 
@@ -185,6 +218,154 @@ func TestWriteSharedValueToString_SharedVector(t *testing.T) {
 	shared := values.NewVector(values.NewInteger(1))
 	outer := values.NewVector(shared, shared)
 
-	result := values.WriteSharedValueToString(outer)
+	result := mustRender(t, values.WriteSharedValueToString, outer)
 	qt.Assert(t, result, qt.Equals, "#(#0=#(1) #0#)")
+}
+
+// TestWriteValueToString_StringEscapesAreR7RS pins R7RS §7.1.1 string escaping:
+// control chars use \xHH; (semicolon-terminated), named escapes use their
+// mnemonics, quote/backslash are escaped, and printable runes (incl. Unicode)
+// pass through. All re-read by the reader — unlike Go's %q, which emits \xHH
+// without ';', plus \f, \v, \uHHHH. Regression for the FuzzReadWriteRoundTrip
+// finding that a control char wrote as the non-re-readable "\x02".
+func TestWriteValueToString_StringEscapesAreR7RS(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   values.Value
+		out  string
+	}{
+		{"STX control char", values.NewString("\x02"), `"\x2;"`},
+		{"tab uses mnemonic", values.NewString("\t"), `"\t"`},
+		{"quote and backslash", values.NewString("a\"b\\c"), `"a\"b\\c"`},
+		{"printable unicode verbatim", values.NewString("café"), `"café"`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, mustRender(t, values.WriteValueToString, tc.in), qt.Equals, tc.out)
+		})
+	}
+}
+
+// TestWriteValueToString_DefaultDepthLimitProtects pins the shipped default:
+// the primitive path (WriteValueToString) refuses a value nested deeper than
+// DefaultMaxWriteDepth rather than overflow the host stack. nestList(N) puts
+// its atom at depth N+1, so DefaultMaxWriteDepth wrappers is the first depth
+// that exceeds the bound.
+func TestWriteValueToString_DefaultDepthLimitProtects(t *testing.T) {
+	_, err := values.WriteValueToString(nestList(values.DefaultMaxWriteDepth))
+	qt.Assert(t, errors.Is(err, werr.ErrWriteDepthExceeded), qt.IsTrue)
+}
+
+// TestSchemeWriter_DepthLimitConfigurable checks the boundary on both sides
+// with a small, cheap cap: a structure exactly at the cap writes, one level
+// deeper trips. Counted as the writer counts (root = 1), so nestList(cap-1)
+// reaches depth cap and nestList(cap) reaches cap+1.
+func TestSchemeWriter_DepthLimitConfigurable(t *testing.T) {
+	const limit = 100
+
+	atLimit := values.NewSchemeWriter()
+	atLimit.SetMaxDepth(limit)
+	_, err := atLimit.WriteString(nestList(limit - 1))
+	qt.Assert(t, err, qt.IsNil)
+
+	overLimit := values.NewSchemeWriter()
+	overLimit.SetMaxDepth(limit)
+	_, err = overLimit.WriteString(nestList(limit))
+	qt.Assert(t, errors.Is(err, werr.ErrWriteDepthExceeded), qt.IsTrue)
+}
+
+// TestSchemeWriter_DepthUnlimited confirms maxDepth = 0 disables the bound:
+// nesting that would trip any positive default writes without error.
+func TestSchemeWriter_DepthUnlimited(t *testing.T) {
+	w := values.NewSchemeWriter()
+	w.SetMaxDepth(0)
+	s, err := w.WriteString(nestList(values.DefaultMaxWriteDepth + 1000))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, strings.HasPrefix(s, "(("), qt.IsTrue)
+}
+
+// TestWriteFlatListNotBoundedByDepth is the load-bearing test for this fix: a
+// flat list's length is NOT its nesting depth. A list far longer than the cap
+// must still write — list length must not be charged against the depth budget.
+// (Pre-fix, findShared recursed once per cdr-spine element; a naive "bound all
+// recursion" misfix would instead trip ErrWriteDepthExceeded here. Both are
+// regressions this catches.)
+func TestWriteFlatListNotBoundedByDepth(t *testing.T) {
+	const limit = 100
+	const length = 5000 // 50x the depth cap
+
+	w := values.NewSchemeWriter()
+	w.SetMaxDepth(limit)
+	s, err := w.WriteString(flatList(length))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, strings.HasPrefix(s, "(0 1 2 3"), qt.IsTrue)
+	qt.Assert(t, strings.HasSuffix(s, "4998 4999)"), qt.IsTrue)
+}
+
+// TestWriteLongFlatListNoOverflow exercises the iterative cdr-spine at scale
+// under the default cap (a flat list nests only one level, so the cap never
+// applies). It completes instantly because the spine is walked in a loop;
+// reintroducing per-element cdr recursion would walk the spine on the Go
+// stack. Output correctness is spot-checked at both ends. The motivating bug
+// — (write (make-list 10000000)) — overflowed the host here pre-fix.
+func TestWriteLongFlatListNoOverflow(t *testing.T) {
+	const length = 1_000_000
+
+	s, err := values.WriteValueToString(flatList(length))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, strings.HasPrefix(s, "(0 1 2 3"), qt.IsTrue)
+	qt.Assert(t, strings.HasSuffix(s, "999998 999999)"), qt.IsTrue)
+}
+
+// TestWriteValueToString_LongSpineCircular exercises filterToCircular's
+// iterative spine-tracking and batch on-stack pop with a cycle that closes over
+// a long cdr-spine. The existing circular tests use length-1 self-cycles, which
+// never stress the spine bookkeeping. The whole spine is on the DFS stack when
+// the back-edge to the head is seen, so the head is the labeled cycle entry.
+func TestWriteValueToString_LongSpineCircular(t *testing.T) {
+	const n = 1000
+	head := values.NewCons(values.NewInteger(0), values.EmptyList)
+	prev := head
+	for i := 1; i < n; i++ {
+		next := values.NewCons(values.NewInteger(int64(i)), values.EmptyList)
+		prev.SetCdr(next)
+		prev = next
+	}
+	prev.SetCdr(head) // close the cycle through the entire spine
+
+	s := mustRender(t, values.WriteValueToString, head)
+	qt.Assert(t, strings.HasPrefix(s, "#0=(0 1 2 3"), qt.IsTrue)
+	qt.Assert(t, strings.HasSuffix(s, ". #0#)"), qt.IsTrue)
+}
+
+// TestSchemeWriter_ReusableAcrossCalls pins that a SchemeWriter resets its
+// per-call working state at WriteString entry. Regression for the crosscheck
+// finding that the cached err (and label counter) were never reset, poisoning a
+// reused writer.
+func TestSchemeWriter_ReusableAcrossCalls(t *testing.T) {
+	// (a) err reset: a write after a depth-limit refusal must not inherit the
+	// stale error.
+	w := values.NewSchemeWriter()
+	w.SetMaxDepth(100)
+	_, err := w.WriteString(nestList(100))
+	qt.Assert(t, errors.Is(err, werr.ErrWriteDepthExceeded), qt.IsTrue)
+	w.SetMaxDepth(0)
+	s, err := w.WriteString(values.List(values.NewInteger(1), values.NewInteger(2)))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, s, qt.Equals, "(1 2)")
+
+	// (b) label-counter reset: two circular values written by the same writer
+	// must each label from #0, not continue the counter (which would make the
+	// second print "#1=...").
+	w2 := values.NewSchemeWriter()
+	c1 := values.NewCons(values.NewInteger(1), values.EmptyList)
+	c1.SetCdr(c1)
+	s1, err := w2.WriteString(c1)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, s1, qt.Equals, "#0=(1 . #0#)")
+	c2 := values.NewCons(values.NewInteger(2), values.EmptyList)
+	c2.SetCdr(c2)
+	s2, err := w2.WriteString(c2)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, s2, qt.Equals, "#0=(2 . #0#)")
 }

@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/big"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -50,6 +52,31 @@ func parseExpectError(t *testing.T, input string) error {
 		t.Fatalf("expected error for input %q, got nil", input)
 	}
 	return err
+}
+
+// TestParseRational_ZeroDenominatorIsDivByZero pins the rational div-by-zero
+// guards across both code paths in parseRationalWithBase. The committed fuzz
+// corpus (#b0/0) takes the small-int path (parser_number.go:146); an over-range
+// numerator over a zero denominator exercises the big-numerator path
+// (parser_number.go:108), which the corpus never reaches. Each must surface a
+// located *ParserError wrapping werr.ErrDivisionByZero.
+func TestParseRational_ZeroDenominatorIsDivByZero(t *testing.T) {
+	cases := []string{
+		"#b0/0",                               // binary, small-int path
+		"#o0/0",                               // octal, small-int path
+		"#x0/0",                               // hex, small-int path
+		"#x" + strings.Repeat("f", 19) + "/0", // over-range numerator -> big path
+	}
+	for _, src := range cases {
+		err := parseExpectError(t, src)
+		if !errors.Is(err, werr.ErrDivisionByZero) {
+			t.Errorf("parse %q: error = %v; want errors.Is ErrDivisionByZero", src, err)
+		}
+		var perr *ParserError
+		if !errors.As(err, &perr) {
+			t.Errorf("parse %q: error %T is not a located *ParserError", src, err)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
