@@ -38,6 +38,10 @@ func vectorReclaimSetup(n int) string {
 // index loop with the callback substituted so the loop self-tail-reclaims its
 // env frame instead of leaking ~2 frames/element. Measured as an allocation
 // slope across two vector sizes: pre-inline ~2 allocs/element; reclaimed ~0.
+// An absolute slope suffices here (unlike the string tests' differential): the
+// vector backing mutates in place, so vector-ref/vector-set! allocate nothing per
+// element and the only per-element allocation is the env frame the inline removes.
+// The stamp/mechanism itself is pinned separately by TestInlineHOFStamp.
 func TestInlineHOFVectorMapReclaims(t *testing.T) {
 	a1 := allocsForRun(t, vectorReclaimSetup(1000), "(vector-map cb v)")
 	a2 := allocsForRun(t, vectorReclaimSetup(2000), "(vector-map cb v)")
@@ -49,8 +53,11 @@ func TestInlineHOFVectorMapReclaims(t *testing.T) {
 }
 
 // TestInlineHOFVectorMapCorrect pins that inlining preserves vector-map
-// semantics: the inlined index loop must build the same result vector as the
-// real vector-map, in order.
+// semantics: the inlined index loop must build the same result vector as the real
+// vector-map, in order, including the boundary inputs (empty, single) where a
+// hand-transcribed loop's off-by-one would show, and the multi-vector arity that
+// must NOT inline (the template is single-vector; a 3-arg call falls through to
+// the real zipping clause).
 func TestInlineHOFVectorMapCorrect(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
@@ -58,38 +65,91 @@ func TestInlineHOFVectorMapCorrect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const program = `(vector-map (lambda (x) (* x x)) #(1 2 3 4 5))`
-	result, err := eng.EvalMultiple(ctx, program)
-	if err != nil {
-		t.Fatalf("eval: %v", err)
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"squares", `(vector-map (lambda (x) (* x x)) #(1 2 3 4 5))`, "#(1 4 9 16 25)"},
+		{"empty", `(vector-map (lambda (x) (* x x)) #())`, "#()"},
+		{"single", `(vector-map (lambda (x) (* x x)) #(7))`, "#(49)"},
+		{"multi-vector fall-through", `(vector-map + #(1 2 3) #(10 20 30))`, "#(11 22 33)"},
 	}
-	got := result.SchemeString()
-	if got != "#(1 4 9 16 25)" {
-		t.Errorf("inlined vector-map result = %s, want #(1 4 9 16 25)", got)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := eng.EvalMultiple(ctx, tc.code)
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			got := result.SchemeString()
+			if got != tc.want {
+				t.Errorf("vector-map = %s, want %s", got, tc.want)
+			}
+		})
 	}
 }
 
-// TestInlineHOFVectorMapCapturingCallbackCorrect is the soundness boundary for
-// the result-building index-loop shape: a call/cc callback is NOT capture-safe,
-// so the dispatch must refuse to inline (no frame release across the capture
-// while writing into the result buffer) and fall through to the real
-// vector-map. The result must remain correct.
-func TestInlineHOFVectorMapCapturingCallbackCorrect(t *testing.T) {
+// TestInlineHOFVectorMapHygiene is the cross-env soundness gate for the index-loop
+// shape: the inlined vector-map loop calls vector-ref/vector-set!/make-vector/etc.
+// as free identifiers; a call site that locally rebinds one of them MUST NOT
+// capture the inlined loop's — it must use the sealed-base global. Shadows
+// vector-ref with a function that would corrupt the result if it leaked in.
+func TestInlineHOFVectorMapHygiene(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
 		WithLibraryPaths(), WithImmutableTopLevel())
 	if err != nil {
 		t.Fatal(err)
 	}
-	const program = `(vector-map (lambda (x) (call/cc (lambda (k) (* x x)))) #(1 2 3 4))`
+	const program = `(let ((vector-ref (lambda (v i) 999)))
+  (vector-map (lambda (x) x) #(1 2 3)))`
 	result, err := eng.EvalMultiple(ctx, program)
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
 	got := result.SchemeString()
-	if got != "#(1 4 9 16)" {
-		t.Errorf("vector-map with a call/cc callback = %s, want #(1 4 9 16) "+
-			"(must fall through to the real vector-map, result intact)", got)
+	if got != "#(1 2 3)" {
+		t.Errorf("hygiene leak: inlined vector-map = %s, want #(1 2 3) "+
+			"(a call-site local vector-ref must not capture the inlined loop's vector-ref)", got)
+	}
+}
+
+// TestInlineHOFVectorMapCapturingCallbackReentrant is the soundness boundary for
+// the result-building index-loop shape, with teeth: the callback captures a
+// continuation mid-map and the test RE-ENTERS it. A passive call/cc test (capture
+// k but never resume it) passes even if the gate is broken, because a wrongly-
+// reclaimed frame is never used-after-release when the continuation is never
+// resumed. Re-entry is the shape that exposes the bug: under the correct gate the
+// call/cc callback is not capture-safe, so the dispatch falls through to the real
+// (capturable) vector-map and resuming the saved continuation rebuilds the result
+// (#(1 2 99)); a wrongly-inlined reclaiming loop would release the frame the
+// captured continuation needs and corrupt it.
+func TestInlineHOFVectorMapCapturingCallbackReentrant(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
+		WithLibraryPaths(), WithImmutableTopLevel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// saved holds the continuation captured at the last element; the one-shot
+	// re-entry resumes it with 99, which re-completes vector-map with 99 written
+	// at the final index.
+	const program = `(begin
+(define saved #f)
+(define done #f)
+(define r (vector-map (lambda (x) (call/cc (lambda (k) (set! saved k) x))) #(1 2 3)))
+(if (not done) (begin (set! done #t) (saved 99)))
+r)`
+	result, err := eng.EvalMultiple(ctx, program)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	if got != "#(1 2 99)" {
+		t.Errorf("re-entrant call/cc through vector-map = %s, want #(1 2 99) "+
+			"(the callback captures a continuation at the last element and is re-entered with 99; "+
+			"the real capturable vector-map must rebuild the result — a wrongly-inlined reclaiming "+
+			"loop would corrupt the released frame)", got)
 	}
 }
 

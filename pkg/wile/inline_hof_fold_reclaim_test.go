@@ -70,6 +70,9 @@ func TestInlineHOFFoldCorrect(t *testing.T) {
 	}{
 		{"sum", `(begin (import (srfi 1)) (fold + 0 '(1 2 3 4 5)))`, "15"},
 		{"build", `(begin (import (srfi 1)) (fold cons '() '(1 2 3)))`, "(3 2 1)"},
+		{"empty", `(begin (import (srfi 1)) (fold + 0 '()))`, "0"},
+		{"single", `(begin (import (srfi 1)) (fold cons '() '(1)))`, "(1)"},
+		{"multi-list fall-through", `(begin (import (srfi 1)) (fold + 0 '(1 2 3) '(10 20 30)))`, "66"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -82,6 +85,33 @@ func TestInlineHOFFoldCorrect(t *testing.T) {
 				t.Errorf("inlined fold = %s, want %s", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestInlineHOFFoldHygiene is the cross-env soundness gate for fold's cdr-walk
+// shape: the inlined fold loop calls car/cdr/pair? as free identifiers; a call
+// site that locally rebinds one MUST NOT capture the inlined loop's — it must use
+// the sealed-base global. Shadows car with a function that would corrupt the fold
+// if it leaked in.
+func TestInlineHOFFoldHygiene(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
+		WithLibraryPaths(), WithImmutableTopLevel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const program = `(begin
+(import (srfi 1))
+(let ((car (lambda (p) 999)))
+  (fold cons '() '(1 2 3))))`
+	result, err := eng.EvalMultiple(ctx, program)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	if got != "(3 2 1)" {
+		t.Errorf("hygiene leak: inlined fold = %s, want (3 2 1) "+
+			"(a call-site local car must not capture the inlined fold loop's car)", got)
 	}
 }
 
@@ -133,10 +163,16 @@ func TestInlineHOFFoldImportedIsStable(t *testing.T) {
 	}
 }
 
-// TestInlineHOFFoldCapturingCallbackCorrect is the soundness boundary for fold: a
-// call/cc kons is NOT capture-safe, so the dispatch must refuse to inline and fall
-// through to the real fold. The accumulation must remain correct.
-func TestInlineHOFFoldCapturingCallbackCorrect(t *testing.T) {
+// TestInlineHOFFoldCapturingCallbackReentrant is the soundness boundary for fold,
+// with teeth: the kons captures a continuation mid-fold and the test RE-ENTERS it.
+// A passive call/cc test passes even if the gate is broken (a wrongly-reclaimed
+// frame is never used-after-release when the continuation is never resumed);
+// re-entry exposes the bug. Under the correct gate the call/cc kons is not
+// capture-safe, so the dispatch falls through to the real (capturable) fold:
+// (fold kons 0 '(1 2 3)) is 6, and resuming the continuation captured at the last
+// element with 99 makes the final accumulator 99. A wrongly-inlined reclaiming
+// loop would corrupt the released frame the continuation needs.
+func TestInlineHOFFoldCapturingCallbackReentrant(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
 		WithLibraryPaths(), WithImmutableTopLevel())
@@ -145,14 +181,20 @@ func TestInlineHOFFoldCapturingCallbackCorrect(t *testing.T) {
 	}
 	const program = `(begin
 (import (srfi 1))
-(fold (lambda (x acc) (call/cc (lambda (k) (+ x acc)))) 0 '(1 2 3 4)))`
+(define saved #f)
+(define done #f)
+(define r (fold (lambda (x acc) (call/cc (lambda (k) (set! saved k) (+ x acc)))) 0 '(1 2 3)))
+(if (not done) (begin (set! done #t) (saved 99)))
+r)`
 	result, err := eng.EvalMultiple(ctx, program)
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
 	got := result.SchemeString()
-	if got != "10" {
-		t.Errorf("fold with a call/cc kons = %s, want 10 "+
-			"(must fall through to the real fold, accumulation intact)", got)
+	if got != "99" {
+		t.Errorf("re-entrant call/cc through fold = %s, want 99 "+
+			"(the kons captures a continuation at the last element and is re-entered with 99, "+
+			"making the final accumulator 99; the real capturable fold must support the re-entry — "+
+			"a wrongly-inlined reclaiming loop would corrupt the released frame)", got)
 	}
 }

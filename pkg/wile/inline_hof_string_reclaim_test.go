@@ -67,8 +67,10 @@ func TestInlineHOFStringMapReclaims(t *testing.T) {
 }
 
 // TestInlineHOFStringMapCorrect pins that inlining preserves string-map
-// semantics: the inlined index loop must build the same result string as the
-// real string-map, in order.
+// semantics: the inlined index loop must build the same result string as the real
+// string-map, in order, including the boundary inputs (empty, single) and the
+// multi-string arity that must NOT inline (the template is single-string; a 3-arg
+// call falls through to the real zipping clause).
 func TestInlineHOFStringMapCorrect(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
@@ -76,37 +78,87 @@ func TestInlineHOFStringMapCorrect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const program = `(string-map (lambda (c) (char-upcase c)) "hello")`
-	result, err := eng.EvalMultiple(ctx, program)
-	if err != nil {
-		t.Fatalf("eval: %v", err)
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"upcase", `(string-map (lambda (c) (char-upcase c)) "hello")`, `"HELLO"`},
+		{"empty", `(string-map (lambda (c) (char-upcase c)) "")`, `""`},
+		{"single", `(string-map (lambda (c) (char-upcase c)) "a")`, `"A"`},
+		{"multi-string fall-through", `(string-map (lambda (a b) (if (char<? a b) a b)) "abc" "cba")`, `"aba"`},
 	}
-	got := result.SchemeString()
-	if got != `"HELLO"` {
-		t.Errorf("inlined string-map result = %s, want \"HELLO\"", got)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := eng.EvalMultiple(ctx, tc.code)
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			got := result.SchemeString()
+			if got != tc.want {
+				t.Errorf("string-map = %s, want %s", got, tc.want)
+			}
+		})
 	}
 }
 
-// TestInlineHOFStringMapCapturingCallbackCorrect is the soundness boundary for
-// the result-building string index loop: a call/cc callback is NOT capture-safe,
-// so the dispatch must fall through to the real string-map (no frame release
-// across the capture while writing into the result buffer). Result intact.
-func TestInlineHOFStringMapCapturingCallbackCorrect(t *testing.T) {
+// TestInlineHOFStringMapHygiene is the cross-env soundness gate for the string
+// index-loop shape: the inlined string-map loop calls string-ref/string-set!/etc.
+// as free identifiers; a call site that locally rebinds one MUST NOT capture the
+// inlined loop's — it must use the sealed-base global. Shadows string-ref with a
+// function that would corrupt the result if it leaked in.
+func TestInlineHOFStringMapHygiene(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
 		WithLibraryPaths(), WithImmutableTopLevel())
 	if err != nil {
 		t.Fatal(err)
 	}
-	const program = `(string-map (lambda (c) (call/cc (lambda (k) (char-upcase c)))) "abc")`
+	const program = `(let ((string-ref (lambda (s i) #\X)))
+  (string-map (lambda (c) c) "abc"))`
 	result, err := eng.EvalMultiple(ctx, program)
 	if err != nil {
 		t.Fatalf("eval: %v", err)
 	}
 	got := result.SchemeString()
-	if got != `"ABC"` {
-		t.Errorf("string-map with a call/cc callback = %s, want \"ABC\" "+
-			"(must fall through to the real string-map, result intact)", got)
+	if got != `"abc"` {
+		t.Errorf("hygiene leak: inlined string-map = %s, want \"abc\" "+
+			"(a call-site local string-ref must not capture the inlined loop's string-ref)", got)
+	}
+}
+
+// TestInlineHOFStringMapCapturingCallbackReentrant is the soundness boundary for
+// the result-building string index loop, with teeth: the callback captures a
+// continuation mid-map and the test RE-ENTERS it. A passive call/cc test passes
+// even if the gate is broken (a wrongly-reclaimed frame is never used-after-
+// release when the continuation is never resumed); re-entry exposes the bug.
+// Under the correct gate the call/cc callback is not capture-safe, so the dispatch
+// falls through to the real (capturable) string-map and resuming the saved
+// continuation with #\Z rebuilds the result ("abZ"); a wrongly-inlined reclaiming
+// loop would corrupt the released frame the continuation needs.
+func TestInlineHOFStringMapCapturingCallbackReentrant(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
+		WithLibraryPaths(), WithImmutableTopLevel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const program = `(begin
+(define saved #f)
+(define done #f)
+(define r (string-map (lambda (c) (call/cc (lambda (k) (set! saved k) c))) "abc"))
+(if (not done) (begin (set! done #t) (saved #\Z)))
+r)`
+	result, err := eng.EvalMultiple(ctx, program)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	if got != `"abZ"` {
+		t.Errorf("re-entrant call/cc through string-map = %s, want \"abZ\" "+
+			"(the callback captures a continuation at the last char and is re-entered with #\\Z; "+
+			"the real capturable string-map must rebuild the result — a wrongly-inlined reclaiming "+
+			"loop would corrupt the released frame)", got)
 	}
 }
 
