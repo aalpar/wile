@@ -2169,6 +2169,37 @@ func TestValidateQuotedLiteral_CircularDatumLabel(t *testing.T) {
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 	})
+
+	t.Run("shared but acyclic vector datum label", func(t *testing.T) {
+		// #0=#(1) referenced twice is shared but NOT circular — must compile,
+		// mirroring the shared-acyclic LIST subtest above. Pins the vector
+		// branch's visited cleanup (delete(visited, val)); without it this is
+		// mis-rejected as ErrInvalidSyntax.
+		result, err := evalSchemeString("'(#0=#(1) #0#)")
+		qt.Assert(t, err, qt.IsNil)
+		inner := values.NewVector(values.NewInteger(1))
+		expected := values.List(inner, inner)
+		qt.Assert(t, result, valuestest.SchemeEquals, expected)
+	})
+
+	t.Run("nested circular vector", func(t *testing.T) {
+		// #0=#(1 #(2 #0#)) — the cycle closes one level deeper, through a child
+		// vector, so the visited[val] hit fires only after recursive descent.
+		// Rejected like the direct self-reference.
+		_, err := evalSchemeString("'#0=#(1 #(2 #0#))")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
+	})
+
+	t.Run("cross-container cycle through a vector", func(t *testing.T) {
+		// #0=(1 #(2 #0#)) — a labeled list whose element is a vector that
+		// back-references the list. The single visited set spans pair and
+		// vector nodes, so a cycle threading through both container types is
+		// still caught.
+		_, err := evalSchemeString("'#0=(1 #(2 #0#))")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
+	})
 }
 
 // TestDeduplicateLiteral_CircularPair tests that DeduplicateLiteral

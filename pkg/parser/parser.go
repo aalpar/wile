@@ -646,12 +646,27 @@ func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tok
 		if p.err != nil {
 			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 		}
+		// readSyntax returns nil only when it skipped trailing comments and
+		// landed on a close delimiter; stop and let the post-loop check
+		// validate the closer, mirroring readList's nil-on-close handling.
+		// Without this, a non-) closer (e.g. ]) is appended as a nil element
+		// and the close is consumed, yielding a malformed vector + EOF error.
+		if v == nil {
+			break
+		}
 		q.Values = append(q.Values, v)
 		// Advance to next element (or close paren)
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 		}
+	}
+	// A vector opened with #( must close with ). The loop exits on ) (its
+	// condition) or breaks after readSyntax landed on another closer; anything
+	// but ) is a located mismatch, R7RS §2.1.
+	if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
+		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur,
+			"vector closed with %q, expected )", p.cur.String())
 	}
 	return q, p.cur, nil
 }

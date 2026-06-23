@@ -210,12 +210,6 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		cache[sv] = v.Value
 		return v.Value
 
-	case *SyntaxDatumLabel:
-		// This should not normally happen if the parser resolved the label
-		result := values.NewInteger(int64(v.Label))
-		cache[sv] = result
-		return result
-
 	case *SyntaxSymbol:
 		result := v.Unwrap()
 		cache[sv] = result

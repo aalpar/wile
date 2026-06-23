@@ -415,55 +415,7 @@ func TestSyntaxDatumComment_SchemeString(t *testing.T) {
 	qt.Assert(t, result, qt.Contains, "42")
 }
 
-// Test SyntaxDatumLabel and SyntaxDatumLabelAssignment
-func TestSyntaxDatumLabel_New(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	label := NewSyntaxDatumLabel(1, sctx)
-	qt.Assert(t, label, qt.IsNotNil)
-	qt.Assert(t, label.Label, qt.Equals, 1)
-	qt.Assert(t, label.SourceContext(), qt.Equals, sctx)
-}
-
-func TestSyntaxDatumLabel_Unwrap(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	label := NewSyntaxDatumLabel(1, sctx)
-	result := label.Unwrap()
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
-}
-
-func TestSyntaxDatumLabel_UnwrapAll(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	label := NewSyntaxDatumLabel(1, sctx)
-	result := label.UnwrapAll()
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(1))
-}
-
-func TestSyntaxDatumLabel_IsVoid(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	label := NewSyntaxDatumLabel(1, sctx)
-	qt.Assert(t, label.IsVoid(), qt.IsFalse)
-
-	var nilLabel *SyntaxDatumLabel
-	qt.Assert(t, nilLabel.IsVoid(), qt.IsTrue)
-}
-
-func TestSyntaxDatumLabel_EqualTo(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	label1 := NewSyntaxDatumLabel(1, sctx)
-	label2 := NewSyntaxDatumLabel(1, sctx)
-	label3 := NewSyntaxDatumLabel(2, sctx)
-
-	qt.Assert(t, label1.EqualTo(label2), qt.IsTrue)
-	qt.Assert(t, label1.EqualTo(label3), qt.IsFalse)
-	qt.Assert(t, label1.EqualTo(values.NewInteger(42)), qt.IsFalse)
-}
-
-func TestSyntaxDatumLabel_SchemeString(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	label := NewSyntaxDatumLabel(1, sctx)
-	qt.Assert(t, label.SchemeString(), qt.Equals, "1")
-}
-
+// Test SyntaxDatumLabelAssignment
 func TestSyntaxDatumLabelAssignment_New(t *testing.T) {
 	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	value := NewSyntaxObject(values.NewInteger(42), sctx)

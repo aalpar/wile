@@ -103,6 +103,33 @@ func TestReader_CircularVectorRoundTrips(t *testing.T) {
 	}
 }
 
+// TestReader_VectorClose covers readVectorInto's delimiter handling (the
+// function this change factored out of readVector). A vector opened with #(
+// must close with ); a non-) closer is a located mismatch error, and a trailing
+// datum comment before the close must not leave a nil element — readVectorInto
+// must mirror readList's nil-on-close handling.
+func TestReader_VectorClose(t *testing.T) {
+	t.Run("bracket-closed vector is a located mismatch error", func(t *testing.T) {
+		_, err := readOneDatum("#(1 2]")
+		if err == nil {
+			t.Fatal("#(1 2] accepted; want a located close-delimiter error")
+		}
+		if !errors.Is(err, werr.ErrNotACloseParen) {
+			t.Fatalf("#(1 2] error = %v; want errors.Is ErrNotACloseParen", err)
+		}
+	})
+	t.Run("trailing datum comment closes cleanly", func(t *testing.T) {
+		q, err := readOneDatum("#(1 #;2 )")
+		if err != nil {
+			t.Fatalf("#(1 #;2 ) rejected: %v", err)
+		}
+		vec, ok := q.UnwrapAll().(*values.Vector)
+		if !ok || len(*vec) != 1 {
+			t.Fatalf("#(1 #;2 ) = %s, want a 1-element vector #(1)", q.UnwrapAll().SchemeString())
+		}
+	})
+}
+
 // TestReader_DatumLabelValidFormsResolve guards the already-working label paths
 // against regression from the undefined-label and circular-vector changes.
 func TestReader_DatumLabelValidFormsResolve(t *testing.T) {
