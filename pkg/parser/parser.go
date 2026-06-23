@@ -264,6 +264,13 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		if err != nil {
 			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
+		// R7RS §7.1.2: the dot must be followed by a datum; a nil cdr (the
+		// reader landed on a close delimiter) is a located error, not a
+		// SetCdr(nil) panic.
+		if cdr == nil {
+			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+				"expected datum after '.' in dotted pair")
+		}
 		placeholder.SetCdr(cdr)
 		// Advance past the cdr and expect matching close delimiter
 		p.cur, p.err = p.toks.Next()
@@ -329,6 +336,12 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		cdr, _, err := p.readSyntax()
 		if err != nil {
 			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
+		}
+		// R7RS §7.1.2: the dot must be followed by a datum; a nil cdr is a
+		// located error, not a SetCdr(nil) panic.
+		if cdr == nil {
+			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+				"expected datum after '.' in dotted pair")
 		}
 		current.SetCdr(cdr)
 		// Advance past the cdr and expect matching close delimiter
@@ -521,6 +534,10 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 	}
 	q0 := pr
 	pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
+	// gotCar records whether the element loop read at least one datum, so the
+	// dotted-pair branch below can reject a '.' in head position (a . b needs a
+	// car) instead of mis-threading an orphan pair into (#<void>).
+	gotCar := false
 	for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
 		var v syntax.SyntaxValue
 		v, _, p.err = p.readSyntax()
@@ -534,6 +551,7 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		}
 		pr0 = pr.(*syntax.SyntaxPair)
 		pr0.SetCar(v)
+		gotCar = true
 		pr0.SetCdr(p.wrapSyntaxPair(nil, nil, p.cur))
 		pr = pr0.Cdr().(*syntax.SyntaxPair)
 		p.cur, p.err = p.toks.Next()
@@ -543,6 +561,13 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 	}
 	switch {
 	case p.cur.Type() == tokenizer.TokenizerStateCons:
+		// R7RS §7.1.2: a dotted pair (a . b) requires a car before the dot.
+		// With no datum read, the '.' is in head position — a located read
+		// error, not a silently mis-parsed (#<void>) with an orphaned tail.
+		if !gotCar {
+			return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+				"unexpected '.' with no preceding datum")
+		}
 		// skip the '.' token
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
@@ -553,6 +578,13 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		v, _, p.err = p.readSyntax()
 		if p.err != nil {
 			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
+		}
+		// R7RS §7.1.2: the dot must be followed by a datum. readSyntax returns
+		// nil when it lands on a close delimiter, so a nil cdr means the datum
+		// is missing — a located error, not a SetCdr(nil) panic.
+		if v == nil {
+			return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
+				"expected datum after '.' in dotted pair")
 		}
 		pr = v
 		p.cur, p.err = p.toks.Next()
@@ -606,6 +638,19 @@ func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	return q, p.cur, nil
 }
 
+// checkByteVectorClose guards the two stx.Unwrap sites in readByteVector.
+// readSyntax returns a nil stx only when it lands on a close delimiter, and the
+// caller checks for ) before calling this. A bytevector opened with #u8( must
+// close with ), so a nil stx here means a non-) closer (e.g. ]) — that is a
+// located mismatch error, not a nil-pointer dereference that crashes the host.
+func (p *Parser) checkByteVectorClose(stx syntax.SyntaxValue) error {
+	if stx != nil {
+		return nil
+	}
+	return NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur,
+		"bytevector closed with %q, expected )", p.cur.String())
+}
+
 // readByteVector reads a byte vector form opened by #u8(.
 func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	q0 := values.NewByteVector()
@@ -621,6 +666,10 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 		// Empty bytevector case: #u8()
 		return p.wrapSyntax(q0, p.cur), p.cur, nil
+	}
+	err := p.checkByteVectorClose(stx)
+	if err != nil {
+		return nil, p.cur, err
 	}
 	i, ok := stx.Unwrap().(*values.Integer)
 	for {
@@ -641,6 +690,10 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 			break
+		}
+		err = p.checkByteVectorClose(stx)
+		if err != nil {
+			return nil, p.cur, err
 		}
 		i, ok = stx.Unwrap().(*values.Integer)
 	}
