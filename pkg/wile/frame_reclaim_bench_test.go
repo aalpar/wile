@@ -23,10 +23,13 @@ import (
 
 // Phase 6 measurement for escape-gated frame reclamation. The optimization is
 // gated by WithImmutableTopLevel (it stamps top-level defines + ambient base
-// primitives Stable), so each shape is benchmarked flag-on (optimized) vs
-// flag-off (the default, inert path — also the regression baseline for the new
-// opcodes). -benchmem reports the allocation win; ns/op reports the net effect of
-// (fewer frame allocations / less GC) minus (the fib tail-+ fusion loss under A).
+// primitives Stable) — which is now the engine DEFAULT (options.go). The flag-off
+// arm must therefore EXPLICITLY opt out via WithMutableTopLevel(); omitting it
+// leaves both arms optimized and the benchmark measures nothing (the regression
+// TestFrameReclaimBenchArmsDiffer guards exactly that). Each shape is benchmarked
+// flag-on (optimized) vs flag-off (mutable top level, the unoptimized baseline).
+// -benchmem reports the allocation win; ns/op reports the net effect of (fewer
+// frame allocations / less GC) minus (the fib tail-+ fusion loss under A).
 //
 // All recursion/loop magnitudes stay inside the cached-integer window
 // [-32768, 32767] so integer boxing is identical across arms and does not pollute
@@ -40,8 +43,13 @@ const benchFib = "(begin (define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (-
 const benchTak = "(begin (define (tak x y z) (if (not (< y x)) z (tak (tak (- x 1) y z) (tak (- y 1) z x) (tak (- z 1) x y))))\n)"
 const benchLoop = "(begin (define (loop i n) (if (>= i n) i (loop (+ i 1) n)))\n)"
 
-func benchReclaim(b *testing.B, immutable bool, setup, code string) {
-	b.Helper()
+// newReclaimEngine builds the engine for one benchmark/test arm. The mutable arm
+// EXPLICITLY opts out via WithMutableTopLevel — required because immutable top
+// level is the engine default (options.go); omitting the opt-out would leave the
+// "off" arm optimized and collapse the A/B delta to zero. Shared by benchReclaim
+// and reclaimRunAllocs so the opt-out lives in exactly one place.
+func newReclaimEngine(tb testing.TB, immutable bool, setup string) (*Engine, context.Context) {
+	tb.Helper()
 	ctx := context.Background()
 	opts := []EngineOption{WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithLibraryPaths()}
 	if immutable {
@@ -54,14 +62,20 @@ func benchReclaim(b *testing.B, immutable bool, setup, code string) {
 	}
 	eng, err := NewEngine(ctx, opts...)
 	if err != nil {
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
 	if setup != "" {
 		_, err = eng.EvalMultiple(ctx, setup)
 		if err != nil {
-			b.Fatal(err)
+			tb.Fatal(err)
 		}
 	}
+	return eng, ctx
+}
+
+func benchReclaim(b *testing.B, immutable bool, setup, code string) {
+	b.Helper()
+	eng, ctx := newReclaimEngine(b, immutable, setup)
 	compiled, err := eng.Compile(ctx, eng.MustParse(ctx, code))
 	if err != nil {
 		b.Fatal(err)
@@ -84,3 +98,36 @@ func BenchmarkTak_FlagOn(b *testing.B)  { benchReclaim(b, true, benchTak, "(tak 
 
 func BenchmarkTailLoop_FlagOff(b *testing.B) { benchReclaim(b, false, benchLoop, "(loop 0 30000)") }
 func BenchmarkTailLoop_FlagOn(b *testing.B)  { benchReclaim(b, true, benchLoop, "(loop 0 30000)") }
+
+// TestFrameReclaimBenchArmsDiffer pins the benchmark's control arm so its prior bug
+// cannot silently return. After immutable top level became the engine default,
+// benchReclaim's "off" arm — which only conditionally ADDED WithImmutableTopLevel
+// and never opted out — ran optimized too, so FlagOff ≡ FlagOn and the A/B
+// benchmark measured nothing. The mutable arm MUST allocate far more than the
+// optimized arm; 10× is a deliberately loose floor (the real fib ratio is ~1000×),
+// so this asserts "the control arm is unoptimized" without being magnitude-brittle.
+func TestFrameReclaimBenchArmsDiffer(t *testing.T) {
+	off := reclaimRunAllocs(t, false, benchFib, "(fib 20)")
+	on := reclaimRunAllocs(t, true, benchFib, "(fib 20)")
+	if off < on*10 {
+		t.Errorf("benchmark control arm is inert: FlagOff=%.0f allocs/run, FlagOn=%.0f allocs/run; "+
+			"want FlagOff >= 10*FlagOn (the mutable arm must run unoptimized)", off, on)
+	}
+}
+
+// reclaimRunAllocs returns the average heap allocations of one Engine.Run of code
+// under the given optimization arm — the test-time analogue of benchReclaim's loop.
+func reclaimRunAllocs(t *testing.T, immutable bool, setup, code string) float64 {
+	t.Helper()
+	eng, ctx := newReclaimEngine(t, immutable, setup)
+	compiled, err := eng.Compile(ctx, eng.MustParse(ctx, code))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return testing.AllocsPerRun(3, func() {
+		_, runErr := eng.Run(ctx, compiled)
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+	})
+}
