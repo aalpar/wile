@@ -230,6 +230,43 @@ func TestBinding_StableEvidenceVsConclusion(t *testing.T) {
 	qt.Assert(t, b3.IsImported(), qt.IsFalse)
 }
 
+// TestBinding_InlineHOFParam pins the inline-HOF capability (callback
+// specialization Strategy A): a binding reports -1 ("not an inline HOF") by
+// default — including a binding that has a BindingMeta but no InlineHOF stamp
+// (the EnsureMeta &BindingMeta{} zero-value case, which a plain -1-sentinel int
+// would mis-read as "callback param 0" and falsely mark every primitive an
+// inline HOF). Once stamped, it reports the callback parameter index.
+func TestBinding_InlineHOFParam(t *testing.T) {
+	// No metadata at all -> -1.
+	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1)
+
+	// Metadata exists but no InlineHOF stamp (zero value) -> still -1. This is the
+	// invariant that keeps EnsureMeta's &BindingMeta{} correct: Lever E stamps
+	// every primitive via EnsureMeta().CaptureSafe, and none of those are HOFs.
+	b.EnsureMeta().CaptureSafe = true
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1)
+
+	// Stamped -> the callback parameter index.
+	m := b.EnsureMeta()
+	m.InlineHOF = true
+	m.InlineHOFCallbackParam = 0
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0)
+}
+
+// TestBinding_Copy_PreservesInlineHOF pins that Copy carries the inline-HOF
+// capability onto the copy (the compile/expansion clone must not drop it). Uses a
+// non-zero param index so the test proves the index itself is copied, not just
+// the gating flag.
+func TestBinding_Copy_PreservesInlineHOF(t *testing.T) {
+	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
+	m := b.EnsureMeta()
+	m.InlineHOF = true
+	m.InlineHOFCallbackParam = 2
+	cp := b.Copy()
+	qt.Assert(t, cp.InlineHOFParam(), qt.Equals, 2)
+}
+
 func TestBinding_Copy_WithSource(t *testing.T) {
 	source := &syntax.SourceContext{
 		File:  "test.scm",

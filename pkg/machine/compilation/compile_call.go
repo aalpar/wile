@@ -114,6 +114,14 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 		return nil
 	}
 
+	inlinedHOF, err := p.tryInlineHOFCall(ctctx, v)
+	if err != nil {
+		return err
+	}
+	if inlinedHOF {
+		return nil
+	}
+
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
@@ -236,5 +244,87 @@ func (p *CompileTimeContinuation) tryInlineCall(
 		delete(p.currentlyInlining, bid)
 	}()
 
+	return true, p.CompileValidatedLet(ctctx, syntheticLet)
+}
+
+// tryInlineHOFCall inlines a call to a curated tail higher-order procedure
+// (for-each, …) by substituting its pre-validated single-list loop template at the
+// call site, when the callback argument is provably capture-safe. The inlined loop
+// then self-tail-reclaims its env frame instead of leaking ~1/element (callback
+// specialization Strategy A). Returns (true, nil) if inlined, (false, nil) if it
+// does not apply, (false, err) on compilation failure.
+//
+// Unify: the callback (symbol or lambda) is always synthetic-let-bound to the
+// template's callback parameter, and that binding is stamped CaptureSafe+Stable
+// (justified by CallbackIsCaptureSafe) so the inlined loop's call to it passes
+// bodyCalleesAllCaptureSafe. There is no symbol-substitution path.
+func (p *CompileTimeContinuation) tryInlineHOFCall(
+	ctctx CompileTimeCallContext,
+	v *validate.ValidatedCall,
+) (bool, error) {
+	sym, ok := v.Proc().(*validate.ValidatedSymbol)
+	if !ok {
+		return false, nil
+	}
+
+	b := p.env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
+	if b == nil {
+		return false, nil
+	}
+	cbIdx := b.InlineHOFParam()
+	if cbIdx < 0 {
+		// Only a curated HOF binding is stamped, and the two stamp seams stamp only
+		// structurally non-rebindable bindings: StampInlineHOFs sweeps the immutable
+		// sealed base, and stampImportedInlineHOF stamps imported bindings (Imported ⇒
+		// IsStable ⇒ R7RS forbids set!). So a stamped binding reaching here is always
+		// Stable — a user (define fold …) resolves to an unstamped runtime binding
+		// (cbIdx -1, handled above) and (set! fold …) on an import is rejected. No
+		// separate IsStable() gate is needed; the stamp already implies it.
+		return false, nil
+	}
+
+	store := p.env.Namespace().InlineHOFTemplates()
+	if store == nil {
+		return false, nil
+	}
+	tmplAny, found := store.InlineHOFTemplate(sym.Symbol.Sym.Key)
+	if !found {
+		return false, nil
+	}
+	template, ok := tmplAny.(*validate.ValidatedLambda)
+	if !ok {
+		return false, nil
+	}
+
+	// Arity must match the single-list clause exactly; a multi-list call (more
+	// args) falls through to the real HOF, whose apply-based clause is not inlined.
+	params := template.Params()
+	if len(v.Body()) != len(params.Required) || cbIdx >= len(v.Body()) {
+		return false, nil
+	}
+
+	// The callback must be provably capture-safe; otherwise the inlined reclaiming
+	// loop could release a frame across a capturing call (use-after-release).
+	if !validate.CallbackIsCaptureSafe(v.Body()[cbIdx], p.env) {
+		return false, nil
+	}
+
+	// Build the synthetic let: each template parameter bound to the call's
+	// corresponding argument. The callback binding is stamped CaptureSafe (unify),
+	// justified by the proof above. Escapes prevents re-registration as an inline
+	// candidate (the params' Mutable/Escapes are not validator-computed here).
+	syntheticBindings := make([]validate.ValidatedLetBinding, len(params.Required))
+	for i, param := range params.Required {
+		syntheticBindings[i] = validate.ValidatedLetBinding{
+			Name:        param,
+			Init:        v.Body()[i],
+			Escapes:     true,
+			CaptureSafe: i == cbIdx,
+		}
+	}
+	syntheticLet := validate.NewValidatedLet(
+		"let", v.Source(), validate.LetKindLet,
+		syntheticBindings, template.Body(),
+	)
 	return true, p.CompileValidatedLet(ctctx, syntheticLet)
 }

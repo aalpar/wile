@@ -141,6 +141,14 @@ type Namespace struct {
 	// Callers needing the full *compilation.LibraryRegistry can type-assert.
 	libraryRegistry LibrarySearcher
 
+	// inlineHOFTemplates holds the pre-validated inline-HOF loop templates
+	// (callback specialization Strategy A), built per-Namespace at bootstrap.
+	// Stored as an InlineHOFTemplateStore interface because the template type
+	// (*validate.ValidatedLambda) lives above environment/ in the import graph;
+	// compilation type-asserts. Mirrors libraryRegistry. Nil until built; not
+	// inherited by child namespaces (template scopes are sealed-base-specific).
+	inlineHOFTemplates InlineHOFTemplateStore
+
 	// libraryEnvFactory creates isolated library environments during
 	// R7RS library loading. Per-instance (not global) so multiple engines
 	// don't race on a shared function pointer.
@@ -439,6 +447,28 @@ func (p *Namespace) LibraryRegistry() LibrarySearcher {
 // SetLibraryRegistry sets the library registry for R7RS library loading.
 func (p *Namespace) SetLibraryRegistry(registry LibrarySearcher) {
 	p.libraryRegistry = registry
+}
+
+// InlineHOFTemplateStore returns a pre-validated inline-HOF loop template by HOF
+// name (callback specialization Strategy A). The returned template is a
+// *validate.ValidatedLambda, exposed here as any because environment/ is below
+// validate/ in the import graph; the compilation consumer type-asserts. Mirrors
+// LibrarySearcher: the minimum environment/ needs to hold a compilation artifact.
+type InlineHOFTemplateStore interface {
+	InlineHOFTemplate(name string) (any, bool)
+}
+
+// InlineHOFTemplates returns the per-Namespace inline-HOF template store, or nil
+// if templates have not been built for this Namespace (in which case the compiler
+// performs no inline-HOF specialization).
+func (p *Namespace) InlineHOFTemplates() InlineHOFTemplateStore {
+	return p.inlineHOFTemplates
+}
+
+// SetInlineHOFTemplates installs the inline-HOF template store. Called once per
+// Namespace at bootstrap, after the sealed base is loaded.
+func (p *Namespace) SetInlineHOFTemplates(store InlineHOFTemplateStore) {
+	p.inlineHOFTemplates = store
 }
 
 // LibraryEnvFactory returns the factory for creating library environments.

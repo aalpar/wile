@@ -817,6 +817,21 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap procedures")
 	}
 
+	// Stamp the bootstrap-resident curated tail HOFs (for-each, vector-map, …)
+	// with the InlineHOF capability, now that the bootstrap procedures are bound.
+	// A post-load metadata sweep, like the doc injection below. Read by the
+	// compiler's inline-HOF dispatch (callback specialization A). Import-gated HOFs
+	// (fold, srfi/1) are stamped on their import path instead.
+	compilation.StampInlineHOFs(runtimeTarget)
+
+	// Build the per-Namespace inline-HOF loop templates against the now-loaded
+	// sealed base, so the dispatch can substitute a curated HOF's reclaiming loop
+	// at a capture-safe call site. Idempotent per Namespace.
+	err = compilation.BuildInlineHOFTemplates(ctx, runtimeTarget)
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "build inline-HOF templates")
+	}
+
 	// Inject documentation into bootstrap macro bindings (expand-time).
 	// Must run after loadBootstrapMacros so define-syntax bindings exist.
 	reg.ApplyDocs(env)

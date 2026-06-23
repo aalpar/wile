@@ -73,6 +73,30 @@ type BindingMeta struct {
 	// capture-safe — a capturing redefinition is never stamped, which is how the
 	// classifier avoids trusting a capturing shadow by name.
 	CaptureSafe bool
+	// InlineHOF marks a curated higher-order procedure whose single-sequence
+	// case-lambda clause may be inlined at a call site that independently proves
+	// the callback capture-safe (callback specialization Strategy A). Stamped on
+	// the sealed-base tail HOFs post-bootstrap (for-each, vector-map,
+	// vector-for-each, string-map, string-for-each) and on import-gated ones from
+	// their library (fold, srfi/1); NOT auto-derived. The curated set lives in
+	// compilation.inlineHOFSpecs. Consumed by the compiler's inline-HOF dispatch.
+	//
+	// ORTHOGONAL to CaptureSafe: an inline HOF is itself NOT capture-safe — it
+	// applies the callback, which may capture (for-each.IsCaptureSafe() is false,
+	// pinned by capture_safety_test.go). This flag says "inlinable WHEN the
+	// callback is proven safe," a different question about the same binding.
+	//
+	// The gating bool is what keeps the capability zero-value-correct: a plain
+	// -1-sentinel int would read 0 ("callback param 0") on every binding that ever
+	// calls EnsureMeta (which is every primitive — see registry/apply.go), falsely
+	// marking them inline HOFs. With the bool, the &BindingMeta{} zero value
+	// (InlineHOF=false) correctly means "not an inline HOF," preserving the
+	// invariant that adding a metadata field needs no constructor edits.
+	InlineHOF bool
+	// InlineHOFCallbackParam is the callback's parameter index, read ONLY when
+	// InlineHOF is true. Stored as data (not hardcoded 0) so a future HOF whose
+	// callback is not the first parameter is handled by the same path.
+	InlineHOFCallbackParam int
 }
 
 // Binding represents a variable binding in the environment.
@@ -217,6 +241,19 @@ func (p *Binding) IsCaptureSafe() bool {
 	return p.meta.CaptureSafe
 }
 
+// InlineHOFParam reports the callback parameter index of a curated inline-HOF
+// binding (callback specialization Strategy A), or -1 when this binding is not a
+// curated inline HOF. The gating BindingMeta.InlineHOF flag makes -1 the correct
+// answer for an unstamped binding and for a binding whose meta exists but carries
+// no inline-HOF stamp (the EnsureMeta zero value). Read by the compiler's
+// inline-HOF dispatch to decide whether to attempt call-site specialization.
+func (p *Binding) InlineHOFParam() int {
+	if p.meta == nil || !p.meta.InlineHOF {
+		return -1
+	}
+	return p.meta.InlineHOFCallbackParam
+}
+
 // Copy creates a deep copy of this binding. The meta struct is copied so
 // that mutations through EnsureMeta on the original do not affect the
 // copy. This method is only used during compilation/expansion, never on
@@ -228,12 +265,14 @@ func (p *Binding) Copy() *Binding {
 	}
 	if p.meta != nil {
 		b.meta = &BindingMeta{
-			Scopes:      p.meta.Scopes,
-			Source:      p.meta.Source,
-			Doc:         p.meta.Doc,
-			Imported:    p.meta.Imported,
-			Stable:      p.meta.Stable,
-			CaptureSafe: p.meta.CaptureSafe,
+			Scopes:                 p.meta.Scopes,
+			Source:                 p.meta.Source,
+			Doc:                    p.meta.Doc,
+			Imported:               p.meta.Imported,
+			Stable:                 p.meta.Stable,
+			CaptureSafe:            p.meta.CaptureSafe,
+			InlineHOF:              p.meta.InlineHOF,
+			InlineHOFCallbackParam: p.meta.InlineHOFCallbackParam,
 		}
 	}
 	return b

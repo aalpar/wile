@@ -53,7 +53,19 @@ import (
 // capture-safety (a leak-safe miss that surfaces only as an unexplained perf
 // regression on an imported program, never as corruption) — so the guard below is
 // defensive, not a supported "no propagation" mode.
-func markBindingImported(target, source *environment.Binding) {
+//
+// exportName is the binding's name in the library (the external/internal export
+// name, NOT the local alias). It establishes the curated inline-HOF capability on
+// the imported target via stampImportedInlineHOF: keyed by export name so a
+// renamed import still carries it, and applied to the fresh per-import target (not
+// the shared source) so it is race-safe under concurrent imports. stampImported-
+// InlineHOF stamps ONLY import-gated HOFs (fold), so a same-named re-export of a
+// SEALED-BASE HOF — e.g. SRFI-13's string-map, a different procedure from R7RS
+// string-map — is never stamped here and never mis-inlined with the R7RS template.
+// The sealed-base HOFs are stamped only at their real home (StampInlineHOFs). The
+// import path is also the only library seam, so a user's own (define …) of a HOF
+// name is never stamped here.
+func markBindingImported(target, source *environment.Binding, exportName string) {
 	if target == nil {
 		return
 	}
@@ -62,6 +74,7 @@ func markBindingImported(target, source *environment.Binding) {
 	if source != nil {
 		m.CaptureSafe = source.IsCaptureSafe()
 	}
+	stampImportedInlineHOF(target, exportName)
 }
 
 // ImportSet represents a parsed import specification.
@@ -297,7 +310,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %s", localName, targetPhase)
 			}
 		}
-		markBindingImported(phaseEnv.GetBinding(localSym, nil), libBinding)
+		markBindingImported(phaseEnv.GetBinding(localSym, nil), libBinding, externalName)
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
@@ -311,7 +324,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
 			}
-			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding)
+			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding, externalName)
 		}
 	}
 	return nil
@@ -376,7 +389,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 			}
 		}
-		markBindingImported(targetEnv.GetBinding(localSym, nil), importedBinding)
+		markBindingImported(targetEnv.GetBinding(localSym, nil), importedBinding, externalName)
 
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
@@ -386,7 +399,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
 			}
-			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding)
+			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding, externalName)
 		}
 	}
 	return nil
