@@ -389,13 +389,11 @@ func TestParser_Read(t *testing.T) {
 			),
 		},
 		{
-			in: "#10#",
-			sexpect: syntax.NewSyntaxDatumLabel(10,
-				syntax.NewSourceContext("#10#", "",
-					syntax.NewSourceIndexes(0, 0, 0),
-					syntax.NewSourceIndexes(4, 4, 0),
-				),
-			),
+			// R7RS §2.4: an undefined forward reference (#10# with no matching
+			// #10=) is a read error, not the integer 10 the old SyntaxDatumLabel
+			// placeholder silently produced.
+			in:  "#10#",
+			err: werr.ErrDatumLabelUndefined,
 		},
 		{
 			in:     "#\\newline",

@@ -397,7 +397,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteral(v values.Value) (values.
 }
 
 func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
-	v values.Value, visited map[*values.Pair]bool,
+	v values.Value, visited map[values.Value]bool,
 ) (values.Value, error) {
 	switch val := v.(type) {
 	case *values.Symbol:
@@ -407,7 +407,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 			return nil, nil
 		}
 		if visited == nil {
-			visited = make(map[*values.Pair]bool)
+			visited = make(map[values.Value]bool)
 		}
 		if visited[val] {
 			return nil, werr.WrapForeignErrorf(
@@ -433,6 +433,16 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		if val == nil || len(*val) == 0 {
 			return val, nil
 		}
+		if visited == nil {
+			visited = make(map[values.Value]bool)
+		}
+		if visited[val] {
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrInvalidSyntax,
+				"compile: circular datum label in quoted literal",
+			)
+		}
+		visited[val] = true
 		changed := false
 		newElements := make([]values.Value, len(*val))
 		for i, elem := range *val {
@@ -445,6 +455,7 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 				changed = true
 			}
 		}
+		delete(visited, val)
 		if !changed {
 			return val, nil
 		}

@@ -2160,11 +2160,14 @@ func TestValidateQuotedLiteral_CircularDatumLabel(t *testing.T) {
 	})
 
 	t.Run("vector datum label with self-reference", func(t *testing.T) {
-		// #0=#(a #0#) — the parser resolves the self-reference in the vector.
-		// This produces a circular vector (element 1 points to the vector itself).
-		// The compiler handles this without crashing.
+		// #0=#(a #0#) — the parser now resolves the self-reference, producing a
+		// genuinely circular vector (element 1 points to the vector itself). Like
+		// a circular list literal (R7RS §2.4), a circular vector literal in code
+		// is rejected at compile time with ErrInvalidSyntax rather than crashing
+		// the compiler with a stack overflow.
 		_, err := evalSchemeString("'#0=#(a #0#)")
-		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 	})
 }
 
