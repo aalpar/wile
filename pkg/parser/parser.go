@@ -441,12 +441,14 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 			return nil, p.cur, p.err
 		}
 	case tokenizer.TokenizerStateOpenVector:
-		// For vectors, read normally (circular vector references are rare)
-		v, _, p.err = p.readSyntax()
+		// Pre-register a placeholder vector so a #n# inside resolves to the
+		// vector itself (circular vectors, R7RS §2.4) — mirrors the list path.
+		placeholder := p.wrapSyntaxVector(nil, p.cur)
+		p.datumLabels[labelNum] = placeholder
+		v, _, p.err = p.readVectorInto(placeholder)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		p.datumLabels[labelNum] = v
 	default:
 		// Non-compound datum: read normally and store
 		v, _, p.err = p.readSyntax()
@@ -476,9 +478,11 @@ func (p *Parser) readLabelReference() (syntax.SyntaxValue, tokenizer.Token, erro
 			return labeled, p.cur, nil
 		}
 	}
-	// Label not found - return a SyntaxDatumLabel (will error at compile time)
-	q := p.wrapSyntaxDatumLabel(labelNum, p.cur)
-	return q, p.cur, nil
+	// R7RS §2.4: a #n# reference must follow its #n= definition. An undefined or
+	// forward reference is a read error — not the integer n that the old
+	// SyntaxDatumLabel placeholder silently produced via Unwrap.
+	return nil, p.cur, NewParserErrorWithWrapf(werr.ErrDatumLabelUndefined, p.cur,
+		"undefined datum label #%d#", labelNum)
 }
 
 // readDatumComment handles #; — reading and wrapping a datum comment.
@@ -621,7 +625,14 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 
 // readVector reads a vector form opened by #(.
 func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
-	q := p.wrapSyntaxVector(nil, p.cur)
+	return p.readVectorInto(p.wrapSyntaxVector(nil, p.cur))
+}
+
+// readVectorInto reads vector elements into q, a pre-created (and possibly
+// already label-registered) vector. Filling a pre-registered placeholder lets a
+// datum label inside the vector resolve to the vector itself, so circular
+// vectors like #0=#(1 #0#) read correctly — mirroring readLabeledList for pairs.
+func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tokenizer.Token, error) {
 	// Advance past #( token
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
@@ -635,12 +646,27 @@ func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 		}
+		// readSyntax returns nil only when it skipped trailing comments and
+		// landed on a close delimiter; stop and let the post-loop check
+		// validate the closer, mirroring readList's nil-on-close handling.
+		// Without this, a non-) closer (e.g. ]) is appended as a nil element
+		// and the close is consumed, yielding a malformed vector + EOF error.
+		if v == nil {
+			break
+		}
 		q.Values = append(q.Values, v)
 		// Advance to next element (or close paren)
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 		}
+	}
+	// A vector opened with #( must close with ). The loop exits on ) (its
+	// condition) or breaks after readSyntax landed on another closer; anything
+	// but ) is a located mismatch, R7RS §2.1.
+	if p.cur.Type() != tokenizer.TokenizerStateCloseParen {
+		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur,
+			"vector closed with %q, expected )", p.cur.String())
 	}
 	return q, p.cur, nil
 }
