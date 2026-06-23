@@ -134,3 +134,25 @@ func TestInlineHOFStamp_UserDefineNotStamped(t *testing.T) {
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1,
 		qt.Commentf("a user define is not a library export and must NOT be stamped an inline HOF"))
 }
+
+// TestInlineHOFStamp_Srfi13StringMapNotStamped pins the soundness fix for the
+// over-broad import-path stamp: the import path stamps ONLY import-gated curated
+// HOFs (fold), never a re-export of a SEALED-BASE name. SRFI-13 exports its OWN
+// string-map (single-string + optional range, NOT the R7RS variadic form);
+// importing it must not stamp that binding, or (string-map f s) would inline the
+// R7RS template for SRFI-13's different procedure. The genuine R7RS string-map is
+// stamped at its sealed-base home (TestInlineHOFStamp); only that binding inlines.
+func TestInlineHOFStamp_Srfi13StringMapNotStamped(t *testing.T) {
+	eng := captureSafetyEngine(t)
+	ctx := context.Background()
+
+	_, err := eng.EvalMultiple(ctx, "(import (srfi 13))")
+	qt.Assert(t, err, qt.IsNil)
+
+	env := eng.Environment()
+	b := env.GetBinding(values.NewSymbol("string-map"), nil)
+	qt.Assert(t, b, qt.IsNotNil, qt.Commentf("string-map is bound (SRFI-13 shadows R7RS)"))
+	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1,
+		qt.Commentf("SRFI-13's string-map is a sealed-base re-export, not an import-gated HOF; "+
+			"the import path must not stamp it (it differs from R7RS string-map)"))
+}

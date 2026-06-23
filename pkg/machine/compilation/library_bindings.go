@@ -56,10 +56,15 @@ import (
 //
 // exportName is the binding's name in the library (the external/internal export
 // name, NOT the local alias). It establishes the curated inline-HOF capability on
-// the imported target via stampInlineHOF: keyed by export name so a renamed import
-// still carries it, and applied to the fresh per-import target (not the shared
-// source) so it is race-safe under concurrent imports. The import path is the only
-// library seam, so a user's own (define …) of a HOF name is never stamped here.
+// the imported target via stampImportedInlineHOF: keyed by export name so a
+// renamed import still carries it, and applied to the fresh per-import target (not
+// the shared source) so it is race-safe under concurrent imports. stampImported-
+// InlineHOF stamps ONLY import-gated HOFs (fold), so a same-named re-export of a
+// SEALED-BASE HOF — e.g. SRFI-13's string-map, a different procedure from R7RS
+// string-map — is never stamped here and never mis-inlined with the R7RS template.
+// The sealed-base HOFs are stamped only at their real home (StampInlineHOFs). The
+// import path is also the only library seam, so a user's own (define …) of a HOF
+// name is never stamped here.
 func markBindingImported(target, source *environment.Binding, exportName string) {
 	if target == nil {
 		return
@@ -69,7 +74,7 @@ func markBindingImported(target, source *environment.Binding, exportName string)
 	if source != nil {
 		m.CaptureSafe = source.IsCaptureSafe()
 	}
-	stampInlineHOF(target, exportName)
+	stampImportedInlineHOF(target, exportName)
 }
 
 // ImportSet represents a parsed import specification.

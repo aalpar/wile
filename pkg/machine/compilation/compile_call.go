@@ -273,6 +273,13 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 	}
 	cbIdx := b.InlineHOFParam()
 	if cbIdx < 0 {
+		// Only a curated HOF binding is stamped, and the two stamp seams stamp only
+		// structurally non-rebindable bindings: StampInlineHOFs sweeps the immutable
+		// sealed base, and stampImportedInlineHOF stamps imported bindings (Imported ⇒
+		// IsStable ⇒ R7RS forbids set!). So a stamped binding reaching here is always
+		// Stable — a user (define fold …) resolves to an unstamped runtime binding
+		// (cbIdx -1, handled above) and (set! fold …) on an import is rejected. No
+		// separate IsStable() gate is needed; the stamp already implies it.
 		return false, nil
 	}
 

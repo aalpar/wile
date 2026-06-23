@@ -73,12 +73,13 @@ type BindingMeta struct {
 	// capture-safe — a capturing redefinition is never stamped, which is how the
 	// classifier avoids trusting a capturing shadow by name.
 	CaptureSafe bool
-	// InlineHOF marks a curated higher-order procedure whose single-list
+	// InlineHOF marks a curated higher-order procedure whose single-sequence
 	// case-lambda clause may be inlined at a call site that independently proves
-	// the callback capture-safe (callback specialization Strategy A). Stamped
-	// post-bootstrap on the sealed-base tail HOFs only (for-each, vector-map,
-	// vector-for-each, string-map, string-for-each); NOT auto-derived. Consumed by
-	// the compiler's inline-HOF dispatch (a later phase); inert until then.
+	// the callback capture-safe (callback specialization Strategy A). Stamped on
+	// the sealed-base tail HOFs post-bootstrap (for-each, vector-map,
+	// vector-for-each, string-map, string-for-each) and on import-gated ones from
+	// their library (fold, srfi/1); NOT auto-derived. The curated set lives in
+	// compilation.inlineHOFSpecs. Consumed by the compiler's inline-HOF dispatch.
 	//
 	// ORTHOGONAL to CaptureSafe: an inline HOF is itself NOT capture-safe — it
 	// applies the callback, which may capture (for-each.IsCaptureSafe() is false,

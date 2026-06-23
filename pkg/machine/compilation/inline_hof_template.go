@@ -25,69 +25,10 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// inlineHOFTemplateSource maps each curated tail HOF to a Scheme template-lambda
-// whose body is the HOF's single-sequence reclaiming loop, callback as the first
-// parameter. Each is a transcription of the HOF's single-sequence case-lambda
-// clause from pkg/registry/core/bootstrap_procedures.scm (for-each/vector-*/
-// string-* defines) — except fold, whose single-list clause is the (null? lists)
-// then-branch of pkg/stdlib/lib/srfi/1/fold.scm. The inline-vs-real equivalence
-// test for each HOF guards transcription drift. v1 = for-each (P3); the vector/
-// string index loops and fold's arity-3 list fold were widened in P6.
-//
-// The callback is the FIRST parameter of every template (matching the
-// inlineHOFCallbackParam index 0), so tryInlineHOFCall's synthetic-let stamps it
-// CaptureSafe. In the index loops the callback is called in non-tail position
-// (an argument to vector-set!/string-set!, or for side effects); only the trailing
-// (loop (+ i 1)) is the self-tail call. bodyCalleesAllCaptureSafe still passes
-// because every callee — <, vector-ref/string-ref, vector-set!/string-set!, +,
-// the stamped callback, and loop — is capture-safe, so the loop reclaims.
-//
-// Built once per Namespace (BuildInlineHOFTemplates) through the real expander +
-// validator, so the body's free identifiers (car/cdr/null?, vector-length,
-// make-vector, etc.) carry definition-env hygiene and resolve to the sealed-base
-// globals even when a call site shadows them locally. Inlined via the
-// synthetic-let substrate (tryInlineHOFCall).
-var inlineHOFTemplateSource = map[string]string{
-	"for-each": `(lambda (f lst)
-  (let loop ((lst lst))
-    (if (null? lst) (if #f #f)
-        (begin (f (car lst)) (loop (cdr lst))))))`,
-	"vector-map": `(lambda (f v)
-  (let ((len (vector-length v)))
-    (let ((result (make-vector len)))
-      (let loop ((i 0))
-        (if (< i len)
-            (begin
-              (vector-set! result i (f (vector-ref v i)))
-              (loop (+ i 1)))
-            result)))))`,
-	"vector-for-each": `(lambda (f v)
-  (let ((len (vector-length v)))
-    (let loop ((i 0))
-      (if (< i len)
-          (begin
-            (f (vector-ref v i))
-            (loop (+ i 1)))))))`,
-	"string-map": `(lambda (f s)
-  (let ((len (string-length s)))
-    (let ((result (make-string len)))
-      (let loop ((i 0))
-        (if (< i len)
-            (begin
-              (string-set! result i (f (string-ref s i)))
-              (loop (+ i 1)))
-            result)))))`,
-	"string-for-each": `(lambda (f s)
-  (let ((len (string-length s)))
-    (let loop ((i 0))
-      (if (< i len)
-          (begin
-            (f (string-ref s i))
-            (loop (+ i 1)))))))`,
-	"fold": `(lambda (kons knil ls)
-  (let lp ((ls ls) (acc knil))
-    (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc)))`,
-}
+// The inline templates live on inlineHOFSpecs (inline_hof.go), the single source
+// of truth that keeps each template adjacent to its callback index and load path.
+// This file owns the build pipeline that turns those source strings into validated
+// lambdas stored per Namespace.
 
 // inlineHOFTemplateRegistry is the per-Namespace store of validated templates,
 // implementing environment.InlineHOFTemplateStore (returning the template as any,
@@ -116,16 +57,36 @@ func BuildInlineHOFTemplates(ctx context.Context, env *environment.EnvironmentFr
 		return nil
 	}
 	reg := &inlineHOFTemplateRegistry{
-		templates: make(map[string]*validate.ValidatedLambda, len(inlineHOFTemplateSource)),
+		templates: make(map[string]*validate.ValidatedLambda, len(inlineHOFSpecs)),
 	}
-	for name, src := range inlineHOFTemplateSource {
-		lam, err := buildInlineHOFTemplate(ctx, env, src)
+	for name, spec := range inlineHOFSpecs {
+		lam, err := buildInlineHOFTemplate(ctx, env, spec.template)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "build inline-HOF template %q", name)
+		}
+		verr := validateInlineHOFCallbackIndex(name, spec.callbackParam, len(lam.Params().Required))
+		if verr != nil {
+			return verr
 		}
 		reg.templates[name] = lam
 	}
 	ns.SetInlineHOFTemplates(reg)
+	return nil
+}
+
+// validateInlineHOFCallbackIndex checks that callbackParam names a real parameter
+// of a template with requiredCount required parameters. tryInlineHOFCall stamps
+// the callbackParam-th synthetic-let binding CaptureSafe; if that index fell
+// outside the template's parameters, the stamp would land on the wrong argument
+// (or panic), so BuildInlineHOFTemplates enforces it at engine init (fail closed).
+// The live specs never trip it — it guards a future mis-authored spec — so it is
+// exercised by a unit test rather than at runtime.
+func validateInlineHOFCallbackIndex(name string, callbackParam, requiredCount int) error {
+	if callbackParam < 0 || callbackParam >= requiredCount {
+		return werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"inline-HOF template %q: callback index %d out of range for %d required parameters",
+			name, callbackParam, requiredCount)
+	}
 	return nil
 }
 
