@@ -45,6 +45,20 @@ type inlineHOFSpec struct {
 	//     this template for it would be unsound. So the import path stamps fold and
 	//     nothing else; the sealed-base names are stamped only at their real home.
 	importGated bool
+	// homeLib is the LibraryName.Key() of the library that actually DEFINES this
+	// import-gated HOF (e.g. "srfi/1" for fold). The import path stamps the
+	// template ONLY when the binding is imported from this exact library — the
+	// identity gate. A different library exporting a same-named procedure with
+	// different semantics (sourceLib != homeLib) is never stamped, so its own code
+	// runs. Empty for sealed-base specs (importGated false), which are stamped at
+	// their real home by StampInlineHOFs and need no source check.
+	//
+	// Soundness vs completeness: this gate is sound (never mis-inlines) but
+	// slightly incomplete — a re-export chain ((import (srfi 1)) then (export
+	// fold) from library B) presents sourceLib=B, so the REAL srfi-1 fold imported
+	// through B is no longer inlined. That is a safe deoptimization (correct
+	// result, lost optimization), strictly better than silent miscompilation.
+	homeLib string
 	// template is the procedure's single-sequence reclaiming loop as a lambda
 	// whose callbackParam-th parameter is the callback. Transcribed from the real
 	// definition (pkg/registry/core/bootstrap_procedures.scm for the sealed-base
@@ -104,7 +118,7 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
           (begin
             (f (string-ref s i))
             (loop (+ i 1)))))))`},
-	"fold": {callbackParam: 0, importGated: true, template: `(lambda (kons knil ls)
+	"fold": {callbackParam: 0, importGated: true, homeLib: "srfi/1", template: `(lambda (kons knil ls)
   (let lp ((ls ls) (acc knil))
     (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc)))`},
 }
@@ -119,15 +133,24 @@ func applyInlineHOFStamp(b *environment.Binding, callbackParam int) {
 }
 
 // stampImportedInlineHOF marks the import target b when name is a curated
-// IMPORT-GATED tail HOF (importGated true — currently only fold). A non-curated
-// name or a sealed-base name is a no-op. This is the soundness boundary for the
-// import path: a re-export of a sealed-base name (e.g. SRFI-13's string-map, a
-// different procedure from R7RS string-map) is NOT import-gated, so it is never
-// stamped here — only fold is. The sealed-base HOFs are stamped only at their
-// real home (StampInlineHOFs).
-func stampImportedInlineHOF(b *environment.Binding, name string) {
+// IMPORT-GATED tail HOF (importGated true — currently only fold) imported from
+// the library that actually defines it. A non-curated name, a sealed-base name,
+// or an import from a DIFFERENT library is a no-op. This is the soundness
+// boundary for the import path on two axes:
+//   - name: a re-export of a sealed-base name (e.g. SRFI-13's string-map, a
+//     different procedure from R7RS string-map) is NOT import-gated, so it is
+//     never stamped here. The sealed-base HOFs are stamped only at their real
+//     home (StampInlineHOFs).
+//   - identity (sourceLib vs spec.homeLib): a library exporting its own `fold`
+//     with non-SRFI-1 semantics presents sourceLib != "srfi/1" and is not
+//     stamped, so the user's code runs instead of the SRFI-1 inline template.
+func stampImportedInlineHOF(b *environment.Binding, name string, sourceLib LibraryName) {
 	spec, ok := inlineHOFSpecs[name]
 	if !ok || !spec.importGated {
+		return
+	}
+	// Identity gate: only the library that defines this HOF may stamp it.
+	if sourceLib.Key() != spec.homeLib {
 		return
 	}
 	applyInlineHOFStamp(b, spec.callbackParam)
