@@ -297,6 +297,14 @@ Directions documents — identify prioritized capability extensions. Priority se
 
 ## Tier 5 — Tech Debt
 
+### List/Pair Primitive Cleanup (from inline annotations)
+
+- [ ] **List/pair primitive cleanup notes** [Low, XS–S]: Relocated from inline `// CLAUDE:` source annotations (removed to keep the axis-B manifest stable — inline comments shift primitive line numbers and break `TestBuildAxisBManifest`). Four items:
+  - **`Pair.Append` removal** (`pkg/values/pair.go`, `(*Pair).Append`): evaluate removing `Pair.Append` and its unit tests — confirm it has no remaining callers / is superseded before deleting.
+  - **`PrimReverse` allocation** (`pkg/registry/core/prim_lists.go`, `PrimReverse`): pre-allocate the result list as a `PairBlock` instead of consing per element.
+  - **`PrimListCopy` allocation** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): pre-allocate the result list as a `PairBlock`.
+  - **`PrimListCopy` loop shape** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): consider a higher-order traversal helper to replace the explicit `for` spine-walk.
+
 ### FCA-Derived
 
 - [ ] **Structural reduction roadmap** [Top priority, planning-only]: Selects the next packages to subject to `/structural-reduction` and **gates** the implementation plans below. Tier A targets in priority order: `values/` (Ca=33, 11K LOC, numeric tower + port hierarchy), `environment/` (Ca=16, binding-resolution algebra, recent namespace migration seams), `registry/` (Ca=19, contract surface for ~500 primitives). Tier B: root `wile/` (API design quality), `repl/`, `registry/helpers/`. Tier C uses different lenses (`scheme-conformance` for `registry/core`, `extensions/math`; `signals-engineer` for `security/`; batch `staff-engineer` sweep for `extensions/{eval,files,threads,gointerop,charsets,system,process,introspection}`). Why gating: `internal/` Phase 7 references `values/` as migration precedent; `machine/` Phase 7 boundaries depend on `environment/` frame shape. Run Tier A analyses BEFORE implementing the plans below. `plans/2026-05-07-structural-reduction-roadmap.md`. **Tier A status (2026-05-13)**: A.2 (`environment/`) shipped via PR #730 (`memory/2026-05-09-environment-structural-reduction.md`). A.3 (`registry/`) cross-cutting findings consolidated in `plans/2026-05-08-dispatch-axis-as-data.md` — Phase unification shipped (PR #728); remaining instances feed per-package plans. **A.1 (`values/`) complete — Phases 0–4 shipped via PRs #747–#756 (`memory/2026-05-13-values-structural-reduction.md`). Tier A closed.**
