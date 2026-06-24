@@ -16,6 +16,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Optional docstring on `define-syntax`.** A macro definition may now carry a
+  Guile-style docstring between the keyword and the transformer —
+  `(define-syntax NAME "doc…" TRANSFORMER)` — mirroring the leading-string
+  docstring `define` already accepts on procedure bodies. The docstring is
+  surfaced by the REPL's `,doc` command and the doc tooling, and it survives
+  `import`, so a documented library macro keeps its documentation at the use
+  site. All 22 `(wile control)` delimited-continuation macros (`prompt`/
+  `control`, `reset`/`shift`, the `0`-variants, `spawn`, `set`/`cupto`) are now
+  documented.
+
+### Changed
+
+- **BREAKING: the remaining public packages moved under `pkg/`.** v1.17.0 moved
+  only the root `wile` package to `github.com/aalpar/wile/pkg/wile`; this
+  completes the relocation. The library and infrastructure packages — `values`,
+  `werr`, `registry`, `security`, `repl`, `docparse`, `machine`, `environment`,
+  `syntax`, `parser`, `schemeutil` — now live at `github.com/aalpar/wile/pkg/<name>`.
+  Migration: insert `/pkg/` into the import path, e.g.
+  `github.com/aalpar/wile/values` → `github.com/aalpar/wile/pkg/values`. The
+  module path (`github.com/aalpar/wile`) is unchanged. The `extensions/*`
+  packages keep their `github.com/aalpar/wile/extensions/<name>` paths (the `io`
+  extension is the lone exception, now `github.com/aalpar/wile/pkg/extensions/io`),
+  and repo tooling moved under `tools/`. This supersedes the v1.17.0 note that
+  subpackage imports were unaffected. (#773)
+- **REPL: `Ctrl-C` is contained to the running form.** An interrupt during
+  evaluation now cancels just that form and returns to the prompt instead of
+  tearing down the session with `context canceled: REPL error`. `main` owns
+  `SIGTERM`; the REPL owns `SIGINT` and runs each form under its own cancellable
+  context. Runtime-error rendering no longer double-prints the source location
+  and stack trace or the redundant `runtime error:` prefix, and the REPL input
+  source is now injectable for embedders via `repl.WithInput(io.Reader)`. (#784)
+- **Embedding hardening: a panic at the VM boundary is contained as an error.**
+  `RunWithEscapeHandling` now converts every panic into a returned `*SchemeError`
+  rather than re-raising a `runtime.Error`, so malformed input or an internal
+  fault stays within the VM boundary instead of crashing the host process or
+  REPL. (#784)
+- **`write`/`display`/`write-shared` bound their nesting depth.** A new
+  `DefaultMaxWriteDepth` caps writer recursion — the fourth depth bound beside
+  the call, parse, and expand limits — so pathologically deep or cyclic
+  structure raises `ErrWriteDepthExceeded` instead of overflowing the host
+  stack. Flat lists of any length still write (the spine is walked iteratively).
+  (#782)
+
+### Fixed
+
+- **The datum reader no longer crashes the host on malformed input.** `read`
+  accepts untrusted input (R7RS §6.13.2), yet several inputs took the process
+  down with an unrecoverable Go panic or silently mis-parsed — e.g. `#u8(1 2]`
+  (nil-deref), `(( . ))` and `#0=(1 . )` (nil-cdr panic), `( . 5)` (silently
+  dropped the `5`). Every malformed input now returns a located `*ParserError`,
+  with a boundary catch-all that lifts any stray non-`*ParserError` to a located
+  error. The reader also gained the repo's first Go native fuzz targets (clean
+  at 180s / 20M+ executions). (#779, #782)
+- **Datum labels (`#n=`/`#n#`) and circular vectors read correctly.** An
+  undefined or forward `#n#` reference silently became the integer `n`; a
+  self-reference inside a labeled vector (`#0=#(1 #0#)`) silently became `0`
+  because vectors — unlike lists — were not pre-registered before their elements
+  were read; and a genuine circular vector literal overflowed the compile-time
+  validator, which cycle-guarded pairs but not vectors. Forward/undefined
+  references now raise `ErrDatumLabelUndefined`, labeled vectors resolve
+  self-references, and the literal validator cycle-guards vectors. (#780)
+- **`syntax-rules`: a depth-0 pattern variable now broadcasts into an ellipsis
+  sub-template.** A template such as `(list (+ x e) ...)` with `x` bound at
+  ellipsis depth 0 raised a spurious unbound-reference error (R7RS §4.3.2);
+  per-iteration capture contexts now chain to their parent, so a lower-depth
+  variable resolves at any nesting depth.
+- **Integer overflow corners promote to bignum.** `(* MinInt64 -1)` and
+  `(quotient MinInt64 -1)` silently returned the wrapped `MinInt64` instead of
+  promoting to `+2^63`, violating R7RS §6.2.6 (exact integer arithmetic is
+  unbounded). Both boundaries now promote, matching every other overflow path.
+- **`channel-select` is deterministic when a closed send races a ready
+  receive.** Selection previously relied on `reflect.Select` panicking on a send
+  to a closed channel; when a send case's channel was closed *and* a receive
+  case was ready, identical inputs could return either the received value or the
+  closed-send error (~50/50). Closed send cases are now detected explicitly
+  before blocking, so the result is stable.
+
+### Performance
+
+- **Tail-call frame reclamation and capture-safe HOF inline-reclaim.** Two
+  related optimizations cut env-frame allocation, which dominates the heap on
+  recursive and call-heavy workloads. The compiler now proves when a tail call's
+  environment frame is dead and reclaims it — closing the mutual-recursion frame
+  leak — driven by an interprocedural capture-safety capability and proof that
+  replaced the previous hand-maintained whitelist (#775, #776). The six curated
+  tail higher-order procedures (`map`, `for-each`, `fold`, `vector-map`/
+  `vector-for-each`, `string-map`/`string-for-each`) inline-reclaim their
+  per-element callback frames at capture-safe call sites, sharply reducing
+  allocation in folds and traversals (#778).
+- **Lock-free per-thread object pools.** The env-frame, continuation, and stack
+  pools now use a per-thread freelist without the previously uncontended
+  mutex/atomics, improving single-thread call-bound throughput and SRFI-18
+  thread scaling (#777).
+- **Compound-argument tail primitive calls are promoted.** A tail call to a
+  primitive with compound arguments (e.g. the `+` in `fib`'s tail position) is
+  inlined, gated on a preceding frame-reclaim proof so re-entrant continuations
+  stay correct (#774).
+
 ## [1.17.0] - 2026-06-17
 
 ### Added
