@@ -274,19 +274,21 @@ func PrimCallWithValues(cc machine.CallContext) error {
 	// Get all values returned by producer
 	producedValues := sub.GetValues()
 
-	// Call consumer with all produced values as arguments
-	sub2 := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub2)
-	_, err = sub2.ApplyCallable(consumerCls, producedValues...)
+	// Apply the consumer in place on mc (not in a sub-context) so the consumer
+	// call is in tail position relative to call-with-values: it returns through
+	// mc.cont, mirroring PrimApply. Running it in a sub-context with sub2.Run()
+	// nested one Go stack frame per call, so a tail loop through call-with-values
+	// (directly, or via the let-values/let*-values macros) overflowed the host
+	// goroutine stack instead of running in O(1) frames. R7RS §3.5 requires the
+	// consumer call to be a tail call.
+	//
+	// Lifetime: ApplyCallable binds producedValues into the consumer's frame
+	// synchronously (Apply -> bindArgs), so the deferred ReleaseSubContext(sub)
+	// on return cannot corrupt them. The consumer's own result (including
+	// multiple values) flows back through mc naturally, exactly as in apply.
+	_, err = mc.ApplyCallable(consumerCls, producedValues...)
 	if err != nil {
 		return err
 	}
-	err = sub2.Run()
-	if err != nil {
-		return err
-	}
-
-	// Return what consumer returned
-	mc.SetValues(sub2.GetValues()...)
 	return nil
 }

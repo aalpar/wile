@@ -70,3 +70,41 @@ func TestCallWithValuesErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestCallWithValuesTailCall is a regression test for proper tail recursion of
+// the call-with-values consumer (R7RS §3.5: "the call to consumer is a tail
+// call"). Before the fix, PrimCallWithValues ran the consumer in a sub-context
+// via sub2.Run(), nesting one Go stack frame per call. A deep tail loop through
+// call-with-values — directly, or via the let-values macro which expands to it —
+// therefore grew the host goroutine stack to its 1 GB limit and died with an
+// uncatchable "fatal error: stack overflow" rather than running in O(1) frames.
+//
+// Each case is a single named-let expression so the only non-constant frame
+// growth would come from the consumer call. If the fix regresses, these crash
+// the whole test binary (a Go stack overflow cannot be recovered) instead of
+// failing softly — that loud signal is intentional for a host-crash-class bug.
+func TestCallWithValuesTailCall(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "direct call-with-values tail loop runs in O(1) frames",
+			Code: `(let loop ((n 2000000))
+			         (call-with-values (lambda () (values n))
+			           (lambda (m) (if (= m 0) 'done (loop (- m 1))))))`,
+			Expected: values.NewSymbol("done"),
+		},
+		{
+			Name: "let-values tail loop runs in O(1) frames",
+			Code: `(let loop ((n 2000000))
+			         (let-values (((a) (values n)))
+			           (if (= a 0) 'done (loop (- a 1)))))`,
+			Expected: values.NewSymbol("done"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
