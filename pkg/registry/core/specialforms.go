@@ -84,12 +84,15 @@ var compileTimeBindingSpecs = []nameDoc{
 			"  (square 5)  => 25"},
 	{"define-syntax",
 		"Defines a macro binding. TRANSFORMER is typically a syntax-rules\n" +
-			"expression that specifies the macro's rewrite patterns. R7RS §5.4.\n" +
-			"Syntax: (define-syntax KEYWORD TRANSFORMER)\n" +
+			"expression that specifies the macro's rewrite patterns. An optional\n" +
+			"string literal between KEYWORD and TRANSFORMER is a docstring,\n" +
+			"surfaced by ,doc just as a leading string documents a define. R7RS §5.4.\n" +
+			"Syntax: (define-syntax KEYWORD [DOCSTRING] TRANSFORMER)\n" +
 			"Category: definitions\n\n" +
 			"Examples:\n" +
 			"  (define-syntax swap! (syntax-rules () ((swap! a b) (let ((t a)) (set! a b) (set! b t)))))\n" +
-			"  ;; (swap! x y) expands to a let-based swap"},
+			"  ;; (swap! x y) expands to a let-based swap\n" +
+			"  (define-syntax twice \"Run BODY twice.\" (syntax-rules () ((_ e) (begin e e))))"},
 	{"set!",
 		"Assignment. Evaluates EXPRESSION and stores the result in the\n" +
 			"location bound to VARIABLE. The variable must already be defined.\n" +

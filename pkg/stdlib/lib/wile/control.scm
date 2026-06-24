@@ -58,11 +58,13 @@
 ;; ─────────────────────────────────────────────────
 
 (define-syntax prompt-at
+  "Delimit the current continuation with prompt tag TAG (Felleisen prompt,\nexplicit tag). Establishes a boundary that a matching control-at captures\nup to; the prompt is reinstalled when an aborting control-at delivers a\nthunk to it.\n\nParameters:\n  tag : continuation prompt tag\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `prompt', `control-at', `reset-at'."
   (syntax-rules ()
     ((_ tag body ...)
      (%prompt-reinstall tag (lambda () body ...)))))
 
 (define-syntax control-at
+  "Capture the delimited continuation up to the prompt tagged TAG and bind it\nto K (Felleisen control, explicit tag). K is a composable continuation that\ndoes not reinstall a prompt when invoked; BODY runs with the captured\ncontext aborted.\n\nParameters:\n  tag : continuation prompt tag\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `control', `prompt-at', `shift-at'."
   (syntax-rules ()
     ((_ tag k body ...)
      (let ((t tag))
@@ -72,11 +74,13 @@
          t)))))
 
 (define-syntax prompt
+  "Delimit the current continuation with the default prompt tag (Felleisen\nprompt). Establishes the boundary that a matching control captures up to.\nShorthand for prompt-at with the default continuation prompt tag.\n\nParameters:\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `control', `prompt-at', `reset'."
   (syntax-rules ()
     ((_ body ...)
      (prompt-at (default-continuation-prompt-tag) body ...))))
 
 (define-syntax control
+  "Capture the current delimited continuation up to the nearest prompt and\nbind it to K (Felleisen control). K is a composable continuation that does\nnot reinstall a prompt when invoked. Shorthand for control-at with the\ndefault continuation prompt tag.\n\nParameters:\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `prompt', `shift', `control-at'."
   (syntax-rules ()
     ((_ k body ...)
      (control-at (default-continuation-prompt-tag) k body ...))))
@@ -87,11 +91,13 @@
 ;; ─────────────────────────────────────────────────
 
 (define-syntax reset-at
+  "Delimit the current continuation with prompt tag TAG (Danvy & Filinski\nreset, explicit tag). Like prompt-at; the prompt is reinstalled when a\nmatching shift-at aborts to it.\n\nParameters:\n  tag : continuation prompt tag\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `reset', `shift-at', `prompt-at'."
   (syntax-rules ()
     ((_ tag body ...)
      (%prompt-reinstall tag (lambda () body ...)))))
 
 (define-syntax shift-at
+  "Capture the delimited continuation up to the reset tagged TAG and bind it\nto K (Danvy & Filinski shift, explicit tag). Unlike control-at, invoking K\nre-delimits its result within a fresh reset, so K behaves as a function\nfrom values to values.\n\nParameters:\n  tag : continuation prompt tag\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `shift', `reset-at', `control-at'."
   (syntax-rules ()
     ((_ tag k body ...)
      (let ((t tag))
@@ -106,11 +112,13 @@
          t)))))
 
 (define-syntax reset
+  "Delimit the current continuation with the default prompt tag (Danvy &\nFilinski reset). Equivalent to prompt; provided under the reset/shift name.\nShorthand for reset-at with the default continuation prompt tag.\n\nParameters:\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `shift', `reset-at', `prompt'."
   (syntax-rules ()
     ((_ body ...)
      (reset-at (default-continuation-prompt-tag) body ...))))
 
 (define-syntax shift
+  "Capture the current delimited continuation up to the nearest reset and bind\nit to K (Danvy & Filinski shift). Invoking K re-delimits its result within a\nfresh reset, so K is a function from values to values. Shorthand for shift-at\nwith the default continuation prompt tag.\n\nParameters:\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `reset', `control', `shift-at'."
   (syntax-rules ()
     ((_ k body ...)
      (shift-at (default-continuation-prompt-tag) k body ...))))
@@ -121,6 +129,7 @@
 ;; ─────────────────────────────────────────────────
 
 (define-syntax prompt0-at
+  "Delimit the current continuation with prompt tag TAG (prompt0, explicit\ntag). Unlike prompt-at, the prompt is NOT reinstalled when a matching\ncontrol0-at aborts to it — the delimiter is consumed.\n\nParameters:\n  tag : continuation prompt tag\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `prompt0', `control0-at', `prompt-at'."
   (syntax-rules ()
     ((_ tag body ...)
      (call-with-continuation-prompt
@@ -129,6 +138,7 @@
        (lambda (thunk) (thunk))))))
 
 (define-syntax control0-at
+  "Capture the delimited continuation up to the prompt tagged TAG and bind it\nto K (control0, explicit tag). Like control-at, but pairs with prompt0-at,\nwhich does not reinstall the prompt.\n\nParameters:\n  tag : continuation prompt tag\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `control0', `prompt0-at', `control-at'."
   (syntax-rules ()
     ((_ tag k body ...)
      (let ((t tag))
@@ -138,11 +148,13 @@
          t)))))
 
 (define-syntax prompt0
+  "Delimit the current continuation with the default prompt tag (prompt0).\nLike prompt but the delimiter is not reinstalled when a matching control0\naborts to it. Shorthand for prompt0-at with the default prompt tag.\n\nParameters:\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `control0', `prompt0-at', `prompt'."
   (syntax-rules ()
     ((_ body ...)
      (prompt0-at (default-continuation-prompt-tag) body ...))))
 
 (define-syntax control0
+  "Capture the current delimited continuation up to the nearest prompt0 and\nbind it to K (control0). Pairs with prompt0, which does not reinstall the\nprompt. Shorthand for control0-at with the default prompt tag.\n\nParameters:\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `prompt0', `control', `control0-at'."
   (syntax-rules ()
     ((_ k body ...)
      (control0-at (default-continuation-prompt-tag) k body ...))))
@@ -153,6 +165,7 @@
 ;; ─────────────────────────────────────────────────
 
 (define-syntax reset0-at
+  "Delimit the current continuation with prompt tag TAG (reset0, explicit\ntag). Like reset-at but the delimiter is not reinstalled when a matching\nshift0-at aborts to it.\n\nParameters:\n  tag : continuation prompt tag\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `reset0', `shift0-at', `reset-at'."
   (syntax-rules ()
     ((_ tag body ...)
      (call-with-continuation-prompt
@@ -161,6 +174,7 @@
        (lambda (thunk) (thunk))))))
 
 (define-syntax shift0-at
+  "Capture the delimited continuation up to the reset0 tagged TAG and bind it\nto K (shift0, explicit tag). Like shift-at but K re-delimits with reset0,\nwhich does not reinstall the prompt.\n\nParameters:\n  tag : continuation prompt tag\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `shift0', `reset0-at', `shift-at'."
   (syntax-rules ()
     ((_ tag k body ...)
      (let ((t tag))
@@ -178,11 +192,13 @@
          t)))))
 
 (define-syntax reset0
+  "Delimit the current continuation with the default prompt tag (reset0). Like\nreset but the delimiter is not reinstalled when a matching shift0 aborts.\nShorthand for reset0-at with the default prompt tag.\n\nParameters:\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `shift0', `reset0-at', `reset'."
   (syntax-rules ()
     ((_ body ...)
      (reset0-at (default-continuation-prompt-tag) body ...))))
 
 (define-syntax shift0
+  "Capture the current delimited continuation up to the nearest reset0 and bind\nit to K (shift0). Like shift but K re-delimits with reset0, which does not\nreinstall the prompt. Shorthand for shift0-at with the default prompt tag.\n\nParameters:\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `reset0', `control0', `shift0-at'."
   (syntax-rules ()
     ((_ k body ...)
      (shift0-at (default-continuation-prompt-tag) k body ...))))
@@ -193,6 +209,7 @@
 ;; ─────────────────────────────────────────────────
 
 (define-syntax spawn-at
+  "Capture the delimited continuation up to the prompt tagged TAG and apply it\nimmediately to BODY's value, under a fresh prompt (Hieb & Dybvig spawn,\nexplicit tag). Equivalent to (control-at tag k (k (begin body ...))).\n\nParameters:\n  tag : continuation prompt tag\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `spawn', `control-at'."
   (syntax-rules ()
     ((_ tag body ...)
      (let ((t tag))
@@ -204,6 +221,7 @@
          t)))))
 
 (define-syntax spawn
+  "Capture the current delimited continuation and apply it immediately to\nBODY's value, under a fresh prompt (Hieb & Dybvig spawn). Equivalent to\n(control k (k body)). Shorthand for spawn-at with the default prompt tag.\n\nParameters:\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `spawn-at', `control'."
   (syntax-rules ()
     ((_ body ...)
      (spawn-at (default-continuation-prompt-tag) body ...))))
@@ -214,21 +232,25 @@
 ;; ─────────────────────────────────────────────────
 
 (define-syntax set-at
+  "Delimit the current continuation with prompt tag TAG (Queinnec & Serpette\nset, explicit tag). An alias for prompt0-at: the delimiter is not\nreinstalled on abort.\n\nParameters:\n  tag : continuation prompt tag\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `set', `cupto-at', `prompt0-at'."
   (syntax-rules ()
     ((_ tag body ...)
      (prompt0-at tag body ...))))
 
 (define-syntax cupto-at
+  "Capture the delimited continuation up to the prompt tagged TAG and bind it\nto K (Queinnec & Serpette cupto; the name abbreviates control-up-to,\nexplicit tag). An alias for control0-at.\n\nParameters:\n  tag : continuation prompt tag\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `cupto', `set-at', `control0-at'."
   (syntax-rules ()
     ((_ tag k body ...)
      (control0-at tag k body ...))))
 
 (define-syntax set
+  "Delimit the current continuation with the default prompt tag (Queinnec &\nSerpette set). An alias for prompt0. Shorthand for set-at with the default\nprompt tag.\n\nParameters:\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `cupto', `set-at', `prompt0'."
   (syntax-rules ()
     ((_ body ...)
      (prompt0 body ...))))
 
 (define-syntax cupto
+  "Capture the current delimited continuation up to the nearest set and bind it\nto K (Queinnec & Serpette cupto; the name abbreviates control-up-to). An\nalias for control0. Shorthand for cupto-at with the default prompt tag.\n\nParameters:\n  k : identifier bound to the captured continuation\n  body : expression ...\nReturns: any\nCategory: control\n\nSee also: `set', `cupto-at', `control0'."
   (syntax-rules ()
     ((_ k body ...)
      (control0 k body ...))))

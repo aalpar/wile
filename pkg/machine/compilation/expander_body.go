@@ -132,9 +132,10 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair, libraryScope *syntax.Scope, evaluator machine.MacroEvaluator) error {
 	expandEnv := env.Expand()
 
-	// Extract (define-syntax keyword transformer) — exactly three elements
-	// counting the keyword. Matches CompileDefineSyntax on the top-level path.
-	parts, err := syntax.FormParts(dsPair, "define-syntax", 3, 3)
+	// Extract (define-syntax keyword [docstring] transformer) — three or four
+	// elements counting the keyword. Matches CompileDefineSyntax on the
+	// top-level path, including the optional Guile-style docstring.
+	parts, err := syntax.FormParts(dsPair, "define-syntax", 3, 4)
 	if err != nil {
 		return wrapSourcedError(dsPair.SourceContext(), err)
 	}
@@ -145,7 +146,10 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	keyword := keywordSym.Unwrap().(*values.Symbol)
 	symbolScopes := keywordSym.Scopes()
 
-	transformer := parts[2]
+	transformer, docstring, err := splitDefineSyntaxRest(parts[2:])
+	if err != nil {
+		return wrapSourcedError(dsPair.SourceContext(), err)
+	}
 
 	// Compile the transformer using the full environment for free identifier resolution
 	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
@@ -165,6 +169,9 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 		symbolSource := keywordSym.SourceContext()
 		if symbolSource != nil {
 			binding.EnsureMeta().Source = symbolSource
+		}
+		if docstring != "" {
+			binding.EnsureMeta().Doc = docstring
 		}
 	}
 	return expandEnv.SetOwnGlobalValue(globalIndex, closure)

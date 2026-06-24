@@ -214,6 +214,61 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 		qt.Commentf(",doc should show closure docstring: %q", output))
 }
 
+func TestCmdDoc_MacroDocstring(t *testing.T) {
+	ctx := context.Background()
+	eng := newTestEngine(t)
+
+	// define-syntax accepts an optional Guile-style docstring between the
+	// keyword and the transformer; ,doc must surface it.
+	_, err := eng.EvalMultiple(ctx, `(define-syntax swap!
+		"Swap the values of two variables.\nCategory: control"
+		(syntax-rules ()
+			((_ a b) (let ((tmp a)) (set! a b) (set! b tmp)))))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng)
+	h.cmdDoc([]string{"swap!"}, &buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "Swap the values of two variables."), qt.IsTrue,
+		qt.Commentf(",doc should show macro docstring: %q", output))
+}
+
+func TestCmdDoc_ImportedMacroDocstring(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// A docstring written at a library macro's define-syntax site must survive
+	// import and be displayed by ,doc on the imported binding.
+	_, err = eng.EvalMultiple(ctx, `(import (wile control))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng)
+	h.cmdDoc([]string{"control"}, &buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "delimited continuation"), qt.IsTrue,
+		qt.Commentf(",doc control should show its docstring after import: %q", output))
+}
+
+func TestDefineSyntax_DocstringMustBeString(t *testing.T) {
+	eng := newTestEngine(t)
+
+	// The optional middle operand, when present, must be a string literal.
+	_, err := eng.EvalMultiple(context.Background(),
+		`(define-syntax foo 42 (syntax-rules () ((_ x) x)))`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, strings.Contains(err.Error(), "docstring"), qt.IsTrue,
+		qt.Commentf("error should explain the docstring must be a string: %v", err))
+}
+
 func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
 	docProv := NewRegistryDocProvider(eng.Registry(), nil)

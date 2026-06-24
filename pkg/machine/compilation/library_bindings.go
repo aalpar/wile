@@ -73,6 +73,14 @@ func markBindingImported(target, source *environment.Binding, exportName string)
 	m.Imported = true
 	if source != nil {
 		m.CaptureSafe = source.IsCaptureSafe()
+		// Carry the docstring across the import boundary so ,doc and the doc
+		// tooling find it on the imported binding (e.g. a (wile control) macro
+		// documented at its define-syntax site). The copy path installs only the
+		// value, so without this the docstring would be lost on import.
+		doc := source.Doc()
+		if doc != "" {
+			m.Doc = doc
+		}
 	}
 	stampImportedInlineHOF(target, exportName)
 }

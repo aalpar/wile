@@ -22,11 +22,11 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// validateDefineSyntax validates (define-syntax keyword transformer)
+// validateDefineSyntax validates (define-syntax keyword [docstring] transformer)
 // Returns a ValidatedLiteral wrapping the original form since the compiler
 // has specialized handling for this.
 func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
-	source, elements, ok := formPrologue(pair, "define-syntax", 2, 2, result)
+	source, elements, ok := formPrologue(pair, "define-syntax", 2, 3, result)
 	if !ok {
 		return nil
 	}
@@ -38,9 +38,20 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 		return nil
 	}
 
-	// Third element is the transformer - don't validate deeply since it could be
-	// syntax-rules, a variable reference, or any expression
-	// The compiler/expander handles transformer validation
+	// Optional docstring: (define-syntax name "doc" transformer). When present
+	// (3 arguments → 4 elements counting the keyword), the middle operand must
+	// be a string literal, mirroring define's Guile-style leading-string docstring.
+	if len(elements) == 4 {
+		_, isStr := elements[2].UnwrapAll().(*values.String)
+		if !isStr {
+			result.addError(getSourceContext(elements[2]), "define-syntax", "define-syntax docstring must be a string literal")
+			return nil
+		}
+	}
+
+	// The transformer (last element) is not validated deeply here — it could be
+	// syntax-rules, a procedural transformer, or a variable reference. The
+	// compiler/expander handles transformer validation.
 
 	// Return as literal - compiler handles the rest
 	return newLiteralExpr(source, pair)

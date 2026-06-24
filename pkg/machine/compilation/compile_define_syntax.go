@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"strings"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -49,9 +51,9 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	if err != nil {
 		return err
 	}
-	// expr is (keyword transformer-expr) — the define-syntax keyword was stripped
-	// by registerSyntaxCompiler in register.go.
-	parts, err := syntax.FormParts(expr, "define-syntax", 2, 2)
+	// expr is (keyword [docstring] transformer-expr) — the define-syntax keyword
+	// was stripped by registerSyntaxCompiler in register.go.
+	parts, err := syntax.FormParts(expr, "define-syntax", 2, 3)
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
@@ -60,7 +62,10 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol"))
 	}
 	keyword := keywordSym.Unwrap().(*values.Symbol)
-	transformerExpr := parts[1]
+	transformerExpr, docstring, err := splitDefineSyntaxRest(parts[1:])
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
 
 	// Compile the transformer (supports syntax-rules and lambda)
 	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
@@ -80,12 +85,18 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: failed to create or find binding for %s", keyword.Key))
 	}
 
-	// Set scopes from the keyword symbol for hygiene
-	// This ensures local define-syntax bindings have correct scopes for lookup
+	// Set scopes from the keyword symbol for hygiene, plus any docstring.
+	// The scopes ensure local define-syntax bindings resolve correctly; the
+	// docstring (when present) is surfaced by ,doc and the doc tooling.
 	symbolScopes := keywordSym.Scopes()
 	binding := expandEnv.GetGlobalBinding(globalIndex)
-	if binding != nil && symbolScopes != nil {
-		binding.EnsureMeta().Scopes = symbolScopes
+	if binding != nil {
+		if symbolScopes != nil {
+			binding.EnsureMeta().Scopes = symbolScopes
+		}
+		if docstring != "" {
+			binding.EnsureMeta().Doc = docstring
+		}
 	}
 
 	err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
@@ -95,4 +106,22 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 
 	// define-syntax is compile-time only, emit no runtime operations
 	return nil
+}
+
+// splitDefineSyntaxRest separates an optional leading docstring from the
+// transformer expression in a define-syntax form. rest is the operand slice
+// that follows the macro keyword name — either [transformer] or
+// [docstring, transformer]. When a docstring is present it must be a string
+// literal, mirroring the Guile-style leading-string docstring that define
+// accepts on procedure bodies. FormParts has already bounded len(rest) to
+// [1, 2], so a length other than 1 is treated as the two-operand case.
+func splitDefineSyntaxRest(rest []syntax.SyntaxValue) (syntax.SyntaxValue, string, error) {
+	if len(rest) < 2 {
+		return rest[0], "", nil
+	}
+	str, ok := rest[0].UnwrapAll().(*values.String)
+	if !ok {
+		return nil, "", werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: docstring must be a string literal")
+	}
+	return rest[1], strings.TrimSpace(str.Value), nil
 }
