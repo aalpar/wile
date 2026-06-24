@@ -16,6 +16,7 @@ package core_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -80,10 +81,24 @@ func TestCallWithValuesErrors(t *testing.T) {
 // uncatchable "fatal error: stack overflow" rather than running in O(1) frames.
 //
 // Each case is a single named-let expression so the only non-constant frame
-// growth would come from the consumer call. If the fix regresses, these crash
-// the whole test binary (a Go stack overflow cannot be recovered) instead of
-// failing softly — that loud signal is intentional for a host-crash-class bug.
+// growth would come from the consumer call. If the fix regresses into renewed
+// Go-stack growth, these crash the whole test binary (a Go stack overflow
+// cannot be recovered) instead of failing softly — that loud signal is
+// intentional for a host-crash-class bug.
+//
+// The iteration count (2,000,000) is the meaningful assertion: it comfortably
+// exceeds the pre-fix host-stack-overflow point. The deadline is only a hang
+// guard for the other regression shape — a consumer call that loops without
+// terminating — so a future break fails with a clear per-test deadline instead
+// of stalling the whole CI job. Mirrors TestApplyTailRecursion_NoStackOverflow
+// (prim_apply_test.go): the race detector slows each VM step by roughly an
+// order of magnitude, so the deadline is widened under -race. The counts here
+// are 2x that test's, so the deadlines are scaled to match.
 func TestCallWithValuesTailCall(t *testing.T) {
+	timeout := 60 * time.Second
+	if raceEnabled {
+		timeout = 360 * time.Second
+	}
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			Name: "direct call-with-values tail loop runs in O(1) frames",
@@ -102,7 +117,7 @@ func TestCallWithValuesTailCall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.Code, timeout)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
