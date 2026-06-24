@@ -17,6 +17,7 @@ package machine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -2572,10 +2573,10 @@ func TestRunWithEscapeHandling_RecoversStackUnderflow(t *testing.T) {
 
 // panickingComplexOp is a test-only side-table operation whose Apply panics with
 // a caller-supplied value that is NOT a *werr.ForeignError. It exists to pin the
-// SELECTIVITY of the boundary recover: the recover converts VM invariant guards
-// (*werr.ForeignError) into returned errors but re-raises everything else so that
-// genuine Go bugs (nil deref, index-out-of-range — all of which satisfy the error
-// interface as runtime.Error) still crash loudly with a full stack trace.
+// CONTAINMENT of the boundary recover: every panic — VM-invariant guards
+// (*werr.ForeignError) and any other Go-level panic (runtime.Error, non-error
+// values) alike — is converted into a returned error so it stays within the VM
+// boundary instead of unwinding into the embedder / REPL.
 type panickingComplexOp struct {
 	OperationBase
 	panicValue any
@@ -2594,23 +2595,39 @@ func (p *panickingComplexOp) Apply(*MachineContext) (*MachineContext, error) {
 	panic(p.panicValue)
 }
 
-// TestRunWithEscapeHandling_RePanicsNonForeignError proves the recover is
-// selective: a panic value that is an error but not a *werr.ForeignError
-// propagates rather than being swallowed into a returned error. This is the
-// property that prevents the recover from masking genuine Go runtime panics.
-func TestRunWithEscapeHandling_RePanicsNonForeignError(t *testing.T) {
+// TestRunWithEscapeHandling_ContainsNonForeignError proves the recover contains
+// a panic value that is an error but not a *werr.ForeignError: it is converted
+// into a returned *SchemeError (carrying source + stack trace, errors.Is-chained
+// to the original) rather than unwinding past the VM boundary into the embedder.
+func TestRunWithEscapeHandling_ContainsNonForeignError(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
+	sentinel := errors.New("not a foreign error")
 	op := &panickingComplexOp{
 		OperationBase: NewOperationBase("test-panicking-complex-op"),
-		panicValue:    errors.New("not a foreign error"),
+		panicValue:    sentinel,
 	}
 	tpl := NewNativeTemplate(0, 0, false, op)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
-	c.Assert(func() {
-		_ = mc.RunWithEscapeHandling()
-	}, qt.PanicMatches, "not a foreign error")
+	// Must not panic: the boundary contains the panic and returns it as an
+	// error. A regression here re-panics, which fails the test directly.
+	rerr := mc.RunWithEscapeHandling()
+
+	c.Assert(rerr, qt.IsNotNil)
+	// Contained as a *SchemeError (a VM/compiler bug, not a catchable condition).
+	var schemeErr *SchemeError
+	c.Assert(errors.As(rerr, &schemeErr), qt.IsTrue)
+	// Not converted into a catchable Scheme exception.
+	var escapeErr *ErrExceptionEscape
+	c.Assert(errors.As(rerr, &escapeErr), qt.IsFalse)
+	// The original panic value stays reachable for matching/diagnostics.
+	c.Assert(errors.Is(rerr, sentinel), qt.IsTrue)
+	// The rendered message surfaces the panic detail, not just a generic
+	// "recovered panic" (SchemeError.Error() does not render Cause, so the
+	// detail must be folded into the message at wrap time).
+	c.Assert(strings.Contains(rerr.Error(), "not a foreign error"), qt.IsTrue,
+		qt.Commentf("Error()=%q", rerr.Error()))
 }
 
 // TestMachineContext_ImmutableLiterals verifies the CallContext accessor

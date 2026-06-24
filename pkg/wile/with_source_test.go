@@ -366,8 +366,41 @@ func TestParseWithSource_ErrorFormat(t *testing.T) {
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
 
-	// Error() should start with "format.scm:line:col: runtime error: ..."
+	// Error() should start with the source prefix and carry the raised
+	// condition's text. The generic "runtime error" prefix was removed: the
+	// condition text is the message and the rendering surface (REPL
+	// "Exception:", CLI "Error:") supplies the category word.
 	c.Assert(strings.HasPrefix(rtErr.Error(), "format.scm:"), qt.IsTrue,
 		qt.Commentf("Error()=%q", rtErr.Error()))
-	c.Assert(strings.Contains(rtErr.Error(), "runtime error"), qt.IsTrue)
+	c.Assert(strings.Contains(rtErr.Error(), "fmt-test"), qt.IsTrue,
+		qt.Commentf("Error()=%q", rtErr.Error()))
+}
+
+// TestRuntimeError_RendersOnce guards against the double-render regression:
+// wrapRuntimeError extracts the location and stack trace from the underlying
+// ErrExceptionEscape into RuntimeError.Source/StackTrace, and Error() must not
+// also embed Cause.Error() (which carries its own copy of both). The
+// "Stack trace:" header — emitted once per rendered trace — must appear exactly
+// once; the bug produced two. The top-level location must also lead the string
+// exactly once (it legitimately recurs inside individual stack frames, so only
+// the leading prefix is checked).
+func TestRuntimeError_RendersOnce(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+	_, err = engine.Eval(ctx, engine.MustParseWithSource(ctx, `(car 5)`, "once.scm"))
+
+	var rtErr *RuntimeError
+	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
+
+	full := rtErr.Error()
+	c.Assert(strings.Count(full, "Stack trace:"), qt.Equals, 1,
+		qt.Commentf("Error()=%q", full))
+	// The leading location prefix appears once; the double-render emitted it
+	// twice back-to-back ("once.scm:1:1: ...: once.scm:1:1: ...").
+	rest := strings.TrimPrefix(full, rtErr.Source+": ")
+	c.Assert(strings.HasPrefix(rest, rtErr.Source+": "), qt.IsFalse,
+		qt.Commentf("Error()=%q", full))
 }

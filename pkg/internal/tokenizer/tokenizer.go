@@ -267,10 +267,21 @@ func Tokenize(s string, ci bool) ([]Token, error) {
 // NewTokenizer creates a new tokenizer that reads from the given RuneReader.
 // The tokenizer is initialized with the first rune already read.
 func NewTokenizer(rdr io.RuneReader, ci bool) *Tokenizer {
+	// Seed the position at line 1. SourceIndexes documents line as 1-based
+	// (index and column are 0-based); the struct zero value would start line
+	// at 0, making every reported source location one line too low. Seeding
+	// runeEnd is what matters — readNextRune copies it into runeStart and the
+	// first token's positions derive from there — but all four are set so the
+	// invariant is local and obvious.
+	start := syntax.NewSourceIndexes(0, 0, 1)
 	q := &Tokenizer{
-		rdr:   rdr,
-		ci:    ci,
-		radix: 0, // 0 means default decimal; 10 means explicit #d prefix
+		rdr:        rdr,
+		ci:         ci,
+		radix:      0, // 0 means default decimal; 10 means explicit #d prefix
+		runeStart:  start,
+		runeEnd:    start,
+		tokenStart: start,
+		tokenEnd:   start,
 	}
 	q.readNextRune()
 	return q

@@ -258,7 +258,13 @@ func main() {
 		goruntime.SetBlockProfileRate(1)
 	}
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// Cancel on SIGTERM only. SIGINT (Ctrl-C) is deliberately NOT routed into
+	// this context: the interactive REPL owns SIGINT so a Ctrl-C during eval
+	// cancels just that evaluation and returns to the prompt instead of
+	// cancelling this context and tearing the whole session down (see
+	// pkg/repl). In non-interactive batch runs no SIGINT handler is installed,
+	// so Ctrl-C keeps its default action of terminating the process.
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 	defer cancel()
 
 	if opts.MCP {
@@ -546,10 +552,18 @@ func writeNamedProfile(name, path string) {
 }
 
 func Failf(err error, messes ...string) {
-	mess := strings.Join(messes, ": ")
+	// Collect the error and message parts, dropping empties so a Failf(err)
+	// with no message never emits a dangling ": " after the error text.
+	var parts []string
 	if err != nil {
-		mess = strings.Join([]string{err.Error(), mess}, ": ")
+		parts = append(parts, err.Error())
 	}
+	for _, s := range messes {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	mess := strings.Join(parts, ": ")
 	if mess == "" {
 		os.Exit(EX_OK)
 	}
