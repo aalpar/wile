@@ -4,6 +4,12 @@ private/
 # Build outputs
 dist/
 build/
+# Stray binaries from `go build ./examples/<name>/` (named after the dir) run
+# from the repo root without -o; the Makefile uses -o /dev/null but manual
+# builds don't.
+/embedding
+/source-tracking
+/stack-trace
 
 # IDE and editor directories
 .idea/
