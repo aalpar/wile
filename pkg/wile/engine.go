@@ -892,6 +892,13 @@ func (p *Engine) LastCounters() machine.VMCounters {
 // source location from the SourcedError chain. The innermost location points
 // at the actual error site (e.g., the undefined variable), not the enclosing
 // form. The full chain remains available via Cause for outer context.
+//
+// Two provenance sources are consulted, mirroring the two layers that produce
+// these errors: the compiler attaches *compilation.SourcedError, while the
+// parser (a lower layer that never carries a SourcedError) attaches the
+// offending token on *parser.ParserError. Without the second lookup a parse
+// error's file:line:col is dropped on the floor even though the parser knew it
+// — see REVIEW.md "Error Chain Losslessness".
 func wrapCompilationError(msg string, cause error) *CompilationError {
 	ce := &CompilationError{Message: msg, Cause: cause}
 	var se *compilation.SourcedError
@@ -899,6 +906,15 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 		loc := se.Source.Location()
 		if loc != "" {
 			ce.Source = loc
+		}
+	}
+	// Parse errors carry location on their token rather than a SourcedError.
+	// Consult them only when the compiler chain yielded nothing, so a genuine
+	// compiler location (more specific) always wins when both are present.
+	if ce.Source == "" {
+		var pe *parser.ParserError
+		if errors.As(cause, &pe) {
+			ce.Source = pe.Location()
 		}
 	}
 	return ce

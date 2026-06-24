@@ -33,12 +33,12 @@ type BindingMeta struct {
 	// conclusion — R7RS forbids set! on imports — so IsStable() treats Imported
 	// as standing evidence and this flag carries the conclusion when a proof
 	// discharges it by other means (defined-once ∧ ¬set! ∧ unit-closed for a
-	// top-level define). The opt-in WithImmutableTopLevel engine option
+	// top-level define). The WithImmutableTopLevel engine option (the default)
 	// discharges it for top-level defines: the compiler sets this from the
 	// validator's in-unit evidence (StableInUnit) and the language then forbids
 	// the cross-unit set!/redefine that evidence alone could not rule out (set!
 	// gate + redefine guard in compile_validated.go), making unit-closure hold
-	// by enforcement rather than inference. When the option is off (default),
+	// by enforcement rather than inference. When the option is off (WithMutableTopLevel),
 	// this flag stays false for non-imported bindings — asserting it from
 	// partial evidence would be a false conclusion. Read by the frame
 	// optimizer's MayCapture. Distinct from set!-permission (Imported alone,

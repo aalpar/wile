@@ -124,14 +124,14 @@ examples:
 #   make ci
 #   make ci SKIP_LINT=1
 .PHONY: ci
-ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links examples verify-mod
+ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links check-docs-orphans examples verify-mod
 	@echo "CI passed"
 
 # ── CD: release-specific validation ─────────────────────────────────
 # Run before goreleaser on tagged releases. CI already passed on merge.
 #   make cd
 .PHONY: cd
-cd: build test-examples test-schelog smoke-test bench-regression check-readme-links
+cd: build test-examples test-schelog smoke-test bench-regression check-readme-links check-docs-orphans
 	@echo "CD passed"
 
 # run extensive builds and tests
@@ -574,16 +574,26 @@ bench-regression: build
 		THRESHOLD=5 \
 		../../$(SH_TOOLS_DIR)/bench-regression.sh
 
-# Validate local file links in README.md and the docs navigation hubs.
-# Only local file references are checked (HTTP(S) and anchors are skipped), so
-# this is fast and deterministic — safe to run on every CI merge.
+# Validate local file links in README.md, the docs navigation hubs, and the
+# examples index. Only local file references are checked (HTTP(S) and anchors
+# are skipped), so this is fast and deterministic — safe to run on every CI
+# merge.
 #   make check-readme-links
 .PHONY: check-readme-links
 check-readme-links:
-	@fail=0; for f in README.md docs/INDEX.md docs/TOC.md; do \
+	@fail=0; for f in README.md docs/INDEX.md docs/TOC.md examples/README.md; do \
 	    echo "$$f:"; \
 	    $(SH_TOOLS_DIR)/check-readme-links.sh "$$f" || fail=1; \
 	done; exit $$fail
+
+# Detect orphaned docs: tracked docs/ Markdown files that no navigation hub
+# (INDEX.md / TOC.md) links to. Complements check-readme-links, which only
+# verifies that listed links resolve and so cannot see a file linked from
+# nowhere. Keeps TOC.md's "every document in docs/" claim honest.
+#   make check-docs-orphans
+.PHONY: check-docs-orphans
+check-docs-orphans:
+	@$(SH_TOOLS_DIR)/check-docs-orphans.sh docs
 
 # Build the Docker image containing the Go toolchain and compiled binary.
 # Delegates to tools/sh/docker-build.sh.

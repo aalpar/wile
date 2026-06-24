@@ -48,7 +48,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	}
 	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
-	// Opt-in top-level immutability (WithImmutableTopLevel): when enabled, a
+	// Top-level immutability (WithImmutableTopLevel, the engine default): when enabled, a
 	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
 	// later redefine of an already-stable binding is rejected. When disabled,
 	// behavior is identical to before (the fast path below still fires).

@@ -108,18 +108,21 @@ Threading, synchronization, and message passing backed by Go's runtime.
 
 ### Algebra
 
-Algebraic structures, equational rewriting, and symbolic normalization.
+Algebraic structures, equational rewriting, and symbolic normalization. The
+algebra examples are a structured, self-verifying [tutorial](algebra/tutorial/) —
+11 deep chapters plus a quick-tour, all run by `make tutorial-test`. A few
+starting points:
 
 | File | Description |
 |------|-------------|
-| [getting-started.scm](algebra/getting-started.scm) | Monoids - fold, power, validation, the simplest algebraic structure |
-| [structures.scm](algebra/structures.scm) | Lattices, rings, fields, Boolean algebras, and forgetful projections |
-| [rewriting.scm](algebra/rewriting.scm) | Term protocols, axiom types, single-step normalization |
-| [symbolic.scm](algebra/symbolic.scm) | Theories, recursive normalizer, transformation traces |
-| [boolean-simplifier.scm](algebra/boolean-simplifier.scm) | End-to-end Boolean expression simplification with traced output |
-| [equivalence-discovery.scm](algebra/equivalence-discovery.scm) | Exploring normal forms across different axiom sets |
+| [tutorial/chapters/01-getting-started.scm](algebra/tutorial/chapters/01-getting-started.scm) | Monoids - fold, power, validation, the simplest algebraic structure |
+| [tutorial/chapters/02-structures.scm](algebra/tutorial/chapters/02-structures.scm) | Lattices, rings, fields, Boolean algebras, and forgetful projections |
+| [tutorial/chapters/03-rewriting-basics.scm](algebra/tutorial/chapters/03-rewriting-basics.scm) | Term protocols, axiom types, single-step normalization |
+| [tutorial/chapters/04-boolean-simplifier.scm](algebra/tutorial/chapters/04-boolean-simplifier.scm) | End-to-end Boolean expression simplification with traced output |
+| [tutorial/chapters/05-symbolic-differentiation.scm](algebra/tutorial/chapters/05-symbolic-differentiation.scm) | Polynomial calculus and a hand-written S-expression differentiator |
+| [tutorial/chapters/11-equivalence-discovery.scm](algebra/tutorial/chapters/11-equivalence-discovery.scm) | Exploring normal forms across different axiom sets |
 
-**Key Feature**: Algebraic structures are composable records with automatic validation, equational rewriting, and traced symbolic normalization. Build a structure, project it to a theory, and simplify expressions with step-by-step explanations. See [docs/algebra/overview.md](../docs/algebra/overview.md) for the full guide.
+**Key Feature**: Algebraic structures are composable records with automatic validation, equational rewriting, and traced symbolic normalization. Build a structure, project it to a theory, and simplify expressions with step-by-step explanations. See [the tutorial README](algebra/tutorial/README.md) for the full chapter list and [docs/algebra/overview.md](../docs/algebra/overview.md) for the design guide.
 
 ### Applications
 
@@ -260,7 +263,7 @@ Tail-recursive functions run in constant space. Compare tail vs non-tail in [bas
 2. [concurrency/channels.scm](concurrency/channels.scm) - Go integration
 3. [numeric-tower/symbolic-diff.scm](numeric-tower/symbolic-diff.scm) - Exact arithmetic
 4. [logic/schelog/](logic/schelog/) - Logic programming embedding
-5. [algebra/getting-started.scm](algebra/getting-started.scm) - Algebraic structures and rewriting
+5. [algebra/tutorial/chapters/01-getting-started.scm](algebra/tutorial/chapters/01-getting-started.scm) - Algebraic structures and rewriting
 
 **Go developer?** Embedding examples:
 1. [embedding/basic.go](embedding/basic.go) - API overview

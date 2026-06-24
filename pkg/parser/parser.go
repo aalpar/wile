@@ -177,7 +177,9 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		// R7RS: unexpected close delimiter at top level is a read error
 		if q == nil && p.cur != nil && p.isListCloser(p.cur.Type()) {
 			p.toks = nil
-			p.err = NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type()))
+			// Route through locateReaderErr so the file name is stamped for
+			// location reporting, exactly as for errors escaping readSyntax.
+			p.err = p.locateReaderErr(NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type())))
 			return nil, p.err
 		}
 		// Advance to the next token for the next ReadSyntax() call
@@ -223,9 +225,15 @@ func (p *Parser) locateReaderErr(err error) error {
 	}
 	var perr *ParserError
 	if errors.As(err, &perr) {
+		// Stamp the source file so ParserError.Location reports file:line:col.
+		// The token already carries line/col; the file name lives only on the
+		// parser, so this choke point is where the two are joined.
+		perr.file = p.file
 		return err
 	}
-	return NewParserErrorWithWrap(err, p.cur, "malformed input")
+	wrapped := NewParserErrorWithWrap(err, p.cur, "malformed input")
+	wrapped.file = p.file
+	return wrapped
 }
 
 // readLabeledList reads a list into a pre-created placeholder pair.

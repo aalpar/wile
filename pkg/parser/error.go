@@ -29,10 +29,16 @@ var (
 )
 
 // ParserError represents an error that occurred during parsing.
+//
+// The offending token (tok) carries the source position; file is the source
+// name (empty for unnamed input such as a REPL stream). Location formats the
+// two so the error's provenance survives to the final error chain — see
+// REVIEW.md "Error Chain Losslessness".
 type ParserError struct {
 	err  error
 	mess string
 	tok  tokenizer.Token
+	file string
 }
 
 // NewParserError creates a new parser error for the given token.
@@ -85,6 +91,25 @@ func (p *ParserError) Error() string {
 
 func (p *ParserError) Unwrap() error {
 	return p.err
+}
+
+// Location returns the offending token's position as "file:line:col", or
+// "line:col" when the input is unnamed (e.g. a REPL stream, where the parser
+// has no file name). It returns "" when the error has no located token.
+//
+// Unlike SourceContext.Location it does not require a file name, so a parse
+// error from unnamed REPL input still reports its line and column rather than
+// dropping the location. Line is 1-based and column 0-based, matching
+// SourceContext.Location's formatting for parity with compiler-side locations.
+func (p *ParserError) Location() string {
+	if p.tok == nil {
+		return ""
+	}
+	start := p.tok.Start()
+	if p.file == "" {
+		return fmt.Sprintf("%d:%d", start.Line(), start.Column())
+	}
+	return fmt.Sprintf("%s:%d:%d", p.file, start.Line(), start.Column())
 }
 
 func (p *ParserError) SchemeString() string {

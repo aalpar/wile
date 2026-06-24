@@ -107,7 +107,7 @@ type ValidatedDefine struct {
 	// local set! or shadowing define marks it non-stable — a false match costs
 	// optimization, never soundness). It is the in-unit evidence the compiler
 	// consumes (only for top-level/global defines) to populate
-	// BindingMeta.Stable when opt-in top-level immutability is enabled. Stamped
+	// BindingMeta.Stable when top-level immutability is enabled (the default). Stamped
 	// by finalizeStability after the whole unit is validated.
 	StableInUnit bool
 }

@@ -8,10 +8,12 @@ implementation notes, and educational articles for a single subsystem.
 | [algebra/](algebra/) | Algebraic structures library -- composable records, equational rewriting, symbolic normalization. Entry points: [overview.md](algebra/overview.md), [reference.md](algebra/reference.md), runnable [tutorial.md](algebra/tutorial.md) |
 | [compiler/](compiler/) | Compiler internals -- macro system, peephole optimizer, IR design (SSA, ANF/CPS, core-let, inlining) |
 | [continuations/](continuations/) | Continuation system -- concepts, marks, VM implementation, delimited continuations, prompt/abort |
-| [dev/](dev/) | Developer guides -- debug methodology, object pooling, foreign closures, project board |
+| [coverage/](coverage/) | Scheme-side line coverage -- `--cover` reports compatible with `go tool cover` |
+| [dev/](dev/) | Developer guides -- debug methodology, iteration idioms, object pooling, foreign closures, project board |
 | [embedding/](embedding/) | Embedding Wile in Go -- public API design, source loading (FileResolver), MCP server |
 | [environment/](environment/) | Environment and namespace system -- binding scopes, phase hierarchy, environment diagram |
 | [extensions/](extensions/) | Extension system -- architecture, authoring, R7RS library integration |
+| [learn/](learn/) | Educational deep-dives -- how hygienic macros work, Scheme debugging primitives, Python vs Scheme for algebra |
 | [numeric/](numeric/) | Numeric tower -- architecture, precision guarantees, NaN-boxing |
 | [reference/](reference/) | Language reference -- Scheme language spec, CLI and REPL, R7RS differences, implementation notes |
 | [security/](security/) | Sandboxing -- capability-based security, extension-level and fine-grained authorization |

@@ -28,10 +28,15 @@ Every document in `docs/`, organized by topic.
 - [optimizations.md](continuations/optimizations.md) -- Continuation-heavy workload optimizations
 - [racket-primitives.md](continuations/racket-primitives.md) -- Racket's low-level control primitives
 
+## Coverage
+
+- [scheme-coverage.md](coverage/scheme-coverage.md) -- Scheme-side line coverage (`--cover`, `go tool cover`-compatible reports)
+
 ## Developer Guides
 
 - [debug-methodology.md](dev/debug-methodology.md) -- Systematic debug logging methodology
 - [foreign-closure-design.md](dev/foreign-closure-design.md) -- ForeignClosure design
+- [iteration-idioms.md](dev/iteration-idioms.md) -- Four iteration shapes and when to use each
 - [pooling.md](dev/pooling.md) -- Object pooling contract
 - [project-board-setup.md](dev/project-board-setup.md) -- GitHub project board setup guide
 
@@ -51,6 +56,12 @@ Every document in `docs/`, organized by topic.
 
 - [architecture.md](extensions/architecture.md) -- Extension system architecture and authoring guide
 - [libraries.md](extensions/libraries.md) -- R7RS library integration for extensions
+
+## Learn
+
+- [macro-system.md](learn/macro-system.md) -- How hygienic macros work in Wile (pedagogical companion to [compiler/macro-system.md](compiler/macro-system.md))
+- [scheme-debugging-primitives.md](learn/scheme-debugging-primitives.md) -- The load-bearing primitives of Scheme debugging
+- [python-vs-scheme-for-algebra.md](learn/python-vs-scheme-for-algebra.md) -- Why Scheme fits symbolic algebra
 
 ## Numeric
 
