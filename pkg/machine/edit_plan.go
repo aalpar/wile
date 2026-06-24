@@ -208,6 +208,17 @@ func fixSurvivingBranches(code []Instruction, edits []edit, remap []int) {
 			continue
 		}
 		absTarget := i + int(code[i].Arg)
+		// remap has length len(code)+1 (the trailing sentinel is the only valid
+		// out-of-body target). An offset outside [0, len(remap)) means malformed
+		// compiler output. branchTargets (peephole.go) silently tolerates the same
+		// out-of-range value because it only consults in-range positions; here the
+		// value is dereferenced, so fail loudly with a wrapped error rather than a
+		// bare "index out of range" runtime panic (CLAUDE.md: never panic raw).
+		if absTarget < 0 || absTarget >= len(remap) {
+			panic(werr.WrapForeignErrorf(werr.ErrInternal,
+				"peephole: malformed branch offset at PC %d: target %d out of range [0,%d)",
+				i, absTarget, len(remap)))
+		}
 		code[i].Arg = int32(remap[absTarget] - remap[i])
 	}
 }
