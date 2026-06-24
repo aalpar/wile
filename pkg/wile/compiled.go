@@ -29,6 +29,22 @@ import (
 //
 // CompiledCode can be run multiple times. It is not safe for concurrent
 // execution (the underlying Engine is not goroutine-safe).
+//
+// Stability contract:
+//
+//   - In-memory and process-local. CompiledCode holds live pointers into the
+//     compiling Engine's machine template and environment. It is not
+//     serializable and cannot be persisted to disk, sent over the wire, or
+//     reloaded in a different process. There is no on-disk bytecode format.
+//   - No cross-version format stability. The internal bytecode and template
+//     representation are implementation details that change between releases
+//     (often within a minor version). Do not depend on their shape.
+//   - Trusted-input only. A CompiledCode is the output of this process's own
+//     compiler. There is no facility to construct one from untrusted bytes,
+//     so there is no untrusted-bytecode attack surface to validate.
+//
+// To "cache" compilation, keep the CompiledCode value alive within the
+// running program; to share work across processes, share the Scheme source.
 type CompiledCode struct {
 	template *machine.NativeTemplate
 	env      *environment.EnvironmentFrame

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+> **Note on versions.** Only the dated, tagged headings below correspond to
+> releases. The `VERSION` file (and `wile --version`) may report a higher patch
+> number than the latest release heading: it carries a build counter ahead of
+> the last tag for unreleased `master` builds. `VERSION` is set to the release
+> version only at release-cut time. A build whose `--version` has no matching
+> heading here is an unreleased development build of the most recent release
+> shown.
+
 ## [Unreleased]
 
 ## [1.17.0] - 2026-06-17

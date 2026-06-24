@@ -1,11 +1,16 @@
 TODO
 ----
 
-**Last Updated**: 2026-06-02
+**Last Updated**: 2026-06-24
 
 ### Current Project Status
 
-**Version**: v1.16.0 (released)
+> Authoritative status lives elsewhere — this header is orientation only and
+> drifts. For the current version see [`VERSION`](VERSION) / `wile --version`
+> and [`CHANGELOG.md`](CHANGELOG.md); for the documentation map see
+> [`docs/INDEX.md`](docs/INDEX.md). Counts below are approximate.
+
+**Version**: 1.17.x line (see `CHANGELOG.md` for the latest release)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
 **Extensions**: 12 extension packages — 8 public (files, math, process, system, threads, gointerop, introspection, charsets), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Extension API contracts (ValueType enum, PrimitiveSpec type declarations) in Phase 1. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); named profiles (`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) via `WithProfile`; orthogonal `WithSandbox` modifier; virtual env map (`WithEnv`, `WithEnvMap`); `Engine.AvailableLibraries()` API for library discovery.

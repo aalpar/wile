@@ -17,11 +17,6 @@ implementation notes, and educational articles for a single subsystem.
 | [security/](security/) | Sandboxing -- capability-based security, extension-level and fine-grained authorization |
 | [types/](types/) | Type system -- records, abstract data types, existential types, Racket structs |
 
-## Conventions
-
-See [CLAUDE.md](CLAUDE.md) for documentation notation, R7RS citation format, and
-influence citation guidelines.
-
 ## See Also
 
 - [`PRIMITIVES.md`](../PRIMITIVES.md) -- Complete reference of types and primitives

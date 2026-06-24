@@ -124,7 +124,7 @@ examples:
 #   make ci
 #   make ci SKIP_LINT=1
 .PHONY: ci
-ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check examples verify-mod
+ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links examples verify-mod
 	@echo "CI passed"
 
 # ── CD: release-specific validation ─────────────────────────────────
@@ -574,11 +574,16 @@ bench-regression: build
 		THRESHOLD=5 \
 		../../$(SH_TOOLS_DIR)/bench-regression.sh
 
-# Validate links in README.md.
+# Validate local file links in README.md and the docs navigation hubs.
+# Only local file references are checked (HTTP(S) and anchors are skipped), so
+# this is fast and deterministic — safe to run on every CI merge.
 #   make check-readme-links
 .PHONY: check-readme-links
 check-readme-links:
-	@$(SH_TOOLS_DIR)/check-readme-links.sh README.md
+	@fail=0; for f in README.md docs/INDEX.md docs/TOC.md; do \
+	    echo "$$f:"; \
+	    $(SH_TOOLS_DIR)/check-readme-links.sh "$$f" || fail=1; \
+	done; exit $$fail
 
 # Build the Docker image containing the Go toolchain and compiled binary.
 # Delegates to tools/sh/docker-build.sh.

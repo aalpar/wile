@@ -14,7 +14,11 @@ if [ ! -f "$FILE" ]; then
     exit 1
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Markdown relative links resolve against the directory containing the file,
+# not the repo root. For README.md (at the repo root) these coincide; for a
+# file like docs/INDEX.md, a link "reference/scheme.md" means
+# docs/reference/scheme.md.
+BASE_DIR="$(cd "$(dirname "$FILE")" && pwd)"
 passed=0
 failed=0
 failures=()
@@ -33,8 +37,8 @@ while IFS= read -r link; do
         continue
     fi
 
-    # Resolve relative to repo root
-    if [ -e "$REPO_ROOT/$target" ]; then
+    # Resolve relative to the markdown file's own directory
+    if [ -e "$BASE_DIR/$target" ]; then
         passed=$((passed + 1))
     else
         failed=$((failed + 1))
