@@ -75,6 +75,31 @@ func (p *ErrExceptionEscape) Error() string {
 	return b.String()
 }
 
+// ConditionText returns the raised condition's human-readable text alone —
+// without the source-location prefix, the "error:"/"exception:" category word,
+// or the stack trace that Error() adds. Callers that render their own prefix
+// (the REPL's "Exception:", the CLI's "Error:", wile.RuntimeError's structured
+// Source/StackTrace fields) use this to surface the message exactly once
+// instead of embedding the whole Error() string and duplicating location and
+// trace. A *NativeError yields its plain message; any other condition yields
+// its SchemeString; a nil condition yields "<nil>".
+//
+// Deliberately NOT shared with Error(): Error() gates a *NativeError's plain
+// message on hasSource (a *NativeError with no source falls back to SchemeString
+// there, for backward compatibility), whereas ConditionText always uses the
+// plain message since it never pairs with a source prefix. The two ladders stay
+// separate on purpose — do not "unify" them without preserving that divergence.
+func (p *ErrExceptionEscape) ConditionText() string {
+	if p.Condition == nil {
+		return "<nil>"
+	}
+	ne, ok := p.Condition.(*values.NativeError)
+	if ok {
+		return ne.Error()
+	}
+	return p.Condition.SchemeString()
+}
+
 // Unwrap returns the underlying error when the condition implements the error
 // interface (e.g., *NativeError). This enables errors.Is/errors.As to traverse
 // through ErrExceptionEscape into the wrapped error chain, supporting sentinel

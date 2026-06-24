@@ -1416,36 +1416,37 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 func (p *MachineContext) RunWithEscapeHandling() (rerr error) {
 	p.promptTag = DefaultPromptTag // install default prompt for call/cc escapes
 
-	// VM invariant guards (the Stack methods on underflow, local-index overflow,
-	// edit-plan bounds, ...) panic with a *werr.ForeignError rather than return —
-	// well-formed bytecode never trips them, so they signal a compiler/VM bug, not
-	// a user-recoverable condition. Recover them here, at the VM boundary, so the
-	// violation surfaces as a returned error to the embedder instead of a raw Go
-	// panic escaping the public API (embedding is the product). A panic unwinds the
-	// whole goroutine stack, so this single site also catches guards tripped inside
-	// nested sub-context Run() calls. Anything that is not a *werr.ForeignError —
-	// notably runtime.Error (nil deref, index out of range) and non-error panics —
-	// is re-raised so genuine Go bugs still crash the process rather than being
-	// silently masked as a returned error.
+	// Contain every panic at this VM boundary so it surfaces to the embedder as
+	// a returned error instead of unwinding into the host process or the REPL
+	// ("embedding is the product"). A panic unwinds the whole goroutine stack,
+	// so this single site also catches panics tripped inside nested sub-context
+	// Run() calls.
+	//
+	// Two panic sources land here. VM-invariant guards (the Stack methods on
+	// underflow, local-index overflow, edit-plan bounds, ...) panic with a
+	// *werr.ForeignError; well-formed bytecode never trips them, so they signal
+	// a compiler/VM bug. Anything else — runtime.Error (nil deref, index out of
+	// range) or a non-error panic value — is likewise a Go-level bug, not a
+	// user-recoverable Scheme condition. Both are wrapped as a *SchemeError (NOT
+	// an *ErrExceptionEscape) so they remain uncatchable by guard /
+	// with-exception-handler while staying observable to the Go caller. WrapError
+	// attaches the VM source location and continuation-chain stack trace — both
+	// read heap state that survives the panic unwind — and chains the original
+	// error via SchemeError.Unwrap, so sentinel matches (errors.Is, e.g.
+	// werr.ErrStackUnderflow) still resolve.
 	defer func() {
 		r := recover()
 		if r == nil {
 			return
 		}
-		var fe *werr.ForeignError
 		err, ok := r.(error)
-		if !ok || !errors.As(err, &fe) {
-			panic(r)
+		if !ok {
+			// A non-error panic value (panic("...") / panic(42)). Carry its text
+			// under an internal-error sentinel so it, too, stays within the VM
+			// boundary as a matchable, wrapped error.
+			err = werr.WrapForeignErrorf(werr.ErrInternal, "RunWithEscapeHandling: recovered panic: %v", r)
 		}
-		// Attach the VM's source location and continuation-chain stack trace —
-		// both read heap state that survives the panic unwind — so the embedder
-		// can localize the offending bytecode rather than receiving a bare
-		// "stack underflow". WrapError builds a *SchemeError, NOT an
-		// *ErrExceptionEscape: a VM-invariant violation is a compiler/VM bug, not
-		// a user-recoverable Scheme condition, so it must remain uncatchable by
-		// guard / with-exception-handler. The wrapped ForeignError stays
-		// errors.Is-matchable because SchemeError.Unwrap chains to it.
-		rerr = p.WrapError(err, "RunWithEscapeHandling: recovered VM invariant violation")
+		rerr = p.WrapError(err, "RunWithEscapeHandling: recovered panic")
 	}()
 
 	// freshCancel tracks the cancel function for any recovery context

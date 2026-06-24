@@ -80,6 +80,13 @@ type RuntimeError struct {
 	Condition  Value  // non-nil when Scheme raise produced the error; nil for VM/primitive errors
 	Source     string // formatted source location ("file:line:col"), empty if unavailable
 	StackTrace string // formatted VM stack trace, empty if unavailable
+
+	// structured is true when Message/Source/StackTrace were already extracted
+	// from Cause (the exception-escape path in wrapRuntimeError). Error() then
+	// treats Cause as opaque (errors.Is/As only, per the Cause doc above) rather
+	// than embedding Cause.Error() — which would re-emit the location and stack
+	// trace that Source/StackTrace already render, duplicating both.
+	structured bool
 }
 
 func (p *RuntimeError) Error() string {
@@ -92,7 +99,11 @@ func (p *RuntimeError) Error() string {
 
 	b.WriteString(p.Message)
 
-	if p.Cause != nil {
+	// Fold in the cause only when the structured fields don't already describe
+	// the failure. The exception path (structured) pulls the message via
+	// ConditionText and sets Source/StackTrace, so embedding Cause.Error() here
+	// would duplicate the location and trace verbatim.
+	if p.Cause != nil && !p.structured {
 		// Suppress the cause when it merely restates the message verbatim. A
 		// sentinel attached to Cause purely so callers can errors.Is it (e.g.
 		// werr.ErrNotAProcedure, whose text is exactly "not a procedure") must not

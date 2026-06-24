@@ -910,10 +910,16 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	var ee *machine.ErrExceptionEscape
 	if errors.As(err, &ee) {
+		// Pull the bare condition text into Message and the location/trace into
+		// the structured fields, then mark structured so Error() renders each
+		// exactly once. The generic "runtime error" prefix is dropped here: the
+		// condition text (e.g. "car: expected pair, got 5") is the real message,
+		// and the surface (REPL "Exception:", CLI "Error:") supplies the category.
 		re := &RuntimeError{
-			Message:   "runtime error",
-			Cause:     err,
-			Condition: wrapValue(ee.Condition),
+			Message:    ee.ConditionText(),
+			Cause:      err,
+			Condition:  wrapValue(ee.Condition),
+			structured: true,
 		}
 		re.Source = ee.Source.Location()
 		if len(ee.StackTrace) > 0 {

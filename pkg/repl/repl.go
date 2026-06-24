@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -41,6 +42,7 @@ type REPL struct {
 	prompt      string
 	contPrompt  string
 	version     string
+	in          io.Reader
 	out         io.Writer
 	errOut      io.Writer
 }
@@ -66,6 +68,15 @@ func WithPrompt(prompt string) Option {
 func WithContinuationPrompt(prompt string) Option {
 	return func(r *REPL) {
 		r.contPrompt = prompt
+	}
+}
+
+// WithInput sets the input reader used by the simple (non-readline) loop.
+// Defaults to os.Stdin. The readline loop reads from the terminal directly
+// and is unaffected by this option.
+func WithInput(in io.Reader) Option {
+	return func(r *REPL) {
+		r.in = in
 	}
 }
 
@@ -118,6 +129,7 @@ func New(eng *wile.Engine, opts ...Option) *REPL {
 		historyFile: defaultHistoryFile(),
 		prompt:      "> ",
 		contPrompt:  "  ",
+		in:          os.Stdin,
 		out:         os.Stdout,
 		errOut:      os.Stderr,
 	}
@@ -165,6 +177,15 @@ func (p *REPL) Run(ctx context.Context) error {
 		return p.RunSimple(ctx)
 	}
 	defer rl.Close() //nolint:errcheck
+
+	// Own SIGINT for the duration of the loop. At the idle prompt readline runs
+	// the terminal in raw mode (ISIG off), so Ctrl-C there is delivered as
+	// readline.ErrInterrupt with no OS signal — this handler only fires for an
+	// interrupt that arrives while a form is evaluating, where it cancels just
+	// that evaluation (see evalAndPrint) instead of tearing down the REPL.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	defer signal.Stop(sigCh)
 
 	// Set up break callback
 	p.debugCtx.Debugger().OnBreak(func(state values.DebugState, bp *wile.BreakpointInfo) {
@@ -249,7 +270,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		rl.SetPrompt(p.prompt)
 
 		for _, expr := range exprs {
-			p.evalAndPrint(ctx, expr)
+			p.evalAndPrint(ctx, sigCh, expr)
 		}
 	}
 }
@@ -262,8 +283,14 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 	// Attach debugger to engine so Engine.Run picks it up.
 	p.eng.SetDebugger(p.debugCtx.Debugger())
 
+	// Own SIGINT so a Ctrl-C while a form is evaluating cancels just that
+	// evaluation (see evalAndPrint) rather than tearing down the REPL.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	defer signal.Stop(sigCh)
+
 	fmt.Fprint(p.out, p.prompt)
-	reader := newLineReader(os.Stdin)
+	reader := newLineReader(p.in)
 	var inputBuffer strings.Builder
 
 	for {
@@ -300,7 +327,7 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 
 		inputBuffer.Reset()
 		for _, expr := range exprs {
-			p.evalAndPrint(ctx, expr)
+			p.evalAndPrint(ctx, sigCh, expr)
 		}
 		fmt.Fprint(p.out, p.prompt)
 	}
@@ -310,14 +337,51 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 // result. Compile and run errors are reported to errOut but do not abort the
 // caller's loop: when several forms arrive on one line each is attempted, so a
 // failure in one never silently swallows the forms that follow it.
-func (p *REPL) evalAndPrint(ctx context.Context, expr *wile.Expression) {
-	cc, compileErr := p.eng.Compile(ctx, expr)
+//
+// The form runs under its own cancellable child of ctx. A SIGINT arriving on
+// sigCh while the form evaluates cancels only that child — the eval unwinds and
+// control returns to the prompt with the loop's ctx untouched, so the REPL
+// survives Ctrl-C during a long computation instead of exiting. The loop's ctx
+// is only cancelled by genuine process termination (SIGTERM), which the caller
+// detects on the next iteration.
+func (p *REPL) evalAndPrint(ctx context.Context, sigCh <-chan os.Signal, expr *wile.Expression) {
+	// Drop any interrupt buffered between evals so it can't cancel this one
+	// before it starts.
+	select {
+	case <-sigCh:
+	default:
+	}
+
+	evalCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Watch for an interrupt for the lifetime of this eval. close(done) (the
+	// later-registered, first-running defer) retires the watcher on the normal
+	// path; on interrupt the watcher cancels evalCtx and the eval unwinds.
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-done:
+		}
+	}()
+	defer close(done)
+
+	cc, compileErr := p.eng.Compile(evalCtx, expr)
 	if compileErr != nil {
 		fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 		return
 	}
-	val, runErr := p.eng.Run(ctx, cc)
+	val, runErr := p.eng.Run(evalCtx, cc)
 	if runErr != nil {
+		// An interrupt cancels evalCtx but not ctx; report it as ^C and return
+		// to the prompt rather than printing a raw "context canceled". When ctx
+		// itself is done (SIGTERM), fall through so the caller's loop exits.
+		if errors.Is(runErr, context.Canceled) && ctx.Err() == nil {
+			fmt.Fprintln(p.errOut, "^C")
+			return
+		}
 		fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
 		return
 	}
