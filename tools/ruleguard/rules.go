@@ -134,3 +134,44 @@ func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by g
 			!m.File().Name.Matches(`_test\.go$`)).
 		Report(`direct value-register access: use SetValue, SetValues, GetValue, GetValues, PushValues, pushValueRegisterTo, copyValueRegisterFrom, or cloneValueRegisterFrom on *vmState (Finding 3)`)
 }
+
+// noUncheckedArgCast flags an unchecked single-value type assertion on the
+// result of a CallContext's Arg(...) — the primitive-argument (user-input)
+// boundary. A wrong-type argument makes the assertion panic with a
+// runtime.Error, and the VM boundary recover in RunWithEscapeHandling
+// deliberately catches only *werr.ForeignError and re-raises runtime.Error —
+// so the panic crashes the process instead of surfacing as a catchable Scheme
+// condition. Use the checked extraction helpers (helpers.RequireArg[T],
+// helpers.ExtractInteger, ...) or the comma-ok form, which the whole primitive
+// surface already does.
+//
+// Only the single-value forms are matched. The comma-ok form
+// (`x, ok := mc.Arg(0).(*values.Integer)`) is a distinct two-LHS AST shape and
+// is the safe, idiomatic pattern — it is intentionally NOT flagged. The
+// call-argument form (`f(mc.Arg(0).(*values.T))`) is not matched; the
+// assignment, selector-chain, and return forms below cover the realistic
+// authoring mistakes, so this is a backstop, not a proof.
+//
+// Scoped to `*values.$t` (concrete pointer asserts) — the panic-prone shape the
+// finding targets; interface asserts (values.Number, values.Tuple) are almost
+// always written comma-ok anyway.
+//
+// See memory/ffi-badcast-vm-boundary-recover.md.
+//
+//	// Wrong (panics on wrong type → process crash):
+//	n := mc.Arg(0).(*values.Integer)
+//	v := mc.Arg(0).(*values.Vector).Get(i)
+//
+//	// Right:
+//	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "name")
+//	n, ok := mc.Arg(0).(*values.Integer)
+func noUncheckedArgCast(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(
+		`$lhs := $mc.Arg($n).(*values.$t)`,
+		`$lhs = $mc.Arg($n).(*values.$t)`,
+		`$mc.Arg($n).(*values.$t).$sel`,
+		`return $mc.Arg($n).(*values.$t)`,
+	).
+		Where(!m.File().Name.Matches(`_test\.go$`)).
+		Report(`unchecked type assertion on Arg(): a wrong-type argument panics (runtime.Error) and crashes the VM — the boundary recover catches only *werr.ForeignError. Use helpers.RequireArg[T](mc, n, sentinel, name) or the comma-ok form`)
+}

@@ -23,6 +23,7 @@ import (
 	"log"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -64,12 +65,21 @@ func main() {
 		Name:       "go-max",
 		ParamCount: 2,
 		Impl: func(mc wile.CallContext) error {
-			a := mc.Arg(0).(*values.Integer).Value
-			b := mc.Arg(1).(*values.Integer).Value
-			if a > b {
-				mc.SetValue(values.NewInteger(a))
+			// Always check argument types: an unchecked type assertion
+			// panics on a wrong-type argument, which crashes the VM rather
+			// than raising a catchable Scheme error.
+			a, ok := mc.Arg(0).(*values.Integer)
+			if !ok {
+				return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "go-max: first argument must be an integer")
+			}
+			b, ok := mc.Arg(1).(*values.Integer)
+			if !ok {
+				return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "go-max: second argument must be an integer")
+			}
+			if a.Value > b.Value {
+				mc.SetValue(values.NewInteger(a.Value))
 			} else {
-				mc.SetValue(values.NewInteger(b))
+				mc.SetValue(values.NewInteger(b.Value))
 			}
 			return nil
 		},
