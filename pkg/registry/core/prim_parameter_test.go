@@ -554,3 +554,66 @@ func TestParameterizeConverterNoDoubleApply(t *testing.T) {
 		})
 	}
 }
+
+// TestParameterizeValueEvalOrder verifies R7RS §4.2.6: every value expression
+// (and converter) in a parameterize form is evaluated in the dynamic environment
+// in effect *before* the parameterize, then bound. A later clause's value must NOT
+// observe an earlier clause's freshly-installed binding.
+func TestParameterizeValueEvalOrder(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		// The fix: b's init reads a; it must see the OLD a (1), not the new a (10).
+		// Pre-fix this returned (10 1000); R7RS / Chez require (10 100).
+		{
+			name: "later value reads earlier param's OLD binding",
+			code: `(let ((a (make-parameter 1)) (b (make-parameter 2)))
+				(parameterize ((a 10) (b (* (a) 100)))
+					(list (a) (b))))`,
+			out: values.List(values.NewInteger(10), values.NewInteger(100)),
+		},
+		// Three clauses: c reads both a and b; both must be the OLD bindings.
+		{
+			name: "third value reads earlier params' OLD bindings",
+			code: `(let ((a (make-parameter 1)) (b (make-parameter 2)) (c (make-parameter 3)))
+				(parameterize ((a 10) (b (* (a) 100)) (c (+ (a) (b))))
+					(list (a) (b) (c))))`,
+			out: values.List(values.NewInteger(10), values.NewInteger(100), values.NewInteger(3)),
+		},
+		// Minimal case: q's init reads p; must see OLD p (1), not 10.
+		{
+			name: "minimal later-reads-earlier",
+			code: `(let ((p (make-parameter 1)) (q (make-parameter 99)))
+				(parameterize ((p 10) (q (p)))
+					(q)))`,
+			out: values.NewInteger(1),
+		},
+		// Symbolic form of the fix: q's value captures (p); must capture the old p.
+		{
+			name: "value expression sees pre-parameterize binding",
+			code: `(let ((p (make-parameter 'old)) (q (make-parameter 'q0)))
+				(parameterize ((p 'X) (q (list 'saw (p))))
+					(q)))`,
+			out: values.List(values.NewSymbol("saw"), values.NewSymbol("old")),
+		},
+		// Hygiene: the macro's introduced temporary (pt) must not capture a
+		// user-bound identifier of the same name visible at the use site.
+		{
+			name: "introduced temp does not capture user pt",
+			code: `(let ((p (make-parameter 0)) (pt 'user-pt))
+				(parameterize ((p 5))
+					(list (p) pt)))`,
+			out: values.List(values.NewInteger(5), values.NewSymbol("user-pt")),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
+		})
+	}
+}
