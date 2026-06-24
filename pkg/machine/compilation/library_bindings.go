@@ -65,7 +65,7 @@ import (
 // The sealed-base HOFs are stamped only at their real home (StampInlineHOFs). The
 // import path is also the only library seam, so a user's own (define …) of a HOF
 // name is never stamped here.
-func markBindingImported(target, source *environment.Binding, exportName string) {
+func markBindingImported(target, source *environment.Binding, exportName string, sourceLib LibraryName) {
 	if target == nil {
 		return
 	}
@@ -82,7 +82,9 @@ func markBindingImported(target, source *environment.Binding, exportName string)
 			m.Doc = doc
 		}
 	}
-	stampImportedInlineHOF(target, exportName)
+	// sourceLib is the library being imported FROM; the inline-HOF stamp is gated
+	// on it (identity), not just the export name — see stampImportedInlineHOF.
+	stampImportedInlineHOF(target, exportName, sourceLib)
 }
 
 // ImportSet represents a parsed import specification.
@@ -318,7 +320,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %s", localName, targetPhase)
 			}
 		}
-		markBindingImported(phaseEnv.GetBinding(localSym, nil), libBinding, externalName)
+		markBindingImported(phaseEnv.GetBinding(localSym, nil), libBinding, externalName, lib.Name)
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
@@ -332,7 +334,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
 			}
-			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding, externalName)
+			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding, externalName, lib.Name)
 		}
 	}
 	return nil
@@ -397,7 +399,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 			}
 		}
-		markBindingImported(targetEnv.GetBinding(localSym, nil), importedBinding, externalName)
+		markBindingImported(targetEnv.GetBinding(localSym, nil), importedBinding, externalName, lib.Name)
 
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
@@ -407,7 +409,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
 			}
-			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding, externalName)
+			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding, externalName, lib.Name)
 		}
 	}
 	return nil

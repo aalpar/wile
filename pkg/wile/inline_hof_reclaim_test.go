@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
 )
@@ -152,5 +153,60 @@ acc)`
 	if got != "(4 3 2 1)" {
 		t.Errorf("for-each with a call/cc callback = %s, want (4 3 2 1) "+
 			"(must fall through to the real for-each, traversal intact)", got)
+	}
+}
+
+// TestInlineFoldIdentityStamp is the soundness gate for the import-gated `fold`
+// inline stamp: it must key on the SOURCE LIBRARY, not just the export name. A
+// library that exports its own `fold` with non-SRFI-1 semantics must run the
+// user's code, never Wile's SRFI-1 element-first inline template.
+//
+// The library's fold is a LEFT fold — (fold f acc lst) calls (f acc elem) — so
+// (fold - 0 '(1 2 3)) = (- (- (- 0 1) 2) 3) = -6. The SRFI-1 template's
+// (kons elem acc) order would instead give 2, the symptom of mis-inlining a
+// same-named but different procedure.
+func TestInlineFoldIdentityStamp(t *testing.T) {
+	ctx := context.Background()
+	fsys := fstest.MapFS{
+		"my/badfold.sld": &fstest.MapFile{Data: []byte(`(define-library (my badfold)
+  (export fold)
+  (import (scheme base))
+  (begin
+    (define (fold f acc lst)
+      (if (null? lst) acc (fold f (f acc (car lst)) (cdr lst))))))`)},
+	}
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
+		WithSourceFS(fsys), WithLibraryPaths(), WithImmutableTopLevel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.EvalMultiple(ctx, `(import (my badfold)) (fold - 0 (list 1 2 3))`)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	if got != "-6" {
+		t.Errorf("imported non-SRFI-1 fold mis-inlined: got %s, want -6 "+
+			"(SRFI-1 inline template gives 2)", got)
+	}
+}
+
+// TestInlineFoldRealSRFI1StillInlines guards against an over-broad fix: Wile's
+// real (srfi 1) fold must still be inlined (element-first), so (fold cons '()
+// '(1 2 3)) = (3 2 1).
+func TestInlineFoldRealSRFI1StillInlines(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS),
+		WithLibraryPaths(), WithImmutableTopLevel())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.EvalMultiple(ctx, `(import (srfi 1)) (fold cons (list) (list 1 2 3))`)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	if got != "(3 2 1)" {
+		t.Errorf("real srfi-1 fold = %s, want (3 2 1)", got)
 	}
 }
