@@ -280,3 +280,28 @@ func TestInteger_OverflowPromotion(t *testing.T) {
 	_, ok = result.(*values.Integer)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("5 * 3 should produce Integer, got %T", result))
 }
+
+// TestInteger_MultiplyMinInt64ByNegOne pins the -1 * MinInt64 overflow corner.
+// The division-based overflow check (prod/a == b) cannot detect it when a == -1,
+// because the recovery division MinInt64/-1 itself wraps to MinInt64 (Go spec).
+// Both argument orders must promote to a BigInteger equal to +2^63; the buggy
+// path silently returned the wrapped MinInt64 in the a == -1 order.
+func TestInteger_MultiplyMinInt64ByNegOne(t *testing.T) {
+	c := qt.New(t)
+
+	minInt := values.NewInteger(math.MinInt64)
+	negOne := values.NewInteger(-1)
+	expected := new(big.Int).Neg(big.NewInt(math.MinInt64)) // +2^63
+
+	// a == -1 order — the corner the division check misses.
+	result := negOne.Multiply(minInt)
+	bi, ok := result.(*values.BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("-1 * MinInt64 should produce BigInteger, got %T (%s)", result, result.SchemeString()))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// b == -1 order — already caught by the division check; verify it stays correct.
+	result = minInt.Multiply(negOne)
+	bi, ok = result.(*values.BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("MinInt64 * -1 should produce BigInteger, got %T (%s)", result, result.SchemeString()))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+}

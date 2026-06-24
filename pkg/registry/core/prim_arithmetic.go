@@ -15,6 +15,7 @@
 package core
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -168,6 +169,15 @@ func integerDivisionOp(
 	}
 
 	inexact := inexact0 || inexact1
+
+	// MinInt64 / -1 overflows int64: the true quotient is +2^63, which wraps
+	// back to MinInt64 under Go's two's-complement division (no panic, silently
+	// wrong). Promote the dividend so the BigInteger branch below computes it
+	// correctly — +2^63 for quotient, 0 for remainder/modulo. All other divisor
+	// values are safe in int64.
+	if big0 == nil && big1 == nil && v0 == math.MinInt64 && v1 == -1 {
+		big0 = big.NewInt(v0)
+	}
 
 	// Handle BigInteger case
 	if big0 != nil || big1 != nil {

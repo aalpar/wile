@@ -132,6 +132,17 @@ func mulInt64(a, b int64) Number {
 	if a == 0 || b == 0 {
 		return NewInteger(0)
 	}
+	// The division-based check (prod/a == b) below cannot detect the
+	// -1 * MinInt64 corner: the recovery division MinInt64/-1 itself
+	// overflows and wraps back to MinInt64 (Go spec), so it equals b and
+	// the overflow is missed. Hacker's Delight §2-12 calls this out — the
+	// a == -1 case must be guarded separately. The mathematical product
+	// (+2^63) does not fit in int64, so promote. (b == -1 with a == MinInt64
+	// is already caught by the division check, but guard it too for symmetry.)
+	if (a == -1 && b == math.MinInt64) || (b == -1 && a == math.MinInt64) {
+		result := new(big.Int).Mul(big.NewInt(a), big.NewInt(b))
+		return &BigInteger{value: result}
+	}
 	prod := a * b
 	if prod/a != b {
 		result := new(big.Int).Mul(big.NewInt(a), big.NewInt(b))
