@@ -56,7 +56,7 @@ func writeSummary(w io.Writer, c *Collector, includeStdlib bool) error {
 		file string
 		line int
 	}
-	stats := make(map[key]*lineStat)
+	stats := make(map[key]*lineStat, len(c.Entries()))
 
 	for _, e := range c.Entries() {
 		if !includeStdlib && isStdlibPath(e.File) {

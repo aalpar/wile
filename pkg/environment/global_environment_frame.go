@@ -124,7 +124,7 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	}
 
 	if p.keys != nil {
-		q.keys = make(map[values.Symbol]int)
+		q.keys = make(map[values.Symbol]int, len(p.keys))
 		maps.Copy(q.keys, p.keys)
 	}
 	return q
