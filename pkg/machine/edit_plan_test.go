@@ -15,9 +15,11 @@
 package machine
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -182,6 +184,30 @@ func TestEditPlan_Insert(t *testing.T) {
 }
 
 // --- Branch Fixup ---
+
+func TestFixSurvivingBranches_OutOfRangeOffsetWrapsError(t *testing.T) {
+	// A surviving branch whose target offset lands outside [0, len(remap)).
+	// Well-formed compiler output never produces this (the len(code) fall-through
+	// sentinel is the only edge case, and it is in range), but if it ever did the
+	// guard must fail with a wrapped werr — not a bare "index out of range"
+	// runtime panic — matching branchTargets' awareness of the same value.
+	code := []Instruction{
+		{Op: OpBranch, Arg: 100}, // 0: target 100, far past len(remap)
+	}
+	remap := make([]int, len(code)+1) // length 2; index 100 is out of range
+	var edits []edit
+
+	defer func() {
+		r := recover()
+		qt.Assert(t, r, qt.IsNotNil)
+		err, ok := r.(error)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, errors.Is(err, werr.ErrInternal), qt.IsTrue,
+			qt.Commentf("panic value should wrap werr.ErrInternal, got %v", r))
+	}()
+	fixSurvivingBranches(code, edits, remap)
+	t.Fatal("expected panic on out-of-range branch offset")
+}
 
 func TestEditPlan_BranchShrinks(t *testing.T) {
 	// Branch spans a deleted range; offset must shrink.
