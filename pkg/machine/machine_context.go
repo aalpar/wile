@@ -1444,9 +1444,14 @@ func (p *MachineContext) RunWithEscapeHandling() (rerr error) {
 			// A non-error panic value (panic("...") / panic(42)). Carry its text
 			// under an internal-error sentinel so it, too, stays within the VM
 			// boundary as a matchable, wrapped error.
-			err = werr.WrapForeignErrorf(werr.ErrInternal, "RunWithEscapeHandling: recovered panic: %v", r)
+			err = werr.WrapForeignErrorf(werr.ErrInternal, "non-error panic value: %v", r)
 		}
-		rerr = p.WrapError(err, "RunWithEscapeHandling: recovered panic")
+		// Fold the recovered error's text into the message. SchemeError.Error()
+		// renders Message + source + trace but NOT Cause, so without this the
+		// printed error would read only "recovered panic" and the real detail
+		// (e.g. a runtime.Error "index out of range" message) would be reachable
+		// only via Unwrap. Cause stays set (WrapError chains it) for errors.Is/As.
+		rerr = p.WrapError(err, "RunWithEscapeHandling: recovered panic: "+err.Error())
 	}()
 
 	// freshCancel tracks the cancel function for any recovery context

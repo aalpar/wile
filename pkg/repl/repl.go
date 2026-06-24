@@ -178,15 +178,6 @@ func (p *REPL) Run(ctx context.Context) error {
 	}
 	defer rl.Close() //nolint:errcheck
 
-	// Own SIGINT for the duration of the loop. At the idle prompt readline runs
-	// the terminal in raw mode (ISIG off), so Ctrl-C there is delivered as
-	// readline.ErrInterrupt with no OS signal — this handler only fires for an
-	// interrupt that arrives while a form is evaluating, where it cancels just
-	// that evaluation (see evalAndPrint) instead of tearing down the REPL.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
-	defer signal.Stop(sigCh)
-
 	// Set up break callback
 	p.debugCtx.Debugger().OnBreak(func(state values.DebugState, bp *wile.BreakpointInfo) {
 		p.debugCtx.SetCurrentState(state)
@@ -269,9 +260,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		inputBuffer.Reset()
 		rl.SetPrompt(p.prompt)
 
-		for _, expr := range exprs {
-			p.evalAndPrint(ctx, sigCh, expr)
-		}
+		p.evalForms(ctx, exprs)
 	}
 }
 
@@ -282,12 +271,6 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 	}
 	// Attach debugger to engine so Engine.Run picks it up.
 	p.eng.SetDebugger(p.debugCtx.Debugger())
-
-	// Own SIGINT so a Ctrl-C while a form is evaluating cancels just that
-	// evaluation (see evalAndPrint) rather than tearing down the REPL.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
-	defer signal.Stop(sigCh)
 
 	fmt.Fprint(p.out, p.prompt)
 	reader := newLineReader(p.in)
@@ -326,10 +309,25 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 		}
 
 		inputBuffer.Reset()
-		for _, expr := range exprs {
-			p.evalAndPrint(ctx, sigCh, expr)
-		}
+		p.evalForms(ctx, exprs)
 		fmt.Fprint(p.out, p.prompt)
+	}
+}
+
+// evalForms evaluates one input line's worth of parsed forms in order, owning
+// SIGINT only for the duration of evaluation. Scoping the handler here — rather
+// than across the whole read-eval loop — keeps Ctrl-C at the *idle* prompt
+// behaving normally: the readline loop clears the line via readline.ErrInterrupt
+// (raw mode, no OS signal), and the simple loop's cooked-mode terminal retains
+// its default SIGINT action (terminate) instead of a suppressed no-op. While a
+// form evaluates, the interrupt cancels just that evaluation (see evalAndPrint).
+func (p *REPL) evalForms(ctx context.Context, exprs []*wile.Expression) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	defer signal.Stop(sigCh)
+
+	for _, expr := range exprs {
+		p.evalAndPrint(ctx, sigCh, expr)
 	}
 }
 

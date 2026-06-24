@@ -17,6 +17,7 @@ package machine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -2622,6 +2623,11 @@ func TestRunWithEscapeHandling_ContainsNonForeignError(t *testing.T) {
 	c.Assert(errors.As(rerr, &escapeErr), qt.IsFalse)
 	// The original panic value stays reachable for matching/diagnostics.
 	c.Assert(errors.Is(rerr, sentinel), qt.IsTrue)
+	// The rendered message surfaces the panic detail, not just a generic
+	// "recovered panic" (SchemeError.Error() does not render Cause, so the
+	// detail must be folded into the message at wrap time).
+	c.Assert(strings.Contains(rerr.Error(), "not a foreign error"), qt.IsTrue,
+		qt.Commentf("Error()=%q", rerr.Error()))
 }
 
 // TestMachineContext_ImmutableLiterals verifies the CallContext accessor
