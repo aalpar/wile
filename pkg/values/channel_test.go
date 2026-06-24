@@ -313,3 +313,53 @@ func TestChannelSelectSendToClosedChannel(t *testing.T) {
 	c.Assert(idx, qt.Equals, 0)
 	c.Assert(ok, qt.IsFalse)
 }
+
+// TestChannelSelectClosedSendDeterministic pins the deterministic contract for
+// closed send cases: a closed send is reported by first-in-slice-order, it is
+// reached without panicking, and a ready operation always wins over a dead send
+// case regardless of position.
+func TestChannelSelectClosedSendDeterministic(t *testing.T) {
+	c := qt.New(t)
+
+	// A ready receive must win over a closed send case, even when the closed
+	// send appears first in slice order.
+	t.Run("ready operation wins over closed send", func(t *testing.T) {
+		closed := values.NewChannel(0)
+		_ = closed.Close()
+		ready := values.NewChannel(1)
+		_ = ready.Send(values.NewInteger(99))
+
+		cases := []values.SelectCase{
+			{Channel: closed, Kind: values.SelectSend, Value: values.NewInteger(1)},
+			{Channel: ready, Kind: values.SelectReceive},
+		}
+		idx, val, ok := values.ChannelSelect(cases)
+		c.Assert(idx, qt.Equals, 1)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(val, valuestest.SchemeEquals, values.NewInteger(99))
+	})
+
+	// With multiple closed send cases and nothing else ready, the FIRST in
+	// slice order is reported, stably across repetitions (no reflect.Select
+	// pseudo-random pick, no panic). A full-open send sits between them to
+	// prove the dead case is still preferred over a would-block case.
+	t.Run("first closed send reported, stable", func(t *testing.T) {
+		for range 200 {
+			closed0 := values.NewChannel(0)
+			_ = closed0.Close()
+			full := values.NewChannel(1)
+			_ = full.Send(values.NewInteger(0)) // open but full: would block
+			closed2 := values.NewChannel(0)
+			_ = closed2.Close()
+
+			cases := []values.SelectCase{
+				{Channel: closed0, Kind: values.SelectSend, Value: values.NewInteger(1)},
+				{Channel: full, Kind: values.SelectSend, Value: values.NewInteger(2)},
+				{Channel: closed2, Kind: values.SelectSend, Value: values.NewInteger(3)},
+			}
+			idx, _, ok := values.ChannelSelect(cases)
+			c.Assert(idx, qt.Equals, 0)
+			c.Assert(ok, qt.IsFalse)
+		}
+	})
+}

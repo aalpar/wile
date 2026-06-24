@@ -219,43 +219,76 @@ type SelectCase struct {
 	Kind    SelectCaseKind
 }
 
-// ChannelSelect performs a select operation on multiple channels.
-// Returns the index of the selected case and the received value (for receive cases).
-// If a send case targets a channel that is closed concurrently, the select returns
-// that case's index with ok=false instead of panicking.
+// firstClosedSendCase returns the index of the first send case (in slice
+// order) whose channel is closed, or (-1, false) if there is none. A send to a
+// closed channel can never proceed — reflect.Select treats it as ready and
+// panics. ChannelSelect reports such a case deterministically (first in slice
+// order) rather than letting reflect.Select pick among several closed sends
+// pseudo-randomly. Both the pre-block scan and the TOCTOU recovery use this so
+// the reported index is identical on either path.
+func firstClosedSendCase(cases []SelectCase) (int, bool) {
+	for i, c := range cases {
+		if c.Kind == SelectSend && c.Channel.IsClosed() {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// ChannelSelect performs a select operation on multiple channels, returning the
+// index of the selected case and the received value (for receive cases).
+//
+// Resolution order is deterministic where it can be: a ready operation (first
+// in slice order) wins, then a default case, then — before any blocking — the
+// first send case targeting a closed channel is reported as (idx, nil, false).
+// Only genuinely blockable cases reach reflect.Select, whose choice among
+// concurrently-ready cases is pseudo-random by design (standard select
+// semantics). The sole remaining panic source is a channel closed concurrently
+// during the blocking wait (TOCTOU); it is recovered and reported via the same
+// first-closed-send rule, so the failure index never depends on reflect.Select's
+// internal pick.
 func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	if len(cases) == 0 {
 		return -1, nil, false
 	}
 
-	// Build native select cases
-	// First pass: try non-blocking operations before falling through to reflect.Select
+	// First pass: try non-blocking operations before falling through to reflect.Select.
 	for i, c := range cases {
 		if c.Kind == SelectDefault {
 			continue
 		}
 		if c.Kind == SelectSend {
-			ok, _ := c.Channel.TrySend(c.Value)
-			if ok {
+			sent, _ := c.Channel.TrySend(c.Value)
+			if sent {
 				return i, nil, true
 			}
 		} else {
-			v, received, ok := c.Channel.TryReceive()
+			v, received, recvOK := c.Channel.TryReceive()
 			if received {
-				return i, v, ok
+				return i, v, recvOK
 			}
 		}
 	}
 
-	// Check for default case
+	// Check for default case.
 	for i, c := range cases {
 		if c.Kind == SelectDefault {
 			return i, nil, true
 		}
 	}
 
-	// No default case — block using reflect.Select for true multiplexing
-	// Build reflect.SelectCase slice, tracking original indices
+	// A send case targeting a closed channel can never proceed; reflect.Select
+	// would treat it as ready and panic. Report it deterministically here,
+	// after the ready-operation and default passes so a viable operation always
+	// wins over a dead send case. (A closed receive case needs no special
+	// handling — reflect.Select returns it as ready with recvOK=false.)
+	closedIdx, hasClosed := firstClosedSendCase(cases)
+	if hasClosed {
+		return closedIdx, nil, false
+	}
+
+	// No default case — block using reflect.Select for true multiplexing.
+	// Build reflect.SelectCase slice, tracking original indices.
 	selectCases := make([]reflect.SelectCase, 0, len(cases))
 	originalIndices := make([]int, 0, len(cases))
 	for i, c := range cases {
@@ -279,25 +312,20 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 		originalIndices = append(originalIndices, i)
 	}
 
-	// reflect.Select panics with "send on closed channel" if a send case
-	// targets a channel closed between our TrySend check and here (TOCTOU).
-	// Recover and report the closed-channel case instead of crashing.
+	// A channel may still close concurrently between the scan above and
+	// reflect.Select picking it (TOCTOU), panicking with "send on closed
+	// channel". Recover and report the first closed send case, matching the
+	// deterministic pre-block contract; re-panic anything else.
 	defer func() {
 		r := recover()
-		if r != nil {
-			// A send on a concurrently-closed channel panicked.
-			// Find the first closed send case and report it.
-			for i, c := range cases {
-				if c.Kind == SelectSend && c.Channel.IsClosed() {
-					idx = i
-					val = nil
-					ok = false
-					return
-				}
-			}
-			// Not a closed-channel panic — re-panic.
+		if r == nil {
+			return
+		}
+		ci, found := firstClosedSendCase(cases)
+		if !found {
 			panic(r)
 		}
+		idx, val, ok = ci, nil, false
 	}()
 
 	chosen, recv, recvOK := reflect.Select(selectCases)
