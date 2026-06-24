@@ -857,6 +857,10 @@ func TestQuotient(t *testing.T) {
 
 		// BigInteger operations
 		{Name: "quotient bigintegers", Code: `(quotient #z100000000000000000000 #z30000000000000000000)`, Expected: values.NewBigIntegerFromString("3", 10)},
+
+		// MinInt64 / -1 overflows int64: true quotient is +2^63, which wraps to
+		// MinInt64 under raw a/b. Must promote to BigInteger equal to +2^63.
+		{Name: "quotient MinInt64/-1 overflow", Code: `(quotient -9223372036854775808 -1)`, Expected: values.NewBigIntegerFromString("9223372036854775808", 10)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -896,6 +900,9 @@ func TestRemainder(t *testing.T) {
 
 		// BigInteger operations
 		{Name: "remainder bigintegers", Code: `(remainder #z100000000000000000000 #z30000000000000000000)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
+
+		// MinInt64 / -1: quotient overflows but remainder is mathematically 0.
+		{Name: "remainder MinInt64/-1", Code: `(remainder -9223372036854775808 -1)`, Expected: values.NewInteger(0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -939,6 +946,9 @@ func TestModulo(t *testing.T) {
 
 		// BigInteger operations
 		{Name: "modulo bigintegers", Code: `(modulo #z100000000000000000007 #z10)`, Expected: values.NewBigIntegerFromString("7", 10)},
+
+		// MinInt64 / -1: quotient overflows but modulo is mathematically 0.
+		{Name: "modulo MinInt64/-1", Code: `(modulo -9223372036854775808 -1)`, Expected: values.NewInteger(0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
