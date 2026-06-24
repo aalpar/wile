@@ -57,13 +57,15 @@ func TestParseWithSource_RuntimeError(t *testing.T) {
 			wantHasTrace:  true,
 		},
 		{
-			name:          "raise without source",
+			// No filename, but the position must survive as ":line:col"
+			// (provenance losslessness — see SourceContext.Location).
+			name:          "raise without filename keeps position",
 			source:        "",
 			code:          `(raise "boom")`,
-			wantSourcePfx: "",
+			wantSourcePfx: ":",
 			wantCondition: `"boom"`,
-			wantHasSource: false,
-			wantHasTrace:  false,
+			wantHasSource: true,
+			wantHasTrace:  true,
 		},
 		{
 			name:          "nested call error with source",
@@ -279,9 +281,11 @@ func TestWithSource_DistinctSources(t *testing.T) {
 	}
 }
 
-// TestWithSource_SourcelessEvalHasEmptySource is a negative test: errors
-// from the sourceless Eval/EvalMultiple/Compile should have empty Source.
-func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
+// TestWithSource_SourcelessEvalCarriesPosition verifies that errors from the
+// sourceless Eval/EvalMultiple/Compile paths still carry ":line:col" provenance.
+// There is no filename to report, but the position must not be dropped — see
+// SourceContext.Location and the "Error Chains: Lossless" invariant.
+func TestWithSource_SourcelessEvalCarriesPosition(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -325,7 +329,9 @@ func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
 
 			var rtErr *RuntimeError
 			c.Assert(errors.As(err, &rtErr), qt.IsTrue)
-			c.Assert(rtErr.Source, qt.Equals, "")
+			// No filename, but the position survives as ":line:col".
+			c.Assert(strings.HasPrefix(rtErr.Source, ":"), qt.IsTrue,
+				qt.Commentf("sourceless error Source=%q, want :line:col", rtErr.Source))
 		})
 	}
 }
