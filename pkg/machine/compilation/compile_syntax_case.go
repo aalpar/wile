@@ -184,7 +184,12 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// (unlike syntax-rules which always has the macro name as the first element)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	patternVars := make(map[string]struct{})
-	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, false, patternVars, nil, match.DefaultEllipsis)
+	// patternVarSyntax records each pattern variable's syntax symbol (with its
+	// scopes) so the ellipsis template-expansion path can do scope-aware
+	// substitution for nested-macro hygiene — the same data the syntax-rules
+	// path stores on SyntaxRulesClause.PatternVarSyntax.
+	patternVarSyntax := make(map[string]*syntax.SyntaxSymbol)
+	err := collectPatternVariablesWithEllipsis(pattern, literalSyntax, false, patternVars, patternVarSyntax, match.DefaultEllipsis)
 	if err != nil {
 		return err
 	}
@@ -196,6 +201,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	_, wildcardIsLiteral := literalSyntax["_"]
 	if !wildcardIsLiteral {
 		delete(patternVars, "_")
+		delete(patternVarSyntax, "_")
 	}
 
 	// Compile the pattern to bytecode.
@@ -245,6 +251,13 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyEnv := p.createPatternVarEnvironment(patternVars)
 	bodyCompiler := NewCompileTimeContinuation(p.template, bodyEnv, p.evaluator)
 	bodyCompiler.SetInlineThreshold(p.inlineThreshold)
+	// Carry the clause's hygiene context into CompileSyntax so that ellipsis
+	// templates expand hygienically. libraryScope is not on bodyEnv (it is a
+	// separate field on CompileTimeContinuation), so propagate it explicitly for
+	// cross-library free-id resolution.
+	bodyCompiler.libraryScope = p.libraryScope
+	bodyCompiler.patternVars = patternVars
+	bodyCompiler.patternVarSyntax = patternVarSyntax
 	// Inherit the parent compiler's current source so that operations emitted
 	// by bodyCompiler (like BindPatternVars) are tagged with the syntax-case
 	// form's source location.

@@ -144,3 +144,85 @@ func TestSyntaxCaseErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestSyntaxCaseEllipsisHygiene checks that templates containing ellipsis are
+// expanded hygienically (R7RS §4.3), matching the already-correct non-ellipsis
+// path. Two failure modes:
+//   - capture: a template-introduced binder must not swallow user identifiers
+//     that arrive through an ellipsis pattern variable.
+//   - referential transparency: a free template identifier must resolve at the
+//     macro definition site, not the use site.
+//
+// Each ellipsis case is paired with its non-ellipsis control, which exercises
+// the compile-time template path (compileSyntaxTemplateToOps) and was already
+// hygienic — the fix makes the runtime ellipsis path (OperationSyntaxTemplateExpand)
+// behave identically.
+func TestSyntaxCaseEllipsisHygiene(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			// Introduced `tmp`=0 must not capture the user's `tmp`=99 spliced via `x ...`.
+			Name: "capture: ellipsis-spliced ids not captured by introduced binder",
+			Code: `(begin
+				(define-syntax m
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ (x ...)) (syntax (let ((tmp 0)) (list tmp x ...)))))))
+				(let ((tmp 99)) (m (tmp tmp))))`,
+			Expected: values.List(values.NewInteger(0), values.NewInteger(99), values.NewInteger(99)),
+		},
+		{
+			Name: "capture control: non-ellipsis sibling is hygienic",
+			Code: `(begin
+				(define-syntax mc
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a b) (syntax (let ((tmp 0)) (list tmp a b)))))))
+				(let ((tmp 99)) (mc tmp tmp)))`,
+			Expected: values.List(values.NewInteger(0), values.NewInteger(99), values.NewInteger(99)),
+		},
+		{
+			// Free template id `list` must resolve to the definition-site global,
+			// not the use-site shadowing binding.
+			Name: "referential transparency: free id resolves at definition site (ellipsis)",
+			Code: `(begin
+				(define-syntax m2
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ (x ...)) (syntax (list x ...))))))
+				(let ((list (lambda args 'shadowed))) (m2 (1 2 3))))`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			Name: "referential transparency control: non-ellipsis sibling",
+			Code: `(begin
+				(define-syntax m2c
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ a b) (syntax (list a b))))))
+				(let ((list (lambda args 'shadowed))) (m2c 1 2)))`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			// Nested ellipsis must remain hygienic at every depth.
+			Name: "capture: nested ellipsis not captured",
+			Code: `(begin
+				(define-syntax mn
+					(lambda (stx)
+						(syntax-case stx ()
+							((_ ((x ...) ...)) (syntax (let ((tmp 0)) (list tmp (list x ...) ...)))))))
+				(let ((tmp 99)) (mn ((tmp tmp) (tmp)))))`,
+			Expected: values.List(
+				values.NewInteger(0),
+				values.List(values.NewInteger(99), values.NewInteger(99)),
+				values.List(values.NewInteger(99)),
+			),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}

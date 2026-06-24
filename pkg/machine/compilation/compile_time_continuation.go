@@ -47,6 +47,17 @@ type CompileTimeContinuation struct {
 	// Threaded to CompileSyntaxRules so free identifiers in macro templates
 	// can carry the library scope for cross-library hygiene.
 	libraryScope *syntax.Scope
+	// patternVars and patternVarSyntax carry the enclosing syntax-case clause's
+	// pattern context into CompileSyntax so that (syntax template) forms with
+	// ellipsis can be expanded hygienically (the runtime ellipsis path mirrors
+	// the syntax-rules transformer). Set on the body compiler by
+	// compileSyntaxCaseClause; nil for (syntax ...) outside syntax-case (which
+	// has no captures and errors at runtime anyway). patternVars distinguishes
+	// pattern variables (substituted) from free identifiers (resolved at the
+	// definition site); patternVarSyntax carries each pattern variable's scopes
+	// for nested-macro scope comparison.
+	patternVars      map[string]struct{}
+	patternVarSyntax map[string]*syntax.SyntaxSymbol
 	// fileResolver controls how include/load resolves files.
 	// Defaults to the resolver stored on Namespace (usually
 	// OSFileResolver); set to EmbedFileResolver for bootstrap.

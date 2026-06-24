@@ -288,11 +288,21 @@ func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
 // The result is the expanded syntax object, left in the value register.
 type OperationSyntaxTemplateExpand struct {
 	machine.OperationBase
+	// FreeIds and PatternVarSyntax carry the enclosing syntax-case clause's
+	// hygiene data, computed once at compile time by CompileSyntax. They mirror
+	// the SyntaxRulesClause fields the syntax-rules transformer uses, so the
+	// ellipsis template-expansion path is hygienic (R7RS §4.3): free template
+	// identifiers resolve at the macro definition site and template-introduced
+	// binders carry a fresh intro scope rather than capturing use-site identifiers.
+	FreeIds          map[string]*FreeIdResolution
+	PatternVarSyntax map[string]*syntax.SyntaxSymbol
 }
 
-func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
+func NewOperationSyntaxTemplateExpand(freeIds map[string]*FreeIdResolution, patternVarSyntax map[string]*syntax.SyntaxSymbol) *OperationSyntaxTemplateExpand {
 	return &OperationSyntaxTemplateExpand{
-		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-template-expand", "SyntaxTemplateExpand"),
+		OperationBase:    machine.NewOperationBaseWithGoName("operation:syntax-template-expand", "SyntaxTemplateExpand"),
+		FreeIds:          freeIds,
+		PatternVarSyntax: patternVarSyntax,
 	}
 }
 
@@ -312,9 +322,23 @@ func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*mach
 		return nil, mc.WrapError(werr.ErrInternal, fmt.Sprintf("syntax: expected syntax template, got %T", templateVal))
 	}
 
-	// Expand the template using the matcher (handles ellipsis)
-	// Use nil for intro scope and freeIds for now - hygiene can be added later
-	expanded, err := sc.matcher.Expand(template, match.ExpandOptions{})
+	// Expand the template using the matcher (handles ellipsis). Mirror the
+	// syntax-rules transformer (OperationSyntaxRulesTransform.Apply): a fresh
+	// intro scope per expansion, plus the compile-time free-id and pattern-var
+	// hygiene data. This makes the ellipsis path hygienic (R7RS §4.3) — the
+	// non-ellipsis path achieves the same by emitting template symbols as
+	// def-site-scoped literals. UseSiteCtx/Origin are intentionally nil:
+	// syntax-case has no single macro-invocation use-site.
+	introScope := syntax.NewScopeWithLabel("intro")
+	freeIds := make(map[string]match.FreeIdResolver, len(p.FreeIds))
+	for k, v := range p.FreeIds {
+		freeIds[k] = v
+	}
+	expanded, err := sc.matcher.Expand(template, match.ExpandOptions{
+		IntroScope:       introScope,
+		FreeIds:          freeIds,
+		PatternVarSyntax: p.PatternVarSyntax,
+	})
 	if err != nil {
 		return nil, mc.WrapError(err, "syntax: template expansion error")
 	}
