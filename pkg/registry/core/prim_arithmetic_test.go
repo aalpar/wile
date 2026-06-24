@@ -170,6 +170,26 @@ func TestSubtraction_SpecialValues(t *testing.T) {
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
+
+	// R7RS §6.2.6: unary (- x) is negation, not 0 - x. They diverge only at
+	// inexact zero: 0 - 0.0 rounds to +0.0 (IEEE like-signed-zero subtraction),
+	// but negate(0.0) flips the sign bit to -0.0. (eqv? -0.0 0.0) is *unspecified*
+	// per R7RS §6.1, so observe the sign through division (1/-0.0 = -inf.0).
+	t.Run("negate positive zero yields negative zero", func(t *testing.T) {
+		result, err := testhelpers.RunSchemeCode(t, `(/ 1.0 (- 0.0))`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
+	})
+
+	t.Run("negate negative zero yields positive zero", func(t *testing.T) {
+		result, err := testhelpers.RunSchemeCode(t, `(/ 1.0 (- -0.0))`)
+		qt.Assert(t, err, qt.IsNil)
+		f, ok := result.(*values.Float)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, math.IsInf(f.Value, 1), qt.IsTrue)
+	})
 }
 
 func TestSubtraction_Errors(t *testing.T) {

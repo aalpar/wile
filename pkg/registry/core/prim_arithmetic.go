@@ -36,7 +36,10 @@ func PrimAdd(mc machine.CallContext) error {
 func PrimSub(mc machine.CallContext) error {
 	return helpers.NumericFoldWithFirst(mc, "-",
 		func(val values.Number) (values.Number, error) {
-			return values.NewInteger(0).Subtract(val), nil
+			// Unary (- x) is negation, not 0 - x: the two diverge at inexact
+			// zero, where 0 - 0.0 rounds to +0.0 but Negate flips to -0.0
+			// (R7RS §6.2.6 sign of inexact zero).
+			return val.Negate(), nil
 		},
 		func(acc, val values.Number) (values.Number, error) {
 			return acc.Subtract(val), nil

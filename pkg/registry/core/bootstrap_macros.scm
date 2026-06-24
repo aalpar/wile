@@ -127,14 +127,31 @@
 ;;
 ;; %parameter-convert applies the converter (if any) before storing the mark,
 ;; so the converter runs exactly once per parameterize entry.
+;;
+;; R7RS §4.2.6 requires every value expression (and converter) to be evaluated
+;; in the dynamic environment in effect *before* the parameterize, then bound.
+;; The macro therefore runs in two phases:
+;;   %bind — evaluate each param object + converted value into temporaries (pt vt)
+;;           in the OUTER dynamic extent (no marks installed yet), accumulating
+;;           them left-to-right; a later clause's value cannot see an earlier
+;;           clause's not-yet-installed binding.
+;;   %mark — nest with-continuation-mark over the already-evaluated temporaries.
+;; The accumulator is threaded through parameterize's own phase-marked recursion.
+;; A two-helper-macro split (one macro accumulating the temporaries, another
+;; emitting the marks) expands correctly too; this single self-recursive form
+;; just keeps the threading in one definition.
 (define-syntax parameterize
-  (syntax-rules ()
-    ((parameterize () body ...)
-     (begin body ...))
-    ((parameterize ((param val) rest ...) body ...)
-     (let ((p param))
-       (with-continuation-mark p (%parameter-convert p val)
-         (parameterize (rest ...) body ...))))))
+  (syntax-rules (%bind %mark)
+    ((parameterize ((p v) ...) body ...)
+     (parameterize %bind ((p v) ...) () (body ...)))
+    ((parameterize %bind ((p v) rest ...) (acc ...) bw)
+     (let* ((pt p) (vt (%parameter-convert pt v)))   ; let* — vt's init reads pt
+       (parameterize %bind (rest ...) (acc ... (pt vt)) bw)))
+    ((parameterize %bind () (acc ...) bw)
+     (parameterize %mark (acc ...) bw))
+    ((parameterize %mark () (b ...)) (begin b ...))
+    ((parameterize %mark ((pt vt) rest ...) bw)
+     (with-continuation-mark pt vt (parameterize %mark (rest ...) bw)))))
 
 ;; Exception handling (R7RS §4.2.7 guard macro)
 ;;

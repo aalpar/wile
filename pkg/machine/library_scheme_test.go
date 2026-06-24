@@ -301,6 +301,45 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(6))
 }
 
+// TestLibraryInternalSyntaxCaseEllipsisHygiene verifies that a syntax-case macro
+// with an ellipsis template, exported from a library, resolves a free identifier
+// (a non-exported helper) at the library definition site — not the use site. This
+// exercises the libraryScope / free-id hygiene threaded into the ellipsis
+// template-expansion path (CompileSyntax → OperationSyntaxTemplateExpand). The
+// use site deliberately shadows `helper` with a different definition; referential
+// transparency requires the macro to ignore that shadow.
+func TestLibraryInternalSyntaxCaseEllipsisHygiene(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	libCode := `(define-library (test sc-ellipsis-hygiene)
+	  (export bump-all)
+	  (import (scheme base))
+	  (begin
+	    (define (helper x) (+ x 1))
+	    (define-syntax bump-all
+	      (lambda (stx)
+	        (syntax-case stx ()
+	          ((_ x ...) (syntax (list (helper x) ...))))))))`
+	compileAndRegisterLibrary(t, env, libCode)
+
+	importCode := `(import (test sc-ellipsis-hygiene))`
+	sv := parseSchemeExpr(t, env, importCode)
+	_, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("import should succeed"))
+
+	// Use site shadows `helper`; the macro's free `helper` must still resolve to
+	// the library's (+ x 1), giving (6 7 8), not the use-site (* x 1000).
+	useCode := `(begin
+	  (define (helper n) (* n 1000))
+	  (bump-all 5 6 7))`
+	sv = parseSchemeExpr(t, env, useCode)
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("syntax-case ellipsis macro using non-exported helper should work"))
+	c.Assert(result, valuestest.SchemeEquals, values.List(
+		values.NewInteger(6), values.NewInteger(7), values.NewInteger(8)))
+}
+
 // TestIndividualSchemeLibraries tests each scheme library can be imported individually
 func TestIndividualSchemeLibraries(t *testing.T) {
 	libraries := []struct {

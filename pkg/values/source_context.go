@@ -84,12 +84,23 @@ func (p *SourceContext) Clone() *SourceContext {
 }
 
 // Location returns the source location formatted as "file:line:col".
-// Returns empty string if the receiver is nil or has no file.
+// Returns empty string if the receiver is nil or carries no location at all.
+//
+// When File is empty (e.g. a nameless EvalMultiple program) but a position is
+// present, the ":line:col" form is still returned so provenance is not lost —
+// mirroring machine.StackFrame.String, which prints :Line:Col unconditionally.
+// A truly position-less context (File=="" and Line==0) still yields "".
 func (p *SourceContext) Location() string {
-	if p == nil || p.File == "" {
+	if p == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s:%d:%d", p.File, p.Start.Line(), p.Start.Column())
+	if p.File != "" {
+		return fmt.Sprintf("%s:%d:%d", p.File, p.Start.Line(), p.Start.Column())
+	}
+	if p.Start.Line() > 0 {
+		return fmt.Sprintf(":%d:%d", p.Start.Line(), p.Start.Column())
+	}
+	return ""
 }
 
 // SchemeString returns the Scheme representation of the source context.
