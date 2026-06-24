@@ -198,6 +198,29 @@ What this PR does.
 
 **Do not merge until all CI checks pass.** The PR will automatically run tests on multiple platforms.
 
+## Versioning and Releases
+
+Wile follows [Semantic Versioning](https://semver.org/). The current version lives
+in the `VERSION` file at the repo root, formatted `vMAJOR.MINOR.PATCH` (an optional
+prerelease suffix like `-alpha` is preserved).
+
+**The version is bumped once per release, not once per commit.** Regular commits and
+pull requests must **not** modify `VERSION` — it stays frozen between releases. The
+bump happens only during the release ceremony.
+
+Release flow (maintainers):
+
+```bash
+make bump-patch        # or bump-minor / bump-major; also reconciles CHANGELOG link refs
+git commit -am "release: $(cat VERSION)"   # version-bump commits land directly on master
+make tag               # cuts an annotated git tag matching VERSION
+make release           # goreleaser builds/publishes from the tag
+```
+
+Published binaries take their version from the **git tag** (`goreleaser` injects
+`-X main.BuildVersion={{ .Tag }}`). The `VERSION` file feeds local `make build`
+`--version` output and `make tag`.
+
 ## Architecture Overview
 
 Wile is an R7RS Scheme interpreter/compiler in Go with hygienic macros.
