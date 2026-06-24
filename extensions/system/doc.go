@@ -22,10 +22,8 @@
 //
 // Environment variable access (get-environment-variable,
 // get-environment-variables) lives in the envvars extension.
-//
-// # Features
-//
-//   - features: return list of implementation features
+// Implementation feature detection (features) lives in the
+// introspection extension.
 //
 // # Time
 //

@@ -22,7 +22,7 @@ import (
 
 // Extension is the system extension.
 var Extension = registry.NewDescribedExtension("system",
-	"System primitives: time, sleep, features, command line.",
+	"System primitives: command-line, exit/emergency-exit, and time (current-second, current-jiffy, jiffies-per-second).",
 	AddToRegistry)
 
 // Builder aggregates all system registration functions.
