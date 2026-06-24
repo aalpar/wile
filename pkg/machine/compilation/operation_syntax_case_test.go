@@ -231,29 +231,29 @@ func TestOperationSyntaxCaseNoMatch_Apply_IncludesInput(t *testing.T) {
 func TestNewOperationSyntaxTemplateExpand(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationSyntaxTemplateExpand()
+	op := NewOperationSyntaxTemplateExpand(nil, nil)
 	c.Assert(op, qt.IsNotNil)
 }
 
 func TestOperationSyntaxTemplateExpand_String(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationSyntaxTemplateExpand()
+	op := NewOperationSyntaxTemplateExpand(nil, nil)
 	c.Assert(op.String(), qt.Equals, "SyntaxTemplateExpand")
 }
 
 func TestOperationSyntaxTemplateExpand_SchemeString(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationSyntaxTemplateExpand()
+	op := NewOperationSyntaxTemplateExpand(nil, nil)
 	c.Assert(op.SchemeString(), qt.Equals, "#<operation:syntax-template-expand>")
 }
 
 func TestOperationSyntaxTemplateExpand_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	op1 := NewOperationSyntaxTemplateExpand()
-	op2 := NewOperationSyntaxTemplateExpand()
+	op1 := NewOperationSyntaxTemplateExpand(nil, nil)
+	op2 := NewOperationSyntaxTemplateExpand(nil, nil)
 
 	c.Assert(op1.EqualTo(op2), qt.IsTrue)
 	c.Assert(op1.EqualTo(values.NewInteger(1)), qt.IsFalse)
@@ -262,7 +262,7 @@ func TestOperationSyntaxTemplateExpand_EqualTo(t *testing.T) {
 func TestOperationSyntaxTemplateExpand_IsVoid(t *testing.T) {
 	c := qt.New(t)
 
-	op := NewOperationSyntaxTemplateExpand()
+	op := NewOperationSyntaxTemplateExpand(nil, nil)
 	c.Assert(op.IsVoid(), qt.IsFalse)
 }
 

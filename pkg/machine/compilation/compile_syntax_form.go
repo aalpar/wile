@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"github.com/aalpar/wile/pkg/internal/match"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -40,10 +41,18 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 
 	// Check if template contains ellipsis - if so, use runtime expansion
 	if templateContainsEllipsis(template) {
-		// Store template in literals and emit runtime expansion operation
+		// Compute hygiene data at compile time, mirroring CompileSyntaxRules:
+		// which template identifiers are free (resolve at the definition site)
+		// vs. pattern variables (substituted from the match). This is what makes
+		// the runtime ellipsis expansion hygienic. p.patternVars,
+		// p.patternVarSyntax, and p.libraryScope are set on the body compiler by
+		// compileSyntaxCaseClause; outside syntax-case they are nil (and a
+		// captureless (syntax ...) errors at runtime regardless).
+		freeIds := make(map[string]*FreeIdResolution)
+		collectFreeIdentifiersWithEllipsis(p.env, template, p.patternVars, freeIds, match.DefaultEllipsis, p.libraryScope)
 		litIdx := p.template.MaybeAppendLiteral(template)
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-		p.AppendOperations(NewOperationSyntaxTemplateExpand())
+		p.AppendOperations(NewOperationSyntaxTemplateExpand(freeIds, p.patternVarSyntax))
 		return nil
 	}
 
