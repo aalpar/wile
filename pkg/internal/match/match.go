@@ -376,6 +376,7 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			cs := &captureContext{
 				children: make(map[int][]*captureContext),
 				bindings: map[string]syntax.SyntaxValue{},
+				parent:   p.captureStack[lcs-1],
 			}
 			if p.captureStack[lcs-1].children == nil {
 				p.captureStack[lcs-1].children = make(map[int][]*captureContext)
@@ -539,6 +540,27 @@ func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs m
 	if p.ellipsisVars == nil {
 		return []int{0}
 	}
+
+	// Restrict selection to variables actually captured under some ellipsis ID.
+	// A lower-depth ("broadcast", R7RS §4.3.2) variable belongs to no ellipsis
+	// group; it is replicated into each iteration, not iterated over, so it must
+	// not drive which group(s) repeat. Leaving it in would fail the single-ID
+	// "all vars present" test and force a spurious cross-group zip against the
+	// iterated variable's groups.
+	sel := make(map[string]struct{}, len(vars))
+	for v := range vars {
+		for id := range p.ellipsisVars {
+			_, ok := p.ellipsisVars[id][v]
+			if ok {
+				sel[v] = struct{}{}
+				break
+			}
+		}
+	}
+	if len(sel) == 0 {
+		return nil
+	}
+	vars = sel
 
 	// Collect and sort IDs for deterministic order.
 	ids := make([]int, 0, len(p.ellipsisVars))

@@ -303,6 +303,23 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	return newSym
 }
 
+// lookupCapturedBinding resolves a pattern variable by walking the capture
+// context's ancestor chain from innermost to root. This is what lets a
+// lower-depth (e.g. depth-0) pattern variable be broadcast into a deeper
+// ellipsis sub-template (R7RS §4.3.2): the per-iteration child context holds
+// only its own ellipsis captures, while the broadcast variable lives in an
+// ancestor. Composes to arbitrary nesting depth because the chain is built
+// one link per ellipsis level during matching.
+func lookupCapturedBinding(ctx *captureContext, key string) (syntax.SyntaxValue, bool) {
+	for c := ctx; c != nil; c = c.parent {
+		v, ok := c.bindings[key]
+		if ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
 // expandSymbol handles symbol expansion for both normal and escaped template contexts.
 // It checks pattern variable bindings, scope compatibility, and applies hygiene.
 func (p *SyntaxMatcher) expandSymbol(
@@ -312,7 +329,12 @@ func (p *SyntaxMatcher) expandSymbol(
 ) (syntax.SyntaxValue, error) {
 	key := t.Key()
 
-	capturedVal, ok := ctx.bindings[key]
+	// Walk the capture-context chain: a per-iteration child context holds only
+	// the bindings captured under its own ellipsis, but a lower-depth pattern
+	// variable referenced inside the ellipsis (R7RS §4.3.2 broadcast) lives in
+	// an ancestor. Innermost binding wins; pattern variables are unique per
+	// clause, so there is no shadowing across levels.
+	capturedVal, ok := lookupCapturedBinding(ctx, key)
 	if !ok {
 		return p.applyHygieneToSymbol(t, opts), nil
 	}
@@ -492,11 +514,23 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 		merged := &captureContext{
 			bindings: make(map[string]syntax.SyntaxValue),
 			children: make(map[int][]*captureContext),
+			// Lower-depth (broadcast) variables live above the zipped groups,
+			// in the shared parent context — preserve the chain to them.
+			parent: ctx,
 		}
 		for _, id := range matchingIDs {
 			child := ctx.children[id][k]
 			maps.Copy(merged.bindings, child.bindings)
 			for cid, cchildren := range child.children {
+				// Reparent grandchildren onto merged so the tree/parent
+				// invariant (c ∈ n.children ⟹ c.parent == n) holds here too:
+				// a lookup walking up from a grandchild then sees the zipped
+				// bindings merged at this level, not only its original group's.
+				// Each grandchild belongs to exactly one (group, k) and is
+				// copied into exactly one merged context, so this never aliases.
+				for _, gc := range cchildren {
+					gc.parent = merged
+				}
 				merged.children[cid] = append(merged.children[cid], cchildren...)
 			}
 		}

@@ -73,6 +73,11 @@ type syntaxCompilerStackEntry struct {
 type captureContext struct {
 	children map[int][]*captureContext     // Key: ellipsisID
 	bindings map[string]syntax.SyntaxValue // Pattern variable bindings (syntax-native)
+	// parent is the context one ellipsis level up (nil at the root). A
+	// per-iteration child context only holds the bindings captured under its
+	// own ellipsis; lower-depth pattern variables (R7RS §4.3.2 "broadcast")
+	// live in an ancestor, so binding lookup walks this chain.
+	parent *captureContext
 }
 
 // SyntaxCommand represents a pattern bytecode instruction.

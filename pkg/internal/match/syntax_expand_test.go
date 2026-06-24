@@ -16,10 +16,12 @@ package match
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -1930,5 +1932,233 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 
 		c.Assert(len(collected), qt.Equals, 1, qt.Commentf("expected 1 outer element, got %d", len(collected)))
 		c.Assert(collected[0], qt.DeepEquals, innerResult{Sym: "list", Values: []int64{10, 20}})
+	})
+}
+
+// flattenExpanded converts an expanded syntax tree into a nested []any of
+// int64 (for integer leaves) and string (for symbol leaves) so results can be
+// compared structurally with qt.DeepEquals.
+func flattenExpanded(v syntax.SyntaxValue) any {
+	pr, ok := v.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(v) {
+		obj, isObj := v.(*syntax.SyntaxObject)
+		if isObj {
+			iv, isInt := obj.Datum().(*values.Integer)
+			if isInt {
+				return iv.Value
+			}
+			return obj.Datum()
+		}
+		sym, isSym := v.(*syntax.SyntaxSymbol)
+		if isSym {
+			return sym.Key()
+		}
+		return []any{} // empty list
+	}
+	var items []any
+	cur := syntax.SyntaxValue(pr)
+	for {
+		p, isPair := cur.(*syntax.SyntaxPair)
+		if !isPair || syntax.IsSyntaxEmptyList(cur) {
+			break
+		}
+		items = append(items, flattenExpanded(p.SyntaxCar()))
+		cur = p.SyntaxCdr()
+	}
+	return items
+}
+
+// TestSyntaxExpandDepth0Broadcast verifies that a pattern variable bound at
+// ellipsis depth 0 is replicated ("broadcast") into an ellipsis sub-template,
+// once per iteration, as required by R7RS §4.3.2 ("a subtemplate followed by
+// an ellipsis... the pattern variables it contains" — lower-depth variables
+// are replicated). This is a regression for the depth-0-inside-ellipsis bug:
+// the per-iteration capture context held only the ellipsis-captured (depth-1)
+// bindings, so a depth-0 variable referenced inside the ellipsis fell through
+// to hygiene and emitted an unbound reference. The fix walks the capture
+// context's ancestor chain, so the property must hold at arbitrary nesting
+// depth.
+func TestSyntaxExpandDepth0Broadcast(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("depth-0 var broadcast into a depth-1 ellipsis", func(c *qt.C) {
+		variables := map[string]struct{}{"x": {}, "e": {}}
+
+		// Pattern: (_ x e ...) — x is depth 0, e is depth 1.
+		pattern := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxSym("x"),
+			testSyntaxSym("e"),
+			testSyntaxSym("..."),
+		)
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ 10 1 2 3)
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxInt(10),
+			testSyntaxInt(1),
+			testSyntaxInt(2),
+			testSyntaxInt(3),
+		)
+
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{
+			EllipsisVars:   compiled.EllipsisVars,
+			EllipsisDepths: compiled.EllipsisDepths,
+		})
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: ((x e) ...) — x (depth 0) must appear in each iteration.
+		template := testSyntaxList(
+			testSyntaxList(testSyntaxSym("x"), testSyntaxSym("e")),
+			testSyntaxSym("..."),
+		)
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+
+		// Expected: ((10 1) (10 2) (10 3))
+		c.Assert(flattenExpanded(result), qt.DeepEquals, []any{
+			[]any{int64(10), int64(1)},
+			[]any{int64(10), int64(2)},
+			[]any{int64(10), int64(3)},
+		})
+	})
+
+	c.Run("depth-0 var broadcast into a depth-2 nested ellipsis", func(c *qt.C) {
+		variables := map[string]struct{}{"x": {}, "e": {}}
+
+		// Pattern: (_ x (e ...) ...) — x is depth 0, e is depth 2.
+		pattern := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxSym("x"),
+			testSyntaxList(testSyntaxSym("e"), testSyntaxSym("...")),
+			testSyntaxSym("..."),
+		)
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ 99 (1 2) (3 4 5))
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxInt(99),
+			testSyntaxList(testSyntaxInt(1), testSyntaxInt(2)),
+			testSyntaxList(testSyntaxInt(3), testSyntaxInt(4), testSyntaxInt(5)),
+		)
+
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{
+			EllipsisVars:   compiled.EllipsisVars,
+			EllipsisDepths: compiled.EllipsisDepths,
+		})
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: (((x e) ...) ...) — x (depth 0) must reach depth 2.
+		template := testSyntaxList(
+			testSyntaxList(
+				testSyntaxList(testSyntaxSym("x"), testSyntaxSym("e")),
+				testSyntaxSym("..."),
+			),
+			testSyntaxSym("..."),
+		)
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+
+		// Expected: (((99 1) (99 2)) ((99 3) (99 4) (99 5)))
+		c.Assert(flattenExpanded(result), qt.DeepEquals, []any{
+			[]any{[]any{int64(99), int64(1)}, []any{int64(99), int64(2)}},
+			[]any{[]any{int64(99), int64(3)}, []any{int64(99), int64(4)}, []any{int64(99), int64(5)}},
+		})
+	})
+
+	c.Run("depth-0 var broadcast into a cross-group zip", func(c *qt.C) {
+		// Two sibling ellipsis groups (a ...) and (b ...) are zipped in the
+		// template, which drives expandEllipsisCrossGroup; the depth-0 var x
+		// must broadcast into each zipped iteration via the merged context's
+		// parent link. This is the only path that exercises the merged-context
+		// parent wiring — single-group tests do not reach it.
+		variables := map[string]struct{}{"x": {}, "a": {}, "b": {}}
+
+		// Pattern: (_ x (a ...) (b ...))
+		pattern := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxSym("x"),
+			testSyntaxList(testSyntaxSym("a"), testSyntaxSym("...")),
+			testSyntaxList(testSyntaxSym("b"), testSyntaxSym("...")),
+		)
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ 7 (1 2) (3 4))
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxInt(7),
+			testSyntaxList(testSyntaxInt(1), testSyntaxInt(2)),
+			testSyntaxList(testSyntaxInt(3), testSyntaxInt(4)),
+		)
+
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{
+			EllipsisVars:   compiled.EllipsisVars,
+			EllipsisDepths: compiled.EllipsisDepths,
+		})
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: ((x a b) ...) — zips a with b, broadcasting x into each.
+		template := testSyntaxList(
+			testSyntaxList(testSyntaxSym("x"), testSyntaxSym("a"), testSyntaxSym("b")),
+			testSyntaxSym("..."),
+		)
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+
+		// Expected: ((7 1 3) (7 2 4))
+		c.Assert(flattenExpanded(result), qt.DeepEquals, []any{
+			[]any{int64(7), int64(1), int64(3)},
+			[]any{int64(7), int64(2), int64(4)},
+		})
+	})
+
+	c.Run("depth-0 var used with its own ellipsis is an expansion error", func(c *qt.C) {
+		// A depth-0 variable followed by `...` (here `x ...` where x is bound at
+		// depth 0) is malformed per R7RS §4.3.2 — the subtemplate has no
+		// variable of the matching ellipsis depth. The filter in
+		// findMatchingEllipsisIDs must surface this as an error, not silently
+		// drop x (which is what "constant template followed by ..." does).
+		variables := map[string]struct{}{"x": {}, "e": {}}
+
+		// Pattern: (_ x e ...)
+		pattern := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxSym("x"),
+			testSyntaxSym("e"),
+			testSyntaxSym("..."),
+		)
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ 10 1 2 3)
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxInt(10),
+			testSyntaxInt(1),
+			testSyntaxInt(2),
+			testSyntaxInt(3),
+		)
+
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{
+			EllipsisVars:   compiled.EllipsisVars,
+			EllipsisDepths: compiled.EllipsisDepths,
+		})
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: (x ...) — x is depth 0, so this is ill-formed.
+		template := testSyntaxList(testSyntaxSym("x"), testSyntaxSym("..."))
+		_, err = sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, werr.ErrExpansion), qt.IsTrue,
+			qt.Commentf("expected ErrExpansion, got %v", err))
 	})
 }
