@@ -136,9 +136,10 @@
 ;;           them left-to-right; a later clause's value cannot see an earlier
 ;;           clause's not-yet-installed binding.
 ;;   %mark — nest with-continuation-mark over the already-evaluated temporaries.
-;; The accumulator is threaded through parameterize's OWN recursion only;
-;; threading introduced temps through a SEPARATE helper macro breaks hygiene in
-;; Wile, so this stays a single self-recursive macro with phase markers.
+;; The accumulator is threaded through parameterize's own phase-marked recursion.
+;; A two-helper-macro split (one macro accumulating the temporaries, another
+;; emitting the marks) expands correctly too; this single self-recursive form
+;; just keeps the threading in one definition.
 (define-syntax parameterize
   (syntax-rules (%bind %mark)
     ((parameterize ((p v) ...) body ...)
