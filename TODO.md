@@ -35,6 +35,32 @@ Items ordered by perceived priority for the project's success as an embedding pr
 
 Items that block production embedded use or prevent silent state corruption.
 
+### Continuation multiple-values follow-ups (from PR #800 crosscheck, 2026-06-25)
+
+Deferred items surfaced while shipping the multi-value continuation re-invocation
+fix (PR #800). The continuation value-count behavior itself is documented in
+`docs/reference/r7rs-differences.md` → "Continuation Value-Count".
+
+- **`dynamic-wind` does not preserve multiple values from its thunk** (real bug,
+  PRE-EXISTING — reproduces on clean master, no `call/cc` involved):
+  `(call-with-values (lambda () (dynamic-wind (lambda () #f) (lambda () (values 3 4)) (lambda () #f))) list)`
+  errors `"expected a procedure, got 3"`. Cause: `CompileValidatedDynamicWind`
+  (`pkg/machine/compilation/compile_validated.go`) `PUSH`/`PEEK`s the thunk
+  result as a single value. Fix: make the thunk-result save/restore
+  multiple-values-aware. R7RS §6.10: `dynamic-wind` must return whatever its
+  thunk returns, including multiple values.
+- **`procedure-arity` reports continuations as `1`** (stale after PR #800 made
+  continuations variadic): `pkg/registry/core/prim_reflection.go:121`
+  (`*ComposableContinuation` case) and the docstring/comment
+  `pkg/registry/core/reflection.go:24-28`. Also no `*CapturedContinuation` case
+  (the value `call/cc` hands to Scheme), so it falls to `default → #f`.
+  Recommended value `(0 . #f)` (variadic-from-0, matching `closureArity`'s
+  no-upper-limit convention and Racket's arity-at-least-0 for continuations).
+- **(Optional, low priority)** single-value resumption contexts splice
+  multiple values instead of raising an arity error (documented as a deliberate
+  choice in unspecified R7RS territory — see r7rs-differences). Only if strict
+  Racket-style arity-mismatch behavior is later wanted; not a bug today.
+
 ### Layered-environment carve regressions (review `d8911c15..HEAD`, 2026-06-15)
 
 Findings from the `/code-review` of the sealed-base carve + immutable-top-level-default
