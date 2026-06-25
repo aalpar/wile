@@ -47,8 +47,13 @@
   (if (null? ls) identity (fold f (car ls) (cdr ls))))
 
 (define (reduce-right f identity ls)
-  "Right-associative variant of reduce. For non-empty lists,\nfolds right using F with IDENTITY as the base. Returns\nIDENTITY for the empty list.\n\nExamples:\n  (reduce-right append '() '((1 2) (3 4) (5)))  => (1 2 3 4 5)\n\nParameters:\n  f : procedure\n  identity : any\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `fold-right', `reduce'."
-  (if (null? ls) identity (fold-right f identity ls)))
+  "Right-associative variant of reduce. For non-empty lists, folds\nright using F with the LAST element as the base (so F is never\napplied to IDENTITY). IDENTITY is returned only for the empty list.\nComputes (f e1 (f e2 ... (f e_{n-1} e_n))).\n\nExamples:\n  (reduce-right append '() '((1 2) (3 4) (5)))  => (1 2 3 4 5)\n  (reduce-right list '() '(1 2 3))              => (1 (2 3))\n  (reduce-right cons '() '(1 2 3))              => (1 2 . 3)\n  (reduce-right list '() '(5))                  => 5\n  (reduce-right + 0 '())                        => 0\n\nParameters:\n  f : procedure\n  identity : any\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `fold-right', `reduce'."
+  (if (null? ls)
+      identity
+      (let recur ((head (car ls)) (tail (cdr ls)))
+        (if (pair? tail)
+            (f head (recur (car tail) (cdr tail)))
+            head))))
 
 (define (unfold p f g seed . o)
   "Build a list by iterating from SEED. P is the stop predicate,\nF maps the seed to a list element, G produces the next seed.\nWhen P returns true, the optional tail-gen argument (default '())\nis called on the final seed to produce the tail.\n(unfold null? car cdr lis) copies a list.\n\nExamples:\n  (unfold (lambda (x) (> x 5)) (lambda (x) (* x x)) (lambda (x) (+ x 1)) 1)\n    => (1 4 9 16 25)\n  (unfold null? car cdr '(a b c))  => (a b c)\n\nParameters:\n  p : procedure\n  f : procedure\n  g : procedure\n  seed : any\n  o : list\nReturns: list\nCategory: srfi-1\n\nSee also: `unfold-right', `list-tabulate'."

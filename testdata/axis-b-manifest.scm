@@ -1,7 +1,7 @@
 (("%char-set" "" () "github.com/aalpar/wile/extensions/charsets.primCharSetCtor" "extensions/charsets/charsets.go:51")
  ("%empty-char-set" "" () "github.com/aalpar/wile/extensions/charsets.primEmptyCharSet" "extensions/charsets/charsets.go:82")
  ("%make-lazy-promise" "any" ("procedure") "github.com/aalpar/wile/pkg/internal/extensions/all.PrimMakeLazyPromise" "pkg/internal/extensions/all/prim_all.go:380")
- ("%make-named-charset" "" () "github.com/aalpar/wile/extensions/charsets.primMakeNamedCharSet" "extensions/charsets/charsets.go:539")
+ ("%make-named-charset" "" () "github.com/aalpar/wile/extensions/charsets.primMakeNamedCharSet" "extensions/charsets/charsets.go:545")
  ("%parameter-convert" "any" ("procedure" "any") "github.com/aalpar/wile/pkg/registry/core.PrimParameterConvert" "pkg/registry/core/prim_parameters.go:92")
  ("%parameter-raw-set!" "void" ("procedure" "any") "github.com/aalpar/wile/pkg/registry/core.PrimParameterRawSet" "pkg/registry/core/prim_parameters.go:76")
  ("*" "number" ("...number") "github.com/aalpar/wile/pkg/registry/core.PrimMul" "pkg/registry/core/prim_arithmetic.go:50")
