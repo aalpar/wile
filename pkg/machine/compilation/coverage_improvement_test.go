@@ -189,7 +189,9 @@ func TestParseImportSetExcept(t *testing.T) {
 	qt.Assert(t, importSet, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName.String(), qt.Equals, "scheme/base")
-	qt.Assert(t, importSet.Except, qt.HasLen, 2)
+	qt.Assert(t, importSet.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, importSet.Modifiers[0].kind, qt.Equals, importModExcept)
+	qt.Assert(t, importSet.Modifiers[0].ids, qt.HasLen, 2)
 }
 
 // TestParseImportSetRename tests parsing rename import sets
@@ -209,7 +211,9 @@ func TestParseImportSetRename(t *testing.T) {
 	qt.Assert(t, importSet, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName.String(), qt.Equals, "scheme/base")
-	qt.Assert(t, importSet.Renames, qt.HasLen, 2)
+	qt.Assert(t, importSet.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, importSet.Modifiers[0].kind, qt.Equals, importModRename)
+	qt.Assert(t, importSet.Modifiers[0].renames, qt.HasLen, 2)
 }
 
 // TestParseFeatureRequirement tests parsing feature requirements

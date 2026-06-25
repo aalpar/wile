@@ -131,7 +131,7 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'only' filter
 	importSet2 := compilation.NewImportSet(name)
-	importSet2.Only = map[string]struct{}{"bindSymbolWithScopes": {}, "bar": {}}
+	importSet2.AddOnly(map[string]struct{}{"bindSymbolWithScopes": {}, "bar": {}})
 	bindings2, err := importSet2.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings2), qt.Equals, 2)
@@ -140,14 +140,14 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'except' filter
 	importSet3 := compilation.NewImportSet(name)
-	importSet3.Except = map[string]struct{}{"baz": {}}
+	importSet3.AddExcept(map[string]struct{}{"baz": {}})
 	bindings3, err := importSet3.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings3), qt.Equals, 2)
 
 	// Test 'prefix' modifier
 	importSet4 := compilation.NewImportSet(name)
-	importSet4.Prefix = "my:"
+	importSet4.AddPrefix("my:")
 	bindings4, err := importSet4.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(bindings4["my:bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
@@ -155,7 +155,7 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'rename' modifier
 	importSet5 := compilation.NewImportSet(name)
-	importSet5.Renames = map[string]string{"bindSymbolWithScopes": "renamed-bindSymbolWithScopes"}
+	importSet5.AddRename(map[string]string{"bindSymbolWithScopes": "renamed-bindSymbolWithScopes"})
 	bindings5, err := importSet5.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(bindings5["renamed-bindSymbolWithScopes"], qt.Equals, "bindSymbolWithScopes")
@@ -173,14 +173,14 @@ func TestImportSetErrors(t *testing.T) {
 
 	// Test 'only' with non-existent identifier
 	importSet := compilation.NewImportSet(name)
-	importSet.Only = map[string]struct{}{"nonexistent": {}}
+	importSet.AddOnly(map[string]struct{}{"nonexistent": {}})
 	_, err := importSet.ApplyToExports(lib)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "nonexistent")
 
 	// Test 'except' with non-existent identifier
 	importSet2 := compilation.NewImportSet(name)
-	importSet2.Except = map[string]struct{}{"nonexistent": {}}
+	importSet2.AddExcept(map[string]struct{}{"nonexistent": {}})
 	_, err2 := importSet2.ApplyToExports(lib)
 	c.Assert(err2, qt.IsNotNil)
 }
@@ -709,20 +709,19 @@ func TestLibraryNamePathConversion(t *testing.T) {
 	qt.Assert(t, strings.Contains(name1.ToFSPath(), "scheme"), qt.IsTrue)
 }
 
-// TestImportSetFields tests ImportSet fields
+// TestImportSetFields tests ImportSet construction via the modifier builders. Each
+// builder appends one ordered modifier; the modifier internals are package-private, so
+// this external test asserts the library name and the modifier count (behavioral
+// coverage of composition lives in pkg/machine/compilation and pkg/wile).
 func TestImportSetFields(t *testing.T) {
-	is := &compilation.ImportSet{
-		LibraryName: compilation.NewLibraryName("scheme", "base"),
-		Only:        map[string]struct{}{"car": {}, "cdr": {}},
-		Except:      map[string]struct{}{"cons": {}},
-		Prefix:      "my-",
-		Renames:     map[string]string{"old": "new"},
-	}
+	is := compilation.NewImportSet(compilation.NewLibraryName("scheme", "base"))
+	is.AddOnly(map[string]struct{}{"car": {}, "cdr": {}})
+	is.AddExcept(map[string]struct{}{"cons": {}})
+	is.AddPrefix("my-")
+	is.AddRename(map[string]string{"old": "new"})
+
 	qt.Assert(t, is.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, len(is.Only), qt.Equals, 2)
-	qt.Assert(t, len(is.Except), qt.Equals, 1)
-	qt.Assert(t, is.Prefix, qt.Equals, "my-")
-	qt.Assert(t, is.Renames["old"], qt.Equals, "new")
+	qt.Assert(t, is.Modifiers, qt.HasLen, 4)
 }
 
 // TestLibraryNameToFSPath tests LibraryName.ToFSPath method

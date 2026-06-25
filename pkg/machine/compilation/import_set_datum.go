@@ -87,13 +87,9 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 	if ok {
 		switch carSym.Key {
 		case "only":
-			return parseImportSetFilterFromDatum(ctx, "only", tuple, func(is *ImportSet, ids map[string]struct{}) {
-				is.Only = ids
-			})
+			return parseImportSetFilterFromDatum(ctx, "only", tuple, (*ImportSet).AddOnly)
 		case "except":
-			return parseImportSetFilterFromDatum(ctx, "except", tuple, func(is *ImportSet, ids map[string]struct{}) {
-				is.Except = ids
-			})
+			return parseImportSetFilterFromDatum(ctx, "except", tuple, (*ImportSet).AddExcept)
 		case "prefix":
 			return parseImportSetPrefixFromDatum(ctx, tuple)
 		case "rename":
@@ -153,7 +149,7 @@ func parseImportSetPrefixFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 	if err != nil {
 		return nil, err
 	}
-	importSet.Prefix = prefixSym.Key
+	importSet.AddPrefix(prefixSym.Key)
 	return importSet, nil
 }
 
@@ -175,6 +171,7 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "rename: expected list of rename pairs")
 	}
 
+	renames := make(map[string]string)
 	err = values.ForEachProperList(ctx, renamesTuple, "rename", func(_ context.Context, _ int, _ bool, renamePairVal values.Value) error {
 		oldSym, newRest, err := values.UnconsTyped[*values.Symbol](renamePairVal, werr.ErrNotASymbol, "rename", "old name")
 		if err != nil {
@@ -184,11 +181,15 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 		if err != nil {
 			return err
 		}
-		importSet.Renames[oldSym.Key] = newSym.Key
+		renames[oldSym.Key] = newSym.Key
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return importSet, err
+	importSet.AddRename(renames)
+	return importSet, nil
 }
 
 // parseImportSetPhaseShiftFromDatum parses (<keyword> <import-set>) and adds

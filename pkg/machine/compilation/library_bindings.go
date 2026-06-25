@@ -98,83 +98,151 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 //   - (import (for-meta -1 (scheme base)))      ; Phase -1 (same as for-template)
 //
 // Phase shifts compose additively: (for-syntax (for-syntax lib)) = phase +2
+//
+// Modifiers preserves the written nesting order of only/except/prefix/rename so
+// ApplyToExports can fold them INSIDE-OUT, as R7RS §5.6 requires. The innermost
+// (textually deepest) modifier is Modifiers[0]; each later modifier operates on the
+// output of the one before it. A flat representation (separate Only/Except/Prefix/
+// Renames fields) cannot express this — it both loses the ordering between different
+// modifier kinds and silently overwrites a repeated kind, so e.g.
+// (prefix (prefix LIB a-) b-) would bind b-car instead of b-a-car.
 type ImportSet struct {
-	LibraryName LibraryName         // Base library to import from
-	Only        map[string]struct{} // If non-nil, only import these names
-	Except      map[string]struct{} // If non-nil, import all except these
-	Prefix      string              // If non-empty, add this prefix to all names
-	Renames     map[string]string   // old-name -> new-name
-	PhaseShift  environment.Phase   // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
+	LibraryName LibraryName       // Base library to import from
+	Modifiers   []importModifier  // only/except/prefix/rename, innermost first
+	PhaseShift  environment.Phase // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
 }
 
-// NewImportSet creates a new import set for a library.
+// importModifierKind discriminates the four R7RS import-set modifier forms.
+type importModifierKind int
+
+const (
+	importModOnly importModifierKind = iota
+	importModExcept
+	importModRename
+	importModPrefix
+)
+
+// importModifier is a single only/except/prefix/rename step. Only the field for its
+// kind is populated.
+type importModifier struct {
+	kind    importModifierKind
+	ids     map[string]struct{} // only / except
+	prefix  string              // prefix
+	renames map[string]string   // rename: old-name -> new-name
+}
+
+// NewImportSet creates a new import set for a library, with no modifiers.
 func NewImportSet(name LibraryName) *ImportSet {
 	return &ImportSet{
 		LibraryName: name,
-		Renames:     make(map[string]string),
 	}
 }
 
-// ApplyToExports applies the import modifiers and returns the final bindings.
-// Returns a map of local-name -> external-name (the name in the library).
+// AddOnly appends an `only` modifier restricting the import to ids. An empty/nil ids
+// set is a no-op (matches the historical flat-field behavior where a nil Only meant
+// "no filter"); callers wanting the empty-import semantics omit such a call.
+func (p *ImportSet) AddOnly(ids map[string]struct{}) {
+	if len(ids) == 0 {
+		return
+	}
+	p.Modifiers = append(p.Modifiers, importModifier{kind: importModOnly, ids: ids})
+}
+
+// AddExcept appends an `except` modifier removing ids from the import. Empty/nil is a
+// no-op.
+func (p *ImportSet) AddExcept(ids map[string]struct{}) {
+	if len(ids) == 0 {
+		return
+	}
+	p.Modifiers = append(p.Modifiers, importModifier{kind: importModExcept, ids: ids})
+}
+
+// AddPrefix appends a `prefix` modifier prepending prefix to every imported name. An
+// empty prefix is a no-op.
+func (p *ImportSet) AddPrefix(prefix string) {
+	if prefix == "" {
+		return
+	}
+	p.Modifiers = append(p.Modifiers, importModifier{kind: importModPrefix, prefix: prefix})
+}
+
+// AddRename appends a `rename` modifier mapping old names to new names. Empty/nil is a
+// no-op.
+func (p *ImportSet) AddRename(renames map[string]string) {
+	if len(renames) == 0 {
+		return
+	}
+	p.Modifiers = append(p.Modifiers, importModifier{kind: importModRename, renames: renames})
+}
+
+// ApplyToExports applies the import modifiers inside-out and returns the final
+// bindings as a map of local-name -> external-name (the name in the library).
 func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, error) {
 	result := make(map[string]string)
 
-	// Start with all exports
+	// Start with all exports.
 	for externalName := range lib.Exports {
 		result[externalName] = externalName
 	}
 
-	// Apply 'only' filter
-	if p.Only != nil {
-		filtered := make(map[string]string)
-		for name := range p.Only {
-			_, ok := result[name]
-			if !ok {
-				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
-					name, lib.Name.SchemeString())
-			}
-			filtered[name] = name
+	// Fold modifiers in written nesting order (innermost first); each step sees the
+	// output local names of the previous step, e.g. an `only` after a `prefix`
+	// matches against the already-prefixed names.
+	for i := range p.Modifiers {
+		next, err := p.Modifiers[i].apply(result, lib)
+		if err != nil {
+			return nil, err
 		}
-		result = filtered
+		result = next
 	}
 
-	// Apply 'except' filter
-	if p.Except != nil {
-		for name := range p.Except {
+	return result, nil
+}
+
+// apply transforms a local-name -> external-name map by one import modifier.
+func (m *importModifier) apply(result map[string]string, lib *CompiledLibrary) (map[string]string, error) {
+	switch m.kind {
+	case importModOnly:
+		filtered := make(map[string]string)
+		for name := range m.ids {
+			externalName, ok := result[name]
+			if !ok {
+				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
+					"applyToExports: identifier %q not exported by %s", name, lib.Name.SchemeString())
+			}
+			filtered[name] = externalName
+		}
+		return filtered, nil
+	case importModExcept:
+		for name := range m.ids {
 			_, ok := result[name]
 			if !ok {
-				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
-					name, lib.Name.SchemeString())
+				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
+					"applyToExports: identifier %q not exported by %s", name, lib.Name.SchemeString())
 			}
 			delete(result, name)
 		}
-	}
-
-	// Apply renames
-	if len(p.Renames) > 0 {
+		return result, nil
+	case importModRename:
 		renamed := make(map[string]string)
 		for localName, externalName := range result {
-			newName, ok := p.Renames[localName]
+			newName, ok := m.renames[localName]
 			if ok {
 				renamed[newName] = externalName
 			} else {
 				renamed[localName] = externalName
 			}
 		}
-		result = renamed
-	}
-
-	// Apply prefix
-	if p.Prefix != "" {
+		return renamed, nil
+	case importModPrefix:
 		prefixed := make(map[string]string)
 		for localName, externalName := range result {
-			prefixed[p.Prefix+localName] = externalName
+			prefixed[m.prefix+localName] = externalName
 		}
-		result = prefixed
+		return prefixed, nil
 	}
-
-	return result, nil
+	return nil, werr.WrapForeignErrorf(werr.ErrInternal,
+		"applyToExports: unknown import modifier kind %d", int(m.kind))
 }
 
 // CopyLibraryBindingsToEnv copies exported bindings from a library to an environment.

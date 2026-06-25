@@ -115,10 +115,7 @@ func TestParseImportSetFromDatum_Simple(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Only, qt.IsNil)
-	qt.Assert(t, result.Except, qt.IsNil)
-	qt.Assert(t, result.Prefix, qt.Equals, "")
-	qt.Assert(t, result.Renames, qt.HasLen, 0)
+	qt.Assert(t, result.Modifiers, qt.HasLen, 0)
 }
 
 func TestParseImportSetFromDatum_Only(t *testing.T) {
@@ -140,7 +137,9 @@ func TestParseImportSetFromDatum_Only(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
+	qt.Assert(t, result.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModOnly)
+	qt.Assert(t, result.Modifiers[0].ids, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 
 func TestParseImportSetFromDatum_Except(t *testing.T) {
@@ -162,7 +161,9 @@ func TestParseImportSetFromDatum_Except(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Except, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
+	qt.Assert(t, result.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModExcept)
+	qt.Assert(t, result.Modifiers[0].ids, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 
 func TestParseImportSetFromDatum_Prefix(t *testing.T) {
@@ -181,7 +182,9 @@ func TestParseImportSetFromDatum_Prefix(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Prefix, qt.Equals, "scheme:")
+	qt.Assert(t, result.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModPrefix)
+	qt.Assert(t, result.Modifiers[0].prefix, qt.Equals, "scheme:")
 }
 
 func TestParseImportSetFromDatum_Rename(t *testing.T) {
@@ -212,8 +215,10 @@ func TestParseImportSetFromDatum_Rename(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Renames["car"], qt.Equals, "first")
-	qt.Assert(t, result.Renames["cdr"], qt.Equals, "rest")
+	qt.Assert(t, result.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModRename)
+	qt.Assert(t, result.Modifiers[0].renames["car"], qt.Equals, "first")
+	qt.Assert(t, result.Modifiers[0].renames["cdr"], qt.Equals, "rest")
 }
 
 func TestParseImportSetFromDatum_Nested(t *testing.T) {
@@ -241,8 +246,16 @@ func TestParseImportSetFromDatum_Nested(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
-	qt.Assert(t, result.Prefix, qt.Equals, "scheme:")
+	// Nested modifiers are preserved as an ordered, innermost-first list — NOT
+	// flattened onto one struct. (prefix (only … car cdr) scheme:) ⇒ [only, prefix],
+	// which ApplyToExports folds inside-out (filter to {car,cdr}, then prefix). The
+	// old flat representation collapsed this to Only={car,cdr}+Prefix=scheme:, losing
+	// the ordering between different modifier kinds (libraries-plan Task 5A / 7D).
+	qt.Assert(t, result.Modifiers, qt.HasLen, 2)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModOnly)
+	qt.Assert(t, result.Modifiers[0].ids, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
+	qt.Assert(t, result.Modifiers[1].kind, qt.Equals, importModPrefix)
+	qt.Assert(t, result.Modifiers[1].prefix, qt.Equals, "scheme:")
 }
 
 func TestParseImportSetFromDatum_OnlyEmpty(t *testing.T) {
@@ -261,7 +274,8 @@ func TestParseImportSetFromDatum_OnlyEmpty(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Only, qt.IsNil)
+	// An empty `only` adds no modifier (preserves the historical "no filter" behavior).
+	qt.Assert(t, result.Modifiers, qt.HasLen, 0)
 }
 
 func TestParseImportSetFromDatum_RenameEmpty(t *testing.T) {
@@ -280,7 +294,8 @@ func TestParseImportSetFromDatum_RenameEmpty(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Renames, qt.HasLen, 0)
+	// An empty `rename` adds no modifier.
+	qt.Assert(t, result.Modifiers, qt.HasLen, 0)
 }
 
 func TestParseImportSetFromDatum_NotAPair(t *testing.T) {
@@ -577,7 +592,9 @@ func TestParseImportSetFromDatum_ForSyntaxWithOnly(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(1))
-	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
+	qt.Assert(t, result.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModOnly)
+	qt.Assert(t, result.Modifiers[0].ids, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 
 func TestParseImportSetFromDatum_ForSyntax_InvalidFormat(t *testing.T) {

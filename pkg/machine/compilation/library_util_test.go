@@ -55,11 +55,7 @@ func TestImportSet_NewImportSet(t *testing.T) {
 	importSet := NewImportSet(name)
 
 	qt.Assert(t, importSet.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, importSet.Only, qt.IsNil)
-	qt.Assert(t, importSet.Except, qt.IsNil)
-	qt.Assert(t, importSet.Prefix, qt.Equals, "")
-	qt.Assert(t, importSet.Renames, qt.IsNotNil)
-	qt.Assert(t, len(importSet.Renames), qt.Equals, 0)
+	qt.Assert(t, importSet.Modifiers, qt.HasLen, 0)
 }
 
 func TestCompiledLibrary_NewCompiledLibrary(t *testing.T) {

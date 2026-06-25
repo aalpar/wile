@@ -116,6 +116,44 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 		return keys
 	}
 
+	// build constructs an import set on the test library by applying the modifier
+	// builders in order (innermost first), matching how the parser unwinds nesting.
+	build := func(mods ...func(*ImportSet)) *ImportSet {
+		is := NewImportSet(lib.Name)
+		for _, m := range mods {
+			m(is)
+		}
+		return is
+	}
+	only := func(ids ...string) func(*ImportSet) {
+		return func(is *ImportSet) {
+			set := make(map[string]struct{}, len(ids))
+			for _, id := range ids {
+				set[id] = struct{}{}
+			}
+			is.AddOnly(set)
+		}
+	}
+	except := func(ids ...string) func(*ImportSet) {
+		return func(is *ImportSet) {
+			set := make(map[string]struct{}, len(ids))
+			for _, id := range ids {
+				set[id] = struct{}{}
+			}
+			is.AddExcept(set)
+		}
+	}
+	prefix := func(p string) func(*ImportSet) {
+		return func(is *ImportSet) {
+			is.AddPrefix(p)
+		}
+	}
+	rename := func(old, neu string) func(*ImportSet) {
+		return func(is *ImportSet) {
+			is.AddRename(map[string]string{old: neu})
+		}
+	}
+
 	testCases := []struct {
 		name      string
 		importSet *ImportSet
@@ -124,50 +162,70 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	}{
 		{
 			name:      "no modifiers exports all",
-			importSet: &ImportSet{},
+			importSet: build(),
 			wantKeys:  []string{"alpha", "beta", "gamma"},
 		},
 		{
-			name: "only alpha",
-			importSet: &ImportSet{
-				Only: map[string]struct{}{"alpha": {}},
-			},
-			wantKeys: []string{"alpha"},
+			name:      "only alpha",
+			importSet: build(only("alpha")),
+			wantKeys:  []string{"alpha"},
 		},
 		{
-			name: "except gamma",
-			importSet: &ImportSet{
-				Except: map[string]struct{}{"gamma": {}},
-			},
-			wantKeys: []string{"alpha", "beta"},
+			name:      "except gamma",
+			importSet: build(except("gamma")),
+			wantKeys:  []string{"alpha", "beta"},
 		},
 		{
-			name: "prefix t:",
-			importSet: &ImportSet{
-				Prefix: "t:",
-			},
-			wantKeys: []string{"t:alpha", "t:beta", "t:gamma"},
+			name:      "prefix t:",
+			importSet: build(prefix("t:")),
+			wantKeys:  []string{"t:alpha", "t:beta", "t:gamma"},
 		},
 		{
-			name: "rename alpha to a",
-			importSet: &ImportSet{
-				Renames: map[string]string{"alpha": "a"},
-			},
-			wantKeys: []string{"a", "beta", "gamma"},
+			name:      "rename alpha to a",
+			importSet: build(rename("alpha", "a")),
+			wantKeys:  []string{"a", "beta", "gamma"},
 		},
 		{
-			name: "only nonexistent errors",
-			importSet: &ImportSet{
-				Only: map[string]struct{}{"nonexistent": {}},
-			},
-			wantErr: true,
+			name:      "only nonexistent errors",
+			importSet: build(only("nonexistent")),
+			wantErr:   true,
 		},
 		{
-			name: "except nonexistent errors",
-			importSet: &ImportSet{
-				Except: map[string]struct{}{"nonexistent": {}},
-			},
-			wantErr: true,
+			name:      "except nonexistent errors",
+			importSet: build(except("nonexistent")),
+			wantErr:   true,
+		},
+		{
+			// (only (prefix LIB t:) t:alpha): prefix first, then only matches the
+			// prefixed name — the inside-out fold (libraries-plan Task 5A / 7D).
+			name:      "only of prefix matches prefixed name",
+			importSet: build(prefix("t:"), only("t:alpha")),
+			wantKeys:  []string{"t:alpha"},
+		},
+		{
+			// (prefix (prefix LIB a-) b-): both prefixes compose, not overwrite.
+			name:      "prefix of prefix composes",
+			importSet: build(prefix("a-"), prefix("b-")),
+			wantKeys:  []string{"b-a-alpha", "b-a-beta", "b-a-gamma"},
+		},
+		{
+			// (rename (prefix LIB t:) (t:alpha aa)): rename sees the prefixed name.
+			name:      "rename of prefix renames prefixed name",
+			importSet: build(prefix("t:"), rename("t:alpha", "aa")),
+			wantKeys:  []string{"aa", "t:beta", "t:gamma"},
+		},
+		{
+			// (only (only LIB alpha) beta): inner restricts to {alpha}; outer cannot
+			// reach beta ⇒ error, not last-writer-wins.
+			name:      "only of only outside inner errors",
+			importSet: build(only("alpha"), only("beta")),
+			wantErr:   true,
+		},
+		{
+			// (only (except (only LIB alpha beta) beta) alpha): chained filters fold.
+			name:      "only except only chain",
+			importSet: build(only("alpha", "beta"), except("beta"), only("alpha")),
+			wantKeys:  []string{"alpha"},
 		},
 	}
 
