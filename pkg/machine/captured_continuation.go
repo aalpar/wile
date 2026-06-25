@@ -104,8 +104,24 @@ func (p *MachineContext) applyCapturedContinuation(
 	val := args[0]
 	cc := capt.cc
 
+	// Bound the Go-stack nesting of continuation re-invocation. Restoring the
+	// captured chain runs it in a fresh sub-context whose Run() frame stays live
+	// until that chain completes; a continuation that re-invokes itself without
+	// converging (a call/cc loop) would nest Go frames until the runtime aborts
+	// the process with a stack overflow, bypassing the eval-stack maxCallDepth
+	// gate in SaveContinuation (each restored chain resets to the captured,
+	// shallow callDepth). Treat the nesting like ordinary recursion depth and
+	// surface a catchable error at the same bound.
+	depth := p.contInvokeDepth + 1
+	if p.maxCallDepth > 0 && depth > p.maxCallDepth {
+		return p, werr.WrapForeignErrorf(werr.ErrCallDepthExceeded,
+			"call/cc: continuation re-invocation depth %d exceeds limit %d",
+			depth, p.maxCallDepth)
+	}
+
 	sub := p.NewSubContext()
 	defer ReleaseSubContext(sub)
+	sub.contInvokeDepth = depth
 	// The composable continuation installs its own continuation chain via
 	// Restore, replacing whatever marks this sub-context might inherit.
 	// Prevent the parent's stale marks from bleeding through findParameterInMarks.

@@ -2,12 +2,60 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
+
+// TestRunawayContinuationIsBounded verifies that re-invoking a captured
+// continuation in a non-converging loop surfaces a catchable
+// ErrCallDepthExceeded rather than overflowing the Go stack and aborting the
+// host process (C2). The continuation re-invocation nests a sub-context Run()
+// frame per iteration, bypassing SaveContinuation's eval-stack depth gate, so
+// applyCapturedContinuation enforces the same maxCallDepth bound on nesting.
+func TestRunawayContinuationIsBounded(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	// Classic non-tail call/cc loop that never converges: each (k 0) re-enters
+	// at the pending (+ 1 _) and immediately re-invokes k.
+	src := `(let ((n 0) (k #f))
+	          (+ 1 (call/cc (lambda (c) (set! k c) 0)))
+	          (set! n (+ n 1))
+	          (if (< n 100000000) (k 0) n))`
+	_, err = eng.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNotNil)
+	if !errors.Is(err, werr.ErrCallDepthExceeded) {
+		t.Fatalf("want ErrCallDepthExceeded, got %v", err)
+	}
+}
+
+// TestContinuationLoopBoundedConverges is the no-false-positive companion to
+// TestRunawayContinuationIsBounded: the same call/cc loop with a bound well
+// under maxCallDepth must complete and return its value, confirming the depth
+// guard does not reject legitimate (if unusual) bounded continuation loops.
+func TestContinuationLoopBoundedConverges(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	src := `(let ((n 0) (k #f))
+	          (call/cc (lambda (c) (set! k c)))
+	          (set! n (+ n 1))
+	          (if (< n 100) (k #f) n))`
+	result, err := eng.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "100")
+}
 
 func TestCallCC_Procedure(t *testing.T) {
 	c := qt.New(t)

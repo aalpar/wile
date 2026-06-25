@@ -79,11 +79,19 @@ type MachineContext struct {
 	// The numeric half (threadID) lives in vmState and propagates into
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
-	thread        *values.Thread
-	maxCallDepth  int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
-	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
-	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
-	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
+	thread       *values.Thread
+	maxCallDepth int    // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
+	maxStackSize uint64 // 0 = unlimited (default), otherwise max eval stack entries
+	// contInvokeDepth counts nested captured-continuation re-invocations. Each
+	// re-invocation runs the restored chain in a fresh sub-context whose Run()
+	// frame stays live on the Go stack until that chain completes; a continuation
+	// that re-invokes itself without converging (a call/cc loop) nests Go frames
+	// without bound. The counter propagates through NewSubContext and is checked
+	// against maxCallDepth in applyCapturedContinuation so the pathology surfaces
+	// as a catchable ErrCallDepthExceeded instead of a Go stack-overflow fatal.
+	contInvokeDepth int
+	restArgBuf      values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
+	isolatedMarks   bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 
 	// reconfigured is set by Apply when it repoints the VM (template/env/pc) to
 	// execute a closure in place. The foreign-call dispatchers (applyForeign,
