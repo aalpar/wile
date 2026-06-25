@@ -274,8 +274,12 @@ func TestParseImportSetFromDatum_OnlyEmpty(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	// An empty `only` adds no modifier (preserves the historical "no filter" behavior).
-	qt.Assert(t, result.Modifiers, qt.HasLen, 0)
+	// (only LIB) with zero identifiers installs an `only` modifier selecting nothing —
+	// R7RS §5.6 reads <identifier> … as zero-or-more, so the empty subset imports
+	// nothing (NOT "no filter / import everything").
+	qt.Assert(t, result.Modifiers, qt.HasLen, 1)
+	qt.Assert(t, result.Modifiers[0].kind, qt.Equals, importModOnly)
+	qt.Assert(t, result.Modifiers[0].ids, qt.HasLen, 0)
 }
 
 func TestParseImportSetFromDatum_RenameEmpty(t *testing.T) {

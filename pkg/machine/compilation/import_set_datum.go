@@ -112,8 +112,8 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 }
 
 // parseImportSetFilterFromDatum parses (<keyword> <import-set> <id> ...) where
-// the keyword is "only" or "except". The apply callback sets the parsed
-// identifier list on the appropriate ImportSet field.
+// the keyword is "only" or "except". The apply callback (AddOnly or AddExcept)
+// appends the corresponding modifier carrying the parsed identifier list.
 func parseImportSetFilterFromDatum(
 	ctx context.Context, keyword string, tuple values.Tuple,
 	apply func(*ImportSet, map[string]struct{}),

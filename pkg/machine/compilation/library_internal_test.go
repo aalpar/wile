@@ -159,11 +159,29 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 		importSet *ImportSet
 		wantKeys  []string
 		wantErr   bool
+		// wantErrIs, when set, is the sentinel the error must match; defaults to
+		// ErrUnexportedIdentifier (the only/except not-exported case).
+		wantErrIs error
 	}{
 		{
 			name:      "no modifiers exports all",
 			importSet: build(),
 			wantKeys:  []string{"alpha", "beta", "gamma"},
+		},
+		{
+			// (only LIB) with zero identifiers selects the empty subset ⇒ import nothing
+			// (R7RS §5.6: <identifier> … is zero-or-more).
+			name:      "only with no identifiers imports nothing",
+			importSet: build(only()),
+			wantKeys:  []string{},
+		},
+		{
+			// (rename LIB (alpha beta)): alpha→beta collides with the pass-through beta;
+			// two different exports under one name ⇒ error, not a silent map-order drop.
+			name:      "rename target collides with passthrough errors",
+			importSet: build(rename("alpha", "beta")),
+			wantErr:   true,
+			wantErrIs: werr.ErrDuplicateBinding,
 		},
 		{
 			name:      "only alpha",
@@ -234,7 +252,11 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 			result, err := tc.importSet.ApplyToExports(lib)
 			if tc.wantErr {
 				qt.Assert(t, err, qt.IsNotNil)
-				qt.Assert(t, errors.Is(err, werr.ErrUnexportedIdentifier), qt.IsTrue)
+				wantSentinel := tc.wantErrIs
+				if wantSentinel == nil {
+					wantSentinel = werr.ErrUnexportedIdentifier
+				}
+				qt.Assert(t, errors.Is(err, wantSentinel), qt.IsTrue)
 				return
 			}
 			qt.Assert(t, err, qt.IsNil)

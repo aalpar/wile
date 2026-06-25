@@ -113,6 +113,13 @@ type ImportSet struct {
 }
 
 // importModifierKind discriminates the four R7RS import-set modifier forms.
+//
+// ADDING A NEW IMPORT MODIFIER requires updates in these locations:
+//   - this iota block (the kind constant)
+//   - the importModifier struct (a field for the modifier's payload, if any)
+//   - an Add* builder method on *ImportSet
+//   - the parser dispatch in ParseImportSetFromDatum (import_set_datum.go)
+//   - the switch in (*importModifier).apply
 type importModifierKind int
 
 const (
@@ -139,12 +146,11 @@ func NewImportSet(name LibraryName) *ImportSet {
 }
 
 // AddOnly appends an `only` modifier restricting the import to ids. An empty/nil ids
-// set is a no-op (matches the historical flat-field behavior where a nil Only meant
-// "no filter"); callers wanting the empty-import semantics omit such a call.
+// set installs a modifier that imports NOTHING: R7RS §5.6 grammar is
+// (only <import-set> <identifier> …) with zero-or-more identifiers, so (only LIB)
+// with no identifiers denotes the empty subset. AddOnly is called exactly once per
+// syntactic `only` form, so the empty case is a real "import nothing", not "no filter".
 func (p *ImportSet) AddOnly(ids map[string]struct{}) {
-	if len(ids) == 0 {
-		return
-	}
 	p.Modifiers = append(p.Modifiers, importModifier{kind: importModOnly, ids: ids})
 }
 
@@ -200,11 +206,11 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 }
 
 // apply transforms a local-name -> external-name map by one import modifier.
-func (m *importModifier) apply(result map[string]string, lib *CompiledLibrary) (map[string]string, error) {
-	switch m.kind {
+func (p *importModifier) apply(result map[string]string, lib *CompiledLibrary) (map[string]string, error) {
+	switch p.kind {
 	case importModOnly:
 		filtered := make(map[string]string)
-		for name := range m.ids {
+		for name := range p.ids {
 			externalName, ok := result[name]
 			if !ok {
 				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
@@ -214,7 +220,7 @@ func (m *importModifier) apply(result map[string]string, lib *CompiledLibrary) (
 		}
 		return filtered, nil
 	case importModExcept:
-		for name := range m.ids {
+		for name := range p.ids {
 			_, ok := result[name]
 			if !ok {
 				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
@@ -226,23 +232,32 @@ func (m *importModifier) apply(result map[string]string, lib *CompiledLibrary) (
 	case importModRename:
 		renamed := make(map[string]string)
 		for localName, externalName := range result {
-			newName, ok := m.renames[localName]
-			if ok {
-				renamed[newName] = externalName
-			} else {
-				renamed[localName] = externalName
+			newName, ok := p.renames[localName]
+			if !ok {
+				newName = localName
 			}
+			// Two source names collapsing to one target (e.g. (rename LIB (car kar)
+			// (cdr kar)), or a rename target shadowing a pass-through name) would bind
+			// one name to two different exports. R7RS §5.6 forbids importing a name with
+			// two different bindings; reject rather than silently drop one by map order.
+			existing, dup := renamed[newName]
+			if dup && existing != externalName {
+				return nil, werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+					"applyToExports: rename binds %q to two different exports (%q and %q) in %s",
+					newName, existing, externalName, lib.Name.SchemeString())
+			}
+			renamed[newName] = externalName
 		}
 		return renamed, nil
 	case importModPrefix:
 		prefixed := make(map[string]string)
 		for localName, externalName := range result {
-			prefixed[m.prefix+localName] = externalName
+			prefixed[p.prefix+localName] = externalName
 		}
 		return prefixed, nil
 	}
 	return nil, werr.WrapForeignErrorf(werr.ErrInternal,
-		"applyToExports: unknown import modifier kind %d", int(m.kind))
+		"applyToExports: unknown import modifier kind %d", int(p.kind))
 }
 
 // CopyLibraryBindingsToEnv copies exported bindings from a library to an environment.

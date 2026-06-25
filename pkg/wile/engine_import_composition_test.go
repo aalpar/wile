@@ -82,6 +82,15 @@ func TestImportSetCompositionOrder(t *testing.T) {
 			program: `(import (only (except (only (scheme base) car cdr) cdr) car)) (car '(1 2 3))`,
 			want:    "1",
 		},
+		{
+			// (rename LIB (car kar) (cdr kar)): two exports collapse to one name ⇒ error.
+			// (Empty-only's "import nothing" is verified at the binding-map level in
+			// pkg/machine/compilation; KitchenSink binds core primitives ambiently, so it
+			// is not observable through an engine-level reference to car.)
+			name:    "rename-collision-errors",
+			program: `(import (rename (scheme base) (car kar) (cdr kar)))`,
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range testCases {
