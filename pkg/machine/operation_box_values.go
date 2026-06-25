@@ -15,9 +15,13 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+var _ values.Value = boxedValuesType{}
 
 // boxedValuesType is an internal carrier that collapses the whole value register
 // (zero, one, or several values) into a SINGLE values.Value so it can be saved
@@ -37,7 +41,7 @@ func (boxedValuesType) IsVoid() bool {
 	return false
 }
 
-func (p boxedValuesType) EqualTo(o values.Value) bool {
+func (boxedValuesType) EqualTo(o values.Value) bool {
 	_, ok := o.(boxedValuesType)
 	return ok
 }
@@ -50,7 +54,9 @@ func (p boxedValuesType) EqualTo(o values.Value) bool {
 // OperationUnboxValues.
 //
 // Pre:  value register = v1 … vN
-// Post: value register = #<boxed-values v1 … vN>, pc++
+// Post: value register = a boxed-values carrier holding v1 … vN, pc++
+//
+//	(the carrier prints as #<boxed-values>; it never escapes to Scheme)
 type OperationBoxValues struct {
 	OperationBase
 }
@@ -85,7 +91,7 @@ func (p *OperationBoxValues) EqualTo(o values.Value) bool {
 // A preceding OpPeekK loads the carrier into the value register; this op replaces
 // it with the boxed values.
 //
-// Pre:  value register = #<boxed-values v1 … vN>
+// Pre:  value register = a boxed-values carrier holding v1 … vN
 // Post: value register = v1 … vN, pc++
 type OperationUnboxValues struct {
 	OperationBase
@@ -106,7 +112,12 @@ func (*OperationUnboxValues) Apply(mc *MachineContext) (*MachineContext, error) 
 			"unbox-values: value register does not hold a boxed-values carrier")
 		return mc, err
 	}
-	mc.SetValues(boxed.vals...)
+	// Clone on the way out: SetValues stores the slice by reference for N>1
+	// (vm_state.go), so without this the value register would alias the box's
+	// private backing array — and the same box may be unboxed again on
+	// continuation re-entry. Symmetric with the defensive copy in
+	// OperationBoxValues; cheap (dynamic-wind exit path only).
+	mc.SetValues(slices.Clone(boxed.vals)...)
 	mc.pc++
 	return mc, nil
 }
