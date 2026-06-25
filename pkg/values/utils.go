@@ -57,18 +57,36 @@ func formatIndexable(prefix string, length int, get func(int) Value, visited map
 // cross-collection cycles (vector→pair→vector and the like) are detected
 // exactly once. Non-compound elements render via SchemeString; void and nil
 // pointers render as "#<void>".
+//
+// The visited set is keyed on pointer-identity Value types only (*Pair and
+// *Vector — the only types inserted). Never insert a value-equality or
+// non-comparable Value: the former would alias distinct nodes to one slot
+// (false cycles), the latter would panic on map insertion.
+//
+// A nil visited set means "no cycle tracking requested" — used by callers
+// whose elements can never be compound (e.g. ByteVector, whose elements are
+// bytes). Should a compound child be encountered anyway, a fresh set is
+// allocated lazily for that subtree, so a nil set can never cause a nil-map
+// write. This keeps the nil contract a safe "no tracking" rather than an
+// unchecked "I promise no compound children" caller obligation.
 func schemeStringChild(child Value, visited map[Value]bool) string {
 	switch c := child.(type) {
 	case *Pair:
-		if c != nil {
-			return c.schemeStringWithVisited(visited)
+		if c == nil {
+			return "#<void>"
 		}
-		return "#<void>"
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited)
 	case *Vector:
-		if c != nil {
-			return c.schemeStringWithVisited(visited)
+		if c == nil {
+			return "#<void>"
 		}
-		return "#<void>"
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited)
 	}
 	if IsVoid(child) {
 		return "#<void>"

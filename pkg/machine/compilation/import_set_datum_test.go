@@ -44,11 +44,18 @@ func TestParseLibraryNameFromDatum(t *testing.T) {
 // can never reach the OS resolver and escape the search root (S1).
 func TestParseLibraryNameRejectsTraversal(t *testing.T) {
 	for _, part := range []string{"..", ".", "", "a/b", "a\\b"} {
-		datum := values.List(values.NewSymbol(part), values.NewSymbol("foo"))
-		_, err := ParseLibraryNameFromDatum(context.Background(), datum)
-		if !errors.Is(err, werr.ErrInvalidArgument) {
-			t.Fatalf("part %q: want ErrInvalidArgument, got %v", part, err)
-		}
+		// Leading position.
+		first := values.List(values.NewSymbol(part), values.NewSymbol("foo"))
+		_, err := ParseLibraryNameFromDatum(context.Background(), first)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+			qt.Commentf("part %q in leading position", part))
+
+		// Non-leading position: the guard runs on every part, so a bad part
+		// anywhere must be rejected (mirrors the (.. .. foo) threat shape).
+		second := values.List(values.NewSymbol("foo"), values.NewSymbol(part))
+		_, err = ParseLibraryNameFromDatum(context.Background(), second)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+			qt.Commentf("part %q in non-leading position", part))
 	}
 }
 

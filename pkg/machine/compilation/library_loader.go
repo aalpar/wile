@@ -62,15 +62,24 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	// StartLoading sequence into one locked decision so two threads cannot both
 	// see "not loaded" and proceed to load+Register the same library (a TOCTOU
 	// that would otherwise surface as ErrDuplicateBinding). See LookupOrClaim.
-	cached, _, err := reg.LookupOrClaim(name)
+	cached, claimed, err := reg.LookupOrClaim(name)
 	if err != nil {
 		return nil, err
 	}
 	if cached != nil {
 		return cached, nil
 	}
-	// cached == nil and err == nil ⇒ we claimed the loading slot; release it on
-	// every exit path.
+	if !claimed {
+		// Defensive: today (cached==nil, err==nil) ⇒ claimed==true. Branch on the
+		// bool LookupOrClaim returns rather than reconstructing the decision, so a
+		// future "proceed but unclaimed" state (e.g. the TODO(1C-b) per-name latch)
+		// fails loudly here instead of silently running FinishLoading on a slot we
+		// never owned — which would delete another loader's loading mark.
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"load-library: %s: registry returned neither a cached library nor a loading claim",
+			name.SchemeString())
+	}
+	// We own the loading slot; release it on every exit path.
 	defer reg.FinishLoading(name)
 	var lib *CompiledLibrary
 

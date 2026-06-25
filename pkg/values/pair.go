@@ -444,6 +444,12 @@ func (p *Pair) String() string {
 	return p.stringWithVisited(visited)
 }
 
+// stringWithVisited is the Stringer twin of schemeStringWithVisited. It keeps a
+// pair-only visited set (map[*Pair]bool): vector children are rendered via
+// stringValue → Vector.SchemeString, which carries its own shared visited set,
+// so a pair↔vector cross-cycle still terminates (the vector's set catches the
+// re-entry) even though this set tracks pairs only. The two paths deliberately
+// diverge on map type for now; Phase 3 unifies both onto path-scoped marking.
 func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
 	if visited[p] {
 		return "..."

@@ -15,9 +15,12 @@
 package compilation
 
 import (
+	"errors"
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestLibraryRegistryConcurrentLoad exercises the registry from multiple
@@ -55,30 +58,74 @@ func TestLibraryRegistryLookupOrClaim(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	claims := 0
+	cachedHits := 0
+	var loserErrs []error
 	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			cached, claimed, err := reg.LookupOrClaim(name)
-			if claimed {
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case claimed:
 				// Winner: register and release the slot.
+				claims++
 				_ = reg.Register(NewCompiledLibrary(name, nil))
 				reg.FinishLoading(name)
-				mu.Lock()
-				claims++
-				mu.Unlock()
-				return
+			case cached != nil:
+				cachedHits++
+			default:
+				loserErrs = append(loserErrs, err)
 			}
-			// Loser: either the lib was already cached, or a circular-dependency
-			// rejection while the winner held the slot. Both are acceptable; what
-			// must never happen is a second successful claim.
-			_ = cached
-			_ = err
 		}()
 	}
 	wg.Wait()
 
 	if claims != 1 {
 		t.Fatalf("want exactly 1 claim of the loading slot, got %d", claims)
+	}
+	// Every non-winner is either a cached hit (winner already registered) or a
+	// circular-dependency rejection (option (a): winner still held the slot) —
+	// never a second claim, never a different error.
+	for _, err := range loserErrs {
+		if !errors.Is(err, werr.ErrCircularDependency) {
+			t.Fatalf("loser error: want ErrCircularDependency, got %v", err)
+		}
+	}
+	if claims+cachedHits+len(loserErrs) != n {
+		t.Fatalf("outcomes do not sum to %d: claims=%d cached=%d losers=%d",
+			n, claims, cachedHits, len(loserErrs))
+	}
+}
+
+// TestLibraryRegistryLookupOrClaimCachedHit deterministically pins the
+// cached-hit path the LoadLibrary rewrite depends on: a second LookupOrClaim of
+// an already-registered name returns the cached library without re-claiming the
+// loading slot (idempotent re-load, no spurious ErrDuplicateBinding).
+func TestLibraryRegistryLookupOrClaimCachedHit(t *testing.T) {
+	reg := NewLibraryRegistry()
+	name := NewLibraryName("conc", "cached")
+
+	_, claimed, err := reg.LookupOrClaim(name)
+	if err != nil || !claimed {
+		t.Fatalf("first LookupOrClaim: claimed=%v err=%v", claimed, err)
+	}
+	lib := NewCompiledLibrary(name, nil)
+	err = reg.Register(lib)
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	reg.FinishLoading(name)
+
+	cached, claimed, err := reg.LookupOrClaim(name)
+	if err != nil {
+		t.Fatalf("second LookupOrClaim: %v", err)
+	}
+	if claimed {
+		t.Fatal("second LookupOrClaim re-claimed an already-registered library")
+	}
+	if cached != lib {
+		t.Fatalf("want the cached library pointer, got %v", cached)
 	}
 }
