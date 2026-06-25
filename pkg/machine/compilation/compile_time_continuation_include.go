@@ -39,10 +39,12 @@ func (p *CompileTimeContinuation) CompileInclude(ctctx CompileTimeCallContext, e
 
 // compileIncludeImpl is the shared implementation for include and include-ci.
 // It uses letrec* semantics so that forward references work within included files.
+// When foldCase is true (include-ci), the included file is read with R7RS §2.1
+// case folding enabled, as if it began with #!fold-case.
 //
 // R7RS §5.3.2: Internal definitions use letrec* semantics where all defined
 // variables are in scope at the start of the body.
-func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, _ bool) error {
+func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, foldCase bool) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
@@ -75,6 +77,9 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			// Create parser for the file
 			reader := bufio.NewReader(file)
 			fileParser := parser.NewParserWithFile(p.env, true, reader, filePath)
+			// include-ci reads the file case-insensitively (R7RS §2.1 fold-case),
+			// folding identifiers to lowercase as they are read.
+			fileParser.SetFoldCase(foldCase)
 
 			// Read all forms from the file first, then process them with letrec* semantics
 			var forms []syntax.SyntaxValue
@@ -177,8 +182,9 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
 }
 
-// CompileIncludeCi compiles an include-ci expression.
-func (p *CompileTimeContinuation) CompileIncludeCi(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
-		"include-ci: case-insensitive includes not yet supported")
+// CompileIncludeCi compiles an include-ci expression (R7RS §4.1.7 / §5.6).
+// It is identical to include except that each included file is read with case
+// folding enabled, as if the file began with a #!fold-case directive.
+func (p *CompileTimeContinuation) CompileIncludeCi(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	return p.compileIncludeImpl(ctctx, expr, true)
 }

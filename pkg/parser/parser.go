@@ -93,6 +93,15 @@ func (p *Parser) SetMaxDepth(n int) {
 	p.maxDepth = n
 }
 
+// SetFoldCase enables or disables R7RS §2.1 fold-case mode at construction time,
+// before any forms are read. This is the programmatic equivalent of a leading
+// #!fold-case directive; it lets a caller (e.g. include-ci) read an entire file
+// case-insensitively without the file itself carrying the directive. An in-file
+// #!fold-case / #!no-fold-case directive still toggles the mode mid-stream.
+func (p *Parser) SetFoldCase(on bool) {
+	p.foldCase = on
+}
+
 func (p *Parser) curr() tokenizer.Token {
 	return p.cur
 }

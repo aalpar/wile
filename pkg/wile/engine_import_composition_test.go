@@ -200,3 +200,45 @@ func TestImportConflictDetection(t *testing.T) {
 		})
 	}
 }
+
+// TestImportRenameOfNonExported pins R7RS §5.6 Task 5C: a rename whose SOURCE name
+// is not exported by the library must error, mirroring the only/except validation,
+// rather than silently no-op the rename. A valid rename of an exported name still
+// works (the new name binds; the old name is no longer available).
+func TestImportRenameOfNonExported(t *testing.T) {
+	testCases := []struct {
+		name    string
+		program string
+		want    string
+		wantErr bool
+	}{
+		{
+			// (rename LIB (nonexistent foo)): source name absent from exports ⇒ error.
+			name:    "rename-of-non-exported-errors",
+			program: `(import (rename (scheme base) (nonexistent foo)))`,
+			wantErr: true,
+		},
+		{
+			// (rename LIB (car kar)): car is exported, kar binds, car shadowed-out.
+			name:    "valid-rename-binds-new-name",
+			program: `(import (rename (scheme base) (car kar))) (kar '(1 2 3))`,
+			want:    "1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx := context.Background()
+			eng := compositionEngine(t)
+			result, err := eng.EvalMultiple(ctx, tc.program)
+			if tc.wantErr {
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(errors.Is(err, werr.ErrUnexportedIdentifier), qt.IsTrue)
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
