@@ -69,6 +69,8 @@ func TestProcedureArity(t *testing.T) {
 			Expected: values.NewCons(values.NewInteger(0), values.FalseValue),
 		},
 		{
+			// A continuation accepts any number of values (R7RS §6.10), so its
+			// arity is (0 . #f) — variadic from zero — not a fixed 1.
 			Name: "composable continuation",
 			Code: `(let ((tag (default-continuation-prompt-tag)))
 				(call-with-continuation-prompt
@@ -78,7 +80,13 @@ func TestProcedureArity(t *testing.T) {
 							tag))
 					tag
 					(lambda (v) v)))`,
-			Expected: values.NewInteger(1),
+			Expected: values.NewCons(values.NewInteger(0), values.FalseValue),
+		},
+		{
+			// call/cc hands Scheme a CapturedContinuation; it is also variadic.
+			Name:     "call/cc-captured continuation",
+			Code:     `(procedure-arity (call/cc (lambda (k) k)))`,
+			Expected: values.NewCons(values.NewInteger(0), values.FalseValue),
 		},
 	}
 

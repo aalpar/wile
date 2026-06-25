@@ -47,13 +47,10 @@ fix (PR #800). The continuation value-count behavior itself is documented in
   `OperationUnboxValues` in `CompileValidatedDynamicWind`). A call/cc
   *multiple-value* escape observed through `call-with-values` is still blocked by
   the paused sub-context truncation bug, not by dynamic-wind.
-- **`procedure-arity` reports continuations as `1`** (stale after PR #800 made
-  continuations variadic): `pkg/registry/core/prim_reflection.go:121`
-  (`*ComposableContinuation` case) and the docstring/comment
-  `pkg/registry/core/reflection.go:24-28`. Also no `*CapturedContinuation` case
-  (the value `call/cc` hands to Scheme), so it falls to `default → #f`.
-  Recommended value `(0 . #f)` (variadic-from-0, matching `closureArity`'s
-  no-upper-limit convention and Racket's arity-at-least-0 for continuations).
+- ~~**`procedure-arity` reports continuations as `1`**~~ FIXED on
+  `fix/procedure-arity-continuations`: both `*ComposableContinuation` and (newly
+  handled) `*CapturedContinuation` now report `(0 . #f)` (variadic-from-0,
+  matching their `AcceptsArity` and Racket's arity-at-least-0); docstring updated.
 - **(Optional, low priority)** single-value resumption contexts splice
   multiple values instead of raising an arity error (documented as a deliberate
   choice in unspecified R7RS territory — see r7rs-differences). Only if strict

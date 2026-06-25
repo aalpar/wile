@@ -117,8 +117,13 @@ func PrimProcedureArity(mc machine.CallContext) error {
 		mc.SetValue(values.List(items...))
 	case *machine.Parameter:
 		mc.SetValue(closureArity(1, true))
-	case *machine.ComposableContinuation:
-		mc.SetValue(values.NewInteger(1))
+	case *machine.ComposableContinuation, *machine.CapturedContinuation:
+		// A continuation accepts any number of values (R7RS §6.10): it resumes
+		// with however many it is invoked with. Report (0 . #f) — variadic from
+		// zero — matching its AcceptsArity (always true). call/cc hands Scheme a
+		// CapturedContinuation; call-with-composable-continuation a
+		// ComposableContinuation; both are variadic.
+		mc.SetValue(closureArity(1, true))
 	default:
 		mc.SetValue(values.FalseValue)
 	}
