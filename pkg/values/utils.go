@@ -32,18 +32,66 @@ const (
 // formatIndexable builds the Scheme external representation for a
 // fixed-size indexable collection.  Format: prefix<elem1> <elem2> ... )
 // with elements separated by single spaces and no padding around elements.
-func formatIndexable(prefix string, length int, get func(int) Value) string {
+//
+// visited threads the cycle-detection set into nested Pair/Vector elements
+// so a self-referential or cross-referential structure renders a bounded
+// "..." marker instead of overflowing the Go stack. Callers whose elements
+// can never be compound (e.g. ByteVector, whose elements are bytes) may pass
+// nil; schemeStringChild only writes to the set for *Pair/*Vector children.
+func formatIndexable(prefix string, length int, get func(int) Value, visited map[Value]bool) string {
 	q := &strings.Builder{}
 	q.WriteString(prefix)
 	if length > 0 {
-		q.WriteString(get(0).SchemeString())
+		q.WriteString(schemeStringChild(get(0), visited))
 		for i := 1; i < length; i++ {
 			q.WriteString(" ")
-			q.WriteString(get(i).SchemeString())
+			q.WriteString(schemeStringChild(get(i), visited))
 		}
 	}
 	q.WriteString(")")
 	return q.String()
+}
+
+// schemeStringChild renders a single element of a compound structure,
+// threading the shared visited set through nested Pair/Vector so that
+// cross-collection cycles (vector→pair→vector and the like) are detected
+// exactly once. Non-compound elements render via SchemeString; void and nil
+// pointers render as "#<void>".
+//
+// The visited set is keyed on pointer-identity Value types only (*Pair and
+// *Vector — the only types inserted). Never insert a value-equality or
+// non-comparable Value: the former would alias distinct nodes to one slot
+// (false cycles), the latter would panic on map insertion.
+//
+// A nil visited set means "no cycle tracking requested" — used by callers
+// whose elements can never be compound (e.g. ByteVector, whose elements are
+// bytes). Should a compound child be encountered anyway, a fresh set is
+// allocated lazily for that subtree, so a nil set can never cause a nil-map
+// write. This keeps the nil contract a safe "no tracking" rather than an
+// unchecked "I promise no compound children" caller obligation.
+func schemeStringChild(child Value, visited map[Value]bool) string {
+	switch c := child.(type) {
+	case *Pair:
+		if c == nil {
+			return "#<void>"
+		}
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited)
+	case *Vector:
+		if c == nil {
+			return "#<void>"
+		}
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited)
+	}
+	if IsVoid(child) {
+		return "#<void>"
+	}
+	return child.SchemeString()
 }
 
 // List constructs a proper list from the given values.

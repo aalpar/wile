@@ -38,6 +38,45 @@ func TestParseLibraryNameFromDatum(t *testing.T) {
 	qt.Assert(t, result.Key(), qt.Equals, "scheme/base")
 }
 
+// TestParseLibraryNameRejectsTraversal verifies that path-traversal and empty
+// library-name parts are rejected at parse time — the single choke point for
+// both compile- and runtime-constructed names — so a name like (.. .. foo)
+// can never reach the OS resolver and escape the search root (S1).
+func TestParseLibraryNameRejectsTraversal(t *testing.T) {
+	for _, part := range []string{"..", ".", "", "a/b", "a\\b"} {
+		// Leading position.
+		first := values.List(values.NewSymbol(part), values.NewSymbol("foo"))
+		_, err := ParseLibraryNameFromDatum(context.Background(), first)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+			qt.Commentf("part %q in leading position", part))
+
+		// Non-leading position: the guard runs on every part, so a bad part
+		// anywhere must be rejected (mirrors the (.. .. foo) threat shape).
+		second := values.List(values.NewSymbol("foo"), values.NewSymbol(part))
+		_, err = ParseLibraryNameFromDatum(context.Background(), second)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+			qt.Commentf("part %q in non-leading position", part))
+	}
+}
+
+// TestParseLibraryNameAllowsLegitimate guards against over-rejection: ordinary
+// names with a dot inside an identifier and integer parts must still parse.
+func TestParseLibraryNameAllowsLegitimate(t *testing.T) {
+	cases := []struct {
+		datum values.Value
+		key   string
+	}{
+		{values.List(values.NewSymbol("srfi"), values.NewInteger(1)), "srfi/1"},
+		{values.List(values.NewSymbol("scheme"), values.NewSymbol("char")), "scheme/char"},
+		{values.List(values.NewSymbol("a.b")), "a.b"}, // dot inside an identifier is fine
+	}
+	for _, tc := range cases {
+		result, err := ParseLibraryNameFromDatum(context.Background(), tc.datum)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, result.Key(), qt.Equals, tc.key)
+	}
+}
+
 func TestParseLibraryNameFromDatum_WithNumbers(t *testing.T) {
 	// (srfi 1)
 	libName := values.NewCons(

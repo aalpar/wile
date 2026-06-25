@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
@@ -142,7 +143,15 @@ type LibraryImportEvent struct {
 type LibraryImportObserver func(LibraryImportEvent)
 
 // LibraryRegistry manages loaded libraries and handles library loading.
+//
+// All fields are guarded by mu so the registry is safe for concurrent use by
+// SRFI-18 threads that load libraries via (environment …) / (eval '(import …)).
+// Read methods take RLock; methods that mutate a map, the search paths, or the
+// observer take Lock. mu is not reentrant — public methods must not call other
+// locking methods while holding the lock (AllNames uses the unlocked all()
+// helper for this reason).
 type LibraryRegistry struct {
+	mu             sync.RWMutex
 	libraries      map[string]*CompiledLibrary // key: library name as "scheme/base"
 	loading        map[string]bool             // libraries currently being loaded (cycle detection)
 	searchPaths    []string                    // directories to search for library files
@@ -164,18 +173,28 @@ func NewLibraryRegistry() *LibraryRegistry {
 	}
 }
 
-// SetSearchPaths sets the library search paths.
+// SetSearchPaths sets the library search paths. The slice is copied so the
+// registry owns its searchPaths memory: a caller mutating the slice it passed
+// in must not be able to race a concurrent reader of the registry's state.
 func (p *LibraryRegistry) SetSearchPaths(paths []string) {
-	p.searchPaths = paths
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.searchPaths = append([]string(nil), paths...)
 }
 
-// GetSearchPaths returns the current library search paths.
+// GetSearchPaths returns a copy of the current library search paths. Returning
+// a copy keeps the registry's internal slice immutable from outside, so a
+// caller cannot mutate the backing array and race a concurrent reader.
 func (p *LibraryRegistry) GetSearchPaths() []string {
-	return p.searchPaths
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return append([]string(nil), p.searchPaths...)
 }
 
 // PrependSearchPath adds a path to the beginning of the search path list.
 func (p *LibraryRegistry) PrependSearchPath(path string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.searchPaths = append([]string{path}, p.searchPaths...)
 }
 
@@ -183,11 +202,15 @@ func (p *LibraryRegistry) PrependSearchPath(path string) {
 // a library is imported. The observer is read-only and cannot influence
 // the import. Pass nil to remove the observer.
 func (p *LibraryRegistry) SetImportObserver(obs LibraryImportObserver) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.importObserver = obs
 }
 
 // ImportObserver returns the current import observer, or nil.
 func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.importObserver
 }
 
@@ -201,7 +224,11 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		return
 	}
 	reg, ok := regAny.(*LibraryRegistry)
-	if !ok || reg.importObserver == nil {
+	if !ok {
+		return
+	}
+	obs := reg.ImportObserver()
+	if obs == nil {
 		return
 	}
 
@@ -217,7 +244,7 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 	}
 	sort.Strings(imported)
 
-	reg.importObserver(LibraryImportEvent{
+	obs(LibraryImportEvent{
 		Library:    lib.Name,
 		SourceFile: lib.SourceFile,
 		Exports:    exports,
@@ -229,6 +256,8 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 
 // Register adds a compiled library to the registry.
 func (p *LibraryRegistry) Register(lib *CompiledLibrary) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	key := lib.Name.Key()
 	_, exists := p.libraries[key]
 	if exists {
@@ -240,11 +269,15 @@ func (p *LibraryRegistry) Register(lib *CompiledLibrary) error {
 
 // Lookup returns a library by name, or nil if not found.
 func (p *LibraryRegistry) Lookup(name LibraryName) *CompiledLibrary {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.libraries[name.Key()]
 }
 
-// All returns all loaded libraries, sorted by name key for determinism.
-func (p *LibraryRegistry) All() []*CompiledLibrary {
+// all returns all loaded libraries sorted by key. Caller must hold at least
+// RLock. Exists so AllNames can reuse it without recursively locking (mu is
+// not reentrant).
+func (p *LibraryRegistry) all() []*CompiledLibrary {
 	libs := make([]*CompiledLibrary, 0, len(p.libraries))
 	for _, lib := range p.libraries {
 		libs = append(libs, lib)
@@ -255,9 +288,18 @@ func (p *LibraryRegistry) All() []*CompiledLibrary {
 	return libs
 }
 
+// All returns all loaded libraries, sorted by name key for determinism.
+func (p *LibraryRegistry) All() []*CompiledLibrary {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.all()
+}
+
 // AllNames returns the names of all registered libraries, sorted by key.
 func (p *LibraryRegistry) AllNames() []LibraryName {
-	libs := p.All()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	libs := p.all()
 	names := make([]LibraryName, len(libs))
 	for i, lib := range libs {
 		names[i] = lib.Name
@@ -268,17 +310,53 @@ func (p *LibraryRegistry) AllNames() []LibraryName {
 // IsLoading returns true if the library is currently being loaded.
 // Used to detect circular dependencies.
 func (p *LibraryRegistry) IsLoading(name LibraryName) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.loading[name.Key()]
 }
 
 // StartLoading marks a library as being loaded.
 func (p *LibraryRegistry) StartLoading(name LibraryName) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.loading[name.Key()] = true
 }
 
 // FinishLoading marks a library as finished loading.
 func (p *LibraryRegistry) FinishLoading(name LibraryName) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	delete(p.loading, name.Key())
+}
+
+// LookupOrClaim atomically resolves a library or claims the loading slot.
+// It is the single check-and-mark decision point that LoadLibrary uses so the
+// Lookup → IsLoading → StartLoading sequence cannot interleave across threads:
+//   - cached != nil  ⇒ already loaded; use it.
+//   - claimed == true ⇒ the caller now owns the loading slot and MUST load,
+//     Register, and FinishLoading.
+//   - otherwise err is a wrapped ErrCircularDependency: either a genuine
+//     import cycle, or (option (a), Task 1C) a second thread loading the SAME
+//     library concurrently. The latter is a rare false positive accepted for
+//     this phase; a per-name latch that blocks-then-reads the cache is the (b)
+//     alternative — see the TODO below.
+//
+// TODO(1C-b): distinguish concurrent same-library load (should wait) from a
+// genuine cycle (should error) via a per-name chan struct{} latch.
+func (p *LibraryRegistry) LookupOrClaim(name LibraryName) (cached *CompiledLibrary, claimed bool, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	key := name.Key()
+	lib := p.libraries[key]
+	if lib != nil {
+		return lib, false, nil
+	}
+	if p.loading[key] {
+		return nil, false, werr.WrapForeignErrorf(werr.ErrCircularDependency,
+			"circular dependency detected while loading %s", name.SchemeString())
+	}
+	p.loading[key] = true
+	return nil, true, nil
 }
 
 // FilePathToLibraryName converts a forward-slash-separated file path with

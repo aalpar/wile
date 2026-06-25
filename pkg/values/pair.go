@@ -376,11 +376,11 @@ func (p *Pair) SchemeString() string {
 	if p.IsVoid() {
 		return "#<void>"
 	}
-	visited := make(map[*Pair]bool)
+	visited := make(map[Value]bool)
 	return p.schemeStringWithVisited(visited)
 }
 
-func (p *Pair) schemeStringWithVisited(visited map[*Pair]bool) string {
+func (p *Pair) schemeStringWithVisited(visited map[Value]bool) string {
 	if visited[p] {
 		return "..."
 	}
@@ -394,24 +394,16 @@ func (p *Pair) schemeStringWithVisited(visited map[*Pair]bool) string {
 		if i > 0 {
 			q.WriteString(" ")
 		}
-		car := pr[0]
-		if IsVoid(car) {
-			q.WriteString("#<void>")
-		} else if carPair, ok := car.(*Pair); ok && carPair != nil {
-			q.WriteString(carPair.schemeStringWithVisited(visited))
-		} else {
-			q.WriteString(car.SchemeString())
-		}
+		// schemeStringChild dispatches nested *Pair/*Vector through the shared
+		// visited set, catching pair↔vector cross-cycles, and renders void/nil
+		// as "#<void>".
+		q.WriteString(schemeStringChild(pr[0], visited))
 		cdrPair, ok := pr[1].(*Pair)
 		if !ok || cdrPair == nil {
 			// Non-pair cdr, nil *Pair (void), or empty list
 			if !IsEmptyList(pr[1]) {
 				q.WriteString(" . ")
-				if IsVoid(pr[1]) {
-					q.WriteString("#<void>")
-				} else {
-					q.WriteString(pr[1].SchemeString())
-				}
+				q.WriteString(schemeStringChild(pr[1], visited))
 			}
 			break
 		}
@@ -452,6 +444,12 @@ func (p *Pair) String() string {
 	return p.stringWithVisited(visited)
 }
 
+// stringWithVisited is the Stringer twin of schemeStringWithVisited. It keeps a
+// pair-only visited set (map[*Pair]bool): vector children are rendered via
+// stringValue → Vector.SchemeString, which carries its own shared visited set,
+// so a pair↔vector cross-cycle still terminates (the vector's set catches the
+// re-entry) even though this set tracks pairs only. The two paths deliberately
+// diverge on map type for now; Phase 3 unifies both onto path-scoped marking.
 func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
 	if visited[p] {
 		return "..."

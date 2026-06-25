@@ -248,6 +248,45 @@ func TestVectorSchemeString(t *testing.T) {
 	}
 }
 
+// TestVectorSchemeStringCyclic verifies a self-referential vector renders a
+// bounded, correctly-placed cycle marker rather than overflowing the Go stack
+// (C3). Assert the exact rendering, not just that "..." appears, so a wrong
+// truncation (dropped element, marker in the wrong slot) is caught.
+func TestVectorSchemeStringCyclic(t *testing.T) {
+	v := values.NewVector(values.NewInteger(1), values.NewInteger(2), nil)
+	(*v)[2] = v // self-reference
+
+	qt.Assert(t, v.SchemeString(), qt.Equals, "#(1 2 ...)")
+}
+
+// TestVectorSchemeStringCrossCycle verifies a vector→pair→vector cycle is
+// bounded from BOTH entry points. The shared visited set must be threaded
+// across Pair and Vector rendering, otherwise each level allocates a fresh set
+// and recurses forever.
+func TestVectorSchemeStringCrossCycle(t *testing.T) {
+	v := values.NewVector(values.NewInteger(1), nil)
+	p := values.NewCons(values.NewSymbol("a"), v)
+	(*v)[1] = p // vector -> pair -> vector
+
+	// Entry from the vector root.
+	qt.Assert(t, v.SchemeString(), qt.Equals, "#(1 (a . ...))")
+	// Entry from the pair root (symmetric direction): pair -> vector -> pair.
+	qt.Assert(t, p.SchemeString(), qt.Equals, "(a . #(1 ...))")
+}
+
+// TestVectorSchemeStringSharedAcyclic pins the CURRENT (intended-for-now)
+// behavior for a non-cyclic shared vector: all-visited marking collapses the
+// second occurrence to "...". This is the documented Phase-1 tradeoff (see the
+// comment on Vector.schemeStringWithVisited); Phase 3 switches to path-scoped
+// marking and will render the diamond in full. This test is the tripwire that
+// must change when that happens.
+func TestVectorSchemeStringSharedAcyclic(t *testing.T) {
+	shared := values.NewVector(values.NewInteger(1))
+	dag := values.List(shared, shared) // (#(1) #(1)) — acyclic, shared
+
+	qt.Assert(t, dag.SchemeString(), qt.Equals, "(#(1) ...)")
+}
+
 func TestVectorAsList(t *testing.T) {
 	tcs := []struct {
 		name  string

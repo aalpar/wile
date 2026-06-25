@@ -2,12 +2,97 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
+
+// TestRunawayContinuationIsBounded verifies that re-invoking a captured
+// continuation in a non-converging loop surfaces a catchable
+// ErrCallDepthExceeded rather than overflowing the Go stack and aborting the
+// host process (C2). The continuation re-invocation nests a sub-context Run()
+// frame per iteration, bypassing SaveContinuation's eval-stack depth gate, so
+// applyCapturedContinuation enforces the same maxCallDepth bound on nesting.
+func TestRunawayContinuationIsBounded(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	// Explicit small limit: deterministic and fast (trips at depth limit+1
+	// rather than nesting to the default 10000), independent of DefaultMaxCallDepth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(200))
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	// Classic non-tail call/cc loop that never converges: each (k 0) re-enters
+	// at the pending (+ 1 _) and immediately re-invokes k.
+	src := `(let ((n 0) (k #f))
+	          (+ 1 (call/cc (lambda (c) (set! k c) 0)))
+	          (set! n (+ n 1))
+	          (if (< n 100000000) (k 0) n))`
+	_, err = eng.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNotNil)
+	if !errors.Is(err, werr.ErrCallDepthExceeded) {
+		t.Fatalf("want ErrCallDepthExceeded, got %v", err)
+	}
+}
+
+// TestContinuationLoopBoundedConverges is the no-false-positive companion to
+// TestRunawayContinuationIsBounded: the same call/cc loop with a bound well
+// under maxCallDepth must complete and return its value, confirming the depth
+// guard does not reject legitimate (if unusual) bounded continuation loops.
+func TestContinuationLoopBoundedConverges(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	// Explicit limit, well above this loop's ~100 re-invocations, so the test
+	// does not implicitly depend on DefaultMaxCallDepth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(500))
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	src := `(let ((n 0) (k #f))
+	          (call/cc (lambda (c) (set! k c)))
+	          (set! n (+ n 1))
+	          (if (< n 100) (k #f) n))`
+	result, err := eng.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "100")
+}
+
+// TestContinuationDepthBoundTracksMaxCallDepth pins that the continuation
+// re-invocation bound IS maxCallDepth — not a hardcoded constant, and not a
+// per-NewSubContext count (which would trip a 10-iteration loop far below the
+// limit). With an explicit small limit, a loop well under it converges and a
+// runaway trips at exactly limit+1.
+func TestContinuationDepthBoundTracksMaxCallDepth(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	const limit = 500
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(limit))
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	// ~10 re-invocations: well under the limit, must converge.
+	under := `(let ((n 0) (k #f))
+	            (call/cc (lambda (c) (set! k c)))
+	            (set! n (+ n 1))
+	            (if (< n 10) (k #f) n))`
+	result, err := eng.EvalMultiple(ctx, under)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "10")
+
+	// Non-converging: must trip the bound, not overflow the Go stack.
+	over := `(let ((n 0) (k #f))
+	           (+ 1 (call/cc (lambda (c) (set! k c) 0)))
+	           (set! n (+ n 1))
+	           (if (< n 100000) (k 0) n))`
+	_, err = eng.EvalMultiple(ctx, over)
+	if !errors.Is(err, werr.ErrCallDepthExceeded) {
+		t.Fatalf("want ErrCallDepthExceeded at maxCallDepth=%d, got %v", limit, err)
+	}
+}
 
 func TestCallCC_Procedure(t *testing.T) {
 	c := qt.New(t)
