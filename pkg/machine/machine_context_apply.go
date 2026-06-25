@@ -433,6 +433,13 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// array; Restore recycles that stack to the pool, clearing the backing array
 	// and invalidating args. The copy also defends SetValues, which stores the
 	// slice by reference for N>1.
+	//
+	// Ownership note: applyCapturedContinuation runs this composable continuation
+	// in a sub-context and then returns &ErrPromptAbort{Values: sub.GetValues()}.
+	// Those abort Values trace back to this freshly-owned `vals` slice (via
+	// SetValues), so they survive the sub-context's release. Do NOT optimize this
+	// copy away — it is load-bearing for that cross-function ownership, not just
+	// for the local Drain/SetValues aliasing.
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
 

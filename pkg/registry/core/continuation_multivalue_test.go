@@ -65,3 +65,49 @@ func TestContinuationMultipleValues(t *testing.T) {
 		})
 	}
 }
+
+// TestPromptNoHandlerMultipleValues pins R7RS §6.10 value forwarding through the
+// no-handler (handler == #f) branch of call-with-continuation-prompt: an abort
+// with N values must deliver all N to the prompt boundary, not just the first
+// (and zero values must deliver zero, not a fabricated Void). This is the same
+// value-truncation the captured/composable apply paths fixed; the no-handler
+// prompt branch (prim_prompt.go) is a fourth site of the identical pattern.
+func TestPromptNoHandlerMultipleValues(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "three values to no-handler prompt",
+			Code: `(let ((t (make-continuation-prompt-tag)))
+			          (call-with-values
+			            (lambda () (call-with-continuation-prompt
+			                         (lambda () (abort-current-continuation t 10 20 30))
+			                         t #f))
+			            list))`,
+			Expected: values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+		},
+		{
+			Name: "single value to no-handler prompt",
+			Code: `(let ((t (make-continuation-prompt-tag)))
+			          (call-with-continuation-prompt
+			            (lambda () (abort-current-continuation t 99))
+			            t #f))`,
+			Expected: values.NewInteger(99),
+		},
+		{
+			Name: "zero values to no-handler prompt",
+			Code: `(let ((t (make-continuation-prompt-tag)))
+			          (call-with-values
+			            (lambda () (call-with-continuation-prompt
+			                         (lambda () (abort-current-continuation t))
+			                         t #f))
+			            (lambda () 'none)))`,
+			Expected: values.NewSymbol("none"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}

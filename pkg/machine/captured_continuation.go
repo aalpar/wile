@@ -55,11 +55,12 @@ func (p *CapturedContinuation) ComposableContinuation() *ComposableContinuation 
 }
 
 // AcceptsArity reports whether this continuation can be called with n
-// arguments. A continuation accepts any number of values (R7RS §6.10): it
+// arguments. A continuation accepts ANY number of values (R7RS §6.10): it
 // resumes the captured computation with however many values it is invoked with
-// — zero, one, or several (multiple values).
-func (p *CapturedContinuation) AcceptsArity(n int) bool {
-	return n >= 0
+// — zero, one, or several. Always true; there is no rejecting arity (n is an
+// argument count, never negative).
+func (*CapturedContinuation) AcceptsArity(int) bool {
+	return true
 }
 
 func (p *CapturedContinuation) SchemeString() string {

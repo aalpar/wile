@@ -138,12 +138,11 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 				mc.SetValues(handlerSub.GetValues()...)
 				return nil
 			}
-			// No handler: return first abort value
-			if len(abortErr.Values) > 0 {
-				mc.SetValue(abortErr.Values[0])
-			} else {
-				mc.SetValue(values.Void)
-			}
+			// No handler: the abort values become the prompt's result. Deliver
+			// ALL of them (R7RS §6.10), including the zero-value case (resumes
+			// with no values, not a fabricated Void) — mirroring the abort
+			// delivery in RunWithEscapeHandling and PrimCallCC sub-context mode.
+			mc.SetValues(abortErr.Values...)
 			return nil
 		}
 		return err
