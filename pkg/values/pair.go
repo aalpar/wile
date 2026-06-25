@@ -376,11 +376,11 @@ func (p *Pair) SchemeString() string {
 	if p.IsVoid() {
 		return "#<void>"
 	}
-	visited := make(map[*Pair]bool)
+	visited := make(map[Value]bool)
 	return p.schemeStringWithVisited(visited)
 }
 
-func (p *Pair) schemeStringWithVisited(visited map[*Pair]bool) string {
+func (p *Pair) schemeStringWithVisited(visited map[Value]bool) string {
 	if visited[p] {
 		return "..."
 	}
@@ -394,24 +394,16 @@ func (p *Pair) schemeStringWithVisited(visited map[*Pair]bool) string {
 		if i > 0 {
 			q.WriteString(" ")
 		}
-		car := pr[0]
-		if IsVoid(car) {
-			q.WriteString("#<void>")
-		} else if carPair, ok := car.(*Pair); ok && carPair != nil {
-			q.WriteString(carPair.schemeStringWithVisited(visited))
-		} else {
-			q.WriteString(car.SchemeString())
-		}
+		// schemeStringChild dispatches nested *Pair/*Vector through the shared
+		// visited set, catching pair↔vector cross-cycles, and renders void/nil
+		// as "#<void>".
+		q.WriteString(schemeStringChild(pr[0], visited))
 		cdrPair, ok := pr[1].(*Pair)
 		if !ok || cdrPair == nil {
 			// Non-pair cdr, nil *Pair (void), or empty list
 			if !IsEmptyList(pr[1]) {
 				q.WriteString(" . ")
-				if IsVoid(pr[1]) {
-					q.WriteString("#<void>")
-				} else {
-					q.WriteString(pr[1].SchemeString())
-				}
+				q.WriteString(schemeStringChild(pr[1], visited))
 			}
 			break
 		}

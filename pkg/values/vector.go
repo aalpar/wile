@@ -101,8 +101,25 @@ func (p *Vector) AsList() Tuple {
 // SchemeString returns the Scheme external representation of the vector.
 // Format: #( element1 element2 ... ) with elements separated by spaces.
 // Empty vectors are represented as #().
+// Cyclic and cross-referential structures render a bounded "..." marker
+// instead of overflowing the Go stack.
 func (p *Vector) SchemeString() string {
+	if p.IsVoid() {
+		return "#<void>"
+	}
+	return p.schemeStringWithVisited(make(map[Value]bool))
+}
+
+// schemeStringWithVisited renders the vector while threading a shared
+// cycle-detection set through nested Pair/Vector elements. A vector already
+// on the visited set renders as "..." (all-visited marking, matching Pair's
+// behavior; Phase 3 converts both to path-scoped marking).
+func (p *Vector) schemeStringWithVisited(visited map[Value]bool) string {
+	if visited[p] {
+		return "..."
+	}
+	visited[p] = true
 	return formatIndexable("#(", len(*p), func(i int) Value {
 		return (*p)[i]
-	})
+	}, visited)
 }
