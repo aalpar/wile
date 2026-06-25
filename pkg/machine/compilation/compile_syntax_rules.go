@@ -239,6 +239,20 @@ func compileClauseWithEllipsisAndLiterals(
 	if err != nil {
 		return nil, err
 	}
+
+	// R7RS §4.3.2 diagnostic: reject, at definition time, a template that follows
+	// a pattern variable with more ellipses than its pattern depth (e.g. `(list a
+	// ...)` where `a` is bound at depth 0). Such an ellipsis sub-template has no
+	// captured sequence to iterate; without this check it is accepted here and
+	// fails only at expansion with the opaque internal error "all ellipsis IDs
+	// excluded". Validating now yields a clean, located CompilationError.
+	patternDepths := make(map[string]int)
+	computePatternVarDepths(pattern, variables, ellipsis, 0, patternDepths)
+	err = validateTemplateEllipsisDepth(template, variables, patternDepths, ellipsis, 0)
+	if err != nil {
+		return nil, err
+	}
+
 	// Compile pattern to bytecode with ellipsis variable mapping and literals
 	// Literals are needed so the compiler knows to match _ literally if it's in the literals list
 	compiled, err := match.CompileSyntaxPattern(ctx, pattern, variables, &match.CompilePatternOpts{
@@ -465,6 +479,235 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 		// Other syntax types are not pattern variables
 	}
 
+	return nil
+}
+
+// skipEllipses counts the consecutive ellipsis symbols at the head of lst and
+// returns that count together with the remaining tail after them. It is used by
+// both the pattern-depth computation and the template depth validation so the two
+// agree on how many ellipses govern a sub-form.
+func skipEllipses(lst syntax.SyntaxValue, ellipsis string) (int, syntax.SyntaxValue) {
+	count := 0
+	cur := lst
+	for {
+		pair, ok := cur.(*syntax.SyntaxPair)
+		if !ok || syntax.IsSyntaxEmptyList(pair) {
+			break
+		}
+		sym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+		if !ok {
+			break
+		}
+		symVal, ok := sym.Unwrap().(*values.Symbol)
+		if !ok || symVal.Key != ellipsis {
+			break
+		}
+		count++
+		cur = pair.SyntaxCdr()
+	}
+	return count, cur
+}
+
+// computePatternVarDepths walks a syntax-rules pattern and records, for each
+// pattern variable, its ellipsis depth: the number of ellipses governing it. A
+// variable bound directly (e.g. `a` in `(_ a)`) has depth 0; under one ellipsis
+// (`(_ a ...)`) depth 1; under nested ellipses (`(_ (a ...) ...)`) depth 2. Only
+// names already known to be pattern variables are recorded; literals, the macro
+// keyword, and the ellipsis marker are naturally excluded.
+func computePatternVarDepths(pattern syntax.SyntaxValue, variables map[string]struct{}, ellipsis string, depth int, out map[string]int) {
+	switch p := pattern.(type) {
+	case *syntax.SyntaxSymbol:
+		symVal, ok := p.Unwrap().(*values.Symbol)
+		if !ok {
+			return
+		}
+		_, isVar := variables[symVal.Key]
+		if !isVar {
+			return
+		}
+		// A pattern variable occurs once, but take the maximum defensively.
+		d, seen := out[symVal.Key]
+		if !seen || depth > d {
+			out[symVal.Key] = depth
+		}
+
+	case *syntax.SyntaxPair:
+		if syntax.IsSyntaxEmptyList(p) {
+			return
+		}
+		cur := syntax.SyntaxValue(p)
+		for {
+			pair, ok := cur.(*syntax.SyntaxPair)
+			if !ok || syntax.IsSyntaxEmptyList(pair) {
+				break
+			}
+			elem := pair.SyntaxCar()
+			k, rest := skipEllipses(pair.SyntaxCdr(), ellipsis)
+			computePatternVarDepths(elem, variables, ellipsis, depth+k, out)
+			cur = rest
+		}
+		// Dotted tail (improper list pattern): governed at the current depth.
+		_, isPair := cur.(*syntax.SyntaxPair)
+		if cur != nil && !isPair {
+			computePatternVarDepths(cur, variables, ellipsis, depth, out)
+		}
+
+	case *syntax.SyntaxVector:
+		// Vector patterns: account for ellipsis the same way as lists so a
+		// vector-bound variable's depth is not undercounted (undercounting could
+		// cause a false positive in the template check). Walk the element slice
+		// as if it were a list.
+		for i := 0; i < len(p.Values); i++ {
+			elem := p.Values[i]
+			// Count following ellipsis elements within the vector.
+			k := 0
+			for j := i + 1; j < len(p.Values); j++ {
+				sym, ok := p.Values[j].(*syntax.SyntaxSymbol)
+				if !ok {
+					break
+				}
+				symVal, ok := sym.Unwrap().(*values.Symbol)
+				if !ok || symVal.Key != ellipsis {
+					break
+				}
+				k++
+			}
+			computePatternVarDepths(elem, variables, ellipsis, depth+k, out)
+			i += k
+		}
+	}
+}
+
+// collectTemplatePatternVars walks a template sub-form and collects the pattern
+// variables it mentions, mapping each name to its first occurrence's syntax
+// symbol (for source-location reporting). Mirrors the runtime expander's
+// findSyntaxPatternVariables: every pattern variable textually present, at any
+// nesting depth, contributes.
+func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables map[string]struct{}, ellipsis string, out map[string]*syntax.SyntaxSymbol) {
+	switch t := tmpl.(type) {
+	case *syntax.SyntaxSymbol:
+		symVal, ok := t.Unwrap().(*values.Symbol)
+		if !ok || symVal.Key == ellipsis {
+			return
+		}
+		_, isVar := variables[symVal.Key]
+		if !isVar {
+			return
+		}
+		_, seen := out[symVal.Key]
+		if !seen {
+			out[symVal.Key] = t
+		}
+
+	case *syntax.SyntaxPair:
+		if syntax.IsSyntaxEmptyList(t) {
+			return
+		}
+		collectTemplatePatternVars(t.SyntaxCar(), variables, ellipsis, out)
+		collectTemplatePatternVars(t.SyntaxCdr(), variables, ellipsis, out)
+
+	case *syntax.SyntaxVector:
+		for _, elem := range t.Values {
+			collectTemplatePatternVars(elem, variables, ellipsis, out)
+		}
+	}
+}
+
+// checkEllipsisGroupDriver enforces the R7RS §4.3.2 invariant that an ellipsis
+// sub-template at template depth requiredDepth must contain at least one "driver":
+// a pattern variable whose pattern depth is at least requiredDepth, supplying the
+// sequence the ellipsis iterates over. A sub-template with pattern variables but
+// no driver (every variable bound shallower than requiredDepth) cannot be
+// iterated — this is the over-ellipsis violation. A sub-template with no pattern
+// variables at all is permitted (R7RS: repeated zero times, dropped).
+func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables map[string]struct{}, patternDepths map[string]int, ellipsis string, requiredDepth int) error {
+	vars := make(map[string]*syntax.SyntaxSymbol)
+	collectTemplatePatternVars(sub, variables, ellipsis, vars)
+	if len(vars) == 0 {
+		return nil
+	}
+	// Look for a driver; meanwhile track the most clearly offending variable
+	// (the one bound at the shallowest pattern depth) to report.
+	offendingName := ""
+	offendingDepth := 0
+	var offendingSym *syntax.SyntaxSymbol
+	for name, sym := range vars {
+		pd := patternDepths[name]
+		if pd >= requiredDepth {
+			return nil // driver found — group is well-formed
+		}
+		if offendingSym == nil || pd < offendingDepth {
+			offendingName = name
+			offendingDepth = pd
+			offendingSym = sym
+		}
+	}
+	src := offendingSym.SourceContext()
+	return wrapSourcedError(src, werr.WrapForeignErrorf(
+		werr.ErrInvalidSyntax,
+		"syntax-rules: template variable %q used at ellipsis depth %d but pattern binds it at depth %d",
+		offendingName, requiredDepth, offendingDepth,
+	))
+}
+
+// validateTemplateEllipsisDepth walks a syntax-rules template, tracking the
+// ellipsis depth, and validates each ellipsis sub-template against the pattern
+// variable depths via checkEllipsisGroupDriver. Errors are wrapped with the
+// offending node's source location and surface as a CompilationError at
+// macro-definition time.
+func validateTemplateEllipsisDepth(tmpl syntax.SyntaxValue, variables map[string]struct{}, patternDepths map[string]int, ellipsis string, depth int) error {
+	pair, ok := tmpl.(*syntax.SyntaxPair)
+	if !ok {
+		return nil
+	}
+	if syntax.IsSyntaxEmptyList(pair) {
+		return nil
+	}
+
+	// Ellipsis escape form (<ellipsis> <template>): the inner template is emitted
+	// literally with no ellipsis interpretation, so it carries no depth obligation.
+	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if ok {
+		symVal, ok := carSym.Unwrap().(*values.Symbol)
+		if ok && symVal.Key == ellipsis {
+			return nil
+		}
+	}
+
+	cur := syntax.SyntaxValue(pair)
+	for {
+		p, ok := cur.(*syntax.SyntaxPair)
+		if !ok || syntax.IsSyntaxEmptyList(p) {
+			break
+		}
+		elem := p.SyntaxCar()
+		k, rest := skipEllipses(p.SyntaxCdr(), ellipsis)
+		if k >= 1 {
+			err := checkEllipsisGroupDriver(elem, variables, patternDepths, ellipsis, depth+k)
+			if err != nil {
+				return err
+			}
+			err = validateTemplateEllipsisDepth(elem, variables, patternDepths, ellipsis, depth+k)
+			if err != nil {
+				return err
+			}
+		} else {
+			err := validateTemplateEllipsisDepth(elem, variables, patternDepths, ellipsis, depth)
+			if err != nil {
+				return err
+			}
+		}
+		cur = rest
+	}
+
+	// Dotted tail: a non-pair, non-empty cdr is validated at the current depth.
+	_, isPair := cur.(*syntax.SyntaxPair)
+	if cur != nil && !isPair {
+		err := validateTemplateEllipsisDepth(cur, variables, patternDepths, ellipsis, depth)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
