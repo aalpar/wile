@@ -55,10 +55,11 @@ func (p *CapturedContinuation) ComposableContinuation() *ComposableContinuation 
 }
 
 // AcceptsArity reports whether this continuation can be called with n
-// arguments. Escape continuations accept exactly 1 argument — the value
-// to resume with.
+// arguments. A continuation accepts any number of values (R7RS §6.10): it
+// resumes the captured computation with however many values it is invoked with
+// — zero, one, or several (multiple values).
 func (p *CapturedContinuation) AcceptsArity(n int) bool {
-	return n == 1
+	return n >= 0
 }
 
 func (p *CapturedContinuation) SchemeString() string {
@@ -101,7 +102,6 @@ func (p *MachineContext) applyCapturedContinuation(
 			"call/cc: continuation cannot cross continuation barrier")
 	}
 
-	val := args[0]
 	cc := capt.cc
 
 	// Bound the Go-stack nesting of continuation re-invocation. Restoring the
@@ -126,7 +126,10 @@ func (p *MachineContext) applyCapturedContinuation(
 	// Restore, replacing whatever marks this sub-context might inherit.
 	// Prevent the parent's stale marks from bleeding through findParameterInMarks.
 	sub.isolatedMarks = true
-	_, err := sub.ApplyCallable(cc, val)
+	// Forward ALL invocation values (R7RS §6.10): the captured continuation
+	// resumes with however many values it was called with. applyComposableContinuation
+	// copies args before any Restore, so passing the slice through is safe.
+	_, err := sub.ApplyCallable(cc, args...)
 	if err != nil {
 		return p, err
 	}

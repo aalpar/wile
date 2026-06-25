@@ -405,10 +405,9 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // See: Flatt, Yu, Findler, Felleisen "Adding Delimited and Composable Control
 // to a Production Programming Environment" (ICFP 2007).
 func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation, args []values.Value) (*MachineContext, error) {
-	if len(args) != 1 {
-		err := p.WrapError(werr.ErrWrongNumberOfArguments, fmt.Sprintf("composable continuation: expected 1 argument, got %d", len(args)))
-		return p, err
-	}
+	// A continuation invoked with N values resumes with all N (R7RS §6.10): N==0
+	// resumes with no values, N==1 with one, N>1 as multiple values. No arity
+	// restriction — the resumed chain reads whatever the value register holds.
 
 	// Reject cross-thread composable continuation invocation. Load-bearing for
 	// the per-thread allocation pool design (no goroutine releases another's
@@ -429,11 +428,13 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 			"composable continuation: cannot cross continuation barrier")
 	}
 
-	// Save the argument value before Restore releases the old eval stack.
-	// When the caller used Drain (zero-copy), args shares the stack's
-	// backing array. Restore recycles that stack to the pool, clearing
-	// the backing array and invalidating args.
-	val := args[0]
+	// Copy the argument values before Restore releases the old eval stack.
+	// When the caller used Drain (zero-copy), args shares the stack's backing
+	// array; Restore recycles that stack to the pool, clearing the backing array
+	// and invalidating args. The copy also defends SetValues, which stores the
+	// slice by reference for N>1.
+	vals := make([]values.Value, len(args))
+	copy(vals, args)
 
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.
@@ -449,8 +450,8 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	if segment == nil {
 		// Empty composable continuation: captured at a tail-call site with no
 		// saved frames above it (e.g., call/cc inside a sub-context where
-		// the call was in tail position). Applying it just returns the value.
-		p.SetValue(val)
+		// the call was in tail position). Applying it just returns the value(s).
+		p.SetValues(vals...)
 		return p.returnImmediate(), nil
 	}
 
@@ -459,6 +460,6 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 
 	// Restore from the top of the segment (resume captured computation)
 	p.Restore(segment)
-	p.SetValue(val)
+	p.SetValues(vals...)
 	return p, nil
 }

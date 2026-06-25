@@ -194,13 +194,11 @@ func PrimCallCC(cc machine.CallContext) error {
 		var abortErr *machine.ErrPromptAbort
 		if errors.As(err, &abortErr) && abortErr.Tag == machine.DefaultPromptTag {
 			// The escape closure ran the composable continuation to completion and
-			// aborted to DefaultPromptTag with the result. Extract all values here
-			// so callers that don't use RunWithEscapeHandling (e.g., threads) work.
-			if len(abortErr.Values) > 0 {
-				mc.SetValues(abortErr.Values...)
-			} else {
-				mc.SetValue(values.Void)
-			}
+			// aborted to DefaultPromptTag with the result. Deliver ALL values
+			// (R7RS §6.10), including the zero-value case: a continuation invoked
+			// with no values resumes with no values, not a fabricated Void. Callers
+			// that don't use RunWithEscapeHandling (e.g., threads) work via this.
+			mc.SetValues(abortErr.Values...)
 			return nil
 		}
 		return err

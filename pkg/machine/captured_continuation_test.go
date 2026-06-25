@@ -92,6 +92,8 @@ func TestCapturedContinuation(t *testing.T) {
 			},
 		},
 		{
+			// A continuation accepts any number of values (R7RS §6.10): zero,
+			// one, or several — it resumes with however many it is invoked with.
 			name: "AcceptsArity 1 is true",
 			checkFn: func(t *testing.T) {
 				capt := NewCapturedContinuation(cc, 0, nil)
@@ -99,17 +101,17 @@ func TestCapturedContinuation(t *testing.T) {
 			},
 		},
 		{
-			name: "AcceptsArity 0 is false",
+			name: "AcceptsArity 0 is true (resumes with no values)",
 			checkFn: func(t *testing.T) {
 				capt := NewCapturedContinuation(cc, 0, nil)
-				qt.Assert(t, capt.AcceptsArity(0), qt.IsFalse)
+				qt.Assert(t, capt.AcceptsArity(0), qt.IsTrue)
 			},
 		},
 		{
-			name: "AcceptsArity 2 is false",
+			name: "AcceptsArity 2 is true (resumes with multiple values)",
 			checkFn: func(t *testing.T) {
 				capt := NewCapturedContinuation(cc, 0, nil)
-				qt.Assert(t, capt.AcceptsArity(2), qt.IsFalse)
+				qt.Assert(t, capt.AcceptsArity(2), qt.IsTrue)
 			},
 		},
 		{

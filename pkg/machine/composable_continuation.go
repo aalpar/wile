@@ -112,10 +112,10 @@ func (p *ComposableContinuation) AcquireSegment() *MachineContinuation {
 }
 
 // AcceptsArity reports whether this composable continuation can be called with
-// n arguments. Composable continuations accept exactly 1 argument — the value
-// to resume with.
+// n arguments. A continuation accepts any number of values (R7RS §6.10): it
+// resumes with however many values it is invoked with — zero, one, or several.
 func (p *ComposableContinuation) AcceptsArity(n int) bool {
-	return n == 1
+	return n >= 0
 }
 
 func (p *ComposableContinuation) SchemeString() string {
