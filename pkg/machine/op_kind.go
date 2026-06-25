@@ -162,6 +162,8 @@ var (
 	_ InlinedOperation = (*OperationSetContMark)(nil)
 	_ InlinedOperation = (*OperationSaveContMark)(nil)
 	_ InlinedOperation = (*OperationRestoreContMark)(nil)
+	_ InlinedOperation = (*OperationBoxValues)(nil)
+	_ InlinedOperation = (*OperationUnboxValues)(nil)
 )
 
 func (*OperationForeignFunctionCall) OpKind() OpCode {
@@ -189,5 +191,13 @@ func (*OperationSaveContMark) OpKind() OpCode {
 }
 
 func (*OperationRestoreContMark) OpKind() OpCode {
+	return OpComplex
+}
+
+func (*OperationBoxValues) OpKind() OpCode {
+	return OpComplex
+}
+
+func (*OperationUnboxValues) OpKind() OpCode {
 	return OpComplex
 }

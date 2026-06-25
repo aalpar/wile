@@ -41,14 +41,12 @@ Deferred items surfaced while shipping the multi-value continuation re-invocatio
 fix (PR #800). The continuation value-count behavior itself is documented in
 `docs/reference/r7rs-differences.md` → "Continuation Value-Count".
 
-- **`dynamic-wind` does not preserve multiple values from its thunk** (real bug,
-  PRE-EXISTING — reproduces on clean master, no `call/cc` involved):
-  `(call-with-values (lambda () (dynamic-wind (lambda () #f) (lambda () (values 3 4)) (lambda () #f))) list)`
-  errors `"expected a procedure, got 3"`. Cause: `CompileValidatedDynamicWind`
-  (`pkg/machine/compilation/compile_validated.go`) `PUSH`/`PEEK`s the thunk
-  result as a single value. Fix: make the thunk-result save/restore
-  multiple-values-aware. R7RS §6.10: `dynamic-wind` must return whatever its
-  thunk returns, including multiple values.
+- ~~**`dynamic-wind` does not preserve multiple values from its thunk**~~ FIXED
+  on `fix/dynamic-wind-multiple-values`: box/unbox the thunk result so 0/1/N
+  values occupy exactly one eval-stack slot (`OperationBoxValues` /
+  `OperationUnboxValues` in `CompileValidatedDynamicWind`). A call/cc
+  *multiple-value* escape observed through `call-with-values` is still blocked by
+  the paused sub-context truncation bug, not by dynamic-wind.
 - **`procedure-arity` reports continuations as `1`** (stale after PR #800 made
   continuations variadic): `pkg/registry/core/prim_reflection.go:121`
   (`*ComposableContinuation` case) and the docstring/comment
