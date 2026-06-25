@@ -204,29 +204,11 @@ func TestSRFI13StringTokenizeDefaultCriterion(t *testing.T) {
 	})
 }
 
-// --- 6I: chibi test records a raising test as a failure, not a suite abort ---
-
-// TestChibiTestRaisingExpressionIsFailure pins that a test expression that raises
-// is recorded as one failure and execution continues: a test-group containing a
-// raising (test ...) followed by a passing (test ...) must run the second test
-// too, ending with 1 fail + 1 pass. The probe measures the failure-count delta
-// across the group; before the fix the raise aborted the group (and the eval)
-// so the second test never ran.
-func TestChibiTestRaisingExpressionIsFailure(t *testing.T) {
-	c := qt.New(t)
-	eng := newSRFITestEngine(t)
-
-	program := `(begin
-(import (chibi test))
-(define (fail-count) ((test-failure-count)))
-(define start-fail (fail-count))
-(test-group "raise-then-pass"
-  (test 1 (raise 'boom))
-  (test 2 (+ 1 1)))
-(define end-fail (fail-count))
-;; one new failure recorded (the raising test); the second test still ran and
-;; passed, adding no failure. Verify exactly one failure was added.
-(- end-fail start-fail))`
-	got := evalSRFI(c, eng, program)
-	c.Assert(got, qt.Equals, "1")
-}
+// NOTE: Task 6I (chibi `test` should record a raising test as a failure instead
+// of aborting the suite) was REVERTED from this branch. The natural fix — wrap
+// the test body in `guard` — weaponizes a pre-existing Wile VM bug: a `guard`
+// around an expression that internally escapes via call/cc (e.g. char-set-every's
+// short-circuit) loses the post-guard continuation, silently truncating the rest
+// of the suite (process exits 0, read as PASS by the integration harness). 6I is
+// blocked on fixing that guard+escaping-continuation bug. See the overnight
+// roadmap's morning briefing.

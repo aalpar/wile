@@ -161,19 +161,13 @@
         ((test expected expr)
          (test #f expected expr))
         ((test name expected expr)
-         ;; Evaluating EXPECTED or EXPR may raise. A raise must be recorded as
-         ;; one failure (the exception is the "actual" value) and must not abort
-         ;; the surrounding suite, so the whole evaluate-and-compare body is
-         ;; guarded. R7RS `guard' re-raises by default if no clause matches; the
-         ;; `else' clause makes every condition a recorded failure.
-         (guard (exn (else (%test-fail name 'no-error-expected exn)))
-           (let ((e expected)
-                 (a expr))
-             (if (if (and (number? e) (inexact? e))
-                     (%approx-equal? e a (current-test-epsilon))
-                     ((current-test-comparator) e a))
-                 (%test-pass name)
-                 (%test-fail name e a)))))))
+         (let ((e expected)
+               (a expr))
+           (if (if (and (number? e) (inexact? e))
+                   (%approx-equal? e a (current-test-epsilon))
+                   ((current-test-comparator) e a))
+               (%test-pass name)
+               (%test-fail name e a))))))
 
     (define-syntax test-equal
       (syntax-rules ()
