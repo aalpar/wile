@@ -559,9 +559,17 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Install in the target environment directly.
+		// Install in the target environment directly. Conflict detection mirrors
+		// CopyLibraryBindingsToEnvAtPhase so that a library declaration importing two
+		// libraries with different bindings for one name is rejected per R7RS §5.6,
+		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
+		_, created := targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
+		if !created && importConflicts(targetEnv.GetBinding(localSym, nil), importedBinding) {
+			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+				localName, lib.Name.SchemeString())
+		}
 		globalIdx := targetEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
 			err := targetEnv.SetOwnGlobalValue(globalIdx, importedBinding.Value())
@@ -574,7 +582,12 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
 			expandEnv := targetEnv.Expand()
-			_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
+			_, expandCreated := expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
+			if !expandCreated && importConflicts(expandEnv.GetBinding(localSym, nil), importedBinding) {
+				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+					localName, lib.Name.SchemeString())
+			}
 			expandIdx := expandEnv.GetGlobalIndex(localSym)
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
