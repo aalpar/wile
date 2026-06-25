@@ -72,14 +72,20 @@ func TestNestedSublistDottedTail(t *testing.T) {
 
 // TestEllipsisThenImproperTail covers the companion matcher bug that also
 // blocks (chibi optional): an ellipsis followed by an improper `. rest` tail,
-// e.g. `(a ... . rest)`. Per R7RS §4.3.2 this matches any list; the ellipsis
-// greedily consumes leading elements and `rest` binds to the trailing cdr —
-// `()` for a proper list, or the dotted tail for an improper one. The chibi
-// `let-optionals` macro relies on this: `(var&default ... . rest)`.
+// e.g. `(a ... . rest)`. The ellipsis greedily consumes the leading elements of
+// a PROPER-list input and `rest` binds to `()` (the cdr of the exhausted list).
+// The chibi `let-optionals` macro relies on exactly this over a proper argument
+// list: `(var&default ... . rest)`.
+//
+// KNOWN LIMITATION (pinned by the "improper input" subtest below): a genuinely
+// improper input like `(1 2 . 5)` does NOT match — the ellipsis loop's VisitCdr
+// cannot traverse a dotted input tail (verified identical on master). This is
+// outside C12/C13's scope (nested-sublist + improper-PATTERN-tail), and chibi
+// feeds only proper lists, so it does not block the libraries.
 //
 // Before the fix, after the ellipsis consumed every element the matcher
 // position was the empty list and ByteCodeCaptureCdr rejected it as no-match,
-// so a proper-list input never matched.
+// so even a proper-list input never matched.
 func TestEllipsisThenImproperTail(t *testing.T) {
 	c := qt.New(t)
 
@@ -125,5 +131,20 @@ func TestEllipsisThenImproperTail(t *testing.T) {
 		rest := m.GetBindings()["rest"]
 		c.Assert(syntax.IsSyntaxEmptyList(rest), qt.IsTrue,
 			qt.Commentf("rest = %v, want ()", rest))
+	})
+
+	// Improper input (1 2 . 5): does NOT match — known limitation, pinned so
+	// the docstring's claim stays honest. The ellipsis loop cannot traverse a
+	// dotted input tail; this is verified identical on master and is outside
+	// C12/C13's scope (chibi feeds only proper lists).
+	c.Run("improper input not matched", func(c *qt.C) {
+		target := syntax.NewSyntaxCons(
+			testSyntaxInt(1),
+			syntax.NewSyntaxCons(testSyntaxInt(2), testSyntaxInt(5), nil),
+			nil,
+		)
+		_, err := compileAndMatch(target)
+		c.Assert(err, qt.IsNotNil,
+			qt.Commentf("(a ... . rest) does not match improper input (1 2 . 5)"))
 	})
 }
