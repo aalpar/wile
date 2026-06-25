@@ -51,10 +51,15 @@ fix (PR #800). The continuation value-count behavior itself is documented in
   `fix/procedure-arity-continuations`: both `*ComposableContinuation` and (newly
   handled) `*CapturedContinuation` now report `(0 . #f)` (variadic-from-0,
   matching their `AcceptsArity` and Racket's arity-at-least-0); docstring updated.
-- **(Optional, low priority)** single-value resumption contexts splice
-  multiple values instead of raising an arity error (documented as a deliberate
-  choice in unspecified R7RS territory — see r7rs-differences). Only if strict
-  Racket-style arity-mismatch behavior is later wanted; not a bug today.
+- **(Investigated 2026-06-25 — NOT pursued)** single-value resumption contexts
+  splice multiple values instead of raising an arity error. Design pass concluded
+  it is not worth it: strictness needs a value-count check on the
+  `RestoreContinuation` hot path + a compile-time single/any classification, and
+  breaks `(wile control)` variadic resumption and pervasive normal-return splices
+  — all to enforce behavior R7RS leaves unspecified (current splice already
+  conforms, documented in r7rs-differences). If ever needed, do it as an opt-in
+  `WithStrictValueArity` engine option, not a default change. Full rationale:
+  `plans/2026-06-25-continuation-arity-strictness-design.local.md`.
 
 ### Layered-environment carve regressions (review `d8911c15..HEAD`, 2026-06-15)
 
