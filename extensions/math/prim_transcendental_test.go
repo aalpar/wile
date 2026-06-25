@@ -15,9 +15,11 @@
 package math_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -177,6 +179,21 @@ func TestExptAdditionalCases(t *testing.T) {
 		// Zero base with positive exponent
 		{"expt 0 positive", `(= (expt 0 5) 0)`, values.TrueValue},
 
+		// Negative real base with non-integer exponent → complex (R7RS §6.2.6),
+		// not +nan.0 (C6). (expt -1 1/2) == i == (sqrt -1); (expt -8 1/3) has
+		// magnitude 2 (a genuine complex cube root, not NaN).
+		{"expt neg base half power is i", `(< (magnitude (- (expt -1 1/2) 0+1i)) 1e-10)`, values.TrueValue},
+		{"expt neg base half power equals sqrt", `(< (magnitude (- (expt -1 1/2) (sqrt -1))) 1e-10)`, values.TrueValue},
+		{"expt neg base cube root magnitude", `(< (abs (- (magnitude (expt -8 1/3)) 2)) 1e-10)`, values.TrueValue},
+		{"expt neg base cube root not nan", `(not (nan? (magnitude (expt -8 1/3))))`, values.TrueValue},
+		// Positive base + non-integer exponent stays real (unchanged).
+		{"expt pos base half power real", `(< (abs (- (expt 4 1/2) 2.0)) 1e-10)`, values.TrueValue},
+		// Negative base with an INTEGER-VALUED inexact exponent must stay REAL
+		// (regression guard for the non-integer-only complex routing).
+		{"expt neg base inexact-int exp real value", `(< (abs (- (expt -2 3.0) -8.0)) 1e-10)`, values.TrueValue},
+		{"expt neg base inexact-int exp not complex", `(real? (expt -2 3.0))`, values.TrueValue},
+		{"expt neg float base int exp real", `(< (abs (- (expt -2.0 3) -8.0)) 1e-10)`, values.TrueValue},
+
 		// Complex exponentiation paths
 		{"complex base integer exp", `(< (magnitude (- (expt 1+1i 2) 0+2i)) 1e-10)`, values.TrueValue},
 		{"complex base float exp", `(number? (expt 1+1i 0.5))`, values.TrueValue},
@@ -290,6 +307,19 @@ func TestTranscendentalErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
 		})
+	}
+}
+
+// TestExptZeroNegativeExponent verifies that (expt 0 <neg>) raises a clean,
+// catchable ErrDivisionByZero rather than surfacing as a recovered panic /
+// "internal error" from big.Rat.SetFrac(_, 0) (C7).
+func TestExptZeroNegativeExponent(t *testing.T) {
+	engine := newEngine(t)
+	for _, code := range []string{"(expt 0 -1)", "(expt 0 -2)", "(expt 0/1 -3)"} {
+		err := evalExpectError(t, engine, code)
+		if !errors.Is(err, werr.ErrDivisionByZero) {
+			t.Fatalf("%s: want ErrDivisionByZero, got %v", code, err)
+		}
 	}
 }
 
