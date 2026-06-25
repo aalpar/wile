@@ -58,17 +58,21 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: invalid library registry type")
 	}
 
-	lib := reg.Lookup(name)
-	if lib != nil {
-		return lib, nil
+	// Atomic check-and-claim: collapses the former Lookup → IsLoading →
+	// StartLoading sequence into one locked decision so two threads cannot both
+	// see "not loaded" and proceed to load+Register the same library (a TOCTOU
+	// that would otherwise surface as ErrDuplicateBinding). See LookupOrClaim.
+	cached, _, err := reg.LookupOrClaim(name)
+	if err != nil {
+		return nil, err
 	}
-
-	if reg.IsLoading(name) {
-		return nil, werr.WrapForeignErrorf(werr.ErrCircularDependency,
-			"circular dependency detected while loading %s", name.SchemeString())
+	if cached != nil {
+		return cached, nil
 	}
-	reg.StartLoading(name)
+	// cached == nil and err == nil ⇒ we claimed the loading slot; release it on
+	// every exit path.
 	defer reg.FinishLoading(name)
+	var lib *CompiledLibrary
 
 	// Resolve and open via FileResolver (supports both OS and virtual FS).
 	resolver := env.FileResolver()
