@@ -537,14 +537,22 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 //	SAVE_CONTINUATION →after_thunk
 //	APPLY                          ; call thunk()
 //	after_thunk:                   ; Stack: [before, thunk, after]
-//	PUSH                           ; save thunk result, Stack: [before, thunk, after, result]
+//	BOX_VALUES                     ; collapse thunk's 0/1/N result values to one carrier
+//	PUSH                           ; save boxed result, Stack: [before, thunk, after, boxed]
 //	OP_POP_WIND                    ; pop winding frame
 //	PEEK_K 1                       ; value = after
 //	SAVE_CONTINUATION →after_after
 //	APPLY                          ; call after()
-//	after_after:                   ; Stack: [before, thunk, after, result]
-//	PEEK_K 0                       ; value = result (thunk's return value)
+//	after_after:                   ; Stack: [before, thunk, after, boxed]
+//	PEEK_K 0                       ; value = boxed result
+//	UNBOX_VALUES                   ; expand carrier back to thunk's 0/1/N values
 //	DROP DROP DROP DROP            ; clean up stack
+//
+// BOX_VALUES/UNBOX_VALUES keep the saved result at exactly one eval-stack slot:
+// OpPush pushes every value in the register (PushAll for multiple, nothing for
+// zero), so without boxing a thunk returning (values …) would mis-align the
+// PeekK/Drop offsets (R7RS §6.4 requires dynamic-wind to return the thunk's
+// values, including zero or several).
 func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
@@ -591,9 +599,15 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 	// after_thunk: Stack is restored to [before, thunk, after]
 	// Thunk's result is in value register
 
-	// Save thunk result on stack
+	// Box the thunk's result so multiple (or zero) values occupy exactly ONE
+	// eval-stack slot. OpPush pushes every value in the register (PushAll for
+	// multi, nothing for zero), which would break the fixed [.. , result] layout
+	// the PeekK/Drop offsets below assume. Boxing collapses 0/1/N values into a
+	// single carrier; OperationUnboxValues restores them after the after-thunk.
+	p.AppendOperations(machine.NewOperationBoxValues())
+	// Save boxed thunk result on stack
 	p.AppendOperations(machine.NewOperationPush())
-	// Stack: [before, thunk, after, result]
+	// Stack: [before, thunk, after, boxed-result]
 
 	// Phase 5: Pop winding frame
 	p.AppendOperations(machine.NewOperationPopWind())
@@ -607,11 +621,13 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 	// after_after: Stack is restored to [before, thunk, after, result]
 
 	// Phase 7: Return thunk result
-	// Get result into value register (at top of stack)
+	// Get boxed result into value register (at top of stack)
 	p.AppendOperations(machine.NewOperationPeekK(0))
+	// Unbox: expand the carrier back into the register's 0/1/N values.
+	p.AppendOperations(machine.NewOperationUnboxValues())
 	// Clean up stack
 	p.AppendOperations(
-		machine.NewOperationDrop(), // result
+		machine.NewOperationDrop(), // boxed result
 		machine.NewOperationDrop(), // after
 		machine.NewOperationDrop(), // thunk
 		machine.NewOperationDrop(), // before

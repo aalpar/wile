@@ -346,3 +346,55 @@ func TestCallCCComprehensive(t *testing.T) {
 		})
 	}
 }
+
+// TestDynamicWindMultipleValues pins R7RS §6.4: dynamic-wind returns whatever
+// its thunk returns, INCLUDING zero or multiple values. The compiled
+// dynamic-wind bytecode (CompileValidatedDynamicWind) saved the thunk result as
+// a single value via PUSH/PEEK, so a thunk returning (values …) corrupted the
+// stack — N>1 raised "expected a procedure" (after-thunk APPLY read a misaligned
+// slot) and N==0 underflowed the stack.
+func TestDynamicWindMultipleValues(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "thunk returns two values",
+			Code:     `(call-with-values (lambda () (dynamic-wind (lambda () #f) (lambda () (values 3 4)) (lambda () #f))) list)`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(4)),
+		},
+		{
+			Name:     "thunk returns three values into a consumer",
+			Code:     `(call-with-values (lambda () (dynamic-wind (lambda () #f) (lambda () (values 1 2 3)) (lambda () #f))) +)`,
+			Expected: values.NewInteger(6),
+		},
+		{
+			Name:     "thunk returns zero values",
+			Code:     `(call-with-values (lambda () (dynamic-wind (lambda () #f) (lambda () (values)) (lambda () #f))) (lambda () 'zero))`,
+			Expected: values.NewSymbol("zero"),
+		},
+		{
+			Name:     "single value still works",
+			Code:     `(dynamic-wind (lambda () #f) (lambda () 7) (lambda () #f))`,
+			Expected: values.NewInteger(7),
+		},
+		{
+			// The before/after thunks must still run when the body yields
+			// multiple values (winding is not skipped by the multi-value path).
+			Name: "before and after run with multiple-value body",
+			Code: `(let ((log '()))
+			          (call-with-values
+			            (lambda () (dynamic-wind
+			                         (lambda () (set! log (cons 'before log)))
+			                         (lambda () (values 1 2))
+			                         (lambda () (set! log (cons 'after log)))))
+			            (lambda (a b) (set! log (cons (+ a b) log))))
+			          (reverse log))`,
+			Expected: values.List(values.NewSymbol("before"), values.NewSymbol("after"), values.NewInteger(3)),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
