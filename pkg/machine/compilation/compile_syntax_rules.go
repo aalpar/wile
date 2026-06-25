@@ -514,6 +514,12 @@ func skipEllipses(lst syntax.SyntaxValue, ellipsis string) (int, syntax.SyntaxVa
 // (`(_ a ...)`) depth 1; under nested ellipses (`(_ (a ...) ...)`) depth 2. Only
 // names already known to be pattern variables are recorded; literals, the macro
 // keyword, and the ellipsis marker are naturally excluded.
+//
+// INVARIANT: this walker must descend into the same sub-forms as
+// collectPatternVariablesWithEllipsis (proper list, dotted tail, vector). The
+// template check reads patternDepths[name] with a 0 default, so a pattern
+// variable this walker fails to reach would be silently mis-depthed as 0 — a
+// spurious (loud) rejection. Keep the two case sets in lockstep.
 func computePatternVarDepths(pattern syntax.SyntaxValue, variables map[string]struct{}, ellipsis string, depth int, out map[string]int) {
 	switch p := pattern.(type) {
 	case *syntax.SyntaxSymbol:
@@ -575,6 +581,9 @@ func computePatternVarDepths(pattern syntax.SyntaxValue, variables map[string]st
 			computePatternVarDepths(elem, variables, ellipsis, depth+k, out)
 			i += k
 		}
+
+	case *syntax.SyntaxObject:
+		// Self-evaluating literals are not pattern variables — no depth to record.
 	}
 }
 
@@ -610,6 +619,9 @@ func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables map[string]st
 		for _, elem := range t.Values {
 			collectTemplatePatternVars(elem, variables, ellipsis, out)
 		}
+
+	case *syntax.SyntaxObject:
+		// Self-evaluating literals contain no pattern variables.
 	}
 }
 
@@ -627,7 +639,9 @@ func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables map[string]struc
 		return nil
 	}
 	// Look for a driver; meanwhile track the most clearly offending variable
-	// (the one bound at the shallowest pattern depth) to report.
+	// (the one bound at the shallowest pattern depth) to report. The name
+	// tie-break makes the reported variable deterministic when several share the
+	// shallowest depth — `vars` is a Go map, so iteration order is randomized.
 	offendingName := ""
 	offendingDepth := 0
 	var offendingSym *syntax.SyntaxSymbol
@@ -636,7 +650,10 @@ func checkEllipsisGroupDriver(sub syntax.SyntaxValue, variables map[string]struc
 		if pd >= requiredDepth {
 			return nil // driver found — group is well-formed
 		}
-		if offendingSym == nil || pd < offendingDepth {
+		isFirst := offendingSym == nil
+		shallower := pd < offendingDepth
+		sameDepthEarlierName := pd == offendingDepth && name < offendingName
+		if isFirst || shallower || sameDepthEarlierName {
 			offendingName = name
 			offendingDepth = pd
 			offendingSym = sym
