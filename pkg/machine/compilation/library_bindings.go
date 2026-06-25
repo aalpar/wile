@@ -385,13 +385,12 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 // more than once with different bindings"). Only a prior IMPORTED binding counts:
 //
 //   - a re-import of the same binding (a diamond — two libraries re-exporting one
-//     source, or re-importing the same library) shares the value and is permitted;
+//     source, or re-importing the same library) is permitted;
 //   - a pre-existing user definition is not an import and is left to shadow.
 //
-// The comparison is by value equality, so two libraries re-exporting equal constants
-// are treated as the same binding (lenient exactly where the observable result is
-// identical); two distinct procedures or a primitive-vs-Scheme redefinition (e.g.
-// (scheme base) string-map vs (srfi 13) string-map) compare unequal and conflict.
+// Whether the two denote the same definition (diamond) or two definitions of one name
+// (conflict) is decided by sameImportedBinding — see its doc for the by-name comparison
+// and why it is used instead of value identity.
 func importConflicts(existing, incoming *environment.Binding) bool {
 	if existing == nil || incoming == nil {
 		return false
