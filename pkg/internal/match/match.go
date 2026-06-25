@@ -346,7 +346,20 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			lcs := len(p.captureStack)
 			vsv := p.syntaxStack[lvs-1].pr
 			if syntax.IsSyntaxEmptyList(vsv) {
-				return ErrNotAMatch
+				// The `. rest` tail follows a preceding ellipsis that already
+				// consumed every element of a PROPER list (e.g. (a ... . rest)
+				// matching (1 2 3)). The rest of an exhausted proper list is the
+				// empty list, so bind `rest` to () rather than failing.
+				// (CaptureCar guards the empty-input case for the leading
+				// element, so reaching here with an empty position can only mean
+				// an exhausted-list tail, never a missing required element.)
+				captured := syntax.SyntaxEmptyList
+				bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
+				if ok && !syntaxValuesEqualForMatch(captured, bv) {
+					return ErrNotAMatch
+				}
+				p.captureStack[lcs-1].bindings[cd.Binding] = captured
+				break
 			}
 			capturedSyntax := vsv.SyntaxCdr()
 			bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
