@@ -193,6 +193,13 @@ func TestExptAdditionalCases(t *testing.T) {
 		{"expt neg base inexact-int exp real value", `(< (abs (- (expt -2 3.0) -8.0)) 1e-10)`, values.TrueValue},
 		{"expt neg base inexact-int exp not complex", `(real? (expt -2 3.0))`, values.TrueValue},
 		{"expt neg float base int exp real", `(< (abs (- (expt -2.0 3) -8.0)) 1e-10)`, values.TrueValue},
+		// NaN exponent on a negative base stays REAL +nan.0 (degenerate input;
+		// must not flip to a complex result via the Trunc(NaN) guard).
+		{"expt neg base nan exp is nan", `(nan? (expt -2 +nan.0))`, values.TrueValue},
+		{"expt neg base nan exp is real", `(real? (expt -2 +nan.0))`, values.TrueValue},
+		// Inexact zero base with a negative exponent is the IEEE +inf.0, NOT the
+		// exact-zero ErrDivisionByZero (which only applies to an exact 0 base).
+		{"expt inexact zero base neg exp inf", `(= (expt 0.0 -1) +inf.0)`, values.TrueValue},
 
 		// Complex exponentiation paths
 		{"complex base integer exp", `(< (magnitude (- (expt 1+1i 2) 0+2i)) 1e-10)`, values.TrueValue},

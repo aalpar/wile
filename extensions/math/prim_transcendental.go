@@ -309,7 +309,10 @@ func PrimExpt(mc machine.CallContext) error {
 		// (R7RS §6.2.6 — it is complex); math.Pow returns +nan.0 there (C6).
 		// An integer-valued exponent (e.g. (expt -2 3.0)) stays real, so guard
 		// on the exponent being non-integral, not merely on a negative base.
-		if baseF < 0 && expF != math.Trunc(expF) {
+		// A NaN exponent is excluded (math.Trunc(NaN)!=NaN would otherwise route
+		// it to the complex path); leave it on the real IEEE path, matching the
+		// prior real +nan.0 result for a degenerate input like (expt -2 +nan.0).
+		if baseF < 0 && !math.IsNaN(expF) && expF != math.Trunc(expF) {
 			mc.SetValue(values.NewComplex(cmplx.Pow(complex(baseF, 0), complex(expF, 0))))
 			return nil
 		}
