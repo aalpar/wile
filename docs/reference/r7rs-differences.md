@@ -4,18 +4,19 @@ This document catalogs differences between the current implementation and the R7
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
-**Last Updated:** 2026-06-12
+**Last Updated:** 2026-06-24
 
 ---
 
 ## Summary
 
-Five known differences exist:
+Six known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 4. Pair and vector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals.
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
+6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
 
 ---
 
@@ -194,6 +195,31 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 **Implementation:** Pure compile-time, scoped to the engine's **root** namespace. The redefinition guard fires only for a define landing in the root's own user runtime or sealed base (`compile_validated.go`); child namespaces report `ImmutableTopLevel() == false`, so REPL / `(environment …)` / `scheme-report-environment` redefines are permitted. The compiler stamps `BindingMeta.Stable`; the `set!` guard keys on `IsStable()` **directly** (not on the namespace flag), so a `Stable` anchor copied into a mutable child stays `set!`-protected — preserving frame-reclaim soundness while still allowing define-shadow. Imported-binding `set!` rejection (always on) is unchanged.
 
 **Impact:** Programs that rebind their own never-mutated top-level definitions via `set!` are rejected by default; the common case (define-once, call-many) is unaffected and gains the optimization. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
+
+---
+
+## Conflicting Imports Signalled (R7RS §5.6)
+
+**R7RS §5.6:** "It is an error to import the same identifier more than once with different bindings." Per §1.3.2, the phrase *"is an error"* (without *"is signalled"*) means the program is erroneous but the implementation is **not required** to detect it — only encouraged to.
+
+**Wile signals it.** Importing one identifier from two libraries (or two import sets) that resolve to **different** bindings raises `werr.ErrDuplicateBinding` rather than silently letting the last import win. This matches Chez Scheme and Racket (R6RS-strict implementations signal the same situation) and avoids the fragile, order-dependent last-import-wins resolution that Guile and pre-strict Wile used.
+
+```scheme
+;; (scheme base) string-map is the R7RS variadic form; (srfi 13) string-map is the
+;; single-string + range form — two DIFFERENT procedures under one name.
+(import (scheme base) (srfi 13))                 ; ERROR: conflicting import of string-map
+(import (except (scheme base) string-map) (srfi 13))  ; OK — srfi-13's string-map
+(import (scheme base) (prefix (srfi 13) s:))     ; OK — srfi-13 names prefixed s:
+(import (scheme r5rs) (srfi 13))                 ; OK — r5rs has no string-map
+```
+
+**Diamonds and repeats stay legal.** Importing one identifier from two libraries that re-export the **same** binding (e.g. `make-list` from both `(scheme base)` and `(srfi 1)`, or `nan?` from both `(scheme base)` and `(scheme inexact)`), and re-importing the same library, are not conflicts.
+
+**SRFI guidance.** Several SRFIs (notably SRFI-13) predate R7RS and the module system entirely (SRFI-13 targets R5RS, which had no `string-map`). Their R7RS port can collide with `(scheme base)`. Use `(scheme r5rs)` as the base for full SRFI surfaces, or `except`/`prefix`/`rename` to disambiguate against `(scheme base)`.
+
+**Implementation:** Wile import **recompiles** a re-exported procedure, so no runtime value identity (template, env, or pointer) survives re-export — two re-exports of one definition are distinct closures. The conflict check (`importConflicts` in `library_bindings.go`) therefore identifies "the same binding" by procedure **name** for closures (the registry is name-unique for primitives; a re-exported Scheme procedure keeps its name) and by `EqualTo` for other values. The one genuine stdlib collision — `(scheme base) string-map` (primitive-backed) vs `(srfi 13) string-map` (a Scheme procedure) — is cross-kind, so it falls to `EqualTo` and is reported as a conflict.
+
+**Limitation (deliberate):** two *different* Scheme procedures exported under the *same* name by two libraries compare equal here and are **not** flagged (silent last-import-wins); no such case exists in the bundled stdlib. A definition-source-location origin would catch it, but it was rejected: it falsely flags the common, legal **define-over-import shadow** — a program that does `(import (scheme base))` then `(define (zero? x) …)` would see its own `zero?` (user source) "conflict" with the imported `zero?` (library source). Name comparison treats both as the one logical `zero?`, so shadowing keeps working. Since define-over-import is ubiquitous and same-name-different-procedure import clashes are absent from the stdlib, name is the right trade-off.
 
 ---
 

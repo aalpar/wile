@@ -2,7 +2,7 @@
 ;; Covers: string-index, string-index-right, string-skip, string-skip-right,
 ;; string-count.
 
-(import (scheme base) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 3")
 

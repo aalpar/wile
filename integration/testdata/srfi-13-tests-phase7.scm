@@ -1,7 +1,7 @@
 ;; SRFI-13 Phase-7 integration tests
 ;; Covers: string-upcase!, string-downcase!.
 
-(import (scheme base) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 7")
 

@@ -379,6 +379,72 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 	return nil, environment.PhaseRuntime, false
 }
 
+// importConflicts reports whether installing incoming under a local name whose
+// own-frame binding already exists would bind one identifier to two DIFFERENT
+// bindings — an error per R7RS §5.6 ("it is an error to import the same identifier
+// more than once with different bindings"). Only a prior IMPORTED binding counts:
+//
+//   - a re-import of the same binding (a diamond — two libraries re-exporting one
+//     source, or re-importing the same library) shares the value and is permitted;
+//   - a pre-existing user definition is not an import and is left to shadow.
+//
+// The comparison is by value equality, so two libraries re-exporting equal constants
+// are treated as the same binding (lenient exactly where the observable result is
+// identical); two distinct procedures or a primitive-vs-Scheme redefinition (e.g.
+// (scheme base) string-map vs (srfi 13) string-map) compare unequal and conflict.
+func importConflicts(existing, incoming *environment.Binding) bool {
+	if existing == nil || incoming == nil {
+		return false
+	}
+	if !existing.IsImported() {
+		return false
+	}
+	ev := existing.Value()
+	iv := incoming.Value()
+	if ev == nil || iv == nil {
+		return false
+	}
+	return !sameImportedBinding(ev, iv)
+}
+
+// sameImportedBinding reports whether two imported values denote the same underlying
+// definition (a diamond / re-export) rather than two different definitions sharing one
+// name (a conflict). Plain EqualTo is insufficient: Wile import/re-export preserves NO
+// runtime identity for procedures — a re-export RECOMPILES, producing a fresh closure
+// with its own template and env (verified: (scheme base) cddr and (scheme cxr) cddr,
+// both re-exports of the ambient bootstrap cddr, share neither template, env, nor
+// pointer). The only signal that survives recompilation is the procedure NAME, so:
+//
+//   - foreign closures (primitives): the registry is name-unique per engine, so equal
+//     names denote the same primitive (e.g. nan? from (scheme base) vs (scheme inexact)).
+//   - machine (Scheme) closures: equal names denote the same re-exported procedure
+//     (e.g. cddr from (scheme base) vs (scheme cxr)).
+//
+// A primitive vs a Scheme redefinition of one name (the only genuine stdlib collision —
+// (scheme base) string-map vs (srfi 13) string-map) is cross-kind, so it falls to the
+// EqualTo default and is reported as a conflict.
+//
+// Why name and not the definition source location: a source-location origin is airtight
+// for import-vs-import clashes but FALSELY flags the common, legal define-over-import
+// shadow — a program that (import (scheme base)) then (define (zero? x) …) would see its
+// own zero? (user source) "conflict" with the imported zero? (library source). Comparing
+// by name treats both as the one logical zero?, preserving shadowing. The cost is that
+// two DIFFERENT Scheme procedures exported under the same name by two libraries are not
+// flagged (silent last-import-wins); no such case exists in the bundled stdlib, whereas
+// define-over-import is everywhere — so name is the right trade-off for Wile.
+func sameImportedBinding(a, b values.Value) bool {
+	switch av := a.(type) {
+	case *machine.ForeignClosure:
+		bv, ok := b.(*machine.ForeignClosure)
+		return ok && av.Name() == bv.Name()
+	case *machine.MachineClosure:
+		bv, ok := b.(*machine.MachineClosure)
+		return ok && av.Name() == bv.Name()
+	default:
+		return a.EqualTo(b)
+	}
+}
+
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
@@ -392,10 +458,17 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Create binding in the target at the base phase.
+		// Create binding in the target at the base phase. A previously-imported
+		// binding of the same local name that resolves to a different binding is a
+		// conflicting import (R7RS §5.6) — reject rather than silently last-wins.
 		phaseEnv := targetEnv.AtPhase(targetPhase)
 		localSym := values.NewSymbol(localName)
-		_, _ = phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
+		_, created := phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
+		if !created && importConflicts(phaseEnv.GetBinding(localSym, nil), libBinding) {
+			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+				localName, lib.Name.SchemeString())
+		}
 		globalIdx := phaseEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
 			err := phaseEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
