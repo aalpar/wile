@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
@@ -38,17 +39,28 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 
 	var parts []string
 	err := values.ForEachProperList(ctx, tuple, "library name", func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
-		sym, ok := partExpr.(*values.Symbol)
-		if ok {
-			parts = append(parts, sym.Key)
-			return nil
+		var part string
+		switch v := partExpr.(type) {
+		case *values.Symbol:
+			part = v.Key
+		case *values.Integer:
+			part = fmt.Sprintf("%d", v.Value)
+		default:
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "library name part must be identifier or integer, got %T", partExpr)
 		}
-		num, ok := partExpr.(*values.Integer)
-		if ok {
-			parts = append(parts, fmt.Sprintf("%d", num.Value))
-			return nil
+		// Reject parts that would let a library name escape the search root or
+		// otherwise denote a non-identifier path segment. ".."/"."/"" and any
+		// embedded path separator are not valid R7RS library-name identifiers,
+		// and ".." in particular builds an out-of-root path the OS resolver
+		// would traverse (S1). This is the single choke point for both
+		// compile-time and runtime-constructed names. Integers can never hit
+		// this, but the guard is total and cheap.
+		if part == ".." || part == "." || part == "" || strings.ContainsAny(part, "/\\") {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"library name part %q is not a valid identifier", part)
 		}
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "library name part must be identifier or integer, got %T", partExpr)
+		parts = append(parts, part)
+		return nil
 	})
 	if err != nil {
 		return LibraryName{}, err
