@@ -140,12 +140,12 @@ type Value interface {
 // This includes lambdas, case-lambdas, parameter objects (R7RS §4.2.6),
 // and composable continuations.
 //
-// AcceptsArity reports whether the procedure can be called with exactly n
-// arguments. This captures arity constraints that are otherwise scattered
-// across per-type checks in the VM apply path.
-//
-// Implemented by: MachineClosure, CaseLambdaClosure, Parameter,
-// ComposableContinuation.
+// AcceptsArity reports whether the procedure can be called with n arguments.
+// This captures arity constraints that are otherwise scattered across per-type
+// checks in the VM apply path. Fixed-arity callables (lambdas) accept only their
+// declared count; variadic and continuation callables accept a range or any
+// number — continuations resume with whatever number of values they are invoked
+// with (R7RS §6.10), so they accept any arity.
 type Callable interface {
 	Value
 	AcceptsArity(n int) bool

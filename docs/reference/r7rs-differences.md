@@ -10,13 +10,14 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Six known differences exist:
+Seven known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 4. Pair and vector literals are **immutable** — mutating one **raises an error** (R7RS permits but does not require this detection), matching immutable string literals.
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
+7. Invoking a continuation with a number of values other than one **splices** those values into the capture position rather than raising an arity error. R7RS §6.10 leaves this **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory (Racket instead raises an arity error); both conform.
 
 ---
 
@@ -220,6 +221,48 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 **Implementation:** Wile import **recompiles** a re-exported definition — an ambient procedure or macro is rebuilt into each manifest library that re-exports it, so the copies are distinct closures with no shared template/env/pointer. The conflict check (`importConflicts` in `library_bindings.go`) therefore identifies "the same binding" for closures by procedure **name** (the recompilation-stable signal: the registry is name-unique for primitives, and a named procedure keeps its name across recompiles), and by `EqualTo` for everything else. The one genuine stdlib collision — `(scheme base) string-map` vs `(srfi 13) string-map`, both name-less `case-lambda`s — is caught by `EqualTo`: a re-exported case-lambda shares its value pointer (diamond), whereas these two differ structurally (conflict).
 
 **Limitation (deliberate, irreducible):** a collision the *name* cannot distinguish is treated as the same binding and silently last-import-wins. This covers **name-less closures** — macro transformers and var-form-defined procedures (`(define f (lambda …))`), whose template name is empty, so `"" == ""` reads as identical — and **same-named function-form procedures**. Catching these would require a definition origin (source location), which was rejected because it falsely flags the ubiquitous, legal **define-over-import shadow**: a program that does `(import (scheme base))` then `(define (zero? x) …)` would see its own `zero?` "conflict" with the imported one. Name comparison preserves that shadowing, and the only signal that could separate a recompiled re-export from a genuine same-name clash is exactly the origin that breaks shadowing — so the gap is irreducible at the value layer. No such hidden clash exists in the bundled stdlib (the one real collision, `string-map`, is caught above).
+
+---
+
+## Continuation Value-Count (Splicing, Not Arity-Checked)
+
+**Affected Primitives:** `call-with-current-continuation` / `call/cc` escape
+procedures, `call-with-composable-continuation`, and any captured continuation.
+
+**R7RS §6.10 Requirement:**
+> Except for continuations created by the `call-with-values` procedure
+> (including the initial continuation) … the effect of passing no value or more
+> than one value to continuations that were not created by `call-with-values` is
+> unspecified.
+
+**Wile Behavior:** A continuation accepts **any** number of values. The values
+delivered when it is invoked are **spliced into the capture position**:
+
+```scheme
+(+ 1 (call/cc (lambda (c) (c 5 6))))   ; => 12   i.e. (+ 1 5 6)
+(+ 1 (call/cc (lambda (c) (c))))       ; => 1    i.e. (+ 1)
+(call-with-values (lambda () (call/cc (lambda (c) (c 1 2 3)))) list) ; => (1 2 3)
+```
+
+A continuation captured in a single-value context invoked with two values does
+**not** raise an arity error (Racket raises one); it splices both. A
+continuation invoked with zero values resumes with no values, not a fabricated
+unspecified value.
+
+**Rationale:** This is emergent from the CESK value-register / eval-stack VM
+model — invoking a continuation places the delivered values at the capture
+position, where the surrounding form consumes however many are present. R7RS
+§6.10 explicitly leaves the ≠1-value case unspecified, so both Wile's splicing
+and Racket's arity error conform. `AcceptsArity` returns `true` for continuations
+(they are variadic); the value-count is governed by the resumption context, not
+by an arity gate. See `docs/continuations/delimited.md` and
+`docs/continuations/escape-design.md` for the capture/restore mechanism.
+
+**Open follow-ups** (tracked in `TODO.md` → Tier 1 "Continuation multiple-values
+follow-ups"): whether single-value resumption contexts should *enforce* their
+value-count (strict R7RS-error behavior); `procedure-arity` still reporting
+continuations as `1`; and `dynamic-wind` not preserving multiple values from its
+thunk.
 
 ---
 

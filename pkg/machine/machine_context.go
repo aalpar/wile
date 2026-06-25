@@ -1521,11 +1521,10 @@ func (p *MachineContext) RunWithEscapeHandling() (rerr error) {
 					return applyErr
 				}
 			} else {
-				if len(abortErr.Values) > 0 {
-					p.SetValues(abortErr.Values...)
-				} else {
-					p.SetValue(values.Void)
-				}
+				// Deliver ALL abort values (R7RS §6.10), including zero: a
+				// continuation invoked with no values resumes with no values, not a
+				// fabricated Void.
+				p.SetValues(abortErr.Values...)
 				// Context-level abort (prompt == nil): the composable continuation
 				// has already run to completion inside the escape closure's sub-context.
 				// The abort value is the final result; p.pc was not advanced (FFC

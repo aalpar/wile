@@ -1055,7 +1055,10 @@ func TestApplyCallable_ComposableContinuation(t *testing.T) {
 	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
-func TestApplyCallable_ComposableContinuation_WrongArgCount(t *testing.T) {
+// A continuation invoked with multiple values resumes with all of them
+// (R7RS §6.10). An empty-segment composable continuation invoked with two
+// values delivers both to the value register as multiple values.
+func TestApplyCallable_ComposableContinuation_MultipleValues(t *testing.T) {
 	c := qt.New(t)
 	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
@@ -1064,8 +1067,28 @@ func TestApplyCallable_ComposableContinuation_WrongArgCount(t *testing.T) {
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	_, err := mc.ApplyCallable(cc, values.NewInteger(1), values.NewInteger(2))
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "expected 1 argument")
+	c.Assert(err, qt.IsNil)
+	got := mc.GetValues()
+	c.Assert(len(got), qt.Equals, 2)
+	c.Assert(got[0], valuestest.SchemeEquals, values.NewInteger(1))
+	c.Assert(got[1], valuestest.SchemeEquals, values.NewInteger(2))
+}
+
+// A continuation invoked with zero values resumes with NO values — the register
+// is canonical-empty (GetValues len 0), not a fabricated single Void. Pins the
+// register-level distinction the Scheme-level nullary-consumer test cannot
+// observe directly.
+func TestApplyCallable_ComposableContinuation_ZeroValues(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewNamespace().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	cc := NewComposableContinuation(nil, nil, 0, nil)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	_, err := mc.ApplyCallable(cc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValues(), qt.HasLen, 0)
 }
 
 func TestApplyCallable_NonCallable(t *testing.T) {
