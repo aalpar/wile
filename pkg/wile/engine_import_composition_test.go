@@ -172,6 +172,16 @@ func TestImportConflictDetection(t *testing.T) {
 			program: `(import (scheme base)) (define (zero? x) (eq? x 'z)) (list (zero? 'z) (zero? 5))`,
 			want:    "(#t #f)",
 		},
+		{
+			// Macro re-export diamond: (scheme base) and (scheme r5rs) both re-export the
+			// ambient derived-syntax macros (let, cond, …). These are name-less,
+			// recompiled-per-manifest closures, so they MUST be recognized as the same
+			// binding by name — a value-identity check would falsely flag this common
+			// combination as a conflict (regression lock).
+			name:    "macro-re-export-not-conflict",
+			program: `(import (scheme base) (scheme r5rs)) (let ((x 1)) (cond (#t (+ x 1))))`,
+			want:    "2",
+		},
 	}
 
 	for _, tc := range testCases {

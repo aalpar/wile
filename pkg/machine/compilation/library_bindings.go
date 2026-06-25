@@ -401,6 +401,10 @@ func importConflicts(existing, incoming *environment.Binding) bool {
 	ev := existing.Value()
 	iv := incoming.Value()
 	if ev == nil || iv == nil {
+		// Defensive: a found binding's value is never Go-nil in practice (a freshly
+		// created binding holds values.Void, not nil), so this guards an upstream-bug
+		// shape rather than a reachable path; treat an absent value as "cannot prove a
+		// conflict" rather than risk a spurious one.
 		return false
 	}
 	return !sameImportedBinding(ev, iv)
@@ -408,29 +412,31 @@ func importConflicts(existing, incoming *environment.Binding) bool {
 
 // sameImportedBinding reports whether two imported values denote the same underlying
 // definition (a diamond / re-export) rather than two different definitions sharing one
-// name (a conflict). Plain EqualTo is insufficient: Wile import/re-export preserves NO
-// runtime identity for procedures — a re-export RECOMPILES, producing a fresh closure
-// with its own template and env (verified: (scheme base) cddr and (scheme cxr) cddr,
-// both re-exports of the ambient bootstrap cddr, share neither template, env, nor
-// pointer). The only signal that survives recompilation is the procedure NAME, so:
+// name (a conflict). Closures compare by NAME; everything else by EqualTo.
 //
-//   - foreign closures (primitives): the registry is name-unique per engine, so equal
-//     names denote the same primitive (e.g. nan? from (scheme base) vs (scheme inexact)).
-//   - machine (Scheme) closures: equal names denote the same re-exported procedure
-//     (e.g. cddr from (scheme base) vs (scheme cxr)).
+// Why by name and not value identity for closures: a re-export does not preserve a
+// single closure value. An ambient definition (a bootstrap procedure or macro) is
+// RECOMPILED into each manifest library that re-exports it, so the copies have distinct
+// template/env/pointer and EqualTo would wrongly report a legitimate re-export as a
+// conflict (verified: (scheme base) cddr vs (scheme cxr) cddr; delay across (scheme
+// base)/(scheme lazy)/(scheme r5rs)). The name is the signal that survives
+// recompilation, so equal names mark these as the one logical binding (a diamond).
 //
-// A primitive vs a Scheme redefinition of one name (the only genuine stdlib collision —
-// (scheme base) string-map vs (srfi 13) string-map) is cross-kind, so it falls to the
-// EqualTo default and is reported as a conflict.
+// The EqualTo default still does real work for non-closure values: a case-lambda
+// re-exported through an importing library SHARES its value pointer (EqualTo identity →
+// diamond), while two genuinely different case-lambdas differ structurally (EqualTo
+// unequal → conflict). This is what catches the one genuine stdlib collision — (scheme
+// base) string-map vs (srfi 13) string-map, both name-less CaseLambdaClosures.
 //
-// Why name and not the definition source location: a source-location origin is airtight
-// for import-vs-import clashes but FALSELY flags the common, legal define-over-import
-// shadow — a program that (import (scheme base)) then (define (zero? x) …) would see its
-// own zero? (user source) "conflict" with the imported zero? (library source). Comparing
-// by name treats both as the one logical zero?, preserving shadowing. The cost is that
-// two DIFFERENT Scheme procedures exported under the same name by two libraries are not
-// flagged (silent last-import-wins); no such case exists in the bundled stdlib, whereas
-// define-over-import is everywhere — so name is the right trade-off for Wile.
+// Deliberate, IRREDUCIBLE gap: two DIFFERENT definitions under one name that the name
+// cannot distinguish are treated as a diamond and silently last-import-wins. This covers
+// name-less closures (macro transformers and var-form-defined procedures, whose template
+// name is empty, so "" == "" reads as same) and same-named function-form procedures. The
+// only signal that could separate "same definition, recompiled-and-re-exported" from
+// "different definition, same name" is a definition origin (source location) — and that
+// was rejected because it falsely flags the ubiquitous, legal define-over-import shadow
+// ((import (scheme base)) then (define (zero? x) …)). No such hidden clash exists in the
+// bundled stdlib (the one real collision, string-map, is caught via EqualTo above).
 func sameImportedBinding(a, b values.Value) bool {
 	switch av := a.(type) {
 	case *machine.ForeignClosure:
@@ -484,7 +490,16 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		if sourcePhase > 0 {
 			propagateEnv := targetEnv.AtPhase(targetPhase + sourcePhase)
 			propagateSym := values.NewSymbol(localName)
-			_, _ = propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
+			_, propagateCreated := propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
+			// Same conflict guard as the base phase: a previously-imported binding at
+			// this propagated phase that resolves differently is a conflict. The base
+			// phase catches most clashes first; this closes the case where the base entry
+			// is created fresh but the propagated (e.g. expand) entry already exists.
+			if !propagateCreated && importConflicts(propagateEnv.GetBinding(propagateSym, nil), libBinding) {
+				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+					localName, lib.Name.SchemeString())
+			}
 			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
