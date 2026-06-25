@@ -4,7 +4,7 @@
 ;; string-prefix-ci?, string-suffix-ci?, string-prefix-length,
 ;; string-suffix-length, string-prefix-length-ci, string-suffix-length-ci.
 
-(import (scheme base) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 2")
 

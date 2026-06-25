@@ -4,7 +4,7 @@
 ;; Pre-Phase-5 these procedures rejected char-set with the error message
 ;; "criterion must be char or procedure (char-set support deferred to SRFI-14)".
 
-(import (scheme base) (chibi test) (srfi 13) (srfi 14))
+(import (except (scheme base) string-map) (chibi test) (srfi 13) (srfi 14))
 
 (test-begin "srfi-14-srfi-13-unlock")
 

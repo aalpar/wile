@@ -379,6 +379,77 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 	return nil, environment.PhaseRuntime, false
 }
 
+// importConflicts reports whether installing incoming under a local name whose
+// own-frame binding already exists would bind one identifier to two DIFFERENT
+// bindings — an error per R7RS §5.6 ("it is an error to import the same identifier
+// more than once with different bindings"). Only a prior IMPORTED binding counts:
+//
+//   - a re-import of the same binding (a diamond — two libraries re-exporting one
+//     source, or re-importing the same library) is permitted;
+//   - a pre-existing user definition is not an import and is left to shadow.
+//
+// Whether the two denote the same definition (diamond) or two definitions of one name
+// (conflict) is decided by sameImportedBinding — see its doc for the by-name comparison
+// and why it is used instead of value identity.
+func importConflicts(existing, incoming *environment.Binding) bool {
+	if existing == nil || incoming == nil {
+		return false
+	}
+	if !existing.IsImported() {
+		return false
+	}
+	ev := existing.Value()
+	iv := incoming.Value()
+	if ev == nil || iv == nil {
+		// Defensive: a found binding's value is never Go-nil in practice (a freshly
+		// created binding holds values.Void, not nil), so this guards an upstream-bug
+		// shape rather than a reachable path; treat an absent value as "cannot prove a
+		// conflict" rather than risk a spurious one.
+		return false
+	}
+	return !sameImportedBinding(ev, iv)
+}
+
+// sameImportedBinding reports whether two imported values denote the same underlying
+// definition (a diamond / re-export) rather than two different definitions sharing one
+// name (a conflict). Closures compare by NAME; everything else by EqualTo.
+//
+// Why by name and not value identity for closures: a re-export does not preserve a
+// single closure value. An ambient definition (a bootstrap procedure or macro) is
+// RECOMPILED into each manifest library that re-exports it, so the copies have distinct
+// template/env/pointer and EqualTo would wrongly report a legitimate re-export as a
+// conflict (verified: (scheme base) cddr vs (scheme cxr) cddr; delay across (scheme
+// base)/(scheme lazy)/(scheme r5rs)). The name is the signal that survives
+// recompilation, so equal names mark these as the one logical binding (a diamond).
+//
+// The EqualTo default still does real work for non-closure values: a case-lambda
+// re-exported through an importing library SHARES its value pointer (EqualTo identity →
+// diamond), while two genuinely different case-lambdas differ structurally (EqualTo
+// unequal → conflict). This is what catches the one genuine stdlib collision — (scheme
+// base) string-map vs (srfi 13) string-map, both name-less CaseLambdaClosures.
+//
+// Deliberate, IRREDUCIBLE gap: two DIFFERENT definitions under one name that the name
+// cannot distinguish are treated as a diamond and silently last-import-wins. This covers
+// name-less closures (macro transformers and var-form-defined procedures, whose template
+// name is empty, so "" == "" reads as same) and same-named function-form procedures. The
+// only signal that could separate "same definition, recompiled-and-re-exported" from
+// "different definition, same name" is a definition origin (source location) — and that
+// was rejected because it falsely flags the ubiquitous, legal define-over-import shadow
+// ((import (scheme base)) then (define (zero? x) …)). No such hidden clash exists in the
+// bundled stdlib (the one real collision, string-map, is caught via EqualTo above).
+func sameImportedBinding(a, b values.Value) bool {
+	switch av := a.(type) {
+	case *machine.ForeignClosure:
+		bv, ok := b.(*machine.ForeignClosure)
+		return ok && av.Name() == bv.Name()
+	case *machine.MachineClosure:
+		bv, ok := b.(*machine.MachineClosure)
+		return ok && av.Name() == bv.Name()
+	default:
+		return a.EqualTo(b)
+	}
+}
+
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
@@ -392,10 +463,17 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Create binding in the target at the base phase.
+		// Create binding in the target at the base phase. A previously-imported
+		// binding of the same local name that resolves to a different binding is a
+		// conflicting import (R7RS §5.6) — reject rather than silently last-wins.
 		phaseEnv := targetEnv.AtPhase(targetPhase)
 		localSym := values.NewSymbol(localName)
-		_, _ = phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
+		_, created := phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
+		if !created && importConflicts(phaseEnv.GetBinding(localSym, nil), libBinding) {
+			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+				localName, lib.Name.SchemeString())
+		}
 		globalIdx := phaseEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
 			err := phaseEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
@@ -412,7 +490,16 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		if sourcePhase > 0 {
 			propagateEnv := targetEnv.AtPhase(targetPhase + sourcePhase)
 			propagateSym := values.NewSymbol(localName)
-			_, _ = propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
+			_, propagateCreated := propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
+			// Same conflict guard as the base phase: a previously-imported binding at
+			// this propagated phase that resolves differently is a conflict. The base
+			// phase catches most clashes first; this closes the case where the base entry
+			// is created fresh but the propagated (e.g. expand) entry already exists.
+			if !propagateCreated && importConflicts(propagateEnv.GetBinding(propagateSym, nil), libBinding) {
+				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+					localName, lib.Name.SchemeString())
+			}
 			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
@@ -472,9 +559,17 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Install in the target environment directly.
+		// Install in the target environment directly. Conflict detection mirrors
+		// CopyLibraryBindingsToEnvAtPhase so that a library declaration importing two
+		// libraries with different bindings for one name is rejected per R7RS §5.6,
+		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
+		_, created := targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
+		if !created && importConflicts(targetEnv.GetBinding(localSym, nil), importedBinding) {
+			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+				localName, lib.Name.SchemeString())
+		}
 		globalIdx := targetEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
 			err := targetEnv.SetOwnGlobalValue(globalIdx, importedBinding.Value())
@@ -487,7 +582,12 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
 			expandEnv := targetEnv.Expand()
-			_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
+			_, expandCreated := expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
+			if !expandCreated && importConflicts(expandEnv.GetBinding(localSym, nil), importedBinding) {
+				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+					localName, lib.Name.SchemeString())
+			}
 			expandIdx := expandEnv.GetGlobalIndex(localSym)
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())

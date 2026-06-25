@@ -2,7 +2,7 @@
 ;; Covers: string-split (Phase 1), string-replace-all, string-byte-length,
 ;; string-blank?, string-repeat (Phase 8).
 
-(import (scheme base) (scheme write) (chibi test) (wile strings))
+(import (except (scheme base) string-map) (scheme write) (chibi test) (wile strings))
 
 (test-begin "wile strings")
 

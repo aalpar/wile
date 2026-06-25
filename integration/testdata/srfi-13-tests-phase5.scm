@@ -3,7 +3,7 @@
 ;; string-ci=, string-ci<, ..., string-ci<>,
 ;; string-compare, string-compare-ci.
 
-(import (scheme base) (scheme write) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 5")
 

@@ -4,7 +4,7 @@
 ;; string-for-each-index, string-map (SRFI-13 form), string-fold,
 ;; string-fold-right.
 
-(import (scheme base) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 6")
 

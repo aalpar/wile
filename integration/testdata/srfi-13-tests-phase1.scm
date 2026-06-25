@@ -2,7 +2,7 @@
 ;; Covers: string-prefix?, string-suffix?, string-contains, string-contains-ci,
 ;; string-join, string-split (the wile-goast top-five + extras).
 
-(import (scheme base) (scheme write) (chibi test) (srfi 13) (wile strings))
+(import (except (scheme base) string-map) (scheme write) (chibi test) (srfi 13) (wile strings))
 
 (test-begin "srfi-13 phase 1")
 
