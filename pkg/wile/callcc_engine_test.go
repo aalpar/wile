@@ -20,7 +20,9 @@ import (
 func TestRunawayContinuationIsBounded(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	// Explicit small limit: deterministic and fast (trips at depth limit+1
+	// rather than nesting to the default 10000), independent of DefaultMaxCallDepth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(200))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
@@ -44,7 +46,9 @@ func TestRunawayContinuationIsBounded(t *testing.T) {
 func TestContinuationLoopBoundedConverges(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	// Explicit limit, well above this loop's ~100 re-invocations, so the test
+	// does not implicitly depend on DefaultMaxCallDepth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(500))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 

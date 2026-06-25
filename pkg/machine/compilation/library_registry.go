@@ -173,18 +173,22 @@ func NewLibraryRegistry() *LibraryRegistry {
 	}
 }
 
-// SetSearchPaths sets the library search paths.
+// SetSearchPaths sets the library search paths. The slice is copied so the
+// registry owns its searchPaths memory: a caller mutating the slice it passed
+// in must not be able to race a concurrent reader of the registry's state.
 func (p *LibraryRegistry) SetSearchPaths(paths []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.searchPaths = paths
+	p.searchPaths = append([]string(nil), paths...)
 }
 
-// GetSearchPaths returns the current library search paths.
+// GetSearchPaths returns a copy of the current library search paths. Returning
+// a copy keeps the registry's internal slice immutable from outside, so a
+// caller cannot mutate the backing array and race a concurrent reader.
 func (p *LibraryRegistry) GetSearchPaths() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.searchPaths
+	return append([]string(nil), p.searchPaths...)
 }
 
 // PrependSearchPath adds a path to the beginning of the search path list.
