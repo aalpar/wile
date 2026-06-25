@@ -31,6 +31,11 @@ var Extension = registry.NewExtension("core", AddToRegistry)
 //  2. registry/core/prim_<category>.go — implement the ForeignFunction
 //  3. registry/core/register.go       — add addXxx to Builder (only if creating a new category)
 //  4. registry/core/prim_<category>_test.go — add table-driven tests
+//
+// If the primitive invokes a Scheme procedure (its Impl reaches ApplyCallable or
+// runs a sub-context), it MUST set InvokesProcedure:true on its PrimitiveSpec —
+// see the field doc in registry/registry.go. TestInvokesProcedureStaticGuard
+// (pkg/wile) fails CI if the annotation is missing.
 var Builder = registry.NewRegistryBuilder(
 	addSpecialForms,
 	addPredicates,

@@ -47,9 +47,16 @@ type PrimitiveSpec struct {
 	// a Scheme procedure" = capture-safe: the frame-reclaim classifier may trust a
 	// tail call to it as non-capturing. The flipped default is a SOUNDNESS
 	// COMMITMENT — an unannotated procedure-invoking primitive would be wrongly
-	// trusted — guarded by TestInvokesProcedureCompleteness (pkg/wile). It flows
-	// to BindingMeta.CaptureSafe at registration; the classifier reads the binding
-	// flag because pkg/internal/validate must not import pkg/registry.
+	// trusted.
+	//
+	// REQUIRED for any primitive whose Impl reaches ApplyCallable or runs a
+	// sub-context (sub.Run()): set InvokesProcedure:true. Two guards in pkg/wile
+	// enforce this — TestInvokesProcedureStaticGuard discovers the requirement
+	// statically (AST of the Impl's call graph) and fails CI when the annotation is
+	// missing; TestInvokesProcedureCompleteness pins the curated set behaviorally.
+	//
+	// It flows to BindingMeta.CaptureSafe at registration; the classifier reads the
+	// binding flag because pkg/internal/validate must not import pkg/registry.
 	InvokesProcedure bool
 }
 
