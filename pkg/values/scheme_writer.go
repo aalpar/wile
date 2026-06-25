@@ -323,6 +323,16 @@ func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 		} else {
 			sb.WriteString(val.SchemeString())
 		}
+	case *Symbol:
+		// In display mode, symbols are printed without |…| bar-escaping
+		// (R7RS §6.13.3: display emits the human-readable representation).
+		// write uses the re-readable external representation via SchemeString,
+		// which bars names that cannot be written bare.
+		if p.displayMode {
+			sb.WriteString(val.Key)
+		} else {
+			sb.WriteString(val.SchemeString())
+		}
 	default:
 		// For non-compound types, just use SchemeString
 		if v != nil {

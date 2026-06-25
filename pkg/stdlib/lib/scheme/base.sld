@@ -9,6 +9,8 @@
     begin
     define
     define-syntax
+    let-syntax
+    letrec-syntax
     syntax-rules
     syntax-error
     quasiquote

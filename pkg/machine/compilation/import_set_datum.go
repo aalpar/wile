@@ -192,6 +192,22 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 	return importSet, nil
 }
 
+// composePhaseShift composes an additional delta onto a nested import set's phase
+// shift, rejecting the composition if the accumulated result would overflow
+// environment.Phase (int8). Each individual operand may fit int8 yet a chain
+// (e.g. (for-meta 100 (for-meta 100 …))) compose to a value that does not. The sum
+// is computed in a wider int so the overflow is detectable rather than silently
+// truncated. keyword names the form for the error message.
+func composePhaseShift(keyword string, base environment.Phase, delta environment.Phase) (environment.Phase, error) {
+	sum := int(base) + int(delta)
+	if sum < math.MinInt8 || sum > math.MaxInt8 {
+		return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"%s: composed phase %d out of range [%d, %d]",
+			keyword, sum, int64(math.MinInt8), int64(math.MaxInt8))
+	}
+	return environment.Phase(sum), nil
+}
+
 // parseImportSetPhaseShiftFromDatum parses (<keyword> <import-set>) and adds
 // delta to the nested import set's phase shift. Handles for-syntax (+1) and
 // for-template (-1).
@@ -204,7 +220,11 @@ func parseImportSetPhaseShiftFromDatum(ctx context.Context, keyword string, tupl
 	if err != nil {
 		return nil, err
 	}
-	importSet.PhaseShift += delta
+	composed, err := composePhaseShift(keyword, importSet.PhaseShift, delta)
+	if err != nil {
+		return nil, err
+	}
+	importSet.PhaseShift = composed
 	return importSet, nil
 }
 
@@ -225,17 +245,22 @@ func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) (*I
 		return nil, err
 	}
 
-	// Add n to phase shift (composable). environment.Phase is int8; reject
-	// values that would silently truncate. Composition with importSet's
-	// existing PhaseShift could still overflow int8 — guard the operand
-	// here; the composition guard belongs in callers that compose chains.
+	// Add n to phase shift (composable). environment.Phase is int8; reject a
+	// single operand that would not fit, then compose onto the nested set's
+	// existing shift — a chain (e.g. (for-meta 100 (for-meta 100 …))) can
+	// overflow int8 even when each operand fits, so the composition is guarded
+	// in composePhaseShift.
 	n := phaseInt.Value
 	if n < math.MinInt8 || n > math.MaxInt8 {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"for-meta: phase %d out of range [%d, %d]",
 			n, int64(math.MinInt8), int64(math.MaxInt8))
 	}
-	importSet.PhaseShift += environment.Phase(n)
+	composed, err := composePhaseShift("for-meta", importSet.PhaseShift, environment.Phase(n))
+	if err != nil {
+		return nil, err
+	}
+	importSet.PhaseShift = composed
 	return importSet, nil
 }
 

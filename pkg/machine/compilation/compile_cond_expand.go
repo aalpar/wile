@@ -45,17 +45,27 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	resolver := p.env.FileResolver()
 
 	var matchedClause syntax.SyntaxValue
-	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
-		if matchedClause != nil {
-			return nil // Already found a match
-		}
-
+	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, hasNext bool, clause syntax.SyntaxValue) error {
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list"))
 		}
 
 		reqExpr := clausePair.SyntaxCar()
+
+		// R7RS §4.2.1: else, if present, must be the last clause. This is a
+		// structural constraint on the whole clause list, so it is checked on
+		// every clause — before the matched-clause short-circuit below, which
+		// would otherwise stop scanning once an earlier clause matches.
+		if isElseClause(reqExpr) && hasNext {
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+				"cond-expand: else must be the last clause"))
+		}
+
+		if matchedClause != nil {
+			return nil // Already found a match; keep scanning to validate else position.
+		}
+
 		req, err := parseFeatureRequirement(ctx, reqExpr)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement"))
@@ -157,6 +167,16 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 		return p.processLibraryDeclaration(ctctx, lib, decl)
 	})
 	return err
+}
+
+// isElseClause reports whether a clause's feature-requirement expression is the
+// literal symbol else. Used to enforce R7RS §4.2.1's else-must-be-last constraint.
+func isElseClause(reqExpr syntax.SyntaxValue) bool {
+	sym, ok := reqExpr.(*syntax.SyntaxSymbol)
+	if !ok {
+		return false
+	}
+	return sym.Key() == "else"
 }
 
 // parseFeatureRequirement parses a feature requirement expression.

@@ -73,11 +73,12 @@ func TestLibraryRegistry(t *testing.T) {
 
 	registry := compilation.NewLibraryRegistry()
 
-	// Test that default search paths are set
+	// Test that default search paths are set. Only "." is searched by default;
+	// the stdlib is served by the embedded FileResolver chain, not a dev-tree path
+	// (the former "./pkg/stdlib/lib" entry was dropped in Phase 8 Task 8F).
 	paths := registry.GetSearchPaths()
-	c.Assert(len(paths), qt.Equals, 2)
+	c.Assert(len(paths), qt.Equals, 1)
 	c.Assert(paths[0], qt.Equals, ".")
-	c.Assert(paths[1], qt.Equals, "./pkg/stdlib/lib")
 
 	// Test SetSearchPaths
 	registry.SetSearchPaths([]string{"/custom/path"})
