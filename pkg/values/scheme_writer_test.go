@@ -208,6 +208,40 @@ func TestDisplayValueToString_List(t *testing.T) {
 	qt.Assert(t, result, qt.Equals, "(hello !)")
 }
 
+// TestSymbolDisplayVsWriteBars pins R7RS §6.13.3: display writes a symbol with no
+// bar-escaping (the human-readable representation), whereas write produces the
+// re-readable external representation, which bars a symbol whose name cannot be
+// written bare. Previously both went through Symbol.SchemeString() and so display
+// incorrectly emitted |a b| for (string->symbol "a b").
+func TestSymbolDisplayVsWriteBars(t *testing.T) {
+	tcs := []struct {
+		name        string
+		sym         values.Value
+		wantDisplay string
+		wantWrite   string
+	}{
+		{"space needs bars", values.NewSymbol("a b"), "a b", "|a b|"},
+		{"empty needs bars", values.NewSymbol(""), "", "||"},
+		{"bare identifier unbarred either way", values.NewSymbol("foo"), "foo", "foo"},
+		{"bar in name escaped only by write", values.NewSymbol("a|b"), "a|b", `|a\|b|`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, mustRender(t, values.DisplayValueToString, tc.sym), qt.Equals, tc.wantDisplay)
+			qt.Assert(t, mustRender(t, values.WriteValueToString, tc.sym), qt.Equals, tc.wantWrite)
+		})
+	}
+}
+
+// TestSymbolDisplayInList pins that the no-bar display rule applies recursively:
+// a barring symbol nested inside a list is still un-barred under display, barred
+// under write.
+func TestSymbolDisplayInList(t *testing.T) {
+	l := values.List(values.NewSymbol("a b"), values.NewSymbol("c"))
+	qt.Assert(t, mustRender(t, values.DisplayValueToString, l), qt.Equals, "(a b c)")
+	qt.Assert(t, mustRender(t, values.WriteValueToString, l), qt.Equals, "(|a b| c)")
+}
+
 func TestWriteValueToString_NilPair(t *testing.T) {
 	result := mustRender(t, values.WriteValueToString, (*values.Pair)(nil))
 	qt.Assert(t, result, qt.Equals, "#<void>")

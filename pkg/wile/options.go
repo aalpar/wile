@@ -267,16 +267,17 @@ func WithInlineThreshold(n int) EngineOption {
 //
 // Without this option, (import ...) raises a configuration error.
 //
-// Paths are searched in order: user-supplied paths first, then the defaults
-// ("." and "./pkg/stdlib/lib"). An empty call WithLibraryPaths() enables library support
-// with defaults only.
+// Paths are searched in order: user-supplied paths first, then the default
+// ("."). The embedded standard library is served by the FileResolver chain
+// (e.g. WithSourceFS(stdlib.FS)), not a search path. An empty call
+// WithLibraryPaths() enables library support with the default only.
 //
 // Example:
 //
 //	eng, err := wile.NewEngine(ctx,
 //	    wile.WithLibraryPaths("/app/libs", "./vendor"),
 //	)
-//	// search order: /app/libs, ./vendor, ., ./pkg/stdlib/lib
+//	// search order: /app/libs, ./vendor, .
 func WithLibraryPaths(paths ...string) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.libraryEnabled = true

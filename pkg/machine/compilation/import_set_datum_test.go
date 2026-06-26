@@ -699,3 +699,56 @@ func TestParseImportSetFromDatum_ForMeta_MissingImportSet(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
+
+// forMetaDatum builds (for-meta <phase> <inner>) as a quoted datum.
+func forMetaDatum(phase int64, inner values.Value) values.Value {
+	return values.NewCons(
+		values.NewSymbol("for-meta"),
+		values.NewCons(
+			values.NewInteger(phase),
+			values.NewCons(inner, values.EmptyList),
+		),
+	)
+}
+
+// schemeBaseDatum builds (scheme base) as a quoted datum.
+func schemeBaseDatum() values.Value {
+	return values.NewCons(
+		values.NewSymbol("scheme"),
+		values.NewCons(values.NewSymbol("base"), values.EmptyList),
+	)
+}
+
+// TestParseImportSetFromDatum_ForMeta_CompositionOverflow pins Phase 8 Task 8G(i):
+// each for-meta operand individually fits int8, but a chain composes their phase
+// shifts. (for-meta 100 (for-meta 100 (scheme base))) accumulates to 200, which
+// overflows environment.Phase (int8). The composition guard must reject it cleanly
+// (wrapped ErrInvalidArgument), not silently truncate to a wrong phase.
+func TestParseImportSetFromDatum_ForMeta_CompositionOverflow(t *testing.T) {
+	// (for-meta 100 (for-meta 100 (scheme base))) → 100 + 100 = 200 > 127.
+	importSet := forMetaDatum(100, forMetaDatum(100, schemeBaseDatum()))
+
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+}
+
+// TestParseImportSetFromDatum_ForMeta_CompositionUnderflow pins the negative side:
+// (for-meta -100 (for-meta -100 (scheme base))) accumulates to -200 < -128.
+func TestParseImportSetFromDatum_ForMeta_CompositionUnderflow(t *testing.T) {
+	importSet := forMetaDatum(-100, forMetaDatum(-100, schemeBaseDatum()))
+
+	_, err := ParseImportSetFromDatum(context.Background(), importSet)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+}
+
+// TestParseImportSetFromDatum_ForMeta_CompositionAtBoundary pins that a chain that
+// composes exactly to the int8 boundary still succeeds: 100 + 27 = 127.
+func TestParseImportSetFromDatum_ForMeta_CompositionAtBoundary(t *testing.T) {
+	importSet := forMetaDatum(100, forMetaDatum(27, schemeBaseDatum()))
+
+	result, err := ParseImportSetFromDatum(context.Background(), importSet)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(127))
+}

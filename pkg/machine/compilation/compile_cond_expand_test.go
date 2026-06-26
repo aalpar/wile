@@ -120,11 +120,41 @@ func TestCompileCondExpand(t *testing.T) {
 func TestCompileCondExpandErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "no matching clause", Code: `(cond-expand (nonexistent 'no))`},
+		// Phase 8 Task 8G(ii): R7RS §4.2.1 — else must be the last clause. A
+		// non-final else is a malformed cond-expand and must error at compile time,
+		// not silently shadow the clauses after it.
+		{Name: "else not last", Code: `(cond-expand (else 'first) (r7rs 'second))`},
+		{Name: "else before another else", Code: `(cond-expand (else 'a) (else 'b))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// TestCompileCondExpandElseLast pins that a final else clause is honored (the
+// complement of the else-not-last error): a present feature is selected before
+// else, and else is the fallback when no feature matches.
+func TestCompileCondExpandElseLast(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "feature before final else wins",
+			Code:     `(cond-expand (r7rs 'feature) (else 'fallback))`,
+			Expected: values.NewSymbol("feature"),
+		},
+		{
+			Name:     "final else is fallback",
+			Code:     `(cond-expand (nonexistent 'no) (else 'fallback))`,
+			Expected: values.NewSymbol("fallback"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

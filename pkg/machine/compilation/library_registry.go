@@ -159,9 +159,13 @@ type LibraryRegistry struct {
 }
 
 // DefaultLibraryPaths are the default directories to search for libraries.
+//
+// Only the current directory is searched by default. The embedded standard
+// library is the real source of the stdlib (resolved via the FileResolver chain
+// over stdlib.FS); the former "./pkg/stdlib/lib" entry was a development-tree
+// convenience that resolves nothing in a deployed binary.
 var DefaultLibraryPaths = []string{
 	".",
-	"./pkg/stdlib/lib",
 }
 
 // NewLibraryRegistry creates a new library registry with default search paths.
