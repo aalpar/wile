@@ -44,8 +44,17 @@
     (define current-test-epsilon
       (make-parameter 1e-5))
 
+    ;; %default-comparator is a distinct sentinel (NOT equal? itself) so the
+    ;; test macro can tell "user left the default" from "user explicitly chose
+    ;; equal?". When the default is in effect, comparison goes through
+    ;; %approx-equal? (which compares inexact numbers within current-test-epsilon
+    ;; and recurses through lists/vectors); an explicitly-set comparator is
+    ;; always honored and never bypassed, even for inexact expected values.
+    (define (%default-comparator a b)
+      (equal? a b))
+
     (define current-test-comparator
-      (make-parameter equal?))
+      (make-parameter %default-comparator))
 
     (define test-failure-count
       (make-parameter (lambda () *test-fail-count*)))
@@ -106,6 +115,12 @@
       (cond
        ((and (number? a) (number? b))
         (cond
+         ;; Both exact: compare precisely. Approximate (relative-epsilon)
+         ;; comparison is for inexact results; two close-but-distinct exact
+         ;; numbers (e.g. 1000000 vs 1000001) must NOT be treated as equal,
+         ;; including when they appear nested inside a list or vector.
+         ((and (exact? a) (exact? b))
+          (= a b))
          ;; Both infinite with same sign
          ((and (infinite? a) (infinite? b))
           (eqv? a b))
@@ -163,8 +178,11 @@
         ((test name expected expr)
          (let ((e expected)
                (a expr))
-           (if (if (and (number? e) (inexact? e))
+           (if (if (eq? (current-test-comparator) %default-comparator)
+                   ;; Default: approximate, recursing through lists/vectors so a
+                   ;; near-equal inexact nested in a structure still matches.
                    (%approx-equal? e a (current-test-epsilon))
+                   ;; Explicit comparator: honor it for every expected value.
                    ((current-test-comparator) e a))
                (%test-pass name)
                (%test-fail name e a))))))
