@@ -80,13 +80,14 @@ type inlineHOFSpec struct {
 // adjacent to the template it indexes, so the two cannot drift apart.
 //
 // v1 = for-each (P3); the vector/string index loops and fold's arity-3 list fold
-// were widened in P6. map is non-tail in its real definition, so its template is a
-// TAIL REWRITE (accumulate + reverse): sound here because a template is reached
-// only when the callback is provably capture-safe, so the call/cc-capturability
-// that map's non-tail shape preserves (bootstrap_procedures.scm) is moot — a
-// capturing callback falls through to the real, non-tail map. The rewrite also
-// sheds the original's O(n) call-depth ceiling. Application order is preserved
-// (verified): map still applies f left-to-right.
+// were widened in P6. map/fold-right are non-tail in their real definitions, so
+// their templates are TAIL REWRITES (accumulate + reverse): sound here because a
+// template is reached only when the callback is provably capture-safe, so the
+// call/cc-capturability that map/fold-right's non-tail shapes preserve
+// (bootstrap_procedures.scm / srfi/1/fold.scm) is moot — a capturing callback
+// falls through to the real, non-tail HOF. The rewrite also sheds the original's
+// O(n) call-depth ceiling. Application order is preserved (verified): map applies
+// f left-to-right; fold-right reverses first so kons still fires right-to-left.
 var inlineHOFSpecs = map[string]inlineHOFSpec{
 	"for-each": {callbackParam: 0, template: `(lambda (f lst)
   (let loop ((lst lst))
@@ -134,6 +135,14 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
             (loop (+ i 1)))))))`},
 	"fold": {callbackParam: 0, importGated: true, homeLib: "srfi/1", template: `(lambda (kons knil ls)
   (let lp ((ls ls) (acc knil))
+    (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc)))`},
+	// fold-right's real single-list clause recurses in non-tail position
+	// ((kons (car ls) (lp (cdr ls)))), applying kons innermost-first
+	// (right-to-left). The tail rewrite reverses ls once, then folds left with
+	// the accumulator — visiting elements in the same right-to-left kons order,
+	// so both the result and the application order match the real fold-right.
+	"fold-right": {callbackParam: 0, importGated: true, homeLib: "srfi/1", template: `(lambda (kons knil ls)
+  (let lp ((ls (reverse ls)) (acc knil))
     (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc)))`},
 }
 
