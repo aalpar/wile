@@ -266,6 +266,14 @@ func PrimExpt(mc machine.CallContext) error {
 
 	e, ok := values.ExactInteger(expNum)
 	if ok {
+		// Exact zero base with a negative exponent is a true division by zero
+		// (1/0^|e|); exptExact would build big.Rat.SetFrac(_, 0) and panic,
+		// surfacing as a recovered "internal error" (C7). An INEXACT zero base
+		// is left to the IEEE path below, where 0.0^-1 = +inf.0 per R7RS §6.2.6.
+		if e < 0 && baseNum.IsExact() && baseNum.IsZero() {
+			return werr.WrapForeignErrorf(werr.ErrDivisionByZero,
+				"expt: zero base with negative exponent %d", e)
+		}
 		switch b := baseNum.(type) {
 		case *values.Integer:
 			mc.SetValue(exptExact(big.NewInt(b.Value), bigOne, e))
@@ -295,9 +303,20 @@ func PrimExpt(mc machine.CallContext) error {
 				values.NumberToComplex128Lossy(expNum))))
 			return nil
 		}
-		mc.SetValue(values.NewFloat(math.Pow(
-			values.NumberToFloat64(baseNum),
-			values.NumberToFloat64(expNum))))
+		baseF := values.NumberToFloat64(baseNum)
+		expF := values.NumberToFloat64(expNum)
+		// A negative real base raised to a NON-integer power has no real value
+		// (R7RS §6.2.6 — it is complex); math.Pow returns +nan.0 there (C6).
+		// An integer-valued exponent (e.g. (expt -2 3.0)) stays real, so guard
+		// on the exponent being non-integral, not merely on a negative base.
+		// A NaN exponent is excluded (math.Trunc(NaN)!=NaN would otherwise route
+		// it to the complex path); leave it on the real IEEE path, matching the
+		// prior real +nan.0 result for a degenerate input like (expt -2 +nan.0).
+		if baseF < 0 && !math.IsNaN(expF) && expF != math.Trunc(expF) {
+			mc.SetValue(values.NewComplex(cmplx.Pow(complex(baseF, 0), complex(expF, 0))))
+			return nil
+		}
+		mc.SetValue(values.NewFloat(math.Pow(baseF, expF)))
 	}
 	return nil
 }
