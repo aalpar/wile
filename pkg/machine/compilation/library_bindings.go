@@ -230,6 +230,17 @@ func (p *importModifier) apply(result map[string]string, lib *CompiledLibrary) (
 		}
 		return result, nil
 	case importModRename:
+		// Validate that every rename SOURCE name is in the current name set, mirroring
+		// the only/except checks. R7RS §5.6: rename maps an exported (post-prior-modifier)
+		// identifier to a new name; a source name that is absent denotes nothing, so
+		// silently no-op'ing it would mask a user error. Reject instead.
+		for oldName := range p.renames {
+			_, ok := result[oldName]
+			if !ok {
+				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
+					"applyToExports: rename source %q not exported by %s", oldName, lib.Name.SchemeString())
+			}
+		}
 		renamed := make(map[string]string)
 		for localName, externalName := range result {
 			newName, ok := p.renames[localName]

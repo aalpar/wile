@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sort"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -113,6 +115,17 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	})
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: error processing declarations"))
+	}
+
+	// R7RS §5.6: every exported identifier must be defined or imported by the library.
+	// Declarations have all been processed (begin/include predeclare their defines into
+	// libEnv, imports install their bindings there), so every export's internal name must
+	// now resolve. Validate eagerly here — collecting ALL gaps — rather than deferring to
+	// the per-name copy at each import site, which both misses unreferenced bad exports
+	// (under (only ...)) and reports only the first gap.
+	err = validateLibraryExports(lib)
+	if err != nil {
+		return p.wrapCompilationError(err)
 	}
 
 	// Peephole optimization on the library template.
@@ -261,6 +274,36 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 	default:
 		return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: expected symbol or rename form"))
 	}
+}
+
+// validateLibraryExports verifies that every export's internal name resolves to a
+// binding in the library's environment (R7RS §5.6). It collects ALL unresolved names
+// and reports them once, sorted for a deterministic message, naming the library. This
+// runs at library finalization — after all begin/include/import declarations have
+// installed their bindings — so an export of a name the library never defines or imports
+// fails eagerly here rather than lazily (and partially) at a downstream import site.
+func validateLibraryExports(lib *CompiledLibrary) error {
+	var missing []string
+	for externalName, internalName := range lib.Exports {
+		_, _, found := findLibraryBinding(lib, internalName)
+		if found {
+			continue
+		}
+		// Report the external name (what the user wrote in the export list); include the
+		// internal name when a rename made them differ, so the gap is unambiguous.
+		if internalName == externalName {
+			missing = append(missing, externalName)
+		} else {
+			missing = append(missing, externalName+" (rename of "+internalName+")")
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
+		"define-library: %s exports undefined identifier(s): %s",
+		lib.Name.SchemeString(), strings.Join(missing, ", "))
 }
 
 // CompileExport handles top-level (export <export-spec> ...).

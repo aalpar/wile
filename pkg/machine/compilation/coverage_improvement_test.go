@@ -387,7 +387,10 @@ func TestCompileInclude_LibraryRegistryPaths(t *testing.T) {
 	qt.Assert(t, cont, qt.IsNotNil)
 }
 
-// TestCompileIncludeCi tests that include-ci returns an unsupported error.
+// TestCompileIncludeCi tests that include-ci is wired to the include splice path
+// (it resolves the named file rather than rejecting the form outright). With no
+// file resolver configured for a missing file, it fails at file resolution — the
+// same path as include — not with a "not yet supported" stub error.
 func TestCompileIncludeCi(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
@@ -400,8 +403,10 @@ func TestCompileIncludeCi(t *testing.T) {
 
 	_, err = newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "include-ci")
-	qt.Assert(t, err.Error(), qt.Contains, "not yet supported")
+	// include-ci now behaves like include: it tries to open the file and fails with a
+	// resolution error, not the old "not yet supported" stub.
+	qt.Assert(t, err.Error(), qt.Contains, "include")
+	qt.Assert(t, err.Error(), qt.Not(qt.Contains), "not yet supported")
 }
 
 // TestParseFeatureRequirementList tests parsing lists of feature requirements
