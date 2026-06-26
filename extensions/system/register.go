@@ -46,7 +46,7 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Exits the process immediately without running cleanup. Same argument handling as exit.", ParamNames: []string{"status"}, Category: "system",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "current-second", Impl: PrimCurrentSecond,
-			Doc: "Returns the current time as seconds since the Unix epoch as an inexact real number.", Category: "system",
+			Doc: "Returns the current time as an inexact real number of seconds. R7RS specifies TAI (International Atomic Time); Wile returns POSIX/Unix time (seconds since the Unix epoch, leap seconds excluded), which trails TAI by a fixed offset. See docs/reference/r7rs-differences.md.", Category: "system",
 			Keywords:   []string{"time now", "Unix timestamp", "epoch", "wall clock"},
 			ReturnType: values.TypeFlonum},
 		{Name: "current-jiffy", Impl: PrimCurrentJiffy,

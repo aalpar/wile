@@ -10,7 +10,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Seven known differences exist:
+Eight known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -18,6 +18,7 @@ Seven known differences exist:
 5. **Default** (opt out with `WithMutableTopLevel`): a defined-once, never-`set!`-in-unit top-level `define` in the user program is immutable, so a later `set!` **raises an error**, and code already compiled against a sealed base binding does not observe a later shadowing re-`define` (Chez two-environment model). User-loaded libraries stay mutable. Use `WithMutableTopLevel()` for strict R7RS top-level mutability.
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
 7. Invoking a continuation with a number of values other than one **splices** those values into the capture position rather than raising an arity error. R7RS §6.10 leaves this **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory (Racket instead raises an arity error); both conform.
+8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
 
 ---
 
@@ -265,6 +266,28 @@ continuations as `1`; and `dynamic-wind` not preserving multiple values from its
 thunk.
 
 ---
+
+## `current-second` Returns Unix Time, Not TAI
+
+**Primitive:** `current-second`
+
+R7RS §6.13.2 specifies that `current-second` returns the current time as
+**TAI** (International Atomic Time) seconds. Wile returns **POSIX/Unix time** —
+`float64(time.Now().Unix()) + nanoseconds/1e9` — which counts seconds since the
+Unix epoch *excluding* leap seconds. The two clocks differ by a fixed integer
+offset (37 seconds since 2017-01-01; the offset grows only when the IERS inserts
+a new leap second).
+
+**Why.** Computing true TAI requires a leap-second table that must be updated
+whenever a leap second is announced — a maintenance and distribution burden for
+a value almost every program uses only as a monotonic-ish wall-clock reading or
+to compute elapsed real time (where the constant offset cancels). Most host
+runtimes (including Go's `time` package) expose Unix time, not TAI.
+
+**Impact.** `(- (current-second) t0)` for elapsed-time measurement is unaffected
+(the offset cancels). Programs that need a true atomic timescale, or that compare
+`current-second` against an external TAI source, will see the fixed offset. For
+monotonic elapsed time prefer `current-jiffy` / `jiffies-per-second`.
 
 ## Extensions Beyond R7RS
 
