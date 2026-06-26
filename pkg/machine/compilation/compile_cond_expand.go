@@ -44,6 +44,18 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	}
 	resolver := p.env.FileResolver()
 
+	// A (library X) requirement is satisfied only if X actually imports, not
+	// merely if its .sld resolves on disk (5F/P6). Probe via a real LoadLibrary
+	// when we have the env + evaluator to do so; LoadLibrary caches on success,
+	// so the subsequent real import is free. nil falls back to file existence.
+	var load LibraryLoadProbe
+	if p.env != nil && p.evaluator != nil {
+		load = func(name LibraryName) bool {
+			_, loadErr := LoadLibrary(ctx, name, p.env, p.evaluator)
+			return loadErr == nil
+		}
+	}
+
 	var matchedClause syntax.SyntaxValue
 	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, hasNext bool, clause syntax.SyntaxValue) error {
 		clausePair, ok := clause.(*syntax.SyntaxPair)
@@ -71,7 +83,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement"))
 		}
 
-		if req.IsSatisfied(ctx, registry, resolver) {
+		if req.IsSatisfied(ctx, registry, resolver, load) {
 			matchedClause = clausePair
 		}
 

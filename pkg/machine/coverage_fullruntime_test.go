@@ -746,47 +746,47 @@ func TestFeatureRequirements(t *testing.T) {
 
 	// Test featureIdentifier
 	reqR7rs := compilation.NewFeatureIdentifier("r7rs")
-	qt.Assert(t, reqR7rs.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
+	qt.Assert(t, reqR7rs.IsSatisfied(context.Background(), registry, nil, nil), qt.IsTrue)
 
 	reqNone := compilation.NewFeatureIdentifier("nonexistent")
-	qt.Assert(t, reqNone.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
+	qt.Assert(t, reqNone.IsSatisfied(context.Background(), registry, nil, nil), qt.IsFalse)
 
 	// Test andRequirement
 	andReq := compilation.NewAndRequirement(
 		compilation.NewFeatureIdentifier("r7rs"),
 		compilation.NewFeatureIdentifier("wile"),
 	)
-	qt.Assert(t, andReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
+	qt.Assert(t, andReq.IsSatisfied(context.Background(), registry, nil, nil), qt.IsTrue)
 
 	andReqFalse := compilation.NewAndRequirement(
 		compilation.NewFeatureIdentifier("r7rs"),
 		compilation.NewFeatureIdentifier("nonexistent"),
 	)
-	qt.Assert(t, andReqFalse.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
+	qt.Assert(t, andReqFalse.IsSatisfied(context.Background(), registry, nil, nil), qt.IsFalse)
 
 	// Test orRequirement
 	orReq := compilation.NewOrRequirement(
 		compilation.NewFeatureIdentifier("nonexistent"),
 		compilation.NewFeatureIdentifier("r7rs"),
 	)
-	qt.Assert(t, orReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
+	qt.Assert(t, orReq.IsSatisfied(context.Background(), registry, nil, nil), qt.IsTrue)
 
 	orReqFalse := compilation.NewOrRequirement(
 		compilation.NewFeatureIdentifier("nonexistent"),
 		compilation.NewFeatureIdentifier("also-nonexistent"),
 	)
-	qt.Assert(t, orReqFalse.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
+	qt.Assert(t, orReqFalse.IsSatisfied(context.Background(), registry, nil, nil), qt.IsFalse)
 
 	// Test notRequirement
 	notReq := compilation.NewNotRequirement(compilation.NewFeatureIdentifier("nonexistent"))
-	qt.Assert(t, notReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
+	qt.Assert(t, notReq.IsSatisfied(context.Background(), registry, nil, nil), qt.IsTrue)
 
 	notReqFalse := compilation.NewNotRequirement(compilation.NewFeatureIdentifier("r7rs"))
-	qt.Assert(t, notReqFalse.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
+	qt.Assert(t, notReqFalse.IsSatisfied(context.Background(), registry, nil, nil), qt.IsFalse)
 
 	// Test elseRequirement
 	elseReq := compilation.NewElseRequirement()
-	qt.Assert(t, elseReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
+	qt.Assert(t, elseReq.IsSatisfied(context.Background(), registry, nil, nil), qt.IsTrue)
 }
 
 // TestLibraryRequirement tests library requirement checking
@@ -796,10 +796,10 @@ func TestLibraryRequirement(t *testing.T) {
 	// Library requirement with nil registry
 	libName := compilation.NewLibraryName("test", "lib")
 	req := compilation.NewLibraryRequirement(libName)
-	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil, nil), qt.IsFalse)
 
 	// Library requirement with registry but library not loaded
-	qt.Assert(t, req.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
+	qt.Assert(t, req.IsSatisfied(context.Background(), registry, nil, nil), qt.IsFalse)
 }
 
 // TestQuasiquoteNestedUnquoteWithRuntimeEval tests the compileQuasiquoteNestedUnquote path

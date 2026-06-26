@@ -114,15 +114,26 @@ type FeatureRequirement interface {
 	// The registry parameter is used to check if a library is already loaded.
 	// The resolver parameter is used to check if a library file exists
 	// (via the FileResolver chain, supporting both OS and virtual fs.FS).
-	IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool
+	// The load parameter, when non-nil, lets a (library X) requirement attempt
+	// a real load (so a .sld that resolves on disk but fails to import counts
+	// as unsatisfied); when nil, library availability falls back to a
+	// file-existence check via the resolver.
+	IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver, load LibraryLoadProbe) bool
 }
+
+// LibraryLoadProbe attempts to actually load a library by name, returning true
+// iff the load (parse + compile + execute + register) succeeds. A successful
+// probe caches the library in the registry, so the subsequent real import is
+// free. cond-expand's (library X) requirement uses this so importability — not
+// mere file presence — decides the clause (R7RS §4.2.1, plan item 5F/P6).
+type LibraryLoadProbe func(name LibraryName) bool
 
 // featureIdentifier is a simple feature requirement.
 type featureIdentifier struct {
 	name string
 }
 
-func (p *featureIdentifier) IsSatisfied(_ context.Context, _ *LibraryRegistry, _ FileResolver) bool {
+func (p *featureIdentifier) IsSatisfied(_ context.Context, _ *LibraryRegistry, _ FileResolver, _ LibraryLoadProbe) bool {
 	return IsFeatureSupported(p.name)
 }
 
@@ -131,14 +142,21 @@ type libraryRequirement struct {
 	name LibraryName
 }
 
-func (p *libraryRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *libraryRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver, load LibraryLoadProbe) bool {
 	if registry != nil && registry.Lookup(p.name) != nil {
 		return true
 	}
+	// Preferred: attempt a real load so a .sld that resolves on disk but fails
+	// to import (missing dependency, body compile error) counts as unsatisfied.
+	// A successful probe caches the library, so the later real import is free.
+	if load != nil {
+		return load(p.name)
+	}
+	// Fallback (no loader threaded in, e.g. in unit tests): the library counts
+	// as available if its file merely resolves via the FileResolver chain.
 	if resolver == nil {
 		return false
 	}
-	// Check via the FileResolver chain (supports both OS and virtual fs.FS).
 	f, _, err := ResolveLibraryFile(ctx, resolver, p.name)
 	if err != nil {
 		return false
@@ -152,9 +170,9 @@ type andRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (p *andRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *andRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver, load LibraryLoadProbe) bool {
 	for _, req := range p.requirements {
-		if !req.IsSatisfied(ctx, registry, resolver) {
+		if !req.IsSatisfied(ctx, registry, resolver, load) {
 			return false
 		}
 	}
@@ -166,9 +184,9 @@ type orRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (p *orRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *orRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver, load LibraryLoadProbe) bool {
 	for _, req := range p.requirements {
-		if req.IsSatisfied(ctx, registry, resolver) {
+		if req.IsSatisfied(ctx, registry, resolver, load) {
 			return true
 		}
 	}
@@ -180,14 +198,14 @@ type notRequirement struct {
 	requirement FeatureRequirement
 }
 
-func (p *notRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
-	return !p.requirement.IsSatisfied(ctx, registry, resolver)
+func (p *notRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver, load LibraryLoadProbe) bool {
+	return !p.requirement.IsSatisfied(ctx, registry, resolver, load)
 }
 
 // elseRequirement is always satisfied (used for else clause).
 type elseRequirement struct{}
 
-func (p *elseRequirement) IsSatisfied(_ context.Context, _ *LibraryRegistry, _ FileResolver) bool {
+func (*elseRequirement) IsSatisfied(_ context.Context, _ *LibraryRegistry, _ FileResolver, _ LibraryLoadProbe) bool {
 	return true
 }
 
