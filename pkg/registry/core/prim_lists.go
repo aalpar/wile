@@ -131,7 +131,7 @@ func PrimAppend(mc machine.CallContext) error {
 		})
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
+		return werr.WrapForeignErrorf(err, "append: error processing argument lists: %s", args.SchemeString())
 	}
 	mc.SetValue(head)
 	return nil
@@ -141,10 +141,10 @@ func PrimAppend(mc machine.CallContext) error {
 // Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
 //
 // Two-pass block construction: pass 1 validates the proper list and counts
-// its length; pass 2 block-allocates all cells at once (PairBlock) and fills
-// them back-to-front so the spine emerges reversed. This amortizes N cons
-// allocations to a single block allocation. The extra spine traversal is
-// allocation-free pointer-chasing.
+// its length; pass 2 block-allocates all cells at once (PairBlock), links the
+// spine via LinkSpine, then fills the cars back-to-front so the result emerges
+// reversed. This amortizes N cons allocations to a single block allocation. The
+// extra spine traversal is allocation-free pointer-chasing.
 func PrimReverse(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
@@ -165,11 +165,7 @@ func PrimReverse(mc machine.CallContext) error {
 		return err
 	}
 
-	block := make(values.PairBlock, n)
-	for k := 0; k < n-1; k++ {
-		block[k][1] = &block[k+1]
-	}
-	block[n-1][1] = values.EmptyList
+	block := make(values.PairBlock, n).LinkSpine()
 	i := n
 	err = helpers.ForEachList(mc.Context(), pr, "reverse", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		i--
