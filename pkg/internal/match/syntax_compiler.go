@@ -221,6 +221,14 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, pr *syntax.SyntaxPair, element syntax.SyntaxValue, elementStart int) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
 
+	// C12/C13: a nested sub-list in NON-FINAL position can be followed by an
+	// improper `. rest` tail, e.g. `((x) . body)`. The descent paths below skip
+	// advanceToNextElement (they return shouldContinue=true), so the improper
+	// tail must be captured here — and BEFORE the descent op, because at runtime
+	// CaptureCdr/CompareCdr read the parent pair's cdr at the current position;
+	// the descent op then operates on the car, which CaptureCdr preserves.
+	emitImproperTailIfPresent(vis, &stack[l-1])
+
 	if syntax.IsSyntaxEmptyList(pr) {
 		// Empty pair pattern () - verify input car is also empty
 		vis.codes = append(vis.codes, ByteCodeRequireCarEmpty{})
@@ -251,6 +259,11 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 	vec *syntax.SyntaxVector, element syntax.SyntaxValue, elementStart int,
 ) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
+
+	// C12/C13: a vector sub-pattern in non-final position can be followed by an
+	// improper `. rest` tail; capture it before the descent op (same rationale
+	// as compilePairElement).
+	emitImproperTailIfPresent(vis, &stack[l-1])
 
 	if len(vec.Values) == 0 {
 		// Empty vector pattern #() — verify input car is an empty vector.
@@ -540,21 +553,38 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 		return true
 	}
 
-	// Check for improper list pattern: (_ a . rest) where rest is a pattern variable
-	sym, ok := cdr.(*syntax.SyntaxSymbol)
-	if ok {
-		_, isVar := vis.variables[sym.Key()]
-		if isVar {
-			// The CDR is a pattern variable - emit CaptureCdr to capture the rest
-			vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key()})
-			entry.variables[sym.Key()] = struct{}{}
-		} else {
-			// The CDR is a literal symbol - compare it
-			vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
-		}
-	}
-
+	// Improper list pattern: (_ a . rest) where rest is a pattern variable
+	// or a literal symbol.
+	emitImproperTailIfPresent(vis, entry)
 	return false
+}
+
+// emitImproperTailIfPresent emits bytecode for an improper `. rest` tail at the
+// current list level. The cdr of entry.pr is an improper tail when it is a bare
+// symbol (not a pair and not the empty list). A pattern variable becomes
+// CaptureCdr (binds the rest of the input); a literal symbol becomes CompareCdr
+// (matches it exactly). Does nothing when the cdr is a pair or the empty list.
+//
+// Shared by advanceToNextElement (symbol/literal preceding element) and by the
+// pair/vector descent paths (compilePairElement, compileVectorElement), which
+// otherwise skip advanceToNextElement and would drop the tail (C12/C13). In the
+// descent paths it must run BEFORE the descent op so CaptureCdr reads the parent
+// pair's cdr at the current position rather than the already-advanced sibling.
+func emitImproperTailIfPresent(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) {
+	cdr := entry.pr.SyntaxCdr()
+	sym, ok := cdr.(*syntax.SyntaxSymbol)
+	if !ok {
+		return
+	}
+	_, isVar := vis.variables[sym.Key()]
+	if isVar {
+		// The CDR is a pattern variable - emit CaptureCdr to capture the rest
+		vis.codes = append(vis.codes, ByteCodeCaptureCdr{Binding: sym.Key()})
+		entry.variables[sym.Key()] = struct{}{}
+		return
+	}
+	// The CDR is a literal symbol - compare it
+	vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
 }
 
 // insert inserts codes into target at index i, adjusting jump offsets as needed.
