@@ -38,8 +38,9 @@
 (test-group "fixed-size sets"
   (test 128    (char-set-size char-set:ascii))
   (test 0      (char-set-size char-set:empty))
-  ;; full = every codepoint in [0, MaxCodepoint]
-  (test #x110000 (char-set-size char-set:full)))
+  ;; full = every codepoint in [0, MaxCodepoint] EXCEPT the 2048 UTF-16
+  ;; surrogates (U+D800..U+DFFF), which are not Unicode scalar values.
+  (test (- #x110000 2048) (char-set-size char-set:full)))
 
 (test-group "consistency with built-in predicates (load-bearing per design §10)"
   ;; Walk ASCII range 0..127 and verify cs membership matches the

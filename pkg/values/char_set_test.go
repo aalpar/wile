@@ -253,3 +253,41 @@ func TestNewCharSetFromRanges_PanicWrapsSentinel(t *testing.T) {
 		})
 	}
 }
+
+// TestCharSet_ExcludesSurrogates verifies the no-surrogate invariant: every
+// constructor strips the UTF-16 surrogate block (U+D800..U+DFFF), splitting any
+// straddling range. Surrogates are not Unicode scalar values, so a char-set must
+// never contain them — otherwise iteration via integer->char crashes (SRFI-14 6D).
+func TestCharSet_ExcludesSurrogates(t *testing.T) {
+	c := qt.New(t)
+
+	contains := func(cs *values.CharSet, cp rune) bool {
+		for _, r := range cs.Ranges() {
+			if cp >= r.Lo && cp <= r.Hi {
+				return true
+			}
+		}
+		return false
+	}
+
+	// A range straddling the surrogate block is split into below/above parts.
+	straddle := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 0xD7FE, Hi: 0xE002}})
+	c.Assert(contains(straddle, 0xD800), qt.IsFalse)
+	c.Assert(contains(straddle, 0xDFFF), qt.IsFalse)
+	c.Assert(contains(straddle, 0xD7FF), qt.IsTrue)
+	c.Assert(contains(straddle, 0xE000), qt.IsTrue)
+
+	// A range entirely within the block collapses to empty.
+	allSurrogate := values.NewCharSetFromUnsortedRanges([]values.CharSetRange{{Lo: 0xD900, Hi: 0xDA00}})
+	c.Assert(len(allSurrogate.Ranges()), qt.Equals, 0)
+
+	// "Full" excludes the 2048 surrogate code points.
+	full := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 0, Hi: values.MaxCodepoint}})
+	c.Assert(full.Size(), qt.Equals, int(values.MaxCodepoint)+1-2048)
+	c.Assert(contains(full, 0xD800), qt.IsFalse)
+	c.Assert(contains(full, 0x10FFFF), qt.IsTrue)
+
+	// Surrogate-free input is returned unchanged (no spurious splitting).
+	ascii := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 'a', Hi: 'z'}})
+	c.Assert(len(ascii.Ranges()), qt.Equals, 1)
+}

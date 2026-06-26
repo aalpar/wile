@@ -27,6 +27,18 @@ var _ Value = (*CharSet)(nil)
 // MaxCodepoint is the largest valid Unicode codepoint (U+10FFFF).
 const MaxCodepoint rune = 0x10FFFF
 
+// surrogateLo and surrogateHi bound the UTF-16 surrogate block (U+D800..U+DFFF).
+// These code points are not Unicode scalar values — they are not characters —
+// so a SRFI-14 char-set never contains them. Every constructor strips this block
+// (see stripSurrogates) so that iteration (char-set-fold/-for-each, which map
+// each codepoint through integer->char), char-set-size, and char-set->string
+// never encounter a surrogate. integer->char rejects surrogates, so leaving them
+// in the inversion list crashes fold/for-each (SRFI-14 6D).
+const (
+	surrogateLo rune = 0xD800
+	surrogateHi rune = 0xDFFF
+)
+
 // CharSet is an immutable set of Unicode codepoints stored as a sorted
 // inversion list of disjoint, non-adjacent ranges. SRFI-14 char-set type.
 //
@@ -51,6 +63,43 @@ type CharSetRange struct {
 	Lo, Hi rune
 }
 
+// stripSurrogates removes the UTF-16 surrogate block (U+D800..U+DFFF) from each
+// input range, splitting any range that straddles the block into its below- and
+// above-block parts. A range lying entirely within the block is dropped. Input
+// need not be sorted; surviving sub-ranges follow input order. When no range
+// touches the block the input slice is returned unchanged with no allocation,
+// so surrogate-free set-algebra (the common case) stays allocation-light.
+func stripSurrogates(rs []CharSetRange) []CharSetRange {
+	touches := false
+	for _, r := range rs {
+		if r.Hi >= surrogateLo && r.Lo <= surrogateHi {
+			touches = true
+			break
+		}
+	}
+	if !touches {
+		return rs
+	}
+	q := make([]CharSetRange, 0, len(rs)+1)
+	for _, r := range rs {
+		if r.Lo < surrogateLo {
+			hi := r.Hi
+			if hi >= surrogateLo {
+				hi = surrogateLo - 1
+			}
+			q = append(q, CharSetRange{Lo: r.Lo, Hi: hi})
+		}
+		if r.Hi > surrogateHi {
+			lo := r.Lo
+			if lo <= surrogateHi {
+				lo = surrogateHi + 1
+			}
+			q = append(q, CharSetRange{Lo: lo, Hi: r.Hi})
+		}
+	}
+	return q
+}
+
 // NewCharSetFromRanges constructs a CharSet from an already-canonical range
 // slice. The caller asserts the slice is sorted, disjoint, non-adjacent, and
 // codepoint-valid. Used internally by primitives that produce canonical output
@@ -59,6 +108,7 @@ type CharSetRange struct {
 // Panics on invariant violation — this is an internal contract assertion,
 // wrapped per CLAUDE.md "NEVER panic with raw errors" imperative.
 func NewCharSetFromRanges(rs []CharSetRange) *CharSet {
+	rs = stripSurrogates(rs)
 	if len(rs) == 0 {
 		return &CharSet{}
 	}
@@ -90,6 +140,7 @@ func NewCharSetFromRanges(rs []CharSetRange) *CharSet {
 // Invalid ranges (Lo > Hi or out-of-bounds) are dropped. Overlapping and
 // adjacent ranges are merged. Result is in canonical form.
 func NewCharSetFromUnsortedRanges(rs []CharSetRange) *CharSet {
+	rs = stripSurrogates(rs)
 	if len(rs) == 0 {
 		return &CharSet{}
 	}

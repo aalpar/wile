@@ -322,9 +322,10 @@ func TestCharSetAlgebra(t *testing.T) {
 	c.Assert(runScheme(t, engine, `(char-set-contains? (char-set-complement (char-set #\a)) #\b)`),
 		qt.Equals, values.TrueValue)
 
-	// complement(empty) = full: 0x110000 codepoints
+	// complement(empty) = full: 0x110000 code points minus the 2048 UTF-16
+	// surrogates (U+D800..U+DFFF), which are not characters and never stored.
 	c.Assert(runScheme(t, engine, `(char-set-size (char-set-complement (char-set)))`),
-		valuestest.SchemeEquals, values.NewInteger(0x110000))
+		valuestest.SchemeEquals, values.NewInteger(0x110000-2048))
 }
 
 func TestCharSetFoldForEach(t *testing.T) {
@@ -681,6 +682,34 @@ func TestCharSetCursorProtocol(t *testing.T) {
 			`(char->integer (char-set-ref char-set:full (char-set-cursor char-set:full)))`),
 			valuestest.SchemeEquals, values.NewInteger(0))
 	})
+}
+
+// TestCharSetFoldSurrogateSafe verifies char-set-fold / char-set-for-each walk
+// ranges that straddle the UTF-16 surrogate block without crashing. Before the
+// surrogate-exclusion invariant, %char-set-walk-ranges passed a surrogate code
+// point to integer->char, which rejects it (SRFI-14 6D). Construction now strips
+// the block, so iteration never sees a surrogate.
+func TestCharSetFoldSurrogateSafe(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	tests := []struct {
+		name string
+		expr string
+		want int64
+	}{
+		// ucs-range is [lower, upper): [D7FE, E002) => D7FE D7FF E000 E001, surrogates skipped.
+		{"fold across surrogate block", `(char-set-fold (lambda (c acc) (+ acc 1)) 0 (ucs-range->char-set #xD7FE #xE002))`, 4},
+		// char-set:full no longer contains surrogates; fold must not crash on it
+		// (count just the two codepoints around the block via intersection).
+		{"for-each across block via intersection", `(let ((n 0)) (char-set-for-each (lambda (c) (set! n (+ n 1))) (char-set-intersection char-set:full (ucs-range->char-set #xD7FF #xE001))) n)`, 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, runScheme(t, engine, tc.expr),
+				valuestest.SchemeEquals, values.NewInteger(tc.want))
+		})
+	}
 }
 
 // TestCharSetHash verifies char-set-hash is content-stable (char-set= sets

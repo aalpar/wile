@@ -35,7 +35,15 @@ func (runeSlice) Generate(r *rand.Rand, size int) reflect.Value {
 	n := r.Intn(50)
 	out := make(runeSlice, n)
 	for i := range out {
-		out[i] = rune(r.Intn(0x10000)) // BMP only — keeps tests fast
+		cp := rune(r.Intn(0x10000)) // BMP only — keeps tests fast
+		// Surrogates (U+D800..U+DFFF) are not Unicode scalar values and are
+		// never stored in a char-set (constructors strip them), so a storage
+		// round-trip property must not generate them; remap into the preceding
+		// valid block.
+		if cp >= 0xD800 && cp <= 0xDFFF {
+			cp -= 0x0800
+		}
+		out[i] = cp
 	}
 	return reflect.ValueOf(out)
 }
