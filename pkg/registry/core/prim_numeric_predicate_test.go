@@ -428,11 +428,14 @@ func TestRealQ_ComplexRegression(t *testing.T) {
 		code string
 		out  values.Value
 	}{
-		// H6: *values.Complex with zero imaginary part should be real
-		{"real? on 3.0+0.0i", `(real? 3.0+0.0i)`, values.TrueValue},
-		{"real? on 1.5+0.0i", `(real? 1.5+0.0i)`, values.TrueValue},
-		{"real? on 0.0+0.0i", `(real? 0.0+0.0i)`, values.TrueValue},
-		{"real? on -2.7+0.0i", `(real? -2.7+0.0i)`, values.TrueValue},
+		// R7RS §6.2: a complex with an *inexact* zero imaginary part is NOT real;
+		// only an exact zero imaginary collapses to real. *values.Complex stores
+		// inexact (float64) parts, so its 0.0 imaginary is an inexact zero. This
+		// reverses the earlier "H6" behavior. (real? 3.0+0.0i) => #f (Chez/Racket).
+		{"real? on 3.0+0.0i", `(real? 3.0+0.0i)`, values.FalseValue},
+		{"real? on 1.5+0.0i", `(real? 1.5+0.0i)`, values.FalseValue},
+		{"real? on 0.0+0.0i", `(real? 0.0+0.0i)`, values.FalseValue},
+		{"real? on -2.7+0.0i", `(real? -2.7+0.0i)`, values.FalseValue},
 
 		// *values.Complex with non-zero imaginary part should NOT be real
 		{"real? on 3.0+1.0i", `(real? 3.0+1.0i)`, values.FalseValue},

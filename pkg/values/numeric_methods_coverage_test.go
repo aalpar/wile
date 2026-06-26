@@ -205,7 +205,9 @@ func TestComplexPredicates(t *testing.T) {
 		isNaN      bool
 	}{
 		{"standard", values.NewComplexFromParts(1.0, 2.0), false, false, true, false},
-		{"real integer", values.NewComplexFromParts(5.0, 0.0), true, true, true, false},
+		// R7RS §6.2: a *Complex (inexact components) with 0.0 imaginary is an
+		// inexact-zero-imaginary complex — not real, hence not integer or rational.
+		{"inexact real-valued", values.NewComplexFromParts(5.0, 0.0), false, false, true, false},
 		{"with inf", values.NewComplexFromParts(math.Inf(1), 0.0), false, false, false, false},
 		{"with NaN real", values.NewComplexFromParts(math.NaN(), 0.0), false, false, false, true},
 		{"with NaN imag", values.NewComplexFromParts(0.0, math.NaN()), false, false, false, true},

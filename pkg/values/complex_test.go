@@ -171,8 +171,15 @@ func TestComplex_LessThan(t *testing.T) {
 }
 
 func TestComplex_IsReal(t *testing.T) {
+	// R7RS §6.2: a complex with an *inexact* zero imaginary part is NOT real
+	// ((real? 5.0+0.0i) => #f). *Complex always stores inexact (float64)
+	// components, so even a 0.0 imaginary part is an inexact zero and the value
+	// is not real, rational, or integer — only complex. Exact-zero-imaginary
+	// complexes are represented by *BigComplex, never *Complex.
 	c1 := values.NewComplex(complex(5, 0))
-	qt.Assert(t, c1.IsReal(), qt.IsTrue)
+	qt.Assert(t, c1.IsReal(), qt.IsFalse)
+	qt.Assert(t, c1.IsRational(), qt.IsFalse)
+	qt.Assert(t, c1.IsInteger(), qt.IsFalse)
 
 	c2 := values.NewComplex(complex(5, 1))
 	qt.Assert(t, c2.IsReal(), qt.IsFalse)

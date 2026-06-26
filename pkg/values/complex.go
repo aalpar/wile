@@ -260,23 +260,24 @@ func (p *Complex) IsExact() bool {
 
 // IsInteger returns true if this complex has zero imaginary part and an integer real part.
 //
-// R7RS §6.2.6: integer? returns #t for complex numbers with zero imaginary
-// part whose real part is an integer.
-func (p *Complex) IsInteger() bool {
-	return imag(p.Value) == 0 &&
-		real(p.Value) == math.Trunc(real(p.Value)) &&
-		!math.IsInf(real(p.Value), 0) &&
-		!math.IsNaN(real(p.Value))
+// IsInteger reports whether this complex number is an integer.
+//
+// R7RS §6.2: the predicate hierarchy is integer? ⟹ rational? ⟹ real? ⟹
+// complex?. A *Complex always has inexact (float64) components, so even a 0.0
+// imaginary part is an *inexact* zero — the value is not real (see IsReal), and
+// therefore not rational or integer. (integer? 5.0+0.0i) => #f (Chez/Racket
+// agree). Always false; integer-valued reals are represented by *Float/*Integer.
+func (*Complex) IsInteger() bool {
+	return false
 }
 
-// IsRational returns true if the imaginary part is zero and the real part is finite.
+// IsRational reports whether this complex number is rational.
 //
-// R7RS §6.2.6: A complex number with zero imaginary part is rational if its real
-// part is a finite real number.
-func (p *Complex) IsRational() bool {
-	return imag(p.Value) == 0.0 &&
-		!math.IsInf(real(p.Value), 0) &&
-		!math.IsNaN(real(p.Value))
+// R7RS §6.2: rational? ⟹ real?. A *Complex always has inexact components, so its
+// zero imaginary part is an inexact zero and the value is not real, hence not
+// rational. (rational? 5.0+0.0i) => #f. Always false.
+func (*Complex) IsRational() bool {
+	return false
 }
 
 // IsFinite returns true if both real and imaginary parts are finite.
@@ -294,9 +295,15 @@ func (p *Complex) IsNaN() bool {
 	return math.IsNaN(real(p.Value)) || math.IsNaN(imag(p.Value))
 }
 
-// IsReal returns true if the imaginary part is zero.
-func (p *Complex) IsReal() bool {
-	return imag(p.Value) == 0
+// IsReal reports whether this complex number is real.
+//
+// R7RS §6.2: a complex with an *inexact* zero imaginary part is NOT real —
+// (real? 5.0+0.0i) => #f, while (real? 5+0i) => #t. A *Complex always stores
+// inexact (float64) components, so its imaginary part (even 0.0) is an inexact
+// zero. Exact-zero-imaginary complexes are represented by *BigComplex, never
+// *Complex, so this is always false. (Chez/Racket agree.)
+func (*Complex) IsReal() bool {
+	return false
 }
 
 // Magnitude returns the absolute value (modulus) of the complex number.

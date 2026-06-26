@@ -330,9 +330,14 @@ func (p *BigComplex) Compare(o Number) int {
 	return bigComplexCompare[o.Kind()](p, o)
 }
 
-// IsReal returns true if the imaginary part is zero.
+// IsReal reports whether this complex number is real.
+//
+// R7RS §6.2: a complex is real iff its imaginary part is an *exact* zero —
+// (real? 5+0i) => #t but (real? 5.0+0.0i) => #f. An inexact zero imaginary
+// (a BigFloat 0.0) does not collapse to real. IsInteger/IsRational delegate
+// here, so the whole integer? ⟹ rational? ⟹ real? hierarchy stays consistent.
 func (p *BigComplex) IsReal() bool {
-	return p.imag.IsZero()
+	return p.imag.IsZero() && isExactPart(p.imag)
 }
 
 // IsExact returns true if both parts are exact (BigInteger or Rational).
