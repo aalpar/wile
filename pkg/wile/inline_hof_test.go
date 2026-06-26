@@ -40,7 +40,7 @@ func TestInlineHOFStamp(t *testing.T) {
 	// Curated tail HOFs resident in the sealed base (bootstrap_procedures.scm).
 	// Each takes its callback as the first parameter -> index 0.
 	inlineHOFs := []string{
-		"for-each", "vector-map", "vector-for-each", "string-map", "string-for-each",
+		"map", "for-each", "vector-map", "vector-for-each", "string-map", "string-for-each",
 	}
 	for _, name := range inlineHOFs {
 		t.Run("hof/"+name, func(t *testing.T) {
@@ -56,9 +56,9 @@ func TestInlineHOFStamp(t *testing.T) {
 		})
 	}
 
-	// Non-curated: a non-HOF (car/cons) and a HOF outside the v1 set (map is
-	// non-tail, deferred) all read -1 — the curation is selective, not "every HOF."
-	notInlineHOFs := []string{"car", "cons", "map"}
+	// Non-curated: non-HOFs (car/cons) and a HOF outside the curated set (apply is
+	// a HOF but not curated) all read -1 — the curation is selective, not "every HOF."
+	notInlineHOFs := []string{"car", "cons", "apply"}
 	for _, name := range notInlineHOFs {
 		t.Run("non/"+name, func(t *testing.T) {
 			c := qt.New(t)
