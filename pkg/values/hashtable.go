@@ -83,6 +83,24 @@ func (p *Hashtable) EqualTo(o Value) bool {
 
 // SchemeString returns the Scheme representation of this hash table.
 func (p *Hashtable) SchemeString() string {
+	return p.schemeStringWithVisited(make(map[Value]bool))
+}
+
+// schemeStringWithVisited renders the hash table using PATH-SCOPED cycle
+// detection threaded through nested Pair/Vector/Hashtable values, so a cycle
+// that passes through a hashtable (e.g. a pair whose cdr is a hashtable whose
+// value is that pair) is bounded with "..." instead of overflowing the Go
+// stack. The hashtable marks itself on entry and unmarks on exit; keys and
+// values recurse via schemeStringChild, which applies the same discipline.
+func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool) string {
+	if visited[p] {
+		return "..."
+	}
+	visited[p] = true
+	defer func() {
+		delete(visited, p)
+	}()
+
 	q := &strings.Builder{}
 	q.WriteString("#hash(")
 	// Collect all entries and sort for deterministic output.
@@ -98,9 +116,9 @@ func (p *Hashtable) SchemeString() string {
 			q.WriteString(" ")
 		}
 		q.WriteString("(")
-		q.WriteString(e.key.SchemeString())
+		q.WriteString(schemeStringChild(e.key, visited))
 		q.WriteString(" . ")
-		q.WriteString(e.value.SchemeString())
+		q.WriteString(schemeStringChild(e.value, visited))
 		q.WriteString(")")
 	}
 	q.WriteString(")")

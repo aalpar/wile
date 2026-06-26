@@ -106,7 +106,7 @@ func addReadWrite(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeTextualOutputPort},
 			ReturnType: values.TypeVoid},
 		{Name: "write-simple", ParamCount: 2, IsVariadic: true, Impl: makeWriteVariant("write-simple", schemeStringRender),
-			Doc: "Like write, but does not use datum labels for shared structure.\n\nExamples:\n  (let ((p (open-output-string))) (write-simple '(1 2) p) (get-output-string p))  => \"(1 2)\"", ParamNames: []string{"obj", "port"}, Category: "io",
+			Doc: "Like write, but emits no datum labels (#N=/#N#): shared structure is printed in full at each occurrence. Cycle detection is path-scoped and bounded: a circular structure renders \"...\" at the back edge instead of looping forever, while acyclic sharing (a DAG) is not mistaken for a cycle.\n\nExamples:\n  (let ((p (open-output-string))) (write-simple '(1 2) p) (get-output-string p))  => \"(1 2)\"", ParamNames: []string{"obj", "port"}, Category: "io",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeTextualOutputPort},
 			ReturnType: values.TypeVoid},
 		{Name: "write-shared", ParamCount: 2, IsVariadic: true, Impl: makeWriteVariant("write-shared", values.WriteSharedValueToString),

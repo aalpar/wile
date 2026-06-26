@@ -71,14 +71,22 @@ func makeWriteVariant(name string, render func(values.Value) (string, error)) ma
 
 // schemeStringRender adapts Value.SchemeString (which cannot fail) to the
 // render signature makeWriteVariant expects. write-simple uses it: it bypasses
-// the SchemeWriter's shared/circular analysis, so it has neither a datum-label
-// pass nor the SchemeWriter's nesting-depth bound.
+// the SchemeWriter's datum-label (#N=/#N#) machinery, so it never emits datum
+// labels even for shared or circular structure.
 //
-// NOTE: SchemeString recurses into nested structure with no depth bound of its
-// own, so write-simple on a programmatically built, deeply nested value can
-// still overflow the host stack. That is a separate surface from the
-// SchemeWriter path (write/display/write-shared) bounded by DefaultMaxWriteDepth;
-// bounding SchemeString touches the core Value contract and is out of scope here.
+// CYCLES: SchemeString uses path-scoped cycle detection threaded through nested
+// Pair/Vector/Hashtable, so a circular structure (e.g. set-cdr! self-cycle, or a
+// cycle through a hashtable value) is bounded — it renders "..." at the back
+// edge instead of overflowing the host stack. Structural sharing (an acyclic
+// DAG) is NOT mistaken for a cycle: a node reachable by two sibling paths is
+// rendered in full at each occurrence, with no datum label.
+//
+// NOTE: SchemeString still has no DEPTH bound, so a programmatically built,
+// genuinely deeply nested (acyclic) value can overflow the host stack — this is
+// the same depth surface as before. That differs from the SchemeWriter path
+// (write/display/write-shared), which is bounded by DefaultMaxWriteDepth;
+// bounding SchemeString by depth touches the core Value contract and is out of
+// scope here.
 func schemeStringRender(v values.Value) (string, error) {
 	return v.SchemeString(), nil
 }

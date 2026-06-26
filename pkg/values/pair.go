@@ -380,11 +380,26 @@ func (p *Pair) SchemeString() string {
 	return p.schemeStringWithVisited(visited)
 }
 
+// schemeStringWithVisited renders the pair using PATH-SCOPED cycle detection:
+// every node this call marks (the entry pair plus each spine cdrPair) is
+// recorded and unmarked on exit, so a node reachable by two SIBLING paths (an
+// acyclic DAG / structural sharing) is rendered in full at each occurrence.
+// Only a node reachable from ITSELF — still on the current path — collapses to
+// "...". Children recurse via schemeStringChild, which applies the same
+// mark/unmark discipline to nested *Pair/*Vector, catching pair↔vector cycles.
 func (p *Pair) schemeStringWithVisited(visited map[Value]bool) string {
 	if visited[p] {
 		return "..."
 	}
+	// marked accumulates every node this call adds to the path so we can remove
+	// all of them on exit — not just the entry pair, but every spine cdrPair.
+	marked := []Value{p}
 	visited[p] = true
+	defer func() {
+		for _, m := range marked {
+			delete(visited, m)
+		}
+	}()
 
 	q := &strings.Builder{}
 	q.WriteString("(")
@@ -412,6 +427,7 @@ func (p *Pair) schemeStringWithVisited(visited map[Value]bool) string {
 			break
 		}
 		visited[cdrPair] = true
+		marked = append(marked, cdrPair)
 		pr = cdrPair
 		i++
 	}

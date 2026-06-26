@@ -53,14 +53,16 @@ func formatIndexable(prefix string, length int, get func(int) Value, visited map
 }
 
 // schemeStringChild renders a single element of a compound structure,
-// threading the shared visited set through nested Pair/Vector so that
-// cross-collection cycles (vector→pair→vector and the like) are detected
-// exactly once. Non-compound elements render via SchemeString; void and nil
-// pointers render as "#<void>".
+// threading the shared visited set through nested Pair/Vector/Hashtable so that
+// cross-collection cycles (vector→pair→vector, pair→hashtable→pair, and the
+// like) are bounded. Marking is path-scoped: each compound renderer unmarks
+// itself on exit, so structural sharing (an acyclic DAG) renders in full and
+// only a true self-cycle collapses to "...". Non-compound elements render via
+// SchemeString; void and nil pointers render as "#<void>".
 //
-// The visited set is keyed on pointer-identity Value types only (*Pair and
-// *Vector — the only types inserted). Never insert a value-equality or
-// non-comparable Value: the former would alias distinct nodes to one slot
+// The visited set is keyed on pointer-identity Value types only (*Pair,
+// *Vector, *Hashtable — the only types inserted). Never insert a value-equality
+// or non-comparable Value: the former would alias distinct nodes to one slot
 // (false cycles), the latter would panic on map insertion.
 //
 // A nil visited set means "no cycle tracking requested" — used by callers
@@ -80,6 +82,14 @@ func schemeStringChild(child Value, visited map[Value]bool) string {
 		}
 		return c.schemeStringWithVisited(visited)
 	case *Vector:
+		if c == nil {
+			return "#<void>"
+		}
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited)
+	case *Hashtable:
 		if c == nil {
 			return "#<void>"
 		}

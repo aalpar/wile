@@ -274,17 +274,25 @@ func TestVectorSchemeStringCrossCycle(t *testing.T) {
 	qt.Assert(t, p.SchemeString(), qt.Equals, "(a . #(1 ...))")
 }
 
-// TestVectorSchemeStringSharedAcyclic pins the CURRENT (intended-for-now)
-// behavior for a non-cyclic shared vector: all-visited marking collapses the
-// second occurrence to "...". This is the documented Phase-1 tradeoff (see the
-// comment on Vector.schemeStringWithVisited); Phase 3 switches to path-scoped
-// marking and will render the diamond in full. This test is the tripwire that
-// must change when that happens.
+// TestVectorSchemeStringSharedAcyclic pins path-scoped marking: a non-cyclic
+// shared vector renders in full at every occurrence. (Pre-Phase-3 this pinned
+// the all-visited tradeoff "(#(1) ...)"; Phase 3 switched to path-scoped
+// marking, so sharing is no longer mistaken for a cycle.)
 func TestVectorSchemeStringSharedAcyclic(t *testing.T) {
 	shared := values.NewVector(values.NewInteger(1))
 	dag := values.List(shared, shared) // (#(1) #(1)) — acyclic, shared
 
-	qt.Assert(t, dag.SchemeString(), qt.Equals, "(#(1) ...)")
+	qt.Assert(t, dag.SchemeString(), qt.Equals, "(#(1) #(1))")
+}
+
+// TestVectorSchemeStringSharedVectorRow pins that a vector holding the SAME
+// sub-vector twice renders both occurrences in full (acyclic sharing inside a
+// vector, not a list).
+func TestVectorSchemeStringSharedVectorRow(t *testing.T) {
+	sub := values.NewVector(values.NewInteger(1), values.NewInteger(2))
+	row := values.NewVector(sub, sub) // #(#(1 2) #(1 2)) — acyclic, shared
+
+	qt.Assert(t, row.SchemeString(), qt.Equals, "#(#(1 2) #(1 2))")
 }
 
 func TestVectorAsList(t *testing.T) {

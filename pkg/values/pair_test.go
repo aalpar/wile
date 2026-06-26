@@ -633,6 +633,43 @@ func TestPair_SchemeString_NonCircularRegression(t *testing.T) {
 	}
 }
 
+// TestPair_SchemeString_SharedAcyclic pins path-scoped (not all-visited) cycle
+// detection: a node reachable by two SIBLING paths (an acyclic DAG, i.e.
+// structural sharing) must render in full at every occurrence. Only a node
+// reachable from ITSELF (a true cycle, still on the current path) collapses to
+// "...". This is the Phase-3 switch away from the old all-visited marking that
+// mistook sharing for a cycle.
+func TestPair_SchemeString_SharedAcyclic(t *testing.T) {
+	// (let ((s (list 1 2))) (list s s)) — shared sublist, acyclic.
+	shared := values.List(values.NewInteger(1), values.NewInteger(2))
+	dag := values.List(shared, shared)
+	qt.Assert(t, dag.SchemeString(), qt.Equals, "((1 2) (1 2))")
+}
+
+// TestPair_SchemeString_SharedSpineCdr pins that sharing reached through the
+// cdr spine (not just the car) is rendered in full. The earlier bug marked
+// every spine cdrPair forever, so a pair appearing in two sibling subtrees was
+// wrongly collapsed to "...".
+func TestPair_SchemeString_SharedSpineCdr(t *testing.T) {
+	shared := values.List(values.NewInteger(7), values.NewInteger(8))
+	// (shared . shared) where both halves are the SAME object, acyclic:
+	// car renders (7 8); cdr is the same pair, spliced onto the spine → 7 8.
+	dag := values.NewCons(shared, shared)
+	qt.Assert(t, dag.SchemeString(), qt.Equals, "((7 8) 7 8)")
+}
+
+// TestPair_SchemeString_TrueCycleStillBounded confirms a real set-cdr! cycle
+// is still bounded (renders "...", does not hang or overflow) after the switch
+// to path-scoped marking.
+func TestPair_SchemeString_TrueCycleStillBounded(t *testing.T) {
+	a := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+	b := values.NewCons(values.NewSymbol("b"), values.EmptyList)
+	a.SetCdr(b)
+	b.SetCdr(a) // #0=(a b . #0#)
+	got := a.SchemeString()
+	qt.Assert(t, got, qt.Equals, "(a b . ...)")
+}
+
 func TestPair_ForEach(t *testing.T) {
 	ctx := context.TODO()
 

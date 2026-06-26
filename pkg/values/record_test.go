@@ -378,3 +378,24 @@ func TestDerivedRecordTypeInheritsOpaque(t *testing.T) {
 	)
 	qt.Assert(t, normalChild.IsOpaque(), qt.IsFalse)
 }
+
+// TestRecord_SchemeString_CompoundCycleBounded confirms a record holding a
+// self-cyclic pair renders bounded (does not overflow the Go stack). Record
+// SchemeString prints only "#<record:Name>" and never recurses into its field
+// values, so it is cycle-safe by construction; this pins that property so a
+// future change that starts printing fields cannot silently reintroduce the
+// overflow.
+func TestRecord_SchemeString_CompoundCycleBounded(t *testing.T) {
+	rt := values.NewRecordType(values.NewSymbol("box"), []*values.Symbol{values.NewSymbol("v")})
+	p := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+	rec, err := values.NewRecord(rt, []values.Value{p})
+	qt.Assert(t, err, qt.IsNil)
+	p.SetCdr(rec) // pair -> record -> (field is the pair) -> ...
+
+	// Reaching this line proves no overflow; the record does not recurse.
+	got := rec.SchemeString()
+	qt.Assert(t, got, qt.Equals, "#<record:box>")
+	// And the pair containing the record is likewise bounded.
+	gotPair := p.SchemeString()
+	qt.Assert(t, gotPair, qt.Equals, "(a . #<record:box>)")
+}

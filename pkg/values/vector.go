@@ -110,15 +110,20 @@ func (p *Vector) SchemeString() string {
 	return p.schemeStringWithVisited(make(map[Value]bool))
 }
 
-// schemeStringWithVisited renders the vector while threading a shared
-// cycle-detection set through nested Pair/Vector elements. A vector already
-// on the visited set renders as "..." (all-visited marking, matching Pair's
-// behavior; Phase 3 converts both to path-scoped marking).
+// schemeStringWithVisited renders the vector using PATH-SCOPED cycle detection:
+// the vector marks itself on entry and unmarks on exit, so a vector reached by
+// two SIBLING paths (acyclic sharing) is rendered in full at each occurrence;
+// only a vector reachable from itself (a true cycle, still on the current path)
+// collapses to "...". Nested Pair/Vector children recurse via schemeStringChild
+// and apply the same mark/unmark discipline, catching pair↔vector cycles.
 func (p *Vector) schemeStringWithVisited(visited map[Value]bool) string {
 	if visited[p] {
 		return "..."
 	}
 	visited[p] = true
+	defer func() {
+		delete(visited, p)
+	}()
 	return formatIndexable("#(", len(*p), func(i int) Value {
 		return (*p)[i]
 	}, visited)

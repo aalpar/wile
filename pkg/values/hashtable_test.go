@@ -250,3 +250,33 @@ func TestHashtable_OverwriteKey(t *testing.T) {
 	c.Assert(found, qt.IsTrue)
 	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(2))
 }
+
+// TestHashtable_SchemeString_CompoundCycleBounded confirms a cycle that passes
+// THROUGH a hashtable is bounded (renders "...", does not overflow the Go
+// stack). Without path-scoped marking threaded through the hashtable renderer,
+// pair -> hashtable -> pair-value -> hashtable -> ... recurses forever.
+func TestHashtable_SchemeString_CompoundCycleBounded(t *testing.T) {
+	ht := values.NewEmptyHashtable()
+	p := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+	err := ht.Set(values.NewSymbol("k"), p)
+	qt.Assert(t, err, qt.IsNil)
+	p.SetCdr(ht) // pair -> hashtable -> pair (value) -> hashtable -> ...
+
+	// Reaching this line at all proves no stack overflow. The cycle through the
+	// hashtable must collapse to "..." rather than recurse forever.
+	got := p.SchemeString()
+	qt.Assert(t, got, qt.Contains, "...")
+}
+
+// TestHashtable_SchemeString_SharedAcyclic confirms acyclic sharing through a
+// hashtable value renders in full (path-scoped, not all-visited).
+func TestHashtable_SchemeString_SharedAcyclic(t *testing.T) {
+	shared := values.List(values.NewInteger(1), values.NewInteger(2))
+	ht := values.NewEmptyHashtable()
+	err := ht.Set(values.NewSymbol("k"), shared)
+	qt.Assert(t, err, qt.IsNil)
+	// The list (shared . ht-with-shared) shares `shared` across two sibling
+	// paths but is acyclic; both occurrences must render in full.
+	dag := values.NewCons(shared, values.NewCons(ht, values.EmptyList))
+	qt.Assert(t, dag.SchemeString(), qt.Equals, "((1 2) #hash((k . (1 2))))")
+}
