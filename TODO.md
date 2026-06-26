@@ -61,6 +61,24 @@ fix (PR #800). The continuation value-count behavior itself is documented in
   `WithStrictValueArity` engine option, not a default change. Full rationale:
   `plans/2026-06-25-continuation-arity-strictness-design.local.md`.
 
+### Restricted-profile `(scheme base)` export-validation (from PR #795–#799 crosscheck, 2026-06-25)
+
+Surfaced by the post-merge crosscheck of the #795–#799 conformance arc.
+`validateLibraryExports` (added in #799) runs eagerly and requires every export
+to resolve, so importing even a subset of `(scheme base)` via `(only …)` now
+fails under the `Tiny`/default profile (its ~64 I/O+numeric primitives are
+unregistered). Verified base-vs-HEAD differential: regression for Tiny/default
+subset import only; Console and full-base import were already failing; no shipped
+consumer affected (CLI/MCP use `KitchenSink`). Arguably *more* R7RS §5.6-conformant
+(a library that can't define its exports is invalid). Diagnostic improved to name
+both causes (merge `43d7d085`).
+
+- **Open maintainer decision (#801):** is `restricted profile + (only (scheme base) …)`
+  a supported combination? If yes → make validation tolerant of profile-gated
+  primitives (needs registry-layer involvement) or register deny-stub bindings; if
+  no → current stricter behavior + improved diagnostic is the resolution. Full
+  differential and options in [#801](https://github.com/aalpar/wile/issues/801).
+
 ### Layered-environment carve regressions (review `d8911c15..HEAD`, 2026-06-15)
 
 Findings from the `/code-review` of the sealed-base carve + immutable-top-level-default
