@@ -185,11 +185,11 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeReal},
 		{Name: "magnitude", ParamCount: 1, Impl: PrimMagnitude,
-			Doc: "Returns the magnitude (absolute value) of Z. For real numbers, equivalent to abs.", ParamNames: []string{"z"}, Category: "math",
+			Doc: "Returns the magnitude (absolute value) of Z. For real numbers, equivalent to abs, and preserves exactness: (magnitude 5) => 5, (magnitude 3/4) => 3/4. Contrast angle, which is always inexact.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeReal},
 		{Name: "angle", ParamCount: 1, Impl: PrimAngle,
-			Doc: "Returns the angle (argument) of Z in radians. For positive reals, returns 0; for negative reals, returns pi.", ParamNames: []string{"z"}, Category: "math",
+			Doc: "Returns the angle (argument) of Z in radians, always as an inexact real (flonum). For positive reals the result is 0.0 (not exact 0); for negative reals it is pi (3.141592653589793). This is asymmetric with magnitude, which preserves exactness for exact real arguments; R7RS leaves the exactness of angle unspecified, so the inexact result is conforming.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeFlonum},
 	}, registry.PhaseSetRuntime)
