@@ -774,8 +774,13 @@ func TestRestoreAndRelease_SkipsNonPooledEnvFrame(t *testing.T) {
 	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(0))
 }
 
-func TestRestoreAndRelease_SharedCont_ReleasesPooledEnv(t *testing.T) {
-	// Shared continuation path should still release the old pooled env.
+func TestRestoreAndRelease_SharedCont_DoesNotReleasePooledEnv(t *testing.T) {
+	// Returning through a SHARED (captured) continuation frame must NOT pool the
+	// old env. oldEnv may be the activation frame of another captured frame deeper
+	// in the chain (the call/cc resume frame in the C1 internal-define re-entry
+	// bug); pooling it recycles a frame the captured continuation re-enters,
+	// yielding "no such local binding" on re-invocation. The frame is left for GC,
+	// mirroring Restore() (the call/cc re-entry path), which never pools old env.
 	env := acquireEnvFrame()
 	mc := &MachineContext{}
 	mc.env = env
@@ -793,8 +798,8 @@ func TestRestoreAndRelease_SharedCont_ReleasesPooledEnv(t *testing.T) {
 	mc.RestoreAndRelease(cont)
 	after := envFramePool.Stats()
 
-	qt.Assert(t, mc.counters.EnvFramePoolReleases, qt.Equals, uint64(1))
-	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
+	qt.Assert(t, mc.counters.EnvFramePoolReleases, qt.Equals, uint64(0))
+	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(0))
 	// Restored env from shared continuation must NOT be marked pooled.
 	qt.Assert(t, mc.envPooled, qt.IsFalse)
 }

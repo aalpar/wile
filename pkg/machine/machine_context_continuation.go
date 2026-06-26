@@ -106,10 +106,13 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
 		p.marks = cloneMarks(cont.marks)
-		if oldEnvPooled && oldEnv != p.env {
-			p.counters.EnvFramePoolReleases++
-			p.releaseEnvFrame(oldEnv)
-		}
+		// Do NOT pool oldEnv here. We are returning through a SHARED (captured)
+		// continuation frame, so oldEnv — the activation frame being left — may be
+		// the env of another captured frame deeper in the chain (the call/cc resume
+		// frame in C1). Pooling it would recycle a frame the captured continuation
+		// re-enters, yielding "no such local binding" on re-invocation. Leave it for
+		// GC, mirroring Restore() (the call/cc re-entry path), which never pools the
+		// old env for the same reason.
 		return
 	}
 
@@ -272,6 +275,15 @@ func (p *MachineContext) SliceContinuationAt(prompt *MachineContinuation) *Machi
 		current = frameCopy
 		src = src.parent
 	}
+	// Copy() shares each frame's env pointer (q.env = p.env), so the captured
+	// segment aliases the LIVE chain's activation env frames. Mark the live
+	// source chain shared so a subsequent NORMAL return through any of these
+	// frames takes RestoreAndRelease's shared branch and does NOT pool the env
+	// that the captured continuation still needs (the C1 internal-define
+	// re-entry corruption: env recycled out from under the captured segment).
+	// MarkChainShared is monotonic and conservative — over-marking only forgoes
+	// pooling, never corrupts.
+	p.cont.MarkChainShared()
 	return top
 }
 
