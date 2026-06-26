@@ -301,9 +301,18 @@ func validateLibraryExports(lib *CompiledLibrary) error {
 		return nil
 	}
 	sort.Strings(missing)
+	// The gap has two distinct causes that look identical at this layer: a genuine
+	// library bug (a name misspelled in the export list, or never defined/imported),
+	// or a name that IS a real primitive the active security profile does not register
+	// (e.g. (scheme base)'s I/O exports under the Tiny profile). We cannot tell them
+	// apart here — the full cross-profile primitive set lives in registry/, which sits
+	// above this layer — so the diagnostic names both possibilities rather than
+	// asserting the names are "undefined".
 	return werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
-		"define-library: %s exports undefined identifier(s): %s",
-		lib.Name.SchemeString(), strings.Join(missing, ", "))
+		"define-library: %s exports %d identifier(s) with no binding in the library's "+
+			"environment (either a typo in the export list, or the active security "+
+			"profile does not register these primitives): %s",
+		lib.Name.SchemeString(), len(missing), strings.Join(missing, ", "))
 }
 
 // CompileExport handles top-level (export <export-spec> ...).
