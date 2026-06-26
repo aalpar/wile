@@ -7,6 +7,83 @@
 ;; The remaining ! aliases (char-set-filter!, char-set-unfold!) live in iteration.scm
 ;; where their referents are defined.
 
+;; N-ary set algebra with zero-arg identities (SRFI-14 §"Set algebra").
+;;
+;; SRFI-14 specifies that union/intersection/xor accept any number of
+;; char-sets, including zero, returning the identity element of the
+;; operation when given no arguments:
+;;   (char-set-union)        => the empty set       (identity for ∪)
+;;   (char-set-intersection) => the full set        (identity for ∩)
+;;   (char-set-xor)          => the empty set        (identity for △)
+;; The %char-set-* FFI primitives fold one-or-more char-sets but cannot be
+;; invoked with zero arguments (Wile's variadic convention requires at least
+;; one fixed argument). These wrappers seed the identity on zero args and
+;; delegate to the FFI fold otherwise.
+;;
+;; char-set-difference is NOT included: SRFI-14 requires at least one
+;; argument (CS1), so it has no zero-arg identity. Its FFI primitive keeps
+;; its name and arity unchanged.
+;;
+;; The full-set identity is built as the complement of the empty set so the
+;; wrapper is independent of named-sets.scm load order.
+
+(define (char-set-union . charsets)
+  "Return the union of all CHARSETS. With no arguments returns the empty
+char-set (the identity for union).
+
+Examples:
+  (char-set-union)                                  =>  #<char-set: empty>
+  (char-set-union (char-set #\\a) (char-set #\\b))    =>  #<char-set: a b>
+
+Parameters:
+  charsets : char-set ... (variadic, zero or more)
+Returns: char-set
+Category: srfi-14
+Keywords: union, set-algebra, char-set, identity
+
+See also: `char-set-intersection', `char-set-xor', `char-set-difference'."
+  (if (null? charsets)
+      (char-set)
+      (apply %char-set-union charsets)))
+
+(define (char-set-intersection . charsets)
+  "Return the intersection of all CHARSETS. With no arguments returns the
+full char-set (the identity for intersection).
+
+Examples:
+  (char-set-intersection)                                   =>  #<char-set: full>
+  (char-set-intersection (char-set #\\a #\\b) (char-set #\\b))  =>  #<char-set: b>
+
+Parameters:
+  charsets : char-set ... (variadic, zero or more)
+Returns: char-set
+Category: srfi-14
+Keywords: intersection, set-algebra, char-set, identity
+
+See also: `char-set-union', `char-set-xor', `char-set-difference'."
+  (if (null? charsets)
+      (char-set-complement (char-set))
+      (apply %char-set-intersection charsets)))
+
+(define (char-set-xor . charsets)
+  "Return the symmetric difference of all CHARSETS. With no arguments returns
+the empty char-set (the identity for symmetric difference).
+
+Examples:
+  (char-set-xor)                                          =>  #<char-set: empty>
+  (char-set-xor (char-set #\\a #\\b) (char-set #\\b #\\c))   =>  #<char-set: a c>
+
+Parameters:
+  charsets : char-set ... (variadic, zero or more)
+Returns: char-set
+Category: srfi-14
+Keywords: xor, symmetric-difference, set-algebra, char-set, identity
+
+See also: `char-set-union', `char-set-intersection', `char-set-difference'."
+  (if (null? charsets)
+      (char-set)
+      (apply %char-set-xor charsets)))
+
 ;; Derived set algebra
 (define (char-set-adjoin cs . chars)
   "Return a new char-set containing all members of CS plus any additional CHARS.

@@ -180,11 +180,11 @@ func addPrimitives(r *registry.Registry) error {
 			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
 			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
 			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-union",
+			Name:       "%char-set-union",
 			ParamCount: 2,
 			IsVariadic: true,
 			Impl:       makeCharSetFold("char-set-union", unionTwo),
-			Doc:        "Returns the union of all char-sets. (SRFI-14)",
+			Doc:        "Internal helper for the n-ary (char-set-union ...). Folds one or more char-sets; the Scheme wrapper supplies the empty-set identity for zero arguments. Use (char-set-union ...) instead.",
 			ParamNames: []string{"cs1", "rest"},
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "union", "srfi-14"},
@@ -193,11 +193,11 @@ func addPrimitives(r *registry.Registry) error {
 			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
 			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
 			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-intersection",
+			Name:       "%char-set-intersection",
 			ParamCount: 2,
 			IsVariadic: true,
 			Impl:       makeCharSetFold("char-set-intersection", intersectTwo),
-			Doc:        "Returns the intersection of all char-sets. (SRFI-14)",
+			Doc:        "Internal helper for the n-ary (char-set-intersection ...). Folds one or more char-sets; the Scheme wrapper supplies the full-set identity for zero arguments. Use (char-set-intersection ...) instead.",
 			ParamNames: []string{"cs1", "rest"},
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "intersection", "srfi-14"},
@@ -219,11 +219,11 @@ func addPrimitives(r *registry.Registry) error {
 			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
 			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
 			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-xor",
+			Name:       "%char-set-xor",
 			ParamCount: 2,
 			IsVariadic: true,
 			Impl:       makeCharSetFold("char-set-xor", xorTwo),
-			Doc:        "Returns the symmetric difference of all char-sets. (SRFI-14)",
+			Doc:        "Internal helper for the n-ary (char-set-xor ...). Folds one or more char-sets; the Scheme wrapper supplies the empty-set identity for zero arguments. Use (char-set-xor ...) instead.",
 			ParamNames: []string{"cs1", "rest"},
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "xor", "symmetric-difference", "srfi-14"},

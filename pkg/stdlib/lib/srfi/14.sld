@@ -32,6 +32,10 @@
     char-set-count char-set-every char-set-any
     ;; Unfold
     char-set-unfold char-set-unfold!
+    ;; Cursor protocol
+    char-set-cursor char-set-ref char-set-cursor-next end-of-char-set?
+    ;; Hash + combined diff/intersection
+    char-set-hash char-set-diff+intersection char-set-diff+intersection!
     ;; Named char-set constants
     char-set:letter char-set:lower-case char-set:upper-case char-set:title-case
     char-set:digit char-set:letter+digit char-set:graphic char-set:printing
@@ -39,20 +43,19 @@
     char-set:hex-digit char-set:blank
     char-set:ascii char-set:empty char-set:full)
 
-  ;; Deferred from v1: char-set-hash (spec is loose; no portable algorithm),
-  ;; char-set-cursor protocol (redundant with for-each / fold),
-  ;; char-set-diff+intersection / ! (niche optimization).
-
   (import (scheme base)
-          (wile charsets))   ; for char-set-ranges, used by util.scm
+          (wile charsets))   ; for char-set-ranges, used by util.scm and cursor.scm
 
   ;; FFI primitives (char-set?, char-set-contains?, char-set-size,
-  ;; %char-set, %empty-char-set, char-set-copy) are bound at the namespace
-  ;; level by the `charsets` extension. The include below defines the
-  ;; Scheme-level (char-set ...) dispatcher that dispatches to those FFI
-  ;; primitives.
+  ;; %char-set, %empty-char-set, char-set-copy, and the %char-set-union /
+  ;; %char-set-intersection / %char-set-xor folds) are bound at the namespace
+  ;; level by the `charsets` extension. The includes below define the
+  ;; Scheme-level (char-set ...) dispatcher, the n-ary set-algebra wrappers
+  ;; (which supply zero-arg identities atop the % folds), and the cursor
+  ;; protocol — all dispatching to those FFI primitives.
   (include "14/dispatcher.scm")
   (include "14/algebra.scm")
   (include "14/util.scm")
   (include "14/iteration.scm")
+  (include "14/cursor.scm")
   (include "14/named-sets.scm"))

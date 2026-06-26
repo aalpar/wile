@@ -194,6 +194,12 @@ func TestSRFI14SRFI13Unlock(t *testing.T) {
 	runSchemeTest(t, "srfi-14-tests-srfi-13-unlock.scm", 2*time.Minute, "SRFI-14 Phase 5 (SRFI-13 unlock)")
 }
 
+// TestSRFI14Cursor runs the SRFI-14 Phase-6 tests: cursor protocol,
+// char-set-hash, and char-set-diff+intersection (incl. surrogate-block skip).
+func TestSRFI14Cursor(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-cursor.scm", 2*time.Minute, "SRFI-14 Phase 6 (cursor, hash, diff+intersection)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")

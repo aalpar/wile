@@ -32,6 +32,27 @@
   (test "ac" (char-set->string (char-set-xor! (char-set #\a #\b) (char-set #\b #\c))))
   (test #t (char-set-contains? (char-set-complement! (char-set #\a)) #\b)))
 
+(test-group "n-ary zero-arg identities (SRFI-14)"
+  ;; union/xor identity = empty set; intersection identity = full set.
+  (test #t (char-set= (char-set-union)        (char-set)))
+  (test #t (char-set= (char-set-xor)          (char-set)))
+  (test #t (char-set= (char-set-intersection) char-set:full))
+  ;; ! aliases share the identities.
+  (test #t (char-set= (char-set-union!)        (char-set)))
+  (test #t (char-set= (char-set-xor!)          (char-set)))
+  (test #t (char-set= (char-set-intersection!) char-set:full))
+  ;; Zero-arg identity is a true identity element: x op identity = x.
+  (test #t (char-set= (char-set #\a)
+                      (char-set-union (char-set #\a) (char-set-union))))
+  (test #t (char-set= (char-set #\a)
+                      (char-set-intersection (char-set #\a) (char-set-intersection))))
+  (test #t (char-set= (char-set #\a)
+                      (char-set-xor (char-set #\a) (char-set-xor))))
+  ;; One-arg case returns the argument unchanged.
+  (test "a" (char-set->string (char-set-union (char-set #\a))))
+  (test "a" (char-set->string (char-set-intersection (char-set #\a))))
+  (test "a" (char-set->string (char-set-xor (char-set #\a)))))
+
 (test-group "algebraic identities"
   ;; Commutativity of union
   (test #t (char-set= (char-set-union (char-set #\a) (char-set #\b))

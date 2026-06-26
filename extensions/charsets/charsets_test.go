@@ -599,3 +599,148 @@ func TestListToCharSet_TooManyArgs(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue,
 		qt.Commentf("expected ErrWrongNumberOfArguments, got %v", err))
 }
+
+// TestCharSetNAryZeroArgIdentities verifies the SRFI-14 zero-argument
+// identities for the n-ary set-algebra operations: union/xor return the empty
+// set and intersection returns the full set, including the !-aliases.
+func TestCharSetNAryZeroArgIdentities(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"union-zero-empty", "(char-set= (char-set-union) (char-set))"},
+		{"xor-zero-empty", "(char-set= (char-set-xor) (char-set))"},
+		{"intersection-zero-full", "(char-set= (char-set-intersection) char-set:full)"},
+		{"union!-zero-empty", "(char-set= (char-set-union!) (char-set))"},
+		{"xor!-zero-empty", "(char-set= (char-set-xor!) (char-set))"},
+		{"intersection!-zero-full", "(char-set= (char-set-intersection!) char-set:full)"},
+		// Identity laws: x op identity == x.
+		{"union-identity-law", "(char-set= (char-set #\\a) (char-set-union (char-set #\\a) (char-set-union)))"},
+		{"intersection-identity-law", "(char-set= (char-set #\\a) (char-set-intersection (char-set #\\a) (char-set-intersection)))"},
+		{"xor-identity-law", "(char-set= (char-set #\\a) (char-set-xor (char-set #\\a) (char-set-xor)))"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, runScheme(t, engine, tc.expr), qt.Equals, values.TrueValue)
+		})
+	}
+}
+
+// TestCharSetCursorProtocol exercises the SRFI-14 cursor protocol, including
+// the defensive skip of the UTF-16 surrogate block U+D800..U+DFFF that
+// integer->char (used by char-set-ref) rejects.
+func TestCharSetCursorProtocol(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+	runScheme(t, engine, `
+		(define (cursor->string cs)
+		  (let loop ((cur (char-set-cursor cs)) (acc '()))
+		    (if (end-of-char-set? cur)
+		        (list->string (reverse acc))
+		        (loop (char-set-cursor-next cs cur)
+		              (cons (char-set-ref cs cur) acc)))))`)
+
+	t.Run("string-results", func(t *testing.T) {
+		tests := []struct {
+			name string
+			expr string
+			want string
+		}{
+			{"ascending", `(cursor->string (char-set #\a #\b #\c))`, "abc"},
+			{"out-of-order-construct", `(cursor->string (char-set #\c #\a #\b))`, "abc"},
+			{"dedup", `(cursor->string (char-set #\a #\a))`, "a"},
+			{"multi-range", `(cursor->string (char-set #\0 #\9 #\a #\z))`, "09az"},
+			{"empty", `(cursor->string (char-set))`, ""},
+		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				qt.Assert(t, runScheme(t, engine, tc.expr),
+					valuestest.SchemeEquals, values.NewString(tc.want))
+			})
+		}
+	})
+
+	t.Run("surrogate-skip-count", func(t *testing.T) {
+		// [D7FE, E002) inclusive => D7FE D7FF E000 E001; surrogates skipped.
+		qt.Assert(t, runScheme(t, engine,
+			`(string-length (cursor->string (ucs-range->char-set #xD7FE #xE002)))`),
+			valuestest.SchemeEquals, values.NewInteger(4))
+	})
+
+	t.Run("all-surrogate-range-ends-immediately", func(t *testing.T) {
+		qt.Assert(t, runScheme(t, engine,
+			`(end-of-char-set? (char-set-cursor (ucs-range->char-set #xD800 #xDC00 #f)))`),
+			qt.Equals, values.TrueValue)
+	})
+
+	t.Run("full-set-first-member", func(t *testing.T) {
+		qt.Assert(t, runScheme(t, engine,
+			`(char->integer (char-set-ref char-set:full (char-set-cursor char-set:full)))`),
+			valuestest.SchemeEquals, values.NewInteger(0))
+	})
+}
+
+// TestCharSetHash verifies char-set-hash is content-stable (char-set= sets
+// hash equal) and respects an optional bound.
+func TestCharSetHash(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"stable-reorder", "(= (char-set-hash (char-set #\\a #\\b)) (char-set-hash (char-set #\\b #\\a)))"},
+		{"stable-via-string", "(= (char-set-hash (char-set #\\a #\\b #\\c)) (char-set-hash (string->char-set \"cba\")))"},
+		{"bounded-100", "(let ((h (char-set-hash char-set:full 100))) (and (>= h 0) (< h 100)))"},
+		{"bounded-7", "(let ((h (char-set-hash char-set:letter 7))) (and (>= h 0) (< h 7)))"},
+		{"default-nonneg-exact", "(let ((h (char-set-hash char-set:digit))) (and (exact-integer? h) (>= h 0)))"},
+		{"empty-hashable", "(exact-integer? (char-set-hash (char-set)))"},
+		{"full-hashable", "(exact-integer? (char-set-hash char-set:full))"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, runScheme(t, engine, tc.expr), qt.Equals, values.TrueValue)
+		})
+	}
+
+	t.Run("nonpositive-bound-errors", func(t *testing.T) {
+		runSchemeExpectError(t, engine, "(char-set-hash (char-set #\\a) 0)")
+		runSchemeExpectError(t, engine, "(char-set-hash (char-set #\\a) -3)")
+	})
+}
+
+// TestCharSetDiffPlusIntersection verifies char-set-diff+intersection returns
+// (difference intersection) as two values, agreeing with the separate ops.
+func TestCharSetDiffPlusIntersection(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	tests := []struct {
+		name string
+		expr string
+	}{
+		{"basic", `(call-with-values
+		             (lambda () (char-set-diff+intersection (char-set #\a #\b #\c) (char-set #\b #\c #\d)))
+		             (lambda (d i) (and (char-set= d (char-set #\a)) (char-set= i (char-set #\b #\c)))))`},
+		{"multiple-others", `(call-with-values
+		             (lambda () (char-set-diff+intersection (char-set #\a #\b #\c) (char-set #\b) (char-set #\c #\d)))
+		             (lambda (d i) (and (char-set= d (char-set #\a)) (char-set= i (char-set #\b #\c)))))`},
+		{"agrees-with-separate", `(call-with-values
+		             (lambda () (char-set-diff+intersection (char-set #\a #\b #\c #\d) (char-set #\b #\d)))
+		             (lambda (d i)
+		               (and (char-set= d (char-set-difference (char-set #\a #\b #\c #\d) (char-set #\b #\d)))
+		                    (char-set= i (char-set-intersection (char-set #\a #\b #\c #\d) (char-set #\b #\d))))))`},
+		{"bang-alias", `(call-with-values
+		             (lambda () (char-set-diff+intersection! (char-set #\a #\b #\c) (char-set #\b #\c #\d)))
+		             (lambda (d i) (and (char-set= d (char-set #\a)) (char-set= i (char-set #\b #\c)))))`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, runScheme(t, engine, tc.expr), qt.Equals, values.TrueValue)
+		})
+	}
+}
