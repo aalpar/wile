@@ -91,18 +91,32 @@
   (let ((v (walk* (var 0) (car s/c))))
     (walk* v (reify-s v '()))))
 
-;; run: bounded query
+;; run: bounded query.
+;; A single query variable yields bare reified values; two or more yield a list
+;; (tuple) per solution, via the standard reduction to a single fresh variable
+;; bound to the list of query variables. q is hygienic and cannot capture user
+;; variables.
 (define-syntax run
   (syntax-rules ()
     ((run n (x) g0 g ...)
      (let ((results (take-inf n
                       ((fresh (x) g0 g ...) empty-state))))
-       (map reify-1st results)))))
+       (map reify-1st results)))
+    ((run n (x0 x1 x ...) g0 g ...)
+     (run n (q)
+       (fresh (x0 x1 x ...)
+         (== q (list x0 x1 x ...))
+         g0 g ...)))))
 
-;; run*: unbounded query
+;; run*: unbounded query. Same single-vs-multi-variable result shape as run.
 (define-syntax run*
   (syntax-rules ()
     ((run* (x) g0 g ...)
      (let ((results (take-all-inf
                       ((fresh (x) g0 g ...) empty-state))))
-       (map reify-1st results)))))
+       (map reify-1st results)))
+    ((run* (x0 x1 x ...) g0 g ...)
+     (run* (q)
+       (fresh (x0 x1 x ...)
+         (== q (list x0 x1 x ...))
+         g0 g ...)))))

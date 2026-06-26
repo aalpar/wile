@@ -9,8 +9,10 @@
     empty-state
     ;; miniKanren syntactic sugar
     fresh conde run run*
+    ;; Stream forcing
+    pull take-inf take-all-inf
     ;; Reification
-    reify reify-1st)
+    reify reify-1st reify-name walk* reify-s)
   (import (scheme base)
           (wile microkanren))
   (include "kanren.scm"))

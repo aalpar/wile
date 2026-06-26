@@ -154,4 +154,51 @@
       ((== q 'yes))
       ((nevero))))))
 
+;; === Multi-variable run / run* (tuples per solution) ===
+
+(test "run* two vars yields a tuple"
+  '((1 2))
+  (run* (x y) (== x 1) (== y 2)))
+
+(test "run* single var stays bare (unchanged)"
+  '(5)
+  (run* (x) (== x 5)))
+
+(test "run* three vars yields a triple"
+  '((1 2 3))
+  (run* (a b c) (== a 1) (== b 2) (== c 3)))
+
+(test "run* two vars, multiple solutions via conde"
+  '((1 10) (2 20))
+  (run* (x y)
+    (conde
+      ((== x 1) (== y 10))
+      ((== x 2) (== y 20)))))
+
+(test "run bounded two vars"
+  '((1 10))
+  (run 1 (x y)
+    (conde
+      ((== x 1) (== y 10))
+      ((== x 2) (== y 20)))))
+
+;; === Exported stream/reification helpers ===
+
+(test "take-inf truncates"
+  '(1 2)
+  (take-inf 2 (list 1 2 3)))
+
+(test "take-all-inf collects all"
+  '(1 2 3)
+  (take-all-inf (list 1 2 3)))
+
+(test "reify-name produces _.N symbol"
+  '_.3
+  (reify-name 3))
+
+(test "walk* resolves nested vars"
+  '(a b)
+  (walk* (list (var 0) (var 1))
+         (list (cons (var 0) 'a) (cons (var 1) 'b))))
+
 (test-summary)
