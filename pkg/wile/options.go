@@ -60,6 +60,8 @@ type engineConfig struct {
 	extensions         []registry.Extension
 	maxCallDepth       int
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
+	maxContDepth       int
+	contDepthSet       bool // true if WithMaxContinuationDepth was explicitly called
 	maxParseDepth      int
 	parseDepthSet      bool // true if WithMaxParseDepth was explicitly called
 	maxExpandDepth     int
@@ -186,6 +188,26 @@ func WithMaxCallDepth(n int) EngineOption {
 		}
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true
+	}
+}
+
+// WithMaxContinuationDepth sets the maximum nesting depth for re-invoking
+// captured continuations. This is SEPARATE from WithMaxCallDepth: a captured
+// continuation re-invoked in a non-converging call/cc loop nests Go-stack
+// frames, which would otherwise overflow the goroutine stack and abort the
+// process; this bound surfaces the pathology as a catchable ErrCallDepthExceeded.
+// The Go stack tolerates far deeper nesting than the eval-stack call-depth
+// budget, and the default is correspondingly higher (DefaultMaxContinuationDepth).
+// A value of 0 means unlimited (no depth check). Negative values are clamped
+// to 0 and therefore also mean unlimited. When not called, the engine uses
+// DefaultMaxContinuationDepth.
+func WithMaxContinuationDepth(n int) EngineOption {
+	return func(cfg *engineConfig) {
+		if n < 0 {
+			n = 0
+		}
+		cfg.maxContDepth = n
+		cfg.contDepthSet = true
 	}
 }
 

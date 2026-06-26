@@ -61,6 +61,34 @@ fix (PR #800). The continuation value-count behavior itself is documented in
   `WithStrictValueArity` engine option, not a default change. Full rationale:
   `plans/2026-06-25-continuation-arity-strictness-design.local.md`.
 
+### Trampoline continuation invocation to bound Go-stack growth (2026-06-26)
+
+`applyCapturedContinuation` (`machine/captured_continuation.go`) invokes a captured
+continuation by running the resumed computation in a *nested* sub-context
+(`sub.Run()` then abort to the prompt) rather than tail-replacing the current
+continuation. So a continuation-heavy program accumulates LIVE Go-goroutine-stack
+frames across its dynamic extent — `ctak`, which a proper Scheme runs in bounded
+space, peaks ~40k live frames for a single `(ctak 18 12 6)` and ~525k for the
+Gabriel benchmark's warmup + 10-iteration loop, approaching Go's ~675k fatal
+stack-overflow point.
+
+The current mitigation (commit after this TODO landed) is a dedicated, live-nesting
+bound `maxContinuationDepth` (default `DefaultMaxContinuationDepth = 600000`,
+tracked as `threadPools.contNestDepth`, decremented on unwind) that surfaces a
+runaway `call/cc` loop as a catchable `ErrCallDepthExceeded` before the Go fatal
+overflow. **The margin is necessarily thin** (benchmark ~525k vs overflow ~675k):
+a sufficiently long continuation-heavy program can still approach the Go stack
+limit, and on a platform whose overflow point sits below the bound a true runaway
+could fatally crash before the catchable bound trips.
+
+- **Proper fix [Performance/Correctness, L]:** trampoline continuation invocation so
+  a resume does not nest a fresh `Run()` Go frame — replace the current continuation
+  in place instead of running the future nested-then-aborting. This bounds Go-stack
+  growth to the genuine live continuation depth and lets the depth bound be set with
+  comfortable margin (or retired). High-risk VM/continuation work — see the
+  memory's `subcontext-continuation-truncation-redesign` and tail-frame-recycling
+  cautions before attempting; gate on the full continuation/`-race` suite.
+
 ### Restricted-profile `(scheme base)` export-validation (from PR #795–#799 crosscheck, 2026-06-25)
 
 Surfaced by the post-merge crosscheck of the #795–#799 conformance arc.

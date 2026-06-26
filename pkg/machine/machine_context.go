@@ -82,16 +82,16 @@ type MachineContext struct {
 	thread       *values.Thread
 	maxCallDepth int    // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
 	maxStackSize uint64 // 0 = unlimited (default), otherwise max eval stack entries
-	// contInvokeDepth counts nested captured-continuation re-invocations. Each
-	// re-invocation runs the restored chain in a fresh sub-context whose Run()
-	// frame stays live on the Go stack until that chain completes; a continuation
-	// that re-invokes itself without converging (a call/cc loop) nests Go frames
-	// without bound. The counter propagates through NewSubContext and is checked
-	// against maxCallDepth in applyCapturedContinuation so the pathology surfaces
-	// as a catchable ErrCallDepthExceeded instead of a Go stack-overflow fatal.
-	contInvokeDepth int
-	restArgBuf      values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
-	isolatedMarks   bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
+	// maxContinuationDepth bounds nested captured-continuation re-invocation
+	// separately from maxCallDepth. The two guard different resources: maxCallDepth
+	// is an eval-stack memory budget, while continuation re-invocation nests on the
+	// Go goroutine stack, whose ceiling is far higher. The live nesting count is
+	// threadPools.contNestDepth (per-thread, shared across sub-contexts), checked
+	// against this bound in applyCapturedContinuation.
+	// 0 = unlimited; negatives are clamped to 0 by SetMaxContinuationDepth.
+	maxContinuationDepth int
+	restArgBuf           values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
+	isolatedMarks        bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 
 	// reconfigured is set by Apply when it repoints the VM (template/env/pc) to
 	// execute a closure in place. The foreign-call dispatchers (applyForeign,
@@ -1290,6 +1290,22 @@ func (p *MachineContext) SetMaxCallDepth(n int) {
 		n = 0
 	}
 	p.maxCallDepth = n
+}
+
+// MaxContinuationDepth returns the maximum captured-continuation re-invocation
+// depth limit. 0 means unlimited. See the field comment for why this is
+// separate from MaxCallDepth.
+func (p *MachineContext) MaxContinuationDepth() int {
+	return p.maxContinuationDepth
+}
+
+// SetMaxContinuationDepth sets the maximum captured-continuation re-invocation
+// depth limit. 0 means unlimited. Negative values are clamped to 0.
+func (p *MachineContext) SetMaxContinuationDepth(n int) {
+	if n < 0 {
+		n = 0
+	}
+	p.maxContinuationDepth = n
 }
 
 // MaxStackSize returns the maximum eval stack size limit. 0 means unlimited.

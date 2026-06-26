@@ -16,13 +16,16 @@ import (
 // ErrCallDepthExceeded rather than overflowing the Go stack and aborting the
 // host process (C2). The continuation re-invocation nests a sub-context Run()
 // frame per iteration, bypassing SaveContinuation's eval-stack depth gate, so
-// applyCapturedContinuation enforces the same maxCallDepth bound on nesting.
+// applyCapturedContinuation enforces the dedicated maxContinuationDepth bound on
+// nesting.
 func TestRunawayContinuationIsBounded(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	// Explicit small limit: deterministic and fast (trips at depth limit+1
-	// rather than nesting to the default 10000), independent of DefaultMaxCallDepth.
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(200))
+	// Explicit small limit: deterministic and fast (trips at depth limit+1 rather
+	// than nesting to the default DefaultMaxContinuationDepth). The bound is
+	// WithMaxContinuationDepth, not WithMaxCallDepth — continuation re-invocation
+	// has its own, much larger budget than ordinary call depth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxContinuationDepth(200))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
@@ -41,14 +44,14 @@ func TestRunawayContinuationIsBounded(t *testing.T) {
 
 // TestContinuationLoopBoundedConverges is the no-false-positive companion to
 // TestRunawayContinuationIsBounded: the same call/cc loop with a bound well
-// under maxCallDepth must complete and return its value, confirming the depth
-// guard does not reject legitimate (if unusual) bounded continuation loops.
+// under maxContinuationDepth must complete and return its value, confirming the
+// depth guard does not reject legitimate (if unusual) bounded continuation loops.
 func TestContinuationLoopBoundedConverges(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 	// Explicit limit, well above this loop's ~100 re-invocations, so the test
-	// does not implicitly depend on DefaultMaxCallDepth.
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(500))
+	// does not implicitly depend on DefaultMaxContinuationDepth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxContinuationDepth(500))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
@@ -61,16 +64,19 @@ func TestContinuationLoopBoundedConverges(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "100")
 }
 
-// TestContinuationDepthBoundTracksMaxCallDepth pins that the continuation
-// re-invocation bound IS maxCallDepth — not a hardcoded constant, and not a
-// per-NewSubContext count (which would trip a 10-iteration loop far below the
-// limit). With an explicit small limit, a loop well under it converges and a
-// runaway trips at exactly limit+1.
-func TestContinuationDepthBoundTracksMaxCallDepth(t *testing.T) {
+// TestContinuationDepthBoundIsSeparateFromCallDepth pins that the continuation
+// re-invocation bound is maxContinuationDepth, NOT maxCallDepth — the two are
+// decoupled. A non-converging loop trips the dedicated continuation bound even
+// when maxCallDepth is set unlimited, and is NOT bounded by a small maxCallDepth
+// alone. (ctak-style deep continuation programs legitimately exceed maxCallDepth's
+// budget; sharing it rejected them — see TestDeepConvergingContinuationConverges.)
+func TestContinuationDepthBoundIsSeparateFromCallDepth(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	const limit = 500
-	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink), wile.WithMaxCallDepth(limit))
+	const contLimit = 500
+	// maxCallDepth unlimited proves the bound is the continuation one, not call depth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink),
+		wile.WithMaxCallDepth(0), wile.WithMaxContinuationDepth(contLimit))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
@@ -83,15 +89,62 @@ func TestContinuationDepthBoundTracksMaxCallDepth(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "10")
 
-	// Non-converging: must trip the bound, not overflow the Go stack.
+	// Non-converging: must trip the continuation bound, not overflow the Go stack.
 	over := `(let ((n 0) (k #f))
 	           (+ 1 (call/cc (lambda (c) (set! k c) 0)))
 	           (set! n (+ n 1))
 	           (if (< n 100000) (k 0) n))`
 	_, err = eng.EvalMultiple(ctx, over)
 	if !errors.Is(err, werr.ErrCallDepthExceeded) {
-		t.Fatalf("want ErrCallDepthExceeded at maxCallDepth=%d, got %v", limit, err)
+		t.Fatalf("want ErrCallDepthExceeded at maxContinuationDepth=%d, got %v", contLimit, err)
 	}
+}
+
+// TestDeepConvergingContinuationConverges is the regression guard for the bug
+// this bound caused on the Gabriel ctak benchmark. ctak(18,12,6) is a legitimate,
+// converging continuation program whose non-tail call/cc structure nests deeply.
+// Two distinct defects had to be fixed:
+//
+//  1. The bound shared maxCallDepth (10000), far too small — a single ctak(18,12,6)
+//     peaks ~40k live re-invocation frames. Fixed by the dedicated, larger
+//     DefaultMaxContinuationDepth.
+//  2. The bound counted CUMULATIVE re-invocations, not LIVE Go-stack nesting, so a
+//     program making forward progress through continuation returns accumulated the
+//     counter without bound — a single ctak passed but a SEQUENCE of them (as in the
+//     benchmark's warmup + 10-iteration loop) tripped the bound mid-run even though
+//     the live Go stack receded between resumes. Fixed by tracking live nesting
+//     (threadPools.contNestDepth, decremented on unwind).
+//
+// This test exercises BOTH: it runs the benchmark's exact warmup + 10-iteration
+// shape, which only completes if (1) the per-call peak fits the default AND (2) the
+// counter recedes between iterations. ctak(18,12,6) = 7 (the Takeuchi result).
+// A single ctak(18,12,6) alone would pass even under the cumulative bug, so the
+// loop is load-bearing.
+func TestDeepConvergingContinuationConverges(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	// Default engine — no depth options — exercises DefaultMaxContinuationDepth.
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	const prog = `(begin
+(define (ctak x y z) (call-with-current-continuation (lambda (k) (ctak-aux k x y z))))
+(define (ctak-aux k x y z)
+  (if (not (< y x)) (k z)
+      (call-with-current-continuation (lambda (k)
+        (ctak-aux k
+          (call-with-current-continuation (lambda (k) (ctak-aux k (- x 1) y z)))
+          (call-with-current-continuation (lambda (k) (ctak-aux k (- y 1) z x)))
+          (call-with-current-continuation (lambda (k) (ctak-aux k (- z 1) x y))))))))
+(define last 0)
+(ctak 18 12 6)                                              ; warmup
+(let loop ((i 0))                                           ; 10 iterations, like the benchmark
+  (when (< i 10) (set! last (ctak 18 12 6)) (loop (+ i 1))))
+last)`
+	result, err := eng.EvalMultiple(ctx, prog)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "7")
 }
 
 func TestCallCC_Procedure(t *testing.T) {

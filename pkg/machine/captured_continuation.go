@@ -105,24 +105,43 @@ func (p *MachineContext) applyCapturedContinuation(
 
 	cc := capt.cc
 
-	// Bound the Go-stack nesting of continuation re-invocation. Restoring the
-	// captured chain runs it in a fresh sub-context whose Run() frame stays live
-	// until that chain completes; a continuation that re-invokes itself without
-	// converging (a call/cc loop) would nest Go frames until the runtime aborts
-	// the process with a stack overflow, bypassing the eval-stack maxCallDepth
-	// gate in SaveContinuation (each restored chain resets to the captured,
-	// shallow callDepth). Treat the nesting like ordinary recursion depth and
-	// surface a catchable error at the same bound.
-	depth := p.contInvokeDepth + 1
-	if p.maxCallDepth > 0 && depth > p.maxCallDepth {
-		return p, werr.WrapForeignErrorf(werr.ErrCallDepthExceeded,
-			"call/cc: continuation re-invocation depth %d exceeds limit %d",
-			depth, p.maxCallDepth)
+	// Bound the LIVE Go-stack nesting of continuation re-invocation. Restoring the
+	// captured chain runs it in a fresh sub-context whose Run() frame stays live on
+	// the Go stack until that chain completes; a continuation that re-invokes itself
+	// without converging (a call/cc loop) nests Go frames without bound until the
+	// runtime aborts the process with a stack overflow, bypassing the eval-stack
+	// maxCallDepth gate in SaveContinuation (each restored chain resets to the
+	// captured, shallow callDepth).
+	//
+	// This bound is SEPARATE from maxCallDepth (see maxContinuationDepth): the two
+	// guard different resources. maxCallDepth bounds eval-stack call depth, a memory
+	// budget (~500 B/frame). Continuation re-invocation nests on the Go goroutine
+	// stack, whose ceiling is far higher (~650k live frames before Go's 1 GB fatal
+	// overflow). The counter is contNestDepth on the per-thread pools: it tracks the
+	// frames CURRENTLY live (incremented here, decremented by the defer below when
+	// this re-invocation unwinds), so a converging program that resumes-then-unwinds
+	// — e.g. ctak, whose tree of resumes peaks ~100k live frames but mostly unwinds —
+	// is measured by its true Go-stack depth, not the cumulative resume count. A
+	// cumulative count over-counts such programs and trips on legitimate deep-but-
+	// converging continuation code; the live count clears them while still tripping a
+	// true runaway loop (which never unwinds) before the Go fatal overflow.
+	//
+	// pools is nil only for rootless cold/expand-time contexts, which never invoke
+	// runtime captured continuations; the guard keeps those panic-free.
+	if p.pools != nil {
+		p.pools.contNestDepth++
+		defer func() {
+			p.pools.contNestDepth--
+		}()
+		if p.maxContinuationDepth > 0 && p.pools.contNestDepth > p.maxContinuationDepth {
+			return p, werr.WrapForeignErrorf(werr.ErrCallDepthExceeded,
+				"call/cc: continuation re-invocation depth %d exceeds limit %d",
+				p.pools.contNestDepth, p.maxContinuationDepth)
+		}
 	}
 
 	sub := p.NewSubContext()
 	defer ReleaseSubContext(sub)
-	sub.contInvokeDepth = depth
 	// The composable continuation installs its own continuation chain via
 	// Restore, replacing whatever marks this sub-context might inherit.
 	// Prevent the parent's stale marks from bleeding through findParameterInMarks.
