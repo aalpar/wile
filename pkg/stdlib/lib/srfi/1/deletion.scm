@@ -16,11 +16,16 @@
 (define delete! delete)
 
 (define (delete-duplicates ls . o)
-  "Remove duplicate elements from LS, preserving the first\noccurrence of each element. The optional second argument is\nthe equality predicate, defaulting to equal?.\n\nExamples:\n  (delete-duplicates '(1 2 1 3 2 4))  => (1 2 3 4)\n  (delete-duplicates '(a a b b c))    => (a b c)\n\nParameters:\n  ls : list\n  o : list\nReturns: list\nCategory: srfi-1\nKeywords: unique, deduplicate, distinct, uniq, nub\n\nSee also: `delete'."
+  "Remove duplicate elements from LS, preserving the first\noccurrence of each element. The optional second argument is\nthe equality predicate, defaulting to equal?. Per the SRFI-1\nreference, the predicate is applied as (= earlier-elt later-elt):\nthe earlier (already-seen) element is the first argument, each\nlater candidate the second.\n\nExamples:\n  (delete-duplicates '(1 2 1 3 2 4))  => (1 2 3 4)\n  (delete-duplicates '(a a b b c))    => (a b c)\n  (delete-duplicates '(1 5 2 9 3) <)  => (1)\n\nParameters:\n  ls : list\n  o : list\nReturns: list\nCategory: srfi-1\nKeywords: unique, deduplicate, distinct, uniq, nub\n\nSee also: `delete'."
   (let ((eq (if (pair? o) (car o) equal?)))
-    (let lp ((ls ls) (res '()))
-      (if (pair? ls)
-          (lp (cdr ls) (if (member (car ls) res eq) res (cons (car ls) res)))
-          (reverse! res)))))
+    (let recur ((ls ls))
+      (if (null? ls)
+          ls
+          (let* ((x (car ls))
+                 (tail (cdr ls))
+                 ;; delete every later element y with (eq x y); the earlier
+                 ;; element x is the FIRST argument, matching SRFI-1 order.
+                 (new-tail (recur (delete x tail eq))))
+            (if (eq? tail new-tail) ls (cons x new-tail)))))))
 
 (define delete-duplicates! delete-duplicates)

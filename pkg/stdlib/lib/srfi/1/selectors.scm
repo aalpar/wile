@@ -80,10 +80,10 @@
         (set-cdr! tail '())
         (values ls right))))
 
-(define (last ls)
-  "Return the last element of non-empty proper list LS.\n\nExamples:\n  (last '(a b c))  => c\n\nParameters:\n  ls : list\nReturns: any\nCategory: srfi-1"
-  (if (null? (cdr ls)) (car ls) (last (cdr ls))))
 (define (last-pair ls)
-  "Return the last pair of non-empty proper list LS.\n\nExamples:\n  (last-pair '(a b c))  => (c)\n\nParameters:\n  ls : list\nReturns: pair\nCategory: srfi-1"
-  (if (null? (cdr ls)) ls (last-pair (cdr ls))))
+  "Return the last pair of non-empty list LS. Terminates on the\nfirst pair whose cdr is not itself a pair, so dotted (improper)\nlists are handled per SRFI-1.\n\nExamples:\n  (last-pair '(a b c))    => (c)\n  (last-pair '(a b . c))  => (b . c)\n\nParameters:\n  ls : pair\nReturns: pair\nCategory: srfi-1"
+  (if (pair? (cdr ls)) (last-pair (cdr ls)) ls))
+(define (last ls)
+  "Return the last element of non-empty list LS. For a dotted\n(improper) list, this is the car of the last pair (the final\nproper element), not the dotted tail.\n\nExamples:\n  (last '(a b c))    => c\n  (last '(a b . c))  => b\n\nParameters:\n  ls : pair\nReturns: any\nCategory: srfi-1"
+  (car (last-pair ls)))
 

@@ -41,7 +41,8 @@
 (define string-join
   (case-lambda
     ((strings)
-     "Concatenate STRINGS with DELIMITER between elements.
+     "Concatenate STRINGS with DELIMITER between elements. The default
+DELIMITER is a single space \" \" per SRFI-13.
 
 GRAMMAR controls how the delimiter is placed:
   infix         -- between elements; empty list -> \"\" (default)
@@ -51,21 +52,21 @@ GRAMMAR controls how the delimiter is placed:
 
 Examples:
   (string-join '(\"a\" \"b\" \"c\") \",\")            => \"a,b,c\"
-  (string-join '(\"a\" \"b\" \"c\"))                  => \"abc\"
+  (string-join '(\"a\" \"b\" \"c\"))                  => \"a b c\"
   (string-join '() \",\")                          => \"\"
   (string-join '(\"a\" \"b\") \",\" 'prefix)         => \",a,b\"
   (string-join '(\"a\" \"b\") \",\" 'suffix)         => \"a,b,\"
 
 Parameters:
   strings : list of strings
-  delimiter : string (optional, default \"\")
+  delimiter : string (optional, default \" \")
   grammar : symbol (optional, default 'infix)
 Returns: string
 Category: srfi-13
 Keywords: join, concatenate, delimiter, separator, glue
 
 See also: `string-split', `string-concatenate'."
-     (%string-join strings "" 'infix))
+     (%string-join strings " " 'infix))
     ((strings delim)
      (%string-join strings delim 'infix))
     ((strings delim grammar)
@@ -142,9 +143,9 @@ adjacent separators are NOT produced (this is the SRFI-13 sense, distinct
 from `string-split').
 
 CRITERION is a char (compared via char=?), a char-set (SRFI-14), or a
-predicate procedure of one argument. Default is a predicate equivalent
-to char-set:graphic (non-whitespace runs); use char-set:graphic from
-SRFI-14 for conformant behaviour.
+predicate procedure of one argument. The default is char-set:graphic
+(SRFI-14): a token is a maximal run of graphic characters, so all
+whitespace AND non-graphic control characters separate tokens.
 
 Examples:
   (string-tokenize \"hello world\")              => (\"hello\" \"world\")
@@ -155,7 +156,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char, char-set (SRFI-14), or procedure (optional, default non-whitespace predicate)
+  criterion : char, char-set (SRFI-14), or procedure (optional, default char-set:graphic)
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: list of strings
@@ -163,7 +164,7 @@ Category: srfi-13
 Keywords: tokenize, split, words, fields, parse
 
 See also: `string-split', `string-index', `string-skip'."
-     (%string-tokenize-impl (lambda (ch) (not (char-whitespace? ch))) s 0 (string-length s)))
+     (%string-tokenize-impl char-set:graphic s 0 (string-length s)))
     ((s criterion)
      (%string-tokenize-impl criterion s 0 (string-length s)))
     ((s criterion start)

@@ -83,7 +83,7 @@
 
 (test-begin "string-join")
 
-(test "default-delim"        "abc"     (string-join '("a" "b" "c")))
+(test "default-delim"        "a b c"   (string-join '("a" "b" "c")))
 (test "comma"                "a,b,c"   (string-join '("a" "b" "c") ","))
 (test "multi-char"           "a, b, c" (string-join '("a" "b" "c") ", "))
 (test "empty-list"           ""        (string-join '() ","))

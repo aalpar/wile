@@ -170,22 +170,25 @@ See also: `char-set-every', `char-set-count'."
 
 (define char-set-unfold
   (case-lambda
-    ((stop? mapper successor seed)
+    ((mapper stop? successor seed)
      "Build a char-set by unfolding: starting from SEED, apply MAPPER to produce
 a char, then SUCCESSOR to advance the seed, until STOP? returns true.
 An optional BASE char-set is unioned into the result (default: empty set).
 
+The argument order is SRFI-14's (char-set-unfold f p g seed [base]):
+the MAPPER comes first, then the STOP? predicate, then the SUCCESSOR.
+
 Examples:
-  (char-set-unfold (lambda (i) (> i 5))
-                   integer->char
+  (char-set-unfold integer->char
+                   (lambda (i) (> i 5))
                    (lambda (i) (+ i 1))
                    0)
     =>  #<char-set: U+0000-U+0005>
 
 Parameters:
-  stop? : any → boolean -- termination predicate on seed
-  mapper : any → char -- produces a char from the current seed
-  successor : any → any -- advances the seed
+  mapper : any → char -- produces a char from the current seed (SRFI 'f')
+  stop? : any → boolean -- termination predicate on seed (SRFI 'p')
+  successor : any → any -- advances the seed (SRFI 'g')
   seed : any -- initial seed value
   base : char-set (optional, default empty)
 Returns: char-set
@@ -194,7 +197,7 @@ Keywords: unfold, generate, build, construct, char-set
 
 See also: `list->char-set', `char-set-filter', `char-set-map'."
      (%char-set-unfold-impl stop? mapper successor seed (char-set)))
-    ((stop? mapper successor seed base)
+    ((mapper stop? successor seed base)
      (%char-set-unfold-impl stop? mapper successor seed base))))
 
 (define char-set-unfold! char-set-unfold)

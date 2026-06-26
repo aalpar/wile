@@ -63,8 +63,8 @@
   (test #t
     (char-set= (char-set #\A #\B #\C #\D #\E)
                (char-set-unfold
-                 (lambda (n) (= n 70))                         ; stop?
                  (lambda (n) (integer->char n))                 ; mapper
+                 (lambda (n) (= n 70))                          ; stop?
                  (lambda (n) (+ 1 n))                           ; successor
                  65)))                                          ; seed
 
@@ -72,7 +72,7 @@
   (test #t
     (char-set= (char-set #\A)
                (char-set-unfold!
-                 (lambda (n) (= n 66)) integer->char (lambda (n) (+ 1 n)) 65))))
+                 integer->char (lambda (n) (= n 66)) (lambda (n) (+ 1 n)) 65))))
 
 (test-end "srfi-14-iteration")
 
