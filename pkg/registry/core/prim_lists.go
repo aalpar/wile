@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"slices"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -81,7 +80,8 @@ func PrimMakeList(mc machine.CallContext) error {
 
 // PrimAppend implements (append list ...) per R7RS §6.4.
 // Returns a list consisting of the elements of the first list followed by
-// the elements of the other lists. The last argument may be any object.
+// the elements of the other lists. The last argument may be any object and
+// is shared (not copied) — the result shares structure only with it.
 // Benchmarked: kept in Go — Scheme impl is 4-9x slower on short lists
 // (benchmark gate: 20% threshold; actual regression was ~363% for Append).
 func PrimAppend(mc machine.CallContext) error {
@@ -95,46 +95,56 @@ func PrimAppend(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected a list but got %T", o)
 	}
 
-	var lists values.Vector
-	err := helpers.ForEachList(mc.Context(), args, "append", func(_ context.Context, _ int, _ bool, elem values.Value) error {
-		lists = append(lists, elem)
-		return nil
-	})
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
-	}
-	var result values.Value = values.EmptyList
-	for i := range slices.Backward(lists) {
-		lst := lists[i]
-		if i == len(lists)-1 {
-			result = lst
-			continue
+	// Build the result front-to-back in a single pass: every argument but the
+	// last is copied cell-by-cell, linked through `tail` via SetCdr; the final
+	// argument is spliced in by reference (R7RS §6.4 — the result shares
+	// structure only with the last argument). No intermediate slices and one
+	// allocation per copied element.
+	var head values.Value = values.EmptyList
+	var tail *values.Pair
+	err := helpers.ForEachList(mc.Context(), args, "append", func(ctx context.Context, _ int, hasMore bool, lst values.Value) error {
+		if !hasMore {
+			// Final argument: any object, shared not copied.
+			if tail == nil {
+				head = lst
+				return nil
+			}
+			tail.SetCdr(lst)
+			return nil
 		}
 		if values.IsEmptyList(lst) {
-			continue
+			return nil
 		}
 		pr, ok := lst.(values.Tuple)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected list but got %T", lst)
 		}
-		var elems values.Vector
-		err = helpers.ForEachList(mc.Context(), pr, "append", func(_ context.Context, _ int, _ bool, elem values.Value) error {
-			elems = append(elems, elem)
+		return helpers.ForEachList(ctx, pr, "append", func(_ context.Context, _ int, _ bool, elem values.Value) error {
+			cell := values.NewCons(elem, values.EmptyList)
+			if tail == nil {
+				head = cell
+			} else {
+				tail.SetCdr(cell)
+			}
+			tail = cell
 			return nil
 		})
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "append: error processing list: %s", pr.SchemeString())
-		}
-		for j := range slices.Backward(elems) {
-			result = values.NewCons(elems[j], result)
-		}
+	})
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
 	}
-	mc.SetValue(result)
+	mc.SetValue(head)
 	return nil
 }
 
 // PrimReverse implements the (reverse) primitive.
 // Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
+//
+// Two-pass block construction: pass 1 validates the proper list and counts
+// its length; pass 2 block-allocates all cells at once (PairBlock) and fills
+// them back-to-front so the spine emerges reversed. This amortizes N cons
+// allocations to a single block allocation. The extra spine traversal is
+// allocation-free pointer-chasing.
 func PrimReverse(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
@@ -145,15 +155,31 @@ func PrimReverse(mc machine.CallContext) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
-	var result values.Value = values.EmptyList
-	err := helpers.ForEachList(mc.Context(), pr, "reverse", func(_ context.Context, _ int, _ bool, v values.Value) error {
-		result = values.NewCons(v, result)
+
+	n := 0
+	err := helpers.ForEachList(mc.Context(), pr, "reverse", func(_ context.Context, _ int, _ bool, _ values.Value) error {
+		n++
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	mc.SetValue(result)
+
+	block := make(values.PairBlock, n)
+	for k := 0; k < n-1; k++ {
+		block[k][1] = &block[k+1]
+	}
+	block[n-1][1] = values.EmptyList
+	i := n
+	err = helpers.ForEachList(mc.Context(), pr, "reverse", func(_ context.Context, _ int, _ bool, v values.Value) error {
+		i--
+		block[i][0] = v
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	mc.SetValue(&block[0])
 	return nil
 }
 

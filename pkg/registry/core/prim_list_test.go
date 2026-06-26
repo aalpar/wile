@@ -895,6 +895,45 @@ func TestAppend_ImproperListErrors(t *testing.T) {
 	}
 }
 
+// TestAppend_SharesLastArgument pins the R7RS §6.4 structure-sharing
+// invariant: append copies every argument but the last, and the result's
+// final tail is the last argument itself (same object, not a copy). The
+// front-to-back tail-pointer construction in PrimAppend splices the last
+// argument in by reference, so eq? on the tail must hold.
+func TestAppend_SharesLastArgument(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		// The tail of (append '(1 2) t) is t itself.
+		{"tail shared with two prefix elements", `(let ((t (list 3 4))) (eq? (cddr (append (list 1 2) t)) t))`},
+		// Multiple prefix lists, the last is still shared by identity.
+		{"tail shared across three lists", `(let ((t (list 5))) (eq? (cdddr (append (list 1) (list 2 3) t)) t))`},
+		// Empty prefixes still share the last argument outright.
+		{"empty prefixes return last arg by identity", `(let ((t (list 9))) (eq? (append '() '() t) t))`},
+		// A non-list last argument is shared as the improper tail.
+		{"non-list last arg shared as improper tail", `(let ((t (cons 1 2))) (eq? (cdr (append (list 0) t)) t))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
+		})
+	}
+}
+
+// TestAppend_CopiesPrefix is the dual of TestAppend_SharesLastArgument:
+// the copied prefix cells must be fresh, so mutating the result must not
+// disturb the original prefix list.
+func TestAppend_CopiesPrefix(t *testing.T) {
+	// Build a prefix, append it, mutate the result's first cell, and confirm
+	// the original prefix is untouched (the copy is independent).
+	code := `(let ((p (list 1 2)))
+	           (let ((r (append p (list 3))))
+	             (set-car! r 99)
+	             (eqv? (car p) 1)))`
+	testhelpers.RunSchemeCodeExpectTrue(t, code)
+}
+
 // ============================================================================
 // CxR — Improper List Handling
 // ============================================================================
