@@ -104,11 +104,11 @@ See also: `string-contains'."
 ;;
 ;; Argument order for the optional range arguments is [start end]
 ;; uniformly for all five procedures, including the -right variants.
-;; Canonical SRFI-13 specifies [end start] for string-index-right and
-;; string-skip-right; Wile uses [start end] for consistency with the
-;; other SRFI-13 procedures and the R7RS-extras family. Document the
-;; range explicitly when calling the right variants if your code is
-;; intended to be portable to other SRFI-13 implementations.
+;; This matches canonical SRFI-13, which specifies [start end] for
+;; every index/skip procedure including string-index-right and
+;; string-skip-right (the -right variants differ only in scan
+;; direction, not in argument order). It is also consistent with the
+;; R7RS-extras family.
 ;; ============================================================
 
 (define (%string-index s criterion start end)
@@ -182,8 +182,8 @@ See also: `string-index-right', `string-skip', `string-contains'."
   (case-lambda
     ((s criterion)
      "Return the index of the rightmost char in S matching CRITERION,
-or #f if none match. Wile uses [start end] argument order (rather than
-the canonical SRFI-13 [end start]) for consistency.
+or #f if none match. Range arguments use [start end] order, matching
+canonical SRFI-13 (the -right variant differs only in scan direction).
 
 Examples:
   (string-index-right \"hello\" #\\l)             => 3
@@ -236,8 +236,9 @@ See also: `string-skip-right', `string-index'."
   (case-lambda
     ((s criterion)
      "Return the index of the rightmost char in S that does NOT match
-CRITERION, or #f if every char matches. Wile uses [start end] argument
-order (rather than canonical SRFI-13 [end start]) for consistency.
+CRITERION, or #f if every char matches. Range arguments use [start end]
+order, matching canonical SRFI-13 (the -right variant differs only in
+scan direction).
 
 Examples:
   (string-skip-right \"hello   \" char-whitespace?)  => 4

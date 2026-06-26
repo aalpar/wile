@@ -65,7 +65,7 @@
     (string-append "_." (number->string n))))
 
 (define (walk* v s)
-  "Deeply walk value V under substitution S.\nLike walk, but recursively resolves variables inside pairs,\nproducing a fully ground term when possible.\n\nExamples:\n  (walk* '(#(0) #(1)) '(((#(0)) . a) ((#(1)) . b)))  => (a b)\n\nParameters:\n  v : any\n  s : list\nReturns: any\nCategory: logic\n\nSee also: `walk', `reify-s', `reify'."
+  "Deeply walk value V under substitution S.\nLike walk, but recursively resolves variables inside pairs,\nproducing a fully ground term when possible.\n\nA substitution is a list of (var . value) bindings whose keys are\nbare logic variables (vectors), e.g. ((#(0) . a) (#(1) . b)).\n\nExamples:\n  (walk* (list (var 0) (var 1))\n         (list (cons (var 0) 'a) (cons (var 1) 'b)))  => (a b)\n\nParameters:\n  v : any\n  s : list\nReturns: any\nCategory: logic\n\nSee also: `walk', `reify-s', `reify'."
   (let ((v (walk v s)))
     (cond
       ((var? v) v)
@@ -75,7 +75,7 @@
       (else v))))
 
 (define (reify-s v s)
-  "Build a reification substitution for value V.\nWalks V under S and maps each remaining free variable to a\nhuman-readable symbol (_.0, _.1, ...) using reify-name.\nRecurses into pairs to discover all unbound variables.\n\nExamples:\n  (reify-s (var 0) '())  => (((#(0)) . _.0))\n\nParameters:\n  v : any\n  s : list\nReturns: list\nCategory: logic\n\nSee also: `walk*', `reify-name', `reify'."
+  "Build a reification substitution for value V.\nWalks V under S and maps each remaining free variable to a\nhuman-readable symbol (_.0, _.1, ...) using reify-name.\nRecurses into pairs to discover all unbound variables.\nThe returned substitution keys are bare logic variables (vectors).\n\nExamples:\n  (reify-s (var 0) '())  => ((#(0) . _.0))\n\nParameters:\n  v : any\n  s : list\nReturns: list\nCategory: logic\n\nSee also: `walk*', `reify-name', `reify'."
   (let ((v (walk v s)))
     (cond
       ((var? v) (ext-s v (reify-name (length s)) s))
@@ -87,7 +87,7 @@
   (walk* v (reify-s v '())))
 
 (define (reify-1st s/c)
-  "Reify the first query variable (var 0) from state/counter S/C.\nExtracts the substitution, deeply walks variable 0, then\nreplaces remaining free variables with readable names.\nUsed by run and run* to present answers.\n\nExamples:\n  (reify-1st (cons '(((#(0)) . 5)) 1))  => 5\n\nParameters:\n  s/c : pair\nReturns: any\nCategory: logic\n\nSee also: `walk*', `reify-s', `reify'."
+  "Reify the first query variable (var 0) from state/counter S/C.\nExtracts the substitution, deeply walks variable 0, then\nreplaces remaining free variables with readable names.\nUsed by run and run* to present answers. The substitution keys\nare bare logic variables (vectors).\n\nExamples:\n  (reify-1st (cons (list (cons (var 0) 5)) 1))  => 5\n\nParameters:\n  s/c : pair\nReturns: any\nCategory: logic\n\nSee also: `walk*', `reify-s', `reify'."
   (let ((v (walk* (var 0) (car s/c))))
     (walk* v (reify-s v '()))))
 

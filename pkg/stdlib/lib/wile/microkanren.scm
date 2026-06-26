@@ -48,7 +48,7 @@
 (define mzero '())
 
 (define (call/fresh f)
-  "Return a goal that allocates a fresh logic variable and passes\nit to F. F must be a one-argument procedure returning a goal.\nThe variable counter in the state is incremented.\n\nExamples:\n  ((call/fresh (lambda (q) (== q 5))) empty-state)\n    => (((#(0) . 5) . 1))\n\nParameters:\n  f : procedure\nReturns: procedure\nCategory: logic\n\nSee also: `var', `=='."
+  "Return a goal that allocates a fresh logic variable and passes\nit to F. F must be a one-argument procedure returning a goal.\nThe variable counter in the state is incremented.\n\nThe result is an answer stream (a list of states); each state is a\n(substitution . counter) pair, and a substitution is itself a list\nof (var . value) bindings -- hence the extra level of parentheses\naround the binding.\n\nExamples:\n  ((call/fresh (lambda (q) (== q 5))) empty-state)\n    => ((((#(0) . 5)) . 1))\n\nParameters:\n  f : procedure\nReturns: procedure\nCategory: logic\n\nSee also: `var', `=='."
   (lambda (s/c)
     (let ((c (cdr s/c)))
       ((f (var c)) (cons (car s/c) (+ c 1))))))
@@ -58,7 +58,7 @@
   "Return a goal that succeeds if either G1 or G2 succeeds.\nInterleaves the answer streams from both goals to ensure\nfair enumeration of results.\n\nExamples:\n  ((disj (== 'x 1) (== 'x 2)) empty-state)  ; two answers\n\nParameters:\n  g1 : procedure\n  g2 : procedure\nReturns: procedure\nCategory: logic\n\nSee also: `conj', `mplus'."
   (lambda (s/c) (mplus (g1 s/c) (g2 s/c))))
 (define (conj g1 g2)
-  "Return a goal that succeeds when both G1 and G2 succeed.\nRuns G1 first, then threads each of its answers through G2\nvia bind.\n\nExamples:\n  ((call/fresh\n     (lambda (q) (conj (== q 5) (== q 5))))\n   empty-state)  => (((#(0) . 5) . 1))\n\nParameters:\n  g1 : procedure\n  g2 : procedure\nReturns: procedure\nCategory: logic\n\nSee also: `disj', `bind'."
+  "Return a goal that succeeds when both G1 and G2 succeed.\nRuns G1 first, then threads each of its answers through G2\nvia bind.\n\nExamples:\n  ((call/fresh\n     (lambda (q) (conj (== q 5) (== q 5))))\n   empty-state)  => ((((#(0) . 5)) . 1))\n\nParameters:\n  g1 : procedure\n  g2 : procedure\nReturns: procedure\nCategory: logic\n\nSee also: `disj', `bind'."
   (lambda (s/c) (bind (g1 s/c) g2)))
 
 ;; Stream operations (interleaving search)
