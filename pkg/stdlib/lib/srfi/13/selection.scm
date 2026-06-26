@@ -106,3 +106,65 @@ See also: `make-string', `string-map'."
   (let loop ((i (- len 1)) (acc '()))
     (cond ((< i 0) (list->string acc))
           (else (loop (- i 1) (cons (proc i) acc))))))
+
+(define (%xsubstring-impl s from to start end)
+  ;; Treat s[start..end) as an infinite string formed by cyclically
+  ;; repeating that slice in both directions, then extract indices
+  ;; [from, to). Index 0 of the cyclic string corresponds to s[start].
+  ;; FROM and TO may be negative or exceed the slice length; they wrap.
+  (let-values (((a b) (%string-range-check s start end)))
+    (let ((slice-len (- b a)))
+      (cond
+       ((> from to)
+        (error "xsubstring: from must be <= to" from to))
+       ((= from to) "")
+       ((<= slice-len 0)
+        ;; A zero-length source cannot fill a non-empty request.
+        (error "xsubstring: cannot replicate an empty substring" start end))
+       (else
+        (let ((out (make-string (- to from))))
+          (let loop ((i from) (j 0))
+            (cond ((>= i to) out)
+                  (else
+                   ;; modulo keeps the index in [0, slice-len) even for
+                   ;; negative i, since Scheme modulo follows the divisor sign.
+                   (string-set! out j (string-ref s (+ a (modulo i slice-len))))
+                   (loop (+ i 1) (+ j 1)))))))))))
+
+(define xsubstring
+  (case-lambda
+    ((s from)
+     "Extract a substring from the infinite cyclic repetition of the
+source slice S[start..end). The cyclic string's index 0 is S[start];
+indices [FROM, TO) are returned. FROM and TO may be negative or exceed
+the slice length and wrap cyclically.
+
+TO defaults to FROM + (end - start), i.e. one full period. The source
+slice must be non-empty whenever FROM /= TO.
+
+Examples:
+  (xsubstring \"abcdef\" 0)      => \"abcdef\"
+  (xsubstring \"abc\" 0 7)       => \"abcabca\"
+  (xsubstring \"abc\" -2 2)      => \"bcab\"
+  (xsubstring \"abcdef\" 2 8)    => \"cdefab\"
+  (xsubstring \"abc\" 1 1)       => \"\"
+
+Parameters:
+  s : string
+  from : integer -- start index into the cyclic string (may be negative)
+  to : integer (optional, default (+ from (- end start)))
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: string (fresh), length (- to from)
+Category: srfi-13
+Keywords: xsubstring, cyclic, repeat, rotate, wrap, extended-substring
+
+See also: `substring', `string-take', `string-pad'."
+     (%xsubstring-impl s from (+ from (string-length s))
+                       0 (string-length s)))
+    ((s from to)
+     (%xsubstring-impl s from to 0 (string-length s)))
+    ((s from to start)
+     (%xsubstring-impl s from to start (string-length s)))
+    ((s from to start end)
+     (%xsubstring-impl s from to start end))))

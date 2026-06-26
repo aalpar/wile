@@ -204,6 +204,119 @@ func TestSRFI13StringTokenizeDefaultCriterion(t *testing.T) {
 	})
 }
 
+// --- A2: SRFI-13 library API completeness (string-titlecase / string-hash / xsubstring) ---
+
+// TestSRFI13StringTitlecase pins SRFI-13 string-titlecase: the first cased
+// character of each word is uppercased and the rest of the word downcased; a
+// word is a maximal run of alphabetic chars; non-alphabetic chars are copied
+// unchanged and end the current word. The optional [start end] range restricts
+// which span is rewritten (chars outside the range are copied verbatim).
+func TestSRFI13StringTitlecase(t *testing.T) {
+	c := qt.New(t)
+	eng := newSRFITestEngine(t)
+
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{"two-words", `(string-titlecase "hello world")`, `"Hello World"`},
+		{"leading-punct-and-mixed-case", `(string-titlecase "--capitalize THIS!")`, `"--Capitalize This!"`},
+		{"already-titlecased", `(string-titlecase "Hello World")`, `"Hello World"`},
+		{"digits-end-word", `(string-titlecase "ab2cd")`, `"Ab2Cd"`},
+		{"empty-string", `(string-titlecase "")`, `""`},
+		{"start-range", `(string-titlecase "hello world" 6)`, `"hello World"`},
+		{"start-end-range", `(string-titlecase "aBC dEF" 0 7)`, `"Abc Def"`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := evalSRFI(c, eng, `(begin (import (srfi 13)) `+tc.expr+`)`)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSRFI13StringHash pins SRFI-13 string-hash: a non-negative, deterministic
+// hash; bounded into [0, bound) when bound is supplied; equal strings hash
+// equal. The hash predicates are asserted (rather than the raw value) so the
+// test does not over-specify the polynomial constant.
+func TestSRFI13StringHash(t *testing.T) {
+	c := qt.New(t)
+	eng := newSRFITestEngine(t)
+
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{"non-negative", `(>= (string-hash "abc") 0)`, `#t`},
+		{"bounded-below-bound", `(< (string-hash "abc" 100) 100)`, `#t`},
+		{"bounded-non-negative", `(>= (string-hash "abc" 100) 0)`, `#t`},
+		{"stable-within-run", `(= (string-hash "abc") (string-hash "abc"))`, `#t`},
+		{"empty-string-bounded", `(string-hash "" 50)`, `0`},
+		{"bound-one-collapses-to-zero", `(string-hash "anything" 1)`, `0`},
+		{"range-hashes-substring", `(= (string-hash "abc" 1000 0 1) (string-hash "axx" 1000 0 1))`, `#t`},
+		{"distinct-prefixes-differ", `(not (= (string-hash "abc" 1000 0 1) (string-hash "abc" 1000 1 2)))`, `#t`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := evalSRFI(c, eng, `(begin (import (srfi 13)) `+tc.expr+`)`)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSRFI13Xsubstring pins SRFI-13 xsubstring: the source slice s[start..end)
+// is treated as an infinite cyclic string (index 0 == s[start]); indices
+// [from, to) are extracted. to defaults to from + (end - start). Negative and
+// out-of-range from/to wrap cyclically; from == to yields "".
+func TestSRFI13Xsubstring(t *testing.T) {
+	c := qt.New(t)
+	eng := newSRFITestEngine(t)
+
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{"default-to-one-period", `(xsubstring "abcdef" 0)`, `"abcdef"`},
+		{"extend-past-end", `(xsubstring "abc" 0 7)`, `"abcabca"`},
+		{"negative-from-wraps", `(xsubstring "abc" -2 2)`, `"bcab"`},
+		{"rotate-past-end", `(xsubstring "abcdef" 2 8)`, `"cdefab"`},
+		{"empty-when-from-equals-to", `(xsubstring "abc" 1 1)`, `""`},
+		{"start-end-slice", `(xsubstring "Hello World" 0 6 0 5)`, `"HelloH"`},
+		{"negative-from-with-slice", `(xsubstring "xabcy" -1 2 1 4)`, `"cab"`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := evalSRFI(c, eng, `(begin (import (srfi 13)) `+tc.expr+`)`)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSRFI13XsubstringErrors pins the two error edges of xsubstring: from > to,
+// and replicating an empty source slice when from /= to. Both must raise.
+func TestSRFI13XsubstringErrors(t *testing.T) {
+	c := qt.New(t)
+	eng := newSRFITestEngine(t)
+
+	cases := []struct {
+		name string
+		expr string
+	}{
+		{"from-greater-than-to", `(xsubstring "abc" 3 0)`},
+		{"empty-slice-nonempty-request", `(xsubstring "abc" 0 3 1 1)`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			_, err := eng.EvalMultiple(context.Background(),
+				`(begin (import (srfi 13)) `+tc.expr+`)`)
+			c.Assert(err, qt.IsNotNil)
+		})
+	}
+}
+
 // NOTE: Task 6I (chibi `test` should record a raising test as a failure instead
 // of aborting the suite) was REVERTED from this branch. The natural fix — wrap
 // the test body in `guard` — weaponizes a pre-existing Wile VM bug: a `guard`

@@ -13,6 +13,7 @@
    ;; Phase 2: selection
    string-take string-drop string-take-right string-drop-right
    substring/shared string-tabulate
+   xsubstring
    ;; Phase 2: full prefix/suffix family
    string-prefix-ci? string-suffix-ci?
    string-prefix-length string-suffix-length
@@ -28,6 +29,7 @@
    string=  string<  string>  string<=  string>=  string<>
    string-ci= string-ci< string-ci> string-ci<= string-ci>= string-ci<>
    string-compare string-compare-ci
+   string-hash
    ;; Phase 6: reverse, replace/tokenize/filter/delete, concat, fold/map.
    ;; Note: string-map shadows R7RS string-map (single-string + range vs variadic).
    string-reverse string-reverse!
@@ -37,7 +39,9 @@
    string-for-each-index string-map
    string-fold string-fold-right
    ;; Phase 7: mutating case (simple per-char mapping; see case.scm header)
-   string-upcase! string-downcase!)
+   string-upcase! string-downcase!
+   ;; Phase 8: titlecase (non-mutating; see case.scm header)
+   string-titlecase)
   (include "13/util.scm"
            "13/predicates.scm"
            "13/selection.scm"

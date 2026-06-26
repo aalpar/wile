@@ -62,6 +62,66 @@ See also: `string-upcase' (R7RS, non-mutating, full Unicode mapping),
     ((s start end)
      (%string-upcase!-impl s start end))))
 
+(define (%string-titlecase-impl s start end)
+  ;; Non-mutating: build a fresh string. A "word" is a maximal run of
+  ;; cased characters; the first cased char of each run is uppercased and
+  ;; the remaining cased chars are downcased. Non-cased chars (spaces,
+  ;; punctuation, digits) reset the in-word state. Wile lacks a
+  ;; char-titlecase primitive, so we approximate titlecase with
+  ;; char-upcase -- identical for ASCII and for all characters whose
+  ;; titlecase and uppercase mappings coincide.
+  (let-values (((a b) (%string-range-check s start end)))
+    (let ((out (string-copy s)))
+      (let loop ((i a) (in-word #f))
+        (cond ((>= i b) out)
+              (else
+               (let ((ch (string-ref s i)))
+                 (cond
+                  ((char-alphabetic? ch)
+                   (string-set! out i
+                                (if in-word
+                                    (char-downcase ch)
+                                    (char-upcase ch)))
+                   (loop (+ i 1) #t))
+                  (else
+                   ;; preserve the original char, end the current word
+                   (loop (+ i 1) #f))))))))))
+
+(define string-titlecase
+  (case-lambda
+    ((s)
+     "Return a fresh copy of S with each word titlecased: the first cased
+character of every word is uppercased and the remaining cased characters
+of that word are downcased. A word is a maximal run of alphabetic
+characters; any non-alphabetic character ends the current word and is
+copied unchanged.
+
+Uses simple (per-char) case mapping. Wile has no char-titlecase
+primitive, so the leading char is upcased via char-upcase; this is
+identical to true titlecase for ASCII and for every character whose
+titlecase and uppercase mappings coincide.
+
+Examples:
+  (string-titlecase \"hello world\")        => \"Hello World\"
+  (string-titlecase \"--capitalize THIS!\")  => \"--Capitalize This!\"
+  (string-titlecase \"hello world\" 6)       => \"hello World\"
+  (string-titlecase \"\")                     => \"\"
+
+Parameters:
+  s : string
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: string (fresh)
+Category: srfi-13
+Keywords: titlecase, capitalize, words, case
+
+See also: `string-upcase' (R7RS), `string-downcase' (R7RS)."
+     (%string-titlecase-impl s 0 (string-length s)))
+    ((s start)
+     (%string-titlecase-impl s start (string-length s)))
+    ((s start end)
+     (%string-titlecase-impl s start end))))
+
 (define string-downcase!
   (case-lambda
     ((s)

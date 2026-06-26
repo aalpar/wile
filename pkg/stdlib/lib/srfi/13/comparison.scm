@@ -271,3 +271,58 @@ See also: `string-compare', `string-ci='."
      (%string-compare-ci-impl s1 start1 end1
                               s2 start2 end2
                               proc< proc= proc>))))
+
+(define %string-hash-default-bound 4194304) ; 2^22; a fixed, modest default range
+
+(define (%string-hash-impl s start end bound)
+  ;; Deterministic polynomial (Java-style) rolling hash over the char
+  ;; codepoints in [start, end). Uses bignum-safe arithmetic, then
+  ;; reduces modulo BOUND so the result is always in [0, bound). The hash
+  ;; is stable for a given string within and across runs (no randomized
+  ;; seed), satisfying SRFI-13's requirement that equal strings under
+  ;; string= hash equal.
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i a) (h 0))
+      (cond ((>= i b) (modulo h bound))
+            (else
+             (loop (+ i 1)
+                   (+ (* h 31) (char->integer (string-ref s i)))))))))
+
+(define string-hash
+  (case-lambda
+    ((s)
+     "Return a non-negative integer hash of string S.
+
+With no BOUND, the result lies in [0, 2^22). With BOUND, the result lies
+in [0, BOUND). The hash is a deterministic polynomial over the character
+codepoints (h := h*31 + codepoint), so equal strings (under string=)
+always hash equal, both within a run and across runs.
+
+Examples:
+  (>= (string-hash \"abc\") 0)          => #t
+  (< (string-hash \"abc\" 100) 100)     => #t
+  (= (string-hash \"abc\") (string-hash \"abc\")) => #t
+
+Parameters:
+  s : string
+  bound : positive integer (optional) -- result in [0, bound)
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: non-negative integer
+Category: srfi-13
+Keywords: hash, digest, fingerprint, bound
+
+See also: `string=', `string-hash-ci' (SRFI-13, not yet provided)."
+     (%string-hash-impl s 0 (string-length s) %string-hash-default-bound))
+    ((s bound)
+     (cond ((or (not (integer? bound)) (<= bound 0))
+            (error "string-hash: bound must be a positive integer" bound)))
+     (%string-hash-impl s 0 (string-length s) bound))
+    ((s bound start)
+     (cond ((or (not (integer? bound)) (<= bound 0))
+            (error "string-hash: bound must be a positive integer" bound)))
+     (%string-hash-impl s start (string-length s) bound))
+    ((s bound start end)
+     (cond ((or (not (integer? bound)) (<= bound 0))
+            (error "string-hash: bound must be a positive integer" bound)))
+     (%string-hash-impl s start end bound))))
