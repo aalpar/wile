@@ -51,9 +51,13 @@ func TestLibraryExportValidation(t *testing.T) {
   (begin (define defined-name 1)))`),
 				},
 			},
-			code:        `(import (only (test bad-export) defined-name)) defined-name`,
-			wantErr:     true,
-			mustContain: []string{"undefined-name", "(test bad-export)"},
+			code:    `(import (only (test bad-export) defined-name)) defined-name`,
+			wantErr: true,
+			// The diagnostic names the missing identifier, the library, and BOTH causes
+			// of an export gap — a typo, or a primitive the active security profile does
+			// not register (the latter is the real cause when e.g. (scheme base) loads
+			// under the Tiny profile). See validateLibraryExports.
+			mustContain: []string{"undefined-name", "(test bad-export)", "security profile does not register"},
 		},
 		{
 			// Two undefined exports: the error collects ALL missing names in one report.
