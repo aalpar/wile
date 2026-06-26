@@ -16,6 +16,7 @@ package environment
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -219,7 +220,7 @@ func TestCopyInto_CopiesBindings(t *testing.T) {
 	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
 }
 
-func TestCopyForApplyInto_MarksBothShared(t *testing.T) {
+func TestCopyForApplyInto_MarksDestinationShared(t *testing.T) {
 	le := NewLocalEnvironment(1)
 	li0 := &LocalIndex{0, 0}
 	le.SetLocalValue(li0, values.NewInteger(42))
@@ -227,12 +228,53 @@ func TestCopyForApplyInto_MarksBothShared(t *testing.T) {
 	var dst LocalEnvironmentFrame
 	le.copyForApplyInto(&dst)
 
-	// Both source and dest have keysShared set
-	qt.Assert(t, le.keysShared, qt.IsTrue)
+	// Only the destination is marked keysShared. The source (an apply source =
+	// fully-compiled closure env) is intentionally NOT marked: its keys are
+	// never mutated at runtime, and marking it raced when the same closure was
+	// applied from multiple threads. See copyForApplyInto's comment.
 	qt.Assert(t, dst.keysShared, qt.IsTrue)
+	qt.Assert(t, le.keysShared, qt.IsFalse)
 
-	// Bindings are independent
+	// The keys map is aliased (CoW) between source and destination.
+	qt.Assert(t, reflect.ValueOf(dst.keys).Pointer(), qt.Equals, reflect.ValueOf(le.keys).Pointer())
+
+	// Bindings are independent: mutating a destination value leaves the source.
 	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(42))
 	dst.bindings[0].SetValue(values.NewInteger(99))
 	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(42))
+
+	// Destination-side CoW still protects the shared keys map: adding a key to
+	// the destination clones its keys, leaving the source's keys untouched.
+	dst.EnsureLocalBinding(values.NewSymbol("added-to-dst"), BindingTypeVariable)
+	qt.Assert(t, dst.GetLocalIndex(values.NewSymbol("added-to-dst")), qt.Not(qt.IsNil))
+	qt.Assert(t, le.GetLocalIndex(values.NewSymbol("added-to-dst")), qt.IsNil)
+}
+
+// TestCopyForApplyInto_ConcurrentSourceRaceFree exercises the exact data race
+// that motivated dropping the source-side keysShared write (B2): applying one
+// closure from multiple threads shares a single source frame, and the former
+// `p.keysShared = true` was a concurrent write to it. Run under -race; before
+// the fix this failed, now it is clean. Each goroutine owns its own dst, so the
+// only shared state is the read-only source `le`.
+func TestCopyForApplyInto_ConcurrentSourceRaceFree(t *testing.T) {
+	le := NewLocalEnvironment(2)
+	le.EnsureLocalBinding(values.NewSymbol("x"), BindingTypeVariable)
+	le.EnsureLocalBinding(values.NewSymbol("y"), BindingTypeVariable)
+
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 2000 {
+				var dst LocalEnvironmentFrame
+				le.copyForApplyInto(&dst)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// The shared source was never mutated: still exactly its two keys, unshared.
+	qt.Assert(t, len(le.Keys()), qt.Equals, 2)
+	qt.Assert(t, le.keysShared, qt.IsFalse)
 }

@@ -207,8 +207,20 @@ func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
 }
 
 // copyForApplyInto copies bindings into an existing destination frame,
-// marking both source and destination as sharing keys (CoW).
+// aliasing the source's keys map into the destination (copy-on-write).
 // Used by EnvironmentFrame.NewApplyFrame() and InitApplyFrame().
+//
+// Only the destination is marked keysShared. The source `p` is intentionally
+// NOT marked: a frame's keys map is mutated only during compilation/expansion
+// (EnsureLocalBinding / MaybeCreateLocalBinding, all called from
+// internal/validate and machine/compilation), never on the runtime apply path.
+// The apply source is a fully-compiled closure environment whose keys are
+// immutable thereafter, so it can never reach the CoW guard — marking it is
+// unnecessary. Eliminating the source-side write also removes a data race:
+// the same closure applied from multiple SRFI-18 threads shares one source
+// frame, and the former `p.keysShared = true` was a concurrent write to it
+// (benign-but-racy; failed `go test -race`). The destination is a fresh /
+// pooled per-call frame owned by one goroutine, so its write is race-free.
 //
 // When dst already has a bindings backing array with sufficient capacity
 // (the common case for pooled frames after warmup), the slice is resliced
@@ -217,7 +229,6 @@ func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
 func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	dst.keys = p.keys
 	dst.keysShared = true
-	p.keysShared = true
 	n := len(p.bindings)
 	if cap(dst.bindings) >= n {
 		dst.bindings = dst.bindings[:n]

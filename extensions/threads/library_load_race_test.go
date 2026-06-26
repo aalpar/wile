@@ -37,18 +37,20 @@ import (
 // run under -race; this is the realistic integration smoke that exercises the
 // same maps through the full (environment …) → LoadLibrary → Register path.
 func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
-	// Synchronizing LibraryRegistry (Task 1C) removed the "concurrent map
-	// writes" fatal, but doing so unmasked a SEPARATE, pre-existing data race
-	// in the per-call apply path: LocalEnvironmentFrame.copyForApplyInto writes
-	// keysShared=true on the SHARED source frame, so concurrent foreign-closure
-	// applications from multiple threads (here, the `environment` primitive
-	// during library load) race on that copy-on-write flag. That race lives in
-	// the hot environment-frame apply path and is out of scope for the registry
-	// synchronization; the authoritative proof of the registry fix is the
-	// registry-level TestLibraryRegistryConcurrentLoad / LookupOrClaim run under
-	// -race. Re-enable this once the apply-frame CoW race is fixed.
-	// TODO(apply-frame-race): tracked in plans/2026-06-25-apply-frame-cow-race.local.md.
-	t.Skip("blocked by pre-existing copyForApplyInto keysShared race (separate from CC1)")
+	// The apply-frame copy-on-write race this test originally surfaced (the
+	// source-side keysShared write in LocalEnvironmentFrame.copyForApplyInto) is
+	// FIXED and proven race-free by
+	// environment.TestCopyForApplyInto_ConcurrentSourceRaceFree under -race.
+	//
+	// Un-skipping then revealed a DISTINCT, deeper concurrency limitation (Q2 in
+	// plans/2026-06-25-apply-frame-cow-race.local.md): when several threads each
+	// load a library that depends on a not-yet-loaded shared dependency (here,
+	// (scheme base)), the loader's circular-dependency detection cannot tell
+	// "another thread is mid-load" from "I am recursively loading this", so it
+	// aborts with a false "circular dependency" error. The fix is a thread-aware
+	// per-name load latch (the TODO(1C-b) in library_loader.go) — a separate
+	// task from the apply-frame CoW race. Keep skipped until that lands.
+	t.Skip("blocked by concurrent shared-dependency load misdetected as circular (loader per-name latch TODO); the keysShared CoW race itself is fixed and proven by environment.TestCopyForApplyInto_ConcurrentSourceRaceFree")
 
 	c := qt.New(t)
 	ctx := context.Background()
