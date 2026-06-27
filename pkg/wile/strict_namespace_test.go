@@ -90,3 +90,87 @@ func TestStrictNamespaceBaseline(t *testing.T) {
 		})
 	}
 }
+
+// TestStrictNamespaceBareSurface pins the strict-mode top-level surface: core
+// primitives and the define/syntax machinery stay visible, while a profile's
+// extension primitive (display) is NOT pre-bound and must be imported.
+func TestStrictNamespaceBareSurface(t *testing.T) {
+	c := qt.New(t)
+
+	okCases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "core primitive still visible",
+			src:  `(car '(1 2))`,
+			want: "1",
+		},
+		{
+			name: "core arithmetic still visible",
+			src:  `(+ 1 2)`,
+			want: "3",
+		},
+		{
+			name: "define and reference still work",
+			src:  `(define x 3) x`,
+			want: "3",
+		},
+	}
+	for _, tc := range okCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalUnderProfile(t, wile.Small, tc.src, wile.WithStrictNamespace())
+			c.Assert(err, qt.IsNil)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+
+	t.Run("extension primitive (display) NOT visible without import", func(t *testing.T) {
+		_, err := evalUnderProfile(t, wile.Small, `(procedure? display)`, wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(err.Error(), qt.Contains, "display")
+	})
+}
+
+// TestStrictNamespaceTinyParity confirms the strict bare surface equals a Tiny
+// engine's visible surface (design D2): the same snippet yields the same verdict
+// under Tiny and under Small+WithStrictNamespace, for a core op (both succeed)
+// and for an extension op (both fail unbound).
+func TestStrictNamespaceTinyParity(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name    string
+		src     string
+		wantErr bool
+		want    string
+	}{
+		{
+			name:    "core op succeeds under both",
+			src:     `(car '(1 2))`,
+			wantErr: false,
+			want:    "1",
+		},
+		{
+			name:    "extension op unbound under both",
+			src:     `(procedure? display)`,
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tinyVal, tinyErr := evalUnderProfile(t, wile.Tiny, tc.src)
+			strictVal, strictErr := evalUnderProfile(t, wile.Small, tc.src, wile.WithStrictNamespace())
+			if tc.wantErr {
+				c.Assert(tinyErr, qt.IsNotNil)
+				c.Assert(strictErr, qt.IsNotNil)
+				return
+			}
+			c.Assert(tinyErr, qt.IsNil)
+			c.Assert(strictErr, qt.IsNil)
+			c.Assert(tinyVal, qt.Equals, tc.want)
+			c.Assert(strictVal, qt.Equals, tinyVal)
+		})
+	}
+}

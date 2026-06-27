@@ -168,13 +168,39 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		ns.SetImmutableTopLevel(true)
 	}
 
+	// In strict-namespace mode the visible top level binds only the core surface;
+	// the profile's extension primitives stay registered on the namespace (reg) and
+	// reachable via (import …), but are not pre-bound here. Non-strict keeps the full
+	// registry, so topLevelReg == reg and the path is byte-for-byte unchanged.
+	topLevelReg := reg
+	if cfg.strictNamespace {
+		topLevelReg, err = coreOnlyRegistry()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	env := ns.Runtime()
-	err = applyBaseEnvironment(ctx, env, reg, applyOptionsFromConfig(cfg)...)
+	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromConfig(cfg)...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	return ns, snapshots, closers, nil
+}
+
+// coreOnlyRegistry builds a registry holding only the core primitive surface. It is
+// the bare top-level binding set for strict-namespace mode and mirrors the registry a
+// Tiny engine produces, so a strict top level equals the Tiny visible surface. The
+// engine's full (profile) registry is still used for library environments and synthetic
+// library registration, so (import …) reaches the profile's extensions.
+func coreOnlyRegistry() (*registry.Registry, error) {
+	reg := registry.NewRegistry()
+	err := core.AddToRegistry(reg)
+	if err != nil {
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "build core-only registry")
+	}
+	return reg, nil
 }
 
 // applyOptionsFromConfig translates engineConfig into the ApplyOption slice
