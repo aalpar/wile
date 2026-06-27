@@ -166,7 +166,13 @@
 (define-syntax guard
   (syntax-rules ()
     ((guard (var clause ...) e1 e2 ...)
-     ((call/cc
+     ;; The OUTER escape uses call-with-exit (an escape continuation), not call/cc,
+     ;; so the handler's outward escape to the guard form propagates through a
+     ;; with-continuation-barrier: exceptions/escapes are pass-through, full call/cc
+     ;; jumps are blocked (Racket + prim_barrier.go). guard-k is invoked once,
+     ;; outward, during the body's dynamic extent — exact call-with-exit usage.
+     ;; handler-k (inner, re-raise path) stays call/cc.
+     ((call-with-exit
         (lambda (guard-k)
           (with-exception-handler
            (lambda (condition)

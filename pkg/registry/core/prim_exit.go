@@ -53,6 +53,13 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	valid := &atomic.Bool{}
 	valid.Store(true)
 	capturingThreadID := mc.ThreadID()
+	// Winding depth at entry. An escape must run the dynamic-wind after thunks
+	// accumulated between here and the escape point. The unwind happens at the
+	// escape point (innerMC, below) where those frames are visible — call-with-exit's
+	// own sub does NOT see frames pushed in deeper sub-contexts (a call-with-values
+	// producer, or an in-place exception handler), so the unwind cannot wait for the
+	// catch to do it against this sub's winding.
+	entryDepth := mc.WindingStack().Depth()
 
 	// Build the exit closure. It is valid only during the dynamic extent of proc.
 	// Checking valid before thread is intentional: a cross-thread call to an expired
@@ -71,6 +78,18 @@ func PrimCallWithExit(cc machine.CallContext) error {
 				"call-with-exit: exit procedure called from different thread")
 		}
 		val := innerMC.Arg(0)
+		// Run dynamic-wind after thunks from the escape point down to the
+		// call-with-exit entry depth, here where the frames are visible (innerMC is
+		// the context invoking the exit procedure — possibly a deeper sub-context than
+		// call-with-exit's own sub). This is what call/cc's RestoreWithWindingFrom
+		// does against the invoker's winding; call-with-exit must do the same so an
+		// exception escaping a dynamic-wind via guard still runs its after thunk.
+		if innerMC.WindingStack().Depth() > entryDepth {
+			unwindErr := innerMC.UnwindTo(entryDepth)
+			if unwindErr != nil {
+				return unwindErr
+			}
+		}
 		return &machine.ErrPromptAbort{
 			Tag:    tag,
 			Values: []values.Value{val},
@@ -91,15 +110,11 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	if err != nil {
 		var abortErr *machine.ErrPromptAbort
 		if errors.As(err, &abortErr) && abortErr.Tag == tag {
-			// Escape matched our tag. Invalidate the exit procedure, then unwind
-			// any dynamic-wind frames accumulated above our entry point.
+			// Escape matched our tag. The exit procedure already ran the dynamic-wind
+			// after thunks at the escape point (see exitFn) — call-with-exit's own sub
+			// cannot see frames pushed in deeper sub-contexts, so unwinding here would
+			// miss them. Just invalidate the procedure and deliver the value.
 			valid.Store(false)
-			if sub.WindingStack().Depth() > mc.WindingStack().Depth() {
-				unwindErr := sub.UnwindTo(mc.WindingStack().Depth())
-				if unwindErr != nil {
-					return unwindErr
-				}
-			}
 			mc.SetValue(abortErr.Values[0])
 			return nil
 		}

@@ -399,7 +399,11 @@ func TestInvokesProcedureStaticGuard(t *testing.T) {
 		modulePath + "/pkg/registry/core.PrimApply",
 		modulePath + "/pkg/registry/core.PrimCallCC",
 		modulePath + "/pkg/registry/core.PrimCallWithValues",
-		modulePath + "/pkg/registry/core.PrimWithExceptionHandler",
+		// (with-exception-handler was here; it is now Scheme — (parameterize over
+		// %exception-handlers) — not a Go primitive. PrimRaise is not a valid
+		// replacement pin: its handler invocation is indirect (via the value register
+		// / RaiseInPlace), outside the analyzer's static call graph, same as the
+		// pre-existing note above on raise.)
 		modulePath + "/extensions/eval.PrimEval",
 	}
 	for _, key := range mustDiscover {
