@@ -16,11 +16,14 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -176,6 +179,110 @@ func TestStrictNamespaceR5RSOnBare(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(got, qt.Equals, "4950.0")
 	})
+}
+
+// TestStrictNamespaceNoEscalation pins the security invariant: strict mode does
+// NOT widen the importable set beyond the profile. A KitchenSink-only library
+// ((wile threads), backed by the threads extension absent from Small) is
+// unimportable under Small whether or not strict mode is on, and importable
+// under KitchenSink. The profile remains the boundary; strict only changes
+// top-level visibility, never reachability.
+func TestStrictNamespaceNoEscalation(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("KitchenSink-only library unimportable under Small (non-strict)", func(t *testing.T) {
+		_, err := evalUnderProfile(t, wile.Small, `(import (wile threads)) (procedure? make-thread)`)
+		c.Assert(err, qt.IsNotNil)
+	})
+
+	t.Run("KitchenSink-only library still unimportable under Small + strict", func(t *testing.T) {
+		_, err := evalUnderProfile(t, wile.Small,
+			`(import (wile threads)) (procedure? make-thread)`, wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNotNil)
+	})
+
+	t.Run("importable under KitchenSink + strict (boundary is the profile, not strict)", func(t *testing.T) {
+		got, err := evalUnderProfile(t, wile.KitchenSink,
+			`(import (wile threads)) (procedure? make-thread)`, wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.Equals, "#t")
+	})
+}
+
+// TestStrictNamespaceOrthogonality confirms WithStrictNamespace composes
+// order-independently with WithProfile and WithSandbox: the bare surface holds
+// regardless of option order and is unaffected by adding a sandbox layer.
+func TestStrictNamespaceOrthogonality(t *testing.T) {
+	c := qt.New(t)
+
+	ctx := context.Background()
+	orders := []struct {
+		name string
+		opts []wile.EngineOption
+	}{
+		{
+			name: "profile,strict",
+			opts: []wile.EngineOption{wile.WithProfile(wile.Small), wile.WithStrictNamespace()},
+		},
+		{
+			name: "strict,profile",
+			opts: []wile.EngineOption{wile.WithStrictNamespace(), wile.WithProfile(wile.Small)},
+		},
+		{
+			name: "profile,strict,sandbox",
+			opts: []wile.EngineOption{wile.WithProfile(wile.Small), wile.WithStrictNamespace(), wile.WithSandbox()},
+		},
+		{
+			name: "sandbox,strict,profile",
+			opts: []wile.EngineOption{wile.WithSandbox(), wile.WithStrictNamespace(), wile.WithProfile(wile.Small)},
+		},
+	}
+	for _, o := range orders {
+		t.Run(o.name, func(t *testing.T) {
+			opts := append([]wile.EngineOption{}, o.opts...)
+			opts = append(opts, wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+			eng, err := wile.NewEngine(ctx, opts...)
+			c.Assert(err, qt.IsNil)
+
+			// core visible
+			v, err := eng.EvalMultiple(ctx, `(car '(1 2))`)
+			c.Assert(err, qt.IsNil)
+			c.Assert(v.SchemeString(), qt.Equals, "1")
+
+			// extension primitive not visible until imported (bare surface holds)
+			_, err = eng.EvalMultiple(ctx, `(procedure? display)`)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, "display")
+		})
+	}
+}
+
+// TestStrictNamespaceAuthorizerStillGates confirms strict mode (a visibility
+// change) does not disable runtime authorization: an explicit deny authorizer
+// still rejects a gated operation under a strict engine.
+func TestStrictNamespaceAuthorizerStillGates(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	denyAll := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		return werr.WrapForeignErrorf(security.ErrAccessDenied, "denyAll: %s/%s", req.Resource, req.Action)
+	})
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.Small),
+		wile.WithStrictNamespace(),
+		wile.WithAuthorizer(denyAll),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// Import the file library, then a gated file op must be denied (not silently
+	// allowed) — proving the authorizer chain survives strict mode.
+	_, err = eng.EvalMultiple(ctx, `(import (scheme file)) (open-input-file "/etc/hostname")`)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+		qt.Commentf("gated file op must be denied under strict mode, got: %v", err))
 }
 
 // TestStrictNamespaceTinyParity confirms the strict bare surface equals a Tiny

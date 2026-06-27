@@ -327,7 +327,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg))
+		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg), cfg.strictNamespace)
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +396,7 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 // import observer, extension libraries, and the library environment factory.
 // applyOpts propagates registry.Apply toggles (e.g., contract enforcement)
 // into child library environments so they mirror the parent's configuration.
-func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption) error {
+func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption, strictNamespace bool) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -419,7 +419,22 @@ func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImport
 
 	env.SetLibraryRegistry(libReg)
 
-	err := registerExtensionLibraries(reg, env, libReg, snapshots)
+	// Synthetic extension libraries re-export the profile's primitives and resolve
+	// their exports against their backing env. In strict mode the visible top-level
+	// env is bare (core-only), so resolve them against a full-registry child runtime
+	// instead. NewChildRuntime is a flat env (SealedBaseTarget is the frame itself),
+	// so the full registry lands in its own frame and does NOT pollute the shared
+	// sealed base — the user top level stays bare. Non-strict uses env directly.
+	synthEnv := env
+	if strictNamespace {
+		synthEnv = ns.NewChildRuntime()
+		applyErr := applyBaseEnvironment(ctx, synthEnv, reg, applyOpts...)
+		if applyErr != nil {
+			return applyErr
+		}
+	}
+
+	err := registerExtensionLibraries(reg, synthEnv, libReg, snapshots)
 	if err != nil {
 		return err
 	}
