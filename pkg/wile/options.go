@@ -107,6 +107,15 @@ type engineConfig struct {
 	// runtime, so it no longer breaks the stdlib. WithMutableTopLevel() opts out;
 	// propagated to the Namespace in NewEngine/NewNamespace.
 	immutableTopLevel bool
+
+	// strictNamespace, when true, binds only the core primitive surface at the
+	// top level; the profile's extension primitives stay registered (importable
+	// via (import …)) but are not pre-bound. The bare top level then equals a
+	// Tiny engine's visible surface, while the full profile registry is still
+	// used for library environments — so (import (scheme r5rs)) works over a
+	// bare baseline. Set by WithStrictNamespace; off by default. Security is
+	// unchanged: the profile still bounds what is reachable at all.
+	strictNamespace bool
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -488,6 +497,23 @@ func WithImmutableTopLevel() EngineOption {
 func WithMutableTopLevel() EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.immutableTopLevel = false
+	}
+}
+
+// WithStrictNamespace makes the engine's top level start BARE: the profile's
+// extension primitives are REGISTERED (so libraries can import them) but are NOT
+// pre-bound at the top level. Reach them with (import …). Core primitives and
+// core syntax remain visible, so the bare surface matches a Tiny engine's; the
+// full profile registry is still used for library environments, so a layered
+// import such as (import (scheme r5rs)) resolves over the bare baseline.
+//
+// Orthogonal to WithProfile/WithSandbox/WithAuthorizer; composes commutatively.
+// The profile (or explicit WithExtension set) remains the security boundary —
+// strict mode never widens what is reachable, it only withholds it from the top
+// level until imported. Off by default.
+func WithStrictNamespace() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.strictNamespace = true
 	}
 }
 
