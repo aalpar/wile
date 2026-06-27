@@ -902,3 +902,51 @@ func TestThreadRespectsParentTimeout(t *testing.T) {
 	c.Assert(elapsed < 2*time.Second, qt.IsTrue,
 		qt.Commentf("should terminate within timeout window, took %v", elapsed))
 }
+
+// TestThreadJoinReRaisesUncaughtException pins the SRFI-18 contract: a thread that
+// terminates via an uncaught exception has that exception re-raised in the JOINING
+// thread's dynamic environment, so a guard / with-exception-handler around the
+// thread-join! call catches it. Before the fix, the uncaught-exception carrier
+// passed through applyCallableError untouched and bubbled past the guard to the top
+// level. Each case self-checks in Scheme and returns #t.
+func TestThreadJoinReRaisesUncaughtException(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngineWithExceptions(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		// A guard around thread-join! catches a thread's bare (raise obj).
+		{"guard catches raised symbol",
+			`(let ((t (make-thread (lambda () (raise 'boom)))))
+			   (thread-start! t)
+			   (eq? 'boom
+			        (guard (e (#t e))
+			          (thread-join! t))))`},
+
+		// The re-raised condition is the ORIGINAL object: an error-object keeps its
+		// message and irritants (dispatchable in the guard clause), not a flattened
+		// "uncaught exception in thread: ..." string.
+		{"guard catches error-object with irritants",
+			`(let ((t (make-thread (lambda () (error "boom" 42)))))
+			   (thread-start! t)
+			   (guard (e ((error-object? e)
+			              (and (equal? (error-object-message e) "boom")
+			                   (equal? (error-object-irritants e) '(42)))))
+			     (thread-join! t)))`},
+
+		// No regression: a thread that returns normally still yields its value through
+		// a surrounding guard rather than tripping the handler.
+		{"normal result still returns through guard",
+			`(let ((t (make-thread (lambda () 99))))
+			   (thread-start! t)
+			   (= 99 (guard (e (#t -1))
+			           (thread-join! t))))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+		})
+	}
+}

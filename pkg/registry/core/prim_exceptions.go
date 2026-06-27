@@ -71,8 +71,12 @@ func PrimError(cc machine.CallContext) error {
 
 	msgStr, ok := message.(*values.String)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString,
-			"error: message must be a string but got %T", message)
+		// User-facing: a Scheme guard can catch this. Build the condition here so the
+		// offending value rides as an irritant (dispatchable via error-object-irritants)
+		// and the sentinel stays the wrapped cause (errors.Is still matches). %T would
+		// keep only the Go type. See CODING_STYLE.md "Error Message Pattern".
+		return machine.RaiseInPlace(mc,
+			values.NewErrorObjectWithCause("error: message must be a string", werr.ErrNotAString, message), false)
 	}
 
 	// Copy irritants out of the variadic rest-arg buffer (restArgBuf) into a fresh
@@ -81,8 +85,10 @@ func PrimError(cc machine.CallContext) error {
 	var irritants []values.Value
 	irritantsTuple, ok := irritantsList.(values.Tuple)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList,
-			"error: irritants must be a proper list but got %T", irritantsList)
+		// User-facing condition; carry the offending value as an irritant and keep the
+		// sentinel as the wrapped cause (see the message-type check above).
+		return machine.RaiseInPlace(mc,
+			values.NewErrorObjectWithCause("error: irritants must be a proper list", werr.ErrNotAList, irritantsList), false)
 	}
 	err = helpers.ForEachList(mc.Context(), irritantsTuple, "error", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		irritants = append(irritants, v)
