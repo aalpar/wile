@@ -88,6 +88,16 @@ could fatally crash before the catchable bound trips.
   comfortable margin (or retired). High-risk VM/continuation work — see the
   memory's `subcontext-continuation-truncation-redesign` and tail-frame-recycling
   cautions before attempting; gate on the full continuation/`-race` suite.
+- **CI mitigation (2026-06-27, until the trampoline lands):** the `-race` detector
+  inflates per-Go-frame cost several-fold, so `TestDeepConvergingContinuationConverges`
+  (ctak(18,12,6), ~40k live re-invocation frames) overflowed the 1 GB goroutine stack
+  under `-race` — a *fatal* abort below the `maxContinuationDepth` bound, which turned
+  the whole `race` CI job red from PR #794 (2026-06-25) onward. ctak is single-threaded,
+  so `-race` adds no race-detection value for it; the test now skips under `-race`
+  (`raceEnabled` flag, `pkg/wile/raceflag_*_test.go`) and still runs in the non-race
+  job, which validates the depth-bound + convergence semantics. This is a
+  test/environment mitigation, **not** the fix — the O(depth) Go-stack continuation
+  model above is the root cause, removed only by the trampoline.
 
 ### Restricted-profile `(scheme base)` export-validation (from PR #795–#799 crosscheck, 2026-06-25)
 
