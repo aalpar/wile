@@ -66,9 +66,8 @@ var immediateReturnTemplate = &NativeTemplate{}
 type MachineContext struct {
 	ctx context.Context
 	vmState
-	cont             *MachineContinuation // current continuation
-	expansion        *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
-	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
+	cont      *MachineContinuation // current continuation
+	expansion *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
 	// SPIKE(B-marks): when this context runs a resumed continuation (isolatedMarks),
 	// the capture-time reachable-marks snapshot, consulted by findParameterInMarks at
 	// the isolatedMarks break so outer parameter/handler marks survive resume.
@@ -1003,32 +1002,6 @@ func (p *MachineContext) SetSyntaxCaseState(v any) {
 		p.expansion = &expansionState{}
 	}
 	p.expansion.syntaxCase = v
-}
-
-// ExceptionHandler returns the current exception handler chain.
-func (p *MachineContext) ExceptionHandler() *ExceptionHandler {
-	return p.exceptionHandler
-}
-
-// SetExceptionHandler sets the exception handler chain.
-func (p *MachineContext) SetExceptionHandler(h *ExceptionHandler) {
-	p.exceptionHandler = h
-}
-
-// PushExceptionHandler pushes a new exception handler onto the handler stack.
-func (p *MachineContext) PushExceptionHandler(handler values.Callable) {
-	p.exceptionHandler = NewExceptionHandler(handler, p.exceptionHandler)
-}
-
-// PopExceptionHandler pops the current exception handler from the stack and returns it.
-// Returns nil if no handler is installed.
-func (p *MachineContext) PopExceptionHandler() *ExceptionHandler {
-	if p.exceptionHandler == nil {
-		return nil
-	}
-	h := p.exceptionHandler
-	p.exceptionHandler = h.parent
-	return h
 }
 
 // SetDebugger attaches a debugger to this context.

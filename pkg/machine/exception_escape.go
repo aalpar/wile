@@ -21,16 +21,18 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// ErrExceptionEscape signals an exception being raised through the call stack.
-// It is used by raise and raise-continuable to propagate exceptions to handlers.
+// ErrExceptionEscape carries an UNCAUGHT Scheme exception out to the embedder.
+// It is produced by RaiseInPlace when the exception-handler stack is empty (no
+// handler caught the condition) and bubbles to RunWithEscapeHandling, where the
+// public Engine turns it into a wile.RuntimeError (engine.wrapRuntimeError reads
+// Condition / Source / StackTrace). Handler dispatch itself no longer flows through
+// this type — handlers ride the %exception-handlers parameter and are invoked in
+// place by RaiseInPlace (see exception_raise.go), so the old handler-machinery
+// fields (Continuable / Continuation / Handled / WindingStack) are gone.
 type ErrExceptionEscape struct {
-	Condition    values.Value          // The raised condition/object
-	Continuable  bool                  // Whether handler can return
-	Continuation *MachineContinuation  // Return point for continuable exceptions
-	Handled      bool                  // Set true after handler processes it
-	WindingStack WindingStack          // Winding stack at raise point (for proper unwinding)
-	Source       *syntax.SourceContext // Source location where exception was raised
-	StackTrace   StackTrace            // VM stack trace at raise point
+	Condition  values.Value          // The raised condition/object
+	Source     *syntax.SourceContext // Source location where exception was raised
+	StackTrace StackTrace            // VM stack trace at raise point
 }
 
 // Error implements the error interface.

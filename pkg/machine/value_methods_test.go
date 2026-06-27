@@ -323,47 +323,9 @@ func TestMachineContext_ExpanderContext(t *testing.T) {
 	qt.Assert(t, mc.ExpanderContext(), qt.IsNil)
 }
 
-func TestMachineContext_ExceptionHandler(t *testing.T) {
-	c := qt.New(t)
-	env := environment.NewNamespace().Runtime()
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(context.Background(), cont)
-
-	c.Assert(mc.ExceptionHandler(), qt.IsNil)
-
-	h := machine.NewExceptionHandler(machine.NewParameter(values.NewString("handler"), nil), nil)
-	mc.SetExceptionHandler(h)
-	c.Assert(mc.ExceptionHandler(), qt.Equals, h)
-}
-
-func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
-	c := qt.New(t)
-	env := environment.NewNamespace().Runtime()
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(context.Background(), cont)
-
-	// Pop from empty returns nil
-	c.Assert(mc.PopExceptionHandler(), qt.IsNil)
-
-	// Push two handlers
-	p1 := machine.NewParameter(values.NewString("h1"), nil)
-	p2 := machine.NewParameter(values.NewString("h2"), nil)
-	mc.PushExceptionHandler(p1)
-	mc.PushExceptionHandler(p2)
-
-	// Pop returns most recent first
-	h2 := mc.PopExceptionHandler()
-	c.Assert(h2, qt.IsNotNil)
-	c.Assert(h2.Handler(), qt.Equals, p2)
-
-	h1 := mc.PopExceptionHandler()
-	c.Assert(h1, qt.IsNotNil)
-	c.Assert(h1.Handler(), qt.Equals, p1)
-
-	c.Assert(mc.PopExceptionHandler(), qt.IsNil)
-}
+// (TestMachineContext_ExceptionHandler and _PushPopExceptionHandler removed in
+// piece E: the exceptionHandler field and its Push/Pop/Get/Set methods are gone;
+// handlers now ride the %exception-handlers parameter.)
 
 func TestMachineContext_WindingStack(t *testing.T) {
 	c := qt.New(t)

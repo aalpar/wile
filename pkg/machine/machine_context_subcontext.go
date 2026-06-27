@@ -55,7 +55,6 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.parentMC = p
 	mc.escapeCont = p.escapeCont
 	mc.thread = p.thread
-	mc.exceptionHandler = p.exceptionHandler
 	mc.maxCallDepth = p.maxCallDepth
 	mc.maxContinuationDepth = p.maxContinuationDepth
 	mc.maxStackSize = p.maxStackSize
@@ -105,13 +104,12 @@ func (p *MachineContext) NewSubContextWithTemplate(
 // reproduced by TestMutexAbandonedOnTermination under -race). Only values safe to
 // snapshot once at spawn time are captured here.
 type SubContextParams struct {
-	Ctx              context.Context
-	Env              *environment.EnvironmentFrame
-	EscapeCont       *MachineContinuation
-	ExceptionHandler *ExceptionHandler
-	MaxCallDepth     int
-	MaxStackSize     uint64
-	WindingStack     WindingStack
+	Ctx          context.Context
+	Env          *environment.EnvironmentFrame
+	EscapeCont   *MachineContinuation
+	MaxCallDepth int
+	MaxStackSize uint64
+	WindingStack WindingStack
 }
 
 // CaptureSubContextParams extracts the state needed to create a sub-context in a different goroutine.
@@ -126,12 +124,11 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 		// SRFI-18 threads share the engine's one mutable runtime global (and see the
 		// sealed base through its parent). MutableRuntime() captures that shared global;
 		// capturing the sealed base instead would corrupt shared state.
-		Env:              p.env.MutableRuntime(),
-		EscapeCont:       p.escapeCont,
-		ExceptionHandler: p.exceptionHandler,
-		MaxCallDepth:     p.maxCallDepth,
-		MaxStackSize:     p.maxStackSize,
-		WindingStack:     p.windingStack,
+		Env:          p.env.MutableRuntime(),
+		EscapeCont:   p.escapeCont,
+		MaxCallDepth: p.maxCallDepth,
+		MaxStackSize: p.maxStackSize,
+		WindingStack: p.windingStack,
 	}
 }
 
@@ -158,11 +155,10 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 		// the correct semantics (a thread's stack trace is its own, and SRFI-18
 		// parameter inheritance is a creation-time snapshot, not a live link to the
 		// concurrently-evolving parent). See SubContextParams above.
-		escapeCont:       params.EscapeCont,
-		exceptionHandler: params.ExceptionHandler,
-		maxCallDepth:     params.MaxCallDepth,
-		maxStackSize:     params.MaxStackSize,
-		pools:            newThreadPools(), // new goroutine: its own freelists
+		escapeCont:   params.EscapeCont,
+		maxCallDepth: params.MaxCallDepth,
+		maxStackSize: params.MaxStackSize,
+		pools:        newThreadPools(), // new goroutine: its own freelists
 		// thread will be set by SetThread below
 	}
 	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()

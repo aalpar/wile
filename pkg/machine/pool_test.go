@@ -112,7 +112,6 @@ func TestSubContextPool_Roundtrip(t *testing.T) {
 	qt.Assert(t, mc2.parentMC, qt.IsNil)
 	qt.Assert(t, mc2.evals, qt.IsNil)
 	qt.Assert(t, mc2.cont, qt.IsNil)
-	qt.Assert(t, mc2.exceptionHandler, qt.IsNil)
 	qt.Assert(t, mc2.thread, qt.IsNil)
 }
 
@@ -246,7 +245,6 @@ func TestAcquireMacroContext_InitializesFields(t *testing.T) {
 	qt.Assert(t, mc.cont, qt.IsNil)
 	qt.Assert(t, mc.parentMC, qt.IsNil)
 	qt.Assert(t, mc.ExpanderContext(), qt.IsNil)
-	qt.Assert(t, mc.exceptionHandler, qt.IsNil)
 	qt.Assert(t, mc.singleValue, qt.IsNil)
 	qt.Assert(t, mc.multiValues, qt.IsNil)
 	qt.Assert(t, mc.pc, qt.Equals, 0)

@@ -1127,77 +1127,10 @@ func TestApplyCallable_Nil(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrNotAProcedure), qt.IsTrue)
 }
 
-// TestNewSubContext_InheritsExceptionHandler verifies that NewSubContext
-// automatically inherits the parent's exception handler chain (M3 fix).
-func TestNewSubContext_InheritsExceptionHandler(t *testing.T) {
-	c := qt.New(t)
-	topEnv := environment.NewNamespace().Runtime()
-	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
-	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
-
-	handler := NewParameter(values.NewInteger(42), nil)
-	parent.PushExceptionHandler(handler)
-
-	sub := parent.NewSubContext()
-
-	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
-	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler), qt.IsTrue)
-}
-
-// TestNewSubContext_InheritsNestedHandlers verifies that nested exception
-// handlers form a chain that is correctly inherited by sub-contexts.
-func TestNewSubContext_InheritsNestedHandlers(t *testing.T) {
-	c := qt.New(t)
-	topEnv := environment.NewNamespace().Runtime()
-	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
-	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
-
-	handler1 := NewParameter(values.NewSymbol("outer"), nil)
-	handler2 := NewParameter(values.NewSymbol("inner"), nil)
-
-	parent.PushExceptionHandler(handler1)
-	parent.PushExceptionHandler(handler2)
-
-	sub := parent.NewSubContext()
-
-	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
-	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler2), qt.IsTrue)
-	c.Assert(sub.ExceptionHandler().Parent(), qt.Not(qt.IsNil))
-	c.Assert(sub.ExceptionHandler().Parent().Handler().EqualTo(handler1), qt.IsTrue)
-}
-
-// TestNewSubContext_NoExceptionHandler verifies that sub-contexts work
-// correctly when the parent has no exception handler installed.
-func TestNewSubContext_NoExceptionHandler(t *testing.T) {
-	c := qt.New(t)
-	topEnv := environment.NewNamespace().Runtime()
-	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
-	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
-
-	sub := parent.NewSubContext()
-
-	c.Assert(sub.ExceptionHandler(), qt.IsNil)
-}
-
-// TestNewThreadSubContext_InheritsExceptionHandler verifies that thread
-// sub-contexts correctly inherit exception handlers via SubContextParams.
-func TestNewThreadSubContext_InheritsExceptionHandler(t *testing.T) {
-	c := qt.New(t)
-	topEnv := environment.NewNamespace().Runtime()
-	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
-	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
-
-	handler := NewParameter(values.NewSymbol("thread-handler"), nil)
-	parent.PushExceptionHandler(handler)
-
-	params := parent.CaptureSubContextParams()
-	thunk := NewParameter(nil, nil)
-	thread := values.NewThread(thunk, "test-thread")
-	sub := NewThreadSubContext(params, thread)
-
-	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
-	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler), qt.IsTrue)
-}
+// (Tests for field-based exception-handler inheritance across sub-contexts were
+// removed in piece E: the handler now rides the %exception-handlers parameter,
+// inherited via parentMC marks and captured by call/cc. That behavior is covered by
+// the exception-capture tests in pkg/registry/core.)
 
 func TestSaveContinuation_CallDepthTracking(t *testing.T) {
 	tests := []struct {
@@ -1381,8 +1314,6 @@ func TestNewSubContextWithTemplate(t *testing.T) {
 	// Set up parent state that should propagate
 	parent.SetMaxCallDepth(100)
 	parent.SetMaxStackSize(200)
-	handler := NewParameter(values.NewSymbol("test-handler"), nil)
-	parent.PushExceptionHandler(handler)
 	parent.windingStack = WindingStack{{}}
 
 	// Target template and env for sub-context
@@ -1401,7 +1332,6 @@ func TestNewSubContextWithTemplate(t *testing.T) {
 	c.Assert(sub.parentMC, qt.Equals, parent)
 	c.Assert(sub.maxCallDepth, qt.Equals, 100)
 	c.Assert(sub.maxStackSize, qt.Equals, uint64(200))
-	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
 	c.Assert(len(sub.windingStack), qt.Equals, 1)
 
 	// Fresh state

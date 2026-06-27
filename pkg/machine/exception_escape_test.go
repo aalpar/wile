@@ -17,19 +17,21 @@ package machine
 import (
 	"testing"
 
-	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
+// ErrExceptionEscape is the uncaught-exception carrier (piece E): handler dispatch
+// no longer flows through it, so it carries only Condition / Source / StackTrace.
+// (The Continuable / Continuation / Handled fields and their tests were removed.)
+
 func TestErrExceptionEscape_Error_NilCondition(t *testing.T) {
 	c := qt.New(t)
 
 	err := &ErrExceptionEscape{
-		Condition:   nil,
-		Continuable: false,
+		Condition: nil,
 	}
 
 	c.Assert(err.Error(), qt.Equals, "exception: <nil>")
@@ -39,8 +41,7 @@ func TestErrExceptionEscape_Error_WithCondition(t *testing.T) {
 	c := qt.New(t)
 
 	err := &ErrExceptionEscape{
-		Condition:   values.NewString("test error"),
-		Continuable: false,
+		Condition: values.NewString("test error"),
 	}
 
 	c.Assert(err.Error(), qt.Equals, "exception: \"test error\"")
@@ -50,8 +51,7 @@ func TestErrExceptionEscape_Error_WithSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	err := &ErrExceptionEscape{
-		Condition:   values.NewSymbol("error-type"),
-		Continuable: true,
+		Condition: values.NewSymbol("error-type"),
 	}
 
 	c.Assert(err.Error(), qt.Equals, "exception: error-type")
@@ -61,49 +61,24 @@ func TestErrExceptionEscape_Error_WithInteger(t *testing.T) {
 	c := qt.New(t)
 
 	err := &ErrExceptionEscape{
-		Condition:   values.NewInteger(42),
-		Continuable: false,
+		Condition: values.NewInteger(42),
 	}
 
 	c.Assert(err.Error(), qt.Equals, "exception: 42")
 }
 
-func TestErrExceptionEscape_Continuable(t *testing.T) {
+func TestErrExceptionEscape_Unwrap(t *testing.T) {
 	c := qt.New(t)
 
-	err := &ErrExceptionEscape{
-		Condition:   values.NewString("continuable"), //nolint:govet
-		Continuable: true,
-	}
+	// A NativeError condition implements error, so Unwrap exposes it for
+	// errors.Is/errors.As sentinel matching from Go callers.
+	ne := values.NewErrorObject("boom")
+	err := &ErrExceptionEscape{Condition: ne}
+	c.Assert(err.Unwrap(), qt.Equals, error(ne))
 
-	c.Assert(err.Continuable, qt.IsTrue)
-}
-
-func TestErrExceptionEscape_WithContinuation(t *testing.T) {
-	c := qt.New(t)
-
-	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-
-	err := &ErrExceptionEscape{
-		Condition:    values.NewString("error"), //nolint:govet
-		Continuable:  true,                      //nolint:govet
-		Continuation: cont,
-	}
-
-	c.Assert(err.Continuation, qt.Equals, cont)
-}
-
-func TestErrExceptionEscape_Handled(t *testing.T) {
-	c := qt.New(t)
-
-	err := &ErrExceptionEscape{
-		Condition: values.NewString("handled"), //nolint:govet
-		Handled:   true,
-	}
-
-	c.Assert(err.Handled, qt.IsTrue)
+	// A non-error condition yields a nil unwrap.
+	err2 := &ErrExceptionEscape{Condition: values.NewSymbol("sym")}
+	c.Assert(err2.Unwrap(), qt.IsNil)
 }
 
 func TestErrExceptionEscape_Error_WithSource(t *testing.T) {
