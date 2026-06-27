@@ -379,10 +379,11 @@ func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
 		// Stop if this context has isolated marks (e.g., applyCapturedContinuation
 		// sub-context running a different continuation chain).
 		if mc.isolatedMarks {
-			// SPIKE(B-marks): isolatedMarks cut off parentMC so the invoker's marks
-			// don't bleed in — but the resumed continuation's OWN capture-time outer
-			// marks (above the sub-context boundary it was captured behind) must still
-			// resolve. Consult the snapshot taken at capture before stopping.
+			// isolatedMarks cut off parentMC so the invoker's marks don't bleed into
+			// a resumed call/cc continuation — but that continuation's OWN
+			// capture-time marks from ABOVE the sub-context boundary it was captured
+			// behind must still resolve. Consult the snapshot taken at capture
+			// (collectReachableMarks / SnapshotReachableMarksInto) before stopping.
 			for _, e := range mc.capturedMarks {
 				if values.EqIdentity(e.key, param) {
 					return e.val
@@ -395,12 +396,23 @@ func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
 	return nil
 }
 
-// collectReachableMarks (SPIKE B-marks) snapshots the effective mark environment
-// reachable from p: for each key, the nearest value, across the local marks, the
-// continuation chain, and parentMC (stopping at an isolatedMarks boundary, but
-// folding in that boundary's own snapshot so nested resumes chain). Taken at
-// call/cc capture so a continuation captured inside a sub-context can restore the
-// outer parameter/handler marks on resume.
+// collectReachableMarks snapshots the parameter/handler mark environment reachable
+// from p — across local marks, the continuation chain, and parentMC — so a call/cc
+// continuation captured here can restore it on resume. It is consulted at the
+// isolatedMarks break in findParameterInMarks, because applyCapturedContinuation sets
+// isolatedMarks and cuts the parentMC walk on resume.
+//
+// The walk starts at p, not p.parentMC: PrimCallCC slices only the continuation
+// CHAIN (p.cont) into the captured segment, while parameterize/with-continuation-mark
+// set the LIVE mc.marks of the current frame, which SliceContinuationAt does not copy.
+// Including p's own live marks is correct and future-proof: today a producer-level
+// mark is unobservable on resume anyway (re-invoking a call-with-values producer
+// truncates — the value-facet limitation tracked in the open-problem plan), but once
+// that is fixed those marks must resolve. (Redundancy with marks the segment does
+// carry, on p.cont frames, is harmless: findParameterInMarks checks the restored
+// chain first, so the segment shadows the snapshot.) For each key the nearest value
+// wins; an isolatedMarks boundary folds in that context's own snapshot so nested
+// resumes chain.
 func (p *MachineContext) collectReachableMarks() []markEntry {
 	var out []markEntry
 	add := func(e markEntry) {
@@ -432,8 +444,9 @@ func (p *MachineContext) collectReachableMarks() []markEntry {
 	return out
 }
 
-// SnapshotReachableMarksInto (SPIKE B-marks) attaches p's capture-time reachable
-// marks to comp, so resuming comp restores the outer parameter/handler environment.
+// SnapshotReachableMarksInto attaches p's capture-time reachable marks to comp, so
+// resuming comp restores the outer parameter/handler environment. Called at call/cc
+// capture sites (PrimCallCC).
 func (p *MachineContext) SnapshotReachableMarksInto(comp *ComposableContinuation) {
 	comp.SetCapturedMarks(p.collectReachableMarks())
 }
@@ -495,10 +508,10 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
 
-	// SPIKE(B-marks): install the capture-time reachable-marks snapshot on the
-	// resumed context. This context runs with isolatedMarks set (parentMC cut), so
-	// findParameterInMarks consults this snapshot to resolve the outer
-	// parameter/handler marks the captured chain was sitting beneath.
+	// Install the capture-time reachable-marks snapshot on the resumed context. When
+	// applyCapturedContinuation runs this composable continuation it sets isolatedMarks
+	// (parentMC cut), so findParameterInMarks consults this snapshot to resolve the
+	// outer parameter/handler marks the captured chain was sitting beneath.
 	p.capturedMarks = cc.capturedMarks
 
 	// Acquire the segment: first invocation avoids DeepCopy by marking

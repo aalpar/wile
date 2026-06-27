@@ -35,15 +35,17 @@ type ComposableContinuation struct {
 	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
 	bottom       *MachineContinuation // bottom frame of segment; for parent reset on re-invocation
 	consumed     bool                 // true after first AcquireSegment call
-	// SPIKE(B-marks): snapshot of the parentMC-reachable marks (parameter/handler
-	// dynamic environment) at capture time — the marks ABOVE any sub-context
-	// boundary that the captured cont chain does not itself carry. Re-installed as a
-	// findParameterInMarks fallback on resume so a continuation captured inside a
-	// call-with-values producer (etc.) restores the outer handler/parameter values.
+	// capturedMarks is the snapshot of the reachable parameter/handler mark
+	// environment at capture time — including the marks ABOVE any sub-context
+	// boundary that the captured cont chain does not itself carry. It is re-installed
+	// as a findParameterInMarks fallback on resume (applyComposableContinuation), so a
+	// continuation captured inside a call-with-values producer (etc.) restores the
+	// outer handler/parameter values. See collectReachableMarks.
 	capturedMarks []markEntry
 }
 
-// SetCapturedMarks stores the capture-time reachable-marks snapshot (SPIKE B-marks).
+// SetCapturedMarks stores the capture-time reachable-marks snapshot. Called from
+// SnapshotReachableMarksInto at continuation-capture sites (e.g. PrimCallCC).
 func (p *ComposableContinuation) SetCapturedMarks(m []markEntry) {
 	p.capturedMarks = m
 }

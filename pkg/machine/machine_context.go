@@ -68,9 +68,11 @@ type MachineContext struct {
 	vmState
 	cont      *MachineContinuation // current continuation
 	expansion *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
-	// SPIKE(B-marks): when this context runs a resumed continuation (isolatedMarks),
-	// the capture-time reachable-marks snapshot, consulted by findParameterInMarks at
-	// the isolatedMarks break so outer parameter/handler marks survive resume.
+	// capturedMarks is set when this context runs a resumed call/cc continuation
+	// (isolatedMarks): it is the capture-time reachable-marks snapshot, consulted by
+	// findParameterInMarks at the isolatedMarks break so the continuation's outer
+	// parameter/handler marks (from above the sub-context boundary it was captured
+	// behind) survive resume. See collectReachableMarks / SnapshotReachableMarksInto.
 	capturedMarks []markEntry
 	debugger      *Debugger            // optional debugger for breakpoints and stepping
 	parentMC      *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking

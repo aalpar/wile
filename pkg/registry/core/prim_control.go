@@ -161,9 +161,13 @@ func PrimCallCC(cc machine.CallContext) error {
 	segment := mc.SliceContinuationAt(nil)
 	windingStack := mc.WindingStack().Copy()
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
-	// SPIKE(B-marks): snapshot the parentMC-reachable marks so a continuation
-	// captured inside a sub-context (e.g. a call-with-values producer) restores the
-	// outer parameter/handler environment on resume.
+	// Snapshot the reachable parameter/handler marks so a continuation captured inside
+	// a sub-context (e.g. a call-with-values producer) restores the outer environment
+	// on resume — call/cc isolates marks on resume, so without this the outer
+	// handler/parameter values would be lost. Composable continuations
+	// (call-with-composable-continuation) and timer interrupts deliberately do NOT
+	// snapshot: they compose with the invoker's continuation (no isolatedMarks), so
+	// they should see the invoker's marks, not a captured snapshot.
 	mc.SnapshotReachableMarksInto(comp)
 
 	capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
