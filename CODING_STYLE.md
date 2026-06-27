@@ -357,10 +357,19 @@ All Go-side errors use the `werr` package (`werr/werr.go`). Scheme-level error o
    werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "variable %q not found", name)
    ```
 
-4. **Native errors** - Scheme error objects (R7RS `error` procedure):
+4. **Native errors** - Scheme error objects (R7RS `error` procedure), for
+   *user-facing* failures a Scheme `guard` clause would catch:
    ```go
    values.NewErrorObject("something went wrong", irritant1, irritant2)
+   // Surfacing a Go failure: keep the sentinel as cause (errors.Is still matches)
+   // and the offending value as an irritant (a handler can dispatch on it):
+   values.NewErrorObjectWithCause("add: expected a number", werr.ErrNotANumber, arg)
+   // read/file: NewReadError / NewFileError / NewErrorObjectWithCauseAndKind carry
+   // the kind so read-error? / file-error? match.
    ```
+   Irritants and `kind` are Scheme `Value`s, so they attach only at or above the
+   `values` layer — at the primitive, not in `werr` (which must not depend on
+   `values`). See *Error Message Pattern* under Primitive Implementation Patterns.
 
 ### Error Comparison
 
@@ -873,7 +882,7 @@ func foldNumbers(ctx context.Context, identity values.Number, args values.Tuple,
 
 ### Error Message Pattern
 
-Include primitive name and expected vs actual type:
+Include the primitive name and expected vs actual type:
 
 ```go
 // Good - includes context
@@ -885,6 +894,33 @@ return werr.WrapForeignErrorf(werr.ErrBadIndex, "vector-ref: index %d out of bou
 // Avoid - missing context
 return werr.NewForeignErrorf("not a number")
 ```
+
+Context is necessary but not sufficient. A primitive's argument/type errors are
+*user-facing* — a Scheme programmer can `guard` them — and `%T` is lossy there: it
+keeps only the Go *type*, leaving a handler nothing to dispatch on. When the
+offending value is something a handler would inspect, construct the error object at
+the primitive, where the value is still in hand, so it survives as an irritant.
+`*values.NativeError` is both a Go `error` and a Scheme condition, so one call does it:
+
+```go
+// The "add: expected number" form above has context but is still lossy — arg's
+// value never reaches Scheme. Carry the value as an irritant instead:
+return values.NewErrorObjectWithCause("add: expected a number", werr.ErrNotANumber, arg)
+```
+
+That preserves everything the chain needs:
+- the offending value is a real irritant (`error-object-irritants`, dispatchable in a `guard` clause);
+- `errors.Is(err, werr.ErrNotANumber)` still matches — the sentinel is the wrapped cause (`Unwrap()`);
+- the return value *is* the condition, so it rides the existing `error` signature to the handler with no extra plumbing.
+
+For read/file failures use `NewReadError` / `NewFileError` (or
+`NewErrorObjectWithCauseAndKind`) so the kind rides along and `read-error?` /
+`file-error?` still match.
+
+Scope and economy:
+- Only user-facing failures become irritant-bearing conditions. Internal invariant violations ("impossible" states) stay `werr` or panic — a Scheme programmer should never be able to `guard` them.
+- Keep call sites to one line: factor a thin helper (e.g. `typeError(name, want string, got values.Value) *values.NativeError`) so the sentinel/kind/irritant wiring lives in one place.
+- When no live value is available to attach, format it into the message with `SchemeString()` (never `%T`) so the error is at least reconstructable from text — the fallback, not the goal.
 
 ## Helper Function Patterns
 
