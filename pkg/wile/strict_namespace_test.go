@@ -133,6 +133,51 @@ func TestStrictNamespaceBareSurface(t *testing.T) {
 	})
 }
 
+// TestStrictNamespaceR5RSOnBare is the headline goal: over a bare strict top
+// level, (import (scheme r5rs)) resolves and layers the R5RS surface on top.
+func TestStrictNamespaceR5RSOnBare(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("import (scheme r5rs) layers the R5RS surface", func(t *testing.T) {
+		got, err := evalUnderProfile(t, wile.Small,
+			`(import (scheme r5rs))
+			 (list (exact->inexact 1/2) (force (delay 7)) (call-with-current-continuation (lambda (k) 9)))`,
+			wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.Equals, "(0.5 7 9)")
+	})
+
+	t.Run("extension primitive reachable after explicit import", func(t *testing.T) {
+		got, err := evalUnderProfile(t, wile.Small,
+			`(import (scheme write)) (procedure? display)`, wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.Equals, "#t")
+	})
+
+	// Re-import identity (design D2 edge): importing (scheme base) re-introduces
+	// names that are also visible as core primitives. Import writes to the mutable
+	// global while core lives in the parent sealed base, so this must NOT raise
+	// ErrDuplicateBinding.
+	t.Run("re-import of core names does not conflict", func(t *testing.T) {
+		got, err := evalUnderProfile(t, wile.Small,
+			`(import (scheme base)) (car '(1 2))`, wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.Equals, "1")
+	})
+
+	// Imported procedure behaves under the default immutable-top-level /
+	// frame-reclaim regime when driven in a loop.
+	t.Run("imported procedure works in a loop", func(t *testing.T) {
+		got, err := evalUnderProfile(t, wile.Small,
+			`(import (scheme r5rs))
+			 (let loop ((i 0) (acc 0.0))
+			   (if (= i 100) acc (loop (+ i 1) (+ acc (exact->inexact i)))))`,
+			wile.WithStrictNamespace())
+		c.Assert(err, qt.IsNil)
+		c.Assert(got, qt.Equals, "4950.0")
+	})
+}
+
 // TestStrictNamespaceTinyParity confirms the strict bare surface equals a Tiny
 // engine's visible surface (design D2): the same snippet yields the same verdict
 // under Tiny and under Small+WithStrictNamespace, for a core op (both succeed)
