@@ -203,8 +203,15 @@ func TestParameterize(t *testing.T) {
 	}
 }
 
-func TestParameterizeRestoresOnException(t *testing.T) {
-	// Test that parameterize restores parameter value even when exception occurs
+func TestExceptionHandlerSeesParameterizeAtRaise(t *testing.T) {
+	// R7RS §6.11: raise-continuable invokes the handler "with the same dynamic
+	// environment as the call to raise-continuable" (only the current-handler binding
+	// is swapped). The call is inside (parameterize ((p 'modified)) ...), so the
+	// handler observes p = 'modified, and its return value becomes the result.
+	//
+	// (Wile previously returned 'original — the old handleException unwound the
+	// parameterize before calling the handler, an undocumented non-conformance. The
+	// handler-on-mark / RaiseInPlace design runs the handler in place, per spec.)
 	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (make-parameter 'original)))
 			(with-exception-handler
@@ -214,8 +221,22 @@ func TestParameterizeRestoresOnException(t *testing.T) {
 						(raise-continuable 'test)))))
 	`)
 	qt.Assert(t, err, qt.IsNil)
-	// After the exception handler runs, we should see 'original
-	// because parameterize should restore the value
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("modified"))
+}
+
+func TestParameterizeRestoredForGuardClause(t *testing.T) {
+	// The complementary property: a guard CLAUSE body runs at the guard form, OUTSIDE
+	// the parameterize the raise was inside — so by then the parameterize extent has
+	// been exited and the clause observes the restored value 'original. (The guard
+	// HANDLER still sees 'modified per §6.11; the clause body does not, because the
+	// escape to the guard form leaves the parameterize's dynamic extent.)
+	result, err := testhelpers.RunSchemeCode(t, `
+		(let ((p (make-parameter 'original)))
+			(guard (e (#t (p)))
+				(parameterize ((p 'modified))
+					(raise 'boom))))
+	`)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("original"))
 }
 
