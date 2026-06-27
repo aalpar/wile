@@ -511,6 +511,14 @@ func WithMutableTopLevel() EngineOption {
 // The profile (or explicit WithExtension set) remains the security boundary —
 // strict mode never widens what is reachable, it only withholds it from the top
 // level until imported. Off by default.
+//
+// The bare surface is carved when the namespace is built, so strictness must be
+// set at namespace-creation time. Like WithRegistry/WithExtension/WithoutCore,
+// this option has no effect on the WithNamespace path (a pre-built namespace is
+// authoritative for its own top level) — bake strictness in at NewNamespace.
+// It is incompatible with WithRegistry/WithoutCore (which supply a custom or
+// coreless registry): strict mode derives its bare surface from the default
+// core registry, so the combination is rejected at construction.
 func WithStrictNamespace() EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.strictNamespace = true

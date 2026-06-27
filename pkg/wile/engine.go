@@ -149,6 +149,17 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 // (NewEngine uses snapshots for extension library registration and closers for
 // Engine.Close).
 func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Namespace, []extSnapshot, []registry.Closeable, error) {
+	// Strict mode derives its bare top-level surface from the default core registry
+	// (coreOnlyRegistry below). A caller-supplied registry (WithRegistry/WithoutCore,
+	// both of which set cfg.registry) may omit or replace core, so minting fresh core
+	// would bind primitives the caller excluded — silently widening the top level past
+	// the configured registry and breaking the option's "never widens" invariant.
+	// Reject the combination rather than widen; use WithProfile to bound capability.
+	if cfg.strictNamespace && cfg.registry != nil {
+		return nil, nil, nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"WithStrictNamespace is incompatible with WithRegistry/WithoutCore: strict mode derives its bare surface from the default core registry; use WithProfile to bound capability")
+	}
+
 	reg, snapshots, closers, err := buildRegistry(cfg)
 	if err != nil {
 		return nil, nil, nil, err
@@ -425,8 +436,12 @@ func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserv
 	// instead. NewChildRuntime is a flat env (SealedBaseTarget is the frame itself),
 	// so the full registry lands in its own frame and does NOT pollute the shared
 	// sealed base — the user top level stays bare. Non-strict uses env directly.
+	// Only worth building when there are extension libraries to back: with no
+	// snapshots (zero-extension profile, or the pre-built-namespace path where
+	// snapshots is empty) registerExtensionLibraries is a no-op, so the full apply
+	// would be wasted.
 	synthEnv := env
-	if strictNamespace {
+	if strictNamespace && len(snapshots) > 0 {
 		synthEnv = ns.NewChildRuntime()
 		applyErr := applyBaseEnvironment(ctx, synthEnv, reg, applyOpts...)
 		if applyErr != nil {

@@ -21,6 +21,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/werr"
@@ -132,6 +133,8 @@ func TestStrictNamespaceBareSurface(t *testing.T) {
 	t.Run("extension primitive (display) NOT visible without import", func(t *testing.T) {
 		_, err := evalUnderProfile(t, wile.Small, `(procedure? display)`, wile.WithStrictNamespace())
 		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+			qt.Commentf("display must be unbound (ErrNoSuchBinding), got: %v", err))
 		c.Assert(err.Error(), qt.Contains, "display")
 	})
 }
@@ -190,15 +193,24 @@ func TestStrictNamespaceR5RSOnBare(t *testing.T) {
 func TestStrictNamespaceNoEscalation(t *testing.T) {
 	c := qt.New(t)
 
+	// Under Small the threads extension is unregistered, so no (wile threads)
+	// synthetic library exists and the loader falls through to the filesystem and
+	// fails with ErrFileNotFound. Asserting the specific sentinel (not just
+	// IsNotNil) keeps this security-invariant test from passing on an incidental
+	// failure (e.g. a missing FS layer would also be non-nil but a different kind).
 	t.Run("KitchenSink-only library unimportable under Small (non-strict)", func(t *testing.T) {
 		_, err := evalUnderProfile(t, wile.Small, `(import (wile threads)) (procedure? make-thread)`)
 		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, werr.ErrFileNotFound), qt.IsTrue,
+			qt.Commentf("want library unavailable (ErrFileNotFound), got: %v", err))
 	})
 
 	t.Run("KitchenSink-only library still unimportable under Small + strict", func(t *testing.T) {
 		_, err := evalUnderProfile(t, wile.Small,
 			`(import (wile threads)) (procedure? make-thread)`, wile.WithStrictNamespace())
 		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, werr.ErrFileNotFound), qt.IsTrue,
+			qt.Commentf("strict must not widen the importable set; want ErrFileNotFound, got: %v", err))
 	})
 
 	t.Run("importable under KitchenSink + strict (boundary is the profile, not strict)", func(t *testing.T) {
@@ -207,6 +219,38 @@ func TestStrictNamespaceNoEscalation(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(got, qt.Equals, "#t")
 	})
+}
+
+// TestStrictNamespaceRejectsCustomRegistry confirms strict mode is rejected when
+// combined with a caller-supplied registry (WithRegistry/WithoutCore). Strict
+// derives its bare surface from the default core registry, so a custom or coreless
+// registry would let the top level widen past the configured registry — the engine
+// rejects the combination at construction with ErrEngineInit rather than widen.
+func TestStrictNamespaceRejectsCustomRegistry(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	cases := []struct {
+		name string
+		opt  wile.EngineOption
+	}{
+		{
+			name: "WithoutCore",
+			opt:  wile.WithoutCore(),
+		},
+		{
+			name: "WithRegistry",
+			opt:  wile.WithRegistry(registry.NewRegistry()),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := wile.NewEngine(ctx, tc.opt, wile.WithStrictNamespace())
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrEngineInit), qt.IsTrue,
+				qt.Commentf("want ErrEngineInit, got: %v", err))
+		})
+	}
 }
 
 // TestStrictNamespaceOrthogonality confirms WithStrictNamespace composes
@@ -315,8 +359,12 @@ func TestStrictNamespaceTinyParity(t *testing.T) {
 			tinyVal, tinyErr := evalUnderProfile(t, wile.Tiny, tc.src)
 			strictVal, strictErr := evalUnderProfile(t, wile.Small, tc.src, wile.WithStrictNamespace())
 			if tc.wantErr {
-				c.Assert(tinyErr, qt.IsNotNil)
-				c.Assert(strictErr, qt.IsNotNil)
+				// Parity for the error case means fail ALIKE, not merely both fail:
+				// assert the same sentinel under Tiny and under Small+strict.
+				c.Assert(errors.Is(tinyErr, werr.ErrNoSuchBinding), qt.IsTrue,
+					qt.Commentf("Tiny: want ErrNoSuchBinding, got: %v", tinyErr))
+				c.Assert(errors.Is(strictErr, werr.ErrNoSuchBinding), qt.IsTrue,
+					qt.Commentf("Small+strict: want ErrNoSuchBinding, got: %v", strictErr))
 				return
 			}
 			c.Assert(tinyErr, qt.IsNil)

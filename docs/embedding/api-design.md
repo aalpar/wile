@@ -242,6 +242,15 @@ A bare top level is a valid import target: import installs resolved bindings int
 the mutable user-global frame, not the sealed base, so layering libraries on a
 strict engine works exactly as on a non-strict one.
 
+**Scope.** The bare surface is carved when the namespace is built, so strictness
+must be set at namespace-creation time. Like `WithRegistry`/`WithExtension`/
+`WithoutCore`, `WithStrictNamespace` has no effect on the `WithNamespace` path —
+a pre-built namespace is authoritative for its own top level, so bake strictness
+in at `NewNamespace`. It is also incompatible with `WithRegistry`/`WithoutCore`
+(which supply a custom or coreless registry): strict mode derives its bare
+surface from the default core registry, so that combination is rejected at
+construction with `ErrEngineInit`.
+
 ## Virtual Filesystem
 
 `WithSourceFS(fsys fs.FS)` adds a virtual filesystem layer to the source file resolver chain. Multiple calls add layers searched in call order. `WithSourceOS()` appends the OS filesystem to the chain. When no resolver options are used, the engine defaults to the OS filesystem. Once any resolver option is used, only the explicitly configured resolvers are active.
