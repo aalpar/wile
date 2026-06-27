@@ -334,6 +334,50 @@ func TestErrorErrors(t *testing.T) {
 	}
 }
 
+// TestErrorTypeCheckIsCatchableCondition pins the CODING_STYLE "Error Message
+// Pattern": error's own message-type check is user-facing (a Scheme guard can catch
+// it), so it raises a NativeError whose message survives and whose offending value
+// rides as an irritant — not a lossy %T Go-type string. Each case self-checks and
+// returns #t.
+func TestErrorTypeCheckIsCatchableCondition(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "non-string message is a catchable error-object",
+			code: `(guard (e ((error-object? e) #t) (#t #f))
+				(error 42))`,
+			out: values.TrueValue,
+		},
+		{
+			name: "offending value rides as an irritant",
+			code: `(guard (e ((error-object? e)
+			           (and (equal? (error-object-message e)
+			                        "error: message must be a string")
+			                (equal? (error-object-irritants e) '(42)))))
+				(error 42))`,
+			out: values.TrueValue,
+		},
+		{
+			name: "symbol message carried as irritant",
+			code: `(guard (e ((error-object? e)
+			           (equal? (error-object-irritants e) '(not-a-string))))
+				(error 'not-a-string))`,
+			out: values.TrueValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
+		})
+	}
+}
+
 // =============================================================================
 // error-object? Tests (R7RS §6.11)
 // =============================================================================

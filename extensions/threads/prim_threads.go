@@ -256,6 +256,22 @@ func PrimThreadJoin(mc machine.CallContext) error {
 			}
 			return &values.JoinTimeoutException{}
 		}
+		// A thread that ended via an uncaught Scheme exception surfaces it here as
+		// an *ErrExceptionEscape carrier (wrapped in *UncaughtThreadException). The
+		// carrier is already-formed control flow, so applyCallableError passes it
+		// through untouched — straight past any guard/with-exception-handler around
+		// the join. Re-raise the original condition in THIS (the joining) thread's
+		// dynamic environment via RaiseInPlace so its %exception-handlers run and a
+		// guard around thread-join! can catch it (SRFI-18). Other Go errors fall
+		// through to applyCallableError, which already re-raises them.
+		var escErr *machine.ErrExceptionEscape
+		if errors.As(err, &escErr) {
+			realMC, mcErr := machine.RequireMachineContext(mc, "thread-join!")
+			if mcErr != nil {
+				return mcErr
+			}
+			return machine.RaiseInPlace(realMC, escErr.Condition, false)
+		}
 		return err
 	}
 
