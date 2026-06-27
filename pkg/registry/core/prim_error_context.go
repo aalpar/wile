@@ -67,7 +67,7 @@ func PrimErrorContextStackTrace(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(stackTraceToSchemeList(ctx.StackTraceFrames()))
+	mc.SetValue(machine.StackTraceToSchemeList(ctx.StackTraceFrames()))
 	return nil
 }
 
@@ -119,43 +119,4 @@ func PrimErrorObjectStackTrace(mc machine.CallContext) error {
 	}
 	mc.SetValue(stv)
 	return nil
-}
-
-// stackTraceToSchemeList converts a machine.StackTrace to a Scheme list of alists.
-func stackTraceToSchemeList(st machine.StackTrace) values.Tuple {
-	if len(st) == 0 {
-		return values.EmptyList
-	}
-	frames := make([]values.Value, len(st))
-	for i, frame := range st {
-		frames[i] = stackFrameToAlist(frame)
-	}
-	return values.List(frames...)
-}
-
-// stackFrameToAlist converts a single machine.StackFrame to a Scheme alist.
-// The alist contains keys: name, file, line, column.
-// Example: ((name . "f") (file . "test.scm") (line . 10) (column . 5))
-func stackFrameToAlist(frame machine.StackFrame) values.Tuple {
-	name := frame.FunctionName
-	if name == "" {
-		name = "<anonymous>"
-	}
-
-	// Prefer CurrentLoc over CallSite for source info.
-	src := frame.CurrentLoc
-	if src == nil {
-		src = frame.CallSite
-	}
-
-	nameEntry := values.NewCons(values.NewSymbol("name"), values.NewString(name))
-	if src == nil {
-		return values.List(nameEntry)
-	}
-
-	fileEntry := values.NewCons(values.NewSymbol("file"), values.NewString(src.File))
-	lineEntry := values.NewCons(values.NewSymbol("line"), values.NewInteger(int64(src.Start.Line())))
-	colEntry := values.NewCons(values.NewSymbol("column"), values.NewInteger(int64(src.Start.Column())))
-
-	return values.List(nameEntry, fileEntry, lineEntry, colEntry)
 }

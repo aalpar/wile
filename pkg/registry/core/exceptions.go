@@ -21,10 +21,14 @@ import (
 
 func addExceptions(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "with-exception-handler", InvokesProcedure: true, ParamCount: 2, Impl: PrimWithExceptionHandler,
-			Doc: "Installs HANDLER as the current exception handler for the dynamic extent of THUNK. HANDLER receives the raised object.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"oops\")))  => 42", ParamNames: []string{"handler", "thunk"}, Category: "exceptions",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeProcedure}, ReturnType: values.TypeAny,
-			Keywords: []string{"try", "catch", "error handler", "trap"}},
+		// with-exception-handler is defined in Scheme (bootstrap_procedures.scm) as
+		// (parameterize ((%exception-handlers (cons handler (%exception-handlers)))) (thunk)),
+		// so the handler rides a continuation mark and is captured by call/cc. This
+		// primitive exposes the canonical parameter object that with-exception-handler
+		// parameterizes and that machine.RaiseInPlace reads.
+		{Name: "%exception-handler-parameter", ParamCount: 0, Impl: PrimExceptionHandlerParameter,
+			Doc: "Returns the canonical exception-handler parameter object (internal).", Category: "exceptions",
+			ReturnType: values.TypeAny},
 		// raise/error never return normally — ReturnType is a nominal TypeAny.
 		{Name: "raise", InvokesProcedure: true, ParamCount: 1, Impl: PrimRaise,
 			Doc: "Raises OBJ as a non-continuable exception. If the handler returns, a secondary exception is raised.\n\nExamples:\n  (guard (e (#t e)) (raise \"oops\"))  => \"oops\"", ParamNames: []string{"obj"}, Category: "exceptions",

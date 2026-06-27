@@ -18,11 +18,11 @@ import (
 // continuation manipulation) should type-assert to *MachineContext.
 type ForeignFunction func(mc CallContext) error
 
-// goErrorToSchemeException converts a Go error to a Scheme exception escape.
-// It detects ForeignFileError and ForeignReadError to set the appropriate
-// NativeError kind per R7RS §6.11. The MachineContext is used to capture
-// the source location and stack trace at the point where the error occurred.
-func goErrorToSchemeException(mc *MachineContext, err error) error {
+// goErrorToCondition converts a Go error into a Scheme condition object (a
+// NativeError). It detects ForeignFileError and ForeignReadError to set the
+// appropriate NativeError kind per R7RS §6.11. RaiseInPlace later stamps the
+// raise-site source location and stack trace onto it.
+func goErrorToCondition(err error) values.Value {
 	kind := values.NativeErrorKindGeneric
 	var fileErr *werr.ForeignFileError
 	var readErr *werr.ForeignReadError
@@ -31,20 +31,15 @@ func goErrorToSchemeException(mc *MachineContext, err error) error {
 	} else if errors.As(err, &readErr) {
 		kind = values.NativeErrorKindRead
 	}
-	errObj := values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
-	return &ErrExceptionEscape{
-		Condition:   errObj,
-		Continuable: false,
-		Handled:     false,
-		Source:      mc.CurrentSource(),
-		StackTrace:  mc.CaptureStackTrace(defaultBacktraceDepth),
-	}
+	return values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
 }
 
-// applyCallableError converts errors from ApplyCallable into Scheme
-// exceptions so they are catchable by guard and with-exception-handler.
-// Errors that are already Scheme-level control flow (exception escapes,
-// prompt aborts) pass through unchanged.
+// applyCallableError converts a Go error from a primitive into a Scheme exception
+// by invoking the current handler in place (RaiseInPlace) — the single bridge
+// between Go-level failures and the mark-based handler chain, so they are catchable
+// by guard and with-exception-handler. Errors that are already Scheme-level control
+// flow pass through unchanged: prompt aborts (a handler escaping), the uncaught
+// exception carrier (a deeper RaiseInPlace found no handler), and timer interrupts.
 func applyCallableError(mc *MachineContext, err error) error {
 	var abortErr *ErrPromptAbort
 	if errors.As(err, &abortErr) {
@@ -58,7 +53,7 @@ func applyCallableError(mc *MachineContext, err error) error {
 	if errors.As(err, &timerErr) {
 		return err
 	}
-	return goErrorToSchemeException(mc, err)
+	return RaiseInPlace(mc, goErrorToCondition(err), false)
 }
 
 var _ Closure = (*ForeignClosure)(nil)

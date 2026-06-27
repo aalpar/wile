@@ -7,6 +7,20 @@
 ;; bootstrap_macros.scm (e.g. forms/macros such as case-lambda, let,
 ;; begin, and). They are loaded before any user code runs.
 
+;; Exception handling (R7RS §6.11)
+;;
+;; The current exception-handler stack rides %exception-handlers, a parameter
+;; (continuation-mark-backed), so a continuation captured under a handler is
+;; restored with that handler current on re-entry. with-exception-handler pushes
+;; a handler by parameterizing the list; raise / raise-continuable / error and the
+;; Go-error bridge read it via machine.RaiseInPlace (machine/exception_raise.go).
+(define %exception-handlers (%exception-handler-parameter))
+
+(define (with-exception-handler handler thunk)
+  "Installs HANDLER as the current exception handler for the dynamic extent of THUNK. HANDLER receives the raised object.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"oops\")))  => 42\n\nParameters:\n  handler : procedure\n  thunk : procedure\nReturns: any\nCategory: exceptions"
+  (parameterize ((%exception-handlers (cons handler (%exception-handlers))))
+    (thunk)))
+
 ;; CxR accessors (R7RS §6.4, also in (scheme cxr) library)
 ;; Defined here so they are available to bootstrap procedures below
 ;; (e.g. assoc uses caar, list? uses cddr).

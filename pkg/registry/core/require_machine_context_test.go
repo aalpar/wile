@@ -71,7 +71,6 @@ func TestPrimitivesRejectForeignCallContext(t *testing.T) {
 		{"call-with-immediate-continuation-mark", core.PrimCallWithImmediateContMark},
 		{"make-parameter", core.PrimMakeParameter},
 		{"%parameter-convert", core.PrimParameterConvert},
-		{"with-exception-handler", core.PrimWithExceptionHandler},
 		{"raise", core.PrimRaise},
 		{"raise-continuable", core.PrimRaiseContinuable},
 		{"error", core.PrimError},

@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -24,253 +23,44 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// PrimWithExceptionHandler implements the with-exception-handler primitive.
-// (with-exception-handler handler thunk)
-// Installs handler as exception handler during thunk execution.
-func PrimWithExceptionHandler(cc machine.CallContext) error {
-	mc, err := machine.RequireMachineContext(cc, "with-exception-handler")
-	if err != nil {
-		return err
-	}
-	handler, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "with-exception-handler")
-	if err != nil {
-		return err
-	}
-	thunk, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "with-exception-handler")
-	if err != nil {
-		return err
-	}
+// Exception handling rides a continuation-mark-backed parameter so it travels with
+// captured continuations (R7RS §6.11; see machine.RaiseInPlace and
+// machine/exception_raise.go). with-exception-handler is defined in Scheme as
+// (parameterize ((%exception-handlers (cons handler (%exception-handlers)))) (thunk));
+// raise / raise-continuable / error and the Go-error bridge all funnel through the
+// single machine.RaiseInPlace helper.
 
-	// Push handler onto exception handler stack
-	mc.PushExceptionHandler(handler)
-
-	// Run thunk in sub-context
-	// Exception handler automatically inherited from parent (M3 fix)
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-
-	_, err = sub.ApplyCallable(thunk)
-	if err != nil {
-		mc.PopExceptionHandler()
-		return err
-	}
-
-	thunkErr := sub.Run()
-
-	// Check for exception escape
-	var excErr *machine.ErrExceptionEscape
-	if errors.As(thunkErr, &excErr) && !excErr.Handled {
-		return handleException(mc, excErr, handler)
-	}
-
-	// Pop handler on normal completion
-	mc.PopExceptionHandler()
-
-	// Check for other errors
-	if thunkErr != nil {
-		return thunkErr
-	}
-
-	// Return thunk's result
-	mc.SetValue(sub.GetValue())
+// PrimExceptionHandlerParameter returns the canonical exception-handler parameter
+// (machine.ExceptionHandlerParam). Bootstrap binds its result to the global
+// %exception-handlers, which the Scheme with-exception-handler parameterizes.
+func PrimExceptionHandlerParameter(cc machine.CallContext) error {
+	cc.SetValue(machine.ExceptionHandlerParam())
 	return nil
 }
 
-// callExceptionHandler invokes the exception handler with the given condition.
-// If errCtx is non-nil, it is set as a continuation mark on the sub-context
-// so that (current-error-context) can retrieve it inside the handler.
-// Returns the handler's return value, or an error if the handler raised an exception
-// or escaped via continuation.
-func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Callable, errCtx *machine.ErrorContext) (values.Value, error) {
-	// Exception handler automatically inherited from parent (M3 fix)
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-
-	if errCtx != nil {
-		sub.SetMark(machine.ErrorContextKey(), errCtx)
-
-		// Enrich NativeError conditions with source location and stack trace
-		// so error-object-source and error-object-stack-trace can access them
-		// without needing the ErrorContext.
-		// Enrich only once — preserve the original raise site if re-raised.
-		ne, ok := condition.(*values.NativeError)
-		if ok && ne.SourceLocation() == "" {
-			ne.SetSourceLocation(errCtx.SourceLocation())
-			ne.SetStackTraceValue(stackTraceToSchemeList(errCtx.StackTraceFrames()))
-		}
-	}
-
-	_, err := sub.ApplyCallable(handler, condition)
-	if err != nil {
-		return nil, err
-	}
-
-	err = sub.Run()
-
-	if err != nil {
-		return nil, err
-	}
-
-	return sub.GetValue(), nil
-}
-
-// resumeFromContinuation resumes execution from a captured continuation with the given value.
-// Returns the result of the resumed execution, or an error.
-// If cont is nil (raise-continuable was in tail position), returns value directly.
-func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
-	if cont == nil {
-		// raise-continuable was in tail position - no continuation to resume
-		// The handler's return value becomes the final result
-		return value, nil
-	}
-
-	// Exception handler automatically inherited from parent (M3 fix)
-	resumeSub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(resumeSub)
-	resumeSub.Restore(cont)
-	resumeSub.SetValue(value)
-
-	err := resumeSub.Run()
-	if err != nil {
-		return nil, err
-	}
-
-	return resumeSub.GetValue(), nil
-}
-
-// handleException processes an exception by calling the handler and, for continuable
-// exceptions, resuming execution from the raise-continuable call site per R7RS §6.11.
-func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Callable) error {
-	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
-	mc.PopExceptionHandler()
-
-	// Unwind the winding stack: run after thunks for any dynamic-wind frames
-	// that were entered between the exception handler installation and the raise point.
-	// This ensures parameterize restores values before the handler sees them.
-	if excErr.WindingStack != nil {
-		// Find common ancestor between exception's winding stack and current
-		currentStack := mc.WindingStack()
-		commonDepth := machine.FindCommonWindingPrefix(excErr.WindingStack, currentStack)
-
-		// Unwind frames that were entered after the handler was installed
-		for i := len(excErr.WindingStack) - 1; i >= commonDepth; i-- {
-			frame := excErr.WindingStack[i]
-			if frame.After == nil {
-				continue
-			}
-			// Truncated stack: the after thunk runs at depth i during exception unwind.
-			sub := mc.NewSubContextWithWinding(excErr.WindingStack[:i])
-			_, err := sub.ApplyCallable(frame.After)
-			if err != nil {
-				machine.ReleaseSubContext(sub)
-				return err
-			}
-			err = sub.Run()
-			machine.ReleaseSubContext(sub)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	// Build error context from the exception's diagnostic info.
-	errCtx := machine.NewErrorContext(excErr.Source, excErr.StackTrace, nil)
-
-	for {
-		// Call handler with the condition
-		handlerResult, err := callExceptionHandler(mc, excErr.Condition, handler, errCtx)
-		if err != nil {
-			return err
-		}
-
-		// Non-continuable exception - handler should not return
-		if !excErr.Continuable {
-			return werr.WrapForeignErrorf(werr.ErrNonContinuableException, "exception handler returned from non-continuable exception")
-		}
-
-		// Continuable: resume execution from the captured continuation
-		// Push handler back so subsequent exceptions in resumed code use this handler
-		mc.PushExceptionHandler(handler)
-
-		resumeResult, resumeErr := resumeFromContinuation(mc, excErr.Continuation, handlerResult)
-
-		// Check if resumed code raised another exception
-		var newExcErr *machine.ErrExceptionEscape
-		if errors.As(resumeErr, &newExcErr) && !newExcErr.Handled {
-			// Pop handler (will be pushed again when we loop)
-			mc.PopExceptionHandler()
-			excErr = newExcErr
-			errCtx = machine.NewErrorContext(newExcErr.Source, newExcErr.StackTrace, nil)
-			continue // Loop to handle new exception
-		}
-
-		// Clean up handler stack
-		mc.PopExceptionHandler()
-
-		if resumeErr != nil {
-			return resumeErr
-		}
-
-		// Normal completion
-		mc.SetValue(resumeResult)
-		excErr.Handled = true
-		return nil
-	}
-}
-
-// PrimRaise implements the raise primitive.
-// (raise obj)
-// Raises a non-continuable exception with obj as the condition.
+// PrimRaise implements (raise obj): invokes the current exception handler on obj as
+// a non-continuable exception.
 func PrimRaise(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "raise")
 	if err != nil {
 		return err
 	}
-	obj := mc.Arg(0)
-
-	return &machine.ErrExceptionEscape{
-		Condition:    obj,
-		Continuable:  false,
-		Handled:      false,
-		WindingStack: mc.WindingStack().Copy(),
-		Source:       mc.CurrentSource(),
-		StackTrace:   mc.CaptureStackTrace(20),
-	}
+	return machine.RaiseInPlace(mc, mc.Arg(0), false)
 }
 
-// PrimRaiseContinuable implements the raise-continuable primitive.
-// (raise-continuable obj)
-// Raises a continuable exception with obj as the condition.
-// If the handler returns, its return value becomes the value of raise-continuable,
-// and execution continues from the call site per R7RS §6.11.
+// PrimRaiseContinuable implements (raise-continuable obj): invokes the current
+// handler; if the handler returns, its value becomes the value of the
+// raise-continuable expression and execution resumes at the call site (R7RS §6.11).
 func PrimRaiseContinuable(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "raise-continuable")
 	if err != nil {
 		return err
 	}
-	obj := mc.Arg(0)
-
-	// Copy continuation to prevent mutation issues during handler execution.
-	// This follows the pattern established by call/cc.
-	cont := mc.Parent()
-	if cont != nil {
-		cont = cont.DeepCopy()
-	}
-
-	return &machine.ErrExceptionEscape{
-		Condition:    obj,
-		Continuable:  true,
-		Continuation: cont,
-		Handled:      false,
-		WindingStack: mc.WindingStack().Copy(),
-		Source:       mc.CurrentSource(),
-		StackTrace:   mc.CaptureStackTrace(20),
-	}
+	return machine.RaiseInPlace(mc, mc.Arg(0), true)
 }
 
-// PrimError implements the error primitive.
-// (error message irritant ...)
-// Creates an error object with the given message and irritants, then raises it.
+// PrimError implements (error message irritant ...): builds an error object from
+// MESSAGE and irritants, then raises it as a non-continuable exception.
 func PrimError(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "error")
 	if err != nil {
@@ -285,7 +75,9 @@ func PrimError(cc machine.CallContext) error {
 			"error: message must be a string but got %T", message)
 	}
 
-	// Convert irritants list to slice
+	// Copy irritants out of the variadic rest-arg buffer (restArgBuf) into a fresh
+	// slice; NewErrorObject retains them, and the rest-arg list is only valid for
+	// the duration of this call.
 	var irritants []values.Value
 	irritantsTuple, ok := irritantsList.(values.Tuple)
 	if !ok {
@@ -300,17 +92,8 @@ func PrimError(cc machine.CallContext) error {
 		return err
 	}
 
-	// Create error object and raise it
 	errObj := values.NewErrorObject(msgStr.Value, irritants...)
-
-	return &machine.ErrExceptionEscape{
-		Condition:    errObj,
-		Continuable:  false,
-		Handled:      false,
-		WindingStack: mc.WindingStack().Copy(),
-		Source:       mc.CurrentSource(),
-		StackTrace:   mc.CaptureStackTrace(20),
-	}
+	return machine.RaiseInPlace(mc, errObj, false)
 }
 
 // PrimErrorObjectQ implements the error-object? predicate.

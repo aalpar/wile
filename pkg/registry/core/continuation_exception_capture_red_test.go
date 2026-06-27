@@ -43,8 +43,6 @@ import (
 // SKIP until the handler is reified into the captured continuation (handler-as-
 // mark; see the plan's "The target" diagram and "Next steps").
 func TestExceptionHandlerNotCapturedByContinuation(t *testing.T) {
-	t.Skip("RED: handler not captured by continuation; unskip when handler-as-mark lands (plans/2026-06-26-subcontext-continuation-the-open-problem.local.md)")
-
 	const code = `
 (call/cc (lambda (done)
   (let ((k #f) (log '()))
@@ -101,8 +99,6 @@ func TestExceptionHandlerSelfReRaiseEscalates(t *testing.T) {
 //
 // RED on HEAD 9540d515: got "(resumed-with sentinel-value)", want "(resumed-with inner-value)".
 func TestRaiseContinuableThroughReinvokedContinuation(t *testing.T) {
-	t.Skip("RED: continuable handler not captured by continuation; unskip when handler-as-mark lands (plans/2026-06-26-subcontext-continuation-the-open-problem.local.md)")
-
 	const code = `
 (call/cc (lambda (done)
   (let ((k #f) (first #t))
