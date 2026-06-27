@@ -73,11 +73,11 @@ type MachineContext struct {
 	// the capture-time reachable-marks snapshot, consulted by findParameterInMarks at
 	// the isolatedMarks break so outer parameter/handler marks survive resume.
 	capturedMarks []markEntry
-	debugger         *Debugger            // optional debugger for breakpoints and stepping
-	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
-	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
-	barrierValid     *BarrierToken        // non-nil when inside a with-continuation-barrier; pointer identity identifies the barrier
-	counters         VMCounters           // performance counters (plain uint64, single-goroutine)
+	debugger      *Debugger            // optional debugger for breakpoints and stepping
+	parentMC      *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
+	escapeCont    *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
+	barrierValid  *BarrierToken        // non-nil when inside a with-continuation-barrier; pointer identity identifies the barrier
+	counters      VMCounters           // performance counters (plain uint64, single-goroutine)
 	// thread is the SRFI-18 thread object (nil = primordial thread).
 	// This is the Scheme-visible half of the thread identity split.
 	// The numeric half (threadID) lives in vmState and propagates into
