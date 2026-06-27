@@ -85,10 +85,17 @@ func PrimError(cc machine.CallContext) error {
 	var irritants []values.Value
 	irritantsTuple, ok := irritantsList.(values.Tuple)
 	if !ok {
-		// User-facing condition; carry the offending value as an irritant and keep the
-		// sentinel as the wrapped cause (see the message-type check above).
-		return machine.RaiseInPlace(mc,
-			values.NewErrorObjectWithCause("error: irritants must be a proper list", werr.ErrNotAList, irritantsList), false)
+		// Unreachable from Scheme. error is variadic (ParamCount: 2, IsVariadic), so
+		// Arg(1) is the VM-collected rest, which the rest-arg binding always
+		// materializes as a proper list (R7RS §4.1.4: rest is "a newly allocated list";
+		// §6.10: apply rejects an improper args tail before error ever runs). A non-list
+		// here means a Go-side VM invariant was violated (restArgBuf corrupted), not bad
+		// user input — an impossible state, not a catchable user condition. Panic with
+		// location context per CLAUDE.md "impossible states stay werr or panic"; raising
+		// a NativeError here (as the reachable message-type check above does) would
+		// advertise a user error for a state no Scheme program can produce.
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList,
+			"error: rest-arg buffer is not a proper list (VM invariant violated)"))
 	}
 	err = helpers.ForEachList(mc.Context(), irritantsTuple, "error", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		irritants = append(irritants, v)
