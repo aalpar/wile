@@ -32,19 +32,25 @@ import (
 // raise reads the innermost mark (the whole stack), and re-marks to its cdr for the
 // handler call so a re-raise escalates to the parent. No mutation, no Go field.
 const handlerMarkPrototype = `
-  (define exc-key (list 'exc))
-  (define (default-h obj) (error "uncaught-exception" obj))
-  (define (handlers)
-    (continuation-mark-set-first (current-continuation-marks) exc-key (list default-h)))
+  ;; The handler stack rides a PARAMETER, not a raw continuation mark. This is the
+  ;; load-bearing choice (step-2 finding): a parameter READ goes through
+  ;; findParameterInMarks, which HOPS parentMC (machine_context_apply.go:362-384)
+  ;; and so spans the sub-contexts that call-with-continuation-prompt / apply /
+  ;; call-with-values create. Raw current-continuation-marks does NOT hop parentMC
+  ;; (continuation_mark_set.go:144) and stops at the prompt -- which is exactly why
+  ;; the first prototype missed a handler installed above an explicit prompt.
+  (define exc-param
+    (make-parameter (list (lambda (obj) (error "uncaught-exception" obj)))))
+  (define (handlers) (exc-param))
   (define (p-weh handler thunk)
-    (with-continuation-mark exc-key (cons handler (handlers)) (thunk)))
+    (parameterize ((exc-param (cons handler (handlers)))) (thunk)))
   (define (p-raise obj)
     (let* ((hs (handlers)) (h (car hs)) (parent (cdr hs)))
-      (with-continuation-mark exc-key parent (h obj))
+      (parameterize ((exc-param parent)) (h obj))
       (error "non-continuable-raise-handler-returned" obj)))
   (define (p-raise-continuable obj)
     (let* ((hs (handlers)) (h (car hs)) (parent (cdr hs)))
-      (with-continuation-mark exc-key parent (h obj))))
+      (parameterize ((exc-param parent)) (h obj))))
 `
 
 func runProto(t *testing.T, probe string) string {
@@ -107,21 +113,14 @@ func TestHandlerAsMarkPrototype_RaiseContinuableThroughReinvoke(t *testing.T) {
 	qt.Assert(t, got, qt.Equals, "(resumed-with inner-value)")
 }
 
-// Probe 4 (step 2: prompt-bounded mark lookup): the handler is installed OUTSIDE an
-// explicit continuation prompt; a raise INSIDE the prompt must still find it. This
-// is the failure mode flagged as most likely in the plan -- current-continuation-marks
-// is documented as prompt-bounded (cont_marks.go:28). If the lookup stops at the
-// inner prompt, the handler is missed and default-h errors "uncaught-exception".
+// Probe 4 (step 2: handler visible across an explicit prompt): the handler is
+// installed OUTSIDE a call-with-continuation-prompt; a raise INSIDE the prompt must
+// still find it. RESOLVED -- passes with the parameter-based storage above, because
+// a parameter read hops parentMC (findParameterInMarks) and so spans the prompt's
+// sub-context. The earlier raw-continuation-mark prototype FAILED this exact probe
+// (current-continuation-marks does not hop parentMC); switching the carrier to a
+// parameter is the fix. No VM change required for handler lookup.
 func TestHandlerAsMarkPrototype_HandlerVisibleAcrossPrompt(t *testing.T) {
-	t.Skip("OPEN obstacle (step 2): a handler installed above an explicit " +
-		"call-with-continuation-prompt is NOT visible to a raise inside it -- " +
-		"current-continuation-marks is prompt-bounded (cont_marks.go:28), and the " +
-		"default-prompt-tag lookup variant does not fix it either (verified). Needs " +
-		"VM-level design (likely the call-with-continuation-prompt sub-context/mark " +
-		"interaction), not a Scheme one-liner. NOTE: guard escapes via call/cc to " +
-		"DefaultPromptTag and DOES cross (see the Capture probe), so this bites only " +
-		"explicit nested prompts -- scope the real fix accordingly.")
-
 	got := runProto(t, `
 (let ((tag (make-continuation-prompt-tag 'p)))
   (call/cc (lambda (done)
