@@ -179,6 +179,7 @@ Engine behavior can be customized via functional options:
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
 | `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. See "Option ordering" below |
+| `WithStrictNamespace()` | Bind only the core surface at the top level; the profile's extension primitives stay importable but are not pre-bound. See "Strict namespace" below |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
@@ -204,6 +205,42 @@ Wile provides two independent sandboxing layers.
 **Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (resources: `file`, `code`, `env`, `process`; actions: `read`, `write`, `delete`, `stat`, `load`, `exit`, `exec`, `exec-shell`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `ReadOnlyWithLoad()`, `FilesystemRoot(path)`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`, `SandboxAuthorizer(envPrefix)`, `All(authorizers...)`. Profiles bundle a matching authorizer; `WithSandbox` adds `SandboxAuthorizer` on top via `All(...)`.
 
 The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`security/sandboxing.md`](../security/sandboxing.md) for the full security model.
+
+### Strict namespace
+
+By default Wile is batteries-included: a profile's extension primitives are
+pre-bound at the top level, so `(display x)` and `(+ 1 2)` work with no `import`.
+This is the "feels native to Go" scripting ergonomic, mirroring Racket's `racket`
+vs `racket/base`.
+
+`WithStrictNamespace()` opts into an R7RS-strict *visible* surface: only the core
+primitives (and the `define`/`import`/syntax machinery) are bound at the top
+level. The profile's extension primitives stay **registered** — reachable via
+`(import …)` — but are not pre-bound. The bare surface equals a `Tiny` engine's,
+while the full profile registry still backs library loading, so libraries layer
+on top of a bare baseline:
+
+```go
+eng, _ := wile.NewEngine(ctx,
+    wile.WithProfile(wile.Small), wile.WithStrictNamespace(),
+    wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+
+eng.EvalMultiple(ctx, "(car '(1 2))")                       // 1   — core visible
+eng.EvalMultiple(ctx, "(display 1)")                        // error: no binding "display"
+eng.EvalMultiple(ctx, "(import (scheme r5rs)) (exact->inexact 1/2)") // 0.5 — layered on top
+```
+
+**Security is unchanged.** The profile (the registered extension set) remains the
+capability boundary — strict mode never widens what is reachable, it only
+withholds it from the top level until imported. `WithProfile(Small) +
+WithStrictNamespace()` exposes exactly the `Small` surface, just bare until
+imported. The option is orthogonal to `WithProfile`/`WithSandbox`/`WithAuthorizer`
+and composes order-independently with them. Off by default (the batteries-included
+top level is preserved for compatibility and the REPL/CLI experience).
+
+A bare top level is a valid import target: import installs resolved bindings into
+the mutable user-global frame, not the sealed base, so layering libraries on a
+strict engine works exactly as on a non-strict one.
 
 ## Virtual Filesystem
 

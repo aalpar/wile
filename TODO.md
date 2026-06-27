@@ -106,6 +106,13 @@ both causes (merge `43d7d085`).
   primitives (needs registry-layer involvement) or register deny-stub bindings; if
   no → current stricter behavior + improved diagnostic is the resolution. Full
   differential and options in [#801](https://github.com/aalpar/wile/issues/801).
+- **Note (strict-namespace mode):** `WithStrictNamespace()` lets an embedder run a
+  bare top level over a profile whose extensions *are* registered (e.g.
+  `WithProfile(Small) + WithStrictNamespace()`), so `(import (scheme r5rs))` layers
+  cleanly on a bare baseline. This sidesteps the #801 subset-import friction for that
+  use case (the primitives exist in the importable registry); it does **not** resolve
+  #801 itself, which concerns genuinely-`Tiny` profiles where the primitives are
+  registered nowhere.
 
 ### Layered-environment carve regressions (review `d8911c15..HEAD`, 2026-06-15)
 

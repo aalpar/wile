@@ -43,6 +43,14 @@
 //	    wile.WithExtension(system.Extension),
 //	)
 //
+// Strict namespace (bare top level; layer R7RS libraries on top):
+//
+//	engine, err := wile.NewEngine(ctx,
+//	    wile.WithProfile(wile.Small), wile.WithStrictNamespace(),
+//	    wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths(),
+//	)
+//	// (display 1) errors until imported; (import (scheme r5rs)) layers it on.
+//
 // Custom primitives:
 //
 //	engine, _ := wile.NewEngine(ctx)
