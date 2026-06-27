@@ -35,6 +35,17 @@ type ComposableContinuation struct {
 	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
 	bottom       *MachineContinuation // bottom frame of segment; for parent reset on re-invocation
 	consumed     bool                 // true after first AcquireSegment call
+	// SPIKE(B-marks): snapshot of the parentMC-reachable marks (parameter/handler
+	// dynamic environment) at capture time — the marks ABOVE any sub-context
+	// boundary that the captured cont chain does not itself carry. Re-installed as a
+	// findParameterInMarks fallback on resume so a continuation captured inside a
+	// call-with-values producer (etc.) restores the outer handler/parameter values.
+	capturedMarks []markEntry
+}
+
+// SetCapturedMarks stores the capture-time reachable-marks snapshot (SPIKE B-marks).
+func (p *ComposableContinuation) SetCapturedMarks(m []markEntry) {
+	p.capturedMarks = m
 }
 
 // bottomOfChain walks a continuation chain to its terminal frame (parent == nil).

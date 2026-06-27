@@ -69,6 +69,10 @@ type MachineContext struct {
 	cont             *MachineContinuation // current continuation
 	expansion        *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
 	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
+	// SPIKE(B-marks): when this context runs a resumed continuation (isolatedMarks),
+	// the capture-time reachable-marks snapshot, consulted by findParameterInMarks at
+	// the isolatedMarks break so outer parameter/handler marks survive resume.
+	capturedMarks []markEntry
 	debugger         *Debugger            // optional debugger for breakpoints and stepping
 	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
 	escapeCont       *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes

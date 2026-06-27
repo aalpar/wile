@@ -379,11 +379,63 @@ func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
 		// Stop if this context has isolated marks (e.g., applyCapturedContinuation
 		// sub-context running a different continuation chain).
 		if mc.isolatedMarks {
+			// SPIKE(B-marks): isolatedMarks cut off parentMC so the invoker's marks
+			// don't bleed in — but the resumed continuation's OWN capture-time outer
+			// marks (above the sub-context boundary it was captured behind) must still
+			// resolve. Consult the snapshot taken at capture before stopping.
+			for _, e := range mc.capturedMarks {
+				if values.EqIdentity(e.key, param) {
+					return e.val
+				}
+			}
 			break
 		}
 		mc = mc.parentMC
 	}
 	return nil
+}
+
+// collectReachableMarks (SPIKE B-marks) snapshots the effective mark environment
+// reachable from p: for each key, the nearest value, across the local marks, the
+// continuation chain, and parentMC (stopping at an isolatedMarks boundary, but
+// folding in that boundary's own snapshot so nested resumes chain). Taken at
+// call/cc capture so a continuation captured inside a sub-context can restore the
+// outer parameter/handler marks on resume.
+func (p *MachineContext) collectReachableMarks() []markEntry {
+	var out []markEntry
+	add := func(e markEntry) {
+		for i := range out {
+			if values.EqIdentity(out[i].key, e.key) {
+				return
+			}
+		}
+		out = append(out, e)
+	}
+	mc := p
+	for mc != nil {
+		for _, e := range mc.marks {
+			add(e)
+		}
+		for c := mc.cont; c != nil; c = c.parent {
+			for _, e := range c.marks {
+				add(e)
+			}
+		}
+		if mc.isolatedMarks {
+			for _, e := range mc.capturedMarks {
+				add(e)
+			}
+			break
+		}
+		mc = mc.parentMC
+	}
+	return out
+}
+
+// SnapshotReachableMarksInto (SPIKE B-marks) attaches p's capture-time reachable
+// marks to comp, so resuming comp restores the outer parameter/handler environment.
+func (p *MachineContext) SnapshotReachableMarksInto(comp *ComposableContinuation) {
+	comp.SetCapturedMarks(p.collectReachableMarks())
 }
 
 // ResolveParameterValue returns the effective value of a parameter, checking
@@ -442,6 +494,12 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// for the local Drain/SetValues aliasing.
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
+
+	// SPIKE(B-marks): install the capture-time reachable-marks snapshot on the
+	// resumed context. This context runs with isolatedMarks set (parentMC cut), so
+	// findParameterInMarks consults this snapshot to resolve the outer
+	// parameter/handler marks the captured chain was sitting beneath.
+	p.capturedMarks = cc.capturedMarks
 
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.

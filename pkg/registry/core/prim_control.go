@@ -161,6 +161,10 @@ func PrimCallCC(cc machine.CallContext) error {
 	segment := mc.SliceContinuationAt(nil)
 	windingStack := mc.WindingStack().Copy()
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
+	// SPIKE(B-marks): snapshot the parentMC-reachable marks so a continuation
+	// captured inside a sub-context (e.g. a call-with-values producer) restores the
+	// outer parameter/handler environment on resume.
+	mc.SnapshotReachableMarksInto(comp)
 
 	capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 
