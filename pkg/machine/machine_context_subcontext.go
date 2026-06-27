@@ -40,6 +40,23 @@ import (
 //
 // The escapeCont field is inherited, allowing nested sub-contexts to know where execution
 // should continue after their completion (set by dynamic-wind and similar constructs).
+
+// mutableRuntimeFor resolves the mutable runtime global for a sub-context of p. It
+// tries p's lexical env chain first (the common case: one frame, with a namespace),
+// then falls back along the parentMC chain — necessary when p.env is a detached
+// transient frame (nil parent, nil namespace), whose owning namespace is reachable
+// only through the synchronous parent context. The final p.env return is a
+// belt-and-suspenders fallback; a root context always carries a namespace-bearing env.
+func mutableRuntimeFor(p *MachineContext) *environment.EnvironmentFrame {
+	for c := p; c != nil; c = c.parentMC {
+		rt := c.env.MutableRuntimeOrNil()
+		if rt != nil {
+			return rt
+		}
+	}
+	return p.env
+}
+
 func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
@@ -48,8 +65,12 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	// envPooled: zero value (false) — sub-context env is top-level, not from pool.
 	// Capture the mutable runtime: load/eval/call-with-exit run here and their defines
 	// must land in the user-visible mutable global (it reaches the sealed base via its
-	// parent walk).
-	mc.env = p.env.MutableRuntime()
+	// parent walk). p.env is usually a namespace-carrying frame, but some transient
+	// execution frames are detached (nil parent, nil namespace) — e.g. a procedure
+	// body entered while running a call-with-values producer, the site RaiseInPlace
+	// dispatches a handler from. There the namespace is reachable only via parentMC,
+	// so fall back along that chain rather than dereferencing a nil namespace.
+	mc.env = mutableRuntimeFor(p)
 	mc.evals = mc.acquireStack()
 	mc.threadID = p.threadID
 	mc.parentMC = p

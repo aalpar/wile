@@ -49,6 +49,21 @@ func TestMarks_OuterParamSurvivesCaptureAcrossProducer(t *testing.T) {
 // B-marks and is not retested here; B-marks concerns marks ABOVE the boundary, which
 // the two tests around this note cover.
 
+// Regression: a Go primitive error raised INSIDE a Scheme procedure (sq = (* x x)),
+// caught by guard, in a begin context. The procedure-body frame can be detached from
+// its namespace (nil parent, nil namespace) when reached through guard's
+// call-with-values producer; RaiseInPlace dispatches the handler via NewSubContext at
+// that error site, which must resolve the namespace via parentMC (mutableRuntimeFor /
+// MutableRuntimeOrNil). Before that fix this nil-pointer-panicked.
+func TestMarks_GoErrorInProcUnderGuard(t *testing.T) {
+	got, err := testhelpers.RunSchemeCode(t, `
+(begin
+  (define (sq x) (* x x))
+  (guard (e (else 'caught)) (sq "hello")))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.SchemeString(), qt.Equals, "caught")
+}
+
 // Nested guards: an inner guard runs in the outer guard's call-with-values producer.
 // An unmatched inner re-raise must escalate to the outer guard (its handler mark is
 // above the producer boundary). Mirrors TestCoverageExceptionReRaise at the registry

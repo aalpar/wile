@@ -285,6 +285,22 @@ func (p *EnvironmentFrame) MutableRuntime() *EnvironmentFrame {
 	return p.namespace.Runtime()
 }
 
+// MutableRuntimeOrNil resolves the namespace's mutable runtime by walking the
+// lexical parent chain, returning nil if no frame in the chain carries a namespace
+// (rather than panicking like MutableRuntime). Some transient execution frames — a
+// procedure body frame entered while running a call-with-values producer, say — are
+// detached (nil parent, nil namespace); their owning namespace is only reachable via
+// the MachineContext's parentMC, not the lexical chain. NewSubContext uses this to
+// fall back to the parent context when the local env cannot resolve a namespace.
+func (p *EnvironmentFrame) MutableRuntimeOrNil() *EnvironmentFrame {
+	for e := p; e != nil; e = e.parent {
+		if e.namespace != nil {
+			return e.namespace.Runtime()
+		}
+	}
+	return nil
+}
+
 // Expand returns the expand phase environment (phase 1), creating it if needed.
 // This is where syntax bindings from define-syntax are stored.
 func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
