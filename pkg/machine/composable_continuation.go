@@ -44,12 +44,6 @@ type ComposableContinuation struct {
 	capturedMarks []markEntry
 }
 
-// SetCapturedMarks stores the capture-time reachable-marks snapshot. Called from
-// SnapshotReachableMarksInto at continuation-capture sites (e.g. PrimCallCC).
-func (p *ComposableContinuation) SetCapturedMarks(m []markEntry) {
-	p.capturedMarks = m
-}
-
 // bottomOfChain walks a continuation chain to its terminal frame (parent == nil).
 func bottomOfChain(head *MachineContinuation) *MachineContinuation {
 	if head == nil {

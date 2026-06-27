@@ -78,6 +78,11 @@ func PrimCallWithExit(cc machine.CallContext) error {
 				"call-with-exit: exit procedure called from different thread")
 		}
 		val := innerMC.Arg(0)
+		// Invalidate the one-shot exit procedure BEFORE unwinding: an after-thunk that
+		// re-invokes it must be rejected (expired), and a failing unwind below must not
+		// leave a stale-but-valid exit procedure behind. The catch site's valid.Store
+		// is now redundant but kept defensively.
+		valid.Store(false)
 		// Run dynamic-wind after thunks from the escape point down to the
 		// call-with-exit entry depth, here where the frames are visible (innerMC is
 		// the context invoking the exit procedure — possibly a deeper sub-context than

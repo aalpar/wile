@@ -264,6 +264,31 @@ func TestEnvironmentFrame_MutableRuntime(t *testing.T) {
 	qt.Assert(t, ns.SealedBase().MutableRuntime(), qt.Equals, ns.Runtime())
 }
 
+// TestEnvironmentFrame_MutableRuntimeOrNil covers the nil-returning counterpart to
+// MutableRuntime: it walks the lexical parent chain and returns nil (rather than
+// panicking) when no frame carries a namespace. machine.NewSubContext uses it to
+// resolve a namespace for transient detached frames (a procedure body reached through
+// a call-with-values producer) before falling back along parentMC.
+func TestEnvironmentFrame_MutableRuntimeOrNil(t *testing.T) {
+	ns := NewNamespace()
+	runtime := ns.Runtime()
+
+	// A namespace-owning frame resolves to its runtime (same as MutableRuntime).
+	qt.Assert(t, runtime.MutableRuntimeOrNil(), qt.Equals, ns.Runtime())
+
+	// A frame with a nil local namespace resolves via its lexical parent.
+	detachedWithParent := newEnvironmentFrame(NewLocalEnvironment(0), runtime.global)
+	detachedWithParent.parent = runtime
+	qt.Assert(t, detachedWithParent.namespace, qt.IsNil)
+	qt.Assert(t, detachedWithParent.MutableRuntimeOrNil(), qt.Equals, ns.Runtime())
+
+	// A fully detached frame (no namespace, no parent) resolves to nil, not a panic.
+	fullyDetached := newEnvironmentFrame(NewLocalEnvironment(0), runtime.global)
+	qt.Assert(t, fullyDetached.namespace, qt.IsNil)
+	qt.Assert(t, fullyDetached.parent, qt.IsNil)
+	qt.Assert(t, fullyDetached.MutableRuntimeOrNil(), qt.IsNil)
+}
+
 func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	// Test the indexed phase hierarchy:
 	// TopLevel is phase 0, Expand is phase 1, Compile is phase 2

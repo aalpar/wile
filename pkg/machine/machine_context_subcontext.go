@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // NewSubContext creates a new MachineContext for running sub-calls (e.g., apply, map, for-each).
@@ -45,8 +46,14 @@ import (
 // tries p's lexical env chain first (the common case: one frame, with a namespace),
 // then falls back along the parentMC chain — necessary when p.env is a detached
 // transient frame (nil parent, nil namespace), whose owning namespace is reachable
-// only through the synchronous parent context. The final p.env return is a
-// belt-and-suspenders fallback; a root context always carries a namespace-bearing env.
+// only through the synchronous parent context.
+//
+// If NO context in the chain carries a namespace, panic rather than degrade silently:
+// the environment package's stated policy is "no legacy fallback — all environments
+// MUST have a Namespace" (environment/CLAUDE.local.md), and the prior direct
+// p.env.MutableRuntime() panicked on this case. Returning a detached env here would
+// silently land user defines in the wrong global. The recover at the VM boundary
+// (RunWithEscapeHandling) contains the panic as a returned error.
 func mutableRuntimeFor(p *MachineContext) *environment.EnvironmentFrame {
 	for c := p; c != nil; c = c.parentMC {
 		rt := c.env.MutableRuntimeOrNil()
@@ -54,7 +61,8 @@ func mutableRuntimeFor(p *MachineContext) *environment.EnvironmentFrame {
 			return rt
 		}
 	}
-	return p.env
+	panic(werr.WrapForeignErrorf(werr.ErrInternal,
+		"mutableRuntimeFor: no namespace reachable via env chain or parentMC"))
 }
 
 func (p *MachineContext) NewSubContext() *MachineContext {

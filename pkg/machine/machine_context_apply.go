@@ -448,7 +448,7 @@ func (p *MachineContext) collectReachableMarks() []markEntry {
 // resuming comp restores the outer parameter/handler environment. Called at call/cc
 // capture sites (PrimCallCC).
 func (p *MachineContext) SnapshotReachableMarksInto(comp *ComposableContinuation) {
-	comp.SetCapturedMarks(p.collectReachableMarks())
+	comp.capturedMarks = p.collectReachableMarks()
 }
 
 // ResolveParameterValue returns the effective value of a parameter, checking

@@ -67,6 +67,31 @@ func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	qt.New(t).Assert(err, qt.IsNotNil)
 }
 
+// TestThreadDoesNotInheritCreatorMarks pins SRFI-18-aligned behavior: a thread does
+// NOT inherit its creator's continuation marks — neither parameterize bindings nor
+// the exception handler (which now rides the %exception-handlers parameter, i.e. the
+// same mark mechanism). NewThreadSubContext severs parentMC and copies no marks, so a
+// thread gets a fresh dynamic environment.
+//
+// This is the documented post-rework semantics. Before the handler moved onto a
+// parameter it was the one piece of dynamic state field-inherited by threads; it now
+// behaves like every other parameter (uninherited). That also removes the old
+// unsoundness — a guard handler inherited into the child would escape via a guard-k
+// captured in the PARENT thread, tripping ErrCrossThreadContinuation.
+func TestThreadDoesNotInheritCreatorMarks(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngineWithExceptions(t)
+	result, err := engine.EvalMultiple(context.Background(), `
+		(let ((p (make-parameter 'base)) (seen #f))
+		  (parameterize ((p 'outer))
+		    (let ((th (make-thread (lambda () (set! seen (p))))))
+		      (thread-start! th)
+		      (thread-join! th)))
+		  (eq? seen 'base))`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
 func TestThreadBasics(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

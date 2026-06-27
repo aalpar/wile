@@ -37,9 +37,13 @@ import (
 // the handler rides the captured continuation instead of an off-chain Go field.
 var exceptionHandlerParam = NewParameter(values.EmptyList, nil)
 
-// ExceptionHandlerParam returns the canonical exception-handler parameter so the
-// core registry can bind it to the Scheme global %exception-handlers.
-func ExceptionHandlerParam() *Parameter {
+// ExceptionHandlerParam returns the canonical exception-handler parameter so the core
+// registry can bind it to the Scheme global %exception-handlers. The return type is
+// values.Value, not *Parameter: callers only need to bind the object, and narrowing
+// keeps the mutating Parameter.SetValue out of reach so the shared singleton's base
+// value (the immutability the cross-Engine safety argument rests on) can't be
+// rewritten through this accessor. RaiseInPlace uses the package var directly.
+func ExceptionHandlerParam() values.Value {
 	return exceptionHandlerParam
 }
 
@@ -94,8 +98,11 @@ func RaiseInPlace(mc *MachineContext, cond values.Value, continuable bool) error
 	}
 
 	if continuable {
-		// raise-continuable: the handler returned; its value resumes the raise site.
-		mc.SetValue(sub.GetValue())
+		// raise-continuable: the handler returned; ALL its values become the values of
+		// the raise-continuable expression (R7RS §6.11 — "the values returned by the
+		// handler"). Use SetValues/GetValues so a multi-value handler return is not
+		// collapsed to its first value.
+		mc.SetValues(sub.GetValues()...)
 		return nil
 	}
 

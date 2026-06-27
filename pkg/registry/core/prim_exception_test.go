@@ -192,6 +192,21 @@ func TestRaiseWithCallCC(t *testing.T) {
 // raise-continuable Tests (R7RS §6.11)
 // =============================================================================
 
+// TestRaiseContinuableMultipleValues verifies R7RS §6.11: "the values returned by the
+// handler become the values returned by raise-continuable" (plural). A handler
+// returning (values 1 2 3) must not collapse to a single value.
+func TestRaiseContinuableMultipleValues(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `
+		(call-with-values
+			(lambda ()
+				(with-exception-handler
+					(lambda (e) (values 1 2 3))
+					(lambda () (raise-continuable 'x))))
+			list)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(1 2 3)")
+}
+
 func TestRaiseContinuable(t *testing.T) {
 	tcs := []struct {
 		name string

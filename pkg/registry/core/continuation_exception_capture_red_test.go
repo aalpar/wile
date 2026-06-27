@@ -22,27 +22,23 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 )
 
-// TestExceptionHandlerNotCapturedByContinuation is a RED characterization of the
-// open sub-context continuation bug, exception-handler facet. See
-// plans/2026-06-26-subcontext-continuation-the-open-problem.local.md
-// ("The two windings, in struct fields" + "Fact 2").
+// TestExceptionHandlerCapturedByContinuation is a GREEN regression guard for the
+// exception-handler facet of the sub-context continuation fix (claim 3). See
+// plans/2026-06-26-subcontext-continuation-the-open-problem.local.md.
 //
-// The current exception handler is part of the dynamic environment (R7RS §6.11),
-// so a continuation captured inside (with-exception-handler H ...) must resume
-// with H current. Wile stores the handler on a context field
-// (MachineContext.exceptionHandler, machine_context.go:71) that call/cc never
-// copies into the continuation value — so on re-invocation the live handler is
-// the INVOKER's, not the captured one.
+// The current exception handler is part of the dynamic environment (R7RS §6.11), so a
+// continuation captured inside (with-exception-handler H ...) must resume with H
+// current. The handler now rides the %exception-handlers parameter (a continuation
+// mark), so call/cc captures it and re-entry restores it. (Before claim 3 the handler
+// lived on an off-chain MachineContext field that call/cc never copied; this probe was
+// RED and t.Skip-guarded. The field is gone and the test now passes.)
 //
-// The probe captures k under an inner handler, exits the with-exception-handler,
-// then re-invokes k under a different (sentinel) handler and raises:
+// The probe captures k under an inner handler, exits the with-exception-handler, then
+// re-invokes k under a different (sentinel) handler and raises; the CAPTURED inner
+// handler must fire:
 //
-//	TARGET (green): the captured inner handler fires  -> (inner-result inner)
-//	CURRENT (red):  the invocation-site sentinel fires -> (sentinel-result sentinel)
-//
-// SKIP until the handler is reified into the captured continuation (handler-as-
-// mark; see the plan's "The target" diagram and "Next steps").
-func TestExceptionHandlerNotCapturedByContinuation(t *testing.T) {
+//	-> (inner-result inner)   [not the invocation-site (sentinel-result sentinel)]
+func TestExceptionHandlerCapturedByContinuation(t *testing.T) {
 	const code = `
 (call/cc (lambda (done)
   (let ((k #f) (log '()))
@@ -92,12 +88,11 @@ func TestExceptionHandlerSelfReRaiseEscalates(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "(outer (reraised original))")
 }
 
-// TestRaiseContinuableThroughReinvokedContinuation (b): a continuation captured
-// under a continuable handler, re-invoked, must resume (raise-continuable ...) with
-// the CAPTURED handler's value, not the invocation-site handler's. Same capture gap
-// as the headline probe, via raise-continuable's resume path.
-//
-// RED on HEAD 9540d515: got "(resumed-with sentinel-value)", want "(resumed-with inner-value)".
+// TestRaiseContinuableThroughReinvokedContinuation (b): a continuation captured under
+// a continuable handler, re-invoked, resumes (raise-continuable ...) with the CAPTURED
+// handler's value, not the invocation-site handler's. The raise-continuable analogue
+// of the headline guard; GREEN since claim 3 (was RED/skipped on HEAD 9540d515:
+// got "(resumed-with sentinel-value)", want "(resumed-with inner-value)").
 func TestRaiseContinuableThroughReinvokedContinuation(t *testing.T) {
 	const code = `
 (call/cc (lambda (done)
