@@ -53,6 +53,14 @@ func applyCallableError(mc *MachineContext, err error) error {
 	if errors.As(err, &timerErr) {
 		return err
 	}
+	// A continuation-resume control signal (the trampoline bounce) is Scheme-level
+	// control flow, not a Go failure: pass it through so it reaches the nearest
+	// DefaultPromptTag driver. Without this, RaiseInPlace below would convert it
+	// into a catchable Scheme condition.
+	var resumeErr *ErrResumeContinuation
+	if errors.As(err, &resumeErr) {
+		return err
+	}
 	return RaiseInPlace(mc, goErrorToCondition(err), false)
 }
 
