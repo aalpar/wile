@@ -116,3 +116,51 @@ func TestErrPromptAbort(t *testing.T) {
 		})
 	}
 }
+
+func TestErrResumeContinuation(t *testing.T) {
+	tcs := []struct {
+		name    string
+		checkFn func(t *testing.T)
+	}{
+		{
+			name: "satisfies error interface with non-empty message",
+			checkFn: func(t *testing.T) {
+				var e error = &ErrResumeContinuation{Tag: DefaultPromptTag}
+				qt.Assert(t, len(e.Error()) > 0, qt.IsTrue)
+			},
+		},
+		{
+			name: "errors.As matches ErrResumeContinuation",
+			checkFn: func(t *testing.T) {
+				var e error = &ErrResumeContinuation{Tag: DefaultPromptTag, Isolate: true}
+				var target *ErrResumeContinuation
+				qt.Assert(t, errors.As(e, &target), qt.IsTrue)
+				qt.Assert(t, target.Tag, qt.Equals, DefaultPromptTag)
+				qt.Assert(t, target.Isolate, qt.IsTrue)
+			},
+		},
+		{
+			name: "type-distinct from ErrPromptAbort",
+			checkFn: func(t *testing.T) {
+				var e error = &ErrResumeContinuation{Tag: DefaultPromptTag}
+				var abortTarget *ErrPromptAbort
+				qt.Assert(t, errors.As(e, &abortTarget), qt.IsFalse)
+			},
+		},
+		{
+			name: "Values field carries resume args",
+			checkFn: func(t *testing.T) {
+				err := &ErrResumeContinuation{
+					Tag:    DefaultPromptTag,
+					Values: []values.Value{values.NewInteger(7)},
+				}
+				qt.Assert(t, err.Values, qt.HasLen, 1)
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.checkFn(t)
+		})
+	}
+}
