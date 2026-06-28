@@ -1398,10 +1398,13 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 	}
 }
 
-// RunWithEscapeHandling runs the VM loop, handling continuation escapes
-// that weren't caught by an enclosing call/cc. This is used at the top level
-// (REPL and file execution) to catch continuations invoked outside their
-// original dynamic extent.
+// RunResumable drives the VM loop under a DefaultPromptTag prompt, catching
+// control bounces (ErrPromptAbort today; ErrResumeContinuation after the
+// trampoline flip) and looping. It is the single resume/abort driver shared by
+// every DefaultPromptTag owner. It handles continuation escapes that weren't
+// caught by an enclosing call/cc — used at the top level (REPL and file
+// execution) to catch continuations invoked outside their original dynamic
+// extent.
 //
 // When a continuation captured inside a foreign function (like dynamic-wind's thunk)
 // is invoked from outside, the escape error propagates up. This method catches it
@@ -1416,7 +1419,7 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 //
 // When execution completes normally (Run returns nil), any remaining
 // frames on the winding stack are unwound (after thunks are called).
-func (p *MachineContext) RunWithEscapeHandling() (rerr error) {
+func (p *MachineContext) RunResumable() (rerr error) {
 	p.promptTag = DefaultPromptTag // install default prompt for call/cc escapes
 
 	// Contain every panic at this VM boundary so it surfaces to the embedder as
@@ -1565,4 +1568,11 @@ func (p *MachineContext) RunWithEscapeHandling() (rerr error) {
 
 		return err
 	}
+}
+
+// RunWithEscapeHandling is the top-level entry point that runs the VM under the
+// DefaultPromptTag prompt. It delegates to RunResumable, the shared abort/resume
+// driver every DefaultPromptTag owner routes through.
+func (p *MachineContext) RunWithEscapeHandling() error {
+	return p.RunResumable()
 }
