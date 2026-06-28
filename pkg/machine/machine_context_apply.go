@@ -473,13 +473,13 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // terminate or continue).
 //
 // Order is load-bearing and matches the pre-refactor applyComposableContinuation:
-//   1. marks BEFORE the winding reconcile — RestoreWithWindingFrom runs
-//      dynamic-wind before/after thunks (arbitrary Scheme that may read marks /
-//      parameters), so the marks snapshot must already be installed.
-//   2. AcquireSegment BEFORE Restore — AcquireSegment marks the chain shared
-//      (first invoke) so a later normal return through a reinstalled frame takes
-//      RestoreAndRelease's copy-don't-pool branch (shared-bit safety; the
-//      tail-frame-recycling-unsound failure class hides here).
+//  1. marks BEFORE the winding reconcile — RestoreWithWindingFrom runs
+//     dynamic-wind before/after thunks (arbitrary Scheme that may read marks /
+//     parameters), so the marks snapshot must already be installed.
+//  2. AcquireSegment BEFORE Restore — AcquireSegment marks the chain shared
+//     (first invoke) so a later normal return through a reinstalled frame takes
+//     RestoreAndRelease's copy-don't-pool branch (shared-bit safety; the
+//     tail-frame-recycling-unsound failure class hides here).
 //
 // isolate is written unconditionally as a per-resume reset on the (now long-lived)
 // driver context: a stale isolatedMarks from a prior resume must not leak into a

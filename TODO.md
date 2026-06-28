@@ -88,6 +88,21 @@ could fatally crash before the catchable bound trips.
   comfortable margin (or retired). High-risk VM/continuation work — see the
   memory's `subcontext-continuation-truncation-redesign` and tail-frame-recycling
   cautions before attempting; gate on the full continuation/`-race` suite.
+- **ATTEMPTED & FALSIFIED (2026-06-27):** a *resume-side-only* segment-reinstall
+  trampoline (`ErrResumeContinuation` signal → `ReinstallSegment` → resume-aware
+  `sub.Run()` drivers `DriveResume`/`RunResumable`) was built and reverted. It DID
+  fix the `-race` ctak overflow and the dynamic-wind after-thunk double-fire, but
+  **reinstall-at-nearest is unsound**: an outer continuation invoked to *escape past*
+  a `call-with-values` producer double-executes the consumer (base: `n2 done`; the
+  flip: `n2 done CONSUMER`). The whole test suite was BLIND to this class — `make ci`
+  was green; a multi-agent crosscheck caught it. A correct flip needs the Go-frame
+  prompt catches (`call-with-exit`, `call-with-continuation-prompt`, `RaiseInPlace`)
+  reified as continuation-chain frames (archaeology §5) — i.e. it is COUPLED to the
+  sub-context truncation open problem, not separable. The behavior-preserving
+  groundwork (`ReinstallSegment`, `RunResumable` extraction, the inert
+  `ErrResumeContinuation` type) is kept. Recoverable at tag
+  `attempt-resume-aware-catches-falsified`; full design + kill-conditions + crosscheck
+  in `plans/2026-06-27-resume-aware-prompt-catches-design.local.md`.
 - **CI mitigation (2026-06-27, until the trampoline lands):** the `-race` detector
   inflates per-Go-frame cost several-fold, so `TestDeepConvergingContinuationConverges`
   (ctak(18,12,6), ~40k live re-invocation frames) overflowed the 1 GB goroutine stack

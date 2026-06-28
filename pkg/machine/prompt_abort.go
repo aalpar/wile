@@ -51,5 +51,5 @@ type ErrResumeContinuation struct {
 }
 
 func (p *ErrResumeContinuation) Error() string {
-	return "continuation resume escaped without a matching prompt"
+	return fmt.Sprintf("continuation resume escaped without a matching prompt %s", p.Tag.SchemeString())
 }

@@ -1457,7 +1457,7 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		// printed error would read only "recovered panic" and the real detail
 		// (e.g. a runtime.Error "index out of range" message) would be reachable
 		// only via Unwrap. Cause stays set (WrapError chains it) for errors.Is/As.
-		rerr = p.WrapError(err, "RunWithEscapeHandling: recovered panic: "+err.Error())
+		rerr = p.WrapError(err, "RunResumable: recovered panic: "+err.Error())
 	}()
 
 	// freshCancel tracks the cancel function for any recovery context
