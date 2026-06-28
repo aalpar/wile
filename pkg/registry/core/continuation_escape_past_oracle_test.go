@@ -58,6 +58,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -345,4 +346,192 @@ func TestDynamicWindDoubleFire_TargetFiresOnce(t *testing.T) {
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "done")
+}
+
+// ============================================================================
+// C1–C4: the four CRITICAL regressions the 2026-06-28 full-cluster reification
+// attempt introduced (reifying all six boundaries WITHOUT the winding-aware resume
+// flip). Every one was invisible to `go test ./...`, `make lint`, `-race`, AND the
+// escape-past guards above; only an A/B crosscheck against clean HEAD caught them —
+// and two also turned `make ci` RED via checked-in Scheme suites that `go test ./...`
+// does not run. These are REGRESSION GUARDS: each pins CORRECT base behavior that is
+// GREEN on clean HEAD (9ee6d38c) today and that the UNIFIED reification+flip change
+// MUST preserve. They are the net the suite lacked for the four CRITICALs; their
+// common root is that reification makes a boundary's abort depend on driver routing +
+// winding-from-the-escape-point, so any path still running boundary-bearing code under
+// a plain Run()/non-reconciling re-raise breaks — which is why the reification and the
+// resume flip are ONE atomic change. Spec:
+// plans/2026-06-28-continuation-cluster-reification-impl.md §7; memory
+// continuation-cwv-reification-validated-coupling-mapped.
+// ============================================================================
+
+// criticalGuardTimeout bounds the C1/C4 guards: the buggy reification-without-flip
+// makes a boundary reached after a resume (C1) or a re-raising handler that ran a
+// reified boundary (C4) recur unboundedly. Cooperative ctx cancellation surfaces that
+// hang as a timeout error (a clean FAIL) instead of wedging the test binary.
+const criticalGuardTimeout = 15 * time.Second
+
+// TestContinuationBoundaryReachedAfterResume_C1 guards C1: a delimiting boundary
+// (guard / escape) nested inside a continuation-prompt, or reached in code AFTER a
+// call/cc resume, must resolve normally. The reification-without-flip left
+// applyCapturedContinuation's resume on a plain sub.Run() (routing it overflows ctak
+// under nest-then-abort), so a boundary in resumed code crashed ("no prompt found for
+// tag exit") or silently returned a #<machine-closure>. The flip (resume on the
+// driver, O(1) Go frames) is what keeps these GREEN once boundaries are reified.
+func TestContinuationBoundaryReachedAfterResume_C1(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			// guard inside a continuation-prompt (plan §3 G-C1 row 1).
+			name: "guard inside continuation-prompt",
+			code: `
+(call-with-continuation-prompt
+  (lambda () (guard (e (#t (list 'caught e))) (raise 'boom)))
+  (make-continuation-prompt-tag)
+  (lambda v 'h))`,
+			want: "(caught boom)",
+		},
+		{
+			// an escape (call-with-exit) inside a continuation-prompt — the base-only
+			// analog of plan §3 G-C1 row 2, (reset (* 2 (call/ec (lambda (k) (k 21)))))
+			// => 42, using core primitives instead of the (wile control) library.
+			name: "escape inside continuation-prompt",
+			code: `
+(call-with-continuation-prompt
+  (lambda () (* 2 (call-with-exit (lambda (k) (k 21)))))
+  (make-continuation-prompt-tag)
+  (lambda v v))`,
+			want: "42",
+		},
+		{
+			// the §7-C1 face: a boundary (guard) reached in code AFTER a call/cc
+			// resume. The resume must land on the live chain so the subsequent guard
+			// resolves; the buggy resume-sub truncated/crashed here.
+			name: "guard reached after call/cc resume",
+			code: `
+(let ((k #f) (n 0))
+  (call/cc (lambda (c) (set! k c)))
+  (set! n (+ n 1))
+  (if (< n 2)
+      (k #f)
+      (guard (e (#t 'caught-after-resume)) (raise 'boom))))`,
+			want: "caught-after-resume",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.code, criticalGuardTimeout)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestBoundaryInsideWindThunkOnForwardEscape_C2 guards C2: a boundary that aborts
+// INSIDE a dynamic-wind thunk reached on the FORWARD-escape path must route, not
+// crash. The reification-without-flip ran the winding thunks
+// (machine_context_winding.go) under a plain sub.Run() reached from
+// RestoreWithWindingFrom, so the inner escape's abort had no driver to route it and
+// crashed ("no prompt found"). Here the after-thunk runs its own call-with-exit while
+// the outer escape unwinds the wind; clean HEAD completes the outer escape => 'done.
+func TestBoundaryInsideWindThunkOnForwardEscape_C2(t *testing.T) {
+	const code = `
+(call-with-exit
+  (lambda (escape)
+    (dynamic-wind
+      (lambda () #f)
+      (lambda () (escape 'done))
+      (lambda () (call-with-exit (lambda (k) (k 'x)))))))`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "done")
+}
+
+// TestAfterThunkThroughDeeperSubFiresOnce_C3 guards C3: a dynamic-wind after-thunk
+// must fire (exactly once) when an exception escapes through a DEEPER surviving
+// sub-context — here force/delay; barrier/timeout/eval are the same class. The
+// reification-without-flip's RunWithinBoundary re-raise reconciled only the frame's
+// own chain, not the deeper sub's winding, so the after-thunk was SILENTLY SKIPPED (a
+// resource leak). The counter proves it ran on the escape.
+func TestAfterThunkThroughDeeperSubFiresOnce_C3(t *testing.T) {
+	const code = `
+(let ((c 0))
+  (guard (e (#t 'caught))
+    (force (delay (dynamic-wind
+                    (lambda () #f)
+                    (lambda () (raise 'x))
+                    (lambda () (set! c (+ c 1)))))))
+  c)`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "1")
+}
+
+// TestHandlerRunsBoundaryThenReraise_C4 guards C4: a with-exception-handler handler
+// that runs a (reifiable) boundary and then re-raises must escalate to the PARENT
+// handler exactly once, not loop. The reification-without-flip's RunBodyUnderFrame set
+// p.cont = frame and dropped the exceptionHandlerParam=parent mark RaiseInPlace had
+// installed on the handler sub, so the secondary raise re-resolved the FULL handler
+// list — re-invoking the same handler unboundedly (a hang). The outer guard must catch
+// the re-raised 'again exactly once.
+func TestHandlerRunsBoundaryThenReraise_C4(t *testing.T) {
+	const code = `
+(guard (outer (#t (list 'outer outer)))
+  (with-exception-handler
+    (lambda (e)
+      (call-with-exit (lambda (k) 'ran-boundary))
+      (raise 'again))
+    (lambda () (raise 'first))))`
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, criticalGuardTimeout)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(outer again)")
+}
+
+// TestComposableEscapePastReifiedBoundary_DocumentsCurrentMasterBug proves KC-9 is
+// live on master: a call-with-composable-continuation captured to the default prompt
+// tag from inside a call-with-exit cannot see the outer default prompt, because the
+// call-with-exit SUB-CONTEXT blocks FindPrompt — so the capture ERRORS ("no prompt
+// found for tag"). Reifying call-with-exit as a chain frame removes that block; the
+// target counterpart asserts the capture then succeeds. This cell only asserts
+// TARGET-relevant behavior indirectly (it pins the current limitation); DELETE it when
+// the unified change lands and its target goes GREEN.
+func TestComposableEscapePastReifiedBoundary_DocumentsCurrentMasterBug(t *testing.T) {
+	const code = `
+(call-with-continuation-prompt
+  (lambda ()
+    (call-with-exit
+      (lambda (exit)
+        (+ 1 (call-with-composable-continuation
+               (lambda (k) (k 10))
+               (default-continuation-prompt-tag))))))
+  (default-continuation-prompt-tag)
+  (lambda (v) v))`
+	_, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, strings.Contains(err.Error(), "no prompt found"), qt.IsTrue)
+}
+
+// TestComposableEscapePastReifiedBoundary_Target is the KC-9 acceptance criterion:
+// once call-with-exit is a chain frame, FindPrompt reaches the outer default prompt,
+// so the composable capture succeeds (no error). The exact value is pinned when the
+// reification lands; the load-bearing property here is that capture no longer errors.
+// Env-gated like the other RED targets.
+func TestComposableEscapePastReifiedBoundary_Target(t *testing.T) {
+	requireRedContinuation(t)
+	const code = `
+(call-with-continuation-prompt
+  (lambda ()
+    (call-with-exit
+      (lambda (exit)
+        (+ 1 (call-with-composable-continuation
+               (lambda (k) (k 10))
+               (default-continuation-prompt-tag))))))
+  (default-continuation-prompt-tag)
+  (lambda (v) v))`
+	_, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
 }
