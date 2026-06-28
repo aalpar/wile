@@ -103,6 +103,83 @@ could fatally crash before the catchable bound trips.
   `ErrResumeContinuation` type) is kept. Recoverable at tag
   `attempt-resume-aware-catches-falsified`; full design + kill-conditions + crosscheck
   in `plans/2026-06-27-resume-aware-prompt-catches-design.local.md`.
+- **ORACLE + SEPARATELY-FALSIFIED DESIGN LANDED (2026-06-27, re-take):** the prior
+  revert happened because the suite was **blind to escape-past**. That gap is now
+  closed by a committed non-blind oracle,
+  `pkg/registry/core/continuation_escape_past_oracle_test.go`: escape-past guards for
+  every boundary (call-with-values / prompt / exit / apply), nested-guard,
+  normal-completion, consumer-captured, escape-past multi-shot+mutation (all GREEN on
+  master), plus the two open bugs (truncation, dynamic-wind double-fire) each with an
+  always-on "documents-current-bug" tripwire and a `WILE_RUN_RED_CONTINUATION`-gated
+  target acceptance cell. **Proven non-blind:** run against the falsified flip (tag
+  `attempt-resume-aware-catches-falsified`) the call-with-values row returns
+  `CONSUMER-WRONGLY-RAN` and the oracle FAILS — it catches the exact regression that
+  shipped `make ci`-green. The coupled-fix design (adversarially reviewed + corrected)
+  is `plans/2026-06-27-continuation-resume-trampoline-coupled-fix-design.local.md`. It
+  PROVES no resume-side-only fix can exist (the resume needs a chain-resident boundary
+  to place itself; reinstall-at-nearest breaks escape-past, abort-to-top breaks guard)
+  and specifies the coupled fix: a new `RunBodyUnderFrame` VM primitive (the missing
+  normal-completion frame-execution mechanism — build+spike FIRST), reify the four
+  boundaries as chain frames (migrating `call-with-exit`'s Go-local tag to
+  chain-carried), then flip `applyCapturedContinuation` to bounce through the single
+  `RunResumable` driver. Verified corrections vs older docs: the exception handler is
+  ALREADY marks-based (`exceptionHandlerParam`), and the `call-with-values` consumer is
+  ALREADY inline — only the producer is a sub-context. **Gate: RED — implementation
+  NOT started; needs human go + the §6 kill-conditions (incl. KC-9..11 to be added
+  before the flip).**
+- **SPIKE EXECUTED — mechanism PROVEN, change is ATOMIC (2026-06-27):** built
+  `RunBodyUnderPrompt` (`pkg/machine/run_body_under_frame.go`) — a transparent
+  chain prompt frame (`returnTemplate` = one `OpRestoreContinuation`) with the body
+  applied INLINE. Wiring it into `call-with-exit` made the oracle's escape-past rows
+  + a SINGLE guard GREEN. But it tripped the design's own STOP condition: reifying ONE
+  boundary while the others stay sub-contexts regresses NESTED guard + call-with-exit-
+  in-barrier — the inner construct runs inside the OUTER guard's `call-with-values`
+  PRODUCER sub-context, so its prompt frame is off the main chain and the driver's
+  `FindPrompt` can't reach it. The reification is **ATOMIC** across {call-with-exit,
+  call-with-continuation-prompt, call-with-values producer, RaiseInPlace handler,
+  with-continuation-barrier} + the flip — not incremental. `call-with-exit` was
+  REVERTED to its sub-context form (tree non-regressing); `RunBodyUnderPrompt` is kept
+  as proven groundwork. **De-risked the hardest piece:** call-with-values' consumer-
+  apply needs NO hot-path change — a normal frame whose template is
+  `[OpPush, OpLoadLocal(consumer), OpApply]` (capturable via `Copy`), and RaiseInPlace
+  is a marks-carrying transparent frame. Full findings + revised atomic execution
+  order: design doc § "Spike outcome".
+- **cwv REIFICATION PROVEN + COUPLING MAPPED, reverted to clean (2026-06-28):** built
+  `RunBodyUnderFrame` + `RunBodyUnderConsumer` (kept as proven groundwork in
+  `run_body_under_frame.go`; consumer template `[OpPush, OpLoadLiteral 0, OpApply]`,
+  verified for 0/1/N values; lint-clean unwired). Wiring it into `PrimCallWithValues`
+  turned the oracle truncation target GREEN and kept escape-past/nested-guard/multishot/
+  machine all GREEN — **the consumer-frame mechanism works.** But it does NOT stand
+  alone, so it was REVERTED: (1) the real `guard` wraps cwv inside `call-with-exit`
+  (bootstrap_macros.scm:175), so reifying only cwv MOVES guard's truncation out to the
+  call-with-exit boundary (`TestGuardCoupling_C2_RealGuard`: `"2"` → leaked
+  `#<machine-closure>`) — empirically CONFIRMS the atomic coupling for guard; (2) it
+  breaks the frame-reclaim `InvokesProcedure` analyzer (`TestInvokesProcedureStaticGuard`)
+  — the `ApplyCallable` moved behind machine helpers it can't see (must learn
+  `RunBodyUnder*` as sinks). call-with-exit reification blockers: one-shot `valid`
+  invalidation has no home in the transparent-frame model (primitive returns before proc
+  runs); must drop exitFn's `UnwindTo` (driver double-fires otherwise). **Risk #1 (the
+  blind spot):** reifying tag-bearing boundaries under nest-then-abort is BLIND-unsound —
+  a `k` captured inside a reified prompt/exit, re-invoked, re-aborting to the tag escapes
+  the plain `sub.Run()` in `applyCapturedContinuation` → "no prompt found". Commit a
+  replay-reabort oracle cell BEFORE wiring exit/prompt; green oracle ≠ correct for them.
+  Full map + corrected coupled plan: design doc § 8c; memory
+  `continuation-cwv-reification-validated-coupling-mapped`.
+- **FULL CLUSTER (Phase 1) IMPLEMENTED then A/B-FALSIFIED, reverted to clean (2026-06-28):**
+  reified all 6 boundaries (cwv/exit/prompt as chain frames; barrier/RaiseInPlace/composable +
+  ~13 sweep sites routed via a new `RunWithinBoundary` driver) + the call/cc-delimiting fix
+  (PrimCallCC slices at `FindPrompt(DefaultPromptTag)`, not nil). Genuine FIXES confirmed by
+  A/B crosscheck (truncation, marks-survive-exit, delimiting). **But the crosscheck FALSIFIED
+  Phase-1-alone: 4 CRITICALs + `make ci` RED** (control-test.scm + exceptions-test.scm go red;
+  `go test ./...` does NOT run them — MUST run `make ci`). C1 boundary-after-resume crash/silent
+  `#<machine-closure>`; C2 boundary-in-after-thunk forward-escape crash; C3 after-thunk silently
+  skipped through a deeper sub (leak); C4 handler-runs-boundary-then-reraise HANG. **DECISIVE:
+  reification ⟺ winding-aware resume (the flip) are ONE atomic change** — 4 paths still run
+  boundary code under plain Run/non-reconciling re-raise, and routing them all overflows ctak
+  under nest-then-abort. The 4 CRITICALs are the spec for the unified change. Full detail: plan
+  `plans/2026-06-28-continuation-cluster-reification-impl.local.md` § 7 (OUTCOME); memory
+  `continuation-cwv-reification-validated-coupling-mapped` (ATTEMPT 2026-06-28c). Helpers kept
+  as proven substrate in `run_body_under_frame.go`.
 - **CI mitigation (2026-06-27, until the trampoline lands):** the `-race` detector
   inflates per-Go-frame cost several-fold, so `TestDeepConvergingContinuationConverges`
   (ctak(18,12,6), ~40k live re-invocation frames) overflowed the 1 GB goroutine stack
