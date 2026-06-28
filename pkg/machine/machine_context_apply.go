@@ -462,10 +462,73 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 	return param.Value()
 }
 
+// ReinstallSegment installs a captured/composable continuation segment into the
+// current context. It is the single resume primitive shared by composable resume
+// (boundary = p.cont, isolate = compose) and abortive call/cc resume
+// (boundary = nil, isolate = true).
+//
+// Returns wasEmpty = true when the captured continuation is empty (no chain to
+// drive): the values are delivered and the CALLER performs its own post-delivery
+// control transfer (composable: returnImmediate; the DefaultPromptTag driver:
+// terminate or continue).
+//
+// Order is load-bearing and matches the pre-refactor applyComposableContinuation:
+//   1. marks BEFORE the winding reconcile — RestoreWithWindingFrom runs
+//      dynamic-wind before/after thunks (arbitrary Scheme that may read marks /
+//      parameters), so the marks snapshot must already be installed.
+//   2. AcquireSegment BEFORE Restore — AcquireSegment marks the chain shared
+//      (first invoke) so a later normal return through a reinstalled frame takes
+//      RestoreAndRelease's copy-don't-pool branch (shared-bit safety; the
+//      tail-frame-recycling-unsound failure class hides here).
+//
+// isolate is written unconditionally as a per-resume reset on the (now long-lived)
+// driver context: a stale isolatedMarks from a prior resume must not leak into a
+// later one (design guard #1). The broader stale-marks safety across separate
+// top-level forms is discharged by the pool zeroing the whole *MachineContext on
+// release (pool.go, via ReleaseTopLevelContext/ReleaseSubContext), not by this
+// per-resume reset alone — if Acquire*Context ever stops zeroing, that guard breaks.
+func (p *MachineContext) ReinstallSegment(
+	comp *ComposableContinuation,
+	boundary *MachineContinuation,
+	srcWinding WindingStack,
+	vals []values.Value,
+	isolate bool,
+) (bool, error) {
+	p.capturedMarks = comp.capturedMarks
+	p.isolatedMarks = isolate
+
+	// Acquire the segment: first invocation avoids DeepCopy by marking
+	// the segment shared; re-invocations deep-copy from preserved frames.
+	segment := comp.AcquireSegment()
+
+	// Reconcile dynamic-wind: unwind current extents not in the captured stack,
+	// rewind captured extents not in the current stack. srcWinding is the winding
+	// live at the invocation (k v) site, not the driver's — load-bearing for the
+	// cross-sub-context resume case.
+	err := p.RestoreWithWindingFrom(nil, srcWinding, comp.WindingStack())
+	if err != nil {
+		return false, err
+	}
+
+	if segment == nil {
+		// Empty captured continuation: deliver the values; the caller decides the
+		// post-delivery control transfer.
+		p.SetValues(vals...)
+		return true, nil
+	}
+
+	// Graft the segment's bottom frame onto the boundary (nil = replace the live
+	// chain, the abortive case; p.cont = extend it, the composable case).
+	GraftContinuation(segment, boundary)
+	p.Restore(segment)
+	p.SetValues(vals...)
+	return false, nil
+}
+
 // applyComposableContinuation applies a composable continuation by splicing
-// its captured frames onto the current continuation chain. On first invocation,
-// the segment is used directly (marked shared for frame preservation). On
-// re-invocation, the segment is deep-copied for independence.
+// its captured frames onto the current continuation chain via ReinstallSegment.
+// On first invocation, the segment is used directly (marked shared for frame
+// preservation); on re-invocation, the segment is deep-copied for independence.
 //
 // See: Flatt, Yu, Findler, Felleisen "Adding Delimited and Composable Control
 // to a Production Programming Environment" (ICFP 2007).
@@ -497,47 +560,24 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// When the caller used Drain (zero-copy), args shares the stack's backing
 	// array; Restore recycles that stack to the pool, clearing the backing array
 	// and invalidating args. The copy also defends SetValues, which stores the
-	// slice by reference for N>1.
-	//
-	// Ownership note: applyCapturedContinuation runs this composable continuation
-	// in a sub-context and then returns &ErrPromptAbort{Values: sub.GetValues()}.
-	// Those abort Values trace back to this freshly-owned `vals` slice (via
-	// SetValues), so they survive the sub-context's release. Do NOT optimize this
-	// copy away — it is load-bearing for that cross-function ownership, not just
-	// for the local Drain/SetValues aliasing.
+	// slice by reference for N>1, and (while the intermediate-state captured path
+	// still runs this in a sub-context) must outlive that sub-context's release.
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
 
-	// Install the capture-time reachable-marks snapshot on the resumed context. When
-	// applyCapturedContinuation runs this composable continuation it sets isolatedMarks
-	// (parentMC cut), so findParameterInMarks consults this snapshot to resolve the
-	// outer parameter/handler marks the captured chain was sitting beneath.
-	p.capturedMarks = cc.capturedMarks
-
-	// Acquire the segment: first invocation avoids DeepCopy by marking
-	// the segment shared; re-invocations deep-copy from preserved frames.
-	segment := cc.AcquireSegment()
-
-	// Handle dynamic-wind: unwind current extents not in captured stack,
-	// rewind captured extents not in current stack.
-	err := p.RestoreWithWindingFrom(nil, p.windingStack, cc.WindingStack())
+	// Compose onto p.cont. isolate = p.isolatedMarks preserves the pre-refactor
+	// behavior exactly: this method never touched isolatedMarks, and it runs both
+	// directly (isolatedMarks=false) AND inside applyCapturedContinuation's
+	// isolatedMarks=true sub-context. Passing the current value makes the extraction
+	// a true no-op. Phase 4 switches this to a constant false once the flip removes
+	// the captured→composable sub-context path (composable resume composes marks;
+	// see call-with-composable-continuation, which does not snapshot).
+	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, vals, p.isolatedMarks)
 	if err != nil {
 		return p, err
 	}
-
-	if segment == nil {
-		// Empty composable continuation: captured at a tail-call site with no
-		// saved frames above it (e.g., call/cc inside a sub-context where
-		// the call was in tail position). Applying it just returns the value(s).
-		p.SetValues(vals...)
+	if wasEmpty {
 		return p.returnImmediate(), nil
 	}
-
-	// Graft the segment's bottom frame onto the current continuation chain
-	GraftContinuation(segment, p.cont)
-
-	// Restore from the top of the segment (resume captured computation)
-	p.Restore(segment)
-	p.SetValues(vals...)
 	return p, nil
 }
