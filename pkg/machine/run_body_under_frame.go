@@ -23,22 +23,23 @@ package machine
 // (FindPrompt) to the nearest driver (RunResumable at the top, RunWithinBoundary in
 // a kept sub-context), not to a Go-stack errors.As catch.
 //
-// PROVEN GROUNDWORK — NOT WIRED (2026-06-28). The full boundary cluster was
-// implemented on these helpers (RunBodyUnderConsumer→call-with-values,
-// RunBodyUnderPrompt→call-with-continuation-prompt, RunBodyUnderExitFrame→
-// call-with-exit, RunWithinBoundary→barrier/RaiseInPlace/composable/sweep) and the
-// genuine fixes were CONFIRMED by an A/B crosscheck (truncation fixed; marks survive
-// call-with-exit; call/cc delimiting fixed). But the SAME crosscheck found 4 CRITICAL
-// regressions + `make ci` RED, all from one root: reification makes boundaries depend
-// on driver routing + winding-from-the-escape-point, yet four paths still run
-// boundary-bearing code under plain Run()/non-reconciling re-raise (the resume sub;
-// the dynamic-wind thunks on the FORWARD-escape path; the deeper-sub winding the
-// exit/RunWithinBoundary re-raise drops; the RaiseInPlace handler-mark dropped by
-// RunBodyUnderFrame's p.cont mutation). Routing them all overflows ctak under the kept
-// nest-then-abort resume. CONCLUSION: the reification and the winding-aware resume
-// (the flip) are INSEPARABLE — one atomic change. The wiring was reverted; these
-// helpers stay as proven substrate for the unified reification+flip change. Full spec
-// (the 4 CRITICALs + root paths) in
+// WIRED (2026-06-28, feat/continuation-resume-trampoline). The full boundary cluster
+// runs on these helpers as the live continuation path:
+//   - RunBodyUnderConsumer → call-with-values        (prim_control.go)
+//   - RunBodyUnderExitFrame → call-with-exit         (prim_exit.go)
+//   - RunBodyUnderPrompt    → call-with-continuation-prompt + raise-continuable
+//                                                     (prim_prompt.go, exception_raise.go)
+//   - RunBodyUnderFrame     → the non-continuable raise escalator (exception_raise.go)
+//   - RunWithinBoundary     → barrier / RaiseInPlace handler / composable / the sweep
+//                             sites (machine_context.go and call sites)
+//
+// An earlier A/B crosscheck proved the reification and the winding-aware resume (the
+// "flip") are INSEPARABLE — reified boundaries depend on driver routing and winding
+// reconciled from the escape point, and the kept nest-then-abort resume overflowed
+// ctak. So both landed together as one atomic change: resume now runs on the driver
+// (RunResumable), giving O(1) Go frames and a single winding reconcile. Full history
+// (the 4 CRITICALs that forced the atomic landing, and the later crosscheck that
+// caught the sticky-isolatedMarks escalation bug) in
 // plans/2026-06-28-continuation-cluster-reification-impl.local.md and memory
 // continuation-cwv-reification-validated-coupling-mapped.
 

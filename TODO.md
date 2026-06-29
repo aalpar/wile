@@ -61,7 +61,21 @@ fix (PR #800). The continuation value-count behavior itself is documented in
   `WithStrictValueArity` engine option, not a default change. Full rationale:
   `plans/2026-06-25-continuation-arity-strictness-design.local.md`.
 
-### Trampoline continuation invocation to bound Go-stack growth (2026-06-26)
+### Trampoline continuation invocation to bound Go-stack growth (2026-06-26) — SHIPPED 2026-06-28
+
+**STATUS: SHIPPED** on `feat/continuation-resume-trampoline`. The unified reification +
+winding-aware resume ("the flip") landed: `applyCapturedContinuation` emits
+`ErrResumeContinuation`, and the resume runs on the driver (`RunResumable` /
+`ReinstallSegment`) instead of nesting a fresh `Run()` — O(1) Go frames. Consequently
+the `maxContinuationDepth` bound and its `threadPools.contNestDepth` tracking were
+RETIRED (the resource they guarded no longer exists), and the `-race` ctak skip plus
+`pkg/wile/raceflag_*_test.go` were removed — `TestDeepConvergingContinuationConverges`
+(ctak 18/12/6) now runs under `-race`. A post-landing A/B `/crosscheck` then found and
+fixed one escalation regression (sticky context-global `isolatedMarks` swallowed R7RS
+§6.11 secondary exceptions after any resume; fixed path-precisely via a
+`resumeGeneration` counter — `pkg/registry/core/continuation_noncontinuable_after_resume_test.go`).
+The chronological design/falsification log below is retained as history; the
+"current mitigation" and "until the trampoline lands" passages in it are SUPERSEDED.
 
 `applyCapturedContinuation` (`machine/captured_continuation.go`) invokes a captured
 continuation by running the resumed computation in a *nested* sub-context
@@ -72,11 +86,12 @@ space, peaks ~40k live frames for a single `(ctak 18 12 6)` and ~525k for the
 Gabriel benchmark's warmup + 10-iteration loop, approaching Go's ~675k fatal
 stack-overflow point.
 
-The current mitigation (commit after this TODO landed) is a dedicated, live-nesting
-bound `maxContinuationDepth` (default `DefaultMaxContinuationDepth = 600000`,
-tracked as `threadPools.contNestDepth`, decremented on unwind) that surfaces a
-runaway `call/cc` loop as a catchable `ErrCallDepthExceeded` before the Go fatal
-overflow. **The margin is necessarily thin** (benchmark ~525k vs overflow ~675k):
+The interim mitigation (**RETIRED** when the trampoline landed — see STATUS above) was
+a dedicated, live-nesting bound `maxContinuationDepth` (default
+`DefaultMaxContinuationDepth = 600000`, tracked as `threadPools.contNestDepth`,
+decremented on unwind) that surfaced a runaway `call/cc` loop as a catchable
+`ErrCallDepthExceeded` before the Go fatal overflow. **The margin was necessarily thin**
+(benchmark ~525k vs overflow ~675k):
 a sufficiently long continuation-heavy program can still approach the Go stack
 limit, and on a platform whose overflow point sits below the bound a true runaway
 could fatally crash before the catchable bound trips.
@@ -180,7 +195,7 @@ could fatally crash before the catchable bound trips.
   `plans/2026-06-28-continuation-cluster-reification-impl.local.md` § 7 (OUTCOME); memory
   `continuation-cwv-reification-validated-coupling-mapped` (ATTEMPT 2026-06-28c). Helpers kept
   as proven substrate in `run_body_under_frame.go`.
-- **CI mitigation (2026-06-27, until the trampoline lands):** the `-race` detector
+- **CI mitigation (2026-06-27 — RETIRED when the trampoline landed; the skip + `raceflag_*_test.go` were removed):** the `-race` detector
   inflates per-Go-frame cost several-fold, so `TestDeepConvergingContinuationConverges`
   (ctak(18,12,6), ~40k live re-invocation frames) overflowed the 1 GB goroutine stack
   under `-race` — a *fatal* abort below the `maxContinuationDepth` bound, which turned

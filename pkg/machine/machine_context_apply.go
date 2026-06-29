@@ -511,6 +511,10 @@ func (p *MachineContext) ReinstallSegment(
 ) (bool, error) {
 	p.capturedMarks = comp.capturedMarks
 	p.isolatedMarks = isolate
+	// Bump the per-driver resume generation: every reinstatement (call/cc or
+	// composable) flows through here, so a non-continuable handler's escalator frame
+	// can detect a resume THROUGH it by comparing this against its arm-time snapshot.
+	p.resumeGeneration++
 
 	// Acquire the segment: first invocation avoids DeepCopy by marking
 	// the segment shared; re-invocations deep-copy from preserved frames.

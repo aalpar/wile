@@ -121,16 +121,23 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// RESUMES this handler's captured handler-k continuation — and that continuation
 	// now spans this finalizer frame (the handler runs inline so handler-k captures
 	// the live chain, which is what makes nested guard work). So the continuable
-	// re-raise's result flows back THROUGH this frame. Detect that by isolatedMarks
-	// (set only while a call/cc continuation is being resumed) and FORWARD the value
-	// instead of escalating: the handler did not return naturally, it was resumed with
-	// a continuable value.
+	// re-raise's result flows back THROUGH this frame. Detect that path-precisely by
+	// snapshotting the driver's resume generation when arming the escalator (armGen
+	// below) and comparing it in escalateFn: a bump means a continuation segment was
+	// reinstated (handler-k resumed) between arm and escalate, so the value arrived via
+	// a resume THROUGH this frame — FORWARD it instead of escalating. An unchanged
+	// generation means the handler returned naturally — escalate the secondary.
+	//
+	// (A context-global isolatedMarks gate was WRONG here: it stays true after ANY prior
+	// resume on the driver, so it swallowed the mandatory secondary exception for every
+	// later non-continuable handler return — see TestNonContinuableHandlerReturnErrors.)
+	armGen := mc.resumeGeneration
 	escalateFn := func(finCC CallContext) error {
 		finMC, err := RequireMachineContext(finCC, "raise")
 		if err != nil {
 			return err
 		}
-		if finMC.isolatedMarks {
+		if finMC.resumeGeneration != armGen {
 			var vals []values.Value
 			current := finMC.Arg(0)
 			for !values.IsEmptyList(current) {
