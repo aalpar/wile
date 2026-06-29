@@ -26,7 +26,7 @@ import (
 // barrier: any attempt to invoke a continuation that would cross the barrier boundary
 // signals an error. Barriers cannot be re-entered — they return exactly once.
 //
-// Specifically, any call/cc escape closure or composable continuation captured inside
+// Specifically, any call/cc captured continuation or composable continuation captured inside
 // the barrier will fail with a barrier violation if invoked from outside the barrier
 // (after the barrier has returned), or from a different barrier context. Similarly,
 // continuations captured outside the barrier cannot be invoked from inside it to

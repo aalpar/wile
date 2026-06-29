@@ -834,10 +834,12 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 	return nil
 }
 
-// applyBaseEnvironment performs the five-step setup that every usable environment
-// requires: apply registry bindings, register syntax compilers, register primitive
-// expanders, load bootstrap macros, and inject documentation into bindings.
-// Each step wraps errors with ErrEngineInit. Additional registry.ApplyOption
+// applyBaseEnvironment performs the setup that every usable environment requires,
+// in order: apply registry bindings, register phase handlers (syntax compilers +
+// primitive expanders), load bootstrap macros, load bootstrap procedures, stamp
+// curated inline HOFs and build their loop templates, then inject documentation
+// (into macro bindings and as doc-only entries for Scheme-defined procedures).
+// Steps that can fail wrap errors with ErrEngineInit. Additional registry.ApplyOption
 // values are forwarded to the registry Apply call.
 func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, opts ...registry.ApplyOption) error {
 	// Runtime primitives + bootstrap procedures are routed to the sealed-base frame for

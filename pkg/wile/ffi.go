@@ -108,9 +108,9 @@ type ffiSpec struct {
 //
 // # Supported Types
 //
-// Parameter types: int64, int, float64, string, bool, []byte, []T (typed
-// slices), map[K]V, structs (exported fields), func(...) (callbacks),
-// [Value], and [context.Context] (first param only).
+// Parameter types: int64, int, float64, complex128, string, bool, []byte,
+// []T (typed slices), map[K]V, structs (exported fields), func(...)
+// (callbacks), [Value], and [context.Context] (first param only).
 //
 // Return types: int64, int, float64, string, bool, []byte, []T, map[K]V,
 // structs, [Value], error (last return only), and void.

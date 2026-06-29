@@ -25,6 +25,7 @@ Every document in `docs/`, organized by topic.
 - [delimited.md](continuations/delimited.md) -- Delimited continuations: prompts, abort, composable
 - [escape-design.md](continuations/escape-design.md) -- First-class continuation escape mechanism
 - [prompt-abort.md](continuations/prompt-abort.md) -- Prompt/abort system implementation details
+- [resume-trampoline.md](continuations/resume-trampoline.md) -- The resume trampoline: reinstalling a captured continuation in O(1) Go frames
 - [optimizations.md](continuations/optimizations.md) -- Continuation-heavy workload optimizations
 - [racket-primitives.md](continuations/racket-primitives.md) -- Racket's low-level control primitives
 

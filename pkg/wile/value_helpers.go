@@ -62,8 +62,9 @@ func IsBoolean(v Value) bool {
 	return ok
 }
 
-// IsProcedure returns true if v is a callable procedure
-// (lambda, foreign closure, case-lambda, parameter, or composable continuation).
+// IsProcedure returns true if v is a callable procedure (lambda, foreign
+// closure, case-lambda, parameter, captured continuation, or composable
+// continuation).
 func IsProcedure(v Value) bool {
 	_, ok := unwrapValue(v).(values.Callable)
 	return ok

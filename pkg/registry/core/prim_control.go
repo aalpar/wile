@@ -105,18 +105,20 @@ func PrimApply(cc machine.CallContext) error {
 //
 //	where f : (A → B) → A  is the user callback, and the escape
 //	continuation k : A → B has return type B (invoking k never returns
-//	to f — it aborts to the prompt).
+//	to f — it reinstalls the captured continuation at the prompt).
 //
 //	Adding call/cc to a language = adding the law of excluded middle.
 //	This means certain program transformations (e.g., CPS conversion
 //	optimizations that assume intuitionistic control flow) are unsound
 //	in the presence of call/cc.
 //
-//	Invariant: the escape closure must abort to DefaultPromptTag after
-//	  applying the captured continuation. Without the abort, control
-//	  would return to f after k returns, violating the B return type.
-//	Constrains: ErrPromptAbort handling (must propagate through foreign
-//	  calls), RunWithEscapeHandling (top-level abort catcher).
+//	Invariant: invoking k must NOT return to f. The CapturedContinuation
+//	  returns an ErrResumeContinuation carrying the captured segment unrun;
+//	  the nearest DefaultPromptTag driver reinstalls it onto the live chain
+//	  (boundary == nil: replace the whole chain). Resuming the captured
+//	  continuation instead of returning to f is what gives k the B return type.
+//	Constrains: ErrResumeContinuation handling (must propagate through
+//	  foreign calls), RunResumable (the top-level resume/abort driver).
 //	Constrained by: CESK model (K must be capturable data, not Go
 //	  stack), WindingStack (captured by value for dynamic-wind thunks),
 //	  threadID (cross-thread invocation rejected).
@@ -124,7 +126,11 @@ func PrimApply(cc machine.CallContext) error {
 // See BIBLIOGRAPHY.md "call/cc as Peirce's Law".
 //
 // Implementation follows the Racket model: capture a composable continuation
-// (via SliceContinuationAt), build an escape closure that applies it then aborts.
+// (via SliceContinuationAt) and return it as a CapturedContinuation value.
+// Invoking that value does not run the segment — it returns an
+// ErrResumeContinuation that the driver reinstalls onto the live chain (the
+// resume trampoline; see docs/continuations/resume-trampoline.md). The
+// equivalence below is the semantic model, not the literal runtime path:
 //
 //	(call/cc f) ≡
 //	  (call-with-composable-continuation

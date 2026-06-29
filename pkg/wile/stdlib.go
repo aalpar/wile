@@ -7,7 +7,7 @@ import (
 )
 
 // StdLibFS provides the standard Scheme libraries shipped with wile
-// (e.g., (wile algebra), (wile match), etc.) as an embedded filesystem.
+// (e.g., (wile algebra), (wile control), etc.) as an embedded filesystem.
 // Library paths resolve as "lib/...". Consumers add it to the engine with
 // WithSourceFS(StdLibFS).
 //

@@ -116,21 +116,24 @@ If `cont` is nil, there's nothing to return to — execution is done.
 
 The implementation lives in `PrimCallCC` in `registry/core/prim_control.go`. Here's the sequence:
 
-**1. Capture the continuation chain.** `SliceContinuationAt(nil)` deep-copies every frame from `mc.cont` down to the bottom. Each frame is individually copied so that future mutations to the live chain don't affect the captured one.
+**1. Capture the continuation chain.** `SliceContinuationAt` deep-copies every frame from `mc.cont` down to the nearest `DefaultPromptTag`. Each frame is individually copied so that future mutations to the live chain don't affect the captured one.
 
 ```go
-segment := mc.SliceContinuationAt(nil)
+capturePrompt, _ := mc.FindPrompt(machine.DefaultPromptTag)
+segment := mc.SliceContinuationAt(capturePrompt)
 windingStack := mc.WindingStack().Copy()
-cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
+comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
+mc.SnapshotReachableMarksInto(comp)            // restore outer marks on resume
+capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 ```
 
-**2. Build the escape closure.** This is a Go function wrapped as a Scheme closure. When invoked with a value `v`, it:
-- Checks the thread ID (no cross-thread jumps)
-- Checks the barrier token (no crossing `with-continuation-barrier`)
-- Creates a sub-context, grafts the copied chain onto it, runs the restored frames to completion
-- Aborts to `DefaultPromptTag` with the result
+The capture is **delimited**, not absolute. `FindPrompt(DefaultPromptTag)` returns `(nil, true)` at the top-level context boundary — `SliceContinuationAt(nil)` then grabs the whole chain — or a chain *frame* when the `call/cc` sits inside a `call-with-continuation-prompt` reusing the default tag, in which case only the segment down to that prompt is captured. Capturing more would loop forever: the chain above the prompt includes the re-invocation site itself.
 
-The model follows Racket's unification: `call/cc` is defined in terms of composable continuations plus abort:
+**2. Build the captured continuation value.** `call/cc` does not return a Go closure. It returns a `CapturedContinuation` (`machine/captured_continuation.go`) — a value that is both *callable* (invoking it resumes the captured point) and *introspectable* (`continuation-marks` can read its chain). The escape logic — thread-ID check, barrier check, and the resume itself — lives in `applyCapturedContinuation`, not inside a closure.
+
+When the value is invoked with `v`, `applyCapturedContinuation` checks the thread ID (no cross-thread jumps) and barrier token (no crossing `with-continuation-barrier`), then **returns the segment unrun** as an `ErrResumeContinuation` control signal. It does *not* run the captured chain on the spot. The nearest `DefaultPromptTag` driver reinstalls it — the [resume trampoline](resume-trampoline.md).
+
+The semantic model still follows Racket's unification: `call/cc` is composable-continuation capture plus abort —
 
 ```
 (call/cc f) ≡
@@ -140,37 +143,50 @@ The model follows Racket's unification: `call/cc` is defined in terms of composa
     default-prompt-tag)
 ```
 
+— but read this as the *meaning*, not the runtime path. The implementation reinstalls the captured segment directly via `ReinstallSegment` (with `boundary == nil`, the abortive "replace the whole chain" case) rather than literally raising an abort after running it.
+
 **3. Two execution modes.** `PrimCallCC` has a critical branch on `mc.Parent() != nil`:
 
-- **Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the current VM context via `mc.Apply()`. This preserves the full continuation chain — crucial for coroutines where multiple continuations interact with the same call stack.
+- **Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the current VM context via `mc.ApplyCallable()`. This preserves the full continuation chain — crucial for coroutines where multiple continuations interact with the same call stack.
 - **Sub-context mode** (`mc.Parent() == nil`): The lambda runs in an isolated sub-context. Used when `call/cc` is itself inside a foreign function's sub-context (e.g., inside `apply`).
 
-## The Escape Path: ErrPromptAbort
+## The Escape Path: Two Control Signals, One Driver
 
-When the escape closure fires, it doesn't just "return" — it needs to abandon whatever computation is currently running and jump back to a known boundary. Wile uses Go's error propagation for this.
+When a continuation is invoked, it doesn't just "return" — it abandons whatever computation is running and jumps to a known boundary. Wile uses Go's error propagation for this: the invocation returns an `error`-typed control signal that rides the `return err` plumbing up through `Run()` and any foreign-call wrappers until it reaches the driver loop. Because the signal is an `error`, `errors.As` finds it whether it arrives bare or wrapped inside other errors.
 
-The escape closure returns an `ErrPromptAbort` error targeting `DefaultPromptTag`. This error propagates up through the Go call stack (through `Run()`, through any `OperationForeignFunctionCall` wrappers) until it hits `RunWithEscapeHandling`.
+There are **two** such signals, and they mean different things:
 
-`RunWithEscapeHandling` is the outermost execution loop. It installs `DefaultPromptTag` as the context-level prompt, runs the VM, and catches any `ErrPromptAbort`:
+- **`ErrResumeContinuation`** — a `call/cc`-captured continuation was invoked. It carries the captured segment *unrun*. The driver reinstalls it onto the live chain and keeps looping (the [resume trampoline](resume-trampoline.md)). This is the resume path.
+- **`ErrPromptAbort`** — `abort-current-continuation` was called (directly, or as the abort half of a value delivery). It carries values, not a segment. The driver reconciles winding, restores past the matching prompt, and runs its handler or delivers the values. See [prompt/abort details](prompt-abort.md).
+
+Both are caught by the same loop. `RunWithEscapeHandling` is a thin entry point that delegates to `RunResumable`, the single driver under `DefaultPromptTag`:
 
 ```go
-func (p *MachineContext) RunWithEscapeHandling() error {
+func (p *MachineContext) RunResumable() error {
     p.promptTag = DefaultPromptTag
     for {
         err := p.Run()
-        if err == nil {
-            // ... normal completion
-            return nil
-        }
+        if err == nil { /* unwind remaining dynamic-wind, return */ }
+
         var abortErr *ErrPromptAbort
         if errors.As(err, &abortErr) {
-            // Unwind dynamic-wind, restore to prompt, invoke handler...
+            // reconcile winding, restore past the prompt, run handler / deliver
+            continue
         }
+
+        var resumeErr *ErrResumeContinuation
+        if errors.As(err, &resumeErr) {
+            boundary, _ := p.FindPrompt(resumeErr.Tag)
+            p.ReinstallSegment(resumeErr.Segment, boundary,
+                resumeErr.SourceWinding, resumeErr.Values, true)
+            continue                     // the trampoline bounce
+        }
+        // ... timer interrupts, then real errors fall through
     }
 }
 ```
 
-This is the same mechanism used by delimited continuations (`abort-current-continuation`). There's no separate "escape continuation" path — `call/cc` reuses the composable-continuation-plus-abort infrastructure.
+So `call/cc` is still *unified* with delimited continuations — both resume through the one shared `ReinstallSegment` primitive — but the resume and the abort are now distinct signals rather than a single abort-after-running. That split is what makes the trampoline possible: returning the segment unrun (instead of running it and aborting the result) is what keeps deep resumes at O(1) Go frames.
 
 ## The Subtle Parts
 
@@ -199,7 +215,7 @@ Foreign functions (Go primitives) that need to call Scheme closures create sub-c
 
 - A continuation captured in a sub-context only captures frames up to the sub-context boundary — not the parent's frames.
 - The `parentMC` pointer lets `call/cc` detect whether inline mode is safe.
-- Cross-context continuation jumps are mediated by `ErrPromptAbort`, not by direct frame manipulation.
+- Cross-context continuation jumps are mediated by control signals (`ErrResumeContinuation` for a `call/cc` resume, `ErrPromptAbort` for a value-delivery abort), not by direct frame manipulation.
 
 ## Seeing It In Action
 
@@ -220,7 +236,9 @@ Here's what happens inside the VM:
 3. `PrimCallCC` fires. It deep-copies the continuation chain (which includes the frame from step 2). It builds an escape closure wrapping this copy.
 4. The lambda `(lambda (k) (set! saved k) 10)` runs. It stashes `k` (the escape closure) in `saved` and returns `10`.
 5. `10` flows back through `RestoreContinuation`, the saved frame is popped, `(+ 1 10)` evaluates to `11`.
-6. Later, `(saved 42)` calls the escape closure with `42`. The closure creates a sub-context, grafts the copied chain onto it, and runs the restored frames — which resume at the `+` application with `1` on the eval stack and `42` in the value register. `(+ 1 42)` evaluates to `43`. The result aborts to `DefaultPromptTag` and is returned.
+6. Later, `(saved 42)` invokes the continuation with `42`. Rather than running the captured chain on the spot, it returns it *unrun* as an `ErrResumeContinuation` control signal. The nearest `DefaultPromptTag` driver (`RunResumable`) catches the signal, grafts the captured chain onto its own live continuation, puts `42` in the value register, and keeps looping — resuming at the `+` application with `1` on the eval stack. `(+ 1 42)` evaluates to `43`, which is returned.
+
+> Step 6 is the **resume trampoline**. An earlier design ran the captured chain in a fresh sub-context and aborted the result back to `DefaultPromptTag` — which cost one Go stack frame *per resume* (deep `call/cc` programs like `ctak` overflowed the Go stack under `-race`) and reconciled `dynamic-wind` winding twice. Returning the segment unrun and letting the single driver reinstall it onto itself runs every resume on the one `Run()` loop: O(1) Go frames, one winding reconcile. See [The Resume Trampoline](resume-trampoline.md) for the full mechanism.
 
 ## What Would Break
 

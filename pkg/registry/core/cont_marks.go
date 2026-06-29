@@ -43,7 +43,7 @@ func addContMarks(r *registry.Registry) error {
 			Doc: "Returns the continuation mark set from CONT, optionally limited by PROMPT-TAG.\n\nExamples:\n  ;; (continuation-marks (call/cc values))  => mark set from captured continuation", ParamNames: []string{"cont", "prompt-tag"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "continuation?", ParamCount: 1, Impl: PrimContinuationQ,
-			Doc: "Returns #t if OBJ is a captured continuation (escape closure from call/cc or composable continuation).\n\nExamples:\n  (call/cc (lambda (k) (continuation? k)))  => #t\n  (continuation? car)  => #f", ParamNames: []string{"obj"}, Category: "continuations",
+			Doc: "Returns #t if OBJ is a captured continuation (from call/cc or a composable continuation).\n\nExamples:\n  (call/cc (lambda (k) (continuation? k)))  => #t\n  (continuation? car)  => #f", ParamNames: []string{"obj"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "continuation-mark-set->list*", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetToListStar,
 			Doc: "Like continuation-mark-set->list but for multiple keys. Returns a list of vectors from MARK-SET, one per frame containing any key in KEY-LIST.\n\nExamples:\n  ;; See `continuation-mark-set->iterator' in (wile control) for usage.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations",
