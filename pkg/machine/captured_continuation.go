@@ -79,10 +79,24 @@ func (p *CapturedContinuation) EqualTo(o values.Value) bool {
 	return p == v
 }
 
-// applyCapturedContinuation implements the escape logic previously in
-// newComposeAbortEscapeClosure. It checks thread identity and barrier
-// validity, applies the composable continuation in a sub-context, then
-// aborts to DefaultPromptTag with the result.
+// applyCapturedContinuation implements the escape logic of a call/cc continuation.
+// It checks thread identity and barrier validity, then returns an
+// ErrResumeContinuation control signal that the nearest DefaultPromptTag driver
+// (RunResumable) reinstalls into the live continuation and keeps looping — the
+// trampoline. It does NOT run the captured chain here.
+//
+// This is the flip that resolves the continuation-resume cluster. The previous form
+// ran the captured chain in a fresh sub-context (sub.Run()) and aborted to
+// DefaultPromptTag with the result. That nests O(live continuation depth) Go frames
+// per resume — the ctak / -race stack overflow — and reconciles dynamic-wind winding
+// twice on an escape-out (ReinstallSegment AND the abort catch = the double-fire).
+// Returning the segment UNRUN and letting the driver reinstall it on ITSELF (boundary
+// = nil, the abortive replace) runs the resumed chain on the driver's own Run loop:
+// O(1) Go frames, and a SINGLE winding reconcile carrying the source winding from this
+// (k v) site (fixing the deeper-sub after-thunk skip). Because every continuation
+// boundary is now a chain frame, a full k aborts to DefaultPromptTag discarding the
+// chain-resident consumer/exit/prompt frames (escape-past preserved), while a k
+// captured inside a producer spans them (truncation fixed).
 func (p *MachineContext) applyCapturedContinuation(
 	capt *CapturedContinuation,
 	args []values.Value,
@@ -103,63 +117,21 @@ func (p *MachineContext) applyCapturedContinuation(
 			"call/cc: continuation cannot cross continuation barrier")
 	}
 
-	cc := capt.cc
+	// Copy the invocation values off the eval stack before the trampoline unwinds:
+	// when the caller used Drain (zero-copy) args shares the eval-stack backing array,
+	// which the resume's Restore recycles. Forward ALL of them (R7RS §6.10): the
+	// captured continuation resumes with however many values it was called with.
+	vals := make([]values.Value, len(args))
+	copy(vals, args)
 
-	// Bound the LIVE Go-stack nesting of continuation re-invocation. Restoring the
-	// captured chain runs it in a fresh sub-context whose Run() frame stays live on
-	// the Go stack until that chain completes; a continuation that re-invokes itself
-	// without converging (a call/cc loop) nests Go frames without bound until the
-	// runtime aborts the process with a stack overflow, bypassing the eval-stack
-	// maxCallDepth gate in SaveContinuation (each restored chain resets to the
-	// captured, shallow callDepth).
-	//
-	// This bound is SEPARATE from maxCallDepth (see maxContinuationDepth): the two
-	// guard different resources. maxCallDepth bounds eval-stack call depth, a memory
-	// budget (~500 B/frame). Continuation re-invocation nests on the Go goroutine
-	// stack, whose ceiling is far higher (~650k live frames before Go's 1 GB fatal
-	// overflow). The counter is contNestDepth on the per-thread pools: it tracks the
-	// frames CURRENTLY live (incremented here, decremented by the defer below when
-	// this re-invocation unwinds), so a converging program that resumes-then-unwinds
-	// — e.g. ctak, whose tree of resumes peaks ~100k live frames but mostly unwinds —
-	// is measured by its true Go-stack depth, not the cumulative resume count. A
-	// cumulative count over-counts such programs and trips on legitimate deep-but-
-	// converging continuation code; the live count clears them while still tripping a
-	// true runaway loop (which never unwinds) before the Go fatal overflow.
-	//
-	// pools is nil only for rootless cold/expand-time contexts, which never invoke
-	// runtime captured continuations; the guard keeps those panic-free.
-	if p.pools != nil {
-		p.pools.contNestDepth++
-		defer func() {
-			p.pools.contNestDepth--
-		}()
-		if p.maxContinuationDepth > 0 && p.pools.contNestDepth > p.maxContinuationDepth {
-			return p, werr.WrapForeignErrorf(werr.ErrCallDepthExceeded,
-				"call/cc: continuation re-invocation depth %d exceeds limit %d",
-				p.pools.contNestDepth, p.maxContinuationDepth)
-		}
-	}
-
-	sub := p.NewSubContext()
-	defer ReleaseSubContext(sub)
-	// The composable continuation installs its own continuation chain via
-	// Restore, replacing whatever marks this sub-context might inherit.
-	// Prevent the parent's stale marks from bleeding through findParameterInMarks.
-	sub.isolatedMarks = true
-	// Forward ALL invocation values (R7RS §6.10): the captured continuation
-	// resumes with however many values it was called with. applyComposableContinuation
-	// copies args before any Restore, so passing the slice through is safe.
-	_, err := sub.ApplyCallable(cc, args...)
-	if err != nil {
-		return p, err
-	}
-	err = sub.Run()
-	if err != nil {
-		return p, err
-	}
-
-	return p, &ErrPromptAbort{
-		Tag:    DefaultPromptTag,
-		Values: sub.GetValues(),
+	return p, &ErrResumeContinuation{
+		Tag:           DefaultPromptTag,
+		Segment:       capt.cc,
+		Values:        vals,
+		SourceWinding: p.windingStack.Copy(),
+		// call/cc isolates marks on resume (the captured snapshot in capt.cc, taken at
+		// capture time, restores the outer parameter/handler environment); composable
+		// resume composes the invoker's marks instead (Isolate=false there).
+		Isolate: true,
 	}
 }

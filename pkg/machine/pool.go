@@ -144,14 +144,6 @@ type threadPools struct {
 	envFrames     *unsyncFreeList[environment.EnvironmentFrame]
 	continuations *unsyncFreeList[MachineContinuation]
 	stacks        *unsyncFreeList[Stack]
-	// contNestDepth is the number of captured-continuation re-invocations
-	// currently live on this thread's Go stack (incremented on entry to
-	// applyCapturedContinuation, decremented when it unwinds). It is the actual
-	// Go-stack nesting depth — unlike a cumulative re-invocation count, it recedes
-	// as nested resumes unwind — so it is the correct quantity to bound against a
-	// Go stack overflow. Single-goroutine like the freelists, so a plain int needs
-	// no synchronization. See applyCapturedContinuation and maxContinuationDepth.
-	contNestDepth int
 }
 
 // newThreadPools mints a fresh, unregistered set of per-thread freelists.

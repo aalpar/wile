@@ -30,13 +30,13 @@ func popTwoNumbers(mc *MachineContext, name string) (values.Number, values.Numbe
 
 	an, ok := a.(values.Number)
 	if !ok {
-		return nil, nil, applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotANumber, "%s: expected number, got %s", name, a.SchemeString()))
+		return nil, nil, werr.WrapForeignErrorf(
+			werr.ErrNotANumber, "%s: expected number, got %s", name, a.SchemeString())
 	}
 	bn, ok := b.(values.Number)
 	if !ok {
-		return nil, nil, applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotANumber, "%s: expected number, got %s", name, b.SchemeString()))
+		return nil, nil, werr.WrapForeignErrorf(
+			werr.ErrNotANumber, "%s: expected number, got %s", name, b.SchemeString())
 	}
 	return an, bn, nil
 }
@@ -52,8 +52,8 @@ func popTwoReals(mc *MachineContext, name string) (values.Number, values.Number,
 		return nil, nil, err
 	}
 	if isNonRealComplex(a) || isNonRealComplex(b) {
-		return nil, nil, applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAReal, "%s: requires real arguments", name))
+		return nil, nil, werr.WrapForeignErrorf(
+			werr.ErrNotAReal, "%s: requires real arguments", name)
 	}
 	return a, b, nil
 }
@@ -171,8 +171,8 @@ func inlineDiv(mc *MachineContext) error {
 	}
 	result, divErr := a.Divide(b)
 	if divErr != nil {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			divErr, "/: division error"))
+		return werr.WrapForeignErrorf(
+			divErr, "/: division error")
 	}
 	mc.SetValue(result)
 	return nil

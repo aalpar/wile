@@ -85,11 +85,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.escapeCont = p.escapeCont
 	mc.thread = p.thread
 	mc.maxCallDepth = p.maxCallDepth
-	mc.maxContinuationDepth = p.maxContinuationDepth
 	mc.maxStackSize = p.maxStackSize
-	// The live continuation re-invocation depth lives on the shared per-thread
-	// pools (contNestDepth), inherited above via mc.pools = p.pools — it is not a
-	// per-context value, so there is nothing to copy here.
 	mc.barrierValid = p.barrierValid // inherit barrier context
 	mc.windingStack = p.windingStack
 	return mc

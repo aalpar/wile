@@ -59,8 +59,12 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 		return mc, err
 	}
 
-	// Create and push the winding frame
+	// Create and push the winding frame, snapshotting the reachable marks at the
+	// dynamic-wind call site so the before/after thunks run in this entry environment
+	// (R7RS §6.10), not the body's — a parameterize established inside the body must
+	// not leak into the after thunk on an escape/reconcile.
 	frame := NewDynamicWindFrame(before, after)
+	frame.entryMarks = mc.collectReachableMarks()
 	mc.PushWindingFrame(frame)
 
 	mc.pc++

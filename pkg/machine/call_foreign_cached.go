@@ -52,7 +52,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 
 	err := checkArity(l, fcls.isVariadic, len(vs))
 	if err != nil {
-		return nil, applyCallableError(mc, err)
+		return bridgeForeignError(mc, err)
 	}
 
 	mc.counters.ClosuresApplied++
@@ -76,7 +76,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	if fcls.validate != nil {
 		err = fcls.validate(mc)
 		if err != nil {
-			return nil, applyCallableError(mc, err)
+			return bridgeForeignError(mc, err)
 		}
 	}
 
@@ -85,7 +85,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	mc.reconfigured = false
 	err = fcls.fn(mc)
 	if err != nil {
-		return nil, applyCallableError(mc, err)
+		return bridgeForeignError(mc, err)
 	}
 
 	// Immediate timeout check after foreign call returns successfully.
@@ -144,7 +144,7 @@ func callForeignCachedReassigned(mc *MachineContext, callable values.Value) (*Ma
 
 	result, err := mc.ApplyCallable(callable, vs...)
 	if err != nil {
-		return nil, applyCallableError(mc, err)
+		return bridgeForeignError(mc, err)
 	}
 	return result, nil
 }

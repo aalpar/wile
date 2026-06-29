@@ -84,19 +84,11 @@ type MachineContext struct {
 	// The numeric half (threadID) lives in vmState and propagates into
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
-	thread       *values.Thread
-	maxCallDepth int    // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
-	maxStackSize uint64 // 0 = unlimited (default), otherwise max eval stack entries
-	// maxContinuationDepth bounds nested captured-continuation re-invocation
-	// separately from maxCallDepth. The two guard different resources: maxCallDepth
-	// is an eval-stack memory budget, while continuation re-invocation nests on the
-	// Go goroutine stack, whose ceiling is far higher. The live nesting count is
-	// threadPools.contNestDepth (per-thread, shared across sub-contexts), checked
-	// against this bound in applyCapturedContinuation.
-	// 0 = unlimited; negatives are clamped to 0 by SetMaxContinuationDepth.
-	maxContinuationDepth int
-	restArgBuf           values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
-	isolatedMarks        bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
+	thread        *values.Thread
+	maxCallDepth  int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
+	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
+	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
+	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 
 	// reconfigured is set by Apply when it repoints the VM (template/env/pc) to
 	// execute a closure in place. The foreign-call dispatchers (applyForeign,
@@ -467,15 +459,24 @@ func (p *MachineContext) Run() error {
 			}
 			tup, ok := v.(values.Tuple)
 			if !ok {
-				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
+				rerr := applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument must be a list, got %s", v.SchemeString()))
+				if rerr != nil {
+					return rerr
+				}
+				// Bridged to an in-place handler that reconfigured mc; re-dispatch into it.
+				continue
 			}
 			err := values.ForEachProperList(mc.ctx, tup, "apply", func(_ context.Context, _ int, _ bool, elem values.Value) error {
 				mc.evals.Push(elem)
 				return nil
 			})
 			if err != nil {
-				return applyCallableError(mc, err)
+				rerr := applyCallableError(mc, err)
+				if rerr != nil {
+					return rerr
+				}
+				continue
 			}
 			err = mc.checkStackSize()
 			if err != nil {
@@ -1271,22 +1272,6 @@ func (p *MachineContext) SetMaxCallDepth(n int) {
 	p.maxCallDepth = n
 }
 
-// MaxContinuationDepth returns the maximum captured-continuation re-invocation
-// depth limit. 0 means unlimited. See the field comment for why this is
-// separate from MaxCallDepth.
-func (p *MachineContext) MaxContinuationDepth() int {
-	return p.maxContinuationDepth
-}
-
-// SetMaxContinuationDepth sets the maximum captured-continuation re-invocation
-// depth limit. 0 means unlimited. Negative values are clamped to 0.
-func (p *MachineContext) SetMaxContinuationDepth(n int) {
-	if n < 0 {
-		n = 0
-	}
-	p.maxContinuationDepth = n
-}
-
 // MaxStackSize returns the maximum eval stack size limit. 0 means unlimited.
 func (p *MachineContext) MaxStackSize() uint64 {
 	return p.maxStackSize
@@ -1492,14 +1477,22 @@ func (p *MachineContext) RunResumable() (rerr error) {
 				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
 			}
 
-			// Unwind dynamic-wind from current to prompt's winding depth.
-			// When prompt is nil (context-level prompt), the target winding stack
-			// is nil — the context boundary has no saved winding state.
+			// Unwind dynamic-wind from the escape-point winding to the prompt's
+			// winding depth. When prompt is nil (context-level prompt), the target
+			// winding stack is nil — the context boundary has no saved winding state.
+			// Reconcile from abortErr.SourceWinding when the abort carried it (the
+			// escape originated in a deeper sub-context whose dynamic-wind frames are
+			// not on this driver's own winding — the C3 deeper-sub after-thunk skip);
+			// otherwise from the driver's own winding (value-delivery aborts).
 			var targetStack WindingStack
 			if prompt != nil {
 				targetStack = prompt.windingStack
 			}
-			restoreErr := p.RestoreWithWindingFrom(nil, p.windingStack, targetStack)
+			sourceStack := p.windingStack
+			if abortErr.SourceWinding != nil {
+				sourceStack = abortErr.SourceWinding
+			}
+			restoreErr := p.RestoreWithWindingFrom(nil, sourceStack, targetStack)
 			if restoreErr != nil {
 				return restoreErr
 			}
@@ -1531,6 +1524,41 @@ func (p *MachineContext) RunResumable() (rerr error) {
 				if prompt == nil {
 					return nil
 				}
+			}
+			continue
+		}
+
+		var resumeErr *ErrResumeContinuation
+		if errors.As(err, &resumeErr) {
+			// The trampoline: a call/cc continuation was invoked (applyCapturedContinuation
+			// returned this signal instead of nesting a sub.Run()). Reinstall its captured
+			// segment at the nearest prompt with the continuation's tag (DefaultPromptTag)
+			// on THIS driver's live chain, then keep looping so the resumed chain runs on
+			// the driver itself: O(1) Go frames (no ctak overflow), and a SINGLE winding
+			// reconcile from the source winding at the (k v) site (no double-fire; deeper-
+			// sub after-thunks fire once). The boundary is the matching prompt's frame, or
+			// nil at the top-level context boundary: nil REPLACES the whole chain (the
+			// escape-past case — a full k discards the chain-resident consumer/exit/prompt
+			// frames), while an inner call-with-continuation-prompt frame receives the
+			// delimited segment's result and the chain above it is discarded.
+			boundary, _ := p.FindPrompt(resumeErr.Tag)
+			wasEmpty, reErr := p.ReinstallSegment(
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, resumeErr.Isolate)
+			if reErr != nil {
+				return reErr
+			}
+			if wasEmpty {
+				// Empty captured continuation (the call/cc sat in tail position, e.g.
+				// captured inside a force/delay thunk): ReinstallSegment delivered the
+				// values and reconciled winding but installed no frames. At the top-level
+				// context boundary the delivered values are the final result. At a
+				// delimited inner prompt the values must flow THROUGH it: restore the
+				// prompt frame so the (transparent) prompt delivers them to its parent
+				// (e.g. an outer call-with-continuation-prompt → the rest of the program).
+				if boundary == nil {
+					return nil
+				}
+				p.Restore(boundary)
 			}
 			continue
 		}
@@ -1575,4 +1603,85 @@ func (p *MachineContext) RunResumable() (rerr error) {
 // driver every DefaultPromptTag owner routes through.
 func (p *MachineContext) RunWithEscapeHandling() error {
 	return p.RunResumable()
+}
+
+// RunWithinBoundary drives this sub-context like Run, but resolves an
+// ErrPromptAbort whose tag names a prompt ON THIS CONTEXT'S OWN CHAIN inline — the
+// way RunResumable's abort arm does at the top level — instead of letting it escape
+// to a Go-stack errors.As catch in the calling primitive.
+//
+// It exists because the continuation cluster reifies call-with-exit /
+// call-with-continuation-prompt as continuation-CHAIN prompt frames run inline. A
+// reified boundary that appears INSIDE a surviving sub-context (a
+// with-continuation-barrier thunk, a RaiseInPlace handler, a dynamic-wind thunk, a
+// parameter converter, ...) lands its prompt frame on THAT sub-context's chain.
+// When it aborts, FindPrompt(tag) on the sub's own chain finds the frame and this
+// driver routes the abort here; without it the abort escapes to the top
+// RunResumable, whose FindPrompt walks the PARENT chain and cannot see the frame
+// ("no prompt found for tag").
+//
+// It is a strict superset of Run for any NewSubContext: such a context has
+// promptTag == nil (NewSubContext does not inherit it), so FindPrompt only matches
+// a prompt FRAME pushed inside the sub by a reified boundary. An abort whose tag is
+// NOT on this chain — a full call/cc to DefaultPromptTag, or an exit targeting an
+// OUTER boundary — is re-raised unchanged so the enclosing driver owns it; and
+// ErrResumeContinuation (the call/cc trampoline signal) is never an ErrPromptAbort,
+// so it always re-raises to the top RunResumable. No DefaultPromptTag install, no
+// timer or panic handling: those belong to the one top-level RunResumable.
+func (p *MachineContext) RunWithinBoundary() error {
+	for {
+		err := p.Run()
+		if err == nil {
+			return nil
+		}
+
+		var abortErr *ErrPromptAbort
+		if !errors.As(err, &abortErr) {
+			// ErrResumeContinuation, a timer, an exception escape, or a real error:
+			// the enclosing driver handles it.
+			return err
+		}
+
+		prompt, found := p.FindPrompt(abortErr.Tag)
+		if !found {
+			// The abort targets a boundary OUTSIDE this sub-context; re-raise so the
+			// enclosing RunWithinBoundary / RunResumable routes it.
+			return err
+		}
+
+		// Reconcile dynamic-wind from the escape-point winding to the prompt's,
+		// restore past the prompt frame, then run its handler or deliver the abort
+		// values — exactly as RunResumable's abort arm does. For a NewSubContext
+		// (promptTag nil) the found prompt is always a chain FRAME; the prompt == nil
+		// (context-level) arms are kept for parity with RunResumable. SourceWinding (if
+		// carried) is the winding at the escape point, possibly deeper than this sub.
+		var targetStack WindingStack
+		if prompt != nil {
+			targetStack = prompt.windingStack
+		}
+		sourceStack := p.windingStack
+		if abortErr.SourceWinding != nil {
+			sourceStack = abortErr.SourceWinding
+		}
+		restoreErr := p.RestoreWithWindingFrom(nil, sourceStack, targetStack)
+		if restoreErr != nil {
+			return restoreErr
+		}
+		if prompt != nil {
+			p.Restore(prompt)
+		}
+
+		if prompt != nil && prompt.PromptHandler() != nil {
+			_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
+			if applyErr != nil {
+				return applyErr
+			}
+		} else {
+			p.SetValues(abortErr.Values...)
+			if prompt == nil {
+				return nil
+			}
+		}
+		continue
+	}
 }

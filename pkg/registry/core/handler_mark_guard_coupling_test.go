@@ -166,37 +166,37 @@ func TestGuardCoupling_C0_PlainSurvives(t *testing.T) {
 	qt.Assert(t, got, qt.Equals, "(finished (1 2 3))")
 }
 
-// truncatedTail is the truncation signature of this generator: first pass yields
-// result 1 (count 0); (k 1) re-invokes the producer -> (+ 1 1) = 2, whose sub-context
-// value is returned while the consumer + set!/if/done tail is dropped. So the whole
-// expression evaluates to "2" instead of (finished (1 2 3)).
-const truncatedTail = "2"
+// fullTrail is the count-to-three generator's correct trace. Before the
+// boundary-reification cluster these probes truncated to "2" (the producer ran in a
+// sub-context, so a k captured inside it dropped the consumer + set!/if/done tail on
+// re-entry); reifying call-with-values / call-with-exit as continuation-chain frames
+// keeps that tail on the captured chain, so the generator now counts to three. These
+// three cells are the permanent regression guards for that fix.
+const fullTrail = "(finished (1 2 3))"
 
-// C1 (doc baseline): raw call-with-values, producer captures k. Characterizes the
-// documented producer-in-sub-context truncation.
+// C1: raw call-with-values, producer captures k — the producer-in-sub-context
+// truncation is fixed; the generator reaches the full trace.
 func TestGuardCoupling_C1_RawCallWithValues(t *testing.T) {
 	got, err := runProtoGuard(t, generatorProbe(
 		`(call-with-values (lambda () (+ 1 (call/cc (lambda (c) (set! k c) 0)))) (lambda (x) x))`))
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got, qt.Equals, truncatedTail)
+	qt.Assert(t, got, qt.Equals, fullTrail)
 }
 
-// C2 (KEY control): the REAL builtin guard truncates identically to C1, proving
-// guard's value-facet truncation is PRE-EXISTING in shipped guard today, independent
-// of any handler change.
+// C2: the REAL builtin guard (call-with-exit over call-with-values) survives
+// identically to C1 once both boundaries are reified.
 func TestGuardCoupling_C2_RealGuard(t *testing.T) {
 	got, err := runProtoGuard(t, generatorProbe(
 		`(guard (e (#t e)) (+ 1 (call/cc (lambda (c) (set! k c) 0))))`))
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got, qt.Equals, truncatedTail)
+	qt.Assert(t, got, qt.Equals, fullTrail)
 }
 
-// G4 (the test): my-guard over the parameter handler truncates IDENTICALLY to the
-// real builtin guard (C2). The handler-on-mark change introduces NO new truncation --
-// the handler facet is separable from claim 1.
+// G4: my-guard over the parameter handler survives identically to the real builtin
+// guard (C2) — the handler facet adds no truncation.
 func TestGuardCoupling_G4_MyGuard(t *testing.T) {
 	got, err := runProtoGuard(t, generatorProbe(
 		`(my-guard (e (#t e)) (+ 1 (call/cc (lambda (c) (set! k c) 0))))`))
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got, qt.Equals, truncatedTail)
+	qt.Assert(t, got, qt.Equals, fullTrail)
 }

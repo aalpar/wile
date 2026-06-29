@@ -171,7 +171,7 @@ func callWithFile(
 	if err != nil {
 		return err
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 	if err != nil {
 		return err
 	}

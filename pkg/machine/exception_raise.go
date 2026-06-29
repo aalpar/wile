@@ -63,11 +63,20 @@ func ExceptionHandlerParam() values.Value {
 // *ErrExceptionEscape carrier bubbles to RunWithEscapeHandling and surfaces to the
 // embedder (engine.wrapRuntimeError) with the condition, source, and stack trace.
 func RaiseInPlace(mc *MachineContext, cond values.Value, continuable bool) error {
+	handlers := mc.ResolveParameterValue(exceptionHandlerParam)
+	return mc.raiseToHandlers(cond, continuable, handlers)
+}
+
+// raiseToHandlers runs the FIRST handler of `handlers` on cond, escalating to the
+// rest (its cdr) on a non-continuable normal return. handlers is passed explicitly so
+// the non-continuable escalation targets the parent list directly rather than
+// re-resolving from marks (the handler ran with the parent mark, but the finalizer
+// frame that escalates runs after the handler's marks are gone).
+func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, handlers values.Value) error {
 	source := mc.CurrentSource()
 	trace := mc.CaptureStackTrace(defaultBacktraceDepth)
 	enrichNativeError(cond, source, trace)
 
-	handlers := mc.ResolveParameterValue(exceptionHandlerParam)
 	pair, ok := handlers.(*values.Pair)
 	if !ok {
 		// Empty handler stack: uncaught exception. Carry it to the embedder.
@@ -76,45 +85,88 @@ func RaiseInPlace(mc *MachineContext, cond values.Value, continuable bool) error
 	handler := pair.Car()
 	parent := pair.Cdr()
 
-	// Run the handler in a sub-context with the parent handler installed as the
-	// current one (so a re-raise inside the handler escalates) and the raise-site
-	// diagnostics attached (so current-error-context can read them). Setting the
-	// parent mark is the Go equivalent of (parameterize ((exc-param parent)) …).
-	errCtx := NewErrorContext(source, trace, nil)
-	sub := mc.NewSubContext()
-	defer ReleaseSubContext(sub)
-	sub.SetMark(exceptionHandlerParam, parent)
-	sub.SetMark(ErrorContextKey(), errCtx)
+	// Install the parent handler as current and the raise-site diagnostics on the LIVE
+	// activation (SetMark updates the marks in place; the Go equivalent of
+	// (parameterize ((exc-param parent)) …)). This makes a re-raise inside the handler
+	// escalate, and rides the marks into a continuation captured inside the handler.
+	mc.SetMark(exceptionHandlerParam, parent)
+	mc.SetMark(ErrorContextKey(), NewErrorContext(source, trace, nil))
 
-	_, err := sub.ApplyCallable(handler, cond)
-	if err != nil {
-		return err
-	}
-	err = sub.Run()
-	if err != nil {
-		// The handler escaped (guard's prompt abort, a captured continuation, a
-		// nested raise's uncaught carrier, …). Let it bubble unchanged.
-		return err
-	}
-
+	// Run the handler INLINE on mc — NOT in a sub-context. This is load-bearing for
+	// nested guard under the resume flip: guard's handler captures handler-k via
+	// call/cc, and that continuation must span the live chain INCLUDING the
+	// chain-resident exit/prompt frames ABOVE the raise. A sub-context handler captures
+	// only the sub's chain, so a reinstated handler-k would not restore the outer
+	// boundaries and an escalating re-raise's abort to an outer exit tag would find "no
+	// prompt found for tag exit". Inline, handler-k spans mc.cont, so the boundaries
+	// travel in the captured segment and the escalation resolves them.
 	if continuable {
-		// raise-continuable: the handler returned; ALL its values become the values of
-		// the raise-continuable expression (R7RS §6.11 — "the values returned by the
-		// handler"). Use SetValues/GetValues so a multi-value handler return is not
-		// collapsed to its first value.
-		mc.SetValues(sub.GetValues()...)
-		return nil
+		// raise-continuable: the handler's return value(s) become the value(s) of the
+		// raise-continuable expression (R7RS §6.11), delivered inline at the raise site
+		// by the transparent frame (returnTemplate passes the value register through).
+		frame := NewMachineContinuation(mc.cont, returnTemplate, mc.env)
+		_, err := mc.RunBodyUnderFrame(frame, handler, cond)
+		return err
 	}
 
-	// Non-continuable handler returned: raise a secondary exception in the handler's
-	// dynamic extent (sub has exc-param = parent), so it escalates to the parent.
-	// Terminates: each level reads a shorter handler list, bottoming out at the
-	// empty-stack uncaught carrier above.
-	secondary := values.NewErrorObjectWithCause(
-		"exception handler returned from non-continuable exception",
-		werr.ErrNonContinuableException,
-	)
-	return RaiseInPlace(sub, secondary, false)
+	// Non-continuable (raise / error / Go-error bridge): the handler is expected to
+	// escape (guard escapes via guard-k). If it RETURNS normally, the finalizer frame
+	// escalates a secondary non-continuable exception to the parent handlers — directly
+	// (not re-resolved from marks). Each escalation reads a shorter handler list,
+	// bottoming out at the empty-stack uncaught carrier above. The frame's
+	// applyToValuesCode template applies the escalator to (and discards) the handler's
+	// return value(s).
+	//
+	// EXCEPTION: a guard whose clauses miss re-raises via raise-continuable, which
+	// RESUMES this handler's captured handler-k continuation — and that continuation
+	// now spans this finalizer frame (the handler runs inline so handler-k captures
+	// the live chain, which is what makes nested guard work). So the continuable
+	// re-raise's result flows back THROUGH this frame. Detect that by isolatedMarks
+	// (set only while a call/cc continuation is being resumed) and FORWARD the value
+	// instead of escalating: the handler did not return naturally, it was resumed with
+	// a continuable value.
+	escalateFn := func(finCC CallContext) error {
+		finMC, err := RequireMachineContext(finCC, "raise")
+		if err != nil {
+			return err
+		}
+		if finMC.isolatedMarks {
+			var vals []values.Value
+			current := finMC.Arg(0)
+			for !values.IsEmptyList(current) {
+				tuple, ok := current.(values.Tuple)
+				if !ok {
+					return werr.WrapForeignErrorf(werr.ErrNotAList,
+						"raise: improper handler-result list")
+				}
+				vals = append(vals, tuple.Car())
+				current = tuple.Cdr()
+			}
+			finMC.SetValues(vals...)
+			return nil
+		}
+		secondary := values.NewErrorObjectWithCause(
+			"exception handler returned from non-continuable exception",
+			werr.ErrNonContinuableException,
+		)
+		return finMC.raiseToHandlers(secondary, false, parent)
+	}
+	// Use a runtime env reachable from here, falling back to the live frame: when the
+	// raise fires inside a reified call-with-values producer the live procedure frame
+	// is detached (nil namespace), so MutableRuntime() would panic. The escalator is a
+	// pure-Go closure; any valid frame serves for its apply-time InitApplyFrame.
+	escalatorEnv := mc.EnvironmentFrame().MutableRuntimeOrNil()
+	if escalatorEnv == nil {
+		escalatorEnv = mc.EnvironmentFrame()
+	}
+	escalator := NewForeignClosure(escalatorEnv, 1, true, escalateFn)
+	escalateTpl := &NativeTemplate{
+		code:     applyToValuesCode,
+		literals: MultipleValues{escalator},
+	}
+	frame := NewMachineContinuation(mc.cont, escalateTpl, mc.env)
+	_, err := mc.RunBodyUnderFrame(frame, handler, cond)
+	return err
 }
 
 // enrichNativeError stamps a freshly-raised NativeError with the raise-site source

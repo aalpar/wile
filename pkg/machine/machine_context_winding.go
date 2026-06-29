@@ -50,6 +50,16 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 		if frame.After != nil {
 			// Truncated stack: the after thunk runs at depth i, not the parent's full depth.
 			sub := p.NewSubContextWithWinding(stack[:i:i])
+			// Run the after thunk in the dynamic-wind's ENTRY mark environment (R7RS
+			// §6.10), not whatever marks are live at the unwind point — so a
+			// parameterize established inside the body does not leak its value into the
+			// after thunk when the reconcile runs before the captured chain is restored.
+			// Always isolate (even when entryMarks is nil): isolation is what stops the
+			// resolver from walking into the still-live body marks; nil entryMarks then
+			// resolves parameters to their base value, the correct entry behaviour when
+			// no mark was set above the dynamic-wind.
+			sub.capturedMarks = frame.entryMarks
+			sub.isolatedMarks = true
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				ReleaseSubContext(sub)
@@ -57,7 +67,7 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 				p.windingStack = stack[:i:i]
 				return err
 			}
-			err = sub.Run()
+			err = sub.RunWithinBoundary()
 			ReleaseSubContext(sub)
 			if err != nil {
 				// Propagate escapes and exceptions.
@@ -81,12 +91,16 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 		frame := target[i]
 		if frame.Before != nil {
 			sub := p.NewSubContext()
+			// Run the before thunk in the dynamic-wind's entry mark environment (R7RS
+			// §6.10) on re-entry, mirroring the after thunk in unwindStackTo.
+			sub.capturedMarks = frame.entryMarks
+			sub.isolatedMarks = true
 			_, err := sub.ApplyCallable(frame.Before)
 			if err != nil {
 				ReleaseSubContext(sub)
 				return err
 			}
-			err = sub.Run()
+			err = sub.RunWithinBoundary()
 			ReleaseSubContext(sub)
 			if err != nil {
 				return err

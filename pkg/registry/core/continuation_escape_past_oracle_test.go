@@ -55,8 +55,6 @@ package core_test
 // like the consumer; they stand as escape-past parity guards for the full fix.)
 
 import (
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -64,19 +62,6 @@ import (
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 )
-
-// requireRedContinuation skips a RED acceptance test unless the caller opts in via
-// WILE_RUN_RED_CONTINUATION=1. The cells assert the TARGET (post-fix) behavior, so
-// they are RED on master; gating keeps CI green while leaving them one env var away
-// from running as the coupled fix's acceptance criteria.
-func requireRedContinuation(t *testing.T) {
-	t.Helper()
-	if os.Getenv("WILE_RUN_RED_CONTINUATION") == "" {
-		t.Skip("RED acceptance test for the continuation coupled-fix (truncation / " +
-			"dynamic-wind double-fire). Set WILE_RUN_RED_CONTINUATION=1 to run; it asserts " +
-			"the post-fix TARGET behavior and is RED on master by design.")
-	}
-}
 
 // TestContinuationEscapePastBoundary is THE escape-past regression net.
 //
@@ -254,41 +239,17 @@ func TestContinuationEscapePastMultiShotWithMutation(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "3")
 }
 
-// --- RED cells: the two OPEN defects the coupled boundary-reification fix targets.
-// Each has a DocumentsCurrentMasterBug tripwire (always on, proves the bug real)
-// and a Target acceptance test (WILE_RUN_RED_CONTINUATION-gated, asserts the fix).
+// --- Acceptance guards: the defects the coupled boundary-reification fix targeted,
+// now GREEN. Before the fix each was an OPEN master defect with a
+// DocumentsCurrentMasterBug tripwire (deleted once the fix landed) and a
+// WILE_RUN_RED_CONTINUATION-gated target; the targets are now un-gated permanent
+// regression guards — a regression turns them RED.
 
-// TestCallWithValuesTruncation_DocumentsCurrentMasterBug proves the truncation
-// defect is live on master: a generator captures `k` INSIDE the call-with-values
-// producer (a sub-context) and re-invokes it after call-with-values returns. The
-// consumer + the rest of the program live as Go control flow after sub.Run(), are
-// not on the captured chain, and are DROPPED on re-entry — the program truncates,
-// surfacing the intermediate value `2` instead of the full trace `(1 2 3)`.
-//
-// BUG CHARACTERIZATION — when the coupled fix lands this assertion must be DELETED;
-// its target counterpart (below) becomes the GREEN acceptance test.
-func TestCallWithValuesTruncation_DocumentsCurrentMasterBug(t *testing.T) {
-	const code = `
-(let ((k #f) (count 0) (trace '()))
-  (call-with-values
-    (lambda () (+ 1 (call/cc (lambda (c) (set! k c) 0))))
-    (lambda (x) (set! trace (cons x trace))))
-  (set! count (+ count 1))
-  (if (< count 3) (k count) (reverse trace)))`
-	result, err := testhelpers.RunSchemeCode(t, code)
-	qt.Assert(t, err, qt.IsNil)
-	// Master truncates the generator: the re-invoked k (captured inside the producer
-	// sub-context) aborts to DefaultPromptTag delivering the intermediate value,
-	// dropping the consumer and the (reverse trace) tail. Correct is "(1 2 3)".
-	qt.Assert(t, result.SchemeString(), qt.Equals, "2")
-}
-
-// TestCallWithValuesTruncation_TargetReachesFullTrace is the acceptance criterion:
-// the coupled fix (producer inline / boundary reified as a chain frame) keeps the
-// consumer + tail on the captured chain, so re-entry replays them and the generator
-// counts to three.
+// TestCallWithValuesTruncation_TargetReachesFullTrace is the truncation acceptance
+// criterion: the reified call-with-values (producer inline, consumer a chain frame)
+// keeps the consumer + program tail on the captured chain, so re-entry replays them
+// and the generator counts to three (master truncated at the intermediate "2").
 func TestCallWithValuesTruncation_TargetReachesFullTrace(t *testing.T) {
-	requireRedContinuation(t)
 	const code = `
 (let ((k #f) (count 0) (trace '()))
   (call-with-values
@@ -301,40 +262,12 @@ func TestCallWithValuesTruncation_TargetReachesFullTrace(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "(1 2 3)")
 }
 
-// TestDynamicWindDoubleFire_DocumentsCurrentMasterBug proves the after-thunk
-// double-fire is live on master. An after-thunk that errors on its SECOND
-// invocation turns the latent double-fire into a surfaced error (the trailing fire
-// happens at the top-level abort catch, AFTER the program's value is fixed — which
-// is exactly why counter/constant assertions are blind to it).
-//
-// Root cause: two winding reconciles on the call/cc-escape path — one in
-// ReinstallSegment, one in RunResumable's abort catch (archaeology §7a). The
-// coupled fix collapses them to a single reconcile site.
-//
-// BUG CHARACTERIZATION — delete when the fix lands; the target counterpart asserts
-// the single fire.
-func TestDynamicWindDoubleFire_DocumentsCurrentMasterBug(t *testing.T) {
-	const code = `
-(let ((fired #f) (k #f))
-  (call/cc (lambda (c) (set! k c)))
-  (cond (k (let ((kk k)) (set! k #f)
-            (dynamic-wind (lambda () #f)
-                          (lambda () (kk #f))
-                          (lambda () (if fired (error "DOUBLE-FIRE") (set! fired #t))))))
-        (else 'done)))`
-	_, err := testhelpers.RunSchemeCode(t, code)
-	// Master double-fires: the after-thunk runs a second time at the top-level
-	// catch, where fired is already #t, raising DOUBLE-FIRE. A correct single-fire
-	// completes with 'done and no error.
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, strings.Contains(err.Error(), "DOUBLE-FIRE"), qt.IsTrue)
-}
-
-// TestDynamicWindDoubleFire_TargetFiresOnce is the acceptance criterion: the
-// after-thunk fires exactly once on escape-out, so the error-on-second sentinel
-// never trips and the program completes with 'done.
+// TestDynamicWindDoubleFire_TargetFiresOnce is the double-fire acceptance criterion:
+// the after-thunk fires exactly once on the call/cc escape-out, so the
+// error-on-second-fire sentinel never trips and the program completes with 'done.
+// The flip collapses the two winding reconciles (ReinstallSegment + the abort catch)
+// that master fired into one.
 func TestDynamicWindDoubleFire_TargetFiresOnce(t *testing.T) {
-	requireRedContinuation(t)
 	const code = `
 (let ((fired #f) (k #f))
   (call/cc (lambda (c) (set! k c)))
@@ -491,37 +424,13 @@ func TestHandlerRunsBoundaryThenReraise_C4(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "(outer again)")
 }
 
-// TestComposableEscapePastReifiedBoundary_DocumentsCurrentMasterBug proves KC-9 is
-// live on master: a call-with-composable-continuation captured to the default prompt
-// tag from inside a call-with-exit cannot see the outer default prompt, because the
-// call-with-exit SUB-CONTEXT blocks FindPrompt — so the capture ERRORS ("no prompt
-// found for tag"). Reifying call-with-exit as a chain frame removes that block; the
-// target counterpart asserts the capture then succeeds. This cell only asserts
-// TARGET-relevant behavior indirectly (it pins the current limitation); DELETE it when
-// the unified change lands and its target goes GREEN.
-func TestComposableEscapePastReifiedBoundary_DocumentsCurrentMasterBug(t *testing.T) {
-	const code = `
-(call-with-continuation-prompt
-  (lambda ()
-    (call-with-exit
-      (lambda (exit)
-        (+ 1 (call-with-composable-continuation
-               (lambda (k) (k 10))
-               (default-continuation-prompt-tag))))))
-  (default-continuation-prompt-tag)
-  (lambda (v) v))`
-	_, err := testhelpers.RunSchemeCode(t, code)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, strings.Contains(err.Error(), "no prompt found"), qt.IsTrue)
-}
-
 // TestComposableEscapePastReifiedBoundary_Target is the KC-9 acceptance criterion:
-// once call-with-exit is a chain frame, FindPrompt reaches the outer default prompt,
-// so the composable capture succeeds (no error). The exact value is pinned when the
-// reification lands; the load-bearing property here is that capture no longer errors.
-// Env-gated like the other RED targets.
+// once call-with-exit is a chain frame (not a sub-context), FindPrompt reaches the
+// outer default prompt from inside it, so a call-with-composable-continuation captured
+// there succeeds (master errored "no prompt found" because the call-with-exit
+// sub-context blocked FindPrompt). The load-bearing property is that capture no longer
+// errors.
 func TestComposableEscapePastReifiedBoundary_Target(t *testing.T) {
-	requireRedContinuation(t)
 	const code = `
 (call-with-continuation-prompt
   (lambda ()
@@ -534,4 +443,146 @@ func TestComposableEscapePastReifiedBoundary_Target(t *testing.T) {
   (lambda (v) v))`
 	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
+}
+
+// ============================================================================
+// Late-arc regression guards (item 4 of the continuation-testing-enhancement plan).
+// Each of these is a bug found LATE in the reification+flip arc — after the full Go
+// suite, lint, and -race were all green — by the checked-in Scheme suites or the A/B
+// crosscheck. Promoting them to one-expression oracle cells makes them the cheapest,
+// most-specific guards. See plans/2026-06-28-continuation-testing-enhancement.md.
+// ============================================================================
+
+// TestConsumerHandlerVisibility: a raise-continuable inside a TAIL-position
+// call-with-values consumer must reach the enclosing with-exception-handler. The
+// reified consumer runs in an apply-frame; before RunBodyUnderFrame carried the
+// caller's marks, the %exception-handlers mark a tail call-with-values inherits on the
+// live activation was dropped when that frame restored, so the consumer's
+// raise-continuable escaped UNCAUGHT.
+func TestConsumerHandlerVisibility(t *testing.T) {
+	const code = `
+(let ((caught #f))
+  (with-exception-handler
+    (lambda (e) (set! caught e) 'handled)
+    (lambda ()
+      (call-with-values
+        (lambda () (values 1 2))
+        (lambda (a b) (raise-continuable 'consumer-error) (+ a b)))))
+  caught)`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "consumer-error")
+}
+
+// TestEscalateViaResumeNoSpuriousEscalate: a guard whose clauses miss re-raises via
+// raise-continuable, RESUMING the handler's handler-k continuation; that continuation
+// now spans the inline handler's non-continuable escalate frame, so the continuable
+// re-raise's result flows back through it. The escalate must NOT fire (the handler did
+// not return naturally, it was resumed) — the outer handler's value is the result.
+func TestEscalateViaResumeNoSpuriousEscalate(t *testing.T) {
+	const code = `
+(with-exception-handler
+  (lambda (e) (list 'caught e))
+  (lambda ()
+    (guard (inner ((symbol? inner) 'sym))
+      (raise 42))))`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(caught 42)")
+}
+
+// TestTailPromotedOpUnderGuard: a promoted op (car / *) in TAIL position of a procedure
+// body, erroring under guard, must be CAUGHT — not crash. The Go-error bridge invokes
+// the in-place handler inline; building the escalate closure resolved the runtime env
+// via MutableRuntime(), which panics on the DETACHED procedure frame a tail call leaves
+// when the raise fires inside a reified call-with-values producer (guard's body). The
+// timeout surfaces any hang as a clean FAIL.
+func TestTailPromotedOpUnderGuard(t *testing.T) {
+	cases := []struct {
+		name string
+		code string
+	}{
+		{"car tail under guard", `(let ((f (lambda (x) (car x)))) (guard (e (#t 'c)) (f 5)))`},
+		{"multiply tail under guard", `(let ((sq (lambda (x) (* x x)))) (guard (e (#t 'c)) (sq "s")))`},
+		{"vector-ref tail under guard", `(let ((g (lambda (v) (vector-ref v 0)))) (guard (e (#t 'c)) (g 5)))`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.code, criticalGuardTimeout)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, "c")
+		})
+	}
+}
+
+// TestBoundaryInDetachedProducer: a reified call-with-exit running inside a
+// call-with-values producer executes on a DETACHED procedure frame (nil namespace);
+// its exit/finalizer closures must build without panicking (MutableRuntimeOrNil fallback).
+func TestBoundaryInDetachedProducer(t *testing.T) {
+	const code = `(call-with-values (lambda () (call-with-exit (lambda (k) (k 7)))) (lambda (x) x))`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "7")
+}
+
+// TestKC10_TimerBoundaryRouting (KC-10): a reified boundary inside a with-timeout thunk
+// resolves on the timer sub-context's own chain (the thunk runs under RunWithinBoundary).
+// Deterministic — a generous deadline that never fires — so it guards the routing, not
+// wall-clock timing.
+func TestKC10_TimerBoundaryRouting(t *testing.T) {
+	const code = `(with-timeout 10000 (lambda (k) 'timed-out) (lambda () (call-with-exit (lambda (ex) (ex 42)))))`
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, criticalGuardTimeout)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "42")
+}
+
+// TestKC11_ThreadCallccInBoundary (KC-11): call/cc inside a reified call-with-exit
+// inside a spawned thread is delimited by that thread's own DefaultPromptTag driver
+// (the thread root is RunWithEscapeHandling, a DefaultPromptTag owner) and returns its
+// value across the thread-join boundary.
+func TestKC11_ThreadCallccInBoundary(t *testing.T) {
+	const code = `
+(let ((t (make-thread
+           (lambda ()
+             (call-with-exit (lambda (ex) (call/cc (lambda (k) (k 55)))))))))
+  (thread-start! t)
+  (thread-join! t))`
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, criticalGuardTimeout)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "55")
+}
+
+// TestParameterizeCleanupBeforeAfterThunk guards a CRITICAL regression the A/B
+// crosscheck found that the full Go suite, lint, -race, this oracle, the golden corpus,
+// the invariant matrix, AND the fuzzer all passed — the exact failure mode the
+// testing-enhancement plan exists to surface
+// (plans/2026-06-28-continuation-testing-enhancement.md).
+//
+// parameterize is marks-based (with-continuation-mark); its restoration is the mark
+// falling off when the captured chain is restored. But the winding reconcile runs the
+// enclosing dynamic-wind after-thunk BEFORE that restore, so without a fix the
+// after-thunk's (p) reads the parameterize-bound value. R7RS §6.10: the after-thunk runs
+// in the dynamic-wind's ENTRY environment, so it must see p restored. The fix snapshots
+// the reachable marks at dynamic-wind entry on the wind frame and runs the after-thunk
+// isolated to them — fixing the call/cc-escape regression AND a pre-existing call-with-
+// exit / guard inconsistency (those were already wrong on clean HEAD). Every escape
+// mechanism must yield the entry value 1.
+func TestParameterizeCleanupBeforeAfterThunk(t *testing.T) {
+	cases := []struct {
+		name string
+		body string // escapes out of (parameterize ((p 10)) ...) inside the dynamic-wind body
+	}{
+		{"call/cc escape", `(call/cc (lambda (escape) (dynamic-wind (lambda () #f) (lambda () (parameterize ((p 10)) (escape 'done))) (lambda () (set! after-p (p))))))`},
+		{"call-with-exit escape", `(call-with-exit (lambda (esc) (dynamic-wind (lambda () #f) (lambda () (parameterize ((p 10)) (esc 'done))) (lambda () (set! after-p (p))))))`},
+		{"exception escape via guard", `(guard (e (#t #f)) (dynamic-wind (lambda () #f) (lambda () (parameterize ((p 10)) (raise 'x))) (lambda () (set! after-p (p)))))`},
+		{"normal exit", `(dynamic-wind (lambda () #f) (lambda () (parameterize ((p 10)) 'v)) (lambda () (set! after-p (p))))`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code := `(let ((p (make-parameter 1)) (after-p #f)) ` + tc.body + ` after-p)`
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, criticalGuardTimeout)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, "1")
+		})
+	}
 }

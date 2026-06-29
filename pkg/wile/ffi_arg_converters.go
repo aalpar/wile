@@ -420,7 +420,7 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type, lossyAllowed
 				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
 			}
 
-			runErr := sub.Run()
+			runErr := sub.RunWithinBoundary()
 			if runErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, runErr)
 			}
@@ -521,7 +521,7 @@ func callbackParameterResult(
 			if applyErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, applyErr)
 			}
-			runErr := sub.Run()
+			runErr := sub.RunWithinBoundary()
 			if runErr != nil {
 				return callbackErrorResult(funcType, hasErrorReturn, runErr)
 			}

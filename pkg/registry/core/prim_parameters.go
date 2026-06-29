@@ -56,7 +56,7 @@ func PrimMakeParameter(cc machine.CallContext) error {
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
 			}
-			err = sub.Run()
+			err = sub.RunWithinBoundary()
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "make-parameter: converter error")
 			}
@@ -109,7 +109,7 @@ func PrimParameterConvert(cc machine.CallContext) error {
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "%%parameter-convert: failed to apply converter")
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "%%parameter-convert: converter error")
 	}

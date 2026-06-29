@@ -105,7 +105,7 @@ func PrimEval(cc machine.CallContext) error {
 	// (exception handler, winding stack, barrier, escape continuation, etc.).
 	sub := mc.NewSubContextWithTemplate(tpl, env)
 	defer machine.ReleaseSubContext(sub)
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func PrimLoad(cc machine.CallContext) error {
 		err = func() error {
 			sub := mc.NewSubContextWithTemplate(tpl, env)
 			defer machine.ReleaseSubContext(sub)
-			err := sub.Run()
+			err := sub.RunWithinBoundary()
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
 			}

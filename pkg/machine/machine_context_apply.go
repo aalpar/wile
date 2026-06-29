@@ -126,7 +126,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	if fcls.validate != nil {
 		err = fcls.validate(p)
 		if err != nil {
-			return nil, applyCallableError(p, err)
+			return bridgeForeignError(p, err)
 		}
 	}
 
@@ -144,7 +144,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	if err != nil {
 		// applyCallableError propagates prompt aborts, exception escapes, and
 		// timer interrupts as-is; everything else becomes a Scheme exception.
-		return nil, applyCallableError(p, err)
+		return bridgeForeignError(p, err)
 	}
 
 	// Immediate timeout check after foreign call returns successfully.
@@ -180,6 +180,21 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 			p.template = immediateReturnTemplate
 			p.pc = 0
 		}
+	}
+	return p, nil
+}
+
+// bridgeForeignError converts a Go error returned from a foreign call into Scheme
+// control flow. applyCallableError either passes a control signal / uncaught carrier
+// through (a non-nil error → propagate as (nil, err)) or invokes the current exception
+// handler IN PLACE via RaiseInPlace. Since RaiseInPlace now runs the handler INLINE on
+// p (reconfiguring it to continue into the handler, like call-with-values), a nil
+// return means "p was reconfigured" — the VM must continue from p, not from a nil
+// context. Returning (p, nil) here is what lets the dispatched handler run.
+func bridgeForeignError(p *MachineContext, err error) (*MachineContext, error) {
+	bridged := applyCallableError(p, err)
+	if bridged != nil {
+		return nil, bridged
 	}
 	return p, nil
 }
@@ -259,7 +274,7 @@ func (p *MachineContext) drainAndApply(callable values.Value) (*MachineContext, 
 	p.counters.RecordStackDepth(len(vs))
 	result, err := p.ApplyCallable(callable, vs...)
 	if err != nil {
-		return nil, applyCallableError(p, err)
+		return bridgeForeignError(p, err)
 	}
 	return result, nil
 }
@@ -281,7 +296,7 @@ func (p *MachineContext) pullDrainAndApply() (*MachineContext, error) {
 	p.SetValue(callable)
 	result, err := p.ApplyCallable(callable, vs...)
 	if err != nil {
-		return nil, applyCallableError(p, err)
+		return bridgeForeignError(p, err)
 	}
 	return result, nil
 }
@@ -329,7 +344,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 				wrapErr := p.WrapError(err, "parameter: failed to apply converter")
 				return p, wrapErr
 			}
-			err = sub.Run()
+			err = sub.RunWithinBoundary()
 			if err != nil {
 				wrapErr := p.WrapError(err, "parameter: converter error")
 				return p, wrapErr

@@ -119,8 +119,12 @@ func PrimMakeThread(cc machine.CallContext) error {
 			return nil, err
 		}
 
-		// Run the thunk
-		err = sub.Run()
+		// Run the thunk under the thread's own DefaultPromptTag driver: a thread root
+		// is a DefaultPromptTag owner (the thread's continuations are delimited here),
+		// so it must use RunWithEscapeHandling — which installs DefaultPromptTag and
+		// resolves the call/cc resume trampoline (ErrResumeContinuation) on this thread
+		// — not RunWithinBoundary, which would re-raise the resume out of the thread.
+		err = sub.RunWithEscapeHandling()
 		if err != nil {
 			return nil, err
 		}

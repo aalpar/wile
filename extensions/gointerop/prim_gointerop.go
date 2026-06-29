@@ -323,7 +323,7 @@ func PrimOnceDo(cc machine.CallContext) error {
 			thunkErr = err
 			return
 		}
-		err = sub.Run()
+		err = sub.RunWithinBoundary()
 		if err != nil {
 			thunkErr = err
 			return

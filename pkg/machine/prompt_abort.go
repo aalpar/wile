@@ -29,6 +29,16 @@ import (
 type ErrPromptAbort struct {
 	Tag    *PromptTag
 	Values []values.Value
+	// SourceWinding is a .Copy() of the winding stack live at the abort ORIGIN — the
+	// escape point, which may be a deeper sub-context than the driver that catches the
+	// abort. When set, the driver reconciles dynamic-wind from it (not from its own
+	// p.windingStack) so the after-thunks between the escape point and the target
+	// prompt fire exactly once: removing exitFn's own UnwindTo fixes the exit-path
+	// double-fire (C2), and reconciling from the escape-point winding fixes the
+	// after-thunk silently skipped when escaping through a deeper sub (C3). nil means
+	// "reconcile from the driver's own winding" (the value-delivery aborts, e.g.
+	// composable continuation, where the abort site and driver share a winding).
+	SourceWinding WindingStack
 }
 
 func (p *ErrPromptAbort) Error() string {

@@ -75,17 +75,17 @@ func inlineVectorRef(mc *MachineContext) error {
 
 	v, ok := vec.(*values.Vector)
 	if !ok {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAVector, "vector-ref: expected vector, got %s", vec.SchemeString()))
+		return werr.WrapForeignErrorf(
+			werr.ErrNotAVector, "vector-ref: expected vector, got %s", vec.SchemeString())
 	}
 	i, ok := values.ExactInteger(idx)
 	if !ok {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAnInteger, "vector-ref: expected exact integer index, got %s", idx.SchemeString()))
+		return werr.WrapForeignErrorf(
+			werr.ErrNotAnInteger, "vector-ref: expected exact integer index, got %s", idx.SchemeString())
 	}
 	if i < 0 || i >= int64(v.Length()) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrIndexOutOfRange, "vector-ref: index %d out of bounds for length %d", i, v.Length()))
+		return werr.WrapForeignErrorf(
+			werr.ErrIndexOutOfRange, "vector-ref: index %d out of bounds for length %d", i, v.Length())
 	}
 	mc.SetValue(v.Get(int(i)))
 	return nil
@@ -124,8 +124,8 @@ func inlineCar(mc *MachineContext) error {
 
 	p, ok := o.(values.Tuple)
 	if !ok || values.IsEmptyList(o) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAPair, "car: expected pair, got %s", o.SchemeString()))
+		return werr.WrapForeignErrorf(
+			werr.ErrNotAPair, "car: expected pair, got %s", o.SchemeString())
 	}
 	mc.SetValue(p.Car())
 	return nil
@@ -141,8 +141,8 @@ func inlineCdr(mc *MachineContext) error {
 
 	p, ok := o.(values.Tuple)
 	if !ok || values.IsEmptyList(o) {
-		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotAPair, "cdr: expected pair, got %s", o.SchemeString()))
+		return werr.WrapForeignErrorf(
+			werr.ErrNotAPair, "cdr: expected pair, got %s", o.SchemeString())
 	}
 	mc.SetValue(p.Cdr())
 	return nil
@@ -179,7 +179,11 @@ func execPromoted(
 	err := fn(mc)
 	mc.counters.RecordCall(name)
 	if err != nil {
-		return nil, err
+		// The inline fn returns a RAW error; bridge it here at the (*MC, error)
+		// boundary. bridgeForeignError invokes the in-place handler (RaiseInPlace,
+		// which reconfigures mc to run INLINE) and returns (mc, nil) so the VM
+		// continues into the handler — without advancing pc past the promoted op.
+		return bridgeForeignError(mc, err)
 	}
 	if tail {
 		return mc.returnImmediate(), nil
@@ -209,7 +213,7 @@ func callPromotedFallback(mc *MachineContext, callable values.Value, tail bool, 
 
 	result, err := mc.ApplyCallable(callable, vs...)
 	if err != nil {
-		return nil, applyCallableError(mc, err)
+		return bridgeForeignError(mc, err)
 	}
 	return result, nil
 }

@@ -100,6 +100,24 @@ var subContextFactories = map[string]bool{
 	"NewSubContextWithTemplate": true,
 }
 
+// procInvokingDriverSelectors are *MachineContext methods that ALWAYS run a Scheme
+// procedure on the live chain, so a primitive that calls one is a procedure-invoker.
+// They are sinks regardless of receiver — like ApplyCallable, and unlike Run (a sink
+// only on a sub-context; exec.Cmd.Run is not Scheme). RunBodyUnder* push a
+// continuation frame and inline-apply a body (the call-with-values / call-with-exit /
+// call-with-continuation-prompt reification); RunWithinBoundary drives a sub-context
+// that may run one. Without these, the reified boundary primitives (whose ApplyCallable
+// now lives behind these machine helpers, in a package the analyzer does not parse)
+// would no longer be discovered as invokers — a false-negative that the InvokesProcedure
+// soundness contract treats as corruption.
+var procInvokingDriverSelectors = map[string]bool{
+	"RunBodyUnderFrame":     true,
+	"RunBodyUnderConsumer":  true,
+	"RunBodyUnderExitFrame": true,
+	"RunBodyUnderPrompt":    true,
+	"RunWithinBoundary":     true,
+}
+
 // closureSuffix matches the trailing .func1[.func2...] that runtime function names
 // carry for closures. A primitive registered via a closure Impl (e.g. sin →
 // makeComplexPrimitive.func10) joins to its enclosing top-level declaration, which
@@ -236,7 +254,7 @@ func funcHasSink(body ast.Node, subVars map[string]bool) bool {
 		if !ok {
 			return true
 		}
-		if sel.Sel.Name == applyCallableSelector {
+		if sel.Sel.Name == applyCallableSelector || procInvokingDriverSelectors[sel.Sel.Name] {
 			found = true
 			return false
 		}
@@ -393,12 +411,20 @@ func TestInvokesProcedureStaticGuard(t *testing.T) {
 
 	// Vacuity guard: if the analysis silently broke (e.g. a selector was renamed),
 	// the soundness loop above would pass trivially. Pin a few primitives the
-	// analyzer MUST discover — direct ApplyCallable, and PrimEval which reaches a
-	// sink only via a sub-context .Run() (the dataflow path, no ApplyCallable).
+	// analyzer MUST discover, covering each sink shape: direct ApplyCallable
+	// (PrimApply, PrimCallCC); the boundary reifications behind the RunBodyUnder*
+	// drivers (PrimCallWithValues -> RunBodyUnderConsumer, PrimCallWithExit ->
+	// RunBodyUnderExitFrame, PrimCallWithContinuationPrompt -> RunBodyUnderPrompt);
+	// and a sub-context driver (PrimEval -> sub.RunWithinBoundary, the dataflow path,
+	// no ApplyCallable). The RunBodyUnder*/RunWithinBoundary pins fail if the
+	// procInvokingDriverSelectors set is dropped — the false-negative that the
+	// reification would otherwise introduce.
 	mustDiscover := []string{
 		modulePath + "/pkg/registry/core.PrimApply",
 		modulePath + "/pkg/registry/core.PrimCallCC",
 		modulePath + "/pkg/registry/core.PrimCallWithValues",
+		modulePath + "/pkg/registry/core.PrimCallWithExit",
+		modulePath + "/pkg/registry/core.PrimCallWithContinuationPrompt",
 		// (with-exception-handler was here; it is now Scheme — (parameterize over
 		// %exception-handlers) — not a Go primitive. PrimRaise is not a valid
 		// replacement pin: its handler invocation is indirect (via the value register

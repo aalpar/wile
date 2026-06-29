@@ -62,11 +62,14 @@ func PrimCallWithContinuationBarrier(cc machine.CallContext) error {
 	defer machine.ReleaseSubContext(sub)
 	sub.SetBarrierValid(barrierValid)
 
+	// RunWithinBoundary (not Run) so a reified call-with-exit / prompt appearing
+	// inside the thunk resolves its abort on this barrier sub-context's chain (the
+	// reified exit/prompt frame lands here, walled off from the parent chain).
 	_, err = sub.ApplyCallable(thunkCls)
 	if err != nil {
 		return err
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 
 	if err != nil {
 		return err

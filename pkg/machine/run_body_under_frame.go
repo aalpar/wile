@@ -101,6 +101,18 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 	if len(p.windingStack) > 0 {
 		frame.windingStack = p.windingStack.Copy()
 	}
+	// Carry the caller's live activation marks onto the pushed frame so they survive
+	// the frame's restore. The body runs in the caller's dynamic extent and keeps
+	// p.marks intact (Apply does not touch them); but when the frame is later restored
+	// — to run a consumer (call-with-values) or finalizer (call-with-exit), or to
+	// resolve a re-raise inside an inline exception handler (RaiseInPlace) — mc.marks is
+	// reloaded from the frame. Without this, a mark on the live activation (e.g. the
+	// %exception-handlers mark a tail-position call-with-values inherits, or the
+	// parent-handler mark RaiseInPlace installs) would be dropped at that boundary,
+	// leaving the consumer/handler unable to see the current exception handler.
+	if len(p.marks) > 0 {
+		frame.marks = cloneMarks(p.marks)
+	}
 	p.cont = frame
 	return p.ApplyCallable(body, args...)
 }

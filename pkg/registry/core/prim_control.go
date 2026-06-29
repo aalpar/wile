@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -155,10 +154,18 @@ func PrimCallCC(cc machine.CallContext) error {
 		return err
 	}
 
-	// Capture a composable continuation via SliceContinuationAt(nil).
-	// FindPrompt(DefaultPromptTag) returns (nil, true) for the context-level
-	// prompt, so SliceContinuationAt(nil) deep-copies the entire chain.
-	segment := mc.SliceContinuationAt(nil)
+	// Capture the continuation delimited at the nearest DefaultPromptTag (D5).
+	// FindPrompt(DefaultPromptTag) returns (nil, true) at the top-level context
+	// boundary — SliceContinuationAt(nil) then captures the whole chain — or a chain
+	// FRAME for a call/cc captured inside a call-with-continuation-prompt reusing the
+	// default tag; slicing at that frame captures only the delimited segment (NOT the
+	// code after the prompt, which would otherwise include the re-invocation site and
+	// loop forever — TestApplyWindingStackInheritance). The matching invocation-side
+	// reinstatement (RunResumable's ErrResumeContinuation arm) grafts this segment onto
+	// the nearest DefaultPromptTag at the (k v) site, so an inner prompt receives the
+	// segment's result while the top-level case replaces the whole chain (escape-past).
+	capturePrompt, _ := mc.FindPrompt(machine.DefaultPromptTag)
+	segment := mc.SliceContinuationAt(capturePrompt)
 	windingStack := mc.WindingStack().Copy()
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
 	// Snapshot the reachable parameter/handler marks so a continuation captured inside
@@ -185,30 +192,22 @@ func PrimCallCC(cc machine.CallContext) error {
 		return nil
 	}
 
-	// Sub-context mode: run the lambda in an isolated context.
-	// The CapturedContinuation's apply emits ErrPromptAbort to DefaultPromptTag.
-	// This propagates up through Run() and is caught by RunWithEscapeHandling
-	// at the top level. In contexts without RunWithEscapeHandling (e.g., threads
-	// that call Run() directly), we catch the abort here and extract the value —
-	// sub-context mode acts as the implicit call-with-continuation-prompt.
+	// Sub-context mode (the call/cc-er is itself rootless — e.g. inside another
+	// foreign sub-context or a thread root): run the lambda under its OWN
+	// DefaultPromptTag driver. Sub-context mode IS the implicit
+	// call-with-continuation-prompt for this captured continuation, so it must be a
+	// DefaultPromptTag owner: RunWithEscapeHandling installs DefaultPromptTag and
+	// resolves the call/cc resume trampoline (ErrResumeContinuation) and any reified
+	// boundary on this sub's chain, then delivers the result. (RunWithinBoundary would
+	// re-raise the resume signal, which has no enclosing driver here.)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	_, err = sub.ApplyCallable(mcls, capt)
 	if err != nil {
 		return err
 	}
-	err = sub.Run()
+	err = sub.RunWithEscapeHandling()
 	if err != nil {
-		var abortErr *machine.ErrPromptAbort
-		if errors.As(err, &abortErr) && abortErr.Tag == machine.DefaultPromptTag {
-			// The escape closure ran the composable continuation to completion and
-			// aborted to DefaultPromptTag with the result. Deliver ALL values
-			// (R7RS §6.10), including the zero-value case: a continuation invoked
-			// with no values resumes with no values, not a fabricated Void. Callers
-			// that don't use RunWithEscapeHandling (e.g., threads) work via this.
-			mc.SetValues(abortErr.Values...)
-			return nil
-		}
 		return err
 	}
 
@@ -265,36 +264,17 @@ func PrimCallWithValues(cc machine.CallContext) error {
 		return err
 	}
 
-	// Call producer with no arguments
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(producerCls)
-	if err != nil {
-		return err
-	}
-	err = sub.Run()
-	if err != nil {
-		return err
-	}
-
-	// Get all values returned by producer
-	producedValues := sub.GetValues()
-
-	// Apply the consumer in place on mc (not in a sub-context) so the consumer
-	// call is in tail position relative to call-with-values: it returns through
-	// mc.cont, mirroring PrimApply. Running it in a sub-context with sub2.Run()
-	// nested one Go stack frame per call, so a tail loop through call-with-values
-	// (directly, or via the let-values/let*-values macros) overflowed the host
-	// goroutine stack instead of running in O(1) frames. R7RS §3.5 requires the
-	// consumer call to be a tail call.
+	// Reify call-with-values: push a consumer apply-frame onto mc.cont and inline-apply
+	// the producer on the live chain (no producer sub-context). On producer's normal
+	// return the frame applies consumer to the produced value(s) exactly once; the
+	// consumer call stays in tail position relative to call-with-values (R7RS §3.5),
+	// returning through mc.cont as before.
 	//
-	// Lifetime: ApplyCallable binds producedValues into the consumer's frame
-	// synchronously (Apply -> bindArgs), so the deferred ReleaseSubContext(sub)
-	// on return cannot corrupt them. The consumer's own result (including
-	// multiple values) flows back through mc naturally, exactly as in apply.
-	_, err = mc.ApplyCallable(consumerCls, producedValues...)
-	if err != nil {
-		return err
-	}
-	return nil
+	// Because the consumer is now a continuation-CHAIN frame, a continuation captured
+	// inside producer spans the consumer frame and the rest of the program — re-entry
+	// replays them, fixing the producer-sub-context truncation — while a full call/cc
+	// invoked inside producer aborts to DefaultPromptTag, discarding the chain-resident
+	// consumer frame (escape-past preserved: the consumer does NOT run).
+	_, err = mc.RunBodyUnderConsumer(producerCls, consumerCls)
+	return err
 }

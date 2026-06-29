@@ -15,8 +15,6 @@
 package core
 
 import (
-	"errors"
-
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -95,61 +93,18 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 		}
 	}
 
-	// Run thunk in a sub-context with the prompt tag set on the context.
-	// The prompt tag marks this sub-context as a prompt boundary. When
-	// call-with-composable-continuation searches for the prompt, it finds
-	// it on the context. When abort propagates, it reaches this primitive
-	// which catches it.
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	sub.SetPromptTag(tag)
-
-	_, err = sub.ApplyCallable(thunkCls)
-	if err != nil {
-		return err
-	}
-	err = sub.Run()
-	if err != nil {
-		var abortErr *machine.ErrPromptAbort
-		if errors.As(err, &abortErr) {
-			if abortErr.Tag != tag {
-				// Not our prompt - propagate
-				return err
-			}
-			// Unwind dynamic-wind extents in the sub-context before handling.
-			if sub.WindingStack().Depth() > mc.WindingStack().Depth() {
-				unwindErr := sub.UnwindTo(mc.WindingStack().Depth())
-				if unwindErr != nil {
-					return unwindErr
-				}
-			}
-			// This abort targets our prompt. Invoke the handler.
-			if handlerCls != nil {
-				handlerSub := mc.NewSubContext()
-				defer machine.ReleaseSubContext(handlerSub)
-				_, applyErr := handlerSub.ApplyCallable(handlerCls, abortErr.Values...)
-				if applyErr != nil {
-					return applyErr
-				}
-				runErr := handlerSub.Run()
-				if runErr != nil {
-					return runErr
-				}
-				mc.SetValues(handlerSub.GetValues()...)
-				return nil
-			}
-			// No handler: the abort values become the prompt's result. Deliver
-			// ALL of them (R7RS §6.10), including the zero-value case (resumes
-			// with no values, not a fabricated Void) — mirroring the abort
-			// delivery in RunWithEscapeHandling and PrimCallCC sub-context mode.
-			mc.SetValues(abortErr.Values...)
-			return nil
-		}
-		return err
-	}
-
-	mc.SetValues(sub.GetValues()...)
-	return nil
+	// Reify the prompt as a continuation-CHAIN frame run inline: push a transparent
+	// prompt frame carrying tag (+ handler) onto mc.cont and inline-apply thunk on the
+	// live chain. On normal return thunk's value(s) flow through the transparent frame
+	// unchanged. An abort to tag is routed by the driver's FindPrompt to this frame —
+	// the driver reconciles dynamic-wind, then invokes the handler (if any) with the
+	// abort values or delivers them as the prompt's result. A continuation captured
+	// inside thunk spans this frame, and call-with-composable-continuation's
+	// FindPrompt(tag) now finds the CHAIN FRAME so SliceContinuationAt(frame) delimits
+	// at it. (Replaces the old sub-context + context-level SetPromptTag + Go-stack
+	// errors.As catch, which truncated any continuation captured inside thunk.)
+	_, err = mc.RunBodyUnderPrompt(thunkCls, tag, handlerCls)
+	return err
 }
 
 // PrimAbortCurrentContinuation aborts to the nearest prompt with the given tag.
@@ -254,13 +209,15 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 
 	// Call proc with the composable continuation.
 	// The result of proc becomes the value delivered to the prompt boundary.
+	// RunWithinBoundary (not Run) so a reified call-with-exit / prompt appearing
+	// inside proc resolves its abort on this sub-context's own chain.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	_, err = sub.ApplyCallable(procCls, comp)
 	if err != nil {
 		return err
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 	if err != nil {
 		return err
 	}

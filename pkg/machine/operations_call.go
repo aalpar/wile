@@ -134,16 +134,16 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 		default:
 			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
 		}
-		rmc = nil
-		// applyCallableError passes VM signal types (prompt abort, exception
-		// escape, timer interrupt) through unchanged and converts everything
-		// else to a Scheme exception. Mirrors the error-return path below.
-		rerr = applyCallableError(mc, err)
+		// bridgeForeignError passes VM signal types (prompt abort, exception escape,
+		// timer interrupt) through unchanged, and for a Scheme exception returns
+		// (mc, nil) when the in-place handler reconfigured mc to run inline so the VM
+		// continues into it. Mirrors the error-return path below.
+		rmc, rerr = bridgeForeignError(mc, err)
 	}()
 	mc.counters.ForeignCalls++
 	err := p.Function(mc)
 	if err != nil {
-		return nil, applyCallableError(mc, err)
+		return bridgeForeignError(mc, err)
 	}
 	mc.pc++
 	return mc, nil

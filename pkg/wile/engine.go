@@ -45,29 +45,6 @@ var ErrEngineClosed = werr.NewStaticError("engine is closed")
 // clamped to 0 (also unlimited).
 const DefaultMaxCallDepth int = 10000
 
-// DefaultMaxContinuationDepth is the default bound on the LIVE Go-stack nesting
-// of captured-continuation re-invocation for new engines (machine tracks it as
-// threadPools.contNestDepth — frames currently on the Go stack, which recede as
-// nested resumes unwind). It is far larger than DefaultMaxCallDepth because the
-// two guard different resources: ordinary call depth is an eval-stack memory
-// budget (~500 B/frame), while continuation re-invocation nests on the Go
-// goroutine stack, whose 1 GB ceiling tolerates ~675k live frames before a fatal
-// overflow.
-//
-// The value is empirical. Wile invokes a captured continuation by running the
-// resumed computation in a nested sub-context (applyCapturedContinuation) rather
-// than tail-replacing the current continuation, so a continuation-heavy program
-// accumulates live Go frames across its dynamic extent: the ctak(18,12,6) Gabriel
-// benchmark (warmup + 10 iterations) peaks ~525k live frames, and a true
-// non-converging call/cc loop overflows the Go stack near ~675k. 600000 sits just
-// above the (deterministic) benchmark peak and below the overflow point, so the
-// benchmark and realistic deep continuation code complete while a runaway loop
-// still surfaces as a catchable ErrCallDepthExceeded before the Go fatal overflow.
-// The margin is necessarily thin: properly bounding this would require trampolining
-// continuation invocation so resumes do not nest Go frames (a larger VM change).
-// Use WithMaxContinuationDepth(0) to opt out; n < 0 is clamped to 0 (unlimited).
-const DefaultMaxContinuationDepth int = 600000
-
 // Engine is the main entry point for embedding Wile.
 //
 // An Engine is NOT safe for concurrent use from multiple goroutines.
@@ -86,7 +63,6 @@ type Engine struct {
 	closers                 []registry.Closeable
 	closed                  bool
 	maxCallDepth            int
-	maxContinuationDepth    int
 	maxParseDepth           int
 	maxExpandDepth          int
 	maxStackSize            uint64
@@ -275,12 +251,6 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		cfg.maxCallDepth = DefaultMaxCallDepth
 	}
 
-	// Apply default continuation re-invocation depth when not set explicitly.
-	// WithMaxContinuationDepth(0) means unlimited — contDepthSet tracks the opt-in.
-	if !cfg.contDepthSet {
-		cfg.maxContDepth = DefaultMaxContinuationDepth
-	}
-
 	// Apply default parse depth when the caller did not set one explicitly.
 	// WithMaxParseDepth(0) means unlimited — parseDepthSet tracks the opt-in.
 	if !cfg.parseDepthSet {
@@ -350,7 +320,6 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		registry:                reg,
 		closers:                 closers,
 		maxCallDepth:            cfg.maxCallDepth,
-		maxContinuationDepth:    cfg.maxContDepth,
 		maxParseDepth:           cfg.maxParseDepth,
 		maxExpandDepth:          cfg.maxExpandDepth,
 		maxStackSize:            cfg.maxStackSize,
@@ -699,7 +668,6 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 	tpl := machine.NewEmptyNativeTemplate()
 	mc := machine.AcquireTopLevelContext(ctx, tpl, p.env)
 	mc.SetMaxCallDepth(p.maxCallDepth)
-	mc.SetMaxContinuationDepth(p.maxContinuationDepth)
 	mc.SetMaxStackSize(p.maxStackSize)
 
 	// Create a sub-context, set up the call frame, and execute.
@@ -956,7 +924,6 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
 	mc.SetMaxCallDepth(p.maxCallDepth)
-	mc.SetMaxContinuationDepth(p.maxContinuationDepth)
 	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {
 		mc.SetDebugger(p.debugger.machineDebugger())

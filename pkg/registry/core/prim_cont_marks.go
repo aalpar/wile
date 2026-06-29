@@ -186,7 +186,7 @@ func PrimCallWithImmediateContMark(cc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 	if err != nil {
 		return err
 	}

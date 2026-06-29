@@ -50,6 +50,15 @@ type DynamicWindFrame struct {
 	Before Closure // Called when entering this extent
 	After  Closure // Called when exiting this extent
 	ID     uint64  // Unique identifier for extent matching
+	// entryMarks is the snapshot of reachable continuation marks at the dynamic-wind
+	// call site, taken when the frame is pushed. R7RS §6.10 runs the before/after
+	// thunks in the dynamic environment of the dynamic-wind call, NOT the body's — so a
+	// parameterize (marks-based) established inside the body must be invisible to the
+	// after thunk. The winding reconcile runs after thunks BEFORE the captured chain is
+	// restored, so without this the after thunk would resolve parameters against the
+	// still-live body marks (the parameterize value), not the entry environment. nil
+	// when no marks were reachable at entry (the common case — no extra cost).
+	entryMarks []markEntry
 }
 
 // Global counter for generating unique frame IDs

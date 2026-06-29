@@ -15,7 +15,6 @@
 package core
 
 import (
-	"errors"
 	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -49,17 +48,19 @@ func PrimCallWithExit(cc machine.CallContext) error {
 		return err
 	}
 
+	// A runtime env for the exit/finalizer closures, robust to a detached frame:
+	// when call-with-exit is invoked inside a reified call-with-values producer the
+	// live procedure frame has a nil namespace, so MutableRuntime() would panic. The
+	// closures are pure Go; any valid frame serves for apply-time InitApplyFrame.
+	closureEnv := mc.EnvironmentFrame().MutableRuntimeOrNil()
+	if closureEnv == nil {
+		closureEnv = mc.EnvironmentFrame()
+	}
+
 	tag := machine.NewPromptTag("exit")
 	valid := &atomic.Bool{}
 	valid.Store(true)
 	capturingThreadID := mc.ThreadID()
-	// Winding depth at entry. An escape must run the dynamic-wind after thunks
-	// accumulated between here and the escape point. The unwind happens at the
-	// escape point (innerMC, below) where those frames are visible — call-with-exit's
-	// own sub does NOT see frames pushed in deeper sub-contexts (a call-with-values
-	// producer, or an in-place exception handler), so the unwind cannot wait for the
-	// catch to do it against this sub's winding.
-	entryDepth := mc.WindingStack().Depth()
 
 	// Build the exit closure. It is valid only during the dynamic extent of proc.
 	// Checking valid before thread is intentional: a cross-thread call to an expired
@@ -78,56 +79,56 @@ func PrimCallWithExit(cc machine.CallContext) error {
 				"call-with-exit: exit procedure called from different thread")
 		}
 		val := innerMC.Arg(0)
-		// Invalidate the one-shot exit procedure BEFORE unwinding: an after-thunk that
-		// re-invokes it must be rejected (expired), and a failing unwind below must not
-		// leave a stale-but-valid exit procedure behind. The catch site's valid.Store
-		// is now redundant but kept defensively.
+		// Invalidate the one-shot BEFORE the abort so an after-thunk that re-invokes
+		// it is rejected (expired). No UnwindTo here: the driver's abort arm
+		// (RunResumable / RunWithinBoundary) runs the dynamic-wind after thunks ONCE,
+		// against SourceWinding — the winding live HERE at the escape point, which may
+		// be a deeper sub-context than the driver holding the exit frame. Unwinding
+		// here too would double-fire (C2); reconciling from the driver's own winding
+		// instead of SourceWinding would skip a deeper sub's after-thunks (C3).
 		valid.Store(false)
-		// Run dynamic-wind after thunks from the escape point down to the
-		// call-with-exit entry depth, here where the frames are visible (innerMC is
-		// the context invoking the exit procedure — possibly a deeper sub-context than
-		// call-with-exit's own sub). This is what call/cc's RestoreWithWindingFrom
-		// does against the invoker's winding; call-with-exit must do the same so an
-		// exception escaping a dynamic-wind via guard still runs its after thunk.
-		if innerMC.WindingStack().Depth() > entryDepth {
-			unwindErr := innerMC.UnwindTo(entryDepth)
-			if unwindErr != nil {
-				return unwindErr
-			}
-		}
 		return &machine.ErrPromptAbort{
-			Tag:    tag,
-			Values: []values.Value{val},
+			Tag:           tag,
+			Values:        []values.Value{val},
+			SourceWinding: innerMC.WindingStack().Copy(),
 		}
 	}
-	exitClosure := machine.NewForeignClosure(mc.EnvironmentFrame().MutableRuntime(), 1, false, exitFn)
+	exitClosure := machine.NewForeignClosure(closureEnv, 1, false, exitFn)
 
-	// Run proc in a sub-context with the exit closure as its argument.
-	// The sub-context inherits the current winding stack so dynamic-wind
-	// after thunks run when unwinding past any dynamic-wind frames on escape.
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(procCls, exitClosure)
-	if err != nil {
-		return err
-	}
-	err = sub.Run()
-	if err != nil {
-		var abortErr *machine.ErrPromptAbort
-		if errors.As(err, &abortErr) && abortErr.Tag == tag {
-			// Escape matched our tag. The exit procedure already ran the dynamic-wind
-			// after thunks at the escape point (see exitFn) — call-with-exit's own sub
-			// cannot see frames pushed in deeper sub-contexts, so unwinding here would
-			// miss them. Just invalidate the procedure and deliver the value.
-			valid.Store(false)
-			mc.SetValue(abortErr.Values[0])
-			return nil
+	// The finalizer runs on BOTH exit paths via the reified exit frame's template:
+	//   - normal return: proc's value(s) are in the register; OpPush spreads them
+	//     onto the eval stack and OpApply applies the finalizer to them.
+	//   - (exit v): the driver delivers v then re-enters this finalizer template.
+	// Either way it clears the one-shot (so a later stale call gets the catchable
+	// ErrExpiredEscape, not the driver's "no prompt found") and forwards the value(s)
+	// unchanged. ParamCount 1 + variadic accepts 0/1/N values (AcceptsArity n >= 0).
+	finalizerFn := func(finCC machine.CallContext) error {
+		valid.Store(false)
+		finMC, err := machine.RequireMachineContext(finCC, "call-with-exit")
+		if err != nil {
+			return err
 		}
-		return err
+		var vals []values.Value
+		current := finMC.Arg(0)
+		for !values.IsEmptyList(current) {
+			tuple, ok := current.(values.Tuple)
+			if !ok {
+				return werr.WrapForeignErrorf(werr.ErrNotAList,
+					"call-with-exit: improper finalizer argument list")
+			}
+			vals = append(vals, tuple.Car())
+			current = tuple.Cdr()
+		}
+		finMC.SetValues(vals...)
+		return nil
 	}
+	finalizer := machine.NewForeignClosure(closureEnv, 1, true, finalizerFn)
 
-	// Normal return: invalidate the exit procedure and forward proc's value(s).
-	valid.Store(false)
-	mc.SetValues(sub.GetValues()...)
-	return nil
+	// Reify the boundary: push a non-transparent prompt frame carrying tag (so an
+	// (exit v) abort routes to it via FindPrompt) whose template clears the one-shot
+	// and forwards the value(s), then inline-apply proc on the live chain. A
+	// continuation captured inside proc now spans the exit frame and everything below
+	// it — re-entry replays them instead of truncating.
+	_, err = mc.RunBodyUnderExitFrame(procCls, tag, finalizer, exitClosure)
+	return err
 }

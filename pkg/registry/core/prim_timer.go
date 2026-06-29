@@ -97,7 +97,7 @@ func PrimWithTimeout(cc machine.CallContext) error {
 		sub.ClearTimer()
 		return err
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 
 	// Always cancel the timer to release resources. ClearTimer encapsulates
 	// the cancel-then-nil discipline so the sub-record cannot drift.

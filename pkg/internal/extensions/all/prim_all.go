@@ -312,7 +312,7 @@ func executeThunk(mc *machine.MachineContext, thunk values.Callable) (values.Val
 	if err != nil {
 		return nil, err
 	}
-	err = sub.Run()
+	err = sub.RunWithinBoundary()
 	if err != nil {
 		return nil, err
 	}
