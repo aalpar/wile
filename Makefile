@@ -191,6 +191,34 @@ tutorial-test: build
 test-race: build
 	$(GO_TEST) -race ./...
 
+# Run the parser fuzzers, MUTATING from their seed corpus to discover new inputs.
+# Unlike `make test` (which runs only the committed corpus deterministically),
+# this mutates. A crasher is written under testdata/fuzz/<Target>/ (an auto-
+# committed regression case) and fails the target; coverage-expanding inputs are
+# kept in Go's LOCAL fuzz cache, not testdata -- promote valuable ones into
+# testdata/fuzz/<Target>/ by hand to share them as seeds. Go fuzzes one target per
+# invocation, so each discovered target runs for FUZZTIME in turn (total wall-
+# clock is FUZZTIME times the number of targets).
+#   make fuzz                                       # each target 10m, in ./pkg/parser
+#   make fuzz FUZZTIME=2m                            # shorter run
+#   make fuzz FUZZ_PKG=./pkg/internal/tokenizer/    # a different package
+FUZZTIME ?= 10m
+FUZZ_PKG ?= ./pkg/parser/
+.PHONY: fuzz
+fuzz:
+	@targets=$$($(GO_TEST) -list '^Fuzz' $(FUZZ_PKG) | grep '^Fuzz'); \
+	if [ -z "$$targets" ]; then \
+	  echo "fuzz: no Fuzz targets found in $(FUZZ_PKG) -- refusing to silently pass"; \
+	  exit 1; \
+	fi; \
+	echo "fuzz: $$(echo "$$targets" | wc -l | tr -d ' ') target(s) in $(FUZZ_PKG), $(FUZZTIME) each"; \
+	for t in $$targets; do \
+	  echo "== fuzzing $$t for $(FUZZTIME) =="; \
+	  $(GO_TEST) $(FUZZ_PKG) -run '^$$' -fuzz="^$${t}$$" -fuzztime=$(FUZZTIME) \
+	    || { echo "FAIL: $$t found a crasher (saved under testdata/fuzz/$$t/)"; exit 1; }; \
+	done; \
+	echo "fuzz: all targets completed $(FUZZTIME) with no new failures"
+
 # Run Scheme-level test suite.
 # Override SCHEME to test against different implementations:
 #   make test-scheme                                    # Use Wile (default)
