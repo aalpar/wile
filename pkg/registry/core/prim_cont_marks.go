@@ -180,16 +180,13 @@ func PrimCallWithImmediateContMark(cc machine.CallContext) error {
 			val = v
 		}
 	}
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(proc, val)
-	if err != nil {
-		return err
-	}
-	err = sub.RunWithinBoundary()
-	if err != nil {
-		return err
-	}
-	mc.SetValues(sub.GetValues()...)
-	return nil
+	// Run proc in place (the apply recipe, prim_control.go) rather than in a
+	// sub-context: proc's result flows through the continuation already on mc.cont,
+	// and a continuation captured inside proc spans the live chain instead of a
+	// walled-off sub-context. This fixes the non-tail-escape truncation
+	// (continuation_subcontext_truncation_red_test.go, call-with-immediate-continuation-mark
+	// case). There is no post-thunk work and no abort tag here, so no RunBodyUnder*
+	// chain frame is needed — the transparent delivery is exactly what apply does.
+	_, err = mc.ApplyCallable(proc, val)
+	return err
 }
