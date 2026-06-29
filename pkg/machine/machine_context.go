@@ -121,16 +121,22 @@ type MachineContext struct {
 	timer *timerState // nil = no timer active; both handler and cancel set together
 }
 
-// timerState clusters the two MachineContext fields that always travel
-// together: the timer interrupt handler and the cancel function for the
-// child timeout context installed by (with-timeout …). The invariant
-// (handler == nil) ⇔ (cancel == nil) is load-bearing: the sole production
-// writer (registry/core/prim_timer.go) sets both via SetTimer, and the
-// sole production clearer calls ClearTimer which atomically cancels and
-// nils the sub-record.
+// timerState clusters the MachineContext fields that always travel
+// together for an active (with-timeout …): the timer interrupt handler,
+// the cancel function for the child timeout context, the prompt tag of
+// this with-timeout's finalizer frame, the enclosing timer (nesting), and
+// the saved outer ctx. The invariant (handler == nil) ⇔ (cancel == nil)
+// is load-bearing: the sole production writer is RunBodyUnderTimer, which
+// installs a fresh record (pushing the prior one via the parent pointer)
+// and whose finalizer — together with resolveTimerInterrupt on a fired
+// timer — restores the parent and cancels, as one atomic teardown.
 //
 // Finding 7 of plans/2026-05-06-machine-structural-reduction.md
 // (stage 2 of 3); see plans/2026-05-12-machine-sr-finding7-timer-impl.md.
+// The bare install/inspect/clear API (SetTimer/ClearTimer/TimerHandler)
+// was retired once with-timeout was reified onto this linked stack: its
+// single-timer guard was incompatible with the nesting the parent pointer
+// now provides.
 type timerState struct {
 	handler  values.Callable
 	cancel   context.CancelFunc
@@ -306,44 +312,6 @@ func (p *MachineContext) SetContext(ctx context.Context) {
 // Context returns the context for this machine context.
 func (p *MachineContext) Context() context.Context {
 	return p.ctx
-}
-
-// TimerHandler returns the current timer interrupt handler, or nil if no timer is active.
-func (p *MachineContext) TimerHandler() values.Callable {
-	if p.timer == nil {
-		return nil
-	}
-	return p.timer.handler
-}
-
-// SetTimer installs the timer interrupt handler and cancel function as a
-// single atomic unit. Both arguments must be non-nil, and no timer may
-// already be installed — call ClearTimer first to replace an active
-// timer. Panics on contract violation: a nil cancel would later panic in
-// ClearTimer with no context, and silently overwriting an active timer
-// would leak the prior cancel function. Allocates the timer sub-record
-// on installation.
-func (p *MachineContext) SetTimer(h values.Callable, cancel context.CancelFunc) {
-	if h == nil || cancel == nil {
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"SetTimer: handler and cancel must be non-nil (got handler=%v, cancel=%v)",
-			h != nil, cancel != nil))
-	}
-	if p.timer != nil {
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"SetTimer: timer already installed; call ClearTimer first"))
-	}
-	p.timer = &timerState{handler: h, cancel: cancel}
-}
-
-// ClearTimer cancels the active timer (calling cancel) and removes the
-// handler. Safe when no timer is active.
-func (p *MachineContext) ClearTimer() {
-	if p.timer == nil {
-		return
-	}
-	p.timer.cancel()
-	p.timer = nil
 }
 
 // Run executes the VM loop starting from the current pc.

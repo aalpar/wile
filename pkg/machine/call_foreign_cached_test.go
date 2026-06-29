@@ -141,7 +141,9 @@ func TestCallForeignCached_TimerInterruptAfterSuccess(t *testing.T) {
 	defer ReleaseTopLevelContext(mc)
 
 	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
-	mc.SetTimer(handler, func() {})
+	// Install a timer the way RunBodyUnderTimer does (the bare SetTimer API
+	// was retired); only the handler is read on the interrupt path.
+	mc.timer = &timerState{handler: handler, cancel: func() {}}
 
 	err := mc.Run()
 

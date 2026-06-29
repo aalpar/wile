@@ -34,8 +34,8 @@ import (
 // cancel the timer, restore the outer timer + ctx, forward the body's 0/1/N values — so
 // it is correct on normal completion AND, run a second time, after the timer arm already
 // tore the fired timer down (resolveTimerInterrupt restores the same outer state). This
-// helper manages p.timer directly rather than via SetTimer/ClearTimer, whose single-
-// timer guard forbids the nesting the linked parent pointer provides.
+// helper installs and restores p.timer directly: nesting requires pushing a child timer
+// while the parent is still live, via the linked parent pointer.
 func (p *MachineContext) RunBodyUnderTimer(
 	timerCtx context.Context, cancel context.CancelFunc,
 	thunk values.Value, handler values.Callable,
