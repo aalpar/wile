@@ -1487,53 +1487,17 @@ func (p *MachineContext) RunResumable() (rerr error) {
 				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
 			}
 
-			// Unwind dynamic-wind from the escape-point winding to the prompt's
-			// winding depth. When prompt is nil (context-level prompt), the target
-			// winding stack is nil — the context boundary has no saved winding state.
-			// Reconcile from abortErr.SourceWinding when the abort carried it (the
-			// escape originated in a deeper sub-context whose dynamic-wind frames are
-			// not on this driver's own winding — the C3 deeper-sub after-thunk skip);
-			// otherwise from the driver's own winding (value-delivery aborts).
-			var targetStack WindingStack
-			if prompt != nil {
-				targetStack = prompt.windingStack
+			// Reconcile winding, restore past the prompt, and run its handler or
+			// deliver the abort values — the shared abort arm (see resolveAbort).
+			done, abErr := p.resolveAbort(abortErr, prompt)
+			if abErr != nil {
+				return abErr
 			}
-			sourceStack := p.windingStack
-			if abortErr.SourceWinding != nil {
-				sourceStack = abortErr.SourceWinding
-			}
-			restoreErr := p.RestoreWithWindingFrom(nil, sourceStack, targetStack)
-			if restoreErr != nil {
-				return restoreErr
-			}
-
-			// Restore to the prompt frame (skip past it).
-			// When prompt is nil (context-level), there's no frame to restore —
-			// the context itself is the boundary.
-			if prompt != nil {
-				p.Restore(prompt)
-			}
-
-			// Invoke the handler with the abort values.
-			// Context-level prompts have no handler (prompt is nil).
-			if prompt != nil && prompt.PromptHandler() != nil {
-				_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
-				if applyErr != nil {
-					return applyErr
-				}
-			} else {
-				// Deliver ALL abort values (R7RS §6.10), including zero: a
-				// continuation invoked with no values resumes with no values, not a
-				// fabricated Void.
-				p.SetValues(abortErr.Values...)
-				// Context-level abort (prompt == nil): the composable continuation
-				// has already run to completion inside the escape closure's sub-context.
-				// The abort value is the final result; p.pc was not advanced (FFC
-				// returned error without incrementing), so there is no remaining code
-				// to execute. Returning nil avoids re-running the FFC at p.pc.
-				if prompt == nil {
-					return nil
-				}
+			if done {
+				// Context-level deliver (prompt == nil): the composable continuation
+				// already ran to completion in the escape closure's sub-context; the
+				// abort value is the final result and p.pc was not advanced.
+				return nil
 			}
 			continue
 		}
@@ -1659,39 +1623,67 @@ func (p *MachineContext) RunWithinBoundary() error {
 			return err
 		}
 
-		// Reconcile dynamic-wind from the escape-point winding to the prompt's,
-		// restore past the prompt frame, then run its handler or deliver the abort
-		// values — exactly as RunResumable's abort arm does. For a NewSubContext
+		// Reconcile winding, restore past the prompt, and run its handler or deliver
+		// the abort values — the shared abort arm (see resolveAbort). For a NewSubContext
 		// (promptTag nil) the found prompt is always a chain FRAME; the prompt == nil
-		// (context-level) arms are kept for parity with RunResumable. SourceWinding (if
-		// carried) is the winding at the escape point, possibly deeper than this sub.
-		var targetStack WindingStack
-		if prompt != nil {
-			targetStack = prompt.windingStack
+		// arms inside resolveAbort are kept for parity with RunResumable. SourceWinding
+		// (if carried) is the winding at the escape point, possibly deeper than this sub.
+		done, abErr := p.resolveAbort(abortErr, prompt)
+		if abErr != nil {
+			return abErr
 		}
-		sourceStack := p.windingStack
-		if abortErr.SourceWinding != nil {
-			sourceStack = abortErr.SourceWinding
-		}
-		restoreErr := p.RestoreWithWindingFrom(nil, sourceStack, targetStack)
-		if restoreErr != nil {
-			return restoreErr
-		}
-		if prompt != nil {
-			p.Restore(prompt)
-		}
-
-		if prompt != nil && prompt.PromptHandler() != nil {
-			_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
-			if applyErr != nil {
-				return applyErr
-			}
-		} else {
-			p.SetValues(abortErr.Values...)
-			if prompt == nil {
-				return nil
-			}
+		if done {
+			return nil
 		}
 		continue
 	}
+}
+
+// resolveAbort reconciles dynamic-wind from the escape-point winding to the FOUND
+// prompt's, restores past the prompt frame, and runs the prompt's handler or delivers
+// the abort values. It is the shared abort arm of RunResumable and RunWithinBoundary —
+// the two drivers differ only in how they treat a NOT-FOUND prompt (the top-level
+// RunResumable errors; a RunWithinBoundary sub-context re-raises to its enclosing
+// driver), so that decision stays at each call site and resolveAbort is reached only
+// with a prompt FindPrompt already matched. prompt may still be nil: the context-level
+// boundary, which has no frame and no handler.
+//
+// Returns done=true when the driver should return nil (a context-level deliver: the
+// resumed computation already ran to completion, so the abort value is the final
+// result), done=false to keep looping, and a non-nil error to propagate. SourceWinding,
+// when the abort carried it, is the winding at the escape point — possibly a deeper
+// sub-context than this driver's own (the C3 deeper-sub after-thunk reconcile);
+// otherwise the driver's own winding is used (value-delivery aborts).
+func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineContinuation) (done bool, err error) {
+	var targetStack WindingStack
+	if prompt != nil {
+		targetStack = prompt.windingStack
+	}
+	sourceStack := p.windingStack
+	if abortErr.SourceWinding != nil {
+		sourceStack = abortErr.SourceWinding
+	}
+	restoreErr := p.RestoreWithWindingFrom(nil, sourceStack, targetStack)
+	if restoreErr != nil {
+		return false, restoreErr
+	}
+
+	// Restore past the prompt frame (skip it). A nil prompt is the context-level
+	// boundary — no frame to restore.
+	if prompt != nil {
+		p.Restore(prompt)
+	}
+
+	// Run the handler, or deliver ALL abort values (R7RS §6.10, including zero — a
+	// continuation invoked with no values resumes with no values, not a fabricated
+	// Void). Context-level prompts (nil) have no handler.
+	if prompt != nil && prompt.PromptHandler() != nil {
+		_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
+		if applyErr != nil {
+			return false, applyErr
+		}
+		return false, nil
+	}
+	p.SetValues(abortErr.Values...)
+	return prompt == nil, nil
 }
