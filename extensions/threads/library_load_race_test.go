@@ -17,6 +17,7 @@ package threads_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -37,20 +38,28 @@ import (
 // run under -race; this is the realistic integration smoke that exercises the
 // same maps through the full (environment …) → LoadLibrary → Register path.
 func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
-	// The apply-frame copy-on-write race this test originally surfaced (the
-	// source-side keysShared write in LocalEnvironmentFrame.copyForApplyInto) is
-	// FIXED and proven race-free by
-	// environment.TestCopyForApplyInto_ConcurrentSourceRaceFree under -race.
+	// Progress so far (plans/2026-06-25-apply-frame-cow-race.local.md):
+	//   1. apply-frame copy-on-write race (keysShared) — FIXED, proven by
+	//      environment.TestCopyForApplyInto_ConcurrentSourceRaceFree.
+	//   2. false-circular-dependency on concurrent shared-dependency load — FIXED
+	//      by the per-name load latch (LibraryRegistry.LookupClaimOrWait), with
+	//      genuine cycles caught via the ctx-borne load chain (loadChainContains).
+	//      Proven by TestLibraryRegistryLookupClaimOrWait /
+	//      TestLibraryRegistryFinishLoadingClosesLatch under -race.
 	//
-	// Un-skipping then revealed a DISTINCT, deeper concurrency limitation (Q2 in
-	// plans/2026-06-25-apply-frame-cow-race.local.md): when several threads each
-	// load a library that depends on a not-yet-loaded shared dependency (here,
-	// (scheme base)), the loader's circular-dependency detection cannot tell
-	// "another thread is mid-load" from "I am recursively loading this", so it
-	// aborts with a false "circular dependency" error. The fix is a thread-aware
-	// per-name load latch (the TODO(1C-b) in library_loader.go) — a separate
-	// task from the apply-frame CoW race. Keep skipped until that lands.
-	t.Skip("blocked by concurrent shared-dependency load misdetected as circular (loader per-name latch TODO); the keysShared CoW race itself is fixed and proven by environment.TestCopyForApplyInto_ConcurrentSourceRaceFree")
+	// Un-skipping now surfaces TWO further engine-global shared-state hazards that
+	// the latch does not address (Q2's "find the next one" — each a separate task):
+	//   A. registry.ApplyDocs concurrent map write (apply.go:300): every library
+	//      load runs applyBaseEnvironment→ApplyDocs, mutating bnd.EnsureMeta().Doc
+	//      on bindings that resolve up to the SHARED sealed base — concurrent
+	//      writes to the same base binding. A real data race under -race.
+	//   B. shared LoadPathStack: include resolves relative to the stack top, but
+	//      all threads push/pop one stack on the root namespace, so a thread
+	//      resolves its (include …) against another thread's directory → file not
+	//      found. A logic race (no -race report), needs a per-load-chain stack.
+	// Both are tracked in the plan's "Still OPEN" section. Keep skipped until they
+	// land; the latch fix itself is proven by the registry unit tests above.
+	t.Skip("blocked by engine-global shared-state under concurrent load: (A) registry.ApplyDocs map write on the shared base; (B) shared LoadPathStack breaks per-thread include resolution. The per-name latch is fixed and proven by pkg/machine/compilation TestLibraryRegistryLookupClaimOrWait under -race.")
 
 	c := qt.New(t)
 	ctx := context.Background()
@@ -63,9 +72,10 @@ func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
-	// Four distinct SRFI libraries, none auto-loaded at startup. Each thread
-	// loads one, so all four StartLoading/Register/FinishLoading sequences hit
-	// the shared registry maps simultaneously.
+	// Four distinct SRFI libraries, none auto-loaded at startup, each depending on
+	// the shared (scheme base). Each thread loads one, so all four claim the
+	// registry concurrently AND contend on (scheme base): exactly one thread loads
+	// it; the rest wait on its latch rather than failing with a false cycle.
 	src := `(let ((t1 (make-thread (lambda () (environment '(srfi 1)))))
 	              (t2 (make-thread (lambda () (environment '(srfi 13)))))
 	              (t3 (make-thread (lambda () (environment '(srfi 14)))))
@@ -75,7 +85,23 @@ func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
 	          (thread-join! t1) (thread-join! t2)
 	          (thread-join! t3) (thread-join! t4)
 	          'done)`
-	result, err := eng.EvalMultiple(ctx, src)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "done")
+
+	// Watchdog: a per-name-latch regression that deadlocks would otherwise hang
+	// the whole package until the global -timeout. Fail fast with a clear message.
+	type evalResult struct {
+		val wile.Value
+		err error
+	}
+	done := make(chan evalResult, 1)
+	go func() {
+		val, evalErr := eng.EvalMultiple(ctx, src)
+		done <- evalResult{val, evalErr}
+	}()
+	select {
+	case r := <-done:
+		c.Assert(r.err, qt.IsNil)
+		c.Assert(r.val.SchemeString(), qt.Equals, "done")
+	case <-time.After(30 * time.Second):
+		t.Fatal("concurrent library load did not complete in 30s — possible per-name latch deadlock")
+	}
 }

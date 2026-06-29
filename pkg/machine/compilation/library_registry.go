@@ -153,7 +153,7 @@ type LibraryImportObserver func(LibraryImportEvent)
 type LibraryRegistry struct {
 	mu             sync.RWMutex
 	libraries      map[string]*CompiledLibrary // key: library name as "scheme/base"
-	loading        map[string]bool             // libraries currently being loaded (cycle detection)
+	loading        map[string]chan struct{}    // in-flight loads → latch closed on completion
 	searchPaths    []string                    // directories to search for library files
 	importObserver LibraryImportObserver       // optional: called on each library import
 }
@@ -172,7 +172,7 @@ var DefaultLibraryPaths = []string{
 func NewLibraryRegistry() *LibraryRegistry {
 	return &LibraryRegistry{
 		libraries:   make(map[string]*CompiledLibrary),
-		loading:     make(map[string]bool),
+		loading:     make(map[string]chan struct{}),
 		searchPaths: DefaultLibraryPaths,
 	}
 }
@@ -311,43 +311,62 @@ func (p *LibraryRegistry) AllNames() []LibraryName {
 	return names
 }
 
-// IsLoading returns true if the library is currently being loaded.
-// Used to detect circular dependencies.
+// IsLoading returns true if the library is currently being loaded by some
+// goroutine. It does not distinguish which one; cycle detection (re-entry on
+// the caller's own load chain) is handled in LoadLibrary via the ctx-borne
+// load chain, not here.
 func (p *LibraryRegistry) IsLoading(name LibraryName) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.loading[name.Key()]
+	return p.loading[name.Key()] != nil
 }
 
-// StartLoading marks a library as being loaded.
+// StartLoading marks a library as being loaded, installing its completion
+// latch. A subsequent LookupClaimOrWait for the same name returns that latch
+// as wait. FinishLoading closes it.
 func (p *LibraryRegistry) StartLoading(name LibraryName) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.loading[name.Key()] = true
+	key := name.Key()
+	if p.loading[key] == nil {
+		p.loading[key] = make(chan struct{})
+	}
 }
 
-// FinishLoading marks a library as finished loading.
+// FinishLoading marks a library as finished loading and wakes every goroutine
+// waiting on its latch (whether the load succeeded and Registered or failed).
+// Waiters re-consult the registry: a successful load is now cached; a failed
+// one is neither cached nor loading, so a waiter re-claims and retries.
 func (p *LibraryRegistry) FinishLoading(name LibraryName) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	delete(p.loading, name.Key())
+	key := name.Key()
+	ch := p.loading[key]
+	if ch == nil {
+		return
+	}
+	close(ch)
+	delete(p.loading, key)
 }
 
-// LookupOrClaim atomically resolves a library or claims the loading slot.
-// It is the single check-and-mark decision point that LoadLibrary uses so the
-// Lookup → IsLoading → StartLoading sequence cannot interleave across threads:
+// LookupClaimOrWait atomically resolves a library, claims its loading slot, or
+// returns a latch to wait on. It is the single check-and-mark decision point so
+// the lookup → claim sequence cannot interleave across threads. Exactly one of
+// the three outcomes is non-zero:
 //   - cached != nil  ⇒ already loaded; use it.
 //   - claimed == true ⇒ the caller now owns the loading slot and MUST load,
-//     Register, and FinishLoading.
-//   - otherwise err is a wrapped ErrCircularDependency: either a genuine
-//     import cycle, or (option (a), Task 1C) a second thread loading the SAME
-//     library concurrently. The latter is a rare false positive accepted for
-//     this phase; a per-name latch that blocks-then-reads the cache is the (b)
-//     alternative — see the TODO below.
+//     Register, and FinishLoading (which closes the latch installed here).
+//   - wait != nil    ⇒ another goroutine is loading this exact library; the
+//     caller must block on wait, then re-call to read the now-cached result
+//     (or re-claim if that load failed).
 //
-// TODO(1C-b): distinguish concurrent same-library load (should wait) from a
-// genuine cycle (should error) via a per-name chan struct{} latch.
-func (p *LibraryRegistry) LookupOrClaim(name LibraryName) (cached *CompiledLibrary, claimed bool, err error) {
+// Unlike the former LookupOrClaim, a concurrent same-library load is NOT a
+// circular-dependency error: that false positive is what blocked concurrent
+// shared-dependency loads. A genuine import cycle (A→B→A) is re-entry on one
+// goroutine's own synchronous load chain and is caught earlier, in LoadLibrary,
+// via the ctx-borne load chain — before reaching this method — so a goroutine
+// never waits on a latch it installed itself.
+func (p *LibraryRegistry) LookupClaimOrWait(name LibraryName) (cached *CompiledLibrary, claimed bool, wait <-chan struct{}) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	key := name.Key()
@@ -355,11 +374,11 @@ func (p *LibraryRegistry) LookupOrClaim(name LibraryName) (cached *CompiledLibra
 	if lib != nil {
 		return lib, false, nil
 	}
-	if p.loading[key] {
-		return nil, false, werr.WrapForeignErrorf(werr.ErrCircularDependency,
-			"circular dependency detected while loading %s", name.SchemeString())
+	ch := p.loading[key]
+	if ch != nil {
+		return nil, false, ch
 	}
-	p.loading[key] = true
+	p.loading[key] = make(chan struct{})
 	return nil, true, nil
 }
 

@@ -58,29 +58,49 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: invalid library registry type")
 	}
 
-	// Atomic check-and-claim: collapses the former Lookup → IsLoading →
-	// StartLoading sequence into one locked decision so two threads cannot both
-	// see "not loaded" and proceed to load+Register the same library (a TOCTOU
-	// that would otherwise surface as ErrDuplicateBinding). See LookupOrClaim.
-	cached, claimed, err := reg.LookupOrClaim(name)
-	if err != nil {
-		return nil, err
+	// Cycle detection precedes the registry claim. A genuine import cycle (A→B→A)
+	// is synchronous re-entry on this goroutine's own load chain, recorded in ctx
+	// by withLoadChain below. Catching it here (before LookupClaimOrWait) is what
+	// lets the registry treat a still-loading name as "wait", not "cycle": a
+	// goroutine can never reach the wait path for a latch it installed itself.
+	if loadChainContains(ctx, name) {
+		return nil, werr.WrapForeignErrorf(werr.ErrCircularDependency,
+			"circular dependency detected while loading %s", name.SchemeString())
 	}
-	if cached != nil {
-		return cached, nil
+
+	// Claim the loading slot, or wait for a concurrent loader of the SAME library.
+	// LookupClaimOrWait collapses lookup → claim into one locked decision so two
+	// threads cannot both see "not loaded" and proceed to load+Register the same
+	// library (a TOCTOU that would otherwise surface as ErrDuplicateBinding).
+	claimed := false
+	for {
+		var cached *CompiledLibrary
+		var wait <-chan struct{}
+		cached, claimed, wait = reg.LookupClaimOrWait(name)
+		if cached != nil {
+			return cached, nil
+		}
+		if claimed {
+			break
+		}
+		// Another goroutine is loading this library. Wait for it to finish, then
+		// re-consult: success ⇒ cached; failure ⇒ neither cached nor loading, so
+		// the next iteration re-claims and retries the load on this goroutine.
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return nil, werr.WrapForeignErrorf(ctx.Err(),
+				"load-library: %s: cancelled while awaiting concurrent load",
+				name.SchemeString())
+		}
 	}
-	if !claimed {
-		// Defensive: today (cached==nil, err==nil) ⇒ claimed==true. Branch on the
-		// bool LookupOrClaim returns rather than reconstructing the decision, so a
-		// future "proceed but unclaimed" state (e.g. the TODO(1C-b) per-name latch)
-		// fails loudly here instead of silently running FinishLoading on a slot we
-		// never owned — which would delete another loader's loading mark.
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
-			"load-library: %s: registry returned neither a cached library nor a loading claim",
-			name.SchemeString())
-	}
-	// We own the loading slot; release it on every exit path.
+	// We own the loading slot; release it (closing the latch) on every exit path.
 	defer reg.FinishLoading(name)
+
+	// Record this library on the load chain so a nested import of it is detected
+	// as a cycle above. The augmented context flows down the synchronous import
+	// resolution; the parent frame retains its own shorter context.
+	ctx = withLoadChain(ctx, name)
 	var lib *CompiledLibrary
 
 	// Resolve and open via FileResolver (supports both OS and virtual FS).
