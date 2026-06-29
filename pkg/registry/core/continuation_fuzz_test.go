@@ -21,8 +21,8 @@ package core_test
 // runaway-loop hang — were both found by hand-poking unusual shapes. This generator does
 // that exhaustively: it builds thousands of small, syntactically-valid, BOUNDED
 // continuation programs from the grammar {literal, var, call/cc, dynamic-wind, guard,
-// call-with-values, call-with-exit, parameterize, if, +, list} and runs each under a hard
-// timeout.
+// call-with-values, call-with-exit, parameterize, if, +, list, bounded multi-shot
+// resume} and runs each under a hard timeout.
 //
 // The oracle is FAILURE-shaped, not value-shaped — no reference implementation needed:
 //   - a Go-level panic ("recovered panic" / "invalid memory address" / "nil pointer"),
@@ -30,13 +30,18 @@ package core_test
 //   - a timeout (the VM wedged on legal input)
 // is a BUG. A normal Scheme value, or a CATCHABLE Scheme error (a raised condition, a
 // type error), is fine — the VM behaving correctly on a nonsensical-but-legal program.
+// Deterministic silent-WRONG-value bugs are out of scope here (no reference oracle) —
+// that net is the golden corpus + cross-scheme differential; this fuzzer's job is to
+// surface crashes, routing failures, and hangs across shapes those can't enumerate.
 //
-// Boundedness: the generator never emits set! (so no self-re-invoking continuation
-// loops) and bounds depth, so every program terminates quickly; a timeout therefore
-// means a genuine VM hang, not a legitimately-infinite program. It also never emits
-// abort-current-continuation or composable continuations to a foreign tag, so any
-// "no prompt found" is a routing bug, not a user error. The seed is fixed, so any
-// failure prints a one-line reproduction.
+// Boundedness: the only set! the grammar emits is the multi-shot production, which
+// stores a captured continuation and re-invokes it under a fixed counter (the stored
+// continuation is kept out of scope, so nothing else can re-invoke it unboundedly).
+// Together with bounded depth every program terminates quickly, so a timeout still
+// means a genuine VM hang, not a legitimately-infinite program. The generator also
+// never emits abort-current-continuation or composable continuations to a foreign tag,
+// so any "no prompt found" is a routing bug, not a user error. The seed is fixed, so
+// any failure prints a one-line reproduction.
 
 import (
 	"context"
@@ -86,7 +91,7 @@ func (g *contGen) expr(depth int, scope []scopeVar) string {
 	if depth <= 0 || g.rng.Intn(4) == 0 {
 		return g.atom(scope)
 	}
-	switch g.rng.Intn(10) {
+	switch g.rng.Intn(11) {
 	case 0: // call/cc — introduces a callable continuation
 		k := g.fresh("kc")
 		body := g.expr(depth-1, append(scope, scopeVar{k, true}))
@@ -115,6 +120,23 @@ func (g *contGen) expr(depth int, scope []scopeVar) string {
 		p := g.fresh("pc")
 		return "(let ((" + p + " (make-parameter 0))) (parameterize ((" + p + " " + g.atom(scope) + ")) " +
 			g.expr(depth-1, append(scope, scopeVar{p, false})) + "))"
+	case 9: // multi-shot resume — store a call/cc continuation and re-invoke it a
+		// BOUNDED number of times. `middle` (re-run on every shot) is where boundaries
+		// get re-entered, so this exercises a continuation reinstated through reified
+		// call-with-values / dynamic-wind / guard frames repeatedly. The stored kbox is
+		// deliberately kept OUT of scope so only the counter drives re-invocation — the
+		// program always terminates, and a timeout is still a genuine VM hang.
+		kbox := g.fresh("mk")
+		cnt := g.fresh("mn")
+		limit := 2 + g.rng.Intn(2) // 2 or 3 shots
+		middle := g.expr(depth-1, append(scope, scopeVar{cnt, false}))
+		return fmt.Sprintf("(let ((%s #f) (%s 0)) "+
+			"(call/cc (lambda (k) (set! %s k))) "+
+			"%s "+
+			"(set! %s (+ %s 1)) "+
+			"(if (< %s %d) (%s #f)) "+
+			"%s)",
+			kbox, cnt, kbox, middle, cnt, cnt, cnt, limit, kbox, cnt)
 	default: // list combinator (forces two sub-evaluations)
 		return "(list " + g.expr(depth-1, scope) + " " + g.expr(depth-1, scope) + ")"
 	}
@@ -149,8 +171,14 @@ func TestContinuationFuzz(t *testing.T) {
 	)
 	g := &contGen{rng: rand.New(rand.NewSource(seed))}
 	crashes := 0
+	multiShot := 0
 	for i := range programs {
 		code := g.expr(maxDepth, nil)
+		// A stored-and-re-invoked continuation is the multi-shot resume stressor; the
+		// grammar marks it by emitting set! (only the multi-shot production does).
+		if strings.Contains(code, "set!") {
+			multiShot++
+		}
 		_, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 8*time.Second)
 		reason, bad := isVMCrash(err)
 		if bad {
@@ -161,5 +189,11 @@ func TestContinuationFuzz(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("fuzzed %d bounded continuation programs (seed=%#x): no VM crash / no-prompt-found / hang", programs, seed)
+	// Guard the coverage the oracle depends on: if the grammar stops emitting multi-shot
+	// programs, the crash oracle silently stops exercising re-invoked continuations (the
+	// class that hid the sticky-isolatedMarks escalation bug).
+	if multiShot == 0 {
+		t.Errorf("generated 0 multi-shot (store-and-re-invoke) programs; the fuzzer is not exercising multi-shot resume")
+	}
+	t.Logf("fuzzed %d bounded continuation programs (%d multi-shot) (seed=%#x): no VM crash / no-prompt-found / hang", programs, multiShot, seed)
 }
