@@ -62,6 +62,13 @@ func FuzzReadSyntax(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add(s)
 	}
+	// Harvested from the parser/tokenizer example-test tables (fuzz_corpus_test.go):
+	// every input some hand-written test exercises becomes a seed the mutator
+	// explores around. FuzzReadWriteRoundTrip deliberately does NOT seed from these
+	// (some numeric forms are not yet round-trip-clean — issue #781).
+	for _, s := range corpusSeeds {
+		f.Add(s)
+	}
 	f.Fuzz(func(t *testing.T, src string) {
 		defer func() {
 			r := recover()
@@ -143,4 +150,16 @@ func FuzzReadWriteRoundTrip(f *testing.F) {
 			t.Fatalf("writer emitted non-re-readable output:\n  input:   %q\n  written: %q\n  reread:  %v", src, out, rereadErr)
 		}
 	})
+}
+
+// TestFuzzCorpusNonTrivial guards the harvested seed corpus against silently
+// shrinking — a regen that parsed nothing (or a refactor that renamed the
+// input/in/src/text test fields) would gut the fuzzer's seed diversity without
+// failing any other test. The harvest yields ~900 distinct inputs today; the
+// floor leaves headroom while still catching a collapse.
+func TestFuzzCorpusNonTrivial(t *testing.T) {
+	const minSeeds = 500
+	if len(corpusSeeds) < minSeeds {
+		t.Fatalf("corpusSeeds has %d entries, want >= %d — did the harvest break (renamed input fields)?", len(corpusSeeds), minSeeds)
+	}
 }
