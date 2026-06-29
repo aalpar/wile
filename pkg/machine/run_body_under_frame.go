@@ -114,6 +114,9 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 	if len(p.marks) > 0 {
 		frame.marks = cloneMarks(p.marks)
 	}
+	// The reified frame inherits the current barrier so a continuation captured in the
+	// body records it (crossing detection still fires) and the frame's restore reverts it.
+	frame.barrierValid = p.barrierValid
 	p.cont = frame
 	return p.ApplyCallable(body, args...)
 }
@@ -181,4 +184,30 @@ func (p *MachineContext) RunBodyUnderConsumer(producer values.Value, consumer va
 // normal-return path, which RunBodyUnderPrompt's returnTemplate cannot do.
 func (p *MachineContext) RunBodyUnderExitFrame(body values.Value, tag *PromptTag, finalizer values.Value, exitArg values.Value) (*MachineContext, error) {
 	return p.runBodyUnderApplyFrame(body, finalizer, tag, exitArg)
+}
+
+// RunBodyUnderBarrier reifies with-continuation-barrier. It pushes a transparent chain
+// frame carrying the OUTER barrier token (the restore target), flips the live barrier to
+// `token` for the body, and inline-applies body on the live chain (no sub-context). On
+// the body's normal return the transparent frame's restore reverts p.barrierValid to the
+// outer token and forwards the body's value(s); a continuation captured inside the body
+// spans the frame, so resume-out replays the same revert. An abort skips the frame and
+// lands on an outer frame whose stamped barrierValid reverts via the driver's Restore.
+// Because barrierValid is now a chain-carried register, the crossing check at the (k v)
+// site (applyCapturedContinuation / applyComposableContinuation) is unchanged and correct
+// at every transition: a continuation captured inside records `token`; one captured
+// outside records the outer barrier; invoking across the boundary trips the pointer check.
+func (p *MachineContext) RunBodyUnderBarrier(body values.Value, token *BarrierToken) (*MachineContext, error) {
+	frame := NewMachineContinuation(p.cont, returnTemplate, p.env)
+	frame.threadID = p.threadID
+	if len(p.windingStack) > 0 {
+		frame.windingStack = p.windingStack.Copy()
+	}
+	if len(p.marks) > 0 {
+		frame.marks = cloneMarks(p.marks)
+	}
+	frame.barrierValid = p.barrierValid // outer token = restore target on frame exit
+	p.cont = frame
+	p.barrierValid = token // flip the live barrier for the body
+	return p.ApplyCallable(body)
 }

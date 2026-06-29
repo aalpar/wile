@@ -169,6 +169,7 @@ func TestVmState(t *testing.T) {
 var vmStateFieldCoverage = map[string]map[string]string{
 	// NewMachineContinuationFromMachineContext: mc → continuation (SaveContinuation path)
 	"NewMachineContinuationFromMachineContext": {
+		"barrierValid": "copy (stamp current barrier onto the saved frame)",
 		"env":          "copy",
 		"template":     "copy",
 		"singleValue":  "copy",
@@ -184,6 +185,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 	},
 	// Restore: continuation → mc (call/cc re-entry, composable continuation)
 	"Restore": {
+		"barrierValid": "copy (restore the barrier the frame was created under)",
 		"env":          "copy",
 		"template":     "copy",
 		"singleValue":  "skip (caller's value preserved)",
@@ -199,6 +201,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 	},
 	// RestoreAndRelease: continuation → mc (normal function return fast path)
 	"RestoreAndRelease": {
+		"barrierValid": "copy (before the shared/unshared branch)",
 		"env":          "copy",
 		"template":     "copy",
 		"singleValue":  "skip (caller's value preserved)",
@@ -214,6 +217,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 	},
 	// PopContinuation: continuation → mc (used by Run loop after RestoreContinuation opcode)
 	"PopContinuation": {
+		"barrierValid": "copy",
 		"env":          "copy",
 		"template":     "copy",
 		"singleValue":  "copy",
@@ -229,6 +233,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 	},
 	// Copy: continuation → continuation (for DeepCopy, SliceContinuationAt)
 	"Copy": {
+		"barrierValid": "copy",
 		"env":          "copy",
 		"template":     "copy",
 		"singleValue":  "copy",
@@ -244,6 +249,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 	},
 	// NewMachineContext: continuation → mc (top-level context creation)
 	"NewMachineContext": {
+		"barrierValid": "zero (no barrier at top level)",
 		"env":          "copy",
 		"template":     "copy",
 		"singleValue":  "copy",
@@ -259,6 +265,7 @@ var vmStateFieldCoverage = map[string]map[string]string{
 	},
 	// NewSubContext: mc → mc (sub-context for foreign calls)
 	"NewSubContext": {
+		"barrierValid": "copy (inherit parent's barrier context)",
 		"env":          "derived (parent.env.TopLevel())",
 		"template":     "zero (no template; caller sets via Apply)",
 		"singleValue":  "zero (fresh value register)",

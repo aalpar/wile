@@ -223,6 +223,14 @@ type vmState struct {
 	// (callee starts clean). Restore/PopContinuation restores from continuation.
 	// cloneMarks does a shallow copy for call/cc re-invocation safety.
 	marks []markEntry
+
+	// barrierValid is non-nil inside a with-continuation-barrier; pointer identity
+	// identifies the barrier. It rides vmState (not a bare MachineContext field) so it
+	// travels with a captured continuation and is reconciled on every frame restore —
+	// the crossing check at the (k v) site (applyCapturedContinuation /
+	// applyComposableContinuation) then sees the barrier the continuation was captured
+	// under even after re-entry. See RunBodyUnderBarrier (run_body_under_frame.go).
+	barrierValid *BarrierToken
 }
 
 // Value-register accessors.

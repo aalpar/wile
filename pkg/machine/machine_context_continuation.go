@@ -46,6 +46,7 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// continuation was invoked). Let GC collect it naturally.
 	p.envPooled = false
 	p.marks = cloneMarks(cont.marks)
+	p.barrierValid = cont.barrierValid
 
 	if cont.evals == nil {
 		// Inline: restore from inline slots, reuse mc.evals.
@@ -87,6 +88,9 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.cont = cont.parent
 	p.pc = cont.pc
 	p.callDepth = cont.callDepth
+	// barrierValid reverts here, before the shared/unshared branch, so both normal
+	// return and resume-out restore the barrier the frame was created under.
+	p.barrierValid = cont.barrierValid
 
 	if cont.shared {
 		// Shared frame: copy evals (preserve for re-invocation), don't pool
@@ -176,6 +180,7 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	// in Run loop) handles release of the old env via the popped frame.
 	p.envPooled = q.envPooled
 	p.marks = q.marks
+	p.barrierValid = q.barrierValid
 
 	if q.evals == nil {
 		// Inline: restore from inline slots, reuse mc.evals.

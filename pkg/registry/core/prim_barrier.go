@@ -48,33 +48,13 @@ func PrimCallWithContinuationBarrier(cc machine.CallContext) error {
 		return err
 	}
 
-	// Create a fresh barrier token. The pointer identity serves as the barrier's
-	// unique identity: comparing mc.BarrierValid() pointers at capture vs
-	// invocation time detects crossing.
-	barrierValid := machine.NewBarrierToken()
-
-	// Run the thunk in a sub-context with the barrier flag set.
-	// NewSubContext inherits the parent's barrierValid by default; we override it here
-	// to establish a new barrier scope. All further sub-contexts created during the
-	// thunk's execution will inherit this barrierValid, so continuations captured
-	// inside carry the same pointer and can be compared against it.
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	sub.SetBarrierValid(barrierValid)
-
-	// RunWithinBoundary (not Run) so a reified call-with-exit / prompt appearing
-	// inside the thunk resolves its abort on this barrier sub-context's chain (the
-	// reified exit/prompt frame lands here, walled off from the parent chain).
-	_, err = sub.ApplyCallable(thunkCls)
-	if err != nil {
-		return err
-	}
-	err = sub.RunWithinBoundary()
-
-	if err != nil {
-		return err
-	}
-
-	mc.SetValues(sub.GetValues()...)
-	return nil
+	// Reify the barrier: push a transparent chain frame carrying the OUTER barrier and
+	// flip the live barrier to a fresh token for the thunk, run INLINE on the live chain
+	// (not a sub-context). barrierValid now rides the continuation (vmState), so a
+	// continuation captured inside the thunk records this barrier and crossing detection
+	// still fires at the (k v) site; normal return and resume-out revert to the outer
+	// barrier via the frame's restore. This fixes the sub-context truncation
+	// (continuation_subcontext_truncation_red_test.go, call-with-continuation-barrier).
+	_, err = mc.RunBodyUnderBarrier(thunkCls, machine.NewBarrierToken())
+	return err
 }
