@@ -187,6 +187,44 @@ func TestLibraryIsolationBetweenLibraries(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "(10 20)")
 }
 
+// TestLibraryImportIdempotentInstance pins R7RS §5.6: a library body is executed
+// at most once, so importing the same library twice yields ONE shared instance, not
+// two independent copies. State mutated through the first import is visible after the
+// second import statement. The mutation is observed through a library-owned mutable
+// cell (set-car! on a closed-over pair) rather than set! on an imported binding —
+// imported bindings are immutable by default (see TestSetBangOnImportedBindingRejected).
+func TestLibraryImportIdempotentInstance(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	// The library closes over a mutable cell `n`. `bump` mutates it; `count` reads it.
+	// If the body re-ran on the second import, `count` would read a fresh 0.
+	sld := `(define-library (counter)
+  (export bump count)
+  (begin
+    (define n (list 0))
+    (define (bump) (set-car! n (+ 1 (car n))))
+    (define (count) (car n))))`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "counter.sld"), []byte(sld), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := wile.NewEngine(ctx, wile.WithLibraryPaths(tmpDir))
+	c.Assert(err, qt.IsNil)
+
+	// Import, mutate, re-import, read. A shared instance reports 1; a re-run body reports 0.
+	result, err := engine.EvalMultiple(ctx, `
+		(import (counter))
+		(bump)
+		(import (counter))
+		(count)
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "1")
+}
+
 func TestWithLibraryPaths_GoFuncsAvailableInLibrary(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
