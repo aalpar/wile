@@ -1550,7 +1550,7 @@ func TestCoverageDelimitedContinuations(t *testing.T) {
 								tag)))
 					tag
 					(lambda (v) v)))`,
-			values.NewInteger(23),
+			values.NewInteger(33), // Racket v9.2: cwcc composes in place (was 23)
 		},
 	}
 

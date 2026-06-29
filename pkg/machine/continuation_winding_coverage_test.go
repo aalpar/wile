@@ -513,7 +513,7 @@ func TestComposableContinuation_DynamicWind(t *testing.T) {
 						(lambda () (set! cc-log (cons 'before cc-log)))
 						(lambda ()
 							(+ 1 (call-with-composable-continuation
-								(lambda (k) k)
+								(lambda (k) (abort-current-continuation cc-tag k))
 								cc-tag)))
 						(lambda () (set! cc-log (cons 'after cc-log)))))
 				cc-tag

@@ -33,6 +33,12 @@ import (
 // restores when composable continuations are invoked in different dynamic
 // contexts. Marks-based parameterize fixes this by storing parameter bindings
 // as continuation marks that ride on the continuation frames.
+//
+// NOTE: to capture a composable continuation for invocation OUTSIDE its prompt,
+// proc aborts to the prompt with it: (lambda (k) (abort-current-continuation tag k)).
+// call-with-composable-continuation composes IN PLACE and does not escape on its own
+// (Racket semantics, verified v9.2), so a bare (lambda (k) k) would return k into the
+// surrounding frame rather than capture it for later.
 // =============================================================================
 
 func TestParameterizeComposableContinuation(t *testing.T) {
@@ -52,7 +58,7 @@ func TestParameterizeComposableContinuation(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 'inner))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (call-with-continuation-prompt
@@ -70,7 +76,7 @@ func TestParameterizeComposableContinuation(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 'inner))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (call-with-continuation-prompt
@@ -90,7 +96,7 @@ func TestParameterizeComposableContinuation(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 'inner))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (let* ((r1 (call-with-continuation-prompt
@@ -117,7 +123,7 @@ func TestParameterizeComposableContinuation(t *testing.T) {
 				               (parameterize ((p1 'p1-inner))
 				                 (parameterize ((p2 'p2-inner))
 				                   (let ((val (call-with-composable-continuation
-				                                (lambda (k) k) tag)))
+				                                (lambda (k) (abort-current-continuation tag k)) tag)))
 				                     (list (p1) (p2))))))
 				             tag #f)))
 				    (let ((result (call-with-continuation-prompt
@@ -139,7 +145,7 @@ func TestParameterizeComposableContinuation(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 10))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (let ((result (call-with-continuation-prompt
@@ -179,7 +185,7 @@ func TestParameterizeMutationClobbering(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 'inner))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (p 'mutated)
@@ -224,7 +230,7 @@ func TestParameterizeOuterDestruction(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 'A))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (parameterize ((p 'B))
@@ -243,7 +249,7 @@ func TestParameterizeOuterDestruction(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p 'B))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (p))))
 				             tag #f)))
 				    (parameterize ((p 'A))
@@ -289,7 +295,7 @@ func TestParameterizeCollateralDamage(t *testing.T) {
 				             (lambda ()
 				               (parameterize ((p1 'p1-inner))
 				                 (let ((val (call-with-composable-continuation
-				                              (lambda (k) k) tag)))
+				                              (lambda (k) (abort-current-continuation tag k)) tag)))
 				                   (list (p1) (p2)))))
 				             tag #f)))
 				    (parameterize ((p1 'p1-X) (p2 'p2-Y))

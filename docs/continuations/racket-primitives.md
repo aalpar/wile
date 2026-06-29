@@ -45,7 +45,8 @@ up to the top level — which is usually too much.
     (+ 1 (call-with-composable-continuation
             (lambda (k)
               ;; k captures (+ 1 [hole]) — just this one frame
-              (k (k 10)))  ; => (+ 1 (+ 1 10)) => 12
+              (k (k 10)))  ; (k 10)->11, (k 11)->12; proc's 12 then flows IN
+                           ; PLACE into the live (+ 1 _) => 13 (compose, not remove)
             tag)))
   tag)
 ```

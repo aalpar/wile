@@ -170,10 +170,9 @@ This is the most complex primitive. Implementation:
 1. `FindPrompt(tag)` — walk the continuation chain and check the context-level prompt.
 2. `SliceContinuationAt(prompt)` — deep-copy the continuation frames from the current position down to (but not including) the prompt. The bottom frame's parent is set to nil, creating a standalone segment.
 3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack.
-4. Run `proc` with the composable continuation in a sub-context.
-5. After `proc` returns, abort to the prompt with `proc`'s result. This is critical: the abort skips past the captured frames in the current context, delivering the result directly to the prompt boundary.
+4. Run `proc` with the composable continuation **in place** on the live chain — mirroring `call/cc`'s inline mode (`prim_control.go`), NOT in a sub-context and NOT aborting. The deep copy in step 2 left the originals on the live chain, so `proc`'s result flows back through them.
 
-Step 5 is what distinguishes composable continuations from undelimited ones. Without the abort, the result would flow through the captured computation a second time (the frames exist both in the captured segment and in the current continuation chain).
+This is the defining behavior of a *composable* continuation (Racket semantics, verified against Racket v9.2): `proc` runs in the continuation of the `call-with-composable-continuation` call — it does not remove the current continuation — and applying the captured continuation **composes** (extends) rather than replaces, so the captured frames may legitimately run more than once. For example `(+ 1 (call-with-composable-continuation (lambda (k) (k (k 10))) tag))` under a prompt yields **13**: `(k 10)`→11, `(k 11)`→12, then `proc`'s 12 flows in place into the live `(+ 1 _)` → 13. `shift`/`control` add their own `abort-current-continuation` on top of this raw capture (`wile/control.scm`); the primitive itself must not. (Earlier versions aborted to the prompt — `control`/frame-removing semantics — which was non-conformant to the Racket primitive this primitive follows.)
 
 ### Applying a composable continuation
 

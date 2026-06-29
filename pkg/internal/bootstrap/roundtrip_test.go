@@ -510,7 +510,7 @@ func TestRoundTrip_Prompts(t *testing.T) {
 			               tag)))
 			     tag
 			     #f))`,
-			values.NewInteger(11)},
+			values.NewInteger(12)}, // Racket v9.2: cwcc composes in place (was 11)
 	})
 }
 

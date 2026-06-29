@@ -85,7 +85,7 @@ var continuationGolden = []struct {
 	{"prompt-normal-return", `(call-with-continuation-prompt (lambda () 5) (make-continuation-prompt-tag) #f)`, "5"},
 	{"prompt-abort-to-handler", `(call-with-continuation-prompt (lambda () (+ 1 (abort-current-continuation (default-continuation-prompt-tag) 41))) (default-continuation-prompt-tag) (lambda (v) (* v 2)))`, "82"},
 	{"prompt-abort-handler-squares", `(+ 100 (call-with-continuation-prompt (lambda () (abort-current-continuation (default-continuation-prompt-tag) 5)) (default-continuation-prompt-tag) (lambda (v) (* v v))))`, "125"},
-	{"composable-continuation-composes", `(call-with-continuation-prompt (lambda () (* 2 (call-with-composable-continuation (lambda (k) (+ 1 (k 5))) (default-continuation-prompt-tag)))) (default-continuation-prompt-tag) (lambda (v) v))`, "11"},
+	{"composable-continuation-composes", `(call-with-continuation-prompt (lambda () (* 2 (call-with-composable-continuation (lambda (k) (+ 1 (k 5))) (default-continuation-prompt-tag)))) (default-continuation-prompt-tag) (lambda (v) v))`, "22"}, // Racket v9.2: cwcc composes in place
 
 	// --- parameterize + control ---
 	{"parameterize-scoped", `(let ((p (make-parameter 1))) (list (p) (parameterize ((p 2)) (p)) (p)))`, "(1 2 1)"},

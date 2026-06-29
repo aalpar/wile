@@ -66,7 +66,7 @@ func TestWithContinuationBarrier_Success(t *testing.T) {
 			                tag)))
 			      tag
 			      (lambda (v) v))))`,
-			Expected: values.NewInteger(12),
+			Expected: values.NewInteger(13), // Racket v9.2: cwcc composes in place (was 12)
 		},
 		{
 			Name: "prompt abort passes through barrier",

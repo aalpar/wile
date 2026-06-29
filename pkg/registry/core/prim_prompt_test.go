@@ -120,7 +120,7 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 				            tag)))
 				  tag
 				  #f))`,
-			Expected: values.NewInteger(11),
+			Expected: values.NewInteger(12), // Racket v9.2: cwcc composes in place (was 11)
 		},
 		{
 			Name: "composable continuation applied multiple times",

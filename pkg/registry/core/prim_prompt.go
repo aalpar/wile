@@ -168,10 +168,12 @@ func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
 //
 // (call-with-composable-continuation proc tag)
 //
-// The captured continuation is a ComposableContinuation value that, when
-// applied, splices its frames onto the current continuation chain.
-//
-// Follows Racket's call-with-composable-continuation.
+// Follows Racket's call-with-composable-continuation: like call/cc but (a) proc
+// runs IN PLACE — the current continuation is NOT removed, so proc's result flows
+// through the live delimited frames — and (b) the captured ComposableContinuation
+// is non-abortive: applying it COMPOSES (extends) the current continuation rather
+// than replacing it, so the captured frames may run more than once. This is the
+// raw composable capture; shift/control add their own abort on top (wile/control.scm).
 func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "call-with-composable-continuation")
 	if err != nil {
@@ -207,26 +209,35 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// capture time so applyComposableContinuation can detect barrier crossings.
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
 
-	// Call proc with the composable continuation.
-	// The result of proc becomes the value delivered to the prompt boundary.
-	// RunWithinBoundary (not Run) so a reified call-with-exit / prompt appearing
-	// inside proc resolves its abort on this sub-context's own chain.
+	// Apply proc with the composable continuation, mirroring call/cc's two modes
+	// (prim_control.go:188-221) — NOT an abort. Racket's
+	// call-with-composable-continuation runs proc IN PLACE (the current continuation is
+	// not removed) and applying the continuation COMPOSES (extends), so proc's result
+	// flows through the live delimited frames and (comp v) inside proc splices the
+	// captured copy onto the live chain (applyComposableContinuation). Verified against
+	// Racket v9.2: (+ 100 (cwcc (lambda (k) (k 5)) t)) => 205, (* 2 (cwcc (lambda (k)
+	// (+ 1 (k 5))) dflt)) => 22 — compose-in-place, not the old control/frame-removing
+	// abort. This also fixes the sub-context truncation: a call/cc captured inside proc
+	// now spans the live chain.
+	if mc.Parent() != nil {
+		// Inline mode: proc runs directly in the current VM context, in place.
+		_, err = mc.ApplyCallable(procCls, comp)
+		return err
+	}
+	// Sub-context mode (rootless cwcc, e.g. inside another foreign sub-context or a
+	// thread root): run proc under its OWN DefaultPromptTag driver, exactly as call/cc's
+	// sub-context mode — RunWithEscapeHandling (not RunWithinBoundary) so a call/cc or
+	// reified boundary inside proc has a driver, then deliver proc's value(s) to mc.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	_, err = sub.ApplyCallable(procCls, comp)
 	if err != nil {
 		return err
 	}
-	err = sub.RunWithinBoundary()
+	err = sub.RunWithEscapeHandling()
 	if err != nil {
 		return err
 	}
-
-	// Abort to the prompt with the proc's result.
-	// This skips past the captured frames in the current context,
-	// delivering the result directly to the prompt boundary.
-	return &machine.ErrPromptAbort{
-		Tag:    tag,
-		Values: []values.Value{sub.GetValue()},
-	}
+	mc.SetValues(sub.GetValues()...)
+	return nil
 }

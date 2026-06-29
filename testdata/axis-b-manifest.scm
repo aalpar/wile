@@ -47,7 +47,7 @@
  ("bytevector-u8-ref" "integer" ("bytevector" "integer") "github.com/aalpar/wile/pkg/registry/core.PrimBytevectorU8Ref" "pkg/registry/core/prim_byte_vectors.go:97")
  ("bytevector-u8-set!" "void" ("bytevector" "integer" "integer") "github.com/aalpar/wile/pkg/registry/core.PrimBytevectorU8Set" "pkg/registry/core/prim_byte_vectors.go:107")
  ("bytevector?" "boolean" ("any") "github.com/aalpar/wile/pkg/registry/core.init.MakeTypePredicate.func69" "pkg/registry/helpers/type.go:26")
- ("call-with-composable-continuation" "any" ("procedure" "any") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithComposableContinuation" "pkg/registry/core/prim_prompt.go:175")
+ ("call-with-composable-continuation" "any" ("procedure" "any") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithComposableContinuation" "pkg/registry/core/prim_prompt.go:177")
  ("call-with-continuation-barrier" "any" ("procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithContinuationBarrier" "pkg/registry/core/prim_barrier.go:39")
  ("call-with-continuation-prompt" "any" ("procedure" "any" "procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithContinuationPrompt" "pkg/registry/core/prim_prompt.go:68")
  ("call-with-current-continuation" "any" ("procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallCC" "pkg/registry/core/prim_control.go:151")
