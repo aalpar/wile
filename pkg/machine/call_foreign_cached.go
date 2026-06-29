@@ -93,7 +93,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		select {
 		case <-mc.ctx.Done():
 			if errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: mc.timer.handler}
+				return nil, &ErrTimerInterrupt{Handler: mc.timer.handler, Tag: mc.timer.tag}
 			}
 		default:
 		}

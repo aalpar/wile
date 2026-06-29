@@ -132,8 +132,11 @@ type MachineContext struct {
 // Finding 7 of plans/2026-05-06-machine-structural-reduction.md
 // (stage 2 of 3); see plans/2026-05-12-machine-sr-finding7-timer-impl.md.
 type timerState struct {
-	handler values.Callable
-	cancel  context.CancelFunc
+	handler  values.Callable
+	cancel   context.CancelFunc
+	tag      *PromptTag      // identifies this with-timeout's finalizer frame on the chain
+	parent   *timerState     // enclosing timer (nesting); restored on teardown
+	savedCtx context.Context // ctx active before this with-timeout; restored on teardown
 }
 
 // expansionState clusters the two MachineContext fields that are nil at
@@ -377,7 +380,7 @@ func (p *MachineContext) Run() error {
 			select {
 			case <-mc.ctx.Done():
 				if mc.timer != nil && errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
-					return &ErrTimerInterrupt{Handler: mc.timer.handler}
+					return &ErrTimerInterrupt{Handler: mc.timer.handler, Tag: mc.timer.tag}
 				}
 				return mc.ctx.Err()
 			default:
@@ -1456,15 +1459,6 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		rerr = p.WrapError(err, "RunResumable: recovered panic: "+err.Error())
 	}()
 
-	// freshCancel tracks the cancel function for any recovery context
-	// installed after a timer interrupt. Cleaned up on function exit.
-	var freshCancel context.CancelFunc
-	defer func() {
-		if freshCancel != nil {
-			freshCancel()
-		}
-	}()
-
 	for {
 		err := p.Run()
 
@@ -1543,30 +1537,15 @@ func (p *MachineContext) RunResumable() (rerr error) {
 
 		var timerErr *ErrTimerInterrupt
 		if errors.As(err, &timerErr) {
-			// Capture the full computation as a composable continuation.
-			segment := p.CaptureInterruptContinuation()
-			windingCopy := p.WindingStack().Copy()
-			resumable := NewComposableContinuation(
-				segment, windingCopy, p.threadID, p.barrierValid,
-			)
-
-			// Clear timer state (prevent re-entry from stale handler).
-			// ClearTimer cancels the active timer (if any) and nils the sub-record.
-			p.ClearTimer()
-
-			// Install a fresh cancellable context (the timed-out context is done).
-			// Cancel any previous recovery context before creating a new one.
-			if freshCancel != nil {
-				freshCancel()
+			boundary, found := p.FindPrompt(timerErr.Tag)
+			if !found {
+				// Every with-timeout pushes its finalizer frame before the thunk runs, so
+				// a fired timer reaching the top driver MUST have a boundary on the chain.
+				return werr.WrapForeignErrorf(werr.ErrInternal,
+					"with-timeout: no boundary frame found for fired timer")
 			}
-			ctx, fc := context.WithCancel(context.Background())
-			freshCancel = fc
-			p.SetContext(ctx)
-
-			// Call the handler with the resumable continuation.
-			_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
+			applyErr := p.resolveTimerInterrupt(timerErr, boundary)
 			if applyErr != nil {
-				freshCancel()
 				return applyErr
 			}
 			continue
@@ -1615,7 +1594,23 @@ func (p *MachineContext) RunWithinBoundary() error {
 
 		var abortErr *ErrPromptAbort
 		if !errors.As(err, &abortErr) {
-			// ErrResumeContinuation, a timer, an exception escape, or a real error:
+			// A timer whose with-timeout boundary is on THIS sub-context's own chain is
+			// resolved here — the symmetric counterpart to resolving an abort to a local
+			// prompt — so a with-timeout that sits inside a surviving sub-context still has
+			// a local driver. A timer for an OUTER with-timeout (boundary not on this
+			// chain) re-raises to the enclosing driver, exactly like a not-found abort.
+			var timerErr *ErrTimerInterrupt
+			if errors.As(err, &timerErr) {
+				boundary, found := p.FindPrompt(timerErr.Tag)
+				if found {
+					applyErr := p.resolveTimerInterrupt(timerErr, boundary)
+					if applyErr != nil {
+						return applyErr
+					}
+					continue
+				}
+			}
+			// ErrResumeContinuation, an outer timer, an exception escape, or a real error:
 			// the enclosing driver handles it.
 			return err
 		}
@@ -1690,4 +1685,50 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 	}
 	p.SetValues(abortErr.Values...)
 	return prompt == nil, nil
+}
+
+// resolveTimerInterrupt is the shared timer arm of RunResumable and RunWithinBoundary
+// (mirroring resolveAbort). The two drivers differ only in how they treat a NOT-FOUND
+// boundary — the top-level RunResumable errors (a fired timer must have a frame on the
+// chain), a sub-context re-raises so the enclosing driver owns it — so each call site
+// does its own FindPrompt and reaches this helper only with boundary (the with-timeout
+// finalizer frame) already matched.
+//
+// It (1) captures the suspended thunk DELIMITED at boundary as a composable continuation
+// the handler may resume; (2) HARD-SUSPENDS — restores past the abandoned thunk to the
+// boundary WITHOUT unwinding, so dynamic-wind after-thunks inside the timed-out thunk do
+// NOT run (Wile's deliberate timeout semantics — see prim_timer_test TestWithTimeoutDynamicWind
+// case 2); (3) tears the fired timer down to the OUTER timer/ctx (the same absolute
+// restore the finalizer frame re-does idempotently on the handler's return), so the
+// handler runs under the surrounding context, not the Done timerCtx; (4) runs the handler
+// with the resumable. Because p.cont is the finalizer frame, the handler returns INTO it,
+// and the finalizer forwards the handler's value past the boundary.
+func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boundary *MachineContinuation) error {
+	segment := p.CaptureInterruptContinuationAt(boundary)
+	windingCopy := p.windingStack.Copy()
+	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+
+	// Hard-suspension: discard the timed-out thunk's frames un-run (no after-thunks) and
+	// land on the finalizer frame. boundary.windingStack is the winding captured at
+	// with-timeout entry (RunBodyUnderFrame), so the thunk's winding frames are dropped.
+	// The thunk's mid-expression operand stack is already deep-copied into `segment`, so
+	// the dirty eval stack is released and a fresh one acquired for the handler.
+	p.cont = boundary
+	p.windingStack = boundary.windingStack
+	oldEvals := p.evals
+	p.evals = p.acquireStack()
+	p.releaseStack(oldEvals)
+
+	// Absolute teardown of the fired timer: cancel it and restore the outer timer + ctx.
+	// p.timer is the innermost (fired) timer — the emit site read mc.timer, and nothing
+	// changed it between emit and here. The finalizer frame re-does this identically.
+	fired := p.timer
+	if fired != nil {
+		fired.cancel()
+		p.timer = fired.parent
+		p.ctx = fired.savedCtx
+	}
+
+	_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
+	return applyErr
 }

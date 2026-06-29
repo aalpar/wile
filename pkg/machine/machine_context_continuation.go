@@ -313,13 +313,25 @@ func GraftContinuation(segment, target *MachineContinuation) {
 // The MachineContext is not modified. The returned chain is a deep copy suitable
 // for wrapping in a ComposableContinuation.
 func (p *MachineContext) CaptureInterruptContinuation() *MachineContinuation {
-	// Push a synthetic continuation frame with the live state, copy
-	// the full chain via SliceContinuationAt, then pop the frame.
+	return p.CaptureInterruptContinuationAt(nil)
+}
+
+// CaptureInterruptContinuationAt is CaptureInterruptContinuation delimited at
+// boundary: it slices the live chain down to (but excluding) boundary, so a timer
+// interrupt captures the suspended thunk DELIMITED at its with-timeout finalizer
+// frame (boundary), not the whole chain — the correct composable continuation to
+// hand the handler. boundary == nil captures the full chain (the original behavior).
+//
+// It still pushes the synthetic live frame first, so the in-progress frame's
+// registers (template, pc, env, evals, value) — which no SaveContinuation has saved
+// — are captured. SliceContinuationAt deep-copies the eval stacks, so the returned
+// segment is independent of p.evals.
+func (p *MachineContext) CaptureInterruptContinuationAt(boundary *MachineContinuation) *MachineContinuation {
 	liveFrame := NewMachineContinuationFromMachineContext(p, 0)
 	savedCont := p.cont
 	p.cont = liveFrame
 
-	segment := p.SliceContinuationAt(nil)
+	segment := p.SliceContinuationAt(boundary)
 
 	p.cont = savedCont
 	// liveFrame.evals aliases p.evals: NewMachineContinuationFromMachineContext

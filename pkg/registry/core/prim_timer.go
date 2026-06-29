@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -86,47 +85,16 @@ func PrimWithTimeout(cc machine.CallContext) error {
 	// timer expiry from external cancellation (e.g. Ctrl+C).
 	timerCtx, timerCancel := context.WithTimeoutCause(mc.Context(), duration, machine.ErrTimerExpired)
 
-	// Run the thunk in a sub-context with the timer installed.
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	sub.SetContext(timerCtx)
-	sub.SetTimer(handlerVal, timerCancel)
-
-	_, err = sub.ApplyCallable(thunkVal)
-	if err != nil {
-		sub.ClearTimer()
-		return err
-	}
-	err = sub.RunWithinBoundary()
-
-	// Always cancel the timer to release resources. ClearTimer encapsulates
-	// the cancel-then-nil discipline so the sub-record cannot drift.
-	sub.ClearTimer()
-
-	if err != nil {
-		var timerErr *machine.ErrTimerInterrupt
-		if errors.As(err, &timerErr) {
-			// Timer expired. Capture the sub-context's full execution state
-			// as a composable continuation.
-			segment := sub.CaptureInterruptContinuation()
-			windingCopy := sub.WindingStack().Copy()
-			resumable := machine.NewComposableContinuation(
-				segment, windingCopy, mc.ThreadID(), mc.BarrierValid(),
-			)
-
-			// Call the handler with the resumable continuation.
-			// ApplyCallable sets mc.template/pc to the handler's code.
-			// When the primitive returns nil, the VM loop executes the handler.
-			_, applyErr := mc.ApplyCallable(timerErr.Handler, resumable)
-			if applyErr != nil {
-				return applyErr
-			}
-			return nil
-		}
-		return err
-	}
-
-	// Normal completion — propagate the thunk's result.
-	mc.SetValues(sub.GetValues()...)
-	return nil
+	// Reify with-timeout: run the thunk INLINE on the live chain under a finalizer
+	// prompt frame carrying a fresh tag (RunBodyUnderTimer), not in a sub-context, so a
+	// continuation captured inside the thunk spans the finalizer frame and the rest of
+	// the program (the sub-context truncation is fixed). A fired timer is routed to this
+	// frame by the driver's FindPrompt (resolveTimerInterrupt — present in BOTH the top
+	// RunResumable and the sub-context RunWithinBoundary, so with-timeout works at top
+	// level and nested inside a surviving sub-context); it hard-suspends the thunk and
+	// runs the handler with a resumable composable continuation, and the finalizer tears
+	// the timer down and forwards values on every exit. Fixes the with-timeout case of
+	// continuation_subcontext_truncation_red_test.go.
+	_, err = mc.RunBodyUnderTimer(timerCtx, timerCancel, thunkVal, handlerVal)
+	return err
 }

@@ -32,6 +32,11 @@ var ErrTimerExpired = werr.NewStaticError("timer expired")
 // handlers — only by the VM infrastructure that installed the timer.
 type ErrTimerInterrupt struct {
 	Handler values.Callable
+	// Tag identifies the with-timeout boundary (its finalizer frame) on the
+	// continuation chain. A driver does FindPrompt(Tag) to locate that frame on the
+	// chain the with-timeout actually installed — its OWN chain, even when the
+	// with-timeout sits inside a surviving sub-context — and resolves the timer there.
+	Tag *PromptTag
 }
 
 func (p *ErrTimerInterrupt) Error() string {

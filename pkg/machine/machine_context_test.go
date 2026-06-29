@@ -2412,63 +2412,15 @@ func TestRun_ContextCancelWithoutTimerHandler(t *testing.T) {
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
 }
 
-func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
-	c := qt.New(t)
-
-	env := environment.NewNamespace().Runtime()
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
-
-	// Set up an immediately-expired timer context so Run() triggers the timer
-	// interrupt path on the first context check (OpsExecuted == 0).
-	// Uses WithTimeoutCause so context.Cause returns ErrTimerExpired.
-	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, ErrTimerExpired)
-	defer cancel()
-	mc.SetContext(ctx)
-
-	// Install a template with a single op so Run() enters the dispatch loop.
-	tpl := NewNativeTemplate(0, 0, false, NewOperationLoadVoid())
-	mc.template = tpl
-	mc.pc = 0
-
-	// Track whether the handler was called and what argument it received.
-	var (
-		handlerCalled    bool
-		handlerArg       values.Value
-		handlerCtxActive bool // context was live during handler execution
-	)
-
-	handler := NewForeignClosure(env, 1, false, func(cc CallContext) error {
-		handlerCalled = true
-		handlerArg = cc.Arg(0)
-		handlerCtxActive = cc.Context().Err() == nil
-		return nil
-	})
-
-	// Install a cancel func to verify it gets called during cleanup.
-	cancelCalled := false
-	mc.SetTimer(handler, func() {
-		cancelCalled = true
-	})
-
-	err := mc.RunWithEscapeHandling()
-
-	// Handler ran successfully — no error propagated.
-	c.Assert(err, qt.IsNil)
-
-	// Handler was invoked with a live (non-cancelled) context.
-	c.Assert(handlerCalled, qt.IsTrue)
-	c.Assert(handlerCtxActive, qt.IsTrue)
-
-	// Handler received a ComposableContinuation.
-	_, ok := handlerArg.(*ComposableContinuation)
-	c.Assert(ok, qt.IsTrue)
-
-	// Timer state was cleared.
-	c.Assert(mc.TimerHandler(), qt.IsNil)
-
-	// The old cancel func was called.
-	c.Assert(cancelCalled, qt.IsTrue)
-}
+// NOTE: the former white-box TestRunWithEscapeHandling_TimerInterrupt was removed
+// when with-timeout was reified (RunBodyUnderTimer + the tag-routed resolveTimerInterrupt
+// arm). It installed a timer via the bare SetTimer API with no boundary frame on the
+// chain — a configuration the reified design no longer produces (a fired timer is now
+// routed by FindPrompt(tag) to its with-timeout finalizer frame). The timer-arm behavior
+// it checked (handler invoked with a composable continuation, timer torn down, handler
+// under a live ctx) is covered end-to-end by TestWithTimeout / TestWithTimeoutResumption /
+// TestWithTimeoutNesting / TestWithTimeoutDynamicWind in registry/core, and by the
+// eval-nested (sub-context) regression there.
 
 func TestApplyCallableError_PassesThroughTimerInterrupt(t *testing.T) {
 	c := qt.New(t)

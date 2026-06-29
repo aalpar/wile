@@ -171,6 +171,22 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 	}
 }
 
+// TestWithTimeoutInSubContext is the regression guard for the timer-arm symmetry: a
+// with-timeout whose timer FIRES while it runs inside a SURVIVING sub-context (here an
+// eval sub-context, driven by RunWithinBoundary) must be resolved on that sub's OWN chain
+// by RunWithinBoundary's timer arm — not re-raised to the top driver, whose FindPrompt
+// would walk the wrong chain and find no boundary. The reified design moved timer routing
+// from a primitive-local Go catch to FindPrompt(tag), so without the symmetric
+// resolveTimerInterrupt arm in RunWithinBoundary this truncates or crashes ("no boundary
+// frame found"). If the loop is not interrupted, the 10s test timeout fails it loudly.
+func TestWithTimeoutInSubContext(t *testing.T) {
+	code := `(eval '(with-timeout 1 (lambda (k) 'expired) (lambda () (let loop () (loop))))
+	               (interaction-environment))`
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 10*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("expired"))
+}
+
 func TestWithTimeoutThreadIsolation(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{

@@ -154,7 +154,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 		select {
 		case <-p.ctx.Done():
 			if errors.Is(context.Cause(p.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: p.timer.handler}
+				return nil, &ErrTimerInterrupt{Handler: p.timer.handler, Tag: p.timer.tag}
 			}
 		default:
 		}

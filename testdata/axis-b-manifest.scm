@@ -455,7 +455,7 @@
  ("wait-group-done!" "void" ("any") "github.com/aalpar/wile/extensions/gointerop.init.MakeUnarySideEffect[...].func25" "pkg/registry/helpers/accessor.go:45")
  ("wait-group-wait!" "void" ("any") "github.com/aalpar/wile/extensions/gointerop.init.MakeUnarySideEffect[...].func26" "pkg/registry/helpers/accessor.go:45")
  ("wait-group?" "boolean" ("any") "github.com/aalpar/wile/extensions/gointerop.init.MakeTypePredicate.func24" "pkg/registry/helpers/type.go:26")
- ("with-timeout" "any" ("integer" "procedure" "procedure") "github.com/aalpar/wile/pkg/registry/core.PrimWithTimeout" "pkg/registry/core/prim_timer.go:38")
+ ("with-timeout" "any" ("integer" "procedure" "procedure") "github.com/aalpar/wile/pkg/registry/core.PrimWithTimeout" "pkg/registry/core/prim_timer.go:37")
  ("write" "void" ("any" "...textual-output-port") "github.com/aalpar/wile/pkg/extensions/io.addReadWrite.makeWriteVariant.func1" "pkg/extensions/io/prim_write.go:50")
  ("write-bytevector" "void" ("bytevector" "...binary-output-port") "github.com/aalpar/wile/pkg/extensions/io.PrimWriteBytevector" "pkg/extensions/io/prim_binary.go:235")
  ("write-char" "void" ("character" "...textual-output-port") "github.com/aalpar/wile/pkg/extensions/io.PrimWriteChar" "pkg/extensions/io/prim_write.go:96")
