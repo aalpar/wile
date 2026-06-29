@@ -154,15 +154,21 @@ func (p *MachineContext) runBodyUnderApplyFrame(body values.Value, applied value
 	return p.RunBodyUnderFrame(frame, body, args...)
 }
 
-// RunBodyUnderConsumer reifies call-with-values. It pushes a consumer apply-frame
-// and inline-applies producer on the live chain, so a continuation captured inside
-// producer spans the consumer frame and the rest of the program (fixing the
-// sub-context producer truncation). On producer's normal return the consumer frame
-// applies consumer to the produced values exactly once; a full call/cc continuation
-// invoked inside producer aborts to DefaultPromptTag, discarding the chain-resident
-// consumer frame (escape-past preserved).
-func (p *MachineContext) RunBodyUnderConsumer(producer values.Value, consumer values.Value) (*MachineContext, error) {
-	return p.runBodyUnderApplyFrame(producer, consumer, nil)
+// RunBodyUnderConsumer reifies a "run a body, then apply a consumer to its result"
+// boundary on the live chain. It pushes a consumer apply-frame and inline-applies
+// producer (to args) on the live chain, so a continuation captured inside producer
+// spans the consumer frame and the rest of the program (fixing the sub-context
+// producer truncation). On producer's normal return the consumer frame applies
+// consumer to the produced values exactly once; a full call/cc continuation invoked
+// inside producer aborts to DefaultPromptTag, discarding the chain-resident consumer
+// frame (escape-past preserved).
+//
+// call-with-values passes no args — its producer is a thunk. make-parameter passes
+// the init value as the single arg to the user converter (the producer), with the
+// consumer being a finalizer that wraps the converted value in a Parameter. The args
+// path is the same one RunBodyUnderExitFrame already exercises.
+func (p *MachineContext) RunBodyUnderConsumer(producer values.Value, consumer values.Value, args ...values.Value) (*MachineContext, error) {
+	return p.runBodyUnderApplyFrame(producer, consumer, nil, args...)
 }
 
 // RunBodyUnderExitFrame reifies call-with-exit. It pushes a prompt apply-frame

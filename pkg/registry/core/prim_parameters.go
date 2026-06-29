@@ -37,36 +37,41 @@ func PrimMakeParameter(cc machine.CallContext) error {
 	init := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	var converterCls machine.Closure
-
-	// Check for optional converter in rest args
-	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(values.Tuple)
-		if ok && !pr.IsEmptyList() {
-			// Validate converter is a procedure
-			converterCls, ok = pr.Car().(machine.Closure)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "make-parameter: converter must be a procedure")
-			}
-
-			// Apply converter to initial value
-			sub := mc.NewSubContext()
-			defer machine.ReleaseSubContext(sub)
-			_, err := sub.ApplyCallable(converterCls, init)
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
-			}
-			err = sub.RunWithinBoundary()
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "make-parameter: converter error")
-			}
-			init = sub.GetValue()
-		}
+	// No converter: build the parameter directly.
+	if values.IsEmptyList(rest) {
+		mc.SetValue(machine.NewParameter(init, nil))
+		return nil
+	}
+	pr, ok := rest.(values.Tuple)
+	if !ok || pr.IsEmptyList() {
+		mc.SetValue(machine.NewParameter(init, nil))
+		return nil
+	}
+	converterCls, ok := pr.Car().(machine.Closure)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "make-parameter: converter must be a procedure")
 	}
 
-	param := machine.NewParameter(init, converterCls)
-	mc.SetValue(param)
-	return nil
+	// Converter present: apply it to init on the LIVE chain (not a sub-context) so a
+	// continuation captured inside the converter spans the rest of the program. The
+	// post-thunk work — wrap the converted value in a Parameter — runs as a chain frame
+	// (the finalizer), mirroring how call-with-exit forwards its value: RunBodyUnderConsumer
+	// inline-applies the converter to init, then applies the finalizer to its result. Fixes
+	// the parameterize-converter case of continuation_subcontext_truncation_red_test.go.
+	closureEnv := mc.EnvironmentFrame().MutableRuntimeOrNil()
+	if closureEnv == nil {
+		closureEnv = mc.EnvironmentFrame()
+	}
+	finalizer := machine.NewForeignClosure(closureEnv, 1, false, func(finCC machine.CallContext) error {
+		finMC, err := machine.RequireMachineContext(finCC, "make-parameter")
+		if err != nil {
+			return err
+		}
+		finMC.SetValue(machine.NewParameter(finMC.Arg(0), converterCls))
+		return nil
+	})
+	_, err = mc.RunBodyUnderConsumer(converterCls, finalizer, init)
+	return err
 }
 
 // PrimParameterRawSet implements the (%parameter-raw-set! param val) primitive.
@@ -103,18 +108,13 @@ func PrimParameterConvert(cc machine.CallContext) error {
 		mc.SetValue(val)
 		return nil
 	}
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(param.Converter(), val)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "%%parameter-convert: failed to apply converter")
-	}
-	err = sub.RunWithinBoundary()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "%%parameter-convert: converter error")
-	}
-	mc.SetValue(sub.GetValue())
-	return nil
+	// Apply the converter on the live chain (the apply recipe) rather than a sub-context,
+	// so a continuation captured inside the converter spans the rest of the program. The
+	// converter's value is this primitive's result (transparent delivery), so no chain
+	// frame is needed — identical to apply. Fixes the parameterize-converter case of
+	// continuation_subcontext_truncation_red_test.go.
+	_, err = mc.ApplyCallable(param.Converter(), val)
+	return err
 }
 
 // PrimParameterQ implements the parameter? predicate.
