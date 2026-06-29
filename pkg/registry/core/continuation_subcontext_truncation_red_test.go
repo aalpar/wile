@@ -15,7 +15,6 @@
 package core_test
 
 import (
-	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -46,27 +45,26 @@ func redExpected() values.Value {
 	return values.List(values.NewSymbol("END"), values.NewInteger(42))
 }
 
-// TestSubContextNonTailEscapeTruncation_RED characterizes an OPEN VM bug: a
-// non-tail call/cc escape inside any sub-context primitive that does not catch
-// DefaultPromptTag truncates the continuation after that primitive. Each case
-// wraps captureEscape in one such primitive; the assertion that the program
-// value is `(END 42)` is the CORRECT post-fix behavior (continuation resumes
-// AND the escape value is delivered), so these cases FAIL on current code.
+// TestSubContextNonTailEscapeTruncation is a GREEN regression guard for the
+// sub-context continuation-truncation fix. A non-tail call/cc escape inside a
+// sub-context primitive that does not catch DefaultPromptTag used to truncate the
+// continuation after that primitive: the program value was the truncated remainder
+// instead of the resumed program tail. The resume-trampoline + boundary-reification
+// arc fixed it — applyCapturedContinuation now bounces through RunResumable, and
+// each of the ten victim primitives reifies its boundary as a chain frame, so a
+// captured segment spans the boundary and re-entry replays the tail.
 //
-// They are gated behind WILE_RUN_RED_CONTINUATION so `make ci` stays green. To
-// watch them fail (RED):
+// Each case wraps captureEscape in one such primitive; a correct VM resumes the
+// continuation AND delivers the escape value, so the program value is `(END 42)`.
+// A regression turns one of these RED.
 //
-//	WILE_RUN_RED_CONTINUATION=1 go test ./pkg/registry/core/ \
-//	    -run TestSubContextNonTailEscapeTruncation_RED -v
-//
-// When the capture/restore fix lands (SliceContinuationAt spanning parentMC, or
-// RunWithEscapeHandling re-entering p.cont on a context-level abort with a live
-// p.cont), delete the gate so this suite guards the fix across every victim.
-func TestSubContextNonTailEscapeTruncation_RED(t *testing.T) {
-	if os.Getenv("WILE_RUN_RED_CONTINUATION") == "" {
-		t.Skip("RED: open sub-context continuation-truncation bug; set WILE_RUN_RED_CONTINUATION=1 to run, un-gate when fixed")
-	}
-
+// History: committed RED + WILE_RUN_RED_CONTINUATION-gated in a99d39ac; the fix
+// landed across 6d8e7ee5..7acf4797 (dfc3504b claim-3 handler reify + the five
+// boundary reifications 71032eb8/9fa2817a/c7e50def/98c9da72/7acf4797); the gate was
+// removed once all ten passed (2026-06-29). See the design archive doc
+// 2026-06-26-subcontext-continuation-the-open-problem.local.md for the
+// falsification arc that produced the fix.
+func TestSubContextNonTailEscapeTruncation(t *testing.T) {
 	cases := []struct {
 		name string
 		// form is the sub-context primitive call whose thunk contains

@@ -176,16 +176,23 @@
         ((test expected expr)
          (test #f expected expr))
         ((test name expected expr)
-         (let ((e expected)
-               (a expr))
-           (if (if (eq? (current-test-comparator) %default-comparator)
-                   ;; Default: approximate, recursing through lists/vectors so a
-                   ;; near-equal inexact nested in a structure still matches.
-                   (%approx-equal? e a (current-test-epsilon))
-                   ;; Explicit comparator: honor it for every expected value.
-                   ((current-test-comparator) e a))
-               (%test-pass name)
-               (%test-fail name e a))))))
+         ;; A raise while evaluating EXPECTED or EXPR is recorded as one failure
+         ;; (the exception is the "actual" value) and must not abort the suite, so
+         ;; the evaluate-and-compare body is guarded; `guard' re-raises if no clause
+         ;; matches and the `else' clause records every condition as a failure.
+         ;; Re-enabled 2026-06-29: the guard+escaping-continuation truncation that
+         ;; forced its revert (a8027851) is fixed — see TestSubContextNonTailEscapeTruncation.
+         (guard (exn (else (%test-fail name 'no-error-expected exn)))
+           (let ((e expected)
+                 (a expr))
+             (if (if (eq? (current-test-comparator) %default-comparator)
+                     ;; Default: approximate, recursing through lists/vectors so a
+                     ;; near-equal inexact nested in a structure still matches.
+                     (%approx-equal? e a (current-test-epsilon))
+                     ;; Explicit comparator: honor it for every expected value.
+                     ((current-test-comparator) e a))
+                 (%test-pass name)
+                 (%test-fail name e a)))))))
 
     (define-syntax test-equal
       (syntax-rules ()

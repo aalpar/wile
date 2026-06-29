@@ -53,7 +53,7 @@ import (
 // across the same shape). Continuation barriers also regress (in-place handler escape
 // crosses the barrier). So claim 3 is NOT separable: it must land together with
 // claim 1 (call-with-values producer inline) and barrier handling. See
-// plans/2026-06-26-subcontext-continuation-the-open-problem.local.md (Progress +
+// memory/2026-06-26-subcontext-continuation-the-open-problem.local.md (Progress +
 // step 4) and plans/2026-06-26-exception-handler-capture-impl.local.md.
 // The probes below remain valid as single-guard characterization.
 

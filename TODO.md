@@ -130,7 +130,7 @@ could fatally crash before the catchable bound trips.
   `attempt-resume-aware-catches-falsified`) the call-with-values row returns
   `CONSUMER-WRONGLY-RAN` and the oracle FAILS — it catches the exact regression that
   shipped `make ci`-green. The coupled-fix design (adversarially reviewed + corrected)
-  is `plans/2026-06-27-continuation-resume-trampoline-coupled-fix-design.local.md`. It
+  is `memory/2026-06-27-continuation-resume-trampoline-coupled-fix-design.local.md`. It
   PROVES no resume-side-only fix can exist (the resume needs a chain-resident boundary
   to place itself; reinstall-at-nearest breaks escape-past, abort-to-top breaks guard)
   and specifies the coupled fix: a new `RunBodyUnderFrame` VM primitive (the missing
@@ -192,7 +192,7 @@ could fatally crash before the catchable bound trips.
   reification ⟺ winding-aware resume (the flip) are ONE atomic change** — 4 paths still run
   boundary code under plain Run/non-reconciling re-raise, and routing them all overflows ctak
   under nest-then-abort. The 4 CRITICALs are the spec for the unified change. Full detail: plan
-  `plans/2026-06-28-continuation-cluster-reification-impl.local.md` § 7 (OUTCOME); memory
+  `memory/2026-06-28-continuation-cluster-reification-impl.md` § 7 (OUTCOME); memory
   `continuation-cwv-reification-validated-coupling-mapped` (ATTEMPT 2026-06-28c). Helpers kept
   as proven substrate in `run_body_under_frame.go`.
 - **CI mitigation (2026-06-27 — RETIRED when the trampoline landed; the skip + `raceflag_*_test.go` were removed):** the `-race` detector

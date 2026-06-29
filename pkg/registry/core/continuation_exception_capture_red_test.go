@@ -24,7 +24,7 @@ import (
 
 // TestExceptionHandlerCapturedByContinuation is a GREEN regression guard for the
 // exception-handler facet of the sub-context continuation fix (claim 3). See
-// plans/2026-06-26-subcontext-continuation-the-open-problem.local.md.
+// memory/2026-06-26-subcontext-continuation-the-open-problem.local.md.
 //
 // The current exception handler is part of the dynamic environment (R7RS §6.11), so a
 // continuation captured inside (with-exception-handler H ...) must resume with H
