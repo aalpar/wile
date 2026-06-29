@@ -1516,8 +1516,11 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// frames), while an inner call-with-continuation-prompt frame receives the
 			// delimited segment's result and the chain above it is discarded.
 			boundary, _ := p.FindPrompt(resumeErr.Tag)
+			// isolate=true: this signal is emitted only for call/cc resume, which restores
+			// the captured mark snapshot (composable resume composes marks and bypasses
+			// this signal — it calls ReinstallSegment directly).
 			wasEmpty, reErr := p.ReinstallSegment(
-				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, resumeErr.Isolate)
+				resumeErr.Segment, boundary, resumeErr.SourceWinding, resumeErr.Values, true)
 			if reErr != nil {
 				return reErr
 			}

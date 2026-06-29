@@ -132,11 +132,10 @@ func TestErrResumeContinuation(t *testing.T) {
 		{
 			name: "errors.As matches ErrResumeContinuation",
 			checkFn: func(t *testing.T) {
-				var e error = &ErrResumeContinuation{Tag: DefaultPromptTag, Isolate: true}
+				var e error = &ErrResumeContinuation{Tag: DefaultPromptTag}
 				var target *ErrResumeContinuation
 				qt.Assert(t, errors.As(e, &target), qt.IsTrue)
 				qt.Assert(t, target.Tag, qt.Equals, DefaultPromptTag)
-				qt.Assert(t, target.Isolate, qt.IsTrue)
 			},
 		},
 		{

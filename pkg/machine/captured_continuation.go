@@ -124,14 +124,15 @@ func (p *MachineContext) applyCapturedContinuation(
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
 
+	// This signal is emitted only for call/cc resume, which always isolates marks on
+	// reinstall (the captured snapshot in capt.cc, taken at capture time, restores the
+	// outer parameter/handler environment). The driver passes isolate=true to
+	// ReinstallSegment accordingly. Composable resume composes the invoker's marks
+	// instead and bypasses this signal (it calls ReinstallSegment directly).
 	return p, &ErrResumeContinuation{
 		Tag:           DefaultPromptTag,
 		Segment:       capt.cc,
 		Values:        vals,
 		SourceWinding: p.windingStack.Copy(),
-		// call/cc isolates marks on resume (the captured snapshot in capt.cc, taken at
-		// capture time, restores the outer parameter/handler environment); composable
-		// resume composes the invoker's marks instead (Isolate=false there).
-		Isolate: true,
 	}
 }

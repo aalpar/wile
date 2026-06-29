@@ -57,7 +57,6 @@ type ErrResumeContinuation struct {
 	Segment       *ComposableContinuation // carried UNRUN
 	Values        []values.Value          // resume args, already copied off the eval stack
 	SourceWinding WindingStack            // .Copy() of the winding live at the (k v) site
-	Isolate       bool                    // captured call/cc => true; composable resume => false
 }
 
 func (p *ErrResumeContinuation) Error() string {
