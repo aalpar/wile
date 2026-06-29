@@ -38,22 +38,23 @@ type loadChain struct {
 	prev *loadChain
 }
 
-type loadChainKeyType struct{}
-
-var loadChainKey loadChainKeyType
+// loadChainKey is the context key for the load chain. A zero-value of an
+// unexported type cannot collide with any other package's key (matching the
+// context-key idiom in security/context.go).
+type loadChainKey struct{}
 
 // withLoadChain returns a context that records name as being loaded on the
 // current chain, in addition to whatever the parent context already carried.
 func withLoadChain(ctx context.Context, name LibraryName) context.Context {
-	prev, _ := ctx.Value(loadChainKey).(*loadChain)
-	return context.WithValue(ctx, loadChainKey, &loadChain{name: name.Key(), prev: prev})
+	prev, _ := ctx.Value(loadChainKey{}).(*loadChain)
+	return context.WithValue(ctx, loadChainKey{}, &loadChain{name: name.Key(), prev: prev})
 }
 
 // loadChainContains reports whether name is already being loaded on the current
 // chain — i.e. a synchronous re-entry, which is a circular dependency.
 func loadChainContains(ctx context.Context, name LibraryName) bool {
 	key := name.Key()
-	node, _ := ctx.Value(loadChainKey).(*loadChain)
+	node, _ := ctx.Value(loadChainKey{}).(*loadChain)
 	for node != nil {
 		if node.name == key {
 			return true

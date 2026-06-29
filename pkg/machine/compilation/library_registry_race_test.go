@@ -33,7 +33,7 @@ func TestLibraryRegistryConcurrentLoad(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			name := NewLibraryName("conc", strconv.Itoa(i))
-			reg.StartLoading(name)
+			reg.LookupClaimOrWait(name)
 			reg.IsLoading(name)
 			_ = reg.Register(NewCompiledLibrary(name, nil))
 			reg.FinishLoading(name)
@@ -63,6 +63,11 @@ func TestLibraryRegistryLookupClaimOrWait(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			cached, claimed, wait := reg.LookupClaimOrWait(name)
+			// Manual unlock (not defer) so the winner releases mu before the slow
+			// Register/FinishLoading. Every branch must unlock exactly once. Keep
+			// the in-lock assertion a t.Errorf, NOT t.Fatalf: Fatalf calls
+			// runtime.Goexit with mu still held, deadlocking the siblings on Lock
+			// and hanging wg.Wait.
 			mu.Lock()
 			switch {
 			case claimed:
@@ -146,5 +151,34 @@ func TestLibraryRegistryFinishLoadingClosesLatch(t *testing.T) {
 	}
 	if cached != lib {
 		t.Fatalf("want the cached library pointer, got %v", cached)
+	}
+}
+
+// TestLibraryRegistryFailedLoadIsReclaimable pins the failed-owner path: when a
+// loader claims the slot but its load FAILS (FinishLoading without Register —
+// what LoadLibrary's unconditional `defer FinishLoading` does on any error), the
+// name must not be poisoned. A subsequent claimant re-claims and retries rather
+// than reading a closed latch or a phantom cache. Deterministic, no goroutines.
+func TestLibraryRegistryFailedLoadIsReclaimable(t *testing.T) {
+	reg := NewLibraryRegistry()
+	name := NewLibraryName("conc", "failed")
+
+	// Owner claims, then its load fails: FinishLoading WITHOUT Register.
+	cached, claimed, wait := reg.LookupClaimOrWait(name)
+	if cached != nil || !claimed || wait != nil {
+		t.Fatalf("first claim: got cached=%v claimed=%v wait!=nil=%v", cached, claimed, wait != nil)
+	}
+	reg.FinishLoading(name)
+
+	// The slot is free again: a re-consult re-claims (not cached, not waiting).
+	cached, claimed, wait = reg.LookupClaimOrWait(name)
+	if !claimed {
+		t.Fatal("failed load poisoned the name: re-consult did not re-claim")
+	}
+	if cached != nil {
+		t.Fatalf("failed load left a phantom cached library: %v", cached)
+	}
+	if wait != nil {
+		t.Fatal("failed load left a dangling latch: re-consult got a wait channel")
 	}
 }

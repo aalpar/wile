@@ -269,20 +269,22 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	}
 }
 
-// TestLibraryRegistryLoadingState tests IsLoading/StartLoading/FinishLoading
-// state transitions on LibraryRegistry.
+// TestLibraryRegistryLoadingState tests the IsLoading view of the claim
+// lifecycle: claiming the slot (via LookupClaimOrWait) installs the latch,
+// FinishLoading clears it.
 func TestLibraryRegistryLoadingState(t *testing.T) {
 	reg := NewLibraryRegistry()
 	name := NewLibraryName("test", "lib")
 
-	// Initially not loading
+	// Initially not loading.
 	qt.Assert(t, reg.IsLoading(name), qt.IsFalse)
 
-	// StartLoading -> IsLoading true
-	reg.StartLoading(name)
+	// Claiming the loading slot -> IsLoading true.
+	_, claimed, _ := reg.LookupClaimOrWait(name)
+	qt.Assert(t, claimed, qt.IsTrue)
 	qt.Assert(t, reg.IsLoading(name), qt.IsTrue)
 
-	// FinishLoading -> IsLoading false
+	// FinishLoading -> IsLoading false.
 	reg.FinishLoading(name)
 	qt.Assert(t, reg.IsLoading(name), qt.IsFalse)
 }

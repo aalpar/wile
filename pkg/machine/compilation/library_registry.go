@@ -311,26 +311,15 @@ func (p *LibraryRegistry) AllNames() []LibraryName {
 	return names
 }
 
-// IsLoading returns true if the library is currently being loaded by some
-// goroutine. It does not distinguish which one; cycle detection (re-entry on
-// the caller's own load chain) is handled in LoadLibrary via the ctx-borne
-// load chain, not here.
+// IsLoading reports whether the library is currently being loaded by some
+// goroutine. Diagnostic only: it does not distinguish which goroutine, and it
+// is not part of the claim protocol (that is LookupClaimOrWait → FinishLoading).
+// Cycle detection — re-entry on the caller's own load chain — is handled in
+// LoadLibrary via the ctx-borne load chain, not here.
 func (p *LibraryRegistry) IsLoading(name LibraryName) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.loading[name.Key()] != nil
-}
-
-// StartLoading marks a library as being loaded, installing its completion
-// latch. A subsequent LookupClaimOrWait for the same name returns that latch
-// as wait. FinishLoading closes it.
-func (p *LibraryRegistry) StartLoading(name LibraryName) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	key := name.Key()
-	if p.loading[key] == nil {
-		p.loading[key] = make(chan struct{})
-	}
 }
 
 // FinishLoading marks a library as finished loading and wakes every goroutine
@@ -343,6 +332,11 @@ func (p *LibraryRegistry) FinishLoading(name LibraryName) {
 	key := name.Key()
 	ch := p.loading[key]
 	if ch == nil {
+		// No latch installed: the legitimate "name was never claimed" case (e.g.
+		// FinishLoading on a slot whose load never started). The protocol has one
+		// owner per claim, each deferring exactly one FinishLoading, so a double
+		// finish should not occur; this guard simply makes the absent case a no-op
+		// rather than a close-of-nil-channel panic.
 		return
 	}
 	close(ch)

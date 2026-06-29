@@ -41,8 +41,9 @@ func TestLibraryRegistryDuplicateRegister(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "already registered")
 }
 
-// TestLibraryRegistryLoadingCycle tests the IsLoading/StartLoading/FinishLoading
-// cycle detection mechanism.
+// TestLibraryRegistryLoadingCycle tests the IsLoading view of the claim
+// lifecycle: claiming the slot (via LookupClaimOrWait) installs the latch,
+// FinishLoading clears it.
 func TestLibraryRegistryLoadingCycle(t *testing.T) {
 	c := qt.New(t)
 
@@ -51,7 +52,8 @@ func TestLibraryRegistryLoadingCycle(t *testing.T) {
 
 	c.Assert(registry.IsLoading(name), qt.IsFalse)
 
-	registry.StartLoading(name)
+	_, claimed, _ := registry.LookupClaimOrWait(name)
+	c.Assert(claimed, qt.IsTrue)
 	c.Assert(registry.IsLoading(name), qt.IsTrue)
 
 	registry.FinishLoading(name)

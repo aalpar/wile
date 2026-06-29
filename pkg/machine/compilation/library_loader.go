@@ -86,6 +86,14 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 		// Another goroutine is loading this library. Wait for it to finish, then
 		// re-consult: success ⇒ cached; failure ⇒ neither cached nor loading, so
 		// the next iteration re-claims and retries the load on this goroutine.
+		//
+		// LIMITATION: cross-goroutine mutual imports deadlock. If goroutine 1 holds
+		// A and imports B while goroutine 2 holds B and imports A, each waits on the
+		// other's latch — the load chain is per-goroutine, so loadChainContains does
+		// not see the other's claim. There is no cross-goroutine wait-for cycle
+		// detection; the only escape is ctx cancellation/deadline. Single-goroutine
+		// cycles (the common case) are caught synchronously by loadChainContains
+		// above. Mutually-importing libraries are themselves an R7RS program error.
 		select {
 		case <-wait:
 		case <-ctx.Done():
