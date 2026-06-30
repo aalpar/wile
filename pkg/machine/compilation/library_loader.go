@@ -72,15 +72,13 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	// LookupClaimOrWait collapses lookup → claim into one locked decision so two
 	// threads cannot both see "not loaded" and proceed to load+Register the same
 	// library (a TOCTOU that would otherwise surface as ErrDuplicateBinding).
-	claimed := false
 	for {
-		var cached *CompiledLibrary
-		var wait <-chan struct{}
-		cached, claimed, wait = reg.LookupClaimOrWait(name)
+		cached, wait := reg.LookupClaimOrWait(name)
 		if cached != nil {
 			return cached, nil
 		}
-		if claimed {
+		if wait == nil {
+			// Both nil: we claimed the loading slot.
 			break
 		}
 		// Another goroutine is loading this library. Wait for it to finish, then

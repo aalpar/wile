@@ -279,9 +279,10 @@ func TestLibraryRegistryLoadingState(t *testing.T) {
 	// Initially not loading.
 	qt.Assert(t, reg.IsLoading(name), qt.IsFalse)
 
-	// Claiming the loading slot -> IsLoading true.
-	_, claimed, _ := reg.LookupClaimOrWait(name)
-	qt.Assert(t, claimed, qt.IsTrue)
+	// Claiming the loading slot (both returns nil) -> IsLoading true.
+	cached, wait := reg.LookupClaimOrWait(name)
+	qt.Assert(t, cached, qt.IsNil)
+	qt.Assert(t, wait, qt.IsNil)
 	qt.Assert(t, reg.IsLoading(name), qt.IsTrue)
 
 	// FinishLoading -> IsLoading false.

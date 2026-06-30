@@ -345,14 +345,15 @@ func (p *LibraryRegistry) FinishLoading(name LibraryName) {
 
 // LookupClaimOrWait atomically resolves a library, claims its loading slot, or
 // returns a latch to wait on. It is the single check-and-mark decision point so
-// the lookup → claim sequence cannot interleave across threads. Exactly one of
-// the three outcomes is non-zero:
-//   - cached != nil  ⇒ already loaded; use it.
-//   - claimed == true ⇒ the caller now owns the loading slot and MUST load,
-//     Register, and FinishLoading (which closes the latch installed here).
-//   - wait != nil    ⇒ another goroutine is loading this exact library; the
-//     caller must block on wait, then re-call to read the now-cached result
-//     (or re-claim if that load failed).
+// the lookup → claim sequence cannot interleave across threads. The two return
+// values encode three outcomes; "claimed" is the both-nil case, not a separate
+// flag, so the contradictory states a third flag would admit are unrepresentable:
+//   - cached != nil              ⇒ already loaded; use it.
+//   - cached == nil, wait != nil ⇒ another goroutine is loading this exact
+//     library; block on wait, then re-call to read the now-cached result (or
+//     re-claim if that load failed).
+//   - cached == nil, wait == nil ⇒ the caller now owns the loading slot and MUST
+//     load, Register, and FinishLoading (which closes the latch installed here).
 //
 // Unlike the former LookupOrClaim, a concurrent same-library load is NOT a
 // circular-dependency error: that false positive is what blocked concurrent
@@ -360,20 +361,20 @@ func (p *LibraryRegistry) FinishLoading(name LibraryName) {
 // goroutine's own synchronous load chain and is caught earlier, in LoadLibrary,
 // via the ctx-borne load chain — before reaching this method — so a goroutine
 // never waits on a latch it installed itself.
-func (p *LibraryRegistry) LookupClaimOrWait(name LibraryName) (cached *CompiledLibrary, claimed bool, wait <-chan struct{}) {
+func (p *LibraryRegistry) LookupClaimOrWait(name LibraryName) (cached *CompiledLibrary, wait <-chan struct{}) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	key := name.Key()
 	lib := p.libraries[key]
 	if lib != nil {
-		return lib, false, nil
+		return lib, nil
 	}
 	ch := p.loading[key]
 	if ch != nil {
-		return nil, false, ch
+		return nil, ch
 	}
 	p.loading[key] = make(chan struct{})
-	return nil, true, nil
+	return nil, nil
 }
 
 // FilePathToLibraryName converts a forward-slash-separated file path with

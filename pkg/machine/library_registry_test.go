@@ -52,8 +52,9 @@ func TestLibraryRegistryLoadingCycle(t *testing.T) {
 
 	c.Assert(registry.IsLoading(name), qt.IsFalse)
 
-	_, claimed, _ := registry.LookupClaimOrWait(name)
-	c.Assert(claimed, qt.IsTrue)
+	cached, wait := registry.LookupClaimOrWait(name)
+	c.Assert(cached, qt.IsNil)
+	c.Assert(wait, qt.IsNil)
 	c.Assert(registry.IsLoading(name), qt.IsTrue)
 
 	registry.FinishLoading(name)

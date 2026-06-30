@@ -62,7 +62,7 @@ func TestLibraryRegistryLookupClaimOrWait(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			cached, claimed, wait := reg.LookupClaimOrWait(name)
+			cached, wait := reg.LookupClaimOrWait(name)
 			// Manual unlock (not defer) so the winner releases mu before the slow
 			// Register/FinishLoading. Every branch must unlock exactly once. Keep
 			// the in-lock assertion a t.Errorf, NOT t.Fatalf: Fatalf calls
@@ -70,7 +70,8 @@ func TestLibraryRegistryLookupClaimOrWait(t *testing.T) {
 			// and hanging wg.Wait.
 			mu.Lock()
 			switch {
-			case claimed:
+			case cached == nil && wait == nil:
+				// Both nil ⇒ this caller claimed the slot.
 				claims++
 				mu.Unlock()
 				// Winner: register and release the slot (wakes any waiters).
@@ -80,11 +81,8 @@ func TestLibraryRegistryLookupClaimOrWait(t *testing.T) {
 			case cached != nil:
 				cachedHits++
 			default:
-				// Loser: a latch to wait on, never an error.
+				// Loser: a non-nil latch to wait on, never an error.
 				waits++
-				if wait == nil {
-					t.Errorf("non-claiming, non-cached caller got a nil wait latch")
-				}
 			}
 			mu.Unlock()
 		}()
@@ -108,16 +106,16 @@ func TestLibraryRegistryFinishLoadingClosesLatch(t *testing.T) {
 	reg := NewLibraryRegistry()
 	name := NewLibraryName("conc", "latch")
 
-	// Owner claims.
-	cached, claimed, wait := reg.LookupClaimOrWait(name)
-	if cached != nil || !claimed || wait != nil {
-		t.Fatalf("first call: want claim, got cached=%v claimed=%v wait!=nil=%v", cached, claimed, wait != nil)
+	// Owner claims: both nil.
+	cached, wait := reg.LookupClaimOrWait(name)
+	if cached != nil || wait != nil {
+		t.Fatalf("first call: want claim (both nil), got cached=%v wait!=nil=%v", cached, wait != nil)
 	}
 
 	// A second caller gets a wait latch, not a claim, not an error.
-	cached, claimed, wait = reg.LookupClaimOrWait(name)
-	if claimed || cached != nil || wait == nil {
-		t.Fatalf("second call: want wait latch, got cached=%v claimed=%v wait==nil=%v", cached, claimed, wait == nil)
+	cached, wait = reg.LookupClaimOrWait(name)
+	if cached != nil || wait == nil {
+		t.Fatalf("second call: want wait latch, got cached=%v wait==nil=%v", cached, wait == nil)
 	}
 
 	// Latch is open until FinishLoading.
@@ -141,16 +139,13 @@ func TestLibraryRegistryFinishLoadingClosesLatch(t *testing.T) {
 		t.Fatal("latch not closed after FinishLoading")
 	}
 
-	// Re-consult returns the cached library, no re-claim.
-	cached, claimed, wait = reg.LookupClaimOrWait(name)
-	if claimed {
-		t.Fatal("re-consult re-claimed an already-registered library")
-	}
+	// Re-consult returns the cached library, no re-claim, no latch.
+	cached, wait = reg.LookupClaimOrWait(name)
 	if wait != nil {
 		t.Fatal("re-consult handed a wait latch for an already-registered library")
 	}
 	if cached != lib {
-		t.Fatalf("want the cached library pointer, got %v", cached)
+		t.Fatalf("want the cached library pointer (no re-claim), got %v", cached)
 	}
 }
 
@@ -163,18 +158,16 @@ func TestLibraryRegistryFailedLoadIsReclaimable(t *testing.T) {
 	reg := NewLibraryRegistry()
 	name := NewLibraryName("conc", "failed")
 
-	// Owner claims, then its load fails: FinishLoading WITHOUT Register.
-	cached, claimed, wait := reg.LookupClaimOrWait(name)
-	if cached != nil || !claimed || wait != nil {
-		t.Fatalf("first claim: got cached=%v claimed=%v wait!=nil=%v", cached, claimed, wait != nil)
+	// Owner claims (both nil), then its load fails: FinishLoading WITHOUT Register.
+	cached, wait := reg.LookupClaimOrWait(name)
+	if cached != nil || wait != nil {
+		t.Fatalf("first claim: want both nil, got cached=%v wait!=nil=%v", cached, wait != nil)
 	}
 	reg.FinishLoading(name)
 
-	// The slot is free again: a re-consult re-claims (not cached, not waiting).
-	cached, claimed, wait = reg.LookupClaimOrWait(name)
-	if !claimed {
-		t.Fatal("failed load poisoned the name: re-consult did not re-claim")
-	}
+	// The slot is free again: a re-consult re-claims — both nil, not cached, not
+	// waiting. A poisoned name would instead return a cached phantom or a latch.
+	cached, wait = reg.LookupClaimOrWait(name)
 	if cached != nil {
 		t.Fatalf("failed load left a phantom cached library: %v", cached)
 	}
