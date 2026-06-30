@@ -142,6 +142,13 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	}
 
 	ns := environment.NewNamespace()
+	// Name the engine's top level eagerly so (interaction-environment) is a pure
+	// read. The introspection primitive previously labeled this shared namespace
+	// lazily on first call ("" -> "interaction-environment"), which is a data race
+	// when concurrent SRFI-18 threads query it (each reads "" and writes). Setting
+	// it once here, before any thread runs, removes that race and the prior
+	// order-dependence of (namespace-name (interaction-environment)).
+	ns.Name = "interaction-environment"
 	ns.SetRegistry(reg)
 	ns.SetLoadPathStack(sourceload.NewLoadStack())
 	auth := cfg.resolveAuthorizer()

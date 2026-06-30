@@ -31,13 +31,15 @@ var PrimEnvironmentQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 })
 
 // PrimInteractionEnvironment implements the (interaction-environment) primitive.
-// Returns the REPL environment (the current top-level environment).
+// Returns the REPL environment (the current top-level namespace).
+//
+// This is a pure read: it must not mutate the returned namespace, which is shared
+// across the engine's SRFI-18 threads. The engine names its top level
+// "interaction-environment" eagerly at init (engine.go), so the descriptive name
+// is already in place; labeling it lazily here raced when concurrent threads each
+// observed an empty Name and wrote it.
 func PrimInteractionEnvironment(mc machine.CallContext) error {
-	topLevel := mc.EnvironmentFrame().Namespace()
-	if topLevel.Name == "" {
-		topLevel.Name = "interaction-environment"
-	}
-	mc.SetValue(topLevel)
+	mc.SetValue(mc.EnvironmentFrame().Namespace())
 	return nil
 }
 
