@@ -458,6 +458,33 @@ func TestFSFileResolver_RelativeToLoadPathStack(t *testing.T) {
 	qt.Assert(t, resolved, qt.Equals, "lib/helper.scm")
 }
 
+// The per-load-chain LoadStack carried on ctx takes precedence over the shared
+// per-namespace stack: a relative include resolves against the ctx stack's
+// directory even when the namespace stack points elsewhere. This is the wiring
+// that lets concurrent library loads resolve their includes independently.
+func TestFSFileResolver_CtxStackPreferredOverEnvStack(t *testing.T) {
+	fsys := fstest.MapFS{
+		"a/helper.scm": {Data: []byte("1")},
+		"b/helper.scm": {Data: []byte("2")},
+	}
+	env := newTestNamespace().Runtime()
+	// Shared namespace stack points at directory "a".
+	env.LoadPathStack().Push("a/main.sld")
+	defer env.LoadPathStack().Pop()
+
+	// Per-load-chain ctx stack points at directory "b".
+	ctxStack := sourceload.NewLoadStack()
+	ctxStack.Push("b/lib.sld")
+	ctx := sourceload.WithLoadStack(context.Background(), ctxStack)
+
+	r := NewFSFileResolver(fsys, env)
+
+	f, resolved, err := r.ResolveAndOpen(ctx, "helper.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "b/helper.scm")
+}
+
 func TestFSFileResolver_ViaSearchPaths(t *testing.T) {
 	fsys := fstest.MapFS{
 		"vendor/util.scm": {Data: []byte("99")},

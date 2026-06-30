@@ -70,8 +70,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: could not create library environment"))
 		}
-		// Share the library registry with the new environment so nested imports work
-		libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
+		// Share the library registry with the new environment so nested imports work.
+		// Under the default factory libEnv is a NewChildRuntime of p.env's Namespace,
+		// so it already resolves to the same registry; re-setting it writes the shared
+		// namespace's registry field redundantly and races sibling concurrent loads.
+		// Only propagate across a distinct (custom-factory) namespace.
+		if libEnv.Namespace() != p.env.Namespace() {
+			libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
+		}
 	} else {
 		// Fallback for tests that don't set up the factory
 		libEnv = environment.NewNamespace().Runtime()

@@ -70,23 +70,9 @@ func (p *FSFileResolver) fsRegistryDirs() []string {
 	return dirs
 }
 
-// loadStack returns the *sourceload.LoadStack from env.LoadPathStack() if
-// the PathTracker is a *sourceload.LoadStack; otherwise returns nil.
-func (p *FSFileResolver) loadStack() *sourceload.LoadStack {
-	tracker := p.env.LoadPathStack()
-	if tracker == nil {
-		return nil
-	}
-	s, ok := tracker.(*sourceload.LoadStack)
-	if !ok {
-		return nil
-	}
-	return s
-}
-
 // ResolveAndOpen finds a file by name and returns an open handle plus the
 // resolved path.
-func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	if path == "" {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
 	}
@@ -100,7 +86,7 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 
 	registryDirs := p.fsRegistryDirs()
 	var opts []sourceload.FinderOption
-	s := p.loadStack()
+	s := loadStackForCtx(ctx, p.env)
 	if s != nil {
 		opts = append(opts, sourceload.WithStack(s))
 	}
@@ -127,7 +113,7 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 
 	// Build the searched-dirs list for the not-found error, mirroring what
 	// Finder.buildSearchDirs() would have tried: stack dir, registry dirs, root.
-	searched := p.buildSearchedList(registryDirs)
+	searched := p.buildSearchedList(ctx, registryDirs)
 	return nil, "", werr.WrapForeignErrorf(
 		werr.ErrFileNotFound,
 		"file %q not found in virtual filesystem; searched: %s",
@@ -139,11 +125,11 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 // buildSearchedList returns human-readable labels for the directories that
 // were searched, matching Finder.buildSearchDirs() order: stack dir (if any),
 // registry dirs, then root.
-func (p *FSFileResolver) buildSearchedList(registryDirs []string) []string {
+func (p *FSFileResolver) buildSearchedList(ctx context.Context, registryDirs []string) []string {
 	var searched []string
-	tracker := p.env.LoadPathStack()
-	if tracker != nil {
-		cur := tracker.CurrentDir()
+	s := loadStackForCtx(ctx, p.env)
+	if s != nil {
+		cur := s.CurrentDir()
 		if cur != "" && cur != "." {
 			searched = append(searched, cur+"/")
 		}

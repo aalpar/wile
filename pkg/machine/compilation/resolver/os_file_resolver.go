@@ -50,14 +50,14 @@ func NewOSFileResolver(env *environment.EnvironmentFrame) *OSFileResolver {
 // sourceload.Finder backed by os.DirFS("/"), which searches the current load
 // directory (from the load path stack), library registry paths,
 // SCHEME_INCLUDE_PATH, and CWD in that order.
-func (p *OSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	if path == "" {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
 	}
 	if filepath.IsAbs(path) {
 		return openAuthorized(p.env.Namespace().Authorizer(), path)
 	}
-	return p.resolveRelative(path)
+	return p.resolveRelative(ctx, path)
 }
 
 // resolveRelative uses sourceload.Finder to locate a relative path across
@@ -70,8 +70,8 @@ func (p *OSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 // All absolute OS paths are stripped of their leading "/" before being passed
 // to the Finder, because os.DirFS("/") requires relative paths. The
 // canonicalize function adds "/" back and resolves the final absolute path.
-func (p *OSFileResolver) resolveRelative(path string) (fs.File, string, error) {
-	searchDirs := p.osFSSearchDirs()
+func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.File, string, error) {
+	searchDirs := p.osFSSearchDirs(ctx)
 	finder := sourceload.NewFinder(
 		os.DirFS("/"),
 		searchDirs,
@@ -111,12 +111,12 @@ func (p *OSFileResolver) resolveRelative(path string) (fs.File, string, error) {
 // for os.DirFS("/"): load-path-stack current dir first (if set), then the
 // configured OS search dirs. All paths are absolutized (to resolve ".." etc.)
 // then have their leading "/" stripped for fs.FS compatibility.
-func (p *OSFileResolver) osFSSearchDirs() []string {
+func (p *OSFileResolver) osFSSearchDirs(ctx context.Context) []string {
 	var dirs []string
 
-	tracker := p.env.LoadPathStack()
-	if tracker != nil {
-		cur := tracker.CurrentDir()
+	s := loadStackForCtx(ctx, p.env)
+	if s != nil {
+		cur := s.CurrentDir()
 		if cur != "" && cur != "." {
 			dirs = append(dirs, cur)
 		}

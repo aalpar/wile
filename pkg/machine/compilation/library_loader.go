@@ -33,6 +33,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
@@ -140,12 +141,20 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 
 // loadLibraryFromReader parses, compiles, and executes a library from an open reader.
 func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) (*CompiledLibrary, error) {
-	// Push to stack after successful open, pop on exit.
-	stack := callerEnv.LoadPathStack()
-	if stack != nil {
-		stack.Push(filePath)
-		defer stack.Pop()
+	// Track this library file on a per-load-chain stack carried on ctx, not the
+	// single LoadStack shared on the root namespace: concurrent SRFI-18 thread
+	// loads would otherwise corrupt that shared LIFO and resolve each other's
+	// (include …) against the wrong directory ("file not found"). The first load
+	// on a chain creates the stack; nested library loads and the includes within
+	// each library reuse it through ctx. It is mutated only within this
+	// synchronous, single-goroutine chain, so Push/Pop need no locking concern.
+	stack := sourceload.LoadStackFromContext(ctx)
+	if stack == nil {
+		stack = sourceload.NewLoadStack()
+		ctx = sourceload.WithLoadStack(ctx, stack)
 	}
+	stack.Push(filePath)
+	defer stack.Pop()
 
 	factory := callerEnv.Namespace().LibraryEnvFactory()
 	if factory == nil {
@@ -156,7 +165,15 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 		return nil, werr.WrapForeignErrorf(err, "could not create library environment")
 	}
 
-	libEnv.SetLibraryRegistry(callerEnv.LibraryRegistry())
+	// The default library-env factory makes libEnv a NewChildRuntime of the caller's
+	// Namespace, so libEnv.LibraryRegistry() already resolves to the caller's registry.
+	// Re-setting it then writes the shared namespace's registry field redundantly,
+	// racing sibling concurrent loads (the same idempotent-shared-write class as the
+	// ApplyDocs guard). Only propagate when a custom factory produced a distinct
+	// namespace, where the registry genuinely needs copying across.
+	if libEnv.Namespace() != callerEnv.Namespace() {
+		libEnv.SetLibraryRegistry(callerEnv.LibraryRegistry())
+	}
 
 	reader := bufio.NewReader(r)
 	p := parser.NewParserWithFile(libEnv, true, reader, filePath)

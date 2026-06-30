@@ -15,6 +15,7 @@
 package resolver
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -26,6 +27,25 @@ import (
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+// loadStackForCtx returns the LoadStack that governs directory-relative
+// resolution for this call. The per-load-chain stack carried on ctx (installed
+// by the library loader) takes precedence so concurrent library loads each
+// resolve relative includes against their own directory; env.LoadPathStack()
+// (the single per-namespace stack) is the fallback for top-level (load …) /
+// (include …) outside a library load. Returns nil when neither is available.
+func loadStackForCtx(ctx context.Context, env *environment.EnvironmentFrame) *sourceload.LoadStack {
+	ctxStack := sourceload.LoadStackFromContext(ctx)
+	if ctxStack != nil {
+		return ctxStack
+	}
+	tracker := env.LoadPathStack()
+	if tracker == nil {
+		return nil
+	}
+	q, _ := tracker.(*sourceload.LoadStack)
+	return q
+}
 
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.
 const SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"

@@ -20,6 +20,8 @@ import (
 	"io"
 	"io/fs"
 
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -67,8 +69,19 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			}
 			defer file.Close() //nolint:errcheck
 
-			// Push to stack after successful open, pop on exit.
-			stack := p.env.LoadPathStack()
+			// Push to stack after successful open, pop on exit. Prefer the
+			// per-load-chain stack carried on ctx (installed by the library loader)
+			// so an (include …) inside a library compiled on an SRFI-18 thread
+			// resolves nested relative paths against its own directory; fall back to
+			// the shared per-namespace stack for a top-level (include …) outside any
+			// library load. Both satisfy environment.PathTracker.
+			var stack environment.PathTracker
+			ctxStack := sourceload.LoadStackFromContext(ctctx.ctx)
+			if ctxStack != nil {
+				stack = ctxStack
+			} else {
+				stack = p.env.LoadPathStack()
+			}
 			if stack != nil {
 				stack.Push(filePath)
 				defer stack.Pop()

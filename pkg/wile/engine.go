@@ -892,7 +892,19 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 
 	// Inject documentation into bootstrap macro bindings (expand-time).
 	// Must run after loadBootstrapMacros so define-syntax bindings exist.
-	reg.ApplyDocs(env)
+	//
+	// Skip flat library frames (NewChildRuntime): they share the root namespace,
+	// so ApplyDocs walks the ROOT's phase bindings (env.Namespace().Phases()),
+	// never the flat frame's own phases. Re-running it per (import …) only
+	// re-writes the shared base bindings' Doc meta — redundant with the root-init
+	// application, and a data race when several imports run concurrently from
+	// SRFI-18 threads (all writing the same shared base binding's meta). Mirrors
+	// the identical guard in registerSchemeDocstrings below: a namespace-owning
+	// runtime frame (engine root / profile child) has SealedBaseTarget() != env;
+	// a flat library frame returns env.
+	if env.SealedBaseTarget() != env {
+		reg.ApplyDocs(env)
+	}
 
 	// Register documentation-only entries for Scheme-defined procedures
 	// that have structured docstrings (parameters, return type, category).

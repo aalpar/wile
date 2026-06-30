@@ -47,19 +47,30 @@ func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
 	//      Proven by TestLibraryRegistryLookupClaimOrWait /
 	//      TestLibraryRegistryFinishLoadingClosesLatch under -race.
 	//
-	// Un-skipping now surfaces TWO further engine-global shared-state hazards that
-	// the latch does not address (Q2's "find the next one" — each a separate task):
-	//   A. registry.ApplyDocs concurrent map write (apply.go:300): every library
-	//      load runs applyBaseEnvironment→ApplyDocs, mutating bnd.EnsureMeta().Doc
-	//      on bindings that resolve up to the SHARED sealed base — concurrent
-	//      writes to the same base binding. A real data race under -race.
-	//   B. shared LoadPathStack: include resolves relative to the stack top, but
-	//      all threads push/pop one stack on the root namespace, so a thread
-	//      resolves its (include …) against another thread's directory → file not
-	//      found. A logic race (no -race report), needs a per-load-chain stack.
-	// Both are tracked in the plan's "Still OPEN" section. Keep skipped until they
-	// land; the latch fix itself is proven by the registry unit tests above.
-	t.Skip("blocked by engine-global shared-state under concurrent load: (A) registry.ApplyDocs map write on the shared base; (B) shared LoadPathStack breaks per-thread include resolution. The per-name latch is fixed and proven by pkg/machine/compilation TestLibraryRegistryLookupClaimOrWait under -race.")
+	// FIXED on this branch (the two hazards the original skip named, Q2's first two):
+	//   A. registry.ApplyDocs concurrent write on the shared sealed base — gated off
+	//      for flat library frames in applyBaseEnvironment (engine.go), mirroring the
+	//      registerSchemeDocstrings guard. The same idempotent-shared-write class in
+	//      libEnv.SetLibraryRegistry (library_loader.go, compile_library_forms.go) is
+	//      now guarded on namespace identity.
+	//   B. shared LoadPathStack — library loading and (include …) now carry a
+	//      per-load-chain LoadStack on ctx (sourceload.WithLoadStack), read by the
+	//      FS/OS resolvers, so concurrent threads resolve includes against their own
+	//      directory. ctx does not cross the SRFI-18 goroutine boundary.
+	//
+	// STILL OPEN (Q2's next sibling, a different subsystem): concurrent macro
+	// expansion races shared syntax-rules transformer state. A clause's
+	// *match.SyntaxMatcher is compiled once at macro-definition time and stored on
+	// the shared macro binding, but the underlying Matcher carries per-invocation
+	// MUTABLE state (captureStack, syntaxStack, tailCountCache) and SyntaxMatcher
+	// sets/clears bindingChecker per call (syntax_adapter.go:167). Library
+	// compilation pervasively expands macros (let / named-let bodies), so two threads
+	// compiling libraries concurrently corrupt the shared matcher. The fix separates
+	// the immutable compiled pattern from per-invocation matching state (e.g. clone
+	// the matcher per invocation) — a delicate macro-subsystem change on the hottest
+	// compile path, with single-thread perf implications. Tracked in
+	// plans/2026-06-25-apply-frame-cow-race.local.md ("Still OPEN").
+	t.Skip("blocked by concurrent macro-expansion races on shared syntax-rules matcher state (match.SyntaxMatcher; syntax_adapter.go:167). The two originally-named hazards (registry.ApplyDocs shared-base write; shared LoadPathStack include resolution) are FIXED on this branch and proven race-free up to the macro-expansion frontier under -race.")
 
 	c := qt.New(t)
 	ctx := context.Background()
