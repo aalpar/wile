@@ -146,6 +146,29 @@ func NewSyntaxMatcher(
 	}
 }
 
+// CloneForMatch returns a SyntaxMatcher that shares this matcher's immutable
+// compiled pattern (bytecode, pattern variables, ellipsis metadata, literal
+// syntax) but has independent per-invocation matching state — the embedded
+// Matcher's capture/syntax stacks and this wrapper's bindingChecker.
+//
+// A SyntaxMatcher built once at macro-definition time is stored on the (shared)
+// macro binding and reused for every expansion of that macro, including
+// concurrent expansions from SRFI-18 threads. MatchWithBindingChecker mutates
+// bindingChecker and the embedded Matcher's stacks per call, and Expand reads the
+// capture stack the match populated, so concurrent expansions on one shared
+// instance corrupt each other. Each expansion must therefore run on its own
+// clone. The immutable fields are shared by reference (read-only after
+// construction), so a clone is one small allocation, not a deep copy — and the
+// match stacks are reallocated per match regardless, so this adds no per-call
+// allocation beyond the wrapper itself.
+func (p *SyntaxMatcher) CloneForMatch() *SyntaxMatcher {
+	return &SyntaxMatcher{
+		matcher:       p.matcher.clone(),
+		ellipsisID:    p.ellipsisID,
+		literalSyntax: p.literalSyntax,
+	}
+}
+
 // Match performs pattern matching on syntax objects.
 // This is the basic method without binding checking. For full R7RS compliance
 // with auxiliary syntax hygiene, use MatchWithBindingChecker instead.

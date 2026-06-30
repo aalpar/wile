@@ -47,30 +47,22 @@ func TestConcurrentLibraryLoadFromThreads(t *testing.T) {
 	//      Proven by TestLibraryRegistryLookupClaimOrWait /
 	//      TestLibraryRegistryFinishLoadingClosesLatch under -race.
 	//
-	// FIXED on this branch (the two hazards the original skip named, Q2's first two):
+	// All the engine-global shared-state hazards that blocked this gate are now
+	// fixed (each was a separate subsystem, surfaced by peeling the -race report one
+	// layer at a time — Q2's "find the next one"):
 	//   A. registry.ApplyDocs concurrent write on the shared sealed base — gated off
 	//      for flat library frames in applyBaseEnvironment (engine.go), mirroring the
-	//      registerSchemeDocstrings guard. The same idempotent-shared-write class in
-	//      libEnv.SetLibraryRegistry (library_loader.go, compile_library_forms.go) is
-	//      now guarded on namespace identity.
-	//   B. shared LoadPathStack — library loading and (include …) now carry a
+	//      registerSchemeDocstrings guard.
+	//   A'. libEnv.SetLibraryRegistry idempotent shared write — guarded on namespace
+	//      identity (library_loader.go, compile_library_forms.go).
+	//   B. shared LoadPathStack — library loading and (include …) carry a
 	//      per-load-chain LoadStack on ctx (sourceload.WithLoadStack), read by the
-	//      FS/OS resolvers, so concurrent threads resolve includes against their own
-	//      directory. ctx does not cross the SRFI-18 goroutine boundary.
-	//
-	// STILL OPEN (Q2's next sibling, a different subsystem): concurrent macro
-	// expansion races shared syntax-rules transformer state. A clause's
-	// *match.SyntaxMatcher is compiled once at macro-definition time and stored on
-	// the shared macro binding, but the underlying Matcher carries per-invocation
-	// MUTABLE state (captureStack, syntaxStack, tailCountCache) and SyntaxMatcher
-	// sets/clears bindingChecker per call (syntax_adapter.go:167). Library
-	// compilation pervasively expands macros (let / named-let bodies), so two threads
-	// compiling libraries concurrently corrupt the shared matcher. The fix separates
-	// the immutable compiled pattern from per-invocation matching state (e.g. clone
-	// the matcher per invocation) — a delicate macro-subsystem change on the hottest
-	// compile path, with single-thread perf implications. Tracked in
-	// plans/2026-06-25-apply-frame-cow-race.local.md ("Still OPEN").
-	t.Skip("blocked by concurrent macro-expansion races on shared syntax-rules matcher state (match.SyntaxMatcher; syntax_adapter.go:167). The two originally-named hazards (registry.ApplyDocs shared-base write; shared LoadPathStack include resolution) are FIXED on this branch and proven race-free up to the macro-expansion frontier under -race.")
+	//      FS/OS resolvers, so each thread resolves includes against its own dir.
+	//   C. concurrent macro expansion on a shared syntax-rules transformer — each
+	//      expansion now runs on its own clause.Matcher.CloneForMatch() (the embedded
+	//      Matcher's capture/syntax stacks + bindingChecker are per-invocation).
+	// This test is the end-to-end regression guard: run under -race (the threads
+	// package is on the -race CI job). See plans/2026-06-25-apply-frame-cow-race.local.md.
 
 	c := qt.New(t)
 	ctx := context.Background()

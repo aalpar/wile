@@ -186,8 +186,15 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 
 	// Try each clause in order
 	for i, clause := range clauses {
+		// clause.Matcher is compiled once at macro-definition time and shared on the
+		// macro binding across all expansions, including concurrent ones from SRFI-18
+		// threads. Its embedded Matcher's capture/syntax stacks and bindingChecker are
+		// mutated per expansion (Expand reads the stack the match populated), so run
+		// each expansion on its own clone — one struct allocation; the match stacks are
+		// reallocated per match regardless.
+		matcher := clause.Matcher.CloneForMatch()
 		// Try to match the pattern with R7RS binding checking
-		err := clause.Matcher.MatchWithBindingChecker(mc.Context(), input, bindingChecker)
+		err := matcher.MatchWithBindingChecker(mc.Context(), input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site
@@ -199,7 +206,7 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*mach
 				freeIds[k] = v
 			}
 
-			expanded, err := clause.Matcher.Expand(clause.Template, match.ExpandOptions{
+			expanded, err := matcher.Expand(clause.Template, match.ExpandOptions{
 				IntroScope:       introScope,
 				FreeIds:          freeIds,
 				UseSiteCtx:       useSiteCtx,
