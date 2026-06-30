@@ -117,7 +117,7 @@ could fatally crash before the catchable bound trips.
   groundwork (`ReinstallSegment`, `RunResumable` extraction, the inert
   `ErrResumeContinuation` type) is kept. Recoverable at tag
   `attempt-resume-aware-catches-falsified`; full design + kill-conditions + crosscheck
-  in `plans/2026-06-27-resume-aware-prompt-catches-design.local.md`.
+  in `memory/2026-06-27-resume-aware-prompt-catches-design.local.md` (falsified/reverted; moved to memory/ 2026-06-29).
 - **ORACLE + SEPARATELY-FALSIFIED DESIGN LANDED (2026-06-27, re-take):** the prior
   revert happened because the suite was **blind to escape-past**. That gap is now
   closed by a committed non-blind oracle,
@@ -206,7 +206,31 @@ could fatally crash before the catchable bound trips.
   test/environment mitigation, **not** the fix — the O(depth) Go-stack continuation
   model above is the root cause, removed only by the trampoline.
 
-### Restricted-profile `(scheme base)` export-validation (from PR #795–#799 crosscheck, 2026-06-25)
+### Restricted-profile `(scheme base)` export-validation (from PR #795–#799 crosscheck, 2026-06-25) — RESOLVED by-design 2026-06-29
+
+**Maintainer decision (2026-06-29): NOT a supported combination. Keep the strict eager
+validation; resolved by-design (won't-fix), documented as an embedding contract. #801 closed.**
+Rationale: (1) strict §5.6 enforcement is the *conformant* behavior — a `(scheme base)` that
+cannot define its I/O exports under Tiny is genuinely invalid in that configuration; (2) the error
+is the **security/capability boundary** asserting itself — `Tiny` is a capability/sandbox choice
+(which primitives are *exposed*), **orthogonal** to the language-standard/dialect axis; subset-
+importing R7RS's `(scheme base)` under a sandbox is not the mechanism for "I want a smaller
+standard" (that is the Dialect System — see the follow-on note below); (3) the "yes" path has
+near-zero value (the names that *do* resolve under such a subset, `car`/`cons`, are core primitives
+already bound under Tiny with no import at all); (4) both "yes" fixes are disproportionate-cost —
+tolerating profile-gated primitives inverts the `machine/compilation`→`registry/` layering (see
+`compile_library_forms.go:307-310`), and deny-stubs pollute every namespace; (5) the shipped
+diagnostic (`43d7d085`) already names both causes, so the failure is actionable (pick a profile
+that provides the primitives, or import only what the profile has). Contract documented in
+`docs/embedding/source-loading.md`.
+
+**Follow-on (distinct axis — non-R7RS standard at startup):** the legitimate "configure as R5RS
+(or R6RS) on non-default startup" need is a *language-standard/dialect* selector, NOT a security
+profile. Today `(scheme r5rs)` only layers R5RS names over the full R7RS core (it `(import (scheme
+base) …)`), so there is no non-R7RS baseline; a first-class `WithDialect(r7rs.Dialect)`/`r6rs.Dialect`
+startup point is designed but **unstarted** — tracked under the Dialect System in
+`plans/ARCHITECTURE.local.md` (all 4 phases incomplete). That is the home for this feature, separate
+from #801.
 
 Surfaced by the post-merge crosscheck of the #795–#799 conformance arc.
 `validateLibraryExports` (added in #799) runs eagerly and requires every export
@@ -218,11 +242,13 @@ consumer affected (CLI/MCP use `KitchenSink`). Arguably *more* R7RS §5.6-confor
 (a library that can't define its exports is invalid). Diagnostic improved to name
 both causes (merge `43d7d085`).
 
-- **Open maintainer decision (#801):** is `restricted profile + (only (scheme base) …)`
-  a supported combination? If yes → make validation tolerant of profile-gated
-  primitives (needs registry-layer involvement) or register deny-stub bindings; if
-  no → current stricter behavior + improved diagnostic is the resolution. Full
-  differential and options in [#801](https://github.com/aalpar/wile/issues/801).
+- **Maintainer decision (#801) — DECIDED 2026-06-29: NO, not supported.** The current
+  stricter behavior + improved diagnostic IS the resolution (the "no" branch). A profile
+  that does not register base's primitives makes `(scheme base)` an invalid library in that
+  configuration, including under `(only …)`; this is correct §5.6 enforcement, not a defect.
+  The "yes" branch (tolerate profile-gated primitives / deny-stubs) is declined — vacuous use
+  case, layering-inverting cost. Full differential in
+  [#801](https://github.com/aalpar/wile/issues/801) (closed by-design).
 - **Note (strict-namespace mode):** `WithStrictNamespace()` lets an embedder run a
   bare top level over a profile whose extensions *are* registered (e.g.
   `WithProfile(Small) + WithStrictNamespace()`), so `(import (scheme r5rs))` layers

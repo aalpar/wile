@@ -166,6 +166,51 @@ if errors.Is(err, werr.ErrFileNotFound) {
 This fallback logic lives in the library loader, not in any resolver.
 Resolvers only see opaque file paths.
 
+### Profiles Gate Which Standard Libraries Load
+
+A security profile (`WithProfile`) is a statement about which primitives the
+configuration registers. A standard library is loadable only if the active
+profile can satisfy the library's *entire* export contract.
+
+At library finalization the loader runs `validateLibraryExports`
+(`pkg/machine/compilation/compile_library_forms.go`), which enforces R7RS §5.6:
+every identifier in the library's export list must be defined or imported by the
+library. If the profile does not register a primitive the library re-exports,
+the library is invalid in that configuration and fails to load — **including
+under a subset import**. For example, under the `Tiny` profile:
+
+```scheme
+(import (only (scheme base) car cons))   ; ERROR under Tiny
+```
+
+fails even though `car`/`cons` are available, because `(scheme base)` also
+exports ~64 I/O and numeric primitives (`display`, `write`, `read`, `floor`, …)
+that `Tiny` does not register. `(scheme base)` cannot satisfy its own export
+list under `Tiny`, so it is not a loadable library there. (This is intended, not
+a workaround target — see issue #801, resolved by-design.) The validation is
+eager and reports all unsatisfied exports at once, naming both possible causes
+(a typo in the export list, or a profile that does not register the primitives).
+
+Two consequences for embedders:
+
+- Under `Tiny`, core primitives such as `car`/`cons` are already bound in the
+  bare top level — importing them from `(scheme base)` is neither necessary nor
+  supported.
+- To import a standard library, choose a profile that registers the primitives
+  it exports (e.g. `Small` or `KitchenSink`). To layer `(import …)` over a bare
+  top level whose extensions *are* registered, see `WithStrictNamespace()`.
+
+**Security profile ≠ language standard.** The capability axis above (which
+primitives a profile *exposes*) is orthogonal to the *language standard* the
+engine implements. Wile is R7RS by default; selecting a different standard
+(R5RS, or R6RS in future) is a separate startup concern, not something achieved
+by subset-importing R7RS's `(scheme base)` under a restricted profile. Note that
+`(scheme r5rs)` today is a re-export bundle layered *on top of* the R7RS core
+(it imports `(scheme base)` et al.), so it requires a profile that provides those
+primitives — it is not a non-R7RS baseline. A first-class standard selector
+(`WithDialect`) is designed but unstarted; see the Dialect System in
+`plans/ARCHITECTURE.local.md`.
+
 ### Library Search Paths
 
 The `LibraryRegistry` holds an ordered list of search paths. Default:
