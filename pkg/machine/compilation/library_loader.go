@@ -139,6 +139,19 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	return lib, nil
 }
 
+// propagateRegistryAcrossNamespace shares caller's library registry into child
+// when the two live in different namespaces. Under the default factory child is
+// a NewChildRuntime of caller's Namespace and already resolves to the same
+// registry, so the copy is skipped: re-setting it writes the shared namespace's
+// registry field redundantly and races sibling concurrent loads (the same
+// idempotent-shared-write class as the ApplyDocs guard). Only a custom factory
+// producing a distinct namespace needs the copy.
+func propagateRegistryAcrossNamespace(child, caller *environment.EnvironmentFrame) {
+	if child.Namespace() != caller.Namespace() {
+		child.SetLibraryRegistry(caller.LibraryRegistry())
+	}
+}
+
 // loadLibraryFromReader parses, compiles, and executes a library from an open reader.
 func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) (*CompiledLibrary, error) {
 	// Track this library file on a per-load-chain stack carried on ctx, not the
@@ -165,15 +178,8 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 		return nil, werr.WrapForeignErrorf(err, "could not create library environment")
 	}
 
-	// The default library-env factory makes libEnv a NewChildRuntime of the caller's
-	// Namespace, so libEnv.LibraryRegistry() already resolves to the caller's registry.
-	// Re-setting it then writes the shared namespace's registry field redundantly,
-	// racing sibling concurrent loads (the same idempotent-shared-write class as the
-	// ApplyDocs guard). Only propagate when a custom factory produced a distinct
-	// namespace, where the registry genuinely needs copying across.
-	if libEnv.Namespace() != callerEnv.Namespace() {
-		libEnv.SetLibraryRegistry(callerEnv.LibraryRegistry())
-	}
+	// Share the registry only across a distinct (custom-factory) namespace.
+	propagateRegistryAcrossNamespace(libEnv, callerEnv)
 
 	reader := bufio.NewReader(r)
 	p := parser.NewParserWithFile(libEnv, true, reader, filePath)

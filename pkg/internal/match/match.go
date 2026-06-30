@@ -144,9 +144,10 @@ func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand, opts ...Ma
 
 // clone returns a Matcher that shares this matcher's immutable compiled pattern
 // (variables, bytecode, ellipsis metadata) but has independent per-invocation
-// matching state. The capture and syntax stacks plus tailCountCache are reset by
-// MatchSyntaxWithLiterals on entry, so they are left zero here; only the shared
-// read-only fields are copied. Cloning is therefore a single struct allocation,
+// matching state. The capture and syntax stacks are reset by
+// MatchSyntaxWithLiterals on entry, so they are left zero here; tailCountCache is
+// set to its -1 "uncached" sentinel. Only the shared read-only fields are copied.
+// Cloning is therefore a single struct allocation,
 // not a deep copy. Used so that a SyntaxMatcher compiled once at macro-definition
 // time and shared on the macro binding can be expanded concurrently (SRFI-18
 // threads) without two goroutines racing on the same capture/syntax stacks.

@@ -2,10 +2,10 @@ package sourceload
 
 import "context"
 
-// loadStackCtxKey is the context key for a per-load-chain LoadStack. A zero-value
+// loadStackKey is the context key for a per-load-chain LoadStack. A zero-value
 // of an unexported type cannot collide with any other package's context key (the
 // standard context-key idiom, matching loadChainKey in the compilation package).
-type loadStackCtxKey struct{}
+type loadStackKey struct{}
 
 // WithLoadStack returns a context carrying stack as the active per-load-chain load
 // stack. Library loading installs a private stack here so that concurrent SRFI-18
@@ -17,13 +17,13 @@ type loadStackCtxKey struct{}
 // goroutine and need no cross-thread synchronization — exactly the property that
 // makes the shared-namespace stack unsafe under concurrency.
 func WithLoadStack(ctx context.Context, stack *LoadStack) context.Context {
-	return context.WithValue(ctx, loadStackCtxKey{}, stack)
+	return context.WithValue(ctx, loadStackKey{}, stack)
 }
 
 // LoadStackFromContext returns the per-load-chain LoadStack carried on ctx, or nil
 // when none has been installed (the top-level, non-library-load case, where the
 // shared per-namespace stack remains the source of the current load directory).
 func LoadStackFromContext(ctx context.Context) *LoadStack {
-	s, _ := ctx.Value(loadStackCtxKey{}).(*LoadStack)
+	s, _ := ctx.Value(loadStackKey{}).(*LoadStack)
 	return s
 }

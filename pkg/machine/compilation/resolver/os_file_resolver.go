@@ -114,7 +114,7 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 func (p *OSFileResolver) osFSSearchDirs(ctx context.Context) []string {
 	var dirs []string
 
-	s := loadStackForCtx(ctx, p.env)
+	s := SelectLoadStack(ctx, p.env)
 	if s != nil {
 		cur := s.CurrentDir()
 		if cur != "" && cur != "." {

@@ -28,13 +28,19 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// loadStackForCtx returns the LoadStack that governs directory-relative
-// resolution for this call. The per-load-chain stack carried on ctx (installed
-// by the library loader) takes precedence so concurrent library loads each
-// resolve relative includes against their own directory; env.LoadPathStack()
-// (the single per-namespace stack) is the fallback for top-level (load …) /
-// (include …) outside a library load. Returns nil when neither is available.
-func loadStackForCtx(ctx context.Context, env *environment.EnvironmentFrame) *sourceload.LoadStack {
+// SelectLoadStack returns the LoadStack that governs directory-relative
+// resolution for this call. It is the single selection point shared by the
+// FS/OS resolvers (which read the current directory from it) and the
+// (include …) compiler (which pushes the included file onto it), so the push
+// target and the read target are guaranteed to be the same object — that
+// identity is what closes the per-thread include-resolution race.
+//
+// The per-load-chain stack carried on ctx (installed by the library loader)
+// takes precedence so concurrent library loads each resolve relative includes
+// against their own directory; env.LoadPathStack() (the single per-namespace
+// stack) is the fallback for top-level (load …) / (include …) outside a library
+// load. Returns nil when neither is available.
+func SelectLoadStack(ctx context.Context, env *environment.EnvironmentFrame) *sourceload.LoadStack {
 	ctxStack := sourceload.LoadStackFromContext(ctx)
 	if ctxStack != nil {
 		return ctxStack
@@ -43,7 +49,15 @@ func loadStackForCtx(ctx context.Context, env *environment.EnvironmentFrame) *so
 	if tracker == nil {
 		return nil
 	}
-	q, _ := tracker.(*sourceload.LoadStack)
+	// The sole PathTracker implementation is *sourceload.LoadStack
+	// (environment/file_resolver.go); a non-LoadStack tracker would be a contract
+	// violation, so fall back to "no stack" rather than asserting blindly. The
+	// explicit !ok branch is the seam where a second tracker type, if ever added,
+	// must decide how to surface itself here.
+	q, ok := tracker.(*sourceload.LoadStack)
+	if !ok {
+		return nil
+	}
 	return q
 }
 
