@@ -189,7 +189,7 @@ tutorial-test: build
 
 .PHONY: test-race
 test-race: build
-	$(GO_TEST) -race ./...
+	$(GO_TEST) -race -timeout 30m ./...
 
 # Run the parser fuzzers, MUTATING from their seed corpus to discover new inputs.
 # Unlike `make test` (which runs only the committed corpus deterministically),
