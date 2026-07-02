@@ -377,7 +377,7 @@ func (p *Pair) SchemeString() string {
 		return "#<void>"
 	}
 	visited := make(map[Value]bool)
-	return p.schemeStringWithVisited(visited)
+	return p.schemeStringWithVisited(visited, 1)
 }
 
 // schemeStringWithVisited renders the pair using PATH-SCOPED cycle detection:
@@ -387,7 +387,13 @@ func (p *Pair) SchemeString() string {
 // Only a node reachable from ITSELF — still on the current path — collapses to
 // "...". Children recurse via schemeStringChild, which applies the same
 // mark/unmark discipline to nested *Pair/*Vector, catching pair↔vector cycles.
-func (p *Pair) schemeStringWithVisited(visited map[Value]bool) string {
+//
+// depth is this pair's nesting level (root = 1). The cdr-spine is walked
+// iteratively, so a flat list of any length stays at one level and does not
+// consume depth or the Go stack; only descent into a car or the improper tail
+// — genuine nesting — passes depth+1 to schemeStringChild, where the
+// host-safety bound is enforced.
+func (p *Pair) schemeStringWithVisited(visited map[Value]bool, depth int) string {
 	if visited[p] {
 		return "..."
 	}
@@ -412,13 +418,14 @@ func (p *Pair) schemeStringWithVisited(visited map[Value]bool) string {
 		// schemeStringChild dispatches nested *Pair/*Vector through the shared
 		// visited set, catching pair↔vector cross-cycles, and renders void/nil
 		// as "#<void>".
-		q.WriteString(schemeStringChild(pr[0], visited))
+		q.WriteString(schemeStringChild(pr[0], visited, depth+1))
 		cdrPair, ok := pr[1].(*Pair)
 		if !ok || cdrPair == nil {
-			// Non-pair cdr, nil *Pair (void), or empty list
+			// Non-pair cdr, nil *Pair (void), or empty list. The improper tail
+			// sits at the same nesting level as the cars (depth+1).
 			if !IsEmptyList(pr[1]) {
 				q.WriteString(" . ")
-				q.WriteString(schemeStringChild(pr[1], visited))
+				q.WriteString(schemeStringChild(pr[1], visited, depth+1))
 			}
 			break
 		}
@@ -457,7 +464,7 @@ func (p *Pair) String() string {
 		return ""
 	}
 	visited := make(map[*Pair]bool)
-	return p.stringWithVisited(visited)
+	return p.stringWithVisited(visited, 1)
 }
 
 // stringWithVisited is the Stringer twin of schemeStringWithVisited. It keeps a
@@ -466,7 +473,13 @@ func (p *Pair) String() string {
 // so a pair↔vector cross-cycle still terminates (the vector's set catches the
 // re-entry) even though this set tracks pairs only. The two paths deliberately
 // diverge on map type for now; Phase 3 unifies both onto path-scoped marking.
-func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
+//
+// depth is this pair's nesting level (root = 1), mirroring schemeStringWithVisited's
+// host-safety bound: the cdr-spine is iterative (a flat list of any length stays
+// at one level), and only descent into a car pair — genuine nesting — recurses,
+// degrading to deepMarker at DefaultMaxWriteDepth rather than overflowing the Go
+// stack. Non-pair cars route through stringValue → SchemeString, itself bounded.
+func (p *Pair) stringWithVisited(visited map[*Pair]bool, depth int) string {
 	if visited[p] {
 		return "..."
 	}
@@ -481,9 +494,13 @@ func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
 			q.WriteString(" ")
 		}
 		car := pr[0]
-		if carPair, ok := car.(*Pair); ok && carPair != nil {
-			q.WriteString(carPair.stringWithVisited(visited))
-		} else {
+		carPair, ok := car.(*Pair)
+		switch {
+		case ok && carPair != nil && depth+1 > DefaultMaxWriteDepth:
+			q.WriteString(deepMarker)
+		case ok && carPair != nil:
+			q.WriteString(carPair.stringWithVisited(visited, depth+1))
+		default:
 			q.WriteString(stringValue(car))
 		}
 		cdrPair, ok := pr[1].(*Pair)

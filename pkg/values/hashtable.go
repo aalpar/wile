@@ -83,7 +83,7 @@ func (p *Hashtable) EqualTo(o Value) bool {
 
 // SchemeString returns the Scheme representation of this hash table.
 func (p *Hashtable) SchemeString() string {
-	return p.schemeStringWithVisited(make(map[Value]bool))
+	return p.schemeStringWithVisited(make(map[Value]bool), 1)
 }
 
 // schemeStringWithVisited renders the hash table using PATH-SCOPED cycle
@@ -92,7 +92,12 @@ func (p *Hashtable) SchemeString() string {
 // value is that pair) is bounded with "..." instead of overflowing the Go
 // stack. The hashtable marks itself on entry and unmarks on exit; keys and
 // values recurse via schemeStringChild, which applies the same discipline.
-func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool) string {
+//
+// depth is this hashtable's nesting level (root = 1); keys and values sit one
+// level deeper (depth+1), where schemeStringChild enforces the host-safety
+// bound. Entries are siblings at the same level, so table size does not consume
+// depth.
+func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) string {
 	if visited[p] {
 		return "..."
 	}
@@ -116,9 +121,9 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool) string {
 			q.WriteString(" ")
 		}
 		q.WriteString("(")
-		q.WriteString(schemeStringChild(e.key, visited))
+		q.WriteString(schemeStringChild(e.key, visited, depth+1))
 		q.WriteString(" . ")
-		q.WriteString(schemeStringChild(e.value, visited))
+		q.WriteString(schemeStringChild(e.value, visited, depth+1))
 		q.WriteString(")")
 	}
 	q.WriteString(")")

@@ -107,7 +107,7 @@ func (p *Vector) SchemeString() string {
 	if p.IsVoid() {
 		return "#<void>"
 	}
-	return p.schemeStringWithVisited(make(map[Value]bool))
+	return p.schemeStringWithVisited(make(map[Value]bool), 1)
 }
 
 // schemeStringWithVisited renders the vector using PATH-SCOPED cycle detection:
@@ -116,7 +116,10 @@ func (p *Vector) SchemeString() string {
 // only a vector reachable from itself (a true cycle, still on the current path)
 // collapses to "...". Nested Pair/Vector children recurse via schemeStringChild
 // and apply the same mark/unmark discipline, catching pair↔vector cycles.
-func (p *Vector) schemeStringWithVisited(visited map[Value]bool) string {
+//
+// depth is this vector's nesting level (root = 1); elements sit one level
+// deeper (depth+1), where formatIndexable threads the host-safety bound.
+func (p *Vector) schemeStringWithVisited(visited map[Value]bool, depth int) string {
 	if visited[p] {
 		return "..."
 	}
@@ -126,5 +129,5 @@ func (p *Vector) schemeStringWithVisited(visited map[Value]bool) string {
 	}()
 	return formatIndexable("#(", len(*p), func(i int) Value {
 		return (*p)[i]
-	}, visited)
+	}, visited, depth+1)
 }

@@ -381,12 +381,37 @@ mutable for interactive sessions. 10/15 items done; A4/B4/D1/D2/E1/E2 are follow
       option**: unlike parse, the writer has no engine-owned entry point — it is
       reached only through the io primitives — so per the parser's documented
       `(read ...)` limitation the primitives use the default. `write-simple`
-      bypasses `SchemeWriter` (it uses `Value.SchemeString`, a separate unbounded
-      recursion left as a flagged out-of-scope surface). Tests:
+      bypasses `SchemeWriter` (it uses `Value.SchemeString`, which was a separate
+      unbounded recursion — **now closed by the SchemeString depth bound below**).
+      Tests:
       `pkg/values/scheme_writer_test.go` (default-protects, configurable boundary,
       unlimited, flat-not-bounded-by-depth, long-flat-no-overflow),
       `pkg/wile/engine_write_depth_test.go` (end-to-end long-flat + deep-nested
       raise).
+- [x] **Bound `SchemeString` recursion depth (staff-sweep #3)** [Medium, Done]: The
+      fifth leg of the recursion-depth quad. `Value.SchemeString()` — the non-writer
+      render path reached by `write-simple`, error messages, and Go-side `%v`/`%s` —
+      recursed one Go frame per nesting level and **host-crashed** (fatal, unrecoverable
+      `stack overflow`) on a deeply nested *acyclic* value: `(write-simple (deep-nest N))`
+      overflowed at ~10⁶ levels. **Root cause identical to the writer's surface 2**: the
+      cdr-spine walk was already iterative (a flat list of any length is depth 1, safe),
+      but car/element descent recursed unboundedly. Path-scoped *cycle* detection does not
+      bound *depth* — the two guarantees are orthogonal (an acyclic chain never re-hits a
+      marked node). **Fix**: thread a `depth` counter through the single chokepoint
+      `schemeStringChild` (`pkg/values/utils.go`) — the one function all compound descent
+      (Pair car / improper cdr, Vector element, Hashtable key/value) flows through — plus
+      the three `schemeStringWithVisited` methods + `formatIndexable`; guard at
+      `depth > DefaultMaxWriteDepth` (reuse the writer's single host-safe nesting number,
+      counted root = 1 / +1 per container descent, so write and SchemeString trip on the
+      same structures). **Diverges from the writer on failure semantics**: `SchemeString()
+      string` is the `Value` interface contract and cannot raise, so it **degrades** to a
+      distinct marker `#<deep>` (vs. the cycle marker `...`) rather than returning
+      `ErrWriteDepthExceeded`. The `Pair.String()` `fmt.Stringer` twin shared the same
+      defect (`fmt.Sprintf("%v", deepPair)`) and got the same bound (same-pattern-everywhere
+      discipline). Tests: `pkg/values/pair_test.go` (deep-bounded SchemeString + String,
+      exact `DefaultMaxWriteDepth` boundary, flat-list-not-bounded, cross-type
+      pair→vector→pair). Doc: `pkg/extensions/io/CLAUDE.local.md`. Plan:
+      `plans/2026-07-01-staff-engineer-sweep.md` #3.
 - [x] **Parser fuzz targets + reader crash-safety hardening** [Medium, Done]: Added
       the first Go native fuzz targets in the repo — `FuzzReadSyntax` (untrusted-input
       contract: never panic/overflow the host; every non-EOF error is a located
@@ -583,7 +608,7 @@ typeName encoding refactor). Deferred per scope or design choice.
 - [ ] **`Lengthable` rename to `IndexedSequence`** [Bikeshed, S, Deferred]: Type analyzer noted the helpers use the constraint as "indexed finite sequence" but the name `Lengthable` promises only `Length() int`. `*String`, `*Pair`, and `emptyListType` accidentally satisfy `Lengthable` but cannot meaningfully participate in `SequenceRef`/`SequenceSet`. Rename when the asymmetry causes real confusion.
 - [ ] **Reflection-based `TestTypeSentinelsCarryTypeName`** [Test debt, S, Deferred]: Currently the inventory test enumerates ~55 type sentinels by hand. Test analyzer recommended a reflection-based variant that walks all exported `*StaticError` vars in `werr/` and asserts any whose `Error()` starts with `"not "` has a non-empty `TypeName()`. Self-maintaining, ~20 lines replacing ~60. Add when a contributor adds a new sentinel and forgets the inventory entry.
 - [ ] **Extension-level message-content tests for new sentinels** [Test debt, M, Deferred]: Test analyzer flagged that no extension-level test asserts the user-visible "expected an integer/namespace/once" message content. Helper-level tests in `registry/helpers/args_test.go` pin the plumbing end-to-end through `TestRequireType_ErrorMessageContainsTypeName`, but a regression that, say, swaps `ErrNotAnInteger` back to `ErrNotANumber` in `make-vector` would not be caught by a test. Belt-and-suspenders coverage; add per primitive when message wording becomes load-bearing for users.
-- [ ] **`ParseOptionalStartEnd` / `ParseOptionalArg` literal phrases** [Tech debt, S, Deferred]: Silent-failure hunter flagged that these helpers hardcode "improper argument list" / "too many arguments" rather than reading from sentinels. These are *shape* errors (proper-list, arity), not type errors, so the design choice to skip TypeName plumbing is defensible — but the file mixes two conventions. Either add a comment noting "shape errors don't need TypeName plumbing" or migrate to a parallel mechanism.
+- [x] **`ParseOptionalStartEnd` / `ParseOptionalArg` literal phrases** [Tech debt, S, Done 2026-07-01 — comment path]: Silent-failure hunter flagged that these helpers hardcode "improper argument list" / "too many arguments" rather than reading from sentinels. These are *shape* errors (proper-list, arity), not type errors, so skipping TypeName plumbing is deliberate — but the file mixed two conventions with nothing explaining why. **Resolved via the comment path** (not migration): both `ParseOptionalStartEnd` and `ParseOptionalArg` doc comments in `pkg/registry/helpers/args.go` now state that shape errors carry literal phrases because there is no expected-type noun to plumb through a `*TypeSentinel`, while the per-argument type checks (start/end must be an integer) still draw their noun from a sentinel. Migration to a parallel mechanism was declined — shape errors genuinely have no type noun.
 - [x] **`read-line` / `peek-char` `UnreadRune` errcheck** [Bug, S, Done 2026-05-06 — commit `460c73a5`]: `read-line`'s `UnreadRune` error (and the non-EOF error from its inner `\r` lookahead `ReadRune`) were dropped via `//nolint:errcheck` / silent fallthrough, masking I/O failures. **Fixed**: both are now captured via `WrapForeignReadErrorf` (`pkg/extensions/io/prim_read_write.go:388-397`); `io.EOF` after `\r` stays silent (line ends with a bare `\r`), any other error propagates as a read-error. Fault-injection test infra added: `pkg/internal/extensions/iotest/` (`FailingTextualInputPort` + `make-failing-unread-port`/`make-failing-read-after-port` primitives), asserted in `pkg/extensions/io/prim_read_error_test.go`. Was a surfaced-but-deferred item from PR #725.
 - [x] **`peek-char` error classification** [Bug, S, Done 2026-05-06 — commit `460c73a5`]: `peek-char`'s `UnreadRune` (and read) failures were wrapped with `WrapForeignErrorf`, so `goErrorToSchemeException` classified them as `NativeErrorKindGeneric` and `(read-error? e)` returned `#f` — a direct R7RS §6.11 violation. **Fixed**: both sites now use `WrapForeignReadErrorf` (`pkg/extensions/io/prim_read_write.go:341,349`), so the condition satisfies `(read-error? e)`. Same commit as the `read-line` fix above.
 - [x] **Library-binding installation swallows errors silently** [Bug, S, Done 2026-07-01]: two `SetOwnGlobalValue` return values in `machine/compilation/library_bindings.go` were discarded via `_ =` — the source-phase propagation branch in `CopyLibraryBindingsToEnvAtPhase` and the syntax-binding branch in `copyLibraryBindingsDirect`; a swallowed failure in the latter means a macro is silently not installed in the expand environment and later macro expansion mysteriously fails. The sibling base-phase installs already wrapped-and-returned — the asymmetry was "evolved separately." **Fixed**: both branches now wrap-and-return per the local convention. While there, added the requested `targetPhase + sourcePhase` int8-overflow guard (`Phase` is `int8`; a `for-meta` target of 127 — permitted by the parse-time `composePhaseShift` guard — plus a syntax binding's source-phase +1 wraps to −128 and silently misroutes the propagated binding). The sum is now checked at int width against `math.MaxInt8` before narrowing, mirroring `composePhaseShift`, returning `ErrInvalidArgument`. The `MaybeCreateOwnGlobalBinding` returns cited in the original note are no longer discarded (PR #793 wired the `created` bool into the conflict guard). Regression test `TestCopyLibraryBindingsPhaseOverflow` (constructs a syntax-only-export library, installs at phase 127, asserts the overflow diagnostic). `make lint` + `make covercheck` green. Pre-existing; surfaced by PR #728 crosscheck.

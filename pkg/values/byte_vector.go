@@ -156,9 +156,10 @@ func (p *ByteVector) EqualTo(v Value) bool {
 
 // SchemeString returns the Scheme representation of the bytevector.
 // Bytevector elements are bytes, never compound, so no cycle-detection set
-// is needed (nil visited).
+// is needed (nil visited) and the depth bound is never reached (bytes cannot
+// recurse). Elements sit one level below the bytevector root (depth 2).
 func (p *ByteVector) SchemeString() string {
 	return formatIndexable("#u8(", len(*p), func(i int) Value {
 		return (*p)[i]
-	}, nil)
+	}, nil, 2)
 }

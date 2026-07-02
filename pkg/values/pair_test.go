@@ -16,6 +16,7 @@ package values_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -631,6 +632,75 @@ func TestPair_SchemeString_NonCircularRegression(t *testing.T) {
 			qt.Assert(t, tc.pair.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// nestPairs builds n nested single-element pairs: ((( … ()))) with n opening
+// pairs. The pairs sit at nesting depths 1..n; the innermost () sits at depth
+// n+1. Used to probe the SchemeString/String host-safety depth bound.
+func nestPairs(n int) *values.Pair {
+	var v values.Value = values.EmptyList
+	for range n {
+		v = values.NewCons(v, values.EmptyList)
+	}
+	return v.(*values.Pair)
+}
+
+// deepMarker mirrors the unexported values.deepMarker; asserted by literal
+// because these are external (package values_test) tests.
+const deepMarker = "#<deep>"
+
+func TestPair_SchemeString_DepthBounded(t *testing.T) {
+	// A structure nested far deeper than the bound must not overflow the host
+	// Go stack; it degrades to the deep marker after DefaultMaxWriteDepth
+	// levels of descent. 2,000,000 deep overflowed before the bound existed.
+	got := nestPairs(2_000_000).SchemeString()
+	prefix, _, found := strings.Cut(got, deepMarker)
+	qt.Assert(t, found, qt.IsTrue)
+	// Exactly DefaultMaxWriteDepth container levels are shown before the marker.
+	qt.Assert(t, strings.Count(prefix, "("), qt.Equals, values.DefaultMaxWriteDepth)
+	// The deep marker is distinct from the cycle marker.
+	qt.Assert(t, deepMarker != "...", qt.IsTrue)
+}
+
+func TestPair_String_DepthBounded(t *testing.T) {
+	// The fmt.Stringer twin shares the defect and the fix.
+	got := nestPairs(2_000_000).String()
+	prefix, _, found := strings.Cut(got, deepMarker)
+	qt.Assert(t, found, qt.IsTrue)
+	qt.Assert(t, strings.Count(prefix, "("), qt.Equals, values.DefaultMaxWriteDepth)
+}
+
+func TestPair_SchemeString_DepthBoundary(t *testing.T) {
+	// The marker first appears once a child would sit past the bound: nesting
+	// exactly DefaultMaxWriteDepth pairs pushes the innermost () to depth+1 >
+	// bound; one fewer stays within and renders in full.
+	atBound := nestPairs(values.DefaultMaxWriteDepth).SchemeString()
+	qt.Assert(t, strings.Contains(atBound, deepMarker), qt.IsTrue)
+
+	underBound := nestPairs(values.DefaultMaxWriteDepth - 1).SchemeString()
+	qt.Assert(t, strings.Contains(underBound, deepMarker), qt.IsFalse)
+}
+
+func TestPair_SchemeString_FlatListNotBounded(t *testing.T) {
+	// Length is not depth: a flat list of any size is nesting depth 1 and must
+	// render in full — the iterative cdr-spine walk never touches the bound.
+	elems := make([]values.Value, values.DefaultMaxWriteDepth*3)
+	for i := range elems {
+		elems[i] = values.NewInteger(int64(i))
+	}
+	got := values.List(elems...).(*values.Pair).SchemeString()
+	qt.Assert(t, strings.Contains(got, deepMarker), qt.IsFalse)
+}
+
+func TestPair_SchemeString_DeepStructureThroughVector(t *testing.T) {
+	// The bound is enforced at the shared schemeStringChild chokepoint, so a
+	// chain alternating pair→vector→pair is bounded too, not just pure pairs.
+	var v values.Value = values.EmptyList
+	for range 1_000_000 {
+		v = values.NewVector(v)
+	}
+	got := values.NewCons(v, values.EmptyList).SchemeString()
+	qt.Assert(t, strings.Contains(got, deepMarker), qt.IsTrue)
 }
 
 // TestPair_SchemeString_SharedAcyclic pins path-scoped (not all-visited) cycle
