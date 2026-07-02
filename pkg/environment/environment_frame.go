@@ -811,6 +811,10 @@ func (p *EnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) er
 // It does not search parent environments.
 // Thread-safe: uses full Lock for write access.
 func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
+	// Maintain the "in a global frame => has an atomicCell" invariant: any
+	// binding published here becomes thread-shared via the lock-free cache.
+	// Migrate before it is reachable from p.global.bindings (still unraced).
+	bd.ensureGlobalCell()
 	p.global.mu.Lock()
 	p.global.bindings[i] = bd
 	p.global.mu.Unlock()

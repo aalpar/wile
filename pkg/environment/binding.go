@@ -15,6 +15,8 @@
 package environment
 
 import (
+	"sync/atomic"
+
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -103,9 +105,68 @@ type BindingMeta struct {
 // It stores the bound value, the binding type (variable, syntax, or primitive),
 // and an optional pointer to compile-time metadata (scopes, source location).
 type Binding struct {
-	value       values.Value
+	value       values.Value // local bindings (single-threaded, plain field)
+	cell        *atomicCell  // global bindings (thread-shared, atomic); nil for locals
 	bindingType BindingType
 	meta        *BindingMeta
+}
+
+// atomicCell holds a binding's value behind an atomic pointer. Global bindings
+// are shared across SRFI-18 threads: the VM's cachedBindings cache holds the
+// *Binding and reads its value lock-free (no frame mutex) while set! publishes a
+// new value. values.Value is a two-word interface, so an unsynchronized
+// reader/writer pair tears it (corrupt interface -> nil-deref / bad type). The
+// cell makes that publish atomic: the reader does a lock-free atomic load, the
+// writer an atomic store.
+//
+// The noCopy inside atomic.Pointer lives HERE, in a heap object that is never
+// value-copied, so Binding itself stays copylocks-clean for the value-embedded
+// local frame ([]Binding). Local bindings are single-threaded and never share a
+// *Binding, so they keep the plain value field (cell == nil) and pay no atomic
+// op or box allocation on the hot Apply arg-bind path.
+type atomicCell struct {
+	v atomic.Pointer[values.Value]
+}
+
+func newAtomicCell(v values.Value) *atomicCell {
+	q := &atomicCell{}
+	q.v.Store(&v)
+	return q
+}
+
+func (p *atomicCell) load() values.Value {
+	boxed := p.v.Load()
+	if boxed == nil {
+		return nil
+	}
+	return *boxed
+}
+
+func (p *atomicCell) store(v values.Value) {
+	p.v.Store(&v)
+}
+
+// newGlobalBinding creates a binding whose value lives in an atomicCell, for
+// installation into a GlobalEnvironmentFrame where it may be read lock-free from
+// multiple threads. Every binding entering a global frame must go through this
+// (or ensureGlobalCell) so the "in a global frame => has a cell" invariant holds.
+func newGlobalBinding(value values.Value, bindingType BindingType) *Binding {
+	return &Binding{
+		cell:        newAtomicCell(value),
+		bindingType: bindingType,
+	}
+}
+
+// ensureGlobalCell migrates a binding's value into an atomicCell if it does not
+// already have one, so it is safe to publish into a global frame. Must be called
+// before the *Binding becomes reachable from other threads (i.e. before it is
+// stored into the global bindings slice), so the migration itself is unraced.
+func (p *Binding) ensureGlobalCell() {
+	if p.cell != nil {
+		return
+	}
+	p.cell = newAtomicCell(p.value)
+	p.value = nil
 }
 
 // NewBinding creates a new binding with the given value and type.
@@ -140,8 +201,13 @@ func NewBindingWithSource(value values.Value, bindingType BindingType, scopes []
 	}
 }
 
-// Value returns the value stored in this binding.
+// Value returns the value stored in this binding. Global bindings (cell != nil)
+// read atomically so a lock-free cachedBindings reader is safe against a
+// concurrent set!; local bindings read the plain field.
 func (p *Binding) Value() values.Value {
+	if p.cell != nil {
+		return p.cell.load()
+	}
 	return p.value
 }
 
@@ -150,8 +216,14 @@ func (p *Binding) BindingType() BindingType {
 	return p.bindingType
 }
 
-// SetValue updates the value stored in this binding.
+// SetValue updates the value stored in this binding. Global bindings publish
+// atomically (paired with the lock-free reader in Value); local bindings write
+// the plain field.
 func (p *Binding) SetValue(value values.Value) {
+	if p.cell != nil {
+		p.cell.store(value)
+		return
+	}
 	p.value = value
 }
 
@@ -260,8 +332,14 @@ func (p *Binding) InlineHOFParam() int {
 // the runtime hot path.
 func (p *Binding) Copy() *Binding {
 	b := &Binding{
-		value:       p.value,
 		bindingType: p.bindingType,
+	}
+	// A global binding's value lives in its atomicCell; give the copy a fresh
+	// cell holding a snapshot. A local binding copies the plain field.
+	if p.cell != nil {
+		b.cell = newAtomicCell(p.cell.load())
+	} else {
+		b.value = p.value
 	}
 	if p.meta != nil {
 		b.meta = &BindingMeta{

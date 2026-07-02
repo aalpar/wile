@@ -134,9 +134,9 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	bd := env.GetGlobalBinding(gi0)
-	qt.Assert(t, bd.value, valuestest.SchemeEquals, value0)
+	qt.Assert(t, bd.Value(), valuestest.SchemeEquals, value0)
 	bd = env.GetGlobalBinding(gi1)
-	qt.Assert(t, bd.value, valuestest.SchemeEquals, value1)
+	qt.Assert(t, bd.Value(), valuestest.SchemeEquals, value1)
 }
 
 func TestEnvironmentFrame_Bindings(t *testing.T) {
@@ -156,7 +156,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	gb := env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.Void)
+	qt.Assert(t, gb.Value(), valuestest.SchemeEquals, values.Void)
 
 	// check local environment
 	li0 := env.GetLocalIndex(tv0, nil)
@@ -177,7 +177,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 
 	gb = env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, gb.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 	li1, ok := env.EnsureLocalBinding(tv0, BindingTypeVariable)
@@ -211,7 +211,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 
 	gb := env.GetGlobalBinding(gi)
 	qt.Assert(t, gb.bindingType, qt.Equals, BindingTypeVariable)
-	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.Void)
+	qt.Assert(t, gb.Value(), valuestest.SchemeEquals, values.Void)
 
 	lenv := NewLocalEnvironment(0)
 	env = NewEnvironmentFrameWithParent(lenv, env)

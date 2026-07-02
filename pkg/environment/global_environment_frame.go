@@ -115,8 +115,11 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	allBindings := make([]Binding, len(p.bindings))
 	q.bindings = make([]*Binding, len(p.bindings))
 	for i, b := range p.bindings {
+		// Each copied global binding gets its own atomicCell snapshotting the
+		// source value (read via Value so it works whether or not the source
+		// already uses a cell).
 		allBindings[i] = Binding{
-			value:       b.value,
+			cell:        newAtomicCell(b.Value()),
 			bindingType: b.bindingType,
 			meta:        b.meta,
 		}
@@ -174,8 +177,9 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt Bind
 	}
 	i := len(p.bindings)
 	p.keys[*key] = i
-	// append the new binding at index i
-	p.bindings = append(p.bindings, NewBinding(values.Void, bt))
+	// append the new binding at index i. Global bindings carry an atomicCell so
+	// they can be read lock-free from other threads (see binding.go atomicCell).
+	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt))
 	q := NewGlobalIndex(key)
 	return q, true
 }
@@ -229,7 +233,10 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 		p.mu.Unlock()
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such global binding %q", gi.Index)
 	}
-	ge.bindings[i].value = v
+	// Publish atomically through the binding's cell so the lock-free
+	// cachedBindings reader (Binding.Value with no frame mutex) never tears the
+	// two-word interface. The frame Lock still serializes writers.
+	ge.bindings[i].SetValue(v)
 	p.mu.Unlock()
 
 	return nil
