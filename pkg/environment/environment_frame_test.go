@@ -711,6 +711,45 @@ func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
+// TestEnvironmentFrame_SetLocalValue_OverDeepIndex pins the *LocalIndex write
+// path to the same contract its BySlotDepth twin already honors: a caller-built
+// index whose depth walks past the frame chain returns ErrNoSuchBinding rather
+// than panicking on a nil-frame deref in hasLocal.
+func TestEnvironmentFrame_SetLocalValue_OverDeepIndex(t *testing.T) {
+	// Chain: child(depth 0) -> parent(depth 1) -> topLevel(depth 2, no local).
+	parent := NewNamespaceFrame()
+	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+
+	// depth=3 lands on nil after the final step (post-loop boundary).
+	err := child.SetLocalValue(&LocalIndex{0, 3}, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue)
+
+	// depth=4 goes nil mid-loop (in-loop boundary); also an error, not a panic.
+	err = child.SetLocalValue(&LocalIndex{0, 4}, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNotNil)
+
+	// A frame with no local environment at all -> error.
+	err = NewNamespaceFrame().SetLocalValue(&LocalIndex{0, 0}, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNotNil)
+}
+
+// TestEnvironmentFrame_GetLocalBinding_OverDeepIndex covers the read path's
+// off-by-one: GetLocalBinding's in-loop nil-guard alone did not stop a depth
+// that walks exactly to nil on the final step from reaching hasLocal(nil).
+func TestEnvironmentFrame_GetLocalBinding_OverDeepIndex(t *testing.T) {
+	// Chain: child(depth 0) -> parent(depth 1) -> topLevel(depth 2, no local).
+	parent := NewNamespaceFrame()
+	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+	child := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
+
+	// depth=3 lands on nil post-loop -> nil, not panic.
+	qt.Assert(t, child.GetLocalBinding(&LocalIndex{0, 3}), qt.IsNil)
+	// depth=4 is caught in-loop today; pin it as a non-regression.
+	qt.Assert(t, child.GetLocalBinding(&LocalIndex{0, 4}), qt.IsNil)
+}
+
 func TestEnvironmentFrame_EqualTo_NilAndDifferent(t *testing.T) {
 	var env1 *EnvironmentFrame
 	env2 := NewNamespaceFrame()

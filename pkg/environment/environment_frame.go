@@ -638,16 +638,17 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 // GetLocalBinding returns the binding for the given LocalIndex.
 // It returns nil if the binding does not exist.
 func (p *EnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
-	j := 0
 	env := p
-	for j < li[1] {
+	for range li[1] {
 		if env == nil {
 			return nil
 		}
 		env = env.parent
-		j++
 	}
-	if !env.hasLocal() {
+	// env == nil guard is required in addition to the in-loop check: a depth
+	// that consumes the final frame leaves env nil at loop exit, and hasLocal
+	// dereferences its receiver. Mirrors GetLocalBindingBySlotDepth.
+	if env == nil || !env.hasLocal() {
 		return nil
 	}
 	return &env.local.bindings[li[0]]
@@ -680,13 +681,17 @@ func (p *EnvironmentFrame) GetLocalBindingBySlotDepth(slot, depth int) *Binding 
 // SetLocalValue sets the value of the binding for the given LocalIndex.
 // It returns an error if the binding does not exist.
 func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
-	j := 0
 	env := p
-	for j < li[1] {
+	for range li[1] {
+		if env == nil {
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local binding %q", li)
+		}
 		env = env.parent
-		j++
 	}
-	if !env.hasLocal() {
+	// env == nil guard mirrors SetLocalValueBySlotDepth: a caller-built
+	// LocalIndex whose depth walks past the frame chain must return an error,
+	// not panic in hasLocal on a nil frame.
+	if env == nil || !env.hasLocal() {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local binding %q", li)
 	}
 	env.local.bindings[li[0]].value = v
