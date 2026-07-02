@@ -320,9 +320,16 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	if err == nil {
 		return NewForeignErrorf(msg, vs...)
 	}
+	// No varargs: treat msg as a literal, not a format, so a '%' in an
+	// already-composed message is not read as a verb and corrupted into
+	// %!x(MISSING)-style noise. Mirrors NewForeignErrorf and the sibling below.
+	message := msg
+	if len(vs) != 0 {
+		message = fmt.Sprintf(msg, vs...)
+	}
 	return &ForeignError{
 		err:     err,
-		message: fmt.Sprintf(msg, vs...),
+		message: message,
 	}
 }
 
@@ -330,10 +337,14 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 // ForeignError. The sentinel is matched by errors.Is for programmatic
 // dispatch; the cause preserves the underlying failure for diagnostics.
 func WrapForeignErrorWithCause(sentinel, cause error, msg string, vs ...any) *ForeignError {
+	message := msg
+	if len(vs) != 0 {
+		message = fmt.Sprintf(msg, vs...)
+	}
 	return &ForeignError{
 		err:     sentinel,
 		cause:   cause,
-		message: fmt.Sprintf(msg, vs...),
+		message: message,
 	}
 }
 

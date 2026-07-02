@@ -120,6 +120,27 @@ func (p *DatumToSyntaxValueSuite) TestAlreadySyntax(c *qt.C) {
 	c.Assert(result, qt.Equals, original)
 }
 
+func (p *DatumToSyntaxValueSuite) TestAlreadySyntaxPair(c *qt.C) {
+	// A *SyntaxPair satisfies values.Tuple, so a naive type switch matches the
+	// Tuple arm before the SyntaxValue arm and rebuilds the pair with the
+	// *caller's* sctx, silently discarding the pair's own source location and
+	// scope set. An already-wrapped syntax pair must pass through unchanged
+	// (identity), exactly like the SyntaxSymbol case above.
+	origCtx := syntax.NewSourceContext("orig", "orig.scm",
+		syntax.NewSourceIndexes(1, 2, 3), syntax.NewSourceIndexes(1, 4, 5))
+	original := syntax.NewSyntaxCons(
+		syntax.NewSyntaxSymbol("a", origCtx),
+		syntax.SyntaxEmptyList,
+		origCtx)
+
+	result := DatumToSyntaxValue(context.Background(), p.sctx, original)
+
+	// Same pointer: passed through, not rebuilt.
+	c.Assert(result, qt.Equals, original)
+	// Its own source context survives rather than being overwritten by p.sctx.
+	c.Assert(result.SourceContext(), qt.Equals, origCtx)
+}
+
 func (p *DatumToSyntaxValueSuite) TestInteger(c *qt.C) {
 	num := values.NewInteger(42)
 	result := DatumToSyntaxValue(context.Background(), p.sctx, num)

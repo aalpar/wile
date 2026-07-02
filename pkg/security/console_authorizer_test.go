@@ -38,6 +38,10 @@ func TestConsoleAuthorizer(t *testing.T) {
 		{"read /etc/passwd", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/etc/passwd"}, false},
 		{"write /home/user", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionWrite, Target: "/home/user/file"}, false},
 		{"read env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionRead, Target: "APP_MODE"}, true},
+		// Env is read-only: the doc says "reads are allowed", and the sibling
+		// SandboxAuthorizer gates env on ActionRead. Write/delete must be denied.
+		{"write env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionWrite, Target: "APP_MODE"}, false},
+		{"delete env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionDelete, Target: "APP_MODE"}, false},
 		{"load code", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "file.scm"}, false},
 		{"exec process", security.AccessRequest{Resource: security.ResourceProcess, Action: security.ActionExec, Target: "ls"}, false},
 		{"path traversal /tmp/../etc", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmp/../etc/passwd"}, false},

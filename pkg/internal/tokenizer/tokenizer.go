@@ -230,8 +230,8 @@ type Tokenizer struct {
 	rdr        io.RuneReader
 	cur        rune
 	err        error
-	runeEnd    syntax.SourceIndexes // emd of the current rune
-	runeStart  syntax.SourceIndexes // start of the current rune tokenStartIndex  int // start of the current token
+	runeEnd    syntax.SourceIndexes // end of the current rune
+	runeStart  syntax.SourceIndexes // start of the current rune
 	tokenStart syntax.SourceIndexes
 	tokenEnd   syntax.SourceIndexes // end of the current token
 	// used to build up token "value", which may differ from the raw text

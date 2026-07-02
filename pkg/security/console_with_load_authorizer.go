@@ -49,7 +49,12 @@ func (consoleWithLoadAuthorizer) Authorize(req AccessRequest) error {
 		}
 		return nil
 	case ResourceEnv:
-		return nil
+		// Read-only: env reads are allowed (see doc), writes/deletes are not.
+		// Matches the sibling SandboxAuthorizer's env gate.
+		if req.Action == ActionRead {
+			return nil
+		}
+		return ErrAccessDenied
 	default:
 		return ErrAccessDenied
 	}

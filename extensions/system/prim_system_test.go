@@ -83,6 +83,40 @@ func runExitSubprocess(t *testing.T, testName, schemeExpr string, expectedCode i
 	}
 }
 
+// exitErrorSentinel is the exit code the child in runExitErrorSubprocess uses to
+// signal that the evaluated expression RETURNED an error rather than calling
+// os.Exit. It must not collide with any status a test's Scheme expression exits
+// with (the exit tests use 0/1/42).
+const exitErrorSentinel = 7
+
+// runExitErrorSubprocess re-invokes the test binary as a subprocess evaluating
+// schemeExpr, and asserts the primitive rejected the input with an error instead
+// of exiting the process. The child exits exitErrorSentinel iff the eval returned
+// an error; if the primitive instead calls os.Exit (e.g. the pre-fix silent
+// coercion of a malformed status to code 0), the child exits with THAT code and
+// never reaches the sentinel. The parent then sees a different (or zero) exit
+// code and the assertions fail -- this is the RED that a plain in-process test
+// cannot produce, because a pre-fix os.Exit(0) would tear down the test runner.
+func runExitErrorSubprocess(t *testing.T, testName, schemeExpr string) {
+	t.Helper()
+	if os.Getenv("WILE_TEST_EXIT_ERROR_SUBPROCESS") == "1" {
+		engine, _ := wile.NewEngine(context.Background(), wile.WithExtension(extsystem.Extension))
+		_, err := engine.EvalMultiple(context.Background(), schemeExpr)
+		if err != nil {
+			os.Exit(exitErrorSentinel)
+		}
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run="+testName)
+	cmd.Env = append(os.Environ(), "WILE_TEST_EXIT_ERROR_SUBPROCESS=1")
+	err := cmd.Run()
+	exitErr, ok := err.(*exec.ExitError)
+	qt.Assert(t, ok, qt.IsTrue) // pre-fix os.Exit(0) makes cmd.Run() return nil -> RED here
+	qt.Assert(t, exitErr.ExitCode(), qt.Equals, exitErrorSentinel)
+}
+
 func TestCommandLine(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
@@ -220,6 +254,48 @@ func TestExit(t *testing.T) {
 	t.Run("exit with true exits 0", func(t *testing.T) {
 		runExitSubprocess(t, "TestExit/exit_with_true_exits_0", `(exit #t)`, 0)
 	})
+}
+
+// TestExitMalformedStatus verifies that a non-integer, non-boolean status is
+// rejected as a catchable error rather than silently coerced to exit code 0.
+// These run in-process precisely because the error path does NOT call os.Exit.
+func TestExitMalformedStatus(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"string status", `(exit "done")`},
+		{"symbol status", `(exit 'ok)`},
+		{"float status", `(exit 2.0)`},
+		{"emergency-exit string status", `(emergency-exit "done")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// TestExitMalformedStatusDoesNotExit is the subprocess counterpart to
+// TestExitMalformedStatus. It proves the malformed status is rejected WITHOUT
+// terminating the process: the child exits exitErrorSentinel only if the eval
+// returned an error. Pre-fix, (exit "done") called os.Exit(0), so the child
+// exited 0 and runExitErrorSubprocess's assertions went RED -- a failure a plain
+// in-process test cannot observe, since os.Exit(0) would kill the test runner.
+func TestExitMalformedStatusDoesNotExit(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"exit", `(exit "done")`},
+		{"emergency", `(emergency-exit "done")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			runExitErrorSubprocess(t, "TestExitMalformedStatusDoesNotExit/"+tc.name, tc.code)
+		})
+	}
 }
 
 // TestEmergencyExit tests the (emergency-exit) primitive using subprocess execution.

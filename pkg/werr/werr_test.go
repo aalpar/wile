@@ -334,3 +334,32 @@ func TestWrapForeignErrorWithCause(t *testing.T) {
 	c.Assert(err.Cause(), qt.Equals, cause)
 	c.Assert(err.Error(), qt.Matches, ".*write failed.*test sentinel.*")
 }
+
+// TestWrapForeign_PercentLiteralNoVararg pins that the wrap constructors treat
+// the message as a literal when no varargs are supplied, mirroring the guard
+// NewForeignErrorf already has. The probe uses a literal "%%": stored verbatim
+// (guard active) it stays "100%% done"; run through fmt.Sprintf (guard absent)
+// it collapses to "100% done". Asserting the doubled percent survives therefore
+// proves Sprintf was skipped. Using "%%" — a valid, constant format directive —
+// keeps go vet's printf analyzer satisfied where a lone '%' would not.
+func TestWrapForeign_PercentLiteralNoVararg(t *testing.T) {
+	sentinel := werr.NewStaticError("boom")
+	cause := werr.NewStaticError("root cause")
+
+	tcs := []struct {
+		name string
+		err  error
+		want string // literal substring that must survive intact
+	}{
+		{"WrapForeignErrorf no vararg", werr.WrapForeignErrorf(sentinel, "100%% done"), "100%% done"},
+		{"WrapForeignErrorf with vararg still formats", werr.WrapForeignErrorf(sentinel, "value %d", 42), "value 42"},
+		{"WrapForeignErrorWithCause no vararg", werr.WrapForeignErrorWithCause(sentinel, cause, "100%% done"), "100%% done"},
+		{"nil sentinel delegates to NewForeignErrorf", werr.WrapForeignErrorf(nil, "100%% done"), "100%% done"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(tc.err.Error(), qt.Contains, tc.want)
+		})
+	}
+}

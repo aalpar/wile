@@ -86,27 +86,30 @@ func TestSort_SwappedArguments(t *testing.T) {
 }
 
 func TestSort_GuardPrecision(t *testing.T) {
-	// TODO(you): This test validates the *core design property* of the swap
-	// guard -- precision. The guard must fire ONLY on the unambiguous swap (a
-	// procedure sitting in the list slot). It must NOT relabel every sort
-	// type-error as a swap, or the hint becomes noise.
-	//
-	// Reference: TestSort_SwappedArguments above pins the positive case.
-	//
-	// Assert the negative cases -- swap-shaped but not actually a swap:
-	//   1. (sort '(1 2) '(3 4))  both args non-procedures. The predicate
-	//      (and (not (procedure? less?)) (procedure? lst)) is false because
-	//      the list slot isn't a procedure -> should still error, but the
-	//      message should NOT contain "swapped".
-	//   2. (sort < 42)           valid comparator, non-list second arg ->
-	//      generic "not a list" error, NOT "swapped".
-	//
-	// The design question you are encoding: when exactly one argument is wrong
-	// and it isn't the detectable swap, does the user get the precise generic
-	// error, or a (possibly misleading) swap hint? Your assertion fixes that
-	// answer -- and guards against a future "helpful" broadening that would
-	// over-fire.
-	t.Skip("TODO: assert guard precision -- see comment above")
+	// The swap guard -- (and (not (procedure? less?)) (procedure? lst)) -- must
+	// fire ONLY on the unambiguous swap (a procedure sitting in the list slot).
+	// It must NOT relabel every sort type-error as a swap, or the hint becomes
+	// noise. TestSort_SwappedArguments above pins the positive case; these pin
+	// the negative "swap-shaped but not a swap" cases: each must still error,
+	// but the message must NOT claim the arguments were swapped.
+	tcs := []struct {
+		name string
+		code string
+	}{
+		// Both args non-procedures: the list slot isn't a procedure, so the
+		// guard is false. Errors later applying a list as the comparator.
+		{"both non-procedures", `(sort '(1 2) '(3 4))`},
+		// Valid comparator, non-list second arg: guard is false (list slot isn't
+		// a procedure). Errors generically on (length 42), not as a swap.
+		{"valid comparator, non-list arg", `(sort < 42)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Not(qt.Contains), "swapped")
+		})
+	}
 }
 
 func TestSort_Errors(t *testing.T) {

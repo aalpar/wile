@@ -36,8 +36,10 @@ func TestConsoleWithLoadAuthorizer(t *testing.T) {
 		{"write /tmp/bar", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionWrite, Target: "/tmp/bar"}, true},
 		{"delete /tmp/baz", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionDelete, Target: "/tmp/baz"}, true},
 		{"read /etc/passwd", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/etc/passwd"}, false},
-		// Env: same as Console
+		// Env: same as Console -- read-only
 		{"read env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionRead, Target: "APP_MODE"}, true},
+		{"write env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionWrite, Target: "APP_MODE"}, false},
+		{"delete env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionDelete, Target: "APP_MODE"}, false},
 		// Code load: NEW capability vs Console -- allowed under /tmp
 		{"load /tmp/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/lib.scm"}, true},
 		{"load /tmp/sub/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/sub/lib.scm"}, true},
