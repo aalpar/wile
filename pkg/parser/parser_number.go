@@ -270,46 +270,19 @@ func (p *Parser) parseRational(s string) (values.Number, error) {
 	return values.Simplify(q), nil
 }
 
-// parseImaginary parses an imaginary number string like "+3i", "-2i", "+i", "-i"
-// R7RS §6.2.2: Returns exact BigComplex for integer imaginary parts,
-// inexact Complex for floating-point imaginary parts.
+// parseImaginary parses a pure imaginary number string like "+3i", "-2i",
+// "+i", "-i", "+3/4i". R7RS §6.2.2: exact BigComplex for integer/rational
+// coefficients, inexact Complex for floating-point ones.
+//
+// Delegates to ParseImaginaryStringNumber — the single source of truth for the
+// imaginary-number grammar, shared with string->number (number_string.go). This
+// method adds only the reader's contribution: a source-located error on reject.
 func (p *Parser) parseImaginary(s string) (values.Number, error) {
-	// Remove the trailing 'i'
-	s = schemeutil.TrimSuffixCI(s, "i")
-
-	// Handle "+i" and "-i" cases - these are exact
-	if s == "+" || s == "" {
-		return values.NewBigComplex(
-			values.NewBigIntegerFromInt64(0),
-			values.NewBigIntegerFromInt64(1),
-		), nil
+	q, ok := ParseImaginaryStringNumber(s)
+	if !ok {
+		return nil, NewParserErrorf(p.cur, "invalid imaginary number: %s", s)
 	}
-	if s == "-" {
-		return values.NewBigComplex(
-			values.NewBigIntegerFromInt64(0),
-			values.NewBigIntegerFromInt64(-1),
-		), nil
-	}
-
-	// Check if the imaginary coefficient is an integer (exact) or float (inexact)
-	if isIntegerString(s) {
-		// Parse as exact integer
-		iam, err := parseExactPart(s)
-		if err != nil {
-			return nil, err
-		}
-		return values.NewBigComplex(
-			values.NewBigIntegerFromInt64(0),
-			iam,
-		), nil
-	}
-
-	// Parse the numeric part as inexact float
-	iam, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil, err
-	}
-	return values.NewComplexFromParts(0, iam), nil
+	return q, nil
 }
 
 // parsePolarComplex parses a polar complex number string like "1@1.5708", "+2@0.5", "-3@1.0"
@@ -405,61 +378,21 @@ func parseExactPart(s string) (values.Number, error) {
 	return values.NewBigInteger(i), nil
 }
 
-// parseComplex parses a complex number string like "1+2i", "3-4i", "1.5+2.5i", "1+i", "5-i"
-// Also handles infnan: "+inf.0+inf.0i", "1+inf.0i", "3+nan.0i"
-// R7RS §6.2.2: Returns an exact BigComplex if both parts are exact (integer/rational),
-// otherwise returns an inexact Complex.
+// parseComplex parses a rectangular complex number string like "1+2i", "3-4i",
+// "1.5+2.5i", "1+i", "5-i", and infnan forms "1+inf.0i", "3+nan.0i".
+// R7RS §6.2.2: exact BigComplex if both parts are exact (integer/rational),
+// otherwise inexact Complex; an exact-zero imaginary part collapses to a real.
+//
+// Delegates to ParseComplexStringNumber — the single source of truth for the
+// rectangular-complex grammar, shared with string->number (number_string.go).
+// This method adds only the reader's contribution: a source-located error on
+// reject.
 func (p *Parser) parseComplex(s string) (values.Number, error) {
-	// Remove the trailing 'i'
-	s = schemeutil.TrimSuffixCI(s, "i")
-
-	// Find the sign separating real and imaginary parts.
-	signPos := findComplexSignSplit(s)
-	if signPos == -1 {
-		return nil, NewParserErrorf(p.cur, "invalid complex number: %s (no sign separator found)", s+"i")
+	q, ok := ParseComplexStringNumber(s)
+	if !ok {
+		return nil, NewParserErrorf(p.cur, "invalid complex number: %s", s)
 	}
-
-	// Split into real and imaginary parts
-	realPart := s[:signPos]
-	imagPart := s[signPos:] // includes the sign
-
-	// Check if both parts are exact (integer or rational)
-	// If so, create an exact BigComplex; otherwise use inexact Complex
-	if isExactPartString(realPart) && isExactPartString(imagPart) {
-		realNum, err := parseExactPart(realPart)
-		if err != nil {
-			return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
-		}
-		imagNum, err := parseExactPart(imagPart)
-		if err != nil {
-			return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
-		}
-		return values.NewBigComplex(realNum, imagNum), nil
-	}
-
-	// Parse as inexact complex
-	rel, err := parseFloatOrInfnan(realPart)
-	if err != nil {
-		return nil, NewParserErrorf(p.cur, "invalid real part in complex number: %s", realPart)
-	}
-
-	// R7RS: If the imaginary part is exact zero, treat the number as real.
-	// e.g., -2.5+0i should be just -2.5 (a Float), not a Complex.
-	// This is because exact 0 means "definitely zero", while inexact 0.0 means
-	// "approximately zero" and could have rounding errors.
-	if isExactPartString(imagPart) {
-		parsedImag, parseErr := parseExactPart(imagPart)
-		if parseErr == nil && parsedImag.IsZero() {
-			return values.NewFloat(rel), nil
-		}
-	}
-
-	img, err := p.parseImagPart(imagPart)
-	if err != nil {
-		return nil, NewParserErrorf(p.cur, "invalid imaginary part in complex number: %s", imagPart)
-	}
-
-	return values.NewComplexFromParts(rel, img), nil
+	return q, nil
 }
 
 // parseFloatOrInfnan parses a float that may be inf.0, nan.0, or a rational
@@ -494,17 +427,6 @@ func parseFloatOrInfnan(s string) (float64, error) {
 	}
 
 	return strconv.ParseFloat(schemeutil.NormalizeExponentMarker(s), 64)
-}
-
-// parseImagPart parses an imaginary coefficient that may be a float, infnan, or just a sign
-func (p *Parser) parseImagPart(s string) (float64, error) {
-	switch s {
-	case "+":
-		return 1, nil
-	case "-":
-		return -1, nil
-	}
-	return parseFloatOrInfnan(s)
 }
 
 // convertWrappedNumber unwraps stx to a Number, applies convert, and re-wraps the

@@ -412,6 +412,29 @@ mutable for interactive sessions. 10/15 items done; A4/B4/D1/D2/E1/E2 are follow
       exact `DefaultMaxWriteDepth` boundary, flat-list-not-bounded, cross-type
       pair→vector→pair). Doc: `pkg/extensions/io/CLAUDE.local.md`. Plan:
       `plans/2026-07-01-staff-engineer-sweep.md` #3.
+- [x] **Unify complex/imaginary number parsing (staff-sweep #5)** [Medium, Done]: The
+      reader (`parser_number.go`) and `string->number` (`extensions/math/prim_conversion.go`
+      via `parser/number_string.go`) implemented the same rectangular-complex / pure-imaginary
+      grammar **twice**, and had already **drifted into two different wrong answers** on the
+      same input: `+3/4i` (pure imaginary, rational coefficient) was *rejected* by the reader
+      (`malformed input`) but accepted by `string->number` as *inexact* `0.0+0.75i` — while
+      R7RS §6.2.5 makes it exact `0+3/4i` (as `0+3/4i` and `3/4+1/2i` already parsed). Root
+      cause: the pure-imaginary path gated its exact branch on `isIntegerString`, so a rational
+      coefficient fell through to the inexact `parseFloatOrInfnan`; the reader's twin used a
+      bare `strconv.ParseFloat` that rejected `3/4` outright. **Fix** (two moves): (1) correct
+      the shared grammar — `ParseImaginaryStringNumber` gates on `isExactPartString` (handles
+      rationals via `parseExactPart`), so a rational coefficient stays exact; (2) unify — the
+      reader's `parseImaginary`/`parseComplex` now **delegate** to
+      `ParseImaginaryStringNumber`/`ParseComplexStringNumber` (the single grammar source of
+      truth), adding only the reader's source-located `NewParserErrorf` on reject. Deleted the
+      now-dead `parseImagPart` (folded into the pure function's inline sign switch). Left
+      `parseImaginaryInf`/`parseImaginaryNan` — tokenizer-driven dedicated infnan tokens, a
+      separate concern from the duplicated grammar. Tests: `pkg/parser/parser_number_test.go`
+      (`TestParseNumber_PureImaginaryRationalIsExact` + `TestNumberParser_ReaderAgreesWithStringParsers`,
+      a reader-vs-pure-function parity guard that pins the single-source-of-truth invariant);
+      `extensions/math/prim_conversion_test.go` (`+3/4i` exact cases); redirected
+      `TestParseImagPart` through the unified `ParseComplexStringNumber`. Plan:
+      `plans/2026-07-01-staff-engineer-sweep.md` #5.
 - [x] **Parser fuzz targets + reader crash-safety hardening** [Medium, Done]: Added
       the first Go native fuzz targets in the repo — `FuzzReadSyntax` (untrusted-input
       contract: never panic/overflow the host; every non-EOF error is a located

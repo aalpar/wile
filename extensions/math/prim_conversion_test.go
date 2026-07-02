@@ -147,6 +147,11 @@ func TestStringToNumberComplex(t *testing.T) {
 		{`0+i`, `(= (string->number "0+i") +i)`, values.TrueValue},
 		{`inexact complex`, `(inexact? (string->number "1.5+2.5i"))`, values.TrueValue},
 		{`imag inf`, `(infinite? (imag-part (string->number "1+inf.0i")))`, values.TrueValue},
+		// Pure imaginary with a rational coefficient is EXACT (R7RS §6.2.5).
+		// Before the number-parser unification this parsed as inexact 0.0+0.75i.
+		{`+3/4i exact`, `(exact? (string->number "+3/4i"))`, values.TrueValue},
+		{`+3/4i value`, `(= (string->number "+3/4i") (make-rectangular 0 3/4))`, values.TrueValue},
+		{`-3/4i imag`, `(= (imag-part (string->number "-3/4i")) -3/4)`, values.TrueValue},
 		// #f on invalid
 		{`invalid`, `(string->number "abc")`, values.FalseValue},
 		{`bare i`, `(string->number "i")`, values.FalseValue},

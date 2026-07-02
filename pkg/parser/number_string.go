@@ -66,8 +66,10 @@ func ParseImaginaryStringNumber(s string) (values.Number, bool) {
 		return values.NewComplexFromParts(0, sf.Value), true
 	}
 
-	// Exact integer coefficient
-	if isIntegerString(trim) {
+	// Exact coefficient — integer OR rational (R7RS §6.2.5: the coefficient of
+	// a pure imaginary is an exact <ureal R>, so "3/4" in "+3/4i" stays exact).
+	// parseExactPart yields a BigInteger or Rational as appropriate.
+	if isExactPartString(trim) {
 		iam, err := parseExactPart(trim)
 		if err != nil {
 			return nil, false
@@ -75,7 +77,7 @@ func ParseImaginaryStringNumber(s string) (values.Number, bool) {
 		return values.NewBigComplex(values.NewBigIntegerFromInt64(0), iam), true
 	}
 
-	// Inexact coefficient
+	// Inexact coefficient (decimal / exponent / rational-with-decimal).
 	f, err := parseFloatOrInfnan(trim)
 	if err != nil {
 		return nil, false

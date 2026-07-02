@@ -2223,7 +2223,7 @@ func TestParsePolarComplexErrors(t *testing.T) {
 }
 
 // ============================================================================
-// parseFloatOrInfnan (real-part) and parseImagPart Unit Tests
+// parseFloatOrInfnan (real-part) and imaginary-coefficient grammar Unit Tests
 // ============================================================================
 
 func TestParseFloatOrInfnan(t *testing.T) {
@@ -2310,10 +2310,12 @@ func TestParseImagPart(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
-			env := environment.NewNamespace().Runtime()
-			p := NewParser(env, true, strings.NewReader(""))
-			got, err := p.parseImagPart(tc.input)
-			c.Assert(err, qt.IsNil)
+			// parseImagPart was folded into ParseComplexStringNumber during the
+			// number-parser unification; exercise the same imaginary-coefficient
+			// grammar through that unified entry point by prepending a real part.
+			num, ok := ParseComplexStringNumber("1" + tc.input + "i")
+			c.Assert(ok, qt.IsTrue, qt.Commentf("coefficient: %s", tc.input))
+			_, got := getComplexParts(num)
 
 			switch {
 			case tc.wantNaN:

@@ -323,6 +323,68 @@ func TestParseNumber_PureImaginary(t *testing.T) {
 	}
 }
 
+// A pure imaginary with a rational coefficient is exact per R7RS §6.2.5
+// (the coefficient is an exact <ureal R>). Before the number-parser
+// unification the reader rejected these outright while string->number
+// accepted them as inexact — both wrong, in different ways.
+func TestParseNumber_PureImaginaryRationalIsExact(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  string
+	}{
+		{"+3/4i", "0+3/4i"},
+		{"-3/4i", "0-3/4i"},
+		{"+1/2i", "0+1/2i"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			v := parseSingle(t, tc.input)
+			_, isExact := v.(*values.BigComplex)
+			c.Assert(isExact, qt.IsTrue, qt.Commentf("got %T: %v; expected exact *BigComplex", v, v))
+			c.Assert(v.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// The reader (parseImaginary / parseComplex) delegates to the same pure
+// functions string->number uses (ParseImaginaryStringNumber /
+// ParseComplexStringNumber), so the two number-parsing paths cannot drift.
+// This test pins that single-source-of-truth invariant across the
+// imaginary/complex grammar. SchemeString is compared (not EqualTo) so NaN
+// forms match as text rather than failing IEEE self-inequality. Note the
+// reader routes pure-imaginary inf/nan through dedicated tokenizer tokens
+// (parseImaginaryInf/Nan), yet still agrees — the pure functions produce the
+// same value.
+func TestNumberParser_ReaderAgreesWithStringParsers(t *testing.T) {
+	imags := []string{
+		"+3i", "-2i", "+i", "-i", "+3/4i", "-3/4i", "1.5i", "+2.0i", "1e3i",
+		"+inf.0i", "-inf.0i", "+nan.0i",
+	}
+	cplx := []string{
+		"3+4i", "1.5-2.5i", "1+i", "5-i", "0+3/4i", "3/4+1/2i",
+		"1+inf.0i", "3+nan.0i", "-2.5+0i", "2+0i",
+	}
+	for _, s := range imags {
+		t.Run("imag/"+s, func(t *testing.T) {
+			c := qt.New(t)
+			pure, ok := ParseImaginaryStringNumber(s)
+			c.Assert(ok, qt.IsTrue)
+			rdr := parseSingle(t, s)
+			c.Assert(rdr.SchemeString(), qt.Equals, pure.SchemeString())
+		})
+	}
+	for _, s := range cplx {
+		t.Run("complex/"+s, func(t *testing.T) {
+			c := qt.New(t)
+			pure, ok := ParseComplexStringNumber(s)
+			c.Assert(ok, qt.IsTrue)
+			rdr := parseSingle(t, s)
+			c.Assert(rdr.SchemeString(), qt.Equals, pure.SchemeString())
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Exactness prefixes (#e, #i)
 // ---------------------------------------------------------------------------
