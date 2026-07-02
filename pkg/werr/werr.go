@@ -322,7 +322,8 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	}
 	// No varargs: treat msg as a literal, not a format, so a '%' in an
 	// already-composed message is not read as a verb and corrupted into
-	// %!x(MISSING)-style noise. Mirrors NewForeignErrorf and the sibling below.
+	// %!x(MISSING)-style noise. Same empty-vararg guarantee as NewForeignErrorf
+	// and the sibling below.
 	message := msg
 	if len(vs) != 0 {
 		message = fmt.Sprintf(msg, vs...)

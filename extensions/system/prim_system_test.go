@@ -83,40 +83,6 @@ func runExitSubprocess(t *testing.T, testName, schemeExpr string, expectedCode i
 	}
 }
 
-// exitErrorSentinel is the exit code the child in runExitErrorSubprocess uses to
-// signal that the evaluated expression RETURNED an error rather than calling
-// os.Exit. It must not collide with any status a test's Scheme expression exits
-// with (the exit tests use 0/1/42).
-const exitErrorSentinel = 7
-
-// runExitErrorSubprocess re-invokes the test binary as a subprocess evaluating
-// schemeExpr, and asserts the primitive rejected the input with an error instead
-// of exiting the process. The child exits exitErrorSentinel iff the eval returned
-// an error; if the primitive instead calls os.Exit (e.g. the pre-fix silent
-// coercion of a malformed status to code 0), the child exits with THAT code and
-// never reaches the sentinel. The parent then sees a different (or zero) exit
-// code and the assertions fail -- this is the RED that a plain in-process test
-// cannot produce, because a pre-fix os.Exit(0) would tear down the test runner.
-func runExitErrorSubprocess(t *testing.T, testName, schemeExpr string) {
-	t.Helper()
-	if os.Getenv("WILE_TEST_EXIT_ERROR_SUBPROCESS") == "1" {
-		engine, _ := wile.NewEngine(context.Background(), wile.WithExtension(extsystem.Extension))
-		_, err := engine.EvalMultiple(context.Background(), schemeExpr)
-		if err != nil {
-			os.Exit(exitErrorSentinel)
-		}
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run="+testName)
-	cmd.Env = append(os.Environ(), "WILE_TEST_EXIT_ERROR_SUBPROCESS=1")
-	err := cmd.Run()
-	exitErr, ok := err.(*exec.ExitError)
-	qt.Assert(t, ok, qt.IsTrue) // pre-fix os.Exit(0) makes cmd.Run() return nil -> RED here
-	qt.Assert(t, exitErr.ExitCode(), qt.Equals, exitErrorSentinel)
-}
-
 func TestCommandLine(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
@@ -256,44 +222,30 @@ func TestExit(t *testing.T) {
 	})
 }
 
-// TestExitMalformedStatus verifies that a non-integer, non-boolean status is
-// rejected as a catchable error rather than silently coerced to exit code 0.
-// These run in-process precisely because the error path does NOT call os.Exit.
+// TestExitMalformedStatus verifies R7RS §6.14 handling of a non-#t/#f,
+// non-integer status: exit "must not signal an exception or return to its
+// continuation", so it must NOT raise; instead it translates the status to an
+// exit value. Wile maps such a status to failure code 1 (not the old silent 0),
+// so e.g. (exit "some error") no longer terminates as success. Run through the
+// subprocess harness because exit calls os.Exit -- an in-process exercise would
+// terminate the test runner and, worse, a regression to os.Exit(0) would read
+// as a PASS.
 func TestExitMalformedStatus(t *testing.T) {
-	engine := newEngine(t)
+	// Subtest names are chosen so none is a substring of another: the child is
+	// selected with an unanchored -test.run regex, so a name that is a suffix of
+	// a sibling would run both subtests in the child.
 	tcs := []struct {
 		name string
 		code string
 	}{
-		{"string status", `(exit "done")`},
-		{"symbol status", `(exit 'ok)`},
-		{"float status", `(exit 2.0)`},
-		{"emergency-exit string status", `(emergency-exit "done")`},
+		{"exit_string", `(exit "done")`},
+		{"exit_symbol", `(exit 'ok)`},
+		{"exit_float", `(exit 2.0)`},
+		{"emergency_string", `(emergency-exit "done")`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			evalExpectError(t, engine, tc.code)
-		})
-	}
-}
-
-// TestExitMalformedStatusDoesNotExit is the subprocess counterpart to
-// TestExitMalformedStatus. It proves the malformed status is rejected WITHOUT
-// terminating the process: the child exits exitErrorSentinel only if the eval
-// returned an error. Pre-fix, (exit "done") called os.Exit(0), so the child
-// exited 0 and runExitErrorSubprocess's assertions went RED -- a failure a plain
-// in-process test cannot observe, since os.Exit(0) would kill the test runner.
-func TestExitMalformedStatusDoesNotExit(t *testing.T) {
-	tcs := []struct {
-		name string
-		code string
-	}{
-		{"exit", `(exit "done")`},
-		{"emergency", `(emergency-exit "done")`},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runExitErrorSubprocess(t, "TestExitMalformedStatusDoesNotExit/"+tc.name, tc.code)
+			runExitSubprocess(t, "TestExitMalformedStatus/"+tc.name, tc.code, 1)
 		})
 	}
 }

@@ -35,9 +35,12 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 	switch v := o.(type) {
 	case syntax.SyntaxValue:
 		// Already-wrapped syntax passes through unchanged. This arm MUST precede
-		// the values.Tuple arm below: *SyntaxPair (and *SyntaxVector) also satisfy
-		// Tuple, so matching Tuple first would rebuild them with the caller's sctx,
-		// discarding their own source location and scope set.
+		// the values.Tuple arm below: *SyntaxPair also satisfies Tuple (see the
+		// `var _ values.Tuple = (*SyntaxPair)(nil)` assertion in
+		// pkg/syntax/syntax_pair.go), so matching Tuple first would rebuild it
+		// with the caller's sctx, discarding its own source location and scope
+		// set. (*SyntaxVector is not a Tuple, but reaches this arm as a
+		// SyntaxValue and is likewise returned unchanged.)
 		return v
 	case *values.Symbol:
 		return syntax.NewSyntaxSymbol(v.Key, sctx)

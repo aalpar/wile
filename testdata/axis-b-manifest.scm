@@ -104,7 +104,7 @@
  ("close-input-port" "void" ("input-port") "github.com/aalpar/wile/pkg/extensions/io.PrimCloseInputPort" "pkg/extensions/io/prim_ports.go:110")
  ("close-output-port" "void" ("output-port") "github.com/aalpar/wile/pkg/extensions/io.PrimCloseOutputPort" "pkg/extensions/io/prim_ports.go:134")
  ("close-port" "void" ("port") "github.com/aalpar/wile/pkg/extensions/io.PrimClosePort" "pkg/extensions/io/prim_ports.go:92")
- ("command-line" "list" () "github.com/aalpar/wile/extensions/system.PrimCommandLine" "extensions/system/prim_system.go:44")
+ ("command-line" "list" () "github.com/aalpar/wile/extensions/system.PrimCommandLine" "extensions/system/prim_system.go:43")
  ("compile" "procedure" ("any") "github.com/aalpar/wile/extensions/eval.PrimCompile" "extensions/eval/prim_eval.go:487")
  ("complex-inexact-with-accuracy" "" ("number") "github.com/aalpar/wile/extensions/math.PrimComplexInexactWithAccuracy" "extensions/math/prim_conversion.go:410")
  ("complex?" "boolean" ("any") "github.com/aalpar/wile/pkg/registry/core.init.MakeTypePredicate.func68" "pkg/registry/helpers/type.go:26")

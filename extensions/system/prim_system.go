@@ -22,7 +22,6 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // ProgramStartTime is used for current-jiffy to measure elapsed time.
@@ -79,12 +78,13 @@ func exitWithCode(mc machine.CallContext) error {
 					code = 1
 				}
 			default:
-				// R7RS §6.14 permits implementation-defined translation of a
-				// non-integer, non-boolean status. Rather than silently coerce
-				// it to 0 (masking a programming error under a success exit),
-				// reject it so the mistake surfaces as a catchable error.
-				return werr.WrapForeignErrorf(werr.ErrNotANumber,
-					"exit: status must be an integer or boolean")
+				// R7RS §6.14: "exit should translate obj into an appropriate
+				// exit value for the operating system, if possible" and "must
+				// not signal an exception or return to its continuation." So a
+				// non-#t/#f, non-integer status must NOT raise. Translate it to
+				// a failure code (1) rather than the old silent 0, so that
+				// e.g. (exit "some error") no longer terminates as success.
+				code = 1
 			}
 		}
 	}
