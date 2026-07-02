@@ -194,14 +194,16 @@ func parseStringToNumber(input string, radix int) values.Value {
 
 	// Complex and imaginary numbers (only for radix 10).
 	if radix == 10 && len(input) > 1 && (input[len(input)-1] == 'i' || input[len(input)-1] == 'I') {
-		// Try pure imaginary first (no real part separator).
-		n, imagOK := parser.ParseImaginaryStringNumber(input)
-		if imagOK {
+		// Try pure imaginary first (no real part separator). A reject is a
+		// "not this grammar" signal here — discard the cause and try the next
+		// form, ultimately yielding #f per R7RS §6.2.7.
+		n, err := parser.ParseImaginaryStringNumber(input)
+		if err == nil {
 			return n
 		}
 		// Try full complex (real + imaginary parts).
-		n, complexOK := parser.ParseComplexStringNumber(input)
-		if complexOK {
+		n, err = parser.ParseComplexStringNumber(input)
+		if err == nil {
 			return n
 		}
 	}

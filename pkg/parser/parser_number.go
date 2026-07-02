@@ -276,11 +276,12 @@ func (p *Parser) parseRational(s string) (values.Number, error) {
 //
 // Delegates to ParseImaginaryStringNumber — the single source of truth for the
 // imaginary-number grammar, shared with string->number (number_string.go). This
-// method adds only the reader's contribution: a source-located error on reject.
+// method adds only the reader's contribution: a source-located error that wraps
+// the grammar's reject cause, keeping it reachable via errors.Is / errors.Unwrap.
 func (p *Parser) parseImaginary(s string) (values.Number, error) {
-	q, ok := ParseImaginaryStringNumber(s)
-	if !ok {
-		return nil, NewParserErrorf(p.cur, "invalid imaginary number: %s", s)
+	q, err := ParseImaginaryStringNumber(s)
+	if err != nil {
+		return nil, NewParserErrorWithWrapf(err, p.cur, "invalid imaginary number: %s", s)
 	}
 	return q, nil
 }
@@ -317,9 +318,27 @@ func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
 	return values.NewComplexFromParts(rel, iam), nil
 }
 
-// isRationalString checks if a string represents a rational number (contains /).
+// isRationalString reports whether s has the coarse shape of a rational literal:
+// exactly one '/' with a non-empty part on each side. It is a necessary, NOT a
+// sufficient, gate — parseExactPart (big.Rat.SetString) stays the authority on
+// rational validity, so double-checking there is still required.
+//
+// The tightening (over a bare strings.Contains(s, "/")) only prunes structurally
+// broken shapes that the inexact fallback also rejects: multiple slashes
+// ("1/2/3"), and empty parts ("/", "3/", "/4"). This shrinks the set of strings
+// that pass isExactPartString yet fail parseExactPart. It deliberately does NOT
+// require integer parts: a single-slash string with a float part ("1.5/3") must
+// stay on the exact path so parseExactPart rejects it — routing it to the inexact
+// float path (parseFloatOrInfnan) would WRONGLY accept it as 0.5.
 func isRationalString(s string) bool {
-	return strings.Contains(s, "/")
+	num, den, ok := strings.Cut(s, "/")
+	if !ok {
+		return false
+	}
+	if num == "" || den == "" {
+		return false
+	}
+	return !strings.Contains(den, "/")
 }
 
 // isIntegerString checks if a string represents an integer (no . or /).
@@ -385,12 +404,12 @@ func parseExactPart(s string) (values.Number, error) {
 //
 // Delegates to ParseComplexStringNumber — the single source of truth for the
 // rectangular-complex grammar, shared with string->number (number_string.go).
-// This method adds only the reader's contribution: a source-located error on
-// reject.
+// This method adds only the reader's contribution: a source-located error that
+// wraps the grammar's reject cause, keeping it reachable via errors.Is / Unwrap.
 func (p *Parser) parseComplex(s string) (values.Number, error) {
-	q, ok := ParseComplexStringNumber(s)
-	if !ok {
-		return nil, NewParserErrorf(p.cur, "invalid complex number: %s", s)
+	q, err := ParseComplexStringNumber(s)
+	if err != nil {
+		return nil, NewParserErrorWithWrapf(err, p.cur, "invalid complex number: %s", s)
 	}
 	return q, nil
 }

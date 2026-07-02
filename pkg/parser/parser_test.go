@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math"
 	"strings"
@@ -2313,8 +2314,8 @@ func TestParseImagPart(t *testing.T) {
 			// parseImagPart was folded into ParseComplexStringNumber during the
 			// number-parser unification; exercise the same imaginary-coefficient
 			// grammar through that unified entry point by prepending a real part.
-			num, ok := ParseComplexStringNumber("1" + tc.input + "i")
-			c.Assert(ok, qt.IsTrue, qt.Commentf("coefficient: %s", tc.input))
+			num, err := ParseComplexStringNumber("1" + tc.input + "i")
+			c.Assert(err, qt.IsNil, qt.Commentf("coefficient: %s", tc.input))
 			_, got := getComplexParts(num)
 
 			switch {
@@ -3017,8 +3018,8 @@ func TestParseImaginaryStringNumber(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.in, func(t *testing.T) {
-			_, ok := ParseImaginaryStringNumber(tc.in)
-			c.Assert(ok, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
+			_, err := ParseImaginaryStringNumber(tc.in)
+			c.Assert(err == nil, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
 		})
 	}
 }
@@ -3039,8 +3040,35 @@ func TestParseComplexStringNumber(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.in, func(t *testing.T) {
-			_, ok := ParseComplexStringNumber(tc.in)
-			c.Assert(ok, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
+			_, err := ParseComplexStringNumber(tc.in)
+			c.Assert(err == nil, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
 		})
 	}
+}
+
+// A structural reject from the shared grammar carries a werr sentinel, and the
+// reader wraps it losslessly: the returned *ParserError still reaches
+// werr.ErrInvalidFormat through errors.Unwrap. This pins the error-threading
+// contract — before it, the pure functions returned a bare bool and the reader
+// emitted a causeless error, so no cause was reachable via errors.Is.
+func TestNumberStringParsersRejectCarriesSentinel(t *testing.T) {
+	c := qt.New(t)
+
+	// Pure functions: sentinel present on the structural reject.
+	_, err := ParseImaginaryStringNumber("abc") // no 'i' suffix
+	c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue)
+	_, err = ParseComplexStringNumber("3+4") // no 'i' suffix
+	c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue)
+	_, err = ParseComplexStringNumber("5i") // no real/imaginary separator
+	c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue)
+
+	// Reader: the source-located ParserError preserves the wrapped cause, so the
+	// sentinel is still reachable and a *ParserError is still recoverable.
+	env := environment.NewNamespace().Runtime()
+	p := NewParser(env, true, strings.NewReader(""))
+	_, err = p.parseComplex("3+4") // structural reject → wrapped, not causeless
+	c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue)
+	var pe *ParserError
+	c.Assert(errors.As(err, &pe), qt.IsTrue)
+	c.Assert(pe.Unwrap(), qt.IsNotNil)
 }

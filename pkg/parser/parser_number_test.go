@@ -340,23 +340,29 @@ func TestParseNumber_PureImaginaryRationalIsExact(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
 			v := parseSingle(t, tc.input)
-			_, isExact := v.(*values.BigComplex)
-			c.Assert(isExact, qt.IsTrue, qt.Commentf("got %T: %v; expected exact *BigComplex", v, v))
+			// Assert the semantic exactness property (IsExact), not merely the
+			// representation: a *BigComplex CAN be inexact (BigFloat parts), so a
+			// type assertion alone does not prove exactness. Mirrors the oracle at
+			// parser_test.go:1156-1158.
+			bc, ok := v.(*values.BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("got %T: %v; expected *BigComplex", v, v))
+			c.Assert(bc.IsExact(), qt.IsTrue, qt.Commentf("%s should be exact", tc.input))
 			c.Assert(v.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }
 
-// The reader (parseImaginary / parseComplex) delegates to the same pure
-// functions string->number uses (ParseImaginaryStringNumber /
-// ParseComplexStringNumber), so the two number-parsing paths cannot drift.
-// This test pins that single-source-of-truth invariant across the
-// imaginary/complex grammar. SchemeString is compared (not EqualTo) so NaN
-// forms match as text rather than failing IEEE self-inequality. Note the
-// reader routes pure-imaginary inf/nan through dedicated tokenizer tokens
-// (parseImaginaryInf/Nan), yet still agrees — the pure functions produce the
-// same value.
-func TestNumberParser_ReaderAgreesWithStringParsers(t *testing.T) {
+// The single-source-of-truth invariant (reader and string->number agree on the
+// imaginary/complex grammar) is enforced in the SOURCE by delegation: both
+// parseImaginary/parseComplex call the very functions checked here. So for every
+// input where the reader delegates, the two sides run identical code and can only
+// diverge on tokenizer→dispatch routing. The load-bearing rows are the ones where
+// the reader does NOT delegate: pure-imaginary +inf.0i / -inf.0i / +nan.0i, which
+// the reader routes through dedicated tokens (parseImaginaryInf/Nan) rather than
+// the pure function — this test confirms that separate path still agrees.
+// SchemeString is compared (not EqualTo) so NaN forms match as text rather than
+// failing IEEE self-inequality.
+func TestParseNumber_ReaderAgreesWithStringParsers(t *testing.T) {
 	imags := []string{
 		"+3i", "-2i", "+i", "-i", "+3/4i", "-3/4i", "1.5i", "+2.0i", "1e3i",
 		"+inf.0i", "-inf.0i", "+nan.0i",
@@ -368,8 +374,8 @@ func TestNumberParser_ReaderAgreesWithStringParsers(t *testing.T) {
 	for _, s := range imags {
 		t.Run("imag/"+s, func(t *testing.T) {
 			c := qt.New(t)
-			pure, ok := ParseImaginaryStringNumber(s)
-			c.Assert(ok, qt.IsTrue)
+			pure, err := ParseImaginaryStringNumber(s)
+			c.Assert(err, qt.IsNil)
 			rdr := parseSingle(t, s)
 			c.Assert(rdr.SchemeString(), qt.Equals, pure.SchemeString())
 		})
@@ -377,8 +383,8 @@ func TestNumberParser_ReaderAgreesWithStringParsers(t *testing.T) {
 	for _, s := range cplx {
 		t.Run("complex/"+s, func(t *testing.T) {
 			c := qt.New(t)
-			pure, ok := ParseComplexStringNumber(s)
-			c.Assert(ok, qt.IsTrue)
+			pure, err := ParseComplexStringNumber(s)
+			c.Assert(err, qt.IsNil)
 			rdr := parseSingle(t, s)
 			c.Assert(rdr.SchemeString(), qt.Equals, pure.SchemeString())
 		})

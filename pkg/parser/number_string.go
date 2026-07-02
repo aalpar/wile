@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // ParseSpecialFloat checks if s is +inf.0, -inf.0, +nan.0, or -nan.0
@@ -39,10 +40,16 @@ func ParseSpecialFloat(s string) (*values.Float, bool) {
 // ParseImaginaryStringNumber parses a pure imaginary string (ending in 'i')
 // and returns the resulting complex number.
 // Handles "+3i", "-2.5i", "+i", "-i", "+inf.0i", "-nan.0i", etc.
-// Returns (nil, false) if s cannot be parsed as a pure imaginary number.
-func ParseImaginaryStringNumber(s string) (values.Number, bool) {
+//
+// On reject it returns a non-nil error carrying a werr sentinel (ErrInvalidFormat
+// for a shape that is not this grammar; the coefficient parser's own sentinel —
+// ErrInvalidFormat / ErrDivisionByZero — for a malformed coefficient). Callers
+// choose how to treat it: string->number discards it and tries the next grammar
+// (R7RS §6.2.7 returns #f), while the reader wraps it with a source location so
+// the cause stays reachable via errors.Is / errors.Unwrap.
+func ParseImaginaryStringNumber(s string) (values.Number, error) {
 	if !hasSuffixFoldedI(s) {
-		return nil, false
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "parseImaginary: missing imaginary suffix: %s", s)
 	}
 	trim := s[:len(s)-1]
 
@@ -51,19 +58,19 @@ func ParseImaginaryStringNumber(s string) (values.Number, bool) {
 		return values.NewBigComplex(
 			values.NewBigIntegerFromInt64(0),
 			values.NewBigIntegerFromInt64(1),
-		), true
+		), nil
 	}
 	if trim == "-" {
 		return values.NewBigComplex(
 			values.NewBigIntegerFromInt64(0),
 			values.NewBigIntegerFromInt64(-1),
-		), true
+		), nil
 	}
 
 	// Special imaginary values: +inf.0i, -inf.0i, +nan.0i, -nan.0i
 	sf, ok := ParseSpecialFloat(trim)
 	if ok {
-		return values.NewComplexFromParts(0, sf.Value), true
+		return values.NewComplexFromParts(0, sf.Value), nil
 	}
 
 	// Exact coefficient — integer OR rational (R7RS §6.2.5: the coefficient of
@@ -72,17 +79,17 @@ func ParseImaginaryStringNumber(s string) (values.Number, bool) {
 	if isExactPartString(trim) {
 		iam, err := parseExactPart(trim)
 		if err != nil {
-			return nil, false
+			return nil, err
 		}
-		return values.NewBigComplex(values.NewBigIntegerFromInt64(0), iam), true
+		return values.NewBigComplex(values.NewBigIntegerFromInt64(0), iam), nil
 	}
 
 	// Inexact coefficient (decimal / exponent / rational-with-decimal).
 	f, err := parseFloatOrInfnan(trim)
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
-	return values.NewComplexFromParts(0, f), true
+	return values.NewComplexFromParts(0, f), nil
 }
 
 // findComplexSignSplit returns the index of the +/- that separates the real and
@@ -117,10 +124,14 @@ func findComplexSignSplit(s string) int {
 
 // ParseComplexStringNumber parses a rectangular complex number string ending in 'i'.
 // Handles "3+4i", "1.5-2.5i", "1+inf.0i", "0+3/4i", etc.
-// Returns (nil, false) if s cannot be parsed as a complex number.
-func ParseComplexStringNumber(s string) (values.Number, bool) {
+//
+// On reject it returns a non-nil error carrying a werr sentinel (ErrInvalidFormat
+// for a shape that is not this grammar; the part parser's own sentinel for a
+// malformed real/imaginary part). See ParseImaginaryStringNumber for how the two
+// callers treat the error differently.
+func ParseComplexStringNumber(s string) (values.Number, error) {
 	if !hasSuffixFoldedI(s) {
-		return nil, false
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "parseComplex: missing imaginary suffix: %s", s)
 	}
 	// Remove trailing 'i'
 	trim := s[:len(s)-1]
@@ -128,7 +139,7 @@ func ParseComplexStringNumber(s string) (values.Number, bool) {
 	// Find the sign separating real and imaginary parts.
 	signPos := findComplexSignSplit(trim)
 	if signPos == -1 {
-		return nil, false
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "parseComplex: no real/imaginary separator: %s", s)
 	}
 
 	realStr := trim[:signPos]
@@ -138,26 +149,26 @@ func ParseComplexStringNumber(s string) (values.Number, bool) {
 	if isExactPartString(realStr) && isExactPartString(imagStr) {
 		realNum, err := parseExactPart(realStr)
 		if err != nil {
-			return nil, false
+			return nil, err
 		}
 		imagNum, err := parseExactPart(imagStr)
 		if err != nil {
-			return nil, false
+			return nil, err
 		}
-		return values.NewBigComplex(realNum, imagNum), true
+		return values.NewBigComplex(realNum, imagNum), nil
 	}
 
 	// Inexact path.
 	rel, err := parseFloatOrInfnan(realStr)
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
 
 	// Exact zero imaginary → collapse to real.
 	if isExactPartString(imagStr) {
 		parsedImag, parseErr := parseExactPart(imagStr)
 		if parseErr == nil && parsedImag.IsZero() {
-			return values.NewFloat(rel), true
+			return values.NewFloat(rel), nil
 		}
 	}
 
@@ -170,10 +181,10 @@ func ParseComplexStringNumber(s string) (values.Number, bool) {
 	default:
 		img, err = parseFloatOrInfnan(imagStr)
 		if err != nil {
-			return nil, false
+			return nil, err
 		}
 	}
-	return values.NewComplexFromParts(rel, img), true
+	return values.NewComplexFromParts(rel, img), nil
 }
 
 // hasSuffixFoldedI returns true if s ends with 'i' or 'I'.

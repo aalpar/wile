@@ -430,7 +430,7 @@ mutable for interactive sessions. 10/15 items done; A4/B4/D1/D2/E1/E2 are follow
       now-dead `parseImagPart` (folded into the pure function's inline sign switch). Left
       `parseImaginaryInf`/`parseImaginaryNan` — tokenizer-driven dedicated infnan tokens, a
       separate concern from the duplicated grammar. Tests: `pkg/parser/parser_number_test.go`
-      (`TestParseNumber_PureImaginaryRationalIsExact` + `TestNumberParser_ReaderAgreesWithStringParsers`,
+      (`TestParseNumber_PureImaginaryRationalIsExact` + `TestParseNumber_ReaderAgreesWithStringParsers`,
       a reader-vs-pure-function parity guard that pins the single-source-of-truth invariant);
       `extensions/math/prim_conversion_test.go` (`+3/4i` exact cases); redirected
       `TestParseImagPart` through the unified `ParseComplexStringNumber`. Plan:
