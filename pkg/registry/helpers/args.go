@@ -87,6 +87,12 @@ func RequireTuple(mc machine.CallContext, index int, name string) (values.Tuple,
 // ParseOptionalStartEnd extracts optional [start [end]] integer arguments from a rest list.
 // defaultEnd is the value used if end is not provided.
 // name is used in error messages (e.g., "bytevector-copy").
+//
+// Shape errors here (improper argument list, too many arguments) carry literal
+// phrases rather than routing through typeNameFromSentinel: they are proper-list
+// and arity violations, not type mismatches, so there is no expected-type noun to
+// plumb. Only the per-argument type checks (start/end must be an integer) draw
+// their noun from a *TypeSentinel. This is deliberate, not an oversight.
 func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (int64, int64, error) {
 	start := int64(0)
 	end := defaultEnd
@@ -214,6 +220,10 @@ func ParseSubrange(rest values.Value, length int, name string) (int, int, error)
 // Returns (nil, false, nil) if rest is empty.
 // Returns an error if rest is not a proper list or contains more than one element.
 // name is used in error messages (e.g., "make-vector").
+//
+// Like ParseOptionalStartEnd, the shape errors (improper argument list, too many
+// arguments) use literal phrases: these are proper-list/arity violations, not type
+// mismatches, so there is no expected-type noun to plumb through a *TypeSentinel.
 func ParseOptionalArg(rest values.Value, name string) (values.Value, bool, error) {
 	if values.IsEmptyList(rest) {
 		return nil, false, nil
