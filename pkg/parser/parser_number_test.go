@@ -271,6 +271,39 @@ func TestParseNumber_ComplexZeroImaginary(t *testing.T) {
 	c.Assert(f.Value, qt.Equals, -2.5)
 }
 
+// R7RS §6.2.1: an EXACT zero imaginary part makes the number real, so an exact
+// complex literal with a zero imaginary part reads as its exact real part —
+// (real? 2+0i) => #t and the value is eqv? to the same real written directly.
+// An INEXACT zero imaginary part ("2+0.0i") does NOT collapse ((real? 2+0.0i)
+// => #f). This matches make-rectangular, which already collapses exact zeros.
+func TestParseNumber_ExactZeroImaginaryCollapsesToReal(t *testing.T) {
+	c := qt.New(t)
+
+	// Exact integer real part → Integer (demoted from BigInteger via Simplify).
+	v := parseSingle(t, "2+0i")
+	iv, ok := v.(*values.Integer)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("2+0i: got %T: %v; expected *Integer", v, v))
+	c.Assert(iv.Value, qt.Equals, int64(2))
+	c.Assert(v.SchemeString(), qt.Equals, "2")
+
+	// Pure imaginary with a zero coefficient is real 0.
+	v = parseSingle(t, "0i")
+	iv, ok = v.(*values.Integer)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("0i: got %T: %v; expected *Integer", v, v))
+	c.Assert(iv.Value, qt.Equals, int64(0))
+
+	// Exact rational real part → Rational (stays exact, not collapsed away).
+	v = parseSingle(t, "3/4+0i")
+	rv, ok := v.(*values.Rational)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("3/4+0i: got %T: %v; expected *Rational", v, v))
+	c.Assert(rv.SchemeString(), qt.Equals, "3/4")
+
+	// INEXACT zero imaginary must NOT collapse — stays an inexact Complex.
+	v = parseSingle(t, "2+0.0i")
+	_, ok = v.(*values.Complex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("2+0.0i: got %T: %v; expected *Complex (no collapse)", v, v))
+}
+
 // Pure imaginary numbers
 func TestParseNumber_PureImaginary(t *testing.T) {
 	tcs := []struct {

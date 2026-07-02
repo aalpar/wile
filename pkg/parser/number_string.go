@@ -76,12 +76,18 @@ func ParseImaginaryStringNumber(s string) (values.Number, error) {
 	// Exact coefficient — integer OR rational (R7RS §6.2.5: the coefficient of
 	// a pure imaginary is an exact <ureal R>, so "3/4" in "+3/4i" stays exact).
 	// parseExactPart yields a BigInteger or Rational as appropriate.
+	//
+	// values.Simplify collapses an exact-zero imaginary part to the exact real
+	// (R7RS §6.2.1: (real? 0+0i) => #t, so "0i" reads as 0, eqv? to the integer
+	// 0); for a nonzero coefficient it is the identity. This mirrors
+	// make-rectangular (prim_complex.go), keeping the two construction paths
+	// consistent.
 	if isExactPartString(trim) {
 		iam, err := parseExactPart(trim)
 		if err != nil {
 			return nil, err
 		}
-		return values.NewBigComplex(values.NewBigIntegerFromInt64(0), iam), nil
+		return values.Simplify(values.NewBigComplex(values.NewBigIntegerFromInt64(0), iam)), nil
 	}
 
 	// Inexact coefficient (decimal / exponent / rational-with-decimal).
@@ -146,6 +152,14 @@ func ParseComplexStringNumber(s string) (values.Number, error) {
 	imagStr := trim[signPos:] // includes the sign
 
 	// Exact path: both parts integer or rational → exact BigComplex.
+	//
+	// values.Simplify collapses an exact-zero imaginary part to the exact real
+	// (R7RS §6.2.1: (real? 2+0i) => #t, so "2+0i" reads as the integer 2, eqv? to
+	// 2; "3/4+0i" reads as 3/4); for a nonzero imaginary part it is the identity.
+	// This matches make-rectangular (prim_complex.go), so the reader,
+	// string->number, and make-rectangular all agree. An INEXACT zero imaginary
+	// (e.g. "2+0.0i") takes the inexact path below and does NOT collapse, per the
+	// same R7RS clause ((real? 2+0.0i) => #f).
 	if isExactPartString(realStr) && isExactPartString(imagStr) {
 		realNum, err := parseExactPart(realStr)
 		if err != nil {
@@ -155,7 +169,7 @@ func ParseComplexStringNumber(s string) (values.Number, error) {
 		if err != nil {
 			return nil, err
 		}
-		return values.NewBigComplex(realNum, imagNum), nil
+		return values.Simplify(values.NewBigComplex(realNum, imagNum)), nil
 	}
 
 	// Inexact path.

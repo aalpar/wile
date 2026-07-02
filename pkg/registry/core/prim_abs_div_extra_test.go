@@ -89,8 +89,10 @@ func TestAbsRejectsComplex(t *testing.T) {
 			code: "(abs 0+1i)",
 		},
 		{
-			name: "abs rejects complex 1+0i",
-			code: "(abs 1+0i)",
+			// 0+1i is a genuine complex (nonzero imaginary); 1+0i would collapse
+			// to the exact real 1 per R7RS §6.2.1 and abs would accept it.
+			name: "abs rejects complex 0+1i",
+			code: "(abs 0+1i)",
 		},
 		{
 			name: "abs rejects complex 5+12i",

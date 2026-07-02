@@ -128,12 +128,14 @@ func TestSqrtExtended(t *testing.T) {
 	})
 
 	t.Run("sqrt of complex number", func(t *testing.T) {
-		result, err := testhelpers.RunSchemeCode(t, "(sqrt 1+0i)")
+		// 0+2i is a genuine complex; sqrt(2i) = 1+i. (1+0i would collapse to the
+		// exact real 1 per R7RS §6.2.1, so it no longer exercises the complex path.)
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt 0+2i)")
 		qt.Assert(t, err, qt.IsNil)
 		complexResult, ok := result.(*values.Complex)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, real(complexResult.Value), qt.Equals, 1.0)
-		qt.Assert(t, imag(complexResult.Value), qt.Equals, 0.0)
+		qt.Assert(t, imag(complexResult.Value), qt.Equals, 1.0)
 	})
 
 	t.Run("sqrt of zero", func(t *testing.T) {
