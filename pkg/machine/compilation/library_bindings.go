@@ -22,6 +22,7 @@ package compilation
 
 import (
 	"context"
+	"math"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -499,7 +500,18 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		// be in the expand phase for macro expansion; compile-phase bindings
 		// (auxiliary syntax, phase 2) need to be in the compile phase.
 		if sourcePhase > 0 {
-			propagateEnv := targetEnv.AtPhase(targetPhase + sourcePhase)
+			// Phase is int8; a high for-meta target phase plus the source-phase
+			// shift can overflow (e.g. 127+1 wraps to -128) and silently route the
+			// binding into the wrong phase registry. Guard the sum at int width
+			// before narrowing, mirroring composePhaseShift's parse-time check.
+			phaseSum := int(targetPhase) + int(sourcePhase)
+			if phaseSum > math.MaxInt8 {
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+					"import: propagation phase %d (target %d + source %d) exceeds max phase %d for %q from %s",
+					phaseSum, int(targetPhase), int(sourcePhase), math.MaxInt8, localName, lib.Name.SchemeString())
+			}
+			propagatePhase := environment.Phase(phaseSum)
+			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
 			_, propagateCreated := propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
 			// Same conflict guard as the base phase: a previously-imported binding at
@@ -513,7 +525,11 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			}
 			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
 			if propagateIdx != nil {
-				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
+				err := propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
+				if err != nil {
+					return werr.WrapForeignErrorf(err,
+						"import: failed to set propagated binding for %s at phase %s", localName, propagatePhase)
+				}
 			}
 			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding, externalName, lib.Name)
 		}
@@ -601,7 +617,11 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			}
 			expandIdx := expandEnv.GetGlobalIndex(localSym)
 			if expandIdx != nil {
-				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
+				err := expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
+				if err != nil {
+					return werr.WrapForeignErrorf(err,
+						"import: failed to install syntax binding for %s in expand phase", localName)
+				}
 			}
 			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding, externalName, lib.Name)
 		}

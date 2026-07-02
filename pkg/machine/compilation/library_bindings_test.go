@@ -17,6 +17,8 @@ package compilation_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
@@ -91,6 +93,41 @@ func TestLibraryBindingsImportModifiers(t *testing.T) {
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
+}
+
+// TestCopyLibraryBindingsPhaseOverflow verifies that installing a syntax binding
+// at a for-meta target phase high enough that adding the binding's source-phase
+// shift overflows int8 is rejected with a diagnostic, rather than silently routing
+// the propagated binding to a wrapped-around negative phase. Phase is int8, so a
+// target phase of 127 (permitted by the parse-time for-meta guard) plus a syntax
+// binding's source phase (+1) sums to 128, which no longer fits.
+func TestCopyLibraryBindingsPhaseOverflow(t *testing.T) {
+	ns := environment.NewNamespace()
+
+	// Build a library exporting one syntax binding that lives only in the expand
+	// phase, so findLibraryBinding reports source phase +1 (the propagation path).
+	libEnv := ns.NewChildRuntime()
+	sym := values.NewSymbol("my-macro")
+	expandEnv := libEnv.Expand()
+	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeSyntax)
+	gi := expandEnv.GetGlobalIndex(sym)
+	qt.Assert(t, gi, qt.IsNotNil)
+	err := expandEnv.SetOwnGlobalValue(gi, values.Void)
+	qt.Assert(t, err, qt.IsNil)
+
+	lib := &compilation.CompiledLibrary{
+		Name:    compilation.NewLibraryName("test", "overflow"),
+		Env:     libEnv,
+		Exports: map[string]string{"my-macro": "my-macro"},
+	}
+
+	targetEnv := ns.NewChildRuntime()
+	bindings := map[string]string{"my-macro": "my-macro"}
+
+	// Max int8 target phase; +1 for the syntax source phase overflows.
+	err = compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, environment.Phase(127))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "exceeds max phase")
 }
 
 // TestLibraryBindingsPhaseShift tests that bindings from different phases
