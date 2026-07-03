@@ -73,26 +73,22 @@ type markEntry struct {
 // removing the []values.Value{v} slice that every operation previously created.
 // See BIBLIOGRAPHY.md "Split Value Register".
 //
-// IMPORTANT: The fields are NOT uniformly copied by save/restore operations.
-// The table below summarizes how each method (SaveContinuation, Restore,
-// PopContinuation) treats each field.
+// IMPORTANT: these fields are NOT uniformly copied by the save/restore/copy
+// operations. Each field is copied (SHARE), deep-cloned (CLONE), transferred with
+// ownership moved (TRANSFER), reset to zero (RESET), or left alone (SKIP), and the
+// discipline differs per method and per field. Copy-vs-transfer is the axis every
+// prior continuation revert got wrong, and a wrong cell silently corrupts
+// resumption while passing ordinary tests.
 //
-//	┌──────────────┬────────────────┬─────────────┬─────────────────────┬──────────────────┐
-//	│ Field        │ SaveCont saves │ Restore     │ RestoreAndRelease   │ PopContinuation  │
-//	├──────────────┼────────────────┼─────────────┼─────────────────────┼──────────────────┤
-//	│ env          │ ✓              │ ✓           │ ✓                   │ ✓                │
-//	│ template     │ ✓              │ ✓           │ ✓                   │ ✓                │
-//	│ singleValue  │ ✓              │ ✗           │ ✗                   │ ✓                │
-//	│ multiValues  │ ✓              │ ✗           │ ✗                   │ ✓                │
-//	│ evals        │ ✓              │ ✓ (Copy)    │ ✓ (transfer+pool)   │ ✓ (no copy)      │
-//	│ pc           │ ✓ (+offset)    │ ✓           │ ✓                   │ ✓                │
-//	│ threadID     │ ✓              │ ✗           │ ✗                   │ ✗                │
-//	│ windingStack │ ✗              │ ✗           │ ✗                   │ ✗                │
-//	│ promptTag    │ ✗              │ ✗           │ ✗                   │ ✗                │
-//	│ callDepth    │ ✓              │ ✓ (saved)   │ ✓ (saved)           │ ✗                │
-//	│ envPooled    │ ✓              │ ✗ (=false)  │ ✓ or false(shared)  │ ✓                │
-//	│ marks        │ ✓              │ ✓           │ ✓                   │ ✓                │
-//	└──────────────┴────────────────┴─────────────┴─────────────────────┴──────────────────┘
+// The authority for the per-(site, field) discipline is a single reviewed data
+// table, contDescriptor in continuation_descriptor_test.go, driven against the real
+// method bodies by the oracle in continuation_descriptor_oracle_test.go. It covers
+// all six sites — NewMachineContinuationFromMachineContext, SaveContinuation,
+// Restore, RestoreAndRelease, PopContinuation, and Copy — and every field here plus
+// the MachineContinuation-only fields (parent, shared, promptHandler, inlineEvals).
+// See plans/2026-07-02-continuation-vmstate-descriptor-oracle.md. Do not re-inline
+// a summary grid here: the ASCII table formerly at this spot drifted (it omitted
+// Copy, and the barrierValid/promptHandler/inlineEvals/shared fields entirely).
 type vmState struct {
 	env      *environment.EnvironmentFrame
 	template *NativeTemplate

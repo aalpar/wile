@@ -151,102 +151,27 @@ func TestVmState(t *testing.T) {
 	}
 }
 
-// vmStateFieldCoverage documents how each transfer operation handles every
-// vmState field. When a field is added to vmState, this table must be updated
-// for every operation — the test below enforces this via reflection.
+// vmStateFieldCoverage documents how the two CONSTRUCTION paths handle every
+// vmState field. When a field is added to vmState, this table must be updated for
+// both — the test below enforces this via reflection.
+//
+// SCOPE (D-d): the six save/restore/copy sites
+// (NewMachineContinuationFromMachineContext, SaveContinuation, Restore,
+// RestoreAndRelease, PopContinuation, Copy) formerly lived here as inert strings
+// that nothing verified — the PopContinuation "transfer" cell even lied (the code
+// aliases evals without relinquishing: a SHARE). They now live in contDescriptor
+// (continuation_descriptor_test.go), driven against the real methods by the oracle
+// (continuation_descriptor_oracle_test.go). Only NewMachineContext and
+// NewSubContext remain here: they are construction paths, not save/restore
+// transitions, and the oracle does not drive them. See
+// plans/2026-07-02-continuation-vmstate-descriptor-oracle.md.
 //
 // Values describe the handling semantics:
 //
 //	"copy"          — field value copied directly
-//	"copy+offset"   — copied with arithmetic adjustment
-//	"clone"         — deep/shallow copy (slices, marks)
-//	"transfer"      — ownership moved, source zeroed
-//	"conditional"   — behavior depends on runtime state (e.g., shared flag)
 //	"derived"       — computed from other state, not copied directly
-//	"skip"          — intentionally not transferred
 //	"zero"          — receives Go zero value (fresh struct)
-//	"force false"   — explicitly set to false regardless of source
 var vmStateFieldCoverage = map[string]map[string]string{
-	// NewMachineContinuationFromMachineContext: mc → continuation (SaveContinuation path)
-	"NewMachineContinuationFromMachineContext": {
-		"barrierValid": "copy (stamp current barrier onto the saved frame)",
-		"env":          "copy",
-		"template":     "copy",
-		"singleValue":  "copy",
-		"multiValues":  "copy",
-		"evals":        "copy (alias; caller decides inline vs transfer)",
-		"pc":           "copy+offset",
-		"windingStack": "skip (not saved per-frame)",
-		"promptTag":    "skip (not saved per-frame)",
-		"threadID":     "copy",
-		"callDepth":    "derived (from mc.cont parent chain)",
-		"envPooled":    "copy",
-		"marks":        "copy (SaveContinuation nils mc.marks after)",
-	},
-	// Restore: continuation → mc (call/cc re-entry, composable continuation)
-	"Restore": {
-		"barrierValid": "copy (restore the barrier the frame was created under)",
-		"env":          "copy",
-		"template":     "copy",
-		"singleValue":  "skip (caller's value preserved)",
-		"multiValues":  "skip (caller's value preserved)",
-		"evals":        "clone (must copy for re-invocation safety)",
-		"pc":           "copy",
-		"windingStack": "skip (winding restored separately)",
-		"promptTag":    "skip (prompt context unchanged)",
-		"threadID":     "skip (invoking thread keeps its own)",
-		"callDepth":    "copy (from continuation's cached depth)",
-		"envPooled":    "force false (shared continuation, env must not be pooled)",
-		"marks":        "clone",
-	},
-	// RestoreAndRelease: continuation → mc (normal function return fast path)
-	"RestoreAndRelease": {
-		"barrierValid": "copy (before the shared/unshared branch)",
-		"env":          "copy",
-		"template":     "copy",
-		"singleValue":  "skip (caller's value preserved)",
-		"multiValues":  "skip (caller's value preserved)",
-		"evals":        "conditional (transfer if unshared, clone if shared)",
-		"pc":           "copy",
-		"windingStack": "skip (winding restored separately)",
-		"promptTag":    "skip (prompt context unchanged)",
-		"threadID":     "skip (invoking thread keeps its own)",
-		"callDepth":    "copy",
-		"envPooled":    "conditional (from cont if unshared, force false if shared)",
-		"marks":        "conditional (transfer if unshared, clone if shared)",
-	},
-	// PopContinuation: continuation → mc (used by Run loop after RestoreContinuation opcode)
-	"PopContinuation": {
-		"barrierValid": "copy",
-		"env":          "copy",
-		"template":     "copy",
-		"singleValue":  "copy",
-		"multiValues":  "copy",
-		"evals":        "transfer (no copy; continuation consumed once)",
-		"pc":           "copy",
-		"windingStack": "skip (not per-frame)",
-		"promptTag":    "skip (not per-frame)",
-		"threadID":     "skip (thread identity unchanged)",
-		"callDepth":    "derived (decremented before pop)",
-		"envPooled":    "copy",
-		"marks":        "transfer",
-	},
-	// Copy: continuation → continuation (for DeepCopy, SliceContinuationAt)
-	"Copy": {
-		"barrierValid": "copy",
-		"env":          "copy",
-		"template":     "copy",
-		"singleValue":  "copy",
-		"multiValues":  "clone (slices.Clone)",
-		"evals":        "conditional (evals.Copy if non-nil, else nil)",
-		"pc":           "copy",
-		"windingStack": "conditional (windingStack.Copy if non-empty)",
-		"promptTag":    "copy",
-		"threadID":     "copy",
-		"callDepth":    "copy",
-		"envPooled":    "zero (false; copy shares env, must not release)",
-		"marks":        "clone",
-	},
 	// NewMachineContext: continuation → mc (top-level context creation)
 	"NewMachineContext": {
 		"barrierValid": "zero (no barrier at top level)",
