@@ -15,7 +15,6 @@
 package registry
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -84,12 +83,12 @@ func init() {
 	}
 	for _, c := range checks {
 		if c.p < 0 || int(c.p) >= phaseSetBits {
-			panic(fmt.Sprintf(
+			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 				"registry: environment.Phase%s = %d is not representable in PhaseSet (bits 0..%d)",
 				c.name, c.p, phaseSetBits-1))
 		}
 		if c.bit != PhaseSet(1<<uint(c.p)) {
-			panic(fmt.Sprintf(
+			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 				"registry: PhaseSet%s = %d does not match 1<<environment.Phase%s (=%d)",
 				c.name, c.bit, c.name, 1<<uint(c.p)))
 		}
@@ -98,7 +97,7 @@ func init() {
 	// PhaseTemplate must remain unrepresentable in a PhaseSet — its
 	// negative value is the load-bearing invariant for With/Has guards.
 	if environment.PhaseTemplate >= 0 {
-		panic(fmt.Sprintf(
+		panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 			"registry: environment.PhaseTemplate must be negative to remain unrepresentable in PhaseSet (got %d)",
 			environment.PhaseTemplate))
 	}

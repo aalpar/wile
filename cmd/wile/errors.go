@@ -14,26 +14,12 @@
 
 package main
 
+// Exit codes from BSD sysexits.h. Only the codes actually used by the CLI are
+// defined here; the full sysexits table (EX_USAGE, EX_DATAERR, ...) was unused
+// and removed. Add a code back from sysexits.h when a caller needs it. Note
+// that not every exit path uses a sysexits code — Failf and several argument-
+// parsing errors exit with a plain 1.
 const (
-	EX_OK    = 0  /* successful termination */
-	EX__BASE = 64 /* base value for error messages */
-	EX__MAX  = 78 /* maximum listed value */
-)
-
-const (
-	EX_USAGE       = EX__BASE + iota /* command line usage error */
-	EX_DATAERR                       /* data format error */
-	EX_NOINPUT                       /* cannot open input */
-	EX_NOUSER                        /* addressee unknown */
-	EX_NOHOST                        /* host name unknown */
-	EX_UNAVAILABLE                   /* service unavailable */
-	EX_SOFTWARE                      /* internal software error */
-	EX_OSERR                         /* system error (e.g., can't fork) */
-	EX_OSFILE                        /* critical OS file missing */
-	EX_CANTCREAT                     /* can't create (user) output file */
-	EX_IOERR                         /* input/output error */
-	EX_TEMPFAIL                      /* temp failure; user is invited to retry */
-	EX_PROTOCOL                      /* remote error in protocol */
-	EX_NOPERM                        /* permission denied */
-	EX_CONFIG                        /* configuration error */
+	EX_OK    = 0  // successful termination
+	EX_IOERR = 74 // input/output error
 )

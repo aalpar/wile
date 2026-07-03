@@ -253,31 +253,16 @@ func (p *MachineContinuation) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo compares by identity. A MachineContinuation is an internal
+// continuation-chain node, never surfaced to Scheme equal?/eqv? (first-class
+// continuations are *CapturedContinuation / *ComposableContinuation), so two
+// distinct nodes are never "equal" in any observable sense. The former
+// field-by-field comparison was structurally unsound (it mixed pointer-equal
+// parent checks with value comparison of the rest) and effectively dead.
 func (p *MachineContinuation) EqualTo(o values.Value) bool {
 	v, ok := o.(*MachineContinuation)
 	if !ok {
 		return false
 	}
-	if p == v {
-		return true
-	}
-	if p == nil || v == nil {
-		return p == v
-	}
-	if p.parent != v.parent {
-		return false
-	}
-	if p.env == nil || v.env == nil {
-		return p.env == v.env
-	}
-	if p.evals != v.evals {
-		return false
-	}
-	if p.template != v.template {
-		return false
-	}
-	if p.pc != v.pc {
-		return false
-	}
-	return true
+	return p == v
 }

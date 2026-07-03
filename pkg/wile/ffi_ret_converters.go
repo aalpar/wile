@@ -23,6 +23,14 @@ import (
 
 // makeRetConverter creates a converter for a single Go return type.
 // Converters are recursive for composite types (slices, maps, structs).
+//
+// The supported set is deliberately narrower than makeArgConverter's: the
+// argument side additionally accepts complex128 (→ Scheme complex) and func
+// (→ callable), which the return side does not. Returning those would require
+// synthesizing a Scheme complex / closure from a Go value, which is
+// unimplemented pending demand. A function returning an unsupported type fails
+// at RegisterFunc time (default arm below), not at call time, so the asymmetry
+// surfaces immediately at registration rather than as a runtime surprise.
 func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
 	// Only accept the exact wile.Value interface type. This avoids panics
 	// from typed-nil returns and keeps the API surface predictable.

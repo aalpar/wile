@@ -17,7 +17,6 @@ package io
 import (
 	"os"
 	"sync"
-	"time"
 
 	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/machine"
@@ -53,8 +52,6 @@ var (
 	//
 	// Thread safety: All access must be protected by cacheMu.
 	Parsers map[values.Value]*parser.Parser
-	// ProgramStartTime is used for current-jiffy to measure elapsed time.
-	ProgramStartTime = time.Now()
 
 	// stateMu protects concurrent access to stateInitialized flag and initialization.
 	stateMu sync.Mutex

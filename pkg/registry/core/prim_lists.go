@@ -38,15 +38,28 @@ func PrimList(mc machine.CallContext) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "list: expected a list but got %T", o)
 	}
-	var elems []values.Value
-	err := helpers.ForEachList(mc.Context(), t, "list", func(_ context.Context, _ int, _ bool, v values.Value) error {
-		elems = append(elems, v)
+	// Count then block-fill: one PairBlock for the whole spine, no
+	// intermediate slice. Both spine walks are allocation-free. Mirrors
+	// PrimReverse (front-to-back fill instead of back-to-front).
+	n := 0
+	err := helpers.ForEachList(mc.Context(), t, "list", func(_ context.Context, _ int, _ bool, _ values.Value) error {
+		n++
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.List(elems...))
+	block := make(values.PairBlock, n).LinkSpine()
+	i := 0
+	err = helpers.ForEachList(mc.Context(), t, "list", func(_ context.Context, _ int, _ bool, v values.Value) error {
+		block[i][0] = v
+		i++
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	mc.SetValue(&block[0])
 	return nil
 }
 

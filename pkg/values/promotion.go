@@ -15,7 +15,6 @@
 package values
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 	"sync"
@@ -277,12 +276,12 @@ func validatePromotionTable() {
 			}
 			lub := promotionTable[src][dst]
 			if promoter[src][lub] == nil {
-				panic(fmt.Sprintf(
+				panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
 					src, lub, src, dst, lub))
 			}
 			if promoter[dst][lub] == nil {
-				panic(fmt.Sprintf(
+				panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
 					dst, lub, src, dst, lub))
 			}

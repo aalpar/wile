@@ -177,56 +177,30 @@ func TestMachineContinuation_IsVoid(t *testing.T) {
 	qt.Assert(t, nilCont.IsVoid(), qt.IsTrue)
 }
 
+// TestMachineContinuation_EqualTo verifies identity comparison: a
+// MachineContinuation equals only itself. Two distinct nodes are never equal,
+// even with identical fields, because EqualTo is pointer identity.
 func TestMachineContinuation_EqualTo(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont1 := NewMachineContinuation(nil, tpl, env)
-	cont2 := cont1 // Same object
-	cont3 := NewMachineContinuation(nil, tpl, env)
 
-	// Same object
-	qt.Assert(t, cont1.EqualTo(cont2), qt.IsTrue)
+	// Same object.
+	qt.Assert(t, cont1.EqualTo(cont1), qt.IsTrue)
 
-	// Different objects with same fields - different evals stacks
-	qt.Assert(t, cont1.EqualTo(cont3), qt.IsFalse)
+	// A distinct node with identical fields is not equal (identity, not value).
+	cont2 := NewMachineContinuation(nil, tpl, env)
+	qt.Assert(t, cont1.EqualTo(cont2), qt.IsFalse)
 
-	// Different type
+	// Different Value type.
 	qt.Assert(t, cont1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 
-	// Nil comparison
+	// Nil receiver: equal to nil, unequal to non-nil.
 	var nilCont *MachineContinuation
 	qt.Assert(t, nilCont.EqualTo(nilCont), qt.IsTrue)
-
-	// Different pc
-	cont4 := NewMachineContinuation(nil, tpl, env)
-	cont4.pc = 10
-	qt.Assert(t, cont1.EqualTo(cont4), qt.IsFalse)
-
-	// Different parent
-	parent := NewMachineContinuation(nil, nil, env)
-	cont5 := &MachineContinuation{
-		vmState: vmState{
-			env:      cont1.env,
-			template: cont1.template,
-			evals:    cont1.evals,
-			pc:       cont1.pc,
-		},
-		parent: parent,
-	}
-	qt.Assert(t, cont1.EqualTo(cont5), qt.IsFalse)
-
-	// Different template
-	tpl2 := NewNativeTemplate(3, 0, false)
-	cont6 := &MachineContinuation{
-		vmState: vmState{
-			env:      cont1.env,
-			template: tpl2,
-			evals:    cont1.evals,
-			pc:       cont1.pc,
-		},
-	}
-	qt.Assert(t, cont1.EqualTo(cont6), qt.IsFalse)
+	qt.Assert(t, cont1.EqualTo(nilCont), qt.IsFalse)
+	qt.Assert(t, nilCont.EqualTo(cont1), qt.IsFalse)
 }
 
 // Tests moved from coverage_additional_test.go
@@ -281,21 +255,6 @@ func TestMachineContinuationMethods(t *testing.T) {
 
 	var nilCont *MachineContinuation
 	qt.Assert(t, nilCont.IsVoid(), qt.IsTrue)
-}
-
-// TestMachineContinuationEqualToDifferentTemplates tests continuation equality with different templates
-func TestMachineContinuationEqualToDifferentTemplates(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	tpl := NewNativeTemplate(0, 0, false)
-	tpl.AppendOperations(NewOperationRestoreContinuation())
-	cont := NewMachineContinuation(nil, tpl, env)
-
-	// Test with different templates
-	tpl2 := NewNativeTemplate(1, 1, true)
-	litIdx := tpl2.MaybeAppendLiteral(values.NewInteger(1))
-	tpl2.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx), NewOperationRestoreContinuation())
-	cont2 := NewMachineContinuation(nil, tpl2, env)
-	qt.Assert(t, cont.EqualTo(cont2), qt.IsFalse) // Different templates
 }
 
 // --- DeepCopy tests ---

@@ -262,13 +262,16 @@ func init() {
 	// Verify all slots are populated — catches missing entries when new types are added.
 	for i := range TypeCount {
 		if typeNames[i] == "" {
-			panic("values: missing typeNames entry for ValueType " + fmt.Sprint(i))
+			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+				"values: missing typeNames entry for ValueType %d", i))
 		}
 		if typeDescriptions[i] == "" {
-			panic("values: missing typeDescriptions entry for ValueType " + fmt.Sprint(i))
+			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+				"values: missing typeDescriptions entry for ValueType %d", i))
 		}
 		if checks[i] == nil {
-			panic("values: missing Check function for ValueType " + typeNames[i])
+			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+				"values: missing Check function for ValueType %s", typeNames[i]))
 		}
 	}
 
