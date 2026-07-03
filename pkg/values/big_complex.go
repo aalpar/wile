@@ -494,6 +494,54 @@ func (p *BigComplex) Phase() *BigFloat {
 	return NewBigFloatFromFloat64(phase)
 }
 
+// Sqrt returns the principal square root at big.Float precision, honoring the
+// R7RS §6.2.6 branch cut along the negative real axis (continuous with
+// quadrant II: the negative real axis maps to the positive imaginary axis).
+// It uses the numerically stable formulation that derives the smaller component
+// from the larger via division, avoiding catastrophic cancellation. Computing
+// with big.Float instead of truncating to complex128 keeps components beyond
+// the float64 range (~1.8e308) from overflowing the result to +inf.
+func (p *BigComplex) Sqrt() *BigComplex {
+	prec := uint(DefaultBigFloatPrecision)
+	a := new(big.Float).SetPrec(prec).Set(toBigFloat(p.real).value)
+	b := new(big.Float).SetPrec(prec).Set(toBigFloat(p.imag).value)
+	two := new(big.Float).SetPrec(prec).SetInt64(2)
+
+	// Zero imaginary part: the result stays on an axis. The negative real axis
+	// maps to the positive imaginary axis per the R7RS branch cut.
+	if b.Sign() == 0 {
+		if a.Sign() >= 0 {
+			re := new(big.Float).SetPrec(prec).Sqrt(a)
+			return NewBigComplexFromBigFloats(&BigFloat{value: re}, NewBigFloatFromFloat64(0))
+		}
+		negA := new(big.Float).SetPrec(prec).Neg(a)
+		im := new(big.Float).SetPrec(prec).Sqrt(negA)
+		return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), &BigFloat{value: im})
+	}
+
+	r := new(big.Float).SetPrec(prec).Set(p.Magnitude().value)
+
+	if a.Sign() >= 0 {
+		// re = sqrt((|z| + a)/2); im = b / (2·re).
+		sum := new(big.Float).SetPrec(prec).Add(r, a)
+		sum.Quo(sum, two)
+		re := new(big.Float).SetPrec(prec).Sqrt(sum)
+		twoRe := new(big.Float).SetPrec(prec).Mul(two, re)
+		im := new(big.Float).SetPrec(prec).Quo(b, twoRe)
+		return NewBigComplexFromBigFloats(&BigFloat{value: re}, &BigFloat{value: im})
+	}
+	// a < 0: im = sign(b)·sqrt((|z| − a)/2); re = b / (2·im).
+	diff := new(big.Float).SetPrec(prec).Sub(r, a)
+	diff.Quo(diff, two)
+	im := new(big.Float).SetPrec(prec).Sqrt(diff)
+	if b.Sign() < 0 {
+		im.Neg(im)
+	}
+	twoIm := new(big.Float).SetPrec(prec).Mul(two, im)
+	re := new(big.Float).SetPrec(prec).Quo(b, twoIm)
+	return NewBigComplexFromBigFloats(&BigFloat{value: re}, &BigFloat{value: im})
+}
+
 // Conjugate returns the complex conjugate (a-bi for a+bi).
 func (p *BigComplex) Conjugate() *BigComplex {
 	return NewBigComplex(p.real, p.imag.Negate())
@@ -533,9 +581,21 @@ func (p *BigComplex) EqualTo(o Value) bool {
 		// Check if equal to regular Complex
 		c, ok := o.(*Complex)
 		if ok {
-			pReal := toBigFloat(p.real).Float64Truncated()
-			pImag := toBigFloat(p.imag).Float64Truncated()
-			return pReal == real(c.Value) && pImag == imag(c.Value)
+			// Promote the Complex's float64 components to big precision rather
+			// than truncating this BigComplex, so two values differing only
+			// below float64 precision compare unequal.
+			cReal := real(c.Value)
+			cImag := imag(c.Value)
+			// NaN never equals anything; guard here because
+			// NewBigFloatFromFloat64 folds NaN into a NaN BigFloat that would
+			// otherwise compare via Compare's nan==0 path.
+			if math.IsNaN(cReal) || math.IsNaN(cImag) || p.IsNaN() {
+				return false
+			}
+			// big.Float represents ±Inf and Compare (via big.Float.Cmp) orders
+			// it correctly, so a finite component never matches an infinite one.
+			return toBigFloat(p.real).Compare(NewBigFloatFromFloat64(cReal)) == 0 &&
+				toBigFloat(p.imag).Compare(NewBigFloatFromFloat64(cImag)) == 0
 		}
 		return false
 	}

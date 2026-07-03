@@ -425,6 +425,110 @@ func TestBigComplex_EqualTo(t *testing.T) {
 	c.Assert(bc1.EqualTo(values.NewInteger(3)), qt.IsFalse)
 }
 
+// TestBigComplex_EqualTo_StrictBeyondFloat64 guards the BigComplex<->Complex
+// comparison against the pre-existing bug where BigComplex.EqualTo truncated its
+// own components to float64 before comparing, so two values differing only below
+// float64 precision compared equal. The real part 1 + 2^-60 rounds to exactly
+// 1.0 in float64 (float64 ULP near 1 is 2^-52), so the truncating comparison
+// wrongly returned true. The fix promotes the Complex components to big.Float
+// and compares at full precision. See TODO site (5).
+func TestBigComplex_EqualTo_StrictBeyondFloat64(t *testing.T) {
+	c := qt.New(t)
+
+	// realNear = (2^60 + 1) / 2^60 = 1 + 2^-60, indistinguishable from 1.0 in
+	// float64 but distinct as an exact rational.
+	den := new(big.Int).Lsh(big.NewInt(1), 60)
+	num := new(big.Int).Add(den, big.NewInt(1))
+	realNear := values.NewRationalFromBigInt(num, den)
+	bcNear := values.NewBigComplex(realNear, values.NewBigIntegerFromInt64(0))
+	cplxOne := values.NewComplexFromParts(1.0, 0.0)
+
+	// Differ below float64 precision: must be unequal in both directions.
+	c.Assert(bcNear.EqualTo(cplxOne), qt.IsFalse)
+	c.Assert(cplxOne.EqualTo(bcNear), qt.IsFalse)
+
+	// A genuinely equal, exactly-representable value stays equal (hash/equality
+	// contract preserved for the representable case).
+	bcOne := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(0))
+	c.Assert(bcOne.EqualTo(cplxOne), qt.IsTrue)
+	c.Assert(cplxOne.EqualTo(bcOne), qt.IsTrue)
+
+	// A huge but finite BigComplex component (>float64 range) must NOT compare
+	// equal to an infinite Complex — regression guard for the Inf branch that
+	// previously truncated the big component to +Inf before comparing.
+	big10e400 := new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil)
+	bcHuge := values.NewBigComplexFromBigIntegers(values.NewBigInteger(big10e400), values.NewBigIntegerFromInt64(0))
+	cplxInf := values.NewComplexFromParts(math.Inf(1), 0.0)
+	c.Assert(bcHuge.EqualTo(cplxInf), qt.IsFalse)
+	c.Assert(cplxInf.EqualTo(bcHuge), qt.IsFalse)
+
+	// NaN never equals anything, in either direction.
+	cplxNaN := values.NewComplexFromParts(math.NaN(), 0.0)
+	c.Assert(bcOne.EqualTo(cplxNaN), qt.IsFalse)
+	c.Assert(cplxNaN.EqualTo(bcOne), qt.IsFalse)
+}
+
+// TestBigComplex_Sqrt guards (*BigComplex).Sqrt across every branch of the
+// closed form: the four quadrant sign combinations of (a, b) and the two b==0
+// axis cases (including the R7RS §6.2.6 branch cut that maps the negative real
+// axis to the positive imaginary axis). The b==0 cases are unreachable from
+// Scheme because make-rectangular collapses a zero-imaginary value to a real,
+// so only a values-level test exercises them. See TODO site (2).
+func TestBigComplex_Sqrt(t *testing.T) {
+	c := qt.New(t)
+
+	// z given as (real, imag) integer parts; sqrt(z) expected as (wantRe, wantIm).
+	// Each squares back to z: (3±4i)^2 = -7±24i, (4±3i)^2 = 7±24i.
+	tcs := []struct {
+		name           string
+		re, im         int64
+		wantRe, wantIm float64
+	}{
+		{"a>=0 b>0: 7+24i -> 4+3i", 7, 24, 4, 3},
+		{"a>=0 b<0: 7-24i -> 4-3i", 7, -24, 4, -3},
+		{"a<0 b>0: -7+24i -> 3+4i", -7, 24, 3, 4},
+		{"a<0 b<0: -7-24i -> 3-4i", -7, -24, 3, -4},
+		{"b==0 a>=0: 9+0i -> 3+0i", 9, 0, 3, 0},
+		// Branch cut: sqrt of a negative real is +i*sqrt(|a|), not -i.
+		{"b==0 a<0 (branch cut): -4+0i -> 0+2i", -4, 0, 0, 2},
+		{"zero: 0+0i -> 0+0i", 0, 0, 0, 0},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			z := values.NewBigComplexFromBigIntegers(
+				values.NewBigIntegerFromInt64(tc.re),
+				values.NewBigIntegerFromInt64(tc.im),
+			)
+			root := z.Sqrt()
+			c.Assert(math.Abs(root.RealAsBigFloat().Float64Truncated()-tc.wantRe) < 1e-9, qt.IsTrue)
+			c.Assert(math.Abs(root.ImagAsBigFloat().Float64Truncated()-tc.wantIm) < 1e-9, qt.IsTrue)
+		})
+	}
+
+	// Components beyond float64 range: result stays finite (no +inf overflow),
+	// and squares back to the input (relative error tiny at big precision).
+	big10e400 := new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil)
+	huge := values.NewBigComplexFromBigIntegers(
+		values.NewBigInteger(big10e400),
+		values.NewBigInteger(big10e400),
+	)
+	hugeRoot := huge.Sqrt()
+	c.Assert(math.IsInf(hugeRoot.RealAsBigFloat().Float64Truncated(), 0), qt.IsFalse)
+	c.Assert(math.IsInf(hugeRoot.ImagAsBigFloat().Float64Truncated(), 0), qt.IsFalse)
+	// Value check at a scale where Float64Truncated would overflow: sqrt(z)^2
+	// must reproduce z. Assert per-component relative error is negligible, so a
+	// wrong-but-finite result cannot pass (unlike the !IsInf checks above).
+	sq := hugeRoot.Multiply(hugeRoot).(*values.BigComplex)
+	relErr := func(got, want *values.BigFloat) *big.Float {
+		d := new(big.Float).Sub(got.BigFloatValue(), want.BigFloatValue())
+		d.Abs(d)
+		return d.Quo(d, new(big.Float).Abs(want.BigFloatValue()))
+	}
+	threshold := big.NewFloat(1e-50)
+	c.Assert(relErr(sq.RealAsBigFloat(), huge.RealAsBigFloat()).Cmp(threshold) < 0, qt.IsTrue)
+	c.Assert(relErr(sq.ImagAsBigFloat(), huge.ImagAsBigFloat()).Cmp(threshold) < 0, qt.IsTrue)
+}
+
 // TestComplex_EqualTo_SymmetricWithBigComplex pins R7RS equality symmetry
 // across the Complex/BigComplex kinds: (equal? a b) must not flip with operand
 // order. Complex.EqualTo previously matched only *Complex and returned false

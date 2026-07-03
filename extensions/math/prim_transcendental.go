@@ -198,10 +198,9 @@ func PrimSqrt(mc machine.CallContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewComplex(complexSqrtR7RS(v.Value)))
 	case *values.BigComplex:
-		// Convert BigComplex to complex128 and compute sqrt
-		realF := v.RealAsBigFloat().Float64Truncated()
-		imagF := v.ImagAsBigFloat().Float64Truncated()
-		mc.SetValue(values.NewComplex(complexSqrtR7RS(complex(realF, imagF))))
+		// Compute at big.Float precision; truncating to complex128 first
+		// overflows to +inf when a component exceeds the float64 range.
+		mc.SetValue(v.Sqrt())
 	default:
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}

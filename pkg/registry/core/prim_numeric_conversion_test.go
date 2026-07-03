@@ -128,14 +128,17 @@ func TestSqrtExtended(t *testing.T) {
 	})
 
 	t.Run("sqrt of complex number", func(t *testing.T) {
-		// 0+2i is a genuine complex; sqrt(2i) = 1+i. (1+0i would collapse to the
-		// exact real 1 per R7RS §6.2.1, so it no longer exercises the complex path.)
+		// 0+2i is a genuine (exact) complex; sqrt(2i) = 1+i. It reads as an exact
+		// BigComplex, and sqrt preserves the argument's precision tier — a
+		// BigComplex in yields a BigComplex out (mirroring magnitude → BigFloat).
+		// The float64-tier *Complex result the old code returned was a side effect
+		// of truncating to complex128, which overflowed to +inf on large inputs.
 		result, err := testhelpers.RunSchemeCode(t, "(sqrt 0+2i)")
 		qt.Assert(t, err, qt.IsNil)
-		complexResult, ok := result.(*values.Complex)
+		bcResult, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, real(complexResult.Value), qt.Equals, 1.0)
-		qt.Assert(t, imag(complexResult.Value), qt.Equals, 1.0)
+		qt.Assert(t, math.Abs(bcResult.RealAsBigFloat().Float64Truncated()-1.0) < 1e-9, qt.IsTrue)
+		qt.Assert(t, math.Abs(bcResult.ImagAsBigFloat().Float64Truncated()-1.0) < 1e-9, qt.IsTrue)
 	})
 
 	t.Run("sqrt of zero", func(t *testing.T) {

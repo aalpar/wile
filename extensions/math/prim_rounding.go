@@ -16,6 +16,7 @@ package math
 
 import (
 	"math"
+	"math/big"
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -23,13 +24,26 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// realNumberOp and makeRealNumberPrimitive for floor/ceiling/truncate/round
+// roundMode selects the rounding direction for floor/ceiling/truncate/round.
+// The exact (Rational) and big.Float (BigFloat) paths share these modes so that
+// rounding never round-trips through float64, which would drop digits beyond
+// float64 precision and overflow the int64 cast on large magnitudes.
+type roundMode int
+
+const (
+	roundFloor roundMode = iota
+	roundCeiling
+	roundTruncate
+	roundNearestEven
+)
+
+// realNumberOp and makeRealNumberPrimitive for floor/ceiling/truncate/round.
+// floatOp is the float64-native rounding used for Float inputs; mode drives the
+// exact (Rational) and big.Float (BigFloat) paths.
 type realNumberOp struct {
-	name         string
-	integerOp    func(*values.Integer) values.Value
-	bigIntegerOp func(*values.BigInteger) values.Value
-	floatOp      func(float64) float64
-	rationalOp   func(*values.Rational) values.Value
+	name    string
+	mode    roundMode
+	floatOp func(float64) float64
 }
 
 func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
@@ -37,19 +51,15 @@ func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
 		o := mc.Arg(0)
 		switch v := o.(type) {
 		case *values.Integer:
-			mc.SetValue(op.integerOp(v))
+			mc.SetValue(v) // rounding an integer is identity
 		case *values.BigInteger:
-			if op.bigIntegerOp != nil {
-				mc.SetValue(op.bigIntegerOp(v))
-			} else {
-				mc.SetValue(values.NewFloat(op.floatOp(v.ToInexact().(*values.Float).Value)))
-			}
+			mc.SetValue(v) // rounding an integer is identity, and stays exact
 		case *values.Float:
 			mc.SetValue(values.NewFloat(op.floatOp(v.Value)))
 		case *values.BigFloat:
-			mc.SetValue(values.NewBigFloatFromFloat64(op.floatOp(v.Float64Truncated())))
+			mc.SetValue(roundBigFloat(v, op.mode))
 		case *values.Rational:
-			mc.SetValue(op.rationalOp(v))
+			mc.SetValue(roundRational(v, op.mode))
 		default:
 			return werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", op.name, o)
 		}
@@ -57,45 +67,87 @@ func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
 	}
 }
 
-func integerPassthrough(v *values.Integer) values.Value {
-	return v
+// roundRational rounds an exact rational to an exact integer per mode.
+// R7RS §6.2.6: floor/ceiling/truncate/round on an exact input return an exact
+// integer.
+func roundRational(v *values.Rational, mode roundMode) values.Value {
+	return exactIntValue(roundRatToInt(v.Rat(), mode))
 }
 
-// rationalToInteger returns an exact integer for exact rational inputs.
-// R7RS §6.2.6: floor, ceiling, truncate, round return integers.
-// When the input is exact (like a rational), the result must also be exact.
-func rationalToInteger(f func(float64) float64) func(*values.Rational) values.Value {
-	return func(v *values.Rational) values.Value {
-		return values.NewInteger(int64(f(v.Float64Truncated())))
+// roundBigFloat rounds an inexact BigFloat to an integer-valued BigFloat per
+// mode, computing at the input's precision instead of truncating to float64.
+func roundBigFloat(v *values.BigFloat, mode roundMode) values.Value {
+	bf := v.BigFloatValue()
+	if bf.IsInf() {
+		return v // floor/ceiling/truncate/round of ±inf is ±inf
 	}
+	// A BigFloat is an exact dyadic rational, so round it exactly then re-widen.
+	r, _ := bf.Rat(nil)
+	rounded := new(big.Float).SetPrec(bf.Prec()).SetInt(roundRatToInt(r, mode))
+	return values.NewBigFloat(rounded)
+}
+
+// roundRatToInt rounds a big.Rat to a big.Int per mode. den is always positive
+// for a normalized big.Rat, so DivMod yields the floor and a modulus in
+// [0, den); the other modes adjust from there. roundNearestEven implements
+// R7RS round-to-even.
+func roundRatToInt(r *big.Rat, mode roundMode) *big.Int {
+	num := r.Num()
+	den := r.Denom()
+	f := new(big.Int)
+	m := new(big.Int)
+	f.DivMod(num, den, m) // f = floor(num/den); 0 <= m < den
+
+	switch mode {
+	case roundCeiling:
+		if m.Sign() != 0 {
+			f.Add(f, big.NewInt(1))
+		}
+	case roundTruncate:
+		// Toward zero: floor overshoots by one for negatives with a fraction.
+		if num.Sign() < 0 && m.Sign() != 0 {
+			f.Add(f, big.NewInt(1))
+		}
+	case roundNearestEven:
+		twoM := new(big.Int).Lsh(m, 1)
+		cmp := twoM.Cmp(den)
+		if cmp > 0 || (cmp == 0 && f.Bit(0) == 1) {
+			f.Add(f, big.NewInt(1))
+		}
+	}
+	return f
+}
+
+// exactIntValue wraps a big.Int as the narrowest exact integer value.
+func exactIntValue(i *big.Int) values.Value {
+	if i.IsInt64() {
+		return values.NewInteger(i.Int64())
+	}
+	return values.NewBigInteger(i)
 }
 
 var PrimCeiling = makeRealNumberPrimitive(realNumberOp{
-	name:       "ceiling",
-	integerOp:  integerPassthrough,
-	floatOp:    math.Ceil,
-	rationalOp: rationalToInteger(math.Ceil),
+	name:    "ceiling",
+	mode:    roundCeiling,
+	floatOp: math.Ceil,
 })
 
 var PrimFloor = makeRealNumberPrimitive(realNumberOp{
-	name:       "floor",
-	integerOp:  integerPassthrough,
-	floatOp:    math.Floor,
-	rationalOp: rationalToInteger(math.Floor),
+	name:    "floor",
+	mode:    roundFloor,
+	floatOp: math.Floor,
 })
 
 var PrimTruncate = makeRealNumberPrimitive(realNumberOp{
-	name:       "truncate",
-	integerOp:  integerPassthrough,
-	floatOp:    math.Trunc,
-	rationalOp: rationalToInteger(math.Trunc),
+	name:    "truncate",
+	mode:    roundTruncate,
+	floatOp: math.Trunc,
 })
 
 var PrimRound = makeRealNumberPrimitive(realNumberOp{
-	name:       "round",
-	integerOp:  integerPassthrough,
-	floatOp:    math.RoundToEven,
-	rationalOp: rationalToInteger(math.RoundToEven),
+	name:    "round",
+	mode:    roundNearestEven,
+	floatOp: math.RoundToEven,
 })
 
 // divResult selects which values a real division primitive returns.

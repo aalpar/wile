@@ -203,10 +203,9 @@ func PrimMagnitude(mc machine.CallContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Abs(v.Value)))
 	case *values.BigComplex:
-		// Convert to float64 for magnitude calculation (transcendental operation via sqrt)
-		realF := v.RealAsBigFloat().Float64Truncated()
-		imagF := v.ImagAsBigFloat().Float64Truncated()
-		mc.SetValue(values.NewFloat(cmplx.Abs(complex(realF, imagF))))
+		// Compute at big.Float precision; truncating to float64 first overflows
+		// to +inf when a component exceeds the float64 range.
+		mc.SetValue(v.Magnitude())
 	case *values.Integer:
 		mc.SetValue(v.Abs())
 	case *values.BigInteger:

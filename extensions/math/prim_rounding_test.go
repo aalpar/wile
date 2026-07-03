@@ -68,6 +68,69 @@ func TestRounding(t *testing.T) {
 	}
 }
 
+// TestRoundingBigPrecision guards floor/ceiling/truncate/round against the
+// pre-existing float64 round-trip bug: BigInteger inputs collapsed to inexact
+// Float, large Rationals overflowed the int64 cast, and BigFloat inputs lost
+// digits beyond float64 precision before the rounding op applied. All four
+// operations must round at exact / big.Float precision instead. See TODO
+// "BigComplex precision-loss bugs" site (3).
+func TestRoundingBigPrecision(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	// 10^30 exceeds int64 (BigInteger); (2*10^20+1)/2 is an exact half-integer
+	// Rational whose integer part exceeds int64; (1.0 * 10^30) + 0.25 is a
+	// BigFloat whose fractional part is invisible to a float64 round-trip.
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// BigInteger: rounding an integer is identity and stays exact.
+		{"floor bigint identity", `(= (floor (expt 10 30)) (expt 10 30))`, values.TrueValue},
+		{"floor bigint exact", `(exact? (floor (expt 10 30)))`, values.TrueValue},
+		{"ceiling bigint identity", `(= (ceiling (expt 10 30)) (expt 10 30))`, values.TrueValue},
+		{"truncate bigint identity", `(= (truncate (expt 10 30)) (expt 10 30))`, values.TrueValue},
+		{"round bigint identity", `(= (round (expt 10 30)) (expt 10 30))`, values.TrueValue},
+
+		// Rational beyond int64: no overflow, exact integer result.
+		{"floor big rational", `(= (floor (/ (+ (* 2 (expt 10 20)) 1) 2)) (expt 10 20))`, values.TrueValue},
+		{"floor big rational exact", `(exact? (floor (/ (+ (* 2 (expt 10 20)) 1) 2)))`, values.TrueValue},
+		{"ceiling big rational", `(= (ceiling (/ (+ (* 2 (expt 10 20)) 1) 2)) (+ (expt 10 20) 1))`, values.TrueValue},
+		{"truncate big rational", `(= (truncate (/ (+ (* 2 (expt 10 20)) 1) 2)) (expt 10 20))`, values.TrueValue},
+		// 10^20 + 0.5 rounds to even -> 10^20 (even).
+		{"round big rational half-even", `(= (round (/ (+ (* 2 (expt 10 20)) 1) 2)) (expt 10 20))`, values.TrueValue},
+
+		// BigFloat: the 0.25 fraction survives 256-bit precision but a float64
+		// round-trip would drop it and reintroduce float64's 10^30 rounding error.
+		{"floor bigfloat precision", `(= (floor (+ (* 1.0 (expt 10 30)) 0.25)) (* 1.0 (expt 10 30)))`, values.TrueValue},
+		{"ceiling bigfloat precision", `(= (ceiling (+ (* 1.0 (expt 10 30)) 0.25)) (+ (* 1.0 (expt 10 30)) 1))`, values.TrueValue},
+		{"truncate bigfloat precision", `(= (truncate (+ (* 1.0 (expt 10 30)) 0.25)) (* 1.0 (expt 10 30)))`, values.TrueValue},
+		{"round bigfloat precision", `(= (round (+ (* 1.0 (expt 10 30)) 0.25)) (* 1.0 (expt 10 30)))`, values.TrueValue},
+		{"floor bigfloat inexact", `(inexact? (floor (+ (* 1.0 (expt 10 30)) 0.25)))`, values.TrueValue},
+
+		// Negative inputs: floor/ceiling diverge, truncate differs from floor,
+		// round-to-even's sign handling (Go DivMod yields a non-negative modulus).
+		{"floor negative rational", `(= (floor -7/2) -4)`, values.TrueValue},
+		{"ceiling negative rational", `(= (ceiling -7/2) -3)`, values.TrueValue},
+		{"truncate negative differs from floor", `(= (truncate -7/2) -3)`, values.TrueValue},
+		// Round-to-even across all three decision points, both signs.
+		{"round even stays", `(= (round 5/2) 2)`, values.TrueValue},    // 2.5 -> 2 (even)
+		{"round odd rounds up", `(= (round 7/2) 4)`, values.TrueValue}, // 3.5 -> 4 (even)
+		{"round past half", `(= (round 9/5) 2)`, values.TrueValue},     // 1.8 -> 2
+		{"round negative half to even", `(= (round -3/2) -2)`, values.TrueValue},
+		{"round negative half to zero", `(= (round -1/2) 0)`, values.TrueValue},
+		// Large negative Rational: exact, no int64 overflow, truncate != floor.
+		{"truncate large negative", `(= (truncate (/ (- 1 (* 2 (expt 10 20))) 2)) (- 1 (expt 10 20)))`, values.TrueValue},
+		{"truncate large negative exact", `(exact? (truncate (/ (- 1 (* 2 (expt 10 20))) 2)))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestIntegerDivision(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

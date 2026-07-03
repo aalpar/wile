@@ -254,3 +254,48 @@ func TestComplexEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestBigComplexTranscendentalPrecision guards magnitude and sqrt on BigComplex
+// against the pre-existing bug where both truncated the components to float64
+// before computing. When a component exceeds the float64 range (~1.8e308) the
+// truncation overflows to +inf, so the whole result collapsed to +inf even
+// though the true value is finite and representable. magnitude must route
+// through (*BigComplex).Magnitude and sqrt through (*BigComplex).Sqrt, both of
+// which stay at big.Float precision. See TODO "BigComplex precision-loss bugs"
+// sites (1) and (2). Site (4) (angle/Phase, big atan2) is deferred.
+func TestBigComplexTranscendentalPrecision(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	// make-rectangular of two exact parts yields a BigComplex; parts >1e308
+	// overflow a float64 truncation.
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// magnitude no longer overflows to +inf on huge components.
+		{"magnitude big finite", `(finite? (magnitude (make-rectangular (expt 10 400) (expt 10 400))))`, values.TrueValue},
+		// |0 + 10^400 i| = 10^400 exactly (at big precision).
+		{"magnitude big value", `(= (magnitude (make-rectangular 0 (expt 10 400))) (* 1.0 (expt 10 400)))`, values.TrueValue},
+		// magnitude of a small exact BigComplex still correct: |3+4i| = 5.
+		{"magnitude small exact", `(= (magnitude (make-rectangular 3 4)) 5)`, values.TrueValue},
+
+		// sqrt no longer overflows both components to +inf.
+		{"sqrt big real finite", `(finite? (real-part (sqrt (make-rectangular (expt 10 400) (expt 10 400)))))`, values.TrueValue},
+		{"sqrt big imag finite", `(finite? (imag-part (sqrt (make-rectangular (expt 10 400) (expt 10 400)))))`, values.TrueValue},
+		// sqrt of the pure imaginary 2*10^400 i is 10^200 + 10^200 i:
+		// a=0 => re = sqrt(|z|/2) = sqrt(10^400) = 10^200; im = b/(2 re) = 10^200.
+		{"sqrt big real value", `(= (real-part (sqrt (make-rectangular 0 (* 2 (expt 10 400))))) (* 1.0 (expt 10 200)))`, values.TrueValue},
+		{"sqrt big imag value", `(= (imag-part (sqrt (make-rectangular 0 (* 2 (expt 10 400))))) (* 1.0 (expt 10 200)))`, values.TrueValue},
+		// Roundtrip at a scale beyond float64: sqrt(z)^2 reproduces z (relative
+		// error negligible). Guards the a>=0,b!=0 branch's value, not just its
+		// finiteness — a wrong-but-finite result would fail this.
+		{"sqrt big roundtrip", `(let ((z (make-rectangular (expt 10 400) (expt 10 400)))) (< (/ (magnitude (- (* (sqrt z) (sqrt z)) z)) (magnitude z)) 1e-50))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
