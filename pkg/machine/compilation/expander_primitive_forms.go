@@ -35,6 +35,36 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+// formUnchanged rebuilds the primitive form (sym . expr) without expanding its
+// body. It serves two callers: the quote-family passthrough expanders, and the
+// arity guards that hand a malformed form to the validator for error reporting
+// rather than raising during expansion.
+func formUnchanged(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+}
+
+// asNonEmptyPair narrows v to a non-empty *SyntaxPair. It reports ok=false for
+// both a non-pair and the empty list — the two conditions every arity guard in
+// this file tests together before bailing.
+func asNonEmptyPair(v syntax.SyntaxValue) (*syntax.SyntaxPair, bool) {
+	pair, ok := v.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return nil, false
+	}
+	return pair, true
+}
+
+// expandSub expands a single sub-expression, wrapping any failure with the
+// form's source context and the caller-supplied "<form>: failed to expand
+// <part>" message so the error chain names both the location and the part.
+func (p *ExpanderTimeContinuation) expandSub(expr, sub syntax.SyntaxValue, what string) (syntax.SyntaxValue, error) {
+	expanded, err := p.ExpandExpression(sub)
+	if err != nil {
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "%s", what))
+	}
+	return expanded, nil
+}
+
 // expandUnchanged returns the form unchanged. Used for forms whose subexpressions
 // are processed at a later stage (compile time) or should not be expanded (quote).
 //
@@ -47,8 +77,8 @@ import (
 //   - cond-expand: Feature expressions use special syntax, not macros
 //   - syntax, syntax-case, quasisyntax, unsyntax, unsyntax-splicing, with-syntax:
 //     Compile-time forms handled during compilation
-func (p *ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+func (*ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return formUnchanged(sym, expr)
 }
 
 // expandWithBindingScope implements the (with-binding-scope (id ...) body) form.
@@ -79,8 +109,8 @@ func (p *ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, exp
 func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// expr is the cdr of (with-binding-scope (id ...) body)
 	// which is ((id ...) body)
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
+	pair, ok := asNonEmptyPair(expr)
+	if !ok {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-binding-scope: expected (with-binding-scope (id ...) body)"))
 	}
 
@@ -88,9 +118,8 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 	idListStx := pair.SyntaxCar()
 
 	// Get the body
-	cdr := pair.SyntaxCdr()
-	bodyPair, ok := cdr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
+	bodyPair, ok := asNonEmptyPair(pair.SyntaxCdr())
+	if !ok {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-binding-scope: missing body"))
 	}
 	body := bodyPair.SyntaxCar()
@@ -150,8 +179,8 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 //	    ((must-be-pair x) (syntax-error "expected a pair" x))))
 func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Extract message (required first argument)
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
+	pair, ok := asNonEmptyPair(expr)
+	if !ok {
 		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: missing message argument"))
 	}
 
@@ -201,75 +230,74 @@ func formatIrritants(irritants []string) string {
 // Uses ExpandBodyWithDefineSyntax to compile define-syntax forms immediately,
 // ensuring macros defined in begin are available to subsequent forms.
 func (p *ExpanderTimeContinuation) expandBeginForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	exprPair, ok := expr.(*syntax.SyntaxPair)
-	if ok && !syntax.IsSyntaxEmptyList(exprPair) {
-		// Collect forms from the begin body
-		forms, err := collectBodyExpressions(exprPair)
-		if err != nil {
-			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to collect begin body"))
-		}
-
-		// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
-		// This ensures macros defined in begin are available to subsequent forms
-		expandedForms, err := p.ExpandBodyWithDefineSyntax(forms)
-		if err != nil {
-			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to expand begin body"))
-		}
-
-		// Rebuild the begin form with expanded contents
-		expandedArgs := syntax.SyntaxEmptyList
-		for i := range slices.Backward(expandedForms) {
-			expandedArgs = syntax.NewSyntaxCons(expandedForms[i], expandedArgs, sym.SourceContext())
-		}
-		return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
+	exprPair, ok := asNonEmptyPair(expr)
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
-	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+
+	// Collect forms from the begin body
+	forms, err := collectBodyExpressions(exprPair)
+	if err != nil {
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to collect begin body"))
+	}
+
+	// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
+	// This ensures macros defined in begin are available to subsequent forms
+	expandedForms, err := p.ExpandBodyWithDefineSyntax(forms)
+	if err != nil {
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to expand begin body"))
+	}
+
+	// Rebuild the begin form with expanded contents
+	expandedArgs := syntax.SyntaxEmptyList
+	for i := range slices.Backward(expandedForms) {
+		expandedArgs = syntax.NewSyntaxCons(expandedForms[i], expandedArgs, sym.SourceContext())
+	}
+	return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil
 }
 
 // expandIfForm expands (if test consequent [alternative])
 func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	pair, ok := asNonEmptyPair(expr)
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
-	// Expand test
-	expandedTest, err := p.ExpandExpression(pair.SyntaxCar())
+	expandedTest, err := p.expandSub(expr, pair.SyntaxCar(), "if: failed to expand test")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand test"))
+		return nil, err
 	}
 
 	// Get consequent. Bail (return the form unchanged) when it is missing so the
 	// validator reports the arity error — consistent with set!/define/begin/lambda.
-	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	cdrPair, ok := asNonEmptyPair(pair.SyntaxCdr())
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
-	expandedConseq, err := p.ExpandExpression(cdrPair.SyntaxCar())
+	expandedConseq, err := p.expandSub(expr, cdrPair.SyntaxCar(), "if: failed to expand consequent")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand consequent"))
+		return nil, err
 	}
 
 	// Check for alternative
-	altPair, ok := cdrPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(altPair) {
+	altPair, ok := asNonEmptyPair(cdrPair.SyntaxCdr())
+	if !ok {
 		// No alternative - (if test conseq)
 		args := syntax.SyntaxList(sym.SourceContext(), expandedTest, expandedConseq)
 		return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
 	}
 
-	// Expand alternative
-	expandedAlt, err := p.ExpandExpression(altPair.SyntaxCar())
+	expandedAlt, err := p.expandSub(expr, altPair.SyntaxCar(), "if: failed to expand alternative")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand alternative"))
+		return nil, err
 	}
 
 	// Bail (return the form unchanged) on extra trailing args so the validator
 	// reports the over-arity error — symmetric with the under-arity bail above.
-	extra, ok := altPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if ok && !syntax.IsSyntaxEmptyList(extra) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	_, hasExtra := asNonEmptyPair(altPair.SyntaxCdr())
+	if hasExtra {
+		return formUnchanged(sym, expr)
 	}
 
 	// Build (if test conseq alt)
@@ -279,30 +307,30 @@ func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr s
 
 // expandSetForm expands (set! var value)
 func (p *ExpanderTimeContinuation) expandSetForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	pair, ok := asNonEmptyPair(expr)
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
 	// Keep variable unchanged
 	varExpr := pair.SyntaxCar()
 
 	// Expand value
-	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	cdrPair, ok := asNonEmptyPair(pair.SyntaxCdr())
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
-	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
+	expandedValue, err := p.expandSub(expr, cdrPair.SyntaxCar(), "set!: failed to expand value")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "set!: failed to expand value"))
+		return nil, err
 	}
 
 	// Bail (return the form unchanged) on extra trailing args so the validator
 	// reports the over-arity error — symmetric with the under-arity bail above.
-	extra, ok := cdrPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if ok && !syntax.IsSyntaxEmptyList(extra) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	_, hasExtra := asNonEmptyPair(cdrPair.SyntaxCdr())
+	if hasExtra {
+		return formUnchanged(sym, expr)
 	}
 
 	// Build (set! var expanded-value)
@@ -312,15 +340,15 @@ func (p *ExpanderTimeContinuation) expandSetForm(sym *syntax.SyntaxSymbol, expr 
 
 // expandDefineForm expands (define var value) or (define (name . args) body ...)
 func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	pair, ok := asNonEmptyPair(expr)
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
 	first := pair.SyntaxCar()
-	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	cdrPair, ok := asNonEmptyPair(pair.SyntaxCdr())
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
 	// Check if it's a function definition (define (name args...) body...)
@@ -337,9 +365,9 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 	}
 
 	// Simple definition (define var value)
-	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
+	expandedValue, err := p.expandSub(expr, cdrPair.SyntaxCar(), "define: failed to expand value")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "define: failed to expand value"))
+		return nil, err
 	}
 
 	// Build (define var expanded-value)
@@ -358,7 +386,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 	// expr is the arguments after 'import': (<import-set> ...)
 	if syntax.IsSyntaxEmptyList(expr) {
 		// Empty import is valid, return unchanged
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+		return formUnchanged(sym, expr)
 	}
 
 	importSets, ok := expr.(*syntax.SyntaxPair)
@@ -376,48 +404,47 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 	}
 
 	// Return the import form unchanged for later compilation
-	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	return formUnchanged(sym, expr)
 }
 
 // expandWithContinuationMarkForm expands all three sub-expressions of
 // (with-continuation-mark key val body).
 func (p *ExpanderTimeContinuation) expandWithContinuationMarkForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	pair, ok := asNonEmptyPair(expr)
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
 
-	// Expand key
-	expandedKey, err := p.ExpandExpression(pair.SyntaxCar())
+	expandedKey, err := p.expandSub(expr, pair.SyntaxCar(), "with-continuation-mark: failed to expand key")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand key"))
+		return nil, err
 	}
 
 	// Get val pair. Bail when missing so the validator reports the arity error.
-	valPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(valPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	valPair, ok := asNonEmptyPair(pair.SyntaxCdr())
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
-	expandedVal, err := p.ExpandExpression(valPair.SyntaxCar())
+	expandedVal, err := p.expandSub(expr, valPair.SyntaxCar(), "with-continuation-mark: failed to expand value")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand value"))
+		return nil, err
 	}
 
 	// Get body pair. Bail when missing so the validator reports the arity error.
-	bodyPair, ok := valPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	bodyPair, ok := asNonEmptyPair(valPair.SyntaxCdr())
+	if !ok {
+		return formUnchanged(sym, expr)
 	}
-	expandedBody, err := p.ExpandExpression(bodyPair.SyntaxCar())
+	expandedBody, err := p.expandSub(expr, bodyPair.SyntaxCar(), "with-continuation-mark: failed to expand body")
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand body"))
+		return nil, err
 	}
 
 	// Bail (return the form unchanged) on extra trailing args so the validator
 	// reports the over-arity error — symmetric with the under-arity bails above.
-	extra, ok := bodyPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if ok && !syntax.IsSyntaxEmptyList(extra) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	_, hasExtra := asNonEmptyPair(bodyPair.SyntaxCdr())
+	if hasExtra {
+		return formUnchanged(sym, expr)
 	}
 
 	args := syntax.SyntaxList(sym.SourceContext(), expandedKey, expandedVal, expandedBody)
