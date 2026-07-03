@@ -66,25 +66,25 @@ func (p *ExpanderTimeContinuation) expandSub(expr, sub syntax.SyntaxValue, what 
 }
 
 // expectArgs collects the argument sub-expressions off args' spine (args is the
-// keyword's cdr). It reports ok=true only when the count lands in [min, max];
+// keyword's cdr). It reports ok=true only when the count lands in [lo, hi];
 // under- or over-arity yields ok=false so the caller bails to formUnchanged and
 // lets the validator report the arity error. Arity is checked structurally,
 // before any sub-expression is expanded.
-func expectArgs(args syntax.SyntaxValue, min, max int) ([]syntax.SyntaxValue, bool) {
-	q := make([]syntax.SyntaxValue, 0, max)
+func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool) {
+	q := make([]syntax.SyntaxValue, 0, hi)
 	rest := args
 	for {
 		pair, ok := asNonEmptyPair(rest)
 		if !ok {
 			break
 		}
-		if len(q) == max {
-			return nil, false // over-arity: a (max+1)th argument is present
+		if len(q) == hi {
+			return nil, false // over-arity: a (hi+1)th argument is present
 		}
 		q = append(q, pair.SyntaxCar())
 		rest = pair.SyntaxCdr()
 	}
-	if len(q) < min {
+	if len(q) < lo {
 		return nil, false
 	}
 	return q, true
