@@ -43,47 +43,72 @@ func LookupCompiler(name string) CompilerFunc {
 	return compilerRegistry[name]
 }
 
-// typeSwitchForms are Tier 1 forms dispatched by the type switch in
-// compileValidated. They have no registry entry because the concrete
-// ValidatedExpr type carries the dispatch information directly.
-var typeSwitchForms = map[string]bool{
-	"if":                     true,
-	"define":                 true,
-	"lambda":                 true,
-	"case-lambda":            true,
-	"set!":                   true,
-	"quote":                  true,
-	"begin":                  true,
-	"quasiquote":             true,
-	"dynamic-wind":           true,
-	"apply":                  true,
-	"with-continuation-mark": true,
-	"let":                    true,
-	"let*":                   true,
-	"letrec":                 true,
-	"letrec*":                true,
+// dispatchKind classifies how a special form that has no Tier-2 compiler entry
+// is handled. Tier-2 (registry) forms are not classified here — they are exactly
+// the keys of compilerRegistry (derived from syntaxCompilerEntries).
+type dispatchKind int
+
+const (
+	// dispatchTypeSwitch marks a Tier-1 form dispatched by the concrete-type
+	// switch in compileValidated (compile_validated.go). Its validator produces
+	// a dedicated Validated* type the switch matches directly — no registry
+	// entry, no string lookup. Note the name→case relationship is name-level,
+	// not 1:1: let/let*/letrec/letrec* all validate to *ValidatedLet.
+	dispatchTypeSwitch dispatchKind = iota
+	// dispatchExpandOnly marks a form handled entirely during expansion that
+	// legitimately has no compiler; it never reaches the compilation phase.
+	dispatchExpandOnly
+)
+
+// formDispatch is the single classification table for forms that have no Tier-2
+// compiler entry: the Tier-1 (type-switch) forms and the expand-only forms. It
+// replaces the former parallel typeSwitchForms/expandTimeOnlyForms maps.
+// VerifyCompilers derives its skip decision from this table; the TestFormDispatch
+// guards keep it honest against the form registry and the compiler registry.
+//
+// ADDING A NEW FORM: a Tier-1 form (dedicated Validated* type + a case in
+// compileValidated) gets a dispatchTypeSwitch entry here; an expand-only form
+// gets a dispatchExpandOnly entry. A Tier-2 form needs NO entry here — add it to
+// syntaxCompilerEntries instead.
+var formDispatch = map[string]dispatchKind{
+	// Tier 1 — dispatched by concrete type in compileValidated.
+	"if":                     dispatchTypeSwitch,
+	"define":                 dispatchTypeSwitch,
+	"lambda":                 dispatchTypeSwitch,
+	"case-lambda":            dispatchTypeSwitch,
+	"set!":                   dispatchTypeSwitch,
+	"quote":                  dispatchTypeSwitch,
+	"begin":                  dispatchTypeSwitch,
+	"quasiquote":             dispatchTypeSwitch,
+	"dynamic-wind":           dispatchTypeSwitch,
+	"apply":                  dispatchTypeSwitch,
+	"with-continuation-mark": dispatchTypeSwitch,
+	"let":                    dispatchTypeSwitch,
+	"let*":                   dispatchTypeSwitch,
+	"letrec":                 dispatchTypeSwitch,
+	"letrec*":                dispatchTypeSwitch,
+
+	// Expand-only — handled entirely during expansion; no compiler.
+	"let-syntax":           dispatchExpandOnly,
+	"letrec-syntax":        dispatchExpandOnly,
+	TransformerSyntaxRules: dispatchExpandOnly,
 }
 
-// expandTimeOnlyForms are forms handled entirely during expansion that
-// legitimately have no compiler. They never reach the compilation phase.
-var expandTimeOnlyForms = map[string]bool{
-	"let-syntax":           true,
-	"letrec-syntax":        true,
-	TransformerSyntaxRules: true,
-}
-
-// VerifyCompilers checks that every form registered in the forms package
-// has a corresponding compiler — either in the registry (Tier 2) or in
-// the type switch (Tier 1). Returns an error listing any gaps.
+// VerifyCompilers checks that every form registered in the forms package has a
+// corresponding compiler — either a Tier-2 entry in compilerRegistry or a
+// Tier-1/expand-only classification in formDispatch. Returns an error listing
+// any form that has neither.
 func VerifyCompilers() error {
 	var missing []string
 	for _, name := range forms.Names() {
-		if expandTimeOnlyForms[name] || typeSwitchForms[name] {
+		if compilerRegistry[name] != nil {
 			continue
 		}
-		if compilerRegistry[name] == nil {
-			missing = append(missing, name+": missing compiler")
+		_, classified := formDispatch[name]
+		if classified {
+			continue
 		}
+		missing = append(missing, name+": no compiler and no dispatch classification")
 	}
 	return formatMissing("compiler", missing)
 }

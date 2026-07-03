@@ -24,14 +24,18 @@ import (
 
 func TestTypeSwitchFormsRegistered(t *testing.T) {
 	// Tier 1 forms are dispatched by type switch in compileValidated.
-	// Verify they are all listed in typeSwitchForms (used by VerifyCompilers).
+	// Verify they are all classified dispatchTypeSwitch in formDispatch
+	// (used by VerifyCompilers to skip them).
 	for _, name := range []string{
 		"if", "define", "lambda", "set!", "begin", "quote",
 		"quasiquote", "case-lambda", "dynamic-wind", "apply",
 		"with-continuation-mark", "let", "let*", "letrec", "letrec*",
 	} {
-		qt.Assert(t, typeSwitchForms[name], qt.IsTrue,
-			qt.Commentf("%q not in typeSwitchForms", name))
+		kind, ok := formDispatch[name]
+		qt.Assert(t, ok, qt.IsTrue,
+			qt.Commentf("%q not in formDispatch", name))
+		qt.Assert(t, kind, qt.Equals, dispatchTypeSwitch,
+			qt.Commentf("%q classified %v, want dispatchTypeSwitch", name, kind))
 	}
 }
 
@@ -87,19 +91,33 @@ func TestVerifyExpanders_SyntaxCompilersHaveExpanders(t *testing.T) {
 	}
 }
 
-// TestTypeSwitchFormsAreKnownForms cross-checks typeSwitchForms against the form
-// registry: every Tier 1 form the map claims compileValidated's type switch
-// handles must be an actually-registered form. typeSwitchForms is hand-maintained
-// to mirror that switch; VerifyCompilers iterates forms.Names() only, so it catches
-// a switch form MISSING from the map (reported as "missing compiler") but NOT a
-// phantom map entry that names no real form. This closes that remaining direction.
-func TestTypeSwitchFormsAreKnownForms(t *testing.T) {
+// TestFormDispatchAreKnownForms cross-checks formDispatch against the form
+// registry: every form the classification table claims to handle (Tier 1 or
+// expand-only) must be an actually-registered form. formDispatch is
+// hand-maintained to mirror the type switch / expander; VerifyCompilers iterates
+// forms.Names() only, so it catches a form MISSING from the table (reported as
+// "no dispatch classification") but NOT a phantom table entry that names no real
+// form. This closes that remaining direction.
+func TestFormDispatchAreKnownForms(t *testing.T) {
 	known := make(map[string]bool)
 	for _, name := range forms.Names() {
 		known[name] = true
 	}
-	for name := range typeSwitchForms {
+	for name := range formDispatch {
 		qt.Assert(t, known[name], qt.IsTrue,
-			qt.Commentf("typeSwitchForms lists %q, which is not a registered form (forms.Names())", name))
+			qt.Commentf("formDispatch lists %q, which is not a registered form (forms.Names())", name))
+	}
+}
+
+// TestFormDispatchDisjointFromRegistry asserts the classification table and the
+// Tier-2 compiler registry are disjoint: a formDispatch entry (Tier 1 or
+// expand-only) must NOT also carry a compilerRegistry compiler. Overlap would be
+// a misclassification — VerifyCompilers skips a name the moment it finds a
+// registry entry, so a stale formDispatch entry would silently mask a Tier-2
+// form's identity. This is the "assert set-equality" guard from the sweep plan.
+func TestFormDispatchDisjointFromRegistry(t *testing.T) {
+	for name := range formDispatch {
+		qt.Assert(t, LookupCompiler(name), qt.IsNil,
+			qt.Commentf("formDispatch classifies %q but it also has a Tier-2 compiler; one is wrong", name))
 	}
 }
