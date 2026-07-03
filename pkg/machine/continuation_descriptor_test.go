@@ -140,6 +140,10 @@ const (
 	condOldEnvPooledDistinct
 	// condPresent: an optional field is populated (windingStack len > 0, in Copy).
 	condPresent
+	// condAbsent: the optional field is empty (windingStack len == 0, in Copy) — the
+	// complementary arm to condPresent, so Copy's winding-absent branch is exercised
+	// and the "exactly one active rule per field" invariant holds in both arms.
+	condAbsent
 )
 
 // guard is a conjunction of conds. nil / empty means ALWAYS.
@@ -170,8 +174,13 @@ func (c cond) holds(cfg probeConfig) bool {
 		return cfg.oldEnvPooledDistinct
 	case condPresent:
 		return cfg.windingPresent
+	case condAbsent:
+		return !cfg.windingPresent
 	}
-	return false
+	// A cond that reaches here was added to the enum but not wired into holds; every
+	// guard using it would silently never fire. Fail loud (test-only) rather than
+	// let a field's discipline go unenforced.
+	panic("continuation_descriptor: unhandled cond in holds")
 }
 
 // probeConfig captures the orthogonal boolean axes a probe can be built along. A
@@ -294,17 +303,16 @@ var contDescriptor = map[contOp]siteSpec{
 		),
 	},
 
-	// SaveWrap — SaveContinuation, mc-side + the evals inline/heap decision.
-	// PARTIAL: verified explicitly in TestOracle_SaveContinuation.
+	// SaveWrap — SaveContinuation. PARTIAL and dual-sided (it post-processes mc AND
+	// the produced cont: mc.marks=nil, mc.callDepth++, and the evals inline/heap
+	// decision on the new frame). It does not transcribe every field in one
+	// direction, so it carries NO field rules here — driving inert rules that nothing
+	// checks would re-create the exact "strings that could lie" problem this table
+	// exists to kill. Its discipline is verified by explicit assertions in
+	// TestOracle_SaveContinuation (+ the ErrCallDepthExceeded guard test).
 	opSaveWrap: {
 		dest:    destMc,
 		partial: true,
-		fields: cat(
-			always(verbReset, "marks"),      // mc.marks = nil (callee starts fresh)
-			always(verbDerive, "callDepth"), // mc.callDepth++ (over-limit → ErrCallDepthExceeded)
-			guarded(guard{condInline}, verbInline, "evals"),
-			guarded(guard{condHeap}, verbTransfer, "evals"),
-		),
 	},
 
 	// Restore — cont → mc (call/cc re-entry). Copies evals.
@@ -380,6 +388,7 @@ var contDescriptor = map[contOp]siteSpec{
 				"inlineEvals", "inlineEvalsLen"),
 			always(verbClone, "multiValues", "marks"),
 			guarded(guard{condPresent}, verbClone, "windingStack"),
+			guarded(guard{condAbsent}, verbSkip, "windingStack"), // src empty → cp.windingStack stays zero
 			always(verbReset, "envPooled", "shared"),
 			guarded(guard{condHeap}, verbClone, "evals"),
 			guarded(guard{condInline}, verbSkip, "evals"), // stays nil; carried via inlineEvals SHARE

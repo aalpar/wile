@@ -101,7 +101,13 @@ func buildProbe(t *testing.T, cfg probeConfig) probe {
 	cont.singleValue = values.NewInteger(2001)
 	cont.multiValues = MultipleValues{values.NewInteger(2002)}
 	cont.pc = 22
-	cont.windingStack = WindingStack{NewDynamicWindFrame(nil, nil)}
+	// cont.windingStack is gated on cfg.windingPresent so Copy's condPresent (CLONE)
+	// and condAbsent (SKIP, stays zero) arms are each exercised by a real probe. mc's
+	// windingStack (above) stays unconditionally set so the SKIP checks at the
+	// cont→mc restore sites have teeth.
+	if cfg.windingPresent {
+		cont.windingStack = WindingStack{NewDynamicWindFrame(nil, nil)}
+	}
 	cont.promptTag = NewPromptTag("cont")
 	cont.threadID = 200
 	cont.callDepth = 7
@@ -144,6 +150,13 @@ type siteCall struct {
 	preDestVm  map[string]any
 	preSrcCont map[string]any
 
+	// Pre-call zero-ness snapshots, used to give RESET teeth: a reset is only
+	// observable if the destination was non-zero before (pre-existing dest) or the
+	// source was non-zero (created dest, so a copy-instead-of-reset would show).
+	preDestZero    map[string]bool
+	preSrcZero     map[string]bool
+	preSrcContZero map[string]bool
+
 	destPreExists bool
 	// srcAlive is false when the method pools/invalidates the src continuation
 	// (RAR unshared), so perturb-based confirmation must be skipped — identity
@@ -172,6 +185,24 @@ func contRefs(c *MachineContinuation) map[string]any {
 	q := make(map[string]any, len(contFieldProbes))
 	for name, fp := range contFieldProbes {
 		q[name] = fp.ref(c)
+	}
+	return q
+}
+
+// vmZeros snapshots the zero-ness of every vmState field (for RESET teeth).
+func vmZeros(s *vmState) map[string]bool {
+	q := make(map[string]bool, len(vmFieldProbes))
+	for name, fp := range vmFieldProbes {
+		q[name] = fp.isZero(s)
+	}
+	return q
+}
+
+// contZeros snapshots the zero-ness of every continuation-only field.
+func contZeros(c *MachineContinuation) map[string]bool {
+	q := make(map[string]bool, len(contFieldProbes))
+	for name, fp := range contFieldProbes {
+		q[name] = fp.isZero(c)
 	}
 	return q
 }
@@ -213,6 +244,7 @@ func equalValues(a, b []values.Value) bool {
 func runChecks(t *testing.T, cfg probeConfig, sc siteCall) {
 	t.Helper()
 	spec := contDescriptor[sc.op]
+	assertExactlyOneActiveRule(t, spec, cfg, sc.op)
 	for _, r := range spec.fields {
 		if !r.when.holds(cfg) {
 			continue
@@ -220,6 +252,26 @@ func runChecks(t *testing.T, cfg probeConfig, sc siteCall) {
 		checkField(t, sc, r)
 	}
 	verifyEffects(t, spec, cfg, sc)
+}
+
+// assertExactlyOneActiveRule enforces that, for the given cfg, every field has
+// exactly one active rule. Zero active rules means the field is silently
+// value-unchecked (an unsatisfiable/uncovered guard that the completeness ratchet
+// still counts as "covered"); more than one means contradictory rules. This closes
+// the guard-reachability hole in the drift-checker itself.
+func assertExactlyOneActiveRule(t *testing.T, spec siteSpec, cfg probeConfig, op contOp) {
+	t.Helper()
+	for _, field := range append(vmStateFieldNames(), contOnlyFieldNames()...) {
+		n := 0
+		for _, r := range spec.fields {
+			if r.field == field && r.when.holds(cfg) {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s: field %q has %d active rules for cfg %+v, want exactly 1", op, field, n, cfg)
+		}
+	}
 }
 
 // checkField dispatches one rule to the vmState or continuation-only classifier.
@@ -273,6 +325,7 @@ func checkVmField(t *testing.T, sc siteCall, r rule, fp fieldProbe) {
 		if !fp.isZero(sc.destVm) {
 			t.Errorf("%s.%s RESET: dest not zero", sc.op, r.field)
 		}
+		assertResetHasTeeth(t, sc, r.field)
 	case verbSkip:
 		if sc.destPreExists {
 			if fp.ref(sc.destVm) != sc.preDestVm[r.field] {
@@ -287,6 +340,28 @@ func checkVmField(t *testing.T, sc siteCall, r rule, fp fieldProbe) {
 		checkInlineRestore(t, sc, r)
 	case verbDerive, verbOffset:
 		runDeriveCheck(t, sc, r)
+	default:
+		t.Errorf("%s.%s: unhandled verb %s in vmState classifier", sc.op, r.field, r.verb)
+	}
+}
+
+// assertResetHasTeeth fails when a RESET check would pass vacuously: the reset is
+// only observable if the destination was non-zero before the call (pre-existing
+// dest) or the source was non-zero (created dest, so a copy-instead-of-reset would
+// leave the dest non-zero). Where the source has no such field (a cont-only field on
+// a MachineContext source, e.g. Save's promptHandler/shared), the reset is the
+// documented "SKIP off a zeroed pool frame" and no teeth are possible.
+func assertResetHasTeeth(t *testing.T, sc siteCall, field string) {
+	t.Helper()
+	if sc.destPreExists {
+		if sc.preDestZero[field] {
+			t.Errorf("%s.%s RESET: vacuous — dest already zero pre-call; seed the probe non-zero", sc.op, field)
+		}
+		return
+	}
+	z, ok := sc.preSrcZero[field]
+	if ok && z {
+		t.Errorf("%s.%s RESET: vacuous — src zero pre-call; a copy-instead-of-reset would be undetectable", sc.op, field)
 	}
 }
 
@@ -304,6 +379,14 @@ func checkContField(t *testing.T, sc siteCall, r rule, fp contFieldProbe) {
 	case verbReset:
 		if !fp.isZero(sc.destCont) {
 			t.Errorf("%s.%s RESET: dest not zero", sc.op, r.field)
+		}
+		// Continuation-destination RESET is created-dest: teeth come from a non-zero
+		// source (so a copy-instead-of-reset would show). preSrcContZero is nil for
+		// Save (its source is a MachineContext with no such field), which correctly
+		// skips the check for those documented "SKIP off a zeroed frame" cells.
+		z, ok := sc.preSrcContZero[r.field]
+		if ok && z {
+			t.Errorf("%s.%s RESET: vacuous — src zero pre-call; a copy-instead-of-reset would be undetectable", sc.op, r.field)
 		}
 	case verbDerive:
 		runDeriveCheck(t, sc, r)
@@ -422,6 +505,8 @@ func verifyEffects(t *testing.T, spec siteSpec, cfg probeConfig, sc siteCall) {
 			expEnv++
 		case effBreakRefs:
 			breakRefs = true
+		default:
+			t.Errorf("%s: unhandled effect verb %d", sc.op, e.effect)
 		}
 	}
 	if sc.mc != nil {
@@ -458,9 +543,13 @@ func TestOracle_Pop(t *testing.T) {
 			mc, cont := p.mc, p.cont
 			mc.cont = cont
 			mc.callDepth = 5
+			// mc.envPooled stays false so Pop's envPooled SHARE (mc ← cont.envPooled,
+			// which is true) is an observable false→true transition, not a no-op.
 
 			preSrcVm := vmRefs(&cont.vmState)
 			preDestVm := vmRefs(&mc.vmState)
+			preDestZero := vmZeros(&mc.vmState)
+			preSrcZero := vmZeros(&cont.vmState)
 			inlineSnap := inlineSnapshot(cont)
 			preMcCallDepth := mc.callDepth
 			preContParent := cont.parent
@@ -472,7 +561,8 @@ func TestOracle_Pop(t *testing.T) {
 			sc := siteCall{
 				op: opPop, dest: destMc, mc: mc,
 				destVm: &mc.vmState, srcVm: &cont.vmState, srcCont: cont,
-				preSrcVm: preSrcVm, preDestVm: preDestVm, destPreExists: true,
+				preSrcVm: preSrcVm, preDestVm: preDestVm,
+				preDestZero: preDestZero, preSrcZero: preSrcZero, destPreExists: true,
 				srcAlive: true, inlineSnap: inlineSnap, preMcCallDepth: preMcCallDepth,
 			}
 			runChecks(t, cfg, sc)
@@ -486,9 +576,14 @@ func TestOracle_Restore(t *testing.T) {
 		t.Run(evalsShape(cfg), func(t *testing.T) {
 			p := buildProbe(t, cfg)
 			mc, cont := p.mc, p.cont
+			// Seed mc.envPooled=true so Restore's envPooled RESET (→ false) is
+			// observable rather than a vacuous zero→zero pass.
+			mc.envPooled = true
 
 			preSrcVm := vmRefs(&cont.vmState)
 			preDestVm := vmRefs(&mc.vmState)
+			preDestZero := vmZeros(&mc.vmState)
+			preSrcZero := vmZeros(&cont.vmState)
 			inlineSnap := inlineSnapshot(cont)
 			preContParent := cont.parent
 
@@ -497,7 +592,8 @@ func TestOracle_Restore(t *testing.T) {
 			sc := siteCall{
 				op: opRestore, dest: destMc, mc: mc,
 				destVm: &mc.vmState, srcVm: &cont.vmState, srcCont: cont,
-				preSrcVm: preSrcVm, preDestVm: preDestVm, destPreExists: true,
+				preSrcVm: preSrcVm, preDestVm: preDestVm,
+				preDestZero: preDestZero, preSrcZero: preSrcZero, destPreExists: true,
 				srcAlive: true, inlineSnap: inlineSnap,
 			}
 			runChecks(t, cfg, sc)
@@ -519,9 +615,19 @@ func TestOracle_RestoreAndRelease(t *testing.T) {
 		t.Run(rarShape(cfg), func(t *testing.T) {
 			p := buildProbe(t, cfg)
 			mc, cont := p.mc, p.cont
+			// On the shared path envPooled is RESET (→ false): seed it true so the
+			// reset is observable. On the unshared path envPooled is SHARE (mc ←
+			// cont.envPooled=true): leave mc false so the copy is a visible false→true
+			// (except the oldEnvPooledDistinct probes, where buildProbe already set it
+			// true to drive the env-release effect).
+			if cfg.shared {
+				mc.envPooled = true
+			}
 
 			preSrcVm := vmRefs(&cont.vmState)
 			preDestVm := vmRefs(&mc.vmState)
+			preDestZero := vmZeros(&mc.vmState)
+			preSrcZero := vmZeros(&cont.vmState)
 			inlineSnap := inlineSnapshot(cont)
 			preContParent := cont.parent
 
@@ -530,7 +636,8 @@ func TestOracle_RestoreAndRelease(t *testing.T) {
 			sc := siteCall{
 				op: opRestoreAndRelease, dest: destMc, mc: mc,
 				destVm: &mc.vmState, srcVm: &cont.vmState, srcCont: cont,
-				preSrcVm: preSrcVm, preDestVm: preDestVm, destPreExists: true,
+				preSrcVm: preSrcVm, preDestVm: preDestVm,
+				preDestZero: preDestZero, preSrcZero: preSrcZero, destPreExists: true,
 				srcAlive: cfg.shared, inlineSnap: inlineSnap,
 			}
 			runChecks(t, cfg, sc)
@@ -549,8 +656,12 @@ func TestOracle_Save(t *testing.T) {
 		t.Run(evalsShape(cfg), func(t *testing.T) {
 			p := buildProbe(t, cfg)
 			mc := p.mc
+			// Seed mc.envPooled=true so Save's envPooled SHARE (cont ← mc.envPooled)
+			// is a visible false→true on the freshly-zeroed cont.
+			mc.envPooled = true
 
 			preSrcVm := vmRefs(&mc.vmState)
+			preSrcZero := vmZeros(&mc.vmState)
 			preMcPC := mc.pc
 			preMcCont := mc.cont
 			preParentCallDepth := 0
@@ -563,7 +674,7 @@ func TestOracle_Save(t *testing.T) {
 			sc := siteCall{
 				op: opSave, dest: destCont, mc: mc,
 				destVm: &got.vmState, srcVm: &mc.vmState, destCont: got, srcCont: got,
-				preSrcVm: preSrcVm, destPreExists: false, srcAlive: true,
+				preSrcVm: preSrcVm, preSrcZero: preSrcZero, destPreExists: false, srcAlive: true,
 				off: saveOffset, preMcPC: preMcPC, preMcCont: preMcCont,
 				preParentCallDepth: preParentCallDepth,
 			}
@@ -629,24 +740,45 @@ func TestOracle_SaveContinuation_CallDepthExceeded(t *testing.T) {
 	qt.Assert(t, mc.callDepth, qt.Equals, 1)
 }
 
+// TestOracle_Pop_Underflow mirrors the Save call-depth guard: popping past the
+// bottom of the chain (callDepth would go negative — a compiler bug) returns
+// ErrContinuationUnderflow and clamps callDepth at zero.
+func TestOracle_Pop_Underflow(t *testing.T) {
+	mc := &MachineContext{}
+	mc.callDepth = 0
+
+	_, err := mc.PopContinuation()
+	qt.Assert(t, errors.Is(err, werr.ErrContinuationUnderflow), qt.IsTrue)
+	qt.Assert(t, mc.callDepth, qt.Equals, 0)
+}
+
 func TestOracle_Copy(t *testing.T) {
+	// shared:true on every cfg so Copy's `shared` RESET (cp.shared ← false from a
+	// true source) is observable, not a vacuous zero→zero. windingPresent is varied
+	// so both Copy arms — condPresent (CLONE) and condAbsent (stays zero) — run.
 	for _, cfg := range []probeConfig{
-		{inline: true, windingPresent: true},
-		{inline: false, windingPresent: true},
+		{shared: true, inline: true, windingPresent: true},
+		{shared: true, inline: true, windingPresent: false},
+		{shared: true, inline: false, windingPresent: true},
+		{shared: true, inline: false, windingPresent: false},
 	} {
-		t.Run(evalsShape(cfg), func(t *testing.T) {
+		t.Run(copyShape(cfg), func(t *testing.T) {
 			p := buildProbe(t, cfg)
 			cont := p.cont
 
 			preSrcVm := vmRefs(&cont.vmState)
 			preSrcCont := contRefs(cont)
+			preSrcZero := vmZeros(&cont.vmState)
+			preSrcContZero := contZeros(cont)
 
 			cp := cont.Copy()
 
 			sc := siteCall{
 				op: opCopy, dest: destCont, mc: nil,
 				destVm: &cp.vmState, srcVm: &cont.vmState, destCont: cp, srcCont: cont,
-				preSrcVm: preSrcVm, preSrcCont: preSrcCont, destPreExists: false, srcAlive: true,
+				preSrcVm: preSrcVm, preSrcCont: preSrcCont,
+				preSrcZero: preSrcZero, preSrcContZero: preSrcContZero,
+				destPreExists: false, srcAlive: true,
 			}
 			runChecks(t, cfg, sc)
 		})
@@ -691,35 +823,82 @@ func TestContDescriptor_Complete(t *testing.T) {
 	assertKeySet(t, "contFieldProbes", contProbeKeys(contFieldProbes), contFields)
 }
 
-// TestOracle_RejectsWrongDescriptor proves the oracle has teeth: a descriptor that
-// lies about a field must be rejected. Pop SHAREs marks; asserting CLONE is a lie,
-// and the classifier must fail on it. Guards against a no-op oracle that
-// rubber-stamps everything.
+// TestOracle_RejectsWrongDescriptor proves the oracle has teeth across verb classes,
+// not just the one SHARE→CLONE arm: each case runs a real method, feeds a LYING
+// descriptor claim to the classifier through a spy *testing.T, and asserts the spy
+// recorded a failure. Guards against a no-op oracle that rubber-stamps everything.
 func TestOracle_RejectsWrongDescriptor(t *testing.T) {
-	cfg := probeConfig{inline: false}
-	p := buildProbe(t, cfg)
+	// Pop SHAREs marks, heap-evals, and envPooled — so CLONE/TRANSFER/RESET claims on
+	// them are all lies the classifier must catch.
+	t.Run("share-claimed-clone", func(t *testing.T) {
+		sc := poppedSiteCall(t)
+		assertRejects(t, func(spy *testing.T) {
+			checkField(spy, sc, rule{field: "marks", verb: verbClone})
+		})
+	})
+	t.Run("share-claimed-transfer", func(t *testing.T) {
+		sc := poppedSiteCall(t)
+		assertRejects(t, func(spy *testing.T) {
+			// Pop aliases heap evals without relinquishing them; TRANSFER must fail.
+			checkField(spy, sc, rule{field: "evals", verb: verbTransfer})
+		})
+	})
+	t.Run("share-claimed-reset", func(t *testing.T) {
+		sc := poppedSiteCall(t)
+		assertRejects(t, func(spy *testing.T) {
+			// envPooled is true after Pop (SHAREd from cont); RESET must fail.
+			checkField(spy, sc, rule{field: "envPooled", verb: verbReset})
+		})
+	})
+	t.Run("dropped-pool-frame-effect", func(t *testing.T) {
+		cfg := probeConfig{inline: false} // unshared heap: really pools the frame
+		p := buildProbe(t, cfg)
+		mc, cont := p.mc, p.cont
+		mc.RestoreAndRelease(cont)
+		sc := siteCall{op: opRestoreAndRelease, mc: mc, srcCont: cont}
+		// A spec that forgets POOL_FRAME expects zero continuation-pool releases; the
+		// real method bumped the counter to 1, so verifyEffects must fail.
+		liar := siteSpec{dest: destMc, effects: []sideEffect{
+			{when: guard{condUnshared, condHeap}, effect: effReleaseOldStack},
+		}}
+		assertRejects(t, func(spy *testing.T) {
+			verifyEffects(spy, liar, cfg, sc)
+		})
+	})
+}
+
+// poppedSiteCall builds a Pop probe, runs the real PopContinuation, and returns the
+// post-call siteCall for feeding lying rules to the classifier.
+func poppedSiteCall(t *testing.T) siteCall {
+	t.Helper()
+	p := buildProbe(t, probeConfig{inline: false})
 	mc, cont := p.mc, p.cont
 	mc.cont = cont
 	mc.callDepth = 5
-
 	preSrcVm := vmRefs(&cont.vmState)
 	preDestVm := vmRefs(&mc.vmState)
-
+	preDestZero := vmZeros(&mc.vmState)
+	preSrcZero := vmZeros(&cont.vmState)
 	_, err := mc.PopContinuation()
 	qt.Assert(t, err, qt.IsNil)
-
-	sc := siteCall{
+	return siteCall{
 		op: opPop, dest: destMc, mc: mc,
 		destVm: &mc.vmState, srcVm: &cont.vmState, srcCont: cont,
-		preSrcVm: preSrcVm, preDestVm: preDestVm, destPreExists: true, srcAlive: true,
+		preSrcVm: preSrcVm, preDestVm: preDestVm,
+		preDestZero: preDestZero, preSrcZero: preSrcZero,
+		destPreExists: true, srcAlive: true,
 	}
+}
 
-	// The truth is SHARE; feed the classifier a CLONE lie and capture its verdict.
-	lie := rule{field: "marks", verb: verbClone}
+// assertRejects runs feed against a spy *testing.T and fails the real test unless
+// the spy recorded a failure. (A zero-value testing.T tracks Fail via Errorf; the
+// classifier's lie-detecting branches use Errorf, not Fatalf, so no Goexit.)
+func assertRejects(t *testing.T, feed func(*testing.T)) {
+	t.Helper()
 	spy := &testing.T{}
-	checkField(spy, sc, lie)
+	feed(spy)
 	if !spy.Failed() {
-		t.Errorf("oracle rubber-stamped a wrong descriptor: Pop marks is SHARE, but a CLONE claim was accepted")
+		t.Errorf("oracle accepted a descriptor claim it should have rejected")
 	}
 }
 
@@ -810,4 +989,12 @@ func rarShape(cfg probeConfig) string {
 		q += "-oldenvpooled"
 	}
 	return q
+}
+
+func copyShape(cfg probeConfig) string {
+	q := evalsShape(cfg)
+	if cfg.windingPresent {
+		return q + "-winding"
+	}
+	return q + "-nowinding"
 }
