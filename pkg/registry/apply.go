@@ -172,6 +172,16 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 		}
 	}
 
+	// Run per-engine namespace initializers with this engine's runtime frame.
+	// Extensions use these to build per-Namespace state (e.g. the I/O port
+	// parameters + caches) that must not be shared across engines.
+	for _, fn := range p.namespaceInits {
+		err := fn(runtimeEnv)
+		if err != nil {
+			return err
+		}
+	}
+
 	// Run initialization functions
 	for _, f := range p.initFuncs {
 		err := f()

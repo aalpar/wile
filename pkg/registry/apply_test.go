@@ -361,3 +361,20 @@ func TestApply_ContractEnforcement(t *testing.T) {
 		})
 	}
 }
+
+// TestAddNamespaceInit_RunsPerApplyWithEnv verifies a registered namespace-init
+// hook runs once per Apply, receiving that engine's runtime environment frame.
+func TestAddNamespaceInit_RunsPerApplyWithEnv(t *testing.T) {
+	r := NewRegistry()
+	var seen []*environment.EnvironmentFrame
+	r.AddNamespaceInit(func(env *environment.EnvironmentFrame) error {
+		seen = append(seen, env)
+		return nil
+	})
+	ns1 := environment.NewNamespace()
+	ns2 := environment.NewNamespace()
+	qt.Assert(t, r.Apply(context.Background(), ns1.Runtime()), qt.IsNil)
+	qt.Assert(t, r.Apply(context.Background(), ns2.Runtime()), qt.IsNil)
+	qt.Assert(t, len(seen), qt.Equals, 2)       // once per engine
+	qt.Assert(t, seen[0] != seen[1], qt.IsTrue) // distinct per-engine env
+}

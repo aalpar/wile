@@ -133,6 +133,11 @@ type Registry struct {
 	// which load into the mutable expand frame. The file boundary is the phase boundary.
 	procedureSources []string
 	globalValues     []GlobalValue
+	// namespaceInits are per-engine initializers run by Apply once per engine,
+	// with that engine's runtime environment frame. Extensions use them to build
+	// per-Namespace state (e.g. I/O port parameters + caches) that must not be
+	// shared across engines.
+	namespaceInits []func(env *environment.EnvironmentFrame) error
 }
 
 // NewRegistry creates a new empty registry.
@@ -266,6 +271,16 @@ func (p *Registry) AddGlobalValue(name string, value values.Value) {
 		Name:  name,
 		Value: value,
 	})
+}
+
+// AddNamespaceInit registers a per-engine initializer run by Apply once per
+// engine, with that engine's runtime environment frame. Extensions use it to
+// build per-Namespace state (e.g. I/O port parameters + caches) that must not
+// be shared across engines.
+func (p *Registry) AddNamespaceInit(fn func(env *environment.EnvironmentFrame) error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.namespaceInits = append(p.namespaceInits, fn)
 }
 
 // AddDocOnlyPrimitive registers a documentation-only primitive entry.
