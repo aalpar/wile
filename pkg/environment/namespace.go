@@ -71,16 +71,16 @@ var _ values.Value = (*Namespace)(nil)
 //	    (envMap is the load-bearing example — see the SetEnvMap doc
 //	    comment in this file for the discussion).
 //
-//	Delegated to the root (children read/write through to the topmost
-//	parent; the field itself only ever lives on the root namespace):
-//	  fileResolver, loadPathStack, scopeRegistry; engine services (ioState,
-//	  exportIndex) live on the pointer-shared *EngineServices (engine_services.go)
-//	    Rationale: these are per-VM resources whose identity must be
-//	    shared across the entire namespace tree (file resolution must
-//	    use the same paths in any child; library scopes registered by
-//	    one child must be visible to all). The root() helper walks the
-//	    parent chain in O(depth); per-method delegation prologues are
-//	    not used.
+//	Delegated to root via root() walk (the field lives only on the root
+//	namespace; children reach it through the parent chain in O(depth)):
+//	  fileResolver, loadPathStack, scopeRegistry
+//
+//	Pointer-shared via *EngineServices (allocated once in NewNamespace;
+//	every child receives the same pointer at construction — no root() walk,
+//	one struct, one optional mutex for the lazy-cache block):
+//	  ioState, exportIndex, formRegistry — add new engine-lifetime services here
+//	  (add a field on EngineServices + two Namespace accessors; children inherit
+//	  automatically because they copy the services pointer at construction)
 //
 // Adding a new field: choose a policy above, document it in this block,
 // then:
@@ -88,10 +88,13 @@ var _ values.Value = (*Namespace)(nil)
 //     NewSchemeReportNamespace (these are the two constructors that
 //     populate child state from a parent; they share the same captured
 //     set).
-//   - Delegated: define accessors that go through p.root() to read or
-//     write the field; do not store it on child namespaces.
+//   - Delegated (root() walk): define accessors through p.root(); do not
+//     store it on child namespaces.
+//   - EngineServices tenant: add a field to EngineServices + two Namespace
+//     accessors that read/write p.services.field directly; no constructor
+//     change needed (children copy the services pointer already).
 //
-// Do NOT mix the two for one field — the asymmetry is the bug source
+// Do NOT mix the policies for one field — the asymmetry is the bug source
 // the policy table exists to prevent.
 type Namespace struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
@@ -418,6 +421,19 @@ func (p *Namespace) SetIOState(v any) {
 // Reads the shared EngineServices (one per engine tree).
 func (p *Namespace) IOState() any {
 	return p.services.ioState
+}
+
+// FormRegistry returns the per-engine forms registry (an *forms.FormRegistry),
+// or nil if unset. Opaque here because environment/ sits below internal/forms in
+// the layering. Reads the shared EngineServices (one per engine tree).
+func (p *Namespace) FormRegistry() any {
+	return p.services.formRegistry
+}
+
+// SetFormRegistry stores the per-engine forms registry. The value is opaque
+// here (an *forms.FormRegistry owned by internal/forms).
+func (p *Namespace) SetFormRegistry(v any) {
+	p.services.formRegistry = v
 }
 
 // ImmutableTopLevel reports whether top-level-define immutability is enforced for

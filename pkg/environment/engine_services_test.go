@@ -41,6 +41,25 @@ func TestEngineServices_ExportIndexSharedAcrossTree(t *testing.T) {
 	}
 }
 
+// TestEngineServices_FormRegistrySharedAcrossTree pins that formRegistry rides
+// the same shared struct as ioState — a child and its root observe one slot.
+func TestEngineServices_FormRegistrySharedAcrossTree(t *testing.T) {
+	root := NewNamespace()
+	child := root.NewChildNamespace()
+
+	root.SetFormRegistry("fr-A")
+	got := child.FormRegistry()
+	if got != "fr-A" {
+		t.Fatalf("child.FormRegistry() = %v, want fr-A (shared slot)", got)
+	}
+
+	child.SetFormRegistry("fr-B")
+	got = root.FormRegistry()
+	if got != "fr-B" {
+		t.Fatalf("root.FormRegistry() = %v, want fr-B (child write hits shared slot)", got)
+	}
+}
+
 // TestEngineServices_ChildRuntimeSharesSlot confirms the library-loading frame
 // (NewChildRuntime shares the parent *Namespace outright) also sees the slot.
 func TestEngineServices_ChildRuntimeSharesSlot(t *testing.T) {

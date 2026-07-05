@@ -166,3 +166,22 @@ func Names() []string {
 func Verify() error {
 	return defaultRegistry.Verify()
 }
+
+// RegistryFor returns the per-engine FormRegistry reachable from env, or the
+// package default when env is nil, has no Namespace, or has no registry set.
+// This guard absorbs every nil-env / fresh-namespace caller with no signature
+// change at the readers (wired in the next task).
+func RegistryFor(env *environment.EnvironmentFrame) *FormRegistry {
+	if env == nil {
+		return defaultRegistry
+	}
+	ns := env.Namespace()
+	if ns == nil {
+		return defaultRegistry
+	}
+	stored, ok := ns.FormRegistry().(*FormRegistry)
+	if !ok || stored == nil {
+		return defaultRegistry
+	}
+	return stored
+}

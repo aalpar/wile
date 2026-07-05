@@ -240,3 +240,35 @@ func TestFormRegistry_Verify(t *testing.T) {
 	r2.RegisterValidator("z", fn)
 	c.Assert(r2.Verify(), qt.IsNil)
 }
+
+func TestRegistryFor_NilEnv_ReturnsDefault(t *testing.T) {
+	c := qt.New(t)
+	got := RegistryFor(nil)
+	c.Assert(got, qt.Equals, defaultRegistry)
+}
+
+func TestRegistryFor_NoRegistrySet_ReturnsDefault(t *testing.T) {
+	c := qt.New(t)
+	// Fresh namespace has no formRegistry set; FormRegistry() returns nil.
+	env := environment.NewNamespace().Runtime()
+	got := RegistryFor(env)
+	c.Assert(got, qt.Equals, defaultRegistry)
+}
+
+func TestRegistryFor_WrongType_ReturnsDefault(t *testing.T) {
+	c := qt.New(t)
+	ns := environment.NewNamespace()
+	// Store a non-*FormRegistry value; type assertion must fail gracefully.
+	ns.SetFormRegistry("not-a-registry")
+	got := RegistryFor(ns.Runtime())
+	c.Assert(got, qt.Equals, defaultRegistry)
+}
+
+func TestRegistryFor_RegistrySet_ReturnsIt(t *testing.T) {
+	c := qt.New(t)
+	ns := environment.NewNamespace()
+	fr := NewFormRegistry()
+	ns.SetFormRegistry(fr)
+	got := RegistryFor(ns.Runtime())
+	c.Assert(got, qt.Equals, fr)
+}

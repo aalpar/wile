@@ -18,7 +18,8 @@ import "sync"
 type EngineServices struct {
 	// Read-mostly service handles (write-once at engine build, then read across
 	// all threads). New tenants join HERE, before the lazy-index block.
-	ioState any // *io.State (extensions/io), set at engine build via namespace-init hook
+	ioState      any // *io.State (extensions/io), set at engine build via namespace-init hook
+	formRegistry any // *forms.FormRegistry (internal/forms), set at engine build; nil => default
 
 	// Lazy library-export cache + its guards, relocated verbatim from Namespace.
 	exportIndex      any // *compilation.LibraryExportIndex; nil until built
