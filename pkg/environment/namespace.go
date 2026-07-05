@@ -73,7 +73,8 @@ var _ values.Value = (*Namespace)(nil)
 //
 //	Delegated to the root (children read/write through to the topmost
 //	parent; the field itself only ever lives on the root namespace):
-//	  fileResolver, loadPathStack, scopeRegistry, exportIndex/exportIndexBuilt
+//	  fileResolver, loadPathStack, scopeRegistry; engine services (ioState,
+//	  exportIndex) live on the pointer-shared *EngineServices (engine_services.go)
 //	    Rationale: these are per-VM resources whose identity must be
 //	    shared across the entire namespace tree (file resolution must
 //	    use the same paths in any child; library scopes registered by
@@ -118,12 +119,11 @@ type Namespace struct {
 	// child is checkable by any mutator anywhere in the namespace tree.
 	immutableLiterals *ImmutableLiterals
 
-	// ioState is the per-engine I/O extension state (an *io.State), opaque here
-	// because environment/ sits below extensions/io in the layering. Set once at
-	// engine build via a registry namespace-init hook; read by I/O primitives
-	// through CallContext.IOState(). Delegated to root like immutableLiterals so
-	// every child of the root Namespace sees the same slot.
-	ioState any
+	// services holds the engine-lifetime, layering-opaque services (ioState,
+	// exportIndex, and Phase-2 formRegistry). Allocated once by the root
+	// NewNamespace and shared by pointer into every child constructor, so the
+	// whole namespace tree reads/writes one struct. See engine_services.go.
+	services *EngineServices
 
 	// immutableTopLevel, when true, makes the engine treat a top-level define
 	// that is defined-once and never set! within its compilation unit as
@@ -176,17 +176,6 @@ type Namespace struct {
 	// authorizer is the security authorizer for this namespace.
 	authorizer security.Authorizer
 
-	// exportIndex is the cached library export index for searching
-	// unloaded library exports. Stored as any to avoid a circular
-	// import with machine/compilation/. The concrete type is
-	// *compilation.LibraryExportIndex. Callers type-assert at use.
-	// Protected by exportIndexMu for lazy initialization.
-	// exportIndexBuilt is set to true after the first build attempt
-	// (successful or non-transient failure) to prevent redundant retries.
-	exportIndex      any
-	exportIndexBuilt bool
-	exportIndexMu    sync.RWMutex
-
 	// moduleInstances caches loaded and initialized library instances.
 	// Keyed by resolved library path (e.g., "(scheme base)").
 	// Nil until the first module is loaded.
@@ -236,6 +225,7 @@ func NewNamespace() *Namespace {
 		syntaxInterns:     make(map[values.Value]syntax.SyntaxValue),
 		scopeRegistry:     make(map[*syntax.Scope]*EnvironmentFrame),
 		immutableLiterals: &ImmutableLiterals{},
+		services:          &EngineServices{},
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
 	return q
@@ -417,17 +407,17 @@ func (p *Namespace) ImmutableLiterals() *ImmutableLiterals {
 	return p.root().immutableLiterals
 }
 
-// SetIOState stores the per-engine I/O extension state on the root Namespace.
+// SetIOState stores the per-engine I/O extension state on the shared EngineServices.
 // The value is opaque here (an *io.State owned by extensions/io); this package
 // sits below extensions/io in the layering and never inspects it.
 func (p *Namespace) SetIOState(v any) {
-	p.root().ioState = v
+	p.services.ioState = v
 }
 
 // IOState returns the per-engine I/O extension state, or nil if unset.
-// Delegated to root so children of the root Namespace see the same slot.
+// Reads the shared EngineServices (one per engine tree).
 func (p *Namespace) IOState() any {
-	return p.root().ioState
+	return p.services.ioState
 }
 
 // ImmutableTopLevel reports whether top-level-define immutability is enforced for
@@ -586,22 +576,21 @@ func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 
 // ExportIndex returns the cached library export index and whether a
 // build has been attempted. Returns (nil, false) if no build has run.
-// Delegated to root. The concrete type is *compilation.LibraryExportIndex.
+// Reads the shared EngineServices (one per engine tree). The concrete type
+// is *compilation.LibraryExportIndex.
 func (p *Namespace) ExportIndex() (any, bool) {
-	r := p.root()
-	r.exportIndexMu.RLock()
-	defer r.exportIndexMu.RUnlock()
-	return r.exportIndex, r.exportIndexBuilt
+	p.services.exportIndexMu.RLock()
+	defer p.services.exportIndexMu.RUnlock()
+	return p.services.exportIndex, p.services.exportIndexBuilt
 }
 
 // SetExportIndex stores the library export index and marks it as built,
-// preventing subsequent build attempts. Delegated to root.
+// preventing subsequent build attempts. Writes the shared EngineServices.
 func (p *Namespace) SetExportIndex(idx any) {
-	r := p.root()
-	r.exportIndexMu.Lock()
-	defer r.exportIndexMu.Unlock()
-	r.exportIndex = idx
-	r.exportIndexBuilt = true
+	p.services.exportIndexMu.Lock()
+	defer p.services.exportIndexMu.Unlock()
+	p.services.exportIndex = idx
+	p.services.exportIndexBuilt = true
 }
 
 // ModuleInstance returns the cached module instance for the given path,
@@ -851,6 +840,7 @@ func (p *Namespace) NewChildNamespace(opts ...NamespaceOption) *Namespace {
 		registry:          p.registry,
 		authorizer:        p.authorizer,
 		envMap:            p.envMap,
+		services:          p.services,
 		parent:            p,
 	}
 	if cfg.registrySet {
@@ -878,6 +868,7 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		registry:          p.registry,
 		authorizer:        p.authorizer,
 		envMap:            p.envMap,
+		services:          p.services,
 		parent:            p,
 	}
 
