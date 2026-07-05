@@ -248,8 +248,13 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 
 	// Redirect this engine's output away from stdout (the MCP JSON-RPC
 	// transport). Each handleEval call captures into its own buffer; between
-	// evals, output goes to discard.
-	p.redirectOutput(io.Discard)
+	// evals, output goes to discard. A failure here means the engine lacks io
+	// state — fatal, because leaving output on stdout corrupts the transport.
+	redirectErr := p.redirectOutput(io.Discard)
+	if redirectErr != nil {
+		return werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"initLocked: redirect output away from transport: %v", redirectErr)
+	}
 
 	// Pre-import standard libraries so their bindings are available from
 	// the first eval call and discoverable via apropos/doc.
@@ -283,19 +288,25 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	return nil
 }
 
-// redirectOutput points the MCP engine's current-output-port at w. The engine
-// (KitchenSink profile) always carries per-engine io state; a missing state is
-// treated as a no-op so a redirect never masks the error being handled (e.g. in
-// the panic-recovery path). The caller must hold p.mu.
-func (p *mcpServer) redirectOutput(w io.Writer) {
+// redirectOutput points the MCP engine's current-output-port at w. It returns an
+// error when the engine carries no per-engine io state, rather than no-op'ing:
+// the default output port is os.Stdout, which IS the MCP JSON-RPC transport, so a
+// silent failure to redirect corrupts the protocol stream (Scheme output
+// interleaved into JSON-RPC) with no diagnostic. Callers decide the policy — the
+// init and capture paths must surface it; the panic-recovery path logs and
+// continues. The caller must hold p.mu.
+func (p *mcpServer) redirectOutput(w io.Writer) error {
 	if p.engine == nil {
-		return
+		return werr.WrapForeignErrorf(werr.ErrEngineInit,
+			"redirectOutput: engine not initialized")
 	}
 	st, ok := p.engine.Namespace().IOState().(*ioext.State)
 	if !ok {
-		return
+		return werr.WrapForeignErrorf(werr.ErrNoIOState,
+			"redirectOutput: engine has no per-engine io state")
 	}
 	st.SetOutputPort(values.NewCharacterOutputPortFromWriter(w))
+	return nil
 }
 
 // evalResult is the structured JSON response from the eval tool.
@@ -323,7 +334,12 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 		// Log to stderr (not stdout, which is the MCP JSON-RPC transport).
 		fmt.Fprintf(os.Stderr, "mcp eval panic: %v\ncode: %s\n", r, code)
 		// Ensure the engine's output port is in a safe state after panic.
-		p.redirectOutput(io.Discard)
+		// Best-effort in recovery: log to stderr (not stdout) if it fails,
+		// but do not mask the panic being handled.
+		resetErr := p.redirectOutput(io.Discard)
+		if resetErr != nil {
+			fmt.Fprintf(os.Stderr, "mcp eval: post-panic output reset failed: %v\n", resetErr)
+		}
 		toolResult = mcp.NewToolResultError(fmt.Sprintf(
 			"internal error (panic): %v — session state may be corrupted; "+
 				"use the reset tool if subsequent calls fail", r))
@@ -353,9 +369,20 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 	}
 
 	// Capture stdout: redirect this engine's current-output-port to a buffer.
+	// initLocked already guaranteed io state (it errors otherwise), so this
+	// should not fail; log to stderr defensively if it ever does, since a silent
+	// failure would send eval output to the JSON-RPC transport.
 	var buf bytes.Buffer
-	p.redirectOutput(&buf)
-	defer p.redirectOutput(io.Discard)
+	captureErr := p.redirectOutput(&buf)
+	if captureErr != nil {
+		fmt.Fprintf(os.Stderr, "mcp eval: output capture redirect failed: %v\n", captureErr)
+	}
+	defer func() {
+		resetErr := p.redirectOutput(io.Discard)
+		if resetErr != nil {
+			fmt.Fprintf(os.Stderr, "mcp eval: output reset failed: %v\n", resetErr)
+		}
+	}()
 
 	// EvalProgram wraps in (begin ...) so all defines have mutual visibility,
 	// matching file execution. A parse/compile failure surfaces via evalErr below

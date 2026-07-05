@@ -2474,14 +2474,3 @@ func TestMachineContext_ImmutableLiterals(t *testing.T) {
 		t.Fatalf("MachineContext.ImmutableLiterals must equal the namespace's set")
 	}
 }
-
-// TestMachineContext_IOState verifies IOState() reaches the engine's Namespace slot.
-func TestMachineContext_IOState(t *testing.T) {
-	ns := environment.NewNamespace()
-	marker := struct{ s string }{"io"}
-	ns.SetIOState(&marker)
-	mc := AcquireTopLevelContext(context.Background(),
-		NewNativeTemplate(0, 0, false), ns.Runtime())
-	defer ReleaseTopLevelContext(mc)
-	qt.Assert(t, mc.IOState(), qt.Equals, &marker)
-}

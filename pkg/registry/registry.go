@@ -69,6 +69,12 @@ type PrimitiveRegistration struct {
 // InitFunc is called after all primitives and global values are registered.
 type InitFunc func() error
 
+// NamespaceInit is a per-engine initializer run by Apply once per engine, with
+// that engine's runtime environment frame. Extensions use it to build
+// per-Namespace state (e.g. I/O port parameters + caches) that must not be
+// shared across engines.
+type NamespaceInit func(env *environment.EnvironmentFrame) error
+
 // GlobalValue pairs a name with a value to be registered as a global binding.
 type GlobalValue struct {
 	Name  string
@@ -101,10 +107,10 @@ type BindingSpec struct {
 //  6. Registry.Apply (registry/apply.go) — materialize the new category into the environment
 //     at the appropriate lifecycle step
 //
-// All seven categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
-// macroSources, procedureSources, globalValues) follow this pattern. Forgetting any
-// step is a silent aliasing or drift hazard — Clone, Without, WithoutCategory, and
-// WithoutBindings all assume deepCopy covers every field.
+// All eight categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
+// macroSources, procedureSources, globalValues, namespaceInits) follow this pattern.
+// Forgetting any step is a silent aliasing or drift hazard — Clone, Without,
+// WithoutCategory, and WithoutBindings all assume deepCopy covers every field.
 //
 // Note: the `docs []DocEntry` slice was removed in Phase 1
 // (plans/2026-05-18-registry-structural-reduction.md, Finding 2):
@@ -137,7 +143,7 @@ type Registry struct {
 	// with that engine's runtime environment frame. Extensions use them to build
 	// per-Namespace state (e.g. I/O port parameters + caches) that must not be
 	// shared across engines.
-	namespaceInits []func(env *environment.EnvironmentFrame) error
+	namespaceInits []NamespaceInit
 }
 
 // NewRegistry creates a new empty registry.
@@ -150,6 +156,7 @@ func NewRegistry() *Registry {
 		macroSources:     make([]string, 0, 4),
 		procedureSources: make([]string, 0, 4),
 		globalValues:     make([]GlobalValue, 0, 4),
+		namespaceInits:   make([]NamespaceInit, 0, 4),
 	}
 	return q
 }
@@ -277,10 +284,20 @@ func (p *Registry) AddGlobalValue(name string, value values.Value) {
 // engine, with that engine's runtime environment frame. Extensions use it to
 // build per-Namespace state (e.g. I/O port parameters + caches) that must not
 // be shared across engines.
-func (p *Registry) AddNamespaceInit(fn func(env *environment.EnvironmentFrame) error) {
+func (p *Registry) AddNamespaceInit(fn NamespaceInit) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.namespaceInits = append(p.namespaceInits, fn)
+}
+
+// NamespaceInits returns a defensive copy of the registered per-engine
+// namespace initializers.
+func (p *Registry) NamespaceInits() []NamespaceInit {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]NamespaceInit, len(p.namespaceInits))
+	copy(q, p.namespaceInits)
+	return q
 }
 
 // AddDocOnlyPrimitive registers a documentation-only primitive entry.
@@ -491,6 +508,7 @@ func (p *Registry) deepCopy() *Registry {
 		macroSources:     make([]string, len(p.macroSources)),
 		procedureSources: make([]string, len(p.procedureSources)),
 		globalValues:     make([]GlobalValue, len(p.globalValues)),
+		namespaceInits:   make([]NamespaceInit, len(p.namespaceInits)),
 	}
 	copy(q.primitives, p.primitives)
 	copy(q.bindingSpecs, p.bindingSpecs)
@@ -499,6 +517,7 @@ func (p *Registry) deepCopy() *Registry {
 	copy(q.macroSources, p.macroSources)
 	copy(q.procedureSources, p.procedureSources)
 	copy(q.globalValues, p.globalValues)
+	copy(q.namespaceInits, p.namespaceInits)
 	return q
 }
 

@@ -65,10 +65,6 @@ type CallContext interface {
 	// list/vector mutators consult it to enforce R7RS §4.1.2 constant
 	// immutability.
 	ImmutableLiterals() *environment.ImmutableLiterals
-
-	// IOState returns the engine-scoped I/O extension state (an *io.State),
-	// or nil if the context has no namespace. The io primitives downcast it.
-	IOState() any
 }
 
 // RequireMachineContext asserts that cc is a *MachineContext, returning a

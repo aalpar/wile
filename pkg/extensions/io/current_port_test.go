@@ -15,10 +15,13 @@
 package io
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -42,4 +45,18 @@ func TestGetCurrentPortReturnsErrorOnNonPort(t *testing.T) {
 		_, err := st.GetOutputPort()
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAnOutputPort)
 	})
+}
+
+// TestStateFrom_NoIOState pins the ErrNoIOState error path: a context whose
+// namespace has no installed io.State (no io namespace-init hook ran) must yield
+// a wrapped ErrNoIOState from stateFrom, which the read/close primitives return
+// as a Scheme error rather than resolving a wrong/default port.
+func TestStateFrom_NoIOState(t *testing.T) {
+	ns := environment.NewNamespace() // no SetIOState — slot is nil
+	mc := machine.AcquireTopLevelContext(context.Background(),
+		machine.NewNativeTemplate(0, 0, false), ns.Runtime())
+	defer machine.ReleaseTopLevelContext(mc)
+
+	_, err := stateFrom(mc)
+	qt.Assert(t, err, qt.ErrorIs, werr.ErrNoIOState)
 }

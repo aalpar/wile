@@ -299,16 +299,6 @@ func (p *MachineContext) ImmutableLiterals() *environment.ImmutableLiterals {
 	return ns.ImmutableLiterals()
 }
 
-// IOState returns the engine-scoped I/O extension state from this context's
-// namespace, or nil if none is set. The io primitives downcast it to *io.State.
-func (p *MachineContext) IOState() any {
-	ns := p.env.Namespace()
-	if ns == nil {
-		return nil
-	}
-	return ns.IOState()
-}
-
 func (p *MachineContext) Arg(index int) values.Value {
 	return p.env.GetLocalBindingByIndex(index).Value()
 }

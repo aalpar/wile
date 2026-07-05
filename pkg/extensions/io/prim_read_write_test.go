@@ -1217,6 +1217,27 @@ func TestParserCacheEviction(t *testing.T) {
 		c.Assert(parsersAfter, qt.Equals, parsersBefore)
 		c.Assert(tokenizersAfter, qt.Equals, tokenizersBefore)
 	})
+
+	t.Run("close-port evicts cache without eof", func(t *testing.T) {
+		// The other documented eviction path: an explicit (close-port) — not EOF —
+		// must go through the evictPortCache choke point. Read once (populating the
+		// parser cache but not reaching EOF), then close, and assert the cache
+		// returns to baseline.
+		eng := newEngine(t)
+		st := eng.Namespace().IOState().(*extio.State)
+		parsersBefore, _ := extio.ExportCacheSizes(st)
+
+		eval(t, eng, `(define p (open-input-string "1 2 3"))`)
+		eval(t, eng, `(read p)`) // caches a parser for p; no EOF
+
+		parsersMid, _ := extio.ExportCacheSizes(st)
+		c.Assert(parsersMid, qt.Equals, parsersBefore+1) // cache actually populated
+
+		eval(t, eng, `(close-port p)`)
+
+		parsersAfter, _ := extio.ExportCacheSizes(st)
+		c.Assert(parsersAfter, qt.Equals, parsersBefore) // close evicted it
+	})
 }
 
 // =============================================================================

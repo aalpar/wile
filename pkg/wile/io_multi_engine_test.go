@@ -70,16 +70,23 @@ func TestTwoEngines_CurrentInputPortIsolated(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	defer eb.Close()
 
-	// Engine A redirects its current-input-port to "xy" and reads one char.
+	// Engine A redirects its current-input-port to "xy" and reads one char ('x').
 	got, err := ea.EvalMultiple(ctx, `
 		(current-input-port (open-input-string "xy"))
 		(read-char (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got.SchemeString(), qt.Equals, `#\x`)
 
-	// Engine B's current-input-port is its own default — not A's "xy" port —
-	// so A's redirect is invisible here. A second read on A continues its own
-	// port at 'y', proving A's port object is not shared with B.
+	// Engine B redirects ITS current-input-port to a different string and reads.
+	// This is the discriminating step: under the former shared-global param, B's
+	// redirect would overwrite the one shared cell, so A's next read would come
+	// from B's "zw" port ('w') instead of continuing A's own "xy" port.
+	_, err = eb.EvalMultiple(ctx, `
+		(current-input-port (open-input-string "zw"))
+		(read-char (current-input-port))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	// A continues its OWN port at 'y' — proving B's redirect did not touch A's.
 	got, err = ea.EvalMultiple(ctx, `(read-char (current-input-port))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got.SchemeString(), qt.Equals, `#\y`)

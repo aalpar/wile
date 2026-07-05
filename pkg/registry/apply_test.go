@@ -378,3 +378,18 @@ func TestAddNamespaceInit_RunsPerApplyWithEnv(t *testing.T) {
 	qt.Assert(t, len(seen), qt.Equals, 2)       // once per engine
 	qt.Assert(t, seen[0] != seen[1], qt.IsTrue) // distinct per-engine env
 }
+
+// TestClone_PreservesNamespaceInits guards the "ADD A CATEGORY" recipe: deepCopy
+// must copy the namespaceInits slice, or Clone/Without silently drop the hook.
+func TestClone_PreservesNamespaceInits(t *testing.T) {
+	r := NewRegistry()
+	ran := 0
+	r.AddNamespaceInit(func(env *environment.EnvironmentFrame) error {
+		ran++
+		return nil
+	})
+	clone := r.Clone()
+	ns := environment.NewNamespace()
+	qt.Assert(t, clone.Apply(context.Background(), ns.Runtime()), qt.IsNil)
+	qt.Assert(t, ran, qt.Equals, 1) // hook survived the clone
+}

@@ -60,28 +60,16 @@ func NewState() *State {
 	}
 }
 
-// InPortParam returns this engine's current-input-port parameter object.
-func (p *State) InPortParam() *machine.Parameter {
-	return p.inPort
-}
-
-// OutPortParam returns this engine's current-output-port parameter object.
-func (p *State) OutPortParam() *machine.Parameter {
-	return p.outPort
-}
-
-// ErrPortParam returns this engine's current-error-port parameter object.
-func (p *State) ErrPortParam() *machine.Parameter {
-	return p.errPort
-}
-
 // SetInputPort sets this engine's base input port. Used by tests and by
-// embedders configuring an engine's ports before running.
+// embedders configuring an engine's ports before running. Per R7RS parameter
+// semantics the value is not validated here; a non-textual port surfaces as a
+// Scheme error when a default-port read resolves it (resolveCurrentInputPort).
 func (p *State) SetInputPort(port *values.PortObject) {
 	p.inPort.SetValue(port)
 }
 
-// SetOutputPort sets this engine's base output port.
+// SetOutputPort sets this engine's base output port. Not validated here (see
+// SetInputPort); a non-textual port errors at resolve time.
 func (p *State) SetOutputPort(port *values.PortObject) {
 	p.outPort.SetValue(port)
 }
@@ -100,11 +88,24 @@ func (p *State) GetOutputPort() (*values.PortObject, error) {
 	return currentTextualOutputPort("current-output-port", p.outPort.Value())
 }
 
-// stateFrom pulls the per-engine State off the CallContext, or returns a wrapped
-// sentinel when the context has no namespace/State (e.g. a bare sub-context).
+// stateFrom pulls the per-engine State off the CallContext's namespace, or
+// returns a wrapped sentinel when the context has no namespace/State (e.g. a bare
+// sub-context). The State lives on the engine's Namespace (root-delegated, like
+// ImmutableLiterals); this reaches it via the already-typed CallContext surface
+// rather than a dedicated interface method, keeping the opaque `any` slot off the
+// public contract.
 func stateFrom(cc machine.CallContext) (*State, error) {
-	v := cc.IOState()
-	st, ok := v.(*State)
+	env := cc.EnvironmentFrame()
+	if env == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrNoIOState,
+			"io: context has no environment frame")
+	}
+	ns := env.Namespace()
+	if ns == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrNoIOState,
+			"io: context has no namespace")
+	}
+	st, ok := ns.IOState().(*State)
 	if !ok || st == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrNoIOState,
 			"io: no per-engine I/O state on this context")
