@@ -30,6 +30,12 @@
 ;; ratio drops to 0.5 < 1.0 -> weak. A shrink of the family below two sites also
 ;; drops below min-sites, forcing a re-review of the family shape.
 ;;
+;; Consensus limit (shared by all consensus beliefs — see B3
+;; callcc-mode-selection-single-seam): a CORRELATED regression of BOTH members
+;; (both -> 'partial) is again a unanimous majority, ratio 1.0 -> strong; what
+;; surfaces then is the reported pattern flipping, not the status. Read the
+;; pattern, not only strong/weak.
+;;
 ;; NOTE: this uses dominates-call, added to wile-goast for this belief (SSA idom;
 ;; the multi-site generalization of `ordered`). See wile-goast belief-checkers.scm.
 (define-belief "callcc-capture-dominates-modes"

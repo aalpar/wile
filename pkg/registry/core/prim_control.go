@@ -138,16 +138,19 @@ func PrimApply(cc machine.CallContext) error {
 //	      (f (lambda (v) (abort-current-continuation default-prompt-tag (k v)))))
 //	    default-prompt-tag)
 //
-// Two execution modes:
+// One capture, one apply seam, two driver modes. The continuation is captured
+// once (shared by both modes); the lambda is then applied once in a selected
+// target context. The only per-mode difference is driver provenance:
 //
-// Inline mode (mc.Parent() != nil): The lambda runs directly in the current VM context.
-// This preserves the full continuation chain, ensuring continuations captured inside the
-// lambda include the complete call stack back to the top level. This is critical for
-// cooperative coroutines and other patterns that capture/invoke multiple continuations.
-//
-// Sub-context mode (mc.Parent() == nil): Falls back to running the lambda in an isolated
-// sub-context. Used when call/cc is invoked inside another foreign function's sub-context
-// (e.g., inside apply or dynamic-wind) where there's no saved continuation to return to.
+//   - Inline (mc.Parent() != nil): apply in the current VM context. Preserves the
+//     full continuation chain, so continuations captured inside the lambda include
+//     the complete call stack back to top level — critical for cooperative
+//     coroutines and other multi-continuation patterns. Resume is resolved by the
+//     ambient DefaultPromptTag driver already running above this frame.
+//   - Sub-context (mc.Parent() == nil): call/cc is rootless (invoked inside another
+//     foreign function's sub-context — e.g. apply or dynamic-wind — or a thread
+//     root), so there is no ambient driver. Apply in a fresh sub-context that
+//     installs its own DefaultPromptTag driver to resolve this call/cc's resume.
 func PrimCallCC(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "call/cc")
 	if err != nil {
@@ -185,39 +188,44 @@ func PrimCallCC(cc machine.CallContext) error {
 
 	capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 
-	if mc.Parent() != nil {
-		// Inline mode: apply the lambda directly in the current VM context.
-		// When the lambda returns normally, RestoreContinuation pops mc.cont,
-		// resuming from the caller of call/cc. When the lambda invokes the
-		// continuation, the escape propagates through the VM to RunWithEscapeHandling.
-		_, err := mc.ApplyCallable(mcls, capt)
+	// Single apply seam. The capture above is shared by both modes; the ONLY
+	// per-mode difference is driver provenance, so mode is one target selection,
+	// not two hand-written apply arms (staff-sweep #9). target is the ambient
+	// context when a live continuation chain exists above this frame
+	// (mc.Parent() != nil), or a fresh sub-context when rootless.
+	target := mc
+	if mc.Parent() == nil {
+		// Rootless (inside another foreign sub-context or a thread root): the
+		// sub-context IS the implicit call-with-continuation-prompt for this
+		// captured continuation, so it owns a DefaultPromptTag driver.
+		sub := mc.NewSubContext()
+		defer machine.ReleaseSubContext(sub)
+		target = sub
+	}
+
+	// Apply the lambda once, in the selected context. Inline (target == mc): the
+	// lambda runs directly in the current VM context, preserving the full
+	// continuation chain; on normal return RestoreContinuation pops mc.cont back
+	// to the caller of call/cc, and on continuation invocation the escape
+	// propagates through the VM to the ambient driver. No PC compensation needed
+	// (applyForeign does not post-increment pc).
+	_, err = target.ApplyCallable(mcls, capt)
+	if err != nil {
+		return err
+	}
+
+	if target != mc {
+		// Rootless: RunWithEscapeHandling installs DefaultPromptTag and resolves
+		// the call/cc resume trampoline (ErrResumeContinuation) plus any reified
+		// boundary on this sub's chain (RunWithinBoundary would re-raise the
+		// resume signal, which has no enclosing driver here), then deliver the
+		// result to mc.
+		err = target.RunWithEscapeHandling()
 		if err != nil {
 			return err
 		}
-		// No PC compensation needed: applyForeign does not post-increment pc.
-		return nil
+		mc.SetValues(target.GetValues()...)
 	}
-
-	// Sub-context mode (the call/cc-er is itself rootless — e.g. inside another
-	// foreign sub-context or a thread root): run the lambda under its OWN
-	// DefaultPromptTag driver. Sub-context mode IS the implicit
-	// call-with-continuation-prompt for this captured continuation, so it must be a
-	// DefaultPromptTag owner: RunWithEscapeHandling installs DefaultPromptTag and
-	// resolves the call/cc resume trampoline (ErrResumeContinuation) and any reified
-	// boundary on this sub's chain, then delivers the result. (RunWithinBoundary would
-	// re-raise the resume signal, which has no enclosing driver here.)
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(mcls, capt)
-	if err != nil {
-		return err
-	}
-	err = sub.RunWithEscapeHandling()
-	if err != nil {
-		return err
-	}
-
-	mc.SetValues(sub.GetValues()...)
 	return nil
 }
 

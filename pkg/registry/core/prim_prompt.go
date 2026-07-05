@@ -219,25 +219,33 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// (+ 1 (k 5))) dflt)) => 22 — compose-in-place, not the old control/frame-removing
 	// abort. This also fixes the sub-context truncation: a call/cc captured inside proc
 	// now spans the live chain.
-	if mc.Parent() != nil {
-		// Inline mode: proc runs directly in the current VM context, in place.
-		_, err = mc.ApplyCallable(procCls, comp)
-		return err
+	// Single apply seam, mirroring call/cc (prim_control.go): capture is shared,
+	// mode is one target selection, not two hand-written apply arms (staff-sweep
+	// #9). target is the ambient context when a live chain exists (proc runs in
+	// place, composing), or a fresh sub-context when rootless.
+	target := mc
+	if mc.Parent() == nil {
+		// Rootless cwcc (inside another foreign sub-context or a thread root): run
+		// proc under its OWN DefaultPromptTag driver, exactly as call/cc's
+		// sub-context mode.
+		sub := mc.NewSubContext()
+		defer machine.ReleaseSubContext(sub)
+		target = sub
 	}
-	// Sub-context mode (rootless cwcc, e.g. inside another foreign sub-context or a
-	// thread root): run proc under its OWN DefaultPromptTag driver, exactly as call/cc's
-	// sub-context mode — RunWithEscapeHandling (not RunWithinBoundary) so a call/cc or
-	// reified boundary inside proc has a driver, then deliver proc's value(s) to mc.
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(procCls, comp)
+
+	_, err = target.ApplyCallable(procCls, comp)
 	if err != nil {
 		return err
 	}
-	err = sub.RunWithEscapeHandling()
-	if err != nil {
-		return err
+
+	if target != mc {
+		// RunWithEscapeHandling (not RunWithinBoundary) so a call/cc or reified
+		// boundary inside proc has a driver, then deliver proc's value(s) to mc.
+		err = target.RunWithEscapeHandling()
+		if err != nil {
+			return err
+		}
+		mc.SetValues(target.GetValues()...)
 	}
-	mc.SetValues(sub.GetValues()...)
 	return nil
 }

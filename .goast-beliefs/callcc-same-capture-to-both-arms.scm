@@ -33,6 +33,12 @@
 ;; reaching only its own arm), that member drops to 'partial, the majority
 ;; splits, and ratio falls to 0.5 < 1.0 -> weak.
 ;;
+;; Consensus limit (shared by all consensus beliefs — see B3
+;; callcc-mode-selection-single-seam): a CORRELATED regression of BOTH members
+;; (both -> 'partial) is again a unanimous majority, ratio 1.0 -> strong; what
+;; surfaces then is the reported pattern flipping, not the status. Read the
+;; pattern, not only strong/weak.
+;;
 ;; NOTE: this uses flows-to-all, added to wile-goast for this belief (the
 ;; value-flow analog of dominates-call, with an aggregate-alias edge for
 ;; value-through-variadic-slice flow). See wile-goast belief-checkers.scm.

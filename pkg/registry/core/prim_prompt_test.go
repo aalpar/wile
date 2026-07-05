@@ -152,6 +152,67 @@ func TestPrompt_ComposableContinuation(t *testing.T) {
 	}
 }
 
+// TestPrompt_ComposableContinuationRootless exercises the rootless (sub-context)
+// arm of PrimCallWithComposableContinuation: when cwcc runs where mc.Parent() ==
+// nil, it applies proc under its OWN DefaultPromptTag driver
+// (RunWithEscapeHandling) and delivers the result back to mc via SetValues. The
+// rootless condition is reached at a thread root (the thread body's context has
+// no ambient continuation chain). The inline arm is covered by
+// TestPrompt_ComposableContinuation; this covers the parallel branch the #9
+// single-seam restructure rewrote (prim_prompt.go target-selection +
+// RunWithEscapeHandling + SetValues), which was previously uncovered.
+func TestPrompt_ComposableContinuationRootless(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "rootless cwcc composes and delivers value through sub-context",
+			Code: `(thread-join!
+			         (thread-start!
+			           (make-thread
+			             (lambda ()
+			               (call-with-composable-continuation
+			                 (lambda (k) (k 5))
+			                 (default-continuation-prompt-tag))))))`,
+			Expected: values.NewInteger(5),
+		},
+		{
+			Name: "rootless cwcc returns proc value when k is not invoked",
+			Code: `(thread-join!
+			         (thread-start!
+			           (make-thread
+			             (lambda ()
+			               (call-with-composable-continuation
+			                 (lambda (k) 7)
+			                 (default-continuation-prompt-tag))))))`,
+			Expected: values.NewInteger(7),
+		},
+		{
+			// Discriminates compose-in-place from escape under the rootless arm:
+			// invoking k twice and summing yields 3 (each (k v) composes and
+			// returns v). An escaping continuation would abort at (k 1) and never
+			// reach (k 2).
+			Name: "rootless cwcc continuation composes in place (invoked twice)",
+			Code: `(thread-join!
+			         (thread-start!
+			           (make-thread
+			             (lambda ()
+			               (call-with-composable-continuation
+			                 (lambda (k) (+ (k 1) (k 2)))
+			                 (default-continuation-prompt-tag))))))`,
+			Expected: values.NewInteger(3),
+		},
+	}
+
+	for _, tc := range tcs {
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result, qt.DeepEquals, tc.Expected)
+		})
+	}
+}
+
 func TestPrompt_NestedPrompts(t *testing.T) {
 	c := qt.New(t)
 
