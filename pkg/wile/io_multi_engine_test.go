@@ -84,3 +84,36 @@ func TestTwoEngines_CurrentInputPortIsolated(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got.SchemeString(), qt.Equals, `#\y`)
 }
+
+// TestImportDoesNotResetCurrentPort guards the idempotent io namespace-init
+// hook. Importing a library re-runs applyBaseEnvironment (hence the hook) against
+// a library environment that SHARES the engine's Namespace (NewChildRuntime). The
+// hook must REUSE the engine's existing io.State, not mint a fresh one — otherwise
+// the import silently resets current-output-port mid-program, discarding a prior
+// redirect. Regression for a defect found verifying staff-sweep #8: a fresh
+// per-Apply State sent output to stdout the moment any library was imported.
+func TestImportDoesNotResetCurrentPort(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(wile.StdLibFS),
+		wile.WithLibraryPaths("lib"))
+	qt.Assert(t, err, qt.IsNil)
+	defer eng.Close()
+
+	// Redirect the DEFAULT output port to a string port, THEN import a library,
+	// THEN write with no explicit port arg. The default-port write must resolve
+	// through the engine's (unchanged) State and land in the redirected port, not
+	// stdout. The no-arg display is essential: it exercises current-output-port
+	// resolution, which the reset-on-import bug corrupted; an explicit
+	// (current-output-port) arg would read the still-bound original param and mask
+	// the defect.
+	got, err := eng.EvalMultiple(ctx, `
+		(define p (open-output-string))
+		(current-output-port p)
+		(import (scheme write))
+		(display "x")
+		(get-output-string p)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.SchemeString(), qt.Equals, `"x"`)
+}

@@ -252,12 +252,25 @@ func addPortState(r *registry.Registry) error {
 		"Parameter holding the default output port.\nParameterize to redirect standard output within a dynamic extent.\n\nCategory: ports")
 	r.AddDocumentation("current-error-port",
 		"Parameter holding the default error port.\nParameterize to redirect standard error within a dynamic extent.\n\nCategory: ports")
-	// Per-engine: each Apply mints a fresh State and binds current-{input,output,
-	// error}-port to that engine's own port parameters. Replaces the former
-	// package-global parameters shared across engines (staff-sweep #8).
+	// Per-engine: the first Apply for a Namespace mints a State and binds
+	// current-{input,output,error}-port to its own port parameters. Replaces the
+	// former package-global parameters shared across engines (staff-sweep #8).
+	//
+	// Idempotent by design: the engine re-runs applyBaseEnvironment (hence this
+	// hook) for every library environment it builds, and those library envs share
+	// the engine's Namespace (NewChildRuntime). Minting a fresh State on each such
+	// re-run would reset the engine's current ports (e.g. discard a mid-eval
+	// output redirect the moment any library is imported). So reuse the existing
+	// State when the shared Namespace already has one — the State is engine-scoped
+	// (root-delegated, like ImmutableLiterals), not per-Apply. Distinct engines
+	// have distinct Namespaces, so each still gets its own State.
 	r.AddNamespaceInit(func(env *environment.EnvironmentFrame) error {
-		st := NewState()
-		env.Namespace().SetIOState(st)
+		ns := env.Namespace()
+		st, ok := ns.IOState().(*State)
+		if !ok || st == nil {
+			st = NewState()
+			ns.SetIOState(st)
+		}
 		binds := []struct {
 			name  string
 			param *machine.Parameter
