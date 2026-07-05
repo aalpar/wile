@@ -59,6 +59,10 @@ func (p *stubCallContext) ImmutableLiterals() *environment.ImmutableLiterals {
 	return nil
 }
 
+func (p *stubCallContext) IOState() any {
+	return nil
+}
+
 var _ machine.CallContext = (*stubCallContext)(nil)
 
 func TestVariadicArgs(t *testing.T) {

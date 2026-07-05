@@ -48,6 +48,10 @@ func (*foreignCallContext) ImmutableLiterals() *environment.ImmutableLiterals {
 	return nil
 }
 
+func (*foreignCallContext) IOState() any {
+	return nil
+}
+
 // Compile-time assertion: foreignCallContext satisfies CallContext without being
 // the concrete *MachineContext the primitives need.
 var _ machine.CallContext = (*foreignCallContext)(nil)

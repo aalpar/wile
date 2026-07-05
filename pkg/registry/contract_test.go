@@ -45,6 +45,10 @@ func (p *stubCallContext) ImmutableLiterals() *environment.ImmutableLiterals {
 	return nil
 }
 
+func (p *stubCallContext) IOState() any {
+	return nil
+}
+
 // Compile-time assertion: stubCallContext satisfies CallContext.
 var _ machine.CallContext = (*stubCallContext)(nil)
 
