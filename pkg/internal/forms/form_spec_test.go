@@ -39,16 +39,15 @@ func (p *testExpr) Source() *syntax.SourceContext {
 	return nil
 }
 
-// saveRegistry snapshots the registry before a test and restores it after,
+// saveRegistry snapshots the defaultRegistry before a test and restores it after,
 // so mutations don't leak between tests.
 func saveRegistry(t *testing.T) {
 	t.Helper()
-	saved := make(map[string]*FormSpec, len(registry))
-	maps.Copy(saved, registry)
+	saved := maps.Clone(defaultRegistry.specs)
 	// Replace with empty registry so tests only see what they register.
-	registry = make(map[string]*FormSpec)
+	defaultRegistry.specs = make(map[string]*FormSpec)
 	t.Cleanup(func() {
-		registry = saved
+		defaultRegistry.specs = saved
 	})
 }
 
@@ -163,4 +162,81 @@ func TestVerify_MissingValidator(t *testing.T) {
 	err := Verify()
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "test-verify-no-validator: missing validator")
+}
+
+func TestFormRegistry_Register_Lookup_Remove(t *testing.T) {
+	c := qt.New(t)
+
+	fn := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "r"}
+	}
+	r := NewFormRegistry()
+	r.Register(&FormSpec{Name: "x", Validate: fn})
+
+	spec := r.Lookup("x")
+	c.Assert(spec, qt.IsNotNil)
+	c.Assert(spec.Name, qt.Equals, "x")
+
+	// Remove then Lookup returns nil.
+	r.Remove("x")
+	c.Assert(r.Lookup("x"), qt.IsNil)
+
+	// Remove of an absent name is a no-op (must not panic).
+	r.Remove("x")
+}
+
+func TestFormRegistry_Clone_COW_Isolation(t *testing.T) {
+	c := qt.New(t)
+
+	origFn := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "orig"}
+	}
+	otherFn := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "other"}
+	}
+
+	r := NewFormRegistry()
+	r.RegisterValidator("x", origFn)
+	origSpec := r.Lookup("x")
+
+	clone := r.Clone()
+
+	// Override "x" in the clone. Must not affect r.
+	clone.RegisterValidator("x", otherFn)
+	c.Assert(r.Lookup("x"), qt.Equals, origSpec) // pointer identity: original spec unchanged
+
+	// Remove "x" from the clone. Must not affect r.
+	clone.Remove("x")
+	c.Assert(r.Lookup("x"), qt.IsNotNil)
+}
+
+func TestFormRegistry_DefaultRegistry_Identity(t *testing.T) {
+	saveRegistry(t)
+	c := qt.New(t)
+
+	fn := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "t"}
+	}
+	Register(&FormSpec{Name: "t", Validate: fn})
+	c.Assert(DefaultRegistry().Lookup("t"), qt.IsNotNil)
+}
+
+func TestFormRegistry_Verify(t *testing.T) {
+	c := qt.New(t)
+
+	fn := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "ok"}
+	}
+
+	// Nil-validate spec produces an error naming the form.
+	r := NewFormRegistry()
+	r.Register(&FormSpec{Name: "z"})
+	err := r.Verify()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "z")
+
+	// Fully-populated registry returns nil.
+	r2 := NewFormRegistry()
+	r2.RegisterValidator("z", fn)
+	c.Assert(r2.Verify(), qt.IsNil)
 }

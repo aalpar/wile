@@ -16,6 +16,7 @@ package forms
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -54,28 +55,49 @@ type FormSpec struct {
 	Validate ValidatorFunc
 }
 
-// registry holds all registered special forms.
-var registry = make(map[string]*FormSpec)
-
-// Register adds a FormSpec to the registry.
-// If a spec with the same name exists, it is replaced.
-func Register(spec *FormSpec) {
-	registry[spec.Name] = spec
+// FormRegistry is a per-engine set of special-form specs. The package-level
+// default (defaultRegistry) backs the delegator functions and the built-in
+// R7RS forms; a dialect forks a Clone at engine origin (later tasks).
+type FormRegistry struct {
+	specs map[string]*FormSpec
 }
 
-// RegisterValidator sets the validator for an existing form or creates a new entry.
-func RegisterValidator(name string, fn ValidatorFunc) {
-	spec := registry[name]
-	if spec == nil {
-		spec = &FormSpec{Name: name}
-		registry[name] = spec
-	}
-	spec.Validate = fn
+// NewFormRegistry returns an empty registry.
+func NewFormRegistry() *FormRegistry {
+	return &FormRegistry{specs: make(map[string]*FormSpec)}
+}
+
+// Register adds or replaces a complete FormSpec.
+func (r *FormRegistry) Register(spec *FormSpec) {
+	r.specs[spec.Name] = spec
+}
+
+// RegisterValidator sets the validator for a form. It is copy-on-write: a fresh
+// FormSpec is assigned rather than mutating an existing one in place, so an
+// override on a clone cannot corrupt the default (or any clone sharing the
+// pointer). Safe because FormSpec carries only Name+Validate.
+func (r *FormRegistry) RegisterValidator(name string, fn ValidatorFunc) {
+	r.specs[name] = &FormSpec{Name: name, Validate: fn}
 }
 
 // Lookup returns the FormSpec for a keyword, or nil if not found.
-func Lookup(name string) *FormSpec {
-	return registry[name]
+func (r *FormRegistry) Lookup(name string) *FormSpec {
+	return r.specs[name]
+}
+
+// Remove deletes a form so a dialect can drop it: the validator disappears and
+// the keyword is thereafter validated as a call. No-op if the form is absent.
+func (r *FormRegistry) Remove(name string) {
+	delete(r.specs, name)
+}
+
+// Names returns all registered form names (unordered).
+func (r *FormRegistry) Names() []string {
+	names := make([]string, 0, len(r.specs))
+	for name := range r.specs {
+		names = append(names, name)
+	}
+	return names
 }
 
 // Verify checks that every registered form has a validator. Returns an error
@@ -84,9 +106,9 @@ func Lookup(name string) *FormSpec {
 // Compiler registration consistency is checked separately by
 // machine/compilation.VerifyCompilers, which has access to the typed
 // compiler registry without requiring any type erasure.
-func Verify() error {
+func (r *FormRegistry) Verify() error {
 	var missing []string
-	for name, spec := range registry {
+	for name, spec := range r.specs {
 		if spec.Validate == nil {
 			missing = append(missing, name+": missing validator")
 		}
@@ -104,11 +126,43 @@ func Verify() error {
 		"form registration inconsistencies:%s", b.String())
 }
 
-// Names returns all registered form names.
+// Clone returns a shallow copy. Safe because RegisterValidator is copy-on-write.
+func (r *FormRegistry) Clone() *FormRegistry {
+	return &FormRegistry{specs: maps.Clone(r.specs)}
+}
+
+// defaultRegistry backs the package-level delegators and holds the built-in
+// forms registered by validate/register.go's init(). EAGER (never lazy): the
+// delegators dereference it unguarded, and validate's init() populates it at
+// import time.
+var defaultRegistry = NewFormRegistry()
+
+// DefaultRegistry returns the package default (the R7RS baseline forms).
+func DefaultRegistry() *FormRegistry {
+	return defaultRegistry
+}
+
+// Register adds or replaces a FormSpec in the package default.
+func Register(spec *FormSpec) {
+	defaultRegistry.Register(spec)
+}
+
+// RegisterValidator sets a validator on the package default.
+func RegisterValidator(name string, fn ValidatorFunc) {
+	defaultRegistry.RegisterValidator(name, fn)
+}
+
+// Lookup returns the FormSpec for a keyword from the package default.
+func Lookup(name string) *FormSpec {
+	return defaultRegistry.Lookup(name)
+}
+
+// Names returns all form names in the package default.
 func Names() []string {
-	names := make([]string, 0, len(registry))
-	for name := range registry {
-		names = append(names, name)
-	}
-	return names
+	return defaultRegistry.Names()
+}
+
+// Verify checks the package default for forms missing validators.
+func Verify() error {
+	return defaultRegistry.Verify()
 }
