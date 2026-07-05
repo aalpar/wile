@@ -95,7 +95,11 @@ func PrimClosePort(mc machine.CallContext) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAPort, "close-port: expected a port but got %T", o)
 	}
-	err := closePort(o)
+	st, err := stateFrom(mc)
+	if err != nil {
+		return err
+	}
+	err = closePort(st, o)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "close-port: %v", err)
 	}
@@ -118,7 +122,11 @@ func PrimCloseInputPort(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAnInputPort,
 			"close-input-port: not an input port")
 	}
-	err := closePort(o)
+	st, err := stateFrom(mc)
+	if err != nil {
+		return err
+	}
+	err = closePort(st, o)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "close-input-port: %v", err)
 	}
@@ -149,7 +157,11 @@ func PrimCloseOutputPort(mc machine.CallContext) error {
 			return werr.WrapForeignErrorf(flushErr, "close-output-port: flush failed")
 		}
 	}
-	err := closePort(o)
+	st, err := stateFrom(mc)
+	if err != nil {
+		return err
+	}
+	err = closePort(st, o)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "close-output-port: %v", err)
 	}
@@ -294,19 +306,19 @@ func PrimBinaryPortQ(mc machine.CallContext) error {
 // evictPortCache removes any cached tokenizer and parser for the given port.
 // This is the single eviction choke point — all port cleanup paths
 // (explicit close, EOF, call-with-port) must go through here.
-func evictPortCache(port values.Value) {
-	cacheMu.Lock()
-	delete(Tokenizers, port)
-	delete(Parsers, port)
-	cacheMu.Unlock()
+func evictPortCache(st *State, port values.Value) {
+	st.mu.Lock()
+	delete(st.tokenizers, port)
+	delete(st.parsers, port)
+	st.mu.Unlock()
 }
 
-func closePort(o values.Value) error {
+func closePort(st *State, o values.Value) error {
 	var err error
 	p, ok := o.(values.Port)
 	if ok {
 		err = p.Close()
 	}
-	evictPortCache(o)
+	evictPortCache(st, o)
 	return err
 }

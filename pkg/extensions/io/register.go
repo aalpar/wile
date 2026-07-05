@@ -20,8 +20,11 @@ package io
 import (
 	_ "embed"
 
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // portProcSource contains call-with-port, defined in Scheme so that
@@ -243,16 +246,48 @@ func addPorts(r *registry.Registry) error {
 }
 
 func addPortState(r *registry.Registry) error {
-	InitState()
-	r.AddGlobalValue("current-input-port", GetCurrentInputPortParam())
-	r.AddGlobalValue("current-output-port", GetCurrentOutputPortParam())
-	r.AddGlobalValue("current-error-port", GetCurrentErrorPortParam())
 	r.AddDocumentation("current-input-port",
 		"Parameter holding the default input port.\nParameterize to redirect standard input within a dynamic extent.\n\nCategory: ports")
 	r.AddDocumentation("current-output-port",
 		"Parameter holding the default output port.\nParameterize to redirect standard output within a dynamic extent.\n\nCategory: ports")
 	r.AddDocumentation("current-error-port",
 		"Parameter holding the default error port.\nParameterize to redirect standard error within a dynamic extent.\n\nCategory: ports")
+	// Per-engine: each Apply mints a fresh State and binds current-{input,output,
+	// error}-port to that engine's own port parameters. Replaces the former
+	// package-global parameters shared across engines (staff-sweep #8).
+	r.AddNamespaceInit(func(env *environment.EnvironmentFrame) error {
+		st := NewState()
+		env.Namespace().SetIOState(st)
+		binds := []struct {
+			name  string
+			param *machine.Parameter
+		}{
+			{"current-input-port", st.inPort},
+			{"current-output-port", st.outPort},
+			{"current-error-port", st.errPort},
+		}
+		for _, b := range binds {
+			err := registerPortParam(env, b.name, b.param)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return nil
+}
+
+// registerPortParam binds a port-parameter name into the engine's runtime frame.
+// It replicates registry.registerGlobalValue's three exported environment calls
+// (that helper is unexported). BindingTypeVariable (no Stable stamp) keeps the
+// parameter set!-able, matching the former AddGlobalValue path.
+func registerPortParam(env *environment.EnvironmentFrame, name string, param *machine.Parameter) error {
+	sym := values.NewSymbol(name)
+	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), param)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "io: binding port parameter %s", name)
+	}
 	return nil
 }
 

@@ -35,6 +35,7 @@ var (
 	ErrNotAByteInputPort      = NewTypeSentinel("binary input port")
 	ErrNotAByteOutputPort     = NewTypeSentinel("binary output port")
 	ErrNotATextualPort        = NewTypeSentinel("textual port")
+	ErrNoIOState              = NewStaticError("no io state")
 	ErrStopIteration          = NewStaticError("stop iteration")
 	ErrNotAPrimitive          = NewTypeSentinel("primitive")
 	ErrNoSuchBinding          = NewStaticError("no such binding")

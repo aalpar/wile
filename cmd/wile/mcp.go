@@ -246,10 +246,10 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	}
 	p.engine = eng
 
-	// Redirect output away from stdout (the MCP JSON-RPC transport).
-	// Each handleEval call captures into its own buffer; between evals,
-	// output goes to discard.
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+	// Redirect this engine's output away from stdout (the MCP JSON-RPC
+	// transport). Each handleEval call captures into its own buffer; between
+	// evals, output goes to discard.
+	p.redirectOutput(io.Discard)
 
 	// Pre-import standard libraries so their bindings are available from
 	// the first eval call and discoverable via apropos/doc.
@@ -283,6 +283,21 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	return nil
 }
 
+// redirectOutput points the MCP engine's current-output-port at w. The engine
+// (KitchenSink profile) always carries per-engine io state; a missing state is
+// treated as a no-op so a redirect never masks the error being handled (e.g. in
+// the panic-recovery path). The caller must hold p.mu.
+func (p *mcpServer) redirectOutput(w io.Writer) {
+	if p.engine == nil {
+		return
+	}
+	st, ok := p.engine.Namespace().IOState().(*ioext.State)
+	if !ok {
+		return
+	}
+	st.SetOutputPort(values.NewCharacterOutputPortFromWriter(w))
+}
+
 // evalResult is the structured JSON response from the eval tool.
 type evalResult struct {
 	Output string `json:"output,omitempty"`
@@ -307,8 +322,8 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 		}
 		// Log to stderr (not stdout, which is the MCP JSON-RPC transport).
 		fmt.Fprintf(os.Stderr, "mcp eval panic: %v\ncode: %s\n", r, code)
-		// Ensure output port is in a safe state after panic.
-		ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+		// Ensure the engine's output port is in a safe state after panic.
+		p.redirectOutput(io.Discard)
 		toolResult = mcp.NewToolResultError(fmt.Sprintf(
 			"internal error (panic): %v — session state may be corrupted; "+
 				"use the reset tool if subsequent calls fail", r))
@@ -337,10 +352,10 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 		defer cancel()
 	}
 
-	// Capture stdout: redirect current-output-port to a buffer.
+	// Capture stdout: redirect this engine's current-output-port to a buffer.
 	var buf bytes.Buffer
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(&buf))
-	defer ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+	p.redirectOutput(&buf)
+	defer p.redirectOutput(io.Discard)
 
 	// EvalProgram wraps in (begin ...) so all defines have mutual visibility,
 	// matching file execution. A parse/compile failure surfaces via evalErr below
@@ -462,7 +477,8 @@ func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.
 	closeErr := p.engine.Close()
 	p.engine = nil
 	p.meta = nil
-	ioext.ResetState()
+	// The per-engine io.State is owned by the engine's Namespace; closing the
+	// engine drops it. The next initLocked builds a fresh engine with fresh state.
 	if closeErr != nil {
 		return mcp.NewToolResultError(
 			fmt.Sprintf("Session reset with warning: engine close failed: %v. "+

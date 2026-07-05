@@ -210,21 +210,25 @@ func PrimRead(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	st, err := stateFrom(mc)
+	if err != nil {
+		return err
+	}
 
 	// Get or create parser under lock to prevent TOCTOU races
-	cacheMu.Lock()
-	prss, ok := Parsers[port]
+	st.mu.Lock()
+	prss, ok := st.parsers[port]
 	if !ok || prss == nil {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, rr)
-		Parsers[port] = prss
+		st.parsers[port] = prss
 	}
-	cacheMu.Unlock()
+	st.mu.Unlock()
 
 	syn, err := prss.ReadSyntax(mc.Context())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
-			evictPortCache(port)
+			evictPortCache(st, port)
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
@@ -246,20 +250,24 @@ func PrimReadToken(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	st, err := stateFrom(mc)
+	if err != nil {
+		return err
+	}
 
 	// Get or create tokenizer under lock to prevent TOCTOU races
-	cacheMu.Lock()
-	tknz, ok := Tokenizers[port]
+	st.mu.Lock()
+	tknz, ok := st.tokenizers[port]
 	if !ok || tknz == nil {
 		tknz = tokenizer.NewTokenizer(rr, false)
-		Tokenizers[port] = tknz
+		st.tokenizers[port] = tknz
 	}
-	cacheMu.Unlock()
+	st.mu.Unlock()
 
 	q, err := tknz.Next()
 	if errors.Is(err, io.EOF) {
 		// Port is exhausted; evict the cached tokenizer.
-		evictPortCache(port)
+		evictPortCache(st, port)
 		mc.SetValue(values.EOFObject)
 		return nil
 	}
@@ -278,21 +286,25 @@ func PrimReadSyntax(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	st, err := stateFrom(mc)
+	if err != nil {
+		return err
+	}
 
 	// Get or create parser under lock to prevent TOCTOU races
-	cacheMu.Lock()
-	prss, ok := Parsers[port]
+	st.mu.Lock()
+	prss, ok := st.parsers[port]
 	if !ok || prss == nil {
 		prss = parser.NewParser(mc.EnvironmentFrame(), true, rr)
-		Parsers[port] = prss
+		st.parsers[port] = prss
 	}
-	cacheMu.Unlock()
+	st.mu.Unlock()
 
 	q, err := prss.ReadSyntax(mc.Context())
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
-			evictPortCache(port)
+			evictPortCache(st, port)
 			mc.SetValue(values.EOFObject)
 			return nil
 		}

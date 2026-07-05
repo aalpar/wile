@@ -29,21 +29,17 @@ import (
 // sentinel error instead. (Production code uses resolveCurrent*Port, which keeps
 // its panic-by-design contract because the VM recovers it.)
 func TestGetCurrentPortReturnsErrorOnNonPort(t *testing.T) {
-	InitState()
-
 	t.Run("input", func(t *testing.T) {
-		saved := currentInputPortParam.Value()
-		defer currentInputPortParam.SetValue(saved)
-		currentInputPortParam.SetValue(values.NewInteger(42))
-		_, err := GetCurrentInputPort()
+		st := NewState()
+		st.inPort.SetValue(values.NewInteger(42))
+		_, err := st.GetInputPort()
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAnInputPort)
 	})
 
 	t.Run("output", func(t *testing.T) {
-		saved := currentOutputPortParam.Value()
-		defer currentOutputPortParam.SetValue(saved)
-		currentOutputPortParam.SetValue(values.NewInteger(42))
-		_, err := GetCurrentOutputPort()
+		st := NewState()
+		st.outPort.SetValue(values.NewInteger(42))
+		_, err := st.GetOutputPort()
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAnOutputPort)
 	})
 }

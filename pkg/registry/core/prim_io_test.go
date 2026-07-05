@@ -17,9 +17,11 @@ package core_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/environment"
 	ioext "github.com/aalpar/wile/pkg/extensions/io"
 	"github.com/aalpar/wile/pkg/internal/bootstrap"
 	"github.com/aalpar/wile/pkg/machine"
@@ -33,6 +35,28 @@ import (
 
 	qt "github.com/frankban/quicktest"
 )
+
+// stateOf returns the per-engine io.State installed on env's namespace by the
+// io extension's namespace-init hook. Each engine has its own State, so tests
+// redirect ports on their own engine instead of a former package global.
+func stateOf(t *testing.T, env *environment.EnvironmentFrame) *ioext.State {
+	t.Helper()
+	st, ok := env.Namespace().IOState().(*ioext.State)
+	qt.Assert(t, ok, qt.IsTrue)
+	return st
+}
+
+// redirectOutput points env's engine current-output-port at w.
+func redirectOutput(t *testing.T, env *environment.EnvironmentFrame, w io.Writer) {
+	t.Helper()
+	stateOf(t, env).SetOutputPort(values.NewCharacterOutputPortFromWriter(w))
+}
+
+// redirectInput points env's engine current-input-port at r.
+func redirectInput(t *testing.T, env *environment.EnvironmentFrame, r io.Reader) {
+	t.Helper()
+	stateOf(t, env).SetInputPort(values.NewCharacterInputPortFromReader(r))
+}
 
 func TestNewline(t *testing.T) {
 	prog := values.List(values.NewSymbol("newline"))
@@ -60,17 +84,11 @@ func TestCurrentOutputPort(t *testing.T) {
 }
 
 func TestDisplayWithBuffer(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -88,17 +106,11 @@ func TestDisplayWithBuffer(t *testing.T) {
 }
 
 func TestWriteWithBuffer(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -116,17 +128,11 @@ func TestWriteWithBuffer(t *testing.T) {
 }
 
 func TestWriteCharWithBuffer(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -144,17 +150,11 @@ func TestWriteCharWithBuffer(t *testing.T) {
 }
 
 func TestNewlineWithBuffer(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -172,17 +172,11 @@ func TestNewlineWithBuffer(t *testing.T) {
 }
 
 func TestReadToken(t *testing.T) {
-	// Save the current input port
-	savedPort, err := ioext.GetCurrentInputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentInputPort(savedPort) }()
-
-	// Create a buffer with input data
+	// Feed input to this engine's current-input-port.
 	input := strings.NewReader("hello 42")
-	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectInput(t, env, input)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -202,17 +196,11 @@ func TestReadToken(t *testing.T) {
 }
 
 func TestReadSyntax(t *testing.T) {
-	// Save the current input port
-	savedPort, err := ioext.GetCurrentInputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentInputPort(savedPort) }()
-
-	// Create a buffer with input data
+	// Feed input to this engine's current-input-port.
 	input := strings.NewReader("(+ 1 2)")
-	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectInput(t, env, input)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -233,17 +221,11 @@ func TestReadSyntax(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	// Save the current input port
-	savedPort, err := ioext.GetCurrentInputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentInputPort(savedPort) }()
-
-	// Create a buffer with input data
+	// Feed input to this engine's current-input-port.
 	input := strings.NewReader("(a b c)")
-	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectInput(t, env, input)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -285,11 +267,8 @@ func TestReadWithPort(t *testing.T) {
 	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
-	// Store port for the test
-	savedPort, err := ioext.GetCurrentInputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentInputPort(savedPort) }()
-	ioext.SetCurrentInputPort(port)
+	// Redirect this engine's current-input-port to the test port.
+	stateOf(t, env).SetInputPort(port)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 	err = mc.Run()
@@ -297,17 +276,11 @@ func TestReadWithPort(t *testing.T) {
 }
 
 func TestDisplayWithSymbol(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -326,17 +299,11 @@ func TestDisplayWithSymbol(t *testing.T) {
 }
 
 func TestWriteWithString(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -354,17 +321,11 @@ func TestWriteWithString(t *testing.T) {
 }
 
 func TestWriteCharWithUnicode(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -382,17 +343,11 @@ func TestWriteCharWithUnicode(t *testing.T) {
 }
 
 func TestReadMultipleTokens(t *testing.T) {
-	// Save the current input port
-	savedPort, err := ioext.GetCurrentInputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentInputPort(savedPort) }()
-
-	// Create a buffer with multiple tokens
+	// Feed multiple tokens to this engine's current-input-port.
 	input := strings.NewReader("foo bar 123")
-	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectInput(t, env, input)
 
 	// Read first token
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
@@ -412,17 +367,11 @@ func TestReadMultipleTokens(t *testing.T) {
 }
 
 func TestDisplayWithInteger(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -440,17 +389,11 @@ func TestDisplayWithInteger(t *testing.T) {
 }
 
 func TestDisplayWithBoolean(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -468,17 +411,11 @@ func TestDisplayWithBoolean(t *testing.T) {
 }
 
 func TestWriteWithSymbol(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -497,41 +434,27 @@ func TestWriteWithSymbol(t *testing.T) {
 }
 
 func TestGetCurrentInputPortInitialization(t *testing.T) {
-	// Test GetCurrentInputPort when currentInputPort is nil
-	savedPort, err := ioext.GetCurrentInputPort()
-	qt.Assert(t, err, qt.IsNil)
-	ioext.ResetCurrentInputPort()
-	defer func() { ioext.SetCurrentInputPort(savedPort) }()
-
-	port, err := ioext.GetCurrentInputPort()
+	// A fresh State defaults its input port to stdin (non-nil, textual).
+	st := ioext.NewState()
+	port, err := st.GetInputPort()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port, qt.IsNotNil)
 }
 
 func TestGetCurrentOutputPortInitialization(t *testing.T) {
-	// Test GetCurrentOutputPort when currentOutputPort is nil
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	ioext.ResetCurrentOutputPort()
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	port, err := ioext.GetCurrentOutputPort()
+	// A fresh State defaults its output port to stdout (non-nil, textual).
+	st := ioext.NewState()
+	port, err := st.GetOutputPort()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port, qt.IsNotNil)
 }
 
 func TestDisplayWithList(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
@@ -551,17 +474,11 @@ func TestDisplayWithList(t *testing.T) {
 }
 
 func TestWriteWithList(t *testing.T) {
-	// Save the current output port
-	savedPort, err := ioext.GetCurrentOutputPort()
-	qt.Assert(t, err, qt.IsNil)
-	defer func() { ioext.SetCurrentOutputPort(savedPort) }()
-
-	// Create a buffer to capture output
+	// Capture this engine's current-output-port into a buffer.
 	buf := &bytes.Buffer{}
-	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
-
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
+	redirectOutput(t, env, buf)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())

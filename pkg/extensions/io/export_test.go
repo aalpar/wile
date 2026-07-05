@@ -14,10 +14,12 @@
 
 package io
 
-// Exported aliases for testing from io_test package.
-var (
-	ExportCacheMu        = &cacheMu
-	ExportParsers        = &Parsers
-	ExportTokenizers     = &Tokenizers
-	ExportEvictPortCache = evictPortCache
-)
+// ExportCacheSizes returns a State's (parsers, tokenizers) cache entry counts,
+// for the io_test package to assert that EOF/close eviction leaves no lingering
+// entries. The caches and their mutex are unexported; this read-locked accessor
+// exposes only the sizes, without widening the production API.
+func ExportCacheSizes(st *State) (int, int) {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	return len(st.parsers), len(st.tokenizers)
+}

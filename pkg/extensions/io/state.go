@@ -25,84 +25,91 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// Package-level state for I/O ports.
-// These are lazily initialized on first access.
-var (
-	// currentInputPortParam is the parameter holding the current input port.
-	currentInputPortParam *machine.Parameter
-	// currentOutputPortParam is the parameter holding the current output port.
-	currentOutputPortParam *machine.Parameter
-	// currentErrorPortParam is the parameter holding the current error port.
-	currentErrorPortParam *machine.Parameter
-	// cacheMu protects concurrent access to Tokenizers and Parsers maps.
-	// Use RLock for reads, Lock for writes and deletes.
-	// Fixes T1 from architectural review (thread safety).
-	cacheMu sync.RWMutex
-	// Tokenizers caches tokenizers per input port.
-	//
-	// Entries are evicted via evictPortCache() on port close or EOF.
-	// Ports that are abandoned without close or EOF will retain their
-	// cache entries until the process exits. If that becomes a problem
-	// in long-running programs, switch to weak.Pointer[T] (Go 1.24+).
-	//
-	// Thread safety: All access must be protected by cacheMu.
-	Tokenizers map[values.Value]*tokenizer.Tokenizer
-	// Parsers caches parsers per input port.
-	// Same retention caveat as Tokenizers above.
-	//
-	// Thread safety: All access must be protected by cacheMu.
-	Parsers map[values.Value]*parser.Parser
+// State is the per-engine I/O port + cache state. One per Namespace, reached by
+// primitives via stateFrom(cc). Replaces the former package globals so two
+// Engines in one process do not share port parameters or caches (staff-sweep #8).
+//
+// The tokenizers/parsers caches are keyed by port value; keeping them in the
+// same per-engine struct as the port parameters is what makes their isolation
+// hold — two engines reading their default current-input-port now key on
+// distinct default port objects, so their read positions no longer collide.
+type State struct {
+	inPort, outPort, errPort *machine.Parameter
 
-	// stateMu protects concurrent access to stateInitialized flag and initialization.
-	stateMu sync.Mutex
-	// stateInitialized tracks whether InitState has been called.
-	stateInitialized bool
-)
-
-// InitState initializes the primitives state. Must be called before using I/O primitives.
-// Safe to call multiple times - subsequent calls are no-ops.
-// Thread-safe: protected by stateMu.
-func InitState() {
-	stateMu.Lock()
-	defer stateMu.Unlock()
-
-	if stateInitialized {
-		return
-	}
-	stateInitialized = true
-
-	Tokenizers = map[values.Value]*tokenizer.Tokenizer{}
-	Parsers = map[values.Value]*parser.Parser{}
-
-	// Initialize port parameters with default values
-	currentInputPortParam = machine.NewParameter(
-		values.NewCharacterInputPortFromReader(os.Stdin),
-		nil,
-	)
-	currentOutputPortParam = machine.NewParameter(
-		values.NewCharacterOutputPortFromWriter(os.Stdout),
-		nil,
-	)
-	currentErrorPortParam = machine.NewParameter(
-		values.NewCharacterOutputPortFromWriter(os.Stderr),
-		nil,
-	)
+	// mu protects the tokenizers/parsers caches. RLock for reads, Lock for
+	// writes and deletes.
+	mu sync.RWMutex
+	// tokenizers caches tokenizers per input port; parsers caches parsers per
+	// input port. Entries are evicted via evictPortCache() on port close or EOF.
+	// Ports abandoned without close or EOF retain their entries until the engine
+	// is collected.
+	tokenizers map[values.Value]*tokenizer.Tokenizer
+	parsers    map[values.Value]*parser.Parser
 }
 
-// ResetState resets the primitives state. Used for testing.
-// Thread-safe: protected by stateMu and cacheMu.
-func ResetState() {
-	stateMu.Lock()
-	stateInitialized = false
-	currentInputPortParam = nil
-	currentOutputPortParam = nil
-	currentErrorPortParam = nil
-	stateMu.Unlock()
+// NewState builds a fresh per-engine State: three port parameters defaulting to
+// the process std streams, and empty caches. Fully constructed here — there is
+// no lazy initialization, unlike the former package-global InitState.
+func NewState() *State {
+	return &State{
+		inPort:     machine.NewParameter(values.NewCharacterInputPortFromReader(os.Stdin), nil),
+		outPort:    machine.NewParameter(values.NewCharacterOutputPortFromWriter(os.Stdout), nil),
+		errPort:    machine.NewParameter(values.NewCharacterOutputPortFromWriter(os.Stderr), nil),
+		tokenizers: map[values.Value]*tokenizer.Tokenizer{},
+		parsers:    map[values.Value]*parser.Parser{},
+	}
+}
 
-	cacheMu.Lock()
-	Tokenizers = nil
-	Parsers = nil
-	cacheMu.Unlock()
+// InPortParam returns this engine's current-input-port parameter object.
+func (p *State) InPortParam() *machine.Parameter {
+	return p.inPort
+}
+
+// OutPortParam returns this engine's current-output-port parameter object.
+func (p *State) OutPortParam() *machine.Parameter {
+	return p.outPort
+}
+
+// ErrPortParam returns this engine's current-error-port parameter object.
+func (p *State) ErrPortParam() *machine.Parameter {
+	return p.errPort
+}
+
+// SetInputPort sets this engine's base input port. Used by tests and by
+// embedders configuring an engine's ports before running.
+func (p *State) SetInputPort(port *values.PortObject) {
+	p.inPort.SetValue(port)
+}
+
+// SetOutputPort sets this engine's base output port.
+func (p *State) SetOutputPort(port *values.PortObject) {
+	p.outPort.SetValue(port)
+}
+
+// GetInputPort returns this engine's base input port, or a wrapped sentinel if
+// the parameter does not hold a textual input port. For non-VM callers (tests,
+// embedders) that read the base value without the panic-on-error contract of
+// resolveCurrentInputPort (whose panic is caught by the VM's recover).
+func (p *State) GetInputPort() (*values.PortObject, error) {
+	return currentTextualInputPort("current-input-port", p.inPort.Value())
+}
+
+// GetOutputPort returns this engine's base output port, or a wrapped sentinel if
+// the parameter does not hold a textual output port.
+func (p *State) GetOutputPort() (*values.PortObject, error) {
+	return currentTextualOutputPort("current-output-port", p.outPort.Value())
+}
+
+// stateFrom pulls the per-engine State off the CallContext, or returns a wrapped
+// sentinel when the context has no namespace/State (e.g. a bare sub-context).
+func stateFrom(cc machine.CallContext) (*State, error) {
+	v := cc.IOState()
+	st, ok := v.(*State)
+	if !ok || st == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrNoIOState,
+			"io: no per-engine I/O state on this context")
+	}
+	return st, nil
 }
 
 // currentTextualInputPort asserts v is a *PortObject with rune-read
@@ -138,69 +145,6 @@ func currentTextualOutputPort(name string, v values.Value) (*values.PortObject, 
 	return p, nil
 }
 
-// GetCurrentInputPort returns the base input port from the parameter, or a
-// wrapped sentinel error if the parameter does not hold a textual input port.
-// This is a test convenience for save/restore; production code should use
-// resolveCurrentInputPort which checks continuation marks from parameterize.
-// Unlike resolveCurrentInputPort it does not panic — its callers run outside
-// the VM's recover, so a panic would crash them.
-func GetCurrentInputPort() (*values.PortObject, error) {
-	InitState()
-	return currentTextualInputPort("current-input-port", currentInputPortParam.Value())
-}
-
-// GetCurrentInputPortParam returns the current-input-port parameter object.
-func GetCurrentInputPortParam() *machine.Parameter {
-	return currentInputPortParam
-}
-
-// SetCurrentInputPort sets the current input port value. Used for testing.
-func SetCurrentInputPort(port *values.PortObject) {
-	InitState() // Ensure state is initialized
-	currentInputPortParam.SetValue(port)
-}
-
-// ResetCurrentInputPort resets the current input port to stdin. Used for testing.
-func ResetCurrentInputPort() {
-	if currentInputPortParam != nil {
-		currentInputPortParam.SetValue(values.NewCharacterInputPortFromReader(os.Stdin))
-	}
-}
-
-// GetCurrentOutputPort returns the base output port from the parameter, or a
-// wrapped sentinel error if the parameter does not hold a textual output port.
-// This is a test convenience for save/restore; production code should use
-// resolveCurrentOutputPort which checks continuation marks from parameterize.
-// Unlike resolveCurrentOutputPort it does not panic — its callers run outside
-// the VM's recover, so a panic would crash them.
-func GetCurrentOutputPort() (*values.PortObject, error) {
-	InitState()
-	return currentTextualOutputPort("current-output-port", currentOutputPortParam.Value())
-}
-
-// GetCurrentOutputPortParam returns the current-output-port parameter object.
-func GetCurrentOutputPortParam() *machine.Parameter {
-	return currentOutputPortParam
-}
-
-// SetCurrentOutputPort sets the current output port value. Used for testing and parameterize.
-func SetCurrentOutputPort(port *values.PortObject) {
-	InitState() // Ensure state is initialized
-	currentOutputPortParam.SetValue(port)
-}
-
-// ResetCurrentOutputPort resets the current output port to stdout. Used for testing.
-func ResetCurrentOutputPort() {
-	if currentOutputPortParam != nil {
-		currentOutputPortParam.SetValue(values.NewCharacterOutputPortFromWriter(os.Stdout))
-	}
-}
-
-// GetCurrentErrorPortParam returns the current-error-port parameter object.
-func GetCurrentErrorPortParam() *machine.Parameter {
-	return currentErrorPortParam
-}
-
 // resolveCurrentOutputPort returns the effective current output port,
 // checking continuation marks (from parameterize) before falling back
 // to the base value. Panics with a wrapped error if the resolved value
@@ -212,8 +156,11 @@ func resolveCurrentOutputPort(cc machine.CallContext) *values.PortObject {
 	if err != nil {
 		panic(err)
 	}
-	InitState()
-	v := mc.ResolveParameterValue(currentOutputPortParam)
+	st, err := stateFrom(cc)
+	if err != nil {
+		panic(err)
+	}
+	v := mc.ResolveParameterValue(st.outPort)
 	p, err := currentTextualOutputPort("current-output-port", v)
 	if err != nil {
 		panic(err)
@@ -232,8 +179,11 @@ func resolveCurrentInputPort(cc machine.CallContext) *values.PortObject {
 	if err != nil {
 		panic(err)
 	}
-	InitState()
-	v := mc.ResolveParameterValue(currentInputPortParam)
+	st, err := stateFrom(cc)
+	if err != nil {
+		panic(err)
+	}
+	v := mc.ResolveParameterValue(st.inPort)
 	p, err := currentTextualInputPort("current-input-port", v)
 	if err != nil {
 		panic(err)

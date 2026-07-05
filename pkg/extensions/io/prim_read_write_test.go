@@ -15,140 +15,16 @@
 package io_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"io"
-	"strings"
-	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	extio "github.com/aalpar/wile/pkg/extensions/io"
-	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
-
-// TestConcurrentMapAccess_T1 verifies that concurrent access to Tokenizers
-// and Parsers maps does not cause races or panics.
-// This test addresses T1 from the architectural review.
-func TestConcurrentMapAccess_T1(t *testing.T) {
-	c := qt.New(t)
-
-	// Reset state before and after test
-	extio.ResetState()
-	extio.InitState()
-	defer extio.ResetState()
-
-	// Create multiple ports that will be accessed concurrently
-	numPorts := 10
-	ports := make([]*values.PortObject, numPorts)
-	for i := range numPorts {
-		ports[i] = values.NewStringInputPortWithBuffer(bytes.NewBufferString("(+ 1 2) (+ 3 4)"))
-	}
-
-	// Number of concurrent goroutines per operation type
-	numGoroutines := 20
-
-	var wg sync.WaitGroup
-
-	// Test 1: Concurrent parser creation and access (PrimRead pattern)
-	t.Run("concurrent parser access", func(t *testing.T) {
-		for i := range numGoroutines {
-			wg.Add(1)
-			go func(portIdx int) {
-				defer wg.Done()
-				port := ports[portIdx%numPorts]
-
-				// Simulate PrimRead: get or create parser
-				rr, _ := port.AsRuneReader()
-				extio.ExportCacheMu.Lock()
-				prss, ok := (*extio.ExportParsers)[port]
-				if !ok || prss == nil {
-					prss = parser.NewParser(nil, true, rr)
-					(*extio.ExportParsers)[port] = prss
-				}
-				extio.ExportCacheMu.Unlock()
-
-				c.Assert(prss, qt.Not(qt.IsNil))
-			}(i)
-		}
-		wg.Wait()
-	})
-
-	// Test 2: Concurrent delete operations (closePort pattern)
-	t.Run("concurrent delete", func(t *testing.T) {
-		// Pre-populate maps
-		for _, port := range ports {
-			rr, _ := port.AsRuneReader()
-			extio.ExportCacheMu.Lock()
-			(*extio.ExportParsers)[port] = parser.NewParser(nil, true, rr)
-			extio.ExportCacheMu.Unlock()
-		}
-
-		// Concurrently delete entries
-		for i := range numGoroutines {
-			wg.Add(1)
-			go func(portIdx int) {
-				defer wg.Done()
-				port := ports[portIdx%numPorts]
-
-				// Simulate closePort: evict cached state
-				extio.ExportEvictPortCache(port)
-			}(i)
-		}
-		wg.Wait()
-	})
-
-	// Test 3: Concurrent mixed operations (read, write, delete)
-	t.Run("concurrent mixed operations", func(t *testing.T) {
-		for i := 0; i < numGoroutines*3; i++ {
-			wg.Add(1)
-			opType := i % 3
-			go func(portIdx, op int) {
-				defer wg.Done()
-				port := ports[portIdx%numPorts]
-
-				switch op {
-				case 0:
-					// Read operation
-					extio.ExportCacheMu.Lock()
-					_ = (*extio.ExportParsers)[port]
-					extio.ExportCacheMu.Unlock()
-				case 1:
-					// Write operation
-					rr, _ := port.AsRuneReader()
-					extio.ExportCacheMu.Lock()
-					(*extio.ExportParsers)[port] = parser.NewParser(nil, true, rr)
-					extio.ExportCacheMu.Unlock()
-				case 2:
-					// Delete operation
-					extio.ExportEvictPortCache(port)
-				}
-			}(i, opType)
-		}
-		wg.Wait()
-	})
-
-	// Test 4: Concurrent InitState calls (should be idempotent and safe)
-	t.Run("concurrent InitState", func(t *testing.T) {
-		extio.ResetState()
-		for range numGoroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				extio.InitState()
-			}()
-		}
-		wg.Wait()
-
-		// Verify maps were initialized exactly once
-		c.Assert(*extio.ExportTokenizers, qt.Not(qt.IsNil))
-		c.Assert(*extio.ExportParsers, qt.Not(qt.IsNil))
-	})
-}
 
 // =============================================================================
 // Allocation Limit Tests (M11)
@@ -1327,24 +1203,17 @@ func TestParserCacheEviction(t *testing.T) {
 	})
 
 	t.Run("cache maps empty after eof", func(t *testing.T) {
-		// Snapshot cache sizes before our operation
-		extio.ExportCacheMu.RLock()
-		parsersBefore := len(*extio.ExportParsers)
-		tokenizersBefore := len(*extio.ExportTokenizers)
-		extio.ExportCacheMu.RUnlock()
-
-		// Read to EOF on a port — should add then evict the parser entry
+		// Read to EOF on a port — should add then evict the parser entry — and
+		// verify this engine's cache is back to its pre-read size (no leak).
 		eng := newEngine(t)
+		st := eng.Namespace().IOState().(*extio.State)
+		parsersBefore, tokenizersBefore := extio.ExportCacheSizes(st)
+
 		eval(t, eng, `(let ((p (open-input-string "1")))
 		   (read p)
 		   (read p))`)
 
-		// After EOF eviction, cache should be back to pre-test size
-		extio.ExportCacheMu.RLock()
-		parsersAfter := len(*extio.ExportParsers)
-		tokenizersAfter := len(*extio.ExportTokenizers)
-		extio.ExportCacheMu.RUnlock()
-
+		parsersAfter, tokenizersAfter := extio.ExportCacheSizes(st)
 		c.Assert(parsersAfter, qt.Equals, parsersBefore)
 		c.Assert(tokenizersAfter, qt.Equals, tokenizersBefore)
 	})
@@ -1358,16 +1227,15 @@ func TestParserCacheEviction(t *testing.T) {
 // write/display/newline/write-char/write-simple/write-shared/flush-output-port
 // fall through to the current output port.
 //
-// NOTE: This test modifies global state (current output port) and must NOT
-// use t.Parallel(). Go tests within the same package run sequentially by
-// default, so no additional synchronization is needed.
+// Each engine has its own current-output-port (per-engine io.State), so the
+// redirect is scoped to this test's engine — no global state, no reset needed.
 func TestDefaultOutputPort(t *testing.T) {
-	// Redirect the current output port to io.Discard to avoid polluting
-	// test output while still exercising the default port code path.
-	extio.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
-	defer extio.ResetCurrentOutputPort()
-
 	engine := newEngine(t)
+
+	// Redirect this engine's current output port to a throwaway string port to
+	// avoid polluting test output while still exercising the default port code
+	// path. (current-output-port p) sets the parameter's base value.
+	eval(t, engine, `(current-output-port (open-output-string))`)
 
 	// Each of these calls the function without a port argument,
 	// exercising the IsEmptyList() → GetCurrentOutputPort() branch.
@@ -1403,17 +1271,14 @@ func TestDefaultInputPortCharReady(t *testing.T) {
 // TestDefaultInputPortRead exercises the "no port arg" path for read-char
 // by redirecting the current input port to a string reader.
 //
-// NOTE: This test modifies global state (current input port) and must NOT
-// use t.Parallel(). Go tests within the same package run sequentially by
-// default, so no additional synchronization is needed.
+// Each engine has its own current-input-port (per-engine io.State), so the
+// redirect is scoped to this test's engine — no global state, no reset needed.
 func TestDefaultInputPortRead(t *testing.T) {
 	c := qt.New(t)
 
-	port := values.NewCharacterInputPortFromReader(strings.NewReader("hello"))
-	extio.SetCurrentInputPort(port)
-	defer extio.ResetCurrentInputPort()
-
 	engine := newEngine(t)
+	// (current-input-port p) sets this engine's base input port.
+	eval(t, engine, `(current-input-port (open-input-string "hello"))`)
 	result := eval(t, engine, `(equal? (read-char) #\h)`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
