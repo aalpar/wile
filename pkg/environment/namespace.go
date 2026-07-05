@@ -118,6 +118,13 @@ type Namespace struct {
 	// child is checkable by any mutator anywhere in the namespace tree.
 	immutableLiterals *ImmutableLiterals
 
+	// ioState is the per-engine I/O extension state (an *io.State), opaque here
+	// because environment/ sits below extensions/io in the layering. Set once at
+	// engine build via a registry namespace-init hook; read by I/O primitives
+	// through CallContext.IOState(). Delegated to root like immutableLiterals so
+	// every child of the root Namespace sees the same slot.
+	ioState any
+
 	// immutableTopLevel, when true, makes the engine treat a top-level define
 	// that is defined-once and never set! within its compilation unit as
 	// rebind-stable (BindingMeta.Stable) and then forbid a later set!/redefine
@@ -408,6 +415,19 @@ func (p *Namespace) SetFileResolver(resolver FileResolver) {
 // children delegate through root(), so every mutator sees the same set.
 func (p *Namespace) ImmutableLiterals() *ImmutableLiterals {
 	return p.root().immutableLiterals
+}
+
+// SetIOState stores the per-engine I/O extension state on the root Namespace.
+// The value is opaque here (an *io.State owned by extensions/io); this package
+// sits below extensions/io in the layering and never inspects it.
+func (p *Namespace) SetIOState(v any) {
+	p.root().ioState = v
+}
+
+// IOState returns the per-engine I/O extension state, or nil if unset.
+// Delegated to root so children of the root Namespace see the same slot.
+func (p *Namespace) IOState() any {
+	return p.root().ioState
 }
 
 // ImmutableTopLevel reports whether top-level-define immutability is enforced for

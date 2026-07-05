@@ -585,3 +585,13 @@ func TestNamespace_ImmutableTopLevelScopedToRoot(t *testing.T) {
 		t.Fatalf("scheme-report child must be mutable, not inherit root immutability")
 	}
 }
+
+// TestNamespace_IOStateSlot verifies the opaque per-engine ioState slot round-trips
+// through the root Namespace.
+func TestNamespace_IOStateSlot(t *testing.T) {
+	ns := NewNamespace()
+	qt.Assert(t, ns.IOState(), qt.IsNil)
+	marker := struct{ n int }{7}
+	ns.SetIOState(&marker)
+	qt.Assert(t, ns.IOState(), qt.Equals, &marker)
+}
