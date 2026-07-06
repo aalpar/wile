@@ -317,15 +317,15 @@ func main() {
 	if len(opts.File) > 0 {
 		for i, filename := range opts.File {
 			if !opts.Quiet {
-				log.Printf("reading file %q", filename)
+				log.Printf("reading file %q", displayName(filename))
 			}
-			descriptor, err := os.Open(filename)
+			descriptor, closeSource, err := openScriptFile(filename)
 			if err != nil {
 				Failf(err, "Cannot open file %s", filename)
 			}
-			func(fn string, fd *os.File) {
+			func(fn string, fd *os.File, closeFn func() error) {
 				defer func() {
-					_ = fd.Close()
+					_ = closeFn()
 				}()
 				isLastFile := i == len(opts.File)-1
 				if opts.Interactive || !isLastFile || len(opts.Eval) > 0 {
@@ -353,7 +353,7 @@ func main() {
 					fin = bufio.NewReader(fd)
 					runFile(ctx, eng, fin, fn, positionalFile)
 				}
-			}(filename, descriptor)
+			}(filename, descriptor, closeSource)
 		}
 	}
 
@@ -441,6 +441,36 @@ func writeSummaryFile(path string, col *coverage.Collector, includeStdlib bool) 
 		return coverage.WriteSummaryIncludingStdlib(f, col)
 	}
 	return coverage.WriteSummary(f, col)
+}
+
+// stdinFilename is the conventional argument that names standard input as the
+// program source, following the Unix "-" idiom used by cat, sh, and friends.
+const stdinFilename = "-"
+
+// openScriptFile opens a Scheme source for execution. The filename "-" reads the
+// program from standard input; the returned closer is then a no-op so stdin is
+// left open for the running process. For any other name it opens the file and
+// returns its Close method.
+func openScriptFile(filename string) (*os.File, func() error, error) {
+	if filename == stdinFilename {
+		return os.Stdin, func() error {
+			return nil
+		}, nil
+	}
+	fd, err := os.Open(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fd, fd.Close, nil
+}
+
+// displayName renders a script source name for human-facing messages, mapping
+// the "-" stdin sentinel to a readable label.
+func displayName(filename string) string {
+	if filename == stdinFilename {
+		return "<stdin>"
+	}
+	return filename
 }
 
 // runFile processes a Scheme file, exiting on errors.

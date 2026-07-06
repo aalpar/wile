@@ -132,6 +132,55 @@ func runCLI(t *testing.T, args ...string) cliResult {
 	return result
 }
 
+// runCLIStdin spawns a subprocess that calls main() with the given CLI args and
+// feeds stdinContent on standard input, so the "-" (stdin) source can be tested.
+func runCLIStdin(t *testing.T, stdinContent string, args ...string) cliResult {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	fullArgs := append([]string{"scheme"}, args...)
+	argsJSON, err := json.Marshal(fullArgs)
+	if err != nil {
+		t.Fatalf("failed to marshal args: %v", err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(argsJSON)
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
+	cmd.Env = append(os.Environ(),
+		envSubprocess+"=1",
+		envCLIArgs+"="+encoded,
+	)
+	cmd.Stdin = strings.NewReader(stdinContent)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+
+	result := cliResult{
+		stdout:   stdout.String(),
+		stderr:   stderr.String(),
+		exitCode: 0,
+	}
+
+	if err != nil {
+		if ctx.Err() != nil {
+			t.Fatalf("subprocess timed out after 10s")
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			result.exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("unexpected error running subprocess: %v", err)
+		}
+	}
+
+	return result
+}
+
 // runExitSubprocess spawns a subprocess to run a specific test function.
 // The target test function should check envExitSubprocess == "1" at its top
 // and call the function under test directly.
@@ -432,6 +481,37 @@ func TestMainFlags(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Phase 3: File execution tests
 // ---------------------------------------------------------------------------
+
+func TestStdinSource(t *testing.T) {
+	t.Run("positional dash reads stdin", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLIStdin(t, "(display (+ 1 2))(newline)", "-q", "-")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "3\n")
+	})
+
+	t.Run("--file dash reads stdin", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLIStdin(t, "(display (* 3 4))(newline)", "-q", "-f", "-")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "12\n")
+	})
+
+	t.Run("dash setup file with -e main program", func(t *testing.T) {
+		c := qt.New(t)
+		result := runCLIStdin(t, "(define x 41)", "-q", "-f", "-", "-e", "(display (+ x 1))(newline)")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "42\n")
+	})
+
+	t.Run("top-level defines are mutually visible across stdin program", func(t *testing.T) {
+		c := qt.New(t)
+		// The (begin ...) wrapping means a later define can reference an earlier one.
+		result := runCLIStdin(t, "(define (f n) (* n 2))\n(display (f 21))(newline)", "-q", "-")
+		c.Assert(result.exitCode, qt.Equals, 0)
+		c.Assert(result.stdout, qt.Equals, "42\n")
+	})
+}
 
 func TestRunFile(t *testing.T) {
 	tcs := []struct {
