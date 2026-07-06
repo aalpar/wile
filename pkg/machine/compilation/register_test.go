@@ -19,57 +19,46 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/forms"
 )
 
-func TestTypeSwitchFormsRegistered(t *testing.T) {
-	// Tier 1 forms are dispatched by type switch in compileValidated.
-	// Verify they are all classified dispatchTypeSwitch in formDispatch
-	// (used by VerifyCompilers to skip them).
-	for _, name := range []string{
-		"if", "define", "lambda", "set!", "begin", "quote",
-		"quasiquote", "case-lambda", "dynamic-wind", "apply",
-		"with-continuation-mark", "let", "let*", "letrec", "letrec*",
-	} {
-		kind, ok := formDispatch[name]
+// TestCompileValidatedDispatchesThroughPerEngineRegistry proves Tier-1 dispatch
+// consults the per-engine forms registry by FormName, not a hardcoded type
+// switch. It clones the default registry, overrides "if" with a sentinel
+// compiler, and asserts the sentinel runs when (if ...) is compiled on an engine
+// using that clone. Under the concrete-type switch this fails (the override is
+// ignored); under registry dispatch it passes.
+func TestCompileValidatedDispatchesThroughPerEngineRegistry(t *testing.T) {
+	reg := forms.DefaultRegistry().Clone()
+	called := false
+	reg.RegisterCompiler("if", CompilerFunc(func(_ *CompileTimeContinuation, _ CompileTimeCallContext, _ forms.ValidatedExpr) error {
+		called = true
+		return nil
+	}))
+
+	ns := environment.NewNamespace()
+	ns.SetFormRegistry(reg)
+	env := newNamespace(ns.Runtime())
+
+	prog := parseSchemeExpr(t, env, "(if #t 1 2)")
+	_, err := newTopLevelThunk(prog, env)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, called, qt.IsTrue,
+		qt.Commentf("compileValidated did not dispatch (if ...) through the per-engine registry"))
+}
+
+func TestTier2CompilersRegisteredInForms(t *testing.T) {
+	// Every Tier-2 syntax compiler is attached to its FormSpec (forms registry),
+	// replacing the deleted global compilerRegistry.
+	for _, entry := range syntaxCompilerEntries {
+		spec := forms.DefaultRegistry().Lookup(entry.Name)
+		qt.Assert(t, spec, qt.IsNotNil,
+			qt.Commentf("no FormSpec for Tier-2 form %q", entry.Name))
+		_, ok := spec.Compile.(CompilerFunc)
 		qt.Assert(t, ok, qt.IsTrue,
-			qt.Commentf("%q not in formDispatch", name))
-		qt.Assert(t, kind, qt.Equals, dispatchTypeSwitch,
-			qt.Commentf("%q classified %v, want dispatchTypeSwitch", name, kind))
+			qt.Commentf("Tier-2 form %q has Compile %T, want CompilerFunc", entry.Name, spec.Compile))
 	}
-}
-
-func TestRegisterCompilers(t *testing.T) {
-	// Tier 2 syntax passthrough compilers are registered in compilerRegistry
-	// via init() from syntaxCompilerEntries. Verify LookupCompiler returns
-	// non-nil for every entry in the shared slice.
-	for _, entry := range syntaxCompilerEntries {
-		qt.Assert(t, LookupCompiler(entry.Name), qt.IsNotNil,
-			qt.Commentf("LookupCompiler(%q) returned nil — init() and syntaxCompilerEntries out of sync", entry.Name))
-	}
-}
-
-func TestSyntaxCompilerRegistrationConsistency(t *testing.T) {
-	// Verify compilerRegistry contains exactly the entries from
-	// syntaxCompilerEntries (no extra, no missing). This guards against
-	// someone adding a registerCompiler call outside the shared slice.
-	entryNames := make(map[string]bool, len(syntaxCompilerEntries))
-	for _, entry := range syntaxCompilerEntries {
-		entryNames[entry.Name] = true
-	}
-
-	for name := range compilerRegistry {
-		qt.Assert(t, entryNames[name], qt.IsTrue,
-			qt.Commentf("compilerRegistry has %q which is not in syntaxCompilerEntries", name))
-	}
-
-	qt.Assert(t, len(compilerRegistry), qt.Equals, len(syntaxCompilerEntries),
-		qt.Commentf("compilerRegistry has %d entries but syntaxCompilerEntries has %d",
-			len(compilerRegistry), len(syntaxCompilerEntries)))
-}
-
-func TestLookupCompilerMiss(t *testing.T) {
-	qt.Assert(t, LookupCompiler("definitely-not-a-form"), qt.IsNil)
 }
 
 func TestVerifyAllPhaseHandlers(t *testing.T) {
@@ -92,12 +81,12 @@ func TestVerifyExpanders_SyntaxCompilersHaveExpanders(t *testing.T) {
 }
 
 // TestFormDispatchAreKnownForms cross-checks formDispatch against the form
-// registry: every form the classification table claims to handle (Tier 1 or
-// expand-only) must be an actually-registered form. formDispatch is
-// hand-maintained to mirror the type switch / expander; VerifyCompilers iterates
-// forms.Names() only, so it catches a form MISSING from the table (reported as
-// "no dispatch classification") but NOT a phantom table entry that names no real
-// form. This closes that remaining direction.
+// registry: every expand-only form the classification table lists must be an
+// actually-registered form. formDispatch is hand-maintained to enumerate the
+// forms that legitimately have NO compiler (consumed during expansion);
+// VerifyCompilers iterates forms.Names() only, so it catches a form MISSING from
+// the table (reported as "no dispatch classification") but NOT a phantom table
+// entry that names no real form. This closes that remaining direction.
 func TestFormDispatchAreKnownForms(t *testing.T) {
 	known := make(map[string]bool)
 	for _, name := range forms.Names() {
@@ -109,16 +98,16 @@ func TestFormDispatchAreKnownForms(t *testing.T) {
 	}
 }
 
-// TestFormDispatchDisjointFromRegistry asserts the classification table and the
-// Tier-2 compiler registry are disjoint: a formDispatch entry (Tier 1 or
-// expand-only) must NOT also carry a compilerRegistry compiler. Overlap would be
-// a misclassification — VerifyCompilers skips a name the moment it finds a
-// registry entry, so a stale formDispatch entry would silently mask a Tier-2
-// form's identity. This is the "assert set-equality" guard from the sweep plan.
+// TestFormDispatchDisjointFromRegistry asserts the expand-only classification and
+// the compiler registration are disjoint: an expand-only form must NOT carry a
+// spec.Compile. Overlap would be a misclassification.
 func TestFormDispatchDisjointFromRegistry(t *testing.T) {
 	for name := range formDispatch {
-		qt.Assert(t, LookupCompiler(name), qt.IsNil,
-			qt.Commentf("formDispatch classifies %q but it also has a Tier-2 compiler; one is wrong", name))
+		spec := forms.DefaultRegistry().Lookup(name)
+		qt.Assert(t, spec, qt.IsNotNil,
+			qt.Commentf("expand-only form %q is not registered", name))
+		qt.Assert(t, spec.Compile, qt.IsNil,
+			qt.Commentf("expand-only form %q also carries a compiler; one is wrong", name))
 	}
 }
 
@@ -131,5 +120,32 @@ func TestTier1CompilersRegisteredInForms(t *testing.T) {
 		_, ok := spec.Compile.(CompilerFunc)
 		qt.Assert(t, ok, qt.IsTrue,
 			qt.Commentf("Tier-1 form %q has Compile %T, want CompilerFunc", entry.Name, spec.Compile))
+	}
+}
+
+// TestNoCompilerRegisteredOutsideSharedSlices is the reverse-direction guard:
+// every registered form that carries a spec.Compile must originate from one of
+// the two shared registration slices (tier1CompilerEntries or
+// syntaxCompilerEntries). A compiler attached to any other name — a stray
+// forms.RegisterCompiler call — is drift the forward-direction presence tests
+// cannot catch (VerifyCompilers only checks each form HAS a compiler-or-expand-only,
+// never that a compiler wasn't attached outside the slices). Restores the
+// set-equality "no extra registration" half of the deleted
+// TestSyntaxCompilerRegistrationConsistency.
+func TestNoCompilerRegisteredOutsideSharedSlices(t *testing.T) {
+	expected := make(map[string]bool)
+	for _, entry := range tier1CompilerEntries {
+		expected[entry.Name] = true
+	}
+	for _, entry := range syntaxCompilerEntries {
+		expected[entry.Name] = true
+	}
+	for _, name := range forms.DefaultRegistry().Names() {
+		spec := forms.DefaultRegistry().Lookup(name)
+		if spec.Compile == nil {
+			continue
+		}
+		qt.Assert(t, expected[name], qt.IsTrue,
+			qt.Commentf("form %q carries a compiler but is in neither tier1CompilerEntries nor syntaxCompilerEntries", name))
 	}
 }

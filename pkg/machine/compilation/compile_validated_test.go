@@ -296,6 +296,36 @@ func TestCompileValidated_UnknownExprType(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
+// A registered form with no compiler (an expand-only macro such as let-syntax)
+// that reaches codegen as a ValidatedLiteral is an expander bug: compileValidated
+// must diagnose it with ErrInvalidSyntax ("should be handled during expansion"),
+// NOT silently self-evaluate the raw form into a wrong value. Reproduce the bug
+// state by validating a literal and stamping it with a registered-but-no-compiler
+// FormName. Under the pre-fix ValidatedLiteral branch this self-evaluated with no
+// error; the diagnostic below guards the restored behavior-identity.
+func TestCompileValidated_RegisteredFormWithoutCompiler_Diagnoses(t *testing.T) {
+	c := qt.New(t)
+
+	env := newNamespace(environment.NewNamespace().Runtime())
+	prog := parseSchemeExpr(t, env, "5")
+	result := validate.ValidateExpression(context.Background(), env, prog)
+	c.Assert(result.Ok(), qt.IsTrue)
+	lit, ok := result.Expr.(*validate.ValidatedLiteral)
+	c.Assert(ok, qt.IsTrue)
+
+	// let-syntax is registered as a passthrough (expand-only) validator but
+	// carries no codegen compiler; stamping it reproduces the expander-bug state.
+	lit.SetFormName("let-syntax")
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	ctc := NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
+	err := ctc.compileValidated(ctctx, lit)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue,
+		qt.Commentf("expected ErrInvalidSyntax for registered-but-no-compiler form, got %v", err))
+}
+
 // mockValidatedExpr implements validate.ValidatedExpr for testing the
 // exhaustiveness check in compileValidated's default branch.
 type mockValidatedExpr struct{}

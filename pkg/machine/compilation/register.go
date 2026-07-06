@@ -58,12 +58,9 @@ func init() {
 		forms.RegisterCompiler(entry.Name, entry.Fn)
 	}
 
-	// Tier 2: syntax passthrough compilers — syntaxCompiler unwraps
-	// ValidatedLiteral → SyntaxPair → CDR before calling the method.
-	// Both this init() and RegisterSyntaxCompilers derive from
-	// syntaxCompilerEntries (syntax_compilers_registry.go) to stay in sync.
+	// Tier 2: syntax passthrough compilers, attached by name onto their FormSpec.
 	for _, entry := range syntaxCompilerEntries {
-		registerCompiler(entry.Name, syntaxCompiler(entry.Fn))
+		forms.RegisterCompiler(entry.Name, syntaxCompiler(entry.Fn))
 	}
 }
 

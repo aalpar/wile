@@ -37,19 +37,30 @@ import (
 // compilation, it goes through the validated path. If a form's syntax is
 // extensible or defined by the extension system itself, it uses the registry path.
 
-// compileValidated dispatches compilation based on the validated expression type.
-// Each ValidatedExpr type has a corresponding compile method that can assume
-// the expression structure has already been validated.
-//
-// This is the main entry point for compiling validated IR. The validation phase
-// has already verified syntax structure and produced type-safe ValidatedExpr nodes,
-// so compilation can focus on bytecode generation without re-checking structure.
-//
-// Dispatch strategy:
-//  1. Form-name lookup: Special forms (if, define, lambda, etc.) carry a formName
-//     that maps to a registered compiler in the forms registry.
-//  2. Type switch fallback: Expressions without form names (symbols, calls, literals)
-//     are dispatched by their concrete ValidatedExpr type.
+// compilerFor returns the per-engine CompilerFunc for a form name, or nil. This
+// is the any → CompilerFunc dispatch assertion site; a mis-typed Compile becomes
+// nil here and is surfaced by VerifyCompilers's checked assertion (test-only).
+func (p *CompileTimeContinuation) compilerFor(name string) CompilerFunc {
+	spec := forms.RegistryFor(p.env).Lookup(name)
+	if spec == nil {
+		return nil
+	}
+	compile, _ := spec.Compile.(CompilerFunc)
+	return compile
+}
+
+// noCompilerDiagnostic reproduces the two legacy diagnostics: a registered form
+// with no compiler should have been handled during expansion (let-syntax,
+// syntax-rules, …); an unregistered name is an unknown validated expression type.
+func (p *CompileTimeContinuation) noCompilerDiagnostic(expr validate.ValidatedExpr) error {
+	name := expr.FormName()
+	if forms.RegistryFor(p.env).Lookup(name) != nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+			"compile: form %q has no compiler (should be handled during expansion)", name)
+	}
+	return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		"unknown validated expression type: %T", expr)
+}
 
 // compileValidatedSequence compiles a slice of validated expressions in order,
 // with all but the last compiled in NotInTail position. Used by CompileValidatedBegin
@@ -72,71 +83,49 @@ func (p *CompileTimeContinuation) compileValidatedSequence(
 	return nil
 }
 
+// compileValidated dispatches compilation of a single validated expression.
+// Grammar-head cases (ValidatedCall, ValidatedSymbol, ValidatedLiteral) are
+// matched by concrete type; everything else — all named forms — routes through
+// the per-engine forms registry by FormName.
 func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext, expr validate.ValidatedExpr) error {
 	// Push the validated expression's source for finer-grained attribution.
-	// Inner sub-expressions will push their own source, naturally creating
-	// the correct nesting on the source stack.
 	src := expr.Source()
 	if src != nil {
 		p.pushSource(src)
 		defer p.popSource()
 	}
 
-	// Unified dispatch by concrete type. Tier 1 forms (if, define, lambda, etc.)
-	// dispatch directly — no string lookup, no type assertion adapter. Tier 2
-	// forms (define-syntax, include, etc.) arrive as ValidatedLiteral and dispatch
-	// through the compiler registry by FormName.
+	// Grammar head: the hottest, never-dialect-reconfigured nodes dispatch by
+	// concrete type so the common path pays no map lookup. Everything named as a
+	// form routes through the per-engine registry by FormName.
 	switch v := expr.(type) {
-	case *validate.ValidatedIf:
-		return CompileValidatedIf(p, ctctx, v)
-	case *validate.ValidatedDefine:
-		return CompileValidatedDefine(p, ctctx, v)
-	case *validate.ValidatedLambda:
-		return CompileValidatedLambda(p, ctctx, v)
-	case *validate.ValidatedCaseLambda:
-		return CompileValidatedCaseLambda(p, ctctx, v)
-	case *validate.ValidatedSetBang:
-		return CompileValidatedSetBang(p, ctctx, v)
-	case *validate.ValidatedQuote:
-		return CompileValidatedQuote(p, ctctx, v)
-	case *validate.ValidatedBegin:
-		return CompileValidatedBegin(p, ctctx, v)
-	case *validate.ValidatedQuasiquote:
-		return CompileValidatedQuasiquote(p, ctctx, v)
-	case *validate.ValidatedDynamicWind:
-		return CompileValidatedDynamicWind(p, ctctx, v)
-	case *validate.ValidatedApply:
-		return CompileValidatedApply(p, ctctx, v)
-	case *validate.ValidatedWithContinuationMark:
-		return CompileValidatedWithContinuationMark(p, ctctx, v)
-	case *validate.ValidatedLet:
-		return CompileValidatedLet(p, ctctx, v)
-
 	case *validate.ValidatedCall:
 		return p.compileValidatedCall(ctctx, v)
 	case *validate.ValidatedSymbol:
 		return p.CompileSymbol(ctctx, v.Symbol)
-
 	case *validate.ValidatedLiteral:
-		// Tier 2 forms (define-syntax, include, syntax-case, etc.) are validated
-		// as literals with a FormName. Dispatch through the compiler registry.
-		if v.FormName() != "" {
-			compiler := LookupCompiler(v.FormName())
-			if compiler != nil {
-				return compiler(p, ctctx, v)
-			}
-			// Form is known to the validator but has no compiler — it should have
-			// been fully handled during expansion (e.g., let-syntax, letrec-syntax,
-			// syntax-rules). If it reached compilation, the expander has a bug.
-			if forms.RegistryFor(p.env).Lookup(v.FormName()) != nil {
-				return werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
-					"compile: form %q has no compiler (should be handled during expansion)", v.FormName())
-			}
+		// Tier-2 forms arrive as literals whose FormName carries a compiler; a
+		// bare self-eval literal ("@literal") resolves to no compiler and self-evals.
+		compile := p.compilerFor(v.FormName())
+		if compile != nil {
+			return compile(p, ctctx, v)
+		}
+		// A registered form with no compiler (let-syntax, letrec-syntax,
+		// syntax-rules) should have been consumed during expansion; reaching
+		// codegen is an expander bug. Diagnose it rather than silently
+		// self-evaluating the raw form, which would yield a wrong value.
+		if forms.RegistryFor(p.env).Lookup(v.FormName()) != nil {
+			return p.noCompilerDiagnostic(v)
 		}
 		return p.compileValidatedLiteral(ctctx, v)
-
 	default:
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "unknown validated expression type: %T", expr)
+		// Tier-1 forms (if, lambda, define, set!, quote, begin, apply, let, …),
+		// name-keyed. let/let*/letrec/letrec* all resolve to CompileValidatedLet.
+		compile := p.compilerFor(expr.FormName())
+		if compile == nil {
+			return p.noCompilerDiagnostic(expr)
+		}
+		return compile(p, ctctx, expr)
 	}
 }
 

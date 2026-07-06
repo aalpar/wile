@@ -21,9 +21,9 @@ import (
 )
 
 // syntaxCompilerEntries is the single source of truth for all Tier 2 syntax
-// compiler registrations. Both the compilerRegistry (dispatch via init() in
-// register.go) and RegisterSyntaxCompilers (compile-time environment for
-// library export/hygiene) derive from this slice.
+// compiler registrations. Both init() (which attaches each entry onto its FormSpec
+// via forms.RegisterCompiler) and RegisterSyntaxCompilers (compile-time environment
+// for library export/hygiene) derive from this slice.
 //
 // ADDING A NEW SYNTAX COMPILER: add one entry here. Both registration paths
 // pick it up automatically.

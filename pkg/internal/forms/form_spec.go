@@ -57,7 +57,8 @@ type FormSpec struct {
 	// Compile holds the form's codegen function. It is [any]-typed — the concrete
 	// type is machine/compilation.CompilerFunc, which forms cannot name without a
 	// forms → machine/compilation import cycle (mirrors ValidatorFunc's result any).
-	// Asserted once, at the single dispatch site in machine/compilation.
+	// Asserted at the dispatch site in machine/compilation (comma-ok); a checked
+	// assertion in VerifyCompilers backstops a mis-typed Compile at test time.
 	Compile any
 }
 
