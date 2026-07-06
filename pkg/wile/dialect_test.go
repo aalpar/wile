@@ -122,6 +122,54 @@ func TestWithDialect_LastWins(t *testing.T) {
 		qt.Commentf("the last dialect (no-set!) must be the active one, not silently dropped"))
 }
 
+// TestDefaultDialect_IsR7RS pins the default dialect's identity.
+func TestDefaultDialect_IsR7RS(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(DefaultDialect, qt.IsNotNil)
+	c.Assert(DefaultDialect.Name(), qt.Equals, "r7rs")
+}
+
+// TestDefaultDialect_InstallForms_IsNoop proves DefaultDialect neither adds nor
+// removes forms: the R7RS forms already live on the cloned default registry, so
+// its InstallForms is a marker, not a mutator. Seeded with a sentinel so the
+// assertion catches a future add-based OR remove-based edit, not just an add.
+func TestDefaultDialect_InstallForms_IsNoop(t *testing.T) {
+	c := qt.New(t)
+	fr := forms.NewFormRegistry()
+	fr.Register(&forms.FormSpec{Name: "sentinel"})
+	err := DefaultDialect.InstallForms(fr)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fr.Names(), qt.HasLen, 1,
+		qt.Commentf("DefaultDialect.InstallForms must not add or remove forms"))
+	c.Assert(fr.Lookup("sentinel"), qt.IsNotNil,
+		qt.Commentf("DefaultDialect.InstallForms must leave the registry untouched"))
+}
+
+// TestWithDialect_DefaultDialect_EqualsNoDialect proves the default path and an
+// explicit WithDialect(DefaultDialect) are equivalent — R7RS is the default
+// dialect, applied uniformly whether or not the caller names it. A/B on the same
+// source: the two engines must produce the same result.
+func TestWithDialect_DefaultDialect_EqualsNoDialect(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	const src = "(let ((x 1)) (set! x 2) x)"
+
+	base, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+	baseResult, err := base.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNil)
+
+	eng, err := NewEngine(ctx, WithDialect(DefaultDialect))
+	c.Assert(err, qt.IsNil)
+	defResult, err := eng.EvalMultiple(ctx, src)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(defResult.SchemeString(), qt.Equals, baseResult.SchemeString(),
+		qt.Commentf("explicit WithDialect(DefaultDialect) must match the no-dialect path"))
+	c.Assert(defResult.SchemeString(), qt.Equals, "2")
+}
+
 // addWhenTrueDialect adds a new special form "when-true" by cloning if's spec
 // (validator AND compiler) under a new name — exercising a dialect installing a
 // codegen-bearing form (fr.Register carries Compile), the capability SP1's

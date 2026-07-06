@@ -51,11 +51,35 @@ type Dialect interface {
 
 // WithDialect installs a Dialect on the engine, customizing its special-form
 // surface at construction time. Last-wins if supplied more than once. A nil
-// dialect (the default) leaves the R7RS-default forms in place. If the dialect's
-// InstallForms returns an error, NewEngine fails with that error wrapped in
-// werr.ErrEngineInit.
+// dialect (the default) applies [DefaultDialect], leaving the R7RS-default forms
+// in place. If the dialect's InstallForms returns an error, NewEngine fails with
+// that error wrapped in werr.ErrEngineInit.
 func WithDialect(d Dialect) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.dialect = d
 	}
+}
+
+// DefaultDialect is the R7RS baseline dialect, applied by every engine that does
+// not supply its own via [WithDialect]. R7RS is thus a dialect like any other —
+// the default one — not a hardcoded special case: engine construction always
+// forks the R7RS-default forms registry and applies a dialect to it, uniformly.
+//
+// Its InstallForms is a no-op: the forked registry already carries the R7RS
+// Tier-1 special forms (they are registered onto the package-default registry at
+// init time, and the fork clones them). DefaultDialect names that baseline and
+// gives derived dialects a base to start from — e.g. a mutation-free dialect that
+// starts as DefaultDialect and removes set!.
+var DefaultDialect Dialect = r7rsDialect{}
+
+// r7rsDialect is the concrete DefaultDialect. Its InstallForms is a marker, not a
+// mutator — see DefaultDialect.
+type r7rsDialect struct{}
+
+func (r7rsDialect) Name() string {
+	return "r7rs"
+}
+
+func (r7rsDialect) InstallForms(_ *forms.FormRegistry) error {
+	return nil
 }

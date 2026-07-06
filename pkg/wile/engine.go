@@ -151,19 +151,23 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// order-dependence of (namespace-name (interaction-environment)).
 	ns.Name = "interaction-environment"
 	ns.SetRegistry(reg)
-	// Fork a per-engine forms registry from the R7RS default, then let an
-	// optional dialect (WithDialect) customize it — add/remove/rename special
-	// forms for this engine only. The registry is copy-on-write over the shared
-	// default, so a dialect's mutations never affect the default or other engines.
-	// With no dialect this is a pure seam: the clone matches the default, behavior
-	// is unchanged, and the per-engine carrier is still exercised on the hot path.
+	// Fork a per-engine forms registry from the R7RS default, then apply the
+	// engine's dialect to customize it — add/remove/rename special forms for this
+	// engine only. R7RS is itself a dialect (DefaultDialect), applied when the
+	// caller supplies none, so the path is uniform: always fork, always apply a
+	// dialect. The registry is copy-on-write over the shared default, so a
+	// dialect's mutations never affect the default or other engines. DefaultDialect
+	// installs nothing (the clone already carries R7RS), so the no-dialect path is
+	// behavior-identical to the pre-dialect seam.
+	dialect := cfg.dialect
+	if dialect == nil {
+		dialect = DefaultDialect
+	}
 	fr := forms.DefaultRegistry().Clone()
-	if cfg.dialect != nil {
-		err = cfg.dialect.InstallForms(fr)
-		if err != nil {
-			return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err,
-				"install dialect %q forms", cfg.dialect.Name())
-		}
+	err = dialect.InstallForms(fr)
+	if err != nil {
+		return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err,
+			"install dialect %q forms", dialect.Name())
 	}
 	ns.SetFormRegistry(fr)
 	ns.SetLoadPathStack(sourceload.NewLoadStack())
