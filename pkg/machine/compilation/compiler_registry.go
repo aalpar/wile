@@ -19,16 +19,17 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/internal/forms"
-	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// CompilerFunc is the signature for Tier 2 (syntax passthrough) compiler
-// functions. These receive ValidatedLiteral because Tier 2 forms pass through
-// validation as literals with a FormName. Tier 1 forms (if, define, lambda,
-// etc.) are dispatched by type switch in compileValidated and never reach
-// the registry.
-type CompilerFunc func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr *validate.ValidatedLiteral) error
+// CompilerFunc is the codegen signature for registry-dispatched forms. Its
+// parameter is the ValidatedExpr interface (not the concrete *ValidatedLiteral)
+// so one uniform type can hold any form's compiler keyed by FormName; each
+// handler asserts its concrete type at its head. Today only Tier-2 (syntax
+// passthrough) forms dispatch through the registry — Tier-1 forms still route
+// through the concrete-type switch in compileValidated. The interface parameter
+// is the enabler for folding Tier-1 into the same registry.
+type CompilerFunc func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error
 
 // compilerRegistry maps form names to their Tier 2 compiler functions.
 var compilerRegistry = make(map[string]CompilerFunc)
