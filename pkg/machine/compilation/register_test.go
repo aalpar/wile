@@ -121,3 +121,15 @@ func TestFormDispatchDisjointFromRegistry(t *testing.T) {
 			qt.Commentf("formDispatch classifies %q but it also has a Tier-2 compiler; one is wrong", name))
 	}
 }
+
+func TestTier1CompilersRegisteredInForms(t *testing.T) {
+	// After init(), every Tier-1 form name carries a CompilerFunc on its FormSpec.
+	for _, entry := range tier1CompilerEntries {
+		spec := forms.DefaultRegistry().Lookup(entry.Name)
+		qt.Assert(t, spec, qt.IsNotNil,
+			qt.Commentf("no FormSpec for Tier-1 form %q", entry.Name))
+		_, ok := spec.Compile.(CompilerFunc)
+		qt.Assert(t, ok, qt.IsTrue,
+			qt.Commentf("Tier-1 form %q has Compile %T, want CompilerFunc", entry.Name, spec.Compile))
+	}
+}

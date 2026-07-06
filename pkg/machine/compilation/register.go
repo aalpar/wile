@@ -52,12 +52,14 @@ func VerifyAllPhaseHandlers() error {
 }
 
 func init() {
+	// Tier 1: native-spine compilers, attached by name onto their FormSpec so
+	// compileValidated dispatches them through the per-engine forms registry.
+	for _, entry := range tier1CompilerEntries {
+		forms.RegisterCompiler(entry.Name, entry.Fn)
+	}
+
 	// Tier 2: syntax passthrough compilers — syntaxCompiler unwraps
 	// ValidatedLiteral → SyntaxPair → CDR before calling the method.
-	//
-	// Tier 1 forms (if, define, lambda, etc.) are dispatched by type switch
-	// in compileValidated (compile_validated.go) — no registry entry needed.
-	//
 	// Both this init() and RegisterSyntaxCompilers derive from
 	// syntaxCompilerEntries (syntax_compilers_registry.go) to stay in sync.
 	for _, entry := range syntaxCompilerEntries {
