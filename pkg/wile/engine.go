@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
@@ -150,6 +151,11 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// order-dependence of (namespace-name (interaction-environment)).
 	ns.Name = "interaction-environment"
 	ns.SetRegistry(reg)
+	// Fork a per-engine forms registry from the R7RS default. Pure seam: the
+	// clone has identical contents to the default so behavior is unchanged, but
+	// it exercises the per-engine carrier on the production path and is the point
+	// where a dialect (Phase 2 WithDialect) will override the clone.
+	ns.SetFormRegistry(forms.DefaultRegistry().Clone())
 	ns.SetLoadPathStack(sourceload.NewLoadStack())
 	auth := cfg.resolveAuthorizer()
 	if auth != nil {
