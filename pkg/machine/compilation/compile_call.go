@@ -244,7 +244,7 @@ func (p *CompileTimeContinuation) tryInlineCall(
 		delete(p.currentlyInlining, bid)
 	}()
 
-	return true, p.CompileValidatedLet(ctctx, syntheticLet)
+	return true, CompileValidatedLet(p, ctctx, syntheticLet)
 }
 
 // tryInlineHOFCall inlines a call to a curated tail higher-order procedure
@@ -326,5 +326,5 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 		"let", v.Source(), validate.LetKindLet,
 		syntheticBindings, template.Body(),
 	)
-	return true, p.CompileValidatedLet(ctctx, syntheticLet)
+	return true, CompileValidatedLet(p, ctctx, syntheticLet)
 }

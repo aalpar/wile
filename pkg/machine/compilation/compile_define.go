@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -24,7 +25,8 @@ import (
 )
 
 // CompileValidatedDefine compiles a validated define form.
-func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) error {
+func CompileValidatedDefine(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedDefine)
 	if v.IsFunction {
 		// (define (name params...) body...) - compile as lambda then define
 		return p.CompileValidatedDefineFn(ctctx, v)

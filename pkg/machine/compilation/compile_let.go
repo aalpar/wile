@@ -24,6 +24,7 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/werr"
@@ -57,10 +58,8 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 	return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
 }
 
-func (p *CompileTimeContinuation) CompileValidatedLet(
-	ctctx CompileTimeCallContext,
-	v *validate.ValidatedLet,
-) error {
+func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedLet)
 	n := len(v.Bindings)
 
 	// For plain let: compile inits BEFORE creating the env frame

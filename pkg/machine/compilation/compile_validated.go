@@ -88,29 +88,29 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 	// through the compiler registry by FormName.
 	switch v := expr.(type) {
 	case *validate.ValidatedIf:
-		return p.CompileValidatedIf(ctctx, v)
+		return CompileValidatedIf(p, ctctx, v)
 	case *validate.ValidatedDefine:
-		return p.CompileValidatedDefine(ctctx, v)
+		return CompileValidatedDefine(p, ctctx, v)
 	case *validate.ValidatedLambda:
-		return p.CompileValidatedLambda(ctctx, v)
+		return CompileValidatedLambda(p, ctctx, v)
 	case *validate.ValidatedCaseLambda:
-		return p.CompileValidatedCaseLambda(ctctx, v)
+		return CompileValidatedCaseLambda(p, ctctx, v)
 	case *validate.ValidatedSetBang:
-		return p.CompileValidatedSetBang(ctctx, v)
+		return CompileValidatedSetBang(p, ctctx, v)
 	case *validate.ValidatedQuote:
-		return p.CompileValidatedQuote(ctctx, v)
+		return CompileValidatedQuote(p, ctctx, v)
 	case *validate.ValidatedBegin:
-		return p.CompileValidatedBegin(ctctx, v)
+		return CompileValidatedBegin(p, ctctx, v)
 	case *validate.ValidatedQuasiquote:
-		return p.CompileValidatedQuasiquote(ctctx, v)
+		return CompileValidatedQuasiquote(p, ctctx, v)
 	case *validate.ValidatedDynamicWind:
-		return p.CompileValidatedDynamicWind(ctctx, v)
+		return CompileValidatedDynamicWind(p, ctctx, v)
 	case *validate.ValidatedApply:
-		return p.CompileValidatedApply(ctctx, v)
+		return CompileValidatedApply(p, ctctx, v)
 	case *validate.ValidatedWithContinuationMark:
-		return p.CompileValidatedWithContinuationMark(ctctx, v)
+		return CompileValidatedWithContinuationMark(p, ctctx, v)
 	case *validate.ValidatedLet:
-		return p.CompileValidatedLet(ctctx, v)
+		return CompileValidatedLet(p, ctctx, v)
 
 	case *validate.ValidatedCall:
 		return p.compileValidatedCall(ctctx, v)
@@ -148,7 +148,8 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 // is the simplest form of constant folding — evaluating known expressions
 // at compile time rather than runtime.
 // See BIBLIOGRAPHY.md "Constant Folding".
-func (p *CompileTimeContinuation) CompileValidatedIf(ctctx CompileTimeCallContext, v *validate.ValidatedIf) error {
+func CompileValidatedIf(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedIf)
 	// Constant folding: if the test is a compile-time-known literal, fold the
 	// if form to just the consequent or alternative. Per R7RS, only #f is false;
 	// all other values (including 0, "", '()) are truthy.
@@ -236,7 +237,8 @@ func isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
 }
 
 // CompileValidatedLambda compiles a validated (lambda params body...) form.
-func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallContext, v *validate.ValidatedLambda) error {
+func CompileValidatedLambda(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedLambda)
 	// Create local environment and template for lambda body.
 	// compileClosure creates the child environment frame after binding parameters.
 	lenv := environment.NewLocalEnvironment(0)
@@ -261,7 +263,8 @@ func (p *CompileTimeContinuation) CompileValidatedLambda(ctctx CompileTimeCallCo
 //	  ((x y . rest) (apply + x y rest)))  ; 2+ args: sum all
 //
 // At runtime, the VM selects the first clause whose arity matches the call.
-func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCallContext, v *validate.ValidatedCaseLambda) error {
+func CompileValidatedCaseLambda(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedCaseLambda)
 	// Phase 1: Compile each clause as a separate closure.
 	// Unlike regular lambda which produces one closure, case-lambda produces
 	// multiple closures (one per clause) that are combined into a dispatch structure.
@@ -298,7 +301,8 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 }
 
 // CompileValidatedSetBang compiles a validated (set! name expr) form.
-func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
+func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedSetBang)
 	// Get the symbol (validator guarantees it's a SyntaxSymbol)
 	sym := v.Name.Sym
 	symbolScopes := v.Name.Scopes()
@@ -381,7 +385,8 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 }
 
 // CompileValidatedQuote compiles a validated (quote datum) form.
-func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, v *validate.ValidatedQuote) error {
+func CompileValidatedQuote(p *CompileTimeContinuation, _ CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedQuote)
 	// Validate quoted literal for circular datum labels.
 	unwrapped := v.Datum.UnwrapAll()
 	validated, err := p.validateQuotedLiteral(unwrapped)
@@ -402,7 +407,8 @@ func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext
 
 // CompileValidatedQuasiquote compiles a validated (quasiquote template) form.
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
-func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCallContext, v *validate.ValidatedQuasiquote) error {
+func CompileValidatedQuasiquote(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedQuasiquote)
 	// The existing quasiquote compiler expects the raw syntax template
 	err := p.compileQuasiquoteDatum(ctctx, v.Template, 1)
 	if err != nil {
@@ -421,7 +427,8 @@ func (p *CompileTimeContinuation) CompileValidatedQuasiquote(ctctx CompileTimeCa
 // are visible throughout the body, enabling forward references between defines.
 //
 // Example: (begin (display "hello") (newline) 42) => 42 (after printing)
-func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallContext, v *validate.ValidatedBegin) error {
+func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedBegin)
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work
 	for _, expr := range v.Body() {
@@ -553,7 +560,8 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 // zero), so without boxing a thunk returning (values …) would mis-align the
 // PeekK/Drop offsets (R7RS §6.4 requires dynamic-wind to return the thunk's
 // values, including zero or several).
-func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
+func CompileValidatedDynamicWind(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedDynamicWind)
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
 	exprCtx := ctctx.NotInTail()
@@ -655,7 +663,8 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 //	after:
 //
 // Tail position: same without SaveContinuation/patch.
-func (p *CompileTimeContinuation) CompileValidatedApply(ctctx CompileTimeCallContext, v *validate.ValidatedApply) error {
+func CompileValidatedApply(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedApply)
 	var saveContinuationIndex int
 	if !ctctx.inTail {
 		saveContinuationIndex = p.emitPatchableSaveContinuation()
@@ -705,10 +714,8 @@ func (p *CompileTimeContinuation) CompileValidatedApply(ctctx CompileTimeCallCon
 //	SaveContMark              ; pops key, saves (key, old) on stack, sets mark
 //	<compile body in non-tail>
 //	RestoreContMark           ; pops (old, key), restores mark
-func (p *CompileTimeContinuation) CompileValidatedWithContinuationMark(
-	ctctx CompileTimeCallContext,
-	v *validate.ValidatedWithContinuationMark,
-) error {
+func CompileValidatedWithContinuationMark(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
+	v := expr.(*validate.ValidatedWithContinuationMark)
 	exprCtx := ctctx.NotInTail()
 
 	// Compile key expression
