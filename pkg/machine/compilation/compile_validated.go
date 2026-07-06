@@ -128,7 +128,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 			// Form is known to the validator but has no compiler — it should have
 			// been fully handled during expansion (e.g., let-syntax, letrec-syntax,
 			// syntax-rules). If it reached compilation, the expander has a bug.
-			if forms.Lookup(v.FormName()) != nil {
+			if forms.RegistryFor(p.env).Lookup(v.FormName()) != nil {
 				return werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
 					"compile: form %q has no compiler (should be handled during expansion)", v.FormName())
 			}

@@ -110,7 +110,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 			}
 
 			// Look up the form in the registry
-			spec := forms.Lookup(symVal.Key)
+			spec := forms.RegistryFor(env).Lookup(symVal.Key)
 			if spec != nil && spec.Validate != nil {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
