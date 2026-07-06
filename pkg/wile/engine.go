@@ -151,11 +151,21 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// order-dependence of (namespace-name (interaction-environment)).
 	ns.Name = "interaction-environment"
 	ns.SetRegistry(reg)
-	// Fork a per-engine forms registry from the R7RS default. Pure seam: the
-	// clone has identical contents to the default so behavior is unchanged, but
-	// it exercises the per-engine carrier on the production path and is the point
-	// where a dialect (Phase 2 WithDialect) will override the clone.
-	ns.SetFormRegistry(forms.DefaultRegistry().Clone())
+	// Fork a per-engine forms registry from the R7RS default, then let an
+	// optional dialect (WithDialect) customize it — add/remove/rename special
+	// forms for this engine only. The registry is copy-on-write over the shared
+	// default, so a dialect's mutations never affect the default or other engines.
+	// With no dialect this is a pure seam: the clone matches the default, behavior
+	// is unchanged, and the per-engine carrier is still exercised on the hot path.
+	fr := forms.DefaultRegistry().Clone()
+	if cfg.dialect != nil {
+		err = cfg.dialect.InstallForms(fr)
+		if err != nil {
+			return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err,
+				"install dialect %q forms", cfg.dialect.Name())
+		}
+	}
+	ns.SetFormRegistry(fr)
 	ns.SetLoadPathStack(sourceload.NewLoadStack())
 	auth := cfg.resolveAuthorizer()
 	if auth != nil {
@@ -289,6 +299,16 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	var closers []registry.Closeable
 
 	if cfg.namespace != nil {
+		// A dialect customizes the forms registry during bootstrapNamespace, which
+		// the pre-built-namespace path skips entirely — so a dialect supplied here
+		// would be silently ignored. Reject the combination rather than drop it,
+		// mirroring the WithStrictNamespace+WithRegistry conflict in
+		// bootstrapNamespace. Install the dialect's forms on the namespace before
+		// WithNamespace, or drop WithNamespace.
+		if cfg.dialect != nil {
+			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+				"WithDialect is incompatible with WithNamespace: a dialect customizes the forms registry at engine origin, which the pre-built-namespace path skips")
+		}
 		// Use pre-built namespace
 		ns = cfg.namespace
 		regAny := ns.Registry()

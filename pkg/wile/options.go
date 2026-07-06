@@ -114,6 +114,12 @@ type engineConfig struct {
 	// bare baseline. Set by WithStrictNamespace; off by default. Security is
 	// unchanged: the profile still bounds what is reachable at all.
 	strictNamespace bool
+
+	// dialect, when non-nil, customizes the per-engine forms registry at engine
+	// origin (bootstrapNamespace): the engine forks the R7RS-default clone and
+	// hands it to the dialect's InstallForms to add/remove/rename special forms.
+	// Set by WithDialect (last wins). See dialect.go.
+	dialect Dialect
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
