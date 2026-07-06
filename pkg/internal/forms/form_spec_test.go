@@ -272,3 +272,41 @@ func TestRegistryFor_RegistrySet_ReturnsIt(t *testing.T) {
 	got := RegistryFor(ns.Runtime())
 	c.Assert(got, qt.Equals, fr)
 }
+
+// noopValidator is a do-nothing ValidatorFunc for registry-preservation tests.
+func noopValidator() ValidatorFunc {
+	return func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return nil
+	}
+}
+
+func TestRegisterCompiler_Preserves_Validator(t *testing.T) {
+	c := qt.New(t)
+	r := NewFormRegistry()
+	r.RegisterValidator("f", noopValidator())
+	r.RegisterCompiler("f", "COMPILER")
+	spec := r.Lookup("f")
+	c.Assert(spec.Validate, qt.IsNotNil)
+	c.Assert(spec.Compile, qt.Equals, "COMPILER")
+}
+
+func TestRegisterValidator_Preserves_Compiler(t *testing.T) {
+	c := qt.New(t)
+	r := NewFormRegistry()
+	r.RegisterCompiler("f", "COMPILER")
+	r.RegisterValidator("f", noopValidator())
+	spec := r.Lookup("f")
+	c.Assert(spec.Compile, qt.Equals, "COMPILER")
+	c.Assert(spec.Validate, qt.IsNotNil)
+}
+
+func TestFormRegistry_Clone_COW_Compile(t *testing.T) {
+	c := qt.New(t)
+	r := NewFormRegistry()
+	r.RegisterCompiler("f", "C1")
+	clone := r.Clone()
+	c.Assert(clone.Lookup("f").Compile, qt.Equals, "C1")
+	clone.RegisterCompiler("f", "C2")
+	c.Assert(r.Lookup("f").Compile, qt.Equals, "C1")
+	c.Assert(clone.Lookup("f").Compile, qt.Equals, "C2")
+}

@@ -53,6 +53,12 @@ type FormSpec struct {
 	// Validate is called during the validation phase to produce a ValidatedExpr.
 	// If nil, the form passes through as ValidatedLiteral.
 	Validate ValidatorFunc
+
+	// Compile holds the form's codegen function. It is [any]-typed — the concrete
+	// type is machine/compilation.CompilerFunc, which forms cannot name without a
+	// forms → machine/compilation import cycle (mirrors ValidatorFunc's result any).
+	// Asserted once, at the single dispatch site in machine/compilation.
+	Compile any
 }
 
 // FormRegistry is a per-engine set of special-form specs. The package-level
@@ -72,12 +78,29 @@ func (r *FormRegistry) Register(spec *FormSpec) {
 	r.specs[spec.Name] = spec
 }
 
-// RegisterValidator sets the validator for a form. It is copy-on-write: a fresh
-// FormSpec is assigned rather than mutating an existing one in place, so an
-// override on a clone cannot corrupt the default (or any clone sharing the
-// pointer). Safe because FormSpec carries only Name+Validate.
+// RegisterValidator sets the validator for a form. Copy-on-write: a fresh
+// FormSpec is assigned rather than mutating in place, so an override on a clone
+// cannot corrupt the default (or a clone sharing the pointer). Preserves any
+// previously-registered Compile so validator and compiler co-locate on one spec.
 func (r *FormRegistry) RegisterValidator(name string, fn ValidatorFunc) {
-	r.specs[name] = &FormSpec{Name: name, Validate: fn}
+	prev := r.specs[name]
+	spec := &FormSpec{Name: name, Validate: fn}
+	if prev != nil {
+		spec.Compile = prev.Compile
+	}
+	r.specs[name] = spec
+}
+
+// RegisterCompiler sets the compiler for a form. Copy-on-write, symmetric with
+// RegisterValidator: preserves any previously-registered Validate. compile is
+// [any]-typed (a machine/compilation.CompilerFunc) to break the import cycle.
+func (r *FormRegistry) RegisterCompiler(name string, compile any) {
+	prev := r.specs[name]
+	spec := &FormSpec{Name: name, Compile: compile}
+	if prev != nil {
+		spec.Validate = prev.Validate
+	}
+	r.specs[name] = spec
 }
 
 // Lookup returns the FormSpec for a keyword, or nil if not found.
@@ -150,6 +173,11 @@ func Register(spec *FormSpec) {
 // RegisterValidator sets a validator on the package default.
 func RegisterValidator(name string, fn ValidatorFunc) {
 	defaultRegistry.RegisterValidator(name, fn)
+}
+
+// RegisterCompiler sets a compiler on the package default.
+func RegisterCompiler(name string, compile any) {
+	defaultRegistry.RegisterCompiler(name, compile)
 }
 
 // Lookup returns the FormSpec for a keyword from the package default.
