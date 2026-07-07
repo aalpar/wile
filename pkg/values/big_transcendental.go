@@ -211,6 +211,25 @@ func bigLn2(prec uint) *big.Float {
 	return result
 }
 
+var (
+	bigECacheMu sync.Mutex
+	bigECache   = map[uint]*big.Float{}
+)
+
+// BigE returns Euler's number e rounded to prec bits (= exp(1)), cached per
+// precision; a defensive copy is returned so callers cannot mutate the cache.
+func BigE(prec uint) *big.Float {
+	bigECacheMu.Lock()
+	defer bigECacheMu.Unlock()
+	v, ok := bigECache[prec]
+	if ok {
+		return new(big.Float).Set(v)
+	}
+	result := BigExp(new(big.Float).SetPrec(prec).SetInt64(1), prec)
+	bigECache[prec] = new(big.Float).Set(result)
+	return result
+}
+
 // logAt computes the natural logarithm of x at precision wp. It splits
 // x = mant·2ᵉ (mant ∈ [0.5,1)) so ln(x) = ln(mant) + e·ln(2), with ln(mant)
 // from the atanh series on (mant−1)/(mant+1) (|t| ≤ 1/3, fast convergence).

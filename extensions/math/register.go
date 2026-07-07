@@ -248,5 +248,18 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}},
 	}, registry.PhaseSetRuntime)
 
+	// Big-precision mathematical constants as 256-bit BigFloat value bindings
+	// (like Racket's `pi`). The tier rules make (exp 1)/(acos -1) return float64,
+	// so these are the only way to get π/e at big precision from Scheme; `euler`
+	// (not bare `e`) avoids colliding with the common throwaway variable name.
+	r.AddGlobalValue("pi", values.NewBigFloat(values.BigPi(values.DefaultBigFloatPrecision)))
+	r.AddGlobalValue("euler", values.NewBigFloat(values.BigE(values.DefaultBigFloatPrecision)))
+	r.AddBindingSpecs([]registry.BindingSpec{
+		{Name: "pi", Doc: "The mathematical constant π (3.14159…) as a 256-bit big-float. " +
+			"Use this for high-precision work; (acos -1) and (* 4 (atan 1)) return only float64 precision.", DocOnly: true},
+		{Name: "euler", Doc: "Euler's number e (2.71828…) as a 256-bit big-float. " +
+			"Named euler rather than e to avoid shadowing the common variable name; (exp 1) returns only float64 precision.", DocOnly: true},
+	})
+
 	return nil
 }

@@ -48,6 +48,14 @@ func TestTranscendental(t *testing.T) {
 		// log(10^400) = 400·ln(10) ≈ 921.034.
 		{"log beyond float64 range", `(< (abs (- (log (expt 10 400)) 921.0340371976184)) 1e-6)`, values.TrueValue},
 
+		// Big-precision constants pi and euler (256-bit bindings).
+		{"pi value", `(< (abs (- pi 3.141592653589793)) 1e-10)`, values.TrueValue},
+		// Agreement with an independent big-π (6·asin(1/2)) beyond float64 proves big precision.
+		{"pi is big precision", `(< (abs (- pi (* 6 (asin 1/2)))) 1e-70)`, values.TrueValue},
+		{"euler value", `(< (abs (- euler 2.718281828459045)) 1e-10)`, values.TrueValue},
+		// log(euler) = 1 to big precision (float64 e would only give ~1e-16).
+		{"euler is big precision", `(< (abs (- (log euler) 1)) 1e-70)`, values.TrueValue},
+
 		// sin
 		{"sin zero", `(< (abs (sin 0)) 1e-10)`, values.TrueValue},
 		{"sin pi/2", `(< (abs (- (sin 1.5707963267948966) 1.0)) 1e-10)`, values.TrueValue},
