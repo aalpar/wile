@@ -34,9 +34,9 @@ import (
 // Boundary: removal is at the visible top level only. The full registry still backs
 // library environments, so a program can reach a mutator again via
 // (import (scheme base)). NoMutation is therefore a *language-surface* statement, not
-// a hard capability guarantee — the same honesty caveat [R7RSMinimal] carries for
-// set!. For a runtime capability sandbox use security.Authorizer, which composes
-// orthogonally with any dialect.
+// a hard capability guarantee: it narrows what the flat top level offers, it does not
+// enforce immutability. For a runtime capability sandbox use security.Authorizer, which
+// composes orthogonally with any dialect.
 var NoMutation Dialect = noMutationDialect{}
 
 // noMutationDialect is the concrete NoMutation — see NoMutation. It implements
