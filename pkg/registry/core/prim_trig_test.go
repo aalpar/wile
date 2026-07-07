@@ -438,6 +438,27 @@ func assertBigFloatResult(t *testing.T, code string, expected float64, tolerance
 		qt.Commentf("expected %v, got %v (diff: %v)", expected, got, diff))
 }
 
+// assertRealResult checks a real result that may be *Float or *BigFloat — for
+// mixed-tier expressions whose result type depends on which operands appear
+// (e.g. an identity evaluated over both bounded and rational arguments).
+func assertRealResult(t *testing.T, code string, expected float64, tolerance float64) {
+	t.Helper()
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	var got float64
+	switch v := result.(type) {
+	case *values.Float:
+		got = v.Value
+	case *values.BigFloat:
+		got = v.Float64Truncated()
+	default:
+		qt.Assert(t, false, qt.IsTrue, qt.Commentf("expected Float or BigFloat, got %T", result))
+	}
+	diff := math.Abs(got - expected)
+	qt.Assert(t, diff < tolerance, qt.IsTrue,
+		qt.Commentf("expected %v, got %v (diff: %v)", expected, got, diff))
+}
+
 // Helper for checking complex results with tolerance
 func assertComplexResult(t *testing.T, code string, expectedReal, expectedImag, tolerance float64) {
 	t.Helper()
@@ -471,9 +492,10 @@ func TestExpExtended(t *testing.T) {
 	})
 
 	t.Run("rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(exp 1/2)`, math.Exp(0.5), 1e-10)
-		assertFloatResult(t, `(exp -1/2)`, math.Exp(-0.5), 1e-10)
-		assertFloatResult(t, `(exp 3/2)`, math.Exp(1.5), 1e-10)
+		// Rational is unbounded-tier → big-precision exp → *BigFloat.
+		assertBigFloatResult(t, `(exp 1/2)`, math.Exp(0.5), 1e-10)
+		assertBigFloatResult(t, `(exp -1/2)`, math.Exp(-0.5), 1e-10)
+		assertBigFloatResult(t, `(exp 3/2)`, math.Exp(1.5), 1e-10)
 	})
 
 	t.Run("special values", func(t *testing.T) {
@@ -527,9 +549,11 @@ func TestLogExtended(t *testing.T) {
 	})
 
 	t.Run("natural log rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(log 1/2)`, math.Log(0.5), 1e-10)
+		// Rational is unbounded-tier → big-precision log → *BigFloat. 2/1 simplifies
+		// to the integer 2 (bounded), so it stays *Float.
+		assertBigFloatResult(t, `(log 1/2)`, math.Log(0.5), 1e-10)
 		assertFloatResult(t, `(log 2/1)`, math.Log(2), 1e-10)
-		assertFloatResult(t, `(log 3/4)`, math.Log(0.75), 1e-10)
+		assertBigFloatResult(t, `(log 3/4)`, math.Log(0.75), 1e-10)
 	})
 
 	t.Run("log with base", func(t *testing.T) {
@@ -547,7 +571,7 @@ func TestLogExtended(t *testing.T) {
 
 	t.Run("log with rational base", func(t *testing.T) {
 		assertFloatResult(t, `(log 4 2)`, 2.0, 1e-10)
-		assertFloatResult(t, `(log 1/4 1/2)`, 2.0, 1e-10) // log_{1/2}(1/4) = 2
+		assertBigFloatResult(t, `(log 1/4 1/2)`, 2.0, 1e-10) // log_{1/2}(1/4) = 2, rational → *BigFloat
 	})
 
 	t.Run("negative numbers return Complex (R7RS)", func(t *testing.T) {
@@ -620,9 +644,10 @@ func TestSinExtended(t *testing.T) {
 	})
 
 	t.Run("rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(sin 1/2)`, math.Sin(0.5), 1e-10)
-		assertFloatResult(t, `(sin -1/2)`, math.Sin(-0.5), 1e-10)
-		assertFloatResult(t, `(sin 3/2)`, math.Sin(1.5), 1e-10)
+		// Rational is unbounded-tier → big-precision → *BigFloat.
+		assertBigFloatResult(t, `(sin 1/2)`, math.Sin(0.5), 1e-10)
+		assertBigFloatResult(t, `(sin -1/2)`, math.Sin(-0.5), 1e-10)
+		assertBigFloatResult(t, `(sin 3/2)`, math.Sin(1.5), 1e-10)
 	})
 
 	t.Run("special values", func(t *testing.T) {
@@ -684,9 +709,9 @@ func TestCosExtended(t *testing.T) {
 	})
 
 	t.Run("rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(cos 1/2)`, math.Cos(0.5), 1e-10)
-		assertFloatResult(t, `(cos -1/2)`, math.Cos(-0.5), 1e-10)
-		assertFloatResult(t, `(cos 3/2)`, math.Cos(1.5), 1e-10)
+		assertBigFloatResult(t, `(cos 1/2)`, math.Cos(0.5), 1e-10)
+		assertBigFloatResult(t, `(cos -1/2)`, math.Cos(-0.5), 1e-10)
+		assertBigFloatResult(t, `(cos 3/2)`, math.Cos(1.5), 1e-10)
 	})
 
 	t.Run("special values", func(t *testing.T) {
@@ -746,9 +771,9 @@ func TestTanExtended(t *testing.T) {
 	})
 
 	t.Run("rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(tan 1/4)`, math.Tan(0.25), 1e-10)
-		assertFloatResult(t, `(tan -1/4)`, math.Tan(-0.25), 1e-10)
-		assertFloatResult(t, `(tan 1/2)`, math.Tan(0.5), 1e-10)
+		assertBigFloatResult(t, `(tan 1/4)`, math.Tan(0.25), 1e-10)
+		assertBigFloatResult(t, `(tan -1/4)`, math.Tan(-0.25), 1e-10)
+		assertBigFloatResult(t, `(tan 1/2)`, math.Tan(0.5), 1e-10)
 	})
 
 	t.Run("special values", func(t *testing.T) {
@@ -800,9 +825,9 @@ func TestAsinExtended(t *testing.T) {
 	})
 
 	t.Run("rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(asin 1/2)`, math.Asin(0.5), 1e-10)
-		assertFloatResult(t, `(asin -1/2)`, math.Asin(-0.5), 1e-10)
-		assertFloatResult(t, `(asin 3/4)`, math.Asin(0.75), 1e-10)
+		assertBigFloatResult(t, `(asin 1/2)`, math.Asin(0.5), 1e-10)
+		assertBigFloatResult(t, `(asin -1/2)`, math.Asin(-0.5), 1e-10)
+		assertBigFloatResult(t, `(asin 3/4)`, math.Asin(0.75), 1e-10)
 	})
 
 	t.Run("outside domain returns Complex (R7RS)", func(t *testing.T) {
@@ -855,9 +880,9 @@ func TestAcosExtended(t *testing.T) {
 	})
 
 	t.Run("rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(acos 1/2)`, math.Acos(0.5), 1e-10)
-		assertFloatResult(t, `(acos -1/2)`, math.Acos(-0.5), 1e-10)
-		assertFloatResult(t, `(acos 3/4)`, math.Acos(0.75), 1e-10)
+		assertBigFloatResult(t, `(acos 1/2)`, math.Acos(0.5), 1e-10)
+		assertBigFloatResult(t, `(acos -1/2)`, math.Acos(-0.5), 1e-10)
+		assertBigFloatResult(t, `(acos 3/4)`, math.Acos(0.75), 1e-10)
 	})
 
 	t.Run("outside domain returns Complex (R7RS)", func(t *testing.T) {
@@ -1047,7 +1072,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"0", "1", "0.5", "1/2", "2", "3.14159"}
 		for _, x := range testValues {
 			code := `(let ((x ` + x + `)) (+ (* (sin x) (sin x)) (* (cos x) (cos x))))`
-			assertFloatResult(t, code, 1.0, 1e-10)
+			assertRealResult(t, code, 1.0, 1e-10)
 		}
 	})
 
@@ -1055,7 +1080,7 @@ func TestTranscendentalIdentities(t *testing.T) {
 		testValues := []string{"1", "0.5", "1/4", "2"}
 		for _, x := range testValues {
 			code := `(let ((x ` + x + `)) (- (tan x) (/ (sin x) (cos x))))`
-			assertFloatResult(t, code, 0.0, 1e-10)
+			assertRealResult(t, code, 0.0, 1e-10)
 		}
 	})
 

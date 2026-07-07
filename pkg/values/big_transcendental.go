@@ -273,3 +273,208 @@ func BigComplexAtan(re, im *big.Float, prec uint) (*big.Float, *big.Float) {
 
 	return new(big.Float).SetPrec(prec).Set(reOut), new(big.Float).SetPrec(prec).Set(imOut)
 }
+
+// roundToInt rounds a *big.Float to the nearest integer (ties away from zero),
+// returning a *big.Int.
+func roundToInt(f *big.Float) *big.Int {
+	half := new(big.Float).SetPrec(f.Prec()).SetFloat64(0.5)
+	if f.Sign() < 0 {
+		half.Neg(half)
+	}
+	adjusted := new(big.Float).SetPrec(f.Prec()).Add(f, half)
+	q, _ := adjusted.Int(nil) // truncation toward zero, applied after the ±0.5 shift
+	return q
+}
+
+// expSeries computes exp(r) = Σ rⁿ/n! at precision wp; converges fast for small r.
+func expSeries(r *big.Float, wp uint) *big.Float {
+	sum := new(big.Float).SetPrec(wp).SetInt64(1)
+	term := new(big.Float).SetPrec(wp).SetInt64(1) // rⁿ/n!
+	negligibleExp := -int(wp) - 4
+	for n := 1; ; n++ {
+		term = new(big.Float).SetPrec(wp).Quo(
+			new(big.Float).SetPrec(wp).Mul(term, r),
+			new(big.Float).SetPrec(wp).SetInt64(int64(n)))
+		sum.Add(sum, term)
+		if term.Sign() == 0 || term.MantExp(nil) < negligibleExp {
+			break
+		}
+	}
+	return sum
+}
+
+// BigExp returns eˣ rounded to prec bits. It range-reduces x = k·ln2 + r
+// (k = round(x/ln2), |r| ≤ ln2/2), sums exp(r) by Taylor, and rescales by 2ᵏ via
+// SetMantExp. Because 2ᵏ is a finite big.Float far below its exponent limit, this
+// does not overflow the way math.Exp does past ~709 — exp(1000) is a finite big
+// value. Astronomically large x (k beyond the big.Float exponent range) yields
+// +Inf; astronomically negative x yields 0.
+func BigExp(x *big.Float, prec uint) *big.Float {
+	wp := atanWorkPrec(prec)
+	xw := new(big.Float).SetPrec(wp).Set(x)
+	if xw.Sign() == 0 {
+		return new(big.Float).SetPrec(prec).SetInt64(1)
+	}
+	ln2 := bigLn2(wp)
+	k := roundToInt(new(big.Float).SetPrec(wp).Quo(xw, ln2))
+	if !k.IsInt64() {
+		q := new(big.Float).SetPrec(prec)
+		if k.Sign() > 0 {
+			q.SetInf(false)
+		}
+		return q // +Inf for +huge, 0 for −huge
+	}
+	kf := new(big.Float).SetPrec(wp).SetInt(k)
+	r := new(big.Float).SetPrec(wp).Sub(xw, new(big.Float).SetPrec(wp).Mul(kf, ln2))
+	expR := expSeries(r, wp)
+	scaled := new(big.Float).SetPrec(wp).SetMantExp(expR, int(k.Int64())) // expR · 2ᵏ
+	return new(big.Float).SetPrec(prec).Set(scaled)
+}
+
+// sinCosWorkPrec returns a working precision that also holds the argument's
+// integer part, so the mod-2π reduction of a large argument is exact to prec bits
+// (the big-precision analogue of Payne–Hanek). x is an exact dyadic value, so its
+// sine/cosine is well-defined at any magnitude; the cost is π to ~exponent bits.
+func sinCosWorkPrec(x *big.Float, prec uint) uint {
+	wp := atanWorkPrec(prec)
+	e := x.MantExp(nil)
+	if e > 0 {
+		wp += uint(e)
+	}
+	return wp
+}
+
+// sinSeries computes sin(r) = Σ (−1)ⁿ r^(2n+1)/(2n+1)! at precision wp.
+func sinSeries(r *big.Float, wp uint) *big.Float {
+	sum := new(big.Float).SetPrec(wp).Set(r)
+	term := new(big.Float).SetPrec(wp).Set(r)
+	r2 := new(big.Float).SetPrec(wp).Mul(r, r)
+	negligibleExp := -int(wp) - 4
+	for n := 1; ; n++ {
+		denom := new(big.Float).SetPrec(wp).SetInt64(int64(2*n) * int64(2*n+1))
+		term = new(big.Float).SetPrec(wp).Quo(new(big.Float).SetPrec(wp).Mul(term, r2), denom)
+		term.Neg(term)
+		sum.Add(sum, term)
+		if term.Sign() == 0 || term.MantExp(nil) < negligibleExp {
+			break
+		}
+	}
+	return sum
+}
+
+// cosSeries computes cos(r) = Σ (−1)ⁿ r^(2n)/(2n)! at precision wp.
+func cosSeries(r *big.Float, wp uint) *big.Float {
+	sum := new(big.Float).SetPrec(wp).SetInt64(1)
+	term := new(big.Float).SetPrec(wp).SetInt64(1)
+	r2 := new(big.Float).SetPrec(wp).Mul(r, r)
+	negligibleExp := -int(wp) - 4
+	for n := 1; ; n++ {
+		denom := new(big.Float).SetPrec(wp).SetInt64(int64(2*n-1) * int64(2*n))
+		term = new(big.Float).SetPrec(wp).Quo(new(big.Float).SetPrec(wp).Mul(term, r2), denom)
+		term.Neg(term)
+		sum.Add(sum, term)
+		if term.Sign() == 0 || term.MantExp(nil) < negligibleExp {
+			break
+		}
+	}
+	return sum
+}
+
+// sinCosAt reduces x mod 2π to [−π,π], then to [−π/2,π/2] (where the Taylor
+// series avoid the catastrophic cancellation of r near ±π), and returns both
+// sin(x) and cos(x) at precision wp. sin is unchanged by the second reduction;
+// cos flips sign when the reduction crossed ±π/2.
+func sinCosAt(x *big.Float, wp uint) (sin, cos *big.Float) {
+	pi := piAtPrec(wp)
+	two := new(big.Float).SetPrec(wp).SetInt64(2)
+	twoPi := new(big.Float).SetPrec(wp).Mul(pi, two)
+	halfPi := new(big.Float).SetPrec(wp).Quo(pi, two)
+	negHalfPi := new(big.Float).SetPrec(wp).Neg(halfPi)
+
+	k := roundToInt(new(big.Float).SetPrec(wp).Quo(x, twoPi))
+	kf := new(big.Float).SetPrec(wp).SetInt(k)
+	r := new(big.Float).SetPrec(wp).Sub(x, new(big.Float).SetPrec(wp).Mul(kf, twoPi))
+
+	cosNeg := false
+	if r.Cmp(halfPi) > 0 {
+		r = new(big.Float).SetPrec(wp).Sub(pi, r)
+		cosNeg = true
+	} else if r.Cmp(negHalfPi) < 0 {
+		r = new(big.Float).SetPrec(wp).Sub(new(big.Float).SetPrec(wp).Neg(pi), r)
+		cosNeg = true
+	}
+	sin = sinSeries(r, wp)
+	cos = cosSeries(r, wp)
+	if cosNeg {
+		cos.Neg(cos)
+	}
+	return sin, cos
+}
+
+// BigSin returns sin(x) rounded to prec bits.
+func BigSin(x *big.Float, prec uint) *big.Float {
+	wp := sinCosWorkPrec(x, prec)
+	s, _ := sinCosAt(new(big.Float).SetPrec(wp).Set(x), wp)
+	return new(big.Float).SetPrec(prec).Set(s)
+}
+
+// BigCos returns cos(x) rounded to prec bits.
+func BigCos(x *big.Float, prec uint) *big.Float {
+	wp := sinCosWorkPrec(x, prec)
+	_, c := sinCosAt(new(big.Float).SetPrec(wp).Set(x), wp)
+	return new(big.Float).SetPrec(prec).Set(c)
+}
+
+// BigTan returns tan(x) = sin(x)/cos(x) rounded to prec bits. At a pole (cos = 0)
+// it returns +Inf.
+func BigTan(x *big.Float, prec uint) *big.Float {
+	wp := sinCosWorkPrec(x, prec)
+	s, c := sinCosAt(new(big.Float).SetPrec(wp).Set(x), wp)
+	if c.Sign() == 0 {
+		return new(big.Float).SetPrec(prec).SetInf(false)
+	}
+	return new(big.Float).SetPrec(prec).Quo(s, c)
+}
+
+// asinAt computes arcsin(x) at precision wp via asin(x) = atan(x/√(1−x²)),
+// returning nil when |x| > 1 (that is the complex domain, handled elsewhere).
+func asinAt(x *big.Float, wp uint) *big.Float {
+	one := new(big.Float).SetPrec(wp).SetInt64(1)
+	abs := new(big.Float).SetPrec(wp).Abs(x)
+	if abs.Cmp(one) > 0 {
+		return nil
+	}
+	if abs.Cmp(one) == 0 {
+		halfPi := new(big.Float).SetPrec(wp).Quo(piAtPrec(wp), new(big.Float).SetPrec(wp).SetInt64(2))
+		if x.Sign() < 0 {
+			halfPi.Neg(halfPi)
+		}
+		return halfPi
+	}
+	x2 := new(big.Float).SetPrec(wp).Mul(x, x)
+	denom := new(big.Float).SetPrec(wp).Sqrt(new(big.Float).SetPrec(wp).Sub(one, x2))
+	return atanAt(new(big.Float).SetPrec(wp).Quo(x, denom), wp)
+}
+
+// BigAsin returns arcsin(x) rounded to prec bits, or nil when |x| > 1 (complex
+// domain — the caller falls back to the complex path).
+func BigAsin(x *big.Float, prec uint) *big.Float {
+	wp := atanWorkPrec(prec)
+	q := asinAt(new(big.Float).SetPrec(wp).Set(x), wp)
+	if q == nil {
+		return nil
+	}
+	return new(big.Float).SetPrec(prec).Set(q)
+}
+
+// BigAcos returns arccos(x) = π/2 − arcsin(x) rounded to prec bits, or nil when
+// |x| > 1 (complex domain).
+func BigAcos(x *big.Float, prec uint) *big.Float {
+	wp := atanWorkPrec(prec)
+	as := asinAt(new(big.Float).SetPrec(wp).Set(x), wp)
+	if as == nil {
+		return nil
+	}
+	halfPi := new(big.Float).SetPrec(wp).Quo(piAtPrec(wp), new(big.Float).SetPrec(wp).SetInt64(2))
+	return new(big.Float).SetPrec(prec).Set(new(big.Float).SetPrec(wp).Sub(halfPi, as))
+}
