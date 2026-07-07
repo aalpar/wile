@@ -233,10 +233,9 @@ func PrimAngle(mc machine.CallContext) error {
 	case *values.Complex:
 		mc.SetValue(values.NewFloat(cmplx.Phase(v.Value)))
 	case *values.BigComplex:
-		// Convert to float64 for phase calculation (transcendental operation)
-		realF := v.RealAsBigFloat().Float64Truncated()
-		imagF := v.ImagAsBigFloat().Float64Truncated()
-		mc.SetValue(values.NewFloat(cmplx.Phase(complex(realF, imagF))))
+		// Big-precision atan2 (see values.BigAtan2); truncating to float64 first
+		// collapses large-magnitude components with a finite ratio to a wrong angle.
+		mc.SetValue(v.Phase())
 	case *values.Integer:
 		if v.Value >= 0 {
 			mc.SetValue(values.NewFloat(0))

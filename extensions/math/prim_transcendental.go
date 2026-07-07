@@ -83,34 +83,87 @@ func PrimAtan(mc machine.CallContext) error {
 	rest := mc.Arg(1)
 
 	if values.IsEmptyList(rest) {
+		// A real big operand keeps big precision via values.BigAtan; complex
+		// operands stay on the float64 complex path (big complex atan needs a
+		// big complex log — out of scope).
+		if isBigReal(o) {
+			mc.SetValue(values.NewBigFloat(values.BigAtan(numberToBigFloat(o), values.DefaultBigFloatPrecision)))
+			return nil
+		}
 		z, err := helpers.ToComplex128(o)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Atan(z)))
-	} else {
-		// atan2 inherently returns an inexact result, so silent lossy
-		// conversion of *Rational / *BigFloat operands is load-bearing
-		// for R7RS §6.2.6 semantics — hence ToFloat64Lossy, not the
-		// strict ToFloat64. See memory/2026-05-14-numeric-loss-signals-design.md §R8.
-		y, err := helpers.ToFloat64Lossy(o)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "atan: %v", err)
-		}
-		xVal, restAfter, err := helpers.Uncons(rest, "atan", "x argument")
-		if err != nil {
-			return err
-		}
-		if !values.IsEmptyList(restAfter) {
-			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "atan: expected 1 or 2 arguments")
-		}
-		x, err := helpers.ToFloat64Lossy(xVal)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "atan: %v", err)
-		}
-		mc.SetValue(values.NewFloat(math.Atan2(y, x)))
+		return nil
 	}
+
+	xVal, restAfter, err := helpers.Uncons(rest, "atan", "x argument")
+	if err != nil {
+		return err
+	}
+	if !values.IsEmptyList(restAfter) {
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "atan: expected 1 or 2 arguments")
+	}
+
+	// A big operand on either side takes the big-precision atan2 path, so
+	// large-magnitude operands with a finite ratio keep their true angle
+	// instead of both saturating to ±Inf under float64 truncation.
+	if isBigReal(o) || isBigReal(xVal) {
+		y := numberToBigFloat(o)
+		x := numberToBigFloat(xVal)
+		if y == nil || x == nil {
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "atan: expected real arguments")
+		}
+		mc.SetValue(values.NewBigFloat(values.BigAtan2(y, x, values.DefaultBigFloatPrecision)))
+		return nil
+	}
+
+	// atan2 inherently returns an inexact result, so silent lossy conversion of
+	// *Rational operands is load-bearing for R7RS §6.2.6 semantics — hence
+	// ToFloat64Lossy, not the strict ToFloat64. See
+	// memory/2026-05-14-numeric-loss-signals-design.md §R8.
+	y, err := helpers.ToFloat64Lossy(o)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "atan: %v", err)
+	}
+	x, err := helpers.ToFloat64Lossy(xVal)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "atan: %v", err)
+	}
+	mc.SetValue(values.NewFloat(math.Atan2(y, x)))
 	return nil
+}
+
+// isBigReal reports whether v is a real number carried at a precision or range
+// beyond float64 — the trigger for the big-precision atan paths.
+func isBigReal(v values.Value) bool {
+	switch v.(type) {
+	case *values.BigFloat, *values.BigInteger:
+		return true
+	default:
+		return false
+	}
+}
+
+// numberToBigFloat converts a real numeric value to *big.Float at default
+// precision, or returns nil for non-real / non-numeric values.
+func numberToBigFloat(v values.Value) *big.Float {
+	prec := uint(values.DefaultBigFloatPrecision)
+	switch n := v.(type) {
+	case *values.BigFloat:
+		return new(big.Float).Set(n.BigFloatValue())
+	case *values.BigInteger:
+		return new(big.Float).SetPrec(prec).SetInt(n.BigInt())
+	case *values.Integer:
+		return new(big.Float).SetPrec(prec).SetInt64(n.Value)
+	case *values.Float:
+		return new(big.Float).SetPrec(prec).SetFloat64(n.Value)
+	case *values.Rational:
+		return new(big.Float).SetPrec(prec).SetRat(n.Rat())
+	default:
+		return nil
+	}
 }
 
 // PrimSqrt implements the (sqrt) primitive.

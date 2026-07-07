@@ -34,6 +34,9 @@ func TestAngle(t *testing.T) {
 		code      string
 		expected  float64
 		tolerance float64
+		// wantBig is true when the input is a big-tier number (BigComplex), whose
+		// angle is returned at big.Float precision rather than truncated to float64.
+		wantBig bool
 	}{
 		{
 			name:     "angle of positive integer",
@@ -70,14 +73,17 @@ func TestAngle(t *testing.T) {
 			code:      "(angle 1+1i)",
 			expected:  math.Pi / 4,
 			tolerance: 0.0001,
+			wantBig:   true,
 		},
 		{
 			name:      "angle of complex number 0+1i",
 			code:      "(angle 0+1i)",
 			expected:  math.Pi / 2,
 			tolerance: 0.0001,
+			wantBig:   true,
 		},
 		{
+			// -1+0i simplifies to the real -1, so its angle stays a float64 *Float.
 			name:      "angle of complex number -1+0i",
 			code:      "(angle -1+0i)",
 			expected:  math.Pi,
@@ -88,12 +94,14 @@ func TestAngle(t *testing.T) {
 			code:      "(angle 0-1i)",
 			expected:  -math.Pi / 2,
 			tolerance: 0.0001,
+			wantBig:   true,
 		},
 		{
 			name:      "angle of complex number 1-1i",
 			code:      "(angle 1-1i)",
 			expected:  -math.Pi / 4,
 			tolerance: 0.0001,
+			wantBig:   true,
 		},
 	}
 	for _, tc := range tcs {
@@ -101,15 +109,25 @@ func TestAngle(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 
-			resultFloat, ok := result.(*values.Float)
-			qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected *values.Float, got %T", result))
+			// A big-tier input (BigComplex) yields its angle at big.Float precision;
+			// real inputs stay float64. Extract the float64 value from whichever type.
+			var got float64
+			if tc.wantBig {
+				resultBig, ok := result.(*values.BigFloat)
+				qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected *values.BigFloat, got %T", result))
+				got = resultBig.Float64Truncated()
+			} else {
+				resultFloat, ok := result.(*values.Float)
+				qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected *values.Float, got %T", result))
+				got = resultFloat.Value
+			}
 
 			if tc.tolerance > 0 {
-				diff := math.Abs(resultFloat.Value - tc.expected)
+				diff := math.Abs(got - tc.expected)
 				qt.Assert(t, diff < tc.tolerance, qt.IsTrue,
-					qt.Commentf("expected %v (±%v), got %v", tc.expected, tc.tolerance, resultFloat.Value))
+					qt.Commentf("expected %v (±%v), got %v", tc.expected, tc.tolerance, got))
 			} else {
-				qt.Assert(t, resultFloat.Value, qt.Equals, tc.expected)
+				qt.Assert(t, got, qt.Equals, tc.expected)
 			}
 		})
 	}

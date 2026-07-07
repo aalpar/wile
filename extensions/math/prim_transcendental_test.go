@@ -80,6 +80,13 @@ func TestTranscendental(t *testing.T) {
 		{"atan2 rational both", `(< (abs (- (atan 1/3 2/7) 0.8621700546672261)) 1e-10)`, values.TrueValue},
 		{"atan2 big float operand",
 			`(< (abs (- (atan 1 (+ 1.0 (expt 10 60))) 1e-60)) 1e-50)`, values.TrueValue},
+		// Big-precision atan2: huge exact operands with a finite ratio keep their
+		// true angle atan(10) ≈ 1.4711 instead of overflowing to a wrong angle.
+		{"atan2 big operands finite ratio",
+			`(< (abs (- (atan (expt 10 401) (expt 10 400)) 1.4711276743037345)) 1e-10)`, values.TrueValue},
+		// 1-arg atan on a real big operand stays on the big path (correct near π/2).
+		{"atan big real operand",
+			`(< (abs (- (atan (expt 10 60)) 1.5707963267948966)) 1e-10)`, values.TrueValue},
 
 		// sqrt
 		{"sqrt perfect square", `(< (abs (- (sqrt 4) 2.0)) 1e-10)`, values.TrueValue},

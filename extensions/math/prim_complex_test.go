@@ -117,6 +117,11 @@ func TestAngleAllTypes(t *testing.T) {
 		{"angle biginteger negative", `(> (angle (- (expt 2 100))) 3.0)`, values.TrueValue},
 		// BigComplex case via exact integer make-rectangular
 		{"angle bigcomplex first quadrant", `(> (angle (make-rectangular 3 4)) 0)`, values.TrueValue},
+		// Overflow regression: components exceed float64 range but the ratio is
+		// finite. angle(1e400 + 1e401 i) = atan(10) ≈ 1.4711, not π/4 (the value
+		// the prior float64-truncating path returned once both saturated to +Inf).
+		{"angle bigcomplex huge finite ratio",
+			`(< (abs (- (angle (make-rectangular (expt 10 400) (expt 10 401))) 1.4711276743037345)) 1e-10)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
