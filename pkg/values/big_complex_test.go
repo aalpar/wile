@@ -398,6 +398,21 @@ func TestBigComplex_MagnitudePhase(t *testing.T) {
 	c.Assert(conj.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(-4))
 }
 
+func TestBigComplex_PhaseHugeComponentsNoOverflow(t *testing.T) {
+	c := qt.New(t)
+
+	// 1e400 + 1e401 i : both components exceed float64 range, but the ratio is
+	// finite. True angle = atan2(1e401, 1e400) = atan(10) ≈ 1.4711. The prior
+	// float64-truncating Phase() returned π/4 (both saturated to +Inf).
+	z := values.NewBigComplexFromBigFloats(
+		values.NewBigFloatFromString("1e400"),
+		values.NewBigFloatFromString("1e401"),
+	)
+
+	got, _ := z.Phase().BigFloatValue().Float64()
+	c.Assert(math.Abs(got-math.Atan(10)) < 1e-12, qt.IsTrue)
+}
+
 func TestBigComplex_EqualTo(t *testing.T) {
 	c := qt.New(t)
 

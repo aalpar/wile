@@ -485,13 +485,13 @@ func (p *BigComplex) Magnitude() *BigFloat {
 }
 
 // Phase returns the phase (argument) of the complex number in radians.
-// Uses atan2(imag, real).
+// Uses atan2(imag, real) at big.Float precision, so components beyond the
+// float64 range (~1.8e308) with a finite ratio keep their true angle instead of
+// both saturating to +Inf and collapsing to atan2(+Inf,+Inf)=π/4.
 func (p *BigComplex) Phase() *BigFloat {
-	// Convert to float64 for atan2 calculation
-	r := toBigFloat(p.real).Float64Truncated()
-	i := toBigFloat(p.imag).Float64Truncated()
-	phase := math.Atan2(i, r)
-	return NewBigFloatFromFloat64(phase)
+	r := toBigFloat(p.real).value
+	i := toBigFloat(p.imag).value
+	return &BigFloat{value: BigAtan2(i, r, DefaultBigFloatPrecision)}
 }
 
 // Sqrt returns the principal square root at big.Float precision, honoring the
