@@ -75,6 +75,29 @@ type PrimitiveRemover interface {
 	RemovedPrimitives() []string
 }
 
+// BootstrapProcedureRewriter is an optional capability a Dialect may implement to
+// substitute bootstrap procedure sources before they load into the sealed base. It
+// is how a dialect crosses the last ceiling: a bootstrap procedure that depends on a
+// primitive the dialect wants gone (the eager vector-map / string-map are built with
+// vector-set! / string-set!). Removing the primitive alone breaks NewEngine — the
+// bootstrap definition no longer compiles; a global reference resolves by slot at
+// call time so it cannot be unbound afterward either. Rewriting the source is the
+// clean fix.
+//
+// When a dialect passed to WithDialect also implements BootstrapProcedureRewriter,
+// the engine calls RewriteBootstrapProcedures with the current procedure sources and
+// binds the returned set instead (on a copy — the full registry that backs library
+// environments is untouched). A no-mutation dialect swaps the mutating
+// vector-map/string-map fragment for a mutation-free one, so the mutation primitives
+// can be removed entirely rather than retained. See [NoMutation].
+type BootstrapProcedureRewriter interface {
+	// RewriteBootstrapProcedures receives the engine's bootstrap procedure sources
+	// (in load order) and returns the set to bind instead. Return the input unchanged
+	// to opt out. The result should preserve load order — later sources may reference
+	// definitions from earlier ones.
+	RewriteBootstrapProcedures(sources []string) []string
+}
+
 // WithDialect installs a Dialect on the engine, customizing its special-form
 // surface at construction time. Last-wins if supplied more than once. A nil
 // dialect (the default) applies [DefaultDialect], leaving the R7RS-default forms

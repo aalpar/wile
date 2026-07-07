@@ -59,6 +59,16 @@ type inlineHOFSpec struct {
 	// through B is no longer inlined. That is a safe deoptimization (correct
 	// result, lost optimization), strictly better than silent miscompilation.
 	homeLib string
+	// requires names the primitives the template's body calls that a dialect might
+	// remove (e.g. vector-map's template fills the result with vector-set!). The
+	// inline optimization applies only when every one of them is bound in the engine;
+	// a dialect that removes one (NoMutation drops vector-set!/string-set!) leaves the
+	// HOF un-stamped, so its call falls back to the real procedure — which such a
+	// dialect swaps for a mutation-free definition. Empty for templates that depend on
+	// no removable primitive (for-each, map, the for-each index loops). Without this
+	// gate a removed primitive would surface as an unbound reference at every inlined
+	// call site rather than a clean deoptimization.
+	requires []string
 	// template is the procedure's single-sequence reclaiming loop as a lambda
 	// whose callbackParam-th parameter is the callback. Transcribed from the real
 	// definition (pkg/registry/core/bootstrap_procedures.scm for the sealed-base
@@ -101,7 +111,7 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
   (let loop ((lst lst) (acc '()))
     (if (null? lst) (reverse acc)
         (loop (cdr lst) (cons (f (car lst)) acc)))))`},
-	"vector-map": {callbackParam: 0, template: `(lambda (f v)
+	"vector-map": {callbackParam: 0, requires: []string{"vector-set!"}, template: `(lambda (f v)
   (let ((len (vector-length v)))
     (let ((result (make-vector len)))
       (let loop ((i 0))
@@ -117,7 +127,7 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
           (begin
             (f (vector-ref v i))
             (loop (+ i 1)))))))`},
-	"string-map": {callbackParam: 0, template: `(lambda (f s)
+	"string-map": {callbackParam: 0, requires: []string{"string-set!"}, template: `(lambda (f s)
   (let ((len (string-length s)))
     (let ((result (make-string len)))
       (let loop ((i 0))
@@ -187,9 +197,26 @@ func StampInlineHOFs(frame *environment.EnvironmentFrame) {
 		if spec.importGated {
 			continue
 		}
+		if !inlineHOFRequirementsMet(frame, spec) {
+			continue
+		}
 		b := frame.GetBinding(values.NewSymbol(name), nil)
 		if b != nil {
 			applyInlineHOFStamp(b, spec.callbackParam)
 		}
 	}
+}
+
+// inlineHOFRequirementsMet reports whether every primitive spec.template depends on
+// (spec.requires) is bound in frame. A dialect that removed one (e.g. NoMutation
+// drops vector-set!) fails this check, so the HOF is left un-stamped and its call
+// sites use the real procedure instead of the now-invalid inline template — a clean
+// deoptimization rather than an unbound-reference compile error.
+func inlineHOFRequirementsMet(frame *environment.EnvironmentFrame, spec inlineHOFSpec) bool {
+	for _, name := range spec.requires {
+		if frame.GetBinding(values.NewSymbol(name), nil) == nil {
+			return false
+		}
+	}
+	return true
 }

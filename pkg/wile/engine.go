@@ -207,6 +207,16 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		}
 	}
 
+	// A dialect may also rewrite the bootstrap procedure sources — e.g. swap the
+	// mutating vector-map/string-map for a mutation-free fragment so the mutation
+	// primitives (removed just above) leave no dangling bootstrap reference. Runs
+	// after PrimitiveRemover so the rewritten fragment sees the narrowed surface.
+	// WithProcedureSources copies, so the full reg backing library envs is untouched.
+	rewriter, ok := dialect.(BootstrapProcedureRewriter)
+	if ok {
+		topLevelReg = topLevelReg.WithProcedureSources(rewriter.RewriteBootstrapProcedures(topLevelReg.ProcedureSources()))
+	}
+
 	env := ns.Runtime()
 	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromConfig(cfg)...)
 	if err != nil {

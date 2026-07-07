@@ -16,10 +16,56 @@ package compilation
 
 import (
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+// removableMutators are the in-place mutation primitives a dialect (e.g. wile's
+// NoMutation) may remove. Kept in sync with the canonical set in
+// pkg/wile/dialect_nomutation.go, duplicated here because the layering forbids
+// compilation importing pkg/wile. TestInlineHOFTemplatesDeclareMutatorRequirements
+// uses it to guard the soundness property below.
+var removableMutators = []string{
+	"set-car!", "set-cdr!", "vector-set!", "vector-fill!", "vector-copy!",
+	"string-set!", "list-set!", "bytevector-u8-set!", "bytevector-copy!",
+	"hashtable-set!", "hashtable-delete!", "hashtable-clear!", "set-box!",
+}
+
+// TestInlineHOFTemplatesDeclareMutatorRequirements is the drift guard for the
+// requirements gate: any inline-HOF template whose body calls a removable mutation
+// primitive MUST declare that primitive in spec.requires. Otherwise a dialect that
+// removes the primitive would leave the HOF stamped and emit an unbound reference at
+// every inlined call site (the bug the gate fixes) instead of de-optimizing cleanly.
+// A future template that adds a mutator without declaring it trips this test.
+func TestInlineHOFTemplatesDeclareMutatorRequirements(t *testing.T) {
+	for name, spec := range inlineHOFSpecs {
+		for _, m := range removableMutators {
+			if !strings.Contains(spec.template, m) {
+				continue
+			}
+			if !slices.Contains(spec.requires, m) {
+				t.Errorf("inline-HOF %q template calls %q but does not declare it in requires %v",
+					name, m, spec.requires)
+			}
+		}
+	}
+}
+
+// TestInlineHOFRequiresAreLive guards the opposite drift: every primitive declared in
+// requires must actually appear in the template, so a stale requirement can't silently
+// suppress an inlining that is in fact valid.
+func TestInlineHOFRequiresAreLive(t *testing.T) {
+	for name, spec := range inlineHOFSpecs {
+		for _, req := range spec.requires {
+			if !strings.Contains(spec.template, req) {
+				t.Errorf("inline-HOF %q declares require %q not used by its template", name, req)
+			}
+		}
+	}
+}
 
 // TestValidateInlineHOFCallbackIndex covers the build-time guard that an inline-HOF
 // spec's stamped callback index names a real parameter of its template. The live

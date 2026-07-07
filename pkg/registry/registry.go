@@ -399,6 +399,17 @@ func (p *Registry) ProcedureSources() []string {
 	return q
 }
 
+// WithProcedureSources returns a new Registry whose bootstrap procedure sources
+// are replaced by the given slice; all other fields are copied unchanged via
+// deepCopy. Used by a dialect to substitute a bootstrap fragment (e.g. swap the
+// mutating vector-map/string-map for a mutation-free one) without mutating the
+// shared registry. The receiver is never modified.
+func (p *Registry) WithProcedureSources(sources []string) *Registry {
+	q := p.deepCopy()
+	q.procedureSources = slices.Clone(sources)
+	return q
+}
+
 // Primitives returns a copy of the primitive registrations.
 func (p *Registry) Primitives() []PrimitiveRegistration {
 	p.mu.RLock()

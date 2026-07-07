@@ -31,6 +31,23 @@ import (
 //go:embed bootstrap.scm bootstrap_macros.scm bootstrap_procedures.scm
 var BootstrapFS embed.FS
 
+// MutableVectorStringMapSource and ImmutableVectorStringMapSource are the two
+// interchangeable bootstrap fragments defining vector-map and string-map — the one
+// bootstrap procedure that depends on a mutation primitive. The default (Mutable)
+// fills a fresh result in place with vector-set! / string-set! (fastest); the
+// Immutable one builds it functionally (list->vector / list->string over map) and
+// depends on no mutator. addBootstrapSources registers the Mutable one, so every
+// engine is unchanged by default; a no-mutation dialect swaps it for the Immutable
+// one (matching by value in the registry's procedure sources), which lets the
+// mutation primitives be removed entirely. This is the sole seam where a dialect
+// substitutes a mutation-dependent bootstrap procedure.
+//
+//go:embed bootstrap_maps_mutable.scm
+var MutableVectorStringMapSource string
+
+//go:embed bootstrap_maps_immutable.scm
+var ImmutableVectorStringMapSource string
+
 // addBootstrapSources registers bootstrap_macros.scm (define-syntax forms) as a macro
 // source and bootstrap_procedures.scm (define forms) as a procedure source. The split
 // is the phase boundary: macros load into the mutable expand frame, procedures into the
@@ -51,5 +68,9 @@ func addBootstrapSources(r *registry.Registry) error {
 	}
 	r.AddMacroSource(string(macros))
 	r.AddProcedureSource(string(procs))
+	// The vector-map/string-map fragment loads as its own procedure source, AFTER
+	// the main procedures (it uses map, defined there) and as a distinct slice entry
+	// so a dialect can swap it by value. Default = the mutating fragment.
+	r.AddProcedureSource(MutableVectorStringMapSource)
 	return nil
 }
