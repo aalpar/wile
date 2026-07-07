@@ -87,6 +87,13 @@ func TestTranscendental(t *testing.T) {
 		// 1-arg atan on a real big operand stays on the big path (correct near π/2).
 		{"atan big real operand",
 			`(< (abs (- (atan (expt 10 60)) 1.5707963267948966)) 1e-10)`, values.TrueValue},
+		// Huge *Rational operands: finite ratio 10 → atan(10), not an overflow to π/4.
+		{"atan2 huge rational finite ratio",
+			`(< (abs (- (atan (/ (expt 10 401) 3) (/ (expt 10 400) 3)) 1.4711276743037345)) 1e-10)`, values.TrueValue},
+		// 1-arg atan of a BigComplex beyond float64 range: first-quadrant |z|→∞ ⇒
+		// real part → π/2 (cmplx.Atan would return NaN on the truncated +Inf).
+		{"atan huge bigcomplex real part",
+			`(< (abs (- (real-part (atan (make-rectangular (expt 10 400) (expt 10 400)))) 1.5707963267948966)) 1e-6)`, values.TrueValue},
 
 		// sqrt
 		{"sqrt perfect square", `(< (abs (- (sqrt 4) 2.0)) 1e-10)`, values.TrueValue},
