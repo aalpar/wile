@@ -196,6 +196,59 @@ func TestIntegerDivision(t *testing.T) {
 	}
 }
 
+func TestIntegerDivisionBigPrecision(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	// 10^30 exceeds int64 (BigInteger). The exact-integer division family must
+	// route through big.Int rather than a float64 round-trip + int64 cast, which
+	// saturates the quotient at int64 max and garbles the remainder.
+	// 142857142857142857142857142857 = (10^30 - 1) / 7, so 10^30 = q*7 + 1.
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// floor family, positive big operands (floor == truncate here).
+		{"floor-quotient big", `(= (floor-quotient (expt 10 30) 7) 142857142857142857142857142857)`, values.TrueValue},
+		{"floor-remainder big", `(= (floor-remainder (expt 10 30) 7) 1)`, values.TrueValue},
+		{"floor-quotient big exact", `(exact? (floor-quotient (expt 10 30) 7))`, values.TrueValue},
+		{"floor-remainder big exact", `(exact? (floor-remainder (expt 10 30) 7))`, values.TrueValue},
+
+		// truncate family, positive big operands.
+		{"truncate-quotient big", `(= (truncate-quotient (expt 10 30) 7) 142857142857142857142857142857)`, values.TrueValue},
+		{"truncate-remainder big", `(= (truncate-remainder (expt 10 30) 7) 1)`, values.TrueValue},
+
+		// multi-value forms.
+		{"floor/ big",
+			`(equal? (call-with-values (lambda () (floor/ (expt 10 30) 7)) list) '(142857142857142857142857142857 1))`,
+			values.TrueValue},
+		{"truncate/ big",
+			`(equal? (call-with-values (lambda () (truncate/ (expt 10 30) 7)) list) '(142857142857142857142857142857 1))`,
+			values.TrueValue},
+
+		// negative divisor: floor and truncate quotients diverge; floor-remainder
+		// takes the divisor's sign, truncate-remainder the dividend's.
+		{"floor-quotient big neg divisor", `(= (floor-quotient (expt 10 30) -7) -142857142857142857142857142858)`, values.TrueValue},
+		{"floor-remainder big neg divisor", `(= (floor-remainder (expt 10 30) -7) -6)`, values.TrueValue},
+		{"truncate-quotient big neg divisor", `(= (truncate-quotient (expt 10 30) -7) -142857142857142857142857142857)`, values.TrueValue},
+		{"truncate-remainder big neg divisor", `(= (truncate-remainder (expt 10 30) -7) 1)`, values.TrueValue},
+
+		// division identity n0 = q*n1 + r holds exactly at big magnitude.
+		{"floor identity big",
+			`(= (+ (* (floor-quotient (expt 10 30) 7) 7) (floor-remainder (expt 10 30) 7)) (expt 10 30))`,
+			values.TrueValue},
+		{"truncate identity big neg",
+			`(= (+ (* (truncate-quotient (expt 10 30) -7) -7) (truncate-remainder (expt 10 30) -7)) (expt 10 30))`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestNumericPredicates(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

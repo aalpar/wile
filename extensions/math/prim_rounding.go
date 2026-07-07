@@ -160,9 +160,20 @@ const (
 )
 
 // realDivision implements the shared logic for floor and truncate division
-// families (R7RS §6.2.6). The roundFn parameter selects the rounding mode
-// (math.Floor or math.Trunc), and result selects which values to return.
-func realDivision(mc machine.CallContext, name string, roundFn func(float64) float64, result divResult) error {
+// families (R7RS §6.2.6). mode selects the rounding direction (roundFloor or
+// roundTruncate), and result selects which values to return.
+//
+// Exact-integer operands take a big.Int path (via the shared roundRatToInt) so
+// that neither the quotient nor the remainder round-trips through float64 — a
+// float64 cast saturates the int64 quotient and drops digits past 2^53 on large
+// magnitudes. Inexact or non-integer operands keep the float64 path.
+func realDivision(mc machine.CallContext, name string, mode roundMode, result divResult) error {
+	b0, ok0 := exactInteger(mc.Arg(0))
+	b1, ok1 := exactInteger(mc.Arg(1))
+	if ok0 && ok1 {
+		return exactIntegerDivision(mc, name, b0, b1, mode, result)
+	}
+
 	n0, exact0, err := helpers.ExtractReal(mc.Arg(0), name)
 	if err != nil {
 		return err
@@ -176,7 +187,7 @@ func realDivision(mc machine.CallContext, name string, roundFn func(float64) flo
 		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "%s: division by zero", name)
 	}
 
-	q := roundFn(n0 / n1)
+	q := floatRounder(mode)(n0 / n1)
 	exact := exact0 && exact1
 
 	switch result {
@@ -204,46 +215,96 @@ func realDivision(mc machine.CallContext, name string, roundFn func(float64) flo
 	return nil
 }
 
+// exactInteger returns the big.Int value of an exact integer (Integer or
+// BigInteger) and true, or (nil, false) for any other value. It never aliases
+// the argument's storage, so callers may treat the result as owned.
+func exactInteger(v values.Value) (*big.Int, bool) {
+	switch n := v.(type) {
+	case *values.Integer:
+		return big.NewInt(n.Value), true
+	case *values.BigInteger:
+		return new(big.Int).Set(n.BigInt()), true
+	default:
+		return nil, false
+	}
+}
+
+// floatRounder maps a division roundMode to its float64-native rounding
+// function for the inexact path. Only floor and truncate reach division.
+func floatRounder(mode roundMode) func(float64) float64 {
+	if mode == roundTruncate {
+		return math.Trunc
+	}
+	return math.Floor
+}
+
+// exactIntegerDivision computes floor/truncate integer division exactly.
+// The quotient is roundRatToInt(b0/b1) — reusing the sign-correct rounding of
+// the rounding family — and the remainder is b0 - q*b1, exact by construction.
+func exactIntegerDivision(mc machine.CallContext, name string, b0, b1 *big.Int, mode roundMode, result divResult) error {
+	if b1.Sign() == 0 {
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "%s: division by zero", name)
+	}
+
+	q := roundRatToInt(new(big.Rat).SetFrac(b0, b1), mode)
+
+	switch result {
+	case divQuotient:
+		mc.SetValue(exactIntValue(q))
+	case divRemainder:
+		mc.SetValue(exactIntValue(exactRemainder(b0, b1, q)))
+	case divBoth:
+		mc.SetValues(exactIntValue(q), exactIntValue(exactRemainder(b0, b1, q)))
+	}
+	return nil
+}
+
+// exactRemainder returns b0 - q*b1 as a fresh big.Int.
+func exactRemainder(b0, b1, q *big.Int) *big.Int {
+	r := new(big.Int).Mul(q, b1)
+	return r.Sub(b0, r)
+}
+
 // PrimFloorDiv implements the (floor/) primitive.
 //
 // R7RS §6.2.6: Returns two values: floor quotient and floor remainder.
 func PrimFloorDiv(mc machine.CallContext) error {
-	return realDivision(mc, "floor/", math.Floor, divBoth)
+	return realDivision(mc, "floor/", roundFloor, divBoth)
 }
 
 // PrimFloorQuotient implements the (floor-quotient) primitive.
 //
 // R7RS §6.2.6: Returns the floor quotient for any real numbers.
 func PrimFloorQuotient(mc machine.CallContext) error {
-	return realDivision(mc, "floor-quotient", math.Floor, divQuotient)
+	return realDivision(mc, "floor-quotient", roundFloor, divQuotient)
 }
 
 // PrimFloorRemainder implements the (floor-remainder) primitive.
 //
 // R7RS §6.2.6: Returns the floor remainder for any real numbers.
 func PrimFloorRemainder(mc machine.CallContext) error {
-	return realDivision(mc, "floor-remainder", math.Floor, divRemainder)
+	return realDivision(mc, "floor-remainder", roundFloor, divRemainder)
 }
 
 // PrimTruncateDiv implements the truncate/ primitive.
 //
 // R7RS §6.2.6: Returns two values: truncate quotient and truncate remainder.
 func PrimTruncateDiv(mc machine.CallContext) error {
-	return realDivision(mc, "truncate/", math.Trunc, divBoth)
+	return realDivision(mc, "truncate/", roundTruncate, divBoth)
 }
 
 // PrimTruncateQuotient implements the truncate-quotient primitive.
 //
 // R7RS §6.2.6: Returns the truncate quotient for any real numbers.
 func PrimTruncateQuotient(mc machine.CallContext) error {
-	return realDivision(mc, "truncate-quotient", math.Trunc, divQuotient)
+	return realDivision(mc, "truncate-quotient", roundTruncate, divQuotient)
 }
 
 // PrimTruncateRemainder implements the truncate-remainder primitive.
 //
 // R7RS §6.2.6: Returns the truncate remainder for any real numbers.
 func PrimTruncateRemainder(mc machine.CallContext) error {
-	return realDivision(mc, "truncate-remainder", math.Trunc, divRemainder)
+	return realDivision(mc, "truncate-remainder", roundTruncate, divRemainder)
 }
 
 // PrimFiniteQ implements the (finite?) primitive.
