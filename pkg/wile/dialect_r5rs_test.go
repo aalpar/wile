@@ -43,9 +43,12 @@ func TestR5RSStrict_InstallForms_RemovesEffectiveForms(t *testing.T) {
 	fr := forms.DefaultRegistry().Clone()
 	before := len(fr.Names())
 
-	// Present-before: iterate the same slice the removal uses, so a typo'd or
-	// non-baseline entry is caught (not just a vacuous nil-after).
-	for _, n := range r5rsRemovedForms {
+	// Both removal slices name real baseline forms. Present-before: iterate the same
+	// slices the removal uses, so a typo'd or non-baseline entry is caught (not just a
+	// vacuous nil-after). That every R6RS macro form has a FormSpec here is the fact
+	// that makes forms-layer removal effective for them.
+	removed := append(append([]string{}, r5rsRemovedForms...), r5rsRemovedMacroForms...)
+	for _, n := range removed {
 		c.Assert(fr.Lookup(n), qt.IsNotNil,
 			qt.Commentf("%q must be in the R7RS baseline the dialect derives from", n))
 	}
@@ -53,14 +56,15 @@ func TestR5RSStrict_InstallForms_RemovesEffectiveForms(t *testing.T) {
 	err := R5RSStrict.InstallForms(fr)
 	c.Assert(err, qt.IsNil)
 
-	for _, n := range r5rsRemovedForms {
+	for _, n := range removed {
 		c.Assert(fr.Lookup(n), qt.IsNil,
 			qt.Commentf("r5rs-strict must remove %q", n))
 	}
-	// Exactly len(r5rsRemovedForms) gone — nothing over-removed.
-	c.Assert(len(fr.Names()), qt.Equals, before-len(r5rsRemovedForms),
-		qt.Commentf("r5rs-strict must remove exactly r5rsRemovedForms, nothing else"))
-	for _, n := range []string{"if", "lambda", "define", "set!", "let", "let*", "letrec", "define-syntax", "syntax-rules", "case-lambda"} {
+	// Exactly the two removal slices gone — nothing over-removed.
+	c.Assert(len(fr.Names()), qt.Equals, before-len(removed),
+		qt.Commentf("r5rs-strict must remove exactly r5rsRemovedForms+r5rsRemovedMacroForms, nothing else"))
+	// R5RS §4.3 macro system and core forms are kept.
+	for _, n := range []string{"if", "lambda", "define", "set!", "let", "let*", "letrec", "define-syntax", "syntax-rules", "let-syntax", "letrec-syntax", "case-lambda"} {
 		c.Assert(fr.Lookup(n), qt.IsNotNil,
 			qt.Commentf("r5rs-strict must keep %q", n))
 	}
@@ -133,6 +137,75 @@ func TestR5RSStrict_ImportNotDisabled_ExpanderCeiling(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsFalse,
 		qt.Commentf("import is expander-driven; forms removal must not turn it into an unbound ref (got %v)", err))
+}
+
+// TestR5RSStrict_InstallForms_RemovesR6RSMacroForms proves InstallForms drops the
+// R6RS macro-transformer forms from the per-engine registry while leaving the R5RS
+// §4.3 macro forms (syntax-rules, define-syntax, let-syntax, letrec-syntax) present.
+func TestR5RSStrict_InstallForms_RemovesR6RSMacroForms(t *testing.T) {
+	c := qt.New(t)
+	fr := forms.DefaultRegistry().Clone()
+
+	// Each R6RS macro form is a real baseline FormSpec — that is what makes forms-layer
+	// removal effective for them (they are not import-style expander-only forms).
+	for _, name := range r5rsRemovedMacroForms {
+		c.Assert(fr.Lookup(name), qt.IsNotNil,
+			qt.Commentf("%q must be a baseline form before removal", name))
+	}
+
+	err := R5RSStrict.InstallForms(fr)
+	c.Assert(err, qt.IsNil)
+
+	for _, name := range r5rsRemovedMacroForms {
+		c.Assert(fr.Lookup(name), qt.IsNil,
+			qt.Commentf("r5rs-strict must remove the R6RS macro form %q", name))
+	}
+	for _, kept := range []string{"syntax-rules", "define-syntax", "let-syntax", "letrec-syntax"} {
+		c.Assert(fr.Lookup(kept), qt.IsNotNil,
+			qt.Commentf("%q is R5RS §4.3 and must stay present", kept))
+	}
+}
+
+// TestR5RSStrict_Engine_R6RSMacroFormsRejected is the end-to-end validation that the
+// R6RS macro surface is gone: under r5rs-strict every R6RS macro-transformer form is
+// an unbound identifier, while R5RS's own syntax-rules macros still expand, and a
+// default engine still recognizes syntax-case as a form (not an unbound ref) — the
+// difference is the dialect, not the build.
+func TestR5RSStrict_Engine_R6RSMacroFormsRejected(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithDialect(R5RSStrict))
+	qt.Assert(t, err, qt.IsNil)
+
+	for _, name := range r5rsRemovedMacroForms {
+		t.Run(name, func(t *testing.T) {
+			// Form removed from the registry → the head resolves to an unbound global.
+			_, err := eng.EvalMultiple(ctx, "("+name+")")
+			qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+				qt.Commentf("%s must be an unbound identifier under r5rs-strict, got %v", name, err))
+		})
+	}
+
+	// A R6RS transformer form is also rejected in transformer position (not just as a
+	// bare call): define-syntax with a syntax-case transformer is an unsupported type.
+	_, err = eng.EvalMultiple(ctx,
+		"(define-syntax m (syntax-case x () (_ 1)))")
+	qt.Assert(t, err, qt.IsNotNil,
+		qt.Commentf("syntax-case transformer must be rejected under r5rs-strict"))
+
+	// R5RS macros survive: define-syntax + syntax-rules still expand.
+	got, err := eng.EvalMultiple(ctx,
+		"(define-syntax swap (syntax-rules () ((_ a b) (list b a)))) (swap 1 2)")
+	qt.Assert(t, err, qt.IsNil,
+		qt.Commentf("syntax-rules/define-syntax are R5RS §4.3 and must still work, got %v", err))
+	qt.Assert(t, got.SchemeString(), qt.Equals, "(2 1)")
+
+	// A default engine still recognizes syntax-case as a form (it errors for being
+	// malformed, NOT as an unbound reference).
+	base, err := NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	_, baseErr := base.EvalMultiple(ctx, "(syntax-case)")
+	qt.Assert(t, errors.Is(baseErr, werr.ErrNoSuchBinding), qt.IsFalse,
+		qt.Commentf("default engine must treat syntax-case as a form, not an unbound ref (got %v)", baseErr))
 }
 
 // TestR5RSStrict_CaseLambdaRetained pins the documented Wile-implementation
