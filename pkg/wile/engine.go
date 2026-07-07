@@ -194,6 +194,19 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		}
 	}
 
+	// A dialect may cross the forms-only ceiling by also implementing
+	// PrimitiveRemover — naming procedures (the mutation set, etc.) to omit from
+	// the visible top level. registry.Without returns a filtered copy, so the full
+	// reg still backs library environments and imports; only the top-level binding
+	// set shrinks. Composes with strict mode: topLevelReg is already core-only there.
+	remover, ok := dialect.(PrimitiveRemover)
+	if ok {
+		removed := remover.RemovedPrimitives()
+		if len(removed) > 0 {
+			topLevelReg = topLevelReg.Without(removed...)
+		}
+	}
+
 	env := ns.Runtime()
 	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromConfig(cfg)...)
 	if err != nil {

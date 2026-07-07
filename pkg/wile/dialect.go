@@ -49,6 +49,32 @@ type Dialect interface {
 	InstallForms(fr *forms.FormRegistry) error
 }
 
+// PrimitiveRemover is an optional capability a Dialect may implement to shape the
+// engine's surface beyond the forms layer: it names procedures to omit from the
+// visible top level. The base Dialect interface is forms-only (InstallForms reaches
+// the per-engine forms registry, which the validator and compiler read); the
+// mutation procedures (set-car!, vector-set!, …) live in the separate per-engine
+// *registry.Registry and are invisible to InstallForms. A dialect that also
+// implements PrimitiveRemover crosses that ceiling.
+//
+// When a dialect passed to WithDialect also implements PrimitiveRemover, the engine
+// omits the named primitives from the top-level binding set (via registry.Without,
+// on a copy — the full registry is untouched). Referencing a removed name at the top
+// level is then an unbound reference (werr.ErrNoSuchBinding), the same failure shape
+// as a removed special form.
+//
+// Boundary: removal is at the *visible top level* only. The full registry still backs
+// library environments, so (import (scheme base)) re-exposes a removed procedure. A
+// PrimitiveRemover dialect is a *language-surface* statement (what the flat top level
+// offers), NOT a capability sandbox — for the latter use security.Authorizer, which
+// composes orthogonally. Airtight enforcement across the import surface is the
+// expander-level dialect track. See [NoMutation].
+type PrimitiveRemover interface {
+	// RemovedPrimitives returns the names of procedures to omit from the engine's
+	// top level. It should return a fresh slice each call (callers may retain it).
+	RemovedPrimitives() []string
+}
+
 // WithDialect installs a Dialect on the engine, customizing its special-form
 // surface at construction time. Last-wins if supplied more than once. A nil
 // dialect (the default) applies [DefaultDialect], leaving the R7RS-default forms
