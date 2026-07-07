@@ -43,11 +43,12 @@ func TestR5RSStrict_InstallForms_RemovesEffectiveForms(t *testing.T) {
 	fr := forms.DefaultRegistry().Clone()
 	before := len(fr.Names())
 
-	// Both removal slices name real baseline forms. Present-before: iterate the same
-	// slices the removal uses, so a typo'd or non-baseline entry is caught (not just a
-	// vacuous nil-after). That every R6RS macro form has a FormSpec here is the fact
-	// that makes forms-layer removal effective for them.
-	removed := append(append([]string{}, r5rsRemovedForms...), r5rsRemovedMacroForms...)
+	// All three removal slices name real baseline forms (each carries a FormSpec, which
+	// is what makes Remove effective for them). Present-before: iterate the same slices
+	// the removal uses, so a typo'd or non-baseline entry is caught (not just a vacuous
+	// nil-after).
+	removed := append(append(append([]string{},
+		r5rsRemovedForms...), r5rsRemovedMacroForms...), r5rsRemovedLibraryForms...)
 	for _, n := range removed {
 		c.Assert(fr.Lookup(n), qt.IsNotNil,
 			qt.Commentf("%q must be in the R7RS baseline the dialect derives from", n))
@@ -60,9 +61,9 @@ func TestR5RSStrict_InstallForms_RemovesEffectiveForms(t *testing.T) {
 		c.Assert(fr.Lookup(n), qt.IsNil,
 			qt.Commentf("r5rs-strict must remove %q", n))
 	}
-	// Exactly the two removal slices gone — nothing over-removed.
+	// Exactly the three removal slices gone from the specs map — nothing over-removed.
 	c.Assert(len(fr.Names()), qt.Equals, before-len(removed),
-		qt.Commentf("r5rs-strict must remove exactly r5rsRemovedForms+r5rsRemovedMacroForms, nothing else"))
+		qt.Commentf("r5rs-strict must remove exactly the three removal slices, nothing else"))
 	// R5RS §4.3 macro system and core forms are kept.
 	for _, n := range []string{"if", "lambda", "define", "set!", "let", "let*", "letrec", "define-syntax", "syntax-rules", "let-syntax", "letrec-syntax", "case-lambda"} {
 		c.Assert(fr.Lookup(n), qt.IsNotNil,
@@ -119,24 +120,40 @@ func TestR5RSStrict_Engine_R5RSWorks_R7RSFormsRejected(t *testing.T) {
 	c.Assert(err, qt.IsNil, qt.Commentf("default engine accepts cond-expand"))
 }
 
-// TestR5RSStrict_ImportNotDisabled_ExpanderCeiling pins the documented ceiling:
-// import (and the rest of the library/module system) is handled by the EXPANDER,
-// which does not consult the forms registry, so forms-only removal cannot disable
-// it. R5RSStrict deliberately omits it; under R5RSStrict, import still fails the
-// way it does on a default bare engine (no library registry) — NOT as an unbound
-// identifier. Guards against re-adding import to r5rsRemovedForms on the false
-// belief it takes effect.
-func TestR5RSStrict_ImportNotDisabled_ExpanderCeiling(t *testing.T) {
-	c := qt.New(t)
+// TestR5RSStrict_LibrarySystemRejected pins the now-CLOSED ceiling: R5RS has no
+// library system, so under r5rs-strict the library-system forms (import,
+// define-library, library, export) are rejected as unbound identifiers. import is
+// expander-driven (a real expandImportForm, no reliance on forms removal), so its
+// rejection uses the DisableExpandForm gate; construction still succeeds (the eager
+// bootstrap uses none of these forms), and a DEFAULT engine still expands import —
+// the difference is the dialect, not the build.
+func TestR5RSStrict_LibrarySystemRejected(t *testing.T) {
 	ctx := context.Background()
-
 	eng, err := NewEngine(ctx, WithDialect(R5RSStrict))
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, err, qt.IsNil,
+		qt.Commentf("construction must succeed; the eager bootstrap uses no library forms"))
 
+	for _, name := range r5rsRemovedLibraryForms {
+		t.Run(name, func(t *testing.T) {
+			_, err := eng.EvalMultiple(ctx, "("+name+")")
+			qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+				qt.Commentf("%s must be an unbound identifier under r5rs-strict, got %v", name, err))
+		})
+	}
+
+	// The user-facing case: (import (scheme base)) rejects as unbound, NOT as a
+	// library-loading error (which is what a bare default engine gives).
 	_, err = eng.EvalMultiple(ctx, "(import (scheme base))")
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsFalse,
-		qt.Commentf("import is expander-driven; forms removal must not turn it into an unbound ref (got %v)", err))
+	qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+		qt.Commentf("import must be unbound under r5rs-strict, got %v", err))
+
+	// A default engine still expands import (it fails for lack of a library registry
+	// on a bare engine, NOT as an unbound ref) — the difference is the dialect.
+	base, err := NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	_, baseErr := base.EvalMultiple(ctx, "(import (scheme base))")
+	qt.Assert(t, errors.Is(baseErr, werr.ErrNoSuchBinding), qt.IsFalse,
+		qt.Commentf("default engine must expand import, not treat it as unbound (got %v)", baseErr))
 }
 
 // TestR5RSStrict_InstallForms_RemovesR6RSMacroForms proves InstallForms drops the

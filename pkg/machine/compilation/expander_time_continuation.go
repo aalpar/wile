@@ -44,6 +44,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -267,22 +268,34 @@ func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(expr syntax.SyntaxValue)
 	return expr, nil
 }
 
+// expandFormDisabled reports whether the named expand-time form was switched off for
+// this engine's dialect (via forms.FormRegistry.DisableExpandForm). When true, the
+// expander must not treat the head symbol as that form: it falls through to ordinary
+// application so the form reads as an unbound reference, the same failure shape as a
+// removed special form. This is the expander half of the per-engine form surface — the
+// mirror of the validator/compiler reading forms.RegistryFor(p.env). Cheap on the
+// default path (no dialect narrowing): ExpandFormDisabled short-circuits on an empty set.
+func (p *ExpanderTimeContinuation) expandFormDisabled(name string) bool {
+	return forms.RegistryFor(p.env).ExpandFormDisabled(name)
+}
+
 // ExpandPrimitiveForm handles expansion within primitive forms like if, begin,
 // lambda, define, etc. Some primitives need their subexpressions expanded
 // (like if, begin) while others should be left unchanged (like quote, define-syntax).
 //
 // This function looks up the primitive expander in the expand environment registry.
-// If found, it invokes the expander; otherwise returns the form unchanged.
+// If found (and not disabled by the dialect), it invokes the expander; otherwise
+// returns the form unchanged.
 func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Look up the primitive expander in the registry
 	symVal := values.NewSymbol(primName)
 	scopes := sym.Scopes()
 
 	pe := LookupPrimitiveExpander(p.env, symVal, scopes)
-	if pe != nil {
+	if pe != nil && !p.expandFormDisabled(pe.Name()) {
 		return pe.Expand(p, sym, expr)
 	}
-	// Unknown primitive - return unchanged (safe default)
+	// Unknown or dialect-disabled primitive - return unchanged (safe default)
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
@@ -357,7 +370,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
 		symVal := sym0
 		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
-		if pe != nil {
+		if pe != nil && !p.expandFormDisabled(pe.Name()) {
 			return pe.Expand(p, sym, expr)
 		}
 	}

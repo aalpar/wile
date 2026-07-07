@@ -56,24 +56,44 @@ var r5rsRemovedMacroForms = []string{
 	"meta",              // phase-shift form
 }
 
+// r5rsRemovedLibraryForms are the R7RS §5.6 / R6RS library-system forms R5RS lacks —
+// R5RS has a flat top level, no module system. import is handled by a REAL expander
+// (expandImportForm) with no compiler fall-through, so Remove alone cannot disable it;
+// InstallForms applies both Remove (drops the compiler FormSpec) and DisableExpandForm
+// (drops the expander's recognition) to each, so every one rejects as an unbound
+// identifier. Safe to disable: the eager bootstrap uses none of them and no library is
+// expanded at construction (all loading is lazy, reachable only through a user import —
+// now rejected). Verified by TestR5RSStrict_LibrarySystemRejected.
+var r5rsRemovedLibraryForms = []string{
+	"import",         // R7RS §5.6 import
+	"define-library", // R7RS §5.6 library definition
+	"library",        // R6RS library form
+	"export",         // R7RS §5.6 export (only meaningful inside define-library)
+}
+
 // R5RSStrict is a dialect that derives from the R7RS baseline ([DefaultDialect]) and
-// removes the R6RS/R7RS-only special forms R5RS lacks that the forms layer can disable:
-// the general forms in r5rsRemovedForms and the R6RS macro-transformer forms in
-// r5rsRemovedMacroForms. An engine built with it rejects them as unbound identifiers
-// while keeping R5RS's syntax-rules macro system.
+// removes the R6RS/R7RS-only special forms R5RS lacks: the general forms in
+// r5rsRemovedForms, the R6RS macro-transformer forms in r5rsRemovedMacroForms, and the
+// library-system forms in r5rsRemovedLibraryForms (import/define-library/library/export).
+// An engine built with it rejects all of them as unbound identifiers while keeping
+// R5RS's flat top level and syntax-rules macro system.
 //
-// Boundary — this is a best-effort strict R5RS, not a certified R5RS. Three things it
+// The library system is disabled at the EXPANDER (import is expander-driven with no
+// compiler fall-through): safe because the eager bootstrap uses none of these forms and
+// no library is expanded at construction — all loading is lazy, reachable only through
+// a user import, which is now rejected. So there is no bootstrap-vs-user phase boundary
+// to draw; the gate is unconditional. See [BootstrapProcedureRewriter]'s sibling
+// mechanism forms.FormRegistry.DisableExpandForm.
+//
+// Boundary — this is a best-effort strict R5RS, not a certified R5RS. Two things it
 // deliberately does not (and, by mechanism, cannot) do:
 //
-//   - The library / module system entry point, import, is handled entirely by the
-//     EXPANDER (it loads libraries at expand time and has no compiler FormSpec), so
-//     forms-layer removal cannot disable it — and it is used pervasively by Wile's own
-//     base loading, so disabling it needs a bootstrap-vs-user phase boundary this
-//     dialect does not draw. R5RSStrict leaves the library system in place; under it,
-//     import fails the way it does on a bare engine (no library registry), NOT as an
-//     unbound identifier. Pinned by TestR5RSStrict_ImportNotDisabled_ExpanderCeiling.
-//     (The R6RS macro-transformer forms, by contrast, ARE removed — unlike import they
-//     carry compiler FormSpecs the forms layer reaches.)
+//   - The flat surface is the profile's job, not the dialect's: disabling import means
+//     a bare R5RSStrict engine can no longer reach .sld-defined procedures, so its flat
+//     top level is only what is pre-bound at construction (core + bootstrap, plus any
+//     WithProfile/WithExtension surface). An embedder wanting a fuller R5RS surface flat
+//     supplies it via a profile. The dialect says "no library forms"; what is flat is
+//     orthogonal.
 //   - case-lambda is retained even though it is R7RS: Wile's bootstrap stdlib is
 //     itself defined using case-lambda, so removing it breaks engine construction.
 //     A Wile implementation constraint, not an R5RS statement.
@@ -98,6 +118,13 @@ func (r5rsStrictDialect) InstallForms(fr *forms.FormRegistry) error {
 	}
 	for _, name := range r5rsRemovedMacroForms {
 		fr.Remove(name)
+	}
+	// Library-system forms are expander-driven (import via a real expandImportForm),
+	// so each needs BOTH the compiler-FormSpec drop (Remove) and the expander gate
+	// (DisableExpandForm) to reject as unbound.
+	for _, name := range r5rsRemovedLibraryForms {
+		fr.Remove(name)
+		fr.DisableExpandForm(name)
 	}
 	return nil
 }

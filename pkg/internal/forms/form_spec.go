@@ -67,6 +67,14 @@ type FormSpec struct {
 // R7RS forms; a dialect forks a Clone at engine origin (later tasks).
 type FormRegistry struct {
 	specs map[string]*FormSpec
+	// disabledExpandForms names expand-time forms a dialect has switched off for this
+	// engine. Unlike specs (read by the validator + compiler), these forms — import
+	// and the rest of the library system — are recognized by the EXPANDER via bindings
+	// in env.Expand(), which the specs map never reaches. import in particular is
+	// handled by a real expandImportForm with no reliance on the specs map, so Remove
+	// alone cannot disable it. The expander gates on ExpandFormDisabled at its dispatch
+	// sites. nil/empty in the common case (no dialect narrowing). See DisableExpandForm.
+	disabledExpandForms map[string]struct{}
 }
 
 // NewFormRegistry returns an empty registry.
@@ -115,6 +123,37 @@ func (r *FormRegistry) Remove(name string) {
 	delete(r.specs, name)
 }
 
+// DisableExpandForm switches off one or more expand-time forms for this engine (the
+// library system: import, define-library, library, export). Distinct from Remove,
+// which drops a validator/compiler FormSpec: these forms are dispatched by the
+// EXPANDER via env.Expand() bindings, which the specs map does not reach — import is
+// handled by a real expander with no compiler fall-through, so Remove alone leaves it
+// live. The expander consults ExpandFormDisabled at its form-dispatch sites and, when
+// a form is disabled, does not treat the head symbol as that form: it falls through to
+// ordinary application (an unbound reference, matching the removed-form failure shape).
+// A dialect calls this from InstallForms, typically alongside Remove for the same name
+// to also drop the form's compiler FormSpec. Idempotent; the set is lazily allocated so
+// the default path stays nil.
+func (r *FormRegistry) DisableExpandForm(names ...string) {
+	if r.disabledExpandForms == nil {
+		r.disabledExpandForms = make(map[string]struct{}, len(names))
+	}
+	for _, name := range names {
+		r.disabledExpandForms[name] = struct{}{}
+	}
+}
+
+// ExpandFormDisabled reports whether name was switched off via DisableExpandForm.
+// Cheap on the common path: a nil/empty set (no dialect narrowing) returns false
+// without a map probe, so gating every expand dispatch on it costs one length check.
+func (r *FormRegistry) ExpandFormDisabled(name string) bool {
+	if len(r.disabledExpandForms) == 0 {
+		return false
+	}
+	_, ok := r.disabledExpandForms[name]
+	return ok
+}
+
 // Names returns all registered form names (unordered).
 func (r *FormRegistry) Names() []string {
 	names := make([]string, 0, len(r.specs))
@@ -150,9 +189,14 @@ func (r *FormRegistry) Verify() error {
 		"form registration inconsistencies:%s", b.String())
 }
 
-// Clone returns a shallow copy. Safe because RegisterValidator is copy-on-write.
+// Clone returns a shallow copy. Safe because RegisterValidator is copy-on-write and
+// DisableExpandForm allocates a fresh set on the clone (maps.Clone(nil) is nil, so the
+// default's nil set is preserved and never shared-then-mutated).
 func (r *FormRegistry) Clone() *FormRegistry {
-	return &FormRegistry{specs: maps.Clone(r.specs)}
+	return &FormRegistry{
+		specs:               maps.Clone(r.specs),
+		disabledExpandForms: maps.Clone(r.disabledExpandForms),
+	}
 }
 
 // defaultRegistry backs the package-level delegators and holds the built-in

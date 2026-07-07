@@ -310,3 +310,43 @@ func TestFormRegistry_Clone_COW_Compile(t *testing.T) {
 	c.Assert(r.Lookup("f").Compile, qt.Equals, "C1")
 	c.Assert(clone.Lookup("f").Compile, qt.Equals, "C2")
 }
+
+func TestFormRegistry_DisableExpandForm(t *testing.T) {
+	c := qt.New(t)
+	r := NewFormRegistry()
+
+	// Empty set: nothing disabled (the common/default path).
+	c.Assert(r.ExpandFormDisabled("import"), qt.IsFalse)
+
+	r.DisableExpandForm("import", "define-library")
+	c.Assert(r.ExpandFormDisabled("import"), qt.IsTrue)
+	c.Assert(r.ExpandFormDisabled("define-library"), qt.IsTrue)
+	c.Assert(r.ExpandFormDisabled("export"), qt.IsFalse)
+
+	// Idempotent + additive.
+	r.DisableExpandForm("import", "export")
+	c.Assert(r.ExpandFormDisabled("import"), qt.IsTrue)
+	c.Assert(r.ExpandFormDisabled("export"), qt.IsTrue)
+}
+
+func TestFormRegistry_Clone_COW_DisabledExpandForms(t *testing.T) {
+	c := qt.New(t)
+	r := NewFormRegistry()
+
+	// A clone of a registry with a nil disabled set (maps.Clone(nil) == nil) can
+	// disable on its own without touching the parent — the COW property the engine
+	// relies on when a dialect narrows a fork of the default registry.
+	clone := r.Clone()
+	clone.DisableExpandForm("import")
+	c.Assert(clone.ExpandFormDisabled("import"), qt.IsTrue)
+	c.Assert(r.ExpandFormDisabled("import"), qt.IsFalse,
+		qt.Commentf("disabling on a clone must not leak to the parent"))
+
+	// And a clone of a registry that already disabled a form inherits it, but further
+	// disables on the clone still do not leak back.
+	r.DisableExpandForm("define-library")
+	clone2 := r.Clone()
+	c.Assert(clone2.ExpandFormDisabled("define-library"), qt.IsTrue)
+	clone2.DisableExpandForm("library")
+	c.Assert(r.ExpandFormDisabled("library"), qt.IsFalse)
+}
