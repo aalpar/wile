@@ -137,31 +137,139 @@ func BigAtan(x *big.Float, prec uint) *big.Float {
 	return new(big.Float).SetPrec(prec).Set(atanAt(xw, wp))
 }
 
-// BigAtan2 returns atan2(y, x) — the angle of the point (x, y) — rounded to prec
-// bits. The quadrant adjustment runs on the big-precision ratio y/x, which stays
-// finite for any finite operands (big.Float's exponent range is ~±10⁹), so
-// large-magnitude components no longer overflow to a wrong angle.
+// atan2At computes atan2(y, x) at precision wp. The quadrant adjustment runs on
+// the big-precision ratio y/x, which stays finite for any finite operands
+// (big.Float's exponent range is ~±10⁹), so large-magnitude components no longer
+// overflow to a wrong angle.
+func atan2At(y, x *big.Float, wp uint) *big.Float {
+	pi := piAtPrec(wp)
+	two := new(big.Float).SetPrec(wp).SetInt64(2)
+	switch {
+	case x.Sign() > 0:
+		return atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp)
+	case x.Sign() < 0 && y.Sign() >= 0:
+		return new(big.Float).SetPrec(wp).Add(atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp), pi)
+	case x.Sign() < 0: // y.Sign() < 0
+		return new(big.Float).SetPrec(wp).Sub(atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp), pi)
+	case y.Sign() > 0: // x == 0
+		return new(big.Float).SetPrec(wp).Quo(pi, two)
+	case y.Sign() < 0: // x == 0
+		return new(big.Float).SetPrec(wp).Neg(new(big.Float).SetPrec(wp).Quo(pi, two))
+	default: // (0, 0)
+		return new(big.Float).SetPrec(wp)
+	}
+}
+
+// BigAtan2 returns atan2(y, x) — the angle of the point (x, y) — rounded to prec bits.
 func BigAtan2(y, x *big.Float, prec uint) *big.Float {
 	wp := atanWorkPrec(prec)
 	yw := new(big.Float).SetPrec(wp).Set(y)
 	xw := new(big.Float).SetPrec(wp).Set(x)
-	pi := piAtPrec(wp)
-	two := new(big.Float).SetPrec(wp).SetInt64(2)
+	return new(big.Float).SetPrec(prec).Set(atan2At(yw, xw, wp))
+}
 
-	var q *big.Float
-	switch {
-	case xw.Sign() > 0:
-		q = atanAt(new(big.Float).SetPrec(wp).Quo(yw, xw), wp)
-	case xw.Sign() < 0 && yw.Sign() >= 0:
-		q = new(big.Float).SetPrec(wp).Add(atanAt(new(big.Float).SetPrec(wp).Quo(yw, xw), wp), pi)
-	case xw.Sign() < 0: // yw.Sign() < 0
-		q = new(big.Float).SetPrec(wp).Sub(atanAt(new(big.Float).SetPrec(wp).Quo(yw, xw), wp), pi)
-	case yw.Sign() > 0: // xw == 0
-		q = new(big.Float).SetPrec(wp).Quo(pi, two)
-	case yw.Sign() < 0: // xw == 0
-		q = new(big.Float).SetPrec(wp).Neg(new(big.Float).SetPrec(wp).Quo(pi, two))
-	default: // (0, 0)
-		q = new(big.Float).SetPrec(wp)
+// atanhSeries computes atanh(t) = Σ t^(2k+1)/(2k+1) for |t| < 1 at precision wp.
+// Unlike the alternating atan series, every term is added.
+func atanhSeries(t *big.Float, wp uint) *big.Float {
+	if t.Sign() == 0 {
+		return new(big.Float).SetPrec(wp)
 	}
-	return new(big.Float).SetPrec(prec).Set(q)
+	sum := new(big.Float).SetPrec(wp).Set(t)
+	t2 := new(big.Float).SetPrec(wp).Mul(t, t)
+	power := new(big.Float).SetPrec(wp).Set(t)
+	negligibleExp := -int(wp) - 4
+	for n := 1; ; n++ {
+		power = new(big.Float).SetPrec(wp).Mul(power, t2)
+		frac := new(big.Float).SetPrec(wp).Quo(power, new(big.Float).SetPrec(wp).SetInt64(int64(2*n+1)))
+		sum.Add(sum, frac)
+		if frac.Sign() == 0 || frac.MantExp(nil) < negligibleExp {
+			break
+		}
+	}
+	return sum
+}
+
+var (
+	bigLn2CacheMu sync.Mutex
+	bigLn2Cache   = map[uint]*big.Float{}
+)
+
+// bigLn2 returns ln(2) rounded to prec bits, computed as 2·atanh(1/3) (since
+// (2−1)/(2+1) = 1/3). Cached per precision; a defensive copy is returned.
+func bigLn2(prec uint) *big.Float {
+	bigLn2CacheMu.Lock()
+	defer bigLn2CacheMu.Unlock()
+	v, ok := bigLn2Cache[prec]
+	if ok {
+		return new(big.Float).Set(v)
+	}
+	wp := prec + 32
+	third := new(big.Float).SetPrec(wp).Quo(new(big.Float).SetPrec(wp).SetInt64(1), new(big.Float).SetPrec(wp).SetInt64(3))
+	ln2 := new(big.Float).SetPrec(wp).Mul(atanhSeries(third, wp), new(big.Float).SetPrec(wp).SetInt64(2))
+	result := new(big.Float).SetPrec(prec).Set(ln2)
+	bigLn2Cache[prec] = new(big.Float).Set(result)
+	return result
+}
+
+// logAt computes the natural logarithm of x at precision wp. It splits
+// x = mant·2ᵉ (mant ∈ [0.5,1)) so ln(x) = ln(mant) + e·ln(2), with ln(mant)
+// from the atanh series on (mant−1)/(mant+1) (|t| ≤ 1/3, fast convergence).
+// x ≤ 0 yields −∞ — the only reachable case is x = 0, the atan(±i) pole.
+func logAt(x *big.Float, wp uint) *big.Float {
+	if x.Sign() <= 0 {
+		return new(big.Float).SetPrec(wp).SetInf(true)
+	}
+	mant := new(big.Float).SetPrec(wp)
+	e := x.MantExp(mant)
+	one := new(big.Float).SetPrec(wp).SetInt64(1)
+	num := new(big.Float).SetPrec(wp).Sub(mant, one)
+	den := new(big.Float).SetPrec(wp).Add(mant, one)
+	t := new(big.Float).SetPrec(wp).Quo(num, den)
+	lnMant := new(big.Float).SetPrec(wp).Mul(atanhSeries(t, wp), new(big.Float).SetPrec(wp).SetInt64(2))
+	eLn2 := new(big.Float).SetPrec(wp).Mul(bigLn2(wp), new(big.Float).SetPrec(wp).SetInt64(int64(e)))
+	return new(big.Float).SetPrec(wp).Add(lnMant, eLn2)
+}
+
+// BigLog returns the natural logarithm of x (x > 0) rounded to prec bits.
+func BigLog(x *big.Float, prec uint) *big.Float {
+	wp := atanWorkPrec(prec)
+	return new(big.Float).SetPrec(prec).Set(logAt(new(big.Float).SetPrec(wp).Set(x), wp))
+}
+
+// BigComplexAtan returns the complex arctangent atan(re + im·i) as (real, imag)
+// parts rounded to prec bits, via atan(z) = (i/2)[ln(1 − iz) − ln(1 + iz)].
+// Computing at big precision keeps components beyond the float64 range from
+// overflowing the way cmplx.Atan on a truncated complex128 would.
+//
+// It agrees with math/cmplx.Atan on the whole plane except the branch cut along
+// the imaginary axis for |Im z| > 1 with Re z = 0, where it returns the
+// principal (Re > 0) value +π/2 rather than Go's signed-zero −π/2. Callers that
+// need Go's convention on that cut should keep using cmplx.Atan in the float64
+// range (this function is reached only when a component overflows float64, where
+// cmplx.Atan yields NaN and has no value to preserve).
+func BigComplexAtan(re, im *big.Float, prec uint) (*big.Float, *big.Float) {
+	wp := atanWorkPrec(prec)
+	a := new(big.Float).SetPrec(wp).Set(re)
+	b := new(big.Float).SetPrec(wp).Set(im)
+	one := new(big.Float).SetPrec(wp).SetInt64(1)
+	two := new(big.Float).SetPrec(wp).SetInt64(2)
+	four := new(big.Float).SetPrec(wp).SetInt64(4)
+
+	// 1 − iz = (1+b) − a·i ; 1 + iz = (1−b) + a·i
+	u1 := new(big.Float).SetPrec(wp).Add(one, b)
+	v1 := new(big.Float).SetPrec(wp).Neg(a)
+	u2 := new(big.Float).SetPrec(wp).Sub(one, b)
+	v2 := new(big.Float).SetPrec(wp).Set(a)
+
+	// Re(atan z) = (arg(1+iz) − arg(1−iz)) / 2
+	arg1 := atan2At(v1, u1, wp)
+	arg2 := atan2At(v2, u2, wp)
+	reOut := new(big.Float).SetPrec(wp).Quo(new(big.Float).SetPrec(wp).Sub(arg2, arg1), two)
+
+	// Im(atan z) = (ln|1−iz|² − ln|1+iz|²) / 4
+	m1 := new(big.Float).SetPrec(wp).Add(new(big.Float).SetPrec(wp).Mul(u1, u1), new(big.Float).SetPrec(wp).Mul(v1, v1))
+	m2 := new(big.Float).SetPrec(wp).Add(new(big.Float).SetPrec(wp).Mul(u2, u2), new(big.Float).SetPrec(wp).Mul(v2, v2))
+	imOut := new(big.Float).SetPrec(wp).Quo(new(big.Float).SetPrec(wp).Sub(logAt(m1, wp), logAt(m2, wp)), four)
+
+	return new(big.Float).SetPrec(prec).Set(reOut), new(big.Float).SetPrec(prec).Set(imOut)
 }

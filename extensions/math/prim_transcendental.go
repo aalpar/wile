@@ -83,12 +83,30 @@ func PrimAtan(mc machine.CallContext) error {
 	rest := mc.Arg(1)
 
 	if values.IsEmptyList(rest) {
-		// A real big operand keeps big precision via values.BigAtan; complex
-		// operands stay on the float64 complex path (big complex atan needs a
-		// big complex log — out of scope).
-		if isBigReal(o) {
+		// Big-tier real operands keep big precision via values.BigAtan; an
+		// out-of-float64-range BigComplex uses values.BigComplexAtan (see below).
+		if isUnboundedReal(o) {
 			mc.SetValue(values.NewBigFloat(values.BigAtan(numberToBigFloat(o), values.DefaultBigFloatPrecision)))
 			return nil
+		}
+		bc, isBigComplex := o.(*values.BigComplex)
+		if isBigComplex {
+			reBig := bc.RealAsBigFloat().BigFloatValue()
+			imBig := bc.ImagAsBigFloat().BigFloatValue()
+			// cmplx.Atan is branch-cut-correct (R7RS) in the float64 range, so only
+			// divert to the big-precision complex atan when a component overflows
+			// float64 — the case where the truncating path returns NaN.
+			reF, _ := reBig.Float64()
+			imF, _ := imBig.Float64()
+			if math.IsInf(reF, 0) || math.IsInf(imF, 0) {
+				reOut, imOut := values.BigComplexAtan(reBig, imBig, values.DefaultBigFloatPrecision)
+				if imOut.Sign() == 0 {
+					mc.SetValue(values.NewBigFloat(reOut))
+				} else {
+					mc.SetValue(values.NewBigComplexFromBigFloats(values.NewBigFloat(reOut), values.NewBigFloat(imOut)))
+				}
+				return nil
+			}
 		}
 		z, err := helpers.ToComplex128(o)
 		if err != nil {
@@ -106,10 +124,10 @@ func PrimAtan(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "atan: expected 1 or 2 arguments")
 	}
 
-	// A big operand on either side takes the big-precision atan2 path, so
-	// large-magnitude operands with a finite ratio keep their true angle
-	// instead of both saturating to ±Inf under float64 truncation.
-	if isBigReal(o) || isBigReal(xVal) {
+	// An unbounded-range/precision operand on either side takes the big-precision
+	// atan2 path, so large-magnitude operands with a finite ratio keep their true
+	// angle instead of both saturating to ±Inf under float64 truncation.
+	if isUnboundedReal(o) || isUnboundedReal(xVal) {
 		y := numberToBigFloat(o)
 		x := numberToBigFloat(xVal)
 		if y == nil || x == nil {
@@ -119,10 +137,9 @@ func PrimAtan(mc machine.CallContext) error {
 		return nil
 	}
 
-	// atan2 inherently returns an inexact result, so silent lossy conversion of
-	// *Rational operands is load-bearing for R7RS §6.2.6 semantics — hence
-	// ToFloat64Lossy, not the strict ToFloat64. See
-	// memory/2026-05-14-numeric-loss-signals-design.md §R8.
+	// Bounded operands (Integer, Float) cannot overflow float64, so atan2 runs on
+	// the fast path. atan2 is inherently inexact, so ToFloat64Lossy (not strict
+	// ToFloat64) is correct here per memory/2026-05-14-numeric-loss-signals-design.md §R8.
 	y, err := helpers.ToFloat64Lossy(o)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "atan: %v", err)
@@ -135,11 +152,14 @@ func PrimAtan(mc machine.CallContext) error {
 	return nil
 }
 
-// isBigReal reports whether v is a real number carried at a precision or range
-// beyond float64 — the trigger for the big-precision atan paths.
-func isBigReal(v values.Value) bool {
+// isUnboundedReal reports whether v is a real number whose range or precision
+// exceeds float64 — *BigFloat (unbounded precision), *BigInteger and *Rational
+// (unbounded range). These take the big-precision atan paths so they cannot
+// overflow to a wrong angle. Bounded *Integer (int64) and *Float (float64) stay
+// on the fast float64 path.
+func isUnboundedReal(v values.Value) bool {
 	switch v.(type) {
-	case *values.BigFloat, *values.BigInteger:
+	case *values.BigFloat, *values.BigInteger, *values.Rational:
 		return true
 	default:
 		return false

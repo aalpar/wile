@@ -422,6 +422,22 @@ func assertFloatResult(t *testing.T, code string, expected float64, tolerance fl
 		qt.Commentf("expected %v, got %v (diff: %v)", expected, resultFloat.Value, diff))
 }
 
+// assertBigFloatResult checks a *BigFloat result within tolerance. Used where a
+// primitive returns big precision for an unbounded-tier input — e.g. atan of a
+// *Rational, which takes the big-precision path (a huge rational would otherwise
+// overflow float64 to a wrong angle).
+func assertBigFloatResult(t *testing.T, code string, expected float64, tolerance float64) {
+	t.Helper()
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	resultBig, ok := result.(*values.BigFloat)
+	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("expected BigFloat, got %T", result))
+	got := resultBig.Float64Truncated()
+	diff := math.Abs(got - expected)
+	qt.Assert(t, diff < tolerance, qt.IsTrue,
+		qt.Commentf("expected %v, got %v (diff: %v)", expected, got, diff))
+}
+
 // Helper for checking complex results with tolerance
 func assertComplexResult(t *testing.T, code string, expectedReal, expectedImag, tolerance float64) {
 	t.Helper()
@@ -893,9 +909,9 @@ func TestAtanExtended(t *testing.T) {
 	})
 
 	t.Run("one-arg rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(atan 1/2)`, math.Atan(0.5), 1e-10)
-		assertFloatResult(t, `(atan -1/2)`, math.Atan(-0.5), 1e-10)
-		assertFloatResult(t, `(atan 3/4)`, math.Atan(0.75), 1e-10)
+		assertBigFloatResult(t, `(atan 1/2)`, math.Atan(0.5), 1e-10)
+		assertBigFloatResult(t, `(atan -1/2)`, math.Atan(-0.5), 1e-10)
+		assertBigFloatResult(t, `(atan 3/4)`, math.Atan(0.75), 1e-10)
 	})
 
 	t.Run("two-arg atan2 integer inputs", func(t *testing.T) {
@@ -914,8 +930,8 @@ func TestAtanExtended(t *testing.T) {
 	})
 
 	t.Run("two-arg atan2 rational inputs", func(t *testing.T) {
-		assertFloatResult(t, `(atan 1/2 1/2)`, math.Pi/4, 1e-10)
-		assertFloatResult(t, `(atan 1/2 3/4)`, math.Atan2(0.5, 0.75), 1e-10)
+		assertBigFloatResult(t, `(atan 1/2 1/2)`, math.Pi/4, 1e-10)
+		assertBigFloatResult(t, `(atan 1/2 3/4)`, math.Atan2(0.5, 0.75), 1e-10)
 	})
 
 	t.Run("special values one-arg", func(t *testing.T) {

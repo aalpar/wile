@@ -3,12 +3,16 @@ package values
 import (
 	"math"
 	"math/big"
+	"math/cmplx"
 	"testing"
 )
 
 // piReference is π to 80 significant digits (Wikipedia), the non-circular anchor
 // for the precision-honesty assertions below.
 const piReference = "3.1415926535897932384626433832795028841971693993751058209749445923078164062862090"
+
+// ln2Reference is ln(2) to 80 significant digits.
+const ln2Reference = "0.69314718055994530941723212145817656807550013436025525412068000949339362196969471"
 
 func bigRef(t *testing.T, s string) *big.Float {
 	t.Helper()
@@ -117,5 +121,66 @@ func TestBigAtan2_HugeOperandsNoOverflow(t *testing.T) {
 	eq := f64(BigAtan2(bigRef(t, "1e400"), bigRef(t, "1e400"), DefaultBigFloatPrecision))
 	if math.Abs(eq-math.Pi/4) > 1e-12 {
 		t.Fatalf("BigAtan2(1e400,1e400) = %v, want π/4 = %v", eq, math.Pi/4)
+	}
+}
+
+func TestBigLog_MatchesReference(t *testing.T) {
+	// ln(2) to (near) full 256-bit precision — a float64-precision impl would only
+	// agree to ~16 digits.
+	ref := bigRef(t, ln2Reference)
+	got := BigLog(big.NewFloat(2), DefaultBigFloatPrecision)
+	if !closeWithin(got, ref, -240) {
+		t.Fatalf("BigLog(2) = %s\n differs from ln(2) beyond 2^-240", got.Text('g', 85))
+	}
+}
+
+func TestBigLog_AgreesWithMathLog(t *testing.T) {
+	for _, x := range []float64{0.01, 0.5, 1.0, 2.0, math.E, 10, 1000, 1e12, 1e300} {
+		got := f64(BigLog(big.NewFloat(x), DefaultBigFloatPrecision))
+		want := math.Log(x)
+		if math.Abs(got-want) > 1e-13*math.Max(1, math.Abs(want)) {
+			t.Errorf("BigLog(%v) f64=%v, math.Log=%v", x, got, want)
+		}
+	}
+}
+
+func TestBigComplexAtan_AgreesWithCmplx(t *testing.T) {
+	cases := []complex128{0, 1i * 0.5, 2 + 3i, -1 + 0.5i, 0.3 - 4i, 5 + 0i}
+	for _, z := range cases {
+		reB, imB := BigComplexAtan(big.NewFloat(real(z)), big.NewFloat(imag(z)), DefaultBigFloatPrecision)
+		want := cmplx.Atan(z)
+		if math.Abs(f64(reB)-real(want)) > 1e-13 || math.Abs(f64(imB)-imag(want)) > 1e-13 {
+			t.Errorf("BigComplexAtan(%v) = (%v,%v), cmplx.Atan = (%v,%v)",
+				z, f64(reB), f64(imB), real(want), imag(want))
+		}
+	}
+}
+
+func TestBigComplexAtan_ImaginaryAxisBranch(t *testing.T) {
+	// On the branch cut (Re z = 0, |Im z| > 1) BigComplexAtan returns the
+	// principal Re = +π/2, which diverges from math/cmplx.Atan's signed-zero
+	// −π/2. Documented and intentional; the primitive only reaches this function
+	// out of float64 range, where cmplx.Atan is NaN anyway. Im part = atanh(1/2).
+	reB, imB := BigComplexAtan(big.NewFloat(0), big.NewFloat(2), DefaultBigFloatPrecision)
+	if math.Abs(f64(reB)-math.Pi/2) > 1e-13 {
+		t.Errorf("Re(atan(2i)) = %v, want principal +π/2 = %v", f64(reB), math.Pi/2)
+	}
+	if math.Abs(f64(imB)-math.Atanh(0.5)) > 1e-13 {
+		t.Errorf("Im(atan(2i)) = %v, want atanh(1/2) = %v", f64(imB), math.Atanh(0.5))
+	}
+}
+
+func TestBigComplexAtan_HugeNoOverflow(t *testing.T) {
+	// atan of a first-quadrant BigComplex with components beyond the float64 range:
+	// as |z| → ∞ the value approaches π/2 (real) + 0i. cmplx.Atan on the truncated
+	// complex128 sees (+Inf,+Inf) and returns NaN — this must not.
+	re := bigRef(t, "1e400")
+	im := bigRef(t, "1e400")
+	reB, imB := BigComplexAtan(re, im, DefaultBigFloatPrecision)
+	if math.Abs(f64(reB)-math.Pi/2) > 1e-6 {
+		t.Fatalf("Re(atan(1e400+1e400i)) = %v, want ≈ π/2 = %v", f64(reB), math.Pi/2)
+	}
+	if math.Abs(f64(imB)) > 1e-6 {
+		t.Fatalf("Im(atan(1e400+1e400i)) = %v, want ≈ 0", f64(imB))
 	}
 }
