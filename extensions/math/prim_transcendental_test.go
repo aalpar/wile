@@ -36,11 +36,17 @@ func TestTranscendental(t *testing.T) {
 		{"exp zero", `(= (exp 0) 1.0)`, values.TrueValue},
 		{"exp one", `(< (abs (- (exp 1) 2.718281828459045)) 1e-10)`, values.TrueValue},
 		{"exp negative", `(< (abs (- (exp -1) 0.36787944117144233)) 1e-10)`, values.TrueValue},
+		// Overflow rescue: math.Exp(1000)=+Inf, but e^1000 is a finite bignum.
+		{"exp overflow rescue finite", `(finite? (exp 1000))`, values.TrueValue},
+		{"exp overflow rescue round-trip", `(< (abs (- (log (exp 1000)) 1000)) 1e-6)`, values.TrueValue},
 
 		// log
 		{"log one", `(< (abs (log 1)) 1e-10)`, values.TrueValue},
 		{"log e", `(< (abs (- (log 2.718281828459045) 1.0)) 1e-10)`, values.TrueValue},
 		{"log base 2", `(< (abs (- (log 8 2) 3.0)) 1e-10)`, values.TrueValue},
+		// Overflow: log of a value beyond float64 range no longer sees +Inf input.
+		// log(10^400) = 400·ln(10) ≈ 921.034.
+		{"log beyond float64 range", `(< (abs (- (log (expt 10 400)) 921.0340371976184)) 1e-6)`, values.TrueValue},
 
 		// sin
 		{"sin zero", `(< (abs (sin 0)) 1e-10)`, values.TrueValue},
@@ -57,6 +63,11 @@ func TestTranscendental(t *testing.T) {
 		// asin
 		{"asin zero", `(< (abs (asin 0)) 1e-10)`, values.TrueValue},
 		{"asin one", `(< (abs (- (asin 1) 1.5707963267948966)) 1e-10)`, values.TrueValue},
+		// Big-tier rational in the real domain: value correct (π/6 for 1/2).
+		{"asin rational in domain", `(< (abs (- (asin 1/2) 0.5235987755982989)) 1e-10)`, values.TrueValue},
+		// Big-tier rational OUT of the real domain (|x|>1): kernel declines, the
+		// primitive falls back to the complex path, so the result is complex.
+		{"asin out-of-domain rational is complex", `(complex? (asin 3/2))`, values.TrueValue},
 
 		// acos
 		{"acos one", `(< (abs (acos 1)) 1e-10)`, values.TrueValue},

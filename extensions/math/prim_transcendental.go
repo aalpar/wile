@@ -29,9 +29,21 @@ import (
 // to complex128, applies fn, and returns the result (as Float when imaginary
 // part is zero, otherwise Complex). Used for the six unary transcendental
 // functions that share identical structure.
-func makeComplexPrimitive(name string, fn func(complex128) complex128) machine.ForeignFunction {
+// makeComplexPrimitive builds a unary transcendental. An unbounded-tier real
+// operand (BigFloat/BigInteger/Rational) takes bigRealFn at big precision when
+// one is supplied; everything else truncates to complex128 and applies fn.
+func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn func(*big.Float, uint) *big.Float) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
-		z, err := helpers.ToComplex128(mc.Arg(0))
+		arg := mc.Arg(0)
+		if bigRealFn != nil && isUnboundedReal(arg) {
+			// A nil return declines (e.g. asin/acos of |x|>1 is complex); fall through.
+			q := bigRealFn(numberToBigFloat(arg), values.DefaultBigFloatPrecision)
+			if q != nil {
+				mc.SetValue(values.NewBigFloat(q))
+				return nil
+			}
+		}
+		z, err := helpers.ToComplex128(arg)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "%s: %v", name, err)
 		}
@@ -40,40 +52,97 @@ func makeComplexPrimitive(name string, fn func(complex128) complex128) machine.F
 	}
 }
 
-// Unary transcendental primitives (R7RS §6.2.6).
+// Unary transcendental primitives (R7RS §6.2.6). Big-real kernels are wired in as
+// they land: exp (below, custom for overflow rescue); sin/cos/tan/asin/acos pass
+// nil until their kernels exist.
 var (
-	PrimExp  = makeComplexPrimitive("exp", cmplx.Exp)
-	PrimSin  = makeComplexPrimitive("sin", cmplx.Sin)
-	PrimCos  = makeComplexPrimitive("cos", cmplx.Cos)
-	PrimTan  = makeComplexPrimitive("tan", cmplx.Tan)
-	PrimAsin = makeComplexPrimitive("asin", cmplx.Asin)
-	PrimAcos = makeComplexPrimitive("acos", cmplx.Acos)
+	PrimSin  = makeComplexPrimitive("sin", cmplx.Sin, values.BigSin)
+	PrimCos  = makeComplexPrimitive("cos", cmplx.Cos, values.BigCos)
+	PrimTan  = makeComplexPrimitive("tan", cmplx.Tan, values.BigTan)
+	PrimAsin = makeComplexPrimitive("asin", cmplx.Asin, values.BigAsin)
+	PrimAcos = makeComplexPrimitive("acos", cmplx.Acos, values.BigAcos)
 )
 
-// PrimLog implements the (log z) and (log z1 z2) primitives.
+// PrimExp implements (exp z). Unlike the other unary transcendentals, exp
+// overflows float64 at ~709 — inside the bounded range — so besides the
+// big-precision path for unbounded-tier operands it also rescues a bounded real
+// operand whose exp over/underflows float64 to a finite BigFloat (e^1000 ≈
+// 1.97e434 is representable as a bignum even though math.Exp returns +Inf).
+func PrimExp(mc machine.CallContext) error {
+	arg := mc.Arg(0)
+	if isUnboundedReal(arg) {
+		mc.SetValue(values.NewBigFloat(values.BigExp(numberToBigFloat(arg), values.DefaultBigFloatPrecision)))
+		return nil
+	}
+	z, err := helpers.ToComplex128(arg)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "exp: %v", err)
+	}
+	r := real(z)
+	if imag(z) == 0 && !math.IsInf(r, 0) {
+		ez := math.Exp(r)
+		if math.IsInf(ez, 1) || (ez == 0 && r != 0) {
+			mc.SetValue(values.NewBigFloat(values.BigExp(big.NewFloat(r), values.DefaultBigFloatPrecision)))
+			return nil
+		}
+	}
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Exp(z)))
+	return nil
+}
+
+// PrimLog implements the (log z) and (log z1 z2) primitives. A positive,
+// unbounded-tier real argument takes the big-precision log (so a value beyond the
+// float64 range no longer overflows its input to +Inf); non-positive or complex
+// arguments keep the branch-correct complex path.
 func PrimLog(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
+
+	if values.IsEmptyList(rest) {
+		if isUnboundedReal(o) {
+			ob := numberToBigFloat(o)
+			if ob.Sign() > 0 {
+				mc.SetValue(values.NewBigFloat(values.BigLog(ob, values.DefaultBigFloatPrecision)))
+				return nil
+			}
+		}
+		z, err := helpers.ToComplex128(o)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "log: %v", err)
+		}
+		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
+		return nil
+	}
+
+	baseVal, restAfter, err := helpers.Uncons(rest, "log", "base argument")
+	if err != nil {
+		return err
+	}
+	if !values.IsEmptyList(restAfter) {
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "log: expected 1 or 2 arguments")
+	}
+	// log base b: big path when the argument is unbounded-positive-real and the
+	// base is positive-real (a bounded base is converted exactly).
+	if isUnboundedReal(o) {
+		ob := numberToBigFloat(o)
+		bb := numberToBigFloat(baseVal)
+		if ob.Sign() > 0 && bb != nil && bb.Sign() > 0 {
+			q := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Quo(
+				values.BigLog(ob, values.DefaultBigFloatPrecision),
+				values.BigLog(bb, values.DefaultBigFloatPrecision))
+			mc.SetValue(values.NewBigFloat(q))
+			return nil
+		}
+	}
+	base, err := helpers.ToComplex128(baseVal)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "log: %v", err)
+	}
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "log: %v", err)
 	}
-	if values.IsEmptyList(rest) {
-		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
-	} else {
-		baseVal, restAfter, err := helpers.Uncons(rest, "log", "base argument")
-		if err != nil {
-			return err
-		}
-		if !values.IsEmptyList(restAfter) {
-			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "log: expected 1 or 2 arguments")
-		}
-		base, err := helpers.ToComplex128(baseVal)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "log: %v", err)
-		}
-		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
-	}
+	mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
 	return nil
 }
 

@@ -14,6 +14,9 @@ const piReference = "3.141592653589793238462643383279502884197169399375105820974
 // ln2Reference is ln(2) to 80 significant digits.
 const ln2Reference = "0.69314718055994530941723212145817656807550013436025525412068000949339362196969471"
 
+// eReference is Euler's number to 80 significant digits.
+const eReference = "2.7182818284590452353602874713526624977572470936999595749669676277240766303535476"
+
 func bigRef(t *testing.T, s string) *big.Float {
 	t.Helper()
 	f, _, err := big.ParseFloat(s, 10, 300, big.ToNearestEven)
@@ -141,6 +144,126 @@ func TestBigLog_AgreesWithMathLog(t *testing.T) {
 		if math.Abs(got-want) > 1e-13*math.Max(1, math.Abs(want)) {
 			t.Errorf("BigLog(%v) f64=%v, math.Log=%v", x, got, want)
 		}
+	}
+}
+
+func TestBigExp_MatchesReference(t *testing.T) {
+	ref := bigRef(t, eReference)
+	got := BigExp(big.NewFloat(1), DefaultBigFloatPrecision)
+	if !closeWithin(got, ref, -240) {
+		t.Fatalf("BigExp(1) = %s\n differs from e beyond 2^-240", got.Text('g', 85))
+	}
+}
+
+func TestBigExp_AgreesWithMathExp(t *testing.T) {
+	for _, x := range []float64{-10, -3.5, -1, -0.25, 0, 0.5, 1, 2.5, 7, 20} {
+		got := f64(BigExp(big.NewFloat(x), DefaultBigFloatPrecision))
+		want := math.Exp(x)
+		if math.Abs(got-want) > 1e-12*math.Max(1, want) {
+			t.Errorf("BigExp(%v) f64=%v, math.Exp=%v", x, got, want)
+		}
+	}
+}
+
+func TestBigExp_NoOverflow(t *testing.T) {
+	// math.Exp(1000) = +Inf (float64 overflows past ~709). BigExp stays finite; the
+	// round trip BigLog(BigExp(1000)) = 1000 pins both finiteness and magnitude.
+	e1000 := BigExp(big.NewFloat(1000), DefaultBigFloatPrecision)
+	if e1000.IsInf() {
+		t.Fatalf("BigExp(1000) overflowed to Inf")
+	}
+	back := f64(BigLog(e1000, DefaultBigFloatPrecision))
+	if math.Abs(back-1000) > 1e-60 {
+		t.Fatalf("BigLog(BigExp(1000)) = %v, want 1000", back)
+	}
+}
+
+func TestBigSinCos_KnownValues(t *testing.T) {
+	prec := uint(DefaultBigFloatPrecision)
+	pi := BigPi(prec)
+	sixth := new(big.Float).Quo(pi, big.NewFloat(6))
+	third := new(big.Float).Quo(pi, big.NewFloat(3))
+	half := big.NewFloat(0.5)
+	if !closeWithin(BigSin(sixth, prec), half, -240) {
+		t.Errorf("sin(π/6) != 1/2: %s", BigSin(sixth, prec).Text('g', 50))
+	}
+	if !closeWithin(BigCos(third, prec), half, -240) {
+		t.Errorf("cos(π/3) != 1/2: %s", BigCos(third, prec).Text('g', 50))
+	}
+	if BigSin(big.NewFloat(0), prec).Sign() != 0 {
+		t.Errorf("sin(0) != 0")
+	}
+	if !closeWithin(BigCos(big.NewFloat(0), prec), big.NewFloat(1), -240) {
+		t.Errorf("cos(0) != 1")
+	}
+}
+
+func TestBigSinCos_AgreesWithMath(t *testing.T) {
+	// Includes 1e15: math.Sin/Cos are Payne–Hanek-correct there, so agreement
+	// validates the big mod-2π reduction against the gold standard.
+	for _, x := range []float64{-10, -3.1, -1, -0.5, 0, 0.5, 1, 2, 3, 6.28, 100, 1000, 1e15} {
+		gs := f64(BigSin(big.NewFloat(x), DefaultBigFloatPrecision))
+		gc := f64(BigCos(big.NewFloat(x), DefaultBigFloatPrecision))
+		if math.Abs(gs-math.Sin(x)) > 1e-12 {
+			t.Errorf("BigSin(%v) f64=%v, math.Sin=%v", x, gs, math.Sin(x))
+		}
+		if math.Abs(gc-math.Cos(x)) > 1e-12 {
+			t.Errorf("BigCos(%v) f64=%v, math.Cos=%v", x, gc, math.Cos(x))
+		}
+	}
+}
+
+func TestBigTan_AgreesWithMath(t *testing.T) {
+	for _, x := range []float64{-1.3, -0.5, 0, 0.5, 1, 1.3} {
+		got := f64(BigTan(big.NewFloat(x), DefaultBigFloatPrecision))
+		if math.Abs(got-math.Tan(x)) > 1e-12 {
+			t.Errorf("BigTan(%v) f64=%v, math.Tan=%v", x, got, math.Tan(x))
+		}
+	}
+}
+
+func TestBigAsinAcos_KnownValues(t *testing.T) {
+	prec := uint(DefaultBigFloatPrecision)
+	pi := BigPi(prec)
+	halfPi := new(big.Float).Quo(pi, big.NewFloat(2))
+	sixth := new(big.Float).Quo(pi, big.NewFloat(6))
+	third := new(big.Float).Quo(pi, big.NewFloat(3))
+	// asin(1/2) = π/6 ; asin(1) = π/2 ; acos(1/2) = π/3 ; acos(1) = 0
+	if !closeWithin(BigAsin(big.NewFloat(0.5), prec), sixth, -240) {
+		t.Errorf("asin(1/2) != π/6")
+	}
+	if !closeWithin(BigAsin(big.NewFloat(1), prec), halfPi, -240) {
+		t.Errorf("asin(1) != π/2")
+	}
+	if !closeWithin(BigAcos(big.NewFloat(0.5), prec), third, -240) {
+		t.Errorf("acos(1/2) != π/3")
+	}
+	if BigAcos(big.NewFloat(1), prec).Sign() != 0 {
+		t.Errorf("acos(1) != 0")
+	}
+}
+
+func TestBigAsinAcos_AgreesWithMath(t *testing.T) {
+	for _, x := range []float64{-1, -0.9, -0.5, 0, 0.3, 0.5, 0.99, 1} {
+		as := f64(BigAsin(big.NewFloat(x), DefaultBigFloatPrecision))
+		ac := f64(BigAcos(big.NewFloat(x), DefaultBigFloatPrecision))
+		if math.Abs(as-math.Asin(x)) > 1e-13 {
+			t.Errorf("BigAsin(%v)=%v math.Asin=%v", x, as, math.Asin(x))
+		}
+		if math.Abs(ac-math.Acos(x)) > 1e-13 {
+			t.Errorf("BigAcos(%v)=%v math.Acos=%v", x, ac, math.Acos(x))
+		}
+	}
+}
+
+func TestBigAsinAcos_DeclineOutOfDomain(t *testing.T) {
+	// |x| > 1 is the complex domain; the kernels decline (nil) so the primitive
+	// falls back to the complex path.
+	if BigAsin(big.NewFloat(2), DefaultBigFloatPrecision) != nil {
+		t.Errorf("BigAsin(2) should decline (nil)")
+	}
+	if BigAcos(big.NewFloat(-1.5), DefaultBigFloatPrecision) != nil {
+		t.Errorf("BigAcos(-1.5) should decline (nil)")
 	}
 }
 
