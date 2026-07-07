@@ -29,10 +29,75 @@ import (
 // to complex128, applies fn, and returns the result (as Float when imaginary
 // part is zero, otherwise Complex). Used for the six unary transcendental
 // functions that share identical structure.
+// bigComplexFn is a big-precision complex kernel returning (real, imag) parts.
+type bigComplexFn func(re, im *big.Float, prec uint) (*big.Float, *big.Float)
+
+// cmplxNonFinite reports whether a complex128 has a non-finite component.
+func cmplxNonFinite(c complex128) bool {
+	return math.IsInf(real(c), 0) || math.IsInf(imag(c), 0) ||
+		math.IsNaN(real(c)) || math.IsNaN(imag(c))
+}
+
+// complexComponents extracts a numeric operand's real/imaginary parts as
+// *big.Float. Real numbers yield (value, 0). Returns ok=false for non-numeric or
+// non-finite operands (so genuine infinities are not "rescued").
+func complexComponents(v values.Value) (re, im *big.Float, ok bool) {
+	switch c := v.(type) {
+	case *values.BigComplex:
+		re = new(big.Float).Set(c.RealAsBigFloat().BigFloatValue())
+		im = new(big.Float).Set(c.ImagAsBigFloat().BigFloatValue())
+	case *values.Complex:
+		cr, ci := real(c.Value), imag(c.Value)
+		if math.IsNaN(cr) || math.IsNaN(ci) || math.IsInf(cr, 0) || math.IsInf(ci, 0) {
+			return nil, nil, false
+		}
+		re = big.NewFloat(cr)
+		im = big.NewFloat(ci)
+	default:
+		r := numberToBigFloat(v)
+		if r == nil {
+			return nil, nil, false
+		}
+		re = r
+		im = new(big.Float)
+	}
+	if re.IsInf() || im.IsInf() {
+		return nil, nil, false
+	}
+	return re, im, true
+}
+
+// rescueBigComplex recomputes bigFn at big precision when the float64 result is
+// non-finite on a finite operand (overflow-gating). It sets the machine value and
+// returns true on rescue; otherwise returns false. The result simplifies to a
+// *BigFloat when the imaginary part is zero.
+func rescueBigComplex(mc machine.CallContext, arg values.Value, result complex128, bigFn bigComplexFn) bool {
+	if bigFn == nil || !cmplxNonFinite(result) {
+		return false
+	}
+	re, im, ok := complexComponents(arg)
+	if !ok {
+		return false
+	}
+	ro, io := bigFn(re, im, values.DefaultBigFloatPrecision)
+	if ro.IsInf() || io.IsInf() {
+		// Genuinely infinite (e.g. log(0) = −∞), not a float64 overflow of a finite
+		// value — keep the float64 result rather than reboxing an infinity.
+		return false
+	}
+	if io.Sign() == 0 {
+		mc.SetValue(values.NewBigFloat(ro))
+	} else {
+		mc.SetValue(values.NewBigComplexFromBigFloats(values.NewBigFloat(ro), values.NewBigFloat(io)))
+	}
+	return true
+}
+
 // makeComplexPrimitive builds a unary transcendental. An unbounded-tier real
-// operand (BigFloat/BigInteger/Rational) takes bigRealFn at big precision when
-// one is supplied; everything else truncates to complex128 and applies fn.
-func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn func(*big.Float, uint) *big.Float) machine.ForeignFunction {
+// operand (BigFloat/BigInteger/Rational) takes bigRealFn at big precision when one
+// is supplied; a complex operand whose float64 result over/underflows takes
+// bigCplxFn (overflow-gating); everything else truncates to complex128 and applies fn.
+func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn func(*big.Float, uint) *big.Float, bigCplxFn bigComplexFn) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
 		arg := mc.Arg(0)
 		if bigRealFn != nil && isUnboundedReal(arg) {
@@ -47,20 +112,23 @@ func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "%s: %v", name, err)
 		}
-		mc.SetValue(helpers.ComplexOrFloat(fn(z)))
+		result := fn(z)
+		if rescueBigComplex(mc, arg, result, bigCplxFn) {
+			return nil
+		}
+		mc.SetValue(helpers.ComplexOrFloat(result))
 		return nil
 	}
 }
 
 // Unary transcendental primitives (R7RS §6.2.6). Big-real kernels are wired in as
-// they land: exp (below, custom for overflow rescue); sin/cos/tan/asin/acos pass
-// nil until their kernels exist.
+// they land. exp is custom (below) for the bounded-real overflow rescue.
 var (
-	PrimSin  = makeComplexPrimitive("sin", cmplx.Sin, values.BigSin)
-	PrimCos  = makeComplexPrimitive("cos", cmplx.Cos, values.BigCos)
-	PrimTan  = makeComplexPrimitive("tan", cmplx.Tan, values.BigTan)
-	PrimAsin = makeComplexPrimitive("asin", cmplx.Asin, values.BigAsin)
-	PrimAcos = makeComplexPrimitive("acos", cmplx.Acos, values.BigAcos)
+	PrimSin  = makeComplexPrimitive("sin", cmplx.Sin, values.BigSin, values.BigComplexSin)
+	PrimCos  = makeComplexPrimitive("cos", cmplx.Cos, values.BigCos, values.BigComplexCos)
+	PrimTan  = makeComplexPrimitive("tan", cmplx.Tan, values.BigTan, values.BigComplexTan)
+	PrimAsin = makeComplexPrimitive("asin", cmplx.Asin, values.BigAsin, values.BigComplexAsin)
+	PrimAcos = makeComplexPrimitive("acos", cmplx.Acos, values.BigAcos, values.BigComplexAcos)
 )
 
 // PrimExp implements (exp z). Unlike the other unary transcendentals, exp
@@ -86,7 +154,11 @@ func PrimExp(mc machine.CallContext) error {
 			return nil
 		}
 	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Exp(z)))
+	result := cmplx.Exp(z)
+	if rescueBigComplex(mc, arg, result, values.BigComplexExp) {
+		return nil
+	}
+	mc.SetValue(helpers.ComplexOrFloat(result))
 	return nil
 }
 
@@ -110,7 +182,11 @@ func PrimLog(mc machine.CallContext) error {
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "log: %v", err)
 		}
-		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
+		result := cmplx.Log(z)
+		if rescueBigComplex(mc, o, result, values.BigComplexLog) {
+			return nil
+		}
+		mc.SetValue(helpers.ComplexOrFloat(result))
 		return nil
 	}
 
@@ -247,6 +323,9 @@ func numberToBigFloat(v values.Value) *big.Float {
 	case *values.Integer:
 		return new(big.Float).SetPrec(prec).SetInt64(n.Value)
 	case *values.Float:
+		if math.IsNaN(n.Value) || math.IsInf(n.Value, 0) {
+			return nil // math/big has no NaN; ±Inf is not a value the big paths handle
+		}
 		return new(big.Float).SetPrec(prec).SetFloat64(n.Value)
 	case *values.Rational:
 		return new(big.Float).SetPrec(prec).SetRat(n.Rat())

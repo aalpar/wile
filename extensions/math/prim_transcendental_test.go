@@ -48,6 +48,13 @@ func TestTranscendental(t *testing.T) {
 		// log(10^400) = 400·ln(10) ≈ 921.034.
 		{"log beyond float64 range", `(< (abs (- (log (expt 10 400)) 921.0340371976184)) 1e-6)`, values.TrueValue},
 
+		// Complex overflow rescue: cmplx.* returns +Inf/NaN on these; the big-complex
+		// kernels stay finite (exp: re-part overflow; sin: imag/cosh overflow; log:
+		// component beyond float64 range).
+		{"exp complex real overflow finite", `(finite? (real-part (exp (make-rectangular 1000 1))))`, values.TrueValue},
+		{"sin complex imag overflow finite", `(finite? (imag-part (sin (make-rectangular 1 1000))))`, values.TrueValue},
+		{"log complex beyond float64", `(< (abs (- (real-part (log (make-rectangular (expt 10 400) 1))) 921.0340371976184)) 1e-3)`, values.TrueValue},
+
 		// Big-precision constants pi and euler (256-bit bindings).
 		{"pi value", `(< (abs (- pi 3.141592653589793)) 1e-10)`, values.TrueValue},
 		// Agreement with an independent big-π (6·asin(1/2)) beyond float64 proves big precision.
