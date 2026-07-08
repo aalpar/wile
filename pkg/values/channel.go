@@ -203,7 +203,6 @@ func (p *Channel) SchemeString() string {
 	return fmt.Sprintf("#<channel:buffered[%d] id=%d %s len=%d>", p.bufferSize, p.id, status, len(p.ch))
 }
 
-// SelectCase represents a case in a channel select operation
 // SelectCaseKind distinguishes the three valid select case types.
 type SelectCaseKind int
 
@@ -213,6 +212,7 @@ const (
 	SelectDefault
 )
 
+// SelectCase represents a case in a channel select operation.
 type SelectCase struct {
 	Channel *Channel
 	Value   Value // for send operations

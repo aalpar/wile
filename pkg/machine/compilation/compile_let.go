@@ -30,12 +30,6 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// CompileValidatedLet compiles all binding forms based on Kind.
-//
-// let:     <inits> Push... | OpPushEnv | StoreLocal(reverse) | body | OpPopEnv
-// let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
-// letrec:  OpPushEnv | <inits> Push... | StoreLocal(reverse) | body | OpPopEnv
-// letrec*: OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
 // compileLetrecBindingInit compiles the i-th binding's init for a letrec/letrec*
 // (and the desugared named-let). When the init is a lambda eligible for in-place
 // self-tail reuse — its body is self-tail-reusable on the binding name and the
@@ -58,6 +52,12 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 	return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
 }
 
+// CompileValidatedLet compiles all binding forms based on Kind.
+//
+// let:     <inits> Push... | OpPushEnv | StoreLocal(reverse) | body | OpPopEnv
+// let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
+// letrec:  OpPushEnv | <inits> Push... | StoreLocal(reverse) | body | OpPopEnv
+// letrec*: OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
 func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedLet)
 	n := len(v.Bindings)

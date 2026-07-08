@@ -285,15 +285,6 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 	}
 }
 
-// PrimEnvironment implements the (environment) primitive.
-// Constructs a new environment from import specifiers.
-//
-// Supports Racket-style phased imports:
-//   - (environment '(scheme base))                    ; Phase 0 (runtime)
-//   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
-//   - (environment '(for-template (scheme base)))     ; Phase -1
-//   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
-//
 // tryWileProfile checks whether argsVal is a single-element list whose only
 // element is (wile <name>). If so, it dispatches to bootstrap to construct a
 // fresh namespace for that profile. Returns (ns, true, nil) on match,
@@ -348,6 +339,14 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 	return ns, true, nil
 }
 
+// PrimEnvironment implements the (environment) primitive.
+// Constructs a new environment from import specifiers.
+//
+// Supports Racket-style phased imports:
+//   - (environment '(scheme base))                    ; Phase 0 (runtime)
+//   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
+//   - (environment '(for-template (scheme base)))     ; Phase -1
+//   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
 func PrimEnvironment(mc machine.CallContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)

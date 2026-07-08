@@ -20,19 +20,6 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// RegisterPrimitiveExpanders binds all primitive expanders in the expand-time
-// environment (env.Expand()). These are looked up by ExpandPrimitiveForm()
-// when the expander encounters a special form.
-//
-// Each primitive has different expansion behavior:
-//   - quote, define-syntax, define-library, quasiquote: return unchanged (no expansion)
-//   - if: expand test, consequent, alternative separately
-//   - begin: expand all subexpressions
-//   - set!: expand only the value expression
-//   - define: expand value if simple define
-//   - lambda, case-lambda: expand body expressions
-//   - syntax-case, cond-expand: return unchanged (compile-time forms)
-//
 // primitiveExpanderEntries is the single source of truth for all primitive
 // expander registrations. Parallels syntaxCompilerEntries in
 // syntax_compilers_registry.go.
@@ -88,6 +75,18 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"import", (*ExpanderTimeContinuation).expandImportForm},
 }
 
+// RegisterPrimitiveExpanders binds all primitive expanders in the expand-time
+// environment (env.Expand()). These are looked up by ExpandPrimitiveForm()
+// when the expander encounters a special form.
+//
+// Each primitive has different expansion behavior:
+//   - quote, define-syntax, define-library, quasiquote: return unchanged (no expansion)
+//   - if: expand test, consequent, alternative separately
+//   - begin: expand all subexpressions
+//   - set!: expand only the value expression
+//   - define: expand value if simple define
+//   - lambda, case-lambda: expand body expressions
+//   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	return RegisterPhaseBindings(env, env.Expand, primitiveExpanderEntries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {

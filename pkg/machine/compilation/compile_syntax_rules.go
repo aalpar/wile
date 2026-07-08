@@ -294,22 +294,19 @@ func compileClauseWithEllipsisAndLiterals(
 	}, nil
 }
 
-// collectFreeIdentifiers walks the template and collects all identifiers that
-// are NOT pattern variables. These "free identifiers" refer to bindings outside
-// the macro and should NOT get the intro scope during expansion.
-// Uses the default ellipsis identifier ("...").
+// collectFreeIdentifiersWithEllipsis walks the template and collects all
+// identifiers that are NOT pattern variables, using a custom ellipsis
+// identifier. These "free identifiers" refer to bindings outside the macro and
+// should NOT get the intro scope during expansion.
 //
 // This is critical for recursive macros: the macro's own name (e.g., "and" in
 // (and test2 ...)) must resolve to the macro's binding, not get an intro scope
 // that would break the lookup.
 //
-// The env parameter is used to resolve free identifiers to their definition-time
-// bindings:
-// collectFreeIdentifiersWithEllipsis walks the template and collects all identifiers that
-// are NOT pattern variables, using a custom ellipsis identifier.
-// Resolves each free identifier to either:
-// - LocalScopes (for local bindings) - enables hygiene for let-syntax capturing local vars
-// - GlobalIndex (for global bindings) - enables cross-library macro hygiene
+// The env parameter resolves each free identifier to its definition-time
+// binding, either:
+//   - LocalScopes (for local bindings) - enables hygiene for let-syntax capturing local vars
+//   - GlobalIndex (for global bindings) - enables cross-library macro hygiene
 func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:

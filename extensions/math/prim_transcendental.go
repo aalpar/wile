@@ -25,10 +25,6 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// makeComplexPrimitive returns a ForeignFunction that converts its argument
-// to complex128, applies fn, and returns the result (as Float when imaginary
-// part is zero, otherwise Complex). Used for the six unary transcendental
-// functions that share identical structure.
 // bigComplexFn is a big-precision complex kernel returning (real, imag) parts.
 type bigComplexFn func(re, im *big.Float, prec uint) (*big.Float, *big.Float)
 
