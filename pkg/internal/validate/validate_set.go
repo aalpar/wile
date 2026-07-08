@@ -41,22 +41,24 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 		return nil
 	}
 
-	// Resolve the target binding for mutability tracking.
-	// Uses BindingID (frame + slot) for stable identity — *Binding pointers
-	// into []Binding become stale when append reallocates the backing array.
-	// Opportunistic: if resolution fails, the compiler catches the error.
+	// Precise: when this set! targets a resolved local slot, record it by its
+	// LocalRef (read by markMutableBindings to flag mutable let bindings). A
+	// non-local target is left to the conservative by-name mark below, so the
+	// global arm is not double-recorded here.
 	if env != nil {
-		bid, ok := env.ResolveBindingID(name.Sym, name.Scopes())
-		if ok {
-			result.markMutated(bid)
+		ref := env.ResolveBindingRef(name.Sym, name.Scopes())
+		if ref.IsLocal() {
+			result.markMutated(ref)
 		}
 	}
 
-	// Also record the set! target by symbol Key. Unlike the BindingID path
-	// above, this is unconditional and binding-creation-independent, so a
-	// top-level set! inside a (begin ...) unit is captured even though the
-	// global binding does not yet exist at validation time. Powers StableInUnit.
-	result.markMutatedKey(name.Key())
+	// Conservative: also mark the bare name unconditionally (even with no env,
+	// and even when the target above resolved to a local shadow), so a
+	// top-level set! inside a (begin ...) unit — whose global binding does not
+	// yet exist at validation time — still marks that name non-stable. This
+	// over-approximation is what keeps the frame-reclaim Stable stamp sound.
+	// Powers StableInUnit (see finalizeStability).
+	result.markMutated(environment.GlobalRef(name.Key()))
 
 	return &ValidatedSetBang{
 		validatedBase: validatedBase{formName: "set!", source: source},
