@@ -355,6 +355,35 @@ func TestMetaHandleUnknown(t *testing.T) {
 		qt.Commentf("output was: %q", buf.String()))
 }
 
+// TestMetaHandleSessionCommandsRouted guards against drift between Handle's
+// dispatch switch (meta.go) and the metaCommands metadata table that drives
+// ,help and autocomplete. The two independently list the same session command
+// names and aliases; nothing else keeps them in sync. Every session command
+// declared in metaCommands must be routed by the switch — i.e. must never fall
+// through to "Unknown command". A table entry with no matching switch case (or a
+// renamed/removed case) would otherwise surface as a documented, autocompleted
+// command that the REPL claims not to know; this test fails the moment that
+// happens.
+func TestMetaHandleSessionCommandsRouted(t *testing.T) {
+	eng := newTestEngine(t)
+	for _, cmd := range metaCommands {
+		if cmd.category != "session" {
+			continue
+		}
+		tokens := append([]string{cmd.name}, cmd.aliases...)
+		for _, tok := range tokens {
+			t.Run(tok, func(t *testing.T) {
+				h := NewMetaCommandHandler(eng)
+				var buf bytes.Buffer
+				handled := h.Handle(context.Background(), ","+tok, &buf)
+				qt.Assert(t, handled, qt.IsTrue)
+				qt.Assert(t, strings.Contains(buf.String(), "Unknown command"), qt.IsFalse,
+					qt.Commentf("session command %q from the metaCommands table routed to Unknown; the Handle switch and metaCommands have drifted (output: %q)", tok, buf.String()))
+			})
+		}
+	}
+}
+
 func TestCmdDoc_ExamplesFiltering(t *testing.T) {
 	eng := newTestEngine(t)
 	docProv := NewRegistryDocProvider(eng.Registry(), nil)
