@@ -187,7 +187,7 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	return p
 }
 
-// Len returns the length of the list.
+// Length returns the length of the list.
 func (p *SyntaxPair) Length() int {
 	q := 0
 	r, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, i int, _ bool, _ SyntaxValue) error {

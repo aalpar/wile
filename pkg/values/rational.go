@@ -111,8 +111,6 @@ func (p *Rational) IsInteger() bool {
 	return p.value.IsInt()
 }
 
-// Add returns the sum of two numbers.
-//
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *Rational) Kind() NumericKind {
 	return KindRational
@@ -204,9 +202,10 @@ func init() {
 	})
 }
 
+// Add returns the sum of this Rational and another number.
+//
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
-// Inexactness is contagious per R7RS §6.2.2.
 func (p *Rational) Add(o Number) Number {
 	v, ok := o.(*Rational)
 	if ok {

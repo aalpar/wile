@@ -159,15 +159,15 @@ func (p *BigFloat) Kind() NumericKind {
 // is mathematically lossless.
 func bigFloatSimplifyDown(n Number) Number {
 	v := n.(*BigFloat)
-	if v.value.IsInt() {
-		bi, _ := v.value.Int(nil)
-		bigInt := &BigInteger{value: bi}
-		if bigInt.value.IsInt64() {
-			return NewInteger(bigInt.value.Int64())
-		}
-		return bigInt
+	if !v.value.IsInt() {
+		return n
 	}
-	return n
+	bi, _ := v.value.Int(nil)
+	bigInt := &BigInteger{value: bi}
+	if bigInt.value.IsInt64() {
+		return NewInteger(bigInt.value.Int64())
+	}
+	return bigInt
 }
 
 // bigFloatToFloat64WithAccuracy converts a BigFloat to float64 with loss-signal.
@@ -222,9 +222,10 @@ func init() {
 	})
 }
 
+// Add returns the sum of this BigFloat and another number.
+//
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
-// Inexactness is contagious per R7RS §6.2.2.
 func (p *BigFloat) Add(o Number) Number {
 	v, ok := o.(*BigFloat)
 	if ok {

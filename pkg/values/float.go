@@ -61,8 +61,6 @@ func (p *Float) bigFloat() *big.Float {
 	return new(big.Float).SetFloat64(p.Value)
 }
 
-// Add returns the sum of two numbers.
-//
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *Float) Kind() NumericKind {
 	return KindFloat
@@ -130,6 +128,8 @@ func init() {
 	})
 }
 
+// Add returns the sum of this Float and another number.
+//
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
 func (p *Float) Add(o Number) Number {

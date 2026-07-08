@@ -128,6 +128,8 @@ func (*OperationReleaseEnvFrame) OpKind() OpCode {
 	return OpReleaseEnvFrame
 }
 
+// OpKind returns OpMakeClosure.
+//
 // OperationMakeClosure is the only Op type that both has a dedicated
 // opcode (OpMakeClosure) and implements Apply. The Apply method is
 // vestigial in production -- the compiler emits OpMakeClosure directly,

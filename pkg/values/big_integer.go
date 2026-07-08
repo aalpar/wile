@@ -114,8 +114,6 @@ func (p *BigInteger) float64Val() float64 {
 	return float64FromBigInt(p.value)
 }
 
-// Add returns the sum of this BigInteger and another number.
-//
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *BigInteger) Kind() NumericKind {
 	return KindBigInteger
@@ -185,10 +183,11 @@ func init() {
 	})
 }
 
+// Add returns the sum of this BigInteger and another number.
+//
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact (BigInteger),
 // exact + inexact = inexact (Float/Complex).
-// Inexactness is contagious per R7RS §6.2.2.
 func (p *BigInteger) Add(o Number) Number {
 	v, ok := o.(*BigInteger)
 	if ok {

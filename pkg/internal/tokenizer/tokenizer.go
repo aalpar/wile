@@ -249,10 +249,9 @@ type Tokenizer struct {
 	hashDigit  bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
 }
 
-// integerStateForRadix returns the appropriate integer token state based on the
-// current radix and whether the number is signed.
-// radix 0 means "default decimal" (plain numbers), radix 10 means "explicit #d prefix".
-// Returns all tokens and any error (typically io.EOF on success).
+// Tokenize returns all tokens read from s, and the terminating error
+// (typically io.EOF on success). The ci flag enables case-insensitive
+// tokenization.
 func Tokenize(s string, ci bool) ([]Token, error) {
 	q := make([]Token, 0)
 	tkns := NewTokenizer(strings.NewReader(s), ci)

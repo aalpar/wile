@@ -21,6 +21,9 @@ import (
 	"strings"
 )
 
+// integerStateForRadix returns the appropriate integer token state based on the
+// current radix and whether the number is signed.
+// radix 0 means "default decimal" (plain numbers), radix 10 means "explicit #d prefix".
 func (p *Tokenizer) integerStateForRadix(signed bool) TokenizerState {
 	switch p.radix {
 	case 2:

@@ -259,9 +259,10 @@ func init() {
 	})
 }
 
+// Add returns the sum of this BigComplex and another number.
+//
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
-// Inexactness is contagious per R7RS §6.2.2.
 func (p *BigComplex) Add(o Number) Number {
 	return bigComplexAdd[o.Kind()](p, o)
 }

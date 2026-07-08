@@ -160,9 +160,6 @@ func negateInt64(v int64) Number {
 	return NewInteger(-v)
 }
 
-// Add returns the sum of this integer and another number.
-//
-// R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *Integer) Kind() NumericKind {
 	return KindInteger
@@ -260,6 +257,9 @@ func init() {
 	})
 }
 
+// Add returns the sum of this Integer and another number.
+//
+// R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
 // When adding Integer + BigInteger, result is BigInteger (exact).
 // When adding Integer + Float/Complex, result is Float/Complex (inexact).

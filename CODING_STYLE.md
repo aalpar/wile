@@ -8,71 +8,118 @@ Always use sentinel error wrapping patterns (not `fmt.Errorf`) per project conve
 
 Never write single-line functions. Always spread function bodies across multiple lines, even for simple implementations.
 
-### Early Exit From Functions When Possible
+### Early Exit From Conditionals (Keep Indentation Shallow)
 
-**A: Classic Nested If (Less Idiomatic)**
+**Invert the guard, exit early, and un-indent the primary path.** When an
+`if`/`else` splits into an exceptional (or trivial) branch and a main branch,
+handle the exceptional branch first with an early `return` — or `continue` /
+`break` inside a loop — drop the `else`, and let the main logic continue at the
+outer indentation level. Indentation should track genuine logical depth, not the
+number of conditions checked along the way.
+
+The same move applies in three places:
+
+1. **Function entry** — guard clauses for preconditions, known failure modes of
+   later calls, and trivial/edge cases.
+2. **Loop bodies** — `continue` past the cases to skip instead of wrapping the
+   body in an `if`.
+3. **Any `if cond { long } else { short-exit }`** — invert to
+   `if !cond { short-exit }`, then write the long body flat.
+
+**A: Nested `if`/`else` (avoid)** — the happy path is buried, and every check
+adds a level of indentation:
+
 ```go
-func processDataNested(value int, settings map[string]bool) error {
+func processData(value int, settings map[string]bool) error {
 	if value > 0 {
 		if settings != nil {
 			if settings["enabled"] {
-				// The actual "happy path" logic is buried here
-				fmt.Printf("Processing value: %d\n", value)
+				fmt.Printf("processing value: %d\n", value)
 				return nil
 			} else {
-				return fmt.Errorf("settings not enabled")
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "processData: settings not enabled")
 			}
 		} else {
-			return fmt.Errorf("settings is nil")
+			return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "processData: settings is nil")
 		}
 	} else {
-		return fmt.Errorf("value must be positive")
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "processData: value must be positive")
 	}
 }
 ```
 
-**B: Early Return (Idiomatic Go)**
-- General structure:
-    -- Check preconditions necessary to eliminate runtime errors, and known failure modes of subsequent function calls.
-    -- Attempt to avoid computation in the body by dealing with edge-cases and know trivial cases first.
-```go
-func mult( a, b int) {
-    if a == 0 || b == 0 {
-        return 0
-    }
-    return a * b
-}
-```
-
-- This approach uses "guard clauses" at the beginning of the function to handle error conditions immediately and return, which keeps the main logic (the "happy path") flat and easy to read. The Go standard library commonly uses this pattern, especially for error handling.
+**B: Guard clauses, early exit (prefer)** — each failure returns immediately, so
+the main logic stays flat and reads top to bottom. Check preconditions and known
+failure modes of later calls first; dispose of trivial and edge cases before any
+real computation:
 
 ```go
-import "fmt"
-
-func processDataEarlyReturn(value int, settings map[string]bool) error {
+func processData(value int, settings map[string]bool) error {
 	if value <= 0 {
-		return fmt.Errorf("value must be positive") // Early exit for invalid input
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "processData: value must be positive")
 	}
-
 	if settings == nil {
-		return fmt.Errorf("settings is nil") // Early exit for missing dependency
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "processData: settings is nil")
 	}
-
 	if !settings["enabled"] {
-		return fmt.Errorf("settings not enabled") // Early exit for a specific condition
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "processData: settings not enabled")
 	}
 
-	// The actual "happy path" logic starts here, clear of indentation
-	fmt.Printf("Processing value: %d\n", value)
+	// happy path, clear of indentation
+	fmt.Printf("processing value: %d\n", value)
 	return nil
 }
 ```
 
-#### Key Advantages of Early Return (B)
-- **Readability**: The code reads more linearly, making the primary execution flow (the "happy path") much clearer.
-- **Reduced Nesting**: It avoids the "arrow code" or "deep nesting" problem associated with multiple if/else blocks.
-- **Maintainability**: It is easier to add or modify a validation check without affecting the indentation or structure of the main logic.
-- **Idiomatic Go**: This style is explicitly mentioned and encouraged in the official [Effective Go](https://go.dev/doc/effective_go) documentation.
+Trivial cases exit first, before the real work:
+
+```go
+func mult(a, b int) int {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	return a * b
+}
+```
+
+Inside a loop, `continue` past the cases to skip rather than nesting the body
+under a filter condition:
+
+```go
+// Avoid — body indented under the filter
+for _, e := range entries {
+	if e.Enabled {
+		process(e)
+	}
+}
+
+// Prefer — skip early, body stays flat
+for _, e := range entries {
+	if !e.Enabled {
+		continue
+	}
+	process(e)
+}
+```
+
+#### Advantages
+
+- **Readability**: the primary execution flow (the "happy path") reads linearly.
+- **Reduced nesting**: avoids "arrow code," where indentation grows with each
+  condition checked.
+- **Maintainability**: a validation check can be added or removed without
+  re-indenting the main logic.
+- **Idiomatic Go**: encouraged in the official
+  [Effective Go](https://go.dev/doc/effective_go); the standard library uses this
+  pattern pervasively for error handling.
+
+#### When Not To Invert
+
+Early exit is for *asymmetric* branches — one short/exceptional, one primary.
+When both arms are genuine, comparable alternatives (a true two-way choice), an
+`if`/`else` is honest and inverting it only hides the symmetry. And a function
+that opens with a wall of a dozen guards is a signal to split it, not evidence
+that guard clauses scale without limit.
 
 ## Return Values
 
