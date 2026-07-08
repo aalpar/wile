@@ -465,12 +465,17 @@ sage-snapshot: build
 # These enforce conventions the gocritic/ruleguard DSL cannot express:
 #   - singlelinefunclint: the no-single-line-function rule (a positional rule).
 #   - typeswitchlint: exhaustiveness of //exhaustive-marked values.Value switches.
+#   - nestinglint: shallow-nesting rule (CODING_STYLE.md "Keep Indentation
+#     Shallow"). Gated at -max 6, the current worst depth: a regression guard
+#     that forbids anything DEEPER while the depth>=5 tail is flattened. Ratchet
+#     the number down (5, then 4) as those functions are refactored.
 #   make lint
 .PHONY: lint
 lint:
 	$(GOLANGCI_LINT) -v run ./...
 	$(GO) run ./cmd/singlelinefunclint .
 	$(GO) run ./cmd/typeswitchlint .
+	$(GO) run ./cmd/nestinglint -max 6 .
 
 # Run golangci-lint with --fix to auto-correct fixable issues.
 #   make fix
