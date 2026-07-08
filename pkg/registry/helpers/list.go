@@ -82,7 +82,7 @@ func ListToVector(mc machine.CallContext, name string) error {
 
 // CollectVectors extracts a non-empty list of vectors from a rest argument,
 // validates that each element is a vector, and returns the minimum length.
-// Used by vector-map, vector-for-each, and vector-append.
+// Used by vector-append (prim_vectors.go).
 func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, error) {
 	var vectors []*values.Vector
 	current := rest
@@ -108,39 +108,6 @@ func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, erro
 		}
 	}
 	return vectors, minLen, nil
-}
-
-// CollectStrings extracts zero or more strings from a rest argument,
-// validates that each element is a string, converts them to rune slices, and returns
-// the minimum length of the strings. Callers are responsible for rejecting an empty
-// argument list if a non-empty list is required. Used by string-map and string-for-each.
-func CollectStrings(rest values.Value, name string) ([]*values.String, [][]rune, int, error) {
-	var strs []*values.String
-	current := rest
-	for !values.IsEmptyList(current) {
-		tuple, ok := current.(values.Tuple)
-		if !ok {
-			return nil, nil, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
-		}
-		s, err := RequireType[*values.String](tuple.Car(), werr.ErrNotAString, name)
-		if err != nil {
-			return nil, nil, 0, err
-		}
-		strs = append(strs, s)
-		current = tuple.Cdr()
-	}
-	if len(strs) == 0 {
-		return nil, nil, 0, nil
-	}
-	runeSlices := make([][]rune, len(strs))
-	minLen := -1
-	for i, s := range strs {
-		runeSlices[i] = s.Runes()
-		if minLen < 0 || len(runeSlices[i]) < minLen {
-			minLen = len(runeSlices[i])
-		}
-	}
-	return strs, runeSlices, minLen, nil
 }
 
 // MemberLookup is a helper for list membership primitives (memq, memv).
