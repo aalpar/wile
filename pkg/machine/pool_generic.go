@@ -22,7 +22,7 @@ import (
 	"sync/atomic"
 )
 
-// Pool[T] is a type-safe, observable object pool backed by sync.Pool.
+// Pool is a type-safe, observable object pool backed by sync.Pool.
 // It wraps sync.Pool with atomic counters (acquires, releases, misses)
 // and an enable/disable toggle for debugging or benchmarking.
 type Pool[T any] struct {
@@ -196,7 +196,7 @@ func (p *PoolManager) String() string {
 	return b.String()
 }
 
-// FreeList[T] is a type-safe, observable object pool backed by a mutex-guarded
+// FreeList is a type-safe, observable object pool backed by a mutex-guarded
 // slice instead of sync.Pool. Unlike sync.Pool, the freelist is NOT cleared by
 // the garbage collector, so recycled objects (and any capacity they retain)
 // persist across GC cycles.

@@ -284,7 +284,7 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 	return p.matcher.GetBindings()
 }
 
-// literalScopesMatch checks if an input symbol should match a pattern literal.
+// literalScopesMatchWithChecker checks if an input symbol should match a pattern literal.
 //
 // Per R7RS §4.3.2, a subform in the input matches a literal identifier if and
 // only if it is an identifier and either:
