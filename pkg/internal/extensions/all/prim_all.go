@@ -182,7 +182,7 @@ func PrimRecordModifier(mc machine.CallContext) error {
 	return resolveRecordField(mc, "record-modifier", newRecordModifierClosure)
 }
 
-// Helper: convert a Scheme list to a slice of symbols
+// listToSymbols converts a Scheme list to a slice of symbols.
 func listToSymbols(ctx context.Context, v values.Value) ([]*values.Symbol, error) {
 	var result []*values.Symbol
 	if values.IsEmptyList(v) {

@@ -41,6 +41,7 @@ const (
 	OpInvalid OpCode = iota
 
 	// Wave 1: zero-operand operations
+
 	OpPush
 	OpPop
 	OpPull
@@ -53,6 +54,7 @@ const (
 	OpRestoreContinuation
 
 	// Wave 2: single-operand operations (Arg = offset, index, or depth)
+
 	OpBranchOnFalseValue
 	OpBranch
 	OpSaveContinuation
@@ -64,32 +66,39 @@ const (
 	OpSelfTailCall // Self-recursive tail call: rebind Arg param slots in place, pc=0
 
 	// Wave 3: two-operand operations (Arg = bit-packed slot|depth)
+
 	OpLoadLocal
 	OpStoreLocal
 
 	// Wave 4: fused push operations (Arg = same as unfused Load variant)
+
 	OpPushLiteral // LoadLiteral + Push
 	OpPushGlobal  // LoadGlobal + Push
 	OpPushLocal   // LoadLocal + Push
 
 	// Wave 5: fused call operations (zero-operand)
+
 	OpPullApply // Pull + Apply
 
 	// Wave 5: promoted complex operations (zero-operand)
+
 	OpMakeClosure // MakeClosure (was OpComplex)
 
 	// Wave 6: cached binding operations (Arg = index into cachedBindings)
+
 	OpLoadCachedBinding // Load from compile-time resolved *Binding
 	OpPushCachedBinding // LoadCachedBinding + Push (fused)
 
 	// Wave 7: direct foreign call operations (Arg = index into cachedBindings)
 	// Emitted by peephole only — compiler never produces these.
+
 	OpCallForeignCached     // Non-tail: call ForeignClosure, then mc.pc++
 	OpCallForeignCachedTail // Tail: call ForeignClosure, then returnImmediate()
 
 	// Wave 8: general call fusion (Arg = same encoding as PushLocal/PushCachedBinding)
 	// Fused PushLocal/PushCachedBinding + PullApply for non-foreign callables.
 	// Emitted by peephole only — compiler never produces these.
+
 	OpCallLocal         // Resolve local binding, drain args, ApplyCallable
 	OpCallCachedBinding // Resolve cached binding, drain args, ApplyCallable
 
@@ -97,6 +106,7 @@ const (
 	// Inline the hot primitive logic directly, bypassing arity check, arg
 	// binding, and indirect function call. Emitted by peephole only when
 	// the cached binding holds a known promoted ForeignClosure.
+
 	OpEqQ           // Non-tail inlined eq?
 	OpEqQTail       // Tail inlined eq?
 	OpVectorQ       // Non-tail inlined vector?
@@ -133,6 +143,7 @@ const (
 	OpDivTail       // Tail inlined 2-arg /
 
 	// Fallback: dispatch to sideTable[Arg]
+
 	OpComplex
 
 	// opCount is not a valid opcode; it marks the end of the enum

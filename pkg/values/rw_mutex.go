@@ -23,7 +23,7 @@ import (
 var (
 	_ Value = (*RWMutex)(nil)
 
-	// RWMutex ID counter
+	// rwMutexIDCounter assigns each RWMutex a unique ID.
 	rwMutexIDCounter atomic.Uint64
 )
 

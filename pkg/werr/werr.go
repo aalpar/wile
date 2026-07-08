@@ -100,6 +100,7 @@ var (
 	ErrUnexportedIdentifier         = NewStaticError("identifier not exported")
 
 	// Threading errors
+
 	ErrNotAThread            = NewTypeSentinel("thread")
 	ErrNotAMutex             = NewTypeSentinel("mutex")
 	ErrNotAConditionVariable = NewTypeSentinel("condition variable")
@@ -136,28 +137,34 @@ var (
 	ErrInvariantViolation      = NewStaticError("invariant violation")
 
 	// FFI errors
+
 	ErrFFIRegistration          = NewStaticError("FFI registration error")
 	ErrFFICallbackError         = NewStaticError("FFI callback error")
 	ErrCallbackResultConversion = NewStaticError("callback result conversion failed")
 	ErrHashtableInsertionFailed = NewStaticError("hashtable insertion failed")
 
 	// Engine initialization errors
+
 	ErrEngineInit = NewStaticError("engine initialization error")
 
 	// Pipeline errors (expansion, compilation, runtime phases)
+
 	ErrExpansion   = NewStaticError("expansion error")
 	ErrCompilation = NewStaticError("compilation error")
 
 	// Environment errors (keep as panics but use sentinels)
+
 	ErrMissingNamespace     = NewStaticError("missing Namespace")
 	ErrMissingPhaseRegistry = NewStaticError("missing PhaseRegistry")
 	ErrNilParentEnvironment = NewStaticError("nil parent environment")
 
 	// Panic recovery errors
+
 	ErrThreadPanic   = NewStaticError("thread panic")
 	ErrPanicRecovery = NewStaticError("panic recovery")
 
 	// Syntax errors
+
 	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")
 	ErrNoMatchingClause        = NewStaticError("no matching clause")
 	ErrUnsupportedTransformer  = NewStaticError("unsupported transformer")
@@ -169,6 +176,7 @@ var (
 	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
 	// Recursion depth
+
 	ErrCallDepthExceeded     = NewStaticError("call depth exceeded")
 	ErrParseDepthExceeded    = NewStaticError("parse nesting depth exceeded")
 	ErrExpandDepthExceeded   = NewStaticError("macro expansion nesting depth exceeded")
@@ -176,20 +184,25 @@ var (
 	ErrContinuationUnderflow = NewStaticError("continuation underflow")
 
 	// Escape continuations
+
 	ErrExpiredEscape       = NewStaticError("expired escape procedure")
 	ErrContinuationBarrier = NewStaticError("continuation barrier violation")
 
 	// Utility errors (keep as panic)
+
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 	ErrInvalidLoadPath        = NewStaticError("invalid load path")
 
 	// Channel errors
+
 	ErrChannelClosed = NewStaticError("channel is closed")
 
 	// Process errors
+
 	ErrNotAProcess = NewTypeSentinel("process")
 
 	// Thread errors
+
 	ErrJoinTimeout             = NewStaticError("thread-join!: timeout")
 	ErrThreadAlreadyStarted    = NewStaticError("thread-start!: thread already started")
 	ErrCrossThreadContinuation = NewStaticError("cannot invoke continuation from different thread")

@@ -42,6 +42,7 @@ import (
 //
 // See BIBLIOGRAPHY.md "Numeric Promotion Lattice".
 //
+
 // promotionTable maps (kindA, kindB) → resultKind, the least upper bound (LUB)
 // in the numeric promotion lattice. The table is symmetric:
 // promotionTable[a][b] == promotionTable[b][a] for all a, b.

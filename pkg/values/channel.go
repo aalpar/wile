@@ -26,7 +26,7 @@ import (
 var (
 	_ Value = (*Channel)(nil)
 
-	// Channel ID counter
+	// channelIDCounter assigns each Channel a unique ID.
 	channelIDCounter atomic.Uint64
 )
 

@@ -59,15 +59,27 @@ func makeCharCiComparePrimitive(name string, cmp func(rune, rune) bool) machine.
 //	whitespace: Zs, Zl, Zp + TAB LF VT FF CR NEL (unicode.IsSpace matches)
 //	upper case: Lu                        (unicode.IsUpper)
 //	lower case: Ll                        (unicode.IsLower)
+
+// PrimCharAlphabeticQ R7RS §6.6 char-alphabetic? predicate.
 var PrimCharAlphabeticQ = helpers.MakeCharPredicate("char-alphabetic?", func(r rune) bool {
 	return unicode.IsLetter(r) || unicode.In(r, unicode.Nl)
 })
+
+// PrimCharNumericQ R7RS §6.6 char-numeric? predicate.
 var PrimCharNumericQ = helpers.MakeCharPredicate("char-numeric?", unicode.IsNumber)
+
+// PrimCharWhitespaceQ R7RS §6.6 char-whitespace? predicate.
 var PrimCharWhitespaceQ = helpers.MakeCharPredicate("char-whitespace?", unicode.IsSpace)
+
+// PrimCharUpperCaseQ R7RS §6.6 char-upper-case? predicate.
 var PrimCharUpperCaseQ = helpers.MakeCharPredicate("char-upper-case?", unicode.IsUpper)
+
+// PrimCharLowerCaseQ R7RS §6.6 char-lower-case? predicate.
 var PrimCharLowerCaseQ = helpers.MakeCharPredicate("char-lower-case?", unicode.IsLower)
 
 // Character case transformation — all use MakeCharTransform factory.
+
+// PrimCharUpcase R7RS §6.6 char-upcase transformation.
 var PrimCharUpcase = helpers.MakeCharTransform("char-upcase", unicode.ToUpper)
 var PrimCharDowncase = helpers.MakeCharTransform("char-downcase", unicode.ToLower)
 var PrimCharFoldcase = helpers.MakeCharTransform("char-foldcase", simpleCaseFold)

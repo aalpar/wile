@@ -24,7 +24,7 @@ import (
 var (
 	_ Value = (*ConditionVariable)(nil)
 
-	// Condition variable ID counter
+	// condVarIDCounter assigns each ConditionVariable a unique ID.
 	condVarIDCounter atomic.Uint64
 )
 

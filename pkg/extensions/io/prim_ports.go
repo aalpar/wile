@@ -28,10 +28,14 @@ import (
 // All ports are *values.PortObject after Phase 2; capability checks
 // inspect slot presence via the AsX accessors instead of asserting
 // against narrow Go interfaces.
+
+// PrimPortQ R7RS §6.13.1 port? predicate.
 var PrimPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(values.Port)
 	return ok
 })
+
+// PrimInputPortQ R7RS §6.13.1 input-port? predicate.
 var PrimInputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	p, ok := o.(*values.PortObject)
 	if !ok {
@@ -40,6 +44,8 @@ var PrimInputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, hasReader := p.AsReader()
 	return hasReader
 })
+
+// PrimOutputPortQ R7RS §6.13.1 output-port? predicate.
 var PrimOutputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	p, ok := o.(*values.PortObject)
 	if !ok {

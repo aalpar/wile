@@ -145,14 +145,25 @@ func (p *BigComplex) Kind() NumericKind {
 	return KindBigComplex
 }
 
-// BigComplex has 5 dispatch tables (no bigComplexLessThan).
-// Complex ordering is undefined in R7RS §6.2.6 — LessThan delegates to Compare,
-// which uses magnitude comparison as a total order for internal use (sorting, etc.)
-// but is NOT mathematical ordering. Compare is initialized below like all other types.
+// BigComplex has 5 dispatch tables (no bigComplexLessThan), each indexed by the
+// second operand's kind. Complex ordering is undefined in R7RS §6.2.6 — LessThan
+// delegates to Compare, which uses magnitude comparison as a total order for
+// internal use (sorting, etc.) but is NOT mathematical ordering. Compare is
+// initialized below like all other types.
+
+// bigComplexAdd dispatches BigComplex addition on the second operand's kind.
 var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
+
+// bigComplexSubtract dispatches BigComplex subtraction on the second operand's kind.
 var bigComplexSubtract [numKinds]func(*BigComplex, Number) Number
+
+// bigComplexCompare dispatches BigComplex magnitude comparison on the second operand's kind.
 var bigComplexCompare [numKinds]func(*BigComplex, Number) int
+
+// bigComplexMultiply dispatches BigComplex multiplication on the second operand's kind.
 var bigComplexMultiply [numKinds]func(*BigComplex, Number) Number
+
+// bigComplexDivide dispatches BigComplex division on the second operand's kind.
 var bigComplexDivide [numKinds]func(*BigComplex, Number) (Number, error)
 
 // bigComplexSimplifyDown is an identity: BigComplex's cross-kind reduction

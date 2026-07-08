@@ -23,7 +23,7 @@ import (
 var (
 	_ Value = (*WaitGroup)(nil)
 
-	// WaitGroup ID counter
+	// waitGroupIDCounter assigns each WaitGroup a unique ID.
 	waitGroupIDCounter atomic.Uint64
 )
 

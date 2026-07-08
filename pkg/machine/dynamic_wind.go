@@ -61,7 +61,7 @@ type DynamicWindFrame struct {
 	entryMarks []markEntry
 }
 
-// Global counter for generating unique frame IDs
+// nextWindingID is the global counter for generating unique frame IDs.
 var nextWindingID atomic.Uint64
 
 // NewDynamicWindFrame creates a new winding frame with a unique ID.

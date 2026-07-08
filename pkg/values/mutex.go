@@ -34,7 +34,7 @@ var (
 var (
 	_ Value = (*Mutex)(nil)
 
-	// Mutex ID counter
+	// mutexIDCounter assigns each Mutex a unique ID.
 	mutexIDCounter atomic.Uint64
 )
 

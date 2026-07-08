@@ -22,7 +22,7 @@ import (
 var (
 	_ Value = (*AtomicBox)(nil)
 
-	// AtomicBox ID counter
+	// atomicIDCounter assigns each AtomicBox a unique ID.
 	atomicIDCounter atomic.Uint64
 )
 

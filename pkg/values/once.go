@@ -23,7 +23,7 @@ import (
 var (
 	_ Value = (*Once)(nil)
 
-	// Once ID counter
+	// onceIDCounter assigns each Once a unique ID.
 	onceIDCounter atomic.Uint64
 )
 

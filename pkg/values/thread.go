@@ -62,7 +62,7 @@ var (
 var (
 	_ Value = (*Thread)(nil)
 
-	// Thread ID counter
+	// threadIDCounter assigns each Thread a unique ID.
 	threadIDCounter atomic.Uint64
 )
 
