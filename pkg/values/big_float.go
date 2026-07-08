@@ -433,13 +433,13 @@ func (p *BigFloat) Compare(o Number) int {
 // values, so we append it when neither '.' nor 'e'/'E' is present.
 func (p *BigFloat) SchemeString() string {
 	if p.nan {
-		return "+nan.0"
+		return NaNString
 	}
 	if p.value.IsInf() {
 		if p.value.Sign() < 0 {
-			return "-inf.0"
+			return NegativeInfinityString
 		}
-		return "+inf.0"
+		return PositiveInfinityString
 	}
 	s := p.value.Text('g', -1)
 	for i := 0; i < len(s); i++ {

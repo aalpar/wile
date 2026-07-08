@@ -69,11 +69,11 @@ func PrimNumberToString(mc machine.CallContext) error {
 	case *values.Float:
 		switch {
 		case math.IsInf(v.Value, 1):
-			mc.SetValue(values.NewString("+inf.0"))
+			mc.SetValue(values.NewString(values.PositiveInfinityString))
 		case math.IsInf(v.Value, -1):
-			mc.SetValue(values.NewString("-inf.0"))
+			mc.SetValue(values.NewString(values.NegativeInfinityString))
 		case math.IsNaN(v.Value):
-			mc.SetValue(values.NewString("+nan.0"))
+			mc.SetValue(values.NewString(values.NaNString))
 		default:
 			s := strconv.FormatFloat(v.Value, 'g', -1, 64)
 			s = ensureInexactDecimal(s)

@@ -417,11 +417,11 @@ func (p *Parser) parseComplex(s string) (values.Number, error) {
 // parseFloatOrInfnan parses a float that may be inf.0, nan.0, or a rational
 func parseFloatOrInfnan(s string) (float64, error) {
 	switch s {
-	case "+inf.0":
+	case values.PositiveInfinityString:
 		return math.Inf(1), nil
-	case "-inf.0":
+	case values.NegativeInfinityString:
 		return math.Inf(-1), nil
-	case "+nan.0", "-nan.0":
+	case values.NaNString, values.NegativeNaNString:
 		return math.NaN(), nil
 	}
 

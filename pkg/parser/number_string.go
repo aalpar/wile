@@ -27,11 +27,11 @@ import (
 // Returns (nil, false) if s is not a special-value string.
 func ParseSpecialFloat(s string) (*values.Float, bool) {
 	switch strings.ToLower(s) {
-	case "+inf.0":
+	case values.PositiveInfinityString:
 		return values.NewFloat(math.Inf(1)), true
-	case "-inf.0":
+	case values.NegativeInfinityString:
 		return values.NewFloat(math.Inf(-1)), true
-	case "+nan.0", "-nan.0":
+	case values.NaNString, values.NegativeNaNString:
 		return values.NewFloat(math.NaN()), true
 	}
 	return nil, false
@@ -118,8 +118,8 @@ func findComplexSignSplit(s string) int {
 			continue
 		}
 		rest := s[i:]
-		if strings.HasPrefix(rest, "+inf.0") || strings.HasPrefix(rest, "-inf.0") ||
-			strings.HasPrefix(rest, "+nan.0") || strings.HasPrefix(rest, "-nan.0") ||
+		if strings.HasPrefix(rest, values.PositiveInfinityString) || strings.HasPrefix(rest, values.NegativeInfinityString) ||
+			strings.HasPrefix(rest, values.NaNString) || strings.HasPrefix(rest, values.NegativeNaNString) ||
 			rest == "+" || rest == "-" ||
 			(len(rest) > 1 && (rest[1] >= '0' && rest[1] <= '9' || rest[1] == '.' || rest[1] == '/')) {
 			return i

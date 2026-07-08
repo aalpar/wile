@@ -253,12 +253,12 @@ func (p *Float) Negate() Number {
 // Returns -1 if p < o, 0 if p == o, 1 if p > o.
 func (p *Float) Compare(o Number) int {
 	v, ok := o.(*Float)
-	if ok {
-		pf := p.bigFloat()
-		vf := new(big.Float).SetFloat64(v.Value)
-		return pf.Cmp(vf)
+	if !ok {
+		return floatCompare[o.Kind()](p, o)
 	}
-	return floatCompare[o.Kind()](p, o)
+	pf := p.bigFloat()
+	vf := new(big.Float).SetFloat64(v.Value)
+	return pf.Cmp(vf)
 }
 
 // IsExact returns false since Float is always inexact.
@@ -335,13 +335,13 @@ func (p *Float) SchemeString() string {
 // Float.SchemeString and the complex-component formatter in complex.go.
 func formatInexactReal(f float64) string {
 	if math.IsInf(f, 1) {
-		return "+inf.0"
+		return PositiveInfinityString
 	}
 	if math.IsInf(f, -1) {
-		return "-inf.0"
+		return NegativeInfinityString
 	}
 	if math.IsNaN(f) {
-		return "+nan.0"
+		return NaNString
 	}
 	s := strconv.FormatFloat(f, 'f', -1, 64)
 	for i := 0; i < len(s); i++ {

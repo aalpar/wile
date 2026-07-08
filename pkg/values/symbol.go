@@ -193,7 +193,7 @@ func isNumberLiteral(name string) bool {
 	}
 	lower := strings.ToLower(name)
 	switch lower {
-	case "+i", "-i", "+inf.0", "-inf.0", "+nan.0", "-nan.0":
+	case "+i", "-i", PositiveInfinityString, NegativeInfinityString, NaNString, NegativeNaNString:
 		return true
 	}
 	c := name[1]
