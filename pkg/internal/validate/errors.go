@@ -55,45 +55,42 @@ func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
 
 // ValidationResult collects all errors from validation
 type ValidationResult struct {
-	Expr            ValidatedExpr     // nil if validation failed
-	Errors          []ValidationError // All errors encountered
-	mutatedBindings map[environment.BindingID]bool
+	Expr   ValidatedExpr     // nil if validation failed
+	Errors []ValidationError // All errors encountered
 
-	// mutatedKeys and definedKeyCount track set! targets and define occurrences
-	// by symbol Key across the whole unit, independent of binding creation.
-	// Top-level global bindings are created by the compiler, not the validator,
-	// so mutatedBindings (keyed by BindingID) cannot see a top-level set! inside
-	// a (begin ...) unit. These power StableInUnit, computed syntactically and
-	// conservatively by Key (over-match ⇒ non-stable). See finalizeStability.
-	mutatedKeys     map[string]bool
+	// mutated records every set! target in the unit, keyed by BindingRef so a
+	// single map names both halves of the binding domain. Each set! records
+	// two facts at the two precisions its consumers need:
+	//   - a precise LocalRef when the target resolves to a local slot (read by
+	//     markMutableBindings to set LetBinding.Mutable);
+	//   - a conservative GlobalRef(name) unconditionally (read by
+	//     finalizeStability for StableInUnit). The global arm is symbolic
+	//     because a top-level binding is created by the compiler, not the
+	//     validator, so no slot exists at validation time; marking it even for
+	//     a local shadow of the name is the deliberate over-approximation that
+	//     keeps the frame-reclaim Stable stamp sound (over-match ⇒ non-stable).
+	mutated map[environment.BindingRef]bool
+
+	// definedKeyCount counts define occurrences by symbol Key across the unit.
+	// A distinct signal from mutation: powers the defined-once half of
+	// StableInUnit. See finalizeStability.
 	definedKeyCount map[string]int
 }
 
-// markMutated records that a local binding is targeted by set!.
-// Uses BindingID (frame pointer + slot index) instead of *Binding
-// because LocalEnvironmentFrame.bindings is []Binding (value type);
-// pointers into the slice become stale when append reallocates.
-func (p *ValidationResult) markMutated(bid environment.BindingID) {
-	if p.mutatedBindings == nil {
-		p.mutatedBindings = make(map[environment.BindingID]bool)
+// markMutated records that the binding named by ref is a set! target. The ref
+// is a precise LocalRef (frame + slot) for a resolved local — stable across
+// []Binding realloc, unlike a *Binding pointer — or a symbolic GlobalRef(Key)
+// for a global or a not-yet-created top-level binding.
+func (p *ValidationResult) markMutated(ref environment.BindingRef) {
+	if p.mutated == nil {
+		p.mutated = make(map[environment.BindingRef]bool)
 	}
-	p.mutatedBindings[bid] = true
+	p.mutated[ref] = true
 }
 
-// isMutated returns true if the binding was targeted by set!.
-func (p *ValidationResult) isMutated(bid environment.BindingID) bool {
-	return p.mutatedBindings[bid]
-}
-
-// markMutatedKey records that a symbol named key is a set! target somewhere in
-// the unit. Recorded by symbol Key (not BindingID) so a top-level set! is
-// captured even before the compiler creates the binding. Over-approximates: a
-// set! to any same-Key binding (including a local shadow) marks the Key.
-func (p *ValidationResult) markMutatedKey(key string) {
-	if p.mutatedKeys == nil {
-		p.mutatedKeys = make(map[string]bool)
-	}
-	p.mutatedKeys[key] = true
+// isMutated returns true if the binding named by ref was targeted by set!.
+func (p *ValidationResult) isMutated(ref environment.BindingRef) bool {
+	return p.mutated[ref]
 }
 
 // recordDefinedKey counts a define of a symbol named key in the unit. Used to
@@ -117,7 +114,7 @@ func (p *ValidationResult) finalizeStability() {
 	}
 	collectTopLevelDefines([]ValidatedExpr{p.Expr}, func(d *ValidatedDefine) {
 		key := d.name.Key()
-		d.StableInUnit = p.definedKeyCount[key] == 1 && !p.mutatedKeys[key]
+		d.StableInUnit = p.definedKeyCount[key] == 1 && !p.isMutated(environment.GlobalRef(key))
 	})
 }
 
