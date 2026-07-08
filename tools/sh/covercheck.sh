@@ -28,6 +28,7 @@ EXCLUDED_PKGS=(
 	"cmd/wile"
 	"cmd/typeswitchlint"
 	"cmd/singlelinefunclint"
+	"cmd/nestinglint"
 	"pkg/testutil"
 	"pkg/repl"
 	"pkg/registry/testhelpers"
