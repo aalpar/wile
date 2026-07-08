@@ -23,14 +23,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// DebugContext holds the state for debug commands.
+// DebugContext holds the state for debug commands. The break state itself
+// (the most recent break's MachineContext) is owned by the wrapped
+// wile.Debugger and read through p.debugger.CurrentState() — DebugContext
+// deliberately keeps no parallel copy, so the two can never disagree.
 type DebugContext struct {
-	debugger     *wile.Debugger
-	currentState values.DebugState
+	debugger *wile.Debugger
 }
 
 // NewDebugContext creates a new debug context.
@@ -43,11 +44,6 @@ func NewDebugContext() *DebugContext {
 // Debugger returns the debugger instance.
 func (p *DebugContext) Debugger() *wile.Debugger {
 	return p.debugger
-}
-
-// SetCurrentState sets the current debug state (for inspection commands).
-func (p *DebugContext) SetCurrentState(state values.DebugState) {
-	p.currentState = state
 }
 
 // debugCommandMeta is the single source of truth for debug command metadata.
@@ -236,7 +232,7 @@ func (p *DebugContext) cmdStep(_ []string, out io.Writer) {
 
 // cmdNext steps over (same frame).
 func (p *DebugContext) cmdNext(_ []string, out io.Writer) {
-	if p.currentState == nil {
+	if p.debugger.CurrentState() == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
@@ -246,7 +242,7 @@ func (p *DebugContext) cmdNext(_ []string, out io.Writer) {
 
 // cmdFinish steps out of current function.
 func (p *DebugContext) cmdFinish(_ []string, out io.Writer) {
-	if p.currentState == nil {
+	if p.debugger.CurrentState() == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
@@ -262,12 +258,13 @@ func (p *DebugContext) cmdContinue(_ []string, out io.Writer) {
 
 // cmdBacktrace shows the current stack trace.
 func (p *DebugContext) cmdBacktrace(_ []string, out io.Writer) {
-	if p.currentState == nil {
+	state := p.debugger.CurrentState()
+	if state == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
-	trace := p.currentState.FormatStackTrace(20)
+	trace := state.FormatStackTrace(20)
 	if trace == "" {
 		fmt.Fprintln(out, "Empty stack trace")
 		return
@@ -279,12 +276,13 @@ func (p *DebugContext) cmdBacktrace(_ []string, out io.Writer) {
 
 // cmdWhere shows the current source location.
 func (p *DebugContext) cmdWhere(_ []string, out io.Writer) {
-	if p.currentState == nil {
+	state := p.debugger.CurrentState()
+	if state == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
-	loc := p.currentState.CurrentLocation()
+	loc := state.CurrentLocation()
 	if loc == nil {
 		fmt.Fprintln(out, "No source location available")
 		return

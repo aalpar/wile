@@ -178,9 +178,10 @@ func (p *REPL) Run(ctx context.Context) error {
 	}
 	defer rl.Close() //nolint:errcheck
 
-	// Set up break callback
+	// Set up break callback. The debugger has already recorded this break's
+	// state (see wile.Debugger.OnBreak); the inspection commands read it back
+	// via p.debugCtx.Debugger().CurrentState(), so the callback only renders.
 	p.debugCtx.Debugger().OnBreak(func(state values.DebugState, bp *wile.BreakpointInfo) {
-		p.debugCtx.SetCurrentState(state)
 		if bp != nil {
 			fmt.Fprintf(p.out, "\nBreakpoint %d hit", bp.ID)
 			loc := state.CurrentLocation()
