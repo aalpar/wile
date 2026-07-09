@@ -38,7 +38,7 @@ import (
 func makeTestToken(src string) tokenizer.Token {
 	si := syntax.NewSourceIndexes(0, 0, 0)
 	ei := syntax.NewSourceIndexes(len(src), len(src), 0)
-	return tokenizer.NewSimpleToken(tokenizer.TokenizerStateSymbol, src, src, &si, &ei, false)
+	return tokenizer.NewSimpleToken(tokenizer.TokenizerStateSymbol, src, src, &si, &ei, false, 0)
 }
 
 func TestParserError_SchemeString(t *testing.T) {

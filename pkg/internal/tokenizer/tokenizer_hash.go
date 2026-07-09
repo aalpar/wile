@@ -198,8 +198,9 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 		p.state = TokenizerStateBigFloat
 		p.readBigNum(isExtendedExponentMarker)
 		return
-	case p.curr() == 'z' || p.curr() == 'Z': // big int #z
-		p.state = TokenizerStateBigIntegerBase10
+	case p.curr() == 'z' || p.curr() == 'Z': // big int #z (R7RS-adjacent; always decimal)
+		p.state = TokenizerStateBigInteger
+		p.tokRadix = 10
 		p.readBigNum(isExtendedExponentMarker)
 		return
 	default:

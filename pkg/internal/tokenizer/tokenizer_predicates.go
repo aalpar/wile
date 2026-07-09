@@ -174,7 +174,7 @@ func isExtendedExponentMarker(c rune) bool {
 // hex integer from mis-reading a trailing e/s/f/d/l as scientific notation.
 //
 // Decimal is r == 10 (explicit #d) or r == 0 (the unset default radix, used for
-// a bare number with no #-prefix); see integerStateForRadix.
+// a bare number with no #-prefix); see effectiveRadix.
 func isExponentMarkerForRadix(c rune, r int) bool {
 	return (r == 0 || r == 10) && isExtendedExponentMarker(c)
 }

@@ -29,10 +29,6 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-const (
-	ParserNumberDefaultBase = 10
-)
-
 // Quote form identifiers.
 const (
 	ConstQuote            = "quote"
@@ -957,7 +953,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntaxSymbol(p.cur.Value(), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger:
-		return p.parseIntegerWithBase(10)
+		return p.parseIntegerWithBase(p.cur.Radix())
 	case tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction:
 		return p.parseDecimalFraction()
 	case tokenizer.TokenizerStateSignedScientificNotation,
@@ -987,14 +983,6 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return p.readSyntax()
 	case tokenizer.TokenizerStateMarkerBase16:
 		return p.parseBaseWithExactness(16)
-	case tokenizer.TokenizerStateSignedIntegerBase2, tokenizer.TokenizerStateUnsignedIntegerBase2:
-		return p.parseIntegerWithBase(2)
-	case tokenizer.TokenizerStateSignedIntegerBase8, tokenizer.TokenizerStateUnsignedIntegerBase8:
-		return p.parseIntegerWithBase(8)
-	case tokenizer.TokenizerStateSignedIntegerBase10, tokenizer.TokenizerStateUnsignedIntegerBase10:
-		return p.parseIntegerWithBase(10)
-	case tokenizer.TokenizerStateSignedIntegerBase16, tokenizer.TokenizerStateUnsignedIntegerBase16:
-		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedInf:
 		stx, tok := p.parseSignedInf()
 		return stx, tok, nil
@@ -1041,16 +1029,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return p.readExactnessMarker("exact", p.makeExact)
 	case tokenizer.TokenizerStateMarkerNumberInexact:
 		return p.readExactnessMarker("inexact", p.makeInexact)
-	case tokenizer.TokenizerStateBigIntegerDefaultBase:
-		return p.parseBigIntegerWithBase(ParserNumberDefaultBase)
-	case tokenizer.TokenizerStateBigIntegerBase10:
+	case tokenizer.TokenizerStateBigInteger:
+		// #z is always decimal.
 		return p.parseBigIntegerWithBase(10)
-	case tokenizer.TokenizerStateBigIntegerBase16:
-		return p.parseBigIntegerWithBase(16)
-	case tokenizer.TokenizerStateBigIntegerBase8:
-		return p.parseBigIntegerWithBase(8)
-	case tokenizer.TokenizerStateBigIntegerBase2:
-		return p.parseBigIntegerWithBase(2)
 	case tokenizer.TokenizerStateBigFloat:
 		return p.parseBigFloat()
 	case tokenizer.TokenizerStateMarkerBooleanTrue:

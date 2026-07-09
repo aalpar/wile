@@ -21,38 +21,23 @@ import (
 	"strings"
 )
 
-// integerStateForRadix returns the appropriate integer token state based on the
-// current radix and whether the number is signed.
-// radix 0 means "default decimal" (plain numbers), radix 10 means "explicit #d prefix".
-func (p *Tokenizer) integerStateForRadix(signed bool) TokenizerState {
-	switch p.radix {
-	case 2:
-		if signed {
-			return TokenizerStateSignedIntegerBase2
-		}
-		return TokenizerStateUnsignedIntegerBase2
-	case 8:
-		if signed {
-			return TokenizerStateSignedIntegerBase8
-		}
-		return TokenizerStateUnsignedIntegerBase8
-	case 10:
-		// Explicit #d prefix
-		if signed {
-			return TokenizerStateSignedIntegerBase10
-		}
-		return TokenizerStateUnsignedIntegerBase10
-	case 16:
-		if signed {
-			return TokenizerStateSignedIntegerBase16
-		}
-		return TokenizerStateUnsignedIntegerBase16
-	default: // 0 or unset (default decimal)
-		if signed {
-			return TokenizerStateSignedInteger
-		}
-		return TokenizerStateUnsignedInteger
+// effectiveRadix maps the scanning radix to the base the parser will use.
+// The scanning radix uses 0 for "default decimal" (no prefix); both 0 and an
+// explicit #d prefix (10) parse in base 10.
+func effectiveRadix(r int) int {
+	if r == 0 {
+		return 10
 	}
+	return r
+}
+
+// integerState records the effective parse base on the current token (read back
+// via Token.Radix()) and returns the signed or unsigned integer state. Base no
+// longer lives in the state name: a single Signed/UnsignedInteger pair covers
+// every radix, and the parser reads Radix() instead of re-deriving a base.
+func (p *Tokenizer) integerState(signed bool) TokenizerState {
+	p.tokRadix = effectiveRadix(p.radix)
+	return signedState(signed, TokenizerStateSignedInteger, TokenizerStateUnsignedInteger)
 }
 
 // signedState returns the signed or unsigned variant of a token state.
@@ -274,7 +259,7 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 }
 
 func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
-	p.state = p.integerStateForRadix(signed)
+	p.state = p.integerState(signed)
 	p.readDigitsAndHash(r)
 	if p.err != nil {
 		return

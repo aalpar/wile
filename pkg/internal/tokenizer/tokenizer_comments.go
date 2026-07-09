@@ -46,7 +46,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 						p.value = p.value[:len(p.value)-1]
 					}
 					p.term()
-					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false)
+					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false, 0)
 				}
 				p.blockDepth--
 			}
@@ -57,7 +57,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 	}
 	// EOF before closing - emit Body token, no End will follow
 	p.term()
-	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false)
+	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false, 0)
 }
 
 func (p *Tokenizer) readLineCommentOrPragma() {

@@ -238,7 +238,7 @@ func TestRadixPrefixMarkers(t *testing.T) {
 		{
 			input:         "#x1a2b3c",
 			expectedType1: TokenizerStateMarkerBase16,
-			expectedType2: TokenizerStateUnsignedIntegerBase16,
+			expectedType2: TokenizerStateUnsignedInteger,
 			expectedStr1:  "#x",
 		},
 	}
@@ -303,22 +303,22 @@ func TestDigitFunction(t *testing.T) {
 		{
 			input:         "#b1011",
 			expectedType1: TokenizerStateMarkerBase2,
-			expectedType2: TokenizerStateUnsignedIntegerBase2,
+			expectedType2: TokenizerStateUnsignedInteger,
 		},
 		{
 			input:         "#o3771",
 			expectedType1: TokenizerStateMarkerBase8,
-			expectedType2: TokenizerStateUnsignedIntegerBase8,
+			expectedType2: TokenizerStateUnsignedInteger,
 		},
 		{
 			input:         "#d9991",
 			expectedType1: TokenizerStateMarkerBase10,
-			expectedType2: TokenizerStateUnsignedIntegerBase10,
+			expectedType2: TokenizerStateUnsignedInteger,
 		},
 		{
 			input:         "#x1fff",
 			expectedType1: TokenizerStateMarkerBase16,
-			expectedType2: TokenizerStateUnsignedIntegerBase16,
+			expectedType2: TokenizerStateUnsignedInteger,
 		},
 	}
 	for i, tc := range tcs {
@@ -334,6 +334,38 @@ func TestDigitFunction(t *testing.T) {
 			token2, err2 := tok.Next()
 			c.Check(err2, qt.IsNil)
 			c.Check(token2.Type(), qt.Equals, tc.expectedType2)
+		})
+	}
+}
+
+// TestIntegerTokenRadix pins the base-carrying contract: a single
+// Signed/UnsignedInteger state covers every radix, and the effective parse base
+// travels on the token via Radix() rather than in the state name. The number
+// token is the last token emitted (a #-prefix emits a marker first).
+func TestIntegerTokenRadix(t *testing.T) {
+	tcs := []struct {
+		input     string
+		wantType  TokenizerState
+		wantRadix int
+	}{
+		{"42", TokenizerStateUnsignedInteger, 10},   // default decimal
+		{"-5", TokenizerStateSignedInteger, 10},     // default decimal, signed
+		{"#b101", TokenizerStateUnsignedInteger, 2}, // binary
+		{"#o17", TokenizerStateUnsignedInteger, 8},  // octal
+		{"#d99", TokenizerStateUnsignedInteger, 10}, // explicit decimal
+		{"#xFF", TokenizerStateUnsignedInteger, 16}, // hex
+		{"#x-FF", TokenizerStateSignedInteger, 16},  // hex, signed
+		{"#z999", TokenizerStateBigInteger, 10},     // big integer (decimal)
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			ts, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			c.Assert(len(ts) >= 1, qt.IsTrue)
+			num := ts[len(ts)-1]
+			c.Check(num.Type(), qt.Equals, tc.wantType)
+			c.Check(num.Radix(), qt.Equals, tc.wantRadix)
 		})
 	}
 }
@@ -380,7 +412,7 @@ func TestRadixPrefixes(t *testing.T) {
 	c.Assert(token.Type(), qt.Equals, TokenizerStateMarkerBase2)
 	token1b, err := tok.Next()
 	c.Assert(err, qt.IsNil)
-	c.Assert(token1b.Type(), qt.Equals, TokenizerStateUnsignedIntegerBase2)
+	c.Assert(token1b.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 	c.Assert(token1b.String(), qt.Equals, "101")
 
 	// Octal number
@@ -1872,49 +1904,49 @@ func TestTokenizer_BigInteger(t *testing.T) {
 			bs:    "#z123",
 			scan:  "#z123",
 			err0:  io.EOF,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#Z456",
 			scan:  "#Z456",
 			err0:  io.EOF,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#z-789",
 			scan:  "#z-789",
 			err0:  io.EOF,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#z+42",
 			scan:  "#z+42",
 			err0:  io.EOF,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#z12345678901234567890",
 			scan:  "#z12345678901234567890",
 			err0:  io.EOF,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#z0",
 			scan:  "#z0",
 			err0:  io.EOF,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#z123 abc",
 			scan:  "#z123",
 			err0:  nil,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 		{
 			bs:    "#z123)",
 			scan:  "#z123",
 			err0:  nil,
-			state: TokenizerStateBigIntegerBase10,
+			state: TokenizerStateBigInteger,
 		},
 	}
 	for i, tc := range tcs {
@@ -2039,15 +2071,22 @@ func TestHashDigit_Tokenizer(t *testing.T) {
 		src  string
 		hash bool
 		err  error
+		// prefix is prepended to in to select a radix (e.g. "#b", "#x"); when set,
+		// the tokenizer emits a marker token followed by the number token. Empty
+		// means a bare, default-decimal number.
+		prefix string
+		// radix is the expected Token.Radix() of the number token.
+		radix int
 	}{
 		// Unsigned integers with hash digits
 		{
-			name: "unsigned integer with hash",
-			in:   "1##",
-			typ:  TokenizerStateUnsignedInteger,
-			src:  "1##",
-			hash: true,
-			err:  io.EOF,
+			name:  "unsigned integer with hash",
+			in:    "1##",
+			typ:   TokenizerStateUnsignedInteger,
+			src:   "1##",
+			hash:  true,
+			radix: 10,
+			err:   io.EOF,
 		},
 		{
 			name: "unsigned integer no hash",
@@ -2136,21 +2175,25 @@ func TestHashDigit_Tokenizer(t *testing.T) {
 		},
 		// Base-2 (binary) with hash digits
 		{
-			name: "binary with hash",
-			in:   "1#",
-			typ:  TokenizerStateUnsignedIntegerBase2,
-			src:  "1#",
-			hash: true,
-			err:  io.EOF,
+			name:   "binary with hash",
+			in:     "1#",
+			typ:    TokenizerStateUnsignedInteger,
+			src:    "1#",
+			hash:   true,
+			prefix: "#b",
+			radix:  2,
+			err:    io.EOF,
 		},
 		// Base-16 (hex) with hash digits
 		{
-			name: "hex with hash",
-			in:   "f#",
-			typ:  TokenizerStateUnsignedIntegerBase16,
-			src:  "f#",
-			hash: true,
-			err:  io.EOF,
+			name:   "hex with hash",
+			in:     "f#",
+			typ:    TokenizerStateUnsignedInteger,
+			src:    "f#",
+			hash:   true,
+			prefix: "#x",
+			radix:  16,
+			err:    io.EOF,
 		},
 		// Signed decimal fraction with hash
 		{
@@ -2165,31 +2208,25 @@ func TestHashDigit_Tokenizer(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			var input string
-			// For base-N tests, we need to set up the tokenizer with the right radix
-			switch tc.typ {
-			case TokenizerStateUnsignedIntegerBase2:
-				input = "#b" + tc.in
-			case TokenizerStateUnsignedIntegerBase16:
-				input = "#x" + tc.in
-			default:
-				input = tc.in
-			}
+			// A prefix (#b/#x) selects a non-decimal radix and makes the tokenizer
+			// emit a marker token followed by the number token.
+			input := tc.prefix + tc.in
 			ts, err := Tokenize(input, false)
 			c.Assert(err, qt.ErrorIs, tc.err)
-			// For base-N, first token is the marker, second is the number
 			var tok Token
-			switch tc.typ {
-			case TokenizerStateUnsignedIntegerBase2, TokenizerStateUnsignedIntegerBase16:
+			if tc.prefix != "" {
 				c.Assert(len(ts), qt.Equals, 2)
 				tok = ts[1]
-			default:
+			} else {
 				c.Assert(len(ts) >= 1, qt.IsTrue)
 				tok = ts[0]
 			}
 			st := tok.(*SimpleToken)
 			c.Assert(st.typ, qt.Equals, tc.typ)
 			c.Assert(st.String(), qt.Equals, tc.src)
+			if tc.radix != 0 {
+				c.Assert(tok.Radix(), qt.Equals, tc.radix)
+			}
 			c.Assert(tok.HasHashDigit(), qt.Equals, tc.hash)
 		})
 	}
@@ -2532,28 +2569,28 @@ func TestNonDecimalRadixNumbers(t *testing.T) {
 		expectedType2 TokenizerState
 	}{
 		// Binary
-		{input: "#b0", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
-		{input: "#b1", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
-		{input: "#b10", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
-		{input: "#b11", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
-		{input: "#b101010", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedIntegerBase2},
+		{input: "#b0", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#b1", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#b10", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#b11", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#b101010", expectedType1: TokenizerStateMarkerBase2, expectedType2: TokenizerStateUnsignedInteger},
 
 		// Octal
-		{input: "#o0", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
-		{input: "#o7", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
-		{input: "#o10", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
-		{input: "#o77", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
-		{input: "#o777", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedIntegerBase8},
+		{input: "#o0", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#o7", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#o10", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#o77", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#o777", expectedType1: TokenizerStateMarkerBase8, expectedType2: TokenizerStateUnsignedInteger},
 
 		// Hexadecimal (must start with digit)
-		{input: "#x0", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x9", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x10", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x100", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x1a", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x1f", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x1ff", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
-		{input: "#x123abc", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedIntegerBase16},
+		{input: "#x0", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x9", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x10", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x100", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x1a", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x1f", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x1ff", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
+		{input: "#x123abc", expectedType1: TokenizerStateMarkerBase16, expectedType2: TokenizerStateUnsignedInteger},
 	}
 	for i, tc := range tcs {
 		qt.New(t).Run(fmt.Sprintf("%d: %q", i, tc.input), func(c *qt.C) {
@@ -3112,10 +3149,10 @@ func TestTokenizer_ExtendedExponentMarkers_BigNumbers(t *testing.T) {
 		state TokenizerState
 	}{
 		// Big integer with s/f/d/l markers
-		{"#z1s10", "#z1s10", io.EOF, TokenizerStateBigIntegerBase10},
-		{"#z1f10", "#z1f10", io.EOF, TokenizerStateBigIntegerBase10},
-		{"#z1d10", "#z1d10", io.EOF, TokenizerStateBigIntegerBase10},
-		{"#z1l10", "#z1l10", io.EOF, TokenizerStateBigIntegerBase10},
+		{"#z1s10", "#z1s10", io.EOF, TokenizerStateBigInteger},
+		{"#z1f10", "#z1f10", io.EOF, TokenizerStateBigInteger},
+		{"#z1d10", "#z1d10", io.EOF, TokenizerStateBigInteger},
+		{"#z1l10", "#z1l10", io.EOF, TokenizerStateBigInteger},
 		// Big float with s/f/d/l markers
 		{"#m1s10", "#m1s10", io.EOF, TokenizerStateBigFloat},
 		{"#m1f10", "#m1f10", io.EOF, TokenizerStateBigFloat},

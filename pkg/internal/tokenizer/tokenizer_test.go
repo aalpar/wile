@@ -447,7 +447,7 @@ func TestTokenizer_TokenStream(t *testing.T) {
 		},
 		{
 			in:     "#x10",
-			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedIntegerBase16},
+			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedInteger},
 			src:    []string{"#x", "10"},
 			err:    io.EOF,
 		},
@@ -471,7 +471,7 @@ func TestTokenizer_TokenStream(t *testing.T) {
 		},
 		{
 			in:     "#x4",
-			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedIntegerBase16},
+			tokens: []TokenizerState{TokenizerStateMarkerBase16, TokenizerStateUnsignedInteger},
 			src:    []string{"#x", "4"},
 			err:    io.EOF,
 		},
@@ -2129,9 +2129,9 @@ func TestTokenizer_TokenStream_EdgeCases(t *testing.T) {
 		{"+", []TokenizerState{TokenizerStateSymbol}},
 		{"-", []TokenizerState{TokenizerStateSymbol}},
 		// Various radix markers
-		{"#b101", []TokenizerState{TokenizerStateMarkerBase2, TokenizerStateUnsignedIntegerBase2}},
-		{"#o777", []TokenizerState{TokenizerStateMarkerBase8, TokenizerStateUnsignedIntegerBase8}},
-		{"#d123", []TokenizerState{TokenizerStateMarkerBase10, TokenizerStateUnsignedIntegerBase10}},
+		{"#b101", []TokenizerState{TokenizerStateMarkerBase2, TokenizerStateUnsignedInteger}},
+		{"#o777", []TokenizerState{TokenizerStateMarkerBase8, TokenizerStateUnsignedInteger}},
+		{"#d123", []TokenizerState{TokenizerStateMarkerBase10, TokenizerStateUnsignedInteger}},
 		// Whitespace handling
 		{"  \t\n  foo", []TokenizerState{TokenizerStateSymbol}},
 	}

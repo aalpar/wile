@@ -29,6 +29,7 @@ type Token interface {
 	String() string
 	Value() string      // Returns processed value (e.g., with escape sequences converted)
 	HasHashDigit() bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
+	Radix() int         // Effective parse base for integer tokens (2/8/10/16); 0 for non-integer tokens
 }
 
 // SimpleToken is the concrete implementation of Token used by the tokenizer.
@@ -37,17 +38,21 @@ type SimpleToken struct {
 	iend   syntax.SourceIndexes
 	typ    TokenizerState
 	hash   bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
+	rad    int  // effective parse base for integer tokens (2/8/10/16); 0 otherwise
 	src    string
 	val    string // Processed value (e.g., escape sequences converted)
 }
 
-// NewSimpleToken creates a new SimpleToken with the given type, source, value, and position.
-func NewSimpleToken(typ TokenizerState, src, val string, sti, eni *syntax.SourceIndexes, hash bool) *SimpleToken {
+// NewSimpleToken creates a new SimpleToken with the given type, source, value,
+// position, hash-digit flag, and radix. radix is the effective parse base for
+// integer tokens (2/8/10/16) and 0 for tokens where base is not meaningful.
+func NewSimpleToken(typ TokenizerState, src, val string, sti, eni *syntax.SourceIndexes, hash bool, radix int) *SimpleToken {
 	q := &SimpleToken{
 		istart: *sti,
 		iend:   *eni,
 		typ:    typ,
 		hash:   hash,
+		rad:    radix,
 		src:    src,
 		val:    val,
 	}
@@ -85,6 +90,14 @@ func (p *SimpleToken) End() syntax.SourceIndexes {
 // representing an unknown digit (treated as 0). Its presence forces the number to be inexact.
 func (p *SimpleToken) HasHashDigit() bool {
 	return p.hash
+}
+
+// Radix returns the effective parse base for an integer token (2, 8, 10, or 16).
+// It is 0 for tokens where base is not meaningful (non-numeric tokens and numeric
+// shapes other than integers). The tokenizer records the base here so the parser
+// reads it directly rather than re-deriving a base literal from the token state.
+func (p *SimpleToken) Radix() int {
+	return p.rad
 }
 
 // SchemeString returns the Scheme representation of the token.

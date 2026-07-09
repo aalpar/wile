@@ -114,35 +114,17 @@ const (
 	// TokenizerStateMarkerNumberExact represents #e prefix (exact).
 	TokenizerStateMarkerNumberExact
 
-	// TokenizerStateSignedInteger represents -123 or +456 (signed decimal).
+	// TokenizerStateSignedInteger represents a signed integer in any base
+	// (-123, +456, #x-FF, #b+101). The base is carried on the token via Radix().
 	TokenizerStateSignedInteger
-	// TokenizerStateUnsignedInteger represents 123 (unsigned decimal).
+	// TokenizerStateUnsignedInteger represents an unsigned integer in any base
+	// (123, #xFF, #b101). The base is carried on the token via Radix().
 	TokenizerStateUnsignedInteger
-
-	// TokenizerStateSignedIntegerBase2 represents signed binary integer after #b prefix.
-	TokenizerStateSignedIntegerBase2
-	// TokenizerStateUnsignedIntegerBase2 represents unsigned binary integer after #b prefix.
-	TokenizerStateUnsignedIntegerBase2
-	// TokenizerStateSignedIntegerBase8 represents signed octal integer after #o prefix.
-	TokenizerStateSignedIntegerBase8
-	// TokenizerStateUnsignedIntegerBase8 represents unsigned octal integer after #o prefix.
-	TokenizerStateUnsignedIntegerBase8
-	// TokenizerStateSignedIntegerBase10 represents signed decimal integer after #d prefix.
-	TokenizerStateSignedIntegerBase10
-	// TokenizerStateUnsignedIntegerBase10 represents unsigned decimal integer after #d prefix.
-	TokenizerStateUnsignedIntegerBase10
-	// TokenizerStateSignedIntegerBase16 represents signed hexadecimal integer after #x prefix.
-	TokenizerStateSignedIntegerBase16
-	// TokenizerStateUnsignedIntegerBase16 represents unsigned hexadecimal integer after #x prefix.
-	TokenizerStateUnsignedIntegerBase16
 
 	// TokenizerStateBigFloat represents #m arbitrary-precision decimal.
 	TokenizerStateBigFloat
-	TokenizerStateBigIntegerDefaultBase // represents #z arbitrary-precision integer (default base).
-	TokenizerStateBigIntegerBase2       // represents #b arbitrary-precision binary.
-	TokenizerStateBigIntegerBase8       // represents #o arbitrary-precision octal.
-	TokenizerStateBigIntegerBase10      // represents #d arbitrary-precision decimal.
-	TokenizerStateBigIntegerBase16      // represents #x arbitrary-precision hexadecimal.
+	// TokenizerStateBigInteger represents #z arbitrary-precision integer (decimal).
+	TokenizerStateBigInteger
 
 	// TokenizerStateMarkerBase2 represents #b prefix (binary).
 	TokenizerStateMarkerBase2
@@ -242,8 +224,12 @@ type Tokenizer struct {
 	state TokenizerState
 	// signed indicates whether the current number token is signed (has + or -)
 	signed bool
-	// radix indicates the current number radix (base)
-	radix      int
+	// radix indicates the current number radix (base) while scanning; 0 = default
+	// decimal, 2/8/10/16 = explicit prefix. Reset to 0 after each number.
+	radix int
+	// tokRadix is the effective parse base recorded on the emitted integer token
+	// (2/8/10/16); 0 for tokens where base is not meaningful. Reset per token in mark().
+	tokRadix   int
 	blockDepth int  // nesting depth for block comments
 	ci         bool // case insensitive symbol mode
 	hashDigit  bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
@@ -315,7 +301,7 @@ func (p *Tokenizer) Next() (Token, error) {
 		src := p.text
 		val := p.value
 		// here p.err may be != nil due to read failure.  will be returned on next call to Next
-		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.hashDigit)
+		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.hashDigit, p.tokRadix)
 		return q, nil //nolint:staticcheck
 	}
 	return nil, p.err
@@ -539,6 +525,7 @@ func (p *Tokenizer) mark() {
 	p.tokenEnd = p.runeStart
 	p.signed = false
 	p.hashDigit = false
+	p.tokRadix = 0
 }
 
 // term terminates the current token, setting its end position and text.

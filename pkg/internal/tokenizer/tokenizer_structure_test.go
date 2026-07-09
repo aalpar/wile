@@ -522,7 +522,7 @@ func TestCombinedPrefixTokenSequence(t *testing.T) {
 
 		tok3, err3 := p.Next()
 		c.Assert(err3, qt.IsNil)
-		c.Check(tok3.Type(), qt.Equals, TokenizerStateUnsignedIntegerBase2)
+		c.Check(tok3.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 		c.Check(tok3.(*SimpleToken).src, qt.Equals, "101")
 	})
 
@@ -544,7 +544,7 @@ func TestCombinedPrefixTokenSequence(t *testing.T) {
 
 		tok3, err3 := p.Next()
 		c.Assert(err3, qt.IsNil)
-		c.Check(tok3.Type(), qt.Equals, TokenizerStateUnsignedIntegerBase16)
+		c.Check(tok3.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 		c.Check(tok3.(*SimpleToken).src, qt.Equals, "1F") // Hex digits included!
 	})
 
@@ -559,7 +559,7 @@ func TestCombinedPrefixTokenSequence(t *testing.T) {
 
 		tok2, err2 := p.Next()
 		c.Assert(err2, qt.IsNil)
-		c.Check(tok2.Type(), qt.Equals, TokenizerStateUnsignedIntegerBase16)
+		c.Check(tok2.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 		c.Check(tok2.(*SimpleToken).src, qt.Equals, "1000ff") // All hex digits included
 	})
 
@@ -575,7 +575,7 @@ func TestCombinedPrefixTokenSequence(t *testing.T) {
 
 		tok2, err2 := p.Next()
 		c.Assert(err2, qt.IsNil)
-		c.Check(tok2.Type(), qt.Equals, TokenizerStateUnsignedIntegerBase10)
+		c.Check(tok2.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 		c.Check(tok2.(*SimpleToken).src, qt.Equals, "1000") // Stops at 'a'
 
 		tok3, err3 := p.Next()
