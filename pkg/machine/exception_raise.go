@@ -90,7 +90,14 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// (parameterize ((exc-param parent)) …)). This makes a re-raise inside the handler
 	// escalate, and rides the marks into a continuation captured inside the handler.
 	mc.SetMark(exceptionHandlerParam, parent)
-	mc.SetMark(ErrorContextKey(), NewErrorContext(source, trace, nil))
+	// Snapshot the marks EAGERLY at the raise site (the third leg of the diagnostic
+	// triple alongside source + trace). It must be taken here: the handler runs with
+	// its own marks, and chain frames get pooled/reclaimed once we leave the raise,
+	// so a lazy "capture the pointer now, materialize later" scheme would race the
+	// continuation machinery (MarkChainShared). Bounded to DefaultPromptTag, and
+	// CollectContinuationMarks skips mark-less frames, so sparse-mark code pays little.
+	marks := mc.CollectContinuationMarks(DefaultPromptTag)
+	mc.SetMark(ErrorContextKey(), NewErrorContext(source, trace, marks))
 
 	// Run the handler INLINE on mc — NOT in a sub-context. This is load-bearing for
 	// nested guard under the resume flip: guard's handler captures handler-k via

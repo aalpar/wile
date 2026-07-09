@@ -171,15 +171,29 @@ func TestErrorContext_Primitives(t *testing.T) {
 			Expected: values.TrueValue,
 		},
 		{
-			Name: "error-context-marks returns false when not captured",
+			Name: "error-context-marks captures a mark set at the raise site",
 			Code: `(call/cc
 				(lambda (k)
 					(with-exception-handler
 						(lambda (e)
 							(let ((ctx (current-error-context)))
-								(k (error-context-marks ctx))))
+								(k (continuation-mark-set? (error-context-marks ctx)))))
 						(lambda () (raise "boom")))))`,
-			Expected: values.FalseValue,
+			Expected: values.TrueValue,
+		},
+		{
+			Name: "error-context-marks round-trips a value set before the raise",
+			Code: `(call/cc
+				(lambda (k)
+					(with-exception-handler
+						(lambda (e)
+							(let ((ctx (current-error-context)))
+								(k (continuation-mark-set-first
+										(error-context-marks ctx) 'my-key 'missing))))
+						(lambda ()
+							(with-continuation-mark 'my-key 'found
+								(raise "boom"))))))`,
+			Expected: values.NewSymbol("found"),
 		},
 	}
 	for _, tc := range tcs {
