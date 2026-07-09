@@ -70,26 +70,80 @@ func (p DocInfo) HasStructuredMetadata() bool {
 	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != nil || p.Category != "" || len(p.Keywords) > 0
 }
 
-// isMetadataHeader reports whether a line starts a metadata section
-// (content extracted from prose).
-func isMetadataHeader(line string) bool {
-	return strings.HasPrefix(line, "Syntax:") ||
-		strings.HasPrefix(line, "Parameters:") ||
-		strings.HasPrefix(line, "Returns:") ||
-		strings.HasPrefix(line, "Category:") ||
-		strings.HasPrefix(line, "Keywords:")
+// parametersPrefix is the one metadata section whose entries span multiple
+// indented continuation lines; every other metadata header carries its value
+// inline on the header line. Named so the sectionHeaders row and the
+// continuation-line dispatch in ParseDocstring reference the same string.
+const parametersPrefix = "Parameters:"
+
+// sectionKind distinguishes docstring sections whose content is extracted into
+// structured DocInfo fields (metadata) from those left in the prose Doc text.
+type sectionKind int
+
+const (
+	kindMetadata sectionKind = iota
+	kindProse
+)
+
+// sectionHeader describes one recognized docstring section header: its line
+// prefix, its kind, and — for a metadata header carrying an inline value — how
+// to apply that value to the DocInfo.
+type sectionHeader struct {
+	prefix string
+	kind   sectionKind
+	// apply extracts the header line's inline value into info. nil when the
+	// header carries no inline value: prose headers, and Parameters, whose
+	// entries follow on subsequent indented lines.
+	apply func(info *DocInfo, value string)
 }
 
-// isProseHeader reports whether a line starts a prose section
-// (content stays in Doc text).
-func isProseHeader(line string) bool {
-	return strings.HasPrefix(line, "Examples:") ||
-		strings.HasPrefix(line, "See also:")
+// sectionHeaders is the single source of truth for the docstring section
+// vocabulary. The header predicate (matchSectionHeader) and the ParseDocstring
+// dispatch both derive from it, so adding a section is one row — not a new
+// prefix string copied across a predicate and a parse switch.
+var sectionHeaders = []sectionHeader{
+	{prefix: "Syntax:", kind: kindMetadata, apply: func(info *DocInfo, value string) {
+		info.Syntax = value
+	}},
+	{prefix: parametersPrefix, kind: kindMetadata},
+	{prefix: "Returns:", kind: kindMetadata, apply: func(info *DocInfo, value string) {
+		info.ReturnType = ParseValueType(value)
+	}},
+	{prefix: "Category:", kind: kindMetadata, apply: func(info *DocInfo, value string) {
+		info.Category = value
+	}},
+	{prefix: "Keywords:", kind: kindMetadata, apply: func(info *DocInfo, value string) {
+		info.Keywords = parseKeywords(value)
+	}},
+	{prefix: "Examples:", kind: kindProse},
+	{prefix: "See also:", kind: kindProse},
 }
 
-// isSectionHeader reports whether a line starts any recognized section.
-func isSectionHeader(line string) bool {
-	return isMetadataHeader(line) || isProseHeader(line)
+// matchSectionHeader finds the section whose prefix begins line, returning the
+// header, the trimmed inline value following the prefix, and true. Search
+// follows sectionHeaders order.
+func matchSectionHeader(line string) (sectionHeader, string, bool) {
+	for _, h := range sectionHeaders {
+		after, found := strings.CutPrefix(line, h.prefix)
+		if found {
+			return h, strings.TrimSpace(after), true
+		}
+	}
+	return sectionHeader{}, "", false
+}
+
+// parseKeywords splits a comma-separated Keywords: value into trimmed,
+// non-empty keyword strings.
+func parseKeywords(raw string) []string {
+	parts := strings.Split(raw, ",")
+	keywords := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			keywords = append(keywords, trimmed)
+		}
+	}
+	return keywords
 }
 
 // ParseDocstring parses a raw docstring into structured metadata.
@@ -116,48 +170,23 @@ func ParseDocstring(raw string) DocInfo {
 			continue
 		}
 
-		if isSectionHeader(line) {
-			switch {
-			case strings.HasPrefix(line, "Syntax:"):
-				info.Syntax = strings.TrimSpace(strings.TrimPrefix(line, "Syntax:"))
-				currentSection = "Syntax:"
-
-			case strings.HasPrefix(line, "Parameters:"):
-				// Parameter lines follow on subsequent indented lines.
-				currentSection = "Parameters:"
-
-			case strings.HasPrefix(line, "Returns:"):
-				val := strings.TrimSpace(strings.TrimPrefix(line, "Returns:"))
-				info.ReturnType = ParseValueType(val)
-				currentSection = "Returns:"
-
-			case strings.HasPrefix(line, "Category:"):
-				info.Category = strings.TrimSpace(strings.TrimPrefix(line, "Category:"))
-				currentSection = "Category:"
-
-			case strings.HasPrefix(line, "Keywords:"):
-				kwRaw := strings.TrimSpace(strings.TrimPrefix(line, "Keywords:"))
-				parts := strings.Split(kwRaw, ",")
-				keywords := make([]string, 0, len(parts))
-				for _, part := range parts {
-					trimmed := strings.TrimSpace(part)
-					if trimmed != "" {
-						keywords = append(keywords, trimmed)
-					}
-				}
-				info.Keywords = keywords
-				currentSection = "Keywords:"
-
-			default:
+		hdr, value, ok := matchSectionHeader(line)
+		if ok {
+			if hdr.kind == kindProse {
 				// Prose section header — include in doc.
 				docLines = append(docLines, line)
 				currentSection = "prose"
+			} else {
+				if hdr.apply != nil {
+					hdr.apply(&info, value)
+				}
+				currentSection = hdr.prefix
 			}
 			continue
 		}
 
 		switch currentSection {
-		case "Parameters:":
+		case parametersPrefix:
 			// Parameter lines: "  name : type"
 			parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
 			if len(parts) == 2 {
@@ -167,13 +196,14 @@ func ParseDocstring(raw string) DocInfo {
 				info.ParamTypes = append(info.ParamTypes, ParseValueType(typeName))
 			}
 
-		case "Syntax:", "Returns:", "Category:", "Keywords:":
-			// These are single-line sections; ignore continuation lines.
-			continue
+		case "", "prose":
+			// Before any section or inside a prose section: keep the line.
+			docLines = append(docLines, line)
 
 		default:
-			// Before any section or inside a prose section.
-			docLines = append(docLines, line)
+			// A single-line metadata section (Syntax/Returns/Category/Keywords):
+			// its value was consumed from the header line; ignore continuations.
+			continue
 		}
 	}
 
