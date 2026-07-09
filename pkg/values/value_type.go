@@ -80,34 +80,57 @@ const (
 	TypeCount                              // sentinel — must be last
 )
 
-// typeNames maps each ValueType to its display name.
-var typeNames = [TypeCount]string{
-	TypeAny:               "any",
-	TypeVoid:              "void",
-	TypeBoolean:           "boolean",
-	TypeNumber:            "number",
-	TypeComplex:           "complex",
-	TypeReal:              "real",
-	TypeRational:          "rational",
-	TypeInteger:           "integer",
-	TypeFlonum:            "flonum",
-	TypeString:            "string",
-	TypeCharacter:         "character",
-	TypeSymbol:            "symbol",
-	TypeByte:              "byte",
-	TypePair:              "pair",
-	TypeList:              "list",
-	TypeVector:            "vector",
-	TypeByteVector:        "bytevector",
-	TypeHashtable:         "hashtable",
-	TypeProcedure:         "procedure",
-	TypePort:              "port",
-	TypeInputPort:         "input-port",
-	TypeOutputPort:        "output-port",
-	TypeTextualInputPort:  "textual-input-port",
-	TypeTextualOutputPort: "textual-output-port",
-	TypeBinaryInputPort:   "binary-input-port",
-	TypeBinaryOutputPort:  "binary-output-port",
+// typeInfo is the per-ValueType metadata row: the Scheme-facing name, a
+// human-readable description, and the value-narrowing check. Colocating the
+// three in one table (indexed by ValueType) means adding a built-in type is a
+// single row rather than lockstep edits across three parallel arrays that
+// demonstrably drift.
+type typeInfo struct {
+	name        string
+	description string
+	check       checkFunc
+}
+
+// typeInfos is the single authoritative table of built-in ValueType metadata,
+// indexed by ValueType. The name and description are declared here statically;
+// the check is assigned in init() — every check transitively calls
+// SchemeTypeName → String() → typeInfos, so populating check in this var
+// initializer would be a self-reference the compiler rejects (InvalidInitCycle),
+// which is the original reason the checkers lived in init(). The drift-guard
+// there asserts every row's three fields are populated, so a new ValueType
+// constant without a full row fails loudly at startup.
+//
+// The Go-type → ValueType reverse direction is goTypeToValueType, which is
+// intentionally NOT part of this table: it is keyed by reflect.Type and is
+// many-to-one (e.g. *Integer and *BigInteger both map to TypeInteger), so it
+// cannot share this table's ValueType index.
+var typeInfos = [TypeCount]typeInfo{
+	TypeAny:               {name: "any", description: "any value"},
+	TypeVoid:              {name: "void", description: "void (no meaningful return value)"},
+	TypeBoolean:           {name: "boolean", description: "boolean (#t or #f)"},
+	TypeNumber:            {name: "number", description: "number (any numeric type)"},
+	TypeComplex:           {name: "complex", description: "complex number"},
+	TypeReal:              {name: "real", description: "real number"},
+	TypeRational:          {name: "rational", description: "exact rational number"},
+	TypeInteger:           {name: "integer", description: "exact integer"},
+	TypeFlonum:            {name: "flonum", description: "inexact floating-point number"},
+	TypeString:            {name: "string", description: "string"},
+	TypeCharacter:         {name: "character", description: "character"},
+	TypeSymbol:            {name: "symbol", description: "symbol"},
+	TypeByte:              {name: "byte", description: "exact integer in [0, 255]"},
+	TypePair:              {name: "pair", description: "pair (cons cell)"},
+	TypeList:              {name: "list", description: "proper list (pair or empty list)"},
+	TypeVector:            {name: "vector", description: "vector"},
+	TypeByteVector:        {name: "bytevector", description: "bytevector"},
+	TypeHashtable:         {name: "hashtable", description: "hash table"},
+	TypeProcedure:         {name: "procedure", description: "procedure"},
+	TypePort:              {name: "port", description: "port"},
+	TypeInputPort:         {name: "input-port", description: "input port"},
+	TypeOutputPort:        {name: "output-port", description: "output port"},
+	TypeTextualInputPort:  {name: "textual-input-port", description: "textual input port"},
+	TypeTextualOutputPort: {name: "textual-output-port", description: "textual output port"},
+	TypeBinaryInputPort:   {name: "binary-input-port", description: "binary input port"},
+	TypeBinaryOutputPort:  {name: "binary-output-port", description: "binary output port"},
 }
 
 // String returns the Scheme-style name for the type (e.g., "integer", "pair").
@@ -115,7 +138,7 @@ func (p ValueType) String() string {
 	if p >= TypeCount {
 		return "unknown"
 	}
-	return typeNames[p]
+	return typeInfos[p].name
 }
 
 // Name returns the Scheme-facing type name, satisfying the TypeConstraint interface.
@@ -123,51 +146,18 @@ func (p ValueType) Name() string {
 	return p.String()
 }
 
-// typeDescriptions maps each ValueType to a human-readable description.
-var typeDescriptions = [TypeCount]string{
-	TypeAny:               "any value",
-	TypeVoid:              "void (no meaningful return value)",
-	TypeBoolean:           "boolean (#t or #f)",
-	TypeNumber:            "number (any numeric type)",
-	TypeComplex:           "complex number",
-	TypeReal:              "real number",
-	TypeRational:          "exact rational number",
-	TypeInteger:           "exact integer",
-	TypeFlonum:            "inexact floating-point number",
-	TypeString:            "string",
-	TypeCharacter:         "character",
-	TypeSymbol:            "symbol",
-	TypeByte:              "exact integer in [0, 255]",
-	TypePair:              "pair (cons cell)",
-	TypeList:              "proper list (pair or empty list)",
-	TypeVector:            "vector",
-	TypeByteVector:        "bytevector",
-	TypeHashtable:         "hash table",
-	TypeProcedure:         "procedure",
-	TypePort:              "port",
-	TypeInputPort:         "input port",
-	TypeOutputPort:        "output port",
-	TypeTextualInputPort:  "textual input port",
-	TypeTextualOutputPort: "textual output port",
-	TypeBinaryInputPort:   "binary input port",
-	TypeBinaryOutputPort:  "binary output port",
-}
-
 // Description returns a human-readable description of the type constraint.
 func (p ValueType) Description() string {
 	if p >= TypeCount {
 		return "unknown type"
 	}
-	return typeDescriptions[p]
+	return typeInfos[p].description
 }
 
 // checkFunc is the signature for per-type check functions.
 // Returns (narrowed value, matched, error). When matched is false, error
 // describes the type mismatch.
 type checkFunc func(Value) (any, bool, error)
-
-// checks is populated in init() with a checker for each ValueType.
-var checks [TypeCount]checkFunc
 
 // goTypeToValueType maps each concrete Go runtime type to its
 // corresponding ValueType. Populated in init(). Used by SchemeTypeName
@@ -198,22 +188,25 @@ var checks [TypeCount]checkFunc
 var goTypeToValueType map[reflect.Type]ValueType
 
 func init() {
-	checks[TypeAny] = func(v Value) (any, bool, error) {
+	// Populate the check field of each typeInfos row. This cannot fold into the
+	// var literal above: every check reaches SchemeTypeName → String() → typeInfos,
+	// so assigning here in init() (exempt from init-cycle analysis) is required.
+	typeInfos[TypeAny].check = func(v Value) (any, bool, error) {
 		return v, true, nil
 	}
-	checks[TypeVoid] = func(v Value) (any, bool, error) {
+	typeInfos[TypeVoid].check = func(v Value) (any, bool, error) {
 		if v == nil || v.IsVoid() {
 			return v, true, nil
 		}
 		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"expected void, got %s", SchemeTypeName(v))
 	}
-	checks[TypeBoolean] = makeCheck[*Boolean]("boolean")
-	checks[TypeNumber] = makeCheck[Number]("number")
-	checks[TypeComplex] = makeCheck[ComplexNumber]("complex")
-	checks[TypeReal] = makeCheck[RealNumber]("real")
-	checks[TypeRational] = makeCheck[*Rational]("rational")
-	checks[TypeInteger] = func(v Value) (any, bool, error) {
+	typeInfos[TypeBoolean].check = makeCheck[*Boolean]("boolean")
+	typeInfos[TypeNumber].check = makeCheck[Number]("number")
+	typeInfos[TypeComplex].check = makeCheck[ComplexNumber]("complex")
+	typeInfos[TypeReal].check = makeCheck[RealNumber]("real")
+	typeInfos[TypeRational].check = makeCheck[*Rational]("rational")
+	typeInfos[TypeInteger].check = func(v Value) (any, bool, error) {
 		switch t := v.(type) {
 		case *Integer:
 			return t, true, nil
@@ -224,7 +217,7 @@ func init() {
 				"expected integer, got %s", SchemeTypeName(v))
 		}
 	}
-	checks[TypeFlonum] = func(v Value) (any, bool, error) {
+	typeInfos[TypeFlonum].check = func(v Value) (any, bool, error) {
 		switch t := v.(type) {
 		case *Float:
 			return t, true, nil
@@ -235,43 +228,45 @@ func init() {
 				"expected flonum, got %s", SchemeTypeName(v))
 		}
 	}
-	checks[TypeString] = makeCheck[*String]("string")
-	checks[TypeCharacter] = makeCheck[*Character]("character")
-	checks[TypeSymbol] = makeCheck[*Symbol]("symbol")
-	checks[TypeByte] = makeCheck[*Byte]("byte")
-	checks[TypePair] = makeCheck[*Pair]("pair")
-	checks[TypeList] = makeCheck[Tuple]("list")
-	checks[TypeVector] = makeCheck[*Vector]("vector")
-	checks[TypeByteVector] = makeCheck[*ByteVector]("bytevector")
-	checks[TypeHashtable] = makeCheck[*Hashtable]("hashtable")
-	checks[TypeProcedure] = makeCheck[Callable]("procedure")
-	checks[TypePort] = makeCheck[Port]("port")
-	checks[TypeInputPort] = makePortCapCheck("input-port",
+	typeInfos[TypeString].check = makeCheck[*String]("string")
+	typeInfos[TypeCharacter].check = makeCheck[*Character]("character")
+	typeInfos[TypeSymbol].check = makeCheck[*Symbol]("symbol")
+	typeInfos[TypeByte].check = makeCheck[*Byte]("byte")
+	typeInfos[TypePair].check = makeCheck[*Pair]("pair")
+	typeInfos[TypeList].check = makeCheck[Tuple]("list")
+	typeInfos[TypeVector].check = makeCheck[*Vector]("vector")
+	typeInfos[TypeByteVector].check = makeCheck[*ByteVector]("bytevector")
+	typeInfos[TypeHashtable].check = makeCheck[*Hashtable]("hashtable")
+	typeInfos[TypeProcedure].check = makeCheck[Callable]("procedure")
+	typeInfos[TypePort].check = makeCheck[Port]("port")
+	typeInfos[TypeInputPort].check = makePortCapCheck("input-port",
 		func(p *PortObject) bool { return p.rdr != nil })
-	checks[TypeOutputPort] = makePortCapCheck("output-port",
+	typeInfos[TypeOutputPort].check = makePortCapCheck("output-port",
 		func(p *PortObject) bool { return p.wrt != nil })
-	checks[TypeTextualInputPort] = makePortCapCheck("textual-input-port",
+	typeInfos[TypeTextualInputPort].check = makePortCapCheck("textual-input-port",
 		func(p *PortObject) bool { return p.rr != nil })
-	checks[TypeTextualOutputPort] = makePortCapCheck("textual-output-port",
+	typeInfos[TypeTextualOutputPort].check = makePortCapCheck("textual-output-port",
 		func(p *PortObject) bool { return p.wr != nil })
-	checks[TypeBinaryInputPort] = makePortCapCheck("binary-input-port",
+	typeInfos[TypeBinaryInputPort].check = makePortCapCheck("binary-input-port",
 		func(p *PortObject) bool { return p.rb != nil })
-	checks[TypeBinaryOutputPort] = makePortCapCheck("binary-output-port",
+	typeInfos[TypeBinaryOutputPort].check = makePortCapCheck("binary-output-port",
 		func(p *PortObject) bool { return p.wb != nil })
 
-	// Verify all slots are populated — catches missing entries when new types are added.
+	// Drift-guard: every typeInfos row must be fully populated. Catches a new
+	// ValueType constant added to the enum without a matching name/description
+	// row above or check assignment here.
 	for i := range TypeCount {
-		if typeNames[i] == "" {
+		if typeInfos[i].name == "" {
 			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-				"values: missing typeNames entry for ValueType %d", i))
+				"values: missing typeInfos name for ValueType %d", i))
 		}
-		if typeDescriptions[i] == "" {
+		if typeInfos[i].description == "" {
 			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-				"values: missing typeDescriptions entry for ValueType %d", i))
+				"values: missing typeInfos description for ValueType %d", i))
 		}
-		if checks[i] == nil {
+		if typeInfos[i].check == nil {
 			panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-				"values: missing Check function for ValueType %s", typeNames[i]))
+				"values: missing typeInfos check for ValueType %s", typeInfos[i].name))
 		}
 	}
 
@@ -313,7 +308,7 @@ func (p ValueType) Check(v Value) (any, bool, error) {
 	if p >= TypeCount {
 		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "invalid ValueType %d", p)
 	}
-	return checks[p](v)
+	return typeInfos[p].check(v)
 }
 
 // SchemeTypeName returns the Scheme-facing type name for a value.
