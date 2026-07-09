@@ -226,56 +226,6 @@ func (p *Pair) IsList() bool {
 	return IsEmptyList(last.Cdr())
 }
 
-// Append appends the given Value vs to the end of the list represented by the Pair.
-// It panics if the Pair does not represent a proper list.
-//
-// R7RS §6.4: The resulting list is always newly allocated, except that it shares
-// structure with the last argument. This implementation copies the spine of p
-// and sets the last cdr to vs.
-func (p *Pair) Append(vs Value) Value {
-	if !p.IsList() {
-		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "Pair.Append: receiver is not a proper list"))
-	}
-	if IsEmptyList(vs) {
-		return p
-	}
-	if IsVoid(p) {
-		return vs
-	}
-
-	// Copy the spine of p and append vs
-	// R7RS §6.4: all arguments except the last must be newly allocated
-	var head, tail *Pair
-	q := p
-	for !IsEmptyList(q) {
-		newPair := NewCons(q.Car(), EmptyList)
-		if head == nil {
-			head = newPair
-			tail = newPair
-		} else {
-			tail[1] = newPair
-			tail = newPair
-		}
-
-		cdr := q.Cdr()
-		if IsEmptyList(cdr) {
-			break
-		}
-		var ok bool
-		q, ok = cdr.(*Pair)
-		if !ok {
-			panic(werr.WrapForeignErrorf(werr.ErrNotAList, "Pair.Append: improper list during spine copy"))
-		}
-	}
-
-	// Attach vs to the last copied pair
-	if tail != nil {
-		tail[1] = vs
-	}
-
-	return head
-}
-
 // Length returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
 //

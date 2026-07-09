@@ -208,8 +208,6 @@ type Tuple interface {
 	// Length returns the number of elements. For improper lists, this
 	// counts only the proper prefix.
 	Length() int
-	// Append creates a new list with value appended (R7RS §6.4 append).
-	Append(value Value) Value
 	// AsVector converts the list to a Vector (R7RS §6.4 list->vector).
 	AsVector() *Vector
 	// IsList reports whether this is a proper list (R7RS §6.4 list?).
