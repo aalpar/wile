@@ -141,6 +141,26 @@ func (p *DatumToSyntaxValueSuite) TestAlreadySyntaxPair(c *qt.C) {
 	c.Assert(result.SourceContext(), qt.Equals, origCtx)
 }
 
+func (p *DatumToSyntaxValueSuite) TestAlreadySyntaxVector(c *qt.C) {
+	// The switch's `case *values.Vector` sits BELOW the SyntaxValue arm; a
+	// *SyntaxVector is not a *values.Vector, so it can only be matched by the
+	// SyntaxValue arm and must pass through unchanged. This pins the second half
+	// of the pass-through contract the comment in syntax.go promises (the first
+	// half — *SyntaxPair — is TestAlreadySyntaxPair). Guards a reorder that would
+	// route already-wrapped syntax vectors through a rebuild and drop their sctx.
+	origCtx := syntax.NewSourceContext("orig", "orig.scm",
+		syntax.NewSourceIndexes(1, 2, 3), syntax.NewSourceIndexes(1, 4, 5))
+	original := syntax.NewSyntaxVector(origCtx)
+	original.Values = append(original.Values, syntax.NewSyntaxSymbol("a", origCtx))
+
+	result := DatumToSyntaxValue(context.Background(), p.sctx, original)
+
+	// Same pointer: passed through, not rebuilt.
+	c.Assert(result, qt.Equals, original)
+	// Its own source context survives rather than being overwritten by p.sctx.
+	c.Assert(result.SourceContext(), qt.Equals, origCtx)
+}
+
 func (p *DatumToSyntaxValueSuite) TestInteger(c *qt.C) {
 	num := values.NewInteger(42)
 	result := DatumToSyntaxValue(context.Background(), p.sctx, num)
