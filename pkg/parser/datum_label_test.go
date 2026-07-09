@@ -88,6 +88,50 @@ func TestReader_CircularVectorResolvesSelfReference(t *testing.T) {
 	}
 }
 
+// TestReader_CircularListResolvesSelfReference pins read-level circular-list
+// support (R7RS §2.4): #0=(1 . #0#) reads as a pair whose cdr is the pair
+// itself. This is the property readLabeledList exists to preserve — it passes
+// the pre-registered placeholder to readListInto so the inner #0# resolves to
+// the eventual list head. A regression that let the shared loop allocate its own
+// head (instead of filling the placeholder) would break the self-reference.
+func TestReader_CircularListResolvesSelfReference(t *testing.T) {
+	q, err := readOneDatum("#0=(1 . #0#)")
+	if err != nil {
+		t.Fatalf("ReadSyntax error: %v", err)
+	}
+	asg, ok := q.(*syntax.SyntaxDatumLabelAssignment)
+	if !ok {
+		t.Fatalf("got %T, want *SyntaxDatumLabelAssignment", q)
+	}
+	pair, ok := asg.Value.(*syntax.SyntaxPair)
+	if !ok {
+		t.Fatalf("labeled value is %T, want *SyntaxPair", asg.Value)
+	}
+	cdr, ok := pair.Cdr().(*syntax.SyntaxPair)
+	if !ok || cdr != pair {
+		t.Fatalf("cdr = %v (%T), want the pair itself (circular self-reference)", pair.Cdr(), pair.Cdr())
+	}
+}
+
+// TestReader_LabeledListElidedElementIsEmptyList pins the consistency the
+// readList/readLabeledList unification established: a labeled list whose only
+// element is elided by a datum comment (#0=( #;5 )) is the empty list, exactly
+// like the plain "( #;5 )". Before the unification the labeled path hard-errored
+// ("expected a datum in labeled list") while the plain path returned ().
+func TestReader_LabeledListElidedElementIsEmptyList(t *testing.T) {
+	q, err := readOneDatum("#0=( #;5 )")
+	if err != nil {
+		t.Fatalf("ReadSyntax(#0=( #;5 )) error: %v", err)
+	}
+	got, writeErr := values.WriteValueToString(q.UnwrapAll())
+	if writeErr != nil {
+		t.Fatalf("WriteValueToString error: %v", writeErr)
+	}
+	if got != "()" {
+		t.Fatalf("#0=( #;5 ) round-trips to %q, want \"()\"", got)
+	}
+}
+
 // TestReader_CircularVectorRoundTrips proves the data-path round-trip that
 // datum labels exist for (R7RS §2.4): reading #0=#(1 #0#) and writing the
 // unwrapped value reproduces the same notation, so write output re-reads.

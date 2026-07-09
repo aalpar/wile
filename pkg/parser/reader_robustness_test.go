@@ -132,7 +132,12 @@ func TestReader_MalformedInputIsLocatedErrorNotPanic(t *testing.T) {
 		// fuzz corpus pins no-panic; these rows pin the *sentinel* so a regression
 		// that rejects the right input for the wrong reason is also caught.
 		{"quote form no datum", "' )", werr.ErrNotACons},
-		{"labeled list nil element (#d)", "#0=(#d)", werr.ErrNotACons},
+		// "#d" is a decimal radix marker with no number. It is now rejected at the
+		// radix arm with the precise ErrNotANumber, in both plain and labeled lists
+		// (previously the labeled path reported the generic ErrNotACons and the
+		// plain path silently mis-parsed "(#d)" to "()").
+		{"labeled list nil element (#d)", "#0=(#d)", werr.ErrNotANumber},
+		{"plain list nil element (#d)", "(#d)", werr.ErrNotANumber},
 		{"exactness marker no number", "#e)", werr.ErrNotANumber},
 		{"rational zero denominator", "#b0/0", werr.ErrDivisionByZero},
 		// (the empty-graphic-char crasher "#\0<NUL>" surfaces on a later datum,

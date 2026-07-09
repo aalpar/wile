@@ -261,179 +261,28 @@ func (p *Parser) advance() error {
 	return err
 }
 
-// readLabeledList reads a list into a pre-created placeholder pair.
-// This enables circular references where the list refers to itself via datum labels.
-// The placeholder must already be registered in datumLabels before calling this.
-// The opener parameter indicates whether ( or [ was used, for bracket matching.
+// readLabeledList reads a list into a pre-created placeholder pair, enabling
+// circular references where the list refers to itself via a datum label. The
+// placeholder must already be registered in datumLabels before calling this, so
+// a #n# encountered while reading elements resolves to the eventual list head.
 //
-// R7RS §2.4: Datum labels enable representing shared/circular structures.
-// For #0=(1 . #0#), we:
-//  1. Pre-create a pair and register it as label 0
-//  2. Read the list contents, which may include #0# references
-//  3. Populate the pair with the read values
+// R7RS §2.4: for #0=(1 . #0#) the caller pre-creates a pair, registers it as
+// label 0, and calls here; the shared readListInto loop fills that exact pair,
+// so the inner #0# resolves back to it. The list grammar itself (proper,
+// improper, empty, bracket matching) lives once in readListInto — this wrapper
+// only supplies the placeholder and re-points the label afterward.
 func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, labelNum int, opener tokenizer.TokenizerState) (syntax.SyntaxValue, error) {
-	expectedClose := p.matchingClose(opener)
-
-	// Skip the opening paren/bracket
-	err := p.advance()
+	q, _, err := p.readListInto(placeholder, opener)
 	if err != nil {
-		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
+		return nil, err
 	}
-
-	// Handle empty list: () or []
-	if p.cur.Type() == expectedClose {
-		// Empty labeled list (#0=()): bind the label to the empty list and
-		// return it. Returning the pre-created placeholder pair unchanged would
-		// leave a malformed (nil . nil) that renders as the non-re-readable
-		// "(#<void>)" — a #n# back-reference must resolve to () as well.
-		empty := p.wrapSyntaxEmptyList(p.cur)
-		p.datumLabels[labelNum] = empty
-		return empty, nil
-	}
-	// Check for bracket mismatch on close
-	err = p.checkDelimiterMatch(opener)
-	if err != nil {
-		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-	}
-
-	// Read the first element
-	first, _, err := p.readSyntax()
-	// A #0= assignment needs a datum; stopping on a close delimiter is a located
-	// error, not a SetCar(nil) that later panics on a nil interface conversion.
-	if errors.Is(err, errNoDatum) {
-		return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
-			"expected a datum in labeled list")
-	}
-	if err != nil {
-		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-	}
-	placeholder.SetCar(first)
-
-	// Advance to next token
-	err = p.advance()
-	if err != nil {
-		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-	}
-
-	// Check for improper list: (a . b) or [a . b]
-	if p.cur.Type() == tokenizer.TokenizerStateCons {
-		// Skip the dot
-		err = p.advance()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		// Read the cdr
-		cdr, _, err := p.readSyntax()
-		// R7RS §7.1.2: the dot must be followed by a datum; stopping on a close
-		// delimiter is a located error, not a SetCdr(nil) panic.
-		if errors.Is(err, errNoDatum) {
-			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
-				"expected datum after '.' in dotted pair")
-		}
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		placeholder.SetCdr(cdr)
-		// Advance past the cdr and expect matching close delimiter
-		err = p.advance()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		if p.cur.Type() != expectedClose {
-			err := p.checkDelimiterMatch(opener)
-			if err != nil {
-				return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-			}
-			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
-				p.delimiterString(expectedClose))
-		}
-		return placeholder, nil
-	}
-
-	// Check for end of list
-	if p.cur.Type() == expectedClose {
-		// Single element list - set cdr to empty list
-		placeholder.SetCdr(syntax.SyntaxEmptyList)
-		return placeholder, nil
-	}
-	// Check for bracket mismatch
-	err = p.checkDelimiterMatch(opener)
-	if err != nil {
-		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-	}
-
-	// Continue reading remaining elements
-	current := placeholder
-	for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
-		// Create a new pair for this element
-		nextPair := p.wrapSyntaxPair(nil, nil, p.cur)
-
-		// Read the element
-		elem, _, err := p.readSyntax()
-		// Stopping on a close delimiter mid-read must be a located error, not a
-		// SetCar(nil) panic — see the first-element guard above.
-		if errors.Is(err, errNoDatum) {
-			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
-				"expected a datum in labeled list")
-		}
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		nextPair.SetCar(elem)
-
-		// Link to previous
-		current.SetCdr(nextPair)
-		current = nextPair
-
-		// Advance to next token
-		err = p.advance()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-	}
-
-	// Handle improper list ending: (a b . c) or [a b . c]
-	switch {
-	case p.cur.Type() == tokenizer.TokenizerStateCons:
-		// Skip the dot
-		err = p.advance()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		// Read the final cdr
-		cdr, _, err := p.readSyntax()
-		// R7RS §7.1.2: the dot must be followed by a datum; stopping on a close
-		// delimiter is a located error, not a SetCdr(nil) panic.
-		if errors.Is(err, errNoDatum) {
-			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
-				"expected datum after '.' in dotted pair")
-		}
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		current.SetCdr(cdr)
-		// Advance past the cdr and expect matching close delimiter
-		err = p.advance()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		if p.cur.Type() != expectedClose {
-			err := p.checkDelimiterMatch(opener)
-			if err != nil {
-				return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-			}
-			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
-				p.delimiterString(expectedClose))
-		}
-	case p.cur.Type() == expectedClose:
-		// Proper list - terminate with empty list
-		current.SetCdr(syntax.SyntaxEmptyList)
-	case p.isListCloser(p.cur.Type()):
-		// Bracket mismatch
-		return nil, p.checkDelimiterMatch(opener)
-	}
-
-	return placeholder, nil
+	// An empty list (#0=(), or one whose only elements were elided by #;) yields
+	// the empty-list singleton, not the placeholder. Re-point the label to the
+	// actual result so a later #n# resolves to () rather than the abandoned
+	// (nil . nil) placeholder. For a non-empty list q == placeholder, so this is
+	// a harmless re-store.
+	p.datumLabels[labelNum] = q
+	return q, nil
 }
 
 // readQuoteForm reads a quote-like form (quote, unquote, quasiquote, etc.).
@@ -613,12 +462,24 @@ func wrapMidParseEOF(err error, tok tokenizer.Token, form string) error {
 	return err
 }
 
-// readList reads a list form opened by ( or [.
-// Handles proper lists (a b c), improper lists (a b . c), and bracket matching.
+// readList reads a fresh list form opened by ( or [. It allocates its own head
+// placeholder wrapping the opener token, then fills it via the shared element
+// loop in readListInto. readLabeledList takes the other entry point, passing a
+// pre-registered placeholder so #n# back-references resolve to the list head.
 func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, tokenizer.Token, error) {
+	return p.readListInto(p.wrapSyntaxPair(nil, nil, p.cur), opener)
+}
+
+// readListInto reads a list form into head, a caller-supplied placeholder pair
+// already wrapping the opener token. It handles proper lists (a b c), improper
+// lists (a b . c), the empty list, and bracket matching. Filling a caller-
+// supplied head is what lets readLabeledList pre-register that exact pair so a
+// #n# inside the list resolves to it (R7RS §2.4 circular structures) — mirroring
+// readVectorInto for vectors. The head's SourceContext (the opener position) is
+// preserved as the returned list's provenance.
+func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.TokenizerState) (syntax.SyntaxValue, tokenizer.Token, error) {
 	expectedClose := p.matchingClose(opener)
-	var pr syntax.SyntaxValue
-	pr = p.wrapSyntaxPair(nil, nil, p.cur)
+	var pr syntax.SyntaxValue = head
 	err := p.advance()
 	if err != nil {
 		return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
@@ -987,11 +848,22 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateMarkerBase8:
 		return p.parseBaseWithExactness(8)
 	case tokenizer.TokenizerStateMarkerBase10:
+		// #d is the default (decimal) radix, so the following datum reads normally.
 		err = p.advance()
 		if err != nil {
 			return nil, p.cur, err
 		}
-		return p.readSyntax()
+		var tok tokenizer.Token
+		q, tok, err = p.readSyntax()
+		// A radix marker with no number (e.g. "#d)") must be a located error, not a
+		// leaked errNoDatum that a compound reader silently treats as "no datum" —
+		// mirroring readExactnessMarker (#e/#i) and the #b/#o/#x arms, which all
+		// reject a missing number. Without this guard "(#d)" mis-parsed to "()".
+		if errors.Is(err, errNoDatum) {
+			return nil, tok, NewParserErrorWithWrapf(werr.ErrNotANumber, tok,
+				"decimal number marker requires a datum")
+		}
+		return q, tok, err
 	case tokenizer.TokenizerStateMarkerBase16:
 		return p.parseBaseWithExactness(16)
 	case tokenizer.TokenizerStateSignedInf:
