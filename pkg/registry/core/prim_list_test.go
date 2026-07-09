@@ -1637,6 +1637,13 @@ func TestListCopy_ElementSharing(t *testing.T) {
 			  (let ((orig (list inner 3)))
 			    (let ((copy (list-copy orig)))
 			      (eq? (car orig) (car copy)))))`, Expected: values.TrueValue},
+		// R7RS §6.4: the copy shares structure with the improper tail. A string
+		// tail is observable by identity (NewString always allocates, so eq?
+		// tests pointer identity), pinning the tail-sharing contract.
+		{Name: "improper tail shared via eq?", Code: `
+			(let ((tail "x"))
+			  (let ((orig (cons 1 (cons 2 tail))))
+			    (eq? (cddr (list-copy orig)) tail)))`, Expected: values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

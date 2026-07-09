@@ -60,11 +60,6 @@ func (emptyListType) Length() int {
 	return 0
 }
 
-// Append returns vs unchanged, since appending to the empty list yields vs.
-func (emptyListType) Append(vs Value) Value {
-	return vs
-}
-
 // ForEach is a no-op on the empty list; returns the empty list and nil error.
 func (p emptyListType) ForEach(_ context.Context, _ ForEachFunc) (Value, error) {
 	return p, nil

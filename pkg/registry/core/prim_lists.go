@@ -293,45 +293,52 @@ func PrimListTail(mc machine.CallContext) error {
 
 // PrimListCopy implements the list-copy primitive.
 // Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
+//
+// Two-pass block construction (mirrors PrimReverse/PrimList): pass 1 counts the
+// pairs and captures the terminating cdr, pass 2 block-allocates the whole spine
+// as one PairBlock and fills the cars front-to-front. This amortizes N cons
+// allocations to a single block. Unlike a proper-list copy, list-copy preserves
+// an improper tail: ForEach visits each car and returns the final cdr
+// (EmptyList for a proper list, the shared atom otherwise), which we re-point
+// the last cell at so the copy shares structure with it (R7RS §6.4).
 func PrimListCopy(mc machine.CallContext) error {
 	obj := mc.Arg(0)
-	if values.IsEmptyList(obj) {
-		mc.SetValue(values.EmptyList)
-		return nil
-	}
 	pr, ok := obj.(values.Tuple)
 	if !ok {
+		// A non-list argument (or an atom) copies to itself.
 		mc.SetValue(obj)
 		return nil
 	}
-	var head, tail *values.Pair
-	current := values.Value(pr)
-	for {
-		p, ok := current.(values.Tuple)
-		if !ok {
-			if tail != nil {
-				tail.SetCdr(current)
-			}
-			break
-		}
-		newPair := values.NewCons(p.Car(), values.EmptyList)
-		if head == nil {
-			head = newPair
-		} else {
-			tail.SetCdr(newPair)
-		}
-		tail = newPair
-		cdr := p.Cdr()
-		if values.IsEmptyList(cdr) {
-			break
-		}
-		current = cdr
-	}
-	if head == nil {
+	if pr.IsEmptyList() {
 		mc.SetValue(values.EmptyList)
-	} else {
-		mc.SetValue(head)
+		return nil
 	}
+
+	n := 0
+	tail, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
+		n++
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	block := make(values.PairBlock, n).LinkSpine()
+	i := 0
+	_, err = pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+		block[i][0] = v
+		i++
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	// LinkSpine terminated the final cdr with EmptyList; for an improper input
+	// re-point it at the shared tail (R7RS §6.4 structure sharing).
+	if !values.IsEmptyList(tail) {
+		block[n-1][1] = tail
+	}
+	mc.SetValue(&block[0])
 	return nil
 }
 

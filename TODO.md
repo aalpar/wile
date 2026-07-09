@@ -580,11 +580,11 @@ Directions documents — identify prioritized capability extensions. Priority se
 
 ### List/Pair Primitive Cleanup (from inline annotations)
 
-- [ ] **List/pair primitive cleanup notes** [Low, XS–S]: Relocated from inline `// CLAUDE:` source annotations (removed to keep the axis-B manifest stable — inline comments shift primitive line numbers and break `TestBuildAxisBManifest`). Four items:
-  - **`Pair.Append` removal** (`pkg/values/pair.go`, `(*Pair).Append`): evaluate removing `Pair.Append` and its unit tests — confirm it has no remaining callers / is superseded before deleting.
-  - **`PrimReverse` allocation** (`pkg/registry/core/prim_lists.go`, `PrimReverse`): pre-allocate the result list as a `PairBlock` instead of consing per element.
-  - **`PrimListCopy` allocation** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): pre-allocate the result list as a `PairBlock`.
-  - **`PrimListCopy` loop shape** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): consider a higher-order traversal helper to replace the explicit `for` spine-walk.
+- [x] **List/pair primitive cleanup notes** [Low, XS–S, Done]: Relocated from inline `// CLAUDE:` source annotations (removed to keep the axis-B manifest stable — inline comments shift primitive line numbers and break `TestBuildAxisBManifest`). Four items:
+  - [x] **`Pair.Append` removal** (`pkg/values/pair.go`, `(*Pair).Append`): **removed.** Confirmed dead — zero production callers (the only `.Append(` in non-test code was `reflect.Append`); superseded by the Scheme `append` primitive (`PrimAppend`), which builds its own spine. Deleted the `Tuple.Append` interface method, both implementers (`*Pair`, `emptyListType`), and the 6 `*_Append*` unit tests.
+  - [x] **`PrimReverse` allocation** (`pkg/registry/core/prim_lists.go`, `PrimReverse`): already `PairBlock` (count pass + back-to-front fill).
+  - [x] **`PrimListCopy` allocation** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): **converted to `PairBlock`.** Reversed the earlier tail-pointer choice — `Tuple.ForEach` gives both the count and the terminating cdr, so an improper tail is preserved by re-pointing the block's last cdr after `LinkSpine`; the tail-pointer form was not load-bearing. Measured: 50-element copy 63→18 allocs / ~10% faster (O(N) cons → 1 block). CLAUDE.local.md allocation guidance updated to move list-copy to the `PairBlock` example and keep `PrimAppend` as the sole tail-pointer exemplar (multi-arg concat genuinely can't pre-count).
+  - [x] **`PrimListCopy` loop shape** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): explicit `for` spine-walk replaced by two `Tuple.ForEach` passes (mirrors `PrimList`/`PrimReverse`).
 
 ### FCA-Derived
 
