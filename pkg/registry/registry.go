@@ -499,11 +499,16 @@ func (p *Registry) Clone() *Registry {
 	return p.deepCopy()
 }
 
-// deepCopy returns a Registry whose 7 category slices are independent
+// deepCopy returns a Registry whose 8 category slices are independent
 // copies of p's. Element types are not transitively cloned — the copy is
 // one level deep (slice header + backing array). Callers may overwrite
 // individual slices on the returned Registry to express filter-style
 // transformations; mutating q never affects p.
+//
+// TestDeepCopyTouchesEverySliceField (registry_test.go) is the drift-guard:
+// it fails if a new slice field is added without extending the make+copy
+// block below (fail-closed) or if a field is ever shared by reference
+// (fail-open aliasing).
 //
 // Locking is internal: deepCopy acquires p.mu.RLock for the duration of
 // the copy and releases it before returning. Callers MUST NOT hold p.mu

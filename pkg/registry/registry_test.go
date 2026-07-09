@@ -15,6 +15,7 @@
 package registry
 
 import (
+	"reflect"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -845,4 +846,72 @@ func TestNewDescribedExtensionForwardsToOptions(t *testing.T) {
 
 	c.Assert(ext.(Describer).Description(), qt.Equals, "desc")
 	c.Assert(ext.(LibraryNamer).LibraryName(), qt.IsNil)
+}
+
+// TestDeepCopyTouchesEverySliceField is the drift-guard for the "ADD A NEW
+// REGISTRY CATEGORY" ritual documented on the Registry type. deepCopy builds an
+// explicit struct literal, so a forgotten field fails closed (nil on the copy →
+// silent data loss through Clone/Without*), while a future switch to a
+// struct-copy idiom would fail open (shared backing array → cross-engine
+// aliasing). This test catches both, generically over every slice field:
+//
+//   - completeness: every []T field on Registry must be populated below, so a
+//     newly added category forces this test (hence deepCopy) to be updated in
+//     lockstep — the ritual is no longer self-enforcing by memory alone (the
+//     doc comment count had already drifted 7→8 before this guard existed);
+//   - fail-closed: the copy's length must match the source (field was copied);
+//   - fail-open: the copy's backing array must differ (no aliasing).
+//
+// It generalizes the single-field TestClone_PreservesNamespaceInits.
+func TestDeepCopyTouchesEverySliceField(t *testing.T) {
+	p := NewRegistry()
+	// Populate every category slice with one element so aliasing is observable
+	// (Pointer() on an empty slice is not a reliable identity). If a new slice
+	// field is added to Registry, the completeness check below fails until it is
+	// populated here.
+	p.primitives = append(p.primitives, PrimitiveRegistration{})
+	p.bindingSpecs = append(p.bindingSpecs, BindingSpec{})
+	p.docPrimitives = append(p.docPrimitives, PrimitiveSpec{})
+	p.initFuncs = append(p.initFuncs, nil)
+	p.macroSources = append(p.macroSources, "m")
+	p.procedureSources = append(p.procedureSources, "s")
+	p.globalValues = append(p.globalValues, GlobalValue{})
+	p.namespaceInits = append(p.namespaceInits, nil)
+
+	pv := reflect.ValueOf(p).Elem()
+	pt := pv.Type()
+
+	// Completeness precondition: every slice field must be populated above.
+	for i := 0; i < pv.NumField(); i++ {
+		f := pv.Field(i)
+		if f.Kind() != reflect.Slice {
+			continue
+		}
+		name := pt.Field(i).Name
+		if f.Len() == 0 {
+			t.Fatalf("Registry slice field %q is not populated in this test — a new "+
+				"category was likely added; populate it here and extend deepCopy", name)
+		}
+	}
+
+	q := p.deepCopy()
+	qv := reflect.ValueOf(q).Elem()
+
+	for i := 0; i < pv.NumField(); i++ {
+		f := pv.Field(i)
+		if f.Kind() != reflect.Slice {
+			continue
+		}
+		name := pt.Field(i).Name
+		qf := qv.Field(i)
+		// Fail-closed: deepCopy omitted the field → nil/short on the copy.
+		if qf.Len() != f.Len() {
+			t.Errorf("deepCopy: field %q length %d != source %d (field not copied)", name, qf.Len(), f.Len())
+			continue
+		}
+		// Fail-open: deepCopy shared the backing array with the source.
+		if qf.Pointer() == f.Pointer() {
+			t.Errorf("deepCopy: field %q shares its backing array with the source (aliasing)", name)
+		}
+	}
 }
