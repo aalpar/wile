@@ -204,9 +204,9 @@ func replaceHashDigits(s string) string {
 // or (#b|#o|#x)(#e|#i). The base-marker cases (#b/#o/#x) may see an exactness
 // marker as their next token; this method handles that transparently.
 func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
-	p.cur, p.err = p.toks.Next()
-	if p.err != nil {
-		return nil, p.cur, p.err
+	err := p.advance()
+	if err != nil {
+		return nil, p.cur, err
 	}
 
 	// Check for trailing exactness prefix: #x#e or #x#i.
@@ -214,22 +214,21 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 	switch p.cur.Type() {
 	case tokenizer.TokenizerStateMarkerNumberExact:
 		exactness = 1
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
+		err = p.advance()
+		if err != nil {
+			return nil, p.cur, err
 		}
 	case tokenizer.TokenizerStateMarkerNumberInexact:
 		exactness = -1
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
+		err = p.advance()
+		if err != nil {
+			return nil, p.cur, err
 		}
 	}
 
 	// Parse the number in the given base.
 	var q syntax.SyntaxValue
 	var tok tokenizer.Token
-	var err error
 	if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
 		p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
 		q, tok, err = p.parseRationalWithBase(base)
