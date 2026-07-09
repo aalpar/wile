@@ -1369,6 +1369,12 @@ func TestRunDispatch_UnimplementedOpcode(t *testing.T) {
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrUnknownOpCode), qt.IsTrue)
+	// Routed through WrapError (not bare werr): the VM-internal failure now
+	// reaches the caller as a *SchemeError carrying a backtrace, while the
+	// sentinel stays matchable via the Unwrap chain.
+	var se *SchemeError
+	c.Assert(errors.As(err, &se), qt.IsTrue)
+	c.Assert(se.StackTrace, qt.Not(qt.Equals), "")
 }
 
 func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
@@ -1538,6 +1544,9 @@ func TestRunDispatch_OpPopEnv_TopLevel(t *testing.T) {
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNilParentEnvironment), qt.IsTrue)
+	// Routed through WrapError: enriched *SchemeError, sentinel still matchable.
+	var se *SchemeError
+	c.Assert(errors.As(err, &se), qt.IsTrue)
 }
 
 func TestRunDispatch_OpRestoreContinuation_NilCont(t *testing.T) {
@@ -2271,6 +2280,11 @@ func TestMachineContext_Run_NegativePC(t *testing.T) {
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, ErrInvalidProgramCounter), qt.IsTrue)
+	// Routed through WrapError even with a corrupt pc: SourceAt bounds-checks,
+	// so provenance degrades to nil source rather than panicking, and the
+	// result is still an enriched *SchemeError.
+	var se *SchemeError
+	c.Assert(errors.As(err, &se), qt.IsTrue)
 }
 
 func TestMachineContext_CurrentLocation_Nil(t *testing.T) {

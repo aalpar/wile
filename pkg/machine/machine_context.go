@@ -340,8 +340,14 @@ func (p *MachineContext) Context() context.Context {
 func (p *MachineContext) Run() error {
 	mc := p
 	if mc.pc < 0 {
-		return werr.WrapForeignErrorf(ErrInvalidProgramCounter,
-			"Run: negative program counter %d", mc.pc)
+		// Mint through WrapError so this VM-internal failure carries source +
+		// backtrace like the resolver failures below — NOT bare werr, which the
+		// embedder receives with no provenance. (SourceAt bounds-checks, so a bad
+		// pc degrades to nil source, not a panic.) The `return err` pass-throughs
+		// in the switch are already condition-enriched via applyCallableError;
+		// only fresh mints at a live-MC boundary belong here.
+		return mc.WrapError(ErrInvalidProgramCounter,
+			fmt.Sprintf("Run: negative program counter %d", mc.pc))
 	}
 	for mc.pc < len(mc.template.code) {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
@@ -404,7 +410,8 @@ func (p *MachineContext) Run() error {
 		case OpPopEnv:
 			parent := mc.env.Parent()
 			if parent == nil {
-				return werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
+				// Fresh VM-internal mint → enrich with source + trace via WrapError.
+				return mc.WrapError(werr.ErrNilParentEnvironment,
 					"PopEnv: cannot pop top-level environment")
 			}
 			mc.env = parent
@@ -934,8 +941,10 @@ func (p *MachineContext) Run() error {
 			}
 
 		default:
-			return werr.WrapForeignErrorf(werr.ErrUnknownOpCode,
-				"unimplemented opcode: %s", instr.Op)
+			// Fresh VM-internal mint → WrapError points the source at the
+			// offending instruction's pc (best possible provenance here).
+			return mc.WrapError(werr.ErrUnknownOpCode,
+				fmt.Sprintf("unimplemented opcode: %s", instr.Op))
 		}
 	}
 	return nil
@@ -1282,8 +1291,10 @@ func (p *MachineContext) checkStackSize() error {
 // returns nil and bypasses the intended fast path.
 func (p *MachineContext) reportStackOverflow() error {
 	if uint64(p.evals.Len()) > p.maxStackSize {
-		return werr.WrapForeignErrorf(werr.ErrStackOverflow,
-			"eval stack size %d exceeds limit %d", p.evals.Len(), p.maxStackSize)
+		// Fresh VM-internal mint (reached from OpPush et al. via checkStackSize) →
+		// enrich with the push site's source + trace via WrapError.
+		return p.WrapError(werr.ErrStackOverflow,
+			fmt.Sprintf("eval stack size %d exceeds limit %d", p.evals.Len(), p.maxStackSize))
 	}
 	return nil
 }
@@ -1447,7 +1458,10 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		if errors.As(err, &abortErr) {
 			prompt, found := p.FindPrompt(abortErr.Tag)
 			if !found {
-				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
+				// Fresh mint (a user abort to a missing tag) → enrich with source +
+				// trace via WrapError, not bare werr.
+				return p.WrapError(werr.ErrInvalidArgument,
+					fmt.Sprintf("abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString()))
 			}
 
 			// Reconcile winding, restore past the prompt, and run its handler or
