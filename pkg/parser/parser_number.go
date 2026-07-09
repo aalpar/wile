@@ -182,13 +182,13 @@ func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token,
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
 	}
 
-	// NormalizeExponentMarker folds any short marker to 'e'; e/E pass through
-	// since strconv.ParseFloat accepts them directly.
-	f, err := strconv.ParseFloat(schemeutil.NormalizeExponentMarker(s), 64)
+	// Out-of-range magnitudes promote to BigFloat inside ParseRealFloatString;
+	// wrapping keeps the ErrInvalidFormat cause reachable via errors.Is/Unwrap.
+	n, err := ParseRealFloatString(s)
 	if err != nil {
-		return nil, p.cur, NewParserErrorf(p.cur, "invalid scientific notation: %s", s)
+		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid scientific notation: %s", s)
 	}
-	q := p.wrapSyntax(values.NewFloat(f), p.cur)
+	q := p.wrapSyntax(n, p.cur)
 	return q, p.cur, nil
 }
 
@@ -569,11 +569,11 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 
 // parseDecimalFraction parses a decimal fraction token (e.g., "1.5", "-0.3").
 func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, error) {
-	a, err := strconv.ParseFloat(schemeutil.NormalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
+	n, err := ParseRealFloatString(replaceHashDigits(p.cur.String()))
 	if err != nil {
 		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid decimal fraction: %s", p.cur.String())
 	}
-	q := p.wrapSyntax(values.NewFloat(a), p.cur)
+	q := p.wrapSyntax(n, p.cur)
 	return q, p.cur, nil
 }
 

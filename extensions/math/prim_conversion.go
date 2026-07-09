@@ -23,7 +23,6 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry/helpers"
-	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -241,11 +240,13 @@ func parseStringToNumber(input string, radix int) values.Value {
 		}
 	}
 
-	// Float and scientific notation only for radix 10.
+	// Float and scientific notation only for radix 10. Delegates to the shared
+	// reader helper so string->number and the reader stay in lockstep, including
+	// BigFloat promotion for magnitudes beyond float64 range.
 	if radix == 10 {
-		f, err := strconv.ParseFloat(schemeutil.NormalizeExponentMarker(input), 64)
+		n, err := parser.ParseRealFloatString(input)
 		if err == nil {
-			return values.NewFloat(f)
+			return n
 		}
 	}
 

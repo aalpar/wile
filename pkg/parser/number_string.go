@@ -15,12 +15,43 @@
 package parser
 
 import (
+	"errors"
 	"math"
+	"strconv"
 	"strings"
 
+	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+// ParseRealFloatString parses a real decimal or scientific-notation string as an
+// inexact number. In-range magnitudes yield a float64-backed Float; magnitudes
+// beyond float64 range (strconv reports ErrRange as ±Inf) promote to a BigFloat
+// rather than failing. This mirrors the int64 -> BigInteger promotion in
+// parseIntegerWithBase and, crucially, keeps the reader and string->number
+// symmetric with the writer, which renders an out-of-range bigfloat in
+// scientific notation (e.g. (write (* 1.0 (expt 10 1000))) -> "1e+1000").
+// Underflow to zero (float64 rounds a tiny magnitude to 0 without ErrRange) is
+// left as the float64 0.0 it already produces, matching float64-based Schemes.
+// The exponent marker is normalized to 'e' first. Returns a wrapped
+// ErrInvalidFormat sentinel on a malformed string.
+func ParseRealFloatString(s string) (values.Number, error) {
+	normalized := schemeutil.NormalizeExponentMarker(s)
+	f, err := strconv.ParseFloat(normalized, 64)
+	if err == nil {
+		return values.NewFloat(f), nil
+	}
+
+	var numErr *strconv.NumError
+	if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
+		bf := values.NewBigFloatFromString(normalized)
+		if bf != nil {
+			return bf, nil
+		}
+	}
+	return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid real number: %s", s)
+}
 
 // ParseSpecialFloat checks if s is +inf.0, -inf.0, +nan.0, or -nan.0
 // and returns the corresponding Float value.

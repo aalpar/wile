@@ -325,3 +325,62 @@ func TestScientificNotationExactPrefix(t *testing.T) {
 		})
 	}
 }
+
+// TestScientificNotationBigFloatOverflow tests that scientific notation whose
+// magnitude exceeds float64 range promotes to BigFloat rather than failing.
+// This makes the reader symmetric with the writer, which renders out-of-range
+// bigfloats in scientific notation (e.g. (* 1.0 (expt 10 1000)) -> "1e+1000").
+func TestScientificNotationBigFloatOverflow(t *testing.T) {
+	tcs := []struct {
+		input  string
+		expect string
+	}{
+		{"1e+1000", "1e+1000"},
+		{"1e1000", "1e1000"},
+		{"1e309", "1e309"},
+		{"-2.5e+500", "-2.5e+500"},
+		{"1.5e400", "1.5e400"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+
+			obj := syn.Unwrap()
+			bigFloat, ok := obj.(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigFloat, got %T: %v", obj, obj))
+
+			expected, _, _ := big.ParseFloat(tc.expect, 10, values.DefaultBigFloatPrecision, big.ToNearestEven)
+			c.Assert(bigFloat.BigFloatValue().Cmp(expected), qt.Equals, 0)
+		})
+	}
+}
+
+// TestScientificNotationExactPrefixOverflow tests that the #e exact prefix on
+// out-of-range scientific notation yields an exact BigInteger, exercising the
+// BigFloat -> exact path in makeExact.
+func TestScientificNotationExactPrefixOverflow(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	p := NewParser(env, true, strings.NewReader("#e1e+1000"))
+
+	syn, err := p.ReadSyntax(context.TODO())
+	c.Assert(err, qt.IsNil)
+
+	obj := syn.Unwrap()
+	bigInt, ok := obj.(*values.BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T: %v", obj, obj))
+
+	// #e converts the (inexact, 256-bit) BigFloat 1e+1000 to its exact integer
+	// value. Precision is bounded by the BigFloat, so the result is the exact
+	// value of that approximation, not the mathematical 10^1000. Assert the
+	// pipeline is self-consistent: reader(#e1e+1000) == exact(BigFloat 1e+1000).
+	bf := values.NewBigFloatFromString("1e+1000")
+	expected, _ := bf.BigFloatValue().Int(nil)
+	c.Assert(bigInt.BigInt().Cmp(expected), qt.Equals, 0)
+}

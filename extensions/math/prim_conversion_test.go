@@ -70,6 +70,16 @@ func TestStringToNumber(t *testing.T) {
 		{"negative integer", `(= (string->number "-42") -42)`, values.TrueValue},
 		{"float", `(= (string->number "1.5") 1.5)`, values.TrueValue},
 		{"scientific", `(= (string->number "1e2") 100.0)`, values.TrueValue},
+		// Out-of-range magnitudes promote to BigFloat rather than returning #f,
+		// keeping string->number symmetric with number->string (round-trip). A
+		// finite value beyond float64 range can only be a BigFloat (a float64
+		// parse would have saturated to +inf.0, which is not finite).
+		{"scientific overflow finite", `(finite? (string->number "1e+1000"))`, values.TrueValue},
+		{"scientific overflow magnitude", `(> (string->number "1e+1000") 1e308)`, values.TrueValue},
+		{"scientific overflow value", `(= (string->number "1e+1000") (* 1.0 (expt 10 1000)))`, values.TrueValue},
+		{"scientific overflow round-trip",
+			`(= (string->number (number->string (* 1.0 (expt 10 1000)))) (* 1.0 (expt 10 1000)))`, values.TrueValue},
+		{"decimal overflow finite", `(finite? (string->number "-2.5e+500"))`, values.TrueValue},
 		{"hex radix arg", `(= (string->number "ff" 16) 255)`, values.TrueValue},
 		{"binary radix arg", `(= (string->number "111" 2) 7)`, values.TrueValue},
 		{"octal radix arg", `(= (string->number "10" 8) 8)`, values.TrueValue},

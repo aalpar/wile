@@ -457,8 +457,13 @@ mutable for interactive sessions. 10/15 items done; A4/B4/D1/D2/E1/E2 are follow
       escaping (`String.SchemeString` used Go `%q` → proper R7RS `\xHH;`/mnemonics, a
       real conformance bug) and `#0=()` empty labeled list (→ `()` not `(#<void>)`).
       **Deferred** to #781: the numeric-tower external-representation round-trip tail
-      (`#m` big floats write without prefix; `1e+700` rejected on read; audit
-      `BigComplex`/`BigInteger`/etc.) — a distinct numeric-formatting conformance pass.
+      (`#m` big floats write without prefix; audit `BigComplex`/`BigInteger`/etc.) —
+      a distinct numeric-formatting conformance pass. **Partially closed 2026-07-09:**
+      the `1e+700`-rejected-on-read half is fixed — scientific/decimal notation whose
+      magnitude overflows float64 now promotes to `BigFloat` (shared
+      `parser.ParseRealFloatString`, mirroring int64→BigInteger) across the reader and
+      `string->number`, so out-of-range bigfloats round-trip. The `#m`
+      write-without-prefix half (in-range bigfloats lose their type on read) remains.
 - [x] **Stable-matching selectors fail + matching tests don't gate CI** [High, M, Done]:
       **Root cause** (single bug, two symptoms): `walk-for-cycle` in
       `stdlib/lib/wile/algebra/matching.scm` stored each rotation cycle in
