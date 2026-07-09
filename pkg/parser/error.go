@@ -26,6 +26,15 @@ var (
 	// ErrUnknownTokenType is returned when the parser encounters an unrecognized token.
 	ErrUnknownTokenType = werr.NewStaticError("unknown token type")
 	ErrAlreadyClosed    = werr.NewStaticError("parser already closed")
+
+	// errNoDatum is an internal control signal: readSyntax returns it (in the
+	// error channel) when it stops on a close delimiter instead of producing a
+	// datum. It is the io.EOF-style sentinel that replaces the old literal-nil
+	// return — matched by errors.Is, so a compound reader distinguishes "no datum
+	// here" from a real read error without relying on a fragile nil value. It is
+	// always caught and either turned into a located error or used as a loop exit;
+	// it must never escape to a caller of ReadSyntax.
+	errNoDatum = werr.NewStaticError("no datum at close delimiter")
 )
 
 // ParserError represents an error that occurred during parsing.

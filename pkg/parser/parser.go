@@ -174,17 +174,18 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 
 	for {
 		q, _, err = p.readSyntax()
-		if err != nil {
-			p.toks = nil
-			p.err = p.locateReaderErr(err)
-			return nil, p.err
-		}
-		// R7RS: unexpected close delimiter at top level is a read error
-		if q == nil && p.cur != nil && p.isListCloser(p.cur.Type()) {
+		// R7RS: an unexpected close delimiter at top level is a read error.
+		// errNoDatum uniquely means readSyntax stopped on a closer (p.cur is it).
+		if errors.Is(err, errNoDatum) {
 			p.toks = nil
 			// Route through locateReaderErr so the file name is stamped for
 			// location reporting, exactly as for errors escaping readSyntax.
 			p.err = p.locateReaderErr(NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type())))
+			return nil, p.err
+		}
+		if err != nil {
+			p.toks = nil
+			p.err = p.locateReaderErr(err)
 			return nil, p.err
 		}
 		// Advance to the next token for the next ReadSyntax() call
@@ -278,15 +279,14 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, labelNum int, o
 
 	// Read the first element
 	first, _, err := p.readSyntax()
-	if err != nil {
-		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-	}
-	// readSyntax returns nil at a close/cons delimiter, and prefixes like #d
-	// re-read to one (e.g. "#0=(#d)", "#0=(.)"); a nil element must be a located
+	// A #0= assignment needs a datum; stopping on a close delimiter is a located
 	// error, not a SetCar(nil) that later panics on a nil interface conversion.
-	if first == nil {
+	if errors.Is(err, errNoDatum) {
 		return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
 			"expected a datum in labeled list")
+	}
+	if err != nil {
+		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 	}
 	placeholder.SetCar(first)
 
@@ -305,15 +305,14 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, labelNum int, o
 		}
 		// Read the cdr
 		cdr, _, err := p.readSyntax()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		// R7RS §7.1.2: the dot must be followed by a datum; a nil cdr (the
-		// reader landed on a close delimiter) is a located error, not a
-		// SetCdr(nil) panic.
-		if cdr == nil {
+		// R7RS §7.1.2: the dot must be followed by a datum; stopping on a close
+		// delimiter is a located error, not a SetCdr(nil) panic.
+		if errors.Is(err, errNoDatum) {
 			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
 				"expected datum after '.' in dotted pair")
+		}
+		if err != nil {
+			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
 		placeholder.SetCdr(cdr)
 		// Advance past the cdr and expect matching close delimiter
@@ -352,15 +351,14 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, labelNum int, o
 
 		// Read the element
 		elem, _, err := p.readSyntax()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		// A nil element (close/cons delimiter, or a #d that re-read to one) must
-		// be a located error, not a SetCar(nil) panic — see the first-element
-		// guard above.
-		if elem == nil {
+		// Stopping on a close delimiter mid-read must be a located error, not a
+		// SetCar(nil) panic — see the first-element guard above.
+		if errors.Is(err, errNoDatum) {
 			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
 				"expected a datum in labeled list")
+		}
+		if err != nil {
+			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
 		nextPair.SetCar(elem)
 
@@ -385,14 +383,14 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, labelNum int, o
 		}
 		// Read the final cdr
 		cdr, _, err := p.readSyntax()
-		if err != nil {
-			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
-		}
-		// R7RS §7.1.2: the dot must be followed by a datum; a nil cdr is a
-		// located error, not a SetCdr(nil) panic.
-		if cdr == nil {
+		// R7RS §7.1.2: the dot must be followed by a datum; stopping on a close
+		// delimiter is a located error, not a SetCdr(nil) panic.
+		if errors.Is(err, errNoDatum) {
 			return nil, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
 				"expected datum after '.' in dotted pair")
+		}
+		if err != nil {
+			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
 		current.SetCdr(cdr)
 		// Advance past the cdr and expect matching close delimiter
@@ -431,16 +429,15 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 		return nil, p.cur, p.err
 	}
 	q, _, err := p.readSyntax()
-	if err != nil {
-		return nil, p.cur, err
-	}
-	// readSyntax returns a literal-nil at a close or cons delimiter; a quote
-	// form with no datum (e.g. "' )") must be a located error, not a quote
-	// wrapped around nil that panics in listSyntax. Mirrors the datum-label
-	// and dotted-pair guards.
-	if q == nil {
+	// A quote form with no datum (e.g. "' )") must be a located error, not a
+	// quote wrapped around nil that panics in listSyntax. Mirrors the
+	// datum-label and dotted-pair guards.
+	if errors.Is(err, errNoDatum) {
 		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACons, p.cur,
 			"%s form requires a datum", keyword)
+	}
+	if err != nil {
+		return nil, p.cur, err
 	}
 	sym := p.wrapSyntaxSymbol(keyword, t)
 	result := p.listSyntax(t, sym, q)
@@ -456,15 +453,14 @@ func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxVal
 		return nil, p.cur, p.err
 	}
 	q, tok, err := p.readSyntax()
-	if err != nil {
-		return nil, tok, err
-	}
-	// readSyntax returns nil at a close or cons delimiter; an exactness marker
-	// with no number (e.g. "#e)") must be a located error, not a nil deref in
-	// convert. Covers both #e and #i.
-	if q == nil {
+	// An exactness marker with no number (e.g. "#e)") must be a located error,
+	// not a nil deref in convert. Covers both #e and #i.
+	if errors.Is(err, errNoDatum) {
 		return nil, tok, NewParserErrorWithWrapf(werr.ErrNotANumber, tok,
 			"%s number marker requires a datum", label)
+	}
+	if err != nil {
+		return nil, tok, err
 	}
 	result, err := convert(q)
 	if err != nil {
@@ -516,17 +512,19 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 			return nil, p.cur, p.err
 		}
 	default:
-		// Non-compound datum: read normally and store
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		// readSyntax returns a literal-nil at a close or cons delimiter; a label
-		// assignment with no datum (e.g. "#0=)" or "#0=.") must be a located
-		// error, not a silently stored nil. Mirrors the dotted-pair guard above.
-		if v == nil {
+		// Non-compound datum: read normally and store.
+		var err error
+		v, _, err = p.readSyntax()
+		// A label assignment with no datum (e.g. "#0=)") must be a located error,
+		// not a silently stored nil. Mirrors the dotted-pair guard above. Keep the
+		// sentinel out of the sticky p.err — it is a control signal, not a failure.
+		if errors.Is(err, errNoDatum) {
 			return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
 				"datum label assignment requires a datum")
+		}
+		if err != nil {
+			p.err = err
+			return nil, p.cur, p.err
 		}
 		p.datumLabels[labelNum] = v
 	}
@@ -568,8 +566,12 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 	}
 	// Read the syntax value being commented
 	var v syntax.SyntaxValue
-	v, _, p.err = p.readSyntax()
-	if p.err != nil {
+	var err error
+	v, _, err = p.readSyntax()
+	// errNoDatum (a #; immediately before a close delimiter) leaves v nil,
+	// preserving the prior literal-nil behavior; a real error propagates.
+	if err != nil && !errors.Is(err, errNoDatum) {
+		p.err = err
 		return nil, p.cur, p.err
 	}
 	// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
@@ -617,14 +619,16 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 	gotCar := false
 	for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
 		var v syntax.SyntaxValue
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
-		}
-		// After skipping comments, we may have landed on a delimiter (close paren/bracket or cons)
-		// In that case, readSyntax returns nil and we should exit the loop
-		if v == nil {
+		var err error
+		v, _, err = p.readSyntax()
+		// Comment-skipping may have landed on a close delimiter → no datum; exit
+		// the loop and let the post-loop check validate the closer. The sentinel
+		// is a control signal, so it never enters the sticky p.err.
+		if errors.Is(err, errNoDatum) {
 			break
+		}
+		if err != nil {
+			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
 		}
 		pr0 = pr.(*syntax.SyntaxPair)
 		pr0.SetCar(v)
@@ -652,16 +656,16 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		}
 		// read cdr value in improper list
 		var v syntax.SyntaxValue
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
-		}
-		// R7RS §7.1.2: the dot must be followed by a datum. readSyntax returns
-		// nil when it lands on a close delimiter, so a nil cdr means the datum
-		// is missing — a located error, not a SetCdr(nil) panic.
-		if v == nil {
+		var err error
+		v, _, err = p.readSyntax()
+		// R7RS §7.1.2: the dot must be followed by a datum; stopping on a close
+		// delimiter is a located error, not a SetCdr(nil) panic.
+		if errors.Is(err, errNoDatum) {
 			return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur,
 				"expected datum after '.' in dotted pair")
+		}
+		if err != nil {
+			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
 		}
 		pr = v
 		p.cur, p.err = p.toks.Next()
@@ -715,17 +719,17 @@ func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tok
 	// check token type BEFORE reading, advance AFTER reading
 	for p.cur.Type() != tokenizer.TokenizerStateCloseParen {
 		var v syntax.SyntaxValue
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
-		}
-		// readSyntax returns nil only when it skipped trailing comments and
-		// landed on a close delimiter; stop and let the post-loop check
-		// validate the closer, mirroring readList's nil-on-close handling.
-		// Without this, a non-) closer (e.g. ]) is appended as a nil element
-		// and the close is consumed, yielding a malformed vector + EOF error.
-		if v == nil {
+		var err error
+		v, _, err = p.readSyntax()
+		// No datum means comment-skipping landed on a close delimiter; stop and
+		// let the post-loop check validate the closer, mirroring readList. Without
+		// this, a non-) closer (e.g. ]) is appended as a nil element and the close
+		// is consumed, yielding a malformed vector + EOF error.
+		if errors.Is(err, errNoDatum) {
 			break
+		}
+		if err != nil {
+			return nil, p.cur, wrapMidParseEOF(err, p.cur, "vector")
 		}
 		q.Values = append(q.Values, v)
 		// Advance to next element (or close paren)
@@ -745,12 +749,13 @@ func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tok
 }
 
 // checkByteVectorClose guards the two stx.Unwrap sites in readByteVector.
-// readSyntax returns a nil stx only when it lands on a close delimiter, and the
-// caller checks for ) before calling this. A bytevector opened with #u8( must
-// close with ), so a nil stx here means a non-) closer (e.g. ]) — that is a
-// located mismatch error, not a nil-pointer dereference that crashes the host.
-func (p *Parser) checkByteVectorClose(stx syntax.SyntaxValue) error {
-	if stx != nil {
+// readSyntax reports errNoDatum only when it lands on a close delimiter, and the
+// caller checks for ) (and any real error) before calling this. A bytevector
+// opened with #u8( must close with ), so errNoDatum here means a non-) closer
+// (e.g. ]) — a located mismatch error, not a nil-pointer dereference that
+// crashes the host. A nil err means a datum was read.
+func (p *Parser) checkByteVectorClose(err error) error {
+	if !errors.Is(err, errNoDatum) {
 		return nil
 	}
 	return NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur,
@@ -765,17 +770,18 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 	}
 	var stx syntax.SyntaxValue
-	stx, _, p.err = p.readSyntax()
-	if p.err != nil {
-		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
+	var err error
+	stx, _, err = p.readSyntax()
+	if err != nil && !errors.Is(err, errNoDatum) {
+		return nil, p.cur, wrapMidParseEOF(err, p.cur, "bytevector")
 	}
 	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 		// Empty bytevector case: #u8()
 		return p.wrapSyntax(q0, p.cur), p.cur, nil
 	}
-	err := p.checkByteVectorClose(stx)
-	if err != nil {
-		return nil, p.cur, err
+	cerr := p.checkByteVectorClose(err)
+	if cerr != nil {
+		return nil, p.cur, cerr
 	}
 	i, ok := stx.Unwrap().(*values.Integer)
 	for {
@@ -790,21 +796,18 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 		}
-		stx, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
+		stx, _, err = p.readSyntax()
+		if err != nil && !errors.Is(err, errNoDatum) {
+			return nil, p.cur, wrapMidParseEOF(err, p.cur, "bytevector")
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 			break
 		}
-		err = p.checkByteVectorClose(stx)
-		if err != nil {
-			return nil, p.cur, err
+		cerr := p.checkByteVectorClose(err)
+		if cerr != nil {
+			return nil, p.cur, cerr
 		}
 		i, ok = stx.Unwrap().(*values.Integer)
-	}
-	if p.err != nil {
-		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 	}
 	return p.wrapSyntax(q0, p.cur), p.cur, nil
 }
@@ -849,13 +852,12 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 
 // readSyntax reads one datum, dispatching on the current token type.
 //
-// Contract relied on by the compound readers (readList, readLabeledList,
-// readByteVector): at a close or cons delimiter readSyntax returns a
-// literal-nil SyntaxValue — the interface zero value, where both the type and
-// value words are nil — never a typed-nil (a nil concrete pointer boxed in the
-// interface). Their `stx == nil` / `cdr == nil` / `v == nil` guards depend on
-// this: a typed-nil satisfies `!= nil` and would slip past, re-introducing the
-// SetCdr(nil) / Unwrap() host crashes those guards exist to prevent.
+// When it stops on a close delimiter instead of a datum, it returns errNoDatum
+// in the error channel (with a nil value). Compound readers detect that with
+// errors.Is(err, errNoDatum) — either exiting an element loop or turning it into
+// a located "expected a datum" error. This sentinel replaces an older
+// literal-nil return whose "never a typed-nil" invariant was enforced only by
+// prose and re-checked at every call site.
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	p.depth++
 	defer func() {
@@ -887,9 +889,12 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			if p.err != nil {
 				return nil, p.cur, p.err
 			}
-			// Read and discard the commented datum
-			_, _, p.err = p.readSyntax()
-			if p.err != nil {
+			// Read and discard the commented datum. errNoDatum (a #; before a
+			// close delimiter) falls through, matching the prior nil-return
+			// behavior; only a real error aborts.
+			_, _, cerr := p.readSyntax()
+			if cerr != nil && !errors.Is(cerr, errNoDatum) {
+				p.err = cerr
 				return nil, p.cur, p.err
 			}
 			// Advance past the commented datum
@@ -1051,10 +1056,11 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(values.NewString(p.cur.Value()), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCloseParen, tokenizer.TokenizerStateCloseBracket:
-		// Close delimiters return the untouched interface zero value q (a
-		// literal nil, not a typed-nil) to signal end of compound form. The
-		// compound readers' nil guards depend on this being a literal nil.
-		return q, p.cur, nil
+		// A close delimiter is not a datum. Signal that through the error channel
+		// with errNoDatum (io.EOF-style sentinel) rather than a fragile literal-nil
+		// value; compound readers match it with errors.Is. p.cur stays on the
+		// delimiter for the caller to inspect.
+		return nil, p.cur, errNoDatum
 	}
 	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %q", p.cur.String())
 }
