@@ -14,6 +14,13 @@
 
 package security
 
+// consoleRoot is the single filesystem confinement root shared by the Console
+// and ConsoleWithLoad authorizers — the one source of truth for the path these
+// profiles pin to, so the file arm and ConfinementRoot cannot disagree. The
+// configurable-root variant is filesystemRootAuthorizer; the Console profiles
+// are deliberately the /tmp-fixed convenience.
+const consoleRoot = "/tmp"
+
 // ConsoleAuthorizer returns an Authorizer for the Console profile.
 // File operations are restricted to /tmp. Environment variable reads
 // are allowed (the envvars primitive handles virtual-vs-OS routing).
@@ -32,7 +39,7 @@ type consoleAuthorizer struct{}
 func (consoleAuthorizer) Authorize(req AccessRequest) error {
 	switch req.Resource {
 	case ResourceFile:
-		if !containedInRoot("/tmp", req.Target) {
+		if !containedInRoot(consoleRoot, req.Target) {
 			return ErrAccessDenied
 		}
 		return nil
@@ -50,5 +57,5 @@ func (consoleAuthorizer) Authorize(req AccessRequest) error {
 }
 
 func (consoleAuthorizer) ConfinementRoot() (string, bool) {
-	return "/tmp", true
+	return consoleRoot, true
 }

@@ -45,6 +45,9 @@ func TestConsoleWithLoadAuthorizer(t *testing.T) {
 		{"load /tmp/sub/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/sub/lib.scm"}, true},
 		{"load /etc/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/etc/lib.scm"}, false},
 		{"load path traversal /tmp/../etc/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/../etc/lib.scm"}, false},
+		// Code eval: allowed unconditionally (no path to confine); the doc'd
+		// sandboxed (eval ...) capability. Side effects gate at their own sinks.
+		{"eval datum (no target)", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionEval}, true},
 		// Prefix-trap cases: applies to both file and code — sibling dirs must not match.
 		{"prefix trap /tmp2 file", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmp2/foo"}, false},
 		{"prefix trap /tmpfoo code", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmpfoo/lib.scm"}, false},
@@ -61,4 +64,42 @@ func TestConsoleWithLoadAuthorizer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestConsoleWithLoad_DelegatesNonCodeToConsole pins the composition invariant:
+// for every non-code resource, ConsoleWithLoad returns the SAME verdict as
+// Console, because it delegates those arms rather than re-implementing them.
+// This is the guard that makes the #10-class drift (env-write gate fixed in one
+// copy but not the other) unrepresentable — a change to Console now propagates.
+func TestConsoleWithLoad_DelegatesNonCodeToConsole(t *testing.T) {
+	c := qt.New(t)
+	console := security.ConsoleAuthorizer()
+	withLoad := security.ConsoleWithLoadAuthorizer()
+
+	resources := []string{security.ResourceFile, security.ResourceEnv, security.ResourceProcess}
+	actions := []string{
+		security.ActionRead, security.ActionWrite, security.ActionDelete,
+		security.ActionExec, security.ActionLoad,
+	}
+	targets := []string{"/tmp/x", "/etc/x", "APP_MODE", ""}
+
+	for _, res := range resources {
+		for _, act := range actions {
+			for _, tgt := range targets {
+				req := security.AccessRequest{Resource: res, Action: act, Target: tgt}
+				base := console.Authorize(req)
+				derived := withLoad.Authorize(req)
+				// Compare allow/deny outcome, not error identity (both return the
+				// shared ErrAccessDenied on deny).
+				c.Assert(derived == nil, qt.Equals, base == nil,
+					qt.Commentf("resource=%v action=%v target=%q", res, act, tgt))
+			}
+		}
+	}
+
+	// And the confinement root is the promoted (identical) one.
+	baseRoot, baseOK := security.ConfinementRootOf(console)
+	derRoot, derOK := security.ConfinementRootOf(withLoad)
+	c.Assert(derRoot, qt.Equals, baseRoot)
+	c.Assert(derOK, qt.Equals, baseOK)
 }

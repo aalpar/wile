@@ -31,36 +31,26 @@ func ConsoleWithLoadAuthorizer() Authorizer {
 	return consoleWithLoadAuthorizer{}
 }
 
-type consoleWithLoadAuthorizer struct{}
-
-func (consoleWithLoadAuthorizer) Authorize(req AccessRequest) error {
-	switch req.Resource {
-	case ResourceCode:
-		if req.Action == ActionEval {
-			return nil
-		}
-		if !containedInRoot("/tmp", req.Target) {
-			return ErrAccessDenied
-		}
-		return nil
-	case ResourceFile:
-		if !containedInRoot("/tmp", req.Target) {
-			return ErrAccessDenied
-		}
-		return nil
-	case ResourceEnv:
-		// Read-only: env reads are allowed (see doc), writes/deletes are not.
-		// Same read-only principle as SandboxAuthorizer's env gate, which
-		// additionally prefix-filters the target.
-		if req.Action == ActionRead {
-			return nil
-		}
-		return ErrAccessDenied
-	default:
-		return ErrAccessDenied
-	}
+// consoleWithLoadAuthorizer is Console plus a sandboxed code arm. It embeds
+// consoleAuthorizer so the file, env, and default policy — and ConfinementRoot —
+// are the SAME code, not a hand-copied twin. This is what closed the #10 drift
+// (the env-write gate had to be fixed in both copies); composition makes that
+// class of divergence unrepresentable. Only ResourceCode is genuinely ours.
+type consoleWithLoadAuthorizer struct {
+	consoleAuthorizer
 }
 
-func (consoleWithLoadAuthorizer) ConfinementRoot() (string, bool) {
-	return "/tmp", true
+func (a consoleWithLoadAuthorizer) Authorize(req AccessRequest) error {
+	if req.Resource != ResourceCode {
+		return a.consoleAuthorizer.Authorize(req)
+	}
+	// code:eval (dynamic (eval <datum>)/(compile <datum>)) has no path to
+	// confine; code:load is confined to the shared root like file access.
+	if req.Action == ActionEval {
+		return nil
+	}
+	if !containedInRoot(consoleRoot, req.Target) {
+		return ErrAccessDenied
+	}
+	return nil
 }
