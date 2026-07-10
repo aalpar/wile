@@ -57,6 +57,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -112,6 +113,8 @@ var knownValueTypes = []string{
 	"*values.SourceIndexes",
 }
 
+// switchInfo is one //exhaustive-marked type switch found during the scan:
+// where it lives and the case types it enumerates.
 type switchInfo struct {
 	file      string
 	line      int
@@ -119,6 +122,10 @@ type switchInfo struct {
 	hasValues bool // at least one case names a values.* type
 }
 
+// main scans the directories named on the command line (or "." if none),
+// reports every marked switch that is missing a value type, and exits non-zero
+// if any gap is found so the tool can gate `make lint`. Exit 2 is a scan error
+// (unreadable tree); exit 1 is a real exhaustiveness gap.
 func main() {
 	verbose := flag.Bool("v", false, "list every checked //exhaustive switch, not only those with gaps")
 	flag.Parse()
@@ -167,6 +174,10 @@ func main() {
 	}
 }
 
+// scanDir walks root recursively and returns every marked switch in its .go
+// files. It skips .git, vendor, and testdata directories, and _test.go files.
+// A parse error in one file is logged and skipped, not fatal; only a walk-level
+// error (e.g. an unreadable path) is returned.
 func scanDir(root string) ([]switchInfo, error) {
 	var result []switchInfo
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -194,6 +205,10 @@ func scanDir(root string) ([]switchInfo, error) {
 	return result, err
 }
 
+// scanFile parses one .go file and returns its //exhaustive-marked type
+// switches. A switch opts in when a marker sits on its own line or the line
+// immediately above the switch keyword; the marker positions are collected
+// first, then matched against each type switch during the AST walk.
 func scanFile(path string) ([]switchInfo, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
@@ -242,6 +257,10 @@ func isExhaustiveMarker(text string) bool {
 	return t == "exhaustive" || strings.HasPrefix(t, "exhaustive:") || strings.HasPrefix(t, "exhaustive ")
 }
 
+// extractCaseTypes returns the rendered type names from every case clause of
+// ts (default clauses contribute nothing) and reports whether any of them names
+// a values.* type, which is what qualifies the switch for the exhaustiveness
+// check.
 func extractCaseTypes(ts *ast.TypeSwitchStmt) (types []string, hasValues bool) {
 	for _, stmt := range ts.Body.List {
 		cc, ok := stmt.(*ast.CaseClause)
@@ -260,6 +279,10 @@ func extractCaseTypes(ts *ast.TypeSwitchStmt) (types []string, hasValues bool) {
 	return
 }
 
+// typeExprString renders a case-clause type expression back to source-like
+// text ("*values.Integer"), recursing through pointer and selector nodes so the
+// result matches the entries in knownValueTypes. An unhandled node kind yields a
+// "<%T>" placeholder rather than a silent empty string, so drift is visible.
 func typeExprString(expr ast.Expr) string {
 	switch e := expr.(type) {
 	case *ast.StarExpr:
@@ -273,14 +296,15 @@ func typeExprString(expr ast.Expr) string {
 	}
 }
 
+// findMissing returns the known value types absent from present, sorted
+// alphabetically. present is a switch's case types; known is knownValueTypes,
+// which is category-grouped rather than sorted, so the sort is what gives the
+// stable alphabetical output. Linear scan per known type is intentional: both
+// slices are tiny (~40 and a handful), so a lookup set would not pay off.
 func findMissing(present []string, known []string) []string {
-	set := make(map[string]bool, len(present))
-	for _, p := range present {
-		set[p] = true
-	}
 	var missing []string
 	for _, k := range known {
-		if !set[k] {
+		if !slices.Contains(present, k) {
 			missing = append(missing, k)
 		}
 	}
