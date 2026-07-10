@@ -211,7 +211,10 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// Create a template for the top-level compilation (will be empty after define-library)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	// Expand the form
+	// Expand the form. WithMaxExpandDepth is honored uniformly by
+	// NewExpanderTimeContinuation, which reads the engine-configured bound from
+	// the env's namespace — so both this structural expansion and the body's
+	// compile-time macro re-expansion (through per-site expanders) obey it.
 	expanded, err := NewExpanderTimeContinuation(ctx, libEnv, evaluator).ExpandExpression(stx)
 	if err != nil {
 		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "error expanding library"))

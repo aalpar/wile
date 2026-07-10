@@ -30,6 +30,16 @@ type EngineServices struct {
 	inlineThreshold    int
 	inlineThresholdSet bool
 
+	// maxExpandDepth forwards the engine's configured macro-expansion recursion
+	// bound (WithMaxExpandDepth) so runtime-triggered library compilation honors
+	// it instead of silently using the expander default — the sibling of
+	// inlineThreshold for the expand phase. maxExpandDepthSet distinguishes an
+	// explicit 0 (bound disabled / unlimited) from "never configured" — a
+	// namespace not built by an Engine — where the reader falls back to the
+	// expander default.
+	maxExpandDepth    int
+	maxExpandDepthSet bool
+
 	// Lazy library-export cache + its guards, relocated verbatim from Namespace.
 	exportIndex      any // *compilation.LibraryExportIndex; nil until built
 	exportIndexBuilt bool

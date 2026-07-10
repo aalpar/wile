@@ -118,14 +118,24 @@ type ExpanderTimeContinuation struct {
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation. The
-// returned expander begins a fresh expansion run with its own depth guard
-// defaulted to DefaultMaxExpandDepth; override via SetMaxDepth.
+// returned expander begins a fresh expansion run with its own depth guard.
+// The bound is read from the env's namespace (WithMaxExpandDepth, forwarded onto
+// the shared EngineServices at engine build) so every expander site — the
+// top-level pass and the ~8 compile-time re-expansion sites reached during
+// library and body compilation — honors it uniformly. A namespace not built by
+// an Engine (e.g. a direct unit-test compile) reports unset and defaults to
+// DefaultMaxExpandDepth. SetMaxDepth still overrides per-run afterward.
 func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) *ExpanderTimeContinuation {
+	maxDepth := DefaultMaxExpandDepth
+	n, ok := env.Namespace().MaxExpandDepth()
+	if ok {
+		maxDepth = n
+	}
 	q := &ExpanderTimeContinuation{
 		ctx:        ctx,
 		env:        env,
 		evaluator:  evaluator,
-		depthGuard: &expandDepthGuard{max: DefaultMaxExpandDepth},
+		depthGuard: &expandDepthGuard{max: maxDepth},
 	}
 	return q
 }

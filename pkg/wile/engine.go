@@ -368,6 +368,13 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	// (inlining disabled) is preserved by SetInlineThreshold's set-flag.
 	ns.SetInlineThreshold(cfg.inlineThreshold)
 
+	// Forward the resolved expansion-depth bound too, for the same reason: the
+	// library load path reaches the expander through the namespace, not a
+	// parameter, so without this an imported library ignores WithMaxExpandDepth
+	// and expands at the default bound. cfg.maxExpandDepth is already defaulted
+	// above; an explicit 0 (unlimited) is preserved by the set-flag.
+	ns.SetMaxExpandDepth(cfg.maxExpandDepth)
+
 	// Set the default file resolver for runtime include/load operations.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
 	// Pre-built namespaces (WithNamespace) may already have a resolver.

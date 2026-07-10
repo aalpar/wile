@@ -454,6 +454,24 @@ func (p *Namespace) InlineThreshold() (int, bool) {
 	return p.services.inlineThreshold, p.services.inlineThresholdSet
 }
 
+// SetMaxExpandDepth stores the engine's configured macro-expansion recursion
+// bound (WithMaxExpandDepth) on the shared EngineServices. Set once at engine
+// build so runtime-triggered library compilation can honor it. An explicit 0
+// (bound disabled / unlimited) is retained and distinguished from "never set"
+// via the bool returned by MaxExpandDepth.
+func (p *Namespace) SetMaxExpandDepth(n int) {
+	p.services.maxExpandDepth = n
+	p.services.maxExpandDepthSet = true
+}
+
+// MaxExpandDepth returns the engine's configured expansion-depth bound and
+// whether it was set. Reads the shared EngineServices (one per engine tree). A
+// false bool means the namespace was not built by an Engine (e.g. a direct
+// LoadLibrary in a unit test); the caller should fall back to its own default.
+func (p *Namespace) MaxExpandDepth() (int, bool) {
+	return p.services.maxExpandDepth, p.services.maxExpandDepthSet
+}
+
 // ImmutableTopLevel reports whether top-level-define immutability is enforced for
 // THIS namespace. It is a property of the engine's PRIMARY (root) namespace only —
 // the home of compiled-program top-level defines, which are the frame-reclaim

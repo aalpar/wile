@@ -118,3 +118,56 @@ func TestInlineThresholdHonoredForImportedLibrary(t *testing.T) {
 	// the engine threshold.
 	qt.Assert(t, helperCalledLocally(t, wile.WithInlineThreshold(0)), qt.IsTrue)
 }
+
+// TestInlineThresholdBoundaryForImportedLibrary proves a NON-DEFAULT POSITIVE
+// threshold gates library inlining at the exact body-length boundary — not just
+// the on/off extremes the test above covers. Inlining keeps a let-bound lambda
+// iff len(body) <= threshold (compile_let.go: len(body) > threshold skips it).
+// use-helper binds f with a 3-expression body, so threshold 2 leaves the call
+// as CallLocal and threshold 3 folds it in. A regression that honored only
+// 0-vs-nonzero — mapping every positive value to the default — would pass the
+// extremes test yet fail here.
+func TestInlineThresholdBoundaryForImportedLibrary(t *testing.T) {
+	ctx := context.Background()
+
+	// f's body is (x x (+ x 1)) -> length 3. The two leading bare-x expressions
+	// are inert; they exist only to set the body length. use-helper's sole local
+	// call is (f n), so CallLocal is present iff f is NOT inlined.
+	fsys := fstest.MapFS{
+		"probe/helper.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (probe helper)
+  (import (scheme base))
+  (export use-helper)
+  (begin
+    (define (use-helper n)
+      (let ((f (lambda (x) x x (+ x 1))))
+        (f n)))))`),
+		},
+	}
+
+	callSurvives := func(t *testing.T, threshold int) bool {
+		eng, err := wile.NewEngine(ctx,
+			wile.WithProfile(wile.KitchenSink),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithSourceFS(fsys),
+			wile.WithLibraryPaths("."),
+			wile.WithInlineThreshold(threshold),
+		)
+		qt.Assert(t, err, qt.IsNil)
+
+		_, err = eng.EvalMultiple(ctx, `(import (probe helper))`)
+		qt.Assert(t, err, qt.IsNil)
+
+		v, ok := eng.Get("use-helper")
+		qt.Assert(t, ok, qt.IsTrue)
+		closure, ok := v.Internal().(*machine.MachineClosure)
+		qt.Assert(t, ok, qt.IsTrue)
+
+		return strings.Contains(machine.DisassembleString(closure.Template()), "CallLocal")
+	}
+
+	// threshold 2 < body length 3 -> not inlined -> CallLocal present.
+	qt.Assert(t, callSurvives(t, 2), qt.IsTrue)
+	// threshold 3 == body length 3 -> inlined -> CallLocal absent.
+	qt.Assert(t, callSurvives(t, 3), qt.IsFalse)
+}
