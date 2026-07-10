@@ -92,15 +92,18 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 	qt.Assert(t, phases, qt.DeepEquals, []Phase{PhaseTemplate, PhaseRuntime, PhaseExpand, PhaseCompile})
 }
 
-func TestPhaseRegistry_PhaseEnvParentsToTopLevel(t *testing.T) {
-	topLevel := NewNamespaceFrame()
+func TestPhaseRegistry_PhaseEnvParentsToSealedBase(t *testing.T) {
+	topLevel := NewNamespaceFrame() // ns.runtime
+	sealedBase := topLevel.Namespace().SealedBase()
 
 	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
 	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
 
-	// All phase environments parent to TopLevel
-	qt.Assert(t, phase1.Parent(), qt.Equals, topLevel)
-	qt.Assert(t, phase2.Parent(), qt.Equals, topLevel)
+	// Phase frames parent to the frozen sealed base (hermetic), NOT the mutable
+	// runtime frame.
+	qt.Assert(t, phase1.Parent(), qt.Equals, sealedBase)
+	qt.Assert(t, phase2.Parent(), qt.Equals, sealedBase)
+	qt.Assert(t, phase1.Parent(), qt.Not(qt.Equals), topLevel)
 }
 
 func TestPhaseRegistry_PhaseEnvHasOwnGlobal(t *testing.T) {

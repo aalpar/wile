@@ -133,7 +133,13 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	global := NewGlobalEnvironmentFrame()
 
 	q := &EnvironmentFrame{
-		parent:     p.envs[PhaseRuntime], // Phase envs parent to runtime frame
+		// Phase frames parent to the runtime frame's sealed-base TARGET, not the
+		// runtime frame itself. For the layered main namespace SealedBaseTarget()
+		// returns the frozen sealedBase — skipping user defines + phase-0 imports,
+		// which is the hermeticity cut. For a flat NewChildRuntime library frame
+		// it returns the frame itself, leaving library visibility unchanged.
+		// See plans/2026-07-10-hermetic-phases-core-impl.local.md.
+		parent:     p.envs[PhaseRuntime].SealedBaseTarget(),
 		global:     global,
 		phaseLevel: phase,
 		phases:     p,
