@@ -763,6 +763,27 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 //
 // This is used during macro compilation to resolve free identifiers that may
 // be defined in any phase (e.g., define in runtime, define-syntax in expand).
+//
+// The phase-0 (runtime) search reaching the mutable runtime frame's OWN defines
+// is DELIBERATE and load-bearing — it is NOT the accidental parent-chain leak
+// the phase-frame reparent (createPhaseEnv) closed, and must NOT be routed
+// through SealedBaseTarget() to "seal" it. A macro-generating-macro introduces
+// a phase-0 define that a generated inner macro references by scope-aware
+// identifier; only searching the runtime frame resolves that intro-scoped
+// binding at compile time. Sealing it breaks R7RS §4.3 referential transparency
+// — concretely, the jabberwocky/march-hare case in
+// integration/testdata/r7rs-tests.scm:
+//
+//	(define-syntax jabberwocky
+//	  (syntax-rules ()
+//	    ((_ hatter)
+//	     (begin (define march-hare 42)
+//	            (define-syntax hatter (syntax-rules () ((_) march-hare)))))))
+//	(jabberwocky mad-hatter) (mad-hatter)  ; => 42; sealing gives "no such binding march-hare"
+//
+// (Verified 2026-07-10: hermeticizing the phase-0 search passes the
+// compilation/machine/wile suites but fails the integration R7RS conformance
+// suite here. Investigated as a possible "second hermeticity hole"; it is not.)
 func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *GlobalIndex {
 	phases := p.phases
 	if phases == nil {
