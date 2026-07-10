@@ -598,3 +598,5 @@ func ExactInteger(v Value) (int64, bool) {
 		return 0, false
 	}
 }
+
+type StringSet map[string]struct{}
