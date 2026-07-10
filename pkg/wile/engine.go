@@ -360,6 +360,14 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 	env := ns.Runtime()
 
+	// Forward the resolved inline threshold onto the shared EngineServices so that
+	// runtime-triggered library compilation (import / (environment …)) honors
+	// WithInlineThreshold — the top-level compile path passes it explicitly, but
+	// the library load path reaches the compiler through the namespace, not a
+	// parameter. cfg.inlineThreshold is already defaulted above; an explicit 0
+	// (inlining disabled) is preserved by SetInlineThreshold's set-flag.
+	ns.SetInlineThreshold(cfg.inlineThreshold)
+
 	// Set the default file resolver for runtime include/load operations.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
 	// Pre-built namespaces (WithNamespace) may already have a resolver.

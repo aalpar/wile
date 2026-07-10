@@ -222,6 +222,18 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	cctx := NewCompileTimeCallContext(ctx, false)
 	compiler := NewCompileTimeContinuation(tpl, libEnv, evaluator)
 
+	// Honor the engine's WithInlineThreshold for library code. Every in-process
+	// child compiler re-threads the parent's threshold explicitly, but this
+	// runtime-triggered compile reaches the library env through the namespace, so
+	// read the engine-configured value from there. When unset (a namespace not
+	// built by an Engine, e.g. a direct LoadLibrary in a unit test) fall back to
+	// the compiler default, preserving prior behavior.
+	inlineThreshold, ok := libEnv.Namespace().InlineThreshold()
+	if !ok {
+		inlineThreshold = DefaultInlineThreshold
+	}
+	compiler.SetInlineThreshold(inlineThreshold)
+
 	// Set up to capture the compiled library
 	var compiledLib *CompiledLibrary
 	compiler.SetLibraryCallback(func(lib *CompiledLibrary) {

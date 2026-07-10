@@ -21,6 +21,15 @@ type EngineServices struct {
 	ioState      any // *io.State (extensions/io), set at engine build via namespace-init hook
 	formRegistry any // *forms.FormRegistry (internal/forms), set at engine build; nil => default
 
+	// inlineThreshold forwards the engine's configured procedure-inlining
+	// body-length bound (WithInlineThreshold) so runtime-triggered library
+	// compilation (LoadLibrary) honors it instead of silently using the compiler
+	// default. inlineThresholdSet distinguishes an explicit 0 (inlining disabled)
+	// from "never configured" — a namespace not built by an Engine (e.g. a direct
+	// LoadLibrary in a unit test) — where the reader falls back to its own default.
+	inlineThreshold    int
+	inlineThresholdSet bool
+
 	// Lazy library-export cache + its guards, relocated verbatim from Namespace.
 	exportIndex      any // *compilation.LibraryExportIndex; nil until built
 	exportIndexBuilt bool

@@ -436,6 +436,24 @@ func (p *Namespace) SetFormRegistry(v any) {
 	p.services.formRegistry = v
 }
 
+// SetInlineThreshold stores the engine's configured procedure-inlining threshold
+// (WithInlineThreshold) on the shared EngineServices. Set once at engine build so
+// runtime-triggered library compilation can honor it. An explicit 0 (inlining
+// disabled) is retained and distinguished from "never set" via the bool returned
+// by InlineThreshold.
+func (p *Namespace) SetInlineThreshold(n int) {
+	p.services.inlineThreshold = n
+	p.services.inlineThresholdSet = true
+}
+
+// InlineThreshold returns the engine's configured inlining threshold and whether
+// it was set. Reads the shared EngineServices (one per engine tree). A false bool
+// means the namespace was not built by an Engine (e.g. a direct LoadLibrary in a
+// unit test); the caller should fall back to its own default.
+func (p *Namespace) InlineThreshold() (int, bool) {
+	return p.services.inlineThreshold, p.services.inlineThresholdSet
+}
+
 // ImmutableTopLevel reports whether top-level-define immutability is enforced for
 // THIS namespace. It is a property of the engine's PRIMARY (root) namespace only —
 // the home of compiled-program top-level defines, which are the frame-reclaim
