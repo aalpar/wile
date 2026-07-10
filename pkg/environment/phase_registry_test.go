@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 func TestPhaseRegistry_Creation(t *testing.T) {
@@ -171,4 +173,23 @@ func TestPhaseString(t *testing.T) {
 		qt.Assert(t, tc.phase.String(), qt.Equals, tc.want,
 			qt.Commentf("phase %d", int8(tc.phase)))
 	}
+}
+
+func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
+	topLevel := NewNamespaceFrame() // ns.runtime — phase 0, mutable
+	ns := topLevel.Namespace()
+	expand := ns.Expand() // phase 1 (lazily created here)
+
+	// A user define lands in the mutable runtime frame (phase 0).
+	userSym := values.NewSymbol("user-x")
+	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable)
+
+	// A base binding lands in the frozen sealed base (the taproot).
+	baseSym := values.NewSymbol("base-y")
+	ns.SealedBase().MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable)
+
+	// Hermeticity: phase 1 must NOT see the phase-0 user define...
+	qt.Assert(t, expand.GetBinding(userSym, nil), qt.IsNil)
+	// ...but MUST still see the shared taproot base binding.
+	qt.Assert(t, expand.GetBinding(baseSym, nil), qt.Not(qt.IsNil))
 }
