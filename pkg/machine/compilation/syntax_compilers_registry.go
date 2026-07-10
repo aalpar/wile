@@ -50,12 +50,22 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 	{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
 }
 
-// RegisterSyntaxCompilers binds all syntax compilers in the compile-time
-// environment (env.Compile()). These bindings serve two purposes:
+// RegisterSyntaxCompilers binds all syntax compilers in the runtime frame's
+// sealed-base target — the frozen taproot for a layered main namespace, or the
+// flat frame itself for a NewChildRuntime library frame (SealedBaseTarget()
+// picks the right one, mirroring how applyBaseEnvironment routes runtime
+// primitives). Because every phase frame now parents to that taproot (see the
+// reparent in environment/phase_registry.go createPhaseEnv), a binding placed
+// here is ambient: reachable uniformly from the runtime, expand, and compile
+// phases via the parent chain, instead of being pinned to the phase-2 (compile)
+// frame. These bindings serve two purposes:
 //
 //  1. Library export/import: findLibraryBinding in library_bindings.go searches
-//     the compile environment to locate syntax compilers when exporting or
-//     importing forms like syntax-case, define-syntax, etc.
+//     a library's own runtime/expand/compile frames to locate syntax compilers
+//     when exporting or importing forms like syntax-case, define-syntax, etc.
+//     A NewChildRuntime library frame is a flat island (parent nil), so it does
+//     not reach the engine root's taproot — special forms stay ambient-only,
+//     unchanged by this relocation.
 //  2. Scope-aware lookup via LookupSyntaxCompiler for hygiene resolution.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
@@ -65,15 +75,20 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 // The syntax compilers are bound with BindingTypePrimitive to distinguish them
 // from syntax transformers (BindingTypeSyntax) and regular variables.
 func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
-	return RegisterPhaseBindings(env, env.Compile, syntaxCompilerEntries,
+	taproot := func() *environment.EnvironmentFrame {
+		return env.SealedBaseTarget()
+	}
+	return RegisterPhaseBindings(env, taproot, syntaxCompilerEntries,
 		func(name string, fn SyntaxCompilerFunc) values.Value {
 			return NewSyntaxCompiler(name, fn)
 		})
 }
 
-// LookupSyntaxCompiler looks up a syntax compiler by symbol in the compile
-// environment. Returns the SyntaxCompiler if found, or nil if the symbol does
-// not name a syntax compiler.
+// LookupSyntaxCompiler looks up a syntax compiler by symbol, entering through
+// the compile phase frame. Returns the SyntaxCompiler if found, or nil if the
+// symbol does not name a syntax compiler. The compilers live in the ambient
+// taproot (see RegisterSyntaxCompilers); the compile frame reaches them through
+// its parent chain, so a phase-2 shadow still takes precedence.
 //
 // This function handles hygiene by using scoped lookup - it will only match
 // bindings whose scopes are a subset of the symbol's scopes.

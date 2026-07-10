@@ -24,9 +24,10 @@ import (
 )
 
 func TestSyntaxCompilersRegistry(t *testing.T) {
-	// RegisterSyntaxCompilers binds SyntaxCompiler values into
-	// env.Compile(). After registration, LookupSyntaxCompiler should
-	// find them by symbol with nil scopes.
+	// RegisterSyntaxCompilers binds SyntaxCompiler values into the taproot
+	// (env.SealedBaseTarget()). After registration, LookupSyntaxCompiler should
+	// find them by symbol with nil scopes — the compile frame reaches the taproot
+	// through its parent chain.
 	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -64,6 +65,31 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 			qt.Assert(t, sc.Name(), qt.Equals, tc.formName)
 		})
 	}
+}
+
+func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
+	// Table-off-axis invariant: syntax compilers register into the taproot
+	// (sealed base), NOT the phase-2 compile frame, so they are reachable
+	// uniformly from every phase. Pre-relocation they lived only in Compile(),
+	// so the expand phase could not see them and the phase-2 own frame held them.
+	env := environment.NewNamespace().Runtime()
+	err := RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	ns := env.Namespace()
+	sym := values.NewSymbol("syntax-case")
+
+	// The compiler binding lives in the frozen taproot's own frame.
+	qt.Assert(t, ns.SealedBase().GlobalEnvironment().GetGlobalIndex(sym), qt.IsNotNil)
+
+	// It is NOT stored in the phase-2 (compile) frame's own global — the leak the
+	// relocation closes.
+	qt.Assert(t, ns.Compile().GlobalEnvironment().GetGlobalIndex(sym), qt.IsNil)
+
+	// Ambient: reachable via the parent chain from runtime, expand, and compile.
+	qt.Assert(t, ns.Runtime().GetBinding(sym, nil), qt.IsNotNil)
+	qt.Assert(t, ns.Expand().GetBinding(sym, nil), qt.IsNotNil)
+	qt.Assert(t, ns.Compile().GetBinding(sym, nil), qt.IsNotNil)
 }
 
 func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {
