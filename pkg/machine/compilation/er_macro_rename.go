@@ -69,19 +69,13 @@ func NewERRenameClosure(
 // is added to ensure the renamed identifier is distinct from any use-site
 // binding with the same name, preventing variable capture.
 func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
-	// Try expand environment first.
+	// Definition-site lookup. The expand frame now parents directly to the frozen
+	// sealed base, so this reaches base bindings; phase-0 user/import bindings are
+	// intentionally invisible (hermeticity — see the reparent in
+	// environment/phase_registry.go createPhaseEnv).
 	bnd := defExpandEnv.GetBinding(sym, nil)
 	if bnd != nil {
 		return symbolWithBindingScopes(sym.Key, bnd, defExpandEnv)
-	}
-
-	// Try runtime environment (phase 0).
-	runtimeEnv := findRuntimeEnv(defExpandEnv)
-	if runtimeEnv != nil {
-		bnd = runtimeEnv.GetBinding(sym, nil)
-		if bnd != nil {
-			return symbolWithBindingScopes(sym.Key, bnd, runtimeEnv)
-		}
 	}
 
 	// Not found — return symbol with the intro scope. This ensures that
@@ -118,15 +112,6 @@ func symbolWithBindingScopes(key string, bnd *environment.Binding, env *environm
 	}
 
 	return result
-}
-
-// findRuntimeEnv walks up from a phase environment to find the phase-0
-// (runtime) environment.
-func findRuntimeEnv(env *environment.EnvironmentFrame) *environment.EnvironmentFrame {
-	for env != nil && env.PhaseLevel() != 0 {
-		env = env.Parent()
-	}
-	return env
 }
 
 // extractSymbolKey extracts the string key from a symbol or syntax symbol argument.
