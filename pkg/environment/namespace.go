@@ -292,7 +292,7 @@ func (p *Namespace) SealedBase() *EnvironmentFrame {
 // key map carries no parent walk). Iteration order is unspecified; a name shadowed in
 // both frames appears once (deduped via the seen set).
 func (p *Namespace) BoundSymbolNames() values.Value {
-	seen := map[string]struct{}{}
+	seen := values.StringSet{}
 	var result values.Value = values.EmptyList
 	for _, frame := range []*EnvironmentFrame{p.runtime, p.sealedBase} {
 		if frame == nil {
@@ -319,7 +319,7 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 // Iteration order across phases does not change the result set (only names are
 // collected); the output is sorted for determinism.
 func (p *Namespace) BoundNamesAcrossPhases() []string {
-	seen := map[string]struct{}{}
+	seen := values.StringSet{}
 	var names []string
 	collect := func(frame *EnvironmentFrame) {
 		if frame == nil {

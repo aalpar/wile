@@ -644,7 +644,7 @@ func (p *Registry) WithoutCategory(categories ...string) *Registry {
 // filterPrimitives returns a new Registry with primitives excluded when
 // keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
 func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *Registry {
-	set := make(map[string]struct{}, len(exclude))
+	set := make(values.StringSet, len(exclude))
 	for _, v := range exclude {
 		set[v] = struct{}{}
 	}
@@ -668,7 +668,7 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 // exports). Removing them would silently strip docs that the embedder
 // likely wants kept.
 func (p *Registry) WithoutBindings(names ...string) *Registry {
-	exclude := make(map[string]struct{}, len(names))
+	exclude := make(values.StringSet, len(names))
 	for _, name := range names {
 		exclude[name] = struct{}{}
 	}

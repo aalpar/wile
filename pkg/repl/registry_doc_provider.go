@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -202,15 +203,15 @@ func (p *RegistryDocProvider) UnloadedLibraries(ctx context.Context) []*wile.Lib
 
 // Categories returns sorted category names, excluding the empty-string category.
 func (p *RegistryDocProvider) Categories() []string {
-	cats := make(map[string]bool)
+	cats := make(values.StringSet)
 	for _, pr := range p.reg.Primitives() {
 		if pr.Spec.Category != "" {
-			cats[pr.Spec.Category] = true
+			cats[pr.Spec.Category] = struct{}{}
 		}
 	}
 	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category != "" {
-			cats[r.Category] = true
+			cats[r.Category] = struct{}{}
 		}
 	}
 

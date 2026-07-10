@@ -574,7 +574,7 @@ func (p *mcpServer) registerPrompts(s *server.MCPServer) error {
 }
 
 func (p *mcpServer) makePromptHandler(template string, argNames []string) server.PromptHandlerFunc {
-	allowed := make(map[string]struct{}, len(argNames))
+	allowed := make(values.StringSet, len(argNames))
 	for _, n := range argNames {
 		allowed[n] = struct{}{}
 	}
