@@ -322,14 +322,28 @@ The `GetGlobalIndexAcrossPhases` phase-0 carve-out (R7RS §4.3 macro-generating-
 resolution: `jabberwocky`/`march-hare`) is unaffected by the climb — it resolves
 *unmutated* cross-phase references and continues to search `[0,1,2]`.
 
-**Not built (Tier 2 / Q4):** separate per-phase *instantiation* (independent
-mutable state per phase) is not implemented. Consequently a binding that is
-`set!` and shared across a phase climb is **silently shared**, not rejected
-(design option (a)). The proposed rejection boundary (`ErrCrossPhaseMutation`,
-Q4 option (b)) is **blocked**: mutation-reachability is a whole-unit property
-computed in the validator pass and is not queryable at the cross-phase resolution
-site, and a flag-based approximation would false-positive on the (unmutated)
-carve-out. See `plans/2026-07-10-climbing-tower-q4-mutation-boundary-note.local.md`
+**Q4 — mutable state across a phase climb (resolved: hermetic by rejection).**
+Tier 1 shares bindings as single objects, so the question arose whether a
+`set!`-mutated binding could be *silently shared* across a climb, computing wrong
+compile-time values. It cannot: the hermetic phase-frame reparent already severs
+the lexical cross-phase path, so a mutable binding defined at phase N is **not
+visible** at phase N+1 — observing it there is a loud compile-time
+`no such binding`, not a silent share
+(`TestClimbingTower_CrossPhaseMutationIsHermetic`). The only surviving cross-phase
+reach, `GetGlobalIndexAcrossPhases`, resolves a free template identifier to a
+*single* binding location (the R7RS §4.3 carve-out); a `set!` of that location is
+observed coherently, with no per-phase divergence
+(`TestClimbingTower_MarchHareMutatedIsCoherent` — mutated `march-hare` still
+yields its mutated value). So no `ErrCrossPhaseMutation` check is needed: the
+hermetic rejection *is* the loud failure, at no cost and with no false positive on
+the carve-out. The boundary is enforced by rejection (nearer Racket's
+rejection-by-construction) rather than a bespoke diagnostic.
+
+**Not built (Tier 2):** separate per-phase *instantiation* (independent mutable
+state per phase) is not implemented. This is a **capability** gap (it would
+*enable* independent per-phase mutable counters for a procedural/`syntax-parse`
+authoring pivot), not a soundness gap — there is no unsound program for it to fix,
+per Q4 above. See `plans/2026-07-10-climbing-tower-q4-mutation-boundary-note.local.md` §7
 and the Tier 2 sketch in the design doc.
 
 ## Bootstrap Macros
