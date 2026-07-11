@@ -65,12 +65,20 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 
 // executeFormsAtCompileTime expands, compiles, and executes each expression
 // in bodyPair at compile time. Used by eval-when and begin-for-syntax.
+//
+// The body forms run one phase up from the defining frame (env.NextPhase()), so a
+// begin-for-syntax at phaseLevel N runs its body at phase N+1 and a nested one
+// climbs to N+2. At phaseLevel 0 NextPhase() == Expand(), so top-level
+// begin-for-syntax/eval-when are unchanged (level-0 identity). The expander stays
+// rooted at p.env because its own macro lookup already applies NextPhase()
+// (expander_time_continuation.go), so expander.env.NextPhase() == expandEnv at
+// every phase — expansion and compile/eval agree on the target frame.
 func (p *CompileTimeContinuation) executeFormsAtCompileTime(
 	ctctx CompileTimeCallContext,
 	formName string,
 	bodyPair *syntax.SyntaxPair,
 ) error {
-	expandEnv := p.env.Expand()
+	expandEnv := p.env.NextPhase()
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 
 	v, err := bodyPair.SyntaxForEach(ctctx.ctx, func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {

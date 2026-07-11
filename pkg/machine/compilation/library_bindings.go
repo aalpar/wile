@@ -352,7 +352,18 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 
 	fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, phase)
 
-	err = CopyLibraryBindingsToEnvAtPhase(res.Library, res.Bindings, env, res.ImportSet.PhaseShift)
+	// Compose the parsed for-syntax/for-meta shift with the current expansion
+	// phase, not a hardcoded 0: an (import (for-syntax M)) written inside a
+	// phase-N transformer body places M at phase N+1. At the top level
+	// env.PhaseLevel() == 0, so the composed shift equals PhaseShift and behavior
+	// is unchanged (level-0 identity). composePhaseShift reuses the int8 overflow
+	// guard (werr.ErrInvalidArgument).
+	targetPhase, err := composePhaseShift("import", env.PhaseLevel(), res.ImportSet.PhaseShift)
+	if err != nil {
+		return err
+	}
+
+	err = CopyLibraryBindingsToEnvAtPhase(res.Library, res.Bindings, env, targetPhase)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
 			res.ImportSet.LibraryName.SchemeString())

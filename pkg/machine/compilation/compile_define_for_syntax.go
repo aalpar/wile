@@ -86,10 +86,13 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		valueExpr = restPair.SyntaxCar()
 	}
 
-	// Expand, compile, and execute the expression at compile time
-	// Uses the expand-phase environment so the expression can access other
-	// define-for-syntax bindings and runtime primitives
-	expandEnv := p.env.Expand()
+	// Expand, compile, and execute the expression one phase up from the defining
+	// frame (relative, not the absolute expand phase) so a define-for-syntax inside
+	// a transformer body climbs symmetrically with begin-for-syntax and the
+	// define-syntax storage/lookup. The expander stays rooted at p.env because its
+	// macro lookup already applies NextPhase(), so expander.env.NextPhase() ==
+	// expandEnv. At phaseLevel 0 NextPhase() == Expand() (level-0 identity).
+	expandEnv := p.env.NextPhase()
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 	result, err := p.expandCompileExecute(ctctx.ctx, ctctx, valueExpr, expandEnv, expander, "define-for-syntax")
 	if err != nil {
