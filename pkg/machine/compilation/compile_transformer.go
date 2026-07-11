@@ -95,11 +95,17 @@ func compileTransformerToMachineClosure(
 // compile time to produce a closure that can be used as a syntax transformer.
 //
 // Unlike other ExpandAndCompile callers that operate on runtime environments,
-// this function uses env.Expand() — transformers see expansion-time bindings,
-// not runtime bindings. The extra EvalTemplate step (absent from ExpandAndCompile)
-// executes the compiled lambda at compile time to produce the transformer closure.
+// this function compiles the transformer against env.NextPhase() — the frame one
+// phase up from the defining frame — so transformers see expansion-time bindings,
+// not runtime bindings. The target is relative, not the absolute expand phase: a
+// transformer body defined at phaseLevel N expands as phase N+1 code, which lets
+// a macro whose transformer itself defines and uses macros climb the phase tower.
+// At the top level (phaseLevel 0) NextPhase() == Expand(), so behavior is
+// unchanged there (level-0 identity). The extra EvalTemplate step (absent from
+// ExpandAndCompile) executes the compiled lambda at compile time to produce the
+// transformer closure.
 func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.EnvironmentFrame, lambdaExpr syntax.SyntaxValue, evaluator machine.MacroEvaluator) (*machine.MachineClosure, error) {
-	expandEnv := env.Expand()
+	expandEnv := env.NextPhase()
 
 	tpl, err := ExpandAndCompile(ctx, expandEnv, lambdaExpr, nil, DefaultInlineThreshold, DefaultMaxExpandDepth)
 	if err != nil {
