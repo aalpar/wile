@@ -104,6 +104,16 @@ func TestPhaseRegistry_PhaseEnvParentsToSealedBase(t *testing.T) {
 	qt.Assert(t, phase1.Parent(), qt.Equals, sealedBase)
 	qt.Assert(t, phase2.Parent(), qt.Equals, sealedBase)
 	qt.Assert(t, phase1.Parent(), qt.Not(qt.Equals), topLevel)
+
+	// Climbing-tower hermeticity: higher phases created on demand (the climb adds
+	// HIGHER siblings) must ALSO parent to the frozen sealed base, never to a lower
+	// phase frame — the climb must never reintroduce a phase->phase parent edge.
+	phase3 := topLevel.phases.GetOrCreate(3)
+	phase5 := topLevel.phases.GetOrCreate(5)
+	qt.Assert(t, phase3.Parent(), qt.Equals, sealedBase)
+	qt.Assert(t, phase5.Parent(), qt.Equals, sealedBase)
+	qt.Assert(t, phase3.Parent(), qt.Not(qt.Equals), phase2)
+	qt.Assert(t, phase5.Parent(), qt.Not(qt.Equals), phase3)
 }
 
 func TestPhaseRegistry_PhaseEnvHasOwnGlobal(t *testing.T) {
@@ -200,12 +210,14 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 func TestNextPhaseClimbsAndGuards(t *testing.T) {
 	topLevel := NewNamespaceFrame()     // runtime frame, phaseLevel 0
 	p1 := topLevel.AtPhase(PhaseExpand) // phaseLevel 1
-	if got := p1.NextPhase().PhaseLevel(); got != PhaseCompile {
-		t.Fatalf("NextPhase from phase 1: got %d want %d", got, PhaseCompile)
+	fromPhase1 := p1.NextPhase().PhaseLevel()
+	if fromPhase1 != PhaseCompile {
+		t.Fatalf("NextPhase from phase 1: got %d want %d", fromPhase1, PhaseCompile)
 	}
 	// Level-0 identity: NextPhase() from the runtime frame equals Expand().
-	if got := topLevel.NextPhase().PhaseLevel(); got != PhaseExpand {
-		t.Fatalf("NextPhase from phase 0: got %d want %d (must equal Expand())", got, PhaseExpand)
+	fromPhase0 := topLevel.NextPhase().PhaseLevel()
+	if fromPhase0 != PhaseExpand {
+		t.Fatalf("NextPhase from phase 0: got %d want %d (must equal Expand())", fromPhase0, PhaseExpand)
 	}
 	// int8 ceiling: base 127 + 1 overflows — must reject, not wrap to -128.
 	q, err := p1.NextPhaseChecked(Phase(127))

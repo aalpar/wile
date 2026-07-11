@@ -284,6 +284,54 @@ Per R7RS §4.2.2, local variable bindings shadow macros:
 
 The expander checks for local variable bindings before macro lookup (`hasLocalVariableBinding`).
 
+### Phase Tower (relative phase accessors)
+
+A `define-syntax` at phase *N* binds a macro usable in phase-*N* code, and its
+transformer *expression* is compiled and run at phase *N+1*. When that transformer
+body itself defines and uses macros, those climb to *N+1*, *N+2*, … The climb is
+realized by making four macro-resolution sites *relative* to the expanding frame's
+own `phaseLevel` via `EnvironmentFrame.NextPhase()` (`environment/environment_frame.go`),
+rather than the absolute `Expand()`:
+
+- transformer-body compilation (`compile_transformer.go`);
+- `define-syntax` storage — both the top-level path (`compile_define_syntax.go`)
+  and the internal-body path (`compileDefineSyntaxFromSyntax`, `expander_body.go`);
+- macro lookup during expansion (`expander_time_continuation.go`, two sites);
+- `begin-for-syntax`/`define-for-syntax` body execution and `(import (for-syntax …))`
+  placement (composed with the current `phaseLevel` via `composePhaseShift`).
+
+At `phaseLevel 0` (top level) `NextPhase() == Expand()`, so top-level macro
+expansion is byte-for-byte unchanged (the *level-0 identity* safety property);
+the climb only fires inside transformer bodies. This distinguishes two macro
+shapes: a **declarative** macro places its inner `define-syntax` in its expansion
+*output* (the same phase as its use, always consistent — the tower does not fire),
+while a **procedural** macro whose *transformer body* defines and uses macros
+genuinely climbs. The pinning case is a name reused at two phases
+(`TestClimbingTower_CrossPhaseCollision`): pre-tower it collapsed into the single
+expand frame and the higher definition clobbered the lower; the tower keeps them
+separate.
+
+Bindings are **shared single objects** across phases, not re-instantiated per
+phase (Tier 1). Phase frames remain hermetic siblings of the frozen sealed base
+(the climb adds *higher* siblings; it never reintroduces a phase→phase parent
+edge — `TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
+The bounded `int8` phase index caps a runaway self-referential macro with a
+wrapped error rather than wrapping to −128.
+
+The `GetGlobalIndexAcrossPhases` phase-0 carve-out (R7RS §4.3 macro-generating-macro
+resolution: `jabberwocky`/`march-hare`) is unaffected by the climb — it resolves
+*unmutated* cross-phase references and continues to search `[0,1,2]`.
+
+**Not built (Tier 2 / Q4):** separate per-phase *instantiation* (independent
+mutable state per phase) is not implemented. Consequently a binding that is
+`set!` and shared across a phase climb is **silently shared**, not rejected
+(design option (a)). The proposed rejection boundary (`ErrCrossPhaseMutation`,
+Q4 option (b)) is **blocked**: mutation-reachability is a whole-unit property
+computed in the validator pass and is not queryable at the cross-phase resolution
+site, and a flag-based approximation would false-positive on the (unmutated)
+carve-out. See `plans/2026-07-10-climbing-tower-q4-mutation-boundary-note.local.md`
+and the Tier 2 sketch in the design doc.
+
 ## Bootstrap Macros
 
 R7RS derived expressions are implemented as macros loaded during bootstrap. The bootstrap surface lives in `internal/bootstrap/bootstrap.go`, which embeds the macro source from `registry/core/bootstrap_macros.scm`. Binding forms (`let`, `let*`, `letrec`, `letrec*`) are *not* listed here — they are core compiled forms handled by the expander/validator/compiler pipeline; see [`core-let.md`](core-let.md) for the design.
