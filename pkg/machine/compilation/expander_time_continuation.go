@@ -334,9 +334,14 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		// Check local bindings first (for let-syntax/letrec-syntax)
 		bnd = p.env.GetBinding(sym0, nil)
 
-		// If not found locally, check the global expand environment
+		// If not found locally, check the global macro environment one phase up
+		// from the expanding frame (relative, not absolute phase 1). This is the
+		// symmetric counterpart of define-syntax storage (compile_define_syntax.go):
+		// expanding phase-N code reads macros at phase N+1, so a macro defined
+		// inside a transformer body resolves at its climbed phase. At phaseLevel 0
+		// NextPhase() == Expand() (level-0 identity).
 		if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
-			expandEnv := p.env.Expand()
+			expandEnv := p.env.NextPhase()
 			bnd = expandEnv.GetBinding(sym0, nil)
 		}
 
@@ -539,11 +544,13 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	}
 
 	// Check local bindings first (for let-syntax/letrec-syntax),
-	// then fall back to the global expand environment.
+	// then fall back to the global macro environment one phase up from the
+	// expanding frame (relative, symmetric with define-syntax storage). At
+	// phaseLevel 0 NextPhase() == Expand() (level-0 identity).
 	// This mirrors ExpandSyntaxExpression's lookup order.
 	bnd := p.env.GetBinding(sym0, nil)
 	if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
-		expandEnv := p.env.Expand()
+		expandEnv := p.env.NextPhase()
 		bnd = expandEnv.GetBinding(sym0, nil)
 	}
 

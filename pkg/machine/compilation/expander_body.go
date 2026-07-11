@@ -128,9 +128,12 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 //
 // The env parameter is used for free identifier resolution during compilation (so macros
 // can see local bindings like lambda parameters), while the actual macro binding is stored
-// in env.Expand() for lookup during expansion.
+// one phase up from the defining frame (env.NextPhase()) for lookup during expansion. The
+// target is relative, not the absolute expand phase, so an internal define-syntax inside a
+// transformer body climbs symmetrically with the expander's NextPhase() lookup rather than
+// desyncing (both collapse to Expand() at phaseLevel 0 — level-0 identity).
 func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair, libraryScope *syntax.Scope, evaluator machine.MacroEvaluator) error {
-	expandEnv := env.Expand()
+	expandEnv := env.NextPhase()
 
 	// Extract (define-syntax keyword [docstring] transformer) — three or four
 	// elements counting the keyword. Matches CompileDefineSyntax on the

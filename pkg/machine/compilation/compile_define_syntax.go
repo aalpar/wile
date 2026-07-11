@@ -73,9 +73,13 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "could not compile transformer"))
 	}
 
-	// Store the transformer in the expand phase environment with BindingTypeSyntax
-	// R7RS requires syntax bindings to live in the expand phase, separate from runtime bindings
-	expandEnv := p.env.Expand()
+	// Store the transformer one phase up from the defining frame (relative, not the
+	// absolute expand phase). R7RS requires syntax bindings to live one phase above
+	// the code that uses them; NextPhase() keeps this relative so a define-syntax
+	// inside a transformer body climbs rather than collapsing into phase 1. Lookup
+	// (expander_time_continuation.go) consults the same NextPhase() so storage and
+	// lookup stay symmetric. At phaseLevel 0 this equals Expand() (level-0 identity).
+	expandEnv := p.env.NextPhase()
 	globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
 	if !created {
 		// Update existing binding
