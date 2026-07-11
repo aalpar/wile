@@ -196,3 +196,20 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	// ...but MUST still see the shared taproot base binding.
 	qt.Assert(t, expand.GetBinding(baseSym, nil), qt.Not(qt.IsNil))
 }
+
+func TestNextPhaseClimbsAndGuards(t *testing.T) {
+	topLevel := NewNamespaceFrame()     // runtime frame, phaseLevel 0
+	p1 := topLevel.AtPhase(PhaseExpand) // phaseLevel 1
+	if got := p1.NextPhase().PhaseLevel(); got != PhaseCompile {
+		t.Fatalf("NextPhase from phase 1: got %d want %d", got, PhaseCompile)
+	}
+	// Level-0 identity: NextPhase() from the runtime frame equals Expand().
+	if got := topLevel.NextPhase().PhaseLevel(); got != PhaseExpand {
+		t.Fatalf("NextPhase from phase 0: got %d want %d (must equal Expand())", got, PhaseExpand)
+	}
+	// int8 ceiling: base 127 + 1 overflows — must reject, not wrap to -128.
+	q, err := p1.NextPhaseChecked(Phase(127))
+	if err == nil {
+		t.Fatalf("NextPhaseChecked at 127 must reject; got frame at phase %d", q.PhaseLevel())
+	}
+}

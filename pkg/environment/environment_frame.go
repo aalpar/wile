@@ -15,6 +15,8 @@
 package environment
 
 import (
+	"math"
+
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -311,6 +313,35 @@ func (p *EnvironmentFrame) Expand() *EnvironmentFrame {
 // This is where compile-time procedures (syntax compilers) are stored.
 func (p *EnvironmentFrame) Compile() *EnvironmentFrame {
 	return p.AtPhase(PhaseCompile)
+}
+
+// NextPhaseChecked returns the sibling frame one phase up from base. The climb
+// is computed in int and rejected if it leaves the int8 phase range, so a
+// runaway self-referential macro hits a wrapped error instead of overflowing
+// int8 (127+1 -> -128). base is explicit (not p.phaseLevel) so the ceiling is
+// testable without constructing a phase-127 frame.
+func (p *EnvironmentFrame) NextPhaseChecked(base Phase) (*EnvironmentFrame, error) {
+	next := int(base) + 1
+	if next > int(math.MaxInt8) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"NextPhaseChecked: phase %d+1 exceeds int8 ceiling", int(base))
+	}
+	return p.AtPhase(Phase(next)), nil
+}
+
+// NextPhase returns the sibling frame one phase up from this frame's own level.
+// Climbing the macro tower: a transformer body compiled against this frame
+// expands as phase (phaseLevel+1) code, so define-syntax storage and macro
+// lookup relative to it climb rather than collapsing into the single expand
+// phase. At phaseLevel 0 this equals Expand(), so top-level behavior is
+// unchanged (level-0 identity). Panics (wrapped) only on the impossible int8
+// overflow, which NextPhaseChecked rejects.
+func (p *EnvironmentFrame) NextPhase() *EnvironmentFrame {
+	q, err := p.NextPhaseChecked(p.phaseLevel)
+	if err != nil {
+		panic(werr.WrapForeignErrorf(err, "NextPhase: phase index overflow"))
+	}
+	return q
 }
 
 // Parent returns the parent environment frame.
