@@ -96,6 +96,22 @@ registration, profiles, sandboxing — is documented in
 [pkg.go.dev/github.com/aalpar/wile/pkg/wile](https://pkg.go.dev/github.com/aalpar/wile/pkg/wile).
 Worked examples live in [`examples/embedding/`](examples/embedding/).
 
+### Asking for a cut
+
+Wile is a full R7RS-small implementation, and its breadth can be more than an
+embedder wants. The extension system is built for trimming: profiles
+(`WithProfile`) and `WithExtension` opt into only the primitives you need, and
+per-engine registries keep one engine's cut from affecting another. If your
+application only wants, say, a configuration DSL or a policy evaluator, you can
+run a much smaller surface than the default.
+
+Reducing the linked *binary* size is a further step — it means splitting Wile
+into separate modules so a build can exclude what it does not import. That work
+is deferred until someone needs it, because the right split depends on the cut
+being asked for. If binary size is blocking you from embedding Wile,
+[open an issue](https://github.com/aalpar/wile/issues) describing the cut you
+want and it can be scoped against your case.
+
 ## Documentation
 
 | Topic | Document |
