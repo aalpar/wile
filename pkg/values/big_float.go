@@ -291,18 +291,23 @@ func (p *BigFloat) Divide(o Number) (Number, error) {
 	if p.nan || o.IsNaN() {
 		return NewBigFloatNaN(), nil
 	}
-	if o.IsZero() {
-		if o.IsExact() {
-			return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigFloat.Divide: division by exact zero")
-		}
-		// Inexact zero: IEEE 754 semantics — ±Inf or NaN
-		if p.nan || p.IsZero() {
-			return NewBigFloatNaN(), nil
-		}
-		return NewBigFloat(new(big.Float).SetInf(p.value.Sign() < 0)), nil
+	// Division by an EXACT zero is a Scheme error, not an IEEE infinity. This is
+	// the one zero case big.Float knows nothing about, so it stays hand-written.
+	if o.IsZero() && o.IsExact() {
+		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigFloat.Divide: division by exact zero")
 	}
 	v, ok := o.(*BigFloat)
 	if ok {
+		// Do NOT hand-roll the inexact-zero case. big.Float represents negative zero
+		// (Signbit() reports it; String() prints "-0") and Quo already gets every sign
+		// right: Quo(1, -0.0) is -Inf and Quo(-1, -0.0) is +Inf. It panics with
+		// big.ErrNaN in exactly the cases whose result is NaN (0/0, Inf/Inf), which is
+		// what recoverNaN is for.
+		//
+		// The previous code computed SetInf(p.value.Sign() < 0), consulting only the
+		// DIVIDEND, so (/ 1 -0.0) gave +inf.0. The trap: big.Float.Sign() returns 0 for
+		// ±0, so the divisor's sign is invisible to Sign() -- but Signbit() sees it,
+		// and Quo needs no help at all.
 		return recoverNaN(func() *BigFloat {
 			return &BigFloat{value: new(big.Float).Quo(p.value, v.value)}
 		}), nil

@@ -140,3 +140,46 @@ func TestExactZeroIsAdditiveIdentity(t *testing.T) {
 			qt.Commentf("inexact complex zero must not hand back the exact operand"))
 	})
 }
+
+// TestDivideByInexactZeroSign pins the sign of the infinity produced by dividing
+// by an inexact zero. The sign is dividend-sign XOR divisor-sign; BigFloat.Divide
+// consulted only the dividend.
+//
+// This is reachable from ordinary code with no BigFloat in it: the promotion table
+// maps Exact x InexactReal -> BigFloat, so (/ 1 -0.0) divides through BigFloat.
+func TestDivideByInexactZeroSign(t *testing.T) {
+	c := qt.New(t)
+
+	posZero := values.NewFloat(0)
+	negZero := values.NewFloat(math.Copysign(0, -1))
+
+	tcs := []struct {
+		name    string
+		a, b    values.Number
+		wantNeg bool
+	}{
+		{"1 / -0.0", values.NewInteger(1), negZero, true},
+		{"1 / 0.0", values.NewInteger(1), posZero, false},
+		{"-1 / -0.0", values.NewInteger(-1), negZero, false},
+		{"-1 / 0.0", values.NewInteger(-1), posZero, true},
+	}
+
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			got, err := tc.a.Divide(tc.b)
+			c.Assert(err, qt.IsNil)
+			f := values.NumberToFloat64(got)
+			c.Assert(math.IsInf(f, 0), qt.IsTrue, qt.Commentf("want an infinity, got %v", got))
+			c.Assert(math.Signbit(f), qt.Equals, tc.wantNeg)
+		})
+	}
+
+	// 0.0 / 0.0 is NaN, and big.Float signals that by panicking with ErrNaN --
+	// which is exactly what recoverNaN is for. Guard the deletion of the
+	// hand-rolled branch against reintroducing that panic.
+	c.Run("0.0 / 0.0 is NaN, not a panic", func(c *qt.C) {
+		got, err := values.NewBigFloatFromFloat64(0).Divide(posZero)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.IsNaN(), qt.IsTrue)
+	})
+}
