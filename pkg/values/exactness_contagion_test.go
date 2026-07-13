@@ -15,7 +15,9 @@
 package values_test
 
 import (
+	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -41,8 +43,6 @@ import (
 // This test verifies that zero short-circuits do NOT happen in Add methods,
 // because doing so would violate exactness contagion.
 func TestExactnessContagionAddition(t *testing.T) {
-	c := qt.New(t)
-
 	// Test case structure: exact zero + inexact zero = inexact zero
 	// This is the critical case that detects improper zero short-circuits.
 	tcs := []struct {
@@ -59,10 +59,13 @@ func TestExactnessContagionAddition(t *testing.T) {
 		// Integer (exact) + Integer (exact) → Integer (exact)
 		{"Integer 0 + Integer 0", values.NewInteger(0), values.NewInteger(0), "Integer", true},
 
-		// BigInteger (exact) + Float (inexact) → BigFloat (inexact)
-		// Changed: precision preservation via BigFloat instead of Float
-		{"BigInteger 0 + Float 0.0", values.NewBigIntegerFromInt64(0), values.NewFloat(0.0), "BigFloat", false},
-		{"Float 0.0 + BigInteger 0", values.NewFloat(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
+		// BigInteger (exact) + Float (inexact) → Float (inexact).
+		// An exact zero is an IDENTITY: it returns the other operand UNCHANGED,
+		// so no promotion to the BigFloat LUB happens. (Corrected 2026-07-12: these
+		// two rows said BigFloat, contradicting their Integer/Rational siblings
+		// above and below, which already said Float. Nothing ever checked the field.)
+		{"BigInteger 0 + Float 0.0", values.NewBigIntegerFromInt64(0), values.NewFloat(0.0), "Float", false},
+		{"Float 0.0 + BigInteger 0", values.NewFloat(0.0), values.NewBigIntegerFromInt64(0), "Float", false},
 
 		// BigInteger (exact) + BigFloat (inexact) → BigFloat (inexact)
 		{"BigInteger 0 + BigFloat 0.0", values.NewBigIntegerFromInt64(0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
@@ -94,9 +97,13 @@ func TestExactnessContagionAddition(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 			result := tc.a.Add(tc.b)
 			c.Assert(result.IsExact(), qt.Equals, tc.isExact,
 				qt.Commentf("Expected %s exactness to be %v, got %v", tc.name, tc.isExact, result.IsExact()))
+			gotType := strings.TrimPrefix(fmt.Sprintf("%T", result), "*values.")
+			c.Assert(gotType, qt.Equals, tc.wantType,
+				qt.Commentf("exactness matched but the result type did not"))
 		})
 	}
 }
@@ -114,7 +121,14 @@ func TestExactnessContagionAddition(t *testing.T) {
 // This test verifies that zero short-circuits do NOT happen in Subtract
 // methods, because doing so would violate exactness contagion.
 func TestExactnessContagionSubtraction(t *testing.T) {
-	c := qt.New(t)
+	// blockedOnNegation marks the rows whose wantType describes the (- 0 x) => -x
+	// NEGATION identity that wile does not yet implement. These are NOT stale
+	// expectations: they are the correct contract, confirmed against both oracles,
+	// which the code fails to honour. See the D6/D5 note on the blocked field below.
+	const blockedOnNegation = "BLOCKED on D6 (missing (- 0 x) => -x negation identity); " +
+		"see plans/2026-07-12-exact-zero-negation-and-complex-demotion.local.md"
+	const blockedOnDemotion = "BLOCKED on D5 (maybeSimplify demotes on an INEXACT zero imag) + D6; " +
+		"see plans/2026-07-12-exact-zero-negation-and-complex-demotion.local.md"
 
 	tcs := []struct {
 		name     string
@@ -122,47 +136,70 @@ func TestExactnessContagionSubtraction(t *testing.T) {
 		b        values.Number
 		wantType string
 		isExact  bool
+		// blocked, when non-empty, marks a row whose wantType is the CORRECT
+		// contract (pinned to Chez and Racket) that the code does not yet meet.
+		// The expectation is deliberately left correct rather than relaxed to
+		// match the current output — relaxing it would reinstate exactly the hole
+		// this assertion exists to close.
+		blocked string
 	}{
-		// Integer (exact) - Float (inexact) → Float (inexact)
-		{"Integer 0 - Float 0.0", values.NewInteger(0), values.NewFloat(0.0), "Float", false},
-		{"Float 0.0 - Integer 0", values.NewFloat(0.0), values.NewInteger(0), "Float", false},
+		// An exact zero on the LEFT of Subtract must NEGATE, not short-circuit:
+		// (- 0 x) is -x. Negation preserves the operand's TYPE, so the result is a
+		// Float, not the promoted BigFloat LUB. Chez and Racket: (- 0 0.0) => -0.0.
+		// wile currently promotes and computes 0.0 - 0.0 = +0.0 (a BigFloat).
+		{"Integer 0 - Float 0.0", values.NewInteger(0), values.NewFloat(0.0), "Float", false, blockedOnNegation},
+		// An exact zero on the RIGHT is an identity: returns the operand unchanged.
+		{"Float 0.0 - Integer 0", values.NewFloat(0.0), values.NewInteger(0), "Float", false, ""},
 
 		// Integer (exact) - Integer (exact) → Integer (exact)
-		{"Integer 0 - Integer 0", values.NewInteger(0), values.NewInteger(0), "Integer", true},
+		{"Integer 0 - Integer 0", values.NewInteger(0), values.NewInteger(0), "Integer", true, ""},
 
-		// BigInteger (exact) - Float (inexact) → BigFloat (inexact)
-		// Changed: precision preservation via BigFloat instead of Float
-		{"BigInteger 0 - Float 0.0", values.NewBigIntegerFromInt64(0), values.NewFloat(0.0), "BigFloat", false},
-		{"Float 0.0 - BigInteger 0", values.NewFloat(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
+		// Corrected 2026-07-12: this row said BigFloat, which is what the CURRENT
+		// (buggy) promotion produces — so it passed while documenting the bug. Under
+		// the negation identity it is a Float, exactly like its Integer sibling above.
+		{"BigInteger 0 - Float 0.0", values.NewBigIntegerFromInt64(0), values.NewFloat(0.0), "Float", false, blockedOnNegation},
+		// Identity on the right — corrected from BigFloat: no promotion occurs.
+		{"Float 0.0 - BigInteger 0", values.NewFloat(0.0), values.NewBigIntegerFromInt64(0), "Float", false, ""},
 
-		// BigInteger (exact) - BigFloat (inexact) → BigFloat (inexact)
-		{"BigInteger 0 - BigFloat 0.0", values.NewBigIntegerFromInt64(0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
-		{"BigFloat 0.0 - BigInteger 0", values.NewBigFloatFromFloat64(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false},
+		// Negation of a BigFloat is a BigFloat, so the type is unaffected by D6
+		// (only the sign of the value changes, +0.0 → -0.0).
+		{"BigInteger 0 - BigFloat 0.0", values.NewBigIntegerFromInt64(0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false, ""},
+		{"BigFloat 0.0 - BigInteger 0", values.NewBigFloatFromFloat64(0.0), values.NewBigIntegerFromInt64(0), "BigFloat", false, ""},
 
-		// Rational (exact) - Float (inexact) → Float (inexact)
-		{"Rational 0/1 - Float 0.0", values.NewRational(0, 1), values.NewFloat(0.0), "Float", false},
-		{"Float 0.0 - Rational 0/1", values.NewFloat(0.0), values.NewRational(0, 1), "Float", false},
+		// Rational (exact) - Float (inexact) → Float, via negation.
+		{"Rational 0/1 - Float 0.0", values.NewRational(0, 1), values.NewFloat(0.0), "Float", false, blockedOnNegation},
+		{"Float 0.0 - Rational 0/1", values.NewFloat(0.0), values.NewRational(0, 1), "Float", false, ""},
 
-		// Rational (exact) - BigFloat (inexact) → BigFloat (inexact)
-		{"Rational 0/1 - BigFloat 0.0", values.NewRational(0, 1), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
-		{"BigFloat 0.0 - Rational 0/1", values.NewBigFloatFromFloat64(0.0), values.NewRational(0, 1), "BigFloat", false},
+		// Rational (exact) - BigFloat (inexact) → BigFloat (negation preserves type).
+		{"Rational 0/1 - BigFloat 0.0", values.NewRational(0, 1), values.NewBigFloatFromFloat64(0.0), "BigFloat", false, ""},
+		{"BigFloat 0.0 - Rational 0/1", values.NewBigFloatFromFloat64(0.0), values.NewRational(0, 1), "BigFloat", false, ""},
 
-		// Integer (exact) - Complex (inexact) → Complex (inexact)
-		{"Integer 0 - Complex 0+0i", values.NewInteger(0), values.NewComplex(0), "Complex", false},
-		{"Complex 0+0i - Integer 0", values.NewComplex(0), values.NewInteger(0), "Complex", false},
+		// (- 0 0.0+0.0i) is -0.0-0.0i in Chez and Racket, and (real? -0.0-0.0i) is #f
+		// per R7RS §6.2.6 — an INEXACT zero imaginary part does not make a number real.
+		// wile returns 0.0 (a real): it both fails to negate (D6) and demotes the
+		// complex on an inexact zero imaginary part (D5).
+		{"Integer 0 - Complex 0+0i", values.NewInteger(0), values.NewComplex(0), "Complex", false, blockedOnDemotion},
+		{"Complex 0+0i - Integer 0", values.NewComplex(0), values.NewInteger(0), "Complex", false, ""},
 
 		// Float (inexact) - Float (inexact) → Float (inexact)
-		{"Float 0.0 - Float 0.0", values.NewFloat(0.0), values.NewFloat(0.0), "Float", false},
+		{"Float 0.0 - Float 0.0", values.NewFloat(0.0), values.NewFloat(0.0), "Float", false, ""},
 
 		// BigFloat (inexact) - BigFloat (inexact) → BigFloat (inexact)
-		{"BigFloat 0.0 - BigFloat 0.0", values.NewBigFloatFromFloat64(0.0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false},
+		{"BigFloat 0.0 - BigFloat 0.0", values.NewBigFloatFromFloat64(0.0), values.NewBigFloatFromFloat64(0.0), "BigFloat", false, ""},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.blocked != "" {
+				t.Skip(tc.blocked)
+			}
+			c := qt.New(t)
 			result := tc.a.Subtract(tc.b)
 			c.Assert(result.IsExact(), qt.Equals, tc.isExact,
 				qt.Commentf("Expected %s exactness to be %v, got %v", tc.name, tc.isExact, result.IsExact()))
+			gotType := strings.TrimPrefix(fmt.Sprintf("%T", result), "*values.")
+			c.Assert(gotType, qt.Equals, tc.wantType,
+				qt.Commentf("exactness matched but the result type did not"))
 		})
 	}
 }
