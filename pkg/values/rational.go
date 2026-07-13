@@ -228,6 +228,9 @@ func (p *Rational) Subtract(o Number) Number {
 	if exactZeroIdentity(o) {
 		return p
 	}
+	if exactZeroIdentity(p) {
+		return o.Negate()
+	}
 	v, ok := o.(*Rational)
 	if ok {
 		return &Rational{value: new(big.Rat).Sub(p.value, v.value)}

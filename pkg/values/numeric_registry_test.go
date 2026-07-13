@@ -210,13 +210,16 @@ func TestRegisterNumericSpecDuplicateRejected(t *testing.T) {
 func simplifyGolden(n Number) Number {
 	switch v := n.(type) {
 	case *BigComplex:
-		if v.Imag().IsZero() {
+		// EXACT zero imag only. An inexact 0.0 imaginary part does not make a
+		// number real (R7RS §6.2.6), and descending on it would also flip the
+		// exactness class. Spelled out rather than calling IsReal(), so this stays
+		// an independent restatement of the rule instead of a mirror of the code
+		// under test.
+		if v.Imag().IsZero() && v.Imag().IsExact() {
 			return simplifyGolden(v.Real())
 		}
-	case *Complex:
-		if imag(v.Value) == 0 {
-			return simplifyGolden(NewFloat(real(v.Value)))
-		}
+	// *Complex never descends: its parts are float64, so a zero imag is always an
+	// INEXACT zero. There is no exact-zero-imag *Complex to descend from.
 	case *BigFloat:
 		if v.value.IsInt() {
 			bi, _ := v.value.Int(nil)
@@ -324,14 +327,19 @@ func equivalenceExemplars() []Number {
 		NewRational(6, 2), // IsInteger → demotes
 		NewRational(7, 2), // non-integer — stays Rational
 		NewRational(1, 3), // not exactly representable in float64
-		// Complex corners
+		// Complex corners. A *Complex is always inexact, so a zero imag is an
+		// INEXACT zero and none of these descend to a real (R7RS §6.2.6).
 		NewComplex(3 + 0i),
 		NewComplex(3.5 + 0i),
 		NewComplex(3 + 4i),
 		// BigComplex corners — exact and inexact mixes
 		NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(0)),
 		NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
-		NewBigComplex(NewBigFloatFromFloat64(3.5), NewBigIntegerFromInt64(0)), // inexact real + exact zero imag
+		NewBigComplex(NewBigFloatFromFloat64(3.5), NewBigIntegerFromInt64(0)), // inexact real + EXACT zero imag: descends
+		// Inexact zero imag: must NOT descend. This is the corner the old
+		// magnitude-only rule got wrong, and no exemplar covered it.
+		NewBigComplex(NewBigFloatFromFloat64(3.5), NewBigFloatFromFloat64(0.0)),
+		NewBigComplex(NewBigFloatFromFloat64(5.0), NewBigFloatFromFloat64(math.Copysign(0, -1))),
 	}
 }
 

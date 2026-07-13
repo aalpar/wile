@@ -95,10 +95,25 @@ func TestBigComplex_Arithmetic(t *testing.T) {
 	c.Assert(bc.Imag().(*values.BigInteger).Int64(), qt.Equals, int64(-4))
 }
 
+// TestBigComplex_Division pins exact complex division.
+//
+// Dividing two EXACT complex numbers yields an EXACT result: the parts divide
+// through the numeric tower, so an Integer/Integer quotient becomes a Rational
+// rather than collapsing to a float. Both oracles agree:
+//
+//	petite -q <<< '(display (list (/ 3+4i 1+2i) (/ 2+2i 1+1i) (/ 0+1i 0+1i)))'
+//	racket   -e '(display (list (/ 3+4i 1+2i) (/ 2+2i 1+1i) (/ 0+1i 0+1i)))'
+//	# both => (11/5-2/5i 2 1)
+//
+// Before 2026-07-12 this test asserted the opposite ("division always produces
+// BigFloat parts", quotient 2.2-0.4i). That was the bug, not the contract: the
+// implementation coerced both parts to BigFloat before dividing, destroying
+// exactness unconditionally. The assertions below are the R7RS §6.2.2 contract.
 func TestBigComplex_Division(t *testing.T) {
 	c := qt.New(t)
 
-	// (3+4i) / (1+2i) = ((3*1+4*2) + (4*1-3*2)i) / (1+4) = (11 - 2i) / 5 = 2.2 - 0.4i
+	// (3+4i) / (1+2i) = ((3*1+4*2) + (4*1-3*2)i) / (1+4) = (11 - 2i) / 5
+	//                 = 11/5 - 2/5i, EXACTLY — not 2.2 - 0.4i.
 	bc1 := values.NewBigComplexFromBigIntegers(
 		values.NewBigIntegerFromInt64(3),
 		values.NewBigIntegerFromInt64(4),
@@ -111,11 +126,9 @@ func TestBigComplex_Division(t *testing.T) {
 	quot, err := bc1.Divide(bc2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(quot, qt.IsNotNil)
-	// Division always produces BigFloat parts
-	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64Truncated()
-	imagPart := quot.(*values.BigComplex).ImagAsBigFloat().Float64Truncated()
-	c.Assert(math.Abs(realPart-2.2) < 0.0001, qt.IsTrue)
-	c.Assert(math.Abs(imagPart-(-0.4)) < 0.0001, qt.IsTrue)
+	c.Assert(quot.SchemeString(), qt.Equals, "11/5-2/5i")
+	c.Assert(quot.IsExact(), qt.IsTrue,
+		qt.Commentf("exact operands must divide exactly; a float quotient means the parts were coerced"))
 
 	// Division by zero returns error
 	zero := values.NewBigComplexFromBigIntegers(
@@ -126,11 +139,10 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Matches, ".*division by zero")
 
-	// Division where zero parts produce *Integer intermediates via
-	// exactZeroProduct. (0+1i)/(0+1i): bc=0*0=Integer(0),
-	// ad=0*1=Integer(0), so numerImag = Integer(0).Subtract(Integer(0))
-	// = Integer(0). This Integer(0) reaches toBigFloat, which must handle
-	// *Integer without panicking.
+	// A quotient whose imaginary part is a mathematically-exact zero demotes to a
+	// real. (0+1i)/(0+1i): numerImag = (0*0) - (1*1)... = exact Integer 0, so
+	// maybeSimplify demotes and the result is the exact integer 1, not 1.0 and not
+	// a complex 1+0i stranded by an inexact zero imag.
 	bcPureImag := values.NewBigComplexFromBigIntegers(
 		values.NewBigIntegerFromInt64(0),
 		values.NewBigIntegerFromInt64(1),
@@ -138,8 +150,147 @@ func TestBigComplex_Division(t *testing.T) {
 	quotImag, err := bcPureImag.Divide(bcPureImag)
 	c.Assert(err, qt.IsNil)
 	c.Assert(quotImag, qt.IsNotNil)
-	// (0+1i)/(0+1i) = (0+1)/(0+1) + (0-0)i/(0+1) = 1+0i → simplifies to BigFloat(1)
-	c.Assert(quotImag.(*values.BigFloat).Float64Truncated(), qt.Equals, 1.0)
+	c.Assert(quotImag.SchemeString(), qt.Equals, "1")
+	c.Assert(quotImag.IsExact(), qt.IsTrue)
+
+	// The mirror case, and the reason maybeSimplify must test exactness rather
+	// than magnitude: an INEXACT zero imaginary part does NOT make a number real
+	// (R7RS §6.2.6). (/ 1.0+1.0i 1.0+1.0i) stays complex at 1.0+0.0i in both
+	// oracles — demoting it to a bare 1.0 would discard an observable component.
+	inexact := values.NewBigComplex(
+		values.NewBigFloatFromFloat64(1.0),
+		values.NewBigFloatFromFloat64(1.0),
+	)
+	quotInexact, err := inexact.Divide(inexact)
+	c.Assert(err, qt.IsNil)
+	c.Assert(quotInexact.SchemeString(), qt.Equals, "1.0+0.0i")
+	c.Assert(quotInexact.IsExact(), qt.IsFalse)
+
+	// Dividing by an INEXACT zero complex does NOT raise: 0.0+0.0i is an IEEE
+	// value, so the quotient is NaN under IEEE rather than a division-by-zero
+	// error. Only an EXACT zero divisor raises (asserted above).
+	//
+	// The COMPLEX zero and the REAL zero are different divisors and the oracles
+	// give different answers — this pair is the reason BigComplex.Divide must
+	// branch on the divisor's KIND before promotion rather than on its imaginary
+	// part's exactness after it (promotion makes a real 0.0 look like 0.0+0.0i):
+	//
+	//	petite -q <<< '(display (list (/ 1+1i 0.0+0.0i) (/ 1+1i 0.0)))'
+	//	racket   -e '(display (list (/ 1+1i 0.0+0.0i) (/ 1+1i 0.0)))'
+	//	# both => (+nan.0+nan.0i +inf.0+inf.0i)
+	//
+	// The complex zero drives the general formula's denominator (c²+d²) to 0.0, so
+	// 0/0 => NaN. The real zero divides each part by c, so x/0.0 => a signed
+	// infinity. TestBigComplex_DivideByRealZero pins the other half of the pair.
+	inexactZero := values.NewBigComplex(
+		values.NewBigFloatFromFloat64(0.0),
+		values.NewBigFloatFromFloat64(0.0),
+	)
+	one := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigIntegerFromInt64(1),
+	)
+	quotNaN, err := one.Divide(inexactZero)
+	c.Assert(err, qt.IsNil,
+		qt.Commentf("an inexact zero divisor is an IEEE value, not a division-by-zero error"))
+	c.Assert(quotNaN.SchemeString(), qt.Equals, "+nan.0+nan.0i")
+}
+
+// TestBigComplex_DivideByRealZero pins the regression half of the divisor pair:
+// dividing by a REAL inexact zero yields a signed infinity, NOT NaN.
+//
+// This is the case an exactness test on the divisor's imaginary part cannot see.
+// Dispatch promotes a real divisor into the complex LUB, manufacturing an inexact
+// zero imaginary part that is byte-identical to a user-written 0.0+0.0i — so the
+// decision must be made on the divisor's KIND, before promotion. Both oracles:
+//
+//	petite -q <<< '(display (list (/ 1+2i 0.0) (/ 1+2i -0.0) (/ 1+2i 0.0+0.0i)))'
+//	racket   -e '(display (list (/ 1+2i 0.0) (/ 1+2i -0.0) (/ 1+2i 0.0+0.0i)))'
+//	# both => (+inf.0+inf.0i -inf.0-inf.0i +nan.0+nan.0i)
+func TestBigComplex_DivideByRealZero(t *testing.T) {
+	oneTwo := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(1),
+		values.NewBigIntegerFromInt64(2),
+	)
+
+	tcs := []struct {
+		name    string
+		divisor values.Number
+		want    string
+	}{
+		{"Float +0.0", values.NewFloat(0.0), "+inf.0+inf.0i"},
+		{"Float -0.0", values.NewFloat(math.Copysign(0, -1)), "-inf.0-inf.0i"},
+		{"BigFloat +0.0", values.NewBigFloatFromFloat64(0.0), "+inf.0+inf.0i"},
+		// A nonzero real divisor takes the same part-wise path; pin that it is
+		// still correct, so the fast path is not merely "right on zeros".
+		{"Float 2.0", values.NewFloat(2.0), "0.5+1.0i"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			got, err := oneTwo.Divide(tc.divisor)
+			c.Assert(err, qt.IsNil)
+			c.Assert(got.SchemeString(), qt.Equals, tc.want,
+				qt.Commentf("a REAL zero divisor must give a signed infinity, not the NaN a COMPLEX zero gives"))
+		})
+	}
+}
+
+// TestBigComplex_SchemeStringSign pins the "+" separator against imaginary parts
+// that already carry their own sign.
+//
+// The separator must be chosen on the RENDERED text, not on IsNegative(). Three
+// values are not negative yet print with a leading sign, and an IsNegative() test
+// misses all three, emitting a double sign:
+//
+//	-0.0    is not < 0        printed "5.0+-0.0i"     want "5.0-0.0i"
+//	+inf.0  is not < 0        printed "5.0++inf.0i"   want "5.0+inf.0i"
+//	+nan.0  is not < 0        printed "5.0++nan.0i"   want "5.0+nan.0i"
+//
+// (*Complex).SchemeString already tested the rendered text; BigComplex did not.
+//
+// The five all-inexact rows are pinned to both oracles, which render these exact
+// shapes:
+//
+//	petite -q <<< '(display (list (make-rectangular 5.0 +inf.0) (make-rectangular 5.0 -0.0)))'
+//	racket   -e '(display (list (make-rectangular 5.0 +inf.0) (make-rectangular 5.0 -0.0)))'
+//	# both => (5.0+inf.0i 5.0-0.0i)
+//
+// The three exact-imag rows are NOT oracle-pinned, and deliberately so: Chez and
+// Racket normalize a mixed-exactness complex to all-inexact parts, so
+// (make-rectangular 5.0 -3) renders as 5.0-3.0i there and the shape under test —
+// an inexact real beside an exact imag — is not constructible in either. They are
+// unit tests of the separator branch on a wile-internal value, which is what this
+// function actually decides.
+func TestBigComplex_SchemeStringSign(t *testing.T) {
+	negZero := values.NewBigFloatFromFloat64(math.Copysign(0, -1))
+
+	tcs := []struct {
+		name string
+		imag values.Number
+		want string
+	}{
+		// Oracle-pinned (all-inexact parts).
+		{"negative zero", negZero, "5.0-0.0i"},
+		{"positive zero", values.NewBigFloatFromFloat64(0.0), "5.0+0.0i"},
+		{"positive infinity", values.NewBigFloatFromFloat64(math.Inf(1)), "5.0+inf.0i"},
+		{"negative infinity", values.NewBigFloatFromFloat64(math.Inf(-1)), "5.0-inf.0i"},
+		{"NaN", values.NewBigFloatNaN(), "5.0+nan.0i"},
+		// Separator-branch only; see the note above on why these are not oracle-pinned.
+		{"negative integer", values.NewBigIntegerFromInt64(-3), "5.0-3i"},
+		{"positive integer", values.NewBigIntegerFromInt64(3), "5.0+3i"},
+		{"negative rational", values.NewRational(-2, 5), "5.0-2/5i"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			bc := values.NewBigComplex(values.NewBigFloatFromFloat64(5), tc.imag)
+			c.Assert(bc.SchemeString(), qt.Equals, tc.want,
+				qt.Commentf("imaginary part rendered as %q", tc.imag.SchemeString()))
+		})
+	}
 }
 
 func TestBigComplex_MixedArithmetic(t *testing.T) {

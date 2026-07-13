@@ -210,6 +210,9 @@ func (p *BigInteger) Subtract(o Number) Number {
 	if exactZeroIdentity(o) {
 		return p
 	}
+	if exactZeroIdentity(p) {
+		return o.Negate()
+	}
 	v, ok := o.(*BigInteger)
 	if ok {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}

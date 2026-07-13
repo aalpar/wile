@@ -93,9 +93,15 @@ func (p *BigComplex) ImagAsBigFloat() *BigFloat {
 	return toBigFloat(p.imag)
 }
 
-// toBigFloat converts a Number to BigFloat.
-// Handles all five types that can appear as BigComplex parts or intermediate
-// arithmetic results: BigFloat, BigInteger, Rational, Integer, and Float.
+// toBigFloat converts a BigComplex part to a BigFloat.
+//
+// The three cases below are exactly the part types validateBigComplexPart admits,
+// and every caller passes a part (p.real or p.imag), so the switch is total. It
+// previously also carried *Integer and *Float arms for "intermediate arithmetic
+// results" — the general divide path used to funnel its unpromoted numerators
+// through here — but that call site now divides the parts directly, and those two
+// arms became unreachable. They are dropped rather than left as unpinned dead code;
+// the panic below still catches a part type that escapes validation.
 func toBigFloat(n Number) *BigFloat {
 	switch v := n.(type) {
 	case *BigFloat:
@@ -106,18 +112,24 @@ func toBigFloat(n Number) *BigFloat {
 	case *Rational:
 		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
 		return &BigFloat{value: bf}
-	case *Integer:
-		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetInt64(v.Value)
-		return &BigFloat{value: bf}
-	case *Float:
-		return NewBigFloatFromFloat64(v.Value)
 	}
 	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toBigFloat: unsupported type %T", n))
 }
 
-// maybeSimplify returns a real number if imag is zero, otherwise returns BigComplex.
+// maybeSimplify demotes a complex to its real part when the imaginary part is an
+// EXACT zero, and only then.
+//
+// R7RS §6.2.6 makes exactness, not magnitude, the deciding property:
+//
+//	(real? 3+0i)       =>  #t     ; exact zero imag: the number IS real
+//	(real? -2.5+0.0i)  =>  #f     ; INEXACT zero imag: still complex
+//
+// An inexact 0.0 is an IEEE value that merely happens to compare equal to zero;
+// it carries a sign and it is not a mathematical zero. Demoting on it would
+// discard a component the caller can still observe, and would silently turn a
+// complex into a real. An exact 0 is a mathematical zero, so a+0i IS a.
 func maybeSimplify(rel, iam Number) Number {
-	if iam.IsZero() {
+	if iam.IsZero() && iam.IsExact() {
 		return rel
 	}
 	return NewBigComplex(rel, iam)
@@ -227,7 +239,14 @@ func init() {
 		v := o.(*BigComplex)
 		// Scalar divisor (d=0): divide each part directly to preserve exactness.
 		// Scalars promoted from Integer/BigInteger/Rational arrive with BigInteger(0) imag.
-		if v.imag.IsZero() {
+		//
+		// The zero must be EXACT. An inexact 0.0 imaginary part is an IEEE value,
+		// not an absent component, and the shortcut is not equivalent to the general
+		// formula on it: the general form computes the imaginary numerator as
+		// (b*c - a*d), which for an exact b=0 and an inexact d=0.0 is 0 - 0.0, i.e.
+		// -0.0 by the exact-zero negation identity. The shortcut computes b/c = +0.0
+		// and loses the sign. Chez and Racket both give (/ 10 2.0+0.0i) => 5.0-0.0i.
+		if v.imag.IsZero() && v.imag.IsExact() {
 			newReal, err := p.real.Divide(v.real)
 			if err != nil {
 				return nil, err
@@ -250,11 +269,28 @@ func init() {
 		numerImag := bc.Subtract(ad)
 		denom := cc.Add(dd)
 
-		newReal, err := toBigFloat(numerReal).Divide(toBigFloat(denom))
+		// Divide the parts directly rather than coercing them to BigFloat first.
+		// Exactness contagion already gives the right answer for both cases: exact
+		// operands divide exactly (Integer/Integer yields a Rational, so 11/5 stays
+		// 11/5 instead of collapsing to 2.2), and any inexact operand makes the
+		// quotient inexact on its own. Coercing to BigFloat up front would destroy
+		// exactness unconditionally, which R7RS §6.2.2 does not license: Chez and
+		// Racket both give (/ 3+4i 1+2i) => 11/5-2/5i, exact.
+		//
+		// This is also what lets maybeSimplify demote correctly below. A quotient
+		// with a mathematically-zero imaginary part reaches it as an EXACT zero, so
+		// (/ 2+2i 1+1i) => 2 rather than being stranded as a complex 2.0+0.0i.
+		//
+		// denom CAN be zero here, but only an inexact one: the exact-zero-imag case
+		// returned above, so a zero denominator implies the divisor was an inexact
+		// zero (0.0+0.0i). Dividing by it yields NaN/infinity under IEEE rather than
+		// raising, which is the answer both oracles give: (/ 1+1i 0.0+0.0i) is
+		// +nan.0+nan.0i. Division by an EXACT zero still raises, on the path above.
+		newReal, err := numerReal.Divide(denom)
 		if err != nil {
 			return nil, err
 		}
-		newImag, err := toBigFloat(numerImag).Divide(toBigFloat(denom))
+		newImag, err := numerImag.Divide(denom)
 		if err != nil {
 			return nil, err
 		}
@@ -292,6 +328,9 @@ func (p *BigComplex) Subtract(o Number) Number {
 	if exactZeroIdentity(o) {
 		return p
 	}
+	if exactZeroIdentity(p) {
+		return o.Negate()
+	}
 	return bigComplexSubtract[o.Kind()](p, o)
 }
 
@@ -316,6 +355,30 @@ func (p *BigComplex) Multiply(o Number) Number {
 func (p *BigComplex) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigComplex.Divide: division by exact zero")
+	}
+	// A REAL divisor divides part-wise. This MUST be decided here, on o's own
+	// kind, because it is the last point that still sees the operand unpromoted.
+	//
+	// Dispatch promotes both operands to the LUB first, and lifting a real into
+	// the complex LUB manufactures a zero imaginary part: a Float 0.0 arrives at
+	// the closure as BigComplex{BigFloat(0.0), BigFloat(0.0)}, byte-identical to a
+	// user-written 0.0+0.0i. The two are NOT interchangeable — the oracles give
+	// (/ 1+2i 0.0) => +inf.0+inf.0i but (/ 1+2i 0.0+0.0i) => +nan.0+nan.0i,
+	// because the general formula's denominator (c²+d²) is 0.0 for the complex
+	// zero and drives 0/0 => NaN, while a real divisor divides each part by c and
+	// yields a signed infinity. Asking about the imaginary part's exactness AFTER
+	// promotion cannot recover the distinction: the promoted zero is inexact
+	// exactly when the real divisor was.
+	if LookupNumericSpec(o.Kind()).IsAlwaysReal() {
+		newReal, err := p.real.Divide(o)
+		if err != nil {
+			return nil, err
+		}
+		newImag, err := p.imag.Divide(o)
+		if err != nil {
+			return nil, err
+		}
+		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }
@@ -570,20 +633,16 @@ func (p *BigComplex) Conjugate() *BigComplex {
 func (p *BigComplex) SchemeString() string {
 	realStr := p.real.SchemeString()
 	imagStr := p.imag.SchemeString()
-	// Check if imaginary part is negative
-	isNeg := false
-	switch v := p.imag.(type) {
-	case *BigInteger:
-		isNeg = v.IsNegative()
-	case *BigFloat:
-		isNeg = v.IsNegative()
-	case *Rational:
-		isNeg = v.IsNegative()
+	// The separator is driven by the RENDERED sign, not by IsNegative(), matching
+	// (*Complex).SchemeString. Three parts are not negative yet still render with a
+	// leading sign, and IsNegative() misses every one: -0.0 (a negative zero is not
+	// less than zero) printed "5.0+-0.0i", while +inf.0 and +nan.0 carry their own
+	// "+" and printed "5.0++inf.0i". A part whose text already opens with a sign
+	// supplies the separator itself.
+	if len(imagStr) > 0 && imagStr[0] != '-' && imagStr[0] != '+' {
+		return realStr + "+" + imagStr + "i"
 	}
-	if isNeg {
-		return realStr + imagStr + "i"
-	}
-	return realStr + "+" + imagStr + "i"
+	return realStr + imagStr + "i"
 }
 
 // IsVoid returns true if this BigComplex is nil.

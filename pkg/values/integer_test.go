@@ -145,10 +145,19 @@ func TestInteger_Divide(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(20, 1))
 
+	// Dividing by a complex whose imaginary part is an INEXACT zero does NOT yield
+	// a real: 0.0 is an IEEE value, not an absent component, so the quotient stays
+	// complex (R7RS §6.2.6). The imaginary part is a NEGATIVE zero, because the
+	// general formula computes it as (b*c - a*d) = 0 - 0.0 = -0.0 — an exact zero
+	// minus an inexact one negates. Chez and Racket: (/ 10 2.0+0.0i) => 5.0-0.0i.
+	//
+	// This previously asserted a bare BigFloat(5), which was wrong twice over: it
+	// demoted a complex on an inexact zero imag, and it dropped the sign.
 	c1 := values.NewComplex(complex(2, 0))
 	result, err = i1.Divide(c1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigFloatFromFloat64(5))
+	qt.Assert(t, result.SchemeString(), qt.Equals, "5.0-0.0i")
+	qt.Assert(t, result.IsExact(), qt.IsFalse)
 }
 
 func TestInteger_IsZero(t *testing.T) {

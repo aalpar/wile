@@ -290,6 +290,9 @@ func (p *Integer) Subtract(o Number) Number {
 	if exactZeroIdentity(o) {
 		return p
 	}
+	if exactZeroIdentity(p) {
+		return o.Negate()
+	}
 	v, ok := o.(*Integer)
 	if ok {
 		return subInt64(p.Value, v.Value)

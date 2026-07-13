@@ -115,8 +115,10 @@ func TestExactZeroIsAdditiveIdentity(t *testing.T) {
 		c.Assert(math.Signbit(f.Value), qt.IsTrue)
 	})
 
-	// The asymmetry: only the RIGHT operand of Subtract may short-circuit.
-	// (- 0 x) is -x, not x.
+	// The asymmetry: the two operands of Subtract short-circuit DIFFERENTLY,
+	// because subtraction is not commutative. The right operand yields the left one
+	// unchanged ((- x 0) is x); an exact zero on the left NEGATES ((- 0 x) is -x).
+	// The sign of that negation is pinned by TestExactZeroSubtractNegates.
 	c.Run("(- exact-0 5) negates rather than short-circuiting", func(c *qt.C) {
 		got := exactZero.Subtract(values.NewInteger(5))
 		c.Assert(values.NumberToFloat64(got), qt.Equals, float64(-5))

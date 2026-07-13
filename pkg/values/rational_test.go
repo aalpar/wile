@@ -122,10 +122,15 @@ func TestRational_Divide(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(0.25))
 
+	// An INEXACT zero imaginary part does not make the divisor real, so the
+	// quotient stays complex (R7RS §6.2.6) with a negative zero imaginary part:
+	// (b*c - a*d) = 0 - 0.0 = -0.0. Chez and Racket: (/ 1/2 2.0+0.0i) => 0.25-0.0i.
+	// This previously asserted a demoted BigFloat(0.25).
 	c1 := values.NewComplex(complex(2, 0))
 	result, err = r1.Divide(c1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigFloatFromFloat64(0.25))
+	qt.Assert(t, result.SchemeString(), qt.Equals, "0.25-0.0i")
+	qt.Assert(t, result.IsExact(), qt.IsFalse)
 }
 
 func TestRational_IsZero(t *testing.T) {

@@ -100,6 +100,21 @@ func (p *NumericTypeSpec) IsAlwaysExact() bool {
 	return p.isAlwaysExact
 }
 
+// IsAlwaysReal reports whether every value of this kind is a real number, i.e.
+// carries no imaginary component at all. True for Integer, BigInteger, Rational,
+// Float, and BigFloat; false for Complex and BigComplex.
+//
+// This is NOT the same question as R7RS real?, and it must not be used to answer
+// it: a BigComplex with an exact zero imaginary part IS real? (see IsReal), yet
+// its kind is not always-real. The distinction this predicate captures is
+// structural — does the KIND have an imaginary slot — and it survives promotion
+// only if it is asked BEFORE promotion, because lifting a real into the complex
+// LUB manufactures a zero imaginary part that is indistinguishable from a
+// user-written one.
+func (p *NumericTypeSpec) IsAlwaysReal() bool {
+	return p.isAlwaysReal
+}
+
 // numericRegistry holds one spec per NumericKind, indexed by kind.
 var numericRegistry [numKinds]NumericTypeSpec
 

@@ -74,8 +74,17 @@ func exactZeroProduct(a, b Number) (Number, bool) {
 // An INEXACT zero must not short-circuit: contagion requires the result be
 // inexact, and IEEE governs the sign.
 //
-// Only the RIGHT operand of Subtract may short-circuit: (- x 0) is x, but
-// (- 0 x) is -x.
+// The two operands of Subtract short-circuit DIFFERENTLY, because subtraction is
+// not commutative: (- x 0) is x, but (- 0 x) is -x. So the right operand yields
+// the left one unchanged, while an exact zero on the LEFT yields o.Negate().
+// Negation is not the identity, and it is not a no-op on a zero: it flips the
+// sign bit, which is why (- 0 0.0) is -0.0 in Chez and Racket. It also preserves
+// the operand's TYPE, so the result is o's kind rather than the promoted LUB.
+//
+// Only the exact kinds (Integer, BigInteger, Rational, and a BigComplex with
+// exact parts) can satisfy this predicate as the receiver; Float, BigFloat, and
+// Complex report IsExact() == false unconditionally, so a guard on their
+// receiver would be dead.
 func exactZeroIdentity(z Number) bool {
 	return z.IsZero() && z.IsExact()
 }
@@ -106,10 +115,20 @@ func floatToExact(f float64) (Number, error) {
 // Simplify attempts to reduce a number to a simpler type without losing information.
 //
 // Simplification rules:
-//   - BigComplex with zero imaginary → real part (cross-kind; handled here)
-//   - Complex with zero imaginary → Float → possibly Integer (cross-kind; handled here)
+//   - BigComplex with an EXACT zero imaginary → real part (cross-kind; handled here)
 //   - All other per-kind descents are delegated to the NumericTypeSpec.SimplifyDown
 //     function registered for each kind (see values/numeric_registry.go).
+//
+// Exactness, not magnitude, licenses the complex→real descent, exactly as in
+// maybeSimplify and IsReal. Demoting on an INEXACT zero imaginary part would lose
+// information twice over, which is what this function exists not to do: it drops a
+// component R7RS §6.2.6 says is still there (real? -2.5+0.0i is #f), and it then
+// launders the inexact real into an exact one, breaking the "must not change
+// exactness class" constraint stated in exactZeroProduct's contract above.
+//
+// A *Complex therefore never descends: its parts are float64, so IsExact() is
+// false unconditionally (complex.go) and a 0.0 imaginary part is always an inexact
+// zero. There is no exact-zero-imag *Complex to descend from.
 //
 // Returns nil unchanged (callers may pass nil from generic Value paths).
 func Simplify(n Number) Number {
@@ -117,12 +136,8 @@ func Simplify(n Number) Number {
 		return nil
 	}
 	bc, ok := n.(*BigComplex)
-	if ok && bc.Imag().IsZero() {
+	if ok && bc.IsReal() {
 		return Simplify(bc.Real())
-	}
-	c, ok := n.(*Complex)
-	if ok && imag(c.Value) == 0 {
-		return Simplify(NewFloat(real(c.Value)))
 	}
 	return LookupNumericSpec(n.Kind()).SimplifyDown(n)
 }
