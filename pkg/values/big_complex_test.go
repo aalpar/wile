@@ -127,7 +127,7 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(err.Error(), qt.Matches, ".*division by zero")
 
 	// Division where zero parts produce *Integer intermediates via
-	// multiplyResultForZero. (0+1i)/(0+1i): bc=0*0=Integer(0),
+	// exactZeroProduct. (0+1i)/(0+1i): bc=0*0=Integer(0),
 	// ad=0*1=Integer(0), so numerImag = Integer(0).Subtract(Integer(0))
 	// = Integer(0). This Integer(0) reaches toBigFloat, which must handle
 	// *Integer without panicking.
