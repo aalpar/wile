@@ -21,74 +21,6 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// exactZeroProduct applies the exact-zero rule for multiplication: an exact zero
-// annihilates any product, yielding exact 0.
-//
-// The distinction that matters is exact vs inexact, NOT finite vs infinite. An
-// exact 0 is a mathematical zero, not an IEEE +0.0, so IEEE 754's 0*inf = NaN
-// rule does not govern it. R7RS §6.2.2 licenses the strong update precisely
-// because the exact value is known. Chez and Racket both give:
-//
-//	(* +inf.0 0) => 0        (* +nan.0 0) => 0        (* 5 0.0) => 0.0
-//
-// An INEXACT zero must not short-circuit at all: normal dispatch already
-// produces the correct signed zero, infinity, or NaN under IEEE 754.
-//
-// Abstract interpretation (Cousot & Cousot 1977). Exactness is tracked
-// in the two-point lattice {exact < inexact}.
-//
-//	α: Number → {exact, inexact}   (abstraction function)
-//	Transfer for most ops: α(a op b) = α(a) ⊔ α(b)  (join = inexact wins)
-//	Transfer for (* 0 x): α(result) = exact   if α(0)=exact
-//
-//	The zero-absorbs rule is a strong update: the transfer function
-//	returns a more precise result than the naive join because the
-//	mathematical result (0) is known exactly. It is licensed by the
-//	EXACTNESS of the zero alone — finiteness of the other operand is
-//	irrelevant, because an exact 0 is not an IEEE value.
-//	Constrains: all arithmetic dispatch closures (must respect
-//	  contagion), Simplify (must not change exactness class).
-//	Constrained by: promotion lattice (T must be monotone w.r.t.
-//	  the exactness ordering).
-//
-// See BIBLIOGRAPHY.md "Exactness as Abstract Interpretation".
-//
-// Returns (result, true) when the rule applies; (nil, false) to fall through
-// to normal dispatch.
-func exactZeroProduct(a, b Number) (Number, bool) {
-	if (a.IsZero() && a.IsExact()) || (b.IsZero() && b.IsExact()) {
-		return NewInteger(0), true
-	}
-	return nil, false
-}
-
-// exactZeroIdentity reports whether z is an exact zero, i.e. an exact additive
-// identity. (+ x 0) and (- x 0) return x UNCHANGED — preserving x's sign and
-// exactness, including a negative zero.
-//
-// This is not the same as adding IEEE +0.0: (+ -0.0 0.0) is +0.0 under IEEE 754,
-// but (+ -0.0 0) is -0.0 in Chez and Racket, because an exact 0 is an exact
-// identity rather than a floating-point value to be added. Returning the operand
-// untouched also preserves exactness contagion for free.
-//
-// An INEXACT zero must not short-circuit: contagion requires the result be
-// inexact, and IEEE governs the sign.
-//
-// The two operands of Subtract short-circuit DIFFERENTLY, because subtraction is
-// not commutative: (- x 0) is x, but (- 0 x) is -x. So the right operand yields
-// the left one unchanged, while an exact zero on the LEFT yields o.Negate().
-// Negation is not the identity, and it is not a no-op on a zero: it flips the
-// sign bit, which is why (- 0 0.0) is -0.0 in Chez and Racket. It also preserves
-// the operand's TYPE, so the result is o's kind rather than the promoted LUB.
-//
-// Only the exact kinds (Integer, BigInteger, Rational, and a BigComplex with
-// exact parts) can satisfy this predicate as the receiver; Float, BigFloat, and
-// Complex report IsExact() == false unconditionally, so a guard on their
-// receiver would be dead.
-func exactZeroIdentity(z Number) bool {
-	return z.IsZero() && z.IsExact()
-}
-
 // floatToExact converts a float64 to its exact Number representation.
 // Returns Integer or BigInteger if the float is integral, Rational otherwise.
 //
@@ -124,7 +56,8 @@ func floatToExact(f float64) (Number, error) {
 // information twice over, which is what this function exists not to do: it drops a
 // component R7RS §6.2.6 says is still there (real? -2.5+0.0i is #f), and it then
 // launders the inexact real into an exact one, breaking the "must not change
-// exactness class" constraint stated in exactZeroProduct's contract above.
+// exactness class" constraint stated in the exact-zero rule's contract
+// (exact_zero.go).
 //
 // A *Complex therefore never descends: its parts are float64, so IsExact() is
 // false unconditionally (complex.go) and a 0.0 imaginary part is always an inexact

@@ -133,10 +133,10 @@ func init() {
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
 func (p *Float) Add(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o
 	}
 	v, ok := o.(*Float)
@@ -151,8 +151,11 @@ func (p *Float) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
 func (p *Float) Subtract(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
+	}
+	if isExactZero(p) {
+		return o.Negate()
 	}
 	v, ok := o.(*Float)
 	if ok {
@@ -170,9 +173,8 @@ func (p *Float) Subtract(o Number) Number {
 // An inexact zero does not short-circuit: IEEE 754 governs, so (* 5 0.0) => 0.0 and
 // (* -1.0 0.0) => -0.0.
 func (p *Float) Multiply(o Number) Number {
-	z, ok := exactZeroProduct(p, o)
-	if ok {
-		return z
+	if exactZeroEither(p, o) {
+		return NewInteger(0)
 	}
 	v, ok := o.(*Float)
 	if ok {

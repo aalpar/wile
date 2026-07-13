@@ -269,10 +269,10 @@ func init() {
 // When adding Integer + BigInteger, result is BigInteger (exact).
 // When adding Integer + Float/Complex, result is Float/Complex (inexact).
 func (p *Integer) Add(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o
 	}
 	v, ok := o.(*Integer)
@@ -287,10 +287,10 @@ func (p *Integer) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *Integer) Subtract(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o.Negate()
 	}
 	v, ok := o.(*Integer)
@@ -308,9 +308,8 @@ func (p *Integer) Subtract(o Number) Number {
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *Integer) Multiply(o Number) Number {
-	z, ok := exactZeroProduct(p, o)
-	if ok {
-		return z
+	if exactZeroEither(p, o) {
+		return NewInteger(0)
 	}
 	v, ok := o.(*Integer)
 	if ok {

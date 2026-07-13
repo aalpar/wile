@@ -227,10 +227,10 @@ func init() {
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: inexact + inexact = inexact, exact + inexact = inexact.
 func (p *BigFloat) Add(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o
 	}
 	v, ok := o.(*BigFloat)
@@ -250,8 +250,11 @@ func (p *BigFloat) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: inexact - inexact = inexact, exact - inexact = inexact.
 func (p *BigFloat) Subtract(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
+	}
+	if isExactZero(p) {
+		return o.Negate()
 	}
 	v, ok := o.(*BigFloat)
 	if ok {
@@ -270,9 +273,8 @@ func (p *BigFloat) Subtract(o Number) Number {
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Multiply(o Number) Number {
 	// The exact-zero rule outranks NaN: (* +nan.0 0) is exact 0, not NaN.
-	z, ok := exactZeroProduct(p, o)
-	if ok {
-		return z
+	if exactZeroEither(p, o) {
+		return NewInteger(0)
 	}
 	if p.nan || o.IsNaN() {
 		return NewBigFloatNaN()

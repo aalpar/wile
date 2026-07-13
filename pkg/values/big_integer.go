@@ -189,10 +189,10 @@ func init() {
 // R7RS §6.2.2 Exactness: exact + exact = exact (BigInteger),
 // exact + inexact = inexact (Float/Complex).
 func (p *BigInteger) Add(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o
 	}
 	v, ok := o.(*BigInteger)
@@ -207,10 +207,10 @@ func (p *BigInteger) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *BigInteger) Subtract(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o.Negate()
 	}
 	v, ok := o.(*BigInteger)
@@ -230,9 +230,8 @@ func (p *BigInteger) Subtract(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Multiply(o Number) Number {
-	z, ok := exactZeroProduct(p, o)
-	if ok {
-		return z
+	if exactZeroEither(p, o) {
+		return NewInteger(0)
 	}
 	v, ok := o.(*BigInteger)
 	if ok {

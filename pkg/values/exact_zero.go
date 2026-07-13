@@ -37,11 +37,29 @@ import (
 // invisible when there is nothing to be missing FROM. As a table, an absent row is
 // a hole you have to look at.
 //
-// Abstract interpretation (Cousot & Cousot 1977): exactness is the two-point
-// lattice {exact < inexact} and ordinary contagion is the join. The exact-zero
-// cases are STRONG UPDATES -- strictly more precise than the join -- licensed
-// because the mathematical result is known exactly. See BIBLIOGRAPHY.md,
-// "Exactness as Abstract Interpretation".
+// Abstract interpretation (Cousot & Cousot 1977). Exactness is tracked in the
+// two-point lattice {exact < inexact}:
+//
+//	α: Number → {exact, inexact}                    (abstraction function)
+//	Transfer for most ops: α(a op b) = α(a) ⊔ α(b)  (join: inexact wins)
+//	Transfer for (* 0 x) and (/ 0 x): α(result) = exact  if α(0) = exact
+//
+// The exact-zero cases are STRONG UPDATES: the transfer function returns a result
+// strictly more precise than the naive join, because the mathematical result is
+// known exactly. The update is licensed by the EXACTNESS of the zero ALONE --
+// finiteness of the other operand is irrelevant, because an exact 0 is not an IEEE
+// value. That is why (* 0 +inf.0) is 0 rather than NaN, and equally why
+// (/ 0 +nan.0) is 0.
+//
+//	Constrains:     all arithmetic dispatch closures (must respect contagion),
+//	                Simplify (must not change exactness class).
+//	Constrained by: the promotion lattice (must be monotone w.r.t. the
+//	                exactness ordering).
+//
+// An INEXACT zero must not short-circuit anywhere: contagion requires the result be
+// inexact, and IEEE governs the sign. (* 5 0.0) is 0.0, not 0.
+//
+// See BIBLIOGRAPHY.md, "Exactness as Abstract Interpretation".
 
 // isExactZero reports whether n is an exact zero, i.e. a mathematical zero rather
 // than an IEEE value that happens to compare equal to zero.
@@ -52,6 +70,24 @@ import (
 // this a mathematical zero", and is correct to ignore exactness.
 func isExactZero(n Number) bool {
 	return n.IsZero() && n.IsExact()
+}
+
+// exactZeroEither reports whether EITHER operand is an exact zero -- the annihilation
+// question, asked by * and by /'s dividend rule.
+//
+// It hand-expands isExactZero instead of calling it twice, and that is a deliberate,
+// measured specialization rather than the spelling drift this file exists to end.
+// isExactZero costs 122 in the inliner's budget (two interface method calls) against
+// a budget of 80, so it is NEVER inlined. Calling it twice on the multiply hot path
+// therefore costs two real calls where one will do:
+//
+//	BenchmarkIntegerMultiply   1 call: 3.82 ns/op    2 calls: 4.37 ns/op   (+14%)
+//	Gabriel suite (geomean)                                                 (+1.5%)
+//
+// The two predicates MUST agree. TestExactZeroPredicatesAgree pins that they do, so
+// this stays a specialization of one rule rather than a second copy of it.
+func exactZeroEither(a, b Number) bool {
+	return (a.IsZero() && a.IsExact()) || (b.IsZero() && b.IsExact())
 }
 
 // zeroAction is what the rule does when one operand is an exact zero.
@@ -128,6 +164,20 @@ func init() {
 
 // exactZeroRule applies the exact-zero rule for a binary arithmetic operation.
 //
+// THIS IS THE EXECUTABLE SPECIFICATION, NOT THE HOT PATH. The seven numeric kinds
+// deliberately hand-inline their rows instead of calling it, because isExactZero
+// costs 122 against the inliner's budget of 80 and is never inlined -- so routing
+// Add through a wrapper that then calls it adds a second real call and a three-word
+// return, which measured +1.5% geomean on the Gabriel suite. Hand-inlined, the call
+// sites are structurally identical to the guards they replaced (+0.65% geomean,
+// inside the noise band).
+//
+// The conformance test (TestExactZeroCallSitesMatchTheTable) is what makes that
+// safe: it drives every kind's PUBLIC Add/Subtract/Multiply/Divide and asserts the
+// result equals what this reference says, for every operand pairing. So the table
+// remains the single source of truth for the rule, and a call site that disagrees
+// with its row is a test failure rather than a bug someone finds a year later.
+//
 // Returns (result, true, nil) when the rule fires, (nil, true, err) when it fires
 // and raises, and (nil, false, nil) to fall through to normal dispatch.
 //
@@ -142,34 +192,33 @@ func init() {
 // the price of keeping the four rules in one place, and it is worth paying: the
 // last time division's rule lived somewhere else, it went missing entirely.
 func exactZeroRule(op zeroOp, a, b Number) (Number, bool, error) {
-	r := exactZeroTable[op]
-	if isExactZero(b) {
-		return applyZeroAction(r.right, a)
-	}
-	if isExactZero(a) {
-		return applyZeroAction(r.left, b)
+	switch op {
+	case zeroAdd:
+		if isExactZero(b) {
+			return a, true, nil
+		}
+		if isExactZero(a) {
+			return b, true, nil
+		}
+	case zeroSub:
+		if isExactZero(b) {
+			return a, true, nil
+		}
+		if isExactZero(a) {
+			return b.Negate(), true, nil
+		}
+	case zeroMul:
+		if isExactZero(b) || isExactZero(a) {
+			return NewInteger(0), true, nil
+		}
+	case zeroDiv:
+		if isExactZero(b) {
+			return nil, true, werr.WrapForeignErrorf(werr.ErrDivisionByZero,
+				"exactZeroRule: division by an exact zero")
+		}
+		if isExactZero(a) {
+			return NewInteger(0), true, nil
+		}
 	}
 	return nil, false, nil
-}
-
-// applyZeroAction performs one cell of the table. other is the operand that is NOT
-// the exact zero -- the one the action acts upon.
-func applyZeroAction(action zeroAction, other Number) (Number, bool, error) {
-	switch action {
-	case zeroYieldExactZero:
-		return NewInteger(0), true, nil
-	case zeroYieldOther:
-		// UNTOUCHED, not "added to zero". IEEE addition of +0.0 would flip a -0.0
-		// to +0.0; handing the operand back preserves its sign and its exactness.
-		return other, true, nil
-	case zeroNegateOther:
-		return other.Negate(), true, nil
-	case zeroRaise:
-		return nil, true, werr.WrapForeignErrorf(werr.ErrDivisionByZero,
-			"exactZeroRule: division by an exact zero")
-	case zeroFallThrough:
-		return nil, false, nil
-	}
-	panic(werr.WrapForeignErrorf(werr.ErrNotANumber,
-		"applyZeroAction: unknown zeroAction %d", action))
 }

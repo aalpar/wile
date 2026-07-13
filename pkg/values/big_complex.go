@@ -311,10 +311,10 @@ func init() {
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
 func (p *BigComplex) Add(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o
 	}
 	return bigComplexAdd[o.Kind()](p, o)
@@ -325,10 +325,10 @@ func (p *BigComplex) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *BigComplex) Subtract(o Number) Number {
-	if exactZeroIdentity(o) {
+	if isExactZero(o) {
 		return p
 	}
-	if exactZeroIdentity(p) {
+	if isExactZero(p) {
 		return o.Negate()
 	}
 	return bigComplexSubtract[o.Kind()](p, o)
@@ -340,9 +340,8 @@ func (p *BigComplex) Subtract(o Number) Number {
 // R7RS §6.2.6: The * procedure returns the product of its arguments.
 // R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
 func (p *BigComplex) Multiply(o Number) Number {
-	z, ok := exactZeroProduct(p, o)
-	if ok {
-		return z
+	if exactZeroEither(p, o) {
+		return NewInteger(0)
 	}
 	return bigComplexMultiply[o.Kind()](p, o)
 }
