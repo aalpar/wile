@@ -250,8 +250,21 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				continue
 			}
 
-			// No branch target in the interior (i+1, pullIdx), exclusive
-			// of pullIdx itself — the SaveCont is expected to target it.
+			// No branch target in the interior (i+1, pullIdx), exclusive of
+			// pullIdx itself.
+			//
+			// The justification for excluding pullIdx is NOT that SaveCont cannot
+			// target it arithmetically — it can. It is that the region [i+2, pullIdx)
+			// is required to be entirely push-family (see the allPush guard below),
+			// and none of the three isBranch opcodes (OpBranch, OpBranchOnFalseValue,
+			// OpSaveContinuation) is push-family. A branch landing on pullIdx from
+			// outside would therefore be jumping onto an Apply having bypassed the
+			// callee push that PullApply exists to consume — already broken before
+			// any fusion. Verified empirically: instrumenting Optimize() across all
+			// packages plus the Scheme corpus yields zero occurrences.
+			//
+			// Widening the scan to <= pullIdx would be free, harmless hardening if a
+			// future change relaxes the all-push guard. It is not a bug fix.
 			branchInInterior := false
 			for k := i + 1; k < pullIdx; k++ {
 				if targets[k] {

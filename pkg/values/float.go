@@ -164,9 +164,11 @@ func (p *Float) Subtract(o Number) Number {
 // Multiply returns the product of two numbers.
 //
 // R7RS §6.2.6: The * procedure returns the product of its arguments.
-// R7RS §6.2.2: Exact zero dominates—(* 0 x) may return exact 0 even when
-// x is inexact. Zero is an exact value when the result is mathematically
-// unambiguous. This implementation follows Chez Scheme's behavior.
+//
+// Exactness: an exact zero annihilates the product to exact 0, regardless of the
+// other operand (R7RS §6.2.2; matches Chez and Racket, including (* +inf.0 0) => 0).
+// An inexact zero does not short-circuit: IEEE 754 governs, so (* 5 0.0) => 0.0 and
+// (* -1.0 0.0) => -0.0.
 func (p *Float) Multiply(o Number) Number {
 	z, ok := exactZeroProduct(p, o)
 	if ok {
