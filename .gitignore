@@ -61,3 +61,6 @@ REVIEW.md
 examples/benchmarks/canonical-results-*.csv
 examples/benchmarks/extended-results-*.csv
 examples/benchmarks/comparison-*.csv
+
+# local review output (wile-review-plugin)
+reviews/
