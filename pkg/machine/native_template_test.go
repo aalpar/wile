@@ -462,3 +462,59 @@ func BenchmarkMaybeAppendLiteral(b *testing.B) {
 		}
 	}
 }
+
+// TestLiteralPoolDoesNotRetypeAcrossFloatKinds guards against a Float literal
+// deduplicating onto an equal BigFloat pool slot.
+//
+// literalIdentical was asymmetric: a pooled *Float rejected a non-*Float candidate,
+// but a pooled *BigFloat fell through to EqualTo, and BigFloat(1.0).EqualTo(Float(1.0))
+// is true. An unrelated #m1.0 elsewhere in the same body therefore re-typed every equal
+// float literal, changing its arithmetic.
+//
+// Assert the stored TYPE, not an arithmetic result. BigFloat.Divide's sign bug is what
+// made this observable as (begin #m1.0 (/ 1.0 -0.0)) => +inf.0; testing that symptom
+// would let THIS bug hide behind THAT fix.
+func TestLiteralPoolDoesNotRetypeAcrossFloatKinds(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("BigFloat pooled first does not swallow an equal Float", func(c *qt.C) {
+		tpl := NewNativeTemplate(0, 0, false)
+
+		bigIdx := tpl.MaybeAppendLiteral(values.NewBigFloatFromFloat64(1.0))
+		floatIdx := tpl.MaybeAppendLiteral(values.NewFloat(1.0))
+
+		c.Assert(floatIdx, qt.Not(qt.Equals), bigIdx,
+			qt.Commentf("Float 1.0 must not dedup onto the BigFloat 1.0 slot"))
+
+		stored := tpl.Literals()[floatIdx]
+		_, isFloat := stored.(*values.Float)
+		c.Assert(isFloat, qt.IsTrue, qt.Commentf("pool re-typed the literal to %T", stored))
+	})
+
+	c.Run("Float pooled first does not swallow an equal BigFloat", func(c *qt.C) {
+		tpl := NewNativeTemplate(0, 0, false)
+
+		floatIdx := tpl.MaybeAppendLiteral(values.NewFloat(1.0))
+		bigIdx := tpl.MaybeAppendLiteral(values.NewBigFloatFromFloat64(1.0))
+
+		c.Assert(bigIdx, qt.Not(qt.Equals), floatIdx)
+
+		stored := tpl.Literals()[bigIdx]
+		_, isBig := stored.(*values.BigFloat)
+		c.Assert(isBig, qt.IsTrue, qt.Commentf("pool re-typed the literal to %T", stored))
+	})
+
+	c.Run("identical Floats still dedup", func(c *qt.C) {
+		tpl := NewNativeTemplate(0, 0, false)
+		a := tpl.MaybeAppendLiteral(values.NewFloat(2.5))
+		b := tpl.MaybeAppendLiteral(values.NewFloat(2.5))
+		c.Assert(a, qt.Equals, b, qt.Commentf("dedup must still work within a kind"))
+	})
+
+	c.Run("+0.0 and -0.0 stay distinct", func(c *qt.C) {
+		tpl := NewNativeTemplate(0, 0, false)
+		pos := tpl.MaybeAppendLiteral(values.NewFloat(0))
+		neg := tpl.MaybeAppendLiteral(values.NewFloat(math.Copysign(0, -1)))
+		c.Assert(neg, qt.Not(qt.Equals), pos, qt.Commentf("signed zeros must not merge"))
+	})
+}

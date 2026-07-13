@@ -16,6 +16,7 @@ package machine
 
 import (
 	"math"
+	"reflect"
 	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -401,22 +402,32 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 	return LiteralIndex(l)
 }
 
-// literalIdentical returns true if two values are identical for literal
-// deduplication purposes. This is stricter than EqualTo for floating point
-// values: -0.0 and +0.0 are numerically equal but have different bit
-// representations and must be kept as separate literals to preserve IEEE 754
-// signed zero semantics in operations like atan2.
+// literalIdentical reports whether two values are interchangeable for literal-pool
+// deduplication. This is STRICTER than EqualTo in two ways.
+//
+// Sign: -0.0 and +0.0 are numerically equal but must stay separate literals to
+// preserve IEEE 754 signed-zero semantics in operations like atan2.
+//
+// Kind: a Float and a BigFloat may compare equal under EqualTo, but they are NOT
+// interchangeable — they dispatch to different arithmetic. Merging them re-types the
+// literal, so an unrelated #m1.0 in the same body would silently turn every 1.0 into
+// a BigFloat. Values of different concrete types never dedup.
+//
+// The old comparison was asymmetric: a pooled *Float rejected a non-*Float candidate,
+// but a pooled *BigFloat fell through to EqualTo, which accepted an equal *Float.
+// reflect.TypeOf is preferred over a type switch enumerating the numeric kinds
+// precisely because it cannot rot when a new values.Value type is added — which is
+// the failure mode that produced this bug. It runs once per literal at COMPILE time,
+// never in the VM loop.
 func literalIdentical(a, b values.Value) bool {
-	// For floats, check both numeric equality and sign bit equality
-	af, ok := a.(*values.Float)
-	if ok {
-		bf, ok := b.(*values.Float)
-		if ok {
-			return af.Value == bf.Value && math.Signbit(af.Value) == math.Signbit(bf.Value)
-		}
+	if reflect.TypeOf(a) != reflect.TypeOf(b) {
 		return false
 	}
-	// For all other types, use standard EqualTo
+	af, ok := a.(*values.Float)
+	if ok {
+		bf := b.(*values.Float) // same concrete type, checked above
+		return af.Value == bf.Value && math.Signbit(af.Value) == math.Signbit(bf.Value)
+	}
 	return a.EqualTo(b)
 }
 
