@@ -277,6 +277,14 @@ func angleOfReal(v values.RealNumber) (values.Value, error) {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"angle: undefined for an exact zero, which has no direction")
 	}
+	// NaN has no side of the axis, so it has no angle: the answer is NaN, which is what
+	// both oracles give. It must be checked BEFORE the sign test, because SignBit() is
+	// false for a NaN, so it would otherwise fall through to the positive-real arm and
+	// come back as an EXACT 0 -- a claim that the angle is known exactly, for an input
+	// that carries no value at all. That is a worse answer than the π it used to give.
+	if v.IsNaN() {
+		return values.NewFloat(math.NaN()), nil
+	}
 	if v.SignBit() {
 		return values.NewFloat(math.Pi), nil
 	}

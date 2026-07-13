@@ -159,6 +159,19 @@ func (p *Float) Subtract(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
+	// Subtraction is NOT commutative, so like Divide it is spelled out rather than
+	// handed to the complex kind. A real MINUEND has no imaginary component, so the
+	// result's imaginary part is simply the NEGATION of the subtrahend's -- not
+	// (0.0 - d), which IEEE turns into +0.0 for d = +0.0, losing the sign.
+	// (- 2.0 5.0+0.0i) is -3.0-0.0i in both oracles; promotion gave -3.0+0.0i.
+	//
+	// This was the missing fourth member of the family: Add and Multiply got
+	// commutative redirects, Divide got its own formula, and Subtract -- equally
+	// non-commutative -- got nothing.
+	c, isComplex := o.(*Complex)
+	if isComplex {
+		return NewComplex(complex(p.Value-real(c.Value), -imag(c.Value)))
+	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value - v.Value)
@@ -214,13 +227,27 @@ func (p *Float) Divide(o Number) (Number, error) {
 	// so a·c = -0.0 is added to +0.0 and the sign dies. (/ 2.0 -0.0+5.0i) came back
 	// 0.0-0.4i; both oracles give -0.0-0.4i.
 	//
+	// SMITH'S ALGORITHM (1962), which is what Go's own complex division uses -- cited in
+	// the comment above, and then not used. The naive conjugate form, a*c/(c²+d²) and
+	// -a*d/(c²+d²), is a strict downgrade in RANGE: c²+d² overflows to +Inf above
+	// ~1.3e154 and flushes to zero below ~1e-154. It collapsed (/ 1.0 1e200+1e200i) to
+	// 0.0-0.0i and made (/ 2.0 1e-200+0.0i) manufacture a NaN out of an ordinary finite
+	// division. Dividing through by the LARGER component keeps the intermediate in
+	// range, costs one comparison, and preserves the signed zero just the same.
+	//
 	// A complex-zero divisor drives denom to 0 and yields NaN components, which is the
 	// same answer the general path gives and the one both oracles want.
 	c, isComplex := o.(*Complex)
 	if isComplex {
 		re, im := real(c.Value), imag(c.Value)
-		denom := re*re + im*im
-		return NewComplex(complex(p.Value*re/denom, -p.Value*im/denom)), nil
+		if math.Abs(re) >= math.Abs(im) {
+			ratio := im / re
+			denom := re + im*ratio
+			return NewComplex(complex(p.Value/denom, -p.Value*ratio/denom)), nil
+		}
+		ratio := re / im
+		denom := re*ratio + im
+		return NewComplex(complex(p.Value*ratio/denom, -p.Value/denom)), nil
 	}
 	return floatDivide[o.Kind()](p, o)
 }

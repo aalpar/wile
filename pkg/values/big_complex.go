@@ -313,6 +313,14 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// The GENERAL branch needs contagion re-imposed too, and it did not get it --
+		// which shipped a leak. A promoted real dividend carries an EXACT zero imaginary
+		// part, and BOTH terms of numerReal = a*c + b*d can annihilate to an exact zero
+		// when the divisor is exact and pure-imaginary: b because promotion mints it
+		// exact, c because it IS zero. The quotient then holds an exact 0 real part
+		// inside an inexact number. (/ 2.0 0+1i) came back as 0-2.0i, with
+		// (exact? (real-part ...)) => #t; both oracles give 0.0-2.0i.
+		newReal, newImag = contagionOverParts(p, v, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 	})
 
