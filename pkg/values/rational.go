@@ -322,6 +322,13 @@ func (p *Rational) IsNegative() bool {
 	return p.value.Sign() < 0
 }
 
+// SignBit reports whether this rational carries a negative sign bit.
+//
+// Rational is exact, so it has no signed zero and this coincides with IsNegative.
+func (p *Rational) SignBit() bool {
+	return p.value.Sign() < 0
+}
+
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
 func (p *Rational) Sign() int {
 	return p.value.Sign()

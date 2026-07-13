@@ -344,6 +344,15 @@ func (p *BigFloat) IsNegative() bool {
 	return !p.nan && p.value.Sign() < 0
 }
 
+// SignBit reports whether this big float carries a negative sign bit, INCLUDING -0.0.
+//
+// big.Float.Sign() returns 0 for BOTH +0 and -0, so a negative zero is invisible to
+// it -- the trap documented in Divide below. Signbit() reads the bit. NaN has no
+// meaningful sign, so it reports false.
+func (p *BigFloat) SignBit() bool {
+	return !p.nan && p.value.Signbit()
+}
+
 // IsPositive returns true if this BigFloat is positive.
 // NaN has no sign and returns false.
 func (p *BigFloat) IsPositive() bool {

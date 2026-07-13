@@ -34,80 +34,66 @@ func TestAngle(t *testing.T) {
 		code      string
 		expected  float64
 		tolerance float64
+		// wantExactZero is true for the angle of a POSITIVE real, which is an EXACT
+		// 0 -- not an inexact 0.0. The result is known exactly, so it is a strong
+		// update, exactly like the exact-zero arithmetic rules. Both oracles:
+		// (angle 1.0) => 0 and (exact? (angle 1.0)) => #t.
+		//
+		// This test previously asserted a *values.Float 0.0 for these, which was the
+		// bug: it pinned an inexact zero the oracles do not produce.
+		wantExactZero bool
 		// wantBig is true when the input is a big-tier number (BigComplex), whose
 		// angle is returned at big.Float precision rather than truncated to float64.
 		wantBig bool
 	}{
+		{name: "angle of positive integer", code: "(angle 1)", wantExactZero: true},
+		{name: "angle of negative integer", code: "(angle -1)", expected: math.Pi},
+		{name: "angle of positive float", code: "(angle 1.0)", wantExactZero: true},
+		{name: "angle of negative float", code: "(angle -1.0)", expected: math.Pi},
+		{name: "angle of positive rational", code: "(angle 1/2)", wantExactZero: true},
+		{name: "angle of negative rational", code: "(angle -1/2)", expected: math.Pi},
+
+		// A NEGATIVE ZERO is on the negative real axis, so its angle is π, not 0.
+		// IsNegative() cannot see that; SignBit() can. Getting it wrong put the answer
+		// in the wrong quadrant. Chez and Racket: (angle -0.0) => 3.141592653589793.
+		{name: "angle of negative zero", code: "(angle -0.0)", expected: math.Pi},
+		{name: "angle of positive zero", code: "(angle 0.0)", wantExactZero: true},
+
 		{
-			name:     "angle of positive integer",
-			code:     "(angle 1)",
-			expected: 0.0,
+			name: "angle of complex number 1+1i", code: "(angle 1+1i)",
+			expected: math.Pi / 4, tolerance: 0.0001, wantBig: true,
 		},
 		{
-			name:     "angle of negative integer",
-			code:     "(angle -1)",
-			expected: math.Pi,
-		},
-		{
-			name:     "angle of positive float",
-			code:     "(angle 1.0)",
-			expected: 0.0,
-		},
-		{
-			name:     "angle of negative float",
-			code:     "(angle -1.0)",
-			expected: math.Pi,
-		},
-		{
-			name:     "angle of positive rational",
-			code:     "(angle 1/2)",
-			expected: 0.0,
-		},
-		{
-			name:     "angle of negative rational",
-			code:     "(angle -1/2)",
-			expected: math.Pi,
-		},
-		{
-			name:      "angle of complex number 1+1i",
-			code:      "(angle 1+1i)",
-			expected:  math.Pi / 4,
-			tolerance: 0.0001,
-			wantBig:   true,
-		},
-		{
-			name:      "angle of complex number 0+1i",
-			code:      "(angle 0+1i)",
-			expected:  math.Pi / 2,
-			tolerance: 0.0001,
-			wantBig:   true,
+			name: "angle of complex number 0+1i", code: "(angle 0+1i)",
+			expected: math.Pi / 2, tolerance: 0.0001, wantBig: true,
 		},
 		{
 			// -1+0i simplifies to the real -1, so its angle stays a float64 *Float.
-			name:      "angle of complex number -1+0i",
-			code:      "(angle -1+0i)",
-			expected:  math.Pi,
-			tolerance: 0.0001,
+			name: "angle of complex number -1+0i", code: "(angle -1+0i)",
+			expected: math.Pi, tolerance: 0.0001,
 		},
 		{
-			name:      "angle of complex number 0-1i",
-			code:      "(angle 0-1i)",
-			expected:  -math.Pi / 2,
-			tolerance: 0.0001,
-			wantBig:   true,
+			name: "angle of complex number 0-1i", code: "(angle 0-1i)",
+			expected: -math.Pi / 2, tolerance: 0.0001, wantBig: true,
 		},
 		{
-			name:      "angle of complex number 1-1i",
-			code:      "(angle 1-1i)",
-			expected:  -math.Pi / 4,
-			tolerance: 0.0001,
-			wantBig:   true,
+			name: "angle of complex number 1-1i", code: "(angle 1-1i)",
+			expected: -math.Pi / 4, tolerance: 0.0001, wantBig: true,
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
+
+			if tc.wantExactZero {
+				n, ok := result.(values.Number)
+				qt.Assert(t, ok, qt.IsTrue)
+				qt.Assert(t, n.IsExact(), qt.IsTrue,
+					qt.Commentf("the angle of a positive real is an EXACT 0, got %s", n.SchemeString()))
+				qt.Assert(t, result.SchemeString(), qt.Equals, "0")
+				return
+			}
 
 			// A big-tier input (BigComplex) yields its angle at big.Float precision;
 			// real inputs stay float64. Extract the float64 value from whichever type.

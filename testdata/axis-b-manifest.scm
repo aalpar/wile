@@ -20,7 +20,7 @@
  ("abort-current-continuation" "any" ("any" "...any") "github.com/aalpar/wile/pkg/registry/core.PrimAbortCurrentContinuation" "pkg/registry/core/prim_prompt.go:116")
  ("abs" "real" ("real") "github.com/aalpar/wile/pkg/registry/core.PrimAbs" "pkg/registry/core/prim_arithmetic.go:125")
  ("acos" "number" ("number") "github.com/aalpar/wile/extensions/math.init.makeComplexPrimitive.func9" "extensions/math/prim_transcendental.go:97")
- ("angle" "flonum" ("number") "github.com/aalpar/wile/extensions/math.PrimAngle" "extensions/math/prim_complex.go:230")
+ ("angle" "flonum" ("number") "github.com/aalpar/wile/extensions/math.PrimAngle" "extensions/math/prim_complex.go:236")
  ("append" "list" ("...any") "github.com/aalpar/wile/pkg/registry/core.PrimAppend" "pkg/registry/core/prim_lists.go:100")
  ("apply" "any" ("procedure" "...any") "github.com/aalpar/wile/pkg/registry/core.PrimApply" "pkg/registry/core/prim_control.go:28")
  ("apropos" "list" ("string") "github.com/aalpar/wile/pkg/registry/core.PrimApropos" "pkg/registry/core/prim_reflection.go:402")

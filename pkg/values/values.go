@@ -342,4 +342,21 @@ type RealNumber interface {
 	IsPositive() bool
 	IsNegative() bool
 	Sign() int
+
+	// SignBit reports whether the value carries a negative sign bit.
+	//
+	// This is NOT IsNegative(), and the difference is the whole reason it exists.
+	// IsNegative asks "is n < 0", which is FALSE for a negative zero: -0.0 is not
+	// less than zero. IsPositive is false for it too, and Sign() returns 0 for BOTH
+	// +0 and -0 -- so none of the three can see a negative zero at all.
+	//
+	// SignBit asks the IEEE question, and it is load-bearing wherever a zero's sign
+	// picks a branch. (angle -0.0) is π, not 0, because -0.0 lies on the NEGATIVE
+	// real axis. The trap is already documented at big_float.go ("Sign() returns 0
+	// for ±0 ... but Signbit() sees it") -- and code kept falling into it, because
+	// the predicate that sees it did not exist.
+	//
+	// For the exact kinds (Integer, BigInteger, Rational) there is no signed zero,
+	// so SignBit coincides with IsNegative.
+	SignBit() bool
 }

@@ -102,11 +102,21 @@ func atanSeries(x *big.Float, wp uint) *big.Float {
 
 // atanAt computes atan(x) over the full real line at precision wp. For |x| > 1 it
 // uses atan(x) = π/2 − atan(1/x) to keep atanSeries in its (0,1] domain.
+//
+// atan(±0) is ±0: the sign is CARRIED THROUGH, not discarded. A fresh big.Float is
+// +0, so returning one for a -0.0 input silently flips the sign -- which is exactly
+// the trap Divide documents ("Sign() returns 0 for ±0 ... but Signbit() sees it"),
+// and this function fell into it. It matters: atan2 routes a signed zero quotient
+// through here, so (angle 1.0-0.0i) came back +0.0 instead of -0.0.
 func atanAt(x *big.Float, wp uint) *big.Float {
 	if x.Sign() == 0 {
-		return new(big.Float).SetPrec(wp)
+		q := new(big.Float).SetPrec(wp)
+		if x.Signbit() {
+			q.Neg(q)
+		}
+		return q
 	}
-	neg := x.Sign() < 0
+	neg := x.Signbit()
 	ax := new(big.Float).SetPrec(wp).Abs(x)
 	one := new(big.Float).SetPrec(wp).SetInt64(1)
 
@@ -144,20 +154,51 @@ func BigAtan(x *big.Float, prec uint) *big.Float {
 func atan2At(y, x *big.Float, wp uint) *big.Float {
 	pi := piAtPrec(wp)
 	two := new(big.Float).SetPrec(wp).SetInt64(2)
+
+	// A ZERO y is where Sign() fails. It returns 0 for BOTH +0 and -0, so the sign of
+	// the result -- which IS the sign of y -- becomes invisible, and the old
+	// `y.Sign() >= 0` test sent a -0.0 into the +π branch: the wrong QUADRANT.
+	//
+	// These are IEEE 754's atan2 special cases, the same set Go's math.Atan2 lists:
+	//
+	//	atan2(±0, x > 0) = ±0        atan2(±0, +0) = ±0
+	//	atan2(±0, x < 0) = ±π        atan2(±0, -0) = ±π
+	//
+	// x is tested with Signbit too, not Sign: a -0.0 abscissa is on the NEGATIVE side
+	// of the axis, so atan2(+0, -0.0) is +π and not +0. Sign() cannot tell -0.0 from
+	// +0.0, which is the whole reason this block exists.
+	if y.Sign() == 0 {
+		if x.Signbit() {
+			return copySignBig(pi, y, wp)
+		}
+		return copySignBig(new(big.Float).SetPrec(wp), y, wp)
+	}
+
 	switch {
 	case x.Sign() > 0:
 		return atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp)
-	case x.Sign() < 0 && y.Sign() >= 0:
+	case x.Sign() < 0 && y.Sign() > 0:
 		return new(big.Float).SetPrec(wp).Add(atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp), pi)
 	case x.Sign() < 0: // y.Sign() < 0
 		return new(big.Float).SetPrec(wp).Sub(atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp), pi)
-	case y.Sign() > 0: // x == 0
+	case y.Sign() > 0: // x is zero
 		return new(big.Float).SetPrec(wp).Quo(pi, two)
-	case y.Sign() < 0: // x == 0
+	default: // y.Sign() < 0, x is zero
 		return new(big.Float).SetPrec(wp).Neg(new(big.Float).SetPrec(wp).Quo(pi, two))
-	default: // (0, 0)
-		return new(big.Float).SetPrec(wp)
 	}
+}
+
+// copySignBig returns |magnitude| carrying sign's sign bit, at precision wp.
+//
+// This is math.Copysign for big.Float, and it exists because there is no other way to
+// build a NEGATIVE ZERO: a fresh big.Float is +0, and Neg is the only operation that
+// sets the sign bit on it. Sign() cannot even observe the result.
+func copySignBig(magnitude, sign *big.Float, wp uint) *big.Float {
+	q := new(big.Float).SetPrec(wp).Abs(magnitude)
+	if sign.Signbit() {
+		q.Neg(q)
+	}
+	return q
 }
 
 // BigAtan2 returns atan2(y, x) — the angle of the point (x, y) — rounded to prec bits.

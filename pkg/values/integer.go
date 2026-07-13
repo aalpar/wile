@@ -405,6 +405,13 @@ func (p *Integer) IsNegative() bool {
 	return p.Value < 0
 }
 
+// SignBit reports whether this integer carries a negative sign bit.
+//
+// Integer is exact, so it has no signed zero and this coincides with IsNegative.
+func (p *Integer) SignBit() bool {
+	return p.Value < 0
+}
+
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
 func (p *Integer) Sign() int {
 	if p.Value < 0 {

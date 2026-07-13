@@ -295,6 +295,13 @@ func (p *BigInteger) IsNegative() bool {
 	return p.value.Sign() < 0
 }
 
+// SignBit reports whether this big integer carries a negative sign bit.
+//
+// BigInteger is exact, so it has no signed zero and this coincides with IsNegative.
+func (p *BigInteger) SignBit() bool {
+	return p.value.Sign() < 0
+}
+
 // IsPositive returns true if this BigInteger is positive.
 func (p *BigInteger) IsPositive() bool {
 	return p.value.Sign() > 0

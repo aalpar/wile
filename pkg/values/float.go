@@ -237,6 +237,15 @@ func (p *Float) IsNegative() bool {
 	return p.Value < 0
 }
 
+// SignBit reports whether this float carries a negative sign bit, INCLUDING -0.0.
+//
+// This is the case IsNegative cannot see: -0.0 < 0 is false, so IsNegative reports
+// false for a value that is unambiguously on the negative side of the real axis.
+// math.Signbit reads the bit itself.
+func (p *Float) SignBit() bool {
+	return math.Signbit(p.Value)
+}
+
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
 // NaN returns 0.
 func (p *Float) Sign() int {

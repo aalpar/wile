@@ -227,6 +227,12 @@ func PrimMagnitude(mc machine.CallContext) error {
 }
 
 // PrimAngle implements the angle primitive.
+// PrimAngle implements R7RS §6.2.6 angle.
+//
+// The five real kinds used to be hand-unrolled here, one arm each, and every arm
+// carried the same three bugs -- which is what a hand-unrolled dispatch buys you: the
+// same mistake, five times, fixed one at a time forever. They ask ONE question, so
+// they get one answer: angleOfReal.
 func PrimAngle(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
@@ -236,38 +242,43 @@ func PrimAngle(mc machine.CallContext) error {
 		// Big-precision atan2 (see values.BigAtan2); truncating to float64 first
 		// collapses large-magnitude components with a finite ratio to a wrong angle.
 		mc.SetValue(v.Phase())
-	case *values.Integer:
-		if v.Value >= 0 {
-			mc.SetValue(values.NewFloat(0))
-		} else {
-			mc.SetValue(values.NewFloat(math.Pi))
+	case values.RealNumber:
+		q, err := angleOfReal(v)
+		if err != nil {
+			return err
 		}
-	case *values.BigInteger:
-		if v.BigInt().Sign() >= 0 {
-			mc.SetValue(values.NewBigFloatFromFloat64(0))
-		} else {
-			mc.SetValue(values.NewBigFloatFromFloat64(math.Pi))
-		}
-	case *values.Float:
-		if v.Value >= 0 {
-			mc.SetValue(values.NewFloat(0))
-		} else {
-			mc.SetValue(values.NewFloat(math.Pi))
-		}
-	case *values.BigFloat:
-		if v.BigFloatValue().Sign() >= 0 {
-			mc.SetValue(values.NewBigFloatFromFloat64(0))
-		} else {
-			mc.SetValue(values.NewBigFloatFromFloat64(math.Pi))
-		}
-	case *values.Rational:
-		if v.Rat().Sign() >= 0 {
-			mc.SetValue(values.NewFloat(0))
-		} else {
-			mc.SetValue(values.NewFloat(math.Pi))
-		}
+		mc.SetValue(q)
 	default:
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "angle: expected a number but got %T", o)
 	}
 	return nil
+}
+
+// angleOfReal returns the angle of a real number: the direction of the point (x, 0).
+//
+// Three axes, each of which the per-kind arms got wrong:
+//
+// SIGN. A negative zero lies on the NEGATIVE real axis, so (angle -0.0) is π, not 0.
+// IsNegative() cannot see that (-0.0 < 0 is false) and neither can Sign() (0 for both
+// ±0); SignBit() can. Getting this wrong put the answer in the wrong QUADRANT, not
+// merely off by a sign.
+//
+// EXACTNESS. The angle of any positive real is EXACTLY 0, whatever the operand's
+// exactness -- a strong update, like the exact-zero rule, licensed because the result
+// is known exactly. The arms all returned an inexact 0.0. Both oracles: (angle 1.0)
+// is 0 and (exact? (angle 1.0)) is #t.
+//
+// DOMAIN. An EXACT zero is a mathematical zero: it has no direction, so its angle is
+// undefined and this raises. An INEXACT ±0.0 is an IEEE value that does sit on one
+// side of the axis, so it does not raise -- (angle 0.0) is 0 and (angle -0.0) is π.
+// The exact-vs-inexact-zero distinction, one more time.
+func angleOfReal(v values.RealNumber) (values.Value, error) {
+	if v.IsZero() && v.IsExact() {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"angle: undefined for an exact zero, which has no direction")
+	}
+	if v.SignBit() {
+		return values.NewFloat(math.Pi), nil
+	}
+	return values.NewInteger(0), nil
 }
