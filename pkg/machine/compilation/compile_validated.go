@@ -104,8 +104,14 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 	case *validate.ValidatedSymbol:
 		return p.CompileSymbol(ctctx, v.Symbol)
 	case *validate.ValidatedLiteral:
-		// Tier-2 forms arrive as literals whose FormName carries a compiler; a
-		// bare self-eval literal ("@literal") resolves to no compiler and self-evals.
+		// A bare self-eval literal has no compiler and self-evaluates. A Tier-2
+		// passthrough form (cond-expand, include, import) is the SAME Go type but
+		// carries a FormName a compiler claims; it must be compiled, never folded.
+		// isSelfEvaluatingLiteral is the single predicate shared with the if-fold
+		// (isLiteralFalse), so the two cannot disagree about what a literal is.
+		if p.isSelfEvaluatingLiteral(v) {
+			return p.compileValidatedLiteral(ctctx, v)
+		}
 		compile := p.compilerFor(v.FormName())
 		if compile != nil {
 			return compile(p, ctctx, v)
@@ -114,10 +120,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		// syntax-rules) should have been consumed during expansion; reaching
 		// codegen is an expander bug. Diagnose it rather than silently
 		// self-evaluating the raw form, which would yield a wrong value.
-		if forms.RegistryFor(p.env).Lookup(v.FormName()) != nil {
-			return p.noCompilerDiagnostic(v)
-		}
-		return p.compileValidatedLiteral(ctctx, v)
+		return p.noCompilerDiagnostic(v)
 	default:
 		// Tier-1 forms (if, lambda, define, set!, quote, begin, apply, let, …),
 		// name-keyed. let/let*/letrec/letrec* all resolve to CompileValidatedLet.
@@ -142,7 +145,7 @@ func CompileValidatedIf(p *CompileTimeContinuation, ctctx CompileTimeCallContext
 	// Constant folding: if the test is a compile-time-known literal, fold the
 	// if form to just the consequent or alternative. Per R7RS, only #f is false;
 	// all other values (including 0, "", '()) are truthy.
-	folded, isFalsy := isLiteralFalse(v.Test)
+	folded, isFalsy := p.isLiteralFalse(v.Test)
 	if folded {
 		if isFalsy {
 			// (if #f X Y) → Y, or void if no alternative
@@ -202,12 +205,33 @@ func CompileValidatedIf(p *CompileTimeContinuation, ctctx CompileTimeCallContext
 	return nil
 }
 
-// isLiteralFalse checks if a validated expression is a compile-time-known
-// literal. Returns (true, true) for #f, (true, false) for any other literal
-// (which is truthy per R7RS), and (false, false) for non-literal expressions.
-func isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
+// isSelfEvaluatingLiteral reports whether a ValidatedLiteral is a bare
+// self-evaluating datum rather than a Tier-2 passthrough form.
+//
+// *validate.ValidatedLiteral carries BOTH: real literals (5, #f, "s") and
+// passthrough forms (cond-expand, include, import), whose FormName is
+// overwritten with the keyword during validation. The only thing that separates
+// them is whether a compiler claims the FormName — which is exactly the question
+// compileValidated asks at dispatch. Asking the identical question here is what
+// keeps the fold and the dispatcher from ever disagreeing again.
+func (p *CompileTimeContinuation) isSelfEvaluatingLiteral(lit *validate.ValidatedLiteral) bool {
+	if p.compilerFor(lit.FormName()) != nil {
+		return false
+	}
+	return forms.RegistryFor(p.env).Lookup(lit.FormName()) == nil
+}
+
+// isLiteralFalse reports whether expr is a compile-time-known self-evaluating
+// literal, and whether it is #f. Returns (true, true) for #f, (true, false) for
+// any other self-evaluating literal (truthy per R7RS), and (false, false) for
+// anything the compiler must actually emit — including Tier-2 passthrough forms,
+// which are *ValidatedLiteral but are NOT constants.
+func (p *CompileTimeContinuation) isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
 	lit, ok := expr.(*validate.ValidatedLiteral)
 	if !ok {
+		return false, false
+	}
+	if !p.isSelfEvaluatingLiteral(lit) {
 		return false, false
 	}
 	if lit.Value == nil {
@@ -219,7 +243,7 @@ func isLiteralFalse(expr validate.ValidatedExpr) (isLiteral, isFalse bool) {
 	}
 	b, isBool := unwrapped.(*values.Boolean)
 	if !isBool {
-		// Non-boolean literal — truthy per R7RS
+		// Non-boolean self-evaluating literal — truthy per R7RS.
 		return true, false
 	}
 	return true, !b.Value
