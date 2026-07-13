@@ -239,18 +239,32 @@ func initPromoters() {
 	}
 
 	// Float → BigComplex
+	//
+	// The manufactured imaginary part is an EXACT zero, not an inexact 0.0, and that
+	// is load-bearing rather than cosmetic. A real number has NO imaginary component;
+	// the zero we invent here is a MATHEMATICAL zero, not an IEEE value that happens
+	// to measure zero. Spell it inexact and IEEE gets to act on it: -0.0 + 0.0 is
+	// +0.0, so (+ 5.0-0.0i 2.0) silently loses the sign of the imaginary part.
+	//
+	// Spelled EXACT, the exact-zero rules do the work for free (exact_zero.go): the
+	// additive identity hands the other operand back untouched, sign and all, and the
+	// annihilation rule kills the cross terms in a product. The exact reals -- whose
+	// promoters have always used an exact zero, just below -- were never broken, which
+	// is what pointed at this.
+	//
+	// Contagion is NOT compromised by the exact zero: the operand pair is still
+	// inexact (BigComplex.IsExact() is false when either part is), and the complex
+	// arithmetic re-imposes the join via contagionOverParts, so no exact component
+	// leaks into an inexact result.
 	promoter[KindFloat][KindBigComplex] = func(n Number) Number {
 		p := n.(*Float)
-		return NewBigComplexFromBigFloats(
-			NewBigFloatFromFloat64(p.Value),
-			NewBigFloatFromFloat64(0),
-		)
+		return NewBigComplex(NewBigFloatFromFloat64(p.Value), NewBigIntegerFromInt64(0))
 	}
 
-	// BigFloat → BigComplex
+	// BigFloat → BigComplex. Exact zero imaginary part, for the reason above.
 	promoter[KindBigFloat][KindBigComplex] = func(n Number) Number {
 		p := n.(*BigFloat)
-		return NewBigComplex(p, NewBigFloatFromFloat64(0))
+		return NewBigComplex(p, NewBigIntegerFromInt64(0))
 	}
 
 	// Complex → BigComplex

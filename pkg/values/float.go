@@ -136,6 +136,14 @@ func (p *Float) Add(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
+	// Addition is COMMUTATIVE, so hand a complex operand back to the complex kind,
+	// which owns the part-wise real handling. Falling through would promote this Float
+	// into a complex with a manufactured 0.0 imaginary part, and IEEE would then eat
+	// the sign of a signed-zero imaginary component in o.
+	c, isComplex := o.(*Complex)
+	if isComplex {
+		return c.Add(p)
+	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value + v.Value)
@@ -170,6 +178,11 @@ func (p *Float) Multiply(o Number) Number {
 	if exactZeroEither(p, o) {
 		return NewInteger(0)
 	}
+	// Multiplication is COMMUTATIVE; see Add.
+	c, isComplex := o.(*Complex)
+	if isComplex {
+		return c.Multiply(p)
+	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value * v.Value)
@@ -189,6 +202,25 @@ func (p *Float) Divide(o Number) (Number, error) {
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value / v.Value), nil
+	}
+	// Division is NOT commutative, so unlike Add and Multiply it cannot simply be
+	// handed to the complex kind. Spell out the conjugate formula, which keeps the
+	// fact that a real DIVIDEND has no imaginary component:
+	//
+	//	a / (c+di) = (a·c)/(c²+d²) + (−a·d)/(c²+d²)·i
+	//
+	// Promotion instead manufactures a 0.0 imaginary part for the dividend, and Go's
+	// complex division then computes the real part as (a·c + b·d) with b = 0.0 --
+	// so a·c = -0.0 is added to +0.0 and the sign dies. (/ 2.0 -0.0+5.0i) came back
+	// 0.0-0.4i; both oracles give -0.0-0.4i.
+	//
+	// A complex-zero divisor drives denom to 0 and yields NaN components, which is the
+	// same answer the general path gives and the one both oracles want.
+	c, isComplex := o.(*Complex)
+	if isComplex {
+		re, im := real(c.Value), imag(c.Value)
+		denom := re*re + im*im
+		return NewComplex(complex(p.Value*re/denom, -p.Value*im/denom)), nil
 	}
 	return floatDivide[o.Kind()](p, o)
 }

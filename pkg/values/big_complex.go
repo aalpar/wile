@@ -218,6 +218,10 @@ func init() {
 		v := o.(*BigComplex)
 		newReal := p.real.Add(v.real)
 		newImag := p.imag.Add(v.imag)
+		// A promoted real arrives with an EXACT zero imaginary part (promotion.go), so
+		// the additive identity hands p.imag back UNTOUCHED and a signed zero survives.
+		// contagionOverParts then stops that exact zero from leaking into the result.
+		newReal, newImag = contagionOverParts(p, v, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
@@ -225,6 +229,7 @@ func init() {
 		v := o.(*BigComplex)
 		newReal := p.real.Subtract(v.real)
 		newImag := p.imag.Subtract(v.imag)
+		newReal, newImag = contagionOverParts(p, v, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
@@ -240,6 +245,11 @@ func init() {
 		bc := p.imag.Multiply(v.real)
 		newReal := ac.Subtract(bd)
 		newImag := ad.Add(bc)
+		// A promoted real has an EXACT zero imaginary part, so the annihilation rule
+		// kills the cross terms (ad and bd become exact 0) and the surviving product
+		// keeps its sign: -0.0 * 2.0 stays -0.0 instead of being swallowed by an IEEE
+		// addition of +0.0.
+		newReal, newImag = contagionOverParts(p, v, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 

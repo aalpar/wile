@@ -128,11 +128,37 @@ func init() {
 	})
 }
 
+// realPartsOf returns the complex operand's parts and the real operand's float64
+// value, plus whether o is a Float at all.
+//
+// A REAL operand touches only the real part; it has NO imaginary component to
+// contribute. Promotion pretends otherwise -- it manufactures an 0.0 imaginary part
+// and lets IEEE act on it, which is how (+ 5.0-0.0i 2.0) loses the sign of its
+// imaginary part (-0.0 + 0.0 is +0.0) and (* 5.0-0.0i 2.0) loses it too.
+//
+// Every other real kind promotes Complex to BigComplex, where the promoted imaginary
+// part is an EXACT zero and the exact-zero rules preserve the sign for free. Float is
+// the exception: LUB(Complex, Float) is Complex, so it stays in complex128, which
+// cannot represent an exact zero. So Float is handled here, part-wise, before
+// promotion can invent the component.
+func realPartsOf(o Number) (float64, bool) {
+	v, ok := o.(*Float)
+	if !ok {
+		return 0, false
+	}
+	return v.Value, true
+}
+
 // Add returns the sum of this complex number and another number.
 // Zero short-circuit: 0+x=x preserves exactness per R7RS §6.2.2.
 func (p *Complex) Add(o Number) Number {
 	if isExactZero(o) {
 		return p
+	}
+	// A real operand adds to the real part and leaves the imaginary part ALONE.
+	r, isReal := realPartsOf(o)
+	if isReal {
+		return NewComplex(complex(real(p.Value)+r, imag(p.Value)))
 	}
 	v, ok := o.(*Complex)
 	if ok {
@@ -146,6 +172,11 @@ func (p *Complex) Subtract(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
+	// A real operand subtracts from the real part and leaves the imaginary part ALONE.
+	r, isReal := realPartsOf(o)
+	if isReal {
+		return NewComplex(complex(real(p.Value)-r, imag(p.Value)))
+	}
 	v, ok := o.(*Complex)
 	if ok {
 		return NewComplex(p.Value - v.Value)
@@ -157,6 +188,13 @@ func (p *Complex) Subtract(o Number) Number {
 func (p *Complex) Multiply(o Number) Number {
 	if exactZeroEither(p, o) {
 		return NewInteger(0)
+	}
+	// A real operand SCALES both parts. Going through complex multiplication instead
+	// computes the imaginary part as a*d + b*c with a manufactured d = 0.0, and the
+	// IEEE addition then swallows the sign: -0.0*2.0 + 0.0*5.0 is +0.0, not -0.0.
+	r, isReal := realPartsOf(o)
+	if isReal {
+		return NewComplex(complex(real(p.Value)*r, imag(p.Value)*r))
 	}
 	v, ok := o.(*Complex)
 	if ok {
@@ -203,12 +241,17 @@ func (p *Complex) Divide(o Number) (Number, error) {
 	// Dividing the parts by the real scalar is what produces the signed infinity
 	// naturally: 1/(-0.0) is -inf under IEEE, with no special case. An exact zero
 	// divisor never reaches here -- it raised above.
-	if o.IsZero() {
-		if LookupNumericSpec(o.Kind()).IsAlwaysReal() {
-			r := NumberToFloat64(o)
-			return NewComplex(complex(real(p.Value)/r, imag(p.Value)/r)), nil
-		}
+	if o.IsZero() && !LookupNumericSpec(o.Kind()).IsAlwaysReal() {
 		return NewComplex(complex(math.NaN(), math.NaN())), nil
+	}
+	// A REAL divisor divides both parts. Kept in complex128 only for a Float divisor,
+	// whose LUB with Complex IS Complex; every other real kind promotes to BigComplex,
+	// where the exact-zero imaginary part makes the general formula sign-correct on its
+	// own. Short-circuiting those here would truncate a BigFloat divisor to float64 and
+	// return a Complex where the promotion lattice says BigComplex.
+	r, isReal := realPartsOf(o)
+	if isReal {
+		return NewComplex(complex(real(p.Value)/r, imag(p.Value)/r)), nil
 	}
 	v, ok := o.(*Complex)
 	if ok {
