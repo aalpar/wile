@@ -783,16 +783,29 @@ NewInteger(0).Multiply(NewFloat(1.5))  // → Integer(0)
 
 ### Simplification Pattern
 
-When a complex operation produces a real result (imaginary part zero), return the appropriate real type:
+When a complex operation produces a real result, return the appropriate real type.
+A result is real when its imaginary part is an **exact** zero, and only then:
 
 ```go
 func maybeSimplify(real, imag Number) Number {
-    if imag.IsZero() {
+    if imag.IsZero() && imag.IsExact() {
         return real  // Return real type, not complex
     }
     return NewBigComplex(real, imag)
 }
 ```
+
+The exactness test is load-bearing, not defensive. Testing magnitude alone
+(`imag.IsZero()`) demotes on an inexact `0.0`, which R7RS §6.2.6 says is still a
+complex number: `(real? -2.5+0.0i)` is `#f`, while `(real? 3+0i)` is `#t`. An
+exact `0` is a mathematical zero; an inexact `0.0` is an IEEE value that merely
+compares equal to zero, carries a sign, and remains observable. Demoting on it
+drops a component the caller can still see *and* launders an inexact value into an
+exact one.
+
+This is the same exact-vs-inexact-zero distinction that governs the arithmetic
+identities (`exactZeroProduct`, `exactZeroIdentity` in `pkg/values/numeric_tower.go`).
+Where a zero is involved, ask which kind of zero it is.
 
 ### Arithmetic Method Template
 
