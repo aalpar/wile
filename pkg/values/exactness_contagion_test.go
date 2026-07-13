@@ -259,60 +259,63 @@ func TestIEEE754SignedZeroPreservation(t *testing.T) {
 	}
 }
 
-// TestMultiplicationExactZeroOptimization validates that multiplication
-// can safely use exact zero optimization (Dybvig's approach from Chez Scheme).
+// TestMultiplicationExactZeroOptimization validates the exact-zero rule for
+// multiplication: an EXACT zero annihilates the product unconditionally.
 //
 // R7RS §6.2.2: "Exact 0 is a number, and infinities and NaNs are numbers
 // whose use in arithmetic should be restricted to those occasions where
 // they are needed."
 //
-// Chez Scheme (and other implementations) optimize (* 0 x) → 0 (exact)
-// when x is finite, because the mathematical result is exact zero regardless
-// of x's exactness.
+// The governing distinction is exact vs inexact, NOT finite vs infinite. An
+// exact 0 is a mathematical zero, not an IEEE +0.0, so IEEE 754's 0*inf = NaN
+// rule does not reach it. Chez Scheme and Racket agree on every case below,
+// including (* 0 +inf.0) => 0 and (* 0 +nan.0) => 0.
 //
 // Why multiplication is different from addition/subtraction:
 //
-//	(* 0 x)   → 0 (always exact zero when x is finite)
-//	(+ 0 x)   → x (exactness depends on x — cannot optimize)
-//	(- x 0)   → x (exactness depends on x — cannot optimize)
+//	(* 0 x)   → exact 0 (the exact zero annihilates, whatever x is)
+//	(+ 0 x)   → x (identity: preserves x's exactness AND its sign)
+//	(- x 0)   → x (identity: preserves x's exactness AND its sign)
 //
-// The key difference: multiplication by zero yields an exact mathematical
-// result (zero), while addition/subtraction of zero is the identity operation
-// (returns the other operand unchanged, preserving its exactness).
+// An INEXACT zero does not short-circuit at all — IEEE 754 governs, so
+// (* 5 0.0) => 0.0 and (* +inf.0 0.0) => +nan.0.
 //
-// This test documents the exception: multiplication CAN return exact zero
-// even when one operand is inexact, but ONLY for finite operands.
-// Special cases:
-//
-//	(* 0 +inf.0) → +nan.0 (not zero)
-//	(* 0 -inf.0) → +nan.0 (not zero)
-//	(* 0 +nan.0) → +nan.0 (not zero)
+// CORRECTED 2026-07-12: cases 3–5 previously asserted (* 0 +inf.0) => +nan.0,
+// encoding a false "the exact-zero rule requires a finite operand" invariant
+// that Chez, Racket and R7RS all contradict. This test was what kept the bug
+// green. See plans/2026-07-12-numeric-zero-and-tier2-fold.local.md.
 func TestMultiplicationExactZeroOptimization(t *testing.T) {
 	c := qt.New(t)
 
-	// Case 1: Exact zero * finite inexact → exact zero
-	// This is the optimization: mathematically unambiguous result
+	// Case 1: Exact zero * finite inexact → exact zero.
 	result := values.NewInteger(0).Multiply(values.NewFloat(42.5))
 	c.Assert(result.IsZero(), qt.IsTrue)
 	c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("(* 0 42.5) should be exact 0"))
 
-	// Case 2: Inexact zero * finite exact → depends on implementation
-	// Some implementations return exact 0, others return inexact 0
+	// Case 2: Inexact zero * exact → INEXACT zero. Contagion governs; the
+	// inexact zero is an IEEE value and does not annihilate to an exact 0.
 	result = values.NewFloat(0.0).Multiply(values.NewInteger(42))
 	c.Assert(result.IsZero(), qt.IsTrue)
-	// No exactness assertion here — both behaviors are acceptable per R7RS
+	c.Assert(result.IsExact(), qt.IsFalse, qt.Commentf("(* 0.0 42) should be inexact 0.0"))
 
-	// Case 3: Exact zero * infinity → NaN (NOT zero)
+	// Case 3: Exact zero * infinity → exact zero. The exact zero wins.
 	result = values.NewInteger(0).Multiply(values.NewFloat(math.Inf(1)))
-	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0 +inf.0) should be +nan.0"))
+	c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("(* 0 +inf.0) should be exact 0"))
+	c.Assert(result.IsZero(), qt.IsTrue)
 
-	// Case 4: Exact zero * -infinity → NaN (NOT zero)
+	// Case 4: Exact zero * -infinity → exact zero.
 	result = values.NewInteger(0).Multiply(values.NewFloat(math.Inf(-1)))
-	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0 -inf.0) should be +nan.0"))
+	c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("(* 0 -inf.0) should be exact 0"))
+	c.Assert(result.IsZero(), qt.IsTrue)
 
-	// Case 5: Exact zero * NaN → NaN (NOT zero)
+	// Case 5: Exact zero * NaN → exact zero. The exact-zero rule outranks NaN.
 	result = values.NewInteger(0).Multiply(values.NewFloat(math.NaN()))
-	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0 +nan.0) should be +nan.0"))
+	c.Assert(result.IsExact(), qt.IsTrue, qt.Commentf("(* 0 +nan.0) should be exact 0"))
+	c.Assert(result.IsZero(), qt.IsTrue)
+
+	// Case 6: INEXACT zero * infinity → NaN. IEEE 754 governs here, and only here.
+	result = values.NewFloat(0.0).Multiply(values.NewFloat(math.Inf(1)))
+	c.Assert(result.IsNaN(), qt.IsTrue, qt.Commentf("(* 0.0 +inf.0) should be +nan.0"))
 }
 
 // TestExactnessContagionWhyMultiplicationIsDifferent documents the fundamental
@@ -324,11 +327,11 @@ func TestMultiplicationExactZeroOptimization(t *testing.T) {
 //	(- x 0) = x → result has same exactness as x
 //	Zero short-circuit would lose exactness information.
 //
-// Multiplication: Absorbing element (for finite operands)
+// Multiplication: Absorbing element (for an EXACT zero, unconditionally)
 //
-//	(* 0 x) = 0 → result is exact zero (when x is finite)
+//	(* 0 x) = 0 → result is exact zero, whatever x is — including inf and NaN.
 //	Zero is the mathematical result, not a passthrough.
-//	Zero short-circuit can return exact zero.
+//	An exact-zero short-circuit therefore returns exact zero.
 //
 // This is why the architectural review finding (H3) only applies to
 // Add/Subtract methods, not Multiply methods.

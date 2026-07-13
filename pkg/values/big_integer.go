@@ -218,11 +218,9 @@ func (p *BigInteger) Subtract(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigInteger) Multiply(o Number) Number {
-	if o.IsZero() {
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
+	z, ok := exactZeroProduct(p, o)
+	if ok {
+		return z
 	}
 	v, ok := o.(*BigInteger)
 	if ok {

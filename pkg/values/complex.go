@@ -152,8 +152,9 @@ func (p *Complex) Subtract(o Number) Number {
 
 // Multiply returns the product of this complex number and another number.
 func (p *Complex) Multiply(o Number) Number {
-	if o.IsZero() {
-		return o
+	z, ok := exactZeroProduct(p, o)
+	if ok {
+		return z
 	}
 	v, ok := o.(*Complex)
 	if ok {

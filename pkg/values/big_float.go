@@ -260,17 +260,13 @@ func (p *BigFloat) Subtract(o Number) Number {
 //
 //nolint:dupl // Type dispatch pattern repeated across numeric tower
 func (p *BigFloat) Multiply(o Number) Number {
+	// The exact-zero rule outranks NaN: (* +nan.0 0) is exact 0, not NaN.
+	z, ok := exactZeroProduct(p, o)
+	if ok {
+		return z
+	}
 	if p.nan || o.IsNaN() {
 		return NewBigFloatNaN()
-	}
-	if o.IsZero() {
-		if !p.IsFinite() {
-			return NewBigFloatNaN() // 0 * Inf = NaN
-		}
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
 	}
 	v, ok := o.(*BigFloat)
 	if ok {

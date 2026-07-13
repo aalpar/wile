@@ -21,27 +21,31 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// multiplyResultForZero returns the correct result when one operand is zero
-// in a multiplication, following R7RS §6.2.2 and Chez Scheme behavior.
+// exactZeroProduct applies the exact-zero rule for multiplication: an exact zero
+// annihilates any product, yielding exact 0.
 //
-// R7RS permits (* 0 x) to return exact 0 even when x is inexact.
-// Rule: if either operand is exact, return exact zero (Integer 0).
-// If both operands are inexact, return the zero operand unchanged.
+// The distinction that matters is exact vs inexact, NOT finite vs infinite. An
+// exact 0 is a mathematical zero, not an IEEE +0.0, so IEEE 754's 0*inf = NaN
+// rule does not govern it. R7RS §6.2.2 licenses the strong update precisely
+// because the exact value is known. Chez and Racket both give:
+//
+//	(* +inf.0 0) => 0        (* +nan.0 0) => 0        (* 5 0.0) => 0.0
+//
+// An INEXACT zero must not short-circuit at all: normal dispatch already
+// produces the correct signed zero, infinity, or NaN under IEEE 754.
 //
 // Abstract interpretation (Cousot & Cousot 1977). Exactness is tracked
 // in the two-point lattice {exact < inexact}.
 //
 //	α: Number → {exact, inexact}   (abstraction function)
 //	Transfer for most ops: α(a op b) = α(a) ⊔ α(b)  (join = inexact wins)
-//	Transfer for (* 0 x): α(result) = exact   if α(0)=exact ∨ α(x)=exact
+//	Transfer for (* 0 x): α(result) = exact   if α(0)=exact
 //
 //	The zero-absorbs rule is a strong update: the transfer function
 //	returns a more precise result than the naive join because the
-//	mathematical result (0) is known exactly.
-//
-//	Invariant: the strong update only applies when other is finite.
-//	  IEEE 754 requires 0 * inf = NaN, so the exact-zero rule does
-//	  not apply for non-finite operands.
+//	mathematical result (0) is known exactly. It is licensed by the
+//	EXACTNESS of the zero alone — finiteness of the other operand is
+//	irrelevant, because an exact 0 is not an IEEE value.
 //	Constrains: all arithmetic dispatch closures (must respect
 //	  contagion), Simplify (must not change exactness class).
 //	Constrained by: promotion lattice (T must be monotone w.r.t.
@@ -49,14 +53,13 @@ import (
 //
 // See BIBLIOGRAPHY.md "Exactness as Abstract Interpretation".
 //
-// Callers must ensure `other` is finite before calling this function.
-// IEEE 754 requires 0 * inf = NaN and 0 * NaN = NaN, so the exact-zero
-// rule does not apply when the non-zero operand is infinite or NaN.
-func multiplyResultForZero(zero, other Number) Number {
-	if zero.IsExact() || other.IsExact() {
-		return NewInteger(0)
+// Returns (result, true) when the rule applies; (nil, false) to fall through
+// to normal dispatch.
+func exactZeroProduct(a, b Number) (Number, bool) {
+	if (a.IsZero() && a.IsExact()) || (b.IsZero() && b.IsExact()) {
+		return NewInteger(0), true
 	}
-	return zero
+	return nil, false
 }
 
 // floatToExact converts a float64 to its exact Number representation.

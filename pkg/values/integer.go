@@ -92,9 +92,14 @@ func (p *Integer) bigInt() *big.Int {
 // integers. These helpers ensure that int64 arithmetic silently promotes
 // to BigInteger instead of wrapping on overflow. Each uses a standard
 // overflow-detection idiom for its operation, falling back to math/big
-// when the result would exceed int64 range. The existing Simplify()
-// function handles demotion back to Integer when BigInteger results
-// fit in int64.
+// when the result would exceed int64 range.
+//
+// Promotion is one-way here: these helpers never demote. A BigInteger
+// result that happens to fit in int64 stays a BigInteger. Simplify()
+// (numeric_tower.go) can demote, but it is applied only at parse time
+// (literal normalization in pkg/parser) and in complex/rational
+// reductions — NOT on the results of +/-/*, which flow through the
+// promotion-table dispatch (promotion.go) unsimplified.
 //
 // Overflow detection techniques (Warren, Hacker's Delight §2-12, §2-13):
 //   - Addition: XOR sign-bit test — same-sign operands overflow when
@@ -291,11 +296,9 @@ func (p *Integer) Subtract(o Number) Number {
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *Integer) Multiply(o Number) Number {
-	if o.IsZero() {
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
+	z, ok := exactZeroProduct(p, o)
+	if ok {
+		return z
 	}
 	v, ok := o.(*Integer)
 	if ok {

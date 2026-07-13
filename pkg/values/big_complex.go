@@ -292,11 +292,9 @@ func (p *BigComplex) Subtract(o Number) Number {
 // R7RS §6.2.6: The * procedure returns the product of its arguments.
 // R7RS §6.2.2 Exactness: exact * exact = exact, exact * inexact = inexact.
 func (p *BigComplex) Multiply(o Number) Number {
-	if o.IsZero() {
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
+	z, ok := exactZeroProduct(p, o)
+	if ok {
+		return z
 	}
 	return bigComplexMultiply[o.Kind()](p, o)
 }

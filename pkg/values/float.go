@@ -159,11 +159,9 @@ func (p *Float) Subtract(o Number) Number {
 // x is inexact. Zero is an exact value when the result is mathematically
 // unambiguous. This implementation follows Chez Scheme's behavior.
 func (p *Float) Multiply(o Number) Number {
-	if o.IsZero() && p.IsFinite() {
-		return multiplyResultForZero(o, p)
-	}
-	if p.IsZero() && o.IsFinite() {
-		return multiplyResultForZero(p, o)
+	z, ok := exactZeroProduct(p, o)
+	if ok {
+		return z
 	}
 	v, ok := o.(*Float)
 	if ok {
