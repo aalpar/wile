@@ -69,6 +69,12 @@ func complexSimplifyDown(n Number) Number {
 // complexToFloat64WithAccuracy returns the real component when the imaginary
 // part is zero (ok=true, Exact since *Complex IS a complex128). Returns
 // ok=false when the imaginary part is non-zero — callers must handle this.
+//
+// The magnitude-only zero test is DELIBERATE, and is the loss-signal question, not
+// the exact-zero rule (exact_zero.go). It asks "did I drop information", not "is
+// this number real": a *Complex is always inexact, so its zero imaginary part is
+// always an INEXACT zero and (real? 5.0+0.0i) is #f — yet dropping a zero-magnitude
+// component from a float64 conversion loses nothing. Contract: conversion.go §isReal.
 func complexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	v := n.(*Complex)
 	return real(v.Value), big.Exact, imag(v.Value) == 0
@@ -178,6 +184,35 @@ func (p *Complex) Divide(o Number) (Number, error) {
 	case zeroYieldExactZero:
 		return NewInteger(0), nil
 	}
+	// A REAL divisor divides each part directly; a COMPLEX zero divisor yields NaN.
+	// The two are NOT interchangeable, and they become indistinguishable the moment
+	// dispatch promotes the real into complex128 -- so the question must be asked
+	// HERE, on the divisor's own kind, which is the last point that still sees it:
+	//
+	//	(/ 1.0+2.0i 0.0)       => +inf.0+inf.0i    (real zero divisor)
+	//	(/ 1.0+2.0i 0.0+0.0i)  => +nan.0+nan.0i    (complex zero divisor)
+	//
+	// Both oracles agree, and C99 Annex G says the same. Go's complex128 division
+	// gives Inf for BOTH. This is the exact mirror of the bug BigComplex.Divide had:
+	// the same erased distinction, the opposite symptom (that one gave NaN for
+	// every zero divisor, this one gives Inf).
+	//
+	// Only a ZERO divisor needs intercepting. A non-zero real divisor is left to
+	// normal dispatch, which promotes to the LUB and so preserves both the result
+	// type and a BigFloat divisor's precision -- short-circuiting it here would
+	// truncate the divisor to float64 and hand back a Complex where the promotion
+	// lattice says BigComplex.
+	//
+	// Dividing the parts by the real scalar is what produces the signed infinity
+	// naturally: 1/(-0.0) is -inf under IEEE, with no special case. An exact zero
+	// divisor never reaches here -- it raised above.
+	if o.IsZero() {
+		if LookupNumericSpec(o.Kind()).IsAlwaysReal() {
+			r := NumberToFloat64(o)
+			return NewComplex(complex(real(p.Value)/r, imag(p.Value)/r)), nil
+		}
+		return NewComplex(complex(math.NaN(), math.NaN())), nil
+	}
 	v, ok := o.(*Complex)
 	if ok {
 		return NewComplex(p.Value / v.Value), nil
@@ -217,6 +252,15 @@ func (p *Complex) Abs() Number {
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
 // Both real and imaginary parts are converted to exact numbers.
+//
+// The result goes through maybeSimplify, because converting the parts to exact is
+// precisely what can make the demotion rule apply: an inexact 0.0 imaginary part
+// becomes an EXACT zero, and a number with an exact zero imaginary part IS real.
+// (exact 5.0+0.0i) is 5, not 5+0i.
+//
+// This used to return NewBigComplex unconditionally, minting a 5+0i that reported
+// real? #t and integer? #t yet was not eqv? to 5 -- while BigComplex.ToExact
+// demoted correctly. Two ToExacts, one applying the rule and one not.
 func (p *Complex) ToExact() (Number, error) {
 	realPart, err := floatToExact(real(p.Value))
 	if err != nil {
@@ -226,7 +270,7 @@ func (p *Complex) ToExact() (Number, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewBigComplex(realPart, imagPart), nil
+	return maybeSimplify(promoteToBigComplexPart(realPart), promoteToBigComplexPart(imagPart)), nil
 }
 
 // ToInexact returns this Complex unchanged since it is already inexact.

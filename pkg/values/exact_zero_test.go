@@ -295,3 +295,74 @@ func TestExactZeroPredicatesAgree(t *testing.T) {
 		}
 	}
 }
+
+// TestComplexToExactDemotes pins that Complex.ToExact routes its result through the
+// demotion rule, like BigComplex.ToExact already did.
+//
+// Converting both parts to exact makes an inexact 0.0 imaginary part an EXACT zero
+// -- at which point the value IS real (R7RS §6.2.6), and must demote. Before this,
+// Complex.ToExact minted a 5+0i that reported real? #t and integer? #t yet was not
+// eqv? to 5, while BigComplex.ToExact demoted correctly. Two ToExacts, one applying
+// the rule and one not, is the tell that the rule had no owner.
+//
+//	petite -q <<< '(display (list (exact 5.0+0.0i) (eqv? (exact 5.0+0.0i) 5)))'
+//	# => (5 #t)
+func TestComplexToExactDemotes(t *testing.T) {
+	tcs := []struct {
+		name string
+		in   *Complex
+		want string
+	}{
+		{"positive zero imag", NewComplex(complex(5, 0)), "5"},
+		{"negative zero imag", NewComplex(complex(5, math.Copysign(0, -1))), "5"},
+		{"non-integral real", NewComplex(complex(2.5, 0)), "5/2"},
+		// A non-zero imaginary part must NOT demote.
+		{"non-zero imag stays complex", NewComplex(complex(5, 4)), "5+4i"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			got, err := tc.in.ToExact()
+			c.Assert(err, qt.IsNil)
+			c.Assert(got.SchemeString(), qt.Equals, tc.want)
+			c.Assert(got.IsExact(), qt.IsTrue)
+		})
+	}
+}
+
+// TestComplexDivideByZeroDivisor pins the real-vs-complex zero divisor distinction
+// in the Complex (complex128) type -- the MIRROR of the bug BigComplex had.
+//
+// Both types erase the distinction by promoting to the same value, but they land on
+// opposite sides: BigComplex used to give NaN for everything, Complex gives Inf for
+// everything. Go's complex128 division by (0+0i) produces Inf; C99 Annex G and both
+// oracles produce NaN. A REAL zero divisor genuinely IS a signed infinity, so the
+// two cannot be told apart after promotion and must be decided on the divisor's KIND.
+//
+//	petite -q <<< '(display (list (/ 1.0+2.0i 0.0) (/ 1.0+2.0i 0.0+0.0i)))'
+//	racket   -e '(display (list (/ 1.0+2.0i 0.0) (/ 1.0+2.0i 0.0+0.0i)))'
+//	# both => (+inf.0+inf.0i +nan.0+nan.0i)
+func TestComplexDivideByZeroDivisor(t *testing.T) {
+	oneTwo := NewComplex(complex(1, 2))
+
+	tcs := []struct {
+		name    string
+		divisor Number
+		want    string
+	}{
+		{"REAL +0.0 divisor => signed infinity", NewFloat(0), "+inf.0+inf.0i"},
+		{"REAL -0.0 divisor => signed infinity", NewFloat(math.Copysign(0, -1)), "-inf.0-inf.0i"},
+		{"COMPLEX 0.0+0.0i divisor => NaN", NewComplex(0), "+nan.0+nan.0i"},
+		{"nonzero real divisor still divides", NewFloat(2.0), "0.5+1.0i"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			got, err := oneTwo.Divide(tc.divisor)
+			c.Assert(err, qt.IsNil)
+			c.Assert(got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}

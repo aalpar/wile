@@ -62,11 +62,27 @@ func TestExact_Complex(t *testing.T) {
 		qt.Assert(t, ok, qt.IsTrue)
 	})
 
-	t.Run("exact on 3.0+0.0i", func(t *testing.T) {
+	// A ZERO imaginary part is a different case: converting the parts to exact makes
+	// it an EXACT zero, and a number with an exact zero imaginary part IS real
+	// (R7RS §6.2.6). So this demotes to a real rather than staying complex.
+	//
+	// This previously asserted *values.BigComplex, which was the bug: it produced a
+	// 3+0i that reported real? #t yet was not eqv? to 3. Chez agrees with the demotion:
+	//
+	//	petite -q <<< '(display (list (exact 3.0+0.0i) (real? (exact 3.0+0.0i))))'
+	//	# => (3 #t)
+	t.Run("exact on 3.0+0.0i demotes to a real", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, "(exact 3.0+0.0i)")
 		qt.Assert(t, err, qt.IsNil)
 		_, ok := result.(*values.BigComplex)
-		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, ok, qt.IsFalse,
+			qt.Commentf("an exact zero imaginary part makes the number real; got %s", result.SchemeString()))
+		qt.Assert(t, result.(values.Number).IsExact(), qt.IsTrue)
+		qt.Assert(t, result.SchemeString(), qt.Equals, "3")
+	})
+
+	t.Run("exact on 3.0+0.0i is eqv? to the integer", func(t *testing.T) {
+		testhelpers.RunSchemeCodeExpectTrue(t, "(eqv? (exact 3.0+0.0i) 3)")
 	})
 
 	t.Run("exact? of exact complex", func(t *testing.T) {

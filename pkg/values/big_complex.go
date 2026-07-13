@@ -129,7 +129,7 @@ func toBigFloat(n Number) *BigFloat {
 // discard a component the caller can still observe, and would silently turn a
 // complex into a real. An exact 0 is a mathematical zero, so a+0i IS a.
 func maybeSimplify(rel, iam Number) Number {
-	if iam.IsZero() && iam.IsExact() {
+	if isExactZero(iam) {
 		return rel
 	}
 	return NewBigComplex(rel, iam)
@@ -190,6 +190,14 @@ func bigComplexSimplifyDown(n Number) Number {
 // direction of the real component only; the imaginary component's drop is
 // signaled by the isReal bool, which is false iff the imaginary part is
 // non-zero. Callers needing both components should use ToComplex128WithAccuracy.
+// The bare IsZero() below is DELIBERATE, and is the one place in this package where
+// a zero test must NOT consult exactness. It asks "did I drop information", not "is
+// this number real" (isExactZero / IsReal). An inexact 0.0 imaginary part is not a
+// mathematical zero -- (real? 5.0+0.0i) is #f -- but dropping it from a float64
+// conversion loses nothing, because its magnitude is zero. Contract: conversion.go
+// §isReal, "false iff n had a NON-ZERO imaginary part".
+//
+// Routing this through isExactZero would report loss where none occurred.
 func bigComplexToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 	p := n.(*BigComplex)
 	realF, realAcc := toBigFloat(p.real).Float64WithAccuracy()
@@ -246,7 +254,7 @@ func init() {
 		// (b*c - a*d), which for an exact b=0 and an inexact d=0.0 is 0 - 0.0, i.e.
 		// -0.0 by the exact-zero negation identity. The shortcut computes b/c = +0.0
 		// and loses the sign. Chez and Racket both give (/ 10 2.0+0.0i) => 5.0-0.0i.
-		if v.imag.IsZero() && v.imag.IsExact() {
+		if isExactZero(v.imag) {
 			newReal, err := p.real.Divide(v.real)
 			if err != nil {
 				return nil, err
@@ -426,14 +434,20 @@ func (p *BigComplex) Compare(o Number) int {
 // (a BigFloat 0.0) does not collapse to real. IsInteger/IsRational delegate
 // here, so the whole integer? ⟹ rational? ⟹ real? hierarchy stays consistent.
 func (p *BigComplex) IsReal() bool {
-	return p.imag.IsZero() && isExactPart(p.imag)
+	return isExactZero(p.imag)
 }
 
-// IsExact returns true if both parts are exact (BigInteger or Rational).
+// IsExact returns true if both parts are exact.
 //
 // R7RS §6.2.2: A complex number is exact if both real and imaginary parts are exact.
+//
+// This used to ask via isExactPart, a type switch on BigInteger|Rational that
+// shadowed the parts' own IsExact(). The two agreed for every part type
+// validateBigComplexPart admits, so it was not a bug -- but it was a second spelling
+// of "is this exact", and it would have diverged silently the moment a part type was
+// added. Ask the value, not its type.
 func (p *BigComplex) IsExact() bool {
-	return isExactPart(p.real) && isExactPart(p.imag)
+	return p.real.IsExact() && p.imag.IsExact()
 }
 
 // IsInteger returns true if the imaginary part is zero and the real part is an integer.
@@ -464,15 +478,6 @@ func (p *BigComplex) IsFinite() bool {
 // R7RS §6.2.6: nan? returns #t for complex numbers with a NaN component.
 func (p *BigComplex) IsNaN() bool {
 	return p.real.IsNaN() || p.imag.IsNaN()
-}
-
-// isExactPart returns true if the number is an exact type (BigInteger or Rational).
-func isExactPart(n Number) bool {
-	switch n.(type) {
-	case *BigInteger, *Rational:
-		return true
-	}
-	return false
 }
 
 // ToExact converts this BigComplex to an exact representation.
