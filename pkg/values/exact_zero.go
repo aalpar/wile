@@ -61,6 +61,37 @@ import (
 //
 // See BIBLIOGRAPHY.md, "Exactness as Abstract Interpretation".
 
+// SCOPE: the rule's operands are whole SCHEME NUMBERS, never the components of a
+// complex.
+//
+// This is not pedantry, it is the sharp edge. Exactness contagion is a property of
+// the OPERAND PAIR -- α(a op b) = α(a) ⊔ α(b) -- so the strong updates are licensed
+// only when the exact zero IS an operand. Apply (/ 0 x) => exact 0 to a component
+// and you get an exact zero sitting inside an inexact number: (/ 0+1i 1.5) comes
+// back as 0+0.666i, whose real part is exact while the number is not. Both oracles
+// say 0.0+0.666i. Such a value even breaks write/read invariance, since it prints in
+// a syntax that reads back as something else.
+//
+// Complex arithmetic that divides part-wise therefore has to re-impose contagion
+// afterwards -- see contagionOverParts, which exists solely because the parts are
+// routed through the public Number methods, and those methods rightly apply the rule
+// to what they are handed.
+
+// WHICH KINDS CAN BE THE EXACT ZERO: only Integer, BigInteger, Rational, and a
+// BigComplex with exact parts. Float, BigFloat and Complex return IsExact() == false
+// unconditionally, so a guard on THEIR receiver can never fire.
+//
+// Those three kinds therefore do NOT carry a receiver-side guard in Add or Subtract,
+// and that asymmetry is deliberate rather than an oversight. isExactZero is not
+// inlinable (see below), so a guard that can never fire is a real call on a hot path
+// bought for nothing. Do not "restore uniformity" by adding them back.
+//
+// Uniformity was never the safety property anyway -- the conformance test is. If a
+// new EXACT kind is added and forgets its guard, the rule WILL fire for it and
+// TestExactZeroCallSitesMatchTheTable fails. A dead guard, by contrast, agrees with
+// its table row vacuously, so its presence proves nothing and its absence costs
+// nothing.
+
 // isExactZero reports whether n is an exact zero, i.e. a mathematical zero rather
 // than an IEEE value that happens to compare equal to zero.
 //
@@ -70,6 +101,26 @@ import (
 // this a mathematical zero", and is correct to ignore exactness.
 func isExactZero(n Number) bool {
 	return n.IsZero() && n.IsExact()
+}
+
+// contagionOverParts re-imposes exactness contagion on a complex result whose parts
+// were computed by dividing/multiplying them individually.
+//
+// The part-wise paths hand each component to the PUBLIC Number arithmetic, which
+// applies the exact-zero rule to the value it is given -- correctly, for an operand.
+// But a component is not an operand. An exact-zero real part divided by an inexact
+// real yields an exact 0 by the dividend rule, and that exact 0 is then sitting in a
+// number the operand pair says must be wholly inexact.
+//
+// So: if EITHER operand is inexact, every component of the result is inexact. That
+// is just α(a op b) = α(a) ⊔ α(b), applied where the part-wise shortcut skipped it.
+//
+//	(/ 0+1i 1.5)  =>  0.0+0.666...i   in Chez and Racket, NOT 0+0.666...i
+func contagionOverParts(a, b Number, re, im Number) (Number, Number) {
+	if a.IsExact() && b.IsExact() {
+		return re, im
+	}
+	return re.ToInexact(), im.ToInexact()
 }
 
 // exactZeroEither reports whether EITHER operand is an exact zero -- the annihilation
@@ -162,7 +213,14 @@ const (
 // an exact 0 divided by ANYTHING is exactly 0, including by NaN and by an inexact
 // zero. (/ 0 0.0) is 0 in both oracles, NOT NaN -- the strong update overrides IEEE
 // for the same reason (* 0 +inf.0) does.
-var exactZeroTable = [numZeroOps]struct{ left, right zeroAction }{
+// zeroRow is one operation's rule: what to do when the LEFT operand is an exact
+// zero, and what to do when the RIGHT one is.
+type zeroRow struct {
+	left  zeroAction
+	right zeroAction
+}
+
+var exactZeroTable = [numZeroOps]zeroRow{
 	zeroAdd: {left: zeroYieldOther, right: zeroYieldOther},
 	zeroSub: {left: zeroNegateOther, right: zeroYieldOther},
 	zeroMul: {left: zeroYieldExactZero, right: zeroYieldExactZero},
@@ -178,14 +236,25 @@ var exactZeroTable = [numZeroOps]struct{ left, right zeroAction }{
 // silence is not an option. An operation with genuinely no exact-zero rule must say
 // so, explicitly, in both columns.
 //
-// Mirrors registerNumericSpec, which likewise panics on an incomplete spec.
+// Mirrors registerNumericSpec, which likewise panics on an incomplete spec -- and,
+// like it, factors the check into a function that takes the table as a PARAMETER, so
+// a test can call it with a deliberately holed table and prove the guard fires. A
+// guard that has only ever run against the good table is a comment.
 func init() {
-	for op := range exactZeroTable {
-		r := exactZeroTable[op]
+	validateExactZeroTable(exactZeroTable)
+}
+
+// validateExactZeroTable panics unless every op declares a rule in at least one
+// column. Takes the table as a parameter so tests can feed it crafted bad state;
+// validateNumericSpecs (numeric_registry.go) is the same shape for the same reason.
+func validateExactZeroTable(table [numZeroOps]zeroRow) {
+	for op := range table {
+		r := table[op]
 		if r.left == zeroFallThrough && r.right == zeroFallThrough {
-			panic(werr.WrapForeignErrorf(werr.ErrNotANumber,
-				"exactZeroTable: op %d declares no exact-zero rule in either column; "+
-					"declare zeroFallThrough explicitly in both if it genuinely has none", op))
+			panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
+				"validateExactZeroTable: op %d declares no exact-zero rule in either "+
+					"column; declare zeroFallThrough explicitly in both if it genuinely "+
+					"has none", op))
 		}
 	}
 }
@@ -220,33 +289,34 @@ func init() {
 // the price of keeping the four rules in one place, and it is worth paying: the
 // last time division's rule lived somewhere else, it went missing entirely.
 func exactZeroRule(op zeroOp, a, b Number) (Number, bool, error) {
-	switch op {
-	case zeroAdd:
-		if isExactZero(b) {
-			return a, true, nil
-		}
-		if isExactZero(a) {
-			return b, true, nil
-		}
-	case zeroSub:
-		if isExactZero(b) {
-			return a, true, nil
-		}
-		if isExactZero(a) {
-			return b.Negate(), true, nil
-		}
-	case zeroMul:
-		if isExactZero(b) || isExactZero(a) {
-			return NewInteger(0), true, nil
-		}
-	case zeroDiv:
-		if isExactZero(b) {
-			return nil, true, werr.WrapForeignErrorf(werr.ErrDivisionByZero,
-				"exactZeroRule: division by an exact zero")
-		}
-		if isExactZero(a) {
-			return NewInteger(0), true, nil
-		}
+	r := exactZeroTable[op]
+	if isExactZero(b) {
+		return applyZeroAction(r.right, a)
+	}
+	if isExactZero(a) {
+		return applyZeroAction(r.left, b)
 	}
 	return nil, false, nil
+}
+
+// applyZeroAction performs one cell of exactZeroTable. other is the operand that is
+// NOT the exact zero -- the one the action acts upon.
+func applyZeroAction(action zeroAction, other Number) (Number, bool, error) {
+	switch action {
+	case zeroYieldExactZero:
+		return NewInteger(0), true, nil
+	case zeroYieldOther:
+		// UNTOUCHED, not "added to zero". IEEE addition of +0.0 would flip a -0.0 to
+		// +0.0; handing the operand back preserves its sign AND its exactness.
+		return other, true, nil
+	case zeroNegateOther:
+		return other.Negate(), true, nil
+	case zeroRaise:
+		return nil, true, werr.WrapForeignErrorf(werr.ErrDivisionByZero,
+			"exactZeroRule: division by an exact zero")
+	case zeroFallThrough:
+		return nil, false, nil
+	}
+	panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
+		"applyZeroAction: unknown zeroAction %d", action))
 }

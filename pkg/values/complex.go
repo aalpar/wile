@@ -134,9 +134,6 @@ func (p *Complex) Add(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
-	if isExactZero(p) {
-		return o
-	}
 	v, ok := o.(*Complex)
 	if ok {
 		return NewComplex(p.Value + v.Value)
@@ -148,9 +145,6 @@ func (p *Complex) Add(o Number) Number {
 func (p *Complex) Subtract(o Number) Number {
 	if isExactZero(o) {
 		return p
-	}
-	if isExactZero(p) {
-		return o.Negate()
 	}
 	v, ok := o.(*Complex)
 	if ok {
@@ -173,11 +167,7 @@ func (p *Complex) Multiply(o Number) Number {
 
 // Divide returns the quotient of this complex number and another number.
 func (p *Complex) Divide(o Number) (Number, error) {
-	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
-	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
-	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
-	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
-	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	// The exact-zero rule for division; exactZeroTable[zeroDiv] in exact_zero.go.
 	switch exactZeroDivideAction(p, o) {
 	case zeroRaise:
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "Complex.Divide: division by exact zero")
@@ -192,10 +182,17 @@ func (p *Complex) Divide(o Number) (Number, error) {
 	//	(/ 1.0+2.0i 0.0)       => +inf.0+inf.0i    (real zero divisor)
 	//	(/ 1.0+2.0i 0.0+0.0i)  => +nan.0+nan.0i    (complex zero divisor)
 	//
-	// Both oracles agree, and C99 Annex G says the same. Go's complex128 division
-	// gives Inf for BOTH. This is the exact mirror of the bug BigComplex.Divide had:
-	// the same erased distinction, the opposite symptom (that one gave NaN for
-	// every zero divisor, this one gives Inf).
+	// SCHEME DELIBERATELY DIVERGES FROM C99 HERE, and the divergence is the point.
+	// C99 Annex G (G.5.1) mandates INFINITY for a zero divisor with a non-NaN
+	// dividend, and Go implements exactly that -- runtime/complex.go says so, citing
+	// G.5.1 by name. So Go's Inf is the C99-correct answer, and it is still the wrong
+	// answer here: Chez and Racket both give NaN for a COMPLEX zero divisor, and this
+	// is a Scheme. Follow the oracles, not C99.
+	//
+	// Stated explicitly because the next reader who "corrects" this toward C99 will
+	// reintroduce the bug it fixes. This is the exact mirror of the bug
+	// BigComplex.Divide had: the same erased distinction, the opposite symptom (that
+	// one gave NaN for every zero divisor, this one gave Inf).
 	//
 	// Only a ZERO divisor needs intercepting. A non-zero real divisor is left to
 	// normal dispatch, which promotes to the LUB and so preserves both the result

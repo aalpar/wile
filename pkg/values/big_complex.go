@@ -263,6 +263,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
+			newReal, newImag = contagionOverParts(p, v, newReal, newImag)
 			return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 		}
 		// General case: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
@@ -360,11 +361,7 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.6: The / procedure returns the quotient of its arguments.
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) (Number, error) {
-	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
-	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
-	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
-	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
-	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	// The exact-zero rule for division; exactZeroTable[zeroDiv] in exact_zero.go.
 	switch exactZeroDivideAction(p, o) {
 	case zeroRaise:
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigComplex.Divide: division by exact zero")
@@ -393,6 +390,7 @@ func (p *BigComplex) Divide(o Number) (Number, error) {
 		if err != nil {
 			return nil, err
 		}
+		newReal, newImag = contagionOverParts(p, o, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 	}
 	return bigComplexDivide[o.Kind()](p, o)

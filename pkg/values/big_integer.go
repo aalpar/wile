@@ -250,11 +250,7 @@ func (p *BigInteger) Multiply(o Number) Number {
 // R7RS §6.2.2 Exactness: exact / exact = exact (BigInteger or Rational),
 // exact / inexact = inexact (Float or Complex).
 func (p *BigInteger) Divide(o Number) (Number, error) {
-	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
-	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
-	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
-	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
-	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	// The exact-zero rule for division; exactZeroTable[zeroDiv] in exact_zero.go.
 	switch exactZeroDivideAction(p, o) {
 	case zeroRaise:
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigInteger.Divide: division by exact zero")

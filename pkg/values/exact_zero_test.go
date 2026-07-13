@@ -366,3 +366,134 @@ func TestComplexDivideByZeroDivisor(t *testing.T) {
 		})
 	}
 }
+
+// TestExactnessContagionOverComponents is the test that would have caught the
+// component-level leak, and the one the exact-zero grid structurally cannot.
+//
+// The grid can only ask "is the whole OPERAND an exact zero" -- which is precisely
+// the question that was never wrong. The bug was one frame down: BigComplex's
+// part-wise divide handed each COMPONENT to the public Number arithmetic, which
+// applied the dividend rule to it, so (/ 0+1i 1.5) came back as 0+0.666i with an
+// EXACT real part inside an inexact number. The grid cannot name that value, because
+// the rule does not fire at the operand level for it.
+//
+// So this pins the property the file's own header asserts and nothing checked
+// (exact_zero.go: α(a op b) = α(a) ⊔ α(b)): if EITHER operand is inexact, the result
+// is inexact -- AND SO IS EVERY COMPONENT OF IT. The two documented strong updates
+// ((* 0 x) and (/ 0 x), at the OPERAND level) are the only exceptions.
+//
+//	petite -q <<< '(display (list (/ 0+1i 1.5) (exact? (real-part (/ 0+1i 1.5)))))'
+//	racket   -e '(display (list (/ 0+1i 1.5) (exact? (real-part (/ 0+1i 1.5)))))'
+//	# both => (0.0+0.6666666666666666i #f)
+func TestExactnessContagionOverComponents(t *testing.T) {
+	// Complexes with an exact-zero COMPONENT and a non-zero one -- the shape the
+	// exact-zero operand grid cannot construct, because such a value is not itself
+	// an exact zero.
+	exactZeroRealPart := NewBigComplexFromBigIntegers(
+		NewBigIntegerFromInt64(0), NewBigIntegerFromInt64(1))
+	exactNonZero := NewBigComplexFromBigIntegers(
+		NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4))
+
+	inexactOperands := []Number{
+		NewFloat(1.5), NewFloat(-2.5), NewFloat(0), NewFloat(math.Copysign(0, -1)),
+		NewFloat(math.Inf(1)), NewFloat(math.NaN()), NewBigFloatFromFloat64(2.0),
+		NewComplex(complex(1.5, 2.5)),
+	}
+	complexes := []Number{exactZeroRealPart, exactNonZero}
+
+	ops := []struct {
+		name string
+		call func(a, b Number) (Number, error)
+	}{
+		{"Add", func(a, b Number) (Number, error) {
+			return a.Add(b), nil
+		}},
+		{"Subtract", func(a, b Number) (Number, error) {
+			return a.Subtract(b), nil
+		}},
+		{"Multiply", func(a, b Number) (Number, error) {
+			return a.Multiply(b), nil
+		}},
+		{"Divide", func(a, b Number) (Number, error) {
+			return a.Divide(b)
+		}},
+	}
+
+	for _, op := range ops {
+		for _, z := range complexes {
+			for _, x := range inexactOperands {
+				name := op.name + " " + z.SchemeString() + " " + x.SchemeString()
+				t.Run(name, func(t *testing.T) {
+					c := qt.New(t)
+					got, err := op.call(z, x)
+					c.Assert(err, qt.IsNil)
+
+					// One operand is inexact, so contagion makes the result inexact.
+					c.Assert(got.IsExact(), qt.IsFalse,
+						qt.Commentf("an inexact operand must make the result inexact"))
+
+					// ...and every COMPONENT of it. This is the half that was broken:
+					// an exact component inside an inexact number is not representable
+					// in Scheme, and prints in a syntax that reads back differently.
+					bc, isBig := got.(*BigComplex)
+					if !isBig {
+						return
+					}
+					c.Assert(bc.Real().IsExact(), qt.IsFalse,
+						qt.Commentf("EXACT real part %s inside an inexact number %s",
+							bc.Real().SchemeString(), got.SchemeString()))
+					c.Assert(bc.Imag().IsExact(), qt.IsFalse,
+						qt.Commentf("EXACT imaginary part %s inside an inexact number %s",
+							bc.Imag().SchemeString(), got.SchemeString()))
+				})
+			}
+		}
+	}
+}
+
+// TestExactZeroDivideActionAgrees pins exactZeroDivideAction in BOTH directions.
+//
+// It claimed to be covered by TestExactZeroCallSitesMatchTheTable, but that test
+// `continue`s whenever the reference rule does not fire -- so it could only ever
+// catch drift in the firing direction. Dropping the IsExact() check from
+// exactZeroDivideAction (so (/ 0.0 2.0) would yield an exact 0) left the whole
+// ExactZero suite green. The doc's safety claim was false, and by this file's own
+// standard a specialisation gets a test rather than a promise.
+func TestExactZeroDivideActionAgrees(t *testing.T) {
+	c := qt.New(t)
+	operands := exactZeroOperands()
+
+	for _, a := range operands {
+		for _, b := range operands {
+			want := zeroFallThrough
+			switch {
+			case isExactZero(b):
+				want = zeroRaise // divisor first: (/ 0 0) raises
+			case isExactZero(a):
+				want = zeroYieldExactZero
+			}
+			c.Assert(exactZeroDivideAction(a, b), qt.Equals, want,
+				qt.Commentf("exactZeroDivideAction(%s, %s) drifted from the table row",
+					a.SchemeString(), b.SchemeString()))
+		}
+	}
+}
+
+// TestValidateExactZeroTablePanicsOnAGap runs the totality guard against a
+// deliberately holed table, which is the only way to know the guard works. Asserting
+// that the GOOD table passes proves nothing -- it is the case that always passes.
+func TestValidateExactZeroTablePanicsOnAGap(t *testing.T) {
+	c := qt.New(t)
+
+	holed := exactZeroTable
+	holed[zeroDiv] = zeroRow{} // both columns default to zeroFallThrough: a silent gap
+
+	c.Assert(func() {
+		validateExactZeroTable(holed)
+	}, qt.PanicMatches, ".*declares no exact-zero rule in either column.*")
+
+	// And the real table passes.
+	c.Assert(func() {
+		validateExactZeroTable(exactZeroTable)
+	}, qt.Not(qt.PanicMatches), ".*")
+}

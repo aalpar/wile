@@ -136,9 +136,6 @@ func (p *Float) Add(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
-	if isExactZero(p) {
-		return o
-	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value + v.Value)
@@ -153,9 +150,6 @@ func (p *Float) Add(o Number) Number {
 func (p *Float) Subtract(o Number) Number {
 	if isExactZero(o) {
 		return p
-	}
-	if isExactZero(p) {
-		return o.Negate()
 	}
 	v, ok := o.(*Float)
 	if ok {
@@ -185,11 +179,7 @@ func (p *Float) Multiply(o Number) Number {
 
 // Divide returns the quotient of this float and another number.
 func (p *Float) Divide(o Number) (Number, error) {
-	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
-	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
-	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
-	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
-	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	// The exact-zero rule for division; exactZeroTable[zeroDiv] in exact_zero.go.
 	switch exactZeroDivideAction(p, o) {
 	case zeroRaise:
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "Float.Divide: division by exact zero")

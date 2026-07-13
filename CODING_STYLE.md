@@ -804,8 +804,13 @@ drops a component the caller can still see *and* launders an inexact value into 
 exact one.
 
 This is the same exact-vs-inexact-zero distinction that governs the arithmetic
-identities (`exactZeroProduct`, `exactZeroIdentity` in `pkg/values/numeric_tower.go`).
-Where a zero is involved, ask which kind of zero it is.
+identities. Both live in `pkg/values/exact_zero.go`, which owns the rule for all four
+operations as a table: ask `isExactZero(n)`, never a bare `n.IsZero()`.
+
+Where a zero is involved, ask which kind of zero it is. And ask it of the whole
+Scheme number, not of a complex's component: contagion is a property of the operand
+pair, so applying a strong update to a part yields an exact zero inside an inexact
+number.
 
 ### Arithmetic Method Template
 

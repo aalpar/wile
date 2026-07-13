@@ -452,11 +452,13 @@ The numeric type promotion table is a finite join-semilattice (upper semilattice
 
 ### Exactness as Abstract Interpretation (Cousot & Cousot 1977)
 
-R7RS exactness tracking (exact/inexact contagion) is an instance of abstract interpretation. The abstract domain is the two-point lattice {exact < inexact}; the transfer function for arithmetic operations computes the abstract result from the abstract operands. The exact-zero-absorbs rule for multiplication (R7RS §6.2.2) is a strong update that returns a more precise result than the naive join.
+R7RS exactness tracking (exact/inexact contagion) is an instance of abstract interpretation. The abstract domain is the two-point lattice {exact < inexact}; the transfer function for arithmetic operations computes the abstract result from the abstract operands, joining them (inexact wins). The exact-zero rules are **strong updates**: they return a strictly more precise result than the naive join, because the mathematical result is known exactly. There are two, and they are the same rule — `(* 0 x)` and `(/ 0 x)` both yield an exact `0` for *any* `x`, overriding IEEE even against `+inf.0` and `+nan.0`, because an exact `0` is a mathematical zero and not an IEEE value.
+
+The update is licensed by the **exactness of the zero alone**; the other operand's finiteness is irrelevant. It applies only when the exact zero is an *operand*: applied to a complex's component it would place an exact zero inside an inexact number, which contagion forbids.
 
 - **Paper**: Patrick Cousot, Radhia Cousot, "Abstract interpretation: a unified lattice model for static analysis of programs by construction or approximation of fixpoints", POPL 1977
 - **DOI**: https://doi.org/10.1145/512950.512973
-- **Location**: `pkg/values/numeric_tower.go` (Exactness, ExactnessOf)
+- **Location**: `pkg/values/exact_zero.go` (the rule: `isExactZero`, `exactZeroTable`, `contagionOverParts`); `pkg/values/numeric_tower.go` (`Exactness`, `ExactnessOf`, `Simplify`)
 
 ### Lists as Initial Algebras (Bird & de Moor 1997; Meijer et al. 1991)
 
