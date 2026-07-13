@@ -166,3 +166,132 @@ func TestExactZeroTableIsTotal(t *testing.T) {
 				"columns if the op genuinely has no exact-zero rule.", op))
 	}
 }
+
+// exactZeroOperands returns a representative value of every numeric kind, in both
+// a zero and a non-zero flavour.
+//
+// Note which zeros are EXACT: Integer, BigInteger, Rational, and a BigComplex with
+// exact parts. Float, BigFloat and Complex report IsExact() == false
+// unconditionally, so their zeros are INEXACT and the rule must never fire on them
+// -- which is exactly what the conformance test below is checking.
+func exactZeroOperands() []Number {
+	return []Number{
+		// exact zeros
+		NewInteger(0),
+		NewBigIntegerFromInt64(0),
+		NewRational(0, 1),
+		NewBigComplexFromBigIntegers(NewBigIntegerFromInt64(0), NewBigIntegerFromInt64(0)),
+		// INEXACT zeros -- the rule must NOT fire on these
+		NewFloat(0),
+		NewFloat(math.Copysign(0, -1)),
+		NewBigFloatFromFloat64(0),
+		NewComplex(0),
+		// non-zeros, one per kind
+		NewInteger(5),
+		NewBigIntegerFromInt64(5),
+		NewRational(1, 2),
+		NewFloat(2.5),
+		NewBigFloatFromFloat64(2.5),
+		NewComplex(complex(3, 4)),
+		NewBigComplexFromBigIntegers(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
+		// IEEE specials, where "exact zero overrides IEEE" actually bites
+		NewFloat(math.Inf(1)),
+		NewFloat(math.Inf(-1)),
+		NewFloat(math.NaN()),
+	}
+}
+
+// TestExactZeroCallSitesMatchTheTable is the load-bearing test of this design.
+//
+// The seven numeric kinds hand-inline their table rows rather than calling
+// exactZeroRule, because the wrapper costs ~1.5% geomean on the Gabriel suite (see
+// exactZeroRule's doc). That optimisation is only safe if the hand-written guards
+// provably agree with the table -- otherwise the table is decoration and we are back
+// to four spellings drifting across seven files, which is the bug this whole change
+// exists to end.
+//
+// So: drive every kind's PUBLIC Add/Subtract/Multiply/Divide over every operand
+// pairing, and assert that whenever the reference rule fires, the public method
+// returns exactly what the reference says. A call site that forgets a row, or
+// spells the predicate wrong, or checks the operands in the wrong order, fails here.
+func TestExactZeroCallSitesMatchTheTable(t *testing.T) {
+	ops := []struct {
+		name string
+		op   zeroOp
+		call func(a, b Number) (Number, error)
+	}{
+		{"Add", zeroAdd, func(a, b Number) (Number, error) {
+			return a.Add(b), nil
+		}},
+		{"Subtract", zeroSub, func(a, b Number) (Number, error) {
+			return a.Subtract(b), nil
+		}},
+		{"Multiply", zeroMul, func(a, b Number) (Number, error) {
+			return a.Multiply(b), nil
+		}},
+		{"Divide", zeroDiv, func(a, b Number) (Number, error) {
+			return a.Divide(b)
+		}},
+	}
+
+	operands := exactZeroOperands()
+	fired := 0
+
+	for _, op := range ops {
+		for _, a := range operands {
+			for _, b := range operands {
+				want, ruleFires, wantErr := exactZeroRule(op.op, a, b)
+				if !ruleFires {
+					continue // normal dispatch owns it; not this test's business
+				}
+				fired++
+
+				name := op.name + " " + a.SchemeString() + " " + b.SchemeString()
+				t.Run(name, func(t *testing.T) {
+					c := qt.New(t)
+					got, gotErr := op.call(a, b)
+
+					if wantErr != nil {
+						c.Assert(gotErr, qt.IsNotNil,
+							qt.Commentf("the table says this raises; the call site did not"))
+						c.Assert(errors.Is(gotErr, werr.ErrDivisionByZero), qt.IsTrue)
+						return
+					}
+					c.Assert(gotErr, qt.IsNil)
+					c.Assert(got.SchemeString(), qt.Equals, want.SchemeString(),
+						qt.Commentf("the call site disagrees with its table row"))
+					c.Assert(got.IsExact(), qt.Equals, want.IsExact(),
+						qt.Commentf("value matched but exactness did not"))
+				})
+			}
+		}
+	}
+
+	// Guard the guard: if a refactor made the rule stop firing, every assertion
+	// above would vacuously pass and this test would be worthless.
+	if fired < 100 {
+		t.Fatalf("the rule fired only %d times across the operand matrix; "+
+			"this test is not exercising what it claims to", fired)
+	}
+}
+
+// TestExactZeroPredicatesAgree pins that exactZeroEither is a SPECIALISATION of
+// isExactZero and not a second copy of the rule that can drift from it.
+//
+// exactZeroEither hand-expands the predicate to save a call on the multiply hot
+// path (isExactZero is never inlined: cost 122 vs budget 80). That is a measured,
+// deliberate duplication -- and duplication is exactly what this file exists to
+// eliminate, so it gets a test rather than a promise.
+func TestExactZeroPredicatesAgree(t *testing.T) {
+	c := qt.New(t)
+	operands := exactZeroOperands()
+
+	for _, a := range operands {
+		for _, b := range operands {
+			want := isExactZero(a) || isExactZero(b)
+			c.Assert(exactZeroEither(a, b), qt.Equals, want,
+				qt.Commentf("exactZeroEither(%s, %s) drifted from isExactZero",
+					a.SchemeString(), b.SchemeString()))
+		}
+	}
+}

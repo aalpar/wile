@@ -352,8 +352,16 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.6: The / procedure returns the quotient of its arguments.
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) (Number, error) {
-	if o.IsZero() && o.IsExact() {
+	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
+	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
+	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
+	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
+	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	switch exactZeroDivideAction(p, o) {
+	case zeroRaise:
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigComplex.Divide: division by exact zero")
+	case zeroYieldExactZero:
+		return NewInteger(0), nil
 	}
 	// A REAL divisor divides part-wise. This MUST be decided here, on o's own
 	// kind, because it is the last point that still sees the operand unpromoted.

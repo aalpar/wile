@@ -290,13 +290,19 @@ func (p *BigFloat) Multiply(o Number) Number {
 
 // Divide returns the quotient of this BigFloat and another number.
 func (p *BigFloat) Divide(o Number) (Number, error) {
+	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
+	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
+	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
+	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
+	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	switch exactZeroDivideAction(p, o) {
+	case zeroRaise:
+		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigFloat.Divide: division by exact zero")
+	case zeroYieldExactZero:
+		return NewInteger(0), nil
+	}
 	if p.nan || o.IsNaN() {
 		return NewBigFloatNaN(), nil
-	}
-	// Division by an EXACT zero is a Scheme error, not an IEEE infinity. This is
-	// the one zero case big.Float knows nothing about, so it stays hand-written.
-	if o.IsZero() && o.IsExact() {
-		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigFloat.Divide: division by exact zero")
 	}
 	v, ok := o.(*BigFloat)
 	if ok {

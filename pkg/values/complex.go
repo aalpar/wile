@@ -167,8 +167,16 @@ func (p *Complex) Multiply(o Number) Number {
 
 // Divide returns the quotient of this complex number and another number.
 func (p *Complex) Divide(o Number) (Number, error) {
-	if o.IsZero() && o.IsExact() {
+	// The exact-zero rule for division (exact_zero.go). The DIVISOR is consulted
+	// first -- that ordering is the rule, and it is why (/ 0 0) raises rather than
+	// yielding an exact 0. An exact zero DIVIDEND then annihilates the quotient
+	// unconditionally, overriding IEEE exactly as (* 0 x) does: both oracles give
+	// (/ 0 +nan.0) => 0 and (/ 0 0.0) => 0, not NaN.
+	switch exactZeroDivideAction(p, o) {
+	case zeroRaise:
 		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "Complex.Divide: division by exact zero")
+	case zeroYieldExactZero:
+		return NewInteger(0), nil
 	}
 	v, ok := o.(*Complex)
 	if ok {

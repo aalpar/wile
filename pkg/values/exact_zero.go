@@ -90,6 +90,34 @@ func exactZeroEither(a, b Number) bool {
 	return (a.IsZero() && a.IsExact()) || (b.IsZero() && b.IsExact())
 }
 
+// exactZeroDivideAction answers BOTH of division's exact-zero questions in ONE call,
+// returning the row of exactZeroTable[zeroDiv] that applies:
+//
+//	zeroRaise           the DIVISOR is an exact zero -- (/ x 0) is an error
+//	zeroYieldExactZero  the DIVIDEND is an exact zero -- (/ 0 x) is exactly 0
+//	zeroFallThrough     neither; normal dispatch owns it
+//
+// The divisor is checked first, and that ordering is the rule: (/ 0 0) RAISES in
+// both oracles rather than returning an exact 0.
+//
+// Same measured motivation as exactZeroEither, and the same caveat. Division's guard
+// used to be written inline, so it cost ZERO function calls; replacing it with two
+// isExactZero calls (neither inlinable) cost +3.2% on diviter and +3.5% on divrec.
+// One call restores that. Returning the action rather than the result lets each kind
+// keep its own error message ("Integer.Divide: ...") instead of a generic one.
+//
+// TestExactZeroCallSitesMatchTheTable pins that this agrees with the table row it
+// claims to implement, so this stays a specialisation of the rule, not a copy.
+func exactZeroDivideAction(a, b Number) zeroAction {
+	if b.IsZero() && b.IsExact() {
+		return zeroRaise
+	}
+	if a.IsZero() && a.IsExact() {
+		return zeroYieldExactZero
+	}
+	return zeroFallThrough
+}
+
 // zeroAction is what the rule does when one operand is an exact zero.
 type zeroAction uint8
 
