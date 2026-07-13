@@ -84,3 +84,59 @@ func TestExactZeroAnnihilatesProduct(t *testing.T) {
 		})
 	}
 }
+
+// TestExactZeroIsAdditiveIdentity pins (+ x 0) => x and (- x 0) => x for an
+// EXACT zero, preserving sign and exactness of x. An inexact zero must not
+// short-circuit: IEEE contagion governs, and (+ -0.0 0.0) is +0.0.
+func TestExactZeroIsAdditiveIdentity(t *testing.T) {
+	c := qt.New(t)
+
+	negZero := values.NewFloat(math.Copysign(0, -1))
+	exactZero := values.NewInteger(0)
+
+	c.Run("(+ -0.0 exact-0) preserves negative zero", func(c *qt.C) {
+		got := negZero.Add(exactZero)
+		f, ok := got.(*values.Float)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(math.Signbit(f.Value), qt.IsTrue)
+	})
+
+	c.Run("(+ exact-0 -0.0) preserves negative zero", func(c *qt.C) {
+		got := exactZero.Add(negZero)
+		f, ok := got.(*values.Float)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(math.Signbit(f.Value), qt.IsTrue)
+	})
+
+	c.Run("(- -0.0 exact-0) preserves negative zero", func(c *qt.C) {
+		got := negZero.Subtract(exactZero)
+		f, ok := got.(*values.Float)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(math.Signbit(f.Value), qt.IsTrue)
+	})
+
+	// The asymmetry: only the RIGHT operand of Subtract may short-circuit.
+	// (- 0 x) is -x, not x.
+	c.Run("(- exact-0 5) negates rather than short-circuiting", func(c *qt.C) {
+		got := exactZero.Subtract(values.NewInteger(5))
+		c.Assert(values.NumberToFloat64(got), qt.Equals, float64(-5))
+	})
+
+	c.Run("(+ exact-0 0.0) stays inexact (contagion)", func(c *qt.C) {
+		got := exactZero.Add(values.NewFloat(0))
+		c.Assert(got.IsExact(), qt.IsFalse)
+	})
+
+	c.Run("(+ exact-0 exact-0) stays exact", func(c *qt.C) {
+		c.Assert(exactZero.Add(values.NewInteger(0)).IsExact(), qt.IsTrue)
+	})
+
+	// The Complex regression: an exact complex minus an inexact zero must
+	// become inexact. Complex.Add/Subtract currently short-circuit on ANY zero.
+	c.Run("(+ 0.0+0.0i 5) stays inexact", func(c *qt.C) {
+		z := values.NewComplex(complex(0, 0))
+		got := z.Add(values.NewInteger(5))
+		c.Assert(got.IsExact(), qt.IsFalse,
+			qt.Commentf("inexact complex zero must not hand back the exact operand"))
+	})
+}

@@ -125,10 +125,10 @@ func init() {
 // Add returns the sum of this complex number and another number.
 // Zero short-circuit: 0+x=x preserves exactness per R7RS §6.2.2.
 func (p *Complex) Add(o Number) Number {
-	if o.IsZero() {
+	if exactZeroIdentity(o) {
 		return p
 	}
-	if p.IsZero() {
+	if exactZeroIdentity(p) {
 		return o
 	}
 	v, ok := o.(*Complex)
@@ -140,7 +140,7 @@ func (p *Complex) Add(o Number) Number {
 
 // Subtract returns the difference of this complex number and another number.
 func (p *Complex) Subtract(o Number) Number {
-	if o.IsZero() {
+	if exactZeroIdentity(o) {
 		return p
 	}
 	v, ok := o.(*Complex)

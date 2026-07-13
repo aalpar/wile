@@ -207,6 +207,12 @@ func init() {
 // R7RS §6.2.6: The + procedure returns the sum of its arguments.
 // R7RS §6.2.2 Exactness: exact + exact = exact, exact + inexact = inexact.
 func (p *Rational) Add(o Number) Number {
+	if exactZeroIdentity(o) {
+		return p
+	}
+	if exactZeroIdentity(p) {
+		return o
+	}
 	v, ok := o.(*Rational)
 	if ok {
 		return &Rational{value: new(big.Rat).Add(p.value, v.value)}
@@ -219,6 +225,9 @@ func (p *Rational) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *Rational) Subtract(o Number) Number {
+	if exactZeroIdentity(o) {
+		return p
+	}
 	v, ok := o.(*Rational)
 	if ok {
 		return &Rational{value: new(big.Rat).Sub(p.value, v.value)}

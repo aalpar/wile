@@ -266,8 +266,20 @@ func TestMultiplication_SpecialValues(t *testing.T) {
 		qt.Assert(t, math.IsInf(f.Value, -1), qt.IsTrue)
 	})
 
-	t.Run("zero times infinity is nan", func(t *testing.T) {
+	// An EXACT zero annihilates the product, beating infinity: (* 0 +inf.0) is
+	// exact 0 in Chez and Racket. An exact 0 is a mathematical zero, not an
+	// IEEE +0.0, so IEEE's 0*inf = NaN rule does not reach it.
+	t.Run("exact zero times infinity is exact zero", func(t *testing.T) {
 		result, err := testhelpers.RunSchemeCode(t, `(* 0 +inf.0)`)
+		qt.Assert(t, err, qt.IsNil)
+		i, ok := result.(*values.Integer)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("want exact Integer, got %T", result))
+		qt.Assert(t, i.Value, qt.Equals, int64(0))
+	})
+
+	// An INEXACT zero is an IEEE value, and IEEE 754 does govern it.
+	t.Run("inexact zero times infinity is nan", func(t *testing.T) {
+		result, err := testhelpers.RunSchemeCode(t, `(* 0.0 +inf.0)`)
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -1344,13 +1356,23 @@ func TestSpecialValueArithmetic(t *testing.T) {
 		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
 	})
 
-	// 0 * inf = nan (IEEE 754)
-	t.Run("0 * +inf.0 is nan", func(t *testing.T) {
-		result, err := testhelpers.RunSchemeCode(t, "(* 0 +inf.0)")
+	// 0.0 * inf = nan (IEEE 754). The IEEE rule governs the INEXACT zero only.
+	t.Run("0.0 * +inf.0 is nan", func(t *testing.T) {
+		result, err := testhelpers.RunSchemeCode(t, "(* 0.0 +inf.0)")
 		qt.Assert(t, err, qt.IsNil)
 		f, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
 		qt.Assert(t, math.IsNaN(f.Value), qt.IsTrue)
+	})
+
+	// (* 0 +inf.0) with an EXACT zero is exact 0, not NaN — R7RS §6.2.2, and
+	// both Chez and Racket agree. The exact-zero rule outranks IEEE.
+	t.Run("exact 0 * +inf.0 is exact 0", func(t *testing.T) {
+		result, err := testhelpers.RunSchemeCode(t, "(* 0 +inf.0)")
+		qt.Assert(t, err, qt.IsNil)
+		i, ok := result.(*values.Integer)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("want exact Integer, got %T", result))
+		qt.Assert(t, i.Value, qt.Equals, int64(0))
 	})
 
 	// Division by exact zero is an error.

@@ -189,6 +189,12 @@ func init() {
 // R7RS §6.2.2 Exactness: exact + exact = exact (BigInteger),
 // exact + inexact = inexact (Float/Complex).
 func (p *BigInteger) Add(o Number) Number {
+	if exactZeroIdentity(o) {
+		return p
+	}
+	if exactZeroIdentity(p) {
+		return o
+	}
 	v, ok := o.(*BigInteger)
 	if ok {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Add, p.value, v.value)}
@@ -201,6 +207,9 @@ func (p *BigInteger) Add(o Number) Number {
 // R7RS §6.2.6: The - procedure returns the difference of its arguments.
 // R7RS §6.2.2 Exactness: exact - exact = exact, exact - inexact = inexact.
 func (p *BigInteger) Subtract(o Number) Number {
+	if exactZeroIdentity(o) {
+		return p
+	}
 	v, ok := o.(*BigInteger)
 	if ok {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Sub, p.value, v.value)}

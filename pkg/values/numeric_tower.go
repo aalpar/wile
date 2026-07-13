@@ -62,6 +62,24 @@ func exactZeroProduct(a, b Number) (Number, bool) {
 	return nil, false
 }
 
+// exactZeroIdentity reports whether z is an exact zero, i.e. an exact additive
+// identity. (+ x 0) and (- x 0) return x UNCHANGED — preserving x's sign and
+// exactness, including a negative zero.
+//
+// This is not the same as adding IEEE +0.0: (+ -0.0 0.0) is +0.0 under IEEE 754,
+// but (+ -0.0 0) is -0.0 in Chez and Racket, because an exact 0 is an exact
+// identity rather than a floating-point value to be added. Returning the operand
+// untouched also preserves exactness contagion for free.
+//
+// An INEXACT zero must not short-circuit: contagion requires the result be
+// inexact, and IEEE governs the sign.
+//
+// Only the RIGHT operand of Subtract may short-circuit: (- x 0) is x, but
+// (- 0 x) is -x.
+func exactZeroIdentity(z Number) bool {
+	return z.IsZero() && z.IsExact()
+}
+
 // floatToExact converts a float64 to its exact Number representation.
 // Returns Integer or BigInteger if the float is integral, Rational otherwise.
 //
