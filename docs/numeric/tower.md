@@ -37,11 +37,39 @@ This eliminates the need for Inf/NaN guard paths in the dispatch table — the p
 
 ### Promotion Beyond Machine Types
 
-Certain operations promote values to arbitrary-precision types (`BigInteger`, `BigFloat`, `Rational`, `BigComplex`). Once a value enters the Big* domain, subsequent operations produce Big* results — there is no automatic demotion back to machine types during computation (only `Simplify` demotes after the fact).
+Certain operations promote values to arbitrary-precision types (`BigInteger`, `BigFloat`, `Rational`, `BigComplex`). Once a value enters the Big* domain, subsequent operations produce Big* results — there is no automatic demotion back to machine types during computation (only `Simplify` demotes after the fact, and only at parse time).
 
-This promotion is correct per R7RS but has practical consequences:
-- Big* arithmetic is significantly slower (heap-allocated, no hardware acceleration)
-- Mixed operations (e.g., `Float × BigComplex`) promote to the lattice LUB as usual
+An **exact** operand meeting an **inexact** one does NOT enter the Big* domain. It is absorbed into the inexact operand's representation — R7RS §6.2.2 exactness contagion:
+
+| Operation | Result | Note |
+|-----------|--------|------|
+| `(+ 1.5 2)` | `Float` 3.5 | the exact `2` is rounded into float64 |
+| `(+ 1.5 (expt 2 2000))` | `Float` `+inf.0` | the exact operand overflows; Chez agrees |
+| `(+ 1.5 #m2)` | `BigFloat` 3.5 | precision ASKED for is preserved |
+| `(exact->inexact 1/2)` | `Float` 0.5 | |
+
+This is deliberately **lossy**, and it is what "inexact" means. It used to promote exact × `Float` to `BigFloat` "to preserve precision", on the theory that `Simplify` would demote afterwards. Per-op demotion was never wired, so ordinary float arithmetic minted 256-bit bignums that never came back down; `(+ 1.5 2)` was a `*BigFloat`. Removing the promotion made mixed float/integer arithmetic ~40% faster.
+
+**Complex is exempt.** Exact × `Complex` → `BigComplex`, not `Complex`. An exact operand rounded into `complex128` acquires a manufactured `+0.0` imaginary part, which is not an *exact* `0`, and the exact-zero rules that give `(/ 10 2.0+0.0i)` its `-0.0i` sign stop applying.
+
+Big* arithmetic remains significantly slower (heap-allocated, no hardware acceleration), so keeping ordinary float arithmetic out of it matters.
+
+### Two Promotion Tables: Arithmetic vs Comparison
+
+Contagion is a property of ARITHMETIC, not of comparison, and the two use **different** tables (`values.promotionTable` and `values.comparisonTable`).
+
+Rounding an operand is free when the result is already inexact, and fatal when the result is a boolean — the rounding is what *decides* the boolean:
+
+```scheme
+(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))   ; => #f
+(< (- (expt 2 100) 1) (exact->inexact (expt 2 100)))   ; => #t
+```
+
+Both operands round to the same `float64`. A lossy comparison would call them equal; they are not, and Chez says so too. So `comparisonTable` promotes **up** to a domain that represents both operands exactly (exact × `Float` → `BigFloat`). It is exactly what `promotionTable` was before contagion was separated out of it — the "no lossy paths" invariant did not die, it moved to the table where it belongs.
+
+The two tables differ on exactly one pair-shape: an exact kind meeting `Float`. `TestComparisonResultKind_API` pins that, and fails if they diverge anywhere else.
+
+Public accessors: `values.PromotionResultKind(a, b)` and `values.ComparisonResultKind(a, b)`.
 
 ### Hot-Loop Allocation Reduction (`BigInteger` only)
 
