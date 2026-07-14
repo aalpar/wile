@@ -218,3 +218,46 @@ func TestHashtable_ConcurrentEqualAndMutate(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+// nonComparableLeaf is a slice-backed Value: legal Go, implements Value, and is
+// NOT Go-comparable. It stands in for an embedder-defined leaf type. Nothing in
+// pkg/values is shaped this way, which is exactly why the hazard survived review.
+type nonComparableLeaf []values.Value
+
+func (p nonComparableLeaf) SchemeString() string {
+	return "#<non-comparable>"
+}
+
+func (p nonComparableLeaf) IsVoid() bool {
+	return false
+}
+
+func (p nonComparableLeaf) EqualTo(v values.Value) bool {
+	_, ok := v.(nonComparableLeaf)
+	return ok
+}
+
+// TestEqual_NonComparableLeafInsideContainerDoesNotPanic pins that a container
+// compared against a non-comparable leaf settles as false instead of faulting.
+//
+// The worklist keys its visited set on equalPairKey{a, b}, which HASHES both
+// elements — a strictly stronger demand than the a == b identity check, which
+// only faults when the two dynamic types are identical. So a *Pair compared
+// against a slice-backed leaf passed the == check (types differ, no fault) and
+// then panicked inside the map lookup. Settling a non-container b before the key
+// is formed is what closes it, and it is a strict narrowing: every
+// EqualComponents asserts b to its own concrete pointer type and returns false.
+func TestEqual_NonComparableLeafInsideContainerDoesNotPanic(t *testing.T) {
+	leaf := nonComparableLeaf{values.NewInteger(1)}
+	container := values.NewCons(values.NewInteger(1), values.EmptyList)
+
+	qt.Assert(t, values.Equal(container, leaf), qt.IsFalse)
+	qt.Assert(t, values.Equal(leaf, container), qt.IsFalse)
+
+	// Nested: the leaf reaches step() as a component, which is the path that
+	// bypasses Equal's top-level leaf shortcut.
+	inA := values.NewCons(leaf, values.EmptyList)
+	inB := values.NewCons(container, values.EmptyList)
+	qt.Assert(t, values.Equal(inA, inB), qt.IsFalse)
+	qt.Assert(t, values.Equal(inB, inA), qt.IsFalse)
+}

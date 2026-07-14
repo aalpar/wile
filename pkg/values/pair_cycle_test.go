@@ -17,10 +17,12 @@ package values_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -134,4 +136,56 @@ func TestForEach_ImproperTailStillReturned(t *testing.T) {
 
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, tail.SchemeString(), qt.Equals, "2")
+}
+
+// TestForEach_HonoursContextCancellation pins that a ForEach walk stops on a
+// cancelled context, for both implementations that accept a ctx.
+//
+// Pair.ForEach is the load-bearing one: it is *the* list walker, and its ctx was
+// unread until a circular list showed that apply ignored cancellation entirely.
+// SyntaxVector.ForEach has no caller yet and is not a Tuple, so nothing reaches it
+// today — it is pinned here so the ctx in its signature stays honest, rather than
+// waiting to hand the same bug to whoever wires it up.
+//
+// The walk must exceed contextCheckMask (1023) for the amortized poll to fire.
+func TestForEach_HonoursContextCancellation(t *testing.T) {
+	const n = 4096
+
+	assertStops := func(t *testing.T, walk func(context.Context, values.ForEachFunc) (values.Value, error)) {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		seen := 0
+		_, err := walk(ctx, func(_ context.Context, _ int, _ bool, _ values.Value) error {
+			seen++
+			if seen == 1 {
+				// Cancel on the first element. The walk may overshoot to the next
+				// poll boundary, but must not run to completion.
+				cancel()
+			}
+			return nil
+		})
+
+		qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue,
+			qt.Commentf("ForEach must surface the cancellation, got %v", err))
+		qt.Assert(t, seen, qt.Not(qt.Equals), n,
+			qt.Commentf("ForEach walked all %d elements despite cancellation", n))
+	}
+
+	t.Run("Pair", func(t *testing.T) {
+		vs := make([]values.Value, n)
+		for i := range vs {
+			vs[i] = values.NewInteger(int64(i))
+		}
+		assertStops(t, values.List(vs...).ForEach)
+	})
+
+	t.Run("SyntaxVector", func(t *testing.T) {
+		svs := make([]values.SyntaxValue, n)
+		for i := range svs {
+			svs[i] = syntax.NewSyntaxSymbol(fmt.Sprintf("s%d", i), nil)
+		}
+		assertStops(t, values.NewSyntaxVector(nil, svs...).ForEach)
+	})
 }

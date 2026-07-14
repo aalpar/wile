@@ -17,6 +17,7 @@ package werr_test
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -370,21 +371,57 @@ func TestRecoverAsError_NilIsNil(t *testing.T) {
 	qt.Assert(t, werr.RecoverAsError(nil, werr.ErrInternal, "site"), qt.IsNil)
 }
 
-// TestRecoverAsError_ErrorPassesThroughUnwrapped pins that an error panic value is
-// returned as itself, not re-wrapped. Callers depend on this: the VM's foreign-call
-// bridge matches VM signal types (prompt abort, exception escape, timer interrupt)
-// on the recovered value with errors.As, and an extra wrap layer is fine for
-// errors.As but a fresh sentinel identity on top is not what those sites want to
-// carry onward. RunResumable likewise wraps it itself, afterwards.
-func TestRecoverAsError_ErrorPassesThroughUnwrapped(t *testing.T) {
+// TestRecoverAsError_ErrorAcquiresSentinelAndKeepsIdentity pins the two halves of
+// the error-panic contract at once, because they pull against each other: the
+// recovered error must acquire the site's sentinel (so a Go runtime fault in
+// foreign code is identifiable as one), AND its own identity must stay matchable
+// through the wrap (so the VM's foreign-call bridge still routes signal types).
+// Chaining as a cause is what satisfies both; returning the error unchanged, as
+// this function once did, satisfies only the second.
+func TestRecoverAsError_ErrorAcquiresSentinelAndKeepsIdentity(t *testing.T) {
 	sentinel := werr.NewStaticError("original")
 	original := werr.WrapForeignErrorf(sentinel, "boom")
 
-	got := werr.RecoverAsError(original, werr.ErrInternal, "site")
+	got := werr.RecoverAsError(original, werr.ErrPanicRecovery, "site")
 
-	qt.Assert(t, got, qt.Equals, error(original))
-	qt.Assert(t, errors.Is(got, werr.ErrInternal), qt.IsFalse,
-		qt.Commentf("an error panic value must not acquire the fallback sentinel"))
+	qt.Assert(t, errors.Is(got, werr.ErrPanicRecovery), qt.IsTrue,
+		qt.Commentf("an error panic value must acquire the site's sentinel"))
+	qt.Assert(t, errors.Is(got, sentinel), qt.IsTrue,
+		qt.Commentf("the recovered error's own identity must survive the wrap"))
+	qt.Assert(t, got.Error(), qt.Contains, "site")
+	qt.Assert(t, got.Error(), qt.Contains, "boom",
+		qt.Commentf("the recovered error's text must survive into the message"))
+}
+
+// TestRecoverAsError_RuntimeErrorCarriesSentinel is the regression this whole
+// contract exists for. A nil deref / index-out-of-range inside foreign code arrives
+// at recover() as a runtime.Error, which satisfies error — so under the old
+// pass-through rule it kept no sentinel at all, and errors.Is(err, ErrPanicRecovery)
+// could not distinguish host memory corruption from a deliberate (error "...").
+// The old test suite never saw this: every case it covered panicked with a non-error.
+func TestRecoverAsError_RuntimeErrorCarriesSentinel(t *testing.T) {
+	var runtimeErr error
+	func() {
+		defer func() {
+			runtimeErr = werr.RecoverAsError(recover(), werr.ErrPanicRecovery, "FFI \"boom\"")
+		}()
+		// Index computed at runtime: a constant index into a statically-known
+		// slice is diagnosed by the nilness/bounds analyzers before it can fault.
+		vs := make([]int, 1)
+		_ = vs[len(vs)+2]
+	}()
+
+	qt.Assert(t, runtimeErr, qt.IsNotNil)
+	qt.Assert(t, errors.Is(runtimeErr, werr.ErrPanicRecovery), qt.IsTrue,
+		qt.Commentf("a Go runtime fault must be identifiable as a recovered panic"))
+
+	var re runtime.Error
+	qt.Assert(t, errors.As(runtimeErr, &re), qt.IsTrue,
+		qt.Commentf("errors.As must still reach the runtime.Error through the wrap — "+
+			"this is the traversal the VM signal types rely on"))
+	qt.Assert(t, runtimeErr.Error(), qt.Contains, "FFI \"boom\"",
+		qt.Commentf("the faulting foreign function must be named"))
+	qt.Assert(t, runtimeErr.Error(), qt.Contains, "out of range")
 }
 
 // TestRecoverAsError_NonErrorWrapsUnderCallerSentinel pins that the fallback

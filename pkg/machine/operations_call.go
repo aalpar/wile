@@ -128,8 +128,9 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 			return
 		}
 		err := werr.RecoverAsError(r, werr.ErrPanicRecovery, "foreign function call")
-		// bridgeForeignError passes VM signal types (prompt abort, exception escape,
-		// timer interrupt) through unchanged, and for a Scheme exception returns
+		// bridgeForeignError matches VM signal types (prompt abort, exception escape,
+		// timer interrupt, continuation resume) with errors.As, which sees through the
+		// ErrPanicRecovery wrap to the chained cause, and for a Scheme exception returns
 		// (mc, nil) when the in-place handler reconfigured mc to run inline so the VM
 		// continues into it. Mirrors the error-return path below.
 		rmc, rerr = bridgeForeignError(mc, err)

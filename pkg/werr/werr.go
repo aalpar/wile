@@ -164,6 +164,13 @@ var (
 	ErrThreadPanic   = NewStaticError("thread panic")
 	ErrPanicRecovery = NewStaticError("panic recovery")
 
+	// ErrNotImplemented marks a primitive that is registered and callable but has
+	// no working implementation behind it. It is deliberately distinct from a
+	// runtime failure sentinel: the operation did not fail on its inputs, it does
+	// not exist yet, and no input would make it succeed. Callers matching on it
+	// are asking "is this feature wired?", not "did this call go wrong?".
+	ErrNotImplemented = NewStaticError("not implemented")
+
 	// Syntax errors
 
 	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")

@@ -157,11 +157,25 @@ func (p *SyntaxVector) EqualTo(o Value) bool {
 
 // ForEach iterates over the elements of the vector as regular values in index order.
 // It provides tuple-style iteration compatible with values.ForEachFunc callbacks.
+//
+// The context poll mirrors Pair.ForEach. It has no caller to serve today — this
+// method has none, and *SyntaxVector is not a Tuple (no AsVector), so it never
+// reaches ForEachProperList. It is here because the signature promises otherwise:
+// a ForEach that accepts a ctx and never reads it is exactly the shape that let
+// apply ignore cancellation for as long as it did, and the next caller to wire
+// this up would inherit that bug rather than write it. No cycle hazard — a vector
+// has no cdr chain to close — but length is unbounded, so cancellation must land.
 func (p *SyntaxVector) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p.IsVoid() {
 		return Void, nil
 	}
 	for i, v := range p.Values {
+		if i&contextCheckMask == 0 && i != 0 {
+			err := ctx.Err()
+			if err != nil {
+				return nil, err
+			}
+		}
 		hasNext := i+1 < len(p.Values)
 		err := fn(ctx, i, hasNext, v)
 		if err != nil {

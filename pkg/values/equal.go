@@ -30,6 +30,13 @@ type equalPairKey [2]Value
 // locally (wrong type, differing length, differing record type) it settles by
 // returning false; everything else it pushes.
 //
+// An implementor MUST be pointer-shaped, and so Go-comparable: Equal keys its
+// visited set on (a, b) identity, and hashing a non-comparable dynamic type
+// panics. Every implementor in this package is a pointer, and the wider Value
+// contract already assumes as much — EqIdentity (utils.go), which backs eq?,
+// compares interfaces with == and would fault on a slice- or map-backed Value
+// long before equal? saw it.
+//
 // A recursive value type defined by an embedder that does NOT implement
 // DeepEqualer is compared through its own EqualTo, and a cycle in it will
 // overflow the host stack. See docs/extensions/architecture.md.
@@ -107,6 +114,22 @@ func (p *equalWorklist) step(a, b Value) bool {
 	da, ok := a.(DeepEqualer)
 	if !ok {
 		return a.EqualTo(b)
+	}
+	// Settle a non-container b BEFORE it reaches the visited map. Keying on
+	// equalPairKey{a, b} hashes both elements, and hashing a non-comparable
+	// dynamic type panics — a strictly stronger demand than the a == b above,
+	// which only panics when the two types are identical. An embedder's leaf
+	// value (a slice- or map-backed Value) therefore cannot be keyed even
+	// though comparing it is harmless.
+	//
+	// This costs nothing: every EqualComponents implementation opens by
+	// asserting the other side to its own concrete pointer type and returns
+	// false otherwise, so a b that is not itself a container was always going
+	// to settle as false. Once past this, both sides are containers, and every
+	// DeepEqualer is pointer-shaped and so hashable.
+	_, ok = b.(DeepEqualer)
+	if !ok {
+		return false
 	}
 	key := equalPairKey{a, b}
 	if p.visited[key] {
