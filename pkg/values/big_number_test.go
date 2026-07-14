@@ -164,14 +164,16 @@ func TestBigInteger_MixedArithmetic(t *testing.T) {
 	c.Assert(f.Value, qt.Equals, float64(100.5))
 	c.Assert(f.IsExact(), qt.Equals, false) // Must be inexact
 
-	// Add with Complex → BigComplex. The contagion deliberately does NOT extend to the
-	// complex axis: an exact operand rounded into complex128 gets a manufactured +0.0
-	// imaginary part, which is not an exact 0, and the exact-zero sign rules stop
-	// applying. See promotion.go Zone 3.
+	// Add with Complex → Complex. The contagion extends to the complex axis exactly as
+	// it does to the real one: the exact operand is absorbed into the inexact operand's
+	// representation. The exact-zero imaginary part is protected at the OPERATION —
+	// real ⊕ complex is computed part-wise and never manufactures a component — not by
+	// escalating the promotion. See promotion.go Zone 3.
 	sumC := bi.Add(values.NewComplex(complex(1, 2)))
-	bc, ok := sumC.(*values.BigComplex)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigComplex, got %T", sumC))
-	c.Assert(bc.RealAsBigFloat().Float64Truncated(), qt.Equals, float64(101))
+	cx, ok := sumC.(*values.Complex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *values.Complex (contagion), got %T", sumC))
+	c.Assert(real(cx.Value), qt.Equals, float64(101))
+	c.Assert(imag(cx.Value), qt.Equals, float64(2))
 }
 
 func TestBigFloat_Constructors(t *testing.T) {

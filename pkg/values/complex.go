@@ -128,30 +128,95 @@ func init() {
 	})
 }
 
-// realPartsOf returns the complex operand's parts and the real operand's float64
-// value, plus whether o is a Float at all.
+// A REAL operand contributes NO imaginary component. That one sentence is the whole
+// rule, and the four helpers below are it, spelled out per operation.
 //
+// Promotion pretends otherwise: embedding a real r into complex128 manufactures an
+// imaginary part, r+0.0i, and a manufactured +0.0 is an INEXACT zero. The exact-zero
+// sign rules stop applying and IEEE eats the sign:
+//
+//	(+ 5.0-0.0i 2.0)   imag: -0.0 + 0.0  =  +0.0   want -0.0
+//	(* 5.0-0.0i 2.0)   imag: -0.0*2.0 + 0.0*5.0    want -0.0
+//	(- 2.0 5.0+0.0i)   imag:  0.0 - 0.0  =  +0.0   want -0.0
+//	(/ 10  2.0+0.0i)   imag:  0.0 - 0.0  =  +0.0   want -0.0
+//
+// Both oracles (Chez, Racket) give the "want" column. So real ⊕ complex is computed
+// part-wise, and the imaginary component is never invented in the first place.
+//
+// ADD and MULTIPLY are commutative: a real receiver hands the complex operand back to
+// the complex kind, which absorbs the real via realPartsOf below. SUBTRACT and DIVIDE
+// are not, so they are spelled out here. All four kinds whose LUB with Complex is
+// Complex — Float, Integer, BigInteger, Rational — share these.
+//
+// This is the operation-level half of a rule the promotion table used to carry alone,
+// badly: it escalated exact × Complex to BigComplex so the exact zero would survive in
+// an exact component. That bought signed-zero correctness at the cost of a
+// non-associative join. Contagion is the table's job; the exact zero is this file's.
+// See promotionTable Zone 3.
+
+// realAddComplex computes r + (c+di) = (r+c) + di.
+//
+// The imaginary part is the addend's UNTOUCHED, not (0.0 + d) — which IEEE turns into
+// +0.0 for d = -0.0, losing the sign.
+func realAddComplex(r float64, z complex128) complex128 {
+	return complex(r+real(z), imag(z))
+}
+
+// realSubtractComplex computes r - (c+di) = (r-c) - di.
+//
+// The imaginary part is the NEGATION of the subtrahend's, not (0.0 - d) — which IEEE
+// turns into +0.0 for d = +0.0, losing the sign.
+func realSubtractComplex(r float64, z complex128) complex128 {
+	return complex(r-real(z), -imag(z))
+}
+
+// realMultiplyComplex computes r · (c+di) = (r·c) + (r·d)i.
+//
+// A real operand SCALES both parts. Going through complex multiplication instead
+// computes the imaginary part as (r·d + 0.0·c) with a manufactured 0.0, and the IEEE
+// addition then swallows the sign: -0.0·2.0 + 0.0·5.0 is +0.0, not -0.0.
+func realMultiplyComplex(r float64, z complex128) complex128 {
+	return complex(r*real(z), r*imag(z))
+}
+
+// realDivideComplex computes r / (c+di), keeping the fact that a real DIVIDEND has no
+// imaginary component:
+//
+//	r / (c+di) = (r·c)/(c²+d²) + (−r·d)/(c²+d²)·i
+//
+// SMITH'S ALGORITHM (1962), which is what Go's own complex division uses. The naive
+// conjugate form above is a strict downgrade in RANGE: c²+d² overflows to +Inf above
+// ~1.3e154 and flushes to zero below ~1e-154. It collapsed (/ 1.0 1e200+1e200i) to
+// 0.0-0.0i and made (/ 2.0 1e-200+0.0i) manufacture a NaN out of an ordinary finite
+// division. Dividing through by the LARGER component keeps the intermediate in range,
+// costs one comparison, and preserves the signed zero just the same.
+//
+// A complex-zero divisor drives denom to 0 and yields NaN components, which is the
+// same answer the general path gives and the one both oracles want.
+func realDivideComplex(r float64, z complex128) complex128 {
+	re, im := real(z), imag(z)
+	if math.Abs(re) >= math.Abs(im) {
+		ratio := im / re
+		denom := re + im*ratio
+		return complex(r/denom, -r*ratio/denom)
+	}
+	ratio := re / im
+	denom := re*ratio + im
+	return complex(r*ratio/denom, -r/denom)
+}
+
 // realPartsOf reports whether o is a real operand that will be absorbed into
 // complex128, and if so returns its float64 value.
 //
-// A REAL operand touches only the real part; it has NO imaginary component to
-// contribute. Promotion pretends otherwise -- it manufactures an 0.0 imaginary part
-// and lets IEEE act on it, which is how (+ 5.0-0.0i 2.0) loses the sign of its
-// imaginary part (-0.0 + 0.0 is +0.0) and (* 5.0-0.0i 2.0) loses it too.
-//
 // The test is the promotion table, not a type: any real kind whose LUB with Complex
-// IS Complex gets absorbed into complex128, which cannot represent an exact zero,
-// so it must be handled here part-wise before promotion can invent the component.
-// A real kind whose LUB is BigComplex is safe to promote and falls through — the
-// promoted imaginary part is an EXACT zero there and the exact-zero rules preserve
+// IS Complex gets absorbed into complex128, which cannot represent an exact zero, so
+// it must be handled part-wise before promotion can invent the component. A real kind
+// whose LUB is BigComplex (that is: BigFloat) is safe to promote and falls through —
+// the promoted imaginary part is an EXACT zero there and the exact-zero rules preserve
 // the sign for free.
 //
-// This used to test `o.(*Float)`, on the stated grounds that "every other real kind
-// promotes Complex to BigComplex." That stopped being true when exactness contagion
-// was fixed (promotion.go, Zone 3): Integer/BigInteger/Rational × Complex now lands
-// at Complex, so an exact real reaching complex128 multiplication silently ate the
-// sign of a signed-zero component. Keying off the table instead of a type list is
-// what keeps the two facts from drifting apart again.
+// Keying off the table rather than a type list is what keeps this from drifting out of
+// step with Zone 3 again.
 func realPartsOf(o Number) (float64, bool) {
 	_, isComplex := o.(ComplexNumber)
 	if isComplex {
@@ -459,7 +524,11 @@ func hashComplexComponent(f float64) uint64 {
 // HashCode returns a hash of the complex value.
 // Hashes real and imaginary parts independently via hashComplexComponent
 // and combines them with a multiplicative mixing constant.
-// NaN and ±Inf components use bitwise hashing to avoid big.Float panics.
+//
+// A NaN component is CANONICALIZED (hashNaN), not hashed bitwise: eqv? identifies every
+// NaN, so the Hashable contract requires every NaN to hash alike, and the raw bits of
+// (/ 0.0 0.0) and a literal +nan.0 differ. ±Inf components stay bit-exact — +inf.0 and
+// -inf.0 are not eqv?, so they are free to hash differently and should.
 func (p *Complex) HashCode() uint64 {
 	r := hashComplexComponent(real(p.Value))
 	i := hashComplexComponent(imag(p.Value))

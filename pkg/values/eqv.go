@@ -66,8 +66,16 @@ func EqvNumber(a, b Number) bool {
 	// A typed-nil numeric pointer is void, and every method below would fault on
 	// it. The per-type EqualTo methods this replaces each carried their own nil
 	// guard; the guard survives their collapse, in one place.
+	//
+	// The answer is the interface compare, NOT `IsVoid(a) == IsVoid(b)`. A nil *Float
+	// and a nil *BigInteger are both void, and they are not the same value — the older
+	// form said they were, which was a WIDENING of what the per-type guards did (each
+	// compared a typed pointer, so a nil of another kind fell through to false). A nil
+	// Number is a Go-side defect in every case, and collapsing two distinct defects into
+	// #t deletes the signal. Interface equality already carries the dynamic type, so it
+	// gets this right for free.
 	if IsVoid(a) || IsVoid(b) {
-		return IsVoid(a) == IsVoid(b)
+		return a == b
 	}
 	// Safe interface compare: every Value is Go-comparable by contract (see the
 	// Value doc comment), and every Number is pointer-shaped.
@@ -84,10 +92,36 @@ func EqvNumber(a, b Number) bool {
 	// signed-zero and precision rules applied to each of them anyway.
 	ca, aIsComplex := a.(ComplexNumber)
 	cb, bIsComplex := b.(ComplexNumber)
-	if aIsComplex || bIsComplex {
-		if !aIsComplex || !bIsComplex {
+	if aIsComplex != bIsComplex {
+		// One complex, one real. Almost always #f — but an EXACT complex with an
+		// EXACT-ZERO imaginary part IS a real number, and R7RS §6.1 requires two exact
+		// numbers that are = to be eqv?. Rejecting outright made `=` and `eqv?`
+		// contradict each other on such a value, which is precisely the lattice
+		// violation this file exists to prevent.
+		//
+		// Scheme cannot construct one: make-rectangular canonicalizes, so
+		// (make-rectangular 1 0) evaluates to 1. But values.NewBigComplex is PUBLIC API
+		// and does not canonicalize, so an embedder can hand us one, and EqvNumber
+		// claims to be the single authority on numeric equivalence. It does not get to
+		// depend on an invariant it neither owns nor states.
+		//
+		// INEXACT is not the same case and must not collapse: 1.0+0.0i is a distinct
+		// object from 1.0 (its imaginary part is an inexact zero, not an absent one),
+		// and (eqv? 1.0 1.0+0.0i) is #f in Chez.
+		cx, re := ca, b
+		if bIsComplex {
+			cx, re = cb, a
+		}
+		if !cx.IsExact() || !isExactZero(cx.ImagPart()) {
 			return false
 		}
+		return EqvNumber(cx.RealPart(), re)
+	}
+	if aIsComplex {
+		// Both complex. Decided by components, at any exactness. Recursing rather than
+		// calling Compare is deliberate: there is no ordering on the complex plane, so
+		// Compare is not meaningful there, and the components need the signed-zero and
+		// precision rules applied to each of them anyway.
 		if !EqvNumber(ca.RealPart(), cb.RealPart()) {
 			return false
 		}

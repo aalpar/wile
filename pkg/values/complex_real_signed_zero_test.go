@@ -8,23 +8,35 @@ import (
 )
 
 // TestComplexTimesRealPreservesSignedZero pins the sign of a zero component through
-// arithmetic with a REAL operand.
+// arithmetic with a REAL operand, in BOTH operand orders, for EVERY real kind absorbed
+// into complex128 (Float, Integer, BigInteger, Rational).
 //
-// A real number has NO imaginary component. Promotion used to manufacture one -- an
-// INEXACT 0.0 -- and IEEE then ate the sign: -0.0 + 0.0 is +0.0, and -0.0*r + 0.0*s
-// is +0.0. So (* 5.0-0.0i 2.0) came back 10.0+0.0i.
+// A real number has NO imaginary component. Promotion manufactures one -- an INEXACT
+// 0.0 -- and IEEE then eats the sign: -0.0 + 0.0 is +0.0, and -0.0*r + 0.0*s is +0.0.
+// So a promoted (* 5.0-0.0i 2.0) comes back 10.0+0.0i. The four real ⊕ complex helpers
+// in complex.go exist to make sure no operand is ever promoted into that trap.
 //
-// The EXACT reals were always correct, and that is the tell: their promoted imaginary
-// part is an EXACT zero, so the exact-zero identity returns the operand untouched and
-// the annihilation rule kills the cross terms. The rule was already doing the job for
-// half the inputs. A real's imaginary part is a mathematical zero, not an IEEE one.
+// THE EXACT KINDS ARE NOT SPECIAL, AND THAT IS NEW. They used to be: exact × Complex
+// escalated to BigComplex, whose imaginary component could hold an EXACT zero, so the
+// exact-zero identity and annihilation rules preserved the sign for free. That bought
+// signed-zero correctness with a non-associative join -- (+ 1 1.5 2.0+0.0i) and
+// (+ 2.0+0.0i 1 1.5) landed on different kinds and were not eqv? -- so the escalation
+// is gone (promotion.go Zone 3) and the exact kinds now take the SAME part-wise path as
+// Float. Which means the sign is no longer protected for them by an accident of
+// representation; it is protected by the code under test here. Every exact row below
+// is load-bearing, and none of them existed before.
 //
 //	petite -q <<< '(display (list (* 5.0-0.0i 2.0) (+ 5.0-0.0i 2.0) (/ -0.0+5.0i 2.0)))'
 //	racket   -e '(display (list (* 5.0-0.0i 2.0) (+ 5.0-0.0i 2.0) (/ -0.0+5.0i 2.0)))'
 //	# both => (10.0-0.0i 7.0-0.0i -0.0+2.5i)
+//
+//	petite -q <<< '(display (list (* 2 5.0-0.0i) (+ 1 5.0-0.0i) (- 2 5.0+0.0i) (/ 10 2.0+0.0i)))'
+//	# => (10.0-0.0i 6.0-0.0i -3.0-0.0i 5.0-0.0i)
 func TestComplexTimesRealPreservesSignedZero(t *testing.T) {
 	negZeroImag := NewComplex(complex(5, math.Copysign(0, -1))) // 5.0-0.0i
 	negZeroReal := NewComplex(complex(math.Copysign(0, -1), 5)) // -0.0+5.0i
+	posZeroImag := NewComplex(complex(5, 0))                    // 5.0+0.0i
+	twoPosZeroImag := NewComplex(complex(2, 0))                 // 2.0+0.0i
 
 	tcs := []struct {
 		name string
@@ -59,13 +71,51 @@ func TestComplexTimesRealPreservesSignedZero(t *testing.T) {
 			return NewFloat(2.0).Divide(negZeroReal)
 		}, "-0.0-0.4i"},
 
-		// The EXACT reals must KEEP working -- they were never broken.
+		// EXACT REAL as the RIGHT operand (Complex receiver, absorbed by realPartsOf).
 		{"complex * exact real", func() (Number, error) {
 			return negZeroImag.Multiply(NewInteger(2)), nil
 		}, "10.0-0.0i"},
 		{"complex + exact real", func() (Number, error) {
-			return negZeroImag.Add(NewInteger(0)), nil
+			return negZeroImag.Add(NewInteger(1)), nil
+		}, "6.0-0.0i"},
+		{"complex - exact real", func() (Number, error) {
+			return negZeroImag.Subtract(NewInteger(2)), nil
+		}, "3.0-0.0i"},
+		{"complex / exact real", func() (Number, error) {
+			return negZeroReal.Divide(NewInteger(2))
+		}, "-0.0+2.5i"},
+
+		// EXACT REAL as the LEFT operand. These reach the dispatch table, which routes
+		// them through the same part-wise helpers rather than promoting them into
+		// complex128. Before Zone 3 was made associative, every one of these escalated
+		// to BigComplex and was correct for the wrong reason.
+		{"exact real + complex", func() (Number, error) {
+			return NewInteger(1).Add(negZeroImag), nil
+		}, "6.0-0.0i"},
+		{"exact real * complex", func() (Number, error) {
+			return NewInteger(2).Multiply(negZeroImag), nil
+		}, "10.0-0.0i"},
+		{"exact real - complex", func() (Number, error) {
+			return NewInteger(2).Subtract(posZeroImag), nil
+		}, "-3.0-0.0i"},
+		{"exact real / complex", func() (Number, error) {
+			return NewInteger(10).Divide(twoPosZeroImag)
 		}, "5.0-0.0i"},
+
+		// The other two exact kinds take the identical path; pin them so a future
+		// per-kind divergence cannot hide behind Integer's coverage.
+		{"bigint + complex", func() (Number, error) {
+			return NewBigIntegerFromInt64(1).Add(negZeroImag), nil
+		}, "6.0-0.0i"},
+		{"bigint / complex", func() (Number, error) {
+			return NewBigIntegerFromInt64(10).Divide(twoPosZeroImag)
+		}, "5.0-0.0i"},
+		{"rational * complex", func() (Number, error) {
+			return NewRational(4, 2).Multiply(negZeroImag), nil
+		}, "10.0-0.0i"},
+		{"rational - complex", func() (Number, error) {
+			return NewRational(4, 2).Subtract(posZeroImag), nil
+		}, "-3.0-0.0i"},
 	}
 
 	for _, tc := range tcs {

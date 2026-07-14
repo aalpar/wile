@@ -33,6 +33,65 @@ func TestPromotionTable_Symmetry(t *testing.T) {
 	}
 }
 
+// kindLabels gives promotion-law failures a readable name. The tables are
+// indexed by NumericKind, which has no String method; a raw %d in a failing
+// triple is unreadable exactly when you most need to read it.
+var kindLabels = [numKinds]string{
+	KindInteger:    "Integer",
+	KindBigInteger: "BigInteger",
+	KindFloat:      "Float",
+	KindBigFloat:   "BigFloat",
+	KindRational:   "Rational",
+	KindComplex:    "Complex",
+	KindBigComplex: "BigComplex",
+}
+
+// TestPromotionTable_Associativity pins the third of the three semilattice laws
+// named in promotionTable's own doc comment. Symmetry and idempotency each had a
+// test; associativity did not, and the table silently stopped satisfying it.
+//
+// A join must be associative or the result of an n-ary + or * depends on the fold
+// order. That is not an abstract algebra complaint: the result KIND is observable
+// through eqv?/equal? (R7RS §6.1 makes representation observable for inexacts), so
+// a non-associative join means (+ a b c) and (+ c a b) can produce values that are
+// = but not eqv?, and that print identically. See docs/numeric/tower.md.
+func TestPromotionTable_Associativity(t *testing.T) {
+	c := qt.New(t)
+	for a := range numKinds {
+		for b := range numKinds {
+			for d := range numKinds {
+				left := promotionTable[promotionTable[a][b]][d]
+				right := promotionTable[a][promotionTable[b][d]]
+				c.Assert(left, qt.Equals, right, qt.Commentf(
+					"(%s ⊔ %s) ⊔ %s = %s  but  %s ⊔ (%s ⊔ %s) = %s",
+					kindLabels[a], kindLabels[b], kindLabels[d], kindLabels[left],
+					kindLabels[a], kindLabels[b], kindLabels[d], kindLabels[right],
+				))
+			}
+		}
+	}
+}
+
+// TestComparisonTable_Associativity holds comparisonTable to the same law. It is
+// a join too, and the same argument applies: (< a b) must not depend on how a
+// three-way comparison was folded.
+func TestComparisonTable_Associativity(t *testing.T) {
+	c := qt.New(t)
+	for a := range numKinds {
+		for b := range numKinds {
+			for d := range numKinds {
+				left := comparisonTable[comparisonTable[a][b]][d]
+				right := comparisonTable[a][comparisonTable[b][d]]
+				c.Assert(left, qt.Equals, right, qt.Commentf(
+					"(%s ⊔ %s) ⊔ %s = %s  but  %s ⊔ (%s ⊔ %s) = %s",
+					kindLabels[a], kindLabels[b], kindLabels[d], kindLabels[left],
+					kindLabels[a], kindLabels[b], kindLabels[d], kindLabels[right],
+				))
+			}
+		}
+	}
+}
+
 func TestPromotionTable_Diagonal(t *testing.T) {
 	c := qt.New(t)
 	// Every type paired with itself should return itself.
@@ -77,16 +136,21 @@ func TestPromotionTable_ExactResults(t *testing.T) {
 		{KindFloat, KindBigFloat, KindBigFloat},
 		{KindBigFloat, KindBigFloat, KindBigFloat},
 
-		// Zone 3: Anything × Complex — contagion does NOT extend here. An exact
-		// operand promoted into complex128 gets a manufactured +0.0 imaginary part,
-		// and a manufactured +0.0 is not an exact 0: the exact-zero rules that give
-		// (/ 10 2.0+0.0i) => 5.0-0.0i its sign stop applying. BigComplex can hold the
-		// exact zero, so the sign survives.
-		{KindInteger, KindComplex, KindBigComplex},
+		// Zone 3: Anything × Complex — the SAME contagion as Zone 2. An exact operand
+		// meeting an inexact Complex is absorbed into it, exactly as it is absorbed
+		// into a Float. Associativity forces this: exact ⊔ Float is Float and
+		// Float ⊔ Complex is Complex, so exact ⊔ Complex must be Complex or the join
+		// stops being a semilattice (TestPromotionTable_Associativity).
+		//
+		// The exact-zero hazard is real and is handled at the OPERATION, not here:
+		// real ⊕ complex is computed part-wise so no imaginary component is ever
+		// manufactured, and (/ 10 2.0+0.0i) => 5.0-0.0i still holds. See the
+		// real ⊕ complex helpers in complex.go.
+		{KindInteger, KindComplex, KindComplex},
 		{KindInteger, KindBigComplex, KindBigComplex},
-		{KindBigInteger, KindComplex, KindBigComplex},
+		{KindBigInteger, KindComplex, KindComplex},
 		{KindBigInteger, KindBigComplex, KindBigComplex},
-		{KindRational, KindComplex, KindBigComplex},
+		{KindRational, KindComplex, KindComplex},
 		{KindRational, KindBigComplex, KindBigComplex},
 		{KindFloat, KindComplex, KindComplex},
 		{KindFloat, KindBigComplex, KindBigComplex},
@@ -161,11 +225,13 @@ func TestPromotionTable_ContagionIsLossy(t *testing.T) {
 			promotionTable[exact][KindFloat], qt.Equals, KindFloat,
 			qt.Commentf("exact kind %d + Float must contaminate to Float (R7RS 6.2.2)", exact),
 		)
-		// NOT extended to the complex axis — see the Zone 3 comment in promotion.go.
+		// The SAME contagion on the complex axis — see the Zone 3 comment in
+		// promotion.go. The exact-zero imaginary part is protected at the operation
+		// (real ⊕ complex is part-wise), not by escalating the join.
 		c.Assert(
-			promotionTable[exact][KindComplex], qt.Equals, KindBigComplex,
-			qt.Commentf("exact kind %d + Complex must stay BigComplex so an exact zero "+
-				"imaginary part survives to the sign rules", exact),
+			promotionTable[exact][KindComplex], qt.Equals, KindComplex,
+			qt.Commentf("exact kind %d + Complex must contaminate to Complex, exactly as "+
+				"it does to Float; escalating instead breaks associativity", exact),
 		)
 		// Precision the program ASKED for is still preserved.
 		c.Assert(
@@ -338,42 +404,60 @@ func TestPromotionResultKind_API(t *testing.T) {
 	c := qt.New(t)
 	// Public API produces same results as direct table access.
 	c.Assert(PromotionResultKind(KindInteger, KindFloat), qt.Equals, KindFloat)
-	c.Assert(PromotionResultKind(KindRational, KindComplex), qt.Equals, KindBigComplex)
+	c.Assert(PromotionResultKind(KindRational, KindComplex), qt.Equals, KindComplex)
 	c.Assert(PromotionResultKind(KindFloat, KindComplex), qt.Equals, KindComplex)
+	c.Assert(PromotionResultKind(KindRational, KindBigComplex), qt.Equals, KindBigComplex)
 }
 
 // TestComparisonResultKind_API pins that the two public accessors DISAGREE on
-// exactly the pairs they are supposed to: an exact kind meeting an inexact one.
-// Arithmetic contaminates down to the inexact operand; comparison promotes up so
-// that neither operand is rounded. Everywhere else they agree.
+// exactly the pairs they are supposed to, and agree everywhere else.
+//
+// The rule, stated once: the tables differ exactly where ARITHMETIC would round an
+// exact operand — that is, where an exact kind meets a FLOAT64-BACKED inexact kind
+// (Float or Complex). Arithmetic contaminates down to the inexact operand's
+// representation, because that is R7RS §6.2.2 exactness contagion. Comparison promotes
+// UP to a domain that holds both operands exactly, because a boolean answer cannot
+// afford a rounded operand:
+//
+//	(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))  =>  #f
+//
+// Meeting BigFloat or BigComplex needs no such split: those hold an exact operand
+// without rounding it, so both tables agree there.
 func TestComparisonResultKind_API(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(ComparisonResultKind(KindInteger, KindFloat), qt.Equals, KindBigFloat)
+	c.Assert(PromotionResultKind(KindInteger, KindFloat), qt.Equals, KindFloat)
+
 	c.Assert(ComparisonResultKind(KindRational, KindComplex), qt.Equals, KindBigComplex)
-	// Same as arithmetic here: Zone 3 already refuses to round an exact operand.
+	c.Assert(PromotionResultKind(KindRational, KindComplex), qt.Equals, KindComplex)
 
 	// No exact operand to protect: the tables agree.
 	c.Assert(ComparisonResultKind(KindFloat, KindComplex), qt.Equals, KindComplex)
 	c.Assert(ComparisonResultKind(KindFloat, KindBigFloat), qt.Equals, KindBigFloat)
+	// An exact operand meeting an arbitrary-precision kind is held exactly by it, so
+	// there is nothing to round and nothing to split.
+	c.Assert(ComparisonResultKind(KindInteger, KindBigFloat), qt.Equals, KindBigFloat)
+	c.Assert(PromotionResultKind(KindInteger, KindBigFloat), qt.Equals, KindBigFloat)
 
-	// The tables differ on EXACTLY one pair-shape: an exact kind meeting Float.
-	// Nowhere else. Zone 3 already declines to round an exact operand into
-	// complex128, so exact × Complex is BigComplex in both.
 	exact := map[NumericKind]bool{KindInteger: true, KindBigInteger: true, KindRational: true}
+	// The float64-backed inexact kinds: the ones that cannot hold an exact operand.
+	lossy := map[NumericKind]bool{KindFloat: true, KindComplex: true}
+
 	for a := range numKinds {
 		for b := range numKinds {
-			differs := (exact[a] && b == KindFloat) || (exact[b] && a == KindFloat)
+			differs := (exact[a] && lossy[b]) || (exact[b] && lossy[a])
 			if differs {
 				c.Assert(
 					promotionTable[a][b], qt.Not(qt.Equals), comparisonTable[a][b],
-					qt.Commentf("exact × Float MUST differ between the tables: arithmetic "+
-						"contaminates to Float, comparison promotes to BigFloat (%d, %d)", a, b),
+					qt.Commentf("exact × float64-backed MUST differ: arithmetic contaminates "+
+						"down, comparison promotes up (%s, %s)", kindLabels[a], kindLabels[b]),
 				)
 				continue
 			}
 			c.Assert(
 				promotionTable[a][b], qt.Equals, comparisonTable[a][b],
-				qt.Commentf("tables may differ only on exact × Float, but differ at (%d, %d)", a, b),
+				qt.Commentf("tables may differ only on exact × float64-backed, "+
+					"but differ at (%s, %s)", kindLabels[a], kindLabels[b]),
 			)
 		}
 	}

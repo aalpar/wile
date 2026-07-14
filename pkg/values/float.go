@@ -41,10 +41,17 @@ func NewFloat(v float64) *Float {
 }
 
 // HashCode returns a hash of the float value.
-// Uses the canonical inexact-family hash so that Float and BigFloat
-// produce identical hashes for equal values.
-// NaN and Inf use bitwise hashing as a fallback since BigFloat has
-// no Inf/NaN, making cross-type equality impossible for those values.
+//
+// The Hashable contract is one-directional — equal implies same hash — and after the
+// R7RS §6.1 alignment a Float is NEVER eqv? to a BigFloat (representation is observable
+// for inexacts, so they are distinct numbers). The contract therefore says nothing about
+// the two, and this hash owes cross-type agreement to nothing. It used to claim it
+// "produce[d] identical hashes for equal values" across Float and BigFloat, which is now
+// a promise about a relation that cannot hold.
+//
+// What it DOES owe: every NaN hashes alike (eqv? identifies all NaNs, so the contract
+// binds), and ±Inf stay bit-exact (+inf.0 and -inf.0 are NOT eqv?, so they must be able
+// to differ).
 func (p *Float) HashCode() uint64 {
 	// Every NaN hashes alike, because eqv? identifies every NaN. Hashing the raw
 	// bits would give (/ 0.0 0.0) and +nan.0 different hashes despite their being
@@ -150,18 +157,13 @@ func (p *Float) Add(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
-	// Addition is COMMUTATIVE, so hand a complex operand back to the complex kind,
-	// which owns the part-wise real handling. Falling through would promote this Float
-	// into a complex with a manufactured 0.0 imaginary part, and IEEE would then eat
-	// the sign of a signed-zero imaginary component in o.
-	c, isComplex := o.(*Complex)
-	if isComplex {
-		return c.Add(p)
-	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value + v.Value)
 	}
+	// A *Complex operand falls through to the dispatch table, which computes
+	// real ⊕ complex part-wise and never manufactures an imaginary component.
+	// Float shares that path with the exact kinds; see makeArithmeticDispatch.
 	return floatAdd[o.Kind()](p, o)
 }
 
@@ -173,23 +175,11 @@ func (p *Float) Subtract(o Number) Number {
 	if isExactZero(o) {
 		return p
 	}
-	// Subtraction is NOT commutative, so like Divide it is spelled out rather than
-	// handed to the complex kind. A real MINUEND has no imaginary component, so the
-	// result's imaginary part is simply the NEGATION of the subtrahend's -- not
-	// (0.0 - d), which IEEE turns into +0.0 for d = +0.0, losing the sign.
-	// (- 2.0 5.0+0.0i) is -3.0-0.0i in both oracles; promotion gave -3.0+0.0i.
-	//
-	// This was the missing fourth member of the family: Add and Multiply got
-	// commutative redirects, Divide got its own formula, and Subtract -- equally
-	// non-commutative -- got nothing.
-	c, isComplex := o.(*Complex)
-	if isComplex {
-		return NewComplex(complex(p.Value-real(c.Value), -imag(c.Value)))
-	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value - v.Value)
 	}
+	// A *Complex operand falls through to the dispatch table; see Add.
 	return floatSubtract[o.Kind()](p, o)
 }
 
@@ -205,15 +195,11 @@ func (p *Float) Multiply(o Number) Number {
 	if exactZeroEither(p, o) {
 		return NewInteger(0)
 	}
-	// Multiplication is COMMUTATIVE; see Add.
-	c, isComplex := o.(*Complex)
-	if isComplex {
-		return c.Multiply(p)
-	}
 	v, ok := o.(*Float)
 	if ok {
 		return NewFloat(p.Value * v.Value)
 	}
+	// A *Complex operand falls through to the dispatch table; see Add.
 	return floatMultiply[o.Kind()](p, o)
 }
 
@@ -230,39 +216,7 @@ func (p *Float) Divide(o Number) (Number, error) {
 	if ok {
 		return NewFloat(p.Value / v.Value), nil
 	}
-	// Division is NOT commutative, so unlike Add and Multiply it cannot simply be
-	// handed to the complex kind. Spell out the conjugate formula, which keeps the
-	// fact that a real DIVIDEND has no imaginary component:
-	//
-	//	a / (c+di) = (a·c)/(c²+d²) + (−a·d)/(c²+d²)·i
-	//
-	// Promotion instead manufactures a 0.0 imaginary part for the dividend, and Go's
-	// complex division then computes the real part as (a·c + b·d) with b = 0.0 --
-	// so a·c = -0.0 is added to +0.0 and the sign dies. (/ 2.0 -0.0+5.0i) came back
-	// 0.0-0.4i; both oracles give -0.0-0.4i.
-	//
-	// SMITH'S ALGORITHM (1962), which is what Go's own complex division uses -- cited in
-	// the comment above, and then not used. The naive conjugate form, a*c/(c²+d²) and
-	// -a*d/(c²+d²), is a strict downgrade in RANGE: c²+d² overflows to +Inf above
-	// ~1.3e154 and flushes to zero below ~1e-154. It collapsed (/ 1.0 1e200+1e200i) to
-	// 0.0-0.0i and made (/ 2.0 1e-200+0.0i) manufacture a NaN out of an ordinary finite
-	// division. Dividing through by the LARGER component keeps the intermediate in
-	// range, costs one comparison, and preserves the signed zero just the same.
-	//
-	// A complex-zero divisor drives denom to 0 and yields NaN components, which is the
-	// same answer the general path gives and the one both oracles want.
-	c, isComplex := o.(*Complex)
-	if isComplex {
-		re, im := real(c.Value), imag(c.Value)
-		if math.Abs(re) >= math.Abs(im) {
-			ratio := im / re
-			denom := re + im*ratio
-			return NewComplex(complex(p.Value/denom, -p.Value*ratio/denom)), nil
-		}
-		ratio := re / im
-		denom := re*ratio + im
-		return NewComplex(complex(p.Value*ratio/denom, -p.Value/denom)), nil
-	}
+	// A *Complex divisor falls through to the dispatch table; see Add.
 	return floatDivide[o.Kind()](p, o)
 }
 

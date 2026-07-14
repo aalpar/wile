@@ -330,7 +330,7 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"Integer+Rational":   "*values.Rational",
 		"Integer+Float":      "*values.Float",
 		"Integer+BigFloat":   "*values.BigFloat",
-		"Integer+Complex":    "*values.BigComplex",
+		"Integer+Complex":    "*values.Complex",
 		"Integer+BigComplex": "*values.BigComplex",
 		// BigInteger row
 		"BigInteger+Integer":    "*values.BigInteger",
@@ -338,7 +338,7 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"BigInteger+Rational":   "*values.Rational",
 		"BigInteger+Float":      "*values.Float",
 		"BigInteger+BigFloat":   "*values.BigFloat",
-		"BigInteger+Complex":    "*values.BigComplex",
+		"BigInteger+Complex":    "*values.Complex",
 		"BigInteger+BigComplex": "*values.BigComplex",
 		// Rational row
 		"Rational+Integer":    "*values.Rational",
@@ -346,7 +346,7 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"Rational+Rational":   "*values.Rational",
 		"Rational+Float":      "*values.Float",
 		"Rational+BigFloat":   "*values.BigFloat",
-		"Rational+Complex":    "*values.BigComplex",
+		"Rational+Complex":    "*values.Complex",
 		"Rational+BigComplex": "*values.BigComplex",
 		// Float row
 		"Float+Integer":    "*values.Float",
@@ -365,9 +365,9 @@ func TestNumericTower_ResultTypes(t *testing.T) {
 		"BigFloat+Complex":    "*values.BigComplex", // Preserves BigFloat precision
 		"BigFloat+BigComplex": "*values.BigComplex",
 		// Complex row
-		"Complex+Integer":    "*values.BigComplex",
-		"Complex+BigInteger": "*values.BigComplex",
-		"Complex+Rational":   "*values.BigComplex",
+		"Complex+Integer":    "*values.Complex",
+		"Complex+BigInteger": "*values.Complex",
+		"Complex+Rational":   "*values.Complex",
 		"Complex+Float":      "*values.Complex",
 		"Complex+BigFloat":   "*values.BigComplex",
 		"Complex+Complex":    "*values.Complex",
@@ -462,7 +462,7 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"Integer/Rational":   "*values.Rational",
 		"Integer/Float":      "*values.Float",
 		"Integer/BigFloat":   "*values.BigFloat",
-		"Integer/Complex":    "*values.BigComplex",
+		"Integer/Complex":    "*values.Complex",
 		"Integer/BigComplex": "*values.BigComplex",
 		// BigInteger row
 		"BigInteger/Integer":    "*values.Rational",
@@ -470,7 +470,7 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"BigInteger/Rational":   "*values.Rational",
 		"BigInteger/Float":      "*values.Float",
 		"BigInteger/BigFloat":   "*values.BigFloat",
-		"BigInteger/Complex":    "*values.BigComplex",
+		"BigInteger/Complex":    "*values.Complex",
 		"BigInteger/BigComplex": "*values.BigComplex",
 		// Rational row
 		"Rational/Integer":    "*values.Rational",
@@ -478,7 +478,7 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"Rational/Rational":   "*values.Rational",
 		"Rational/Float":      "*values.Float",
 		"Rational/BigFloat":   "*values.BigFloat",
-		"Rational/Complex":    "*values.BigComplex",
+		"Rational/Complex":    "*values.Complex",
 		"Rational/BigComplex": "*values.BigComplex",
 		// Float row
 		"Float/Integer":    "*values.Float",
@@ -497,9 +497,9 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		"BigFloat/Complex":    "*values.BigComplex",
 		"BigFloat/BigComplex": "*values.BigComplex",
 		// Complex row
-		"Complex/Integer":    "*values.BigComplex",
-		"Complex/BigInteger": "*values.BigComplex",
-		"Complex/Rational":   "*values.BigComplex",
+		"Complex/Integer":    "*values.Complex",
+		"Complex/BigInteger": "*values.Complex",
+		"Complex/Rational":   "*values.Complex",
 		"Complex/Float":      "*values.Complex",
 		"Complex/BigFloat":   "*values.BigComplex",
 		"Complex/Complex":    "*values.Complex",

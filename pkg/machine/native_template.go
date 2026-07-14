@@ -403,37 +403,48 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 }
 
 // literalIdentical reports whether two values are interchangeable for literal-pool
-// deduplication. This is STRICTER than EqualTo in two ways.
+// deduplication. It is THE pool's only equality predicate — every dedup path goes
+// through it (AddLiteral and findLiteral both).
 //
-// Sign: -0.0 and +0.0 are numerically equal but must stay separate literals to
-// preserve IEEE 754 signed-zero semantics in operations like atan2.
+// It is STRICTER than EqualTo in exactly one way: KIND. Two values of different
+// concrete types never dedup, even when they are eqv?. An Integer 1 and a BigInteger 1
+// ARE the same number under R7RS §6.1, but they dispatch to different arithmetic, and
+// merging them RE-TYPES the literal. Same for Rational 1/1. reflect.TypeOf is preferred
+// over a type switch enumerating the numeric kinds precisely because it cannot rot when
+// a new values.Value type is added. It runs once per literal at COMPILE time, never in
+// the VM loop.
 //
-// Kind: a Float and a BigFloat may compare equal under EqualTo, but they are NOT
-// interchangeable — they dispatch to different arithmetic. Merging them re-types the
-// literal, so an unrelated #m1.0 in the same body would silently turn every 1.0 into
-// a BigFloat. Values of different concrete types never dedup.
+// Everything else is delegated to EqualTo, which routes to values.EqvNumber — the single
+// authority on numeric equivalence (see values/eqv.go). This used to hand-roll a Float
+// arm, `af.Value == bf.Value && Signbit == Signbit`, and eqv.go's own doc named it as
+// one of the three drifted copies of the numeric rule. It was never unified, and by the
+// end it DISAGREED with EqualTo: `NaN == NaN` is false in IEEE, so two +nan.0 literals
+// were kept apart, while EqualTo now (correctly, per Chez) calls them eqv?. Both of its
+// stated jobs are already done, and done better, by EqvNumber:
 //
-// The old comparison was asymmetric: a pooled *Float rejected a non-*Float candidate,
-// but a pooled *BigFloat fell through to EqualTo, which accepted an equal *Float.
-// reflect.TypeOf is preferred over a type switch enumerating the numeric kinds
-// precisely because it cannot rot when a new values.Value type is added — which is
-// the failure mode that produced this bug. It runs once per literal at COMPILE time,
-// never in the VM loop.
+//   - Signed zero: EqvNumber consults SignBit precisely because IEEE says 0.0 == -0.0.
+//     (eqv? 0.0 -0.0) is #f, so the two stay separate literals, and atan2 keeps its sign.
+//   - Float vs BigFloat: EqvNumber separates inexact numbers by Kind, so they are never
+//     eqv? and can never merge — the reflect gate above is belt-and-braces for them.
+//
+// Merging two NaN literals is SOUND, and is what now happens: every NaN is eqv? to every
+// other, so a program cannot tell the merged pool from the unmerged one.
 func literalIdentical(a, b values.Value) bool {
 	if reflect.TypeOf(a) != reflect.TypeOf(b) {
 		return false
 	}
-	af, ok := a.(*values.Float)
-	if ok {
-		bf := b.(*values.Float) // same concrete type, checked above
-		return af.Value == bf.Value && math.Signbit(af.Value) == math.Signbit(bf.Value)
-	}
 	return a.EqualTo(b)
 }
 
+// findLiteral returns the pooled literal interchangeable with v, or nil.
+//
+// It uses literalIdentical, NOT a bare EqualTo. It used to use EqualTo, which made the
+// pool carry two dedup predicates that disagreed: AddLiteral refused to merge across
+// concrete types while this path merged freely, so deduplicateLiteral could hand back a
+// pooled Integer 1 in place of a BigInteger 1 and silently re-type the literal.
 func (p *NativeTemplate) findLiteral(v values.Value) values.Value {
 	for _, l := range p.literals {
-		if l.EqualTo(v) {
+		if literalIdentical(l, v) {
 			return l
 		}
 	}

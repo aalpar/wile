@@ -135,50 +135,34 @@ func classifyBigComplexPrecision(_ *values.BigComplex) PrecisionRank {
 // Join computes the least upper bound of two type classes.
 // This determines the result type of a binary operation.
 //
-// Two rules, and they pull in opposite directions on the precision axis:
+// It is the componentwise max on a product of two independent axes — precision and
+// complexity — and NOTHING ELSE. That is the whole model, and its simplicity is the
+// point: max is associative and commutative, so a Join built only from max inherits
+// both laws for free. The real table must satisfy the same laws, and
+// TestLattice_PredictionsVsActual is what holds it to them.
 //
-//   - On the REAL axis, exactness contagion applies: an exact operand meeting a
-//     Float is absorbed into it, and the result is a Float. That is a plain max
-//     (see maxPrecision).
+// THIS MODEL IS THE ORACLE. It is derived from the lattice, independently of
+// promotionTable, and it earns its keep only so long as that independence is real.
+// It once carried a carve-out here — an escalation to BigFloat precision when an
+// exact real met a float64-backed complex — added to make the model agree with a
+// table that had stopped being associative. That is backwards. A model edited to
+// match the implementation is not an oracle, it is a mirror, and it will report green
+// on exactly the bug it exists to catch. It did: (+ 1 1.5 2.0+0.0i) and
+// (+ 2.0+0.0i 1 1.5) produced values that were =, printed identically, and were not
+// eqv?, and this file agreed that they should.
 //
-//   - On the COMPLEX axis it does NOT. An exact operand promoted into complex128
-//     acquires a MANUFACTURED +0.0 imaginary part, and a manufactured +0.0 is not
-//     an exact 0 — the exact-zero rules that give (/ 10 2.0+0.0i) => 5.0-0.0i its
-//     sign stop applying, and the sign is silently eaten. So the join escalates to
-//     arbitrary precision, where the exact zero survives.
+// The exact-zero problem that the carve-out was reaching for is real, but it is not a
+// PROMOTION problem and it does not belong in a join. It is an OPERATION problem, and
+// it is solved where operations live: real ⊕ complex is computed part-wise so that no
+// imaginary component is ever manufactured. See the real ⊕ complex helpers in
+// complex.go, and promotionTable Zone 3.
 //
-// The asymmetry is not an inconsistency: contagion is free when nothing but
-// precision is at stake, and it is not free when it destroys a value's identity.
+// If this function ever needs a special case again, the special case is the bug.
 func Join(a, b TypeClass) TypeClass {
-	complexity := maxComplexity(a.Complexity, b.Complexity)
-	precision := maxPrecision(a.Precision, b.Precision)
-
-	// The escalation fires only when an exact REAL meets a FLOAT64-BACKED complex.
-	// That is the one pairing where the promotion would have to invent an imaginary
-	// part in complex128. An exact real meeting a BigComplex needs no escalation —
-	// BigComplex holds exact components, so the exact zero survives on its own.
-	if complexity == ComplexityComplex && exactRealOperand(a, b) && complexOperandIsFloat64(a, b) {
-		precision = PrecisionBigFloat
+	return TypeClass{
+		Precision:  maxPrecision(a.Precision, b.Precision),
+		Complexity: maxComplexity(a.Complexity, b.Complexity),
 	}
-	return TypeClass{Precision: precision, Complexity: complexity}
-}
-
-// exactRealOperand reports whether either side is an exact REAL — the operand
-// shape that must not be rounded into complex128.
-func exactRealOperand(a, b TypeClass) bool {
-	isExactReal := func(tc TypeClass) bool {
-		return tc.Complexity == ComplexityReal && tc.Precision <= PrecisionRational
-	}
-	return isExactReal(a) || isExactReal(b)
-}
-
-// complexOperandIsFloat64 reports whether the complex side of the pair is a
-// complex128 (*values.Complex) rather than an arbitrary-precision BigComplex.
-func complexOperandIsFloat64(a, b TypeClass) bool {
-	isFloat64Complex := func(tc TypeClass) bool {
-		return tc.Complexity == ComplexityComplex && tc.Precision == PrecisionFloat
-	}
-	return isFloat64Complex(a) || isFloat64Complex(b)
 }
 
 // maxPrecision is the join on the precision axis, and for ARITHMETIC it is a
@@ -319,12 +303,14 @@ func TestLattice_Join(t *testing.T) {
 		{"Float+BigFloat", TypeClass{PrecisionFloat, ComplexityReal}, TypeClass{PrecisionBigFloat, ComplexityReal},
 			TypeClass{PrecisionBigFloat, ComplexityReal}},
 
-		// Real + Complex (complexity promotion)
-		// Exact real meeting a Complex escalates: the exact zero must survive.
+		// Real + Complex (complexity promotion). Contagion applies here exactly as it
+		// does on the real axis: an exact real is absorbed into the Complex. Plain max
+		// on both axes, no special case. The exact zero is protected at the operation,
+		// not by escalating the join — see Join's doc comment.
 		{"Int+Complex", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityComplex},
-			TypeClass{PrecisionBigFloat, ComplexityComplex}},
+			TypeClass{PrecisionFloat, ComplexityComplex}},
 		{"BigFloat+Complex", TypeClass{PrecisionBigFloat, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityComplex},
-			TypeClass{PrecisionBigFloat, ComplexityComplex}}, // Lattice says BigFloat precision!
+			TypeClass{PrecisionBigFloat, ComplexityComplex}}, // BigFloat can't fit in complex128.
 		{"Rational+BigComplex(exact)", TypeClass{PrecisionRational, ComplexityReal}, TypeClass{PrecisionRational, ComplexityComplex},
 			TypeClass{PrecisionRational, ComplexityComplex}},
 
@@ -338,6 +324,41 @@ func TestLattice_Join(t *testing.T) {
 			got := Join(tt.a, tt.b)
 			c.Assert(got, qt.Equals, tt.expected)
 		})
+	}
+}
+
+// TestLattice_JoinIsASemilattice holds the MODEL to the three semilattice laws over
+// every TypeClass in the product, not just the hand-listed pairs above.
+//
+// A pure componentwise max satisfies all three by construction, so this test can only
+// fail if someone reintroduces a special case into Join. That is exactly what it is
+// for: the model's authority over promotionTable (via TestLattice_PredictionsVsActual)
+// is only worth anything while the model is lawful. Guard the oracle, not just the
+// implementation.
+func TestLattice_JoinIsASemilattice(t *testing.T) {
+	c := qt.New(t)
+
+	var all []TypeClass
+	for _, p := range []PrecisionRank{
+		PrecisionInteger, PrecisionBigInteger, PrecisionRational,
+		PrecisionFloat, PrecisionBigFloat,
+	} {
+		for _, x := range []ComplexityRank{ComplexityReal, ComplexityComplex} {
+			all = append(all, TypeClass{Precision: p, Complexity: x})
+		}
+	}
+
+	for _, a := range all {
+		for _, b := range all {
+			c.Assert(Join(a, b), qt.Equals, Join(b, a),
+				qt.Commentf("commutativity: %v ⊔ %v", a, b))
+			c.Assert(Join(a, a), qt.Equals, a,
+				qt.Commentf("idempotency: %v ⊔ %v", a, a))
+			for _, d := range all {
+				c.Assert(Join(Join(a, b), d), qt.Equals, Join(a, Join(b, d)),
+					qt.Commentf("associativity: %v ⊔ %v ⊔ %v", a, b, d))
+			}
+		}
 	}
 }
 
@@ -456,7 +477,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Integer+Rational":   "*values.Rational",
 		"Integer+Float":      "*values.Float",
 		"Integer+BigFloat":   "*values.BigFloat",
-		"Integer+Complex":    "*values.BigComplex",
+		"Integer+Complex":    "*values.Complex",
 		"Integer+BigComplex": "*values.BigComplex",
 
 		// BigInteger row
@@ -465,7 +486,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"BigInteger+Rational":   "*values.Rational",
 		"BigInteger+Float":      "*values.Float",
 		"BigInteger+BigFloat":   "*values.BigFloat",
-		"BigInteger+Complex":    "*values.BigComplex",
+		"BigInteger+Complex":    "*values.Complex",
 		"BigInteger+BigComplex": "*values.BigComplex",
 
 		// Rational row
@@ -474,7 +495,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Rational+Rational":   "*values.Rational",
 		"Rational+Float":      "*values.Float",
 		"Rational+BigFloat":   "*values.BigFloat",
-		"Rational+Complex":    "*values.BigComplex",
+		"Rational+Complex":    "*values.Complex",
 		"Rational+BigComplex": "*values.BigComplex",
 
 		// Float row
@@ -496,9 +517,9 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"BigFloat+BigComplex": "*values.BigComplex",
 
 		// Complex row
-		"Complex+Integer":    "*values.BigComplex",
-		"Complex+BigInteger": "*values.BigComplex",
-		"Complex+Rational":   "*values.BigComplex",
+		"Complex+Integer":    "*values.Complex",
+		"Complex+BigInteger": "*values.Complex",
+		"Complex+Rational":   "*values.Complex",
 		"Complex+Float":      "*values.Complex",
 		"Complex+BigFloat":   "*values.BigComplex", // Complex.Add(BigFloat) preserves precision!
 		"Complex+Complex":    "*values.Complex",

@@ -689,12 +689,42 @@ func (p *BigComplex) EqualTo(v Value) bool {
 }
 
 // HashCode returns a hash of the complex value.
-// Hashes real and imaginary parts independently via hashInexactNumeric
-// and combines them with a multiplicative mixing constant.
-// Uses the same combining formula as Complex.HashCode for cross-type consistency:
-// when BigComplex.EqualTo(*Complex) holds, both produce equal hashes.
+//
+// EQUALITY RECURSES INTO THE COMPONENTS, SO HASHING MUST TOO. EqvNumber decides a
+// complex pair by recursing onto RealPart and ImagPart (see eqv.go), which means the
+// Hashable contract — a.EqualTo(b) implies equal hashes — is discharged component-wise.
+// Delegating to each component's own HashCode is therefore not merely tidy, it is the
+// only way to inherit the component rules (NaN canonicalization, signed zero, the
+// exact-family Integer/BigInteger/Rational collapse) instead of re-deriving them.
+//
+// It used to hash toBigFloat(part).value directly. That bypassed BigFloat.HashCode, and
+// so bypassed hashNaN: a NaN BigFloat carries an explicit nan flag with a ZERO backing
+// big.Float, so a BigComplex with a NaN real part hashed identically to one with a 0.0
+// real part. Legal (a collision, and the contract is one-directional) but exactly the
+// discipline hash.go had just been introduced to establish, and the one numeric HashCode
+// not following it.
+//
+// It also used to claim it matched Complex.HashCode "for cross-type consistency: when
+// BigComplex.EqualTo(*Complex) holds". That relation cannot hold: EqvNumber separates
+// inexact numbers by Kind, so a BigComplex is never eqv? to a Complex, and the branch's
+// own TestBigComplex_EqualTo asserts as much.
 func (p *BigComplex) HashCode() uint64 {
-	r := hashInexactNumeric(toBigFloat(p.real).value)
-	i := hashInexactNumeric(toBigFloat(p.imag).value)
-	return r ^ (i * 0x9e3779b97f4a7c15)
+	return hashBigComplexPart(p.real) ^ (hashBigComplexPart(p.imag) * 0x9e3779b97f4a7c15)
+}
+
+// hashBigComplexPart hashes a BigComplex component through the component's OWN HashCode.
+// The switch is exhaustive over what validateBigComplexPart admits; anything else is an
+// invariant violation, not a value to hash.
+func hashBigComplexPart(n Number) uint64 {
+	switch v := n.(type) {
+	case *BigInteger:
+		return v.HashCode()
+	case *Rational:
+		return v.HashCode()
+	case *BigFloat:
+		return v.HashCode()
+	}
+	panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+		"hashBigComplexPart: part is %T, but validateBigComplexPart admits only "+
+			"*BigInteger, *Rational, *BigFloat", n))
 }

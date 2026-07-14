@@ -50,7 +50,21 @@ An **exact** operand meeting an **inexact** one does NOT enter the Big* domain. 
 
 This is deliberately **lossy**, and it is what "inexact" means. It used to promote exact × `Float` to `BigFloat` "to preserve precision", on the theory that `Simplify` would demote afterwards. Per-op demotion was never wired, so ordinary float arithmetic minted 256-bit bignums that never came back down; `(+ 1.5 2)` was a `*BigFloat`. Removing the promotion made mixed float/integer arithmetic ~40% faster.
 
-**Complex is exempt.** Exact × `Complex` → `BigComplex`, not `Complex`. An exact operand rounded into `complex128` acquires a manufactured `+0.0` imaginary part, which is not an *exact* `0`, and the exact-zero rules that give `(/ 10 2.0+0.0i)` its `-0.0i` sign stop applying.
+**Complex is not exempt.** Exact × `Complex` → `Complex`, exactly as exact × `Float` → `Float`. It has to be: the promotion table is a join-semilattice, and given exact ⊔ `Float` = `Float` and `Float` ⊔ `Complex` = `Complex`, associativity *forces* exact ⊔ `Complex` = `Complex`. Any two of those three entries determine the third.
+
+Exact × `Complex` used to escalate to `BigComplex`, and the reason was real: an exact operand rounded into `complex128` acquires a manufactured `+0.0` imaginary part, which is not an *exact* `0`, so the exact-zero rules that give `(/ 10 2.0+0.0i)` its `-0.0i` sign stop applying. But escalating bought that correctness with a **broken lattice**. With exact ⊔ `Float` = `Float` on one side and exact ⊔ `Complex` = `BigComplex` on the other, the join stopped being associative on 12 of its 343 triples, and the result *kind* is observable through `eqv?`/`equal?` (R7RS §6.1 makes representation observable for inexacts). So:
+
+```scheme
+(+ 1 1.5 2.0+0.0i)                                ; => 4.5+0.0i   (a Complex)
+(+ 2.0+0.0i 1 1.5)                                ; => 4.5+0.0i   (a BigComplex)
+(=      (+ 1 1.5 2.0+0.0i) (+ 2.0+0.0i 1 1.5))    ; => #t
+(eqv?   (+ 1 1.5 2.0+0.0i) (+ 2.0+0.0i 1 1.5))    ; => #f   ← same value, different fold order
+(equal? (* 1.0+2.0i 1) 1.0+2.0i)                  ; => #f   ← multiply by exact 1
+```
+
+**The exact zero is protected at the operation, not in the table.** A real operand has *no* imaginary component, so `real ⊕ complex` is computed part-wise and the component is never manufactured in the first place — `(/ 10 2.0+0.0i)` is still `5.0-0.0i`. `Float` has always worked this way (`Float` ⊔ `Complex` has always been `Complex`); the exact kinds now share that path. See the `real ⊕ complex` helpers in `values/complex.go` and `promotionTable` Zone 3.
+
+The rule, stated once: **contagion is a promotion question and the table owns it; the exact zero is an operation question and `complex.go` owns it.** They were tangled together, and the tangle cost the semilattice.
 
 Big* arithmetic remains significantly slower (heap-allocated, no hardware acceleration), so keeping ordinary float arithmetic out of it matters.
 
@@ -65,7 +79,18 @@ Rounding an operand is free when the result is already inexact, and fatal when t
 (< (- (expt 2 100) 1) (exact->inexact (expt 2 100)))   ; => #t
 ```
 
-Both operands round to the same `float64`. A lossy comparison would call them equal; they are not, and Chez says so too. So `comparisonTable` promotes **up** to a domain that represents both operands exactly (exact × `Float` → `BigFloat`). It is exactly what `promotionTable` was before contagion was separated out of it — the "no lossy paths" invariant did not die, it moved to the table where it belongs.
+Both operands round to the same `float64`. A lossy comparison would call them equal; they are not, and Chez says so too. So `comparisonTable` promotes **up** to a domain that represents both operands exactly. It is exactly what `promotionTable` was before contagion was separated out of it — the "no lossy paths" invariant did not die, it moved to the table where it belongs.
+
+The two tables differ on exactly the pairs where arithmetic would round an exact operand — that is, where an exact kind meets a **float64-backed** inexact kind:
+
+| Pair | `promotionTable` (arithmetic) | `comparisonTable` (comparison) |
+|------|-------------------------------|--------------------------------|
+| exact × `Float` | `Float` (contaminates down) | `BigFloat` (promotes up) |
+| exact × `Complex` | `Complex` (contaminates down) | `BigComplex` (promotes up) |
+| exact × `BigFloat` | `BigFloat` | `BigFloat` — agree |
+| exact × `BigComplex` | `BigComplex` | `BigComplex` — agree |
+
+`BigFloat` and `BigComplex` hold an exact operand without rounding it, so there is nothing to split. Everywhere else the tables agree. `TestComparisonResultKind_API` pins exactly this, and both tables are held to the semilattice laws (`TestPromotionTable_Associativity`, `TestComparisonTable_Associativity`).
 
 The two tables differ on exactly one pair-shape: an exact kind meeting `Float`. `TestComparisonResultKind_API` pins that, and fails if they diverge anywhere else.
 
