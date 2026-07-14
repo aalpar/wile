@@ -363,3 +363,51 @@ func TestWrapForeign_PercentLiteralNoVararg(t *testing.T) {
 		})
 	}
 }
+
+// TestRecoverAsError_NilIsNil pins that a no-panic recover() yields no error,
+// so callers can assign the result unconditionally in a deferred closure.
+func TestRecoverAsError_NilIsNil(t *testing.T) {
+	qt.Assert(t, werr.RecoverAsError(nil, werr.ErrInternal, "site"), qt.IsNil)
+}
+
+// TestRecoverAsError_ErrorPassesThroughUnwrapped pins that an error panic value is
+// returned as itself, not re-wrapped. Callers depend on this: the VM's foreign-call
+// bridge matches VM signal types (prompt abort, exception escape, timer interrupt)
+// on the recovered value with errors.As, and an extra wrap layer is fine for
+// errors.As but a fresh sentinel identity on top is not what those sites want to
+// carry onward. RunResumable likewise wraps it itself, afterwards.
+func TestRecoverAsError_ErrorPassesThroughUnwrapped(t *testing.T) {
+	sentinel := werr.NewStaticError("original")
+	original := werr.WrapForeignErrorf(sentinel, "boom")
+
+	got := werr.RecoverAsError(original, werr.ErrInternal, "site")
+
+	qt.Assert(t, got, qt.Equals, error(original))
+	qt.Assert(t, errors.Is(got, werr.ErrInternal), qt.IsFalse,
+		qt.Commentf("an error panic value must not acquire the fallback sentinel"))
+}
+
+// TestRecoverAsError_NonErrorWrapsUnderCallerSentinel pins that the fallback
+// sentinel is the caller's, not a hardcoded one. The three recover sites use three
+// different sentinels (ErrInternal, ErrThreadPanic, ErrPanicRecovery) and each is
+// part of that site's contract.
+func TestRecoverAsError_NonErrorWrapsUnderCallerSentinel(t *testing.T) {
+	got := werr.RecoverAsError(42, werr.ErrPanicRecovery, "foreign function call")
+
+	qt.Assert(t, got, qt.IsNotNil)
+	qt.Assert(t, errors.Is(got, werr.ErrPanicRecovery), qt.IsTrue)
+	qt.Assert(t, errors.Is(got, werr.ErrInternal), qt.IsFalse)
+	qt.Assert(t, got.Error(), qt.Contains, "foreign function call")
+	qt.Assert(t, got.Error(), qt.Contains, "42",
+		qt.Commentf("the panic value's text must survive into the message"))
+}
+
+// TestRecoverAsError_NonErrorStringValue covers the panic("...") shape specifically,
+// which is what the FFI re-raise threw before it was deleted.
+func TestRecoverAsError_NonErrorStringValue(t *testing.T) {
+	got := werr.RecoverAsError("kaboom", werr.ErrThreadPanic, "thread \"w\"")
+
+	qt.Assert(t, errors.Is(got, werr.ErrThreadPanic), qt.IsTrue)
+	qt.Assert(t, got.Error(), qt.Contains, "kaboom")
+	qt.Assert(t, got.Error(), qt.Contains, "thread \"w\"")
+}

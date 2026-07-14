@@ -1423,13 +1423,10 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		if r == nil {
 			return
 		}
-		err, ok := r.(error)
-		if !ok {
-			// A non-error panic value (panic("...") / panic(42)). Carry its text
-			// under an internal-error sentinel so it, too, stays within the VM
-			// boundary as a matchable, wrapped error.
-			err = werr.WrapForeignErrorf(werr.ErrInternal, "non-error panic value: %v", r)
-		}
+		// A non-error panic value (panic("...") / panic(42)) carries its text under
+		// an internal-error sentinel so it, too, stays within the VM boundary as a
+		// matchable, wrapped error.
+		err := werr.RecoverAsError(r, werr.ErrInternal, "RunResumable")
 		// Fold the recovered error's text into the message. SchemeError.Error()
 		// renders Message + source + trace but NOT Cause, so without this the
 		// printed error would read only "recovered panic" and the real detail
