@@ -504,11 +504,13 @@ func TestNumericTowerUtilities(t *testing.T) {
 	_, isInt2 := simplifiedBC.(*values.Integer)
 	c.Assert(isInt2, qt.IsTrue)
 
-	// Simplify a BigFloat that is integer-valued
+	// Simplify does NOT descend an integer-valued BigFloat to an exact Integer:
+	// 100.0 is inexact, and Simplify preserves the exactness class (R7RS §6.2.2).
+	// This assertion used to require the opposite, pinning the violation.
 	bf := values.NewBigFloat(new(big.Float).SetInt64(100))
 	simplifiedBF := values.Simplify(bf)
-	_, isInt3 := simplifiedBF.(*values.Integer)
-	c.Assert(isInt3, qt.IsTrue)
+	_, stillBigFloat := simplifiedBF.(*values.BigFloat)
+	c.Assert(stillBigFloat, qt.IsTrue)
 
 	// Simplify a Rational that is integer-valued
 	r := values.NewRational(6, 2)

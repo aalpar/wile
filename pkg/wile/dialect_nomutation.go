@@ -85,10 +85,21 @@ func (noMutationDialect) RewriteBootstrapProcedures(sources []string) []string {
 // Returns a fresh slice each call so callers may retain or mutate the result without
 // corrupting the set.
 //
-// Scope: every bang-suffixed destructive procedure in registry/core, including the
-// destination-mutating copy!/fill! variants (writing into an existing object is
-// mutation; the non-destructive vector-copy / string-copy that allocate a fresh
-// result are not here and stay).
+// Scope: every registered primitive that destructively writes into an EXISTING
+// object, wherever it is registered. The non-destructive vector-copy / string-copy
+// that allocate a fresh result are not mutation and stay.
+//
+// "wherever it is registered" is the correction. This list used to scope itself to
+// registry/core, and three destructive primitives are not there: string-copy! and
+// string-fill! live in internal/extensions/all, read-bytevector! in extensions/io.
+// All three sailed straight through a dialect whose whole claim is that no
+// destructive update survives, so the claim was false on any io-loading profile.
+// A scope defined by WHERE a primitive is registered cannot enforce a property
+// about WHAT primitives do.
+//
+// TestNoMutationRemovesEveryDestructivePrimitive derives the destructive set from
+// what the engine actually registers and fails on any unclassified bang-suffixed
+// primitive, so the next one cannot sail through either.
 func mutationPrimitives() []string {
 	return []string{
 		"set-car!",
@@ -97,12 +108,18 @@ func mutationPrimitives() []string {
 		"vector-fill!",
 		"vector-copy!",
 		"string-set!",
+		"string-fill!",
+		"string-copy!",
 		"list-set!",
 		"bytevector-u8-set!",
 		"bytevector-copy!",
+		"read-bytevector!",
 		"hashtable-set!",
 		"hashtable-delete!",
 		"hashtable-clear!",
 		"set-box!",
+		"atomic-store!",
+		"atomic-swap!",
+		"atomic-compare-and-swap!",
 	}
 }

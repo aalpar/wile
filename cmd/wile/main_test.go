@@ -668,13 +668,13 @@ func TestRunFileErrors(t *testing.T) {
 // Phase 5: Direct function tests (per-test subprocess branches)
 // ---------------------------------------------------------------------------
 
-func TestFailfNilNoMessage(t *testing.T) {
+func TestFailNilNoMessage(t *testing.T) {
 	if os.Getenv(envExitSubprocess) == "1" {
-		Failf(nil)
+		Fail(nil)
 		return
 	}
 	c := qt.New(t)
-	result := runExitSubprocess(t, "TestFailfNilNoMessage")
+	result := runExitSubprocess(t, "TestFailNilNoMessage")
 	c.Assert(result.exitCode, qt.Equals, 0)
 	c.Assert(result.stderr, qt.Equals, "")
 }
@@ -971,4 +971,69 @@ func TestResolveVersionPartialLdflags(t *testing.T) {
 		}
 		_ = v
 	})
+}
+
+// TestFailfIsPrintfFormatted pins the printf contract of Failf. Before the
+// signature changed from (messes ...string) to (format string, args ...any),
+// Failf(err, "Cannot open file %s", name) joined the format and the name as two
+// message *parts*: the output carried a literal "%s" and the filename twice, and
+// `go vet` could not see the mistake because the function was not printf-shaped.
+func TestFailfIsPrintfFormatted(t *testing.T) {
+	if os.Getenv(envExitSubprocess) == "1" {
+		Failf(fmt.Errorf("boom"), "Cannot open file %s", "/no/such.scm")
+		return
+	}
+	c := qt.New(t)
+	result := runExitSubprocess(t, "TestFailfIsPrintfFormatted")
+	c.Assert(result.exitCode, qt.Equals, 1)
+	c.Assert(
+		strings.Contains(result.stderr, "Error: boom: Cannot open file /no/such.scm"), qt.IsTrue,
+		qt.Commentf("stderr: %q", result.stderr),
+	)
+	c.Assert(
+		strings.Contains(result.stderr, "%s"), qt.IsFalse,
+		qt.Commentf("format verb reached the output: %q", result.stderr),
+	)
+	c.Assert(
+		strings.Count(result.stderr, "/no/such.scm"), qt.Equals, 1,
+		qt.Commentf("filename repeated: %q", result.stderr),
+	)
+}
+
+// TestMissingFileMessage exercises the same defect end to end: a missing --file
+// argument must report the path once, with no format verb.
+func TestMissingFileMessage(t *testing.T) {
+	c := qt.New(t)
+	result := runCLI(t, "-q", "-f", "/no/such/file.scm")
+	c.Assert(result.exitCode, qt.Equals, 1)
+	c.Assert(
+		strings.Contains(result.stderr, "%s"), qt.IsFalse,
+		qt.Commentf("format verb reached the output: %q", result.stderr),
+	)
+	c.Assert(
+		strings.Count(result.stderr, "/no/such/file.scm"), qt.Equals, 1,
+		qt.Commentf("filename repeated: %q", result.stderr),
+	)
+}
+
+// TestUsageNamesTheBinary pins the binary name in --help and in flag errors.
+// The parser was still named "scheme", the pre-rename binary.
+func TestUsageNamesTheBinary(t *testing.T) {
+	c := qt.New(t)
+
+	help := runCLI(t, "--help")
+	c.Assert(
+		strings.Contains(help.stdout, "wile [OPTIONS] [FILE]"), qt.IsTrue,
+		qt.Commentf("stdout: %q", help.stdout),
+	)
+	c.Assert(
+		strings.Contains(help.stdout, "scheme ["), qt.IsFalse,
+		qt.Commentf("old binary name in usage: %q", help.stdout),
+	)
+
+	bogus := runCLI(t, "--bogus")
+	c.Assert(
+		strings.Contains(bogus.stderr, "scheme:"), qt.IsFalse,
+		qt.Commentf("old binary name in flag error: %q", bogus.stderr),
+	)
 }

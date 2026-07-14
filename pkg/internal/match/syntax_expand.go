@@ -187,20 +187,64 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		return syntax.NewSyntaxCons(expandedCar, expandedCdr, opts.resolveSourceContext(t)), nil
 
 	case *syntax.SyntaxVector:
-		// Expand each element
-		expandedElements := make([]syntax.SyntaxValue, len(t.Values))
-		for i, elem := range t.Values {
-			expanded, err := p.expandSyntaxValue(elem, ctx, ellipsisVars, excludeEllipsisIDs, opts)
-			if err != nil {
-				return nil, err
-			}
-			expandedElements[i] = expanded
-		}
-		return syntax.NewSyntaxVector(opts.resolveSourceContext(t), expandedElements...), nil
+		return p.expandVectorTemplate(t, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 
 	default:
 		// Self-evaluating values - return as-is
 		return template, nil
+	}
+}
+
+// expandVectorTemplate expands a vector template.
+//
+// R7RS §4.3.2: a vector template's elements obey the same rules as a list
+// template's, ellipsis included — `#(x ...)` must repeat `x` just as `(x ...)`
+// does. Element-wise expansion cannot see an ellipsis, which follows an element
+// rather than containing it, so expansion routes through the equivalent pair
+// chain and re-vectorizes the result.
+func (p *SyntaxMatcher) expandVectorTemplate(
+	t *syntax.SyntaxVector,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
+	opts *ExpandOptions,
+) (syntax.SyntaxValue, error) {
+	srcCtx := opts.resolveSourceContext(t)
+	if len(t.Values) == 0 {
+		return syntax.NewSyntaxVector(srcCtx), nil
+	}
+
+	chain := vectorElementsToPairChain(t)
+	expanded, err := p.expandSyntaxValue(chain, ctx, ellipsisVars, excludeEllipsisIDs, opts)
+	if err != nil {
+		return nil, err
+	}
+	elements, err := syntaxListToSlice(expanded)
+	if err != nil {
+		return nil, err
+	}
+	return syntax.NewSyntaxVector(srcCtx, elements...), nil
+}
+
+// syntaxListToSlice flattens a proper syntax list into its elements. Used to
+// re-vectorize a vector template that was expanded through its pair chain.
+func syntaxListToSlice(v syntax.SyntaxValue) ([]syntax.SyntaxValue, error) {
+	var q []syntax.SyntaxValue
+	for cur := v; ; {
+		// The terminator is the shared empty-list singleton, which is a
+		// SyntaxTuple rather than a *SyntaxPair — test it before the assertion.
+		if syntax.IsSyntaxEmptyList(cur) {
+			return q, nil
+		}
+		pr, ok := cur.(*syntax.SyntaxPair)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrExpansion,
+				"syntaxListToSlice: vector template expanded to an improper list",
+			)
+		}
+		q = append(q, pr.SyntaxCar())
+		cur = pr.SyntaxCdr()
 	}
 }
 
@@ -283,9 +327,28 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		if opts.IntroScope != nil {
 			newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 		}
+		// The library scope and the resolved binding are CUMULATIVE, not
+		// alternatives. Returning early with only the scope (which is what this did)
+		// threw away the *GlobalIndex that collectFreeIdentifiers had already
+		// resolved at macro-definition time, and it broke R7RS §4.3.2 referential
+		// transparency for every library macro whose template names something the
+		// library does not itself define.
+		//
+		// The scope alone can only redirect into the LIBRARY's env
+		// (GetGlobalIndexFromLibraryScopes). A core primitive is not there — it lives
+		// in the sealed base — so that lookup missed, CompileSymbol fell through to
+		// the use-site global, and a user's top-level (define car 42) captured the
+		// template's `car`. Shipped stdlib was reachable this way: a top-level
+		// (define %prompt-reinstall …) broke (wile control)'s reset/shift.
+		//
+		// Keeping both makes the pin the primary resolution (CompileSymbol consults
+		// it before the library scope) and leaves the scope as the fallback for a
+		// free identifier that was NOT resolvable at definition time. The pin stays
+		// BELOW the scope-set local match, so a binder co-introduced by the same
+		// template still shadows it (the R1 fix, plans/2026-06-15-macro-hygiene-...).
 		libScope := resolution.GetLibraryScope()
 		if libScope != nil {
-			return newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
+			newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
 		}
 		return newSym.WithResolvedBinding(globalBinding)
 	}
@@ -670,6 +733,21 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 			return nil, err
 		}
 		return syntax.NewSyntaxCons(car, cdr, opts.resolveSourceContext(t)), nil
+
+	case *syntax.SyntaxVector:
+		// R7RS §4.3.2: `(... <template>)` suppresses the ellipsis's special
+		// meaning, not pattern-variable substitution — and a vector is a
+		// structured template like a pair, so the escape must descend into it or
+		// its variables are left standing as literal symbols.
+		elements := make([]syntax.SyntaxValue, len(t.Values))
+		for i, elem := range t.Values {
+			expanded, err := p.expandEscapedSyntaxTemplate(elem, ctx, ellipsisVars, opts)
+			if err != nil {
+				return nil, err
+			}
+			elements[i] = expanded
+		}
+		return syntax.NewSyntaxVector(opts.resolveSourceContext(t), elements...), nil
 
 	default:
 		return template, nil

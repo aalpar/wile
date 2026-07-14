@@ -18,7 +18,7 @@ Thank you for your interest in contributing to Wile! This document provides guid
    - `good-first-issue` — Great for newcomers to the project
    - `help-wanted` — High-priority items needing contributors
    - `documentation` — Writing examples, guides, or improving docs
-3. Read the issue description and linked plan files (in `plans/`) for context
+3. Read the issue description and any design notes linked from it for context
 4. Comment on the issue to claim it or ask questions
 
 ### Development Setup
@@ -251,8 +251,8 @@ string → Tokenizer → Parser → SyntaxValue
 
 - **`CODING_STYLE.md`** — Style guide
 - **`PRIMITIVES.md`** — Complete primitives reference
-- **`plans/`** — Design documents for major features
-- **`docs/`** — Architecture documentation organized by topic (see `docs/INDEX.md`)
+- **`BIBLIOGRAPHY.md`** — Papers and specifications the implementation follows
+- **`docs/`** — Architecture documentation organized by topic (see `docs/INDEX.md`); design documents for major features live here. Working notes kept during development are not part of the repository.
 
 ## Contribution Guidelines
 

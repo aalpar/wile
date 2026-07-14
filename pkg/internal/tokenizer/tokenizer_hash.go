@@ -17,6 +17,7 @@ package tokenizer
 import (
 	"errors"
 	"io"
+	"unicode/utf8"
 )
 
 func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() {
@@ -81,7 +82,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		if p.err != nil {
 			return
 		}
-		p.value = string(p.readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape())
+		p.value = utf8.AppendRune(p.value[:0], p.readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape())
 		return
 
 	case p.curr() == '(': // #( array
@@ -171,6 +172,10 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 			return
 		}
 		if k != 0 || p.curr() != '(' {
+			// R7RS §7.1.1: #u introduces nothing but a #u8( byte vector. Falling
+			// through with neither a state nor an error made `#u9` read as the
+			// PREVIOUS token's type and the input parse as if the #u were absent.
+			p.err = NewTokenizerError(MessageExpectingByteVectorPrefix)
 			return
 		}
 		p.state = TokenizerStateOpenVectorUnsignedByteMarker

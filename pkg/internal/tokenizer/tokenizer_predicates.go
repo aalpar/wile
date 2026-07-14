@@ -36,13 +36,18 @@ func isVerticalLine(c rune) bool {
 
 // isDelimiter returns true if c is a token delimiter per R7RS 7.1.1.
 // Delimiters are: whitespace, |, (, ), ", and ;
+//
+// R7RS §2.1 makes [ and ] equivalent to ( and ), so they delimit too. Omitting
+// them broke the #-boolean forms, whose scanners are the ones that consult this
+// predicate: `#t]` scanned as a bare marker, so `(let ([x #t]) ...)` would not
+// parse. Self-terminating tokens (numbers, characters, vectors) were unaffected.
 func isDelimiter(c rune) bool {
 	return isIntralineWhitespace(c) || isVerticalLine(c) || isLineEnding(c) ||
-		c == '(' || c == ')' || c == '"' || c == ';'
+		c == '(' || c == ')' || c == '[' || c == ']' || c == '"' || c == ';'
 }
 
 // isDelimiterOrMarker returns true if c is a token delimiter per R7RS 7.1.1.
-// Delimiters are: whitespace, |, (, ), ", and ;
+// Delimiters are: whitespace, |, (, ), [, ], ", and ;
 func isDelimiterOrMarker(c rune) bool {
 	return isDelimiter(c) || isMarker(c)
 }

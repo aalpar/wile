@@ -347,6 +347,30 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 	for !syntax.IsSyntaxEmptyList(current) {
 		car := current.SyntaxCar()
 		carSyntax := car
+
+		// Dotted-pair unquote, mirroring expandQuasiList's arm. `(a . ,x)` READS as
+		// the proper list `(a unquote x)`, so a dotted tail never arrives as a
+		// non-pair cdr — it arrives as the bare symbol `unquote` sitting on the
+		// spine, followed by exactly one element. The improper-tail branch further
+		// down therefore never fires for it, and without this check the splice path
+		// walked `unquote` and `x` in as ordinary elements: `(,@x . ,y) rendered as
+		// the 4-element list (1 2 unquote y). R7RS §4.2.8.
+		if kw.handleDottedUnquote {
+			carSymName, ok := p.getSymbolName(carSyntax)
+			if ok && carSymName == kw.unquote && depth == 1 {
+				cdr := current.SyntaxCdr()
+				cdrPair, ok := cdr.(*syntax.SyntaxPair)
+				if ok && cdrPair.Length() == 1 {
+					flushNormal()
+					// Raw, not expanded: the tail expression is evaluated at
+					// runtime, exactly as a splice segment's expr is. append with
+					// a non-list final argument yields the improper list.
+					improperTail = cdrPair.SyntaxCar()
+					break
+				}
+			}
+		}
+
 		carPair, ok := carSyntax.(*syntax.SyntaxPair)
 		if ok {
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())

@@ -321,3 +321,19 @@
   (if (and (not (procedure? less?)) (procedure? lst))
       (error "sort: arguments look swapped -- wile is comparator-first: (sort less? lst), not (sort lst less?)" less? lst)
       (msort lst (length lst))))
+
+;; dynamic-wind as a first-class PROCEDURE (R7RS §6.10).
+;;
+;; dynamic-wind is compiled as a special form, which is why (dynamic-wind b t a) has
+;; always worked. But R7RS specifies it as a procedure, and it was not bound as a
+;; value at all: (procedure? dynamic-wind) and (apply dynamic-wind …) were not merely
+;; #f, they were a COMPILE ERROR — "no such binding".
+;;
+;; This binding is only ever reached in VALUE position. Form dispatch precedes symbol
+;; resolution (a form is shadowed by a LOCAL binding, not by a top-level define), so
+;; the body's own (dynamic-wind before thunk after) compiles to the wind opcodes and
+;; does not call back into this procedure. Operator position keeps the fast path; value
+;; position now has a procedure.
+(define (dynamic-wind before thunk after)
+  "Call THUNK with BEFORE run on every entry to its dynamic extent and AFTER run\non every exit, including exits and re-entries via continuations.\n\nExamples:\n  (procedure? dynamic-wind)  => #t\n\nParameters:\n  before : procedure with no arguments\n  thunk : procedure with no arguments\n  after : procedure with no arguments\nReturns: the value of THUNK\nCategory: control"
+  (dynamic-wind before thunk after))

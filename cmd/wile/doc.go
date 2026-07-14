@@ -14,14 +14,14 @@
 
 // Package main provides the entry point for the Wile Scheme interpreter binary.
 //
-// The scheme command provides an interactive REPL and file execution mode:
+// The wile command provides an interactive REPL and file execution mode:
 //
-//	scheme                        # Start interactive REPL
-//	scheme file.scm               # Execute file
-//	scheme --file file.scm        # Execute file (explicit flag)
-//	scheme --file file.scm -i     # Execute file, then enter REPL
-//	scheme --version              # Print version and exit
-//	scheme --mcp                  # Start MCP server on stdio
+//	wile                        # Start interactive REPL
+//	wile file.scm               # Execute file
+//	wile --file file.scm        # Execute file (explicit flag)
+//	wile --file file.scm -i     # Execute file, then enter REPL
+//	wile --version              # Print version and exit
+//	wile --mcp                  # Start MCP server on stdio
 //
 // Library search paths can be configured via the -L flag or SCHEME_LIBRARY_PATH
 // environment variable. The command uses BSD sysexits.h exit codes.

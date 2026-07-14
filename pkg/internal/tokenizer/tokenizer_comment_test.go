@@ -15,12 +15,15 @@
 package tokenizer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestDatumComment(t *testing.T) {
@@ -138,17 +141,18 @@ func TestBlockCommentNested(t *testing.T) {
 func TestBlockCommentUnclosed(t *testing.T) {
 	c := qt.New(t)
 
-	// Unclosed block comment (EOF before |#)
+	// Unclosed block comment (EOF before |#). R7RS §2.2: the comment must be
+	// closed, so EOF inside one is a read error, not a clean end of input.
 	tok := NewTokenizer(strings.NewReader("#| unclosed"), false)
-	// Body ends at EOF, no End token
 	token1, err := tok.Next()
 	c.Assert(err, qt.IsNil)
 	c.Assert(token1.Type(), qt.Equals, TokenizerStateBlockCommentBody)
 	c.Assert(token1.String(), qt.Equals, "#| unclosed")
 
-	// Next call should return EOF
 	_, err = tok.Next()
-	c.Assert(err, qt.Equals, io.EOF)
+	c.Assert(errors.Is(err, io.EOF), qt.IsFalse)
+	c.Assert(errors.Is(err, NewTokenizerError(MessageUnterminatedBlockComment)), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrIncompleteInput), qt.IsTrue)
 }
 
 func TestDatumCommentEmitTokens(t *testing.T) {
@@ -389,8 +393,9 @@ func TestInvalidComments(t *testing.T) {
 			p := NewTokenizer(strings.NewReader(tc.input), false)
 			p.mark()
 			p.read()
-			// Unclosed block comments should reach EOF
-			c.Check(p.err, qt.Equals, io.EOF)
+			// R7RS §2.2: an unclosed block comment is a read error, not EOF.
+			c.Check(errors.Is(p.err, io.EOF), qt.IsFalse)
+			c.Check(errors.Is(p.err, NewTokenizerError(MessageUnterminatedBlockComment)), qt.IsTrue)
 		})
 	}
 }

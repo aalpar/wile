@@ -164,15 +164,32 @@ var rationalCompare [numKinds]func(*Rational, Number) int
 var rationalMultiply [numKinds]func(*Rational, Number) Number
 var rationalDivide [numKinds]func(*Rational, Number) (Number, error)
 
+// canonicalRational is the single exit through which every rational arithmetic
+// result leaves. An integer-valued result descends to *Integer / *BigInteger
+// (rationalSimplifyDown); everything else stays a *Rational.
+//
+// The tower's invariant is that an exact value has ONE representation. Returning
+// a raw denominator-1 *Rational broke it, and the damage was not confined to the
+// producer: (+ 1/2 1/2) printed as 1, answered #t to integer? and to exact?, and
+// still answered #f to (eqv? … 1) — because eqv? dispatches on the concrete type
+// and saw *Rational where the tower says only *Integer can be. R7RS §6.1 requires
+// eqv? to be #t for two exact numbers that are numerically equal.
+//
+// Fixing eqv? instead would have been the wrong layer: eqv? was one consumer of a
+// broken invariant, and every other type-dispatching consumer (hashing, Kind()
+// dispatch, memv/assv) was standing on the same crack. Canonicalize once, at the
+// producer. TestRationalArithmeticNeverYieldsDenominatorOne pins it.
+func canonicalRational(result *big.Rat) Number {
+	return Simplify(&Rational{value: result})
+}
+
 func init() {
 	rationalAdd = makeAddDispatch(KindRational, func(p *Rational, o Number) Number {
-		result := new(big.Rat).Add(p.value, o.(*Rational).value)
-		return &Rational{value: result}
+		return canonicalRational(new(big.Rat).Add(p.value, o.(*Rational).value))
 	})
 
 	rationalSubtract = makeSubtractDispatch(KindRational, func(p *Rational, o Number) Number {
-		result := new(big.Rat).Sub(p.value, o.(*Rational).value)
-		return &Rational{value: result}
+		return canonicalRational(new(big.Rat).Sub(p.value, o.(*Rational).value))
 	})
 
 	rationalLessThan = makeLessThanDispatch(KindRational, func(p *Rational, o Number) bool {
@@ -184,13 +201,11 @@ func init() {
 	})
 
 	rationalMultiply = makeMultiplyDispatch(KindRational, func(p *Rational, o Number) Number {
-		result := new(big.Rat).Mul(p.value, o.(*Rational).value)
-		return &Rational{value: result}
+		return canonicalRational(new(big.Rat).Mul(p.value, o.(*Rational).value))
 	})
 
 	rationalDivide = makeDivideDispatch(KindRational, func(p *Rational, o Number) (Number, error) {
-		result := new(big.Rat).Quo(p.value, o.(*Rational).value)
-		return &Rational{value: result}, nil
+		return canonicalRational(new(big.Rat).Quo(p.value, o.(*Rational).value)), nil
 	})
 
 	registerNumericSpec(KindRational, NumericTypeSpec{
@@ -215,7 +230,7 @@ func (p *Rational) Add(o Number) Number {
 	}
 	v, ok := o.(*Rational)
 	if ok {
-		return &Rational{value: new(big.Rat).Add(p.value, v.value)}
+		return canonicalRational(new(big.Rat).Add(p.value, v.value))
 	}
 	return rationalAdd[o.Kind()](p, o)
 }
@@ -233,7 +248,7 @@ func (p *Rational) Subtract(o Number) Number {
 	}
 	v, ok := o.(*Rational)
 	if ok {
-		return &Rational{value: new(big.Rat).Sub(p.value, v.value)}
+		return canonicalRational(new(big.Rat).Sub(p.value, v.value))
 	}
 	return rationalSubtract[o.Kind()](p, o)
 }
@@ -247,8 +262,7 @@ func (p *Rational) Multiply(o Number) Number {
 	}
 	v, ok := o.(*Rational)
 	if ok {
-		result := new(big.Rat).Mul(p.value, v.value)
-		return &Rational{value: result}
+		return canonicalRational(new(big.Rat).Mul(p.value, v.value))
 	}
 	return rationalMultiply[o.Kind()](p, o)
 }
@@ -264,8 +278,7 @@ func (p *Rational) Divide(o Number) (Number, error) {
 	}
 	v, ok := o.(*Rational)
 	if ok {
-		result := new(big.Rat).Quo(p.value, v.value)
-		return &Rational{value: result}, nil
+		return canonicalRational(new(big.Rat).Quo(p.value, v.value)), nil
 	}
 	return rationalDivide[o.Kind()](p, o)
 }

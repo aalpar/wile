@@ -178,7 +178,7 @@ func main() {
 	var fin *bufio.Reader
 
 	parser := flags.NewParser(&opts, flags.Default)
-	parser.Name = "scheme"
+	parser.Name = "wile"
 	parser.Usage = "[OPTIONS] [FILE]"
 
 	args, err := parser.Parse()
@@ -321,7 +321,9 @@ func main() {
 			}
 			descriptor, closeSource, err := openScriptFile(filename)
 			if err != nil {
-				Failf(err, "Cannot open file %s", filename)
+				// The os error already reads "open <path>: ..." — adding the
+				// filename again would print it twice.
+				Fail(err)
 			}
 			func(fn string, fd *os.File, closeFn func() error) {
 				defer func() {
@@ -346,7 +348,7 @@ func main() {
 						return evalErr
 					})
 					if loadErr != nil {
-						Failf(loadErr)
+						Fail(loadErr)
 					}
 				} else {
 					// Run last file (print results) and exit in non-interactive mode
@@ -511,7 +513,7 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 		return evalErr
 	})
 	if loadErr != nil {
-		Failf(loadErr)
+		Fail(loadErr)
 	}
 
 	if result != nil && !result.IsVoid() {
@@ -527,7 +529,7 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
 	result, err := eng.EvalProgram(ctx, strings.Join(exprs, "\n"), "<eval>")
 	if err != nil {
-		Failf(err)
+		Fail(err)
 	}
 	if result != nil && !result.IsVoid() {
 		Printf("%s\n", result.SchemeString())
@@ -563,41 +565,56 @@ func Printf(fmtstr string, args ...any) {
 func writeNamedProfile(name, path string) {
 	p := pprof.Lookup(name)
 	if p == nil {
-		Failf(werr.ErrInternal, fmt.Sprintf("Unknown profile %q", name))
+		Failf(werr.ErrInternal, "Unknown profile %q", name)
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		Failf(err, fmt.Sprintf("Cannot create %s profile", name))
+		Failf(err, "Cannot create %s profile", name)
 	}
 	defer func() {
 		closeErr := f.Close()
 		if closeErr != nil {
-			Failf(closeErr, fmt.Sprintf("Cannot close %s profile", name))
+			Failf(closeErr, "Cannot close %s profile", name)
 		}
 	}()
 	err = p.WriteTo(f, 0)
 	if err != nil {
-		Failf(err, fmt.Sprintf("Cannot write %s profile", name))
+		Failf(err, "Cannot write %s profile", name)
 	}
 }
 
-func Failf(err error, messes ...string) {
-	// Collect the error and message parts, dropping empties so a Failf(err)
-	// with no message never emits a dangling ": " after the error text.
+// Failf prints "Error: <err>: <formatted message>" to stderr and exits 1.
+//
+// The (format string, args ...any) shape is deliberate: it makes Failf a printf
+// wrapper that `go vet` classifies and checks. The former (messes ...string)
+// signature accepted "Cannot open file %s", filename as two message *parts*,
+// silently printing a literal %s and the filename twice, and vet could not see
+// it. Use Fail for the no-message case.
+func Failf(err error, format string, args ...any) {
+	fail(err, fmt.Sprintf(format, args...))
+}
+
+// Fail prints "Error: <err>" and exits 1. A nil err exits EX_OK: several call
+// sites hand Failf/Fail whatever error a step returned and rely on the nil case
+// being a clean exit.
+func Fail(err error) {
+	fail(err, "")
+}
+
+func fail(err error, mess string) {
+	// Drop the empty parts so a bare Fail(err) never emits a dangling ": ".
 	var parts []string
 	if err != nil {
 		parts = append(parts, err.Error())
 	}
-	for _, s := range messes {
-		if s != "" {
-			parts = append(parts, s)
-		}
+	if mess != "" {
+		parts = append(parts, mess)
 	}
-	mess := strings.Join(parts, ": ")
-	if mess == "" {
+	joined := strings.Join(parts, ": ")
+	if joined == "" {
 		os.Exit(EX_OK)
 	}
-	_, err0 := fmt.Fprintf(os.Stderr, "Error: %s\n", mess)
+	_, err0 := fmt.Fprintf(os.Stderr, "Error: %s\n", joined)
 	if err0 != nil {
 		os.Exit(EX_IOERR)
 	}

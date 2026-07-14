@@ -59,3 +59,36 @@ func TestGetVariables(t *testing.T) {
 	vars := analysis.GetVariables(pattern)
 	qt.Assert(t, vars, qt.IsNotNil)
 }
+
+// TestGetVariablesVectorSubPattern pins R7RS §4.3.2: a vector sub-pattern's
+// variables belong to the enclosing subtree, exactly as a list sub-pattern's do.
+// compileEllipsis reads the enclosing pair's variable set to decide what an
+// ellipsis group captures, so a name dropped here leaves the group unable to
+// claim it and the template fails to expand.
+func TestGetVariablesVectorSubPattern(t *testing.T) {
+	c := qt.New(t)
+
+	// Sub-pattern: (x #(a)) — the enclosing pair must report BOTH x and a.
+	sub := testSyntaxList(
+		testSyntaxSym("x"),
+		testSyntaxVec(testSyntaxSym("a")),
+	)
+	// Pattern: (_ (x #(a)) ...)
+	pattern := testSyntaxList(
+		testSyntaxSym("_"),
+		sub,
+		testSyntaxSym("..."),
+	)
+	variables := map[string]struct{}{
+		"x": {},
+		"a": {},
+	}
+
+	analysis := AnalyzePattern(pattern, variables)
+
+	c.Assert(analysis.ContainsVariables(sub), qt.IsTrue)
+	c.Assert(analysis.GetVariables(sub), qt.DeepEquals, map[string]struct{}{
+		"x": {},
+		"a": {},
+	})
+}

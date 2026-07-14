@@ -296,6 +296,48 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
+// lookupMacroBinding resolves sym0 to a macro (syntax) binding, or nil.
+//
+// Three places to look, in order: the local env (let-syntax / letrec-syntax), the
+// expand phase one step up from the expanding frame (the symmetric counterpart of
+// define-syntax storage — expanding phase-N code reads macros at phase N+1, so a
+// macro defined inside a transformer body resolves at its climbed phase; at
+// phaseLevel 0, NextPhase() == Expand()), and finally the library env named by any
+// scope the symbol carries, which is how a library macro reaches an UNEXPORTED
+// helper macro of its own library.
+//
+// It exists because ExpandOnce had only the first two. A macro reachable solely
+// through the library-scope arm was therefore reported by (expand-once …) as "not a
+// macro" — a real macro call that the expander itself expands perfectly well. Two
+// copies of a three-step lookup is how one of them ends up two steps long.
+func (p *ExpanderTimeContinuation) lookupMacroBinding(sym0 *values.Symbol, symbolScopes []*syntax.Scope) *environment.Binding {
+	bnd := p.env.GetBinding(sym0, nil)
+	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
+		return bnd
+	}
+
+	expandEnv := p.env.NextPhase()
+	bnd = expandEnv.GetBinding(sym0, nil)
+	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
+		return bnd
+	}
+
+	if p.env.Namespace() == nil {
+		return nil
+	}
+	for _, scope := range symbolScopes {
+		libEnv := p.env.Namespace().LookupLibraryEnv(scope)
+		if libEnv == nil {
+			continue
+		}
+		libBnd := libEnv.Expand().GetBinding(sym0, nil)
+		if libBnd != nil && libBnd.BindingType() == environment.BindingTypeSyntax {
+			return libBnd
+		}
+	}
+	return nil
+}
+
 // ExpandSyntaxExpression checks if sym is a macro and expands it, or returns
 // the expression as a procedure call if not.
 //
@@ -322,51 +364,14 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 	}
 
 	// R7RS §4.2.2: Local variable bindings shadow macros AND primitive forms
+
 	// Check if there's a local variable binding before checking for macros or primitives
 	hasLocalBinding := p.hasLocalVariableBinding(sym0, sym.Scopes())
 
 	if !hasLocalBinding {
-		// No local variable shadowing - check for macros
-		// First check local bindings in p.env (supports let-syntax local macros)
-		// Then fall back to the global expand environment
-		var bnd *environment.Binding
-
-		// Check local bindings first (for let-syntax/letrec-syntax)
-		bnd = p.env.GetBinding(sym0, nil)
-
-		// If not found locally, check the global macro environment one phase up
-		// from the expanding frame (relative, not absolute phase 1). This is the
-		// symmetric counterpart of define-syntax storage (compile_define_syntax.go):
-		// expanding phase-N code reads macros at phase N+1, so a macro defined
-		// inside a transformer body resolves at its climbed phase. At phaseLevel 0
-		// NextPhase() == Expand() (level-0 identity).
-		if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
-			expandEnv := p.env.NextPhase()
-			bnd = expandEnv.GetBinding(sym0, nil)
-		}
-
-		// Check if it's a macro binding
-		if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
-			// This is a macro - invoke the transformer
+		bnd := p.lookupMacroBinding(sym0, sym.Scopes())
+		if bnd != nil {
 			return p.expandMacroInvocation(sym, expr, bnd)
-		}
-
-		// Library scope macro fallback: if the symbol carries a library scope,
-		// check the library env's expand phase for an unexported macro binding.
-		// This enables macros that reference unexported helper macros.
-		symbolScopes := sym.Scopes()
-		if p.env.Namespace() != nil && len(symbolScopes) > 0 {
-			for _, scope := range symbolScopes {
-				libEnv := p.env.Namespace().LookupLibraryEnv(scope)
-				if libEnv == nil {
-					continue
-				}
-				libExpandEnv := libEnv.Expand()
-				libBnd := libExpandEnv.GetBinding(sym0, nil)
-				if libBnd != nil && libBnd.BindingType() == environment.BindingTypeSyntax {
-					return p.expandMacroInvocation(sym, expr, libBnd)
-				}
-			}
 		}
 
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
@@ -543,19 +548,13 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return expr, false, nil
 	}
 
-	// Check local bindings first (for let-syntax/letrec-syntax),
-	// then fall back to the global macro environment one phase up from the
-	// expanding frame (relative, symmetric with define-syntax storage). At
-	// phaseLevel 0 NextPhase() == Expand() (level-0 identity).
-	// This mirrors ExpandSyntaxExpression's lookup order.
-	bnd := p.env.GetBinding(sym0, nil)
-	if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
-		expandEnv := p.env.NextPhase()
-		bnd = expandEnv.GetBinding(sym0, nil)
-	}
-
-	// Check if it's a macro binding
-	if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
+	// The SAME three-step lookup the expander itself uses — local, next phase, then
+	// the library env named by the symbol's scopes. This used to be a hand-copied
+	// two-step version, missing the library arm, so (expand-once …) reported a macro
+	// reachable only through a library scope as not-a-macro, even though expansion
+	// itself handled it fine.
+	bnd := p.lookupMacroBinding(sym0, sym.Scopes())
+	if bnd == nil {
 		// Not a macro - no expansion
 		return expr, false, nil
 	}

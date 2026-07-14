@@ -207,9 +207,12 @@ engine implements. Wile is R7RS by default; selecting a different standard
 by subset-importing R7RS's `(scheme base)` under a restricted profile. Note that
 `(scheme r5rs)` today is a re-export bundle layered *on top of* the R7RS core
 (it imports `(scheme base)` et al.), so it requires a profile that provides those
-primitives — it is not a non-R7RS baseline. A first-class standard selector
-(`WithDialect`) is designed but unstarted; see the Dialect System in
-`plans/ARCHITECTURE.local.md`.
+primitives — it is not a non-R7RS baseline. The first-class standard selector is
+`WithDialect(d)` (`pkg/wile/dialect.go`): it forks the R7RS-default forms
+registry per engine and lets the dialect install, replace, or remove special
+forms; a dialect that also implements `PrimitiveRemover` or
+`BootstrapProcedureRewriter` reshapes the primitive and bootstrap layers too.
+`DefaultDialect` is the R7RS baseline, applied when no dialect is given.
 
 ### Library Search Paths
 

@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/big"
 	"strings"
@@ -446,15 +447,22 @@ func TestCoverage_DatumLabelReference(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
 
-	// Read two datums: #0=hello then #0# (reference to label 0)
-	p := NewParser(env, true, strings.NewReader("#0=hello #0#"))
+	// A label resolves within the datum that defines it.
+	p := NewParser(env, true, strings.NewReader("#0=(hello #0#)"))
 	syn1, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn1, qt.IsNotNil)
 
+	// R7RS §2.4: the label's scope is the outermost datum in which it appears, so
+	// a #0# in a LATER top-level datum is undefined even though an earlier datum
+	// defined #0=. The table used to persist across ReadSyntax calls.
+	p = NewParser(env, true, strings.NewReader("#0=hello #0#"))
 	syn2, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 	c.Assert(syn2, qt.IsNotNil)
+
+	_, err = p.ReadSyntax(context.TODO())
+	c.Assert(errors.Is(err, werr.ErrDatumLabelUndefined), qt.IsTrue)
 }
 
 func TestCoverage_DatumLabelVector(t *testing.T) {

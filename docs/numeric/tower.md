@@ -47,9 +47,9 @@ This promotion is correct per R7RS but has practical consequences:
 
 For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting-semiring path queries on DAGs — `values/numeric_scratch.go` provides unexported in-place arithmetic helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`). These reuse the destination's existing `[]Word` backing rather than allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op (the path through `(*BigInteger).Add`).
 
-The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `extensions/algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. See `pkg/values/CLAUDE.md` §"In-Place Arithmetic on BigInteger" for the helpers' contract (aliasing, storage reuse) and microbench numbers.
+The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `extensions/algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. The helpers' contract (aliasing rules, storage reuse) is documented on the declarations in `pkg/values/numeric_scratch.go`.
 
-The fast path applies only to `*BigInteger`. Other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but separate plans (see `memory/2026-05-24-bignum-allocation-reduction.md` §"Out of scope" for the scoping rationale).
+The fast path applies only to `*BigInteger`. The other carriers — `*BigFloat`, `*Rational`, `*BigComplex` — have similar shapes but no in-place helpers: they are out of scope for the counting-semiring workload that motivated these.
 
 ### Out of Scope
 
@@ -229,10 +229,7 @@ imag-acc)` and the symbols apply to each component independently.
   rejection.
 - `values.BigAccuracyToSymbol(acc) *Symbol` — Go-side projection
   used by every primitive.
-- `extensions/math/CLAUDE.local.md` — primitive inventory and design
-  notes.
-- `memory/2026-05-14-numeric-loss-signals-design.md` — design rationale,
-  Q-1 through Q-6 resolutions.
+- `extensions/math/` — the primitives that raise these signals.
 
 ---
 
@@ -255,5 +252,5 @@ go test -v ./values/ -run "TestNumericTower|TestLattice"
 - R7RS §6.2.1 — Numerical types (tower definition)
 - R7RS §6.2.2 — Exactness (contagion rules)
 - R7RS §6.2.3 — Implementation restrictions
-- `values/CLAUDE.md` — Package documentation
+- `pkg/values/` — package sources: `numeric_kind.go` (dispatch), `numeric_scratch.go` (in-place helpers)
 - Design rationale: Unified tower dispatch was prototyped and abandoned (see "Why Direct Dispatch" above)
