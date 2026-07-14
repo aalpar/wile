@@ -518,3 +518,61 @@ func TestLiteralPoolDoesNotRetypeAcrossFloatKinds(t *testing.T) {
 		c.Assert(neg, qt.Not(qt.Equals), pos, qt.Commentf("signed zeros must not merge"))
 	})
 }
+
+// TestNativeTemplate_MaybeAppendLiteral_GlobalIndexEnvNotDeduped asserts that a
+// library-pinned GlobalIndex and an Env==nil GlobalIndex for the same symbol
+// occupy DISTINCT literal-pool slots.
+//
+// GlobalIndex is not values.Hashable, so MaybeAppendLiteral takes the linear
+// fallback → literalIdentical → GlobalIndex.EqualTo, which compares only Index.
+// Collapsing the two slots silently retargets a load or a store at runtime: a
+// user (define helper 1) writes into a library's private binding, or a macro's
+// expansion reads the user's. Which one breaks depends on emission order.
+func TestNativeTemplate_MaybeAppendLiteral_GlobalIndexEnvNotDeduped(t *testing.T) {
+	c := qt.New(t)
+
+	tmpl := NewNativeTemplate(0, 0, false)
+	sym := values.NewSymbol("helper")
+	libraryFrame := environment.NewNamespace().Runtime().GlobalEnvironment()
+
+	libraryLoad := &environment.GlobalIndex{Index: sym, Env: libraryFrame}
+	userStore := environment.NewGlobalIndex(sym)
+
+	libraryIdx := tmpl.MaybeAppendLiteral(libraryLoad)
+	userIdx := tmpl.MaybeAppendLiteral(userStore)
+
+	c.Assert(libraryIdx, qt.Not(qt.Equals), userIdx,
+		qt.Commentf("a library-pinned GlobalIndex must not dedup onto an Env==nil one"))
+
+	pooledLibrary, ok := tmpl.literals[libraryIdx].(*environment.GlobalIndex)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(pooledLibrary.Env, qt.Equals, libraryFrame,
+		qt.Commentf("the library slot must keep its resolving frame"))
+
+	pooledUser, ok := tmpl.literals[userIdx].(*environment.GlobalIndex)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(pooledUser.Env, qt.IsNil,
+		qt.Commentf("the store slot must stay unpinned"))
+}
+
+// TestNativeTemplate_MaybeAppendLiteral_GlobalIndexSameEnvDedups pins the
+// precision side: dedup must still collapse two GlobalIndex that agree on both
+// symbol key and resolving frame, so the fix cannot be "never dedup".
+func TestNativeTemplate_MaybeAppendLiteral_GlobalIndexSameEnvDedups(t *testing.T) {
+	c := qt.New(t)
+
+	tmpl := NewNativeTemplate(0, 0, false)
+	frame := environment.NewNamespace().Runtime().GlobalEnvironment()
+
+	first := &environment.GlobalIndex{Index: values.NewSymbol("helper"), Env: frame}
+	second := &environment.GlobalIndex{Index: values.NewSymbol("helper"), Env: frame}
+
+	c.Assert(tmpl.MaybeAppendLiteral(first), qt.Equals, tmpl.MaybeAppendLiteral(second),
+		qt.Commentf("same symbol key, same frame: one pool slot"))
+
+	unpinnedA := environment.NewGlobalIndex(values.NewSymbol("g"))
+	unpinnedB := environment.NewGlobalIndex(values.NewSymbol("g"))
+
+	c.Assert(tmpl.MaybeAppendLiteral(unpinnedA), qt.Equals, tmpl.MaybeAppendLiteral(unpinnedB),
+		qt.Commentf("same symbol key, both unpinned: one pool slot"))
+}

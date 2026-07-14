@@ -144,3 +144,41 @@ func TestGlobalEnvironmentFrame_SymbolEquality(t *testing.T) {
 	qt.Assert(t, sym1.EqualTo(sym2), qt.IsTrue)
 	qt.Assert(t, sym1.Key, qt.Equals, sym2.Key)
 }
+
+// TestGlobalIndex_EqualTo_DistinguishesEnv asserts that two GlobalIndex values
+// naming the same symbol but resolving in different global frames are NOT equal.
+//
+// Env is not decoration: the VM branches on gi.Env != nil to pick the resolving
+// frame (machine_context.go:519,1190). Two GlobalIndex that differ only in Env
+// therefore denote different bindings, and any equality that ignores Env lets a
+// library-pinned macro reference and a user top-level store be treated as one.
+func TestGlobalIndex_EqualTo_DistinguishesEnv(t *testing.T) {
+	sym := values.NewSymbol("helper")
+	libraryFrame := newTestGlobalEnvFrame()
+
+	userStore := NewGlobalIndex(sym)
+	libraryLoad := &GlobalIndex{Index: sym, Env: libraryFrame}
+
+	qt.Assert(t, userStore.Env, qt.IsNil)
+	qt.Assert(t, libraryLoad.Env, qt.Not(qt.IsNil))
+
+	qt.Assert(t, libraryLoad.EqualTo(userStore), qt.IsFalse,
+		qt.Commentf("library-pinned load must not equal an Env==nil store of the same symbol"))
+	qt.Assert(t, userStore.EqualTo(libraryLoad), qt.IsFalse,
+		qt.Commentf("equality must be symmetric"))
+}
+
+// TestGlobalIndex_EqualTo_SameEnv_IsEqual pins the other direction, so a fix that
+// simply always returns false cannot pass.
+func TestGlobalIndex_EqualTo_SameEnv_IsEqual(t *testing.T) {
+	sym := values.NewSymbol("helper")
+	frame := newTestGlobalEnvFrame()
+
+	a := &GlobalIndex{Index: sym, Env: frame}
+	b := &GlobalIndex{Index: values.NewSymbol("helper"), Env: frame}
+
+	qt.Assert(t, a.EqualTo(b), qt.IsTrue,
+		qt.Commentf("same symbol key, same resolving frame: one binding"))
+	qt.Assert(t, NewGlobalIndex(sym).EqualTo(NewGlobalIndex(values.NewSymbol("helper"))), qt.IsTrue,
+		qt.Commentf("same symbol key, both unpinned: one binding"))
+}

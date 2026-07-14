@@ -54,12 +54,28 @@ func (p *GlobalIndex) IsVoid() bool {
 }
 
 // EqualTo returns true if this global index equals the given value.
+//
+// Env participates in the comparison, by pointer. It is not provenance metadata:
+// a non-nil Env is the binding store the VM reads and writes directly, with no
+// parent walk (machine_context.go, OpLoadGlobal/OpStoreGlobal via GetOwnGlobalBinding
+// and SetOwnGlobalValue). Two frames are two distinct `bindings` slices, so two
+// GlobalIndex pinned to different frames denote different variables even when
+// their symbol keys agree.
+//
+// A nil Env is not "some frame we did not record" — it is a deferred lookup,
+// resolved against whatever environment is live when the instruction executes.
+// It is therefore never equal to a pinned index, even one whose frame today's
+// walk would reach: the two are different operations, and a closure with a
+// different env chain resolves them differently.
 func (p *GlobalIndex) EqualTo(value values.Value) bool {
 	if p == nil || value == nil {
 		return p == nil && value == nil
 	}
 	v, ok := value.(*GlobalIndex)
 	if !ok {
+		return false
+	}
+	if v.Env != p.Env {
 		return false
 	}
 	return v.Index.EqualTo(p.Index)
