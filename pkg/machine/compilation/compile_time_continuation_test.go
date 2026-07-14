@@ -489,7 +489,8 @@ func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
 func TestCompileContext_CompileSetBang(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	symX := values.NewSymbol("x")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
+	_, created := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
+	qt.Assert(t, created, qt.IsTrue)
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// top-level closure with no parameters (thunk)
@@ -509,7 +510,14 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	qt.Assert(t, cont.Template().ParameterCount(), qt.Equals, 0)
 	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 2)
 	qt.Assert(t, cont.Template().Literals()[0], valuestest.SchemeEquals, values.NewString("true"))
-	qt.Assert(t, cont.Template().Literals()[1], valuestest.SchemeEquals, gi)
+
+	// compileSetBang emits env.GetGlobalIndex(sym), which pins Env to the frame
+	// resolution found. Build the expectation the same way: a GlobalIndex minted by
+	// MaybeCreateOwnGlobalBinding carries Env==nil and denotes a deferred lookup,
+	// not this pinned store.
+	storeGI := env.GetGlobalIndex(symX)
+	qt.Assert(t, storeGI.Env, qt.IsNotNil)
+	qt.Assert(t, cont.Template().Literals()[1], valuestest.SchemeEquals, storeGI)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, cont.Template(), env))
 	qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
@@ -519,7 +527,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	// set! now returns void with the LoadVoid operation at the end
 	qt.Assert(t, mc.GetValue(), qt.Equals, values.Void)
 	qt.Assert(t, *mc.Evals(), qt.HasLen, 0)
-	gi = mc.EnvironmentFrame().GlobalEnvironment().GetGlobalIndex(values.NewSymbol("x"))
+	gi := mc.EnvironmentFrame().GlobalEnvironment().GetGlobalIndex(values.NewSymbol("x"))
 	qt.Assert(t, gi, qt.IsNotNil)
 	v := mc.EnvironmentFrame().GlobalEnvironment().GetOwnGlobalBinding(gi)
 	qt.Assert(t, v.BindingType(), qt.Equals, environment.BindingTypeVariable)
