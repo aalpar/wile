@@ -72,3 +72,26 @@ func hashInexactNumeric(f *big.Float) uint64 {
 	normalized := new(big.Float).SetPrec(prec).Set(f)
 	return hashString(0x5, normalized.Text('g', -1))
 }
+
+// hashNaN is the hash EVERY NaN gets, whatever its payload bits.
+//
+// The Hashable contract is one-directional but binding: if a.EqualTo(b) then
+// a.HashCode() == b.HashCode(). Since eqv? (and so equal?) identifies any two
+// NaNs, every NaN must hash alike — and NaN is NOT one bit pattern. Three
+// already occur in practice:
+//
+//	+nan.0 literal   0x7ff8000000000001   (math.NaN())
+//	(/ 0.0 0.0)      0x7ff8000000000000
+//	negated NaN      0xfff8000000000001   (sign bit flipped)
+//
+// Hashing the raw bits, as this code used to, gives those three different hashes.
+// A hashtable keyed on (/ 0.0 0.0) would then fail to find an entry stored under
+// +nan.0 even though the two are equal? — the classic equal-but-different-hash
+// corruption. Canonicalizing here is what makes NaN-as-a-key work at all.
+func hashNaN() uint64 {
+	return hashUint64(0x5, nanCanonicalBits)
+}
+
+// nanCanonicalBits is an arbitrary fixed stand-in for "some NaN". Its value does
+// not matter; that it is CONSTANT does.
+const nanCanonicalBits uint64 = 0x7ff8000000000000

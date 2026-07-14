@@ -445,7 +445,12 @@ func (p *Complex) EqualTo(v Value) bool {
 // For finite values it delegates to hashInexactNumeric via big.Float.
 // For NaN or ±Inf it hashes the raw IEEE-754 bits to avoid big.Float panics.
 func hashComplexComponent(f float64) uint64 {
-	if math.IsNaN(f) || math.IsInf(f, 0) {
+	// Canonical for NaN (every NaN is eqv?, so every NaN must hash alike);
+	// bit-exact for Inf (+inf.0 and -inf.0 are not eqv?). See hashNaN.
+	if math.IsNaN(f) {
+		return hashNaN()
+	}
+	if math.IsInf(f, 0) {
 		return hashUint64(0x5, math.Float64bits(f))
 	}
 	return hashInexactNumeric(new(big.Float).SetFloat64(f))

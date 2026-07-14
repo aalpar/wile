@@ -57,10 +57,11 @@ package values
 //     non-NaN results, so the #f clause fires. Numeric comparison cannot see this
 //     (IEEE-754 says 0.0 == -0.0), which is why SignBit is consulted separately.
 //
-//   - NaN ⟹ #f across distinct objects. §6.1: "As an exception, the behavior of
-//     eqv? is unspecified when both obj1 and obj2 are NaN." Both answers conform.
-//     Wile answers #f; Chez answers #t. This is the one line to change if that
-//     policy is ever revisited — see the plan's F3.
+//   - NaN ⟹ #t, but only against another NaN of the same kind. §6.1: "As an
+//     exception, the behavior of eqv? is unspecified when both obj1 and obj2 are
+//     NaN", so both answers conform; Wile follows Chez and Racket. Consult IsNaN,
+//     never IEEE `==`: eqv? is an equivalence relation and must be reflexive,
+//     which IEEE equality deliberately is not.
 func EqvNumber(a, b Number) bool {
 	// A typed-nil numeric pointer is void, and every method below would fault on
 	// it. The per-type EqualTo methods this replaces each carried their own nil
@@ -97,12 +98,28 @@ func EqvNumber(a, b Number) bool {
 		return a.Compare(b) == 0
 	}
 
-	// Inexact from here.
-	if a.IsNaN() || b.IsNaN() {
-		return false
-	}
+	// Inexact from here. Kind first: precision is observable for inexact numbers,
+	// and that holds for NaN too — a float64 NaN and a BigFloat NaN are not the same
+	// object in the same domain.
 	if a.Kind() != b.Kind() {
 		return false
+	}
+	// NaN is eqv? to NaN. §6.1 leaves this explicitly unspecified ("As an exception,
+	// the behavior of eqv? is unspecified when both obj1 and obj2 are NaN"), so both
+	// answers conform; Wile follows Chez and Racket in answering #t.
+	//
+	// The alternative — #f, which IEEE-754's own != gives you for free — makes
+	// (memv +nan.0 lst) unable to find a NaN it did not itself allocate, and makes
+	// the (case x ((+nan.0) …)) arm dead code that can never fire. Neither is useful,
+	// and neither is what a Scheme programmer expects.
+	//
+	// Note this is NOT the same as IEEE equality, and must not be implemented with
+	// it: eqv? is an EQUIVALENCE relation and so must be reflexive, while IEEE `==`
+	// is deliberately not. Consult IsNaN, never `x == x`.
+	aNaN := a.IsNaN()
+	bNaN := b.IsNaN()
+	if aNaN || bNaN {
+		return aNaN && bNaN
 	}
 	if a.Compare(b) != 0 {
 		return false

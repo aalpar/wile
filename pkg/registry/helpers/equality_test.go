@@ -207,10 +207,14 @@ func TestEqv(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "float/NaN not equal to NaN",
+			// R7RS §6.1 leaves eqv? on two NaNs UNSPECIFIED; Wile answers #t, matching
+			// Chez and Racket. This is NOT IEEE equality — eqv? is an equivalence
+			// relation and must be reflexive, which IEEE `==` deliberately is not.
+			// Numeric = keeps IEEE semantics: (= +nan.0 +nan.0) is still #f.
+			name: "float/NaN is eqv? to NaN",
 			a:    values.NewFloat(math.NaN()),
 			b:    values.NewFloat(math.NaN()),
-			want: false, // IEEE 754: NaN != NaN
+			want: true,
 		},
 		{
 			// The old expectation here was `true`, justified in a comment as "Go:
@@ -255,10 +259,10 @@ func TestEqv(t *testing.T) {
 		// as a separate flag; without a guard, Cmp on the zero backing *big.Float
 		// returns 0 (incorrectly treating NaN == NaN as true).
 		{
-			name: "bigfloat/NaN not equal to NaN",
+			name: "bigfloat/NaN is eqv? to NaN",
 			a:    values.NewBigFloatNaN(),
 			b:    values.NewBigFloatNaN(),
-			want: false,
+			want: true,
 		},
 		{
 			name: "bigfloat/NaN not equal to finite",

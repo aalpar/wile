@@ -138,7 +138,7 @@ func (p *BigFloat) Float64WithAccuracy() (float64, big.Accuracy) {
 // Hashable contract is not violated, but NaN is not a useful hashtable key.
 func (p *BigFloat) HashCode() uint64 {
 	if p.nan {
-		return hashUint64(0x5, math.Float64bits(math.NaN()))
+		return hashNaN()
 	}
 	if p.value.IsInf() {
 		return hashUint64(0x5, math.Float64bits(p.Float64Truncated()))

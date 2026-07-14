@@ -122,15 +122,51 @@ var equivCases = []equivCase{
 		name: "memv/signed-zero", expr: `(memv -0.0 (list 0.0))`, want: "#f",
 	},
 
-	// F3 — NaN. §6.1: "the behavior of eqv? is unspecified when both obj1 and obj2
-	// are NaN." Wile's #f CONFORMS; Chez answers #t. Pinned as the status quo, with
-	// the divergence recorded. Phase 3 of the plan proposes matching Chez.
-	{name: "eqv?/nan-distinct", expr: `(eqv? +nan.0 +nan.0)`, want: "#f", chez: "#t"},
-	{name: "equal?/nan-distinct", expr: `(equal? +nan.0 +nan.0)`, want: "#f", chez: "#t"},
+	// F3 (resolved) — NaN. §6.1: "As an exception, the behavior of eqv? is
+	// unspecified when both obj1 and obj2 are NaN." Both answers conform. Wile now
+	// answers #t, matching Chez and Racket; it used to answer #f, which made
+	// (memv +nan.0 lst) unable to find a NaN it had not itself allocated and made
+	// the (case x ((+nan.0) …)) arm dead code.
+	//
+	// This is NOT IEEE equality and must not be confused with it: eqv? is an
+	// EQUIVALENCE relation, hence reflexive, which IEEE `==` deliberately is not.
+	// Numeric = keeps IEEE semantics — see the row below.
+	{name: "eqv?/nan-distinct", expr: `(eqv? +nan.0 +nan.0)`, want: "#t"},
+	{name: "equal?/nan-distinct", expr: `(equal? +nan.0 +nan.0)`, want: "#t"},
 	{
-		name: "case/nan-arm-never-fires",
+		// Different NaN PAYLOADS: the +nan.0 literal and (/ 0.0 0.0) have different
+		// bit patterns. They are still eqv?, which is why HashCode canonicalizes NaN.
+		name: "eqv?/nan-across-payloads",
+		expr: `(eqv? +nan.0 (/ 0.0 0.0))`,
+		want: "#t",
+	},
+	{
+		// The Hashable contract in action: equal? implies equal hashes, so a table
+		// keyed on one NaN payload must be found by another.
+		name: "hashtable/nan-key-across-payloads",
+		expr: `(let ((h (make-hashtable)))
+		         (hashtable-set! h (/ 0.0 0.0) 'found)
+		         (hashtable-ref h +nan.0 'missing))`,
+		want: "found",
+	},
+	{
+		name: "case/nan-arm-fires",
 		expr: `(case (/ 0.0 0.0) ((+nan.0) 'hit) (else 'miss))`,
-		want: "miss", chez: "hit",
+		want: "hit",
+	},
+	{
+		// Numeric = is a DIFFERENT predicate and stays IEEE-754. Reflexivity is a law
+		// of equivalence relations, not of =.
+		name: "=/nan-stays-ieee",
+		expr: `(= +nan.0 +nan.0)`,
+		want: "#f",
+	},
+	{
+		// A float64 NaN and an arbitrary-precision NaN are still different kinds:
+		// precision is observable for inexact numbers, NaN included.
+		name: "eqv?/nan-cross-kind",
+		expr: `(eqv? +nan.0 (/ #m0.0 #m0.0))`,
+		want: "#f",
 	},
 
 	// Reflexivity is NOT optional, whatever NaN does across objects: eqv? settles

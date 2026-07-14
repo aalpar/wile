@@ -483,7 +483,14 @@ func TestEqualIsReflexive(t *testing.T) {
 
 		// Distinct NaN objects stay #f: eqv? says #f for them, and equal? on
 		// non-compound values is defined to agree with eqv?. Only reflexivity moved.
-		{Name: "distinct nan literals stay false", Code: `(equal? +nan.0 +nan.0)`, Expected: values.FalseValue},
+		{Name: "distinct nan literals are equal", Code: `(equal? +nan.0 +nan.0)`, Expected: values.TrueValue},
+		{Name: "nan found by memv across payloads", Code: `(if (memv +nan.0 (list 1 (/ 0.0 0.0))) #t #f)`, Expected: values.TrueValue},
+		{Name: "case nan arm fires", Code: `(case (/ 0.0 0.0) ((+nan.0) 'hit) (else 'miss))`, Expected: values.NewSymbol("hit")},
+		{Name: "nan hashtable key across payloads",
+			Code: `(let ((h (make-hashtable)))
+			         (hashtable-set! h (/ 0.0 0.0) 'found)
+			         (hashtable-ref h +nan.0 'missing))`,
+			Expected: values.NewSymbol("found")},
 
 		// equal? stays COARSER than eqv? where R7RS requires it to be.
 		{Name: "equal? still compares string contents", Code: `(equal? (string-copy "ab") (string-copy "ab"))`, Expected: values.TrueValue},

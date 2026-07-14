@@ -595,8 +595,13 @@ func TestBigFloat_NaNEquality(t *testing.T) {
 	// TestFloat_NaNEquality for the full argument.
 	c.Assert(nan1.EqualTo(nan1), qt.IsTrue)
 
-	// Distinct objects: identity does not hold, so IEEE-754 decides and NaN != NaN.
-	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
+	// Distinct NaN objects are equivalent too (R7RS §6.1 leaves this unspecified;
+	// Wile follows Chez). See TestFloat_NaNEquality for the full argument.
+	c.Assert(nan1.EqualTo(nan2), qt.IsTrue)
+	c.Assert(nan2.EqualTo(nan1), qt.IsTrue)
+	c.Assert(nan1.HashCode(), qt.Equals, nan2.HashCode())
+
+	// But NaN is equivalent to no finite value, in either direction.
 	c.Assert(nan1.EqualTo(finite), qt.IsFalse)
 	c.Assert(finite.EqualTo(nan1), qt.IsFalse)
 }

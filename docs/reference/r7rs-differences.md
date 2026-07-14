@@ -10,7 +10,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Nine known differences exist:
+Ten known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -20,6 +20,7 @@ Nine known differences exist:
 7. Invoking a continuation with a number of values other than one **splices** those values into the capture position rather than raising an arity error. R7RS §6.10 leaves this **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory (Racket instead raises an arity error); both conform.
 8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
 9. `equal?` is **structural** on records, hashtables, and boxes, where Chez and Racket answer `#f` for distinct objects. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here.
+10. `(eqv? +nan.0 +nan.0)` returns `#t`. R7RS §6.1 makes this **explicitly unspecified** ("As an exception, the behavior of `eqv?` is unspecified when both `obj1` and `obj2` are NaN"), so this is a choice within unspecified territory, matching Chez and Racket. Numeric `=` keeps IEEE-754 semantics: `(= +nan.0 +nan.0)` is still `#f`.
 
 ---
 

@@ -1177,17 +1177,24 @@ func TestBigComplex_NaNEquality(t *testing.T) {
 	c.Assert(nanImag.EqualTo(nanImag), qt.IsTrue)
 	c.Assert(nanBoth.EqualTo(nanBoth), qt.IsTrue)
 
-	// Distinct objects with NaN components stay unequal: identity does not hold, so
-	// IEEE-754 decides (pinned below against finite and against a separate NaN).
-
-	// NaN != finite.
+	// NaN is equivalent to no finite value: a NaN component makes the whole complex
+	// INEXACT, and finite here is exact (BigInteger parts), so exactness alone
+	// separates them — before the NaN rule is even consulted.
 	c.Assert(nanReal.EqualTo(finite), qt.IsFalse)
 	c.Assert(finite.EqualTo(nanReal), qt.IsFalse)
 
-	// NaN BigComplex != NaN BigComplex (different instances).
+	// Two distinct NaN-carrying BigComplexes ARE equivalent, component-wise: the NaN
+	// reals are eqv? (Chez-matching), and the exact imaginary parts are equal. See
+	// TestFloat_NaNEquality.
 	nanReal2 := values.NewBigComplex(
 		values.NewBigFloatNaN(),
 		values.NewBigIntegerFromInt64(4),
 	)
-	c.Assert(nanReal.EqualTo(nanReal2), qt.IsFalse)
+	c.Assert(nanReal.EqualTo(nanReal2), qt.IsTrue)
+	c.Assert(nanReal2.EqualTo(nanReal), qt.IsTrue)
+
+	// A NaN in the REAL slot is still not the same value as a NaN in the IMAGINARY
+	// slot — the rule is component-wise, not "contains a NaN somewhere".
+	c.Assert(nanReal.EqualTo(nanImag), qt.IsFalse)
+	c.Assert(nanBoth.EqualTo(nanReal), qt.IsFalse)
 }

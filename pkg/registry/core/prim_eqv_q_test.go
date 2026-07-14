@@ -103,8 +103,18 @@ func TestEqvQSpecialValues(t *testing.T) {
 		{Name: "negative infinity", Code: `(eqv? -inf.0 -inf.0)`, Expected: values.TrueValue},
 		{Name: "pos inf vs neg inf", Code: `(eqv? +inf.0 -inf.0)`, Expected: values.FalseValue},
 
-		// NaN - per R7RS, NaN is not eqv? to itself
-		{Name: "nan vs nan", Code: `(eqv? +nan.0 +nan.0)`, Expected: values.FalseValue},
+		// NaN. The old comment here read "per R7RS, NaN is not eqv? to itself", which
+		// is simply not what the spec says: §6.1 makes eqv? on two NaNs explicitly
+		// UNSPECIFIED ("As an exception, the behavior of eqv? is unspecified when both
+		// obj1 and obj2 are NaN"). Both answers conform. Wile answers #t, following
+		// Chez and Racket — #f would make (memv +nan.0 lst) unable to find a NaN it
+		// did not allocate and make the (case x ((+nan.0) …)) arm dead code.
+		//
+		// Numeric = is a DIFFERENT predicate and keeps IEEE semantics: see below.
+		{Name: "nan vs nan", Code: `(eqv? +nan.0 +nan.0)`, Expected: values.TrueValue},
+		{Name: "nan vs nan (arith payload)", Code: `(eqv? +nan.0 (/ 0.0 0.0))`, Expected: values.TrueValue},
+		{Name: "nan vs finite", Code: `(eqv? +nan.0 1.0)`, Expected: values.FalseValue},
+		{Name: "numeric = on nan stays IEEE", Code: `(= +nan.0 +nan.0)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

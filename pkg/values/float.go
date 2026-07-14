@@ -46,7 +46,15 @@ func NewFloat(v float64) *Float {
 // NaN and Inf use bitwise hashing as a fallback since BigFloat has
 // no Inf/NaN, making cross-type equality impossible for those values.
 func (p *Float) HashCode() uint64 {
-	if math.IsNaN(p.Value) || math.IsInf(p.Value, 0) {
+	// Every NaN hashes alike, because eqv? identifies every NaN. Hashing the raw
+	// bits would give (/ 0.0 0.0) and +nan.0 different hashes despite their being
+	// equal?. See hashNaN.
+	if math.IsNaN(p.Value) {
+		return hashNaN()
+	}
+	// Inf keeps its bits: +inf.0 and -inf.0 are NOT eqv?, so they must be free to
+	// hash differently.
+	if math.IsInf(p.Value, 0) {
 		return hashUint64(0x5, math.Float64bits(p.Value))
 	}
 	return hashInexactNumeric(new(big.Float).SetFloat64(p.Value))
