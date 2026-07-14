@@ -62,6 +62,21 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
+### `Value` Go-comparability is an unenforced invariant, already violated in-tree (2026-07-14)
+
+- [ ] **Decide whether `Value` must be Go-comparable, then enforce it or stop assuming it** [Correctness, M]: Three sites compare or hash arbitrary `Value` interfaces, and Go panics (`comparing uncomparable type` / `hash of unhashable type`) when the dynamic type is a slice, map, or func:
+  - `values.EqIdentity` (`pkg/values/utils.go`) — `return a == b`. Backs `eq?`, `memq`, `assq`.
+  - `equalWorklist.step` (`pkg/values/equal.go`) — `if a == b` on component pairs.
+  - `equalPairKey{a, b}` as a map key (`pkg/values/equal.go`) — hashes BOTH elements, so it faults on a non-comparable operand *even when the two types differ and `==` would have been safe*. **Fixed** on `fix/crosscheck-2026-07-14` by settling a non-`DeepEqualer` `b` before the key is formed; the other two are open.
+
+  **This is not hypothetical and not embedder-only.** `machine.Operations` is `[]Operation` (`pkg/machine/operations.go`) and implements `Value`. Verified: `values.EqIdentity(ops, ops2)` panics with `runtime error: comparing uncomparable type machine.Operations`. It was found when a naive `a == b` fast-path added to `Equal` took down all of `pkg/machine/compilation`'s tests — the suite catches it, which is the only reason the invariant has held.
+
+  Pick one and commit to it:
+  1. **Require comparability.** Document it on the `Value` interface, and either make `Operations` a struct wrapping the slice, or exclude it from `Value`. Cheapest to reason about; `eq?` stays a pointer compare.
+  2. **Stop assuming it.** Guard the three sites (`reflect.TypeOf(a).Comparable()`, or an explicit `Identity() uintptr` on the interface). Costs a check on the `eq?`/`member` hot path.
+
+  Do NOT paper over it by adding identity fast-paths one at a time — that is what produced the panic above. Reflexivity for NaN-carrying numerics is handled correctly on `fix/equal-nan-reflexivity` by putting the identity check inside each numeric `EqualTo`, on a *pointer* compare, precisely because the interface compare is unsafe.
+
 ### Continuation multiple-values follow-ups (from PR #800 crosscheck, 2026-06-25)
 
 Deferred items surfaced while shipping the multi-value continuation re-invocation

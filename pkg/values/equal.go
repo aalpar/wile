@@ -70,6 +70,12 @@ func Equal(a, b Value) bool {
 	if IsVoid(a) || IsVoid(b) {
 		return IsVoid(a) == IsVoid(b)
 	}
+	// NOTE: no `if a == b` identity shortcut here, however tempting. Not every
+	// Value is Go-comparable — machine.Operations is a slice — and comparing two
+	// interfaces holding the same non-comparable dynamic type panics. Reflexivity
+	// is instead the responsibility of each leaf's EqualTo, where it can be
+	// established without an interface compare. See the numeric types, whose
+	// EqualTo would otherwise report a NaN as unequal to itself.
 	_, ok := a.(DeepEqualer)
 	if !ok {
 		// Leaf: no traversal, no allocation. This is the hot path under

@@ -424,6 +424,12 @@ func (p *Complex) IsVoid() bool {
 func (p *Complex) EqualTo(v Value) bool {
 	switch other := v.(type) {
 	case *Complex:
+		// Reflexive on the same object: a NaN component must not make a value
+		// unequal to itself. See Float.EqualTo for why equal? may not fall below
+		// eqv? (R7RS §6.1) and why the check lives here rather than in Equal.
+		if p == other {
+			return true
+		}
 		return p.Value == other.Value
 	case *BigComplex:
 		return other.EqualTo(p)

@@ -472,6 +472,12 @@ func (p *BigFloat) EqualTo(o Value) bool {
 		if v == nil || p == nil {
 			return p == v
 		}
+		// Reflexive on the same object, before the NaN guard below rejects it. See
+		// Float.EqualTo: equal? may not be finer than eqv? (R7RS §6.1), and eqv?
+		// settles identity first.
+		if p == v {
+			return true
+		}
 		if p.nan || v.nan {
 			return false
 		}

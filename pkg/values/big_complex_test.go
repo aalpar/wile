@@ -1130,10 +1130,16 @@ func TestBigComplex_NaNEquality(t *testing.T) {
 		values.NewBigIntegerFromInt64(4),
 	)
 
-	// NaN != NaN (IEEE 754).
-	c.Assert(nanReal.EqualTo(nanReal), qt.IsFalse)
-	c.Assert(nanImag.EqualTo(nanImag), qt.IsFalse)
-	c.Assert(nanBoth.EqualTo(nanBoth), qt.IsFalse)
+	// Reflexive: EqualTo backs the equivalence predicates (eqv?/equal?), not numeric
+	// =, and an equivalence relation holds between an object and itself whatever its
+	// components carry. R7RS §6.1 requires eq? ⊆ eqv? ⊆ equal?. See
+	// TestFloat_NaNEquality for the full argument.
+	c.Assert(nanReal.EqualTo(nanReal), qt.IsTrue)
+	c.Assert(nanImag.EqualTo(nanImag), qt.IsTrue)
+	c.Assert(nanBoth.EqualTo(nanBoth), qt.IsTrue)
+
+	// Distinct objects with NaN components stay unequal: identity does not hold, so
+	// IEEE-754 decides (pinned below against finite and against a separate NaN).
 
 	// NaN != finite.
 	c.Assert(nanReal.EqualTo(finite), qt.IsFalse)
