@@ -87,6 +87,7 @@ func TestMagnitude(t *testing.T) {
 		out  values.Value
 	}{
 		{
+			// A float64-backed Complex operand, so magnitude stays in float64 here.
 			name: "magnitude of 3+4i",
 			prog: values.List(values.NewSymbol("magnitude"), values.NewComplexFromParts(3.0, 4.0)),
 			out:  values.NewFloat(5.0),
@@ -113,9 +114,11 @@ func TestMakeRectangular(t *testing.T) {
 		out  values.Value
 	}{
 		{
+			// EXACT integer parts in, exact complex out (R7RS §6.2.5). Chez agrees:
+			// (exact? (make-rectangular 3 4)) => #t.
 			name: "make-rectangular from integers",
 			prog: values.List(values.NewSymbol("make-rectangular"), values.NewInteger(3), values.NewInteger(4)),
-			out:  values.NewComplexFromParts(3.0, 4.0),
+			out:  values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4)),
 		},
 		{
 			name: "make-rectangular from floats",

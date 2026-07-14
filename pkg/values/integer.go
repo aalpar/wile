@@ -82,10 +82,6 @@ func (p *Integer) HashCode() uint64 {
 // dispatch methods below. Each produces the representation needed by
 // the target type's native arithmetic.
 
-func (p *Integer) bigInt() *big.Int {
-	return big.NewInt(p.Value)
-}
-
 // Overflow-detecting arithmetic helpers for int64.
 //
 // R7RS §6.2.3 allows implementations to support arbitrarily large exact
@@ -480,21 +476,15 @@ func (p *Integer) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both integers have the same value.
+// EqualTo implements R7RS equal? for Integer.
 //
-// R7RS §6.2.6: The = procedure compares numerical values for equality.
-// This implements structural equality for the Integer type specifically.
-// Handles comparison with Integer, BigInteger, and Rational types for symmetry.
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
 func (p *Integer) EqualTo(v Value) bool {
-	switch other := v.(type) {
-	case *Integer:
-		return p.Value == other.Value
-	case *BigInteger:
-		return other.BigInt().Cmp(p.bigInt()) == 0
-	case *Rational:
-		return other.value.Cmp(new(big.Rat).SetInt64(p.Value)) == 0
-	}
-	return false
+	return eqvNumberValue(p, v)
 }
 
 // SchemeString returns the Scheme representation of this integer.

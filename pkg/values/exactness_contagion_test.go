@@ -17,6 +17,7 @@ package values_test
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -448,4 +449,176 @@ func TestExactnessContagionWhyMultiplicationIsDifferent(t *testing.T) {
 	mulResult := values.NewInteger(0).Multiply(values.NewFloat(42.5))
 	c.Assert(mulResult.IsExact(), qt.IsTrue,
 		qt.Commentf("(* 0 42.5) can be exact because result is mathematically 0"))
+}
+
+// TestContagionOverflowsToInfinity pins the most user-visible consequence of exactness
+// contagion, and the one thing about it that looks like a bug and is not.
+//
+// Absorbing an exact operand into a float64 means ROUNDING it, and a bignum too large
+// for float64 rounds to ±Inf. So a precise exact value, touched by a single inexact
+// operand, becomes +inf.0. That is not a defect; it is what "inexact" promises, and it
+// is what Chez gives:
+//
+//	petite -q <<< '(display (list (+ 1.5 (expt 2 2000)) (exact->inexact (expt 2 2000))))'
+//	# => (+inf.0 +inf.0)
+//
+// This was untested. Three tests that used to exercise the lossy path were rewritten to
+// route AROUND it (they now take a #m literal, which is the deliberate opt-in to
+// arbitrary precision), which left the behavior itself pinned nowhere: contagion could
+// have been reverted to the old exact × Float => BigFloat escalation and the suite
+// would have stayed green, because a BigFloat compares = to the #m literals those tests
+// assert against. These rows are the guard.
+func TestContagionOverflowsToInfinity(t *testing.T) {
+	c := qt.New(t)
+
+	huge := new(big.Int).Exp(big.NewInt(2), big.NewInt(2000), nil)
+	bigHuge := values.NewBigInteger(huge)
+
+	// Exact + inexact: the exact operand is rounded into float64 and overflows.
+	sum := bigHuge.Add(values.NewFloat(1.5))
+	f, ok := sum.(*values.Float)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("contagion must land on *values.Float, got %T", sum))
+	c.Assert(math.IsInf(f.Value, 1), qt.IsTrue,
+		qt.Commentf("(+ 1.5 (expt 2 2000)) must be +inf.0, got %s", sum.SchemeString()))
+	c.Assert(sum.IsExact(), qt.IsFalse)
+
+	// Same the other way round: contagion is symmetric.
+	sum2 := values.NewFloat(1.5).Add(bigHuge)
+	c.Assert(sum2.SchemeString(), qt.Equals, sum.SchemeString(),
+		qt.Commentf("contagion must not depend on operand order"))
+
+	// Negative overflow.
+	negHuge := values.NewBigInteger(new(big.Int).Neg(huge))
+	neg := negHuge.Add(values.NewFloat(1.5))
+	nf, ok := neg.(*values.Float)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(math.IsInf(nf.Value, -1), qt.IsTrue,
+		qt.Commentf("must be -inf.0, got %s", neg.SchemeString()))
+
+	// The #m literal is how a program ASKS to keep the precision, and it still works.
+	// This is the escape hatch, and it is the reason the overflow above is acceptable.
+	kept := bigHuge.Add(values.NewBigFloatFromFloat64(1.5))
+	_, isBig := kept.(*values.BigFloat)
+	c.Assert(isBig, qt.IsTrue, qt.Commentf("a BigFloat operand must preserve precision, got %T", kept))
+	c.Assert(kept.IsExact(), qt.IsFalse)
+	bf := kept.(*values.BigFloat)
+	c.Assert(bf.IsFinite(), qt.IsTrue,
+		qt.Commentf("BigFloat has the range to hold 2^2000; it must not overflow"))
+}
+
+// TestComparisonNeverRoundsAnOperand pins TRICHOTOMY across the exact/inexact boundary,
+// including against infinities.
+//
+// For any two real numbers exactly one of a<b, a=b, a>b holds. That is not negotiable,
+// and it was violated: the comparison dispatchers carried an IEEE special-value guard
+// that, when either operand was an Inf/NaN Float, short-circuited BOTH operands through
+// float64. An exact bignum too large for float64 became +Inf, and then compared EQUAL to
+// the infinity it was being compared against:
+//
+//	(<  (expt 10 400) +inf.0)   =>  #f
+//	(>= (expt 10 400) +inf.0)   =>  #t      -- simultaneously
+//
+// The guard's justification (that BigFloat/BigComplex could not hold Inf/NaN) went stale
+// when they were made IEEE-capable. Rounding an operand is the one thing comparison must
+// never do; it is why comparisonTable exists at all.
+func TestComparisonNeverRoundsAnOperand(t *testing.T) {
+	c := qt.New(t)
+
+	huge := values.NewBigInteger(new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil))
+	negHuge := values.NewBigInteger(new(big.Int).Neg(new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil)))
+	posInf := values.NewFloat(math.Inf(1))
+	negInf := values.NewFloat(math.Inf(-1))
+
+	// A finite exact number, however large, is strictly less than +inf.0.
+	c.Assert(huge.LessThan(posInf), qt.IsTrue, qt.Commentf("10^400 < +inf.0"))
+	c.Assert(huge.Compare(posInf), qt.Equals, -1)
+	c.Assert(posInf.LessThan(huge), qt.IsFalse, qt.Commentf("+inf.0 is not < 10^400"))
+	c.Assert(posInf.Compare(huge), qt.Equals, 1)
+
+	// And strictly greater than -inf.0.
+	c.Assert(negInf.LessThan(huge), qt.IsTrue)
+	c.Assert(huge.LessThan(negInf), qt.IsFalse)
+	c.Assert(negHuge.LessThan(posInf), qt.IsTrue)
+	c.Assert(negInf.LessThan(negHuge), qt.IsTrue, qt.Commentf("-inf.0 < -10^400"))
+
+	// TRICHOTOMY, stated as the law rather than as cases: for every ordered pair,
+	// exactly one of <, =, > holds. The old guard made (10^400, +inf.0) satisfy NONE of
+	// the strict relations while also reporting Compare == 0.
+	pairs := []struct {
+		name string
+		a, b values.Number
+	}{
+		{"10^400 vs +inf.0", huge, posInf},
+		{"10^400 vs -inf.0", huge, negInf},
+		{"-10^400 vs +inf.0", negHuge, posInf},
+		{"+inf.0 vs 10^400", posInf, huge},
+		{"2^100-1 vs (inexact 2^100)", values.NewBigInteger(
+			new(big.Int).Sub(new(big.Int).Exp(big.NewInt(2), big.NewInt(100), nil), big.NewInt(1))),
+			values.NewFloat(math.Pow(2, 100))},
+	}
+	for _, tc := range pairs {
+		lt := tc.a.LessThan(tc.b)
+		gt := tc.b.LessThan(tc.a)
+		eq := values.NumericEquals(tc.a, tc.b)
+		n := 0
+		for _, b := range []bool{lt, gt, eq} {
+			if b {
+				n++
+			}
+		}
+		c.Assert(n, qt.Equals, 1, qt.Commentf(
+			"trichotomy violated for %s: less=%v greater=%v equal=%v (exactly one must hold)",
+			tc.name, lt, gt, eq))
+
+		// Compare must agree with LessThan rather than contradict it.
+		cmp := tc.a.Compare(tc.b)
+		switch {
+		case lt:
+			c.Assert(cmp, qt.Equals, -1, qt.Commentf("%s: LessThan says <, Compare disagrees", tc.name))
+		case gt:
+			c.Assert(cmp, qt.Equals, 1, qt.Commentf("%s: LessThan says >, Compare disagrees", tc.name))
+		default:
+			c.Assert(cmp, qt.Equals, 0, qt.Commentf("%s: equal, Compare disagrees", tc.name))
+		}
+	}
+}
+
+// TestEqvAgreesWithNumericEqualsOnExactComplex closes an R7RS §6.1 lattice violation:
+// two EXACT numbers that are = must be eqv?.
+//
+// An exact BigComplex with an exact-ZERO imaginary part is a real number. `=` said so
+// (NumericEquals compared it to Integer 1 and answered #t) while eqv? rejected any
+// complex-vs-real pair outright and answered #f. Two exact numbers, numerically equal,
+// not eqv? — exactly the disagreement between the predicates that R7RS forbids and that
+// values/eqv.go was written to make impossible.
+//
+// Scheme cannot construct such a value — make-rectangular canonicalizes, so
+// (make-rectangular 1 0) evaluates to 1 — but values.NewBigComplex is PUBLIC API and does
+// not canonicalize. EqvNumber calls itself the single authority on numeric equivalence,
+// so it does not get to lean on an invariant it neither owns nor states.
+func TestEqvAgreesWithNumericEqualsOnExactComplex(t *testing.T) {
+	c := qt.New(t)
+
+	one := values.NewInteger(1)
+	exactOnePlusZeroI := values.NewBigComplex(
+		values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(0))
+
+	// The law: for EXACT operands, = and eqv? must agree.
+	c.Assert(values.NumericEquals(exactOnePlusZeroI, one), qt.IsTrue)
+	c.Assert(values.EqvNumber(exactOnePlusZeroI, one), qt.IsTrue,
+		qt.Commentf("exact 1+0i IS the exact number 1; R7RS 6.1 requires eqv? to agree with ="))
+	c.Assert(values.EqvNumber(one, exactOnePlusZeroI), qt.IsTrue,
+		qt.Commentf("and it must not depend on operand order"))
+
+	// INEXACT does not collapse, and must not. 1.0+0.0i has an imaginary part that is an
+	// inexact zero, not an absent one, so it is a distinct object from 1.0.
+	// Chez: (eqv? 1.0 1.0+0.0i) => #f.
+	inexactOnePlusZeroI := values.NewComplex(complex(1, 0))
+	c.Assert(values.EqvNumber(inexactOnePlusZeroI, values.NewFloat(1.0)), qt.IsFalse,
+		qt.Commentf("an INEXACT complex with a 0.0 imaginary part is not eqv? to the real"))
+
+	// A nonzero imaginary part is still not a real number, exact or not.
+	c.Assert(values.EqvNumber(
+		values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
+		one), qt.IsFalse)
 }

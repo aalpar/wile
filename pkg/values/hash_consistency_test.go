@@ -79,8 +79,15 @@ func TestHashConsistencyExactLargeValues(t *testing.T) {
 	c.Assert(bi.HashCode(), qt.Equals, rat.HashCode())
 }
 
-// TestHashConsistencyInexactFamily verifies that Float and BigFloat
-// produce identical hashes for mathematically equal values.
+// TestHashConsistencyInexactFamily pins the inexact half of the Hashable contract:
+// a Float is NOT eqv? to a BigFloat, and DISTINCT objects of the same kind that ARE
+// eqv? must hash alike.
+//
+// The second half is the one with teeth, and it has to be spelled with distinct
+// objects. An assertion like `bf.EqualTo(bf)` — the same pointer — cannot fail for any
+// implementation of numeric equality: EqvNumber opens with `if a == b { return true }`,
+// so a self-compare short-circuits before reaching a single equality rule. It reads like
+// a check and is a tautology. Every pair below is two separately-constructed values.
 func TestHashConsistencyInexactFamily(t *testing.T) {
 	c := qt.New(t)
 
@@ -98,13 +105,28 @@ func TestHashConsistencyInexactFamily(t *testing.T) {
 
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			// Precondition: EqualTo holds.
-			c.Assert(tc.f.EqualTo(tc.bf), qt.IsTrue)
-			c.Assert(tc.bf.EqualTo(tc.f), qt.IsTrue)
+			// A Float and a BigFloat of the "same" value are NOT equal, in either
+			// direction. Both are inexact, and for inexact numbers the REPRESENTATION
+			// is observable — (+ x 1e-20) tells a float64 apart from a 256-bit
+			// BigFloat — so R7RS 6.1's eqv? clause makes them distinct. Same shape as
+			// TestHashConsistencyExactInexactBoundary below, one axis over.
+			c.Assert(tc.f.EqualTo(tc.bf), qt.IsFalse)
+			c.Assert(tc.bf.EqualTo(tc.f), qt.IsFalse)
 
-			// Contract: equal values must have equal hashes.
-			c.Assert(tc.f.HashCode(), qt.Equals, tc.bf.HashCode(),
-				qt.Commentf("Float vs BigFloat for %s", tc.name))
+			// The Hashable contract is one-directional — equal implies same hash — so
+			// the unequal pair above is free to hash alike or differently. What it DOES
+			// bind is same-kind equality between DISTINCT objects.
+			f2 := values.NewFloat(tc.f.Value)
+			c.Assert(tc.f.EqualTo(f2), qt.IsTrue,
+				qt.Commentf("distinct Floats of the same value must be eqv?"))
+			c.Assert(tc.f.HashCode(), qt.Equals, f2.HashCode(),
+				qt.Commentf("Float: equal implies same hash (%s)", tc.name))
+
+			bf2 := values.NewBigFloatFromFloat64(tc.bf.Float64Truncated())
+			c.Assert(tc.bf.EqualTo(bf2), qt.IsTrue,
+				qt.Commentf("distinct BigFloats of the same value must be eqv?"))
+			c.Assert(tc.bf.HashCode(), qt.Equals, bf2.HashCode(),
+				qt.Commentf("BigFloat: equal implies same hash (%s)", tc.name))
 		})
 	}
 }
@@ -169,8 +191,21 @@ func TestHashConsistencyHashtableInexact(t *testing.T) {
 	err := ht.Set(key, val)
 	c.Assert(err, qt.IsNil)
 
-	// Look up with BigFloat.
-	got, ok, err := ht.Get(values.NewBigFloatFromFloat64(3.14))
+	// A BigFloat does NOT find a Float key. Hashtables are equal?-keyed, and a
+	// float64 3.14 is not equal? to a 256-bit 3.14 — they are distinguishable by
+	// arithmetic, so R7RS 6.1 makes them distinct numbers, hence distinct keys.
+	//
+	// This lookup used to SUCCEED, because the numeric EqualTo methods compared
+	// across representations while eqv? did not. That disagreement is the thing
+	// R7RS 6.1 forbids outright ("equal? returns the same as eqv? ... on numbers"),
+	// and closing it necessarily closed this door too.
+	_, ok, err := ht.Get(values.NewBigFloatFromFloat64(3.14))
+	c.Assert(err, qt.IsNil)
+	c.Assert(ok, qt.IsFalse,
+		qt.Commentf("a BigFloat key must not find a Float entry: they are not equal?"))
+
+	// An equal Float does find it. The key is the VALUE, not the object.
+	got, ok, err := ht.Get(values.NewFloat(3.14))
 	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(got, valuestest.SchemeEquals, val)
@@ -215,9 +250,15 @@ func TestHashConsistencySameValueStability(t *testing.T) {
 	c.Assert(bf1.HashCode(), qt.Equals, bf2.HashCode())
 }
 
-// TestHashConsistencyComplexFamily verifies that BigComplex (with BigFloat parts)
-// and Complex produce the same hash when BigComplex.EqualTo(Complex) holds.
-// Contract: if a.EqualTo(b) then a.HashCode() == b.HashCode().
+// TestHashConsistencyComplexFamily pins the Hashable contract on the complex axis:
+// a Complex is NOT eqv? to a BigComplex, and distinct same-kind complex values that ARE
+// eqv? hash alike — including when a component is NaN.
+//
+// Its name promises hash consistency and it used to assert none: both surviving lines
+// were self-compares (`tc.big.EqualTo(tc.big)`), which EqvNumber answers from its
+// `a == b` short-circuit without consulting a single rule. The NaN row is the one that
+// earns its keep — BigComplex.HashCode used to hash a NaN component's ZERO backing
+// big.Float, bypassing hashNaN entirely.
 func TestHashConsistencyComplexFamily(t *testing.T) {
 	c := qt.New(t)
 
@@ -245,13 +286,69 @@ func TestHashConsistencyComplexFamily(t *testing.T) {
 
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			// Precondition: BigComplex.EqualTo(Complex) holds.
-			c.Assert(tc.big.EqualTo(tc.complex), qt.IsTrue,
-				qt.Commentf("precondition: BigComplex must equal Complex"))
+			// A Complex and a BigComplex of the "same" value are NOT equal, in either
+			// direction — the same rule as Float vs BigFloat, applied component-wise.
+			// Both are inexact, and their representations are distinguishable by
+			// arithmetic, so R7RS 6.1 makes them distinct numbers.
+			//
+			// This used to assert the opposite as a PRECONDITION. It held only because
+			// the numeric EqualTo methods compared across representations while eqv?
+			// did not — the disagreement R7RS 6.1 forbids ("equal? returns the same as
+			// eqv? ... on numbers").
+			c.Assert(tc.big.EqualTo(tc.complex), qt.IsFalse,
+				qt.Commentf("BigComplex must not equal Complex: different inexact precisions"))
+			c.Assert(tc.complex.EqualTo(tc.big), qt.IsFalse,
+				qt.Commentf("and it must not depend on operand order"))
 
-			// Contract: equal values must produce equal hashes.
-			c.Assert(tc.big.HashCode(), qt.Equals, tc.complex.HashCode(),
-				qt.Commentf("BigComplex and Complex hash must agree for %s", tc.name))
+			// The Hashable contract is one-directional (equal implies same hash), so it
+			// says nothing about the unequal pair above. What it binds is same-kind
+			// equality between DISTINCT objects — which is what must be asserted here.
+			cx2 := values.NewComplex(tc.complex.Value)
+			c.Assert(tc.complex.EqualTo(cx2), qt.IsTrue,
+				qt.Commentf("distinct Complexes of the same value must be eqv?"))
+			c.Assert(tc.complex.HashCode(), qt.Equals, cx2.HashCode(),
+				qt.Commentf("Complex: equal implies same hash (%s)", tc.name))
+
+			big2 := values.NewBigComplexFromBigFloats(
+				values.NewBigFloatFromFloat64(tc.big.RealAsBigFloat().Float64Truncated()),
+				values.NewBigFloatFromFloat64(tc.big.ImagAsBigFloat().Float64Truncated()),
+			)
+			c.Assert(tc.big.EqualTo(big2), qt.IsTrue,
+				qt.Commentf("distinct BigComplexes of the same value must be eqv?"))
+			c.Assert(tc.big.HashCode(), qt.Equals, big2.HashCode(),
+				qt.Commentf("BigComplex: equal implies same hash (%s)", tc.name))
 		})
 	}
+
+	// NaN components. Two NaN-carrying complexes are eqv? (NaN is eqv? to NaN in Wile,
+	// following Chez), so the contract REQUIRES them to hash alike — and a NaN component
+	// must not hash as if it were zero, which is what hashing the raw backing big.Float
+	// did.
+	c.Run("NaN components", func(c *qt.C) {
+		nan := math.NaN()
+
+		cxNaN1 := values.NewComplex(complex(nan, 4))
+		cxNaN2 := values.NewComplex(complex(nan, 4))
+		c.Assert(cxNaN1.EqualTo(cxNaN2), qt.IsTrue, qt.Commentf("NaN is eqv? to NaN"))
+		c.Assert(cxNaN1.HashCode(), qt.Equals, cxNaN2.HashCode(),
+			qt.Commentf("eqv? NaN Complexes must hash alike"))
+
+		bcNaN1 := values.NewBigComplexFromBigFloats(
+			values.NewBigFloatFromFloat64(nan), values.NewBigFloatFromFloat64(4))
+		bcNaN2 := values.NewBigComplexFromBigFloats(
+			values.NewBigFloatFromFloat64(nan), values.NewBigFloatFromFloat64(4))
+		c.Assert(bcNaN1.EqualTo(bcNaN2), qt.IsTrue)
+		c.Assert(bcNaN1.HashCode(), qt.Equals, bcNaN2.HashCode(),
+			qt.Commentf("eqv? NaN BigComplexes must hash alike"))
+
+		// The regression: a NaN real part must not hash as a zero real part. Hashing the
+		// component's raw big.Float did exactly that, because NewBigFloatNaN stores the
+		// nan flag alongside a ZERO value.
+		bcZero := values.NewBigComplexFromBigFloats(
+			values.NewBigFloatFromFloat64(0), values.NewBigFloatFromFloat64(4))
+		c.Assert(bcNaN1.EqualTo(bcZero), qt.IsFalse)
+		c.Assert(bcNaN1.HashCode(), qt.Not(qt.Equals), bcZero.HashCode(),
+			qt.Commentf("a NaN real part must not hash as 0.0 — BigComplex.HashCode must "+
+				"route through BigFloat.HashCode, which canonicalizes NaN via hashNaN"))
+	})
 }

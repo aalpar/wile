@@ -51,23 +51,65 @@ import (
 // and complexity — forming a partial order:
 //
 //	Exact chain:    Integer → BigInteger → Rational
-//	                    ↓          ↓           ↓
-//	Inexact real:   BigFloat ← BigFloat ← BigFloat
-//	                    ↑
-//	Float native:   Float → BigFloat
-//	                  ↓
-//	Complex:        Complex → BigComplex ← BigFloat
-//	                              ↑
-//	                    Integer/BigInt/Rational (exact parts)
+//	Inexact real:   Float → BigFloat
+//	Complex:        Complex → BigComplex
 //
-// NO LOSSY PROMOTIONS: exact types (Integer, BigInteger, Rational) never
-// promote to float64 or complex128. They go to BigFloat (meeting inexact reals)
-// or BigComplex (meeting complex). BigFloat never goes to complex128.
+// Meeting an exact kind with an inexact one lands at the INEXACT operand's own
+// kind — Float stays Float, BigFloat stays BigFloat — never one step up the
+// precision axis. That is exactness contagion (R7RS §6.2.2): the exact operand
+// is absorbed, and the inexact operand's representation decides the result.
+//
+//	Integer/BigInteger/Rational × Float      → Float       (contagion, lossy)
+//	Integer/BigInteger/Rational × BigFloat   → BigFloat
+//	Integer/BigInteger/Rational × Complex    → Complex     (contagion, lossy)
+//	Integer/BigInteger/Rational × BigComplex → BigComplex
+//	Float × BigFloat → BigFloat        Float × Complex → Complex
+//	BigFloat × Complex → BigComplex    (BigFloat cannot fit in complex128)
+//
+// EXACT→INEXACT PROMOTIONS ARE LOSSY, deliberately. Rounding an exact operand to
+// float64 is the contagion, not a defect of it; an exact value beyond float64's
+// range becomes ±Inf, matching Chez. Exact×exact never touches float64, so
+// exactness is never lost while it is still being claimed.
+//
+// THE THREE LAWS ARE LOAD-BEARING, not decoration. Associativity in particular: the
+// result KIND is observable through eqv?/equal? (R7RS §6.1 makes representation
+// observable for inexacts), so a non-associative join means (+ a b c) and (+ c a b) can
+// produce values that are = and print identically but are not eqv?. Zone 3 once escalated
+// exact × Complex to BigComplex while Zone 2 contaminated exact × Float down to Float,
+// which broke associativity on 12 of the 343 triples and did exactly that.
+// TestPromotionTable_Associativity holds this table to all three laws;
+// TestLattice_PredictionsVsActual holds it to an independently-derived model.
 //
 // A previous linear tower (TowerAdd, etc.) was prototyped and abandoned because
-// it forced exact reals through float64 on the way to Complex, destroying
-// exactness. See docs/dev/NUMERIC_TOWER.md.
+// it forced exact reals through float64 ON THE WAY TO an exact-capable result,
+// destroying exactness where exactness was still promised. That is a different
+// thing from the lossy contagion above, which only ever lands on a kind that is
+// already declaring itself inexact. See docs/numeric/tower.md.
 var promotionTable [numKinds][numKinds]NumericKind
+
+// comparisonTable maps (kindA, kindB) → the kind both operands are promoted to
+// in order to COMPARE them (=, <, >, <=, >=). It is symmetric, like
+// promotionTable, and it is deliberately a DIFFERENT table.
+//
+// Contagion is a property of arithmetic, not of comparison. Arithmetic on an
+// exact and an inexact operand yields an inexact RESULT, so rounding the exact
+// operand into the inexact one's representation costs nothing that was not
+// already being given up (promotionTable, Zone 2). A comparison yields a BOOLEAN.
+// Nothing about it is inexact, so rounding an operand to reach a common domain
+// throws away information the answer depends on:
+//
+//	(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))
+//
+// Both operands round to the SAME float64, so a lossy comparison answers #t. The
+// true answer is #f — they are different numbers — and it is what Chez gives.
+// Likewise (< (- (expt 2 100) 1) (exact->inexact (expt 2 100))) is #t, and a
+// float64 comparison cannot see it.
+//
+// So comparison promotes UP to a domain that can represent both operands exactly:
+// exact × Float → BigFloat, exact × Complex → BigComplex. That is the lossless
+// lattice, which is what promotionTable itself used to be before contagion was
+// separated out of it.
+var comparisonTable [numKinds][numKinds]NumericKind
 
 // promoter maps (srcKind, resultKind) → conversion function.
 // promoter[src][dst](n) converts a Number of kind src to a Number of kind dst.
@@ -100,8 +142,8 @@ func init() {
 //
 // Three zones:
 //  1. Exact×Exact (Integer, BigInteger, Rational): stays exact
-//  2. Exact×InexactReal (×Float, ×BigFloat): always BigFloat
-//  3. Anything×Complex: exact→BigComplex; Float+Complex→Complex; BigFloat+Complex→BigComplex
+//  2. Exact×InexactReal: lands at the inexact operand's kind (Float→Float, BigFloat→BigFloat)
+//  3. Anything×Complex: the same contagion (exact→Complex); BigFloat×Complex→BigComplex
 func initPromotionTable() {
 	I := KindInteger
 	BI := KindBigInteger
@@ -125,10 +167,29 @@ func initPromotionTable() {
 	set(BI, R, R)
 	set(R, R, R)
 
-	// Zone 2: Exact × Inexact Real → BigFloat
-	// Exact types never truncate to float64. BigFloat preserves precision (256-bit).
+	// Zone 2: Exact × Inexact Real → the INEXACT OPERAND'S precision.
+	//
+	// This is R7RS §6.2.2 exactness contagion, and the contagion is the whole
+	// point: (+ 1.5 2) is 3.5 as a Float, not as a 256-bit BigFloat. The exact
+	// operand is absorbed into the inexact one's representation; it does not drag
+	// the result up the precision axis. Every other Scheme does this — Chez gives
+	// (+ 1.5 2) => 3.5 flonum, and (+ 1.5 (expt 2 2000)) => +inf.0.
+	//
+	// Yes, that is a lossy promotion, and it is the correct one. "Inexact" is a
+	// promise that precision may be lost; a program that wants the precision must
+	// stay exact, or say so with an explicit BigFloat (#m) operand — which routes
+	// through the BF rows below and is preserved.
+	//
+	// This used to send exact × Float to BigFloat "to preserve precision," on the
+	// theory that Simplify would demote afterwards. Per-op demotion was never
+	// wired (Simplify runs at parse time only), so ordinary float arithmetic
+	// silently minted 256-bit bignums that never came back down: (+ 1.5 2) was a
+	// *BigFloat. It went unnoticed for as long as it did because the numeric
+	// EqualTo methods compared across kinds, so a BigFloat 3.5 tested equal to a
+	// Float 3.5 and the tests passed. Making equal? agree with eqv? (R7RS §6.1)
+	// took that cover away. See docs/numeric/tower.md.
 	for _, exact := range []NumericKind{I, BI, R} {
-		set(exact, F, BF)
+		set(exact, F, F)
 		set(exact, BF, BF)
 	}
 
@@ -137,10 +198,51 @@ func initPromotionTable() {
 	set(F, BF, BF)
 	set(BF, BF, BF)
 
-	// Zone 3: Anything × Complex
-	// Exact types → BigComplex (preserve exactness, never go through complex128).
+	// Zone 3: Anything × Complex — the SAME contagion as Zone 2, on the complex axis.
+	//
+	// An exact real meeting an inexact Complex yields a Complex, exactly as an exact
+	// real meeting a Float yields a Float. It has to: this table is a join-semilattice,
+	// and the three laws in the doc comment above are not decoration. Given Zone 2's
+	// exact ⊔ Float = Float and the (unavoidable) Float ⊔ Complex = Complex,
+	// associativity FORCES exact ⊔ Complex = Complex:
+	//
+	//	(exact ⊔ Float) ⊔ Complex  =  Float ⊔ Complex  =  Complex
+	//	exact ⊔ (Float ⊔ Complex)  =  exact ⊔ Complex  =  ???
+	//
+	// Any two of the three entries determine the third. This one used to say BigComplex
+	// while Zone 2 said Float, which broke the law on 12 of the 343 triples and made
+	// (+ 1 1.5 2.0+0.0i) and (+ 2.0+0.0i 1 1.5) produce values that are =, print
+	// identically, and are NOT eqv?. It also minted a 256-bit BigComplex out of
+	// (* 1.0+2.0i 1) — multiplication by exact 1 — which then failed equal? against
+	// the very literal it came from. TestPromotionTable_Associativity pins the law.
+	//
+	// THE EXACT-ZERO HAZARD IS REAL, AND IT IS NOT SOLVED BY THIS TABLE.
+	//
+	// Promoting an exact real into complex128 manufactures an imaginary part, and a
+	// manufactured +0.0 is not an exact 0: the exact-zero rules that give complex
+	// arithmetic its signs stop applying, and the sign is eaten.
+	//
+	//	(/ 10 2.0+0.0i)  =>  5.0-0.0i
+	//
+	// The imaginary part is NEGATIVE zero, because the general formula computes it as
+	// (b*c - a*d) = 0 - 0.0, and an EXACT zero minus an inexact one negates. Chez and
+	// Racket agree. Route the 10 through complex128 first and it becomes 10+0.0i, the
+	// subtraction becomes 0.0 - 0.0 = +0.0, and the answer is silently wrong.
+	//
+	// Escalating to BigComplex was one way to dodge that — it kept the exact zero
+	// alive in an exact component — but it bought signed-zero correctness with a
+	// broken lattice, and it was not even the way FLOAT solved the same problem.
+	// Float ⊔ Complex has always been Complex, and Float has always protected the sign
+	// at the OPERATION, not in the table: a real operand contributes no imaginary
+	// component, so real ⊕ complex is computed part-wise and never manufactures one.
+	// See the real ⊕ complex helpers in complex.go. The exact kinds now do the same,
+	// which is why they can safely share Float's row here.
+	//
+	// The rule, stated once: exactness contagion is a PROMOTION question and the table
+	// owns it; the exact zero is an OPERATION question and complex.go owns it. They
+	// were tangled together, and the tangle cost the semilattice.
 	for _, exact := range []NumericKind{I, BI, R} {
-		set(exact, C, BC)
+		set(exact, C, C)
 		set(exact, BC, BC)
 	}
 	// Float + Complex → Complex (both float64-based, no loss).
@@ -155,16 +257,101 @@ func initPromotionTable() {
 	set(C, C, C)
 	set(C, BC, BC)
 	set(BC, BC, BC)
+
+	initComparisonTable()
 }
 
-// initPromoters populates the lossless conversion functions.
+// initComparisonTable populates the LOSSLESS 7×7 matrix used to bring two
+// operands into a common domain for comparison. See comparisonTable's doc
+// comment for why this is not the same table as promotionTable.
+//
+// It is exactly promotionTable minus the contagion: every entry is identical
+// except that an exact kind meeting Float promotes to BigFloat (not Float) and
+// meeting Complex promotes to BigComplex (not Complex), so that no operand is
+// rounded on the way to a boolean answer.
+func initComparisonTable() {
+	I := KindInteger
+	BI := KindBigInteger
+	F := KindFloat
+	BF := KindBigFloat
+	R := KindRational
+	C := KindComplex
+	BC := KindBigComplex
+
+	set := func(a, b, result NumericKind) {
+		comparisonTable[a][b] = result
+		comparisonTable[b][a] = result
+	}
+
+	// Exact × Exact: stays exact, same as arithmetic.
+	set(I, I, I)
+	set(I, BI, BI)
+	set(I, R, R)
+	set(BI, BI, BI)
+	set(BI, R, R)
+	set(R, R, R)
+
+	// Exact × Inexact: promote UP, so neither operand is rounded.
+	for _, exact := range []NumericKind{I, BI, R} {
+		set(exact, F, BF)
+		set(exact, BF, BF)
+		set(exact, C, BC)
+		set(exact, BC, BC)
+	}
+
+	// Inexact × Inexact: identical to arithmetic — no exact operand to protect.
+	set(F, F, F)
+	set(F, BF, BF)
+	set(BF, BF, BF)
+	set(F, C, C)
+	set(F, BC, BC)
+	set(BF, C, BC)
+	set(BF, BC, BC)
+	set(C, C, C)
+	set(C, BC, BC)
+	set(BC, BC, BC)
+}
+
+// initPromoters populates the conversion functions.
 // promoter[src][dst] converts a Number of kind src to kind dst.
 // Only entries reachable from promotionTable are populated.
+//
+// Exact→exact and exact→Big* conversions are lossless. Exact→Float and
+// exact→Complex are NOT: they are the exactness-contagion promotions (Zone 2/3
+// above), and rounding to float64 is precisely what they are for. An integer too
+// large for float64 becomes ±Inf, which is the same answer Chez gives.
 func initPromoters() {
 	// Identity promoters (diagonal): every type promotes to itself.
 	for k := range numKinds {
 		promoter[k][k] = func(n Number) Number {
 			return n
+		}
+	}
+
+	// Exact → Float and Exact → Complex: the contagion promotions (promotionTable
+	// Zones 2 and 3). Lossy by design — rounding the exact operand IS the contagion.
+	// Written as a loop over the exact kinds because the conversion is identical for
+	// all three; NumberToFloat64 already dispatches on kind.
+	//
+	// THE EXACT → COMPLEX PROMOTER IS NOT SAFE FOR ARITHMETIC, and arithmetic does not
+	// use it. It manufactures a +0.0 imaginary part, which is an INEXACT zero; the
+	// exact-zero sign rules then stop applying and (+ 1 5.0-0.0i) comes back 6.0+0.0i
+	// instead of 6.0-0.0i. That is a fact about the OPERATION, not about the
+	// promotion: as a pure value-level embedding of a real into complex128, r ↦ r+0.0i
+	// is the right answer, and that is what Promote (the public accessor) means.
+	//
+	// The four arithmetic operations never route a real operand through here — they
+	// compute real ⊕ complex part-wise (realSubtractComplex / realDivideComplex in
+	// complex.go, and a commuting redirect for the other two), which never
+	// manufactures an imaginary component at all. Float has worked this way since
+	// Float ⊔ Complex was Complex; the exact kinds now do too. If you find yourself
+	// reaching for this promoter inside an arithmetic path, that is the bug.
+	for _, exact := range []NumericKind{KindInteger, KindBigInteger, KindRational} {
+		promoter[exact][KindFloat] = func(n Number) Number {
+			return NewFloat(NumberToFloat64(n))
+		}
+		promoter[exact][KindComplex] = func(n Number) Number {
+			return NewComplex(complex(NumberToFloat64(n), 0))
 		}
 	}
 
@@ -284,31 +471,30 @@ func initPromoters() {
 // numeric type was added without completing its promotion entries. Panics at
 // program init, never at runtime.
 func validatePromotionTable() {
-	for src := range numKinds {
-		for dst := range numKinds {
-			if src == dst {
-				continue
-			}
-			lub := promotionTable[src][dst]
-			if promoter[src][lub] == nil {
-				panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
-					src, lub, src, dst, lub))
-			}
-			if promoter[dst][lub] == nil {
-				panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
-					dst, lub, src, dst, lub))
+	tables := map[string]*[numKinds][numKinds]NumericKind{
+		"promotion":  &promotionTable,
+		"comparison": &comparisonTable,
+	}
+	for name, table := range tables {
+		for src := range numKinds {
+			for dst := range numKinds {
+				if src == dst {
+					continue
+				}
+				lub := table[src][dst]
+				if promoter[src][lub] == nil {
+					panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+						"incomplete %s table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
+						name, src, lub, src, dst, lub))
+				}
+				if promoter[dst][lub] == nil {
+					panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+						"incomplete %s table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
+						name, dst, lub, src, dst, lub))
+				}
 			}
 		}
 	}
-}
-
-// PromotionResultKind returns the result type when operands of kindA and kindB
-// are combined in an arithmetic operation. The result is the least upper bound
-// (LUB) in the promotion lattice — symmetric and lossless.
-func PromotionResultKind(kindA, kindB NumericKind) NumericKind {
-	return promotionTable[kindA][kindB]
 }
 
 // Promote converts a Number to the target NumericKind using the lossless
@@ -396,6 +582,7 @@ func makeArithmeticDispatch[T Number](
 	applyOp func(Number, Number) Number,
 	float64Op func(float64, float64) float64,
 	complex128Op func(complex128, complex128) complex128,
+	realComplexOp func(float64, complex128) complex128,
 ) [numKinds]func(T, Number) Number {
 	ensurePromotionInit()
 	var table [numKinds]func(T, Number) Number
@@ -413,6 +600,19 @@ func makeArithmeticDispatch[T Number](
 		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
 
 		switch {
+		case dstKind == KindComplex && lubKind == KindComplex:
+			// A REAL receiver meeting a Complex operand. The kinds that land here are
+			// exactly those absorbed into complex128 — Float, Integer, BigInteger,
+			// Rational — and for every one of them the promoter would manufacture a
+			// +0.0 imaginary part the receiver does not have, letting IEEE eat the sign
+			// of a signed-zero component in o. Compute part-wise instead; the imaginary
+			// component is never invented. See the real ⊕ complex helpers in complex.go.
+			//
+			// The mirror case (Complex receiver, real operand) is caught earlier, by
+			// realPartsOf inside Complex's own methods, and never reaches a table.
+			table[dstKind] = func(p T, o Number) Number {
+				return NewComplex(realComplexOp(NumberToFloat64(p), o.(*Complex).Value))
+			}
 		case srcKind == KindFloat && lubNeedsGuard:
 			// Receiver is Float, might have Inf/NaN.
 			lubIsComplex := lubKind == KindBigComplex
@@ -468,6 +668,7 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 		func(a, b complex128) complex128 {
 			return a + b
 		},
+		realAddComplex,
 	)
 }
 
@@ -483,6 +684,7 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 		func(a, b complex128) complex128 {
 			return a - b
 		},
+		realSubtractComplex,
 	)
 }
 
@@ -498,6 +700,7 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 		func(a, b complex128) complex128 {
 			return a * b
 		},
+		realMultiplyComplex,
 	)
 }
 
@@ -524,6 +727,14 @@ func makeDivideDispatch[T Number](
 		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
 
 		switch {
+		case dstKind == KindComplex && lubKind == KindComplex:
+			// A REAL dividend divided by a Complex divisor. See the twin case in
+			// makeArithmeticDispatch: promoting the dividend into complex128 invents a
+			// +0.0 imaginary part it does not have, and the sign of a signed-zero
+			// component dies. realDivideComplex keeps the dividend real.
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				return NewComplex(realDivideComplex(NumberToFloat64(p), o.(*Complex).Value)), nil
+			}
 		case srcKind == KindFloat && lubNeedsGuard:
 			// Receiver is Float, might have Inf/NaN.
 			lubIsComplex := lubKind == KindBigComplex
@@ -582,31 +793,29 @@ func makeLessThanDispatch[T Number](
 		if dstKind == srcKind {
 			continue
 		}
-		lubKind := promotionTable[srcKind][dstKind]
+		lubKind := comparisonTable[srcKind][dstKind]
 		promSrc := promoter[srcKind][lubKind]
 		promDst := promoter[dstKind][lubKind]
 
-		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
-
-		switch {
-		case srcKind == KindFloat && lubNeedsGuard:
-			table[dstKind] = func(p T, o Number) bool {
-				if isSpecialFloat(any(p).(*Float)) {
-					return NumberToFloat64(p) < NumberToFloat64(o)
-				}
-				return promSrc(p).LessThan(promDst(o))
-			}
-		case dstKind == KindFloat && lubNeedsGuard:
-			table[dstKind] = func(p T, o Number) bool {
-				if isSpecialFloat(o.(*Float)) {
-					return NumberToFloat64(p) < NumberToFloat64(o)
-				}
-				return promSrc(p).LessThan(promDst(o))
-			}
-		default:
-			table[dstKind] = func(p T, o Number) bool {
-				return promSrc(p).LessThan(promDst(o))
-			}
+		// NO IEEE special-value guard here, unlike the ARITHMETIC dispatchers.
+		//
+		// There used to be one: when a Float operand held Inf/NaN and the LUB was
+		// BigFloat/BigComplex, it short-circuited BOTH operands through NumberToFloat64.
+		// That rounds the OTHER operand, and rounding is exactly what comparison must
+		// never do — it is the entire reason comparisonTable exists. An exact operand too
+		// large for float64 became ±Inf and compared EQUAL to the infinity it was being
+		// compared against, which broke trichotomy outright:
+		//
+		//	(<  (expt 10 400) +inf.0)   =>  #f      and
+		//	(>= (expt 10 400) +inf.0)   =>  #t      -- both, simultaneously
+		//
+		// The guard's stated justification was that BigFloat/BigComplex could not hold
+		// Inf/NaN. That stopped being true when they were made IEEE-capable (#362):
+		// BigFloat carries an explicit nan flag and handles big.Float's Inf, and
+		// BigFloat(10^400).Compare(+inf.0) is -1 without any help. So promoting is not
+		// merely safe here, it is the only thing that gives the right answer.
+		table[dstKind] = func(p T, o Number) bool {
+			return promSrc(p).LessThan(promDst(o))
 		}
 	}
 	return table
@@ -616,8 +825,9 @@ func makeLessThanDispatch[T Number](
 // Cross-type entries promote both operands to the LUB type and compare via
 // the LUB type's Compare method.
 //
-// IEEE 754 guard: when Float has Inf/NaN and the LUB is BigFloat/BigComplex,
-// falls back to float64 comparison via cmpFloat64.
+// NO IEEE special-value guard, for the same reason makeLessThanDispatch has none:
+// short-circuiting through float64 rounds the other operand, and comparison must never
+// round. See the comment there.
 func makeCompareDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeCmp func(T, Number) int,
@@ -629,31 +839,12 @@ func makeCompareDispatch[T Number](
 		if dstKind == srcKind {
 			continue
 		}
-		lubKind := promotionTable[srcKind][dstKind]
+		lubKind := comparisonTable[srcKind][dstKind]
 		promSrc := promoter[srcKind][lubKind]
 		promDst := promoter[dstKind][lubKind]
 
-		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
-
-		switch {
-		case srcKind == KindFloat && lubNeedsGuard:
-			table[dstKind] = func(p T, o Number) int {
-				if isSpecialFloat(any(p).(*Float)) {
-					return cmpFloat64(NumberToFloat64(p), NumberToFloat64(o))
-				}
-				return promSrc(p).Compare(promDst(o))
-			}
-		case dstKind == KindFloat && lubNeedsGuard:
-			table[dstKind] = func(p T, o Number) int {
-				if isSpecialFloat(o.(*Float)) {
-					return cmpFloat64(NumberToFloat64(p), NumberToFloat64(o))
-				}
-				return promSrc(p).Compare(promDst(o))
-			}
-		default:
-			table[dstKind] = func(p T, o Number) int {
-				return promSrc(p).Compare(promDst(o))
-			}
+		table[dstKind] = func(p T, o Number) int {
+			return promSrc(p).Compare(promDst(o))
 		}
 	}
 	return table

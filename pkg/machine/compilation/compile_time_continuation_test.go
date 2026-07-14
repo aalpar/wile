@@ -36,6 +36,42 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
+// assertOperations compares two opcode lists.
+//
+// It replaces valuestest.SchemeEquals here: machine.Operations is deliberately
+// not a values.Value (it is the compiler's opcode list, not a Scheme datum — see
+// its doc comment), so the Scheme-value checker no longer accepts it. Comparing
+// through the concrete Operations.EqualTo is what that change buys, and the
+// diff-on-failure below is better than the checker's anyway.
+func assertOperations(t *testing.T, got machine.Operations, want machine.Operations) {
+	t.Helper()
+	if got.EqualTo(want) {
+		return
+	}
+	t.Errorf("operations differ:\n got (%d): %s\nwant (%d): %s",
+		got.Len(), operationNames(got), want.Len(), operationNames(want))
+}
+
+func operationNames(ops machine.Operations) string {
+	q := make([]string, 0, len(ops))
+	for _, op := range ops {
+		q = append(q, op.SchemeString())
+	}
+	return strings.Join(q, " ")
+}
+
+// assertLiterals compares two literal pools. Same rationale as assertOperations:
+// machine.MultipleValues is the VM's multi-value carrier, not a Scheme datum, so
+// it is no longer a values.Value and the Scheme-value checker no longer takes it.
+func assertLiterals(t *testing.T, got machine.MultipleValues, want machine.MultipleValues) {
+	t.Helper()
+	if got.EqualTo(want) {
+		return
+	}
+	t.Errorf("literals differ:\n got (%d): %s\nwant (%d): %s",
+		got.Len(), got.SchemeString(), want.Len(), want.SchemeString())
+}
+
 func TestCompileContext_CompileLambda(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	prog := values.List(values.NewSymbol("lambda"), values.NewSymbol("x"), values.NewSymbol("x"))
@@ -46,7 +82,7 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 5)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
@@ -60,7 +96,7 @@ func TestCompileContext_CompileLambda(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	// check that the template has been compiled correctly
 	qt.Assert(t, tpl0.Operations(), qt.HasLen, 2)
-	qt.Assert(t, tpl0.Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, tpl0.Operations(), machine.NewOperations(
 		machine.NewOperationLoadLocalByLocalIndexImmediate(environment.NewLocalIndex(0, 0)),
 		machine.NewOperationRestoreContinuation(),
 	))
@@ -91,7 +127,7 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 11)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationSaveContinuationOffsetImmediate(11),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
@@ -112,7 +148,7 @@ func TestCompileContext_CompileLambdaCall(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	// check that the template has been compiled correctly
 	qt.Assert(t, tpl0.Operations(), qt.HasLen, 2)
-	qt.Assert(t, tpl0.Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, tpl0.Operations(), machine.NewOperations(
 		machine.NewOperationLoadLocalByLocalIndexImmediate(environment.NewLocalIndex(0, 0)),
 		machine.NewOperationRestoreContinuation(),
 	))
@@ -146,7 +182,7 @@ func TestCompileContext_CompileDefine(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 4)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
 		machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(machine.LiteralIndex(1)),
@@ -177,7 +213,7 @@ func TestCompileContext_CompileQuote(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 1)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 	))
 	qt.Assert(t, cont.Template().IsVariadic(), qt.Equals, false)
@@ -206,7 +242,7 @@ func TestCompileContext_CompileQuasiquote(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 1)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 	))
 	qt.Assert(t, cont.Template().IsVariadic(), qt.Equals, false)
@@ -422,7 +458,7 @@ func TestCompileContext_CompileIf(t *testing.T) {
 
 	// BranchOnFalseValue reads value register directly, no Push needed
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 5)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadCachedBinding(0),
 		machine.NewOperationBranchOnFalseValueOffsetImmediate(3),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
@@ -461,7 +497,7 @@ func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
 
 	// Constant folding: only the alternative branch is compiled
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 1)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 	))
 
@@ -500,7 +536,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 4)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
 		machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(machine.LiteralIndex(1)),
@@ -549,7 +585,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Literals(), qt.HasLen, 4)
-	qt.Assert(t, cont.Template().Literals(), valuestest.SchemeEquals,
+	assertLiterals(t, cont.Template().Literals(),
 		machine.NewMultipleValues(
 			cont.Template().Literals()[0],
 			cont.Template().Literals()[1],
@@ -558,7 +594,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 		),
 	)
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 15)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationPush(),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
@@ -598,7 +634,7 @@ func TestCompileContext_CompileBegin_1(t *testing.T) {
 
 	// check that the closure has been compiled correctly
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 2)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
 	))
@@ -626,7 +662,7 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 	// check that the closure has been compiled correctly
 	// meta should compile like begin - sequence of expressions
 	qt.Assert(t, cont.Template().Operations(), qt.HasLen, 2)
-	qt.Assert(t, cont.Template().Operations(), valuestest.SchemeEquals, machine.NewOperations(
+	assertOperations(t, cont.Template().Operations(), machine.NewOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(1),
 	))

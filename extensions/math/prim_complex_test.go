@@ -281,7 +281,13 @@ func TestBigComplexTranscendentalPrecision(t *testing.T) {
 		// magnitude no longer overflows to +inf on huge components.
 		{"magnitude big finite", `(finite? (magnitude (make-rectangular (expt 10 400) (expt 10 400))))`, values.TrueValue},
 		// |0 + 10^400 i| = 10^400 exactly (at big precision).
-		{"magnitude big value", `(= (magnitude (make-rectangular 0 (expt 10 400))) (* 1.0 (expt 10 400)))`, values.TrueValue},
+		//
+		// The comparand is an explicit BigFloat literal (#m). It used to be
+		// (* 1.0 (expt 10 400)), which relied on exact × Float promoting to BigFloat.
+		// Exactness contagion now sends that to Float, so it correctly overflows to
+		// +inf.0 — Chez gives +inf.0 for (* 1.0 (expt 10 400)) too. An arbitrary-
+		// precision inexact value has to be ASKED for, and #m is how you ask.
+		{"magnitude big value", `(= (magnitude (make-rectangular 0 (expt 10 400))) #m1e400)`, values.TrueValue},
 		// magnitude of a small exact BigComplex still correct: |3+4i| = 5.
 		{"magnitude small exact", `(= (magnitude (make-rectangular 3 4)) 5)`, values.TrueValue},
 
@@ -290,8 +296,13 @@ func TestBigComplexTranscendentalPrecision(t *testing.T) {
 		{"sqrt big imag finite", `(finite? (imag-part (sqrt (make-rectangular (expt 10 400) (expt 10 400)))))`, values.TrueValue},
 		// sqrt of the pure imaginary 2*10^400 i is 10^200 + 10^200 i:
 		// a=0 => re = sqrt(|z|/2) = sqrt(10^400) = 10^200; im = b/(2 re) = 10^200.
-		{"sqrt big real value", `(= (real-part (sqrt (make-rectangular 0 (* 2 (expt 10 400))))) (* 1.0 (expt 10 200)))`, values.TrueValue},
-		{"sqrt big imag value", `(= (imag-part (sqrt (make-rectangular 0 (* 2 (expt 10 400))))) (* 1.0 (expt 10 200)))`, values.TrueValue},
+		// #m literals again: (* 1.0 (expt 10 200)) is now a Float, i.e. the float64
+		// APPROXIMATION of 10^200, while sqrt of a big exact operand returns a BigFloat
+		// carrying 256 bits. Comparing them is lossless (the comparison table refuses
+		// to round) and so correctly reports them UNEQUAL in the low bits. The value
+		// under test is the 256-bit one, so name it with #m.
+		{"sqrt big real value", `(= (real-part (sqrt (make-rectangular 0 (* 2 (expt 10 400))))) #m1e200)`, values.TrueValue},
+		{"sqrt big imag value", `(= (imag-part (sqrt (make-rectangular 0 (* 2 (expt 10 400))))) #m1e200)`, values.TrueValue},
 		// Roundtrip at a scale beyond float64: sqrt(z)^2 reproduces z (relative
 		// error negligible). Guards the a>=0,b!=0 branch's value, not just its
 		// finiteness — a wrong-but-finite result would fail this.

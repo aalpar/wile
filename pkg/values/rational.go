@@ -321,8 +321,17 @@ func (p *Rational) ToExact() (Number, error) {
 // R7RS §6.2.6: inexact returns an inexact representation of its argument.
 // L18: Use big.Float.SetRat to preserve precision for large rationals.
 func (p *Rational) ToInexact() Number {
-	f := new(big.Float).SetRat(p.value)
-	return NewBigFloat(f)
+	// Float, not BigFloat. Integer.ToInexact and BigInteger.ToInexact both already
+	// return Float; Rational was the odd one out, and the inconsistency was invisible
+	// because the numeric EqualTo methods compared across representations, so a
+	// BigFloat 0.5 tested equal to a Float 0.5.
+	//
+	// R7RS §6.2.6 exact->inexact converts to "an inexact representation", and the
+	// inexact real representation is float64 — Chez gives (exact->inexact 1/2) => 0.5,
+	// a flonum. A rational too large for float64 becomes ±Inf, which is the same
+	// answer Chez gives and is what "inexact" licenses.
+	f, _ := p.value.Float64()
+	return NewFloat(f)
 }
 
 // IsPositive returns true if this rational is positive.
@@ -392,19 +401,15 @@ func (p *Rational) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if the rationals have equal values.
-// Handles comparison with Integer and BigInteger for symmetry with
-// whole-valued rationals (e.g., 5/1 == 5).
+// EqualTo implements R7RS equal? for Rational.
+//
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
 func (p *Rational) EqualTo(v Value) bool {
-	switch other := v.(type) {
-	case *Rational:
-		return p.value.Cmp(other.value) == 0
-	case *Integer:
-		return p.value.Cmp(new(big.Rat).SetInt64(other.Value)) == 0
-	case *BigInteger:
-		return p.value.Cmp(new(big.Rat).SetInt(other.BigInt())) == 0
-	}
-	return false
+	return eqvNumberValue(p, v)
 }
 
 // SchemeString returns the Scheme representation of the rational.

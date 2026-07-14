@@ -214,18 +214,31 @@ func TestEqualTo_NumericSymmetry(t *testing.T) {
 		in1 values.Value
 		out bool
 	}{
-		// Float ↔ BigFloat
+		// Float ↔ BigFloat: NOT equal, and symmetrically so.
+		//
+		// Both are inexact, and for inexact numbers the representation is observable:
+		// (+ x 1e-20) distinguishes a float64 from a 256-bit BigFloat, which is exactly
+		// R7RS 6.1's "yield the same results under any finite composition of standard
+		// arithmetic" test. So eqv? says #f, and equal? must say the same (6.1 gives no
+		// latitude on numbers).
+		//
+		// These two rows asserted `true` until exactness contagion was fixed. Note the
+		// EXACT cross-kind rows below still assert `true` and must keep doing so — for
+		// exact numbers the representation is NOT observable, so Integer 5, BigInteger 5
+		// and Rational 10/2 are all the same number. Same code shape, opposite verdicts;
+		// exactness is what discriminates. That asymmetry is the whole subtlety of
+		// values.EqvNumber.
 		{
-			nm:  "Float(3.0) == BigFloat(3.0)",
+			nm:  "Float(3.0) != BigFloat(3.0)",
 			in0: values.NewFloat(3.0),
 			in1: values.NewBigFloatFromFloat64(3.0),
-			out: true,
+			out: false,
 		},
 		{
-			nm:  "BigFloat(3.0) == Float(3.0)",
+			nm:  "BigFloat(3.0) != Float(3.0)",
 			in0: values.NewBigFloatFromFloat64(3.0),
 			in1: values.NewFloat(3.0),
-			out: true,
+			out: false,
 		},
 		{
 			nm:  "Float(3.0) == BigFloat(4.0)",

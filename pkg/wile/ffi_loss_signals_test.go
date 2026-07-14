@@ -112,11 +112,18 @@ func TestRegisterFuncFloat64StrictModeLossy(t *testing.T) {
 		// 1/3 is rational but not exactly representable in binary
 		// float64 (denominator is not a power of 2).
 		{"rational 1/3 (non-power-of-2 denom)", `(take-float 1/3)`},
-		// (+ 1.0 (expt 10 60)) constructs a *BigFloat (mixing an
-		// inexact unit with a 60-digit exact integer forces
-		// arbitrary-precision arithmetic). Float64 can't hold all
-		// 60 decimal digits; conversion rounds with non-Exact accuracy.
-		{"big float lossy mantissa", `(take-float (+ 1.0 (expt 10 60)))`},
+		// (* #m1.0 (expt 10 60)) constructs a *BigFloat (~10^60): the #m literal is an
+		// arbitrary-precision inexact operand, and exact x BigFloat stays BigFloat.
+		// Float64 can't hold all 60 decimal digits; conversion rounds with non-Exact
+		// accuracy, which is what strict mode must reject.
+		//
+		// This used to be (+ 1.0 (expt 10 60)), on the (then-true) grounds that "mixing
+		// an inexact unit with a 60-digit exact integer forces arbitrary-precision
+		// arithmetic". That was the bug, not the feature: exactness contagion means the
+		// exact operand is ABSORBED into the float64, so the sum is now a Float and the
+		// FFI conversion is lossless. An arbitrary-precision inexact value has to be
+		// asked for, and #m is how you ask.
+		{"big float lossy mantissa", `(take-float (* #m1.0 (expt 10 60)))`},
 		// 2^100 + 1: BigInteger whose mantissa requires more than
 		// 53 bits, so float64 can't preserve every digit.
 		{"big integer precision loss",
@@ -283,14 +290,15 @@ func TestRegisterFuncComplex128StrictMode(t *testing.T) {
 	}{
 		{"rational 1/3", `(complex-finite? 1/3)`},
 		{"complex 1/3+0i", `(complex-finite? (make-rectangular 1/3 0))`},
-		// BigComplex with a real-part magnitude that float64 cannot
-		// preserve. (+ 1.0 (expt 10 60)) is a *BigFloat (~10^60),
-		// representable in big.Float but lossy in float64.
+		// BigComplex with a real-part magnitude that float64 cannot preserve.
+		// (* #m1.0 (expt 10 60)) is a *BigFloat (~10^60), representable in big.Float
+		// but lossy in float64. See the note on "big float lossy mantissa" above for
+		// why this is no longer spelled (+ 1.0 (expt 10 60)).
 		{"big complex (lossy real)",
-			`(complex-finite? (make-rectangular (+ 1.0 (expt 10 60)) 0))`},
+			`(complex-finite? (make-rectangular (* #m1.0 (expt 10 60)) 0))`},
 		// BigComplex with a lossy imaginary part (real-part exact).
 		{"big complex (lossy imag)",
-			`(complex-finite? (make-rectangular 0 (+ 1.0 (expt 10 60))))`},
+			`(complex-finite? (make-rectangular 0 (* #m1.0 (expt 10 60))))`},
 	}
 	for _, tc := range lossyCases {
 		t.Run("lossy/"+tc.name, func(t *testing.T) {

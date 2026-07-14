@@ -21,29 +21,37 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-var _ values.Value = boxedValuesType{}
+var _ values.Value = (*boxedValues)(nil)
 
-// boxedValuesType is an internal carrier that collapses the whole value register
+// boxedValues is an internal carrier that collapses the whole value register
 // (zero, one, or several values) into a SINGLE values.Value so it can be saved
 // on the eval stack as one slot. It never escapes to Scheme: it lives only on
 // the eval stack between an OperationBoxValues and its paired OperationUnboxValues
 // (currently dynamic-wind, bracketing the after-thunk call). Identified by type,
 // like noMarkSentinelType.
-type boxedValuesType struct {
+//
+// It is used through a POINTER (*boxedValues), and that is load-bearing, not
+// incidental. The struct holds a slice, so the bare struct type is not
+// Go-comparable; boxed into a values.Value it would fault any `==` or map-key
+// hash of the interface — values.EqIdentity (eq?) is exactly such an `==`. A
+// pointer is comparable, which is what keeps this carrier inside the Value
+// contract while it sits in the value register. See values.Value's doc comment,
+// and TestMachineValues_AreGoComparable.
+type boxedValues struct {
 	vals []values.Value
 }
 
-func (boxedValuesType) SchemeString() string {
+func (*boxedValues) SchemeString() string {
 	return "#<boxed-values>"
 }
 
-func (boxedValuesType) IsVoid() bool {
+func (*boxedValues) IsVoid() bool {
 	return false
 }
 
-func (boxedValuesType) EqualTo(o values.Value) bool {
-	_, ok := o.(boxedValuesType)
-	return ok
+func (p *boxedValues) EqualTo(o values.Value) bool {
+	v, ok := o.(*boxedValues)
+	return SameType(p, v, ok)
 }
 
 // OperationBoxValues collapses the value register (0, 1, or N values) into a
@@ -71,7 +79,7 @@ func (*OperationBoxValues) Apply(mc *MachineContext) (*MachineContext, error) {
 	src := mc.GetValues()
 	// Copy: GetValues returns the live multiValues slice; the box outlives the
 	// register (the bracketed call rebinds the register), so own the values.
-	boxed := boxedValuesType{}
+	boxed := &boxedValues{}
 	if len(src) > 0 {
 		boxed.vals = make([]values.Value, len(src))
 		copy(boxed.vals, src)
@@ -104,7 +112,7 @@ func NewOperationUnboxValues() *OperationUnboxValues {
 }
 
 func (*OperationUnboxValues) Apply(mc *MachineContext) (*MachineContext, error) {
-	boxed, ok := mc.GetValue().(boxedValuesType)
+	boxed, ok := mc.GetValue().(*boxedValues)
 	if !ok {
 		// Compiler invariant: OperationUnboxValues only ever runs on a value
 		// register holding a box produced by OperationBoxValues.

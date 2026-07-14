@@ -76,9 +76,12 @@ func TestStringToNumber(t *testing.T) {
 		// parse would have saturated to +inf.0, which is not finite).
 		{"scientific overflow finite", `(finite? (string->number "1e+1000"))`, values.TrueValue},
 		{"scientific overflow magnitude", `(> (string->number "1e+1000") 1e308)`, values.TrueValue},
-		{"scientific overflow value", `(= (string->number "1e+1000") (* 1.0 (expt 10 1000)))`, values.TrueValue},
+		// Comparand is an explicit BigFloat literal (#m): (* 1.0 (expt 10 1000)) now
+		// contaminates to Float and overflows to +inf.0, exactly as Chez does. A big
+		// INEXACT value must be asked for explicitly.
+		{"scientific overflow value", `(= (string->number "1e+1000") #m1e1000)`, values.TrueValue},
 		{"scientific overflow round-trip",
-			`(= (string->number (number->string (* 1.0 (expt 10 1000)))) (* 1.0 (expt 10 1000)))`, values.TrueValue},
+			`(= (string->number (number->string #m1e1000)) #m1e1000)`, values.TrueValue},
 		{"decimal overflow finite", `(finite? (string->number "-2.5e+500"))`, values.TrueValue},
 		{"hex radix arg", `(= (string->number "ff" 16) 255)`, values.TrueValue},
 		{"binary radix arg", `(= (string->number "111" 2) 7)`, values.TrueValue},

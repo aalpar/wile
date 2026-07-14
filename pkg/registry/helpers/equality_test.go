@@ -207,16 +207,33 @@ func TestEqv(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "float/NaN not equal to NaN",
+			// R7RS §6.1 leaves eqv? on two NaNs UNSPECIFIED; Wile answers #t, matching
+			// Chez and Racket. This is NOT IEEE equality — eqv? is an equivalence
+			// relation and must be reflexive, which IEEE `==` deliberately is not.
+			// Numeric = keeps IEEE semantics: (= +nan.0 +nan.0) is still #f.
+			name: "float/NaN is eqv? to NaN",
 			a:    values.NewFloat(math.NaN()),
 			b:    values.NewFloat(math.NaN()),
-			want: false, // IEEE 754: NaN != NaN
+			want: true,
 		},
 		{
+			// The old expectation here was `true`, justified in a comment as "Go:
+			// 0.0 == -0.0". That is the bug, stated out loud: it asserted GO's
+			// equality, not Scheme's. R7RS §6.1's eqv? #f clause fires when two
+			// inexact numbers "do not yield the same results ... when passed as
+			// arguments to any other procedure that can be defined as a finite
+			// composition of Scheme's standard arithmetic procedures", and the spec's
+			// own note says (eqv? 0.0 -0.0) is #f "if negative zero is distinguished".
+			//
+			// Wile distinguishes it, and its own output is the witness:
+			//   (/ 1.0  0.0) => +inf.0
+			//   (/ 1.0 -0.0) => -inf.0
+			//
+			// Chez agrees: #f.
 			name: "float/positive vs negative zero",
 			a:    values.NewFloat(0.0),
 			b:    values.NewFloat(math.Copysign(0, -1)),
-			want: true, // Go: 0.0 == -0.0
+			want: false,
 		},
 
 		// ── BigFloat == BigFloat ───────────────────────────────────────
@@ -242,10 +259,10 @@ func TestEqv(t *testing.T) {
 		// as a separate flag; without a guard, Cmp on the zero backing *big.Float
 		// returns 0 (incorrectly treating NaN == NaN as true).
 		{
-			name: "bigfloat/NaN not equal to NaN",
+			name: "bigfloat/NaN is eqv? to NaN",
 			a:    values.NewBigFloatNaN(),
 			b:    values.NewBigFloatNaN(),
-			want: false,
+			want: true,
 		},
 		{
 			name: "bigfloat/NaN not equal to finite",
@@ -384,10 +401,19 @@ func TestEqv(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "mismatch/integer vs rational",
+			// Both EXACT and numerically equal, so eqv? is #t. R7RS §6.1: eqv? returns
+			// #t if "obj1 and obj2 are both exact numbers and are numerically equal
+			// (in the sense of =)". Representation is not observable for exact numbers
+			// — Integer 1, BigInteger 1 and Rational 1/1 are the same number.
+			//
+			// This asserted #f, not by design but by omission: helpers.Eqv was a
+			// fourteen-arm type switch and simply had no Integer↔Rational arm, so it
+			// fell through to the default. Routing through values.EqvNumber, which
+			// states the exactness rule once, closes the gap.
+			name: "match/integer vs rational (both exact, numerically equal)",
 			a:    values.NewInteger(1),
 			b:    values.NewRational(1, 1),
-			want: false,
+			want: true,
 		},
 		{
 			name: "mismatch/integer vs complex",
@@ -432,10 +458,13 @@ func TestEqv(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "mismatch/bigint vs rational",
+			// Both exact, numerically equal: #t, for the same reason as
+			// integer-vs-rational above. Another arm helpers.Eqv's type switch simply
+			// never had.
+			name: "match/bigint vs rational (both exact, numerically equal)",
 			a:    values.NewBigIntegerFromInt64(1),
 			b:    values.NewRational(1, 1),
-			want: false,
+			want: true,
 		},
 		{
 			name: "mismatch/rational vs bigfloat",

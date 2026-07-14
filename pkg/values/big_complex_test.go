@@ -583,9 +583,17 @@ func TestBigComplex_EqualTo(t *testing.T) {
 	c.Assert(bc1.EqualTo(bc2), qt.IsTrue)
 	c.Assert(bc1.EqualTo(bc3), qt.IsFalse)
 
-	// Equal to regular Complex with same values
+	// NOT equal to a regular Complex with the "same" values, and the reason is
+	// EXACTNESS, not precision: bc1 has BigInteger components, so it is an EXACT
+	// complex, while Complex is float64-backed and therefore inexact. R7RS 6.1:
+	// eqv? is #f when "one of obj1 and obj2 is an exact number but the other is an
+	// inexact number", and equal? returns the same as eqv? on numbers.
+	//
+	// This asserted IsTrue until equal? was made to agree with eqv?. It was the same
+	// bug as (equal? 3 3.0) answering #t — just wearing a complex costume.
 	cplx := values.NewComplexFromParts(3.0, 4.0)
-	c.Assert(bc1.EqualTo(cplx), qt.IsTrue)
+	c.Assert(bc1.EqualTo(cplx), qt.IsFalse)
+	c.Assert(cplx.EqualTo(bc1), qt.IsFalse)
 
 	// Not equal to different type
 	c.Assert(bc1.EqualTo(values.NewInteger(3)), qt.IsFalse)
@@ -613,11 +621,17 @@ func TestBigComplex_EqualTo_StrictBeyondFloat64(t *testing.T) {
 	c.Assert(bcNear.EqualTo(cplxOne), qt.IsFalse)
 	c.Assert(cplxOne.EqualTo(bcNear), qt.IsFalse)
 
-	// A genuinely equal, exactly-representable value stays equal (hash/equality
-	// contract preserved for the representable case).
+	// An exactly-representable value is STILL not equal — and this is the assertion
+	// that changed. bcOne has BigInteger components (exact); cplxOne is float64-backed
+	// (inexact). R7RS 6.1 makes an exact and an inexact number unequal under eqv?,
+	// whatever their values, and equal? follows eqv? on numbers.
+	//
+	// The guard this test exists for is UNAFFECTED and is strengthened: the point was
+	// that BigComplex must not truncate its components to float64 before comparing.
+	// It now does not compare across the exact/inexact boundary at all.
 	bcOne := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(0))
-	c.Assert(bcOne.EqualTo(cplxOne), qt.IsTrue)
-	c.Assert(cplxOne.EqualTo(bcOne), qt.IsTrue)
+	c.Assert(bcOne.EqualTo(cplxOne), qt.IsFalse)
+	c.Assert(cplxOne.EqualTo(bcOne), qt.IsFalse)
 
 	// A huge but finite BigComplex component (>float64 range) must NOT compare
 	// equal to an infinite Complex — regression guard for the Inf branch that
@@ -695,11 +709,23 @@ func TestBigComplex_Sqrt(t *testing.T) {
 	c.Assert(relErr(sq.ImagAsBigFloat(), huge.ImagAsBigFloat()).Cmp(threshold) < 0, qt.IsTrue)
 }
 
-// TestComplex_EqualTo_SymmetricWithBigComplex pins R7RS equality symmetry
-// across the Complex/BigComplex kinds: (equal? a b) must not flip with operand
-// order. Complex.EqualTo previously matched only *Complex and returned false
-// for any *BigComplex, while BigComplex.EqualTo cross-compared to *Complex —
-// so the two directions disagreed.
+// TestComplex_EqualTo_SymmetricWithBigComplex pins R7RS equality symmetry across
+// the Complex/BigComplex kinds: (equal? a b) must not flip with operand order.
+// Complex.EqualTo once matched only *Complex and returned false for any
+// *BigComplex, while BigComplex.EqualTo cross-compared to *Complex — so the two
+// directions disagreed.
+//
+// Symmetry is now STRUCTURAL rather than asserted: both directions delegate to the
+// same values.EqvNumber, which cannot be asymmetric because it is one function. The
+// test is kept as a guard against anyone re-introducing a hand-written cross-kind
+// arm in one type's EqualTo and not the other's — the exact way the original bug
+// arose.
+//
+// The expected ANSWER changed with exactness contagion: a BigComplex with
+// BigInteger components is an EXACT complex, and a Complex is float64-backed and
+// so inexact. R7RS §6.1 makes an exact and an inexact number unequal under eqv?,
+// and equal? returns the same as eqv? on numbers. So both directions are now #f —
+// still symmetric, which is what this test is for.
 func TestComplex_EqualTo_SymmetricWithBigComplex(t *testing.T) {
 	c := qt.New(t)
 
@@ -709,9 +735,9 @@ func TestComplex_EqualTo_SymmetricWithBigComplex(t *testing.T) {
 	)
 	cplx := values.NewComplexFromParts(3.0, 4.0)
 
-	// Equal values: both directions must agree.
-	c.Assert(bc.EqualTo(cplx), qt.IsTrue)
-	c.Assert(cplx.EqualTo(bc), qt.IsTrue)
+	// Numerically equal, but exact vs inexact: unequal, and symmetrically so.
+	c.Assert(bc.EqualTo(cplx), qt.IsFalse)
+	c.Assert(cplx.EqualTo(bc), qt.IsFalse)
 
 	// Unequal values: both directions must agree.
 	bcDiff := values.NewBigComplexFromBigIntegers(
@@ -720,6 +746,19 @@ func TestComplex_EqualTo_SymmetricWithBigComplex(t *testing.T) {
 	)
 	c.Assert(bcDiff.EqualTo(cplx), qt.IsFalse)
 	c.Assert(cplx.EqualTo(bcDiff), qt.IsFalse)
+
+	// Same kind, same value: equal in both directions. The symmetry guarantee is not
+	// vacuous — it still has a true case to be symmetric about.
+	cplxSame := values.NewComplexFromParts(3.0, 4.0)
+	c.Assert(cplx.EqualTo(cplxSame), qt.IsTrue)
+	c.Assert(cplxSame.EqualTo(cplx), qt.IsTrue)
+
+	bcSame := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(3),
+		values.NewBigIntegerFromInt64(4),
+	)
+	c.Assert(bc.EqualTo(bcSame), qt.IsTrue)
+	c.Assert(bcSame.EqualTo(bc), qt.IsTrue)
 }
 
 func TestBigComplex_SchemeString(t *testing.T) {
@@ -1138,17 +1177,24 @@ func TestBigComplex_NaNEquality(t *testing.T) {
 	c.Assert(nanImag.EqualTo(nanImag), qt.IsTrue)
 	c.Assert(nanBoth.EqualTo(nanBoth), qt.IsTrue)
 
-	// Distinct objects with NaN components stay unequal: identity does not hold, so
-	// IEEE-754 decides (pinned below against finite and against a separate NaN).
-
-	// NaN != finite.
+	// NaN is equivalent to no finite value: a NaN component makes the whole complex
+	// INEXACT, and finite here is exact (BigInteger parts), so exactness alone
+	// separates them — before the NaN rule is even consulted.
 	c.Assert(nanReal.EqualTo(finite), qt.IsFalse)
 	c.Assert(finite.EqualTo(nanReal), qt.IsFalse)
 
-	// NaN BigComplex != NaN BigComplex (different instances).
+	// Two distinct NaN-carrying BigComplexes ARE equivalent, component-wise: the NaN
+	// reals are eqv? (Chez-matching), and the exact imaginary parts are equal. See
+	// TestFloat_NaNEquality.
 	nanReal2 := values.NewBigComplex(
 		values.NewBigFloatNaN(),
 		values.NewBigIntegerFromInt64(4),
 	)
-	c.Assert(nanReal.EqualTo(nanReal2), qt.IsFalse)
+	c.Assert(nanReal.EqualTo(nanReal2), qt.IsTrue)
+	c.Assert(nanReal2.EqualTo(nanReal), qt.IsTrue)
+
+	// A NaN in the REAL slot is still not the same value as a NaN in the IMAGINARY
+	// slot — the rule is component-wise, not "contains a NaN somewhere".
+	c.Assert(nanReal.EqualTo(nanImag), qt.IsFalse)
+	c.Assert(nanBoth.EqualTo(nanReal), qt.IsFalse)
 }

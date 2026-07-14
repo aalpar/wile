@@ -67,34 +67,25 @@ Items that block production embedded use or prevent silent state corruption.
 - [ ] **Establish whether over-marking relaxes an *enforced rule* or only an optimization** [Correctness, S-M, ACCURACY RISK]: `markOpaqueSubtree` (`pkg/internal/validate/opaque_subtree.go`) records every symbol mentioned anywhere in a quasiquote template / passthrough form as a possible `set!` target. The code justifies this as safe on the grounds that "an over-mark costs an optimization; an under-mark costs correctness." That holds for the two consumers it was written for (the inliner, and heap-vs-slot allocation), but **it does not obviously hold for the third**: the immutable-top-level legality check, where the marked-mutated set is what makes a `set!` **accepted**. In that direction an over-mark is *permissive* — it can admit a mutation the dialect is supposed to reject, so `` (begin `(x) (set! x 1)) `` may compile under the default immutable top level purely because the quasiquote *mentions* `x`.
   **This is an accuracy risk, not just a lost optimization: the "over-marking is always safe" rationale is stated in the code and is false for at least one consumer, so the comment is actively misleading the next reader.**
   Work: (1) write a test that pins the current accept/reject behavior of a `set!` on a top-level binding whose only other mention is inside a quasiquote/passthrough, under `WithImmutableTopLevel`; (2) if it is accepted, decide whether the check should consult a *separate*, precisely-marked mutation set rather than the conservative opaque-subtree one — the two consumers want opposite error directions from the same data, which is the actual design defect; (3) either way, correct the "over-mark costs an optimization" comment to name the consumer for which that is untrue. Found by crosscheck code lens; the acceptance was **not** confirmed empirically, so step (1) is the gate.
-### `Value` Go-comparability is an unenforced invariant, already violated in-tree (2026-07-14)
+### ~~`Value` Go-comparability is an unenforced invariant, already violated in-tree (2026-07-14)~~ RESOLVED
 
-- [ ] **Decide whether `Value` must be Go-comparable, then enforce it or stop assuming it** [Correctness, M]: Three sites compare or hash arbitrary `Value` interfaces, and Go panics (`comparing uncomparable type` / `hash of unhashable type`) when the dynamic type is a slice, map, or func:
-  - `values.EqIdentity` (`pkg/values/utils.go`) — `return a == b`. Backs `eq?`, `memq`, `assq`.
-  - `equalWorklist.step` (`pkg/values/equal.go`) — `if a == b` on component pairs.
-  - `equalPairKey{a, b}` as a map key (`pkg/values/equal.go`) — hashes BOTH elements, so it faults on a non-comparable operand *even when the two types differ and `==` would have been safe*. **Fixed** (merged 2026-07-14) by settling a non-`DeepEqualer` `b` before the key is formed; the other two are open.
+- [x] **Decided: Option 1 — require comparability. Documented and enforced.** (2026-07-14, `fix/value-comparability-contract`)
 
-  **Go comparability is not an interface.** It is a static property of the type, with no method set: it cannot be asserted (`a.(comparable)` does not compile), and the `comparable` *constraint* accepts `values.Value` and then panics at runtime, so generics are not a safety net. The only runtime query is `reflect.TypeOf(v).Comparable()`. Nothing in `Value` (`SchemeString`/`IsVoid`/`EqualTo`) constrains the dynamic type's shape, so a slice-backed `Value` is legal Go and the compiler is silent.
+  The requirement is now stated on the `Value` doc comment (`pkg/values/values.go`), including the rule that actually decides it: **the RECEIVER, not the underlying type**. `Vector` is `[]Value` and is safe because its methods take pointer receivers.
 
-  **Two non-comparable `Value`s exist today** (checked mechanically via `reflect`, not by eye):
-  - `machine.Operations` = `[]Operation`, value receivers.
-  - `machine.MultipleValues` = `[]values.Value`, value receivers.
+  Enforced by `reflect.TypeOf(v).Comparable()` over rosters, since Go comparability has no method set and cannot be asserted at compile time:
+  - `TestValue_ImplementorsAreGoComparable` (`pkg/values`, over `allValueExemplars`)
+  - `TestDeepEqualer_ImplementorsAreGoComparable` (hashing is a stricter demand than `==`)
+  - `TestMachineValues_AreGoComparable` (`pkg/machine`, new roster)
+  - `TestMachineValueExemplars_CoverPackage` (pins that `Operations`/`MultipleValues` do not silently re-acquire `Value`)
 
-  `values.Vector` (`[]Value`) and `values.ByteVector` are NOT affected: their methods take pointer receivers, so the boxed dynamic type is `*Vector` — a pointer, hence comparable. **The receiver, not the underlying type, is what decides.**
+  **THREE violators, not two.** The audit above listed `Operations` and `MultipleValues`. It missed `machine.boxedValuesType` — a `struct{[]values.Value}` with value receivers — and that was the only one of the three *reachable from Scheme*: `OperationBoxValues` puts it in the value register, so `dynamic-wind` gets there. Found by `reflect`, not by eye, which is the argument for the roster tests.
+  - `Operations` and `MultipleValues` — **no longer `values.Value`**. Neither is a Scheme datum; both took the conformance for container convenience. Production code built untouched, only tests referenced the interface methods. They keep a concrete `EqualTo(T)`: having an equality method is not the same as being a `Value`.
+  - `boxedValues` — genuinely IS a `Value`, so it became **pointer-shaped**.
 
-  **Reachability (measured, not assumed):**
-  - From Scheme: **no.** `(values …)` splices in argument position, so a `MultipleValues` never reaches `eq?` as one object; `Operations` is a compiler artifact.
-  - From the embedding API: **no.** `wile.Value` is narrower than `values.Value` (no `EqualTo`), and `Eval` unwraps multiple values (verified: `EvalMultiple("(values 1 2)")` returns `*values.Integer`).
-  - From internal Go code: **YES** — anything calling `values.Equal`/`EqIdentity` on these. Verified: `values.EqIdentity(ops, ops2)` panics with `runtime error: comparing uncomparable type machine.Operations`. Found when a naive `a == b` fast-path in `Equal` took down every test in `pkg/machine/compilation`; the suite is the only thing holding the invariant.
-  - From an extension author: **YES** — `pkg/values` is public, so a custom slice-backed `Value` is legal and would fault in `eq?`.
+  **A live host-crash bug was fixed on the way.** `equalWorklist.step` compared `a == b` BEFORE establishing both sides were `DeepEqualer`s, so two same-typed non-comparable leaves meeting as components panicked. The regression test merged earlier that day only paired a leaf against a `*Pair` — differing dynamic types, which Go answers `false` for without faulting — so the hazard sat unmeasured in the one shape that actually faults. `step()` now reaches `==` and the visited-set key only once both operands are `DeepEqualer`s. Guarded by `TestEqual_SameTypedNonComparableLeavesDoNotPanic`.
 
-  So this is a latent internal hazard plus an open door for extension authors, NOT a live Scheme-facing bug. That sets the priority, not the validity.
-
-  Pick one and commit to it:
-  1. **Require comparability.** Document it on `Value`, and give `Operations` and `MultipleValues` pointer receivers (or wrap them in structs) so the boxed type is a pointer — the same thing that already makes `Vector` safe. Cheapest to reason about; `eq?` stays a pointer compare. Add a `reflect`-based test that walks the known `Value` implementations and asserts each is `Comparable()`, so the invariant is enforced rather than remembered.
-  2. **Stop assuming it.** Guard the sites with `reflect.TypeOf(a).Comparable()` (runtime cost on the `eq?`/`member` hot path), or add an `Identity() uintptr` method to `Value` — the only way to make identity a *checked method call* instead of an unchecked interface `==`.
-
-  Do NOT paper over it by adding identity fast-paths one at a time — that is what produced the panic above. Reflexivity for NaN-carrying numerics is handled correctly (merged 2026-07-14) by putting the identity check inside each numeric `EqualTo`, on a *pointer* compare, precisely because the interface compare is unsafe.
+  **A `SchemeComparable` interface was considered and REJECTED.** It is the intuitive fix and it is the wrong one: it would give `Operations` and `MultipleValues` a *supported* way to be non-comparable `Value`s, ratifying the free ride instead of ending it. Also, identity may not be delegated to a method — R7RS §6.1 defines `eq?`/`eqv?` on aggregates as "denote the same location in the store", and `eq?` is the FINEST equivalence in the lattice: a type that computes its own identity can lie about it, and `eq? ⊆ eqv? ⊆ equal?` stops being structurally guaranteed. The contract, and why it has no compile-time expression, is on `values.Value`'s doc comment; it is enforced module-wide by `TestValue_AllImplementorsAreGoComparable`.
 
 ### Continuation multiple-values follow-ups (from PR #800 crosscheck, 2026-06-25)
 

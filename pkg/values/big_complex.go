@@ -15,7 +15,6 @@
 package values
 
 import (
-	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -678,69 +677,54 @@ func (p *BigComplex) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both complex numbers have equal real and imaginary parts.
+// EqualTo implements R7RS equal? for BigComplex.
 //
-// R7RS §6.2.6: The = procedure compares numerical values for equality.
-func (p *BigComplex) EqualTo(o Value) bool {
-	v, ok := o.(*BigComplex)
-	if ok && p == v {
-		// Reflexive on the same object, before any NaN component can reject it. See
-		// Float.EqualTo: equal? may not be finer than eqv? (R7RS §6.1).
-		return true
-	}
-	if !ok {
-		// Check if equal to regular Complex
-		c, ok := o.(*Complex)
-		if ok {
-			// Promote the Complex's float64 components to big precision rather
-			// than truncating this BigComplex, so two values differing only
-			// below float64 precision compare unequal.
-			cReal := real(c.Value)
-			cImag := imag(c.Value)
-			// NaN never equals anything; guard here because
-			// NewBigFloatFromFloat64 folds NaN into a NaN BigFloat that would
-			// otherwise compare via Compare's nan==0 path.
-			if math.IsNaN(cReal) || math.IsNaN(cImag) || p.IsNaN() {
-				return false
-			}
-			// big.Float represents ±Inf and Compare (via big.Float.Cmp) orders
-			// it correctly, so a finite component never matches an infinite one.
-			return toBigFloat(p.real).Compare(NewBigFloatFromFloat64(cReal)) == 0 &&
-				toBigFloat(p.imag).Compare(NewBigFloatFromFloat64(cImag)) == 0
-		}
-		return false
-	}
-	if v == nil || p == nil {
-		return p == v
-	}
-	// NaN is not equal to anything, including itself (IEEE 754).
-	if p.IsNaN() || v.IsNaN() {
-		return false
-	}
-	// Compare real parts
-	if !p.real.EqualTo(v.real) {
-		// Try comparing as BigFloat
-		if toBigFloat(p.real).Compare(v.real) != 0 {
-			return false
-		}
-	}
-	// Compare imaginary parts
-	if !p.imag.EqualTo(v.imag) {
-		// Try comparing as BigFloat
-		if toBigFloat(p.imag).Compare(v.imag) != 0 {
-			return false
-		}
-	}
-	return true
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
+func (p *BigComplex) EqualTo(v Value) bool {
+	return eqvNumberValue(p, v)
 }
 
 // HashCode returns a hash of the complex value.
-// Hashes real and imaginary parts independently via hashInexactNumeric
-// and combines them with a multiplicative mixing constant.
-// Uses the same combining formula as Complex.HashCode for cross-type consistency:
-// when BigComplex.EqualTo(*Complex) holds, both produce equal hashes.
+//
+// EQUALITY RECURSES INTO THE COMPONENTS, SO HASHING MUST TOO. EqvNumber decides a
+// complex pair by recursing onto RealPart and ImagPart (see eqv.go), which means the
+// Hashable contract — a.EqualTo(b) implies equal hashes — is discharged component-wise.
+// Delegating to each component's own HashCode is therefore not merely tidy, it is the
+// only way to inherit the component rules (NaN canonicalization, signed zero, the
+// exact-family Integer/BigInteger/Rational collapse) instead of re-deriving them.
+//
+// It used to hash toBigFloat(part).value directly. That bypassed BigFloat.HashCode, and
+// so bypassed hashNaN: a NaN BigFloat carries an explicit nan flag with a ZERO backing
+// big.Float, so a BigComplex with a NaN real part hashed identically to one with a 0.0
+// real part. Legal (a collision, and the contract is one-directional) but exactly the
+// discipline hash.go had just been introduced to establish, and the one numeric HashCode
+// not following it.
+//
+// It also used to claim it matched Complex.HashCode "for cross-type consistency: when
+// BigComplex.EqualTo(*Complex) holds". That relation cannot hold: EqvNumber separates
+// inexact numbers by Kind, so a BigComplex is never eqv? to a Complex, and the branch's
+// own TestBigComplex_EqualTo asserts as much.
 func (p *BigComplex) HashCode() uint64 {
-	r := hashInexactNumeric(toBigFloat(p.real).value)
-	i := hashInexactNumeric(toBigFloat(p.imag).value)
-	return r ^ (i * 0x9e3779b97f4a7c15)
+	return hashBigComplexPart(p.real) ^ (hashBigComplexPart(p.imag) * 0x9e3779b97f4a7c15)
+}
+
+// hashBigComplexPart hashes a BigComplex component through the component's OWN HashCode.
+// The switch is exhaustive over what validateBigComplexPart admits; anything else is an
+// invariant violation, not a value to hash.
+func hashBigComplexPart(n Number) uint64 {
+	switch v := n.(type) {
+	case *BigInteger:
+		return v.HashCode()
+	case *Rational:
+		return v.HashCode()
+	case *BigFloat:
+		return v.HashCode()
+	}
+	panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+		"hashBigComplexPart: part is %T, but validateBigComplexPart admits only "+
+			"*BigInteger, *Rational, *BigFloat", n))
 }

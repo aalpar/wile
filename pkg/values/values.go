@@ -95,10 +95,49 @@ var EOFObject Value = eofType{}
 //     return true so that missing values are treated as void.
 //   - EqualTo implements structural equality (R7RS §6.1 equal?).
 //
+// # Implementors MUST be Go-comparable
+//
+// This is a hard requirement of the contract, and it has no compile-time
+// expression — the compiler will not stop you from breaking it.
+//
+// R7RS §6.1 defines eq?/eqv? on aggregates as "denote the same location in the
+// store." A Scheme object must therefore HAVE a location, and Wile spells that as
+// Go pointer identity: EqIdentity (utils.go) special-cases *Symbol (compared by
+// Key, since interning was removed) and otherwise falls through to a bare `a == b`
+// on the interface. It backs eq?, memq, and assq — the hot path. Go panics with
+// "comparing uncomparable type" when the dynamic type behind an interface is a
+// slice, map, or func. Not an error return: a panic, in the embedder's process.
+//
+// The RECEIVER, not the underlying type, decides. Vector is []Value and it is
+// perfectly safe, because its methods take POINTER receivers — the dynamic type
+// boxed into the interface is *Vector, which is a pointer and hence comparable.
+// The mistake to avoid is a VALUE receiver on a slice-, map-, or func-backed
+// type, which puts the naked slice into the interface:
+//
+//	type MyThing []Value        // with VALUE receivers: eq? panics on it
+//	type MyThing struct{ … }    // with POINTER receivers: *MyThing is comparable, safe
+//
+// Enforced MODULE-WIDE by TestValue_AllImplementorsAreGoComparable, which
+// type-checks every implementing package with go/types and asserts
+// types.Comparable on each of the ~130 implementors. There is no roster to keep
+// up to date and nothing is exempt: add a non-comparable Value anywhere in the
+// module and that test fails.
+//
+// If your type is not a Scheme datum — a compiler or VM container that merely
+// wanted SchemeString for diagnostics — do not implement Value at all. Having an
+// equality method is not the same as being a Value; give it a concrete
+// EqualTo(T) instead. machine.Operations and machine.MultipleValues are the
+// worked examples.
+//
 // ADDING A NEW VALUE TYPE requires at minimum:
 //
-//  1. values/<type>.go              — implement Value (SchemeString, IsVoid, EqualTo)
+//  1. values/<type>.go              — implement Value (SchemeString, IsVoid, EqualTo),
+//     with POINTER receivers unless the type is already
+//     comparable (an empty struct, a scalar)
 //  2. values/<type>_test.go         — test the three Value methods + type-specific behavior
+//  3. allValueExemplars             — add an exemplar (value_isvoid_convention_test.go);
+//     this is what enforces both the IsVoid convention
+//     and Go-comparability
 //
 // Depending on the type's role, also update:
 //

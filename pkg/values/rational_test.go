@@ -56,7 +56,14 @@ func TestRational_Add(t *testing.T) {
 
 	c1 := values.NewComplex(complex(1, 2))
 	result = r1.Add(c1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(1.5, 2)))
+	// exact + Complex => BigComplex, not Complex. Zone 3 declines the contagion so an
+	// exact operand is never rounded into complex128: a manufactured +0.0 imaginary
+	// part is not an exact 0, and the exact-zero sign rules stop applying (that is what
+	// gives (/ 10 2.0+0.0i) => 5.0-0.0i its sign). The VALUE is exactly what Chez gives;
+	// only the carrier kind differs, so compare the external representation — which is
+	// what a Scheme program can actually observe.
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(1.5, 2)).SchemeString())
 }
 
 func TestRational_Subtract(t *testing.T) {
@@ -79,7 +86,8 @@ func TestRational_Subtract(t *testing.T) {
 
 	c1 := values.NewComplex(complex(1, 2))
 	result = r1.Subtract(c1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(-0.5, -2)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(-0.5, -2)).SchemeString())
 }
 
 func TestRational_Multiply(t *testing.T) {
@@ -102,7 +110,8 @@ func TestRational_Multiply(t *testing.T) {
 
 	c1 := values.NewComplex(complex(2, 3))
 	result = r1.Multiply(c1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(1, 1.5)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(1, 1.5)).SchemeString())
 }
 
 func TestRational_Divide(t *testing.T) {

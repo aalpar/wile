@@ -155,19 +155,25 @@ func TestBigInteger_MixedArithmetic(t *testing.T) {
 	sum := bi.Add(values.NewInteger(50))
 	c.Assert(sum.(*values.BigInteger).Int64(), qt.Equals, int64(150))
 
-	// Add with Float - now returns BigFloat for precision preservation
+	// Add with Float -> Float. Exactness contagion (R7RS 6.2.2): the exact operand is
+	// absorbed into the inexact one's representation, it does not drag the result up
+	// the precision axis. Chez gives (+ 100 0.5) => 100.5, a flonum.
 	sumF := bi.Add(values.NewFloat(0.5))
-	// Result must be BigFloat (inexact) to preserve exactness contagion
-	bf, ok := sumF.(*values.BigFloat)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", sumF))
-	c.Assert(bf.Float64Truncated(), qt.Equals, float64(100.5))
-	c.Assert(bf.IsExact(), qt.Equals, false) // Must be inexact
+	f, ok := sumF.(*values.Float)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *values.Float (contagion), got %T", sumF))
+	c.Assert(f.Value, qt.Equals, float64(100.5))
+	c.Assert(f.IsExact(), qt.Equals, false) // Must be inexact
 
-	// Add with Complex → BigComplex (no-loss: exact BigInteger never truncates to float64)
+	// Add with Complex → Complex. The contagion extends to the complex axis exactly as
+	// it does to the real one: the exact operand is absorbed into the inexact operand's
+	// representation. The exact-zero imaginary part is protected at the OPERATION —
+	// real ⊕ complex is computed part-wise and never manufactures a component — not by
+	// escalating the promotion. See promotion.go Zone 3.
 	sumC := bi.Add(values.NewComplex(complex(1, 2)))
-	bc, ok := sumC.(*values.BigComplex)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigComplex, got %T", sumC))
-	c.Assert(bc.RealAsBigFloat().Float64Truncated(), qt.Equals, float64(101))
+	cx, ok := sumC.(*values.Complex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *values.Complex (contagion), got %T", sumC))
+	c.Assert(real(cx.Value), qt.Equals, float64(101))
+	c.Assert(imag(cx.Value), qt.Equals, float64(2))
 }
 
 func TestBigFloat_Constructors(t *testing.T) {
@@ -314,7 +320,11 @@ func TestBigFloat_EqualTo(t *testing.T) {
 
 	c.Assert(bf1.EqualTo(bf2), qt.IsTrue)
 	c.Assert(bf1.EqualTo(bf3), qt.IsFalse)
-	c.Assert(bf1.EqualTo(f1), qt.IsTrue) // Should equal regular Float
+	// A BigFloat is NOT equal to a Float of the same value: both are inexact, and
+	// their precisions are distinguishable by arithmetic, so R7RS 6.1 makes them
+	// distinct numbers. (An exact Integer 3 was already unequal, for a different
+	// reason -- exactness.)
+	c.Assert(bf1.EqualTo(f1), qt.IsFalse)
 	c.Assert(bf1.EqualTo(values.NewInteger(3)), qt.IsFalse)
 }
 
@@ -587,8 +597,13 @@ func TestBigFloat_NaNEquality(t *testing.T) {
 	// TestFloat_NaNEquality for the full argument.
 	c.Assert(nan1.EqualTo(nan1), qt.IsTrue)
 
-	// Distinct objects: identity does not hold, so IEEE-754 decides and NaN != NaN.
-	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
+	// Distinct NaN objects are equivalent too (R7RS §6.1 leaves this unspecified;
+	// Wile follows Chez). See TestFloat_NaNEquality for the full argument.
+	c.Assert(nan1.EqualTo(nan2), qt.IsTrue)
+	c.Assert(nan2.EqualTo(nan1), qt.IsTrue)
+	c.Assert(nan1.HashCode(), qt.Equals, nan2.HashCode())
+
+	// But NaN is equivalent to no finite value, in either direction.
 	c.Assert(nan1.EqualTo(finite), qt.IsFalse)
 	c.Assert(finite.EqualTo(nan1), qt.IsFalse)
 }

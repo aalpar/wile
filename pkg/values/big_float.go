@@ -138,7 +138,7 @@ func (p *BigFloat) Float64WithAccuracy() (float64, big.Accuracy) {
 // Hashable contract is not violated, but NaN is not a useful hashtable key.
 func (p *BigFloat) HashCode() uint64 {
 	if p.nan {
-		return hashUint64(0x5, math.Float64bits(math.NaN()))
+		return hashNaN()
 	}
 	if p.value.IsInf() {
 		return hashUint64(0x5, math.Float64bits(p.Float64Truncated()))
@@ -464,32 +464,13 @@ func (p *BigFloat) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if this BigFloat equals another value.
-// NaN is not equal to anything, including itself (IEEE 754).
-func (p *BigFloat) EqualTo(o Value) bool {
-	v, ok := o.(*BigFloat)
-	if ok {
-		if v == nil || p == nil {
-			return p == v
-		}
-		// Reflexive on the same object, before the NaN guard below rejects it. See
-		// Float.EqualTo: equal? may not be finer than eqv? (R7RS §6.1), and eqv?
-		// settles identity first.
-		if p == v {
-			return true
-		}
-		if p.nan || v.nan {
-			return false
-		}
-		return p.value.Cmp(v.value) == 0
-	}
-	f, ok := o.(*Float)
-	if ok {
-		if p.nan || math.IsNaN(f.Value) {
-			return false
-		}
-		vf := new(big.Float).SetFloat64(f.Value)
-		return p.value.Cmp(vf) == 0
-	}
-	return false
+// EqualTo implements R7RS equal? for BigFloat.
+//
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
+func (p *BigFloat) EqualTo(v Value) bool {
+	return eqvNumberValue(p, v)
 }

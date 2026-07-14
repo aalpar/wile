@@ -167,10 +167,19 @@ func TestFloat_Divide(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(20.0))
 
+	// (/ 10.0 2.0+0.0i) => 5.0-0.0i. The imaginary part is NEGATIVE zero: the general
+	// formula computes it as (b*c - a*d) = 0.0 - 0.0, and dividing by |z|^2 keeps the
+	// sign. Chez and Racket agree — verified against Petite Chez 10.4.1.
+	//
+	// This asserted complex(5, 0) — a POSITIVE zero — and passed anyway, because
+	// Complex.EqualTo compared complex128 with Go's ==, and IEEE-754 says
+	// 0.0 == -0.0. The sign was simply invisible to the assertion. Routing equality
+	// through values.EqvNumber, which consults SignBit, made it visible; the value
+	// itself did not change.
 	c1 := values.NewComplex(complex(2, 0))
 	result, err = f1.Divide(c1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 0)))
+	qt.Assert(t, result.SchemeString(), qt.Equals, "5.0-0.0i")
 }
 
 func TestFloat_IsZero(t *testing.T) {
@@ -306,8 +315,20 @@ func TestFloat_InfNaNPredicates(t *testing.T) {
 // == false), which put equal? BELOW eqv? and made (member x lst) unable to find
 // the very object it was handed.
 //
-// Two DISTINCT NaN objects remain unequal: identity does not hold, and the value
-// comparison then applies IEEE-754. That is the case that carries "NaN != NaN".
+// TestFloat_NaNEquality pins that NaN is eqv? to NaN.
+//
+// R7RS §6.1: "As an exception, the behavior of eqv? is unspecified when both obj1
+// and obj2 are NaN." Both answers conform. Wile answers #t, following Chez and
+// Racket. equal? follows eqv? on numbers, so it answers #t too.
+//
+// The alternative (#f, which IEEE-754's own != hands you for free) makes
+// (memv +nan.0 lst) unable to find a NaN it did not itself allocate and makes the
+// (case x ((+nan.0) …)) arm dead code. Neither is useful.
+//
+// Crucially this is NOT IEEE equality and must not be implemented with it. eqv? is
+// an EQUIVALENCE relation, so it must be reflexive; IEEE `==` deliberately is not.
+// Numeric = is a different predicate and KEEPS IEEE semantics — (= +nan.0 +nan.0)
+// is still #f. Reflexivity is a law of equivalence relations, not of =.
 func TestFloat_NaNEquality(t *testing.T) {
 	c := qt.New(t)
 	nan1 := values.NewFloat(math.NaN())
@@ -316,8 +337,17 @@ func TestFloat_NaNEquality(t *testing.T) {
 	// Reflexive: the same object is equivalent to itself, NaN payload or not.
 	c.Assert(nan1.EqualTo(nan1), qt.IsTrue)
 
-	// Distinct objects: no identity, so IEEE-754 decides, and NaN != NaN.
-	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
+	// And DISTINCT NaN objects are equivalent too — that is the Chez-matching part.
+	c.Assert(nan1.EqualTo(nan2), qt.IsTrue)
+
+	// A NaN produced by arithmetic carries a different payload from the +nan.0
+	// literal (0x7ff8...0000 vs 0x7ff8...0001). They are still eqv?, which is why
+	// HashCode canonicalizes every NaN to one hash — see hashNaN.
+	arith := values.NewFloat(math.Inf(1) - math.Inf(1))
+	c.Assert(nan1.EqualTo(arith), qt.IsTrue)
+	c.Assert(nan1.HashCode(), qt.Equals, arith.HashCode())
+
+	// NaN is equivalent to no NON-NaN, including infinities.
 	c.Assert(nan1.EqualTo(values.NewFloat(0)), qt.IsFalse)
 	c.Assert(nan1.EqualTo(values.NewFloat(math.Inf(1))), qt.IsFalse)
 
@@ -390,7 +420,10 @@ func TestFloat_EqualTo_NaNVsBigFloat(t *testing.T) {
 		{"NaN vs finite BigFloat", values.NewFloat(math.NaN()), values.NewBigFloatFromFloat64(1.0), false},
 		{"NaN vs BigFloat NaN", values.NewFloat(math.NaN()), values.NewBigFloatNaN(), false},
 		{"finite vs BigFloat NaN", values.NewFloat(1.0), values.NewBigFloatNaN(), false},
-		{"finite vs equal BigFloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(1.0), true},
+		// Not equal: different inexact precisions are observable under arithmetic
+		// ((+ x 1e-20) tells them apart), so R7RS 6.1's eqv? clause says #f, and
+		// equal? must agree. The point of this test is that neither case PANICS.
+		{"finite vs equal BigFloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(1.0), false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
