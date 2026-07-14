@@ -106,6 +106,19 @@ func Equal(a, b Value) bool {
 
 // step compares one pair, decomposing it onto the worklist if it is a
 // container and settling it outright if it is a leaf.
+//
+// Ordering is a safety property, not a style choice. Every interface operation
+// that can fault on a non-comparable dynamic type — `==` and map-key hashing —
+// is placed AFTER both sides are known to be DeepEqualers, which the interface's
+// contract requires to be pointer-shaped. Nothing above that point compares or
+// hashes an arbitrary Value.
+//
+// A leaf therefore never meets `==` here; it settles through its own EqualTo,
+// which owns identity (each numeric leaf does a *typed* pointer compare — see
+// Float.EqualTo — which is safe precisely because it is not an interface
+// compare). So a Value that violates the comparability contract — an embedder's
+// slice-backed leaf — degrades to a false answer rather than crashing the host.
+// See TestEqual_SameTypedNonComparableLeavesDoNotPanic.
 func (p *equalWorklist) step(a, b Value) bool {
 	// IsVoid, not a == nil, is the void test: a nil Value interface and a
 	// typed-nil pointer (a *Pair cdr left nil rather than EmptyList) are both
@@ -114,28 +127,24 @@ func (p *equalWorklist) step(a, b Value) bool {
 	if IsVoid(a) || IsVoid(b) {
 		return IsVoid(a) == IsVoid(b)
 	}
-	if a == b {
-		return true
-	}
 	da, ok := a.(DeepEqualer)
 	if !ok {
 		return a.EqualTo(b)
 	}
-	// Settle a non-container b BEFORE it reaches the visited map. Keying on
-	// equalPairKey{a, b} hashes both elements, and hashing a non-comparable
-	// dynamic type panics — a strictly stronger demand than the a == b above,
-	// which only panics when the two types are identical. An embedder's leaf
-	// value (a slice- or map-backed Value) therefore cannot be keyed even
-	// though comparing it is harmless.
-	//
-	// This costs nothing: every EqualComponents implementation opens by
-	// asserting the other side to its own concrete pointer type and returns
-	// false otherwise, so a b that is not itself a container was always going
-	// to settle as false. Once past this, both sides are containers, and every
-	// DeepEqualer is pointer-shaped and so hashable.
+	// Settle a non-container b here. This costs nothing: every EqualComponents
+	// implementation opens by asserting the other side to its own concrete
+	// pointer type and returns false otherwise, so a b that is not itself a
+	// container was always going to settle as false.
 	_, ok = b.(DeepEqualer)
 	if !ok {
 		return false
+	}
+	// Both sides are containers, hence pointer-shaped and Go-comparable. The
+	// identity shortcut and the visited-set key are safe from here and nowhere
+	// earlier. Identity also subsumes the shared-structure fast path: two
+	// references to the same container are equal without descending into it.
+	if a == b {
+		return true
 	}
 	key := equalPairKey{a, b}
 	if p.visited[key] {

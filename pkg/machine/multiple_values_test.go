@@ -122,9 +122,6 @@ func TestMultipleValues_EqualTo(t *testing.T) {
 
 	// Different length
 	qt.Assert(t, mv1.EqualTo(mv4), qt.IsFalse)
-
-	// Different type
-	qt.Assert(t, mv1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 // Tests moved from coverage_additional_test.go
@@ -137,6 +134,4 @@ func TestMultipleValuesEqualTo(t *testing.T) {
 
 	mv3 := MultipleValues{values.NewInteger(1)}
 	qt.Assert(t, mv1.EqualTo(mv3), qt.IsFalse)
-
-	qt.Assert(t, mv1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }

@@ -261,3 +261,35 @@ func TestEqual_NonComparableLeafInsideContainerDoesNotPanic(t *testing.T) {
 	qt.Assert(t, values.Equal(inA, inB), qt.IsFalse)
 	qt.Assert(t, values.Equal(inB, inA), qt.IsFalse)
 }
+
+// TestEqual_SameTypedNonComparableLeavesDoNotPanic covers the case the test above
+// does NOT: two non-comparable leaves of the SAME dynamic type, meeting as
+// components inside containers.
+//
+// The sibling test only ever pairs a leaf against a *Pair. Go's interface `==`
+// does not fault on differing dynamic types — it answers false — so that pairing
+// walked straight past the `if a == b` in step() and the hazard sat there
+// unmeasured. Same-typed operands are exactly the shape that faults, and they are
+// the *likelier* shape in practice: an embedder comparing two of its own values.
+//
+// Fixed by ordering: step() now reaches `==` only after both sides are known
+// DeepEqualers (pointer-shaped by contract). A leaf settles through EqualTo,
+// which never compares interfaces.
+func TestEqual_SameTypedNonComparableLeavesDoNotPanic(t *testing.T) {
+	a := nonComparableLeaf{values.NewInteger(1)}
+	b := nonComparableLeaf{values.NewInteger(1)}
+
+	// Bare, at top level: Equal's leaf path calls EqualTo directly.
+	qt.Assert(t, values.Equal(a, b), qt.IsTrue)
+
+	// As components: this is the path that panicked at equal.go:117.
+	inA := values.NewCons(a, values.EmptyList)
+	inB := values.NewCons(b, values.EmptyList)
+	qt.Assert(t, values.Equal(inA, inB), qt.IsTrue)
+
+	// Deeper, and behind a vector, so the worklist carries the pair rather than
+	// settling it on the first step.
+	deepA := values.NewVector(values.NewCons(a, values.EmptyList))
+	deepB := values.NewVector(values.NewCons(b, values.EmptyList))
+	qt.Assert(t, values.Equal(deepA, deepB), qt.IsTrue)
+}

@@ -414,16 +414,6 @@ func TestOperationValueMethods(t *testing.T) {
 	})
 }
 
-func TestOperations_SchemeString(t *testing.T) {
-	ops := NewOperations(
-		NewOperationPush(),
-		NewOperationPop(),
-		NewOperationLoadVoid())
-
-	str := ops.SchemeString()
-	qt.Assert(t, str, qt.Equals, "#<machine-operations>")
-}
-
 func TestOperations_Copy(t *testing.T) {
 	ops := NewOperations(
 		NewOperationPush(),
@@ -453,22 +443,11 @@ func TestOperations_EqualTo(t *testing.T) {
 	// Same operations in different order
 	qt.Assert(t, ops1.EqualTo(ops4), qt.IsFalse)
 
-	// Different type
-	qt.Assert(t, ops1.EqualTo(values.NewInteger(42)), qt.IsFalse)
-
 	// Nil operations
 	var nilOps1 Operations
 	var nilOps2 Operations
 	qt.Assert(t, nilOps1.EqualTo(nilOps2), qt.IsTrue)
 	qt.Assert(t, ops1.EqualTo(nilOps1), qt.IsFalse)
-}
-
-func TestOperations_IsVoid(t *testing.T) {
-	ops := NewOperations(NewOperationPush())
-	qt.Assert(t, ops.IsVoid(), qt.IsFalse)
-
-	var nilOps Operations
-	qt.Assert(t, nilOps.IsVoid(), qt.IsTrue)
 }
 
 func TestOperations_Length(t *testing.T) {
@@ -881,25 +860,6 @@ func TestOperationStoreLocalMethods(t *testing.T) {
 	qt.Assert(t, op.IsVoid(), qt.IsFalse)
 }
 
-// TestOperationsSchemeString tests Operations SchemeString method
-func TestOperationsSchemeString(t *testing.T) {
-	ops := Operations{
-		NewOperationLoadVoid(),
-		NewOperationPush(),
-	}
-	str := ops.SchemeString()
-	qt.Assert(t, str, qt.IsNotNil)
-}
-
-// TestOperationsIsVoid tests Operations IsVoid method
-func TestOperationsIsVoid(t *testing.T) {
-	var nilOps Operations
-	qt.Assert(t, nilOps.IsVoid(), qt.IsTrue)
-
-	ops := Operations{NewOperationLoadVoid()}
-	qt.Assert(t, ops.IsVoid(), qt.IsFalse)
-}
-
 // TestOperationsEqualTo tests Operations EqualTo method
 func TestOperationsEqualTo(t *testing.T) {
 	ops1 := Operations{NewOperationLoadVoid()}
@@ -908,8 +868,6 @@ func TestOperationsEqualTo(t *testing.T) {
 
 	ops3 := Operations{NewOperationPush()}
 	qt.Assert(t, ops1.EqualTo(ops3), qt.IsFalse)
-
-	qt.Assert(t, ops1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 // TestOperationSaveContinuationEqualToAdditional tests additional save continuation paths

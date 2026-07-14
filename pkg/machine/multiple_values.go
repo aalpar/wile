@@ -21,7 +21,20 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// MultipleValues represents multiple return values from a function.
+// MultipleValues represents multiple return values from a function. It is
+// deliberately NOT a values.Value.
+//
+// Multiple values are carried in the VM's dedicated multi-value register
+// (vmState.multiValues), under a singleValue-XOR-multiValues invariant — never
+// in a Value slot. The Value conformance this type used to carry was therefore
+// unreachable as a Scheme datum, and it was actively harmful: []values.Value is
+// not Go-comparable, so a MultipleValues boxed into a values.Value would fault
+// any `==` or map-key hash of that interface. values.EqIdentity (eq?) is exactly
+// such an `==`. That latent hazard is on record as the reason the continuation
+// marks table is a flat slice rather than a Go map (see vm_state.go).
+//
+// The type remains a convenient []values.Value alias for internal carriers
+// (NativeTemplate.literals, the value register). It just is not a Scheme value.
 type MultipleValues []values.Value
 
 // NewMultipleValues creates a new MultipleValues from the given values.
@@ -39,7 +52,12 @@ func (p MultipleValues) Copy() MultipleValues {
 	return slices.Clone(p)
 }
 
-// IsVoid returns true if the MultipleValues represents 'void' - either
+// IsVoid reports whether the register content this carries is the absence of a
+// result: no values at all, or exactly one void value.
+//
+// Not part of any interface — see the type's doc comment. It is a predicate the
+// VM asks of a register snapshot, kept because the callers want it, not because
+// values.Value demands it.
 func (p MultipleValues) IsVoid() bool {
 	if len(p) == 0 {
 		return true
@@ -50,7 +68,9 @@ func (p MultipleValues) IsVoid() bool {
 	return false
 }
 
-// SchemeString returns the Scheme representation of the MultipleValues.
+// SchemeString renders the values space-separated, as `(values …)` would print
+// them. Diagnostic support (disassembly, test failure messages); not a Scheme
+// external representation, since this type is not a Scheme datum.
 func (p MultipleValues) SchemeString() string {
 	q := strings.Builder{}
 	if len(p) == 0 {
@@ -69,12 +89,11 @@ func (p MultipleValues) SchemeString() string {
 	return q.String()
 }
 
-// EqualTo checks if the MultipleValues is equal to another value.
-func (p MultipleValues) EqualTo(o values.Value) bool {
-	v, ok := o.(MultipleValues)
-	if !ok {
-		return false
-	}
+// EqualTo reports whether two value lists are element-wise equal.
+//
+// It takes a concrete MultipleValues, not a values.Value: this type is not a
+// Scheme datum and does not implement the Value interface.
+func (p MultipleValues) EqualTo(v MultipleValues) bool {
 	if len(p) != len(v) {
 		return false
 	}

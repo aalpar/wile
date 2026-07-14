@@ -18,8 +18,22 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-var _ values.Value = Operations{}
-
+// Operations is the compiler's opcode list. It is deliberately NOT a
+// values.Value.
+//
+// It carried SchemeString/IsVoid/EqualTo for container convenience, which made
+// the naked []Operation slice a legal dynamic type inside a values.Value
+// interface — and a slice is not Go-comparable, so any `==` or map-key hash of
+// that interface faults. values.EqIdentity (eq?) is exactly such an `==`. The
+// conformance was never used: nothing outside this package treated an Operations
+// as a Scheme datum, and its SchemeString rendered the non-datum
+// "#<machine-operations>". Meanwhile it cost the equality core real
+// defensiveness, since values.Equal could not assume its operands were
+// comparable.
+//
+// Having an equality method is not the same as being a Value. EqualTo below
+// takes a concrete Operations, so callers still get structural comparison
+// without the type entering the Value contract.
 type Operations []Operation
 
 func (p Operations) AsList() values.Tuple {
@@ -42,19 +56,11 @@ func (p Operations) Len() int {
 	return len(p)
 }
 
-func (p Operations) SchemeString() string {
-	return "#<machine-operations>"
-}
-
-func (p Operations) IsVoid() bool {
-	return p == nil
-}
-
-func (p Operations) EqualTo(o values.Value) bool {
-	v, ok := o.(Operations)
-	if !ok {
-		return false
-	}
+// EqualTo reports whether two operation lists are element-wise equal.
+//
+// It takes a concrete Operations, not a values.Value: this type is not a Scheme
+// datum and does not implement the Value interface. See the type's doc comment.
+func (p Operations) EqualTo(v Operations) bool {
 	if len(p) != len(v) {
 		return false
 	}
