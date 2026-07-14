@@ -230,6 +230,11 @@ func validateInclude(_ context.Context, env *environment.EnvironmentFrame, pair 
 		result.addErrorf(getSourceContext(elements[i]), "include", "include argument %d must be a string", i)
 	}
 
+	// The included forms are runtime code in THIS scope, and this package never
+	// sees them. Treat every name the form mentions as possibly set!. The file's
+	// contents are not even readable here, so this is the most that can be said —
+	// which is why the capture predicate independently disqualifies frame reuse.
+	markOpaqueSubtree(env, pair, result)
 	return newLiteralExpr(source, pair)
 }
 
@@ -254,5 +259,9 @@ func validateCondExpand(_ context.Context, env *environment.EnvironmentFrame, pa
 		}
 	}
 
+	// The selected clause's body is runtime code in THIS scope, compiled later in
+	// its own unit. Which clause wins is not known here, so every name any clause
+	// mentions is recorded as a possible set! target. See opaque_subtree.go.
+	markOpaqueSubtree(env, pair, result)
 	return newLiteralExpr(source, pair)
 }
