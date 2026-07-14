@@ -131,22 +131,36 @@ func init() {
 // realPartsOf returns the complex operand's parts and the real operand's float64
 // value, plus whether o is a Float at all.
 //
+// realPartsOf reports whether o is a real operand that will be absorbed into
+// complex128, and if so returns its float64 value.
+//
 // A REAL operand touches only the real part; it has NO imaginary component to
 // contribute. Promotion pretends otherwise -- it manufactures an 0.0 imaginary part
 // and lets IEEE act on it, which is how (+ 5.0-0.0i 2.0) loses the sign of its
 // imaginary part (-0.0 + 0.0 is +0.0) and (* 5.0-0.0i 2.0) loses it too.
 //
-// Every other real kind promotes Complex to BigComplex, where the promoted imaginary
-// part is an EXACT zero and the exact-zero rules preserve the sign for free. Float is
-// the exception: LUB(Complex, Float) is Complex, so it stays in complex128, which
-// cannot represent an exact zero. So Float is handled here, part-wise, before
-// promotion can invent the component.
+// The test is the promotion table, not a type: any real kind whose LUB with Complex
+// IS Complex gets absorbed into complex128, which cannot represent an exact zero,
+// so it must be handled here part-wise before promotion can invent the component.
+// A real kind whose LUB is BigComplex is safe to promote and falls through — the
+// promoted imaginary part is an EXACT zero there and the exact-zero rules preserve
+// the sign for free.
+//
+// This used to test `o.(*Float)`, on the stated grounds that "every other real kind
+// promotes Complex to BigComplex." That stopped being true when exactness contagion
+// was fixed (promotion.go, Zone 3): Integer/BigInteger/Rational × Complex now lands
+// at Complex, so an exact real reaching complex128 multiplication silently ate the
+// sign of a signed-zero component. Keying off the table instead of a type list is
+// what keeps the two facts from drifting apart again.
 func realPartsOf(o Number) (float64, bool) {
-	v, ok := o.(*Float)
-	if !ok {
+	_, isComplex := o.(ComplexNumber)
+	if isComplex {
 		return 0, false
 	}
-	return v.Value, true
+	if promotionTable[KindComplex][o.Kind()] != KindComplex {
+		return 0, false
+	}
+	return NumberToFloat64(o), true
 }
 
 // Add returns the sum of this complex number and another number.
@@ -416,25 +430,15 @@ func (p *Complex) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both complex numbers have the same value.
+// EqualTo implements R7RS equal? for Complex.
 //
-// The *BigComplex case delegates to BigComplex.EqualTo so the two cross-kind
-// directions share one comparison and cannot disagree — (equal? c bc) and
-// (equal? bc c) must not flip with operand order (R7RS §6.2.6).
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
 func (p *Complex) EqualTo(v Value) bool {
-	switch other := v.(type) {
-	case *Complex:
-		// Reflexive on the same object: a NaN component must not make a value
-		// unequal to itself. See Float.EqualTo for why equal? may not fall below
-		// eqv? (R7RS §6.1) and why the check lives here rather than in Equal.
-		if p == other {
-			return true
-		}
-		return p.Value == other.Value
-	case *BigComplex:
-		return other.EqualTo(p)
-	}
-	return false
+	return eqvNumberValue(p, v)
 }
 
 // hashComplexComponent hashes a single float64 component of a complex number.

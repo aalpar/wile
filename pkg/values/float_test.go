@@ -167,10 +167,19 @@ func TestFloat_Divide(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(20.0))
 
+	// (/ 10.0 2.0+0.0i) => 5.0-0.0i. The imaginary part is NEGATIVE zero: the general
+	// formula computes it as (b*c - a*d) = 0.0 - 0.0, and dividing by |z|^2 keeps the
+	// sign. Chez and Racket agree — verified against Petite Chez 10.4.1.
+	//
+	// This asserted complex(5, 0) — a POSITIVE zero — and passed anyway, because
+	// Complex.EqualTo compared complex128 with Go's ==, and IEEE-754 says
+	// 0.0 == -0.0. The sign was simply invisible to the assertion. Routing equality
+	// through values.EqvNumber, which consults SignBit, made it visible; the value
+	// itself did not change.
 	c1 := values.NewComplex(complex(2, 0))
 	result, err = f1.Divide(c1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 0)))
+	qt.Assert(t, result.SchemeString(), qt.Equals, "5.0-0.0i")
 }
 
 func TestFloat_IsZero(t *testing.T) {
@@ -390,7 +399,10 @@ func TestFloat_EqualTo_NaNVsBigFloat(t *testing.T) {
 		{"NaN vs finite BigFloat", values.NewFloat(math.NaN()), values.NewBigFloatFromFloat64(1.0), false},
 		{"NaN vs BigFloat NaN", values.NewFloat(math.NaN()), values.NewBigFloatNaN(), false},
 		{"finite vs BigFloat NaN", values.NewFloat(1.0), values.NewBigFloatNaN(), false},
-		{"finite vs equal BigFloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(1.0), true},
+		// Not equal: different inexact precisions are observable under arithmetic
+		// ((+ x 1e-20) tells them apart), so R7RS 6.1's eqv? clause says #f, and
+		// equal? must agree. The point of this test is that neither case PANICS.
+		{"finite vs equal BigFloat", values.NewFloat(1.0), values.NewBigFloatFromFloat64(1.0), false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

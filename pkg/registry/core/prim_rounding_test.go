@@ -225,9 +225,17 @@ func TestRounding(t *testing.T) {
 			Expected: values.NewFloat(2.0), // 2 is even
 		},
 		{
+			// NEGATIVE zero. Round-half-to-even takes -0.5 to the even neighbour, and
+			// IEEE-754 keeps the sign: the answer is -0.0, not 0.0. Chez agrees
+			// (verified, Petite 10.4.1).
+			//
+			// This asserted 0.0 and passed anyway, because Float.EqualTo compared
+			// float64 with Go's ==, and 0.0 == -0.0. The sign was invisible to the
+			// assertion. Routing equality through values.EqvNumber, which consults
+			// SignBit, made it visible — the value did not change.
 			Name:     "round -0.5 half to even",
 			Code:     "(round -0.5)",
-			Expected: values.NewFloat(0.0), // 0 is even
+			Expected: values.NewFloat(math.Copysign(0, -1)),
 		},
 		{
 			Name:     "round -1.5 half to even",

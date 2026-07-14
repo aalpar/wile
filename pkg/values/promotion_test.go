@@ -62,12 +62,14 @@ func TestPromotionTable_ExactResults(t *testing.T) {
 		{KindBigInteger, KindRational, KindRational},
 		{KindRational, KindRational, KindRational},
 
-		// Zone 2: Exact × Inexact Real → BigFloat
-		{KindInteger, KindFloat, KindBigFloat},
+		// Zone 2: Exact × Inexact Real → the inexact operand's kind (contagion).
+		// (+ 1.5 2) is a Float 3.5, not a 256-bit BigFloat. An explicit BigFloat
+		// operand still yields BigFloat — precision you ASK for is preserved.
+		{KindInteger, KindFloat, KindFloat},
 		{KindInteger, KindBigFloat, KindBigFloat},
-		{KindBigInteger, KindFloat, KindBigFloat},
+		{KindBigInteger, KindFloat, KindFloat},
 		{KindBigInteger, KindBigFloat, KindBigFloat},
-		{KindRational, KindFloat, KindBigFloat},
+		{KindRational, KindFloat, KindFloat},
 		{KindRational, KindBigFloat, KindBigFloat},
 
 		// Inexact × Inexact
@@ -75,7 +77,11 @@ func TestPromotionTable_ExactResults(t *testing.T) {
 		{KindFloat, KindBigFloat, KindBigFloat},
 		{KindBigFloat, KindBigFloat, KindBigFloat},
 
-		// Zone 3: Anything × Complex
+		// Zone 3: Anything × Complex — contagion does NOT extend here. An exact
+		// operand promoted into complex128 gets a manufactured +0.0 imaginary part,
+		// and a manufactured +0.0 is not an exact 0: the exact-zero rules that give
+		// (/ 10 2.0+0.0i) => 5.0-0.0i its sign stop applying. BigComplex can hold the
+		// exact zero, so the sign survives.
 		{KindInteger, KindComplex, KindBigComplex},
 		{KindInteger, KindBigComplex, KindBigComplex},
 		{KindBigInteger, KindComplex, KindBigComplex},
@@ -104,32 +110,89 @@ func TestPromotionTable_ExactResults(t *testing.T) {
 	}
 }
 
-func TestPromotionTable_NoLossyPaths(t *testing.T) {
+// TestComparisonTable_NoLossyPaths is the old TestPromotionTable_NoLossyPaths,
+// retargeted. The invariant it guards did not go away when exactness contagion
+// was fixed — it MOVED. Rounding an exact operand is correct for arithmetic (the
+// result is inexact anyway) and wrong for comparison (the result is a boolean, and
+// the rounding decides it). So "exact operands never route through float64" is now
+// a property of the COMPARISON table, where it always belonged.
+//
+// The witness, if this ever regresses:
+//
+//	(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))
+//
+// Both operands round to the same float64, so a lossy comparison answers #t. The
+// true answer is #f, and it is what Chez gives.
+func TestComparisonTable_NoLossyPaths(t *testing.T) {
 	c := qt.New(t)
-	// Exact types meeting Float or Complex must NEVER produce Float or Complex.
-	// They must produce BigFloat or BigComplex respectively.
 	exactKinds := []NumericKind{KindInteger, KindBigInteger, KindRational}
 	for _, exact := range exactKinds {
-		// Exact + Float must NOT be Float.
-		result := promotionTable[exact][KindFloat]
+		result := comparisonTable[exact][KindFloat]
 		c.Assert(
 			result != KindFloat, qt.IsTrue,
-			qt.Commentf("exact kind %d + Float must not produce Float (got %d)", exact, result),
+			qt.Commentf("comparing exact kind %d against Float must not round it to float64 (got %d)", exact, result),
 		)
-		// Exact + Complex must NOT be Complex.
-		result = promotionTable[exact][KindComplex]
+		result = comparisonTable[exact][KindComplex]
 		c.Assert(
 			result != KindComplex, qt.IsTrue,
-			qt.Commentf("exact kind %d + Complex must not produce Complex (got %d)", exact, result),
+			qt.Commentf("comparing exact kind %d against Complex must not round it to complex128 (got %d)", exact, result),
 		)
 	}
 
-	// BigFloat + Complex must NOT be Complex.
-	result := promotionTable[KindBigFloat][KindComplex]
+	// BigFloat cannot fit in complex128, in either table.
 	c.Assert(
-		result != KindComplex, qt.IsTrue,
-		qt.Commentf("BigFloat + Complex must not produce Complex (got %d)", result),
+		comparisonTable[KindBigFloat][KindComplex] != KindComplex, qt.IsTrue,
+		qt.Commentf("BigFloat vs Complex must not round through complex128"),
 	)
+	c.Assert(
+		promotionTable[KindBigFloat][KindComplex] != KindComplex, qt.IsTrue,
+		qt.Commentf("BigFloat + Complex must not round through complex128"),
+	)
+}
+
+// TestPromotionTable_ContagionIsLossy is the other half: arithmetic MUST round the
+// exact operand into the inexact one's representation. This is the positive
+// statement of what the change bought — (+ 1.5 2) allocating a Float, not a 256-bit
+// BigFloat that nothing ever demotes.
+func TestPromotionTable_ContagionIsLossy(t *testing.T) {
+	c := qt.New(t)
+	for _, exact := range []NumericKind{KindInteger, KindBigInteger, KindRational} {
+		c.Assert(
+			promotionTable[exact][KindFloat], qt.Equals, KindFloat,
+			qt.Commentf("exact kind %d + Float must contaminate to Float (R7RS 6.2.2)", exact),
+		)
+		// NOT extended to the complex axis — see the Zone 3 comment in promotion.go.
+		c.Assert(
+			promotionTable[exact][KindComplex], qt.Equals, KindBigComplex,
+			qt.Commentf("exact kind %d + Complex must stay BigComplex so an exact zero "+
+				"imaginary part survives to the sign rules", exact),
+		)
+		// Precision the program ASKED for is still preserved.
+		c.Assert(
+			promotionTable[exact][KindBigFloat], qt.Equals, KindBigFloat,
+			qt.Commentf("exact kind %d + BigFloat must stay BigFloat", exact),
+		)
+	}
+}
+
+// TestComparisonTable_Symmetry and _Diagonal mirror the promotionTable pair: a
+// comparison must not depend on operand order, or on nothing at all.
+func TestComparisonTable_Symmetry(t *testing.T) {
+	c := qt.New(t)
+	for a := range numKinds {
+		for b := range numKinds {
+			c.Assert(
+				comparisonTable[a][b], qt.Equals, comparisonTable[b][a],
+				qt.Commentf("comparisonTable[%d][%d] != comparisonTable[%d][%d]", a, b, b, a),
+			)
+		}
+	}
+	for k := range numKinds {
+		c.Assert(
+			comparisonTable[k][k], qt.Equals, k,
+			qt.Commentf("diagonal: kind %d should compare against itself in its own domain", k),
+		)
+	}
 }
 
 func TestPromoter_AllReachablePathsPopulated(t *testing.T) {
@@ -274,9 +337,46 @@ func TestPromote_PreservesExactness(t *testing.T) {
 func TestPromotionResultKind_API(t *testing.T) {
 	c := qt.New(t)
 	// Public API produces same results as direct table access.
-	c.Assert(PromotionResultKind(KindInteger, KindFloat), qt.Equals, KindBigFloat)
+	c.Assert(PromotionResultKind(KindInteger, KindFloat), qt.Equals, KindFloat)
 	c.Assert(PromotionResultKind(KindRational, KindComplex), qt.Equals, KindBigComplex)
 	c.Assert(PromotionResultKind(KindFloat, KindComplex), qt.Equals, KindComplex)
+}
+
+// TestComparisonResultKind_API pins that the two public accessors DISAGREE on
+// exactly the pairs they are supposed to: an exact kind meeting an inexact one.
+// Arithmetic contaminates down to the inexact operand; comparison promotes up so
+// that neither operand is rounded. Everywhere else they agree.
+func TestComparisonResultKind_API(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(ComparisonResultKind(KindInteger, KindFloat), qt.Equals, KindBigFloat)
+	c.Assert(ComparisonResultKind(KindRational, KindComplex), qt.Equals, KindBigComplex)
+	// Same as arithmetic here: Zone 3 already refuses to round an exact operand.
+
+	// No exact operand to protect: the tables agree.
+	c.Assert(ComparisonResultKind(KindFloat, KindComplex), qt.Equals, KindComplex)
+	c.Assert(ComparisonResultKind(KindFloat, KindBigFloat), qt.Equals, KindBigFloat)
+
+	// The tables differ on EXACTLY one pair-shape: an exact kind meeting Float.
+	// Nowhere else. Zone 3 already declines to round an exact operand into
+	// complex128, so exact × Complex is BigComplex in both.
+	exact := map[NumericKind]bool{KindInteger: true, KindBigInteger: true, KindRational: true}
+	for a := range numKinds {
+		for b := range numKinds {
+			differs := (exact[a] && b == KindFloat) || (exact[b] && a == KindFloat)
+			if differs {
+				c.Assert(
+					promotionTable[a][b], qt.Not(qt.Equals), comparisonTable[a][b],
+					qt.Commentf("exact × Float MUST differ between the tables: arithmetic "+
+						"contaminates to Float, comparison promotes to BigFloat (%d, %d)", a, b),
+				)
+				continue
+			}
+			c.Assert(
+				promotionTable[a][b], qt.Equals, comparisonTable[a][b],
+				qt.Commentf("tables may differ only on exact × Float, but differ at (%d, %d)", a, b),
+			)
+		}
+	}
 }
 
 // TestFloatBigComplexGuard_ImaginaryPreserved verifies fix for issue #362:

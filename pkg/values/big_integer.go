@@ -399,21 +399,13 @@ func (p *BigInteger) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if this BigInteger equals another value.
+// EqualTo implements R7RS equal? for BigInteger.
 //
-// R7RS §6.2.6: The = procedure compares numerical values for equality.
-// BigInteger also compares equal to Integer when values match.
-func (p *BigInteger) EqualTo(o Value) bool {
-	switch other := o.(type) {
-	case *BigInteger:
-		if other == nil || p == nil {
-			return p == other
-		}
-		return p.value.Cmp(other.value) == 0
-	case *Integer:
-		return p.value.Cmp(other.bigInt()) == 0
-	case *Rational:
-		return other.value.Cmp(new(big.Rat).SetInt(p.BigInt())) == 0
-	}
-	return false
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
+func (p *BigInteger) EqualTo(v Value) bool {
+	return eqvNumberValue(p, v)
 }

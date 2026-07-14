@@ -21,7 +21,6 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/values/valuestest"
 )
 
 func TestComplex_NewComplex(t *testing.T) {
@@ -55,69 +54,90 @@ func TestComplex_Add(t *testing.T) {
 	c1 := values.NewComplex(complex(1, 2))
 	c2 := values.NewComplex(complex(3, 4))
 	result := c1.Add(c2)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(4, 6)))
+	// exact + Complex => BigComplex, not Complex. Zone 3 declines the contagion so an
+	// exact operand is never rounded into complex128: a manufactured +0.0 imaginary
+	// part is not an exact 0, and the exact-zero sign rules stop applying (that is what
+	// gives (/ 10 2.0+0.0i) => 5.0-0.0i its sign). The VALUE is exactly what Chez gives;
+	// only the carrier kind differs, so compare the external representation — which is
+	// what a Scheme program can actually observe.
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(4, 6)).SchemeString())
 
 	c3 := values.NewComplex(complex(0, 0))
 	result = c1.Add(c3)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(1, 2)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(1, 2)).SchemeString())
 
 	i1 := values.NewInteger(5)
 	result = c1.Add(i1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(6, 2)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(6, 2)).SchemeString())
 
 	f1 := values.NewFloat(2.5)
 	result = c1.Add(f1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(3.5, 2)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(3.5, 2)).SchemeString())
 
 	r1 := values.NewRational(1, 2)
 	result = c1.Add(r1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(1.5, 2)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(1.5, 2)).SchemeString())
 }
 
 func TestComplex_Subtract(t *testing.T) {
 	c1 := values.NewComplex(complex(5, 6))
 	c2 := values.NewComplex(complex(2, 3))
 	result := c1.Subtract(c2)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(3, 3)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(3, 3)).SchemeString())
 
 	c3 := values.NewComplex(complex(0, 0))
 	result = c1.Subtract(c3)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 6)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(5, 6)).SchemeString())
 
 	i1 := values.NewInteger(2)
 	result = c1.Subtract(i1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(3, 6)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(3, 6)).SchemeString())
 
 	f1 := values.NewFloat(1.0)
 	result = c1.Subtract(f1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(4, 6)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(4, 6)).SchemeString())
 
 	r1 := values.NewRational(1, 2)
 	result = c1.Subtract(r1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(4.5, 6)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(4.5, 6)).SchemeString())
 }
 
 func TestComplex_Multiply(t *testing.T) {
 	c1 := values.NewComplex(complex(2, 3))
 	c2 := values.NewComplex(complex(1, 2))
 	result := c1.Multiply(c2)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(-4, 7)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(-4, 7)).SchemeString())
 
 	c3 := values.NewComplex(complex(0, 0))
 	result = c1.Multiply(c3)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(0, 0)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(0, 0)).SchemeString())
 
 	i1 := values.NewInteger(3)
 	result = c1.Multiply(i1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(6, 9)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(6, 9)).SchemeString())
 
 	f1 := values.NewFloat(2.0)
 	result = c1.Multiply(f1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(4, 6)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(4, 6)).SchemeString())
 
 	r1 := values.NewRational(1, 2)
 	result = c1.Multiply(r1)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(1, 1.5)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(1, 1.5)).SchemeString())
 }
 
 func TestComplex_Divide(t *testing.T) {
@@ -125,22 +145,26 @@ func TestComplex_Divide(t *testing.T) {
 	c2 := values.NewComplex(complex(2, 0))
 	result, err := c1.Divide(c2)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(2, 1)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(2, 1)).SchemeString())
 
 	i1 := values.NewInteger(2)
 	result, err = c1.Divide(i1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(2, 1)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(2, 1)).SchemeString())
 
 	f1 := values.NewFloat(2.0)
 	result, err = c1.Divide(f1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(2, 1)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(2, 1)).SchemeString())
 
 	r1 := values.NewRational(1, 2)
 	result, err = c1.Divide(r1)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(8, 4)))
+	qt.Assert(t, result.SchemeString(), qt.Equals,
+		values.NewComplex(complex(8, 4)).SchemeString())
 }
 
 func TestComplex_IsZero(t *testing.T) {

@@ -155,15 +155,19 @@ func TestBigInteger_MixedArithmetic(t *testing.T) {
 	sum := bi.Add(values.NewInteger(50))
 	c.Assert(sum.(*values.BigInteger).Int64(), qt.Equals, int64(150))
 
-	// Add with Float - now returns BigFloat for precision preservation
+	// Add with Float -> Float. Exactness contagion (R7RS 6.2.2): the exact operand is
+	// absorbed into the inexact one's representation, it does not drag the result up
+	// the precision axis. Chez gives (+ 100 0.5) => 100.5, a flonum.
 	sumF := bi.Add(values.NewFloat(0.5))
-	// Result must be BigFloat (inexact) to preserve exactness contagion
-	bf, ok := sumF.(*values.BigFloat)
-	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", sumF))
-	c.Assert(bf.Float64Truncated(), qt.Equals, float64(100.5))
-	c.Assert(bf.IsExact(), qt.Equals, false) // Must be inexact
+	f, ok := sumF.(*values.Float)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *values.Float (contagion), got %T", sumF))
+	c.Assert(f.Value, qt.Equals, float64(100.5))
+	c.Assert(f.IsExact(), qt.Equals, false) // Must be inexact
 
-	// Add with Complex → BigComplex (no-loss: exact BigInteger never truncates to float64)
+	// Add with Complex → BigComplex. The contagion deliberately does NOT extend to the
+	// complex axis: an exact operand rounded into complex128 gets a manufactured +0.0
+	// imaginary part, which is not an exact 0, and the exact-zero sign rules stop
+	// applying. See promotion.go Zone 3.
 	sumC := bi.Add(values.NewComplex(complex(1, 2)))
 	bc, ok := sumC.(*values.BigComplex)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigComplex, got %T", sumC))
@@ -314,7 +318,11 @@ func TestBigFloat_EqualTo(t *testing.T) {
 
 	c.Assert(bf1.EqualTo(bf2), qt.IsTrue)
 	c.Assert(bf1.EqualTo(bf3), qt.IsFalse)
-	c.Assert(bf1.EqualTo(f1), qt.IsTrue) // Should equal regular Float
+	// A BigFloat is NOT equal to a Float of the same value: both are inexact, and
+	// their precisions are distinguishable by arithmetic, so R7RS 6.1 makes them
+	// distinct numbers. (An exact Integer 3 was already unequal, for a different
+	// reason -- exactness.)
+	c.Assert(bf1.EqualTo(f1), qt.IsFalse)
 	c.Assert(bf1.EqualTo(values.NewInteger(3)), qt.IsFalse)
 }
 

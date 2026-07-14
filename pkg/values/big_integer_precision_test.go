@@ -139,30 +139,52 @@ func TestBigIntegerCompareComplexPrecision(t *testing.T) {
 	}
 }
 
-// TestBigIntegerArithmeticFloatPrecision verifies that BigInteger arithmetic
-// with Float preserves precision by promoting to BigFloat.
+// TestBigIntegerArithmeticFloatPrecision verifies that BigInteger arithmetic with
+// Float DISCARDS precision — exactness contagion (R7RS §6.2.2) — and that the
+// discarding is confined to arithmetic.
+//
+// The test used to assert the opposite: that the result was promoted to BigFloat
+// "to preserve precision." The promotion was real; the preservation was not. Per-op
+// demotion back to Float was never wired (Simplify runs at parse time only), so
+// ordinary float arithmetic minted 256-bit bignums that never came back down —
+// (+ 1.5 2) was a *BigFloat. Nobody noticed for as long as they did because the
+// numeric EqualTo methods compared across representations, so a BigFloat 3.5 tested
+// equal to a Float 3.5 and every test passed.
+//
+// Chez, verified (Petite 10.4.1):
+//
+//	(+ (expt 2 54) 1.0)                                  => 1.8014398509481984e16
+//	(= (+ (expt 2 54) 1.0) (exact->inexact (expt 2 54))) => #t   ; the +1 is GONE
+//
+// That is what "inexact" means. A program that needs the digit must stay exact, or
+// ask for a BigFloat operand explicitly.
 func TestBigIntegerArithmeticFloatPrecision(t *testing.T) {
 	c := qt.New(t)
 
-	// Use 2^54 which is beyond float64 precision boundary
+	// 2^54 is exactly representable in float64; 2^54 + 1 is NOT (53-bit mantissa).
+	// So this is precisely the case where contagion is observable.
 	bigInt := values.NewBigInteger(new(big.Int).SetInt64(18014398509481984)) // 2^54
 	floatOne := values.NewFloat(1.0)
 
 	t.Run("Add: 2^54 + 1.0", func(t *testing.T) {
 		result := bigInt.Add(floatOne)
-		// Result should be BigFloat (inexact) to preserve exactness contagion
 		c.Assert(result, qt.Not(qt.IsNil))
 
-		bf, ok := result.(*values.BigFloat)
-		c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *BigFloat, got %T", result))
+		f, ok := result.(*values.Float)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("Expected *values.Float (contagion), got %T", result))
+		c.Assert(f.IsExact(), qt.Equals, false)
 
-		// Verify the value is correct
-		expected := new(big.Float).SetInt64(18014398509481984)
-		expected.Add(expected, new(big.Float).SetFloat64(1.0))
-		c.Assert(bf.BigFloatValue().Cmp(expected), qt.Equals, 0)
+		// The +1 is gone: the sum is bit-identical to 2^54 as a float64. This is the
+		// assertion that inverted, and it is the whole content of the change.
+		c.Assert(f.Value, qt.Equals, float64(18014398509481984))
 
-		// Verify it's inexact
-		c.Assert(bf.IsExact(), qt.Equals, false)
+		// But COMPARISON still sees the difference the arithmetic threw away — that is
+		// the other half of the contagion fix, and why there are two promotion tables.
+		// Comparing 2^54+1 (exact) against 2^54 (exact) must not round either operand.
+		exactPlusOne := values.NewBigInteger(new(big.Int).SetInt64(18014398509481985))
+		c.Assert(exactPlusOne.Compare(bigInt) > 0, qt.IsTrue,
+			qt.Commentf("2^54+1 must compare GREATER than 2^54; if comparison rounded to "+
+				"float64 they would collapse to equal"))
 	})
 
 	t.Run("Subtract: 2^54 - 1.0", func(t *testing.T) {

@@ -107,14 +107,25 @@ func Classify(n values.Number) TypeClass {
 	panic(fmt.Sprintf("unknown type: %T", n))
 }
 
-func classifyBigComplexPrecision(bc *values.BigComplex) PrecisionRank {
-	// BigComplex precision is the max of its real and imaginary parts
-	realPrec := Classify(bc.Real())
-	imagPrec := Classify(bc.Imag())
-	if realPrec.Precision > imagPrec.Precision {
-		return realPrec.Precision
-	}
-	return imagPrec.Precision
+// classifyBigComplexPrecision reports the precision of the BigComplex CONTAINER,
+// which is arbitrary-precision no matter what its components currently hold.
+//
+// It used to report max(precision(real), precision(imag)) — the precision of the
+// values inside. That reads sensibly and is wrong, because the model's precision
+// axis is what the JOIN is computed on, and a BigComplex operand can never demote:
+// Float + BigComplex is a BigComplex, exactly as Float + BigFloat is a BigFloat.
+// Reporting a BigComplex(BigInteger, BigInteger) as "BigInteger precision" made the
+// join predict Complex — a complex128 — for four pairs, which would silently
+// truncate the container.
+//
+// The old no-loss rule hid this: it forced exact × Float up to BigFloat, so the
+// join happened to land on BigComplex anyway, for the wrong reason. Removing that
+// rule (exactness contagion) exposed the model's real defect.
+//
+// Exactness is a SEPARATE axis and is unaffected: a BigComplex with exact parts is
+// still exact, and TestLattice_Exactness checks that via IsExact().
+func classifyBigComplexPrecision(_ *values.BigComplex) PrecisionRank {
+	return PrecisionBigFloat
 }
 
 // =============================================================================
@@ -123,22 +134,70 @@ func classifyBigComplexPrecision(bc *values.BigComplex) PrecisionRank {
 
 // Join computes the least upper bound of two type classes.
 // This determines the result type of a binary operation.
+//
+// Two rules, and they pull in opposite directions on the precision axis:
+//
+//   - On the REAL axis, exactness contagion applies: an exact operand meeting a
+//     Float is absorbed into it, and the result is a Float. That is a plain max
+//     (see maxPrecision).
+//
+//   - On the COMPLEX axis it does NOT. An exact operand promoted into complex128
+//     acquires a MANUFACTURED +0.0 imaginary part, and a manufactured +0.0 is not
+//     an exact 0 — the exact-zero rules that give (/ 10 2.0+0.0i) => 5.0-0.0i its
+//     sign stop applying, and the sign is silently eaten. So the join escalates to
+//     arbitrary precision, where the exact zero survives.
+//
+// The asymmetry is not an inconsistency: contagion is free when nothing but
+// precision is at stake, and it is not free when it destroys a value's identity.
 func Join(a, b TypeClass) TypeClass {
-	return TypeClass{
-		Precision:  maxPrecision(a.Precision, b.Precision),
-		Complexity: maxComplexity(a.Complexity, b.Complexity),
+	complexity := maxComplexity(a.Complexity, b.Complexity)
+	precision := maxPrecision(a.Precision, b.Precision)
+
+	// The escalation fires only when an exact REAL meets a FLOAT64-BACKED complex.
+	// That is the one pairing where the promotion would have to invent an imaginary
+	// part in complex128. An exact real meeting a BigComplex needs no escalation —
+	// BigComplex holds exact components, so the exact zero survives on its own.
+	if complexity == ComplexityComplex && exactRealOperand(a, b) && complexOperandIsFloat64(a, b) {
+		precision = PrecisionBigFloat
 	}
+	return TypeClass{Precision: precision, Complexity: complexity}
 }
 
-func maxPrecision(a, b PrecisionRank) PrecisionRank {
-	// No-loss rule: exact types (Integer, BigInteger, Rational) meeting
-	// Float must produce BigFloat, not Float. Exact values cannot be
-	// truncated to float64 without precision loss.
-	exactA := a <= PrecisionRational
-	exactB := b <= PrecisionRational
-	if exactA && b == PrecisionFloat || exactB && a == PrecisionFloat {
-		return PrecisionBigFloat
+// exactRealOperand reports whether either side is an exact REAL — the operand
+// shape that must not be rounded into complex128.
+func exactRealOperand(a, b TypeClass) bool {
+	isExactReal := func(tc TypeClass) bool {
+		return tc.Complexity == ComplexityReal && tc.Precision <= PrecisionRational
 	}
+	return isExactReal(a) || isExactReal(b)
+}
+
+// complexOperandIsFloat64 reports whether the complex side of the pair is a
+// complex128 (*values.Complex) rather than an arbitrary-precision BigComplex.
+func complexOperandIsFloat64(a, b TypeClass) bool {
+	isFloat64Complex := func(tc TypeClass) bool {
+		return tc.Complexity == ComplexityComplex && tc.Precision == PrecisionFloat
+	}
+	return isFloat64Complex(a) || isFloat64Complex(b)
+}
+
+// maxPrecision is the join on the precision axis, and for ARITHMETIC it is a
+// plain max — which is exactly what exactness contagion says (R7RS §6.2.2). The
+// ranks are already ordered Integer < BigInteger < Rational < Float < BigFloat,
+// so an exact operand meeting a Float simply loses to it, and the result is a
+// Float. That is the contagion: the exact value is absorbed.
+//
+// This used to carry a "no-loss rule" carve-out forcing exact × Float up to
+// BigFloat. That rule is real, but it belongs to COMPARISON, not arithmetic —
+// rounding an operand is free when the result is already inexact, and fatal when
+// the result is a boolean, because the rounding is what decides the boolean:
+//
+//	(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))  =>  #f, not #t
+//
+// That rule now lives in values.comparisonTable, reachable as
+// values.ComparisonResultKind and exercised by TestLattice_PrecisionLoss's
+// comparison subtest below.
+func maxPrecision(a, b PrecisionRank) PrecisionRank {
 	if a > b {
 		return a
 	}
@@ -213,10 +272,12 @@ func TestLattice_Classify(t *testing.T) {
 		{"Complex", values.NewComplex(complex(1, 2)), TypeClass{PrecisionFloat, ComplexityComplex}},
 
 		// BigComplex with various component types
+		// The CONTAINER is arbitrary-precision, whatever its parts hold — that is
+		// what the join must see. See classifyBigComplexPrecision.
 		{"BigComplex(BigInteger)", values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
-			TypeClass{PrecisionBigInteger, ComplexityComplex}},
+			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 		{"BigComplex(Rational)", values.NewBigComplex(values.NewRational(1, 2), values.NewRational(3, 4)),
-			TypeClass{PrecisionRational, ComplexityComplex}},
+			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 		{"BigComplex(BigFloat)", values.NewBigComplex(values.NewBigFloatFromFloat64(1.0), values.NewBigFloatFromFloat64(2.0)),
 			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 	}
@@ -250,14 +311,16 @@ func TestLattice_Join(t *testing.T) {
 			TypeClass{PrecisionBigInteger, ComplexityReal}},
 		{"Int+Rational", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionRational, ComplexityReal},
 			TypeClass{PrecisionRational, ComplexityReal}},
+		// Contagion: the exact operand is absorbed into the Float. Plain max.
 		{"Int+Float", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityReal},
-			TypeClass{PrecisionBigFloat, ComplexityReal}},
+			TypeClass{PrecisionFloat, ComplexityReal}},
 		{"Rational+Float", TypeClass{PrecisionRational, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityReal},
-			TypeClass{PrecisionBigFloat, ComplexityReal}},
+			TypeClass{PrecisionFloat, ComplexityReal}},
 		{"Float+BigFloat", TypeClass{PrecisionFloat, ComplexityReal}, TypeClass{PrecisionBigFloat, ComplexityReal},
 			TypeClass{PrecisionBigFloat, ComplexityReal}},
 
 		// Real + Complex (complexity promotion)
+		// Exact real meeting a Complex escalates: the exact zero must survive.
 		{"Int+Complex", TypeClass{PrecisionInteger, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityComplex},
 			TypeClass{PrecisionBigFloat, ComplexityComplex}},
 		{"BigFloat+Complex", TypeClass{PrecisionBigFloat, ComplexityReal}, TypeClass{PrecisionFloat, ComplexityComplex},
@@ -391,7 +454,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Integer+Integer":    "*values.Integer",
 		"Integer+BigInteger": "*values.BigInteger",
 		"Integer+Rational":   "*values.Rational",
-		"Integer+Float":      "*values.BigFloat",
+		"Integer+Float":      "*values.Float",
 		"Integer+BigFloat":   "*values.BigFloat",
 		"Integer+Complex":    "*values.BigComplex",
 		"Integer+BigComplex": "*values.BigComplex",
@@ -400,7 +463,7 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"BigInteger+Integer":    "*values.BigInteger",
 		"BigInteger+BigInteger": "*values.BigInteger",
 		"BigInteger+Rational":   "*values.Rational",
-		"BigInteger+Float":      "*values.BigFloat", // Changed: precision preservation
+		"BigInteger+Float":      "*values.Float",
 		"BigInteger+BigFloat":   "*values.BigFloat",
 		"BigInteger+Complex":    "*values.BigComplex",
 		"BigInteger+BigComplex": "*values.BigComplex",
@@ -409,15 +472,15 @@ func TestLattice_ResultTypeMatrix(t *testing.T) {
 		"Rational+Integer":    "*values.Rational",
 		"Rational+BigInteger": "*values.Rational",
 		"Rational+Rational":   "*values.Rational",
-		"Rational+Float":      "*values.BigFloat",
+		"Rational+Float":      "*values.Float",
 		"Rational+BigFloat":   "*values.BigFloat",
 		"Rational+Complex":    "*values.BigComplex",
 		"Rational+BigComplex": "*values.BigComplex",
 
 		// Float row
-		"Float+Integer":    "*values.BigFloat",
-		"Float+BigInteger": "*values.BigFloat",
-		"Float+Rational":   "*values.BigFloat",
+		"Float+Integer":    "*values.Float",
+		"Float+BigInteger": "*values.Float",
+		"Float+Rational":   "*values.Float",
 		"Float+Float":      "*values.Float",
 		"Float+BigFloat":   "*values.BigFloat",
 		"Float+Complex":    "*values.Complex",
@@ -559,14 +622,18 @@ func TestLattice_VsLinearTower(t *testing.T) {
 	directResult := exactInt.Add(exactComplex)
 	c.Assert(directResult.IsExact(), qt.IsTrue, qt.Commentf("direct dispatch should preserve exactness"))
 
-	// The lattice predicts: Join({Integer,Real}, {BigInteger,Complex}) = {BigInteger,Complex}
-	// Result type: BigComplex with exact parts
+	// The lattice predicts: Join({Integer,Real}, {BigFloat,Complex}) = {BigFloat,Complex}
+	// Result type: BigComplex — which, note, still carries EXACT parts. The
+	// precision axis describes the CONTAINER's width (a BigComplex is
+	// arbitrary-precision), and exactness is an independent axis, asserted above via
+	// IsExact(). An arbitrary-precision container holding exact components is exact;
+	// the two facts do not contradict each other.
 	classInt := Classify(exactInt)
 	classComplex := Classify(exactComplex)
 	joined := Join(classInt, classComplex)
 
 	c.Assert(joined.Complexity, qt.Equals, ComplexityComplex)
-	c.Assert(joined.Precision, qt.Equals, PrecisionBigInteger)
+	c.Assert(joined.Precision, qt.Equals, PrecisionBigFloat)
 
 	expectedType := ExpectedResultType(joined)
 	c.Assert(expectedType, qt.Equals, "*values.BigComplex")
@@ -610,22 +677,65 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 		c.Logf("Precision preserved: BigFloat with 256-bit precision kept in BigComplex")
 	})
 
-	// BigInteger + Float now preserves precision via BigFloat
-	c.Run("BigInteger+Float_preserves_precision", func(c *qt.C) {
-		// An integer larger than float64 can exactly represent
+	// BigInteger + Float LOSES precision, deliberately. This subtest used to assert
+	// the opposite ("preserves precision via BigFloat"), and reversing it is the
+	// point of the exactness-contagion fix, not collateral damage from it.
+	//
+	// R7RS §6.2.2: exact + inexact = inexact. "Inexact" is a promise that precision
+	// MAY be lost, and contagion is how it is lost — the exact operand is absorbed
+	// into the float64. Chez agrees: (+ 1.5 (expt 2 2000)) is +inf.0, not a precise
+	// bignum-float.
+	//
+	// The old rule promoted to BigFloat "to preserve precision," on the theory that
+	// Simplify would demote afterwards. Per-op demotion was never wired, so ordinary
+	// float arithmetic minted 256-bit bignums that never came back down — (+ 1.5 2)
+	// was a *BigFloat. A program that WANTS the precision must stay exact, or ask for
+	// it with an explicit BigFloat operand (see the BigFloat subtest below, which
+	// still preserves).
+	c.Run("BigInteger+Float_loses_precision_by_contagion", func(c *qt.C) {
+		// An integer larger than float64 can exactly represent.
 		largeInt := new(big.Int)
 		largeInt.SetString("9999999999999999999999999999", 10)
 		bi := values.NewBigInteger(largeInt)
 
-		fl := values.NewFloat(1.0)
+		result := bi.Add(values.NewFloat(1.0))
 
-		result := bi.Add(fl)
-
-		// Result is now BigFloat, which preserves the BigInteger's precision
 		actualType := reflect.TypeOf(result).String()
-		c.Assert(actualType, qt.Equals, "*values.BigFloat")
+		c.Assert(actualType, qt.Equals, "*values.Float",
+			qt.Commentf("exact + Float must contaminate to Float, not escalate to BigFloat"))
 
-		// This is correct per R7RS (exact + inexact = inexact) AND preserves precision
-		c.Logf("BigInteger with ~95 bits of precision preserved in BigFloat result")
+		// And it agrees with the model.
+		latticePrediction := ExpectedResultType(Join(Classify(bi), Classify(values.NewFloat(1.0))))
+		c.Assert(latticePrediction, qt.Equals, "*values.Float")
+	})
+
+	// The precision the arithmetic gives up is NOT given up by COMPARISON. This is
+	// the other half of the contagion fix and the reason there are two tables: the
+	// result of an arithmetic op is inexact anyway, so rounding an operand costs
+	// nothing already promised. The result of a comparison is a BOOLEAN, and the
+	// rounding would decide it.
+	c.Run("comparison_does_not_round_the_exact_operand", func(c *qt.C) {
+		// 2^100 and 2^100 - 1 round to the SAME float64. A lossy comparison would
+		// call them equal. They are not, and Chez says so too.
+		twoTo100 := new(big.Int).Lsh(big.NewInt(1), 100)
+		exact := values.NewBigInteger(twoTo100)
+
+		minusOne := new(big.Int).Sub(twoTo100, big.NewInt(1))
+		exactMinusOne := values.NewBigInteger(minusOne)
+
+		inexact := exact.ToInexact()
+
+		c.Assert(exact.Compare(inexact), qt.Equals, 0,
+			qt.Commentf("2^100 compares equal to its own inexact image"))
+		c.Assert(exactMinusOne.Compare(inexact) < 0, qt.IsTrue,
+			qt.Commentf("2^100-1 must compare LESS than (exact->inexact 2^100); "+
+				"if the comparison rounded the bignum to float64 both would collapse to equal"))
+
+		// The comparison table is what buys this, and it differs from the arithmetic
+		// table on exactly this pair.
+		c.Assert(values.ComparisonResultKind(values.KindBigInteger, values.KindFloat),
+			qt.Equals, values.KindBigFloat)
+		c.Assert(values.PromotionResultKind(values.KindBigInteger, values.KindFloat),
+			qt.Equals, values.KindFloat)
 	})
 }

@@ -15,7 +15,6 @@
 package values
 
 import (
-	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -678,60 +677,15 @@ func (p *BigComplex) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both complex numbers have equal real and imaginary parts.
+// EqualTo implements R7RS equal? for BigComplex.
 //
-// R7RS §6.2.6: The = procedure compares numerical values for equality.
-func (p *BigComplex) EqualTo(o Value) bool {
-	v, ok := o.(*BigComplex)
-	if ok && p == v {
-		// Reflexive on the same object, before any NaN component can reject it. See
-		// Float.EqualTo: equal? may not be finer than eqv? (R7RS §6.1).
-		return true
-	}
-	if !ok {
-		// Check if equal to regular Complex
-		c, ok := o.(*Complex)
-		if ok {
-			// Promote the Complex's float64 components to big precision rather
-			// than truncating this BigComplex, so two values differing only
-			// below float64 precision compare unequal.
-			cReal := real(c.Value)
-			cImag := imag(c.Value)
-			// NaN never equals anything; guard here because
-			// NewBigFloatFromFloat64 folds NaN into a NaN BigFloat that would
-			// otherwise compare via Compare's nan==0 path.
-			if math.IsNaN(cReal) || math.IsNaN(cImag) || p.IsNaN() {
-				return false
-			}
-			// big.Float represents ±Inf and Compare (via big.Float.Cmp) orders
-			// it correctly, so a finite component never matches an infinite one.
-			return toBigFloat(p.real).Compare(NewBigFloatFromFloat64(cReal)) == 0 &&
-				toBigFloat(p.imag).Compare(NewBigFloatFromFloat64(cImag)) == 0
-		}
-		return false
-	}
-	if v == nil || p == nil {
-		return p == v
-	}
-	// NaN is not equal to anything, including itself (IEEE 754).
-	if p.IsNaN() || v.IsNaN() {
-		return false
-	}
-	// Compare real parts
-	if !p.real.EqualTo(v.real) {
-		// Try comparing as BigFloat
-		if toBigFloat(p.real).Compare(v.real) != 0 {
-			return false
-		}
-	}
-	// Compare imaginary parts
-	if !p.imag.EqualTo(v.imag) {
-		// Try comparing as BigFloat
-		if toBigFloat(p.imag).Compare(v.imag) != 0 {
-			return false
-		}
-	}
-	return true
+// R7RS §6.1: equal? "returns the same as eqv? when applied to … numbers" — no
+// latitude. So this delegates to EqvNumber (eqv.go), the single authority on
+// numeric equivalence, rather than restating the rules. Restating them is what
+// let equal? and eqv? drift apart on signed zero and on cross-representation
+// inexacts.
+func (p *BigComplex) EqualTo(v Value) bool {
+	return eqvNumberValue(p, v)
 }
 
 // HashCode returns a hash of the complex value.

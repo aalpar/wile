@@ -16,72 +16,42 @@ package helpers
 
 import "github.com/aalpar/wile/pkg/values"
 
-// Eqv is a helper implementing eqv? semantics for memv and assv.
+// Eqv implements R7RS §6.1 eqv?, and backs memv, assv, and case.
 //
-// R7RS §6.1: eqv? returns #t for numbers that are = and both exact or both inexact.
-// For exact integers (Integer and BigInteger), this means comparing numeric values.
+// eqv? is eq? widened by exactly two families: numbers and characters. Everything
+// else it settles by identity, which is what eq? already does (symbols by name,
+// per §6.5, since Wile de-interns them). So this function is three clauses, and
+// each defers to the authority for its family rather than restating it:
+//
+//	identity  -> values.EqIdentity
+//	numbers   -> values.EqvNumber   (also what equal? uses, via each numeric EqualTo)
+//	chars     -> char= on the code point
+//
+// It used to restate the numeric rules as a fourteen-arm type switch. That copy
+// disagreed with the one in the numeric EqualTo methods — it merged 0.0 with -0.0
+// (Go's == on float64), and it rejected cross-representation inexacts that
+// EqualTo accepted — so eqv? and equal? gave different answers on the same two
+// numbers, which §6.1 forbids outright. Routing both through EqvNumber makes them
+// agree by construction rather than by two implementations happening to concur.
 func Eqv(a, b values.Value) bool {
-	if a == b {
+	if values.EqIdentity(a, b) {
 		return true
 	}
-	switch va := a.(type) {
-	case *values.Integer:
-		switch vb := b.(type) {
-		case *values.Integer:
-			return va.Value == vb.Value
-		case *values.BigInteger:
-			// Both are exact integers, compare numerically
-			return va.Compare(vb) == 0
+	na, ok := a.(values.Number)
+	if ok {
+		nb, ok := b.(values.Number)
+		if !ok {
+			return false
 		}
-	case *values.BigInteger:
-		switch vb := b.(type) {
-		case *values.BigInteger:
-			return va.BigInt().Cmp(vb.BigInt()) == 0
-		case *values.Integer:
-			// Both are exact integers, compare numerically
-			return va.Compare(vb) == 0
+		return values.EqvNumber(na, nb)
+	}
+	ca, ok := a.(*values.Character)
+	if ok {
+		cb, ok := b.(*values.Character)
+		if !ok {
+			return false
 		}
-	case *values.Float:
-		vb, ok := b.(*values.Float)
-		if ok {
-			return va.Value == vb.Value
-		}
-	case *values.BigFloat:
-		vb, ok := b.(*values.BigFloat)
-		if ok {
-			// NaN is not equal to anything, including itself (IEEE 754).
-			// BigFloat stores NaN as a flag with a zero *big.Float; Cmp would
-			// incorrectly return 0 (equal) without this guard.
-			if va.IsNaN() || vb.IsNaN() {
-				return false
-			}
-			return va.BigFloatValue().Cmp(vb.BigFloatValue()) == 0
-		}
-	case *values.Rational:
-		vb, ok := b.(*values.Rational)
-		if ok {
-			return va.Rat().Cmp(vb.Rat()) == 0
-		}
-	case *values.Complex:
-		vb, ok := b.(*values.Complex)
-		if ok {
-			return va.Value == vb.Value
-		}
-	case *values.BigComplex:
-		vb, ok := b.(*values.BigComplex)
-		if ok {
-			return va.EqualTo(vb)
-		}
-	case *values.Character:
-		vb, ok := b.(*values.Character)
-		if ok {
-			return va.Value == vb.Value
-		}
-	case *values.Symbol:
-		vb, ok := b.(*values.Symbol)
-		if ok {
-			return va.Key == vb.Key
-		}
+		return ca.Value == cb.Value
 	}
 	return false
 }

@@ -328,11 +328,16 @@ func TestRationalExactness(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(exact, valuestest.SchemeEquals, r)
 
+	// ToInexact returns a Float, matching Integer.ToInexact and BigInteger.ToInexact.
+	// Rational was the odd one out — it returned a BigFloat "for precision", which
+	// made (exact->inexact 1/2) a 256-bit bignum. Chez gives 0.5, a flonum, and the
+	// inconsistency was invisible only because the numeric EqualTo methods compared
+	// across representations.
 	inexact := r.ToInexact()
-	// L18: ToInexact now returns BigFloat for precision
-	bf, ok := inexact.(*values.BigFloat)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(bf.Float64Truncated() > 0.33, qt.IsTrue)
+	f, ok := inexact.(*values.Float)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("Rational.ToInexact must give a Float, got %T", inexact))
+	c.Assert(f.Value > 0.33, qt.IsTrue)
+	c.Assert(f.IsExact(), qt.IsFalse)
 }
 
 func TestRationalHashCode(t *testing.T) {

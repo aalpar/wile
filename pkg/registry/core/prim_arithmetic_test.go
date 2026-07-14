@@ -48,9 +48,15 @@ func TestAddition(t *testing.T) {
 		{Name: "add rational and float", Code: `(+ 1/2 0.5)`, Expected: values.NewFloat(1.0)},
 
 		// Complex operations
-		{Name: "add two complex", Code: `(+ 1+2i 3+4i)`, Expected: values.NewComplexFromParts(4.0, 6.0)},
-		{Name: "add complex and integer", Code: `(+ 1+2i 3)`, Expected: values.NewComplexFromParts(4.0, 2.0)},
-		{Name: "add complex and float", Code: `(+ 1+2i 1.5)`, Expected: values.NewComplexFromParts(2.5, 2.0)},
+		// The literal 1+2i reads as an EXACT complex (R7RS §6.2.5), so exact complex
+		// arithmetic yields an exact result — Chez agrees: (+ 1+2i 3+4i) => 4+6i, and
+		// (exact? ...) => #t. These expectations were inexact float-backed complexes
+		// and passed anyway, because the numeric EqualTo methods compared across
+		// representations and ignored exactness entirely. Wile's carrier is BigComplex
+		// where Chez uses a flonum complex; the VALUE and the EXACTNESS match.
+		{Name: "add two complex", Code: `(+ 1+2i 3+4i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(4), values.NewBigIntegerFromInt64(6))},
+		{Name: "add complex and integer", Code: `(+ 1+2i 3)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(4), values.NewBigIntegerFromInt64(2))},
+		{Name: "add complex and float", Code: `(+ 1+2i 1.5)`, Expected: values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2.5), values.NewBigFloatFromFloat64(2.0))},
 
 		// BigInteger operations
 		{Name: "add two bigintegers", Code: `(+ #z10000000000000000000 #z1)`, Expected: values.NewBigIntegerFromString("10000000000000000001", 10)},
@@ -126,9 +132,9 @@ func TestSubtraction(t *testing.T) {
 		{Name: "subtract integer and rational", Code: `(- 2 1/2)`, Expected: values.NewRational(3, 2)},
 
 		// Complex operations
-		{Name: "subtract two complex", Code: `(- 5+6i 2+3i)`, Expected: values.NewComplexFromParts(3.0, 3.0)},
-		{Name: "negate complex", Code: `(- 1+2i)`, Expected: values.NewComplexFromParts(-1.0, -2.0)},
-		{Name: "subtract complex and integer", Code: `(- 5+3i 2)`, Expected: values.NewComplexFromParts(3.0, 3.0)},
+		{Name: "subtract two complex", Code: `(- 5+6i 2+3i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(3))},
+		{Name: "negate complex", Code: `(- 1+2i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(-1), values.NewBigIntegerFromInt64(-2))},
+		{Name: "subtract complex and integer", Code: `(- 5+3i 2)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(3))},
 
 		// BigInteger operations
 		{Name: "subtract two bigintegers", Code: `(- #z10000000000000000005 #z5)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},
@@ -228,9 +234,9 @@ func TestMultiplication(t *testing.T) {
 		{Name: "multiply rational and float", Code: `(* 1/2 3.0)`, Expected: values.NewFloat(1.5)},
 
 		// Complex operations
-		{Name: "multiply two complex", Code: `(* 1+2i 3+4i)`, Expected: values.NewComplexFromParts(-5.0, 10.0)},
-		{Name: "multiply complex and integer", Code: `(* 2+3i 2)`, Expected: values.NewComplexFromParts(4.0, 6.0)},
-		{Name: "multiply complex and float", Code: `(* 1+1i 2.0)`, Expected: values.NewComplexFromParts(2.0, 2.0)},
+		{Name: "multiply two complex", Code: `(* 1+2i 3+4i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(-5), values.NewBigIntegerFromInt64(10))},
+		{Name: "multiply complex and integer", Code: `(* 2+3i 2)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(4), values.NewBigIntegerFromInt64(6))},
+		{Name: "multiply complex and float", Code: `(* 1+1i 2.0)`, Expected: values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(2.0), values.NewBigFloatFromFloat64(2.0))},
 
 		// BigInteger operations
 		{Name: "multiply two bigintegers", Code: `(* #z10000000000000000000 #z2)`, Expected: values.NewBigIntegerFromString("20000000000000000000", 10)},
@@ -319,9 +325,10 @@ func TestDivision(t *testing.T) {
 		{Name: "reciprocal of rational", Code: `(/ 3/4)`, Expected: values.NewRational(4, 3)},
 
 		// Complex operations
-		{Name: "divide two complex", Code: `(/ 4+2i 1+1i)`, Expected: values.NewComplexFromParts(3.0, -1.0)},
-		{Name: "divide complex and integer", Code: `(/ 4+2i 2)`, Expected: values.NewComplexFromParts(2.0, 1.0)},
-		{Name: "reciprocal of complex", Code: `(/ 1+1i)`, Expected: values.NewComplexFromParts(0.5, -0.5)},
+		{Name: "divide two complex", Code: `(/ 4+2i 1+1i)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(-1))},
+		{Name: "divide complex and integer", Code: `(/ 4+2i 2)`, Expected: values.NewBigComplex(values.NewBigIntegerFromInt64(2), values.NewBigIntegerFromInt64(1))},
+		// (/ 1+1i) => 1/2-1/2i, an exact RATIONAL complex. Chez agrees.
+		{Name: "reciprocal of complex", Code: `(/ 1+1i)`, Expected: values.NewBigComplex(values.NewRational(1, 2), values.NewRational(-1, 2))},
 
 		// BigInteger operations
 		{Name: "divide two bigintegers evenly", Code: `(/ #z20000000000000000000 #z2)`, Expected: values.NewBigIntegerFromString("10000000000000000000", 10)},

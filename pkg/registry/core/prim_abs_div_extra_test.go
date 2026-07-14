@@ -118,9 +118,13 @@ func TestMagnitudeExtraCoverage(t *testing.T) {
 		out  values.Value
 	}{
 		{
+			// |3+4i| = 5 exactly, but magnitude of an exact BigComplex is computed in
+			// arbitrary precision and returns a BigFloat, not a float64 Float. The two
+			// used to compare equal across kinds; they no longer do (both inexact,
+			// different precisions — R7RS §6.1 makes them distinct).
 			name: "magnitude of 3+4i",
 			code: "(magnitude 3+4i)",
-			out:  values.NewFloat(5.0),
+			out:  values.NewBigFloatFromFloat64(5.0),
 		},
 		{
 			name: "magnitude of real number",
@@ -173,9 +177,10 @@ func TestDivisionExtraCoverage(t *testing.T) {
 			out:  values.NewRational(1, 5),
 		},
 		{
+			// 1+2i and 1+0i are both EXACT complex literals, so the quotient is exact.
 			name: "divide complex by real",
 			code: "(/ 1+2i 1+0i)",
-			out:  values.NewComplexFromParts(1.0, 2.0),
+			out:  values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)),
 		},
 	}
 	for _, tc := range tcs {

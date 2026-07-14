@@ -26,10 +26,13 @@ import (
 // Equivalence-predicate conformance, pinned against R7RS-small §6.1 and against
 // Petite Chez Scheme 10.4.1 as a second implementation.
 //
-// The `want` column is what Wile MUST answer. Where Wile is currently WRONG, the
-// case carries a `bug` note and `want` still states the correct answer — the test
-// is skipped with that note until the fix lands, so the pin is a specification,
-// not a ratification of the defect. See
+// The `want` column is what Wile MUST answer.
+//
+// This table was written while F1 (signed zero) and F2 (equal? disagreeing with
+// eqv? on cross-representation inexacts) were still open: each defective case
+// carried a `bug` note and asserted the WRONG answer, with `want` recording the
+// R7RS-required one. Closing the defects made those pins fail, which is what
+// forced the notes off. The notes are gone; the cases remain. See
 // plans/2026-07-14-equivalence-predicate-divergence.md.
 //
 // R7RS §6.1 rules this table encodes:
@@ -47,9 +50,6 @@ type equivCase struct {
 	name string
 	expr string
 	want string
-	// bug, when non-empty, names the finding in the plan. The case is skipped and
-	// `want` records the answer the fix must produce.
-	bug string
 	// chez, when non-empty, records Petite Chez 10.4.1's answer where it differs
 	// from Wile's *correct* answer — i.e. a legal divergence, not a defect.
 	chez string
@@ -92,36 +92,34 @@ var equivCases = []equivCase{
 	{name: "eqv?/rational-vs-float", expr: `(eqv? 1/2 0.5)`, want: "#f"},
 	{name: "equal?/rational-vs-float", expr: `(equal? 1/2 0.5)`, want: "#f"},
 
-	// F2 — equal? and eqv? DISAGREE on numbers. Forbidden outright.
-	// eqv?'s #f is the correct answer: a float64 and an arbitrary-precision
+	// F2 (fixed) — equal? and eqv? must agree on numbers; §6.1 gives no latitude.
+	// #f is the correct answer for both: a float64 and an arbitrary-precision
 	// BigFloat are not substitutable under a finite composition of standard
-	// arithmetic ((+ x 1e-20) separates them). So the defect is in equal?'s
-	// cross-kind arm (values/float.go), not in Eqv.
+	// arithmetic ((+ x 1e-20) separates them). equal? used to answer #t here,
+	// via a cross-kind arm in Float.EqualTo that Eqv did not have. Both now
+	// route through values.EqvNumber and cannot drift apart again.
 	{
 		name: "eqv?/float-vs-bigfloat", expr: `(eqv? 1.0 #m1.0)`, want: "#f",
 	},
 	{
 		name: "equal?/float-vs-bigfloat", expr: `(equal? 1.0 #m1.0)`, want: "#f",
-		bug: "F2: equal? returns #t; Float.EqualTo carries a cross-kind *BigFloat arm that Eqv does not",
 	},
 
-	// F1 — signed zero. §6.1's eqv? #f clause fires whenever the implementation
-	// distinguishes negative zero, and Wile does: (/ 1.0 -0.0) => -inf.0 while
-	// (/ 1.0 0.0) => +inf.0. That is a finite composition of standard arithmetic
-	// yielding different, non-NaN results. Wile's own output is the witness.
+	// F1 (fixed) — signed zero. §6.1's eqv? #f clause fires whenever the
+	// implementation distinguishes negative zero, and Wile does: the two witness
+	// rows below are the proof, and they are in this table precisely so that a
+	// future change making Wile STOP distinguishing -0.0 would break here and
+	// flag that (eqv? 0.0 -0.0) may then legally become #t.
 	{name: "F1/witness-positive", expr: `(/ 1.0 0.0)`, want: "+inf.0"},
 	{name: "F1/witness-negative", expr: `(/ 1.0 -0.0)`, want: "-inf.0"},
 	{
 		name: "eqv?/signed-zero", expr: `(eqv? 0.0 -0.0)`, want: "#f",
-		bug: "F1: helpers.Eqv compares *Float with Go ==, and IEEE-754 says 0.0 == -0.0",
 	},
 	{
 		name: "equal?/signed-zero", expr: `(equal? 0.0 -0.0)`, want: "#f",
-		bug: "F1: inherited from Eqv via Float.EqualTo's ==",
 	},
 	{
 		name: "memv/signed-zero", expr: `(memv -0.0 (list 0.0))`, want: "#f",
-		bug: "F1 fallout: memv is eqv?-based, so it finds a 0.0 when handed a -0.0",
 	},
 
 	// F3 — NaN. §6.1: "the behavior of eqv? is unspecified when both obj1 and obj2
@@ -137,8 +135,7 @@ var equivCases = []equivCase{
 
 	// Reflexivity is NOT optional, whatever NaN does across objects: eqv? settles
 	// identity before it looks at the value, and equal? may not be finer than eqv?.
-	// Established at each numeric leaf's pointer compare, NOT by an `a == b` in
-	// values.Equal — see values/float.go.
+	// Established by the identity check at the head of values.EqvNumber.
 	{name: "eqv?/nan-reflexive", expr: `(let ((x (/ 0.0 0.0))) (eqv? x x))`, want: "#t"},
 	{name: "equal?/nan-reflexive", expr: `(let ((x (/ 0.0 0.0))) (equal? x x))`, want: "#t"},
 	{name: "memv/nan-reflexive", expr: `(let ((x (/ 0.0 0.0))) (if (memv x (list x)) 'found 'lost))`, want: "found"},
@@ -183,11 +180,6 @@ var equivCases = []equivCase{
 }
 
 // TestEquivalencePredicateConformance pins eq?/eqv?/equal? against R7RS §6.1.
-//
-// Cases carrying a `bug` note are skipped: their `want` is the answer the fix must
-// produce, so the skip disappears — rather than the expectation changing — when the
-// defect is closed. A case that starts passing while still marked `bug` fails loudly,
-// which is what stops a fix from landing without its pin being un-skipped.
 func TestEquivalencePredicateConformance(t *testing.T) {
 	for _, tc := range equivCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -198,18 +190,7 @@ func TestEquivalencePredicateConformance(t *testing.T) {
 
 			result, err := engine.EvalMultiple(ctx, tc.expr)
 			c.Assert(err, qt.IsNil)
-			got := result.SchemeString()
-
-			if tc.bug == "" {
-				c.Assert(got, qt.Equals, tc.want, qt.Commentf("expr: %s", tc.expr))
-				return
-			}
-			// Known defect: assert it still misbehaves, and say what it should be.
-			// When the fix lands this assertion fires, forcing the note's removal.
-			c.Assert(got, qt.Not(qt.Equals), tc.want,
-				qt.Commentf("FIXED — drop the `bug` note on %q; it now correctly answers %s. (%s)",
-					tc.name, tc.want, tc.bug))
-			t.Logf("known defect (%s): got %s, R7RS requires %s", tc.bug, got, tc.want)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want, qt.Commentf("expr: %s", tc.expr))
 		})
 	}
 }
