@@ -30,8 +30,11 @@ import (
 // unreachable as a Scheme datum, and it was actively harmful: []values.Value is
 // not Go-comparable, so a MultipleValues boxed into a values.Value would fault
 // any `==` or map-key hash of that interface. values.EqIdentity (eq?) is exactly
-// such an `==`. That latent hazard is on record as the reason the continuation
-// marks table is a flat slice rather than a Go map (see vm_state.go).
+// such an `==`.
+//
+// It still carries SchemeString and IsVoid for diagnostics, which leaves it ONE method
+// — EqualTo(values.Value) — from silently re-entering the Value set as a non-comparable
+// slice. TestSliceCarriersAreNotValues exists to stop that.
 //
 // The type remains a convenient []values.Value alias for internal carriers
 // (NativeTemplate.literals, the value register). It just is not a Scheme value.

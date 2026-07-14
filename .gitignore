@@ -38,6 +38,7 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+*.txt
 *#
 /wile
 

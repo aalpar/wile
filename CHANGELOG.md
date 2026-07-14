@@ -16,7 +16,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Exactness contagion (R7RS §6.2.2) now actually contaminates.** An exact operand
+  meeting an inexact one is absorbed into the inexact operand's representation, on
+  **both** the real and the complex axis: `(+ 1.5 2)` is a `Float` (it was a 256-bit
+  `BigFloat`) and `(+ 1.0+2.0i 1)` is a `Complex` (it was a `BigComplex`). The old
+  behavior promoted "to preserve precision", on the theory that `Simplify` would demote
+  afterwards; per-op demotion was never wired, so ordinary arithmetic minted bignums
+  that never came back down. **This is user-visible and lossy by design**: an exact
+  value too large for `float64` now overflows, so `(+ 1.5 (expt 2 2000))` is `+inf.0`,
+  which is what Chez gives. A program that needs the precision must stay exact or ask
+  for it with a `#m` literal, which is preserved.
+
+  The complex half was not a free choice. The promotion table is a join-semilattice,
+  and with `exact ⊔ Float = Float` and `Float ⊔ Complex = Complex`, associativity
+  *forces* `exact ⊔ Complex = Complex`. Escalating instead broke the law on 12 of its
+  343 triples, and because the result kind is observable through `eqv?`/`equal?`, that
+  produced values that were `=`, printed identically, and were not `eqv?`:
+  `(eqv? (+ 1 1.5 2.0+0.0i) (+ 2.0+0.0i 1 1.5))` answered `#f`, and
+  `(equal? (* 1.0+2.0i 1) 1.0+2.0i)` — multiplying by exact `1` — answered `#f`.
+  Signed zero is unaffected: `(/ 10 2.0+0.0i)` is still `5.0-0.0i`, now preserved at the
+  *operation* (a real operand contributes no imaginary component, so `real ⊕ complex` is
+  computed part-wise) rather than by escalating the promotion.
+- **Inexact representation is observable, so `Float` and `BigFloat` are never `eqv?`.**
+  Per R7RS §6.1, a `float64` `1.0` and a 256-bit `#m1.0` are distinguishable by
+  arithmetic and are therefore distinct numbers. They no longer compare equal, and — the
+  practical consequence — a `BigFloat` key no longer finds a `Float` entry in a
+  hashtable. Exact cross-representations are unaffected: `1`, `#e1`, and `1/1` remain
+  `eqv?` and hash alike.
+- **`values.PromotionResultKind` / `values.ComparisonResultKind` are no longer public.**
+  Both had zero production callers and existed only for the external test package. As
+  public API they were a raw-index panic (`NumericKind` is exported, the bound is not)
+  and a footgun: nothing in the type system distinguished "kind for arithmetic" from
+  "kind for comparison", and picking the wrong one silently rounds an operand. They now
+  live in `export_test.go`.
+- **Strict-mode FFI precision loss is detected at the boundary, not through arithmetic.**
+  With contagion fixed, `(+ 1.0 (expt 10 60))` is an ordinary lossy `Float`, so a strict
+  `float64` parameter accepts it. It used to be rejected — but only because the old
+  `BigFloat` contagion kept the precision alive past the point where it should have been
+  lost. Strict mode was detecting Wile's own non-conformance. Use a `#m` literal to keep
+  precision through mixed arithmetic.
+
 ### Fixed
+
+- **The `values.Value` Go-comparability contract is real and enforced.** Every `Value`
+  implementor must be Go-comparable: `values.EqIdentity` — backing `eq?`, `memq`, `assq`
+  and the literal pool — is a bare `a == b` on the interface, and Go *panics* with
+  "comparing uncomparable type" when the dynamic type is a slice, map, or func. In an
+  embedded engine that panic lands in the host's process. Three violators had shipped
+  (`machine.Operations`, `machine.MultipleValues`, `machine.boxedValues`), none found by
+  reading code. The first two were not Scheme data at all and lost the conformance; the
+  third is genuinely a `Value` and became pointer-shaped. Enforcement is now module-wide
+  via `go/types` (`TestValue_AllImplementorsAreGoComparable`), which checks all ~130
+  implementors across all seven implementing packages and needs no roster to keep current.
+- **Trichotomy across the exact/inexact boundary.** For any two reals exactly one of
+  `<`, `=`, `>` holds. It did not: the comparison dispatchers carried an IEEE
+  special-value guard that, when either operand was an `Inf`/`NaN` `Float`, routed
+  **both** operands through `float64`. An exact bignum too large for `float64` became
+  `+Inf` and compared *equal* to the infinity it was tested against, so
+  `(< (expt 10 400) +inf.0)` was `#f` **and** `(>= (expt 10 400) +inf.0)` was `#t`,
+  simultaneously. The guard's premise (that `BigFloat`/`BigComplex` cannot hold
+  `Inf`/`NaN`) went stale when they were made IEEE-capable. Comparison never rounds an
+  operand now — that is the whole reason it uses a different promotion table from
+  arithmetic.
+- **The literal pool had two dedup predicates that disagreed.** `AddLiteral` used
+  `literalIdentical` (which refuses to merge across concrete types) while
+  `deduplicateLiteral` used a bare `EqualTo` (which does not), so the pool could hand
+  back a pooled `Integer 1` in place of a `BigInteger 1` and silently re-type the
+  literal. Both paths now use one predicate, and its hand-rolled `Float` arm — named in
+  `eqv.go` as one of three drifted copies of the numeric rule, and by the end disagreeing
+  with `EqualTo` on NaN — is gone in favor of `EqvNumber`.
+- **`BigComplex.HashCode` no longer hashes a NaN component as zero.** It hashed the
+  component's raw backing `big.Float`, bypassing `BigFloat.HashCode` and so bypassing
+  NaN canonicalization; a NaN-valued `BigFloat` stores its flag alongside a *zero* value,
+  so a `BigComplex` with a NaN real part hashed identically to one with `0.0`. Equality
+  recurses into the components, so hashing does too.
+- **`eqv?` and `=` no longer contradict each other on an exact complex.** An exact
+  `BigComplex` with an exact-zero imaginary part *is* a real number, and R7RS §6.1
+  requires two exact numbers that are `=` to be `eqv?`. `=` said `#t` and `eqv?` said
+  `#f`. Not reachable from Scheme (`make-rectangular` canonicalizes) but
+  `values.NewBigComplex` is public API and does not. Inexact does not collapse:
+  `(eqv? 1.0 1.0+0.0i)` is still `#f`, matching Chez.
+- **`EqvNumber` no longer conflates distinct typed-nils.** A nil `*Float` and a nil
+  `*BigInteger` are both void and are not the same value; the centralized void guard
+  answered `#t` for the pair, widening what the per-type guards it replaced had done.
 
 - **`equal?` is no longer finer than `eqv?`.** R7RS §6.1 orders the equivalence
   predicates by coarseness — `eq?` ⊆ `eqv?` ⊆ `equal?` — and each must answer `#t`
@@ -27,11 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   while `memv`/`assv` are `eqv?`-based, so `(member x (list 1 x 2))` could not find
   the very object it was handed. `equal?` also disagreed with itself by nesting
   depth: `(equal? x x)` was `#f` while `(equal? (list x) (list x))` was `#t`.
-  Reflexivity is now established inside each NaN-capable numeric `EqualTo`
-  (`Float`, `BigFloat`, `Complex`, `BigComplex`). Distinct NaN objects still
-  compare `#f` (matching `eqv?`), `equal?` remains coarser than `eqv?` on strings
-  and lists, and numeric `=` keeps IEEE-754 semantics unchanged — it is a different
-  predicate, and conflating it with the equivalence relation was the bug.
+  Both predicates now route through the single authority `values.EqvNumber`, so they
+  agree on numbers by construction rather than by coincidence, and **`(eqv? +nan.0
+  +nan.0)` is `#t`** (R7RS §6.1 makes this explicitly unspecified; Wile follows Chez
+  and Racket). `equal?` remains coarser than `eqv?` on strings and lists, and numeric
+  `=` keeps IEEE-754 semantics unchanged — `(= +nan.0 +nan.0)` is still `#f`. It is a
+  different predicate, and conflating it with the equivalence relation was the bug.
 - **A recovered Go panic now carries its site's sentinel.** `werr.RecoverAsError`
   returned an error-typed panic value unchanged, so the sentinel only ever reached
   *non-error* panics. A Go runtime fault inside foreign code (nil dereference, index
@@ -46,8 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   key, and hashing a non-comparable dynamic type panics — a stronger requirement
   than the identity compare above it, which only faults when *both* types match. A
   container compared against a slice-backed `Value` therefore panicked inside the
-  map lookup. (`machine.Operations` is `[]Operation`, so this was reachable in-tree,
-  not merely through the embedding API.)
+  map lookup. `step()` now reaches both the identity compare and the visited-set key
+  only once *both* operands are known to be `DeepEqualer`s. (It was reachable in-tree
+  at the time via `machine.Operations`, a `[]Operation` that then implemented `Value`;
+  see the comparability contract below, which removed that conformance.)
 - **`syntax-local-introduce` fails honestly.** Nothing sets an introduction scope, so
   the primitive could never succeed, yet its docstring advertised working behavior
   with a worked example. It now reports `werr.ErrNotImplemented` (a new sentinel;

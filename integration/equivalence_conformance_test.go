@@ -33,7 +33,7 @@ import (
 // carried a `bug` note and asserted the WRONG answer, with `want` recording the
 // R7RS-required one. Closing the defects made those pins fail, which is what
 // forced the notes off. The notes are gone; the cases remain. See
-// plans/2026-07-14-equivalence-predicate-divergence.md.
+// docs/reference/r7rs-differences.md (items 9 and 10).
 //
 // R7RS §6.1 rules this table encodes:
 //
@@ -45,7 +45,9 @@ import (
 //   - "In all other cases, equal? may return either #t or #f" — this is what makes
 //     Wile's structural equal? on records/hashtables/boxes LEGAL, though it diverges
 //     from Chez. Those rows are pinned as deliberate policy, not accident.
-//   - eqv? on two NaNs is explicitly unspecified. Wile's #f conforms; Chez says #t.
+//   - eqv? on two NaNs is explicitly unspecified ("As an exception, the behavior of
+//     eqv? is unspecified when both obj1 and obj2 are NaN"). Wile answers #t, matching
+//     Chez and Racket. Numeric = keeps IEEE semantics, so (= +nan.0 +nan.0) is still #f.
 type equivCase struct {
 	name string
 	expr string
@@ -161,6 +163,41 @@ var equivCases = []equivCase{
 		expr: `(= +nan.0 +nan.0)`,
 		want: "#f",
 	},
+
+	// ---- Numeric leaves INSIDE containers. ----
+	//
+	// This is where values.Equal's worklist reorder actually lives: a numeric leaf
+	// reached as a container COMPONENT settles through its own EqualTo (and so through
+	// EqvNumber), never through an interface ==. The top-level rows above cannot exercise
+	// that path, and the pre-existing NaN-in-container row compared a container against
+	// ITSELF — which the identity short-circuit answers without ever reaching a leaf.
+	// Every row here uses DISTINCT objects.
+	{name: "equal?/nan-in-distinct-vectors", expr: `(equal? (vector +nan.0) (vector +nan.0))`, want: "#t"},
+	{name: "equal?/nan-in-distinct-lists", expr: `(equal? (list +nan.0) (list +nan.0))`, want: "#t"},
+	{
+		// Signed zero must survive the descent into a container, exactly as at top level.
+		name: "equal?/signed-zero-in-lists",
+		expr: `(equal? (list 0.0) (list -0.0))`,
+		want: "#f",
+	},
+	{
+		// member is equal?-based, so it inherits the leaf rule — including this one.
+		name: "member/signed-zero-distinguished",
+		expr: `(if (member 0.0 (list -0.0)) #t #f)`,
+		want: "#f",
+	},
+	{
+		// Exactness is observable through a container too: 1/2 is exact, 0.5 is not.
+		name: "equal?/exact-vs-inexact-in-lists",
+		expr: `(equal? (list 1/2) (list 0.5))`,
+		want: "#f",
+	},
+	{
+		// ...and the exact family still collapses inside a container.
+		name: "equal?/exact-family-in-lists",
+		expr: `(equal? (list 1) (list #e1))`,
+		want: "#t",
+	},
 	{
 		// A float64 NaN and an arbitrary-precision NaN are still different kinds:
 		// precision is observable for inexact numbers, NaN included.
@@ -227,6 +264,19 @@ func TestEquivalencePredicateConformance(t *testing.T) {
 			result, err := engine.EvalMultiple(ctx, tc.expr)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want, qt.Commentf("expr: %s", tc.expr))
+
+			// The chez field is an ASSERTION, not a comment. It exists to say "this row
+			// is a known, legal divergence from Chez", so if it ever records the same
+			// answer Wile gives, it is stale and the row is no longer a divergence at
+			// all — which is exactly the sort of drift nobody notices in a struct field
+			// that is only ever written. It was write-only until this check existed.
+			if tc.chez == "" {
+				return
+			}
+			c.Assert(tc.chez, qt.Not(qt.Equals), tc.want, qt.Commentf(
+				"row %q records Chez's answer as %s, which is also Wile's answer — so this "+
+					"is NOT a divergence and the chez field should be dropped", tc.name, tc.chez))
+			t.Logf("legal divergence: Wile %s, Chez %s (R7RS permits either)", tc.want, tc.chez)
 		})
 	}
 }

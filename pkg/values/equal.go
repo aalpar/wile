@@ -77,12 +77,25 @@ func Equal(a, b Value) bool {
 	if IsVoid(a) || IsVoid(b) {
 		return IsVoid(a) == IsVoid(b)
 	}
-	// NOTE: no `if a == b` identity shortcut here, however tempting. Not every
-	// Value is Go-comparable — machine.Operations is a slice — and comparing two
-	// interfaces holding the same non-comparable dynamic type panics. Reflexivity
-	// is instead the responsibility of each leaf's EqualTo, where it can be
-	// established without an interface compare. See the numeric types, whose
-	// EqualTo would otherwise report a NaN as unequal to itself.
+	// NOTE: no `if a == b` identity shortcut here, however tempting.
+	//
+	// It used to say "machine.Operations is a slice" — an IN-TREE counterexample. That
+	// is stale: Operations is no longer a Value, and Go-comparability is now a hard
+	// contract on Value (see its doc) enforced module-wide over every implementor.
+	//
+	// The reason survives its example, because pkg/values is PUBLIC. An embedder can
+	// declare a slice-backed Value with value receivers; it is legal Go, the compiler is
+	// silent, and no test in this module can see it. `a == b` on two interfaces holding
+	// that dynamic type panics. Reflexivity is instead each leaf's own EqualTo, which
+	// establishes it with a TYPED pointer compare — safe precisely because it is not an
+	// interface compare. See the numeric types, whose EqualTo would otherwise report a
+	// NaN as unequal to itself.
+	//
+	// SCOPE, HONESTLY: this makes equal? survive such a type; it does NOT make Wile
+	// survive it. EqIdentity (utils.go) is a bare interface `==` backing eq?/memq/assq
+	// and has no such defense — it panics, and the VM boundary turns that into an opaque
+	// internal error. So the ordering below is cheap insurance, not a guarantee, and the
+	// real fix for an embedder is to honor the contract.
 	_, ok := a.(DeepEqualer)
 	if !ok {
 		// Leaf: no traversal, no allocation. This is the hot path under
@@ -117,7 +130,13 @@ func Equal(a, b Value) bool {
 // which owns identity (each numeric leaf does a *typed* pointer compare — see
 // Float.EqualTo — which is safe precisely because it is not an interface
 // compare). So a Value that violates the comparability contract — an embedder's
-// slice-backed leaf — degrades to a false answer rather than crashing the host.
+// slice-backed leaf, which is legal Go and which no test in this module can see —
+// degrades to a false answer HERE rather than faulting.
+//
+// That is scoped to equal?, and deliberately understated: eq?/memq/assq go through
+// EqIdentity, a bare interface `==` with no such protection, so a violating type still
+// faults there. See Equal's NOTE. This ordering is cheap insurance on one path, not an
+// engine-wide guarantee.
 // See TestEqual_SameTypedNonComparableLeavesDoNotPanic.
 func (p *equalWorklist) step(a, b Value) bool {
 	// IsVoid, not a == nil, is the void test: a nil Value interface and a

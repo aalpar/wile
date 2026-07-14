@@ -208,12 +208,18 @@ type vmState struct {
 	// nil when no marks are set on this frame (zero-cost common case).
 	// Lazily allocated by SetMark on first use.
 	//
-	// Stored as a flat slice rather than a map. Key lookup uses values.EqIdentity
-	// (eq? semantics: symbol identity by name, all other types by pointer).
-	// Mark counts per frame are typically 0–3, so O(n) scan is O(1) in practice
-	// and avoids the Go-map comparability requirement that caused panics for
-	// non-comparable value types (MultipleValues) and wrong results for symbols
-	// after interning removal.
+	// Stored as a flat slice rather than a map, and the reason is EqIdentity, not
+	// comparability. Key lookup must use values.EqIdentity (eq? semantics: symbols by
+	// name, everything else by pointer), and a Go map CANNOT express that at all — it
+	// hashes by dynamic type and value, so two distinct *Symbol allocations with the
+	// same name are different keys, which is wrong after interning was removed. Mark
+	// counts per frame are typically 0–3, so the O(n) scan is O(1) in practice.
+	//
+	// This comment used to lead with a second reason: that a map key would panic on
+	// non-comparable Values such as MultipleValues. That reason is GONE — MultipleValues
+	// is no longer a values.Value, and Go-comparability is now a hard contract on Value,
+	// enforced module-wide. The EqIdentity reason above is sufficient on its own and was
+	// buried behind the dead one.
 	//
 	// Propagation: SaveContinuation copies to continuation then nils mc.marks
 	// (callee starts clean). Restore/PopContinuation restores from continuation.
