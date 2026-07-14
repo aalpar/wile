@@ -165,7 +165,9 @@ func PrimBytevectorCopyBang(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if atIdx.Value < 0 || atIdx.Value+int64(end-start) > int64(len(*toBv)) {
+	// Subtract rather than add: see the identical guard in prim_vectors.go. The sum
+	// overflows int64 for a near-MaxInt64 atIdx and wraps negative past the guard.
+	if atIdx.Value < 0 || atIdx.Value > int64(len(*toBv))-int64(end-start) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "bytevector-copy!: invalid destination index")
 	}
 	if mc.ImmutableLiterals().IsImmutable(toBv) {

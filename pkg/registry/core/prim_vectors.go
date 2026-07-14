@@ -162,7 +162,10 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	if atIdx < 0 || atIdx+(end-start) > len(*to) {
+	// Subtract rather than add: atIdx+(end-start) overflows int64 for a near-MaxInt64
+	// atIdx, wrapping negative so the guard passes and the slice expression panics.
+	// len(*to)-(end-start) cannot wrap, both terms being bounded by the slice length.
+	if atIdx < 0 || atIdx > len(*to)-(end-start) {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "vector-copy!: invalid destination index")
 	}
 

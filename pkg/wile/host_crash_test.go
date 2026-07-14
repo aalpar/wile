@@ -140,3 +140,62 @@ func TestHostCrash_AtomicBoxTypeChange(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.SchemeString(), qt.Equals, `"now a string"`)
 }
+
+// TestHostCrash_VectorCopyDestinationOverflow asserts that a near-MaxInt64
+// destination index is rejected rather than slice-panicking.
+//
+// Citation: prim_vectors.go:165. The guard `atIdx+(end-start) > len(*to)` overflows
+// int64 for a huge atIdx: the sum wraps negative, the guard passes, and the slice
+// expression panics uncatchably. Values above MaxInt64 parse as BigInteger and are
+// rejected upstream, so MaxInt64-1 is the boundary that matters.
+func TestHostCrash_VectorCopyDestinationOverflow(t *testing.T) {
+	eng := newTestEngine(t)
+
+	_, err := eng.EvalMultiple(context.Background(),
+		`(vector-copy! (vector 1 2 3) 9223372036854775806 (vector 4 5))`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "destination index")
+}
+
+// TestHostCrash_BytevectorCopyDestinationOverflow is the same guard, same overflow,
+// in bytevector-copy! (prim_byte_vectors.go:168).
+func TestHostCrash_BytevectorCopyDestinationOverflow(t *testing.T) {
+	eng := newTestEngine(t)
+
+	_, err := eng.EvalMultiple(context.Background(),
+		`(bytevector-copy! (bytevector 1 2 3) 9223372036854775806 (bytevector 4 5))`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "destination index")
+}
+
+// TestHostCrash_StringCopyDestinationOverflow is the same guard in string-copy!
+// (internal/extensions/all/prim_strings.go:73), which is not in the default profile.
+//
+// The trigger is at+copyLen exceeding MaxInt64, not "at near MaxInt64" as the design
+// puts it. With a one-element source, at must be MaxInt64 exactly: at MaxInt64-1 the
+// sum lands on MaxInt64, does not wrap, and the guard correctly rejects. The vector
+// cases above copy two elements, so MaxInt64-1 suffices there.
+func TestHostCrash_StringCopyDestinationOverflow(t *testing.T) {
+	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalMultiple(context.Background(),
+		`(string-copy! (string #\a #\b) 9223372036854775807 (string #\c))`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "out of bounds")
+}
+
+// TestHostCrash_VectorCopyValidDestinationStillWorks pins the guard from below: a
+// legal in-range copy must still be admitted after the rewrite.
+func TestHostCrash_VectorCopyValidDestinationStillWorks(t *testing.T) {
+	eng := newTestEngine(t)
+
+	v, err := eng.EvalMultiple(context.Background(),
+		`(define v (vector 1 2 3)) (vector-copy! v 1 (vector 8 9)) v`)
+
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "#(1 8 9)")
+}
