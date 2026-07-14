@@ -74,11 +74,25 @@ Items that block production embedded use or prevent silent state corruption.
   - `equalWorklist.step` (`pkg/values/equal.go`) — `if a == b` on component pairs.
   - `equalPairKey{a, b}` as a map key (`pkg/values/equal.go`) — hashes BOTH elements, so it faults on a non-comparable operand *even when the two types differ and `==` would have been safe*. **Fixed** (merged 2026-07-14) by settling a non-`DeepEqualer` `b` before the key is formed; the other two are open.
 
-  **This is not hypothetical and not embedder-only.** `machine.Operations` is `[]Operation` (`pkg/machine/operations.go`) and implements `Value`. Verified: `values.EqIdentity(ops, ops2)` panics with `runtime error: comparing uncomparable type machine.Operations`. It was found when a naive `a == b` fast-path added to `Equal` took down all of `pkg/machine/compilation`'s tests — the suite catches it, which is the only reason the invariant has held.
+  **Go comparability is not an interface.** It is a static property of the type, with no method set: it cannot be asserted (`a.(comparable)` does not compile), and the `comparable` *constraint* accepts `values.Value` and then panics at runtime, so generics are not a safety net. The only runtime query is `reflect.TypeOf(v).Comparable()`. Nothing in `Value` (`SchemeString`/`IsVoid`/`EqualTo`) constrains the dynamic type's shape, so a slice-backed `Value` is legal Go and the compiler is silent.
+
+  **Two non-comparable `Value`s exist today** (checked mechanically via `reflect`, not by eye):
+  - `machine.Operations` = `[]Operation`, value receivers.
+  - `machine.MultipleValues` = `[]values.Value`, value receivers.
+
+  `values.Vector` (`[]Value`) and `values.ByteVector` are NOT affected: their methods take pointer receivers, so the boxed dynamic type is `*Vector` — a pointer, hence comparable. **The receiver, not the underlying type, is what decides.**
+
+  **Reachability (measured, not assumed):**
+  - From Scheme: **no.** `(values …)` splices in argument position, so a `MultipleValues` never reaches `eq?` as one object; `Operations` is a compiler artifact.
+  - From the embedding API: **no.** `wile.Value` is narrower than `values.Value` (no `EqualTo`), and `Eval` unwraps multiple values (verified: `EvalMultiple("(values 1 2)")` returns `*values.Integer`).
+  - From internal Go code: **YES** — anything calling `values.Equal`/`EqIdentity` on these. Verified: `values.EqIdentity(ops, ops2)` panics with `runtime error: comparing uncomparable type machine.Operations`. Found when a naive `a == b` fast-path in `Equal` took down every test in `pkg/machine/compilation`; the suite is the only thing holding the invariant.
+  - From an extension author: **YES** — `pkg/values` is public, so a custom slice-backed `Value` is legal and would fault in `eq?`.
+
+  So this is a latent internal hazard plus an open door for extension authors, NOT a live Scheme-facing bug. That sets the priority, not the validity.
 
   Pick one and commit to it:
-  1. **Require comparability.** Document it on the `Value` interface, and either make `Operations` a struct wrapping the slice, or exclude it from `Value`. Cheapest to reason about; `eq?` stays a pointer compare.
-  2. **Stop assuming it.** Guard the three sites (`reflect.TypeOf(a).Comparable()`, or an explicit `Identity() uintptr` on the interface). Costs a check on the `eq?`/`member` hot path.
+  1. **Require comparability.** Document it on `Value`, and give `Operations` and `MultipleValues` pointer receivers (or wrap them in structs) so the boxed type is a pointer — the same thing that already makes `Vector` safe. Cheapest to reason about; `eq?` stays a pointer compare. Add a `reflect`-based test that walks the known `Value` implementations and asserts each is `Comparable()`, so the invariant is enforced rather than remembered.
+  2. **Stop assuming it.** Guard the sites with `reflect.TypeOf(a).Comparable()` (runtime cost on the `eq?`/`member` hot path), or add an `Identity() uintptr` method to `Value` — the only way to make identity a *checked method call* instead of an unchecked interface `==`.
 
   Do NOT paper over it by adding identity fast-paths one at a time — that is what produced the panic above. Reflexivity for NaN-carrying numerics is handled correctly (merged 2026-07-14) by putting the identity check inside each numeric `EqualTo`, on a *pointer* compare, precisely because the interface compare is unsafe.
 
