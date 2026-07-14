@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // Expression represents a single parsed Scheme expression.
@@ -154,7 +155,26 @@ func (p *Engine) mustParse(ctx context.Context, code string, source string) *Exp
 	return expr
 }
 
-func (p *Engine) parse(ctx context.Context, code string, source string) (*Expression, error) {
+func (p *Engine) parse(ctx context.Context, code string, source string) (q *Expression, err error) {
+	// Containment boundary. A Go host reaches Wile through three verbs — parse,
+	// compile, run — and only run was guarded. Parse and ParseWithSource both
+	// delegate here, so this is the single parse-side boundary.
+	//
+	// Placed at the Engine, not in pkg/parser: a panic below this line is a Wile
+	// bug, and containing it inside the parser would hide our own defects from our
+	// own suite. Guarding here gives the embedder the documented contract while
+	// `go test ./pkg/parser/...` stays as loud as it is today.
+	//
+	// No valid input reaches a panic here today; this is a backstop, not a fix.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		q = nil
+		err = wrapCompilationError("parse error", werr.RecoverAsError(r, werr.ErrInternal, "parse"))
+	}()
+
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 	pr.SetMaxDepth(p.maxParseDepth)

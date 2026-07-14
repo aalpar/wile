@@ -43,17 +43,21 @@ func (p *Box) IsVoid() bool {
 
 // EqualTo returns true if the boxes contain equal values.
 func (p *Box) EqualTo(v Value) bool {
+	return Equal(p, v)
+}
+
+// EqualComponents pushes the two boxes' contents for Equal to compare. A box is
+// mutable, so a cycle can run through one; Equal's visited set closes it.
+func (p *Box) EqualComponents(v Value, push func(a, b Value)) bool {
 	other, ok := v.(*Box)
 	if !ok {
 		return false
 	}
-	if p == other {
-		return true
-	}
 	if p == nil || other == nil {
-		return false
+		return p == other
 	}
-	return wrapperValueEqualTo(p.Value, other.Value)
+	push(p.Value, other.Value)
+	return true
 }
 
 // SchemeString returns the Scheme representation of the box.
@@ -61,5 +65,23 @@ func (p *Box) SchemeString() string {
 	if p == nil {
 		return "#<box:void>"
 	}
-	return fmt.Sprintf("#&%s", p.Value.SchemeString())
+	return p.schemeStringWithVisited(make(map[Value]bool), 1)
+}
+
+// schemeStringWithVisited renders the box under the same path-scoped cycle
+// detection Pair, Vector and Hashtable use. set-box! can point a box at a
+// structure that reaches the box again, so the naive "#&" + contents rendering
+// this replaced overflowed the host Go stack.
+//
+// depth is this box's nesting level (root = 1); its content sits one level
+// deeper, where schemeStringChild enforces the host-safety bound.
+func (p *Box) schemeStringWithVisited(visited map[Value]bool, depth int) string {
+	if visited[p] {
+		return "..."
+	}
+	visited[p] = true
+	defer func() {
+		delete(visited, p)
+	}()
+	return fmt.Sprintf("#&%s", schemeStringChild(p.Value, visited, depth+1))
 }

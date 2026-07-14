@@ -70,7 +70,10 @@ func PrimStringCopyTo(mc machine.CallContext) error {
 
 	toLen := to.Len()
 	copyLen := end - start
-	if at < 0 || at+copyLen > toLen {
+	// Subtract rather than add: see the identical guard in prim_vectors.go. at+copyLen
+	// overflows int64 when at is MaxInt64, wrapping negative past the guard and
+	// panicking in the slice expression below.
+	if at < 0 || at > toLen-copyLen {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "string-copy!: destination index out of bounds")
 	}
 

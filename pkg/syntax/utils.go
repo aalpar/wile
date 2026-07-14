@@ -102,10 +102,26 @@ func EqualTo(a, b SyntaxValue) bool {
 	if av.Comparable() && bv.Comparable() && a == b {
 		return true
 	}
-	if av.IsNil() && bv.IsNil() {
+	// reflect.Value.IsNil panics on any Kind that cannot be nil, and not every
+	// SyntaxValue is a pointer: SyntaxVoid is syntaxVoidType{}, a struct. Comparing
+	// it against a different value reaches here. EqualTo is exported, so that panic
+	// escaped to Go hosts outside every recover boundary.
+	if isNilableKind(av) && isNilableKind(bv) && av.IsNil() && bv.IsNil() {
 		return true
 	}
 	return a.EqualTo(b)
+}
+
+// isNilableKind reports whether v's Kind admits a nil value, i.e. whether
+// reflect.Value.IsNil may be called on it without panicking.
+func isNilableKind(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface,
+		reflect.Map, reflect.Pointer, reflect.Slice:
+		return true
+	default:
+		return false
+	}
 }
 
 // IsSyntaxList returns true if the value is a proper syntax list.

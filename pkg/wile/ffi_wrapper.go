@@ -16,7 +16,6 @@ package wile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -32,17 +31,19 @@ func (p *ffiSpec) makeWrapper() ForeignFunction {
 		defer func() {
 			r := recover()
 			if r == nil {
+				// No panic in flight. Leave returnErr alone: the function body may
+				// have set it on a normal error return.
 				return
 			}
-			err, ok := r.(error)
-			if ok {
-				var fe *werr.ForeignError
-				if errors.As(err, &fe) {
-					returnErr = err
-					return
-				}
-			}
-			panic(fmt.Sprintf("FFI %q: %v", p.name, r))
+			// Return the panic as an error rather than re-raising it. The VM's
+			// foreign-call dispatcher routes a returned error through
+			// bridgeForeignError exactly as it routes a recovered panic, so VM signal
+			// types (prompt abort, exception escape, timer interrupt) still reach the
+			// bridge unchanged. Re-raising discarded the identity of any error that
+			// was not a *werr.ForeignError: errors.Is stopped matching once the value
+			// was flattened into a fmt.Sprintf string.
+			returnErr = werr.RecoverAsError(r, werr.ErrPanicRecovery,
+				fmt.Sprintf("FFI %q", p.name))
 		}()
 
 		var args []reflect.Value

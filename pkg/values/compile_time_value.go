@@ -44,17 +44,20 @@ func (p *CompileTimeValue) IsVoid() bool {
 
 // EqualTo returns true if the compile-time values are equal.
 func (p *CompileTimeValue) EqualTo(v Value) bool {
+	return Equal(p, v)
+}
+
+// EqualComponents pushes the two wrapped values for Equal to compare.
+func (p *CompileTimeValue) EqualComponents(v Value, push func(a, b Value)) bool {
 	other, ok := v.(*CompileTimeValue)
 	if !ok {
 		return false
 	}
-	if p == other {
-		return true
-	}
 	if p == nil || other == nil {
-		return false
+		return p == other
 	}
-	return wrapperValueEqualTo(p.Value, other.Value)
+	push(p.Value, other.Value)
+	return true
 }
 
 // SchemeString returns the Scheme representation of the compile-time value.

@@ -279,3 +279,23 @@ func Test_SyntaxList(t *testing.T) {
 		})
 	}
 }
+
+// TestEqualTo_NonNilableKindDoesNotPanic pins that comparing the void singleton
+// against a different syntax value returns false rather than panicking.
+//
+// SyntaxVoid is a non-pointer SyntaxValue (syntaxVoidType{}). When the two values
+// are comparable but unequal, EqualTo fell through to reflect.Value.IsNil(), which
+// panics for any Kind that is not chan/func/interface/map/pointer/slice. EqualTo is
+// exported, so a Go host calls it outside every recover boundary.
+func TestEqualTo_NonNilableKindDoesNotPanic(t *testing.T) {
+	sym := NewSyntaxSymbol("x", nil)
+
+	qt.Assert(t, EqualTo(SyntaxVoid, sym), qt.IsFalse)
+	qt.Assert(t, EqualTo(sym, SyntaxVoid), qt.IsFalse)
+}
+
+// TestEqualTo_VoidEqualsVoid pins the from-below case: the comparable fast path
+// must still report two voids equal.
+func TestEqualTo_VoidEqualsVoid(t *testing.T) {
+	qt.Assert(t, EqualTo(SyntaxVoid, SyntaxVoid), qt.IsTrue)
+}

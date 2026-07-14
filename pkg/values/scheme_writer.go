@@ -75,6 +75,10 @@ type SchemeWriter struct {
 	seenPairs map[*Pair]int
 	// seenVectors maps vector pointers to their assigned label numbers.
 	seenVectors map[*Vector]int
+	// seenBoxes maps box pointers to their assigned label numbers. A Box is a
+	// mutable one-slot container, so set-box! can build a cycle through it
+	// exactly as set-car!/vector-set! can; it needs the same identity tracking.
+	seenBoxes map[*Box]int
 	// nextLabel is the next datum label number to assign.
 	nextLabel int
 	// needsLabelPair tracks which pairs need labels (referenced more than once).
@@ -82,6 +86,8 @@ type SchemeWriter struct {
 	needsLabelPair map[*Pair]bool
 	// needsLabelVector tracks which vectors need labels.
 	needsLabelVector map[*Vector]bool
+	// needsLabelBox tracks which boxes need labels.
+	needsLabelBox map[*Box]bool
 	// displayMode indicates whether to use display format (no quotes on strings).
 	displayMode bool
 	// writeMode controls whether to label all shared or only circular references.
@@ -100,8 +106,10 @@ func NewSchemeWriter() *SchemeWriter {
 	q := &SchemeWriter{
 		seenPairs:        make(map[*Pair]int),
 		seenVectors:      make(map[*Vector]int),
+		seenBoxes:        make(map[*Box]int),
 		needsLabelPair:   make(map[*Pair]bool),
 		needsLabelVector: make(map[*Vector]bool),
+		needsLabelBox:    make(map[*Box]bool),
 		nextLabel:        0,
 		writeMode:        WriteModeWrite,
 		maxDepth:         DefaultMaxWriteDepth,
@@ -133,8 +141,10 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	p.nextLabel = 0
 	p.seenPairs = make(map[*Pair]int)
 	p.seenVectors = make(map[*Vector]int)
+	p.seenBoxes = make(map[*Box]int)
 	p.needsLabelPair = make(map[*Pair]bool)
 	p.needsLabelVector = make(map[*Vector]bool)
+	p.needsLabelBox = make(map[*Box]bool)
 
 	// First pass: identify which objects are referenced multiple times. This
 	// is also the depth-enforcing pass — it is the first traversal to descend
@@ -154,6 +164,7 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	// Reset seen maps for the output pass
 	p.seenPairs = make(map[*Pair]int)
 	p.seenVectors = make(map[*Vector]int)
+	p.seenBoxes = make(map[*Box]int)
 
 	// Second pass: generate output with labels
 	q := &strings.Builder{}
@@ -224,6 +235,18 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 				return
 			}
 		}
+
+	case *Box:
+		if val == nil {
+			return
+		}
+		_, found := p.seenBoxes[val]
+		if found {
+			p.needsLabelBox[val] = true
+			return
+		}
+		p.seenBoxes[val] = -1
+		p.findShared(val.Value, depth+1)
 	}
 }
 
@@ -233,10 +256,13 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 func (p *SchemeWriter) filterToCircular(v Value) {
 	circularPairs := make(map[*Pair]bool)
 	circularVectors := make(map[*Vector]bool)
+	circularBoxes := make(map[*Box]bool)
 	onStackPairs := make(map[*Pair]bool)
 	onStackVectors := make(map[*Vector]bool)
+	onStackBoxes := make(map[*Box]bool)
 	visitedPairs := make(map[*Pair]bool)
 	visitedVectors := make(map[*Vector]bool)
+	visitedBoxes := make(map[*Box]bool)
 
 	var walk func(v Value)
 	walk = func(v Value) {
@@ -293,6 +319,22 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 				walk(elem)
 			}
 			delete(onStackVectors, val)
+
+		case *Box:
+			if val == nil {
+				return
+			}
+			if onStackBoxes[val] {
+				circularBoxes[val] = true
+				return
+			}
+			if visitedBoxes[val] {
+				return
+			}
+			visitedBoxes[val] = true
+			onStackBoxes[val] = true
+			walk(val.Value)
+			delete(onStackBoxes, val)
 		}
 	}
 
@@ -300,6 +342,7 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 
 	p.needsLabelPair = circularPairs
 	p.needsLabelVector = circularVectors
+	p.needsLabelBox = circularBoxes
 }
 
 // write outputs a value, handling cycles with datum labels.
@@ -309,6 +352,8 @@ func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 		p.writePair(sb, val)
 	case *Vector:
 		p.writeVector(sb, val)
+	case *Box:
+		p.writeBox(sb, val)
 	case *String:
 		// In display mode, strings are printed without quotes
 		if p.displayMode {
@@ -460,6 +505,32 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 		p.write(sb, elem)
 	}
 	sb.WriteString(")")
+}
+
+// writeBox writes a box with cycle detection, mirroring writeVector. Without
+// this arm the default write branch would fall through to Box.SchemeString,
+// whose recursion is not label-aware and overflows the host stack on a cycle.
+func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box) {
+	if bx == nil {
+		sb.WriteString("#<box:void>")
+		return
+	}
+
+	label, found := p.seenBoxes[bx]
+	if found && label >= 0 {
+		fmt.Fprintf(sb, "#%d#", label)
+		return
+	}
+
+	if p.needsLabelBox[bx] {
+		label := p.nextLabel
+		p.nextLabel++
+		p.seenBoxes[bx] = label
+		fmt.Fprintf(sb, "#%d=", label)
+	}
+
+	sb.WriteString("#&")
+	p.write(sb, bx.Value)
 }
 
 // WriteValueToString writes a Scheme value to a string with cycle detection.

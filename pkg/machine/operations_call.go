@@ -127,13 +127,7 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 		if r == nil {
 			return
 		}
-		var err error
-		switch v := r.(type) {
-		case error:
-			err = v
-		default:
-			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
-		}
+		err := werr.RecoverAsError(r, werr.ErrPanicRecovery, "foreign function call")
 		// bridgeForeignError passes VM signal types (prompt abort, exception escape,
 		// timer interrupt) through unchanged, and for a Scheme exception returns
 		// (mc, nil) when the in-place handler reconfigured mc to run inline so the VM

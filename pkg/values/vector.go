@@ -69,6 +69,12 @@ func (p *Vector) IsVoid() bool {
 // elements are equal (using recursive EqualTo comparison).
 // Returns false if the other value is not a Vector.
 func (p *Vector) EqualTo(v Value) bool {
+	return Equal(p, v)
+}
+
+// EqualComponents pushes the two vectors' corresponding elements for Equal to
+// compare, once the lengths agree.
+func (p *Vector) EqualComponents(v Value, push func(a, b Value)) bool {
 	other, ok := v.(*Vector)
 	if !ok {
 		return false
@@ -80,9 +86,7 @@ func (p *Vector) EqualTo(v Value) bool {
 		return false
 	}
 	for i := range *p {
-		if !EqualTo((*p)[i], (*other)[i]) {
-			return false
-		}
+		push((*p)[i], (*other)[i])
 	}
 	return true
 }

@@ -28,6 +28,28 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+// maxLocalSlots is the largest slot index a frame may allocate. A LocalIndex is
+// bit-packed into an int32 as (depth<<16 | slot&0xFFFF), so a slot must fit an
+// int16. See machine.EncodeLocalIndex.
+const maxLocalSlots = 32767
+
+// checkLocalSlotCapacity reports a compile error when a frame needs more local
+// slots than the De Bruijn encoding can address.
+//
+// The frame-building sites own this check because they are the only places that
+// know the total slot count before any Load/StoreLocal is emitted. Past that
+// point the count is only discoverable inside machine.EncodeLocalIndex, which is
+// reached through the 107-call-site AppendOperations path and cannot return an
+// error. EncodeLocalIndex keeps its panic as an internal invariant backstop; this
+// guard is what keeps user-reachable input from ever tripping it.
+func checkLocalSlotCapacity(slots int, form string) error {
+	if slots <= maxLocalSlots {
+		return nil
+	}
+	return werr.WrapForeignErrorf(machine.ErrLocalIndexOverflow,
+		"compile %s: frame requires %d locals, maximum %d", form, slots, maxLocalSlots)
+}
+
 // compileClosureBody binds parameters, compiles the body, optimizes, and registers
 // the template and environment as literals. Returns the literal indices so the
 // caller can emit the appropriate closure opcodes.
@@ -74,6 +96,11 @@ func (p *CompileTimeContinuation) compileClosureBody(
 		}
 	}
 
+	err := checkLocalSlotCapacity(len(lenv.Bindings()), errContext)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	// Phase 3: Create child environment and register literals.
 	// lenv must be fully populated before NewEnvironmentFrameWithParent (embeds by value).
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
@@ -82,7 +109,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 
 	// Phase 4: Compile body expressions into child template. The last expression
 	// is compiled in tail position for proper tail-call optimization.
-	err := p.compileBody(ctctx, v, childEnv, tpl, fr)
+	err = p.compileBody(ctctx, v, childEnv, tpl, fr)
 	if err != nil {
 		return 0, 0, err
 	}

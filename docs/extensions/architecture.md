@@ -379,6 +379,40 @@ return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
     "my-fn: expected 2 arguments, got %d", n)
 ```
 
+### Recursive Value Types MUST Implement `DeepEqualer`
+
+An extension-defined `values.Value` that can **contain other values** — anything
+a cycle could run through — must implement `values.DeepEqualer`:
+
+```go
+type DeepEqualer interface {
+    EqualComponents(other values.Value, push func(a, b values.Value)) bool
+}
+```
+
+`values.Equal` (which backs Scheme `equal?`) owns an explicit heap worklist and a
+visited set. It decomposes containers by calling `EqualComponents`, so no input
+can overflow the Go stack. An implementor decides only whether the two containers
+are *shaped* alike (same type, same length, same record type) and `push`es the
+component pairs; it must **not** compare components itself, and must not call
+`EqualTo` on them — that puts the recursion back on the Go stack, which is the
+whole thing the interface removes.
+
+A recursive value type that does **not** implement `DeepEqualer` is compared
+through its own `EqualTo`. If that `EqualTo` recurses, `equal?` on a cyclic
+instance is a Go `fatal error: stack overflow` — which `recover()` **cannot**
+catch, so it kills the embedding host process. Core containers (`*Pair`,
+`*Vector`, `*Record`, `*Hashtable`, `*Box`, `*CompileTimeValue`) all implement it;
+extension types are the remaining exposure, and only the extension author can
+close it.
+
+Values that cannot contain other values (a handle, a wrapped `int`, an opaque Go
+struct) are leaves and need nothing.
+
+The same reasoning applies to `SchemeString()`: a container that renders its
+contents must route children through the writer's cycle-aware path rather than
+calling `SchemeString()` on them directly.
+
 ---
 
 ## RegisterFunc: Go Functions as Scheme Primitives

@@ -456,20 +456,30 @@ func (p *MachineContext) Run() error {
 				// Bridged to an in-place handler that reconfigured mc; re-dispatch into it.
 				continue
 			}
+			// checkStackSize runs INSIDE the callback, not after the spread. Run
+			// after, it bounds only the final size: a long argument list is fully
+			// pushed first, so the eval stack's peak is the list's length regardless
+			// of maxStackSize, and the limit means nothing until the damage is done.
+			// Checked per element, growth is bounded as it happens.
 			err := values.ForEachProperList(mc.ctx, tup, "apply", func(_ context.Context, _ int, _ bool, elem values.Value) error {
 				mc.evals.Push(elem)
-				return nil
+				return mc.checkStackSize()
 			})
 			if err != nil {
+				// A resource-limit breach (stack overflow, ctx deadline) is not a
+				// Scheme condition: it must reach the Go caller, not the in-place
+				// handler that applyCallableError would dispatch to. Only the
+				// not-a-proper-list error is a Scheme-level condition.
+				if errors.Is(err, werr.ErrStackOverflow) ||
+					errors.Is(err, context.Canceled) ||
+					errors.Is(err, context.DeadlineExceeded) {
+					return err
+				}
 				rerr := applyCallableError(mc, err)
 				if rerr != nil {
 					return rerr
 				}
 				continue
-			}
-			err = mc.checkStackSize()
-			if err != nil {
-				return err
 			}
 			mc.pc++
 
@@ -1423,13 +1433,10 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		if r == nil {
 			return
 		}
-		err, ok := r.(error)
-		if !ok {
-			// A non-error panic value (panic("...") / panic(42)). Carry its text
-			// under an internal-error sentinel so it, too, stays within the VM
-			// boundary as a matchable, wrapped error.
-			err = werr.WrapForeignErrorf(werr.ErrInternal, "non-error panic value: %v", r)
-		}
+		// A non-error panic value (panic("...") / panic(42)) carries its text under
+		// an internal-error sentinel so it, too, stays within the VM boundary as a
+		// matchable, wrapped error.
+		err := werr.RecoverAsError(r, werr.ErrInternal, "")
 		// Fold the recovered error's text into the message. SchemeError.Error()
 		// renders Message + source + trace but NOT Cause, so without this the
 		// printed error would read only "recovered panic" and the real detail

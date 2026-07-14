@@ -44,6 +44,7 @@ var (
 	ErrNotAReal               = NewTypeSentinel("real number")
 	ErrDivisionByZero         = NewStaticError("division by zero")
 	ErrNotAList               = NewTypeSentinel("list")
+	ErrCircularList           = NewStaticError("circular list")
 	ErrNotACloseParen         = NewStaticError("not a close parenthesis")
 	ErrDatumLabelUndefined    = NewStaticError("undefined datum label")
 	ErrWrongNumberOfArguments = NewStaticError("wrong number of arguments")
