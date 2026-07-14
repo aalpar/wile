@@ -102,10 +102,11 @@ var EOFObject Value = eofType{}
 //
 // R7RS §6.1 defines eq?/eqv? on aggregates as "denote the same location in the
 // store." A Scheme object must therefore HAVE a location, and Wile spells that as
-// Go pointer identity: EqIdentity (utils.go) is a bare `a == b` on the interface,
-// and it backs eq?, memq, and assq — the hot path. Go panics with "comparing
-// uncomparable type" when the dynamic type behind an interface is a slice, map,
-// or func. Not an error return: a panic, in the embedder's process.
+// Go pointer identity: EqIdentity (utils.go) special-cases *Symbol (compared by
+// Key, since interning was removed) and otherwise falls through to a bare `a == b`
+// on the interface. It backs eq?, memq, and assq — the hot path. Go panics with
+// "comparing uncomparable type" when the dynamic type behind an interface is a
+// slice, map, or func. Not an error return: a panic, in the embedder's process.
 //
 // The RECEIVER, not the underlying type, decides. Vector is []Value and it is
 // perfectly safe, because its methods take POINTER receivers — the dynamic type
@@ -116,9 +117,11 @@ var EOFObject Value = eofType{}
 //	type MyThing []Value        // with VALUE receivers: eq? panics on it
 //	type MyThing struct{ … }    // with POINTER receivers: *MyThing is comparable, safe
 //
-// Enforced by TestValue_ImplementorsAreGoComparable over allValueExemplars
-// (values) and TestMachineValues_AreGoComparable (machine). A type that
-// implements Value and is absent from those rosters is unguarded.
+// Enforced MODULE-WIDE by TestValue_AllImplementorsAreGoComparable, which
+// type-checks every implementing package with go/types and asserts
+// types.Comparable on each of the ~130 implementors. There is no roster to keep
+// up to date and nothing is exempt: add a non-comparable Value anywhere in the
+// module and that test fails.
 //
 // If your type is not a Scheme datum — a compiler or VM container that merely
 // wanted SchemeString for diagnostics — do not implement Value at all. Having an
