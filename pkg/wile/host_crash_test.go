@@ -16,10 +16,12 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -198,4 +200,67 @@ func TestHostCrash_VectorCopyValidDestinationStillWorks(t *testing.T) {
 
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.SchemeString(), qt.Equals, "#(1 8 9)")
+}
+
+// TestHostCrash_FFINonForeignErrorPanicKeepsSentinel is the discriminating case for
+// ffi_wrapper.go:44.
+//
+// The wrapper returned only *werr.ForeignError and re-panicked everything else as
+// panic(fmt.Sprintf("FFI %q: %v", ...)). The stringified re-panic is caught downstream
+// by operations_call.go:126, so the panic's *text* survives and a message assertion
+// cannot see the bug. What does not survive is the error's identity: any error that is
+// not a *ForeignError, such as a bare sentinel, is flattened to a string and
+// errors.Is stops matching. That is the lossless-chain rule broken at a boundary
+// whose whole job is to carry Go errors into the VM.
+//
+// The re-raise also implements a policy reversed on 2026-06-23: the VM boundary
+// contains every panic, so the wrapper has nothing to re-raise for.
+func TestHostCrash_FFINonForeignErrorPanicKeepsSentinel(t *testing.T) {
+	eng := newTestEngine(t)
+
+	sentinel := werr.NewStaticError("ffi bare sentinel")
+	err := eng.RegisterFunc("boom", func() int {
+		panic(sentinel)
+	})
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalMultiple(context.Background(), `(boom)`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, sentinel), qt.IsTrue,
+		qt.Commentf("a non-ForeignError sentinel must survive the FFI boundary, not be stringified"))
+}
+
+// TestHostCrash_FFIForeignErrorPanicKeepsSentinel pins the path that already worked,
+// so the fix cannot regress it.
+func TestHostCrash_FFIForeignErrorPanicKeepsSentinel(t *testing.T) {
+	eng := newTestEngine(t)
+
+	sentinel := werr.NewStaticError("ffi wrapped sentinel")
+	err := eng.RegisterFunc("boom2", func() int {
+		panic(werr.WrapForeignErrorf(sentinel, "deliberate"))
+	})
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalMultiple(context.Background(), `(boom2)`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, sentinel), qt.IsTrue)
+}
+
+// TestHostCrash_FFINonErrorPanicNamesTheFunction pins that a panic("...") still
+// reports which FFI function blew up. The name is the only locator a Go host gets.
+func TestHostCrash_FFINonErrorPanicNamesTheFunction(t *testing.T) {
+	eng := newTestEngine(t)
+
+	err := eng.RegisterFunc("boom3", func() int {
+		panic("go side exploded")
+	})
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalMultiple(context.Background(), `(boom3)`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Contains, "go side exploded")
+	qt.Assert(t, err.Error(), qt.Contains, "boom3")
 }
