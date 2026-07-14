@@ -90,8 +90,18 @@ func registerValidator(name string, fn validatorFunc) {
 }
 
 // registerPassthrough registers a form that passes through as ValidatedLiteral.
+//
+// The form's body is code this package never validates — it is compiled later, in
+// its own unit — so every name it mentions is recorded as a possible set! target
+// before the form is parked. Discarding env and result here (which this function
+// used to do) is what let a set! or a capture inside a passthrough body go unseen
+// by escape, mutable and StableInUnit marking. See opaque_subtree.go.
 func registerPassthrough(name string) {
-	forms.RegisterValidator(name, func(_ context.Context, _ *environment.EnvironmentFrame, pair *syntax.SyntaxPair, _ any) forms.ValidatedExpr {
+	forms.RegisterValidator(name, func(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result any) forms.ValidatedExpr {
+		res, ok := result.(*ValidationResult)
+		if ok {
+			markOpaqueSubtree(env, pair, res)
+		}
 		return newLiteralExpr(pair.SourceContext(), pair)
 	})
 }
