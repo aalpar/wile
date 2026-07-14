@@ -16,6 +16,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`equal?` is no longer finer than `eqv?`.** R7RS §6.1 orders the equivalence
+  predicates by coarseness — `eq?` ⊆ `eqv?` ⊆ `equal?` — and each must answer `#t`
+  wherever the finer one does. `equal?` fell *below* `eqv?` on NaN: `eqv?` settles
+  identity before inspecting the value, but `equal?` went straight to
+  `Float.EqualTo`, which compares values, and IEEE-754 says `NaN != NaN`. The
+  damage was concrete, not philosophical — `member`/`assoc` are `equal?`-based
+  while `memv`/`assv` are `eqv?`-based, so `(member x (list 1 x 2))` could not find
+  the very object it was handed. `equal?` also disagreed with itself by nesting
+  depth: `(equal? x x)` was `#f` while `(equal? (list x) (list x))` was `#t`.
+  Reflexivity is now established inside each NaN-capable numeric `EqualTo`
+  (`Float`, `BigFloat`, `Complex`, `BigComplex`). Distinct NaN objects still
+  compare `#f` (matching `eqv?`), `equal?` remains coarser than `eqv?` on strings
+  and lists, and numeric `=` keeps IEEE-754 semantics unchanged — it is a different
+  predicate, and conflating it with the equivalence relation was the bug.
+- **A recovered Go panic now carries its site's sentinel.** `werr.RecoverAsError`
+  returned an error-typed panic value unchanged, so the sentinel only ever reached
+  *non-error* panics. A Go runtime fault inside foreign code (nil dereference, index
+  out of range) arrives as a `runtime.Error`, which satisfies `error` — it therefore
+  carried no `ErrPanicRecovery` and no site attribution, and reached Scheme
+  indistinguishable from a deliberate `(error "…")`. `errors.Is(err,
+  ErrPanicRecovery)` could not match a real panic. The value is now chained as a
+  cause, which preserves the `errors.As` routing that VM signal types (prompt abort,
+  exception escape, timer interrupt, continuation resume) depend on.
+- **`equal?` no longer panics on a non-comparable operand.** `values.Equal` formed
+  its visited-set key before validating the right-hand operand. The key is a map
+  key, and hashing a non-comparable dynamic type panics — a stronger requirement
+  than the identity compare above it, which only faults when *both* types match. A
+  container compared against a slice-backed `Value` therefore panicked inside the
+  map lookup. (`machine.Operations` is `[]Operation`, so this was reachable in-tree,
+  not merely through the embedding API.)
+- **`syntax-local-introduce` fails honestly.** Nothing sets an introduction scope, so
+  the primitive could never succeed, yet its docstring advertised working behavior
+  with a worked example. It now reports `werr.ErrNotImplemented` (a new sentinel;
+  the previous `ErrNoCaptureContext` misdescribed a wiring gap as a runtime
+  condition) and says so in its documentation.
+- **`SyntaxVector.ForEach` honors context cancellation.** It accepted a `ctx` it never
+  read — the same shape that let `apply` ignore cancellation.
+- **Stale doc comments** on `Vector.EqualTo` and `Hashtable.EqualTo`, which still
+  described the recursive comparison that the iterative worklist replaced.
+
 ## [1.18.0] - 2026-07-09
 
 ### Added
