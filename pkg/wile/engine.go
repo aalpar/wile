@@ -991,7 +991,28 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 // expandAndCompileOptimized runs the expand → compile → optimize pipeline for a
 // single syntax value. Thin wrapper around compilation.ExpandAndCompile that adds
 // the Optimize() call used by the public Engine API.
-func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
+func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int, maxExpandDepth int) (q *machine.NativeTemplate, rerr error) {
+	// Containment boundary for the compile verb. This is the single funnel for Eval,
+	// EvalMultiple, and Compile, and the only caller of tpl.Optimize(), so the
+	// peephole optimizer is covered too.
+	//
+	// Placed here rather than in compilation.ExpandAndCompile for the same reason as
+	// the parse boundary: a compile-time panic is a Wile bug, and containing it
+	// deeper would hide our defects from `go test ./pkg/machine/...`. A host driving
+	// pkg/machine directly is unprotected — narrow, documented, and the
+	// ExpandAndCompile seam stays available if someone asks for it.
+	//
+	// After the frame-slot guard (compile_closure.go), no valid input reaches a panic
+	// here. This is a backstop for future bugs, not a fix for a live one.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		q = nil
+		rerr = wrapCompilationError("compile error", werr.RecoverAsError(r, werr.ErrInternal, "compile"))
+	}()
+
 	tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
 	if err != nil {
 		return nil, err
