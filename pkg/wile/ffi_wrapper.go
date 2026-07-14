@@ -37,11 +37,13 @@ func (p *ffiSpec) makeWrapper() ForeignFunction {
 			}
 			// Return the panic as an error rather than re-raising it. The VM's
 			// foreign-call dispatcher routes a returned error through
-			// bridgeForeignError exactly as it routes a recovered panic, so VM signal
-			// types (prompt abort, exception escape, timer interrupt) still reach the
-			// bridge unchanged. Re-raising discarded the identity of any error that
-			// was not a *werr.ForeignError: errors.Is stopped matching once the value
-			// was flattened into a fmt.Sprintf string.
+			// bridgeForeignError exactly as it routes a recovered panic, and the
+			// ErrPanicRecovery wrap is transparent to that routing: bridgeForeignError
+			// matches VM signal types (prompt abort, exception escape, timer interrupt,
+			// continuation resume) with errors.As, which traverses the cause chain.
+			// The wrap is what makes a Go runtime fault in the host's function —
+			// a runtime.Error, and so already an error — carry the sentinel and this
+			// function's name rather than reaching Scheme as an anonymous condition.
 			returnErr = werr.RecoverAsError(r, werr.ErrPanicRecovery,
 				fmt.Sprintf("FFI %q", p.name))
 		}()

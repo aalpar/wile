@@ -66,8 +66,12 @@ func (p *Vector) IsVoid() bool {
 
 // EqualTo implements structural equality for vectors.
 // Two vectors are equal if they have the same length and all corresponding
-// elements are equal (using recursive EqualTo comparison).
-// Returns false if the other value is not a Vector.
+// elements are equal. Returns false if the other value is not a Vector.
+//
+// The comparison is delegated to Equal, whose traversal is ITERATIVE: elements
+// are drained from a heap worklist, not by recursive EqualTo calls, so a deeply
+// nested or cyclic vector cannot overflow the Go stack. EqualComponents below is
+// this type's whole contribution to it.
 func (p *Vector) EqualTo(v Value) bool {
 	return Equal(p, v)
 }

@@ -608,21 +608,21 @@ func PrimMakeCompileTimeValue(mc machine.CallContext) error {
 }
 
 // PrimSyntaxLocalIntroduce implements the syntax-local-introduce primitive.
-// Flips the introduction scope on a syntax object.
-// (syntax-local-introduce stx) -> stx
+// (syntax-local-introduce stx) -> error
 //
-// This primitive toggles the "introduction scope" on a syntax object.
-// The introduction scope is added to identifiers introduced by a macro.
-// By flipping it, you can make an introduced identifier behave as if it
-// came from the macro use site (or vice versa).
+// NOT IMPLEMENTED: this primitive is registered and callable but always fails
+// with werr.ErrNotImplemented. The scope-flipping branch below is unreachable
+// because ExpanderContext.IntroductionScope() is never set — see the comment at
+// the nil check for why wiring it is not a one-liner.
 //
-// Use cases:
-//   - Breaking hygiene intentionally (anaphoric macros)
-//   - Making macro-introduced bindings visible at the use site
-//   - Implementing advanced macro patterns like syntax-parameterize
+// It is kept registered, rather than deleted, so that a program calling it gets
+// a diagnosis instead of an unbound-variable error, and so the intended
+// semantics stay documented in one place:
 //
-// This primitive can only be called during macro expansion (when an
-// ExpanderContext is set on the MachineContext with an introduction scope).
+// Flipping the "introduction scope" on a syntax object makes a
+// macro-introduced identifier behave as if it came from the macro use site (or
+// vice versa) — the mechanism behind anaphoric macros, use-site-visible
+// bindings, and syntax-parameterize.
 func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "syntax-local-introduce")
 	if err != nil {
@@ -653,7 +653,7 @@ func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 		// transform op, and syntax-case), so "store one scope on the context and flip
 		// it" cannot be correct — there is no single scope to store. Until the context
 		// carries the invocation's actual scope, say so instead of lying.
-		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext,
+		return werr.WrapForeignErrorf(werr.ErrNotImplemented,
 			"syntax-local-introduce: no introduction scope is available on the expander "+
 				"context; this primitive is not wired to the per-invocation intro scopes "+
 				"and cannot flip hygiene")

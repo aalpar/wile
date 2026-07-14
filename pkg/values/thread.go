@@ -244,11 +244,11 @@ func (p *Thread) Start(parentCtx context.Context) error {
 			if r != nil {
 				p.mu.Lock()
 				p.state = ThreadTerminated
-				// The outer wrap supplies the ErrThreadPanic identity, so the cause
-				// only needs a sentinel for the non-error case. Chaining it as a cause
-				// rather than inlining its text keeps the chain traversable.
-				cause := werr.RecoverAsError(r, werr.ErrInternal, "thread panic value")
-				p.outcome = &threadOutcome{err: werr.WrapForeignErrorWithCause(werr.ErrThreadPanic, cause, "thread %q: panic recovery", p.name)}
+				// RecoverAsError applies the sentinel to error and non-error panic
+				// values alike, chaining an error one as the cause, so this is the
+				// whole of the identity the outcome needs: no second wrap, and no
+				// ErrInternal layered under ErrThreadPanic for a runtime fault.
+				p.outcome = &threadOutcome{err: werr.RecoverAsError(r, werr.ErrThreadPanic, fmt.Sprintf("thread %q", p.name))}
 				p.mu.Unlock()
 			}
 		}()

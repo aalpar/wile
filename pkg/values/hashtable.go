@@ -68,7 +68,11 @@ func (p *Hashtable) IsVoid() bool {
 }
 
 // EqualTo returns true if both hash tables have equal contents.
-// Uses structural equality (EqualTo) for both keys and values.
+//
+// Keys and values take different routes, and the asymmetry is deliberate: keys
+// are matched inside EqualComponents (a key is always a leaf — see below), while
+// values are pushed onto Equal's iterative worklist, since a value may be a
+// container and may be cyclic.
 func (p *Hashtable) EqualTo(o Value) bool {
 	return Equal(p, o)
 }
