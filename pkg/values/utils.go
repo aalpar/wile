@@ -127,6 +127,14 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			visited = make(map[Value]bool)
 		}
 		return c.schemeStringWithVisited(visited, depth)
+	case *Box:
+		if c == nil {
+			return "#<box:void>"
+		}
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited, depth)
 	}
 	if IsVoid(child) {
 		return "#<void>"
@@ -272,38 +280,10 @@ func NthCons(lst Value, n int64, name string) (Value, error) {
 	return current, nil
 }
 
-// equalPairKey identifies a pair of compound values being compared.
-// Go compares interface values in arrays by type and pointer for pointer types,
-// so [2]any{pairA, pairB} works as a map key without unsafe.
-type equalPairKey [2]Value
-
-// wrapperValueEqualTo compares two optional Value fields for structural equality.
-// Used by wrapper types (Box, CompileTimeValue) whose EqualTo delegates to inner values.
-func wrapperValueEqualTo(pVal, oVal Value) bool {
-	if pVal == oVal {
-		return true
-	}
-	if pVal == nil || oVal == nil {
-		return false
-	}
-	return pVal.EqualTo(oVal)
-}
-
-// EqualTo compares two values for structural equality.
-// Handles nil and void values specially: nil equals nil, void equals void.
-// For compound types (Pair, Vector), uses optimistic bisimilarity
-// with a visited set to terminate on circular structures per R7RS §6.1.
-// This is the same technique used by Chez Scheme and Racket: when a
-// (pointer-a, pointer-b) pair is re-encountered during recursion, return true.
+// EqualTo compares two values for structural equality (R7RS equal?).
+// It is the package-level spelling of Equal; see equal.go for the traversal.
 func EqualTo(a, b Value) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	if a.IsVoid() || b.IsVoid() {
-		return a.IsVoid() == b.IsVoid()
-	}
-	visited := make(map[equalPairKey]bool)
-	return equalToDeep(a, b, visited)
+	return Equal(a, b)
 }
 
 // EqIdentity implements R7RS eq? semantics: pointer identity for all types
@@ -322,158 +302,6 @@ func EqIdentity(a, b Value) bool {
 		return false
 	}
 	return a == b
-}
-
-// equalToDeep dispatches compound types to cycle-aware helpers,
-// and delegates everything else to a.EqualTo(b).
-//
-// Bisimulation equivalence (Milner 1989). equal? on cyclic structures
-// is the greatest fixpoint of the structural matching relation.
-//
-//	R = gfp(F) where F(R) = { (a,b) : structure(a) matches structure(b)
-//	                           under R for all sub-components }
-//
-//	visited : map[equalPairKey]bool implements the coinductive hypothesis.
-//	When (ptr(a), ptr(b)) ∈ visited, return true (optimistic assumption).
-//	This correctly computes gfp because the greatest fixpoint is the
-//	union of all consistent relations.
-//
-//	Invariant: visited keys are pointer pairs, not structural. Two
-//	  distinct objects with identical structure are compared structurally,
-//	  not short-circuited by visited.
-//	Constrains: pairEqualToDeep, vectorEqualToDeep (must propagate
-//	  visited through recursive calls).
-//	Constrained by: EqualTo (top-level entry creates the visited map),
-//	  Hashable contract (equal values must hash identically — the hash
-//	  function cannot depend on pointer identity).
-//
-// See BIBLIOGRAPHY.md "Bisimulation Equivalence for equal?".
-func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	if a.IsVoid() || b.IsVoid() {
-		return a.IsVoid() == b.IsVoid()
-	}
-	switch pa := a.(type) {
-	case *Pair:
-		// Must check concrete *Pair type, not Tuple interface
-		pb, ok := b.(*Pair)
-		if !ok {
-			return false
-		}
-		return pairEqualToDeep(pa, pb, visited)
-	case *Vector:
-		pb, ok := b.(*Vector)
-		if !ok {
-			return false
-		}
-		return vectorEqualToDeep(pa, pb, visited)
-	default:
-		return a.EqualTo(b)
-	}
-}
-
-// compareIndexable is a generic helper for comparing indexable collections with
-// cycle detection. Used by vectorEqualToDeep and arrayListEqualToDeep.
-func compareIndexable[T Value](
-	a, b T,
-	length func(T) int,
-	getElement func(T, int) Value,
-	checkVoid func(T, int) bool,
-	visited map[equalPairKey]bool,
-) bool {
-	// Use type-erased pointers as map keys
-	aPtr := a
-	bPtr := b
-
-	if length(a) != length(b) {
-		return false
-	}
-	key := equalPairKey{aPtr, bPtr}
-	if visited[key] {
-		return true
-	}
-	visited[key] = true
-
-	for i := 0; i < length(a); i++ {
-		// Handle void elements if applicable
-		if checkVoid != nil {
-			aVoid := checkVoid(a, i)
-			bVoid := checkVoid(b, i)
-			if aVoid || bVoid {
-				if aVoid && bVoid {
-					continue
-				}
-				return false
-			}
-		}
-		if !equalToDeep(getElement(a, i), getElement(b, i), visited) {
-			return false
-		}
-	}
-	return true
-}
-
-// pairEqualToDeep compares two Pairs with cycle detection.
-// Mirrors the iterative structure of Pair.EqualTo but records visited
-// pointer pairs and recurses elements via equalToDeep.
-//
-// Implementation note: Must use *Pair (not Tuple) for two reasons:
-// 1. Cycle detection via pointer identity comparison (p == v, p0 == v0)
-// 2. Map keys require concrete type (equalPairKey uses [2]Value with *Pair pointers)
-func pairEqualToDeep(p, v *Pair, visited map[equalPairKey]bool) bool {
-	if p == v {
-		return true
-	}
-	p0 := p
-	v0 := v
-	for {
-		key := equalPairKey{p0, v0}
-		if visited[key] {
-			return true
-		}
-		visited[key] = true
-
-		if !equalToDeep(p0.Car(), v0.Car(), visited) {
-			return false
-		}
-		// nil/void cdr: a pair constructed with nil cdr (instead of EmptyList)
-		// is malformed but must be handled. Two nil cdrs are equal; a nil cdr
-		// and a non-nil cdr are not.
-		if IsVoid(p0.Cdr()) || IsVoid(v0.Cdr()) {
-			if IsVoid(p0.Cdr()) && IsVoid(v0.Cdr()) {
-				return true
-			}
-			return p0.Cdr() == v0.Cdr()
-		}
-		if p0.Cdr() == v0.Cdr() {
-			return true
-		}
-		// Type assertions to *Pair required for iterative traversal with pointer
-		// identity comparison for cycle detection.
-		pv0, _ := p0.Cdr().(*Pair)
-		vv0, _ := v0.Cdr().(*Pair)
-		if pv0 == nil || vv0 == nil {
-			return equalToDeep(p0.Cdr(), v0.Cdr(), visited)
-		}
-		p0 = pv0
-		v0 = vv0
-	}
-}
-
-// vectorEqualToDeep compares two Vectors with cycle detection.
-func vectorEqualToDeep(p, other *Vector, visited map[equalPairKey]bool) bool {
-	if p == nil || other == nil {
-		return p == other
-	}
-	return compareIndexable(
-		p, other,
-		func(v *Vector) int { return len(*v) },
-		func(v *Vector, i int) Value { return (*v)[i] },
-		nil, // Vectors don't have void elements
-		visited,
-	)
 }
 
 // NewTemporaryVariableName generates a unique symbol for use as a temporary variable.

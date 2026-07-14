@@ -17,6 +17,7 @@ package values
 import (
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -39,7 +40,16 @@ type hashtableEntry struct {
 // Keys must implement the Hashable interface (Value + HashCode()).
 // Uses bucket chaining with FNV-1a hashing for O(1) amortized operations
 // and EqualTo() for key comparison within buckets.
+//
+// Concurrency: a Hashtable is a Scheme-level value that SRFI-18 threads can
+// share, so every operation is guarded by mu. Readers that must run user code
+// or render nested values (Entries, EqualComponents, SchemeString) take a
+// snapshot under the lock and release it before doing so: holding the lock
+// across a callback would deadlock on a self-referential table, and holding two
+// tables' locks at once during comparison would need a lock ordering. With
+// snapshots, neither hazard exists.
 type Hashtable struct {
+	mu      sync.RWMutex
 	buckets map[uint64][]hashtableEntry
 	size    int
 }
@@ -60,23 +70,36 @@ func (p *Hashtable) IsVoid() bool {
 // EqualTo returns true if both hash tables have equal contents.
 // Uses structural equality (EqualTo) for both keys and values.
 func (p *Hashtable) EqualTo(o Value) bool {
+	return Equal(p, o)
+}
+
+// EqualComponents pairs this table's entries against the other's by key, then
+// pushes the matched VALUES for Equal to compare. Keys are matched here rather
+// than pushed because a key is always a leaf: no container type implements
+// Hashable, so a key cannot carry a cycle. TestNoContainerIsHashable pins that
+// invariant — adding HashCode() to *Pair or *Vector (what R6RS
+// make-equal-hashtable wants) would put recursion back on the Go stack here.
+//
+// Both tables are read through snapshots, each taken under its own lock, so no
+// lock is held during the comparison and two tables never lock at once.
+func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 	v, ok := o.(*Hashtable)
 	if !ok {
 		return false
 	}
-	if p.size != v.size {
+	if p == nil || v == nil {
+		return p == v
+	}
+	entries := p.snapshot()
+	if len(entries) != v.Size() {
 		return false
 	}
-	for _, bucket := range p.buckets {
-		for _, entry := range bucket {
-			vval, found := v.get(entry.key)
-			if !found {
-				return false
-			}
-			if !entry.value.EqualTo(vval) {
-				return false
-			}
+	for _, entry := range entries {
+		vval, found := v.get(entry.key)
+		if !found {
+			return false
 		}
+		push(entry.value, vval)
 	}
 	return true
 }
@@ -108,11 +131,9 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) s
 
 	q := &strings.Builder{}
 	q.WriteString("#hash(")
-	// Collect all entries and sort for deterministic output.
-	entries := make([]hashtableEntry, 0, p.size)
-	for _, bucket := range p.buckets {
-		entries = append(entries, bucket...)
-	}
+	// Snapshot, then render: schemeStringChild can recurse back into this same
+	// table through a cycle, so no lock may be held across it.
+	entries := p.snapshot()
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].key.SchemeString() < entries[j].key.SchemeString()
 	})
@@ -130,8 +151,10 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) s
 	return q.String()
 }
 
-// get is the internal lookup used by EqualTo and other methods.
+// get is the internal lookup used by EqualComponents and other methods.
 func (p *Hashtable) get(key Hashable) (Value, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	h := key.HashCode()
 	bucket := p.buckets[h]
 	for _, e := range bucket {
@@ -140,6 +163,19 @@ func (p *Hashtable) get(key Hashable) (Value, bool) {
 		}
 	}
 	return nil, false
+}
+
+// snapshot copies every entry out from under the read lock. Callers that must
+// run user code, render nested values, or touch a second table do so against
+// the snapshot, with no lock held. See the Hashtable type comment.
+func (p *Hashtable) snapshot() []hashtableEntry {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]hashtableEntry, 0, p.size)
+	for _, bucket := range p.buckets {
+		q = append(q, bucket...)
+	}
+	return q
 }
 
 // Get retrieves the value associated with key.
@@ -161,6 +197,8 @@ func (p *Hashtable) Set(key Value, val Value) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	h := hk.HashCode()
 	bucket := p.buckets[h]
 	for i, e := range bucket {
@@ -192,6 +230,8 @@ func (p *Hashtable) Delete(key Value) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	h := hk.HashCode()
 	bucket := p.buckets[h]
 	for i, e := range bucket {
@@ -211,14 +251,13 @@ func (p *Hashtable) Delete(key Value) error {
 // returning the projections as a proper list. Keys and Values differ only
 // in which entry field they read.
 func (p *Hashtable) collectEntries(project func(e hashtableEntry) Value) Tuple {
-	if p.size == 0 {
+	entries := p.snapshot()
+	if len(entries) == 0 {
 		return EmptyList
 	}
-	out := make([]Value, 0, p.size)
-	for _, bucket := range p.buckets {
-		for _, e := range bucket {
-			out = append(out, project(e))
-		}
+	out := make([]Value, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, project(e))
 	}
 	return List(out...)
 }
@@ -239,11 +278,15 @@ func (p *Hashtable) Values() Tuple {
 
 // Size returns the number of entries in the hash table.
 func (p *Hashtable) Size() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.size
 }
 
 // Copy returns a shallow copy of the hash table.
 func (p *Hashtable) Copy() *Hashtable {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	q := &Hashtable{
 		buckets: make(map[uint64][]hashtableEntry, len(p.buckets)),
 		size:    p.size,
@@ -258,6 +301,8 @@ func (p *Hashtable) Copy() *Hashtable {
 
 // Clear removes all entries from the hash table.
 func (p *Hashtable) Clear() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.buckets = make(map[uint64][]hashtableEntry)
 	p.size = 0
 }
@@ -265,13 +310,16 @@ func (p *Hashtable) Clear() {
 // Entries iterates over all entries in the hash table, calling fn for each
 // key-value pair. Iteration stops early if fn returns a non-nil error.
 // This is more efficient than Keys()+Get() as it avoids intermediate allocations.
+//
+// fn runs against a snapshot, with no lock held: it may be Scheme code that
+// reads or mutates this same table (hashtable-walk), which would deadlock if
+// the read lock were held across the call. The snapshot is the iteration's
+// view; entries added concurrently are not visited.
 func (p *Hashtable) Entries(fn func(key Hashable, value Value) error) error {
-	for _, bucket := range p.buckets {
-		for _, e := range bucket {
-			err := fn(e.key, e.value)
-			if err != nil {
-				return err
-			}
+	for _, e := range p.snapshot() {
+		err := fn(e.key, e.value)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

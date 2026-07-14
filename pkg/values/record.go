@@ -98,6 +98,14 @@ func (p *Record) IsVoid() bool {
 // EqualTo implements structural equality for records.
 // Two records are equal if they have the same type and all fields are equal.
 func (p *Record) EqualTo(v Value) bool {
+	return Equal(p, v)
+}
+
+// EqualComponents pushes the two records' corresponding fields for Equal to
+// compare, once the record types and field counts agree. A record field is
+// mutable, so a record can hold itself; Equal's visited set closes the cycle
+// that used to overflow the host stack here.
+func (p *Record) EqualComponents(v Value, push func(a, b Value)) bool {
 	other, ok := v.(*Record)
 	if !ok {
 		return false
@@ -112,9 +120,7 @@ func (p *Record) EqualTo(v Value) bool {
 		return false
 	}
 	for i := range p.fields {
-		if !EqualTo(p.fields[i], other.fields[i]) {
-			return false
-		}
+		push(p.fields[i], other.fields[i])
 	}
 	return true
 }

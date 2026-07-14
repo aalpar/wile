@@ -342,16 +342,29 @@ func Must(v Value, err error) {
 }
 
 // EqualTo checks if the Pair is equal to another Value o.
-// Delegates to the cycle-aware pairEqualToDeep to handle circular lists.
+// Delegates to Equal, which owns the iterative traversal and terminates on
+// circular lists.
 func (p *Pair) EqualTo(o Value) bool {
+	return Equal(p, o)
+}
+
+// EqualComponents pushes the two pairs' cars and cdrs for Equal to compare.
+//
+// The cdr is pushed BEFORE the car so that the worklist, which pops last-in
+// first, drains the car's subtree before walking on down the spine. Pushing car
+// first would queue one pending entry per spine element, making a flat list cost
+// O(n) auxiliary space instead of O(1).
+func (p *Pair) EqualComponents(o Value, push func(a, b Value)) bool {
 	v, ok := o.(*Pair)
 	if !ok {
 		return false
 	}
-	if p == v {
-		return true
+	if p == nil || v == nil {
+		return p == v
 	}
-	return pairEqualToDeep(p, v, make(map[equalPairKey]bool))
+	push(p.Cdr(), v.Cdr())
+	push(p.Car(), v.Car())
+	return true
 }
 
 // IsVoid checks if the Pair is void (nil).
