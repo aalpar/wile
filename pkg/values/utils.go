@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -170,6 +171,15 @@ func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
 func ForEachProperList(ctx context.Context, t Tuple, name string, fn ForEachFunc) error {
 	v, err := t.ForEach(ctx, fn)
 	if err != nil {
+		// A circular list IS an improper list, and rejecting improper lists is
+		// already this function's job (R7RS §6.10 requires apply's last argument to
+		// be a proper list). Report the error callers already handle, chaining the
+		// cycle sentinel as the cause so errors.Is(err, werr.ErrCircularList) still
+		// resolves for anyone who wants to distinguish it.
+		if errors.Is(err, werr.ErrCircularList) {
+			return werr.WrapForeignErrorWithCause(werr.ErrNotAList, err,
+				"%s: expected a proper list", name)
+		}
 		return err
 	}
 	if !IsEmptyList(v) {

@@ -264,3 +264,55 @@ func TestHostCrash_FFINonErrorPanicNamesTheFunction(t *testing.T) {
 	qt.Assert(t, err.Error(), qt.Contains, "go side exploded")
 	qt.Assert(t, err.Error(), qt.Contains, "boom3")
 }
+
+// TestHostCrash_ApplyCircularList asserts that apply over a circular list returns an
+// error instead of consuming memory until the host dies.
+//
+// Citation: machine_context.go:459. Pair.ForEach accepted a ctx and never read it and
+// chased cdr pointers unconditionally, so the argument spread ignored the deadline,
+// maxStackSize, and maxCallDepth all at once, growing the eval stack to ~10GB in
+// seconds and defeating every sandbox resource limit. R7RS 6.10 requires apply's last
+// argument to be a proper list; a circular list is improper, so the correct answer was
+// always ErrNotAList, and nothing detected the condition that should raise it.
+func TestHostCrash_ApplyCircularList(t *testing.T) {
+	eng := newTestEngine(t)
+
+	_, err := eng.EvalMultiple(context.Background(), `
+		(define lst (list 1 2 3))
+		(set-cdr! (cddr lst) lst)
+		(apply + lst)`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue,
+		qt.Commentf("a circular list is an improper list"))
+	qt.Assert(t, errors.Is(err, werr.ErrCircularList), qt.IsTrue,
+		qt.Commentf("the cycle sentinel must remain reachable through the chain"))
+}
+
+// TestHostCrash_ApplyLongListRespectsMaxStackSize asserts that the eval stack limit
+// bounds the argument spread as it happens, not after it completes.
+//
+// Before the fix, checkStackSize ran after the whole list had been pushed, so the
+// stack's peak was the argument list's length no matter what maxStackSize said. The
+// error surfaced, but only once the memory had already been committed.
+func TestHostCrash_ApplyLongListRespectsMaxStackSize(t *testing.T) {
+	eng, err := wile.NewEngine(context.Background(), wile.WithMaxStackSize(1000))
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalMultiple(context.Background(),
+		`(apply + (make-list 500000 1))`)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrStackOverflow), qt.IsTrue)
+}
+
+// TestHostCrash_ApplyProperListStillWorks pins the guard from below: ordinary apply
+// over a proper list must be unaffected by the cycle check.
+func TestHostCrash_ApplyProperListStillWorks(t *testing.T) {
+	eng := newTestEngine(t)
+
+	v, err := eng.EvalMultiple(context.Background(), `(apply + (list 1 2 3 4 5))`)
+
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "15")
+}

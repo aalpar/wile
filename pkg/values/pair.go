@@ -251,6 +251,13 @@ func (p *Pair) IsEmptyList() bool {
 	return false
 }
 
+// contextCheckMask gates how often Pair.ForEach polls ctx.Done() while walking a
+// list. A non-blocking check is cheap but not free; polling every 1024 elements
+// eliminates ~99.9% of them while keeping cancellation latency bounded. Power of
+// two so the test is a single AND. Mirrors machine.contextCheckMask, which gates
+// the VM dispatch loop for the same reason.
+const contextCheckMask = 1023
+
 // ForEach iterates over each element in the list represented by the Pair.
 // The provided function fn is called for each element with the index i,
 // a boolean hasNext indicating if there are more elements, and the value v.
@@ -270,7 +277,29 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	}
 	pr := p
 	i := 0
+	// Brent's cycle detection: one pointer comparison per step, plus a
+	// power-of-two teleport of the checkpoint. No allocation, and fewer
+	// comparisons than Floyd's two-pointer walk. Without it, a circular cdr
+	// chain spins here forever — and because this is *the* list walker
+	// (ForEachProperList, length, list-copy, append, reverse, and apply's
+	// argument spread all funnel through it), that unbounded walk is what let
+	// (apply + circular-list) grow the eval stack past every configured limit.
+	checkpoint := pr
+	power := 1
+	steps := 0
 	for pr != nil {
+		// The context poll is INDEPENDENT of cycle detection: a proper list of
+		// 10^9 elements is legal, finite, and must still respect the embedder's
+		// deadline. ForEach accepted a ctx and never read it, which is the whole
+		// of why apply ignored ctx cancellation, maxStackSize, and maxCallDepth.
+		// Amortized every 1024 elements, matching the VM loop's contextCheckMask.
+		if i&contextCheckMask == 0 && i != 0 {
+			err := ctx.Err()
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		hasNext := !IsEmptyList(pr[1])
 		err := fn(ctx, i, hasNext, pr[0])
 		if err != nil {
@@ -284,6 +313,17 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 		}
 		pr = pr0
 		i++
+
+		steps++
+		if pr == checkpoint {
+			return nil, werr.WrapForeignErrorf(werr.ErrCircularList,
+				"Pair.ForEach: circular list detected at element %d", i)
+		}
+		if steps == power {
+			checkpoint = pr
+			power *= 2
+			steps = 0
+		}
 	}
 	return EmptyList, nil
 }
