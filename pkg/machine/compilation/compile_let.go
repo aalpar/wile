@@ -98,6 +98,11 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		totalSlots += n
 	}
 
+	err := checkLocalSlotCapacity(totalSlots, "let")
+	if err != nil {
+		return err
+	}
+
 	p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
 
 	// Emit init compilation + stores based on Kind.
@@ -185,7 +190,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// at the enclosing closure's parameter-frame depth: clear any self-tail context
 	// so a self call inside the body is NOT rewritten to the in-place OpSelfTailCall
 	// (which rebinds the parameter frame). Tail position itself is preserved.
-	err := p.compileValidatedSequence(ctctx.WithoutFrameReuse(), v.Body())
+	err = p.compileValidatedSequence(ctctx.WithoutFrameReuse(), v.Body())
 	if err != nil {
 		return err
 	}

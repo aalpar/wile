@@ -45,7 +45,16 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	symbolSource := v.Name().SourceContext()
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
+		li, _ := p.env.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
+		// An internal define allocates its slot here, after compileClosureBody's
+		// parameter-count check has already run, so this is the only place a body
+		// define's slot can be rejected before a Load/StoreLocal is emitted for it.
+		if li != nil {
+			err := checkLocalSlotCapacity(li.Over()+1, "define")
+			if err != nil {
+				return nil, err
+			}
+		}
 		return sym, nil
 	}
 	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
