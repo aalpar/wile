@@ -121,3 +121,22 @@ func TestHostCrash_LetAtSlotLimitStillCompiles(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil,
 		qt.Commentf("32767 slots is within the int16 encoding range and must compile"))
 }
+
+// TestHostCrash_AtomicBoxTypeChange asserts that storing a differently-typed value
+// into an atomic box is an ordinary operation, not an uncatchable panic.
+//
+// Citation: atomic.go:61. sync/atomic.Value panics on a concrete-type change, which
+// is normal under dynamic typing. The panic escaped RunResumable as a runtime error.
+// The atomic primitives live in extensions/gointerop, so this needs a profile that
+// loads it (the review said registry/gointerop; the design said pkg/extensions/
+// gointerop; both are wrong).
+func TestHostCrash_AtomicBoxTypeChange(t *testing.T) {
+	eng, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+
+	v, err := eng.EvalMultiple(context.Background(),
+		`(define a (make-atomic 1)) (atomic-store! a "now a string") (atomic-load a)`)
+
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, `"now a string"`)
+}

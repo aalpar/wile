@@ -26,8 +26,26 @@ var (
 	atomicIDCounter atomic.Uint64
 )
 
-// AtomicBox provides atomic operations on a Value
-// This uses atomic.Value from the standard library
+// atomicCell is the single concrete type ever stored in an AtomicBox's
+// atomic.Value.
+//
+// sync/atomic.Value panics ("inconsistently typed value") when a Store, Swap, or
+// CompareAndSwap sees a concrete Go type different from the one already stored.
+// Storing an *Integer and later a *String into one box is ordinary in a
+// dynamically typed language, so that panic was reachable from plain Scheme and
+// escaped the VM as an uncatchable runtime error.
+//
+// Wrapping in a cell makes the stored concrete type invariant. It preserves CAS
+// semantics exactly, which atomic.Pointer[Value] would not: a cell compares with
+// == on its single interface field, so CompareAndSwap still matches on the
+// identity of the stored Value (an equal-but-distinct object does not match, as
+// TestAtomicCompareAndSwap requires), whereas atomic.Pointer would compare the
+// address of a heap cell that changes on every Store.
+type atomicCell struct {
+	v Value
+}
+
+// AtomicBox provides atomic operations on a Value.
 type AtomicBox struct {
 	id    uint64
 	value atomic.Value
@@ -38,7 +56,7 @@ func NewAtomicBox(initial Value) *AtomicBox {
 	id := atomicIDCounter.Add(1)
 	a := &AtomicBox{id: id}
 	if initial != nil {
-		a.value.Store(initial)
+		a.value.Store(atomicCell{v: initial})
 	}
 	return a
 }
@@ -54,27 +72,30 @@ func (p *AtomicBox) Load() Value {
 	if v == nil {
 		return nil
 	}
-	return v.(Value)
+	return v.(atomicCell).v
 }
 
 // Store atomically stores the value
 func (p *AtomicBox) Store(v Value) {
-	p.value.Store(v)
+	p.value.Store(atomicCell{v: v})
 }
 
 // Swap atomically stores new and returns the old value
 func (p *AtomicBox) Swap(v Value) Value {
-	old := p.value.Swap(v)
+	old := p.value.Swap(atomicCell{v: v})
 	if old == nil {
 		return nil
 	}
-	return old.(Value)
+	return old.(atomicCell).v
 }
 
-// CompareAndSwap atomically compares and swaps if current equals old
-// Returns true if the swap was performed
+// CompareAndSwap atomically compares and swaps if current equals old.
+// Returns true if the swap was performed.
+//
+// Comparison is by identity of the stored Value, not by Scheme equal?: an
+// equal-but-distinct object does not match. See atomicCell.
 func (p *AtomicBox) CompareAndSwap(ol, nw Value) bool {
-	return p.value.CompareAndSwap(ol, nw)
+	return p.value.CompareAndSwap(atomicCell{v: ol}, atomicCell{v: nw})
 }
 
 // buf interface implementation

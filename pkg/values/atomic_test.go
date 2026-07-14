@@ -173,3 +173,42 @@ func TestAtomicInt64_SchemeString(t *testing.T) {
 	var nilA *values.AtomicInt64
 	qt.Assert(t, nilA.SchemeString(), qt.Equals, "#<atomic-int64:void>")
 }
+
+// TestAtomicBox_StoreDifferentConcreteType asserts that storing a differently-typed
+// value succeeds. A dynamically typed language stores an *Integer and then a *String
+// into the same box as a matter of course; sync/atomic.Value panics on that
+// ("inconsistently typed value"), and the panic escaped as an uncatchable runtime
+// error to the embedding host.
+func TestAtomicBox_StoreDifferentConcreteType(t *testing.T) {
+	a := values.NewAtomicBox(values.NewInteger(1))
+
+	a.Store(values.NewString("now a string"))
+
+	qt.Assert(t, a.Load(), valuestest.SchemeEquals, values.NewString("now a string"))
+}
+
+// TestAtomicBox_SwapDifferentConcreteType covers the Swap arm of the same defect.
+func TestAtomicBox_SwapDifferentConcreteType(t *testing.T) {
+	a := values.NewAtomicBox(values.NewInteger(1))
+
+	old := a.Swap(values.NewString("s"))
+
+	qt.Assert(t, old, valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, a.Load(), valuestest.SchemeEquals, values.NewString("s"))
+}
+
+// TestAtomicBox_CompareAndSwapDifferentConcreteType covers the CAS arm. The swap
+// must be attempted and simply not match, rather than panicking on the type change.
+func TestAtomicBox_CompareAndSwapDifferentConcreteType(t *testing.T) {
+	a := values.NewAtomicBox(values.NewInteger(1))
+
+	ok := a.CompareAndSwap(values.NewString("not the stored value"), values.NewInteger(2))
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, a.Load(), valuestest.SchemeEquals, values.NewInteger(1))
+
+	stored := values.NewInteger(1)
+	a2 := values.NewAtomicBox(stored)
+	ok = a2.CompareAndSwap(stored, values.NewString("s"))
+	qt.Assert(t, ok, qt.IsTrue, qt.Commentf("CAS to a different concrete type must succeed"))
+	qt.Assert(t, a2.Load(), valuestest.SchemeEquals, values.NewString("s"))
+}

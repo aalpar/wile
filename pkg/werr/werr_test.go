@@ -411,3 +411,14 @@ func TestRecoverAsError_NonErrorStringValue(t *testing.T) {
 	qt.Assert(t, got.Error(), qt.Contains, "kaboom")
 	qt.Assert(t, got.Error(), qt.Contains, "thread \"w\"")
 }
+
+// TestRecoverAsError_EmptyContextOmitsPrefix pins the escape hatch for callers that
+// wrap the result again with their own site prefix (RunResumable does), so the site
+// name does not appear twice in the rendered message.
+func TestRecoverAsError_EmptyContextOmitsPrefix(t *testing.T) {
+	got := werr.RecoverAsError(42, werr.ErrInternal, "")
+
+	qt.Assert(t, errors.Is(got, werr.ErrInternal), qt.IsTrue)
+	qt.Assert(t, got.Error(), qt.Contains, "non-error panic value: 42")
+	qt.Assert(t, got.Error(), qt.Not(qt.Contains), ": non-error panic value: 42: ")
+}

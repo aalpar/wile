@@ -31,7 +31,8 @@ package werr
 // switch is the whole of what this function owns.
 //
 // context names the recovering site and prefixes the message, e.g. "thread \"w\""
-// or "foreign function call".
+// or "foreign function call". Pass "" when the caller wraps the result again with
+// its own prefix, so the site name does not appear twice.
 func RecoverAsError(r any, sentinel error, context string) error {
 	if r == nil {
 		return nil
@@ -39,6 +40,9 @@ func RecoverAsError(r any, sentinel error, context string) error {
 	err, ok := r.(error)
 	if ok {
 		return err
+	}
+	if context == "" {
+		return WrapForeignErrorf(sentinel, "non-error panic value: %v", r)
 	}
 	return WrapForeignErrorf(sentinel, "%s: non-error panic value: %v", context, r)
 }
