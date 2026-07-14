@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -412,6 +413,95 @@ func TestEqvQPrimitive(t *testing.T) {
 			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
+		})
+	}
+}
+
+// TestEquivalenceLattice pins R7RS §6.1's ordering of the three equivalence
+// predicates by coarseness: eq? ⊆ eqv? ⊆ equal?. Each must answer #t wherever
+// the finer one does; equal? may be coarser (it compares string and list
+// contents), but it may never be FINER.
+//
+// equal? fell below eqv? on NaN. eqv? opens with an identity check, so
+// (eqv? x x) was #t, while equal? went straight to Float.EqualTo, which compares
+// values — and IEEE-754 says NaN != NaN. The lattice inverted, and the damage was
+// not academic: (member x lst) could not find the very object it was handed,
+// because member is equal?-based while memv is eqv?-based.
+//
+// Written as a law over representative values rather than a NaN special case: any
+// future leaf type whose EqualTo is non-reflexive breaks the same way, and this
+// table catches it without anyone remembering to think about NaN.
+func TestEquivalenceLattice(t *testing.T) {
+	tcs := []struct {
+		name  string
+		value string // expression bound to x, then compared with itself
+	}{
+		{name: "nan", value: `+nan.0`},
+		{name: "nan in list", value: `(list +nan.0)`},
+		{name: "nan in vector", value: `(vector +nan.0)`},
+		{name: "nan nested deeply", value: `(list (vector (list +nan.0)))`},
+		{name: "integer", value: `42`},
+		{name: "float", value: `1.5`},
+		{name: "symbol", value: `(quote sym)`},
+		{name: "string", value: `"s"`},
+		{name: "char", value: `#\a`},
+		{name: "empty list", value: `(quote ())`},
+		{name: "pair", value: `(cons 1 2)`},
+		{name: "vector", value: `(vector 1 2)`},
+		{name: "infinity", value: `+inf.0`},
+		{name: "negative zero", value: `-0.0`},
+		{name: "boolean", value: `#t`},
+	}
+
+	// eq? => eqv? => equal?, asserted as implication rather than equality: a #f on
+	// the finer predicate constrains nothing, so the law — not a fixed expected
+	// value — is what each case checks.
+	const law = `(let* ((x %s)
+	                    (a (eq? x x))
+	                    (b (eqv? x x))
+	                    (c (equal? x x)))
+	               (and (if a b #t) (if b c #t)))`
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, fmt.Sprintf(law, tc.value))
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue,
+				qt.Commentf("eq? \u2286 eqv? \u2286 equal? violated for %s", tc.name))
+		})
+	}
+}
+
+// TestEqualIsReflexive pins the consequence that bit the equal?-based list
+// searches: an object must be found in a list that contains it.
+func TestEqualIsReflexive(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "equal? nan self", Code: `(let ((x +nan.0)) (equal? x x))`, Expected: values.TrueValue},
+		{Name: "member finds nan", Code: `(let ((x +nan.0)) (if (member x (list 1 x 2)) #t #f))`, Expected: values.TrueValue},
+		{Name: "assoc finds nan key", Code: `(let ((x +nan.0)) (if (assoc x (list (cons x 1))) #t #f))`, Expected: values.TrueValue},
+		{Name: "nested nan agrees with leaf", Code: `(let ((x +nan.0)) (eq? (equal? x x) (equal? (list x) (list x))))`, Expected: values.TrueValue},
+
+		// Distinct NaN objects stay #f: eqv? says #f for them, and equal? on
+		// non-compound values is defined to agree with eqv?. Only reflexivity moved.
+		{Name: "distinct nan literals stay false", Code: `(equal? +nan.0 +nan.0)`, Expected: values.FalseValue},
+
+		// equal? stays COARSER than eqv? where R7RS requires it to be.
+		{Name: "equal? still compares string contents", Code: `(equal? (string-copy "ab") (string-copy "ab"))`, Expected: values.TrueValue},
+		{Name: "eqv? still distinguishes those strings", Code: `(eqv? (string-copy "ab") (string-copy "ab"))`, Expected: values.FalseValue},
+		{Name: "equal? still compares list contents", Code: `(equal? (list 1 2) (list 1 2))`, Expected: values.TrueValue},
+
+		// Numeric = is a DIFFERENT predicate and keeps IEEE-754 (R7RS §6.2.6): NaN is
+		// = to nothing, ITSELF INCLUDED. Reflexivity is a law of equivalence
+		// relations, not of =. Conflating the two is what produced the bug — the old
+		// EqualTo applied "NaN != NaN" to equal?, where it does not belong.
+		{Name: "= stays IEEE on same object", Code: `(let ((x +nan.0)) (= x x))`, Expected: values.FalseValue},
+		{Name: "= stays IEEE on distinct nans", Code: `(= +nan.0 +nan.0)`, Expected: values.FalseValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

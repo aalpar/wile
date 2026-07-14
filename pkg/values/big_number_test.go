@@ -580,8 +580,14 @@ func TestBigFloat_NaNEquality(t *testing.T) {
 	nan2 := values.NewBigFloatNaN()
 	finite := values.NewBigFloatFromFloat64(1.0)
 
-	// NaN is not equal to anything, including itself.
-	c.Assert(nan1.EqualTo(nan1), qt.IsFalse)
+	// EqualTo backs the equivalence predicates (eqv?/equal?), not numeric =, and an
+	// equivalence relation is reflexive: the same object is equivalent to itself,
+	// NaN payload or not. R7RS §6.1 requires eq? ⊆ eqv? ⊆ equal?, and eqv? settles
+	// identity before inspecting the value — so equal? must too. See
+	// TestFloat_NaNEquality for the full argument.
+	c.Assert(nan1.EqualTo(nan1), qt.IsTrue)
+
+	// Distinct objects: identity does not hold, so IEEE-754 decides and NaN != NaN.
 	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
 	c.Assert(nan1.EqualTo(finite), qt.IsFalse)
 	c.Assert(finite.EqualTo(nan1), qt.IsFalse)

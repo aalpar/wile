@@ -390,6 +390,20 @@ func (p *Float) IsVoid() bool {
 func (p *Float) EqualTo(v Value) bool {
 	switch other := v.(type) {
 	case *Float:
+		// Reflexive on the same object, whatever the payload. R7RS §6.1 orders the
+		// equivalences by coarseness — eq? ⊆ eqv? ⊆ equal? — so equal? may never be
+		// FINER than eqv?, and eqv? settles identity before it looks at the value
+		// (helpers.Eqv opens with that check). Without this, a NaN is eqv? to itself
+		// but not equal? to itself, since IEEE-754 says NaN != NaN — and (member x lst)
+		// then fails to find the very object it was handed, because member is
+		// equal?-based while memv is eqv?-based.
+		//
+		// The check belongs here, on a pointer compare, and NOT as an `a == b` in
+		// Equal: not every Value is Go-comparable (machine.Operations is a slice), and
+		// comparing two interfaces holding the same non-comparable type panics.
+		if p == other {
+			return true
+		}
 		return p.Value == other.Value
 	case *BigFloat:
 		if math.IsNaN(p.Value) || other.IsNaN() {

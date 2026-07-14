@@ -294,15 +294,37 @@ func TestFloat_InfNaNPredicates(t *testing.T) {
 	}
 }
 
-// TestFloat_NaNEquality verifies that NaN != NaN (IEEE 754) in EqualTo.
+// TestFloat_NaNEquality pins EqualTo's NaN behavior, which splits along a line
+// this test used to blur: EqualTo backs the EQUIVALENCE predicates (eqv?/equal?),
+// NOT numeric = (R7RS §6.2.6, which routes through Compare and keeps IEEE-754's
+// NaN != NaN — see the assertion at the end).
+//
+// An equivalence relation must be reflexive, and R7RS §6.1 orders the three by
+// coarseness: eq? ⊆ eqv? ⊆ equal?. eqv? settles identity before it inspects the
+// value, so it answers #t for a NaN compared with itself — and equal? may not be
+// finer than eqv?. This test previously asserted the opposite (nan1.EqualTo(nan1)
+// == false), which put equal? BELOW eqv? and made (member x lst) unable to find
+// the very object it was handed.
+//
+// Two DISTINCT NaN objects remain unequal: identity does not hold, and the value
+// comparison then applies IEEE-754. That is the case that carries "NaN != NaN".
 func TestFloat_NaNEquality(t *testing.T) {
 	c := qt.New(t)
 	nan1 := values.NewFloat(math.NaN())
 	nan2 := values.NewFloat(math.NaN())
+
+	// Reflexive: the same object is equivalent to itself, NaN payload or not.
+	c.Assert(nan1.EqualTo(nan1), qt.IsTrue)
+
+	// Distinct objects: no identity, so IEEE-754 decides, and NaN != NaN.
 	c.Assert(nan1.EqualTo(nan2), qt.IsFalse)
-	c.Assert(nan1.EqualTo(nan1), qt.IsFalse)
 	c.Assert(nan1.EqualTo(values.NewFloat(0)), qt.IsFalse)
 	c.Assert(nan1.EqualTo(values.NewFloat(math.Inf(1))), qt.IsFalse)
+
+	// Numeric = is a DIFFERENT predicate and keeps IEEE-754 even for the same
+	// object — reflexivity is a law of equivalence relations, not of =. Pinned at
+	// the Scheme level in registry/core (TestEqualIsReflexive), since Float.Compare
+	// panics on NaN rather than answering, and so cannot be asserted here.
 }
 
 // TestFloat_InfNaNArithmetic verifies IEEE 754 Inf/NaN arithmetic outcomes.

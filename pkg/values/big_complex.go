@@ -683,6 +683,11 @@ func (p *BigComplex) IsVoid() bool {
 // R7RS §6.2.6: The = procedure compares numerical values for equality.
 func (p *BigComplex) EqualTo(o Value) bool {
 	v, ok := o.(*BigComplex)
+	if ok && p == v {
+		// Reflexive on the same object, before any NaN component can reject it. See
+		// Float.EqualTo: equal? may not be finer than eqv? (R7RS §6.1).
+		return true
+	}
 	if !ok {
 		// Check if equal to regular Complex
 		c, ok := o.(*Complex)
