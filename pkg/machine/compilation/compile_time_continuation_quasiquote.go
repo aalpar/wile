@@ -238,7 +238,12 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 		}
 		nextPair, ok := cdr.(*syntax.SyntaxPair)
 		if !ok {
-			break
+			// Improper tail that is not a pair — a vector, most usefully. It is
+			// still part of the template and can carry an unquote of its own, so
+			// ASK it rather than assume it is inert. Breaking here (which is what
+			// this did) reported "no runtime needed" for `(1 . #(,x)) and emitted
+			// the whole form as a literal, so it printed (1 . #((unquote x))).
+			return p.quasiquoteNeedsRuntime(cdr, depth, g)
 		}
 		current = nextPair
 	}

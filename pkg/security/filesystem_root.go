@@ -41,6 +41,25 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	default:
 		return nil
 	}
+
+	// code:eval is decided on the ACTION, never by path containment. Its Target is
+	// the literal "<eval>" / "<compile>" — a label, not a path — and feeding a label
+	// to containedInRoot resolves it RELATIVE TO THE PROCESS CWD. That made the
+	// answer depend on where the host happened to be running: eval was denied only
+	// because the CWD is usually outside the root, and a host whose CWD sat INSIDE
+	// its own confinement root silently got eval for free. A sandbox decision must
+	// not be a coincidence of the working directory.
+	//
+	// Deny is the explicit stance, matching the de-facto behaviour for every host
+	// whose CWD is outside the root, and failing safe for the ones where it is not.
+	// (consoleWithLoadAuthorizer answers the same question the same way — on the
+	// action — and ALLOWS, because permitting eval under /tmp is that profile's
+	// whole point. What neither may do is ask containedInRoot about a non-path.)
+	if req.Action == ActionEval {
+		return werr.WrapForeignErrorf(ErrAccessDenied,
+			"code:eval is not permitted under a filesystem-root authorizer")
+	}
+
 	if !containedInRoot(p.root, req.Target) {
 		return werr.WrapForeignErrorf(ErrAccessDenied, "path %q outside root %q", req.Target, p.root)
 	}

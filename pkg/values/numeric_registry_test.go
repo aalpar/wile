@@ -220,15 +220,17 @@ func simplifyGolden(n Number) Number {
 		}
 	// *Complex never descends: its parts are float64, so a zero imag is always an
 	// INEXACT zero. There is no exact-zero-imag *Complex to descend from.
-	case *BigFloat:
-		if v.value.IsInt() {
-			bi, _ := v.value.Int(nil)
-			return simplifyGolden(&BigInteger{value: bi})
-		}
-	case *Float:
-		if v.Value == float64(int64(v.Value)) {
-			return NewInteger(int64(v.Value))
-		}
+	// The INEXACT tier does not descend, for the same reason the BigComplex arm
+	// above refuses an inexact zero imaginary: Simplify must not change a number's
+	// exactness class. An integer-valued 2.0 is still inexact, and returning
+	// Integer(2) for it would make (exact? 2.0) answer #t.
+	//
+	// These two arms used to demote, and so did the code, so this golden agreed
+	// with the implementation while both contradicted the rule the arm three lines
+	// up spells out. A golden that mirrors the code instead of restating the rule
+	// cannot catch the code being wrong.
+	case *BigFloat, *Float:
+		return n
 	case *Rational:
 		if v.IsInteger() {
 			return simplifyGolden(&BigInteger{value: new(big.Int).Set(v.Num())})

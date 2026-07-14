@@ -409,7 +409,7 @@
  ("syntax->list" "any" ("any") "github.com/aalpar/wile/pkg/registry/core.PrimSyntaxToList" "pkg/registry/core/prim_syntax_loc.go:117")
  ("syntax-column" "any" ("any") "github.com/aalpar/wile/pkg/registry/core.init.makeSyntaxLocAccessor.func75" "pkg/registry/core/prim_syntax_loc.go:68")
  ("syntax-line" "any" ("any") "github.com/aalpar/wile/pkg/registry/core.init.makeSyntaxLocAccessor.func74" "pkg/registry/core/prim_syntax_loc.go:68")
- ("syntax-local-identifier-as-binding" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimSyntaxLocalIdentifierAsBinding" "extensions/eval/prim_eval.go:676")
+ ("syntax-local-identifier-as-binding" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimSyntaxLocalIdentifierAsBinding" "extensions/eval/prim_eval.go:687")
  ("syntax-local-introduce" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimSyntaxLocalIntroduce" "extensions/eval/prim_eval.go:626")
  ("syntax-local-value" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimSyntaxLocalValue" "extensions/eval/prim_eval.go:539")
  ("syntax-local-value/immediate" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimSyntaxLocalValueImmediate" "extensions/eval/prim_eval.go:588")

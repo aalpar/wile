@@ -624,7 +624,7 @@ String processing procedures (predicates, search, filter, fold, tokenize, etc.).
 - **Author**: Olin Shivers
 - **URL**: https://srfi.schemers.org/srfi-13/srfi-13.html
 - **Status**: Final (2000-07-25)
-- **Wile reference**: `(srfi 13)` library; design `memory/2026-05-03-string-primitives-design.local.md`; impl `memory/2026-05-03-string-primitives-impl.local.md`
+- **Wile reference**: `(srfi 13)` library — `pkg/stdlib/lib/srfi/13.sld`, backed by the string primitives in `pkg/registry/core/`
 
 ### SRFI-14: Character-Set Library
 
@@ -633,7 +633,7 @@ Character-set algebra (union, intersection, complement, difference, fold, filter
 - **Author**: Olin Shivers
 - **URL**: https://srfi.schemers.org/srfi-14/srfi-14.html
 - **Status**: Final (2000-07-25)
-- **Wile reference**: `(srfi 14)` library; design `memory/2026-05-04-srfi-14-design.local.md`; impl `memory/2026-05-04-srfi-14-impl.local.md`
+- **Wile reference**: `(srfi 14)` library — `pkg/stdlib/lib/srfi/14.sld`, backed by the `charsets` extension (`extensions/charsets/`)
 
 ### SRFI-18: Multithreading Support
 
@@ -917,7 +917,7 @@ canonical labeling for isomorphism (McKay–Piperno), bipartite matching
 (Hopcroft–Karp), and strongly-connected components (Tarjan). The `graph-partition`
 balanced-cut primitive uses Kernighan–Lin pair-swaps (Fiduccia–Mattheyses is the
 linear-time single-move variant; not used because it deadlocks under a tight
-balance from a balanced seed — see `memory/2026-06-08-balanced-graph-partition-design.local.md`).
+balance from a balanced seed).
 
 - **Reference**: Chris Godsil, Gordon Royle, *Algebraic Graph Theory*, Springer, 2001 (ISBN 978-0-387-95220-8)
 - **Reference**: Reinhard Diestel, *Graph Theory*, 5th edition, Springer, 2017 (ISBN 978-3-662-53621-6)

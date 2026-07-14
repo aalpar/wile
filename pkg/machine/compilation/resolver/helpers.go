@@ -113,7 +113,9 @@ func osSearchDirs(env *environment.EnvironmentFrame) []string {
 	return dirs
 }
 
-// openAuthorized performs security authorization then opens absPath on the OS filesystem.
+// openAuthorized performs security authorization then opens absPath on the OS
+// filesystem, through os.Root when the authorizer confines access to a root so
+// the check and the open cannot observe different files (see confined.go).
 func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, error) {
 	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
@@ -123,7 +125,7 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	f, err := os.Open(absPath)
+	f, err := confinedOpenFile(auth, absPath)
 	if err != nil {
 		sentinel := werr.ErrFileOpen
 		if errors.Is(err, os.ErrNotExist) {

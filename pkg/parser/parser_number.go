@@ -204,9 +204,14 @@ func replaceHashDigits(s string) string {
 // or (#b|#o|#x)(#e|#i). The base-marker cases (#b/#o/#x) may see an exactness
 // marker as their next token; this method handles that transparently.
 func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	// A radix prefix requires a number after it, so input ending on the prefix
+	// (e.g. "#b") is malformed, not a clean EOF. The prefix token is also the
+	// only located token still in hand — p.cur is nil once the tokenizer hits
+	// EOF — so it carries the error's provenance.
+	markerTok := p.curr()
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, err
+		return nil, p.cur, wrapMidParseEOF(err, markerTok, "radix number marker")
 	}
 
 	// Check for trailing exactness prefix: #x#e or #x#i.
@@ -216,13 +221,13 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 		exactness = 1
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, err
+			return nil, p.cur, wrapMidParseEOF(err, markerTok, "radix number marker")
 		}
 	case tokenizer.TokenizerStateMarkerNumberInexact:
 		exactness = -1
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, err
+			return nil, p.cur, wrapMidParseEOF(err, markerTok, "radix number marker")
 		}
 	}
 

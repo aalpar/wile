@@ -40,3 +40,15 @@ type ByteCodeCaptureCdr struct {
 func (p ByteCodeCaptureCdr) String() string {
 	return fmt.Sprintf("CaptureCdr(%s)", p.Binding)
 }
+
+// ByteCodeDiscardCdr consumes the current cdr without binding it.
+//
+// R7RS §4.3.2: `_` is a wildcard that matches any input but never binds. In a
+// dotted tail (`(_ a . _)`) it must still consume the rest of the input, so the
+// matcher cannot simply emit nothing — that would leave the trailing elements
+// visible to Done, which requires the position to be exhausted.
+type ByteCodeDiscardCdr struct{}
+
+func (ByteCodeDiscardCdr) String() string {
+	return "DiscardCdr"
+}

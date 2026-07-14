@@ -390,6 +390,14 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			// After capturing CDR, update position to indicate the entire rest is consumed.
 			// Set the current pair's cdr to empty so Done doesn't think there are extra elements.
 			p.syntaxStack[lvs-1].pr = syntax.NewSyntaxCons(vsv.SyntaxCar(), syntax.SyntaxEmptyList, vsv.SourceContext())
+		case ByteCodeDiscardCdr:
+			// Wildcard `_` in a dotted tail: consume the rest without binding it
+			// (R7RS §4.3.2). An exhausted position already has nothing to consume.
+			vsv := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(vsv) {
+				break
+			}
+			p.syntaxStack[lvs-1].pr = syntax.NewSyntaxCons(vsv.SyntaxCar(), syntax.SyntaxEmptyList, vsv.SourceContext())
 		case ByteCodeJump:
 			if len(p.syntaxStack) == 0 {
 				return nil

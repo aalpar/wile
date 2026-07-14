@@ -66,15 +66,21 @@ func (p *Float) Kind() NumericKind {
 	return KindFloat
 }
 
-// floatSimplifyDown demotes an integer-valued Float to Integer. The
-// double-cast equality guard rejects |Value| > MaxInt64 by way of Go's
-// implementation-defined overflow on the int64 cast — the resulting
-// inequality fails the test, so the float is left as-is.
+// floatSimplifyDown is the identity. Simplify descends WITHIN an exactness class
+// (R7RS §6.2.2), and *Float is the bottom of the inexact tier — there is nothing
+// below it to descend to.
+//
+// It used to demote an integer-valued Float to an exact *Integer, which crosses
+// the exactness class and is a bug, not an optimization: it would make
+// (exact? 2.0) answer #t. It survived only because nothing called Simplify on a
+// float — parse-time Simplify runs on exact literals. That "no live caller" is a
+// thin guarantee: wiring Simplify into an arithmetic path is a two-line change (it
+// is exactly what rational.go now does to canonicalize denominator-1 results), and
+// the next person to do it for floats would have silently made every whole-valued
+// float exact.
+//
+// The same demotion was at bigFloatSimplifyDown; both are identities now.
 func floatSimplifyDown(n Number) Number {
-	v := n.(*Float)
-	if v.Value == float64(int64(v.Value)) {
-		return NewInteger(int64(v.Value))
-	}
 	return n
 }
 

@@ -848,6 +848,15 @@ func TestBigComplex_RationalParts(t *testing.T) {
 	c.Assert(bcNeg.SchemeString(), qt.Equals, "3/2-1/2i")
 }
 
+// TestBigComplex_RationalArithmetic asserts the VALUE of each result, not its
+// concrete Go type.
+//
+// It used to cast every component to *values.Rational — including the ones its own
+// comments call 2 and 1. That only held because rational arithmetic returned
+// non-canonical denominator-1 rationals; once the tower canonicalizes (an exact
+// value has ONE representation), an integral component descends to *Integer and the
+// cast panics. An assertion that pins the representation of a result cannot notice
+// the representation being wrong, which is exactly what it was hiding here.
 func TestBigComplex_RationalArithmetic(t *testing.T) {
 	c := qt.New(t)
 
@@ -860,29 +869,26 @@ func TestBigComplex_RationalArithmetic(t *testing.T) {
 		values.NewRational(1, 4), // 1/4
 	)
 
-	// Add: (3/2 + 1/2i) + (1/2 + 1/4i) = (2 + 3/4i)
+	// Add: (3/2 + 1/2i) + (1/2 + 1/4i) = (2 + 3/4i). The real part is integral, so
+	// it is an exact integer, not a 2/1 rational.
 	sum := bc1.Add(bc2)
 	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
-	realPart := sum.(*values.BigComplex).Real().(*values.Rational)
-	imagPart := sum.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64Truncated(), qt.Equals, 2.0)
-	c.Assert(imagPart.Float64Truncated(), qt.Equals, 0.75)
+	c.Assert(sum.SchemeString(), qt.Equals, "2+3/4i")
 
 	// Subtract: (3/2 + 1/2i) - (1/2 + 1/4i) = (1 + 1/4i)
 	diff := bc1.Subtract(bc2)
 	c.Assert(diff.(*values.BigComplex).IsExact(), qt.IsTrue)
-	realPart = diff.(*values.BigComplex).Real().(*values.Rational)
-	imagPart = diff.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64Truncated(), qt.Equals, 1.0)
-	c.Assert(imagPart.Float64Truncated(), qt.Equals, 0.25)
+	c.Assert(diff.SchemeString(), qt.Equals, "1+1/4i")
 
-	// Multiply: (3/2 + 1/2i) * (1/2 + 1/4i) = (3/4 - 1/8) + (3/8 + 1/4)i = 5/8 + 5/8i
+	// Multiply: (3/2 + 1/2i) * (1/2 + 1/4i) = (3/4 - 1/8) + (3/8 + 1/4)i = 5/8 + 5/8i.
+	// Neither component is integral, so both stay rational.
 	prod := bc1.Multiply(bc2)
 	c.Assert(prod.(*values.BigComplex).IsExact(), qt.IsTrue)
-	realPart = prod.(*values.BigComplex).Real().(*values.Rational)
-	imagPart = prod.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64Truncated(), qt.Equals, 0.625) // 5/8
-	c.Assert(imagPart.Float64Truncated(), qt.Equals, 0.625) // 5/8
+	c.Assert(prod.SchemeString(), qt.Equals, "5/8+5/8i")
+	_, realIsRational := prod.(*values.BigComplex).Real().(*values.Rational)
+	c.Assert(realIsRational, qt.IsTrue,
+		qt.Commentf("a non-integral exact component must STAY a *Rational; "+
+			"canonicalization descends integral values only"))
 }
 
 func TestBigComplex_RationalWithScalar(t *testing.T) {
@@ -893,24 +899,21 @@ func TestBigComplex_RationalWithScalar(t *testing.T) {
 		values.NewRational(1, 2), // 1/2
 	)
 
-	// Add Rational: (3/2 + 1/2i) + 1/4 = (7/4 + 1/2i)
+	// Add Rational: (3/2 + 1/2i) + 1/4 = (7/4 + 1/2i) — both components fractional.
 	sum := bc.Add(values.NewRational(1, 4))
 	c.Assert(sum.(*values.BigComplex).IsExact(), qt.IsTrue)
-	realPart := sum.(*values.BigComplex).Real().(*values.Rational)
-	c.Assert(realPart.Float64Truncated(), qt.Equals, 1.75) // 7/4
+	c.Assert(sum.SchemeString(), qt.Equals, "7/4+1/2i")
 
-	// Multiply Rational: (3/2 + 1/2i) * 2 = (3 + 1i)
+	// Multiply Rational: (3/2 + 1/2i) * 2 = (3 + 1i) — both components integral.
 	prod := bc.Multiply(values.NewRational(2, 1))
 	c.Assert(prod.(*values.BigComplex).IsExact(), qt.IsTrue)
+	c.Assert(prod.SchemeString(), qt.Equals, "3+1i")
 
 	// Divide by Rational: (3/2 + 1/2i) / (1/2) = (3 + 1i)
 	quot, err := bc.Divide(values.NewRational(1, 2))
 	c.Assert(err, qt.IsNil)
 	c.Assert(quot.(*values.BigComplex).IsExact(), qt.IsTrue)
-	realPart = quot.(*values.BigComplex).Real().(*values.Rational)
-	imagPart := quot.(*values.BigComplex).Imag().(*values.Rational)
-	c.Assert(realPart.Float64Truncated(), qt.Equals, 3.0)
-	c.Assert(imagPart.Float64Truncated(), qt.Equals, 1.0)
+	c.Assert(quot.SchemeString(), qt.Equals, "3+1i")
 }
 
 func TestBigComplex_RationalExactnessContagion(t *testing.T) {

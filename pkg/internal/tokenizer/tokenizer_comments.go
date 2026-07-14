@@ -14,6 +14,13 @@
 
 package tokenizer
 
+import (
+	"errors"
+	"io"
+
+	"github.com/aalpar/wile/pkg/werr"
+)
+
 func (p *Tokenizer) continueBlockComment() Token {
 	p.state = TokenizerStateBlockCommentBody
 	// Read content until we find |# at depth 0 or EOF
@@ -36,17 +43,20 @@ func (p *Tokenizer) continueBlockComment() Token {
 				break
 			}
 			if isMarker(p.curr()) { // Found |#
-				p.next()
-				if p.err != nil {
-					break
-				}
 				if p.blockDepth == 0 {
-					// Found closing |# - remove the | from scratch and stop
+					// Found closing |# - remove the | from scratch and stop.
+					// Consuming the '#' may hit EOF; the comment is closed all the
+					// same, so no error check may intervene before this return.
+					p.next()
 					if len(p.value) > 0 {
 						p.value = p.value[:len(p.value)-1]
 					}
 					p.term()
-					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false, 0)
+					return NewSimpleToken(p.state, string(p.text), "", &p.tokenStart, &p.tokenEnd, false, 0)
+				}
+				p.next()
+				if p.err != nil {
+					break
 				}
 				p.blockDepth--
 			}
@@ -55,9 +65,14 @@ func (p *Tokenizer) continueBlockComment() Token {
 			p.next()
 		}
 	}
-	// EOF before closing - emit Body token, no End will follow
+	// R7RS §2.2: a block comment runs to its matching |#. Reaching EOF first is
+	// malformed input, not an acceptable end of it — the comment was silently
+	// accepted before, so an unclosed #| swallowed the rest of the file.
+	if errors.Is(p.err, io.EOF) {
+		p.err = NewTokenizerErrorWithWrap(werr.ErrIncompleteInput, MessageUnterminatedBlockComment)
+	}
 	p.term()
-	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false, 0)
+	return NewSimpleToken(p.state, string(p.text), "", &p.tokenStart, &p.tokenEnd, false, 0)
 }
 
 func (p *Tokenizer) readLineCommentOrPragma() {

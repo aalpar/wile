@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -45,11 +44,11 @@ func NewOSFileResolver(env *environment.EnvironmentFrame) *OSFileResolver {
 // ResolveAndOpen finds a file by name and returns an open handle plus the
 // resolved path.
 //
-// Absolute paths bypass the Finder — fs.FS does not support them — and are
-// opened directly via openAuthorized. Relative paths are searched through a
-// sourceload.Finder backed by os.DirFS("/"), which searches the current load
-// directory (from the load path stack), library registry paths,
-// SCHEME_INCLUDE_PATH, and CWD in that order.
+// Both arms — absolute path and search-path-relative — order identically:
+// authorize the candidate, then open it. The open goes through os.Root when the
+// authorizer confines filesystem access (see confined.go), so a path component
+// swapped between the check and the open cannot redirect the open out of the
+// confinement root.
 func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
 	if path == "" {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
@@ -60,58 +59,67 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 	return p.resolveRelative(ctx, path)
 }
 
-// resolveRelative uses sourceload.Finder to locate a relative path across
-// OS search directories, then enforces security authorization on the result.
+// resolveRelative locates a relative path across the OS search directories.
 //
 // The search list is built as:
 //  1. Current load directory from the load path stack (stack-relative, highest priority)
 //  2. Configured OS search dirs (library registry, SCHEME_INCLUDE_PATH, CWD)
+//  3. The filesystem root, matching sourceload.Finder's "." fallback
 //
-// All absolute OS paths are stripped of their leading "/" before being passed
-// to the Finder, because os.DirFS("/") requires relative paths. The
-// canonicalize function adds "/" back and resolves the final absolute path.
+// A candidate is located with os.Stat — a probe that hands out no descriptor —
+// and only an authorized candidate is ever opened. Doing the search here rather
+// than through sourceload.Finder is what buys that ordering: Finder opens the
+// file to decide it exists, which would put the handle ahead of the gate.
 func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.File, string, error) {
-	searchDirs := p.osFSSearchDirs(ctx)
-	finder := sourceload.NewFinder(
-		os.DirFS("/"),
-		searchDirs,
-		sourceload.WithCanonicalize(canonicalizeOSPath),
-	)
+	auth := p.env.Namespace().Authorizer()
+	searchDirs := p.osAbsSearchDirs(ctx)
 
-	f, resolved, err := finder.Open(path)
-	if err != nil {
-		if errors.Is(err, sourceload.ErrNotFound) {
-			searched := p.buildSearchedList(searchDirs)
-			if len(searched) == 0 {
-				return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
-					"file %q not found (no search paths available)", path)
-			}
-			return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
-				"file %q not found; searched: %s", path, strings.Join(searched, ", "))
+	// The filesystem root is the last resort, matching sourceload.Finder's "."
+	// fallback. It is not part of the searched list reported on failure.
+	candidates := make([]string, 0, len(searchDirs)+1)
+	candidates = append(candidates, searchDirs...)
+	candidates = append(candidates, string(filepath.Separator))
+
+	for _, dir := range candidates {
+		candidate := filepath.Join(dir, path)
+		fi, statErr := os.Stat(candidate)
+		if statErr != nil || fi.IsDir() {
+			continue
 		}
-		return nil, "", err
+
+		authErr := security.CheckWithAuthorizer(auth, security.AccessRequest{
+			Resource: security.ResourceCode,
+			Action:   security.ActionLoad,
+			Target:   candidate,
+		})
+		if authErr != nil {
+			return nil, "", authErr
+		}
+
+		f, openErr := confinedOpenFile(auth, candidate)
+		if openErr != nil {
+			sentinel := werr.ErrFileOpen
+			if errors.Is(openErr, os.ErrNotExist) {
+				sentinel = werr.ErrFileNotFound
+			}
+			return nil, "", werr.WrapForeignErrorWithCause(sentinel, openErr, "open %s", candidate)
+		}
+		return f, candidate, nil
 	}
 
-	// Authorization check on the resolved absolute path. Close the file
-	// on denial — the caller never sees it.
-	authErr := security.CheckWithAuthorizer(p.env.Namespace().Authorizer(), security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   resolved,
-	})
-	if authErr != nil {
-		f.Close() //nolint:errcheck // closing on denial; error irrelevant
-		return nil, "", authErr
+	searched := p.buildSearchedList(searchDirs)
+	if len(searched) == 0 {
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
+			"file %q not found (no search paths available)", path)
 	}
-
-	return f, resolved, nil
+	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
+		"file %q not found; searched: %s", path, strings.Join(searched, ", "))
 }
 
-// osFSSearchDirs returns the ordered list of fs.FS-compatible search directories
-// for os.DirFS("/"): load-path-stack current dir first (if set), then the
-// configured OS search dirs. All paths are absolutized (to resolve ".." etc.)
-// then have their leading "/" stripped for fs.FS compatibility.
-func (p *OSFileResolver) osFSSearchDirs(ctx context.Context) []string {
+// osAbsSearchDirs returns the ordered, absolute search directories:
+// load-path-stack current dir first (if set), then the configured OS search
+// dirs. Paths that fail filepath.Abs are dropped.
+func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 	var dirs []string
 
 	s := SelectLoadStack(ctx, p.env)
@@ -123,43 +131,24 @@ func (p *OSFileResolver) osFSSearchDirs(ctx context.Context) []string {
 	}
 
 	dirs = append(dirs, osSearchDirs(p.env)...)
-	return absolutizeAndStrip(dirs)
-}
 
-// buildSearchedList returns the OS-absolute directories that were searched,
-// for inclusion in not-found error messages.
-func (p *OSFileResolver) buildSearchedList(fsDirs []string) []string {
-	q := make([]string, len(fsDirs))
-	for i, d := range fsDirs {
-		q[i] = "/" + d + "/"
-	}
-	return q
-}
-
-// canonicalizeOSPath converts an fs.FS-relative path (no leading slash) back
-// to an absolute OS path, then resolves it to a clean absolute form via
-// filepath.Abs. The leading slash was stripped so os.DirFS("/") could accept
-// the path; this function restores it.
-func canonicalizeOSPath(fsPath string) string {
-	abs := "/" + fsPath
-	resolved, err := filepath.Abs(abs)
-	if err != nil {
-		return abs
-	}
-	return resolved
-}
-
-// absolutizeAndStrip converts OS paths to fs.FS-compatible paths for os.DirFS("/").
-// Each path is made absolute via filepath.Abs (resolving ".." and relative paths),
-// then the leading "/" is stripped. Paths that fail Abs are dropped.
-func absolutizeAndStrip(dirs []string) []string {
 	q := make([]string, 0, len(dirs))
 	for _, d := range dirs {
 		abs, err := filepath.Abs(d)
 		if err != nil {
 			continue
 		}
-		q = append(q, strings.TrimPrefix(abs, "/"))
+		q = append(q, abs)
+	}
+	return q
+}
+
+// buildSearchedList returns the searched directories in display form, for
+// inclusion in not-found error messages.
+func (p *OSFileResolver) buildSearchedList(dirs []string) []string {
+	q := make([]string, len(dirs))
+	for i, d := range dirs {
+		q[i] = strings.TrimSuffix(d, string(filepath.Separator)) + string(filepath.Separator)
 	}
 	return q
 }

@@ -49,6 +49,8 @@ const (
 	MessageInvalidCharacterMnemonic              = "invalid character mnemonic"
 	MessageUnterminatedExtendedSymbol            = "unterminated extended symbol"
 	MessageUnterminatedString                    = "unterminated string"
+	MessageUnterminatedBlockComment              = "unterminated block comment"
+	MessageExpectingByteVectorPrefix             = "expecting #u8( byte vector prefix"
 )
 
 // TokenizerState represents the type of token recognized by the tokenizer.
@@ -216,10 +218,13 @@ type Tokenizer struct {
 	runeStart  syntax.SourceIndexes // start of the current rune
 	tokenStart syntax.SourceIndexes
 	tokenEnd   syntax.SourceIndexes // end of the current token
-	// used to build up token "value", which may differ from the raw text
-	value string
+	// used to build up token "value", which may differ from the raw text.
+	// Byte slices, not strings: a string += per rune is O(n^2) in the token
+	// length, so a single large datum (a 400KB symbol on an untrusted port)
+	// costs quadratic time. Appending into a reused buffer is linear.
+	value []byte
 	// raw source code text of the current token
-	text string
+	text []byte
 	// state describes the type of the current token
 	state TokenizerState
 	// signed indicates whether the current number token is signed (has + or -)
@@ -274,7 +279,7 @@ func NewTokenizer(rdr io.RuneReader, ci bool) *Tokenizer {
 
 // Text returns the text of the current token.
 func (p *Tokenizer) Text() string {
-	return p.text
+	return string(p.text)
 }
 
 // Next returns the next token from the input stream.
@@ -298,8 +303,8 @@ func (p *Tokenizer) Next() (Token, error) {
 		// start new token
 		p.mark()
 		p.read()
-		src := p.text
-		val := p.value
+		src := string(p.text)
+		val := string(p.value)
 		// here p.err may be != nil due to read failure.  will be returned on next call to Next
 		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.hashDigit, p.tokRadix)
 		return q, nil //nolint:staticcheck
@@ -385,7 +390,7 @@ func (p *Tokenizer) read() {
 		p.state = TokenizerStateLineCommentBody
 		p.readLineCommentOrPragma() //nolint:errcheck
 		p.term()
-		p.value = p.text
+		p.value = append(p.value[:0], p.text...)
 		return
 	case isVerticalLine(p.curr()): // '|'
 		// skip vertical lines outside symbols
@@ -419,7 +424,7 @@ func (p *Tokenizer) read() {
 		return
 	case isInitial(p.curr()): // read symbol
 		p.state = TokenizerStateSymbol
-		p.value += string(p.curr())
+		p.value = utf8.AppendRune(p.value, p.curr())
 		p.next()
 		if p.err != nil {
 			p.term()
@@ -526,6 +531,10 @@ func (p *Tokenizer) mark() {
 	p.signed = false
 	p.hashDigit = false
 	p.tokRadix = 0
+	// Every per-token field is reset here, state included: a scanner path that
+	// bails out before assigning one (readBoolean on a lexical error) would
+	// otherwise emit this token under the PREVIOUS token's type.
+	p.state = TokenizerStateFailed
 }
 
 // term terminates the current token, setting its end position and text.
@@ -539,26 +548,48 @@ func (p *Tokenizer) readNextRune() {
 	n := 0
 	p.cur, n, p.err = p.rdr.ReadRune()
 	p.runeStart = p.runeEnd
-	p.runeEnd.Inc(n)
 	if n == 0 {
 		p.cur = utf8.RuneError
 		p.err = io.EOF
-	} else if p.cur == utf8.RuneError {
-		p.err = NewTokenizerError(MessageRuneError)
+		return
 	}
+	// Index counts bytes; column counts characters. A byte-valued column would
+	// only restate the index and would misplace a caret in non-ASCII source.
+	p.runeEnd = syntax.NewSourceIndexes(p.runeEnd.Index()+n, p.runeEnd.Column()+1, p.runeEnd.Line())
+	// A decoding failure is reported as (RuneError, 1); a genuine U+FFFD in the
+	// source decodes to (RuneError, 3). Only the one-byte form is an error —
+	// conflating them makes a written U+FFFD unreadable.
+	if p.cur == utf8.RuneError && n == 1 {
+		p.err = NewTokenizerError(MessageRuneError)
+		return
+	}
+	// Line and tab-stop adjustments belong here, not in next(): the constructor
+	// reads the first rune through this path, and a source starting with a tab
+	// or newline must be tracked like any other.
+	if isNewLine(p.cur) {
+		p.runeEnd.NewLine()
+		return
+	}
+	if p.cur == '\t' {
+		p.runeEnd = tabStop(p.runeEnd)
+	}
+}
+
+// tabStop advances si's column to the next 8-column tab stop. si's column was
+// already stepped one past the tab's own column by readNextRune, so the stop is
+// computed from the tab's column (column-1). SourceIndexes.Tab() adds a whole
+// stop on top of that step instead, over-advancing by 8 whenever the tab sits on
+// a column congruent to 7 (mod 8).
+func tabStop(si syntax.SourceIndexes) syntax.SourceIndexes {
+	col := si.Column() - 1
+	return syntax.NewSourceIndexes(si.Index(), col+8-col%8, si.Line())
 }
 
 // next advances to the next rune, appending the current rune to scratch.
 // Updates position tracking and handles line endings and EOF.
 func (p *Tokenizer) next() {
-	p.text += string(p.cur)
+	p.text = utf8.AppendRune(p.text, p.cur)
 	p.readNextRune()
-	if isNewLine(p.cur) {
-		p.runeEnd.NewLine()
-	}
-	if p.cur == '\t' {
-		p.runeEnd.Tab()
-	}
 }
 
 // isUnicodeLetter returns true if c is an ASCII letter (A-Z or a-z) or unicode number-letter

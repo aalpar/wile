@@ -576,6 +576,15 @@ func emitImproperTailIfPresent(vis *SyntaxCompiler, entry *syntaxCompilerStackEn
 	if !ok {
 		return
 	}
+	// R7RS §4.3.2: `_` is the wildcard everywhere in a pattern, dotted tail
+	// included — it matches the rest of the input but must not bind, so a
+	// template `_` stays a free identifier. Unless it was declared a literal, in
+	// which case it is matched literally like any other literal symbol.
+	_, isLiteral := vis.literals[sym.Key()]
+	if sym.Key() == "_" && !isLiteral {
+		vis.codes = append(vis.codes, ByteCodeDiscardCdr{})
+		return
+	}
 	_, isVar := vis.variables[sym.Key()]
 	if isVar {
 		// The CDR is a pattern variable - emit CaptureCdr to capture the rest

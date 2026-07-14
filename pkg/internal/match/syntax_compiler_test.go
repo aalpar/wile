@@ -671,3 +671,61 @@ func TestExecuteVectorPattern(t *testing.T) {
 		c.Assert(len(children), qt.Equals, 0)
 	})
 }
+
+// TestCompileDottedWildcardTail pins R7RS §4.3.2: `_` is the wildcard in a
+// dotted tail as well as in an element position — it matches the rest of the
+// input but must never bind, so a template `_` stays a free identifier. Before
+// the fix the tail compiled to CaptureCdr and `_` was substituted.
+func TestCompileDottedWildcardTail(t *testing.T) {
+	c := qt.New(t)
+
+	// Pattern: (m a . _) — build the improper tail explicitly.
+	pattern := syntax.NewSyntaxCons(
+		testSyntaxSym("m"),
+		syntax.NewSyntaxCons(
+			testSyntaxSym("a"),
+			testSyntaxSym("_"),
+			nil,
+		),
+		nil,
+	)
+
+	// `_` is a pattern variable as far as the caller's variable set is concerned;
+	// the wildcard rule must win regardless.
+	variables := map[string]struct{}{"a": {}, "_": {}}
+
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+
+	codes := fmt.Sprintf("%v", compiled.Codes)
+	c.Assert(codes, qt.Contains, "DiscardCdr")
+	c.Assert(codes, qt.Not(qt.Contains), "CaptureCdr")
+
+	tcs := []struct {
+		name  string
+		input *syntax.SyntaxPair
+	}{
+		{
+			name:  "non-empty tail",
+			input: testSyntaxList(testSyntaxSym("m"), testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3)),
+		},
+		{
+			name:  "empty tail",
+			input: testSyntaxList(testSyntaxSym("m"), testSyntaxInt(1)),
+		},
+	}
+
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+			err := sm.Match(context.Background(), tc.input)
+			c.Assert(err, qt.IsNil)
+
+			bindings := sm.GetBindings()
+			_, bound := bindings["_"]
+			c.Assert(bound, qt.IsFalse, qt.Commentf("wildcard `_` must not bind, bindings: %v", bindings))
+			_, bound = bindings["a"]
+			c.Assert(bound, qt.IsTrue)
+		})
+	}
+}

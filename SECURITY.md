@@ -109,9 +109,15 @@ privileged operations at runtime. Each gated operation issues an
 `AccessRequest{Resource, Action, Target}`:
 
 - **Resources:** `file`, `code`, `env`, `process`
-- **Actions:** `read`, `write`, `delete`, `stat`, `load`, `exit`, `exec`,
-  `exec-shell`
+- **Actions:** `read`, `write`, `delete`, `stat`, `load`, `eval`, `exit`,
+  `exec`, `exec-shell`
 - **Target:** operation-specific — a file path, env-var name, or library name.
+  For `code:eval` the target is the literal `<eval>` or `<compile>`: there is no
+  path to inspect, so a custom Authorizer must decide on the action alone.
+
+`code:load` (run code from a resolved file path) and `code:eval` (compile and
+run an in-memory datum, i.e. `eval`/`compile`) are **separate** actions. An
+Authorizer that gates only `code:load` leaves `(eval …)` open.
 
 Gate sites include file primitives, the system/process and eval extensions,
 `include`, and library import. Built-in authorizers include `DenyAll()`,

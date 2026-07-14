@@ -642,10 +642,21 @@ func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 
 	introScope := expanderCtx.IntroductionScope()
 	if introScope == nil {
-		// No introduction scope set - return syntax unchanged
-		// This can happen if called outside a macro transformer
-		mc.SetValue(syntaxVal)
-		return nil
+		// Fail loudly. Nothing in production ever calls SetIntroductionScope, so this
+		// scope is ALWAYS nil and this primitive was a silent no-op: it handed back
+		// the syntax object unchanged and reported success, so a macro relying on it
+		// to flip hygiene got a wrong answer that looked like a right one.
+		//
+		// Returning the input is the worst of the three options. Wiring the scope is
+		// not a one-liner either: each of the three transformer entry points mints its
+		// OWN intro scope per invocation (expander_time_continuation, the syntax-rules
+		// transform op, and syntax-case), so "store one scope on the context and flip
+		// it" cannot be correct — there is no single scope to store. Until the context
+		// carries the invocation's actual scope, say so instead of lying.
+		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext,
+			"syntax-local-introduce: no introduction scope is available on the expander "+
+				"context; this primitive is not wired to the per-invocation intro scopes "+
+				"and cannot flip hygiene")
 	}
 
 	// Flip the scope on the syntax object

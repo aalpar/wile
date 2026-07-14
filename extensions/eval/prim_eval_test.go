@@ -517,21 +517,35 @@ func TestSyntaxLocalValueInMacro(t *testing.T) {
 	})
 }
 
-// TestSyntaxLocalIntroduceInMacro covers PrimSyntaxLocalIntroduce in expansion context.
-func TestSyntaxLocalIntroduceInMacro(t *testing.T) {
+// TestSyntaxLocalIntroduceIsNotWired pins that syntax-local-introduce FAILS, loudly,
+// because it is not wired to the expander's per-invocation introduction scopes.
+//
+// It used to assert the opposite — that the call "succeeds" inside a macro — and it
+// passed for the worst possible reason: nothing in production ever sets the
+// introduction scope, so the primitive read nil, handed the syntax object back
+// UNCHANGED, and reported success. A macro asking it to flip hygiene got a wrong
+// answer that looked like a right one, and the test said that was fine. An assertion
+// of "no error" on a primitive whose failure mode is "silently does nothing" cannot
+// distinguish working from broken.
+//
+// Wiring it is not a one-liner: each of the three transformer entry points mints its
+// own intro scope per invocation, so there is no single scope for the context to
+// store and flip. When that is fixed, invert this test.
+func TestSyntaxLocalIntroduceIsNotWired(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	t.Run("syntax-local-introduce in macro expansion context", func(t *testing.T) {
-		result := eval(t, engine, `
+	_, err := engine.EvalMultiple(context.Background(), `
 			(define-syntax test-introduce
 			  (lambda (stx)
 			    (let ((introduced (syntax-local-introduce (syntax x))))
 			      (syntax #t))))
 			(test-introduce)
 		`)
-		c.Assert(result.Internal(), qt.IsNotNil)
-	})
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("syntax-local-introduce must report that it cannot flip hygiene, "+
+			"not silently return its argument unchanged"))
+	c.Assert(err.Error(), qt.Contains, "not wired")
 }
 
 // TestSyntaxLocalIdentifierAsBindingInMacro covers PrimSyntaxLocalIdentifierAsBinding

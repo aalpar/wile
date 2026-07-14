@@ -86,7 +86,7 @@ func (p *Tokenizer) readHexEscapeToken() {
 		return
 	}
 	// code point validated - x will always be a valid Unicode code point that can be converted to a rune without error
-	p.value += string(rune(x))
+	p.value = utf8.AppendRune(p.value, rune(x))
 }
 
 // readEscapeSequence handles escape sequences within strings and extended tokens.
@@ -103,7 +103,7 @@ func (p *Tokenizer) readEscapeSequence() {
 	}
 	replacement, ok := stringEscapes[p.curr()]
 	if ok {
-		p.value += replacement
+		p.value = append(p.value, replacement...)
 		p.next()
 		return
 	}
@@ -116,7 +116,7 @@ func (p *Tokenizer) readEscapeSequence() {
 // Called after the opening delimiter has already been consumed.
 // Returns true if the terminator was found and consumed.
 func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool {
-	p.value = ""
+	p.value = p.value[:0]
 	for p.err == nil && p.curr() != terminator {
 		if isBackSlash(p.curr()) {
 			p.next()
@@ -132,7 +132,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 			}
 			continue
 		}
-		p.value += string(p.curr())
+		p.value = utf8.AppendRune(p.value, p.curr())
 		p.next()
 		if p.err != nil {
 			if errors.Is(p.err, io.EOF) {
@@ -250,7 +250,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 
 func (p *Tokenizer) readSymbol() {
 	for p.err == nil && isSymbolSubsequent(p.curr()) {
-		p.value += string(p.curr())
+		p.value = utf8.AppendRune(p.value, p.curr())
 		p.next()
 	}
 }

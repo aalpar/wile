@@ -151,23 +151,15 @@ func (p *BigFloat) Kind() NumericKind {
 	return KindBigFloat
 }
 
-// bigFloatSimplifyDown descends BigFloat → BigInteger → Integer in a single
-// call when the value is integer-valued and fits each smaller representation.
-//
-// The discarded big.Accuracy on Int(nil) is Exact by construction: IsInt()
-// returned true, so the value has no fractional part and the integer cast
-// is mathematically lossless.
+// bigFloatSimplifyDown is the identity: the inexact tier does not descend.
 func bigFloatSimplifyDown(n Number) Number {
-	v := n.(*BigFloat)
-	if !v.value.IsInt() {
-		return n
-	}
-	bi, _ := v.value.Int(nil)
-	bigInt := &BigInteger{value: bi}
-	if bigInt.value.IsInt64() {
-		return NewInteger(bigInt.value.Int64())
-	}
-	return bigInt
+	// Identity: see floatSimplifyDown. Simplify descends within an exactness class,
+	// and *BigFloat is inexact — demoting an integer-valued one to *Integer /
+	// *BigInteger (which is what this did) crosses the class and would make
+	// (exact? 2.0) answer #t. A BigFloat -> Float descent WOULD stay inexact, but it
+	// is not obviously wanted (it discards the extended precision the BigFloat was
+	// chosen for), so the inexact tier simply does not descend.
+	return n
 }
 
 // bigFloatToFloat64WithAccuracy converts a BigFloat to float64 with loss-signal.

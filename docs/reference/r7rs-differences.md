@@ -192,7 +192,7 @@ name (a capture-safe primitive such as `car`, or any defined-once bootstrap proc
 as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme semantics
 (`define` introduces, `set!` mutates) applied to the sealed/mutable split.
 
-**Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer (`plans/2026-06-11-escape-gated-frame-allocation.local.md`). The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), the engine *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`).
+**Rationale:** This is the language-level enforcement half of the frame-reclamation optimizer. The optimizer may release a function's stack frame at a tail call only if every callee it relies on provably never captures a continuation; proving that for a *top-level* callee requires knowing the binding will not be rebound to a capturing procedure. Rather than *infer* unit-closure (undecidable for an incremental/embedded system), the engine *enforces* it — the "compile for speed" contract used by sealed-module Schemes (Racket modules, Chez `optimize-level 3`).
 
 **Implementation:** Pure compile-time, scoped to the engine's **root** namespace. The redefinition guard fires only for a define landing in the root's own user runtime or sealed base (`compile_validated.go`); child namespaces report `ImmutableTopLevel() == false`, so REPL / `(environment …)` / `scheme-report-environment` redefines are permitted. The compiler stamps `BindingMeta.Stable`; the `set!` guard keys on `IsStable()` **directly** (not on the namespace flag), so a `Stable` anchor copied into a mutable child stays `set!`-protected — preserving frame-reclaim soundness while still allowing define-shadow. Imported-binding `set!` rejection (always on) is unchanged.
 
@@ -361,7 +361,6 @@ silent-truncation behavior for embedders that depended on it. This
 is purely an embedder-API concern; Scheme programs are unaffected.
 
 See `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go Types"
-and `memory/2026-05-14-numeric-loss-signals-design.md` for the
-underlying design.
+for the underlying design.
 
 

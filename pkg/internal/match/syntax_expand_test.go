@@ -2162,3 +2162,214 @@ func TestSyntaxExpandDepth0Broadcast(t *testing.T) {
 			qt.Commentf("expected ErrExpansion, got %v", err))
 	})
 }
+
+// collectSyntaxInts unwraps a syntax list or vector element slice into int64s.
+func collectSyntaxInts(c *qt.C, elems []syntax.SyntaxValue) []int64 {
+	q := make([]int64, 0, len(elems))
+	for _, elem := range elems {
+		obj, ok := elem.(*syntax.SyntaxObject)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxObject, got %T", elem))
+		intVal, ok := obj.Datum().(*values.Integer)
+		c.Assert(ok, qt.IsTrue)
+		q = append(q, intVal.Value)
+	}
+	return q
+}
+
+// TestSyntaxExpandVectorEllipsisTemplate pins R7RS §4.3.2: a vector template's
+// elements obey the same rules as a list template's, so `#(x ...)` repeats the
+// captured values rather than emitting the literal symbols `x` and `...`.
+func TestSyntaxExpandVectorEllipsisTemplate(t *testing.T) {
+	c := qt.New(t)
+
+	variables := map[string]struct{}{"x": {}}
+	// Pattern: (_ x ...)
+	pattern := testSyntaxList(
+		testSyntaxSym("_"),
+		testSyntaxSym("x"),
+		testSyntaxSym("..."),
+	)
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+
+	tcs := []struct {
+		name  string
+		input []syntax.SyntaxValue
+		want  []int64
+	}{
+		{
+			name:  "zero repetitions yields empty vector",
+			input: []syntax.SyntaxValue{},
+			want:  []int64{},
+		},
+		{
+			name: "multiple repetitions",
+			input: []syntax.SyntaxValue{
+				testSyntaxInt(1),
+				testSyntaxInt(2),
+				testSyntaxInt(3),
+			},
+			want: []int64{1, 2, 3},
+		},
+	}
+
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			inputElems := []syntax.SyntaxValue{testSyntaxSym("_")}
+			inputElems = append(inputElems, tc.input...)
+
+			sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+			err := sm.Match(context.Background(), testSyntaxList(inputElems...))
+			c.Assert(err, qt.IsNil)
+
+			// Template: #(x ...)
+			template := testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("..."))
+
+			result, err := sm.Expand(template, ExpandOptions{})
+			c.Assert(err, qt.IsNil)
+
+			vec, ok := result.(*syntax.SyntaxVector)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxVector, got %T", result))
+			c.Assert(collectSyntaxInts(c, vec.Values), qt.DeepEquals, tc.want)
+		})
+	}
+}
+
+// TestSyntaxExpandVectorEllipsisSublistTemplate covers `#((a b) ...)`: an
+// ellipsis over a compound element inside a vector template (R7RS §4.3.2).
+func TestSyntaxExpandVectorEllipsisSublistTemplate(t *testing.T) {
+	c := qt.New(t)
+
+	variables := map[string]struct{}{"a": {}, "b": {}}
+	// Pattern: (_ (a b) ...)
+	pattern := testSyntaxList(
+		testSyntaxSym("_"),
+		testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b")),
+		testSyntaxSym("..."),
+	)
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+
+	// Input: (_ (1 2) (3 4))
+	input := testSyntaxList(
+		testSyntaxSym("_"),
+		testSyntaxList(testSyntaxInt(1), testSyntaxInt(2)),
+		testSyntaxList(testSyntaxInt(3), testSyntaxInt(4)),
+	)
+
+	sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+	err = sm.Match(context.Background(), input)
+	c.Assert(err, qt.IsNil)
+
+	// Template: #((a b) ...)
+	template := testSyntaxVec(
+		testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b")),
+		testSyntaxSym("..."),
+	)
+
+	result, err := sm.Expand(template, ExpandOptions{})
+	c.Assert(err, qt.IsNil)
+
+	vec, ok := result.(*syntax.SyntaxVector)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxVector, got %T", result))
+	c.Assert(len(vec.Values), qt.Equals, 2)
+
+	want := [][]int64{{1, 2}, {3, 4}}
+	for i, elem := range vec.Values {
+		pr, ok := elem.(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("element %d: expected SyntaxPair, got %T", i, elem))
+		cdr, ok := pr.SyntaxCdr().(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(collectSyntaxInts(c, []syntax.SyntaxValue{pr.SyntaxCar(), cdr.SyntaxCar()}), qt.DeepEquals, want[i])
+	}
+}
+
+// TestSyntaxExpandEscapedVectorTemplate covers a vector inside an ellipsis
+// escape. R7RS §4.3.2: `(... <template>)` suppresses the ellipsis's meaning, not
+// pattern-variable substitution — so `x` must still be substituted inside the
+// escaped vector while `...` survives as a literal symbol.
+func TestSyntaxExpandEscapedVectorTemplate(t *testing.T) {
+	c := qt.New(t)
+
+	variables := map[string]struct{}{"x": {}}
+	pattern := testSyntaxList(testSyntaxSym("macro"), testSyntaxSym("x"))
+
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+
+	input := testSyntaxList(testSyntaxSym("macro"), testSyntaxInt(5))
+
+	sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+	err = sm.Match(context.Background(), input)
+	c.Assert(err, qt.IsNil)
+
+	// Template: (... #(x ...))
+	template := testSyntaxList(
+		testSyntaxSym("..."),
+		testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("...")),
+	)
+
+	result, err := sm.Expand(template, ExpandOptions{})
+	c.Assert(err, qt.IsNil)
+
+	vec, ok := result.(*syntax.SyntaxVector)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxVector, got %T", result))
+	c.Assert(len(vec.Values), qt.Equals, 2)
+
+	obj, ok := vec.Values[0].(*syntax.SyntaxObject)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected substituted value, got %T", vec.Values[0]))
+	c.Assert(obj.Datum(), qt.DeepEquals, values.NewInteger(5))
+
+	sym, ok := vec.Values[1].(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(sym.Key(), qt.Equals, "...")
+}
+
+// TestSyntaxExpandVectorSubPatternUnderEllipsis is the regression guard for a
+// vector sub-pattern nested inside an ellipsis group: pattern (_ (x #(a)) ...)
+// with template (a ...). R7RS §4.3.2 makes `a` an ellipsis-depth-1 variable, so
+// it must drive the repetition. When the analyzer dropped a vector's variables
+// from the enclosing subtree, the ellipsis group did not claim `a` and expansion
+// failed outright.
+func TestSyntaxExpandVectorSubPatternUnderEllipsis(t *testing.T) {
+	c := qt.New(t)
+
+	variables := map[string]struct{}{"x": {}, "a": {}}
+	// Pattern: (_ (x #(a)) ...)
+	pattern := testSyntaxList(
+		testSyntaxSym("_"),
+		testSyntaxList(
+			testSyntaxSym("x"),
+			testSyntaxVec(testSyntaxSym("a")),
+		),
+		testSyntaxSym("..."),
+	)
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+
+	// Input: (_ (1 #(2)) (3 #(4)))
+	input := testSyntaxList(
+		testSyntaxSym("_"),
+		testSyntaxList(testSyntaxInt(1), testSyntaxVec(testSyntaxInt(2))),
+		testSyntaxList(testSyntaxInt(3), testSyntaxVec(testSyntaxInt(4))),
+	)
+
+	sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+	err = sm.Match(context.Background(), input)
+	c.Assert(err, qt.IsNil)
+
+	// Template: (a ...) — only the vector's variable repeats.
+	template := testSyntaxList(testSyntaxSym("a"), testSyntaxSym("..."))
+
+	result, err := sm.Expand(template, ExpandOptions{})
+	c.Assert(err, qt.IsNil)
+
+	var elems []syntax.SyntaxValue
+	for cur := result; !syntax.IsSyntaxEmptyList(cur); {
+		pr, ok := cur.(*syntax.SyntaxPair)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("expected proper list, got %T", cur))
+		elems = append(elems, pr.SyntaxCar())
+		cur = pr.SyntaxCdr()
+	}
+	c.Assert(collectSyntaxInts(c, elems), qt.DeepEquals, []int64{2, 4})
+}

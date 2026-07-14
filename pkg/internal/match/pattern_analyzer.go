@@ -43,78 +43,63 @@ func AnalyzePattern(pattern *syntax.SyntaxPair, variables map[string]struct{}) *
 	return analysis
 }
 
-// analyzeRecursive analyzes which subtrees contain pattern variables
-func analyzeRecursive(v syntax.SyntaxValue, variables map[string]struct{}, analysis *PatternAnalysis) bool {
+// analyzeRecursive returns the set of pattern variables occurring in v (nil when
+// there are none), recording the result for every *SyntaxPair subtree it visits.
+//
+// It returns the set rather than a bool because that is what keeps a vector
+// sub-pattern's variables attached to the enclosing subtree: the analysis maps
+// are keyed by *SyntaxPair, so a *SyntaxVector has nowhere of its own to record
+// them and the names must travel up to the enclosing pair. compileEllipsis reads
+// that enclosing pair's set to decide which variables an ellipsis group
+// captures, and R7RS §4.3.2 requires a vector sub-pattern to repeat under `...`
+// exactly as a list sub-pattern does — a dropped name leaves the group unable to
+// claim it.
+func analyzeRecursive(
+	v syntax.SyntaxValue,
+	variables map[string]struct{},
+	analysis *PatternAnalysis,
+) map[string]struct{} {
 	switch t := v.(type) {
 	case *syntax.SyntaxSymbol:
 		_, isVar := variables[t.Key()]
-		return isVar
+		if !isVar {
+			return nil
+		}
+		return map[string]struct{}{t.Key(): {}}
+
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
-			return false
+			return nil
 		}
 
-		// Initialize variable set for this subtree
 		varsInSubtree := make(map[string]struct{})
+		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCar(), variables, analysis))
+		maps.Copy(varsInSubtree, analyzeRecursive(t.SyntaxCdr(), variables, analysis))
 
-		// Check car (first element)
-		carHasVars := analyzeRecursive(t.SyntaxCar(), variables, analysis)
-		if carHasVars {
-			// If car is a symbol variable, add it
-			sym, ok := t.SyntaxCar().(*syntax.SyntaxSymbol)
-			if ok {
-				_, isVar := variables[sym.Key()]
-				if isVar {
-					varsInSubtree[sym.Key()] = struct{}{}
-				}
-			}
-			// If car is a pair, merge its variables
-			carPair, ok := t.SyntaxCar().(*syntax.SyntaxPair)
-			if ok {
-				carVars, exists := analysis.variablesInSubtree[carPair]
-				if exists {
-					for v := range carVars {
-						varsInSubtree[v] = struct{}{}
-					}
-				}
-			}
-		}
-
-		// Check cdr (rest)
-		cdrHasVars := analyzeRecursive(t.SyntaxCdr(), variables, analysis)
-		if cdrHasVars {
-			// If cdr is a pair, merge its variables
-			cdrPair, ok := t.SyntaxCdr().(*syntax.SyntaxPair)
-			if ok {
-				cdrVars, exists := analysis.variablesInSubtree[cdrPair]
-				if exists {
-					for v := range cdrVars {
-						varsInSubtree[v] = struct{}{}
-					}
-				}
-			}
-		}
-
-		hasVars := carHasVars || cdrHasVars
+		hasVars := len(varsInSubtree) > 0
 		analysis.containsVariables[t] = hasVars
-		if len(varsInSubtree) > 0 {
-			analysis.variablesInSubtree[t] = varsInSubtree
+		if !hasVars {
+			return nil
 		}
-		return hasVars
+		analysis.variablesInSubtree[t] = varsInSubtree
+		return varsInSubtree
+
 	case *syntax.SyntaxVector:
-		// R7RS §4.3.2: #(<pattern> ...) — recurse into vector elements.
-		// Returns whether any element contains variables, but does NOT store
-		// entries in the analysis maps (those use *SyntaxPair keys). The
-		// converted pair chain entries are added via Merge in the compiler.
-		hasVars := false
+		// R7RS §4.3.2: #(<pattern> ...) — recurse into vector elements. The
+		// compiler converts the vector to a pair chain and Merges that chain's
+		// analysis, which is what supplies map entries for the chain's own pairs;
+		// here we only propagate the names upward.
+		varsInVector := make(map[string]struct{})
 		for _, elem := range t.Values {
-			if analyzeRecursive(elem, variables, analysis) {
-				hasVars = true
-			}
+			maps.Copy(varsInVector, analyzeRecursive(elem, variables, analysis))
 		}
-		return hasVars
+		if len(varsInVector) == 0 {
+			return nil
+		}
+		return varsInVector
+
 	default:
-		return false
+		return nil
 	}
 }
 

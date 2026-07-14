@@ -20,6 +20,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -638,4 +639,60 @@ func TestSpecialCharacterConstants(t *testing.T) {
 			c.Check(p.Text(), qt.Equals, tc.span)
 		})
 	}
+}
+
+// TestReplacementCharacterIsNotADecodeError pins U+FFFD as an ordinary rune.
+// utf8.DecodeRune signals a decoding failure as (RuneError, 1) and a genuine
+// U+FFFD as (RuneError, 3); the tokenizer used to test only the rune, so a
+// U+FFFD that `write` had emitted could not be read back.
+func TestReplacementCharacterIsNotADecodeError(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+		typ   TokenizerState
+		value string
+	}{
+		{name: "in_string", input: "\"a�b\"", typ: TokenizerStateString, value: "a�b"},
+		{name: "character", input: "#\\�", typ: TokenizerStateCharGraphic, value: "�"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			c.Assert(len(toks), qt.Equals, 1)
+			c.Check(toks[0].Type(), qt.Equals, tc.typ)
+			c.Check(toks[0].Value(), qt.Equals, tc.value)
+		})
+	}
+}
+
+// TestInvalidUTF8IsADecodeError is the other half of the U+FFFD distinction:
+// a byte sequence that does not decode must still be a read error.
+func TestInvalidUTF8IsADecodeError(t *testing.T) {
+	c := qt.New(t)
+
+	_, err := Tokenize("\"a\xffb\"", false)
+	c.Check(errors.Is(err, NewTokenizerError(MessageRuneError)), qt.IsTrue)
+}
+
+// TestLargeTokenScansInLinearTime guards the read-side DoS surface: token text
+// used to be accumulated with a string +=, making one large datum O(n^2) in its
+// length (a 400KB symbol took ~9.5s). Appending into a reused byte buffer is
+// linear, so the same input scans in milliseconds; the deadline is loose enough
+// to be machine-independent while still failing the quadratic build by orders of
+// magnitude.
+func TestLargeTokenScansInLinearTime(t *testing.T) {
+	c := qt.New(t)
+
+	const n = 400 * 1024
+	src := strings.Repeat("a", n)
+	deadline := time.Now().Add(5 * time.Second)
+
+	toks, err := Tokenize(src, false)
+	c.Assert(err, qt.Equals, io.EOF)
+	c.Assert(len(toks), qt.Equals, 1)
+	c.Check(toks[0].Type(), qt.Equals, TokenizerStateSymbol)
+	c.Check(len(toks[0].Value()), qt.Equals, n)
+	c.Check(time.Now().Before(deadline), qt.IsTrue, qt.Commentf("scanning a %d-byte symbol took longer than the linear-time budget", n))
 }

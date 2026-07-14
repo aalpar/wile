@@ -15,6 +15,7 @@
 package tokenizer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -641,6 +642,71 @@ func TestDelimiterBoundaries(t *testing.T) {
 			p.read()
 			c.Check(p.state, qt.Equals, tc.state)
 			c.Check(p.Text(), qt.Equals, tc.span)
+		})
+	}
+}
+
+// TestMalformedHashUIsReadError pins that #u introduces nothing but a #u8( byte
+// vector (R7RS §7.1.1). The scanner used to fall out of the #u arm with neither
+// a state nor an error, so `#u9` emitted a token carrying the PREVIOUS token's
+// type and `'(a #u9)` evaluated as though the #u were not there.
+func TestMalformedHashUIsReadError(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+	}{
+		{name: "wrong_digit", input: "(a #u9)"},
+		{name: "no_paren", input: "#u8x"},
+		{name: "bare_u", input: "(a #u)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			_, err := Tokenize(tc.input, false)
+			c.Check(errors.Is(err, io.EOF), qt.IsFalse, qt.Commentf("malformed %q must not tokenize cleanly", tc.input))
+		})
+	}
+}
+
+// TestTokenStateDoesNotLeakAcrossTokens pins that a token never inherits the
+// previous token's type. mark() resets every per-token field, state included: a
+// scanner path that bails out before assigning one (a lexical error inside
+// readBoolean, the old #u fall-through) would otherwise mis-type the token.
+func TestTokenStateDoesNotLeakAcrossTokens(t *testing.T) {
+	c := qt.New(t)
+
+	// "a" scans as a Symbol; the malformed #u that follows must not be emitted
+	// as a Symbol too.
+	toks, err := Tokenize("a #u9", false)
+	c.Assert(errors.Is(err, io.EOF), qt.IsFalse)
+	for _, tok := range toks[1:] {
+		c.Check(tok.Type(), qt.Not(qt.Equals), TokenizerStateSymbol)
+	}
+}
+
+// TestBooleanAbuttingBracketIsBoolean pins [ and ] as delimiters (R7RS §2.1
+// makes them equivalent to parens). Only the #-boolean scanners consult
+// isDelimiter, so `#t]` was the visible casualty: it scanned as a bare marker,
+// and `(let ([x #t]) ...)` would not parse.
+func TestBooleanAbuttingBracketIsBoolean(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+		want  TokenizerState
+	}{
+		{name: "true_close_bracket", input: "#t]", want: TokenizerStateMarkerBooleanTrue},
+		{name: "false_close_bracket", input: "#f]", want: TokenizerStateMarkerBooleanFalse},
+		{name: "true_open_bracket", input: "#t[", want: TokenizerStateMarkerBooleanTrue},
+		{name: "long_true_close_bracket", input: "#true]", want: TokenizerStateMarkerBooleanTrue},
+		{name: "true_close_paren", input: "#t)", want: TokenizerStateMarkerBooleanTrue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			c.Assert(len(toks), qt.Equals, 2)
+			c.Check(toks[0].Type(), qt.Equals, tc.want)
 		})
 	}
 }

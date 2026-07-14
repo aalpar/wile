@@ -167,6 +167,10 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	if p.err != nil {
 		return nil, p.locateReaderErr(p.err)
 	}
+	// R7RS §2.4: a datum label's scope is the datum in which it appears. Carrying
+	// the table across calls let a #n# in one top-level form resolve to a #n=
+	// defined in an earlier one.
+	p.datumLabels = nil
 	var (
 		q   syntax.SyntaxValue
 		err error
@@ -294,7 +298,11 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	t := p.curr()
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, err
+		// EOF here means the input ended ON the quote mark. R7RS §7.1.2: a quote
+		// form is not a datum without the datum it quotes, so this is malformed
+		// input, not a clean end of input — a bare io.EOF would let the caller
+		// treat "'" as an empty file.
+		return nil, p.cur, wrapMidParseEOF(err, t, keyword+" form")
 	}
 	q, _, err := p.readSyntax()
 	// A quote form with no datum (e.g. "' )") must be a located error, not a
@@ -316,9 +324,12 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 // It advances the tokenizer, reads the next datum, and applies the conversion
 // function (makeExact or makeInexact) to it.
 func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxValue) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
+	markerTok := p.curr()
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, err
+		// A prefix with nothing after it is malformed input, not a clean EOF —
+		// same rule as the errNoDatum guard below, which rejects "#e)".
+		return nil, p.cur, wrapMidParseEOF(err, markerTok, label+" number marker")
 	}
 	q, tok, err := p.readSyntax()
 	// An exactness marker with no number (e.g. "#e)") must be a located error,
@@ -353,7 +364,9 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 	assignTok := p.cur
 	err = p.advance()
 	if err != nil {
-		return nil, p.cur, err
+		// "#0=" with nothing after it: a label assignment needs its datum, so an
+		// EOF here is malformed input rather than a clean end of input.
+		return nil, p.cur, wrapMidParseEOF(err, assignTok, "datum label assignment")
 	}
 	// Check if the next token starts a compound structure (list or vector)
 	// For these, we pre-register a placeholder to support circular references
@@ -454,6 +467,12 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 // the location tok at which it occurred), not the Parser itself. Taking
 // both as explicit parameters makes the call-site synchronization
 // contract visible; a receiver-held token would hide it.
+//
+// Callers must pass the form's OPENING token, not p.cur: at EOF the tokenizer
+// hands back a nil token, so a p.cur here would leave ParserError.Location
+// empty and drop the error's provenance (REVIEW.md "Error Chain Losslessness").
+// The opener is also the location a reader wants — it names the delimiter that
+// was never closed.
 func wrapMidParseEOF(err error, tok tokenizer.Token, form string) error {
 	if errors.Is(err, io.EOF) {
 		return NewParserErrorWithWrapf(io.ErrUnexpectedEOF, tok,
@@ -479,10 +498,13 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 // preserved as the returned list's provenance.
 func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.TokenizerState) (syntax.SyntaxValue, tokenizer.Token, error) {
 	expectedClose := p.matchingClose(opener)
+	// The opening delimiter is the only token still in hand once the input ends
+	// mid-form — p.cur is nil at EOF — and it is the position worth reporting.
+	openTok := p.cur
 	var pr syntax.SyntaxValue = head
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
+		return nil, p.cur, wrapMidParseEOF(err, openTok, "list")
 	}
 	q0 := pr
 	pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
@@ -500,7 +522,7 @@ func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.Tokenize
 			break
 		}
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "list")
 		}
 		pr0 = pr.(*syntax.SyntaxPair)
 		pr0.SetCar(v)
@@ -509,7 +531,7 @@ func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.Tokenize
 		pr = pr0.Cdr().(*syntax.SyntaxPair)
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "list")
 		}
 	}
 	switch {
@@ -524,7 +546,7 @@ func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.Tokenize
 		// skip the '.' token
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "list")
 		}
 		// read cdr value in improper list
 		var v syntax.SyntaxValue
@@ -536,12 +558,12 @@ func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.Tokenize
 				"expected datum after '.' in dotted pair")
 		}
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "list")
 		}
 		pr = v
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "list")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "list")
 		}
 		// Check for bracket mismatch
 		if p.cur.Type() != expectedClose {
@@ -581,10 +603,12 @@ func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 // datum label inside the vector resolve to the vector itself, so circular
 // vectors like #0=#(1 #0#) read correctly — mirroring readLabeledList for pairs.
 func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tokenizer.Token, error) {
+	// See readListInto: the opener is the location to report on a mid-parse EOF.
+	openTok := p.cur
 	// Advance past #( token
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, wrapMidParseEOF(err, p.cur, "vector")
+		return nil, p.cur, wrapMidParseEOF(err, openTok, "vector")
 	}
 	// Read vector elements - match the list parsing pattern:
 	// check token type BEFORE reading, advance AFTER reading
@@ -599,13 +623,13 @@ func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tok
 			break
 		}
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "vector")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "vector")
 		}
 		q.Values = append(q.Values, v)
 		// Advance to next element (or close paren)
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "vector")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "vector")
 		}
 	}
 	// A vector opened with #( must close with ). The loop exits on ) (its
@@ -634,15 +658,17 @@ func (p *Parser) checkByteVectorClose(err error) error {
 
 // readByteVector reads a byte vector form opened by #u8(.
 func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
+	// See readListInto: the opener is the location to report on a mid-parse EOF.
+	openTok := p.cur
 	q0 := values.NewByteVector()
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, wrapMidParseEOF(err, p.cur, "bytevector")
+		return nil, p.cur, wrapMidParseEOF(err, openTok, "bytevector")
 	}
 	var stx syntax.SyntaxValue
 	stx, _, err = p.readSyntax()
 	if err != nil && !errors.Is(err, errNoDatum) {
-		return nil, p.cur, wrapMidParseEOF(err, p.cur, "bytevector")
+		return nil, p.cur, wrapMidParseEOF(err, openTok, "bytevector")
 	}
 	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 		// Empty bytevector case: #u8()
@@ -663,11 +689,11 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		*q0 = append(*q0, values.NewByte(uint8(i.Value)))
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "bytevector")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "bytevector")
 		}
 		stx, _, err = p.readSyntax()
 		if err != nil && !errors.Is(err, errNoDatum) {
-			return nil, p.cur, wrapMidParseEOF(err, p.cur, "bytevector")
+			return nil, p.cur, wrapMidParseEOF(err, openTok, "bytevector")
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 			break
@@ -849,9 +875,12 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return p.parseBaseWithExactness(8)
 	case tokenizer.TokenizerStateMarkerBase10:
 		// #d is the default (decimal) radix, so the following datum reads normally.
+		markerTok := p.curr()
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, err
+			// "#d" alone: the radix prefix requires a number, so EOF is malformed
+			// input — mirroring the errNoDatum guard below.
+			return nil, p.cur, wrapMidParseEOF(err, markerTok, "decimal number marker")
 		}
 		var tok tokenizer.Token
 		q, tok, err = p.readSyntax()
