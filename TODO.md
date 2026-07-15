@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-07-01 (marked done: D2 thread-shared-global race / commit `fbcd7654` + its perf-recovery follow-up to Tier 4; stale `peek-char`/`read-line` read-error classification bugs / commit `460c73a5` — already fixed, boxes unchecked. Earlier: Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard — all verified shipped on master)
+**Last Updated**: 2026-07-14 (Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
 
 ### Current Project Status
 
@@ -86,6 +86,32 @@ Items that block production embedded use or prevent silent state corruption.
   **A live host-crash bug was fixed on the way.** `equalWorklist.step` compared `a == b` BEFORE establishing both sides were `DeepEqualer`s, so two same-typed non-comparable leaves meeting as components panicked. The regression test merged earlier that day only paired a leaf against a `*Pair` — differing dynamic types, which Go answers `false` for without faulting — so the hazard sat unmeasured in the one shape that actually faults. `step()` now reaches `==` and the visited-set key only once both operands are `DeepEqualer`s. Guarded by `TestEqual_SameTypedNonComparableLeavesDoNotPanic`.
 
   **A `SchemeComparable` interface was considered and REJECTED.** It is the intuitive fix and it is the wrong one: it would give `Operations` and `MultipleValues` a *supported* way to be non-comparable `Value`s, ratifying the free ride instead of ending it. Also, identity may not be delegated to a method — R7RS §6.1 defines `eq?`/`eqv?` on aggregates as "denote the same location in the store", and `eq?` is the FINEST equivalence in the lattice: a type that computes its own identity can lie about it, and `eq? ⊆ eqv? ⊆ equal?` stops being structurally guaranteed. The contract, and why it has no compile-time expression, is on `values.Value`'s doc comment; it is enforced module-wide by `TestValue_AllImplementorsAreGoComparable`.
+
+### ~~`eqv?`/`equal?` numeric-lattice nonconformances (F1/F2/F3, from 2026-07-13 review `numeric-tower.md` + Chez probe)~~ RESOLVED
+
+- [x] **One owner for numeric equivalence; contagion lattice and NaN reflexivity fixed.** (2026-07-14, `fix/value-comparability-contract`, `c302b702`)
+
+  `EqvNumber` (`pkg/values/eqv.go`) is now the single authority the three F6 sites consume: two exact numbers compare across representations, so `(eqv? (+ 1/2 1/2) 1) ⇒ #t` — closing the `numeric-tower.md` rational SPEC finding (`rational.go:168`), which the tower also fixes upstream by canonicalizing denom-1 results to `*Integer`. Exactness contagion corrected (`Float ⊕ exact → Float`, F2); NaN is now reflexive (`(eqv? +nan.0 +nan.0) ⇒ #t`, matching Chez, F3), deliberately finer than the literal pool's `literalIdentical`. F4/F5 (records, hashtables/boxes) documented as conformant divergences. Shipped as the same branch as the Value-comparability contract above. Design + per-phase commit map: `plans/2026-07-14-equivalence-predicate-divergence.md`.
+
+### ~~`define-values` broken under NoMutation; no macro could introduce a top-level temporary (from 2026-07-13 review `dialects.md`)~~ PARTIALLY RESOLVED
+
+- [x] **Macro-introduced top-level binders are now hygienically renamed; `define-values` survives NoMutation.** (2026-07-14, `fix/toplevel-macro-binder-hygiene`, `d594beeb`)
+
+  A new expander pass (`pkg/machine/compilation/toplevel_binder_hygiene.go`) gives each macro-introduced top-level `(define …)` binder a fresh crypto-random name and rewrites the references that resolve to it — quote/quasiquote-aware, since a quoted or quasiquote-literal symbol is data, not an identifier (R7RS §4.3.2 / §4.1.2). `define-values` was rewritten `set!`-free with a template temporary, so it now works under the immutable top level, across compilation units, and under the NoMutation dialect (a definition, not a mutation — R7RS §5.3.3). `TestNoMutationKeepsDefineValues` is now an enforced guard, not a gated RED test. A subsequent quote-in-quasiquote corruption (`` `(quote ,tmp) `` rewriting the temp) was fixed with a quasi-depth barrier (`ba283e86`).
+
+- [ ] **STILL OPEN — the general form-removal leak** [Correctness, S-M]: The fix worked around the one bootstrap macro that tripped it; it did not touch form removal. A **user** macro whose template references a *removed* form still leaks that form's expand-phase `*PrimitiveExpander` into runtime — `(define-syntax my-set (syntax-rules () ((_ v e) (set! v e)))) (let ((x 1)) (my-set x 2) x)` on a NoMutation engine applies `#<primitive-expander:set!>` instead of failing with `ErrNoSuchBinding`. Direction (per `reviews/2026-07-13/dialects.md`): on form removal, also unbind the form's expand-phase `PrimitiveExpander` (diff the cloned registry's `Names()` against the default's), or have `CompileSymbol`/`tryResolvedBinding` refuse to emit a load of a `*PrimitiveExpander`.
+
+### ~~`(scheme base)`/`(scheme eval)`/`(scheme cxr)` export supersets + non-R7RS `(description)` declaration (from 2026-07-13 review `sld-libraries.md`)~~ RESOLVED
+
+- [x] **Documented as deliberate deviations, not deleted.** (2026-07-14, `docs/r7rs-library-export-supersets`, `cc3c48bb`)
+
+  Deleting exports is a user-visible API break, so the supersets were recorded rather than removed: two new sections in `docs/reference/r7rs-differences.md` (*Standard-Library Export Supersets*, *`(description <string>)` Library Declaration*), pinned by `TestLibraryExportSupersets` — it imports each binding through `(only (scheme …) id)`, so narrowing any library back to the strict R7RS surface fails the test and forces a deliberate doc update rather than a silent API break.
+
+### ~~`GlobalIndex` literal identity must include `Env` (from 2026-07-13 review `codegen.md`, §2c)~~ RESOLVED
+
+- [x] **`GlobalIndex.EqualTo` now compares `Env`, not just `Index`.** (2026-07-14, `fix/globalindex-env-literal-identity`, `fa9804d6`, merged to master)
+
+  A literal-pool collision: two distinct globals with the same `Index` symbol but different `Env` deduped to one literal slot. `EqualTo` (`pkg/environment/global_environment_frame.go`) now includes `Env`. Phase 1 shipped + merged; Phase 2 deferred by design. `plans/2026-07-13-globalindex-env-literal-identity.md`.
 
 ### Continuation multiple-values follow-ups (from PR #800 crosscheck, 2026-06-25)
 
