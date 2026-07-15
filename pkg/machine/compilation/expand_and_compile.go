@@ -39,7 +39,7 @@ func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 
 	expander := NewExpanderTimeContinuation(ctx, env, evaluator)
 	expander.SetMaxDepth(maxExpandDepth)
-	expanded, err := expander.ExpandExpression(stx)
+	expanded, err := expander.ExpandTopLevelExpression(stx)
 	if err != nil {
 		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "expansion"))
 	}

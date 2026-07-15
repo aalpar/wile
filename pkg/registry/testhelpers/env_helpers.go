@@ -63,7 +63,7 @@ func NewTopLevelThunk(
 ) (*machine.MachineContinuation, error) {
 	ctx := context.Background()
 	eval := machine.NewVMMacroEvaluator()
-	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, eval).ExpandExpression(sv)
+	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, eval).ExpandTopLevelExpression(sv)
 	if err != nil {
 		return nil, err
 	}

@@ -167,21 +167,13 @@ func TestNoMutationRemovesEveryDestructivePrimitive(t *testing.T) {
 //     hygiene bug in its own right (no macro can introduce a top-level temporary
 //     today). Then the set!-free define-values above works, and NoMutation keeps it.
 //
-// Un-skip this the moment either lands.
+// RESOLVED: the second fix landed. define-values was rewritten set!-free using a
+// template-introduced temporary, and the expander now gives macro-introduced
+// top-level binders a fresh unique name (compilation/toplevel_binder_hygiene.go),
+// so the temporary is unique per expansion and hidden from the use site. This
+// test is now an enforced guard, not a gated gap.
 func TestNoMutationKeepsDefineValues(t *testing.T) {
-	t.Skip("KNOWN GAP: NoMutation breaks define-values. See the comment above — the " +
-		"fix is a design decision (dialect macro-removal, or hygienic renaming of " +
-		"macro-introduced top-level binders), not a patch.")
-
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx,
-		wile.WithProfile(wile.KitchenSink),
-		wile.WithDialect(wile.NoMutation),
-	)
-	qt.Assert(t, err, qt.IsNil)
-	defer func() {
-		_ = eng.Close()
-	}()
 
 	tcs := []struct {
 		name string
@@ -194,6 +186,19 @@ func TestNoMutationKeepsDefineValues(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			// A fresh engine per case: these programs all bind a/b under the
+			// immutable top level, so sharing one engine would (correctly) fail
+			// the second define with "cannot redefine immutable top-level a" —
+			// a property of the immutable top level, not of define-values.
+			eng, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithDialect(wile.NoMutation),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			defer func() {
+				_ = eng.Close()
+			}()
+
 			v, err := eng.EvalMultiple(ctx, tc.src)
 			qt.Assert(t, err, qt.IsNil,
 				qt.Commentf("define-values is a definition, not a mutation (R7RS §5.3.3)"))

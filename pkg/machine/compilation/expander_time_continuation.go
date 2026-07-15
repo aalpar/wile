@@ -183,6 +183,23 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 	return p.env.HasLocalVariableBinding(sym, scopes)
 }
 
+// ExpandTopLevelExpression expands a whole TOP-LEVEL form and then restores
+// hygiene for any macro-introduced top-level binder it produced: each is given a
+// fresh unique name so it is unique per expansion (no cross-unit collision) and
+// hidden from the use site (R7RS §4.3.2). See toplevel_binder_hygiene.go.
+//
+// Use this at every top-level entry point (the Engine's ExpandAndCompile, the
+// test-harness pipelines); use ExpandExpression for sub-forms. The rename is a
+// no-op unless the fully-expanded form is a top-level define / begin-of-defines,
+// so calling it on an ordinary expression is harmless.
+func (p *ExpanderTimeContinuation) ExpandTopLevelExpression(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	expanded, err := p.ExpandExpression(expr)
+	if err != nil {
+		return nil, err
+	}
+	return renameMacroIntroducedTopLevelBinders(expanded), nil
+}
+
 // ExpandExpression expands a syntax expression.
 //
 // This is the single recursion chokepoint of the expander: every descent into a
