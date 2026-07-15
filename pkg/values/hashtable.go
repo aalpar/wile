@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -41,25 +42,36 @@ type hashtableEntry struct {
 // Uses bucket chaining with FNV-1a hashing for O(1) amortized operations
 // and EqualTo() for key comparison within buckets.
 //
-// Concurrency: a Hashtable is a Scheme-level value that SRFI-18 threads can
-// share, so every operation is guarded by mu. Readers that must run user code
-// or render nested values (Entries, EqualComponents, SchemeString) take a
-// snapshot under the lock and release it before doing so: holding the lock
-// across a callback would deadlock on a self-referential table, and holding two
-// tables' locks at once during comparison would need a lock ordering. With
-// snapshots, neither hazard exists.
+// Concurrency: LOCK-FREE, by design. A Hashtable is user-owned data that
+// SRFI-18 threads may share; per the concurrency ownership line, the USER
+// synchronizes it for atomic multi-step sequences or a consistent iteration
+// snapshot. The type itself carries no mutex — but it must never CRASH the
+// host on concurrent access, so the backing store is a sync.Map (key: uint64
+// hash → an IMMUTABLE []hashtableEntry bucket) with copy-on-write writes:
+//   - Reads Load an immutable bucket and scan it — no lock, no data race.
+//   - Writes (Set/Delete) Load the bucket, COPY it, mutate the copy, Store the
+//     new slice. Buckets are never mutated in place, so the inner-slice race is
+//     gone too. Both halves (sync.Map AND copy) are required: sync.Map alone
+//     would leave an in-place slice append/overwrite racing.
+//
+// The lock-free store removes Go's fatal "concurrent map read and map write";
+// what it does NOT provide is transactional atomicity. Under UNSYNCHRONIZED
+// concurrent writers to one bucket a Set may be lost (last-Store-wins) and the
+// atomic size may drift — that is the accepted consequence of the user not
+// synchronizing their own shared data. Single-threaded use is exact.
 type Hashtable struct {
-	mu      sync.RWMutex
-	buckets map[uint64][]hashtableEntry
-	size    int
+	// buckets maps a uint64 hash to an immutable []hashtableEntry snapshot.
+	// Never mutate a stored bucket in place; replace it via Store (copy-on-write).
+	buckets sync.Map
+	// size is the entry count, maintained lock-free. Exact single-threaded;
+	// best-effort under unsynchronized concurrent mutation.
+	size atomic.Int64
 }
 
-// NewEmptyHashtable creates a new empty hash table.
+// NewEmptyHashtable creates a new empty hash table. The zero sync.Map and
+// atomic.Int64 are ready to use, so no field initialization is needed.
 func NewEmptyHashtable() *Hashtable {
-	q := &Hashtable{
-		buckets: make(map[uint64][]hashtableEntry),
-	}
-	return q
+	return &Hashtable{}
 }
 
 // IsVoid returns true if this hash table is nil.
@@ -84,8 +96,8 @@ func (p *Hashtable) EqualTo(o Value) bool {
 // invariant — adding HashCode() to *Pair or *Vector (what R6RS
 // make-equal-hashtable wants) would put recursion back on the Go stack here.
 //
-// Both tables are read through snapshots, each taken under its own lock, so no
-// lock is held during the comparison and two tables never lock at once.
+// Both tables are read through lock-free snapshots, so no lock is held during
+// the comparison and two tables never contend.
 func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 	v, ok := o.(*Hashtable)
 	if !ok {
@@ -135,8 +147,6 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) s
 
 	q := &strings.Builder{}
 	q.WriteString("#hash(")
-	// Snapshot, then render: schemeStringChild can recurse back into this same
-	// table through a cycle, so no lock may be held across it.
 	entries := p.snapshot()
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].key.SchemeString() < entries[j].key.SchemeString()
@@ -155,13 +165,19 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) s
 	return q.String()
 }
 
+// loadBucket returns the immutable bucket stored under h, or nil if absent.
+// The returned slice must NOT be mutated — writers copy before changing.
+func (p *Hashtable) loadBucket(h uint64) []hashtableEntry {
+	v, ok := p.buckets.Load(h)
+	if !ok {
+		return nil
+	}
+	return v.([]hashtableEntry)
+}
+
 // get is the internal lookup used by EqualComponents and other methods.
 func (p *Hashtable) get(key Hashable) (Value, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	h := key.HashCode()
-	bucket := p.buckets[h]
-	for _, e := range bucket {
+	for _, e := range p.loadBucket(key.HashCode()) {
 		if e.key.EqualTo(key) {
 			return e.value, true
 		}
@@ -169,16 +185,15 @@ func (p *Hashtable) get(key Hashable) (Value, bool) {
 	return nil, false
 }
 
-// snapshot copies every entry out from under the read lock. Callers that must
-// run user code, render nested values, or touch a second table do so against
-// the snapshot, with no lock held. See the Hashtable type comment.
+// snapshot copies every entry out of the sync.Map. Callers that must run user
+// code, render nested values, or touch a second table do so against the
+// snapshot. Buckets are immutable, so this never races a concurrent writer.
 func (p *Hashtable) snapshot() []hashtableEntry {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	q := make([]hashtableEntry, 0, p.size)
-	for _, bucket := range p.buckets {
-		q = append(q, bucket...)
-	}
+	q := make([]hashtableEntry, 0, p.size.Load())
+	p.buckets.Range(func(_, v any) bool {
+		q = append(q, v.([]hashtableEntry)...)
+		return true
+	})
 	return q
 }
 
@@ -196,23 +211,31 @@ func (p *Hashtable) Get(key Value) (Value, bool, error) {
 
 // Set associates key with val in the hash table.
 // Returns werr.ErrInvalidArgument if the key does not implement Hashable.
+//
+// Copy-on-write: the target bucket is copied before it is changed, so a
+// concurrent reader scanning the old bucket is never disturbed. See the type
+// comment for the (non-transactional) concurrency contract.
 func (p *Hashtable) Set(key Value, val Value) error {
 	hk, ok := key.(Hashable)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	h := hk.HashCode()
-	bucket := p.buckets[h]
-	for i, e := range bucket {
+	old := p.loadBucket(h)
+	for i, e := range old {
 		if e.key.EqualTo(hk) {
-			p.buckets[h][i].value = val
+			nb := make([]hashtableEntry, len(old))
+			copy(nb, old)
+			nb[i] = hashtableEntry{key: hk, value: val}
+			p.buckets.Store(h, nb)
 			return nil
 		}
 	}
-	p.buckets[h] = append(bucket, hashtableEntry{key: hk, value: val})
-	p.size++
+	nb := make([]hashtableEntry, len(old), len(old)+1)
+	copy(nb, old)
+	nb = append(nb, hashtableEntry{key: hk, value: val})
+	p.buckets.Store(h, nb)
+	p.size.Add(1)
 	return nil
 }
 
@@ -229,22 +252,27 @@ func (p *Hashtable) HasKey(key Value) (bool, error) {
 
 // Delete removes the entry for key from the hash table.
 // Returns werr.ErrInvalidArgument if the key does not implement Hashable.
+//
+// Copy-on-write: a shrunk bucket is a fresh slice; the last entry's removal
+// drops the bucket key entirely.
 func (p *Hashtable) Delete(key Value) error {
 	hk, ok := key.(Hashable)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	h := hk.HashCode()
-	bucket := p.buckets[h]
-	for i, e := range bucket {
+	old := p.loadBucket(h)
+	for i, e := range old {
 		if e.key.EqualTo(hk) {
-			p.buckets[h] = append(bucket[:i], bucket[i+1:]...)
-			p.size--
-			if len(p.buckets[h]) == 0 {
-				delete(p.buckets, h)
+			if len(old) == 1 {
+				p.buckets.Delete(h)
+			} else {
+				nb := make([]hashtableEntry, 0, len(old)-1)
+				nb = append(nb, old[:i]...)
+				nb = append(nb, old[i+1:]...)
+				p.buckets.Store(h, nb)
 			}
+			p.size.Add(-1)
 			return nil
 		}
 	}
@@ -280,45 +308,37 @@ func (p *Hashtable) Values() Tuple {
 	})
 }
 
-// Size returns the number of entries in the hash table.
+// Size returns the number of entries in the hash table. Exact single-threaded;
+// best-effort under unsynchronized concurrent mutation.
 func (p *Hashtable) Size() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.size
+	return int(p.size.Load())
 }
 
-// Copy returns a shallow copy of the hash table.
+// Copy returns a shallow copy of the hash table. Buckets are immutable, so each
+// stored slice can be shared directly with the copy without re-copying.
 func (p *Hashtable) Copy() *Hashtable {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	q := &Hashtable{
-		buckets: make(map[uint64][]hashtableEntry, len(p.buckets)),
-		size:    p.size,
-	}
-	for h, bucket := range p.buckets {
-		cp := make([]hashtableEntry, len(bucket))
-		copy(cp, bucket)
-		q.buckets[h] = cp
-	}
+	q := NewEmptyHashtable()
+	p.buckets.Range(func(k, v any) bool {
+		q.buckets.Store(k, v.([]hashtableEntry))
+		return true
+	})
+	q.size.Store(p.size.Load())
 	return q
 }
 
 // Clear removes all entries from the hash table.
 func (p *Hashtable) Clear() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.buckets = make(map[uint64][]hashtableEntry)
-	p.size = 0
+	p.buckets.Clear()
+	p.size.Store(0)
 }
 
 // Entries iterates over all entries in the hash table, calling fn for each
 // key-value pair. Iteration stops early if fn returns a non-nil error.
 // This is more efficient than Keys()+Get() as it avoids intermediate allocations.
 //
-// fn runs against a snapshot, with no lock held: it may be Scheme code that
-// reads or mutates this same table (hashtable-walk), which would deadlock if
-// the read lock were held across the call. The snapshot is the iteration's
-// view; entries added concurrently are not visited.
+// fn runs against a snapshot: it may be Scheme code that reads or mutates this
+// same table (hashtable-walk). The snapshot is the iteration's view; entries
+// added concurrently are not visited.
 func (p *Hashtable) Entries(fn func(key Hashable, value Value) error) error {
 	for _, e := range p.snapshot() {
 		err := fn(e.key, e.value)
