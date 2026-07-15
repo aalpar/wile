@@ -293,7 +293,7 @@ monotonic elapsed time prefer `current-jiffy` / `jiffies-per-second`.
 
 ## Extensions Beyond R7RS
 
-These are Wile-specific features that extend R7RS. They do not conflict with R7RS behavior — standard Scheme programs behave identically. These extensions use reader prefixes in the `#` dispatch space that R7RS leaves implementation-defined.
+These are Wile-specific features that extend R7RS. They do not conflict with R7RS behavior — standard Scheme programs behave identically. Some use reader prefixes in the `#` dispatch space that R7RS leaves implementation-defined; others add strictly-additive library exports and library-declaration metadata. In every case the extension is additive: a program written against R7RS alone sees no change, while a program that depends on the extension does not port to a strict implementation.
 
 ### Arbitrary-Precision Number Literals
 
@@ -364,5 +364,68 @@ is purely an embedder-API concern; Scheme programs are unaffected.
 
 See `docs/numeric/tower.md` §"Conversion to Fixed-Precision Go Types"
 for the underlying design.
+
+### Standard-Library Export Supersets
+
+Three bundled standard libraries **re-export bindings that R7RS Appendix A homes
+in a different library**, as an embedding convenience, so a program can reach a
+common binding without importing its formal home. The extra exports are strictly
+additive: a program that imports one of these libraries and uses only the
+bindings R7RS assigns it behaves identically. The trade-off runs the other way —
+code that imports one of the bindings below *from the convenience library* does
+not load on a strict R7RS implementation, where the binding is exported only from
+its home.
+
+| Library | Also exports | R7RS home |
+|---------|--------------|-----------|
+| `(scheme base)` | `case-lambda` | `(scheme case-lambda)` |
+| `(scheme base)` | `read` | `(scheme read)` |
+| `(scheme base)` | `write`, `display` | `(scheme write)` |
+| `(scheme eval)` | `scheme-report-environment`, `null-environment` | `(scheme r5rs)` |
+| `(scheme cxr)` | `caar`, `cadr`, `cdar`, `cddr` | `(scheme base)` |
+
+Each binding remains exported from its R7RS home as well, so portable code that
+imports the home library is unaffected. `(scheme base)` also dual-homes
+`finite?` / `infinite?` / `nan?` (R7RS home `(scheme inexact)`); that trio is a
+legal re-export diamond, covered under "Conflicting Imports Signalled" above and
+not repeated here.
+
+The `(scheme cxr)` row is structural rather than a bare convenience: the two-deep
+accessors `caar`…`cddr` are defined ambiently in the bootstrap (core procedures
+such as `assoc` depend on them before any library loads), and `(scheme cxr)`
+re-exports those ambient bindings rather than redefining them — so it surfaces
+the two-deep accessors R7RS assigns to `(scheme base)` alongside the three- and
+four-deep ones it owns.
+
+Pinned by `TestLibraryExportSupersets` (`pkg/wile`), which imports each binding
+through `(only (scheme …) id)` — an import set that resolves strictly through the
+named library's export list — so narrowing any library back to the strict R7RS
+surface fails the test and forces a deliberate update here rather than a silent
+public-API break.
+
+### `(description <string>)` Library Declaration
+
+`define-library` accepts an optional `(description <string>)` declaration that
+R7RS §5.6.1 does not define among its library declarations:
+
+```scheme
+(define-library (scheme base)
+  (description "R7RS base library: pairs, lists, numbers, strings, ...")
+  (export ...)
+  ...)
+```
+
+The string is captured at compile time into the library's summary
+(`CompiledLibrary.Description` / `LibrarySummary.Description`) and surfaced by the
+documentation and reflection tooling (`,doc` and `,apropos` in the REPL, `apropos`
+search, and the `library-description` reflection primitive). It has no runtime
+effect and does not alter the library's exports or imports. 60 of the 61 bundled
+`.sld` files carry one (`wile/algebra/matching.sld` is the exception).
+
+A strict R7RS reader rejects an unrecognized library declaration, so a `.sld`
+using `(description …)` does not port to such an implementation; the declaration
+is Wile-internal documentation metadata, not part of any program's semantics.
+Acceptance and capture are pinned by the `library_export_index` tests
+(`pkg/machine/compilation`).
 
 
