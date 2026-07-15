@@ -215,16 +215,10 @@ func PrimRead(mc machine.CallContext) error {
 		return err
 	}
 
-	// Get or create parser under lock to prevent TOCTOU races
-	st.mu.Lock()
-	prss, ok := st.parsers[port]
-	if !ok || prss == nil {
-		prss = parser.NewParser(mc.EnvironmentFrame(), true, rr)
-		st.parsers[port] = prss
+	mkParser := func() *parser.Parser {
+		return parser.NewParser(mc.EnvironmentFrame(), true, rr)
 	}
-	st.mu.Unlock()
-
-	syn, err := prss.ReadSyntax(mc.Context())
+	syn, err := st.readSyntaxCached(mc.Context(), port, mkParser)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.
@@ -255,16 +249,10 @@ func PrimReadToken(mc machine.CallContext) error {
 		return err
 	}
 
-	// Get or create tokenizer under lock to prevent TOCTOU races
-	st.mu.Lock()
-	tknz, ok := st.tokenizers[port]
-	if !ok || tknz == nil {
-		tknz = tokenizer.NewTokenizer(rr, false)
-		st.tokenizers[port] = tknz
+	mkTokenizer := func() *tokenizer.Tokenizer {
+		return tokenizer.NewTokenizer(rr, false)
 	}
-	st.mu.Unlock()
-
-	q, err := tknz.Next()
+	q, err := st.nextTokenCached(port, mkTokenizer)
 	if errors.Is(err, io.EOF) {
 		// Port is exhausted; evict the cached tokenizer.
 		evictPortCache(st, port)
@@ -291,16 +279,10 @@ func PrimReadSyntax(mc machine.CallContext) error {
 		return err
 	}
 
-	// Get or create parser under lock to prevent TOCTOU races
-	st.mu.Lock()
-	prss, ok := st.parsers[port]
-	if !ok || prss == nil {
-		prss = parser.NewParser(mc.EnvironmentFrame(), true, rr)
-		st.parsers[port] = prss
+	mkParser := func() *parser.Parser {
+		return parser.NewParser(mc.EnvironmentFrame(), true, rr)
 	}
-	st.mu.Unlock()
-
-	q, err := prss.ReadSyntax(mc.Context())
+	q, err := st.readSyntaxCached(mc.Context(), port, mkParser)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			// Port is exhausted; evict the cached parser.

@@ -16,6 +16,8 @@ package io
 
 import (
 	"bytes"
+	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -53,13 +55,13 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				port := ports[portIdx%numPorts]
 				rr, _ := port.AsRuneReader()
 				st.mu.Lock()
-				prss, ok := st.parsers[port]
-				if !ok || prss == nil {
-					prss = parser.NewParser(nil, true, rr)
-					st.parsers[port] = prss
+				entry, ok := st.parsers[port]
+				if !ok || entry == nil {
+					entry = &parserEntry{parser: parser.NewParser(nil, true, rr)}
+					st.parsers[port] = entry
 				}
 				st.mu.Unlock()
-				c.Assert(prss, qt.Not(qt.IsNil))
+				c.Assert(entry, qt.Not(qt.IsNil))
 			}(i)
 		}
 		wg.Wait()
@@ -70,7 +72,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 		for _, port := range ports {
 			rr, _ := port.AsRuneReader()
 			st.mu.Lock()
-			st.parsers[port] = parser.NewParser(nil, true, rr)
+			st.parsers[port] = &parserEntry{parser: parser.NewParser(nil, true, rr)}
 			st.mu.Unlock()
 		}
 		for i := range numGoroutines {
@@ -100,7 +102,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 				case 1:
 					rr, _ := port.AsRuneReader()
 					st.mu.Lock()
-					st.parsers[port] = parser.NewParser(nil, true, rr)
+					st.parsers[port] = &parserEntry{parser: parser.NewParser(nil, true, rr)}
 					st.mu.Unlock()
 				case 2:
 					evictPortCache(st, port)
@@ -113,4 +115,42 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 	// NewState fully constructs the caches (no lazy init), so both are non-nil.
 	c.Assert(st.tokenizers, qt.Not(qt.IsNil))
 	c.Assert(st.parsers, qt.Not(qt.IsNil))
+}
+
+// TestConcurrentReadSyntaxSamePort_T1_1 guards the reviews/2026-07-13 §4
+// CONCURRENCY finding at prim_read_write.go. The io read primitives cache one
+// *parser.Parser per port; before the fix they called ReadSyntax on it OUTSIDE
+// the state lock (which guarded only cache get-or-create), so two threads
+// reading ONE port drove the SAME parser concurrently — a data race on
+// p.cur/p.err/p.toks and an UNRECOVERABLE "fatal error: concurrent map writes"
+// on the lazily-allocated p.datumLabels. Unlike TestConcurrentMapAccess_T1
+// above (which exercises only map get-or-create/evict), this drives concurrent
+// ReadSyntax on a single shared cache entry — the actual finding. readSyntaxCached
+// now holds a per-port lock across the whole ReadSyntax call, serialising reads
+// on one port. Run under -race; must stay green.
+func TestConcurrentReadSyntaxSamePort_T1_1(t *testing.T) {
+	st := NewState()
+	// Datum labels force the lazy p.datumLabels map allocation on every read,
+	// widening the concurrent-map-write window the finding hinges on.
+	src := strings.Repeat("#0=(a b c) #0# ", 8192)
+	port := values.NewStringInputPortWithBuffer(bytes.NewBufferString(src))
+	rr, _ := port.AsRuneReader()
+	mk := func() *parser.Parser {
+		return parser.NewParser(nil, true, rr)
+	}
+
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				_, err := st.readSyntaxCached(context.Background(), port, mk)
+				if err != nil {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
