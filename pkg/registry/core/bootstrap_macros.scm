@@ -276,8 +276,13 @@
 
 ;; define-values - R7RS 5.3.3
 ;; Binds multiple variables to values from a multiple-value expression.
-;; Uses a recursive expansion that collects values into a list, then
-;; extracts them one by one with set!.
+;; Collects the values into a template-introduced temporary `tmp`, then binds
+;; each variable from it. `tmp` is a macro-introduced TOP-LEVEL binder: the
+;; expander's top-level binder-hygiene pass (compilation/toplevel_binder_hygiene.go)
+;; gives it a fresh unique name per expansion, so this is set!-free and works
+;; under the immutable top level, across compilation units, and under the
+;; NoMutation dialect (which removes set!). define-values is a DEFINITION
+;; (R7RS §5.3.3), not a mutation, so NoMutation must keep it.
 ;; Also supports rest patterns: (define-values (x . rest) expr) and
 ;; (define-values var expr) collects all values as a list.
 (define-syntax define-values
@@ -291,21 +296,21 @@
     ;; Proper list pattern: (var0 var1 ...)
     ((define-values (var0 var1 ...) expr)
      (begin
-       (define var0 (call-with-values (lambda () expr) list))
-       (define-values (var1 ...) (apply values (cdr var0)))
-       (set! var0 (car var0))))
+       (define tmp (call-with-values (lambda () expr) list))
+       (define var0 (car tmp))
+       (define-values (var1 ...) (apply values (cdr tmp)))))
     ;; Dotted pattern with two+ vars: (var0 var1 . rest) reduces to (var1 . rest)
     ((define-values (var0 var1 . rest) expr)
      (begin
-       (define var0 (call-with-values (lambda () expr) list))
-       (define-values (var1 . rest) (apply values (cdr var0)))
-       (set! var0 (car var0))))
+       (define tmp (call-with-values (lambda () expr) list))
+       (define var0 (car tmp))
+       (define-values (var1 . rest) (apply values (cdr tmp)))))
     ;; Dotted pattern base case: (var . rest) binds var to first, rest to remaining list
     ((define-values (var . rest) expr)
      (begin
-       (define var (call-with-values (lambda () expr) list))
-       (define rest (cdr var))
-       (set! var (car var))))
+       (define tmp (call-with-values (lambda () expr) list))
+       (define var (car tmp))
+       (define rest (cdr tmp))))
     ;; All values as list: var (no parens)
     ((define-values var expr)
      (define var (call-with-values (lambda () expr) list)))))
