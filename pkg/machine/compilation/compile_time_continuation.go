@@ -321,6 +321,19 @@ func (p *CompileTimeContinuation) tryResolvedBinding(expr *syntax.SyntaxSymbol) 
 	}
 	bd := gi.Env.GetOwnGlobalBinding(gi)
 	if bd != nil {
+		// A pin resolving to a compile-time-only handler is a phase confusion:
+		// the value is an expand/compile-phase internal, not a runtime value.
+		// It arises when a dialect removes a *form* (fr.Remove) whose expand-phase
+		// PrimitiveExpander survives and a macro template names the removed
+		// keyword: the compiler no longer sees it as a form, so the keyword
+		// reaches here as an operator carrying its definition-site pin. Refuse the
+		// load so the caller falls through to ErrNoSuchBinding — the documented
+		// removed-form contract (dialect.go) — instead of leaking the internal
+		// handler (e.g. #<primitive-expander:set!>) into the value world.
+		_, isHandler := bd.Value().(compileTimeHandler)
+		if isHandler {
+			return false
+		}
 		idx := p.template.AppendCachedBinding(bd)
 		p.AppendOperations(
 			machine.NewOperationLoadCachedBinding(idx),

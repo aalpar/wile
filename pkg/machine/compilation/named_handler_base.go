@@ -22,6 +22,22 @@ type namedHandlerBase struct {
 	prefix string
 }
 
+// compileTimeHandler marks a value as a compile-time-only handler — a
+// SyntaxCompiler or PrimitiveExpander that lives in an expand/compile-phase
+// frame and is never a runtime value. tryResolvedBinding consults it to refuse
+// emitting a runtime load of such a handler, so a macro template naming a
+// dialect-removed form fails as an unbound reference rather than leaking the
+// internal handler into the value world.
+type compileTimeHandler interface {
+	isCompileTimeHandler()
+}
+
+// isCompileTimeHandler marks namedHandlerBase — and thus the SyntaxCompiler and
+// PrimitiveExpander that embed it — as a compile-time-only handler. The receiver
+// is unused; the method exists only to satisfy compileTimeHandler.
+func (*namedHandlerBase) isCompileTimeHandler() {
+}
+
 // Name returns the handler's name.
 func (p *namedHandlerBase) Name() string {
 	return p.name
