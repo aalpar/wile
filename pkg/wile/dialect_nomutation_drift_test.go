@@ -16,11 +16,13 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -225,4 +227,39 @@ func TestNoMutationStillRemovesSetBang(t *testing.T) {
 
 	_, err = eng.EvalMultiple(ctx, `(begin (define v (vector 1)) (vector-set! v 0 9))`)
 	qt.Assert(t, err, qt.IsNotNil, qt.Commentf("NoMutation must remove vector-set!"))
+}
+
+// TestNoMutationRemovedFormInMacroTemplateIsUnbound guards the residue of the
+// 2026-07-13 review dialects.md finding: removing a *form* (here set!, via
+// fr.Remove) dropped its compiler FormSpec but left the form's expand-phase
+// *PrimitiveExpander binding reachable. A user macro whose template names the
+// removed form pins that expand-phase binding onto the introduced identifier;
+// the compiler, which no longer sees set! as a form, resolved the pin and emitted
+// a runtime load of the internal expander. The program then applied
+// #<primitive-expander:set!> as a procedure — an internal compile-time object
+// leaking into the value world — instead of failing as an unbound reference.
+//
+// The contract (dialect.go: "referencing a removed name is an unbound reference,
+// werr.ErrNoSuchBinding") must hold whether the removed keyword is written
+// literally or introduced by a macro template. This is the general defect: it
+// applies to any removed form carrying a primitive expander, not just set!.
+func TestNoMutationRemovedFormInMacroTemplateIsUnbound(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithDialect(wile.NoMutation))
+	qt.Assert(t, err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+
+	// A user macro whose template references the removed set! form. Before the
+	// fix this compiled and, at runtime, applied #<primitive-expander:set!>.
+	src := `(define-syntax my-set (syntax-rules () ((_ v e) (set! v e))))
+	        (let ((x 1)) (my-set x 2) x)`
+	_, err = eng.EvalMultiple(ctx, src)
+	qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+		qt.Commentf("a removed form named in a macro template must be an unbound reference, got %v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "set!",
+		qt.Commentf("the unbound identifier must be set! specifically"))
+	qt.Assert(t, err.Error(), qt.Not(qt.Contains), "primitive-expander",
+		qt.Commentf("the internal expand-phase handler must never leak into runtime, got %v", err))
 }
