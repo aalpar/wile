@@ -20,21 +20,22 @@ func atanWorkPrec(prec uint) uint {
 	return prec + prec/16 + 32
 }
 
-var (
-	bigPiCacheMu sync.Mutex
-	bigPiCache   = map[uint]*big.Float{}
-)
+// bigPiCache memoizes π per precision, LOCK-FREE. This is engine machinery: no
+// user-visible handle exists to serialize on (any thread doing high-precision
+// math implicitly triggers it), so the engine keeps it safe itself rather than
+// pushing it to the user. Cached values are immutable and a concurrent duplicate
+// compute is harmless (identical result), so a sync.Map replaces the former
+// mutex + map; callers still receive a defensive copy.
+var bigPiCache sync.Map // uint prec -> *big.Float (immutable)
 
 // piAtPrec returns π rounded to prec bits via Machin's formula
 // π = 16·atan(1/5) − 4·atan(1/239). Both arguments are < 1, so atanSeries never
 // needs π and there is no recursion back into piAtPrec. Results are cached per
 // precision; a defensive copy is returned so callers cannot mutate the cache.
 func piAtPrec(prec uint) *big.Float {
-	bigPiCacheMu.Lock()
-	defer bigPiCacheMu.Unlock()
-	p, ok := bigPiCache[prec]
+	cached, ok := bigPiCache.Load(prec)
 	if ok {
-		return new(big.Float).Set(p)
+		return new(big.Float).Set(cached.(*big.Float))
 	}
 	wp := prec + 32
 	one := new(big.Float).SetPrec(wp).SetInt64(1)
@@ -49,8 +50,8 @@ func piAtPrec(prec uint) *big.Float {
 	pi := new(big.Float).SetPrec(wp).Sub(sixteenA, fourB)
 
 	result := new(big.Float).SetPrec(prec).Set(pi)
-	bigPiCache[prec] = new(big.Float).Set(result)
-	return result
+	bigPiCache.Store(prec, result)
+	return new(big.Float).Set(result)
 }
 
 // atanSeries computes atan(x) for 0 ≤ x ≤ 1 at precision wp. It halves the
@@ -230,45 +231,41 @@ func atanhSeries(t *big.Float, wp uint) *big.Float {
 	return sum
 }
 
-var (
-	bigLn2CacheMu sync.Mutex
-	bigLn2Cache   = map[uint]*big.Float{}
-)
+// bigLn2Cache memoizes ln(2) per precision, LOCK-FREE (sync.Map). Same rationale
+// as bigPiCache: engine machinery with no user handle, immutable cached values,
+// harmless duplicate computes.
+var bigLn2Cache sync.Map // uint prec -> *big.Float (immutable)
 
 // bigLn2 returns ln(2) rounded to prec bits, computed as 2·atanh(1/3) (since
 // (2−1)/(2+1) = 1/3). Cached per precision; a defensive copy is returned.
 func bigLn2(prec uint) *big.Float {
-	bigLn2CacheMu.Lock()
-	defer bigLn2CacheMu.Unlock()
-	v, ok := bigLn2Cache[prec]
+	cached, ok := bigLn2Cache.Load(prec)
 	if ok {
-		return new(big.Float).Set(v)
+		return new(big.Float).Set(cached.(*big.Float))
 	}
 	wp := prec + 32
 	third := new(big.Float).SetPrec(wp).Quo(new(big.Float).SetPrec(wp).SetInt64(1), new(big.Float).SetPrec(wp).SetInt64(3))
 	ln2 := new(big.Float).SetPrec(wp).Mul(atanhSeries(third, wp), new(big.Float).SetPrec(wp).SetInt64(2))
 	result := new(big.Float).SetPrec(prec).Set(ln2)
-	bigLn2Cache[prec] = new(big.Float).Set(result)
-	return result
+	bigLn2Cache.Store(prec, result)
+	return new(big.Float).Set(result)
 }
 
-var (
-	bigECacheMu sync.Mutex
-	bigECache   = map[uint]*big.Float{}
-)
+// bigECache memoizes e per precision, LOCK-FREE (sync.Map). Same rationale as
+// bigPiCache: engine machinery with no user handle, immutable cached values,
+// harmless duplicate computes.
+var bigECache sync.Map // uint prec -> *big.Float (immutable)
 
 // BigE returns Euler's number e rounded to prec bits (= exp(1)), cached per
 // precision; a defensive copy is returned so callers cannot mutate the cache.
 func BigE(prec uint) *big.Float {
-	bigECacheMu.Lock()
-	defer bigECacheMu.Unlock()
-	v, ok := bigECache[prec]
+	cached, ok := bigECache.Load(prec)
 	if ok {
-		return new(big.Float).Set(v)
+		return new(big.Float).Set(cached.(*big.Float))
 	}
 	result := BigExp(new(big.Float).SetPrec(prec).SetInt64(1), prec)
-	bigECache[prec] = new(big.Float).Set(result)
-	return result
+	bigECache.Store(prec, result)
+	return new(big.Float).Set(result)
 }
 
 // logAt computes the natural logarithm of x at precision wp. It splits

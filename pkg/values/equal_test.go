@@ -141,14 +141,18 @@ func TestEqual_ShortListsUnchanged(t *testing.T) {
 	qt.Assert(t, values.Equal(mk(), mk()), qt.IsTrue)
 }
 
-// TestHashtable_ConcurrentReadWrite pins hashtable.go:159. Two goroutines
-// sharing one hashtable — which SRFI-18 threads can do, since a hashtable is an
-// ordinary Scheme value — produced Go's unrecoverable "concurrent map read and
-// map write" fatal error.
+// TestHashtable_ConcurrentReadWrite pins hashtable.go. Two goroutines sharing
+// one hashtable — which SRFI-18 threads can do, since a hashtable is an ordinary
+// Scheme value — once produced Go's unrecoverable "concurrent map read and map
+// write" fatal error. The type is now LOCK-FREE (sync.Map + copy-on-write
+// buckets), so concurrent access is crash-safe without a mutex; this test pins
+// that host-safety, NOT any transactional guarantee (data landing is the user's
+// responsibility to synchronize — see the Hashtable type comment).
 //
 // Must run under -race: per memory/srfi18-parentmc-race-fix.md a green `make ci`
-// is not evidence of race-freedom. Without the mutex this test is a hard failure
-// under -race and a probabilistic host kill without it.
+// is not evidence of race-freedom. If a future change reintroduced an in-place
+// map/slice write this test is a hard failure under -race and a probabilistic
+// host kill.
 func TestHashtable_ConcurrentReadWrite(t *testing.T) {
 	h := values.NewEmptyHashtable()
 	const iterations = 500
@@ -192,8 +196,8 @@ func TestHashtable_ConcurrentReadWrite(t *testing.T) {
 }
 
 // TestHashtable_ConcurrentEqualAndMutate pins the comparison path specifically:
-// EqualComponents snapshots rather than holding a read lock across the walk, so
-// a concurrent writer must not fault it.
+// EqualComponents reads a lock-free snapshot (immutable buckets via sync.Map),
+// so a concurrent writer must not fault it.
 func TestHashtable_ConcurrentEqualAndMutate(t *testing.T) {
 	a := values.NewEmptyHashtable()
 	b := values.NewEmptyHashtable()
