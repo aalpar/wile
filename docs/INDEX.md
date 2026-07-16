@@ -7,6 +7,7 @@ implementation notes, and educational articles for a single subsystem.
 |-------|-------------|
 | [algebra/](algebra/) | Algebraic structures library -- composable records, equational rewriting, symbolic normalization. Entry points: [overview.md](algebra/overview.md), [reference.md](algebra/reference.md), runnable [tutorial.md](algebra/tutorial.md) |
 | [compiler/](compiler/) | Compiler internals -- macro system, peephole optimizer, IR design (SSA, ANF/CPS, core-let, inlining) |
+| [concurrency/](concurrency/) | SRFI-18 threads and Go-interop concurrency -- how blocking channel operations couple to VM cancellation (`with-timeout`, `thread-terminate!`) |
 | [continuations/](continuations/) | Continuation system -- concepts, marks, VM implementation, delimited continuations, prompt/abort |
 | [coverage/](coverage/) | Scheme-side line coverage -- `--cover` reports compatible with `go tool cover` |
 | [dev/](dev/) | Developer guides -- debug methodology, iteration idioms, object pooling, foreign closures, project board |

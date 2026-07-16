@@ -17,6 +17,10 @@ Every document in `docs/`, organized by topic.
 - [ssa.md](compiler/ssa.md) -- Would SSA help the Wile compiler?
 - [anf-and-cps.md](compiler/anf-and-cps.md) -- CPS and ANF as intermediate forms
 
+## Concurrency
+
+- [channel-cancellation.md](concurrency/channel-cancellation.md) -- Channel lifecycle (never-close-the-data-channel) and how blocking channel ops couple to VM cancellation (`with-timeout`, `thread-terminate!`, embedder deadline)
+
 ## Continuations
 
 - [concepts.md](continuations/concepts.md) -- What continuations are (general concept)
