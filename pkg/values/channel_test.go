@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -48,53 +49,46 @@ func TestChannel_NewChannel_NegativeBuffer(t *testing.T) {
 
 func TestChannel_SendReceive_Buffered(t *testing.T) {
 	ch := values.NewChannel(2)
+	ctx := context.Background()
 
-	err := ch.Send(values.NewInteger(1))
-	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, ch.Send(ctx, values.NewInteger(1)), qt.Equals, values.SendSent)
 	qt.Assert(t, ch.Len(), qt.Equals, 1)
 
-	err = ch.Send(values.NewInteger(2))
-	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, ch.Send(ctx, values.NewInteger(2)), qt.Equals, values.SendSent)
 	qt.Assert(t, ch.Len(), qt.Equals, 2)
 
-	v, ok := ch.Receive()
-	qt.Assert(t, ok, qt.IsTrue)
+	v, out := ch.Receive(ctx)
+	qt.Assert(t, out, qt.Equals, values.RecvReceived)
 	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(1))
 
-	v, ok = ch.Receive()
-	qt.Assert(t, ok, qt.IsTrue)
+	v, out = ch.Receive(ctx)
+	qt.Assert(t, out, qt.Equals, values.RecvReceived)
 	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(2))
 }
 
 func TestChannel_TrySend_FullBuffer(t *testing.T) {
 	ch := values.NewChannel(1)
 
-	ok, err := ch.TrySend(values.NewInteger(1))
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, ch.TrySend(values.NewInteger(1)), qt.Equals, values.SendSent)
 
 	// Buffer is full, should not block
-	ok, err = ch.TrySend(values.NewInteger(2))
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, ch.TrySend(values.NewInteger(2)), qt.Equals, values.SendWouldBlock)
 }
 
 func TestChannel_TryReceive_Empty(t *testing.T) {
 	ch := values.NewChannel(1)
 
-	v, received, ok := ch.TryReceive()
-	qt.Assert(t, received, qt.IsFalse)
-	qt.Assert(t, ok, qt.IsTrue) // channel is open
+	v, out := ch.TryReceive()
+	qt.Assert(t, out, qt.Equals, values.RecvWouldBlock) // open, nothing buffered
 	qt.Assert(t, v == nil, qt.IsTrue)
 }
 
 func TestChannel_TryReceive_WithData(t *testing.T) {
 	ch := values.NewChannel(1)
-	_ = ch.Send(values.NewInteger(42))
+	_ = ch.Send(context.Background(), values.NewInteger(42))
 
-	v, received, ok := ch.TryReceive()
-	qt.Assert(t, received, qt.IsTrue)
-	qt.Assert(t, ok, qt.IsTrue)
+	v, out := ch.TryReceive()
+	qt.Assert(t, out, qt.Equals, values.RecvReceived)
 	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
@@ -120,39 +114,38 @@ func TestChannel_SendAfterClose(t *testing.T) {
 	ch := values.NewChannel(1)
 	_ = ch.Close()
 
-	err := ch.Send(values.NewInteger(1))
-	qt.Assert(t, errors.Is(err, werr.ErrChannelClosed), qt.IsTrue)
+	qt.Assert(t, ch.Send(context.Background(), values.NewInteger(1)), qt.Equals, values.SendClosed)
 }
 
 func TestChannel_TrySendAfterClose(t *testing.T) {
 	ch := values.NewChannel(1)
 	_ = ch.Close()
 
-	_, err := ch.TrySend(values.NewInteger(1))
-	qt.Assert(t, errors.Is(err, werr.ErrChannelClosed), qt.IsTrue)
+	qt.Assert(t, ch.TrySend(values.NewInteger(1)), qt.Equals, values.SendClosed)
 }
 
 func TestChannel_TryReceiveAfterClose(t *testing.T) {
 	ch := values.NewChannel(1)
 	_ = ch.Close()
 
-	_, _, ok := ch.TryReceive()
-	qt.Assert(t, ok, qt.IsFalse) // channel closed
+	_, out := ch.TryReceive()
+	qt.Assert(t, out, qt.Equals, values.RecvClosed)
 }
 
 func TestChannel_ReceiveAfterClose(t *testing.T) {
 	ch := values.NewChannel(1)
-	_ = ch.Send(values.NewInteger(42))
+	ctx := context.Background()
+	_ = ch.Send(ctx, values.NewInteger(42))
 	_ = ch.Close()
 
 	// Can still receive buffered values
-	v, ok := ch.Receive()
-	qt.Assert(t, ok, qt.IsTrue)
+	v, out := ch.Receive(ctx)
+	qt.Assert(t, out, qt.Equals, values.RecvReceived)
 	qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Then closed
-	_, ok = ch.Receive()
-	qt.Assert(t, ok, qt.IsFalse)
+	_, out = ch.Receive(ctx)
+	qt.Assert(t, out, qt.Equals, values.RecvClosed)
 }
 
 func TestChannel_Chan(t *testing.T) {
@@ -203,8 +196,7 @@ func TestChannelSelectReceive(t *testing.T) {
 	ch2 := values.NewChannel(1)
 
 	// Send to ch2 so it's ready
-	err := ch2.Send(values.NewInteger(42))
-	c.Assert(err, qt.IsNil)
+	c.Assert(ch2.Send(context.Background(), values.NewInteger(42)), qt.Equals, values.SendSent)
 
 	cases := []values.SelectCase{
 		{Channel: ch1, Kind: values.SelectReceive},
@@ -230,8 +222,8 @@ func TestChannelSelectSend(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 
 	// Verify the value was sent
-	v, recvOK := ch.Receive()
-	c.Assert(recvOK, qt.IsTrue)
+	v, out := ch.Receive(context.Background())
+	c.Assert(out, qt.Equals, values.RecvReceived)
 	c.Assert(v, valuestest.SchemeEquals, values.NewString("hello"))
 }
 
@@ -260,7 +252,7 @@ func TestChannelSelectBlocking(t *testing.T) {
 	// Send from another goroutine — unbuffered channel semantics
 	// synchronize sender and receiver, so no sleep needed.
 	go func() {
-		_ = ch.Send(values.NewInteger(99))
+		_ = ch.Send(context.Background(), values.NewInteger(99))
 	}()
 
 	done := make(chan struct{})
@@ -295,13 +287,35 @@ func TestChannelSelectClosedChannel(t *testing.T) {
 	c.Assert(ok, qt.IsFalse)
 }
 
+// TestChannelSelectClosedButBuffered pins the Len()==0 guard in firstDeadCase:
+// a receive case on a CLOSED channel that still holds buffered values is not
+// dead — the ready pass must drain the buffered value (ok=true), not report the
+// case as a dead closed-receive (ok=false). Dropping the Len()==0 conjunct
+// would regress this silently.
+func TestChannelSelectClosedButBuffered(t *testing.T) {
+	c := qt.New(t)
+
+	ch := values.NewChannel(1)
+	_ = ch.Send(context.Background(), values.NewInteger(7))
+	_ = ch.Close() // closed, but the buffered 7 must still be receivable
+
+	cases := []values.SelectCase{
+		{Channel: ch, Kind: values.SelectReceive},
+	}
+
+	idx, val, ok := values.ChannelSelect(cases)
+	c.Assert(idx, qt.Equals, 0)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(7))
+}
+
 func TestChannelSelectSendToClosedChannel(t *testing.T) {
 	c := qt.New(t)
 
 	ch := values.NewChannel(1)
 	// Fill the buffer so TrySend fails (non-blocking pass won't catch it)
-	_ = ch.Send(values.NewInteger(1))
-	// Close the channel — reflect.Select would panic without the recover guard
+	_ = ch.Send(context.Background(), values.NewInteger(1))
+	// Close the channel — the send case is now dead and reported deterministically
 	_ = ch.Close()
 
 	cases := []values.SelectCase{
@@ -327,7 +341,7 @@ func TestChannelSelectClosedSendDeterministic(t *testing.T) {
 		closed := values.NewChannel(0)
 		_ = closed.Close()
 		ready := values.NewChannel(1)
-		_ = ready.Send(values.NewInteger(99))
+		_ = ready.Send(context.Background(), values.NewInteger(99))
 
 		cases := []values.SelectCase{
 			{Channel: closed, Kind: values.SelectSend, Value: values.NewInteger(1)},
@@ -348,7 +362,7 @@ func TestChannelSelectClosedSendDeterministic(t *testing.T) {
 			closed0 := values.NewChannel(0)
 			_ = closed0.Close()
 			full := values.NewChannel(1)
-			_ = full.Send(values.NewInteger(0)) // open but full: would block
+			_ = full.Send(context.Background(), values.NewInteger(0)) // open but full: would block
 			closed2 := values.NewChannel(0)
 			_ = closed2.Close()
 

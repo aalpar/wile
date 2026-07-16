@@ -15,6 +15,7 @@
 package values
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sync"
@@ -30,17 +31,104 @@ var (
 	channelIDCounter atomic.Uint64
 )
 
-// Channel represents a Go channel exposed to Scheme
+// SendOutcome reports how a send resolved. It is the seam that keeps the
+// ctx-cancellation cause visible to the caller: the primitive layer decides
+// whether a cancelled send is surfaced to Scheme as an ordinary closed-channel
+// error (the current policy) or as a distinct condition, without any change to
+// the channel lifecycle below.
+type SendOutcome int
+
+const (
+	// SendSent means the value was delivered.
+	SendSent SendOutcome = iota
+	// SendClosed means the channel was closed; the value was not delivered.
+	SendClosed
+	// SendWouldBlock is returned by TrySend only: the buffer is full or there
+	// is no ready receiver.
+	SendWouldBlock
+	// SendCancelled means a blocking Send observed ctx cancellation (deadline
+	// or thread-terminate!) before the value was delivered.
+	SendCancelled
+)
+
+// String names the outcome, so %v in diagnostics reads "SendCancelled" rather
+// than a bare integer.
+func (o SendOutcome) String() string {
+	switch o {
+	case SendSent:
+		return "SendSent"
+	case SendClosed:
+		return "SendClosed"
+	case SendWouldBlock:
+		return "SendWouldBlock"
+	case SendCancelled:
+		return "SendCancelled"
+	default:
+		return fmt.Sprintf("SendOutcome(%d)", int(o))
+	}
+}
+
+// RecvOutcome reports how a receive resolved. See SendOutcome for why the cause
+// is surfaced rather than flattened.
+type RecvOutcome int
+
+const (
+	// RecvReceived means a value was produced from the channel. The value is
+	// whatever was sent, which may itself be nil (a nil Value on the channel);
+	// callers that treat nil specially must still check it (PrimChannelReceive
+	// maps RecvReceived+nil to Void).
+	RecvReceived RecvOutcome = iota
+	// RecvClosed means the channel is closed and drained.
+	RecvClosed
+	// RecvWouldBlock is returned by TryReceive only: nothing is buffered and
+	// the channel is still open.
+	RecvWouldBlock
+	// RecvCancelled means a blocking Receive observed ctx cancellation.
+	RecvCancelled
+)
+
+// String names the outcome, so %v in diagnostics reads "RecvCancelled" rather
+// than a bare integer.
+func (o RecvOutcome) String() string {
+	switch o {
+	case RecvReceived:
+		return "RecvReceived"
+	case RecvClosed:
+		return "RecvClosed"
+	case RecvWouldBlock:
+		return "RecvWouldBlock"
+	case RecvCancelled:
+		return "RecvCancelled"
+	default:
+		return fmt.Sprintf("RecvOutcome(%d)", int(o))
+	}
+}
+
+// Channel represents a Go channel exposed to Scheme.
+//
+// Lifecycle: the underlying data channel (ch) is never closed. Closure is
+// signalled by closing a separate done channel exactly once, guarded by
+// closeOnce. This is deliberate — closing ch while a send may be in flight is a
+// data race (and a "send on closed channel" host panic) under Go's memory
+// model. Because ch is never closed, every send/receive is a select over
+// {data op, done, ctx.Done()}: a concurrent Close can never panic a send, the
+// operations are -race-clean, and a blocking op honours the VM deadline /
+// thread-terminate! instead of leaking a parked goroutine.
+//
+// This type carries no transactional guarantee across operations; concurrent
+// senders/receivers observe standard Go channel semantics. Status (closed) is a
+// lock-free atomic; there is no mutex.
 type Channel struct {
 	id         uint64
 	bufferSize int
 	ch         chan Value
-	closed     bool
-	mu         sync.RWMutex
+	done       chan struct{} // closed exactly once by Close; the closure signal
+	closeOnce  sync.Once     // guards the single close(done) + closed.Store
+	closed     atomic.Bool   // status for IsClosed / SchemeString; set before done closes
 }
 
-// NewChannel creates a new channel with the given buffer size
-// bufferSize of 0 creates an unbuffered channel
+// NewChannel creates a new channel with the given buffer size.
+// bufferSize of 0 creates an unbuffered channel.
 func NewChannel(bufferSize int) *Channel {
 	if bufferSize < 0 {
 		bufferSize = 0
@@ -50,123 +138,137 @@ func NewChannel(bufferSize int) *Channel {
 		id:         id,
 		bufferSize: bufferSize,
 		ch:         make(chan Value, bufferSize),
+		done:       make(chan struct{}),
 	}
 }
 
-// ID returns the channel's unique identifier
+// ID returns the channel's unique identifier.
 func (p *Channel) ID() uint64 {
 	return p.id
 }
 
-// BufferSize returns the channel's buffer size
+// BufferSize returns the channel's buffer size.
 func (p *Channel) BufferSize() int {
 	return p.bufferSize
 }
 
-// Send sends a value on the channel (blocking)
-func (p *Channel) Send(v Value) error {
-	p.mu.RLock()
-	if p.closed {
-		p.mu.RUnlock()
-		return werr.ErrChannelClosed
+// Send sends a value on the channel, blocking until the value is delivered, the
+// channel is closed, or ctx is cancelled.
+func (p *Channel) Send(ctx context.Context, v Value) SendOutcome {
+	// Closed wins over an available buffer slot: never deliver to a closed
+	// channel. (A send racing a concurrent close may still land in the buffer
+	// and be drained by a receiver — a legitimate send-before-close ordering,
+	// never a panic, since ch is never closed.)
+	if p.closed.Load() {
+		return SendClosed
 	}
-	ch := p.ch
-	p.mu.RUnlock()
-
-	ch <- v
-	return nil
-}
-
-// TrySend attempts to send a value without blocking
-// Returns true if sent, false if would block
-func (p *Channel) TrySend(v Value) (bool, error) {
-	p.mu.RLock()
-	if p.closed {
-		p.mu.RUnlock()
-		return false, werr.ErrChannelClosed
-	}
-	ch := p.ch
-	p.mu.RUnlock()
-
 	select {
-	case ch <- v:
-		return true, nil
-	default:
-		return false, nil
+	case p.ch <- v:
+		return SendSent
+	case <-p.done:
+		return SendClosed
+	case <-ctx.Done():
+		return SendCancelled
 	}
 }
 
-// Receive receives a value from the channel (blocking)
-// Returns the value and true, or nil and false if channel is closed
-func (p *Channel) Receive() (Value, bool) {
-	p.mu.RLock()
-	ch := p.ch
-	p.mu.RUnlock()
-
-	v, ok := <-ch
-	return v, ok
-}
-
-// TryReceive attempts to receive a value without blocking
-// Returns (value, true, true) if received
-// Returns (nil, false, true) if would block
-// Returns (nil, false, false) if channel is closed
-func (p *Channel) TryReceive() (Value, bool, bool) {
-	p.mu.RLock()
-	ch := p.ch
-	closed := p.closed
-	p.mu.RUnlock()
-
+// TrySend attempts to send a value without blocking.
+func (p *Channel) TrySend(v Value) SendOutcome {
+	if p.closed.Load() {
+		return SendClosed
+	}
 	select {
-	case v, ok := <-ch:
-		if !ok {
-			return nil, false, false // channel closed
-		}
-		return v, true, true
+	case p.ch <- v:
+		return SendSent
+	case <-p.done:
+		return SendClosed
 	default:
-		if closed {
-			return nil, false, false
-		}
-		return nil, false, true // would block
+		return SendWouldBlock
 	}
 }
 
-// Close closes the channel
+// Receive receives a value from the channel, blocking until a value is
+// available, the channel is closed and drained, or ctx is cancelled.
+//
+// This is a plain 3-way select, mirroring Go's own `select { case v := <-ch;
+// case <-ctx.Done() }`: when a buffered value and cancellation are both ready
+// the choice is pseudo-random, exactly as Go's select is. The one priority Go
+// DOES guarantee — a receive on a closed channel yields buffered values before
+// the closed signal — is provided by the inner drain on the done arm, not by a
+// leading non-blocking receive (which would impose a data-beats-ctx priority Go
+// does not have).
+func (p *Channel) Receive(ctx context.Context) (Value, RecvOutcome) {
+	select {
+	case v := <-p.ch:
+		return v, RecvReceived
+	case <-p.done:
+		// Closed: a straggler may still sit in the buffer (the outer select
+		// picks randomly between a ready ch and a ready done); drain it before
+		// reporting closed, per Go's drain-then-zero close semantics.
+		select {
+		case v := <-p.ch:
+			return v, RecvReceived
+		default:
+			return nil, RecvClosed
+		}
+	case <-ctx.Done():
+		return nil, RecvCancelled
+	}
+}
+
+// TryReceive attempts to receive a value without blocking.
+func (p *Channel) TryReceive() (Value, RecvOutcome) {
+	// Drain a buffered value first, even if the channel is closed.
+	select {
+	case v := <-p.ch:
+		return v, RecvReceived
+	default:
+	}
+	if p.closed.Load() {
+		return nil, RecvClosed
+	}
+	return nil, RecvWouldBlock
+}
+
+// Close closes the channel. It is idempotent-safe: a second Close returns
+// ErrChannelClosed rather than panicking.
 func (p *Channel) Close() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.closed {
-		return werr.ErrChannelClosed
+	first := false
+	p.closeOnce.Do(func() {
+		first = true
+		p.closed.Store(true)
+		close(p.done)
+	})
+	if !first {
+		return werr.WrapForeignErrorf(werr.ErrChannelClosed, "Close: channel already closed")
 	}
-	p.closed = true
-	close(p.ch)
 	return nil
 }
 
-// IsClosed returns true if the channel is closed
+// IsClosed returns true if the channel is closed.
 func (p *Channel) IsClosed() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.closed
+	return p.closed.Load()
 }
 
-// Len returns the number of elements queued in the channel
+// Len returns the number of elements queued in the channel.
 func (p *Channel) Len() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return len(p.ch)
 }
 
-// Cap returns the channel's capacity
+// Cap returns the channel's capacity.
 func (p *Channel) Cap() int {
 	return p.bufferSize
 }
 
-// Chan returns the underlying Go channel for use in select statements
+// Chan returns the underlying Go channel for use in select statements.
+//
+// The caller MUST NOT close the returned channel: the never-closed invariant is
+// what makes concurrent sends panic-free (see the Channel doc comment), and
+// close(ch) from here would reintroduce the "send on closed channel" host panic
+// this type exists to prevent. Closure is signalled only through Close/IsClosed.
+// A caller ranging or selecting on the returned channel will not observe closure
+// by the channel's own lifecycle.
 func (p *Channel) Chan() chan Value {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.ch
 }
 
@@ -191,10 +293,8 @@ func (p *Channel) SchemeString() string {
 	if p == nil {
 		return "#<channel:void>"
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	status := "open"
-	if p.closed {
+	if p.closed.Load() {
 		status = "closed"
 	}
 	if p.bufferSize == 0 {
@@ -219,17 +319,26 @@ type SelectCase struct {
 	Kind    SelectCaseKind
 }
 
-// firstClosedSendCase returns the index of the first send case (in slice
-// order) whose channel is closed, or (-1, false) if there is none. A send to a
-// closed channel can never proceed — reflect.Select treats it as ready and
-// panics. ChannelSelect reports such a case deterministically (first in slice
-// order) rather than letting reflect.Select pick among several closed sends
-// pseudo-randomly. Both the pre-block scan and the TOCTOU recovery use this so
-// the reported index is identical on either path.
-func firstClosedSendCase(cases []SelectCase) (int, bool) {
+// firstDeadCase returns the index of the first case (in slice order) that can
+// never proceed: a send to a closed channel, or a receive from a closed,
+// drained channel. ChannelSelect reports such a case as (idx, nil, false). A closed receive
+// that still holds buffered values is not dead — the ready pass drains it — so
+// by the time firstDeadCase runs, any closed receive is empty. Reporting these
+// deterministically (rather than letting reflect.Select pick among them)
+// keeps the failure index independent of reflect.Select's pseudo-random choice,
+// and is necessary because the data channel is never closed, so reflect.Select
+// would otherwise block forever on a closed receive instead of returning it.
+func firstDeadCase(cases []SelectCase) (int, bool) {
 	for i, c := range cases {
-		if c.Kind == SelectSend && c.Channel.IsClosed() {
-			return i, true
+		switch c.Kind {
+		case SelectSend:
+			if c.Channel.IsClosed() {
+				return i, true
+			}
+		case SelectReceive:
+			if c.Channel.IsClosed() && c.Channel.Len() == 0 {
+				return i, true
+			}
 		}
 	}
 	return -1, false
@@ -240,55 +349,51 @@ func firstClosedSendCase(cases []SelectCase) (int, bool) {
 //
 // Resolution order is deterministic where it can be: a ready operation (first
 // in slice order) wins, then a default case, then — before any blocking — the
-// first send case targeting a closed channel is reported as (idx, nil, false).
-// Only genuinely blockable cases reach reflect.Select, whose choice among
-// concurrently-ready cases is pseudo-random by design (standard select
-// semantics). The sole remaining panic source is a channel closed concurrently
-// during the blocking wait (TOCTOU); it is recovered and reported via the same
-// first-closed-send rule, so the failure index never depends on reflect.Select's
-// internal pick.
+// first dead case (a closed send, or a closed drained receive) is reported as
+// (idx, nil, false). Only genuinely blockable open cases reach reflect.Select.
+//
+// Because the underlying data channels are never closed (see Channel), a case
+// cannot become dead while blocked in reflect.Select: a peer closing an open
+// channel mid-block is not observed here. This method has no Scheme surface
+// today; wiring a `channel-select` primitive would extend the reflect.Select
+// set with each channel's done signal to lift that limitation.
 func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	if len(cases) == 0 {
 		return -1, nil, false
 	}
 
-	// First pass: try non-blocking operations before falling through to reflect.Select.
+	// Ready pass: take the first non-blocking operation in slice order.
 	for i, c := range cases {
-		if c.Kind == SelectDefault {
+		switch c.Kind {
+		case SelectDefault:
 			continue
-		}
-		if c.Kind == SelectSend {
-			sent, _ := c.Channel.TrySend(c.Value)
-			if sent {
+		case SelectSend:
+			if c.Channel.TrySend(c.Value) == SendSent {
 				return i, nil, true
 			}
-		} else {
-			v, received, recvOK := c.Channel.TryReceive()
-			if received {
-				return i, v, recvOK
+		case SelectReceive:
+			v, out := c.Channel.TryReceive()
+			if out == RecvReceived {
+				return i, v, true
 			}
 		}
 	}
 
-	// Check for default case.
+	// Default case, if present.
 	for i, c := range cases {
 		if c.Kind == SelectDefault {
 			return i, nil, true
 		}
 	}
 
-	// A send case targeting a closed channel can never proceed; reflect.Select
-	// would treat it as ready and panic. Report it deterministically here,
-	// after the ready-operation and default passes so a viable operation always
-	// wins over a dead send case. (A closed receive case needs no special
-	// handling — reflect.Select returns it as ready with recvOK=false.)
-	closedIdx, hasClosed := firstClosedSendCase(cases)
-	if hasClosed {
-		return closedIdx, nil, false
+	// Dead cases (closed send / closed drained receive), reported
+	// deterministically before blocking.
+	deadIdx, dead := firstDeadCase(cases)
+	if dead {
+		return deadIdx, nil, false
 	}
 
-	// No default case — block using reflect.Select for true multiplexing.
-	// Build reflect.SelectCase slice, tracking original indices.
+	// Block on the remaining open, blockable cases using reflect.Select.
 	selectCases := make([]reflect.SelectCase, 0, len(cases))
 	originalIndices := make([]int, 0, len(cases))
 	for i, c := range cases {
@@ -311,22 +416,6 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 		selectCases = append(selectCases, rc)
 		originalIndices = append(originalIndices, i)
 	}
-
-	// A channel may still close concurrently between the scan above and
-	// reflect.Select picking it (TOCTOU), panicking with "send on closed
-	// channel". Recover and report the first closed send case, matching the
-	// deterministic pre-block contract; re-panic anything else.
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		ci, found := firstClosedSendCase(cases)
-		if !found {
-			panic(r)
-		}
-		idx, val, ok = ci, nil, false
-	}()
 
 	chosen, recv, recvOK := reflect.Select(selectCases)
 	idx = originalIndices[chosen]

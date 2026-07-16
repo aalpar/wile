@@ -59,6 +59,12 @@ var PrimChannelQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimChannelSend sends a value on the channel (blocking)
 // (channel-send! ch value) -> void
+//
+// A send on a closed channel raises ErrChannelClosed. A send interrupted by ctx
+// cancellation (thread-terminate! / deadline) is surfaced the same way — the
+// thread is unwound anyway, so it observes the closed-channel contract rather
+// than a distinct condition (see values.SendOutcome for the seam that would
+// distinguish them).
 func PrimChannelSend(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-send!")
 	if err != nil {
@@ -66,9 +72,11 @@ func PrimChannelSend(mc machine.CallContext) error {
 	}
 	val := mc.Arg(1)
 
-	err = ch.Send(val)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "channel-send!")
+	if ch.Send(mc.Context(), val) != values.SendSent {
+		// SendClosed, or SendCancelled (Option A: a cancelled send is surfaced
+		// as closed). Anything that is not a positive delivery is an error, not
+		// a silent success.
+		return werr.WrapForeignErrorf(werr.ErrChannelClosed, "channel-send!")
 	}
 
 	mc.SetValue(values.Void)
@@ -77,22 +85,22 @@ func PrimChannelSend(mc machine.CallContext) error {
 
 // PrimChannelReceive receives a value from the channel (blocking)
 // (channel-receive ch) -> value
+//
+// A receive on a closed, drained channel returns Void. A receive interrupted by
+// ctx cancellation returns Void the same way (see PrimChannelSend).
 func PrimChannelReceive(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-receive")
 	if err != nil {
 		return err
 	}
 
-	v, ok := ch.Receive()
-	switch {
-	case !ok:
-		// Channel is closed
-		mc.SetValue(values.Void)
-	case v == nil:
-		mc.SetValue(values.Void)
-	default:
+	v, outcome := ch.Receive(mc.Context())
+	if outcome == values.RecvReceived && v != nil {
 		mc.SetValue(v)
+		return nil
 	}
+	// Closed, cancelled, or a nil value: report Void.
+	mc.SetValue(values.Void)
 	return nil
 }
 
@@ -105,12 +113,12 @@ func PrimChannelTrySend(mc machine.CallContext) error {
 	}
 	val := mc.Arg(1)
 
-	sent, err := ch.TrySend(val)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "channel-try-send!")
+	outcome := ch.TrySend(val)
+	if outcome == values.SendClosed {
+		return werr.WrapForeignErrorf(werr.ErrChannelClosed, "channel-try-send!")
 	}
 
-	mc.SetValue(values.BoolToBoolean(sent))
+	mc.SetValue(values.BoolToBoolean(outcome == values.SendSent))
 	return nil
 }
 
@@ -122,7 +130,7 @@ func PrimChannelTryReceive(mc machine.CallContext) error {
 		return err
 	}
 
-	v, received, open := ch.TryReceive()
+	v, outcome := ch.TryReceive()
 
 	// Return three values: the received value (#f when none, not Void — per the
 	// channel-try-receive contract), whether a value was received, and whether
@@ -131,6 +139,8 @@ func PrimChannelTryReceive(mc machine.CallContext) error {
 	if val == nil {
 		val = values.FalseValue
 	}
+	received := outcome == values.RecvReceived
+	open := outcome != values.RecvClosed
 	mc.SetValues(val, values.BoolToBoolean(received), values.BoolToBoolean(open))
 	return nil
 }
