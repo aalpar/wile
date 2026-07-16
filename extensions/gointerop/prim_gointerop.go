@@ -61,10 +61,28 @@ var PrimChannelQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // (channel-send! ch value) -> void
 //
 // A send on a closed channel raises ErrChannelClosed. A send interrupted by ctx
-// cancellation (thread-terminate! / deadline) is surfaced the same way — the
-// thread is unwound anyway, so it observes the closed-channel contract rather
-// than a distinct condition (see values.SendOutcome for the seam that would
-// distinguish them).
+// cancellation raises it too — Option A: cancelled is surfaced as closed, rather
+// than as a distinct condition (values.SendOutcome is the seam that keeps the two
+// apart down to this boundary, where the policy discards the difference).
+//
+// What makes Option A safe lives OUTSIDE this package, and differs per
+// cancellation source. Do not weaken the invariants below believing the channel
+// layer protects itself; it does not. channel_cancellation_test.go guards them
+// from this side, and is where a regression surfaces:
+//
+//   - with-timeout: callForeignCached rechecks ctx after every foreign return —
+//     but only when a timer is installed (mc.timer != nil) and the cause is
+//     ErrTimerExpired — and raises ErrTimerInterrupt, so the handler runs before
+//     the laundered error is consumed. Those two gates are why the other two
+//     sources get nothing from it.
+//   - thread-terminate!: Thread.setOutcome is write-once, so a terminated thread
+//     reports its SRFI-18 terminated-thread exception, never this one. (The VM's
+//     ≈1024-op ctx-check window is NOT the protection — a cancelled op in tail
+//     position has no following op to trip it.)
+//   - An embedder-supplied deadline has neither. There the laundering is real and
+//     observable, bounded only by that same ≈1024-op window.
+//
+// See docs/concurrency/channel-cancellation.md for the full argument.
 func PrimChannelSend(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-send!")
 	if err != nil {
@@ -87,7 +105,10 @@ func PrimChannelSend(mc machine.CallContext) error {
 // (channel-receive ch) -> value
 //
 // A receive on a closed, drained channel returns Void. A receive interrupted by
-// ctx cancellation returns Void the same way (see PrimChannelSend).
+// ctx cancellation returns Void the same way — Option A again, and the more
+// dangerous half: a send's laundered outcome is at least an error, whereas Void
+// is an ordinary value that flows on silently. See PrimChannelSend for the
+// out-of-package invariants that make that safe, and where they run out.
 func PrimChannelReceive(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-receive")
 	if err != nil {
