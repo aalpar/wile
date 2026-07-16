@@ -8,20 +8,24 @@ of parking a goroutine forever.
 **Status:** as-built, merged to master 2026-07-16 (`3441c8ed`, from branch
 `fix/channel-lifecycle-ctx`). It replaced a `sync.RWMutex` + `close(ch)` design
 under which the TOCTOU host-panic and the ctx goroutine-leak described below were
-live. This is the design record for a coupling that was retrofitted onto a
+live. Writing this document surfaced a further defect it had missed — a
+terminated thread could report a cancelled channel op's laundered value as its
+result — fixed 2026-07-16 in `pkg/values/thread.go`; see *The tail-position
+hole*. This is the design record for a coupling that was retrofitted onto a
 5-month-old channel subsystem; see *History* for why it is younger than
 everything it touches, and *Open decisions* for the parts still deliberately
 unsettled.
 
-Sections marked as gaps (*Boundaries*, *Test coverage*) describe work that is
-**not** implemented.
+The section marked as a gap (*Boundaries*) describes work that is **not**
+implemented.
 
 **Code:** `pkg/values/channel.go` (the `Channel` type, `SendOutcome` /
 `RecvOutcome`), `extensions/gointerop/prim_gointerop.go` (the primitive layer's
 Option A policy), `pkg/machine/call_foreign_cached.go` (`callForeignCached`, the
 eager timer recheck this design leans on), `pkg/machine/run_body_under_timer.go`
 (`RunBodyUnderTimer`, the `with-timeout` ctx), `pkg/values/thread.go`
-(`Thread.Terminate`, the SRFI-18 ctx).
+(`Thread.Terminate`, the SRFI-18 ctx; `Thread.setOutcome`, the write-once rule
+that keeps a laundered value from becoming a terminated thread's result).
 
 ---
 
@@ -126,14 +130,37 @@ each case. This is the crux of the coupling.
 | Source | Cause on ctx | Why Option A is safe |
 |---|---|---|
 | `with-timeout` | `ErrTimerExpired` (`WithTimeoutCause`) | **Eager recheck.** `callForeignCached` does a non-blocking `ctx.Done()` check *after every foreign return* and, on `ErrTimerExpired`, returns `ErrTimerInterrupt` before the laundered value is consumed. The timeout handler runs; the bogus `Void`/closed-error is discarded. |
-| `thread-terminate!` | `context.Canceled` (plain `cancel()`) | **Bounded latency.** The eager recheck is `ErrTimerExpired`-only, so it does *not* fire here. Safety instead comes from the pre-existing property that a terminated thread runs at most `contextCheckMask` (≈1024) more ops before the VM loop's top-of-loop `ctx.Done()` check unwinds it to `TerminatedThreadException`. The laundered value is discarded on that unwind. Channels add no new hazard beyond terminate's already-accepted latency. |
+| `thread-terminate!` | `context.Canceled` (plain `cancel()`) | **The outcome is claimed, not raced.** The eager recheck is `ErrTimerExpired`-only, so it does *not* fire here. Safety comes instead from `Terminate` storing the SRFI-18 terminated-thread exception *before* it cancels, plus the outcome being write-once (`Thread.setOutcome`, `pkg/values/thread.go`): the laundered value cannot become the thread's result no matter which path ends the goroutine. Side effects the thread performs in the ≤ `contextCheckMask` (≈1024) ops before the VM loop's top-of-loop `ctx.Done()` check unwinds it remain observable — terminate's already-accepted latency, unchanged by channels. |
 | Embedder deadline | `context.DeadlineExceeded`, `mc.timer == nil` | **Neither protection; bounded and strictly better than before.** No eager recheck (not a timer) and no thread teardown. The body runs up to ≈1024 ops with a laundered `Void` before `DeadlineExceeded` propagates. This is the one path where "a cancelled receive looks exactly like a closed channel" is observable — but it is bounded by the same VM-wide cancellation latency every primitive has, and it replaces the old **infinite hang** with a bounded return. |
 
 The single mechanism that makes the first row work — the eager `ErrTimerExpired`
 recheck in `callForeignCached` — is the invariant the Option A comment must name.
 Remove or narrow it and the `with-timeout` composition regresses to the
-embedder-deadline behavior (bounded laundering), and no channel or timer test
-would catch the change (see *Test coverage*).
+embedder-deadline behavior (bounded laundering);
+`TestWithTimeoutInterruptsParkedReceive` is the one test that fails when it does.
+
+### The tail-position hole (found and fixed 2026-07-16)
+
+The `thread-terminate!` row above originally claimed the ≈1024-op unwind window
+was itself the protection: the terminated thread would reach the top-of-loop ctx
+check and the laundered value would be "discarded on that unwind". It is not,
+when the parked `channel-receive` sits in **tail position of the thread thunk** —
+nothing follows it, so no op ever triggers the check, and the laundered `Void`
+returns as the thunk's ordinary result. `Thread.Start`'s goroutine then
+overwrote the exception `Terminate` had stored, and `(thread-join! t)` reported a
+terminated thread as having *succeeded* with `Void` — indistinguishable from a
+receive on a closed channel, and a fourth laundering escape in the row the doc
+called safe.
+
+The defect was in `thread.go`, not in the channel layer; the channel fix only
+made it reachable (before it, that thread hung forever). SRFI-18 gives
+`thread-terminate!` an outcome, not merely an effect: a terminated-thread
+exception stored in the end-exception field, which `thread-join!` raises. The
+outcome is now write-once, so the first writer (`Terminate`) wins over the
+goroutine's completion path, and *no* laundered value can be reported as a
+terminated thread's result. Guarded channel-free by
+`TestThreadTerminateStoresEndException`; the two thunk shapes are pinned as
+indistinguishable by `TestTerminateUnparksBlockedThread`.
 
 ### Empirical confirmation
 
@@ -169,8 +196,8 @@ The channel-cancellation link is the youngest part of the channel subsystem by
 |---|---|---|
 | Go channel infrastructure exposed to Scheme | ~Feb 2026 (PR #224) | git only |
 | `SelectCaseKind` enum refinement | 2026-03-04 (PR #415) | git only |
-| `channel-select` multiplex surface | 2026-06-08 (draft, unshipped) | `memory/2026-06-08-channel-select-design.local.md` |
-| **Channel ops ↔ VM cancellation** | **2026-07-15 (`3441c8ed`)** | `plans/2026-07-15-review-2026-07-13-sec4-remediation.md` §T1.2/T1.3 |
+| `channel-select` multiplex surface | 2026-06-08 (draft, unshipped) | untracked local design note, quoted below |
+| **Channel ops ↔ VM cancellation** | **2026-07-15 (`3441c8ed`)** | untracked review-remediation plan, §T1.2/T1.3 |
 
 For the subsystem's first ~5 months, blocking channel ops ignored `ctx`
 entirely. The 2026-06-08 `channel-select` design **explicitly declined**
@@ -215,22 +242,31 @@ not close them.
    one observable manifestation of the laundering and deserves an explicit
    decision rather than an accident of the eager recheck being timer-only.
 
-## Test coverage (and its gap)
+## Test coverage
 
 `pkg/values/channel_lifecycle_test.go` proves the Go-level contract: a blocking
 `Send`/`Receive` returns on a raw `context.WithCancel`, and a parked op is woken
 by a concurrent `Close`. `TestChannel_ConcurrentSendClose_NoPanic` (20000 trials,
 ungated, `-race`) is the permanent TOCTOU guard.
 
-**Gap:** nothing exercises the coupling *through the Scheme integration* that
-makes it safe. No test drives `thread-terminate!` or `with-timeout` into a parked
-channel op. In particular, the `with-timeout ∘ channel-receive` path is safe only
-because of the eager `ErrTimerExpired` recheck in `callForeignCached`; no channel
-or timer test would fail if that recheck regressed. Two tests close the gap:
+The Go layer cannot reach the two integrations that make Option A safe, because
+both live above `pkg/values`. `extensions/gointerop/channel_cancellation_test.go`
+drives them from Scheme:
 
-- a Scheme `(with-timeout T handler (lambda () (channel-receive empty-ch)))`
-  asserting the *handler* value, not `Void` — the regression guard for the eager
-  recheck;
-- a cross-thread rendezvous: park a thread in `channel-receive`,
-  `thread-terminate!` it, assert the goroutine exits and the joiner sees
-  `TerminatedThreadException`.
+- `TestWithTimeoutInterruptsParkedReceive` — asserts the *handler's* value, not
+  `Void`. The regression guard for the eager `ErrTimerExpired` recheck; with that
+  recheck disabled it fails with the laundered `Void` reaching the program.
+- `TestTerminateUnparksBlockedThread` — parks a thread in `channel-receive`,
+  terminates it, and joins. `thread-join!` *is* the goroutine-exit handshake
+  (`Thread.Join` blocks on the `done` channel closed by `Start`'s
+  first-registered, therefore last-run, defer), so a leaked goroutine surfaces as
+  `JoinTimeoutException`. Both thunk shapes (receive in tail position, and ops
+  following) assert the same terminated-thread exception — the mechanism that
+  ends the thread must not be visible from Scheme.
+
+The SRFI-18 contract the second test leans on is pinned separately, and
+channel-free, in `extensions/threads/prim_threads_terminate_outcome_test.go`
+(`TestThreadTerminateStoresEndException` and its already-completed-thread
+mirror). Asserting merely that *some* exception is raised does not guard it: the
+overwritten outcome was the thunk's own `context.Canceled`, which raises too, so
+only the exception's identity separates correct from broken.

@@ -242,30 +242,57 @@ func (p *Thread) Start(parentCtx context.Context) error {
 		defer func() {
 			r := recover()
 			if r != nil {
-				p.mu.Lock()
-				p.state = ThreadTerminated
 				// RecoverAsError applies the sentinel to error and non-error panic
 				// values alike, chaining an error one as the cause, so this is the
 				// whole of the identity the outcome needs: no second wrap, and no
 				// ErrInternal layered under ErrThreadPanic for a runtime fault.
-				p.outcome = &threadOutcome{err: werr.RecoverAsError(r, werr.ErrThreadPanic, fmt.Sprintf("thread %q", p.name))}
-				p.mu.Unlock()
+				p.setOutcome(&threadOutcome{err: werr.RecoverAsError(r, werr.ErrThreadPanic, fmt.Sprintf("thread %q", p.name))})
 			}
 		}()
 
 		result, err := p.RunFunc(p.ctx, p.thunk)
 
-		p.mu.Lock()
-		p.state = ThreadTerminated
 		if err != nil {
-			p.outcome = &threadOutcome{err: err}
+			p.setOutcome(&threadOutcome{err: err})
 		} else {
-			p.outcome = &threadOutcome{value: result}
+			p.setOutcome(&threadOutcome{value: result})
 		}
-		p.mu.Unlock()
 	}()
 
 	return nil
+}
+
+// setOutcome records the thread's final outcome and marks it terminated.
+// The first writer wins; later writers are dropped.
+//
+// Normal completion, a panic, and Terminate race to be the thread's last word,
+// and only the first of them is true. Once Terminate has stored the
+// terminated-thread exception, the goroutine it cancelled is merely unwinding,
+// and whatever that unwind produces is not a result: a thread parked in a
+// cancellable operation returns a laundered ordinary value when its context is
+// cancelled (channel-receive yields Void — see
+// docs/concurrency/channel-cancellation.md), and if that return sits in tail
+// position, no further VM op runs to unwind it. Letting the completion path win
+// there reports a terminated thread as having succeeded.
+//
+// SRFI-18: thread-terminate! stores a terminated-thread exception in the
+// thread's end-exception field, which thread-join! then raises. Dropping a
+// later writer can discard a panic raised while unwinding an already-terminated
+// thread; the termination is the salient fact, and reporting the panic instead
+// would lose the SRFI-18 outcome.
+func (p *Thread) setOutcome(o *threadOutcome) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.setOutcomeLocked(o)
+}
+
+// setOutcomeLocked is setOutcome for callers already holding p.mu.
+func (p *Thread) setOutcomeLocked(o *threadOutcome) {
+	p.state = ThreadTerminated
+	if p.outcome != nil {
+		return
+	}
+	p.outcome = o
 }
 
 // Join waits for the thread to terminate with optional timeout
@@ -311,8 +338,7 @@ func (p *Thread) Terminate() {
 	if p.cancel != nil {
 		p.cancel()
 	}
-	p.state = ThreadTerminated
-	p.outcome = &threadOutcome{err: &TerminatedThreadException{Thread: p}}
+	p.setOutcomeLocked(&threadOutcome{err: &TerminatedThreadException{Thread: p}})
 }
 
 // Yield yields execution to other threads
