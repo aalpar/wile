@@ -33,6 +33,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
@@ -96,6 +97,48 @@ func TestThreadTerminateEndExceptionIsCatchable(t *testing.T) {
     (thread-join! th 5)))`)
 
 	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewSymbol("terminated"))
+}
+
+// TestThreadTerminateNeverStartedThreadIsJoinable pins that terminating a thread
+// that was never started leaves it joinable, raising the same end-exception as
+// any other terminated thread.
+//
+// The end-exception was never the missing piece — Terminate stored it either
+// way. The done channel was: it is closed by the goroutine Start spawns, so a
+// thread terminated before it ever started had no closer, and Join parked on
+// done forever while the exception it wanted sat in the outcome field. Terminate
+// now closes done when it is the one that ends a ThreadNew thread.
+//
+// This joins with no timeout on purpose. The timeout form would report the
+// regression as JoinTimeoutException, which reads as a slow thread rather than a
+// permanently parked joiner; the bug is the unbounded park. The result-channel
+// handshake proves the join returned, following the convention established by
+// pkg/values/channel_lifecycle_test.go. The engine is touched only by the
+// spawned goroutine, so its one-goroutine contract holds.
+func TestThreadTerminateNeverStartedThreadIsJoinable(t *testing.T) {
+	engine := newEngine(t)
+	expr, err := engine.Parse(context.Background(), `
+(let ((th (make-thread (lambda () 42))))
+  (thread-terminate! th)
+  (thread-join! th))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	joined := make(chan error, 1)
+	go func() {
+		_, evalErr := engine.Eval(context.Background(), expr)
+		joined <- evalErr
+	}()
+
+	select {
+	case evalErr := <-joined:
+		qt.Assert(t, evalErr, qt.IsNotNil)
+		var terminated *values.TerminatedThreadException
+		qt.Assert(t, errors.As(evalErr, &terminated), qt.IsTrue,
+			qt.Commentf("want SRFI-18's terminated-thread exception, got: %v", evalErr))
+	case <-time.After(10 * time.Second):
+		t.Fatal("thread-join! on a terminated never-started thread parked forever: " +
+			"nothing closed its done channel")
+	}
 }
 
 // TestThreadTerminateLeavesCompletedThreadAlone is the mirror guard, and the

@@ -332,6 +332,20 @@ func (p *Thread) Terminate() {
 		return
 	}
 
+	// A thread still in ThreadNew has no goroutine and can never acquire one:
+	// Start spawns only on the ThreadNew -> ThreadRunnable transition it makes
+	// under this same lock, and the outcome recorded below leaves this thread
+	// ThreadTerminated, which Start refuses. Closing done is therefore this
+	// call's job — nothing else will ever do it, and Join parks on done before
+	// it reads the outcome, so a never-started thread would otherwise block its
+	// joiner forever while holding the very exception the joiner wants.
+	//
+	// The two closers are mutually exclusive: observing ThreadNew here means
+	// Start has not transitioned yet, and once it has, this branch is
+	// unreachable (no state returns to ThreadNew). So done is closed exactly
+	// once without a sync.Once.
+	ownsDone := p.state == ThreadNew
+
 	// Mark mutexes abandoned even if goroutine is blocked
 	p.AbandonOwnedMutexes()
 
@@ -339,6 +353,10 @@ func (p *Thread) Terminate() {
 		p.cancel()
 	}
 	p.setOutcomeLocked(&threadOutcome{err: &TerminatedThreadException{Thread: p}})
+
+	if ownsDone {
+		close(p.done)
+	}
 }
 
 // Yield yields execution to other threads
