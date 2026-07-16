@@ -181,11 +181,16 @@ the primitive layer.
   `wait-group-wait!` and `rw-mutex-*-lock!` park on bare Go operations and remain
   a separate follow-up; `thread-terminate!` on a thread blocked in one still
   leaks its goroutine.
-- **`ChannelSelect` is not wired to `done` or ctx.** `values.ChannelSelect`
-  builds `reflect.SelectCase` on the never-closed `ch` directly, so a peer closing
-  a channel mid-block is invisible to a blocked select. It is also registered
-  nowhere (no `channel-select` primitive). Lifting the limitation means adding
-  each channel's `done` arm to the `reflect.Select` set. See *Open decisions*.
+- **There is no multiplexed select.** `values.ChannelSelect` was removed
+  2026-07-16 (see *History*): it built its `reflect.SelectCase` set on the
+  never-closed `ch`, so a peer close mid-block was invisible to a blocked select,
+  and it took no ctx where `Send`/`Receive` both do. No `channel-select` primitive
+  ever existed, and nothing consumed the Go symbol. Reintroducing one is a bounded
+  job, not a redesign: `reflect.Select` takes a case set built at runtime, so each
+  channel contributes a `done` arm and the whole set one ctx arm (2N+1), the `done`
+  arm draining stragglers before reporting closed exactly as `Receive` does. It
+  needs an arity guard — `reflect.Select` panics past 65536 cases, and a Scheme
+  caller supplies the list.
 
 ## History — why the coupling is younger than the subsystem
 
@@ -195,9 +200,10 @@ The channel-cancellation link is the youngest part of the channel subsystem by
 | Design | Introduced | Source |
 |---|---|---|
 | Go channel infrastructure exposed to Scheme | ~Feb 2026 (PR #224) | git only |
-| `SelectCaseKind` enum refinement | 2026-03-04 (PR #415) | git only |
+| `SelectCaseKind` enum refinement | 2026-03-04 (PR #415) | git only (removed 2026-07-16) |
 | `channel-select` multiplex surface | 2026-06-08 (draft, unshipped) | untracked local design note, quoted below |
 | **Channel ops ↔ VM cancellation** | **2026-07-15 (`3441c8ed`)** | untracked review-remediation plan, §T1.2/T1.3 |
+| `values.ChannelSelect` removed | 2026-07-16 | git only |
 
 For the subsystem's first ~5 months, blocking channel ops ignored `ctx`
 entirely. The 2026-06-08 `channel-select` design **explicitly declined**
@@ -205,6 +211,14 @@ cancellation ("No existing channel primitive threads a context for cancellation,
 so v1 does not either — it follows the established pattern"). The coupling was
 then introduced as a bug-fix for the leak that design had chosen to live with,
 derived from the 2026-07-13 review §4 (items T1.2 host-panic, T1.3 ctx-leak).
+
+The rows above are history, not inventory: `ChannelSelect` and its `SelectCase`
+types no longer exist. Their fate is the clearest illustration of the section's
+point. The select code was written under the pre-cancellation lifecycle and was
+never revisited when that lifecycle changed beneath it, because nothing called
+it — the compiler cannot fail an unused function that has quietly become wrong.
+The 2026-06-08 draft declined cancellation to "follow the established pattern";
+by the time the pattern moved, the code following it was already unreachable.
 
 The cancellation *mechanism* is older and was borrowed, not invented here: the VM
 ctx-check cadence (`contextCheckMask`), `SetContext`, timer interrupts
@@ -229,11 +243,12 @@ not close them.
    op cannot be confused with close (Option B). Today the seam is built,
    documented as load-bearing, and wired to nothing.
 
-2. **`channel-select`: delete or wire?** `ChannelSelect` is complete, tested, and
-   CHANGELOG-cited, but registered nowhere and drifted from the done-channel
-   model (it can block forever on a peer close). Either delete it, or wire it as
-   `channel-select` *with* the per-channel `done` arms added — half-migrated dead
-   code is the worst of the three.
+2. ~~**`channel-select`: delete or wire?**~~ **Resolved 2026-07-16: deleted.**
+   Nothing consumed it, so its cost was carrying a function written against a
+   lifecycle that no longer existed. The decision was never technical — a
+   prototype confirmed `done` and ctx arms work — it was that `channel-select`
+   had no consumer to justify the surface. Reinstating it is a fresh, bounded
+   piece of work whenever one appears; see *Boundaries*.
 
 3. **Embedder-deadline observability.** Is it acceptable that a timed-out
    `channel-receive` under an embedder `WithTimeout` returns `Void` (looks

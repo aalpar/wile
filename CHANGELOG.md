@@ -16,6 +16,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **`values.ChannelSelect` and its `SelectCase`/`SelectCaseKind` types are gone.**
+  Exported from `values/` (a public embedding package) but reachable from Go only —
+  no `channel-select` primitive was ever registered, so no Scheme program could
+  invoke it. It had also drifted out from under the channel lifecycle: since the
+  done-channel rewrite the data channel is never closed, so `ChannelSelect` built
+  its `reflect.SelectCase` set on channels that cannot report closure, and a peer
+  closing a channel mid-block was invisible to a blocked select. It took no
+  `context.Context` either, where `Send`/`Receive` both do, so exposing it as-is
+  would have reintroduced the parked-goroutine leak those two were fixed for.
+  Removed rather than repaired: nothing consumes it. Wiring it back is a bounded
+  job (a `done` arm and a ctx arm per channel in the `reflect.Select` set, an
+  arity guard for `reflect.Select`'s 65536-case ceiling now that the list would
+  come from Scheme), and worth doing when a `channel-select` surface has an actual
+  consumer.
+
+### Fixed
+
+- **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
+  deterministic when a closed send races a ready receive" described `channel-select`
+  as a Scheme primitive. There has never been one; the fix it describes was to the
+  unexported-in-practice Go helper removed above. No Scheme-visible behavior changed
+  in 1.18.0, and nothing a program could call was affected.
+
 ### Changed
 
 - **Exactness contagion (R7RS §6.2.2) now actually contaminates.** An exact operand
