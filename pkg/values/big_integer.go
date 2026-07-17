@@ -140,7 +140,6 @@ func bigIntegerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 var bigIntegerAdd [numKinds]func(*BigInteger, Number) Number
 var bigIntegerSubtract [numKinds]func(*BigInteger, Number) Number
 var bigIntegerLessThan [numKinds]func(*BigInteger, Number) bool
-var bigIntegerCompare [numKinds]func(*BigInteger, Number) int
 var bigIntegerMultiply [numKinds]func(*BigInteger, Number) Number
 var bigIntegerDivide [numKinds]func(*BigInteger, Number) (Number, error)
 
@@ -155,10 +154,6 @@ func init() {
 
 	bigIntegerLessThan = makeLessThanDispatch(KindBigInteger, func(p *BigInteger, o Number) bool {
 		return p.value.Cmp(o.(*BigInteger).value) < 0
-	})
-
-	bigIntegerCompare = makeCompareDispatch(KindBigInteger, func(p *BigInteger, o Number) int {
-		return p.value.Cmp(o.(*BigInteger).value)
 	})
 
 	bigIntegerMultiply = makeMultiplyDispatch(KindBigInteger, func(p *BigInteger, o Number) Number {
@@ -375,18 +370,6 @@ func (p *BigInteger) Abs() Number {
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
 func (p *BigInteger) Sign() int {
 	return p.value.Sign()
-}
-
-// Compare compares this BigInteger with another number.
-//
-// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of
-// exactness. Returns -1, 0, or 1 for less than, equal, or greater than.
-func (p *BigInteger) Compare(o Number) int {
-	v, ok := o.(*BigInteger)
-	if ok {
-		return p.value.Cmp(v.value)
-	}
-	return bigIntegerCompare[o.Kind()](p, o)
 }
 
 // SchemeString returns the Scheme representation of this BigInteger.

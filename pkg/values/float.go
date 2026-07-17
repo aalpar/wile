@@ -67,15 +67,6 @@ func (p *Float) HashCode() uint64 {
 	return hashInexactNumeric(new(big.Float).SetFloat64(p.Value))
 }
 
-// Per-type conversion helpers for Float.
-// These eliminate repeated conversion expressions in the type-switch
-// dispatch methods below. Each produces the representation needed by
-// the target type's native arithmetic.
-
-func (p *Float) bigFloat() *big.Float {
-	return new(big.Float).SetFloat64(p.Value)
-}
-
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *Float) Kind() NumericKind {
 	return KindFloat
@@ -109,7 +100,6 @@ func floatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 var floatAdd [numKinds]func(*Float, Number) Number
 var floatSubtract [numKinds]func(*Float, Number) Number
 var floatLessThan [numKinds]func(*Float, Number) bool
-var floatCompare [numKinds]func(*Float, Number) int
 var floatMultiply [numKinds]func(*Float, Number) Number
 var floatDivide [numKinds]func(*Float, Number) (Number, error)
 
@@ -124,12 +114,6 @@ func init() {
 
 	floatLessThan = makeLessThanDispatch(KindFloat, func(p *Float, o Number) bool {
 		return p.Value < o.(*Float).Value
-	})
-
-	floatCompare = makeCompareDispatch(KindFloat, func(p *Float, o Number) int {
-		pf := p.bigFloat()
-		vf := new(big.Float).SetFloat64(o.(*Float).Value)
-		return pf.Cmp(vf)
 	})
 
 	floatMultiply = makeMultiplyDispatch(KindFloat, func(p *Float, o Number) Number {
@@ -290,20 +274,6 @@ func (p *Float) Sign() int {
 // R7RS §6.2.6: The - procedure with one argument returns the additive inverse.
 func (p *Float) Negate() Number {
 	return NewFloat(-p.Value)
-}
-
-// Compare compares this float with another number.
-//
-// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
-// Returns -1 if p < o, 0 if p == o, 1 if p > o.
-func (p *Float) Compare(o Number) int {
-	v, ok := o.(*Float)
-	if !ok {
-		return floatCompare[o.Kind()](p, o)
-	}
-	pf := p.bigFloat()
-	vf := new(big.Float).SetFloat64(v.Value)
-	return pf.Cmp(vf)
 }
 
 // IsExact returns false since Float is always inexact.

@@ -160,7 +160,6 @@ func rationalToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 var rationalAdd [numKinds]func(*Rational, Number) Number
 var rationalSubtract [numKinds]func(*Rational, Number) Number
 var rationalLessThan [numKinds]func(*Rational, Number) bool
-var rationalCompare [numKinds]func(*Rational, Number) int
 var rationalMultiply [numKinds]func(*Rational, Number) Number
 var rationalDivide [numKinds]func(*Rational, Number) (Number, error)
 
@@ -194,10 +193,6 @@ func init() {
 
 	rationalLessThan = makeLessThanDispatch(KindRational, func(p *Rational, o Number) bool {
 		return p.value.Cmp(o.(*Rational).value) < 0
-	})
-
-	rationalCompare = makeCompareDispatch(KindRational, func(p *Rational, o Number) int {
-		return p.value.Cmp(o.(*Rational).value)
 	})
 
 	rationalMultiply = makeMultiplyDispatch(KindRational, func(p *Rational, o Number) Number {
@@ -354,18 +349,6 @@ func (p *Rational) SignBit() bool {
 // Sign returns -1 if negative, 0 if zero, or 1 if positive.
 func (p *Rational) Sign() int {
 	return p.value.Sign()
-}
-
-// Compare compares this rational with another number.
-//
-// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
-// Returns -1 if p < o, 0 if p == o, 1 if p > o.
-func (p *Rational) Compare(o Number) int {
-	v, ok := o.(*Rational)
-	if ok {
-		return p.value.Cmp(v.value)
-	}
-	return rationalCompare[o.Kind()](p, o)
 }
 
 // IsExact returns true since Rational is always exact.

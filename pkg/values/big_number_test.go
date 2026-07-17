@@ -82,9 +82,12 @@ func TestBigInteger_Comparison(t *testing.T) {
 	bi2 := values.NewBigIntegerFromInt64(50)
 	bi3 := values.NewBigIntegerFromInt64(100)
 
-	c.Assert(bi1.Compare(bi2), qt.Equals, 1)
-	c.Assert(bi2.Compare(bi1), qt.Equals, -1)
-	c.Assert(bi1.Compare(bi3), qt.Equals, 0)
+	c.Assert(bi2.LessThan(bi1), qt.IsTrue)
+	c.Assert(bi1.LessThan(bi2), qt.IsFalse)
+	// Equal: neither ordering holds, and eqv? agrees.
+	c.Assert(bi1.LessThan(bi3), qt.IsFalse)
+	c.Assert(bi3.LessThan(bi1), qt.IsFalse)
+	c.Assert(values.EqvNumber(bi1, bi3), qt.IsTrue)
 
 	c.Assert(bi2.LessThan(bi1), qt.IsTrue)
 	c.Assert(bi1.LessThan(bi2), qt.IsFalse)
@@ -232,9 +235,12 @@ func TestBigFloat_Comparison(t *testing.T) {
 	bf2 := values.NewBigFloatFromFloat64(50.0)
 	bf3 := values.NewBigFloatFromFloat64(100.0)
 
-	c.Assert(bf1.Compare(bf2), qt.Equals, 1)
-	c.Assert(bf2.Compare(bf1), qt.Equals, -1)
-	c.Assert(bf1.Compare(bf3), qt.Equals, 0)
+	c.Assert(bf2.LessThan(bf1), qt.IsTrue)
+	c.Assert(bf1.LessThan(bf2), qt.IsFalse)
+	// Equal: neither ordering holds, and eqv? agrees.
+	c.Assert(bf1.LessThan(bf3), qt.IsFalse)
+	c.Assert(bf3.LessThan(bf1), qt.IsFalse)
+	c.Assert(values.EqvNumber(bf1, bf3), qt.IsTrue)
 
 	c.Assert(bf2.LessThan(bf1), qt.IsTrue)
 	c.Assert(bf1.LessThan(bf2), qt.IsFalse)

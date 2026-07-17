@@ -23,13 +23,13 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// TestBigIntegerCompareFloatPrecision verifies that BigInteger.Compare
-// preserves precision when comparing with Float values, especially for
+// TestBigIntegerOrderFloatPrecision verifies that BigInteger.LessThan
+// preserves precision when ordering against Float values, especially for
 // integers beyond the float64 precision boundary (2^53).
 //
 // Prior to the fix, BigInteger was converted to float64 before comparison,
 // causing precision loss for integers with more than 53 significant bits.
-func TestBigIntegerCompareFloatPrecision(t *testing.T) {
+func TestBigIntegerOrderFloatPrecision(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -84,19 +84,16 @@ func TestBigIntegerCompareFloatPrecision(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.bigInt.Compare(tc.float)
-			c.Assert(result, qt.Equals, tc.expectedResult)
-
-			// Also test the reverse comparison (Float.Compare(BigInteger))
-			reverseResult := tc.float.Compare(tc.bigInt)
-			c.Assert(reverseResult, qt.Equals, -tc.expectedResult)
+			// assertOrder covers both directions, subsuming the reverse check
+			// this loop used to make separately.
+			assertOrder(c, tc.bigInt, tc.float, tc.expectedResult)
 		})
 	}
 }
 
-// TestBigIntegerCompareComplexPrecision verifies that BigInteger.Compare
-// preserves precision when comparing with Complex values (real part comparison).
-func TestBigIntegerCompareComplexPrecision(t *testing.T) {
+// TestBigIntegerOrderComplexPrecision verifies that BigInteger.LessThan
+// preserves precision when ordering against Complex values (real part only).
+func TestBigIntegerOrderComplexPrecision(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -133,8 +130,7 @@ func TestBigIntegerCompareComplexPrecision(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.bigInt.Compare(tc.complex)
-			c.Assert(result, qt.Equals, tc.expectedResult)
+			assertOrder(c, tc.bigInt, tc.complex, tc.expectedResult)
 		})
 	}
 }
@@ -182,9 +178,10 @@ func TestBigIntegerArithmeticFloatPrecision(t *testing.T) {
 		// the other half of the contagion fix, and why there are two promotion tables.
 		// Comparing 2^54+1 (exact) against 2^54 (exact) must not round either operand.
 		exactPlusOne := values.NewBigInteger(new(big.Int).SetInt64(18014398509481985))
-		c.Assert(exactPlusOne.Compare(bigInt) > 0, qt.IsTrue,
-			qt.Commentf("2^54+1 must compare GREATER than 2^54; if comparison rounded to "+
-				"float64 they would collapse to equal"))
+		assertOrder(c, exactPlusOne, bigInt, 1)
+		c.Assert(values.EqvNumber(exactPlusOne, bigInt), qt.IsFalse,
+			qt.Commentf("2^54+1 must order GREATER than 2^54 and not be eqv? to it; if "+
+				"comparison rounded to float64 they would collapse to equal"))
 	})
 
 	t.Run("Subtract: 2^54 - 1.0", func(t *testing.T) {

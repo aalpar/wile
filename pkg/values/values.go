@@ -357,8 +357,22 @@ type Number interface {
 	IsRational() bool // R7RS §6.2.6: is this a rational value?
 	IsFinite() bool   // R7RS §6.2.6: is this a finite number?
 	IsNaN() bool      // R7RS §6.2.6: is this NaN?
+
+	// LessThan is the tower's ONLY ordering primitive, and deliberately so.
+	//
+	// A NaN operand yields false in both directions, which is exactly right: NaN
+	// is unordered against everything including itself, and bool has no third
+	// state to get wrong. Equality is therefore not a comparison result here but
+	// a separate question — ask EqvNumber, which owns it (eqv.go).
+	//
+	// There used to be a Compare(Number) int alongside this. It answered a
+	// four-state question (less, equal, greater, unordered) in a three-state
+	// return, so a NaN got 0 and read as "equal": `Compare(o) == 0` reported NaN
+	// equal to everything, and a comparator built on it was not a total order at
+	// all. It had no consumer outside this package, and its only two consumers
+	// inside it wanted equality, which was the one thing it could not say. See
+	// numEqual (eqv.go) for how equality is spelled now.
 	LessThan(Number) bool
-	Compare(Number) int
 }
 
 // ComplexNumber represents a complex-valued number with accessible parts.

@@ -209,7 +209,6 @@ func integerToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 var integerAdd [numKinds]func(*Integer, Number) Number
 var integerSubtract [numKinds]func(*Integer, Number) Number
 var integerLessThan [numKinds]func(*Integer, Number) bool
-var integerCompare [numKinds]func(*Integer, Number) int
 var integerMultiply [numKinds]func(*Integer, Number) Number
 var integerDivide [numKinds]func(*Integer, Number) (Number, error)
 
@@ -224,16 +223,6 @@ func init() {
 
 	integerLessThan = makeLessThanDispatch(KindInteger, func(p *Integer, o Number) bool {
 		return p.Value < o.(*Integer).Value
-	})
-
-	integerCompare = makeCompareDispatch(KindInteger, func(p *Integer, o Number) int {
-		v := o.(*Integer)
-		if p.Value < v.Value {
-			return -1
-		} else if p.Value > v.Value {
-			return 1
-		}
-		return 0
 	})
 
 	integerMultiply = makeMultiplyDispatch(KindInteger, func(p *Integer, o Number) Number {
@@ -417,23 +406,6 @@ func (p *Integer) Sign() int {
 		return 1
 	}
 	return 0
-}
-
-// Compare compares this integer with another number.
-//
-// R7RS §6.2.6: Numeric comparisons use mathematical value regardless of exactness.
-// Returns -1 if p < o, 0 if p == o, 1 if p > o.
-func (p *Integer) Compare(o Number) int {
-	v, ok := o.(*Integer)
-	if ok {
-		if p.Value < v.Value {
-			return -1
-		} else if p.Value > v.Value {
-			return 1
-		}
-		return 0
-	}
-	return integerCompare[o.Kind()](p, o)
 }
 
 // IsExact returns true since Integer is always exact.

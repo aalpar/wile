@@ -156,11 +156,11 @@ func (p *BigComplex) Kind() NumericKind {
 	return KindBigComplex
 }
 
-// BigComplex has 5 dispatch tables (no bigComplexLessThan), each indexed by the
-// second operand's kind. Complex ordering is undefined in R7RS §6.2.6 — LessThan
-// delegates to Compare, which uses magnitude comparison as a total order for
-// internal use (sorting, etc.) but is NOT mathematical ordering. Compare is
-// initialized below like all other types.
+// BigComplex has 5 dispatch tables, each indexed by the second operand's kind.
+//
+// R7RS §6.2.6 leaves < undefined on the complex plane. LessThan nevertheless
+// answers, on real parts only, matching Complex (complex.go). It is NOT
+// mathematical ordering and nothing may read it as such.
 
 // bigComplexAdd dispatches BigComplex addition on the second operand's kind.
 var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
@@ -168,8 +168,8 @@ var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
 // bigComplexSubtract dispatches BigComplex subtraction on the second operand's kind.
 var bigComplexSubtract [numKinds]func(*BigComplex, Number) Number
 
-// bigComplexCompare dispatches BigComplex magnitude comparison on the second operand's kind.
-var bigComplexCompare [numKinds]func(*BigComplex, Number) int
+// bigComplexLessThan dispatches BigComplex real-part ordering on the second operand's kind.
+var bigComplexLessThan [numKinds]func(*BigComplex, Number) bool
 
 // bigComplexMultiply dispatches BigComplex multiplication on the second operand's kind.
 var bigComplexMultiply [numKinds]func(*BigComplex, Number) Number
@@ -232,8 +232,8 @@ func init() {
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
-	bigComplexCompare = makeCompareDispatch(KindBigComplex, func(p *BigComplex, o Number) int {
-		return toBigFloat(p.real).Compare(toBigFloat(o.(*BigComplex).real))
+	bigComplexLessThan = makeLessThanDispatch(KindBigComplex, func(p *BigComplex, o Number) bool {
+		return toBigFloat(p.real).LessThan(toBigFloat(o.(*BigComplex).real))
 	})
 
 	bigComplexMultiply = makeMultiplyDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
@@ -426,20 +426,21 @@ func (p *BigComplex) IsZero() bool {
 // LessThan compares the real parts of complex numbers.
 // Following R7RS, < is not mathematically defined for complex numbers,
 // but we follow the existing Complex.LessThan pattern of comparing real parts.
-func (p *BigComplex) LessThan(o Number) bool {
-	return p.Compare(o) < 0
-}
-
-// Compare compares this BigComplex with another number by real parts.
 //
-// R7RS §6.2.6: Numeric comparisons use mathematical value.
-// For complex numbers, we compare real parts only (matching Complex behavior).
-func (p *BigComplex) Compare(o Number) int {
+// The NaN guard is this method's own. It used to delegate to Compare, and so
+// inherited Compare's NaN-yields-0, which made a NaN operand report NOT-less-than
+// in both directions — indistinguishable from equal. Every other LessThan in the
+// tower owns its NaN answer locally (BigFloat guards explicitly, Float gets #f
+// free from IEEE <), and this one now does too.
+func (p *BigComplex) LessThan(o Number) bool {
+	if p.IsNaN() || o.IsNaN() {
+		return false
+	}
 	v, ok := o.(*BigComplex)
 	if ok {
-		return toBigFloat(p.real).Compare(toBigFloat(v.real))
+		return toBigFloat(p.real).LessThan(toBigFloat(v.real))
 	}
-	return bigComplexCompare[o.Kind()](p, o)
+	return bigComplexLessThan[o.Kind()](p, o)
 }
 
 // IsReal reports whether this complex number is real.

@@ -122,11 +122,11 @@ var promoter [numKinds][numKinds]func(Number) Number
 var promotionOnce sync.Once
 
 // ensurePromotionInit lazily initializes the promotion tables. Called
-// by the dispatch generators (makeArithmeticDispatch, makeLessThanDispatch,
-// makeCompareDispatch) which may run from type-file init() functions
-// before promotion.go's own init().
-// Startup cost: populates 7×7 promotion table (49 entries) and 294 dispatch
-// closures for arithmetic, comparison, and ordering operations.
+// by the dispatch generators (makeArithmeticDispatch, makeLessThanDispatch)
+// which may run from type-file init() functions before promotion.go's own
+// init().
+// Startup cost: populates 7×7 promotion table (49 entries) and 245 dispatch
+// closures for arithmetic and ordering operations.
 func ensurePromotionInit() {
 	promotionOnce.Do(func() {
 		initPromotionTable()
@@ -550,17 +550,6 @@ func NumberToComplex128Lossy(n Number) complex128 {
 	return LookupNumericSpec(n.Kind()).ToComplex128WithAccuracy(n).Value
 }
 
-// cmpFloat64 compares two float64 values, returning -1, 0, or 1.
-// Used by makeCompareDispatch for the IEEE 754 special-value guard.
-func cmpFloat64(a, b float64) int {
-	if a < b {
-		return -1
-	} else if a > b {
-		return 1
-	}
-	return 0
-}
-
 // makeArithmeticDispatch generates a dispatch table for an arithmetic
 // operation (Add, Subtract, Multiply, Divide). The same-type entry uses
 // the hand-written sameTypeOp (preserving hot-path performance — e.g.,
@@ -812,39 +801,10 @@ func makeLessThanDispatch[T Number](
 		// The guard's stated justification was that BigFloat/BigComplex could not hold
 		// Inf/NaN. That stopped being true when they were made IEEE-capable (#362):
 		// BigFloat carries an explicit nan flag and handles big.Float's Inf, and
-		// BigFloat(10^400).Compare(+inf.0) is -1 without any help. So promoting is not
-		// merely safe here, it is the only thing that gives the right answer.
+		// BigFloat(10^400).LessThan(+inf.0) is true without any help. So promoting is
+		// not merely safe here, it is the only thing that gives the right answer.
 		table[dstKind] = func(p T, o Number) bool {
 			return promSrc(p).LessThan(promDst(o))
-		}
-	}
-	return table
-}
-
-// makeCompareDispatch generates a dispatch table for the Compare operation.
-// Cross-type entries promote both operands to the LUB type and compare via
-// the LUB type's Compare method.
-//
-// NO IEEE special-value guard, for the same reason makeLessThanDispatch has none:
-// short-circuiting through float64 rounds the other operand, and comparison must never
-// round. See the comment there.
-func makeCompareDispatch[T Number](
-	srcKind NumericKind,
-	sameTypeCmp func(T, Number) int,
-) [numKinds]func(T, Number) int {
-	ensurePromotionInit()
-	var table [numKinds]func(T, Number) int
-	table[srcKind] = sameTypeCmp
-	for dstKind := range numKinds {
-		if dstKind == srcKind {
-			continue
-		}
-		lubKind := comparisonTable[srcKind][dstKind]
-		promSrc := promoter[srcKind][lubKind]
-		promDst := promoter[dstKind][lubKind]
-
-		table[dstKind] = func(p T, o Number) int {
-			return promSrc(p).Compare(promDst(o))
 		}
 	}
 	return table

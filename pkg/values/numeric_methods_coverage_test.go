@@ -68,7 +68,7 @@ func TestIntegerExactness(t *testing.T) {
 	c.Assert(f.Value, qt.Equals, 5.0)
 }
 
-func TestIntegerCompare(t *testing.T) {
+func TestIntegerOrder(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -92,7 +92,7 @@ func TestIntegerCompare(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			c.Assert(tc.a.Compare(tc.b), qt.Equals, tc.want)
+			assertOrder(c, tc.a, tc.b, tc.want)
 		})
 	}
 }
@@ -164,7 +164,7 @@ func TestFloatHashCode(t *testing.T) {
 	c.Assert(f1.HashCode(), qt.Equals, f2.HashCode())
 }
 
-func TestFloatCompare(t *testing.T) {
+func TestFloatOrder(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -186,7 +186,7 @@ func TestFloatCompare(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			c.Assert(tc.a.Compare(tc.b), qt.Equals, tc.want)
+			assertOrder(c, tc.a, tc.b, tc.want)
 		})
 	}
 }
@@ -256,7 +256,7 @@ func TestComplexExactness(t *testing.T) {
 	c.Assert(inexact, valuestest.SchemeEquals, z)
 }
 
-func TestComplexCompare(t *testing.T) {
+func TestComplexOrder(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -276,7 +276,7 @@ func TestComplexCompare(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			c.Assert(tc.a.Compare(tc.b), qt.Equals, tc.want)
+			assertOrder(c, tc.a, tc.b, tc.want)
 		})
 	}
 }
@@ -347,7 +347,7 @@ func TestRationalHashCode(t *testing.T) {
 	c.Assert(r1.HashCode(), qt.Equals, r2.HashCode())
 }
 
-func TestRationalCompare(t *testing.T) {
+func TestRationalOrder(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -368,7 +368,7 @@ func TestRationalCompare(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			c.Assert(tc.a.Compare(tc.b), qt.Equals, tc.want)
+			assertOrder(c, tc.a, tc.b, tc.want)
 		})
 	}
 }

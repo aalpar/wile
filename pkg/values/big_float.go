@@ -176,7 +176,6 @@ func bigFloatToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool) {
 var bigFloatAdd [numKinds]func(*BigFloat, Number) Number
 var bigFloatSubtract [numKinds]func(*BigFloat, Number) Number
 var bigFloatLessThan [numKinds]func(*BigFloat, Number) bool
-var bigFloatCompare [numKinds]func(*BigFloat, Number) int
 var bigFloatMultiply [numKinds]func(*BigFloat, Number) Number
 var bigFloatDivide [numKinds]func(*BigFloat, Number) (Number, error)
 
@@ -191,10 +190,6 @@ func init() {
 
 	bigFloatLessThan = makeLessThanDispatch(KindBigFloat, func(p *BigFloat, o Number) bool {
 		return p.LessThan(o)
-	})
-
-	bigFloatCompare = makeCompareDispatch(KindBigFloat, func(p *BigFloat, o Number) int {
-		return p.Compare(o)
 	})
 
 	bigFloatMultiply = makeMultiplyDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
@@ -420,19 +415,6 @@ func (p *BigFloat) Sign() int {
 		return 0
 	}
 	return p.value.Sign()
-}
-
-// Compare compares this BigFloat with another number.
-// Returns 0 for NaN operands (NaN has no valid ordering).
-func (p *BigFloat) Compare(o Number) int {
-	if p.nan || o.IsNaN() {
-		return 0
-	}
-	v, ok := o.(*BigFloat)
-	if ok {
-		return p.value.Cmp(v.value)
-	}
-	return bigFloatCompare[o.Kind()](p, o)
 }
 
 // SchemeString returns the Scheme representation of this BigFloat.

@@ -119,11 +119,13 @@ These are valid future directions but require significant design work beyond the
 
 ## Overview
 
-The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. Each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods look up the incoming operand's `Kind()` in a per-op table and invoke the matching closure. See the next subsection for the table inventory and call path.
+The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. Each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `LessThan` methods look up the incoming operand's `Kind()` in a per-op table and invoke the matching closure. See the next subsection for the table inventory and call path.
 
 ### Dispatch Table Architecture
 
-Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`. Six of the seven numeric types carry six tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`, `Compare`), all pre-indexed by `NumericKind`. `BigComplex` carries five: it has no `LessThan` dispatch table because `LessThan` delegates to `Compare` (see `values/big_complex.go:148`). Total: **41 tables, 294 closures**. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
+Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch` and `makeLessThanDispatch`. All seven numeric types carry five tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`), pre-indexed by `NumericKind`. Total: **35 tables, 245 closures**.
+
+`LessThan` is the tower's only ordering primitive. A `Compare(Number) int` sat alongside it until it was removed: it answered a four-state question (less, equal, greater, unordered) in a three-state return, so a NaN operand got `0` and read as "equal". Equality is `NumericEquals` (R7RS `=`) or `EqvNumber` (`eqv?`), never the absence of ordering. See the `Number` doc comment in `values/values.go`. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
 
 **Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
 

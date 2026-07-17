@@ -90,7 +90,6 @@ func complexToComplex128WithAccuracy(n Number) Complex128Result {
 var complexAdd [numKinds]func(*Complex, Number) Number
 var complexSubtract [numKinds]func(*Complex, Number) Number
 var complexLessThan [numKinds]func(*Complex, Number) bool
-var complexCompare [numKinds]func(*Complex, Number) int
 var complexMultiply [numKinds]func(*Complex, Number) Number
 var complexDivide [numKinds]func(*Complex, Number) (Number, error)
 
@@ -105,10 +104,6 @@ func init() {
 
 	complexLessThan = makeLessThanDispatch(KindComplex, func(p *Complex, o Number) bool {
 		return real(p.Value) < real(o.(*Complex).Value)
-	})
-
-	complexCompare = makeCompareDispatch(KindComplex, func(p *Complex, o Number) int {
-		return cmpFloat64(real(p.Value), real(o.(*Complex).Value))
 	})
 
 	complexMultiply = makeMultiplyDispatch(KindComplex, func(p *Complex, o Number) Number {
@@ -411,18 +406,6 @@ func (p *Complex) RealPart() Number {
 // R7RS §6.2.6: imag-part returns the imaginary part of a complex number.
 func (p *Complex) ImagPart() Number {
 	return NewFloat(imag(p.Value))
-}
-
-// Compare compares this complex number with another number by real parts.
-//
-// R7RS §6.2.6: Complex comparison compares real parts only.
-// Returns -1 if p < o, 0 if p == o, 1 if p > o.
-func (p *Complex) Compare(o Number) int {
-	v, ok := o.(*Complex)
-	if ok {
-		return cmpFloat64(real(p.Value), real(v.Value))
-	}
-	return complexCompare[o.Kind()](p, o)
 }
 
 // IsExact returns false since Complex is always inexact.

@@ -518,6 +518,10 @@ func TestContagionOverflowsToInfinity(t *testing.T) {
 //	(<  (expt 10 400) +inf.0)   =>  #f
 //	(>= (expt 10 400) +inf.0)   =>  #t      -- simultaneously
 //
+// Trichotomy is checked against LessThan and NumericEquals (R7RS =), which are now
+// the only two relations in play: the Compare cross-check this test used to carry
+// went with the method itself.
+//
 // The guard's justification (that BigFloat/BigComplex could not hold Inf/NaN) went stale
 // when they were made IEEE-capable. Rounding an operand is the one thing comparison must
 // never do; it is why comparisonTable exists at all.
@@ -531,9 +535,7 @@ func TestComparisonNeverRoundsAnOperand(t *testing.T) {
 
 	// A finite exact number, however large, is strictly less than +inf.0.
 	c.Assert(huge.LessThan(posInf), qt.IsTrue, qt.Commentf("10^400 < +inf.0"))
-	c.Assert(huge.Compare(posInf), qt.Equals, -1)
 	c.Assert(posInf.LessThan(huge), qt.IsFalse, qt.Commentf("+inf.0 is not < 10^400"))
-	c.Assert(posInf.Compare(huge), qt.Equals, 1)
 
 	// And strictly greater than -inf.0.
 	c.Assert(negInf.LessThan(huge), qt.IsTrue)
@@ -569,17 +571,6 @@ func TestComparisonNeverRoundsAnOperand(t *testing.T) {
 		c.Assert(n, qt.Equals, 1, qt.Commentf(
 			"trichotomy violated for %s: less=%v greater=%v equal=%v (exactly one must hold)",
 			tc.name, lt, gt, eq))
-
-		// Compare must agree with LessThan rather than contradict it.
-		cmp := tc.a.Compare(tc.b)
-		switch {
-		case lt:
-			c.Assert(cmp, qt.Equals, -1, qt.Commentf("%s: LessThan says <, Compare disagrees", tc.name))
-		case gt:
-			c.Assert(cmp, qt.Equals, 1, qt.Commentf("%s: LessThan says >, Compare disagrees", tc.name))
-		default:
-			c.Assert(cmp, qt.Equals, 0, qt.Commentf("%s: equal, Compare disagrees", tc.name))
-		}
 	}
 }
 

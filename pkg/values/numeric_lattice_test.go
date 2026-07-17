@@ -746,11 +746,15 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 
 		inexact := exact.ToInexact()
 
-		c.Assert(exact.Compare(inexact), qt.Equals, 0,
-			qt.Commentf("2^100 compares equal to its own inexact image"))
-		c.Assert(exactMinusOne.Compare(inexact) < 0, qt.IsTrue,
-			qt.Commentf("2^100-1 must compare LESS than (exact->inexact 2^100); "+
-				"if the comparison rounded the bignum to float64 both would collapse to equal"))
+		assertOrder(c, exact, inexact, 0)
+		c.Assert(values.NumericEquals(exact, inexact), qt.IsTrue,
+			qt.Commentf("2^100 is = to its own inexact image"))
+
+		assertOrder(c, exactMinusOne, inexact, -1)
+		c.Assert(values.NumericEquals(exactMinusOne, inexact), qt.IsFalse,
+			qt.Commentf("2^100-1 must order LESS than (exact->inexact 2^100) and not be = "+
+				"to it; if the comparison rounded the bignum to float64 both would "+
+				"collapse to equal"))
 
 		// The comparison table is what buys this, and it differs from the arithmetic
 		// table on exactly this pair.

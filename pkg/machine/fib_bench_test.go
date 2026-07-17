@@ -194,11 +194,14 @@ func BenchmarkDeferRecoverFib(b *testing.B) {
 }
 
 // stubLe is a minimal foreign function matching <=: compares two integers.
+//
+// a <= b is spelled as "b is not less than a", the same way PrimNumLe spells it
+// (registry/core/prim_arithmetic.go). No NaN guard: the operands are Integers.
 func stubLe(cc CallContext) error {
 	mc := cc.(*MachineContext)
 	bnds := mc.env.LocalEnvironment().Bindings()
 	a := bnds[0].Value().(*values.Integer)
 	b := bnds[1].Value().(*values.Integer)
-	mc.SetValue(values.BoolToBoolean(a.Compare(b) <= 0))
+	mc.SetValue(values.BoolToBoolean(!b.LessThan(a)))
 	return nil
 }

@@ -87,9 +87,9 @@ func EqvNumber(a, b Number) bool {
 	}
 
 	// Complex is decided by its components, at any exactness. Recursing rather
-	// than calling Compare is deliberate: there is no ordering on the complex
-	// plane, so Compare is not meaningful there, and the components need the
-	// signed-zero and precision rules applied to each of them anyway.
+	// than comparing the numbers whole is deliberate: there is no ordering on the
+	// complex plane, and the components need the signed-zero and precision rules
+	// applied to each of them anyway.
 	ca, aIsComplex := a.(ComplexNumber)
 	cb, bIsComplex := b.(ComplexNumber)
 	if aIsComplex != bIsComplex {
@@ -119,9 +119,9 @@ func EqvNumber(a, b Number) bool {
 	}
 	if aIsComplex {
 		// Both complex. Decided by components, at any exactness. Recursing rather than
-		// calling Compare is deliberate: there is no ordering on the complex plane, so
-		// Compare is not meaningful there, and the components need the signed-zero and
-		// precision rules applied to each of them anyway.
+		// comparing the numbers whole is deliberate: there is no ordering on the complex
+		// plane, and the components need the signed-zero and precision rules applied to
+		// each of them anyway.
 		if !EqvNumber(ca.RealPart(), cb.RealPart()) {
 			return false
 		}
@@ -129,7 +129,8 @@ func EqvNumber(a, b Number) bool {
 	}
 
 	if a.IsExact() {
-		return a.Compare(b) == 0
+		// Exact operands are never NaN, so numEqual's precondition holds structurally.
+		return numEqual(a, b)
 	}
 
 	// Inexact from here. Kind first: precision is observable for inexact numbers,
@@ -155,7 +156,7 @@ func EqvNumber(a, b Number) bool {
 	if aNaN || bNaN {
 		return aNaN && bNaN
 	}
-	if a.Compare(b) != 0 {
+	if !numEqual(a, b) {
 		return false
 	}
 	// Numerically equal and same kind. Only the sign bit can still separate them,
@@ -167,6 +168,27 @@ func EqvNumber(a, b Number) bool {
 		return true
 	}
 	return ra.SignBit() == rb.SignBit()
+}
+
+// numEqual reports whether two numbers are numerically equal, via antisymmetry:
+// neither is less than the other. LessThan is the tower's only ordering
+// primitive, so this is how equality is spelled here.
+//
+// CALLERS MUST HAVE EXCLUDED NaN. LessThan is false in both directions for a NaN
+// operand, and this would read that as equal. The precondition is not checked
+// because both call sites discharge it more cheaply than a check would: the exact
+// path structurally (an exact number cannot be NaN), the inexact path by the
+// explicit IsNaN guard that owns the NaN-is-eqv?-to-NaN rule anyway.
+//
+// This replaced a Compare(Number) int method on the Number interface. Compare
+// answered a four-state question (less, equal, greater, unordered) in a
+// three-state return, giving NaN a 0 that read as "equal" — so `Compare(b) == 0`,
+// which is all this package ever used it for, was the one spelling its own doc
+// called wrong. Both spare states are gone with it: NaN reaches neither branch of
+// LessThan's bool, and there is no longer a public method whose contract has to be
+// read to be used safely.
+func numEqual(a, b Number) bool {
+	return !a.LessThan(b) && !b.LessThan(a)
 }
 
 // eqvNumberValue is the Value-typed adapter every numeric EqualTo delegates to.

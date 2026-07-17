@@ -834,10 +834,13 @@ func TestBigComplex_Comparison(t *testing.T) {
 	c.Assert(bc2.LessThan(bc1), qt.IsFalse) // 5 > 3
 	c.Assert(bc1.LessThan(bc3), qt.IsFalse) // 3 == 3 (imaginary ignored)
 
-	// Compare with other numeric types
-	c.Assert(bc1.Compare(values.NewBigIntegerFromInt64(5)), qt.Equals, -1) // 3 < 5
-	c.Assert(bc1.Compare(values.NewBigIntegerFromInt64(2)), qt.Equals, 1)  // 3 > 2
-	c.Assert(bc1.Compare(values.NewBigIntegerFromInt64(3)), qt.Equals, 0)  // 3 == 3
+	// Ordering against other numeric types, through the cross-kind dispatch.
+	c.Assert(bc1.LessThan(values.NewBigIntegerFromInt64(5)), qt.IsTrue)  // 3 < 5
+	c.Assert(bc1.LessThan(values.NewBigIntegerFromInt64(2)), qt.IsFalse) // 3 > 2
+	c.Assert(values.NewBigIntegerFromInt64(2).LessThan(bc1), qt.IsTrue)  // 2 < 3
+	// 3 == 3: neither ordering holds.
+	c.Assert(bc1.LessThan(values.NewBigIntegerFromInt64(3)), qt.IsFalse)
+	c.Assert(values.NewBigIntegerFromInt64(3).LessThan(bc1), qt.IsFalse)
 }
 
 func TestBigComplex_ZeroOptimizations(t *testing.T) {

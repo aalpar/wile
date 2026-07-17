@@ -315,8 +315,10 @@ func lessThanFails(prev, curr values.Number) bool {
 	return !prev.LessThan(curr)
 }
 
+// equalFails mirrors PrimNumEq's predicate (registry/core/prim_arithmetic.go):
+// NumericEquals is R7RS =, and is the only equality this chain may use.
 func equalFails(prev, curr values.Number) bool {
-	return prev.Compare(curr) != 0
+	return !values.NumericEquals(prev, curr)
 }
 
 func TestNumericChainCompare(t *testing.T) {
