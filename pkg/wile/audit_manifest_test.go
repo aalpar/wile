@@ -153,7 +153,7 @@ func buildManifest(t *testing.T) []manifestEntry {
 // Survey (2026-04-20) of the 484-primitive registry found zero short variadic
 // cases — every variadic primitive has len(ParamTypes) == ParamCount when
 // ParamTypes is populated. The permissive validation range [1, ParamCount] in
-// registry.validateParamTypes is future-proofing; this formatter handles the
+// registry.PrimitiveSpec.Validate is future-proofing; this formatter handles the
 // short case correctly but it isn't currently exercised.
 func formatParamTypes(types []values.TypeConstraint, isVariadic bool) []string {
 	if len(types) == 0 {

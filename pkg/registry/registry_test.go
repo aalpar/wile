@@ -15,6 +15,7 @@
 package registry
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // testValue creates a simple string value for testing.
@@ -915,3 +917,107 @@ func TestDeepCopyTouchesEverySliceField(t *testing.T) {
 		}
 	}
 }
+
+// TestPrimitiveSpec_Validate pins the embedder pre-flight path: a malformed spec
+// yields an ErrInvalidArgument-matchable error rather than a panic, so a host
+// assembling specs from config can reject them without crashing.
+func TestPrimitiveSpec_Validate(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name    string
+		spec    PrimitiveSpec
+		wantErr bool
+	}{
+		{
+			name:    "variadic with ParamCount 0 would index bnds[:-1]",
+			spec:    PrimitiveSpec{Name: "bad-variadic", ParamCount: 0, IsVariadic: true},
+			wantErr: true,
+		},
+		{
+			name: "non-variadic ParamTypes shorter than ParamCount",
+			spec: PrimitiveSpec{Name: "short-types", ParamCount: 2,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+			wantErr: true,
+		},
+		{
+			name: "non-variadic ParamTypes longer than ParamCount",
+			spec: PrimitiveSpec{Name: "long-types", ParamCount: 1,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}},
+			wantErr: true,
+		},
+		{
+			name: "variadic ParamTypes longer than ParamCount",
+			spec: PrimitiveSpec{Name: "long-variadic", ParamCount: 1, IsVariadic: true,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}},
+			wantErr: true,
+		},
+		{
+			name:    "variadic with no ParamTypes is unconstrained",
+			spec:    PrimitiveSpec{Name: "ok-variadic", ParamCount: 1, IsVariadic: true},
+			wantErr: false,
+		},
+		{
+			name: "variadic short ParamTypes is the declared catch-all shape",
+			spec: PrimitiveSpec{Name: "ok-short-variadic", ParamCount: 2, IsVariadic: true,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+			wantErr: false,
+		},
+		{
+			name: "non-variadic exact ParamTypes",
+			spec: PrimitiveSpec{Name: "ok-exact", ParamCount: 1,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+			wantErr: false,
+		},
+		{
+			name:    "zero-arg non-variadic",
+			spec:    PrimitiveSpec{Name: "ok-thunk", ParamCount: 0},
+			wantErr: false,
+		},
+	}
+	for _, test := range tests {
+		c.Run(test.name, func(c *qt.C) {
+			err := test.spec.Validate()
+			if !test.wantErr {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.IsNotNil)
+			// Sentinel identity, not message text: the embedder branches on this.
+			c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+				qt.Commentf("got %v", err))
+		})
+	}
+}
+
+// TestAddPrimitives_PanicsOnInvalidSpec pins the other half of the contract:
+// registration is the Must path, so a spec that fails Validate still panics
+// rather than being silently accepted or silently dropped.
+func TestAddPrimitives_PanicsOnInvalidSpec(t *testing.T) {
+	c := qt.New(t)
+	reg := NewRegistry()
+	bad := PrimitiveSpec{Name: "bad-variadic", ParamCount: 0, IsVariadic: true}
+
+	// Pre-flight sees it, so an embedder had a way to avoid the panic below.
+	c.Assert(bad.Validate(), qt.IsNotNil)
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		reg.AddPrimitives([]PrimitiveSpec{bad}, PhaseSetRuntime)
+	}()
+	c.Assert(recovered, qt.IsNotNil)
+
+	err, ok := recovered.(error)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("panic value %T is not an error", recovered))
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+	// The registration context survives the wrap, and so does the cause chain.
+	c.Assert(err.Error(), qt.Contains, "AddPrimitives")
+	c.Assert(err.Error(), qt.Contains, "bad-variadic")
+
+	// The failed spec left no partial registration behind.
+	_, found := reg.FindPrimitive("bad-variadic", PhaseSetRuntime)
+	c.Assert(found, qt.IsFalse)
+}
+

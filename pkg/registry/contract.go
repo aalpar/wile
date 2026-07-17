@@ -39,7 +39,7 @@ import (
 // are checked directly via mc.Arg(i). Position ParamCount-1 holds the
 // rest list (a values.Tuple); each rest element is checked against the
 // last entry in ParamTypes. When len(ParamTypes) is shorter than
-// ParamCount (permitted by validateParamTypes), any fixed position i
+// ParamCount (permitted by PrimitiveSpec.Validate), any fixed position i
 // beyond len(ParamTypes)-1 reuses types[len(ParamTypes)-1] — the last
 // declared constraint acts as the catch-all for unspecified fixed slots
 // and for rest-list elements.
