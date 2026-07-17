@@ -82,11 +82,16 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	if binding == nil {
 		return
 	}
-	mta := binding.EnsureMeta()
-	if scopes != nil {
-		mta.Scopes = scopes
-	}
-	if source != nil {
-		mta.Source = source
-	}
+	binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+		changed := false
+		if scopes != nil {
+			m.Scopes = scopes
+			changed = true
+		}
+		if source != nil {
+			m.Source = source
+			changed = true
+		}
+		return changed
+	})
 }

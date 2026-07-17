@@ -261,7 +261,10 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	// of the immutable-top-level flag (unlike Stable below). The frame-reclaim
 	// classifier pairs it with IsStable() to trust a primitive callee. (No reader
 	// until the classifier consults it; see validate's classifyCallee.)
-	b.EnsureMeta().CaptureSafe = !spec.InvokesProcedure
+	b.UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.CaptureSafe = !spec.InvokesProcedure
+		return true
+	})
 
 	// Opt-in (WithStableBasePrimitives): mark the binding Stable so the
 	// frame-reclaim classifier trusts it as non-rebindable, for every capture-safe
@@ -273,7 +276,10 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	// primitive here would be pointless (it is not CaptureSafe) and is excluded. The
 	// set!-gate (compile_validated.go) then makes the trust a guarantee.
 	if cfg.stableBase && !spec.InvokesProcedure {
-		b.EnsureMeta().Stable = true
+		b.UpdateMeta(func(m *environment.BindingMeta) bool {
+			m.Stable = true
+			return true
+		})
 	}
 	return nil
 }
@@ -321,7 +327,10 @@ func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 			}
 			bnd := phaseEnv.GetBinding(sym, nil)
 			if bnd != nil {
-				bnd.EnsureMeta().Doc = spec.Doc
+				bnd.UpdateMeta(func(m *environment.BindingMeta) bool {
+					m.Doc = spec.Doc
+					return true
+				})
 			}
 		}
 	}

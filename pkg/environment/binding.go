@@ -21,9 +21,13 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// BindingMeta holds compile-time metadata (scopes and source location) that
-// is never read during VM execution. Stored behind a pointer so that runtime
-// Binding copies (the hot path) move 32 bytes instead of 56.
+// BindingMeta holds compile-time metadata (scopes and source location) that is
+// never read during VM execution — but IS read and written concurrently across
+// SRFI-18 threads at compile time (two threads compiling a define of the same
+// top-level name). For a global binding it is therefore published copy-on-write
+// through the binding's atomicCell (see UpdateMeta); a reader always sees a
+// complete, immutable snapshot. Stored behind a pointer so that runtime Binding
+// copies (the hot path) move a pointer instead of the whole struct.
 type BindingMeta struct {
 	Scopes   []*syntax.Scope
 	Source   *syntax.SourceContext
@@ -90,7 +94,7 @@ type BindingMeta struct {
 	//
 	// The gating bool is what keeps the capability zero-value-correct: a plain
 	// -1-sentinel int would read 0 ("callback param 0") on every binding that ever
-	// calls EnsureMeta (which is every primitive — see registry/apply.go), falsely
+	// calls UpdateMeta (which is every primitive — see registry/apply.go), falsely
 	// marking them inline HOFs. With the bool, the &BindingMeta{} zero value
 	// (InlineHOF=false) correctly means "not an inline HOF," preserving the
 	// invariant that adding a metadata field needs no constructor edits.
@@ -108,29 +112,51 @@ type Binding struct {
 	value       values.Value // local bindings (single-threaded, plain field)
 	cell        *atomicCell  // global bindings (thread-shared, atomic); nil for locals
 	bindingType BindingType
-	meta        *BindingMeta
+	meta        *BindingMeta // local bindings only; a global's meta lives in cell
 }
 
-// atomicCell holds a binding's value behind an atomic pointer. Global bindings
-// are shared across SRFI-18 threads: the VM's cachedBindings cache holds the
-// *Binding and reads its value lock-free (no frame mutex) while set! publishes a
-// new value. values.Value is a two-word interface, so an unsynchronized
-// reader/writer pair tears it (corrupt interface -> nil-deref / bad type). The
-// cell makes that publish atomic: the reader does a lock-free atomic load, the
-// writer an atomic store.
+// atomicCell holds a global binding's mutable, thread-shared state — its value
+// and its compile-time metadata — behind atomic pointers. Global bindings are
+// shared across SRFI-18 threads two ways:
+//
+//   - The VM's cachedBindings cache holds the *Binding and reads its value
+//     lock-free (no frame mutex) while set! publishes a new value.
+//   - Concurrent compiles (two threads eval'ing a define of the same top-level
+//     name) mutate the metadata (Imported/Stable/Scopes/…) while the frame
+//     optimizer's IsStable()/IsCaptureSafe() read it.
+//
+// values.Value and *BindingMeta are each published as a whole pointer, so an
+// unsynchronized reader/writer pair on either would tear (corrupt interface ->
+// nil-deref/bad type; half-updated meta). The cell makes both publishes atomic:
+// value via a lock-free load/store, meta via copy-on-write CAS (updateMeta) so a
+// reader always sees a complete, immutable BindingMeta snapshot.
 //
 // The noCopy inside atomic.Pointer lives HERE, in a heap object that is never
 // value-copied, so Binding itself stays copylocks-clean for the value-embedded
 // local frame ([]Binding). Local bindings are single-threaded and never share a
-// *Binding, so they keep the plain value field (cell == nil) and pay no atomic
-// op or box allocation on the hot Apply arg-bind path.
+// *Binding, so they keep the plain value/meta fields (cell == nil) and pay no
+// atomic op or box allocation on the hot Apply arg-bind path.
 type atomicCell struct {
 	v atomic.Pointer[values.Value]
+	m atomic.Pointer[BindingMeta]
 }
 
 func newAtomicCell(v values.Value) *atomicCell {
 	q := &atomicCell{}
 	q.v.Store(&v)
+	return q
+}
+
+// newAtomicCellWithMeta builds a cell holding both an initial value and an
+// initial metadata pointer. meta may be nil (no metadata yet). Used when a
+// binding is promoted or copied into a global frame and its existing meta must
+// travel into the cell rather than the (now global-invisible) plain field.
+func newAtomicCellWithMeta(v values.Value, meta *BindingMeta) *atomicCell {
+	q := &atomicCell{}
+	q.v.Store(&v)
+	if meta != nil {
+		q.m.Store(meta)
+	}
 	return q
 }
 
@@ -144,6 +170,34 @@ func (p *atomicCell) load() values.Value {
 
 func (p *atomicCell) store(v values.Value) {
 	p.v.Store(&v)
+}
+
+// loadMeta returns the current metadata snapshot, or nil if none is attached.
+// The returned pointer is immutable: mutate only via updateMeta.
+func (p *atomicCell) loadMeta() *BindingMeta {
+	return p.m.Load()
+}
+
+// updateMeta applies fn to a private copy of the current metadata and publishes
+// it with a compare-and-swap, retrying if a concurrent writer won the race. fn
+// reports whether it changed anything; when it returns false updateMeta
+// publishes nothing and returns false. Because a CAS retry re-runs fn, fn must
+// depend only on the *BindingMeta it is handed — no captured cross-call state.
+func (p *atomicCell) updateMeta(fn func(*BindingMeta) bool) bool {
+	for {
+		cur := p.m.Load()
+		next := &BindingMeta{}
+		if cur != nil {
+			*next = *cur
+		}
+		changed := fn(next)
+		if !changed {
+			return false
+		}
+		if p.m.CompareAndSwap(cur, next) {
+			return true
+		}
+	}
 }
 
 // newGlobalBinding creates a binding whose value lives in an atomicCell, for
@@ -165,8 +219,12 @@ func (p *Binding) ensureGlobalCell() {
 	if p.cell != nil {
 		return
 	}
-	p.cell = newAtomicCell(p.value)
+	// Migrate BOTH value and meta into the cell: once cell != nil the plain
+	// fields are global-invisible (Value/Meta read only the cell), so leaving
+	// meta behind would silently drop this binding's scopes/provenance.
+	p.cell = newAtomicCellWithMeta(p.value, p.meta)
 	p.value = nil
+	p.meta = nil
 }
 
 // NewBinding creates a new binding with the given value and type.
@@ -227,62 +285,82 @@ func (p *Binding) SetValue(value values.Value) {
 	p.value = value
 }
 
-// Meta returns the BindingMeta pointer, or nil if no metadata has been
-// attached. Callers that read metadata fields should nil-check the
-// returned pointer; the convenience getters (Scopes, Source, Doc,
+// Meta returns the current BindingMeta snapshot, or nil if no metadata has been
+// attached. For a global binding (cell != nil) the snapshot is immutable — do
+// not write through it; use UpdateMeta. Callers that read metadata fields should
+// nil-check the returned pointer; the convenience getters (Scopes, Source, Doc,
 // IsImported, IsStable) wrap this pattern.
 func (p *Binding) Meta() *BindingMeta {
+	if p.cell != nil {
+		return p.cell.loadMeta()
+	}
 	return p.meta
 }
 
-// EnsureMeta returns the BindingMeta pointer, lazily allocating an empty
-// BindingMeta on first call. This is the only mutator API for metadata
-// fields: callers assign directly, e.g.
+// UpdateMeta mutates this binding's compile-time metadata and is the only
+// metadata mutator API. fn receives a *BindingMeta to modify and returns whether
+// it changed anything; UpdateMeta returns that same result. Adding a new
+// metadata field thus requires editing only the BindingMeta struct itself; no
+// parallel getter/setter accessor pair is needed. Usage:
 //
-//	b.EnsureMeta().Imported = true
+//	b.UpdateMeta(func(m *BindingMeta) bool {
+//		m.Imported = true
+//		return true
+//	})
 //
-// Adding a new metadata field thus requires editing only the BindingMeta
-// struct itself; no parallel getter/setter accessor pair is needed.
-func (p *Binding) EnsureMeta() *BindingMeta {
+// For a global binding (cell != nil) the update is copy-on-write under an atomic
+// CAS, so it is safe against concurrent compiles and lock-free readers, and fn
+// may be re-run on CAS contention — fn MUST therefore depend only on the
+// *BindingMeta it is handed, never on captured cross-call state (return the
+// "did I change it?" answer instead of recording it in a closed-over variable).
+// For a local binding (single-threaded) fn runs exactly once, in place.
+func (p *Binding) UpdateMeta(fn func(*BindingMeta) bool) bool {
+	if p.cell != nil {
+		return p.cell.updateMeta(fn)
+	}
 	if p.meta == nil {
 		p.meta = &BindingMeta{}
 	}
-	return p.meta
+	return fn(p.meta)
 }
 
 // Scopes returns the hygiene scopes associated with this binding.
 // Returns nil for bindings without hygiene information.
 func (p *Binding) Scopes() []*syntax.Scope {
-	if p.meta == nil {
+	m := p.Meta()
+	if m == nil {
 		return nil
 	}
-	return p.meta.Scopes
+	return m.Scopes
 }
 
 // Source returns the source location where this binding was defined.
 // Returns nil for bindings without source information.
 func (p *Binding) Source() *syntax.SourceContext {
-	if p.meta == nil {
+	m := p.Meta()
+	if m == nil {
 		return nil
 	}
-	return p.meta.Source
+	return m.Source
 }
 
 // Doc returns the documentation string for this binding.
 // Returns empty string for bindings without documentation.
 func (p *Binding) Doc() string {
-	if p.meta == nil {
+	m := p.Meta()
+	if m == nil {
 		return ""
 	}
-	return p.meta.Doc
+	return m.Doc
 }
 
 // IsImported returns whether this binding was imported from a library.
 func (p *Binding) IsImported() bool {
-	if p.meta == nil {
+	m := p.Meta()
+	if m == nil {
 		return false
 	}
-	return p.meta.Imported
+	return m.Imported
 }
 
 // IsStable reports the rebind-stability conclusion: the binding will not be
@@ -292,10 +370,11 @@ func (p *Binding) IsImported() bool {
 // the frame optimizer's MayCapture (sibling escape-gated plan). Renamed from the
 // retired IsConstant, which falsely asserted "value known at compile time".
 func (p *Binding) IsStable() bool {
-	if p.meta == nil {
+	m := p.Meta()
+	if m == nil {
 		return false
 	}
-	return p.meta.Imported || p.meta.Stable
+	return m.Imported || m.Stable
 }
 
 // IsCaptureSafe reports whether this binding's callee cannot invoke a Scheme
@@ -307,51 +386,57 @@ func (p *Binding) IsStable() bool {
 // trusted. Unlike IsStable (which ORs in Imported), this reads CaptureSafe alone:
 // Imported does NOT imply capture-safe (see the BindingMeta.CaptureSafe invariant).
 func (p *Binding) IsCaptureSafe() bool {
-	if p.meta == nil {
+	m := p.Meta()
+	if m == nil {
 		return false
 	}
-	return p.meta.CaptureSafe
+	return m.CaptureSafe
 }
 
 // InlineHOFParam reports the callback parameter index of a curated inline-HOF
 // binding (callback specialization Strategy A), or -1 when this binding is not a
 // curated inline HOF. The gating BindingMeta.InlineHOF flag makes -1 the correct
 // answer for an unstamped binding and for a binding whose meta exists but carries
-// no inline-HOF stamp (the EnsureMeta zero value). Read by the compiler's
+// no inline-HOF stamp (the UpdateMeta zero value). Read by the compiler's
 // inline-HOF dispatch to decide whether to attempt call-site specialization.
 func (p *Binding) InlineHOFParam() int {
-	if p.meta == nil || !p.meta.InlineHOF {
+	m := p.Meta()
+	if m == nil || !m.InlineHOF {
 		return -1
 	}
-	return p.meta.InlineHOFCallbackParam
+	return m.InlineHOFCallbackParam
 }
 
 // Copy creates a deep copy of this binding. The meta struct is copied so
-// that mutations through EnsureMeta on the original do not affect the
+// that mutations through UpdateMeta on the original do not affect the
 // copy. This method is only used during compilation/expansion, never on
 // the runtime hot path.
 func (p *Binding) Copy() *Binding {
 	b := &Binding{
 		bindingType: p.bindingType,
 	}
-	// A global binding's value lives in its atomicCell; give the copy a fresh
-	// cell holding a snapshot. A local binding copies the plain field.
+	var m *BindingMeta
+	src := p.Meta()
+	if src != nil {
+		m = &BindingMeta{
+			Scopes:                 src.Scopes,
+			Source:                 src.Source,
+			Doc:                    src.Doc,
+			Imported:               src.Imported,
+			Stable:                 src.Stable,
+			CaptureSafe:            src.CaptureSafe,
+			InlineHOF:              src.InlineHOF,
+			InlineHOFCallbackParam: src.InlineHOFCallbackParam,
+		}
+	}
+	// A global binding's value and meta live in its atomicCell; give the copy a
+	// fresh cell holding snapshots of both. A local binding copies the plain
+	// fields.
 	if p.cell != nil {
-		b.cell = newAtomicCell(p.cell.load())
+		b.cell = newAtomicCellWithMeta(p.cell.load(), m)
 	} else {
 		b.value = p.value
-	}
-	if p.meta != nil {
-		b.meta = &BindingMeta{
-			Scopes:                 p.meta.Scopes,
-			Source:                 p.meta.Source,
-			Doc:                    p.meta.Doc,
-			Imported:               p.meta.Imported,
-			Stable:                 p.meta.Stable,
-			CaptureSafe:            p.meta.CaptureSafe,
-			InlineHOF:              p.meta.InlineHOF,
-			InlineHOFCallbackParam: p.meta.InlineHOFCallbackParam,
-		}
+		b.meta = m
 	}
 	return b
 }

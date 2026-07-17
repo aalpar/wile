@@ -241,9 +241,11 @@ func stampLetBindingCaptureSafe(childEnv *environment.EnvironmentFrame, b valida
 	if bound == nil {
 		return
 	}
-	m := bound.EnsureMeta()
-	m.CaptureSafe = true
-	m.Stable = true
+	bound.UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.CaptureSafe = true
+		m.Stable = true
+		return true
+	})
 }
 
 // predeclareBodyDefines scans the body for define forms and pre-creates

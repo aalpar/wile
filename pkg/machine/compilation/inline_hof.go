@@ -160,9 +160,11 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
 // non-nil b and own the soundness decision (which bindings are eligible); this is
 // just the shared write.
 func applyInlineHOFStamp(b *environment.Binding, callbackParam int) {
-	m := b.EnsureMeta()
-	m.InlineHOF = true
-	m.InlineHOFCallbackParam = callbackParam
+	b.UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.InlineHOF = true
+		m.InlineHOFCallbackParam = callbackParam
+		return true
+	})
 }
 
 // stampImportedInlineHOF marks the import target b when name is a curated

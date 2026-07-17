@@ -67,7 +67,7 @@ func TestBinding_Scopes(t *testing.T) {
 	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope)
 }
 
-func TestBinding_EnsureMeta_Scopes(t *testing.T) {
+func TestBinding_UpdateMeta_Scopes(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
 	qt.Assert(t, b.Scopes(), qt.IsNil)
 
@@ -75,7 +75,10 @@ func TestBinding_EnsureMeta_Scopes(t *testing.T) {
 	scope2 := syntax.NewScope()
 	scopes := []*syntax.Scope{scope1, scope2}
 
-	b.EnsureMeta().Scopes = scopes
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Scopes = scopes
+		return true
+	})
 	qt.Assert(t, b.Scopes(), qt.HasLen, 2)
 	qt.Assert(t, b.Scopes()[0], qt.Equals, scope1)
 	qt.Assert(t, b.Scopes()[1], qt.Equals, scope2)
@@ -99,8 +102,11 @@ func TestBinding_Copy(t *testing.T) {
 	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1)
 	qt.Assert(t, b2.Scopes()[1], qt.Equals, scope2)
 
-	// Replacing the original's scopes via EnsureMeta does not touch the copy.
-	b1.EnsureMeta().Scopes = []*syntax.Scope{syntax.NewScope()}
+	// Replacing the original's scopes via UpdateMeta does not touch the copy.
+	b1.UpdateMeta(func(m *BindingMeta) bool {
+		m.Scopes = []*syntax.Scope{syntax.NewScope()}
+		return true
+	})
 	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1) // Copy unchanged
 
 	// Test copy with nil scopes
@@ -142,7 +148,7 @@ func TestBinding_Source(t *testing.T) {
 	qt.Assert(t, b2.Source(), qt.Equals, source)
 }
 
-func TestBinding_EnsureMeta_Source(t *testing.T) {
+func TestBinding_UpdateMeta_Source(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypeVariable)
 	qt.Assert(t, b.Source(), qt.IsNil)
 
@@ -151,59 +157,85 @@ func TestBinding_EnsureMeta_Source(t *testing.T) {
 		Start: syntax.NewSourceIndexes(5, 3, 50),
 	}
 
-	b.EnsureMeta().Source = source
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Source = source
+		return true
+	})
 	qt.Assert(t, b.Source(), qt.Equals, source)
 	qt.Assert(t, b.Source().File, qt.Equals, "test.scm")
 }
 
-func TestBinding_EnsureMeta_Doc(t *testing.T) {
+func TestBinding_UpdateMeta_Doc(t *testing.T) {
 	b := NewBinding(values.Void, BindingTypePrimitive)
 	qt.Assert(t, b.Doc(), qt.Equals, "")
-	b.EnsureMeta().Doc = "Conditional expression."
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Doc = "Conditional expression."
+		return true
+	})
 	qt.Assert(t, b.Doc(), qt.Equals, "Conditional expression.")
 }
 
-func TestBinding_EnsureMeta_PreservesExistingMeta(t *testing.T) {
+func TestBinding_UpdateMeta_PreservesExistingMeta(t *testing.T) {
 	scope := syntax.NewScope()
 	b := NewBindingWithScopes(values.NewInteger(1), BindingTypeVariable, []*syntax.Scope{scope})
-	b.EnsureMeta().Doc = "A documented binding."
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Doc = "A documented binding."
+		return true
+	})
 	qt.Assert(t, b.Doc(), qt.Equals, "A documented binding.")
 	qt.Assert(t, b.Scopes(), qt.HasLen, 1)
 }
 
 func TestBinding_Copy_WithDoc(t *testing.T) {
 	b1 := NewBinding(values.Void, BindingTypePrimitive)
-	b1.EnsureMeta().Doc = "Original doc."
+	b1.UpdateMeta(func(m *BindingMeta) bool {
+		m.Doc = "Original doc."
+		return true
+	})
 	b2 := b1.Copy()
 	qt.Assert(t, b2.Doc(), qt.Equals, "Original doc.")
-	b2.EnsureMeta().Doc = "Changed doc."
+	b2.UpdateMeta(func(m *BindingMeta) bool {
+		m.Doc = "Changed doc."
+		return true
+	})
 	qt.Assert(t, b1.Doc(), qt.Equals, "Original doc.")
 	qt.Assert(t, b2.Doc(), qt.Equals, "Changed doc.")
 }
 
-func TestBinding_EnsureMeta_Imported(t *testing.T) {
+func TestBinding_UpdateMeta_Imported(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
 	qt.Assert(t, b.IsImported(), qt.IsFalse)
-	b.EnsureMeta().Imported = true
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Imported = true
+		return true
+	})
 	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
-func TestBinding_EnsureMeta_Stable(t *testing.T) {
+func TestBinding_UpdateMeta_Stable(t *testing.T) {
 	b := NewBinding(values.NewInteger(42), BindingTypeVariable)
 	qt.Assert(t, b.IsStable(), qt.IsFalse)
-	b.EnsureMeta().Stable = true
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Stable = true
+		return true
+	})
 	qt.Assert(t, b.IsStable(), qt.IsTrue)
 }
 
 func TestBinding_Copy_PreservesImportedAndStable(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
-	m := b.EnsureMeta()
-	m.Imported = true
-	m.Stable = true
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Imported = true
+		m.Stable = true
+		return true
+	})
 	cp := b.Copy()
 	qt.Assert(t, cp.IsImported(), qt.IsTrue)
 	qt.Assert(t, cp.IsStable(), qt.IsTrue)
-	cp.EnsureMeta().Imported = false
+	cp.UpdateMeta(func(m *BindingMeta) bool {
+		m.Imported = false
+		return true
+	})
 	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
@@ -213,14 +245,20 @@ func TestBinding_Copy_PreservesImportedAndStable(t *testing.T) {
 func TestBinding_StableEvidenceVsConclusion(t *testing.T) {
 	// Imported is evidence: IsStable holds, IsImported holds.
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
-	b.EnsureMeta().Imported = true
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Imported = true
+		return true
+	})
 	qt.Assert(t, b.IsStable(), qt.IsTrue)
 	qt.Assert(t, b.IsImported(), qt.IsTrue)
 
 	// A proven Stable conclusion without import: stable but not imported, so
 	// set! is still permitted (IsImported false).
 	b2 := NewBinding(values.NewInteger(2), BindingTypeVariable)
-	b2.EnsureMeta().Stable = true
+	b2.UpdateMeta(func(m *BindingMeta) bool {
+		m.Stable = true
+		return true
+	})
 	qt.Assert(t, b2.IsStable(), qt.IsTrue)
 	qt.Assert(t, b2.IsImported(), qt.IsFalse)
 
@@ -233,7 +271,7 @@ func TestBinding_StableEvidenceVsConclusion(t *testing.T) {
 // TestBinding_InlineHOFParam pins the inline-HOF capability (callback
 // specialization Strategy A): a binding reports -1 ("not an inline HOF") by
 // default — including a binding that has a BindingMeta but no InlineHOF stamp
-// (the EnsureMeta &BindingMeta{} zero-value case, which a plain -1-sentinel int
+// (the UpdateMeta &BindingMeta{} zero-value case, which a plain -1-sentinel int
 // would mis-read as "callback param 0" and falsely mark every primitive an
 // inline HOF). Once stamped, it reports the callback parameter index.
 func TestBinding_InlineHOFParam(t *testing.T) {
@@ -242,15 +280,20 @@ func TestBinding_InlineHOFParam(t *testing.T) {
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1)
 
 	// Metadata exists but no InlineHOF stamp (zero value) -> still -1. This is the
-	// invariant that keeps EnsureMeta's &BindingMeta{} correct: Lever E stamps
-	// every primitive via EnsureMeta().CaptureSafe, and none of those are HOFs.
-	b.EnsureMeta().CaptureSafe = true
+	// invariant that keeps UpdateMeta's &BindingMeta{} correct: Lever E stamps
+	// every primitive via UpdateMeta setting CaptureSafe, and none of those are HOFs.
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.CaptureSafe = true
+		return true
+	})
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1)
 
 	// Stamped -> the callback parameter index.
-	m := b.EnsureMeta()
-	m.InlineHOF = true
-	m.InlineHOFCallbackParam = 0
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.InlineHOF = true
+		m.InlineHOFCallbackParam = 0
+		return true
+	})
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0)
 }
 
@@ -260,9 +303,11 @@ func TestBinding_InlineHOFParam(t *testing.T) {
 // the gating flag.
 func TestBinding_Copy_PreservesInlineHOF(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
-	m := b.EnsureMeta()
-	m.InlineHOF = true
-	m.InlineHOFCallbackParam = 2
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.InlineHOF = true
+		m.InlineHOFCallbackParam = 2
+		return true
+	})
 	cp := b.Copy()
 	qt.Assert(t, cp.InlineHOFParam(), qt.Equals, 2)
 }

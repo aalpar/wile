@@ -166,16 +166,23 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil {
-		if symbolScopes != nil {
-			binding.EnsureMeta().Scopes = symbolScopes
-		}
-		symbolSource := keywordSym.SourceContext()
-		if symbolSource != nil {
-			binding.EnsureMeta().Source = symbolSource
-		}
-		if docstring != "" {
-			binding.EnsureMeta().Doc = docstring
-		}
+		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+			changed := false
+			if symbolScopes != nil {
+				m.Scopes = symbolScopes
+				changed = true
+			}
+			symbolSource := keywordSym.SourceContext()
+			if symbolSource != nil {
+				m.Source = symbolSource
+				changed = true
+			}
+			if docstring != "" {
+				m.Doc = docstring
+				changed = true
+			}
+			return changed
+		})
 	}
 	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
 }

@@ -134,10 +134,12 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 		// Each copied global binding gets its own atomicCell snapshotting the
 		// source value (read via Value so it works whether or not the source
 		// already uses a cell).
+		// A global binding's meta lives in its cell (Meta reads it there), so
+		// snapshot both value and meta into the copy's fresh cell. Sharing the
+		// meta pointer is safe: it is immutable under copy-on-write (UpdateMeta).
 		allBindings[i] = Binding{
-			cell:        newAtomicCell(b.Value()),
+			cell:        newAtomicCellWithMeta(b.Value(), b.Meta()),
 			bindingType: b.bindingType,
-			meta:        b.meta,
 		}
 		q.bindings[i] = &allBindings[i]
 	}

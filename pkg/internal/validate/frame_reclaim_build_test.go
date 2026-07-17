@@ -29,6 +29,10 @@ import (
 func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFrame {
 	t.Helper()
 	env := environment.NewNamespace().Runtime()
+	// The classifier's same-unit edge is immutable only under immutable top-level
+	// (rebindStable = StableInUnit ∧ this flag). These tests model that regime; the
+	// discriminator between reclaimable and not is markStableInUnit, not the flag.
+	env.Namespace().SetImmutableTopLevel(true)
 	for _, name := range names {
 		sym := syntax.NewSyntaxSymbol(name, nil).Sym
 		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
@@ -36,7 +40,10 @@ func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFram
 		if b == nil {
 			t.Fatalf("failed to create global binding %q", name)
 		}
-		b.EnsureMeta().Imported = true
+		b.UpdateMeta(func(m *environment.BindingMeta) bool {
+			m.Imported = true
+			return true
+		})
 		// Model the registry's CaptureSafe stamp (Lever E): the post-whitelist
 		// classifier trusts a primitive callee on IsCaptureSafe()&&IsStable(). These
 		// unit tests lack the real registry, so a capture-safe primitive stand-in
@@ -45,7 +52,10 @@ func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFram
 		// and the non-primitive callee stand-ins (proc, fns, pong, k) used in the
 		// negative tests are deliberately absent — they must NOT be trusted.
 		if captureSafeTestPrims[name] {
-			b.EnsureMeta().CaptureSafe = true
+			b.UpdateMeta(func(m *environment.BindingMeta) bool {
+				m.CaptureSafe = true
+				return true
+			})
 		}
 	}
 	return env
@@ -62,25 +72,26 @@ var captureSafeTestPrims = map[string]bool{
 	"car": true, "cdr": true, "cons": true,
 }
 
-// stampStable creates (or reuses) a global binding for each name and stamps it
-// Stable, so IsStable() returns true — modelling a same-unit top-level define
-// the producer has proven rebind-stable (StableInUnit = defined-once ∧
-// never-set!, made sound by Option-B enforcement). internal/validate cannot run
-// a full compile to populate the bit naturally, so the classifier's Stable read
-// is exercised by stamping the bit by hand. An env where a define is NOT stamped
-// models the tier-(a) case (flag off, or non-compiled env): the same-unit edge
-// stays mutable.
-func stampStable(t *testing.T, env *environment.EnvironmentFrame, names ...string) {
-	t.Helper()
+// markStableInUnit sets StableInUnit on the named top-level defines in unit,
+// modelling the validator's finalizeStability verdict (defined-once ∧ never-set!)
+// that a same-unit define is rebind-stable. The frame-reclaim classifier reads
+// this thread-local bit off the ValidatedDefine — NOT the shared *Binding — so a
+// same-unit callee edge is immutable iff its producer carries it. Replaces the old
+// stampStable, which wrote the callee binding's Stable field; the T1.5 follow-on
+// removed the pre-stamp that surfaced StableInUnit through the binding, so the
+// classifier no longer reads the binding for same-unit edges. A define left
+// unmarked models the tier-(a) case (defined-twice, set!, or non-compiled): its
+// edge stays mutable. Flattens one level of begin, matching collectTopLevelDefines.
+func markStableInUnit(unit []ValidatedExpr, names ...string) {
+	want := make(map[string]bool, len(names))
 	for _, name := range names {
-		sym := syntax.NewSyntaxSymbol(name, nil).Sym
-		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-		b := env.GetBinding(sym, nil)
-		if b == nil {
-			t.Fatalf("failed to create global binding %q", name)
-		}
-		b.EnsureMeta().Stable = true
+		want[name] = true
 	}
+	collectTopLevelDefines(unit, func(d *ValidatedDefine) {
+		if want[d.name.Key()] {
+			d.StableInUnit = true
+		}
+	})
 }
 
 func TestBuildReclaimGraph_DetectsCallCC(t *testing.T) {
@@ -157,10 +168,11 @@ func TestClassifyFrameReclaim_StableDefineUnlocksCaller(t *testing.T) {
 		t.Fatalf("no-Stable env: want sq reclaimable, use not — got sq=%v use=%v", a["sq"], a["use"])
 	}
 
-	// Env with sq stamped Stable (tier-(b) equivalent): use→sq immutable, sq safe.
+	// Env with sq stable-in-unit (tier-(b) equivalent): use→sq immutable, sq safe.
 	envB := envWithImported(t, "*")
-	stampStable(t, envB, "sq")
-	b := ClassifyFrameReclaim(mkUnit(), envB)
+	unitB := mkUnit()
+	markStableInUnit(unitB, "sq")
+	b := ClassifyFrameReclaim(unitB, envB)
 	if !b["sq"] || !b["use"] {
 		t.Fatalf("Stable-sq env: want both reclaimable (use→sq immutable, sq safe) — got sq=%v use=%v", b["sq"], b["use"])
 	}
@@ -186,8 +198,9 @@ func TestClassifyFrameReclaim_SelfRecursiveTopLevel(t *testing.T) {
 	}
 
 	envB := envWithImported(t, "+", "-")
-	stampStable(t, envB, "fib")
-	if !ClassifyFrameReclaim(mkUnit(), envB)["fib"] {
+	unitB := mkUnit()
+	markStableInUnit(unitB, "fib")
+	if !ClassifyFrameReclaim(unitB, envB)["fib"] {
 		t.Fatalf("Stable env: a self-recursive top-level define over safe primitives MUST be reclaimable")
 	}
 }
@@ -212,10 +225,11 @@ func TestClassifyFrameReclaim_TwiceDefinedNotReclaimable(t *testing.T) {
 		return []ValidatedExpr{f}
 	}
 
-	// Control: defined-once, never-set! ⇒ producer stamps Stable ⇒ reclaimable.
+	// Control: defined-once, never-set! ⇒ producer is StableInUnit ⇒ reclaimable.
 	control := envWithImported(t, "-")
-	stampStable(t, control, "f")
-	if !ClassifyFrameReclaim(mkUnit(), control)["f"] {
+	controlUnit := mkUnit()
+	markStableInUnit(controlUnit, "f")
+	if !ClassifyFrameReclaim(controlUnit, control)["f"] {
 		t.Fatalf("control (Stable f): self-recursive define over safe primitives MUST be reclaimable")
 	}
 
@@ -246,8 +260,9 @@ func TestClassifyFrameReclaim_MutualRecursionPair(t *testing.T) {
 	}
 
 	envB := envWithImported(t, "-")
-	stampStable(t, envB, "f", "g")
-	b := ClassifyFrameReclaim(mkUnit(), envB)
+	unitB := mkUnit()
+	markStableInUnit(unitB, "f", "g")
+	b := ClassifyFrameReclaim(unitB, envB)
 	if !b["f"] || !b["g"] {
 		t.Fatalf("both-Stable env: mutual recursion over immutable edges MUST be reclaimable — got f=%v g=%v", b["f"], b["g"])
 	}
@@ -297,8 +312,9 @@ func TestClassifyFrameReclaim_BeginWrappedUnit(t *testing.T) {
 	}
 
 	envB := envWithImported(t, "*")
-	stampStable(t, envB, "sq")
-	b := ClassifyFrameReclaim(mkUnit(), envB)
+	unitB := mkUnit()
+	markStableInUnit(unitB, "sq")
+	b := ClassifyFrameReclaim(unitB, envB)
 	if !b["sq"] || !b["use"] {
 		t.Fatalf("begin-wrapped Stable-sq: want both reclaimable — got sq=%v use=%v", b["sq"], b["use"])
 	}
@@ -326,28 +342,31 @@ func TestBuildReclaimGraph_QuasiquoteNotReclaimable(t *testing.T) {
 	}
 
 	stableEnv := envWithImported(t)
-	stampStable(t, stableEnv, "g")
-	if ClassifyFrameReclaim(mkUnit(), stableEnv)["g"] {
+	stableUnit := mkUnit()
+	markStableInUnit(stableUnit, "g")
+	if ClassifyFrameReclaim(stableUnit, stableEnv)["g"] {
 		t.Fatalf("a define whose body contains a quasiquote must not be reclaimable (Stable env)")
 	}
 }
 
 // TestBuildReclaimGraph_ImmutableEdgeImpliesStable is the kill-criterion guard
 // (plan Risks): the soundness invariant lives on the edge, not the node verdict.
-// Every reclaimEdge marked immutable MUST point at a callee binding that
-// IsStable() in env — because `immutable` is assigned from exactly that read.
-// This introspects the built graph and fails if any immutable edge resolves to a
-// non-Stable (rebindable) binding, catching a future regression that decouples
+// Every reclaimEdge marked immutable MUST point at a callee node that is
+// StableInUnit — because `immutable` is assigned from exactly that field (the
+// T1.5 follow-on moved the read from the shared *Binding to the thread-local
+// node). This introspects the built graph and fails if any immutable edge resolves
+// to a non-stable (rebindable) callee, catching a future regression that decouples
 // the flag from the read.
 func TestBuildReclaimGraph_ImmutableEdgeImpliesStable(t *testing.T) {
-	// (define (sq x) (* x x)) (define (use) (sq 3)) with sq Stable: use→sq is the
-	// one immutable same-unit edge; sq→* contributes no edge (capture-safe).
+	// (define (sq x) (* x x)) (define (use) (sq 3)) with sq StableInUnit: use→sq is
+	// the one immutable same-unit edge; sq→* contributes no edge (capture-safe).
 	sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
 	use := defineFn("use", call(symRef("sq"), lit()))
+	unit := []ValidatedExpr{sq, use}
+	markStableInUnit(unit, "sq")
 	env := envWithImported(t, "*")
-	stampStable(t, env, "sq")
 
-	nodes, _ := buildReclaimGraph([]ValidatedExpr{sq, use}, env)
+	nodes, _ := buildReclaimGraph(unit, env)
 	immutableEdges := 0
 	for _, n := range nodes {
 		for _, e := range n.callees {
@@ -355,10 +374,8 @@ func TestBuildReclaimGraph_ImmutableEdgeImpliesStable(t *testing.T) {
 				continue
 			}
 			immutableEdges++
-			sym := syntax.NewSyntaxSymbol(e.target.label, nil).Sym
-			b := env.GetBinding(sym, nil)
-			if b == nil || !b.IsStable() {
-				t.Fatalf("immutable edge %s→%s resolves to a non-Stable binding — soundness invariant violated",
+			if e.target == nil || !e.target.rebindStable {
+				t.Fatalf("immutable edge %s→%s resolves to a rebindable callee node — soundness invariant violated",
 					n.label, e.target.label)
 			}
 		}
@@ -393,8 +410,9 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 		IsFunction: true,
 	}
 	envA := envWithImported(t, "*")
-	stampStable(t, envA, "sq")
-	if ClassifyFrameReclaim([]ValidatedExpr{mkSq(), useParam}, envA)["use"] {
+	unitA := []ValidatedExpr{mkSq(), useParam}
+	markStableInUnit(unitA, "sq")
+	if ClassifyFrameReclaim(unitA, envA)["use"] {
 		t.Fatalf("parameter shadow: use must NOT be reclaimable — (sq 3) calls the param, not the Stable top-level sq")
 	}
 
@@ -403,8 +421,9 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 		nestedLet([]ValidatedLetBinding{{Name: syntax.NewSyntaxSymbol("sq", nil), Init: lit()}},
 			call(symRef("sq"))))
 	envB := envWithImported(t, "*")
-	stampStable(t, envB, "sq")
-	if ClassifyFrameReclaim([]ValidatedExpr{mkSq(), useLet}, envB)["use"] {
+	unitLet := []ValidatedExpr{mkSq(), useLet}
+	markStableInUnit(unitLet, "sq")
+	if ClassifyFrameReclaim(unitLet, envB)["use"] {
 		t.Fatalf("let shadow: use must NOT be reclaimable — (sq) calls the let binding, not the Stable top-level sq")
 	}
 
@@ -413,8 +432,9 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 	// guard does not over-reject legitimate same-unit calls.
 	useReal := defineFn("use", call(symRef("sq"), lit()))
 	envC := envWithImported(t, "*")
-	stampStable(t, envC, "sq")
-	if !ClassifyFrameReclaim([]ValidatedExpr{mkSq(), useReal}, envC)["use"] {
+	unitReal := []ValidatedExpr{mkSq(), useReal}
+	markStableInUnit(unitReal, "sq")
+	if !ClassifyFrameReclaim(unitReal, envC)["use"] {
 		t.Fatalf("control: a genuine same-unit call to Stable sq MUST be reclaimable")
 	}
 }

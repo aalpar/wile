@@ -109,6 +109,17 @@ func buildReclaimGraph(
 ) ([]*reclaimNode, map[string]*reclaimNode) {
 	isCaptureOp := makeIsCaptureOp(env)
 
+	// A same-unit define is provably non-rebindable only when the namespace
+	// enforces immutable top-level; without it a later unit may redefine/set! the
+	// name, so StableInUnit (in-unit evidence) is not a sound basis for an immutable
+	// edge. Read once from engine-construction-time state (never mutated after
+	// construction), the sound conjunct the pre-fix binding Stable bit carried.
+	immTop := false
+	ns := env.Namespace()
+	if ns != nil {
+		immTop = ns.ImmutableTopLevel()
+	}
+
 	byName := make(map[string]*reclaimNode)
 	var defs []*ValidatedDefine
 	var defNodes []*reclaimNode
@@ -123,6 +134,7 @@ func buildReclaimGraph(
 			label:             name,
 			referencesCapture: bodyReferencesCaptureOperator(d.Body(), isCaptureOp),
 			createsEscaping:   bodyCreatesEscapingClosure(d.Body()),
+			rebindStable:      d.StableInUnit && immTop,
 		}
 		byName[name] = n
 		defs = append(defs, d)
@@ -210,16 +222,15 @@ func classifyCallee(
 	}
 
 	// Same-unit top-level define: resolvable. Its edge is immutable iff the
-	// callee binding IsStable() — the producer's Stable bit, the single source
-	// of truth (StableInUnit = defined-once ∧ never-set!, made sound by Option-B
-	// enforcement). A non-stamped binding (flag off, or non-compiled env) ⇒
-	// mutable edge ⇒ unsafe, the sound tier-(a) default. Mirror the primitive
-	// lookup below: assignment then test, not a compound if.
+	// producer is provably non-rebindable (rebindStable = StableInUnit ∧ immutable
+	// top-level). Read it off the callee node, NOT the shared *Binding: the node is
+	// thread-local to this compile, so a concurrent compile that owns the same name
+	// cannot perturb this read (and this classifier no longer needs the binding
+	// pre-stamped Stable, which was the T1.5 transient-window hazard). A rebindable
+	// producer ⇒ mutable edge ⇒ unsafe, the sound tier-(a) default.
 	target, ok := byName[name]
 	if ok {
-		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
-		immutable := b != nil && b.IsStable()
-		return reclaimEdge{target: target, immutable: immutable}, true
+		return reclaimEdge{target: target, immutable: target.rebindStable}, true
 	}
 
 	// Capture-safe core primitive, confirmed non-rebindable: no constraint, no

@@ -449,15 +449,12 @@ func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 	}
 
 	// Pass 1.5 (Lever A): at the user-program top-level unit only, classify the unit
-	// for interprocedural frame reclamation, once. ClassifyFrameReclaim reads each
-	// callee's IsStable(), but the per-define Stable stamp (compile_define.go) fires
-	// only as each body compiles — too late for a forward/mutual edge whose callee is
-	// defined later. So pre-stamp Stable from the validation-time StableInUnit, run
-	// the classifier, then REVERT the pre-stamp: the redefine guard reads the same
-	// Stable field and would otherwise mistake this unit's own define for a frozen
-	// prior-unit binding. Reverting restores the pre-pass state exactly; Pass 2's
-	// per-define stamp re-applies the final Stable value, so the net binding state is
-	// identical to a run without this pass — only frameReclaimVerdict is added.
+	// for interprocedural frame reclamation, once. A forward/mutual edge needs the
+	// callee's rebind-stability before the callee's body compiles, so
+	// ClassifyFrameReclaim reads it from the validation-time StableInUnit carried on
+	// each ValidatedDefine (thread-local to this compile) rather than from the shared
+	// *Binding. No pre-stamp of the binding is required — which also removes the
+	// transient cross-thread Stable window a concurrent compile could observe.
 	//
 	// The gate is the user mutable-runtime frame (ns.Runtime()==p.env); it
 	// structurally excludes macro transformers (expand-phase env), libraries
@@ -466,64 +463,11 @@ func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 	// re-enters on the same p but finds the map already set).
 	ns := p.env.Namespace()
 	if ns != nil && ns.ImmutableTopLevel() && ns.Runtime() == p.env && p.frameReclaimVerdict == nil {
-		flipped := p.prestampTopLevelStable(v.Body())
 		p.frameReclaimVerdict = validate.ClassifyFrameReclaim(v.Body(), p.env)
-		// Revert SYNCHRONOUSLY, never via defer: the revert MUST complete before Pass 2
-		// (compileValidatedSequence) below, whose declareDefineBinding reads this same
-		// Stable field in its redefine guard. A deferred revert would run at function
-		// return — after Pass 2 — leaving the bindings Stable during Pass 2 and
-		// reintroducing the "cannot redefine immutable top-level binding" collision this
-		// revert exists to prevent. ClassifyFrameReclaim is error-free and does not panic
-		// over validated input, so no failure can intervene between stamp and revert.
-		for _, b := range flipped {
-			b.EnsureMeta().Stable = false
-		}
 	}
 
 	// Pass 2: Compile each expression in sequence
 	return p.compileValidatedSequence(ctctx, v.Body())
-}
-
-// prestampTopLevelStable transiently stamps Stable on each top-level define from
-// its validation-time StableInUnit, so the reclaim classifier's IsStable() reads
-// are correct for forward/mutual edges (the per-define stamp at compile_define.go
-// otherwise fires only as each body compiles — too late). It returns the bindings
-// it flipped from non-Stable to Stable so the caller can revert them once the
-// verdict is computed; the revert is required because the redefine guard reads the
-// same Stable field. The caller gates immutability + the top-level frame; this
-// helper only walks defines. Flattens top-level begins to match
-// collectTopLevelDefines, and resolves the binding via the same GetBinding the
-// classifier uses, so it stamps the exact binding the classifier reads.
-func (p *CompileTimeContinuation) prestampTopLevelStable(body []validate.ValidatedExpr) []*environment.Binding {
-	var flipped []*environment.Binding
-	for _, expr := range body {
-		switch v := expr.(type) {
-		case *validate.ValidatedDefine:
-			if !v.StableInUnit {
-				continue
-			}
-			name := v.Name()
-			b := p.env.GetBinding(name.Sym, name.Scopes())
-			if b == nil {
-				// Skipping is sound: the classifier resolves the callee via the same
-				// GetBinding (frame_reclaim_build.go), so a name that fails to resolve
-				// here also fails there, where it yields a mutable => unsafe edge. A
-				// skipped stamp can only forgo an optimization, never forge a verdict.
-				continue
-			}
-			m := b.EnsureMeta()
-			if m.Stable {
-				// Already Stable (a prior unit froze it, or it is imported-stable):
-				// leave it — reverting would wrongly disarm the redefine guard.
-				continue
-			}
-			m.Stable = true
-			flipped = append(flipped, b)
-		case *validate.ValidatedBegin:
-			flipped = append(flipped, p.prestampTopLevelStable(v.Body())...)
-		}
-	}
-	return flipped
 }
 
 // compileValidatedLiteral handles self-evaluating values (numbers, strings, booleans, etc.).
