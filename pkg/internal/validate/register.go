@@ -100,7 +100,7 @@ func registerPassthrough(name string) {
 	forms.RegisterValidator(name, func(_ context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result any) forms.ValidatedExpr {
 		res, ok := result.(*ValidationResult)
 		if ok {
-			markOpaqueSubtree(env, pair, res)
+			markOpaqueCode(env, pair, res)
 		}
 		return newLiteralExpr(pair.SourceContext(), pair)
 	})

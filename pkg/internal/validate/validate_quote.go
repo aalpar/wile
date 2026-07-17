@@ -48,7 +48,7 @@ func validateQuasiquote(_ context.Context, env *environment.EnvironmentFrame, pa
 	// An unquote can hold any expression, including a set! whose target this package
 	// would otherwise never see (`(,(set! f ...)) silently inlined f's stale body).
 	// Record every name the template mentions as a possible set! target.
-	markOpaqueSubtree(env, elements[1], result)
+	markOpaqueTemplate(env, elements[1], result)
 
 	return &ValidatedQuasiquote{
 		validatedBase: validatedBase{formName: "quasiquote", source: source},
