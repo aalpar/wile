@@ -57,10 +57,28 @@ func TestImmutableTopLevel_OpaqueSubtreeOverMark(t *testing.T) {
 			why:         "defined once, never set!: the stamp lands and enforcement follows",
 		},
 		{
-			name:        "quasiquote mentioning x costs x its stamp",
+			name:        "quasiquote mentioning x leaves the stamp alone",
 			unit:        "(begin (define x 1) `(x))",
+			setRejected: true,
+			why:         "x is template DATA no unquote reaches, so it is not a set! target",
+		},
+		{
+			name:        "nested template keeps an inner unquote as data",
+			unit:        "(begin (define x 1) `(a `(b ,(set! x 9))))",
+			setRejected: true,
+			why:         "one unquote under two quasiquotes lands at depth 1: data, not evaluated",
+		},
+		{
+			name:        "quote inside a template is not a barrier",
+			unit:        "(begin (define x 1) `(a '(b ,(set! x 9))))",
 			setRejected: false,
-			why:         "x is template DATA no unquote reaches; over-marked anyway",
+			why:         "R7RS §4.2.6: unquotes under a quoted template stay live, so the set! is real",
+		},
+		{
+			name:        "dotted unquote reaches the tail",
+			unit:        "(begin (define x 1) `(a . ,(set! x 9)))",
+			setRejected: false,
+			why:         "`(a . ,e) parses as (a unquote e): a bare unquote in the SPINE, still live",
 		},
 		{
 			name:        "quasiquote unquoting a set! of x",
