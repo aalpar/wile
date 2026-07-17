@@ -87,9 +87,10 @@ func (p *SourceContext) Clone() *SourceContext {
 // Returns empty string if the receiver is nil or carries no location at all.
 //
 // When File is empty (e.g. a nameless EvalMultiple program) but a position is
-// present, the ":line:col" form is still returned so provenance is not lost —
-// mirroring machine.StackFrame.String, which prints :Line:Col unconditionally.
-// A truly position-less context (File=="" and Line==0) still yields "".
+// present, the ":line:col" form is still returned so provenance is not lost.
+// A truly position-less context (File=="" and Line==0) yields "", which is what
+// lets machine.StackFrame.String fall through to the call site, or to the bare
+// frame name, instead of printing ":0:0".
 func (p *SourceContext) Location() string {
 	if p == nil {
 		return ""

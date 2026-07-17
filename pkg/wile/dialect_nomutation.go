@@ -49,8 +49,8 @@ func (noMutationDialect) Name() string {
 	return "no-mutation"
 }
 
-// InstallForms removes the set! special form, mirroring r7rs-minimal. The
-// mutation primitives are handled separately via RemovedPrimitives.
+// InstallForms removes the set! special form. The mutation primitives are
+// handled separately via RemovedPrimitives.
 func (noMutationDialect) InstallForms(fr *forms.FormRegistry) error {
 	fr.Remove("set!")
 	return nil

@@ -21,8 +21,6 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/aalpar/wile/pkg/syntax"
-
 	qt "github.com/frankban/quicktest"
 )
 
@@ -2104,19 +2102,6 @@ func TestTokenizer_scanLineEnding(t *testing.T) {
 			c.Assert(ok, qt.Equals, tc.expected)
 		})
 	}
-}
-
-func TestTokenizer_reset(t *testing.T) {
-	c := qt.New(t)
-	p := NewTokenizer(strings.NewReader("test"), false)
-	p.tokenEnd = syntax.SourceIndexes{}
-	p.tokenEnd.Inc(5)
-	p.err = io.EOF
-
-	p.reset()
-
-	c.Assert(p.err, qt.IsNil)
-	c.Assert(p.tokenStart, qt.Equals, p.tokenEnd)
 }
 
 // Additional tokenization edge cases

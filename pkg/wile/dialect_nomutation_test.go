@@ -78,7 +78,7 @@ func TestNoMutation_Engine_MutatorsGone_RestIntact(t *testing.T) {
 	eng, err := NewEngine(ctx, WithDialect(NoMutation))
 	c.Assert(err, qt.IsNil)
 
-	// The set! FORM is gone (as in r7rs-minimal).
+	// The set! FORM is gone.
 	_, err = eng.EvalMultiple(ctx, "(let ((x 1)) (set! x 2) x)")
 	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
 		qt.Commentf("set! form must be gone under no-mutation, got %v", err))
