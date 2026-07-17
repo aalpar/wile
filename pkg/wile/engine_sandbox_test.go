@@ -197,10 +197,15 @@ func TestConsole_LibraryPropagation(t *testing.T) {
 		qt.Commentf("expected error from library using privileged primitive"))
 }
 
-// TestWithout_ImmutableSandbox verifies that Registry.Without can remove
-// mutation primitives from a full engine, producing compile-time errors
+// TestWithout_RemovesMutationPrimitives verifies that Registry.Without can
+// remove mutation primitives from a full engine, producing compile-time errors
 // for set-car! while leaving car working.
-func TestWithout_ImmutableSandbox(t *testing.T) {
+//
+// Despite this file's name, removal is a statement about the language surface,
+// not an enforcement boundary: it narrows what the engine can name, and nothing
+// stops a Go embedder from handing the same capability back. Sandbox
+// enforcement is the authorizer's job (security.Check gate sites).
+func TestWithout_RemovesMutationPrimitives(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 

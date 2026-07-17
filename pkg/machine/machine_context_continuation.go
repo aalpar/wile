@@ -155,42 +155,6 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.releaseContinuation(cont)
 }
 
-// PopContinuation pops the current continuation from the machine context and returns it.
-// It restores the machine context to the state saved in the popped continuation.
-// Returns ErrContinuationUnderflow if callDepth would go below zero (compiler bug).
-//
-// Note: Unlike Restore(), we do NOT copy evals here because PopContinuation is used
-// for normal function return where the continuation is consumed once. Restore() is
-// used for continuation re-entry (call/cc) where the same continuation may be invoked
-// multiple times, requiring the copy to prevent stack corruption.
-func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
-	p.callDepth--
-	if p.callDepth < 0 {
-		p.callDepth = 0
-		return nil, werr.WrapForeignErrorf(werr.ErrContinuationUnderflow,
-			"callDepth underflow in PopContinuation")
-	}
-	q := p.cont
-	p.template = q.template
-	p.env = q.env
-	p.cont = q.parent
-	p.pc = q.pc
-	p.copyValueRegisterFrom(&q.vmState)
-	// envPooled: restore caller's ownership state. Caller (releaseContinuation
-	// in Run loop) handles release of the old env via the popped frame.
-	p.envPooled = q.envPooled
-	p.marks = q.marks
-	p.barrierValid = q.barrierValid
-
-	if q.evals == nil {
-		// Inline: restore from inline slots, reuse mc.evals.
-		restoreInlineEvals(p.evals, q)
-	} else {
-		p.evals = q.evals
-	}
-	return q, nil
-}
-
 // SaveContinuation pushes a new continuation onto the machine context with the given offset to the current program counter.
 // Returns ErrCallDepthExceeded if the call depth limit has been reached.
 //

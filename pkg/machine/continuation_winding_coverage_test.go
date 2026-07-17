@@ -219,11 +219,11 @@ func TestUnwindTo_NestedDynamicWindWithPromptAbort(t *testing.T) {
 	c.Assert(mc.GetValue(), valuestest.SchemeEquals, expected)
 }
 
-// --- RestoreWithWinding ---
+// --- RestoreWithWindingFrom ---
 
-// TestRestoreWithWinding_DirectCall exercises the 0%-covered wrapper method
-// by calling it directly with a target winding stack that requires rewinding.
-func TestRestoreWithWinding_DirectCall(t *testing.T) {
+// TestRestoreWithWindingFrom_RewindOnly drives the rewind-only path: a nil cont
+// and a target stack the source stack does not cover, so only before thunks run.
+func TestRestoreWithWindingFrom_RewindOnly(t *testing.T) {
 	c := qt.New(t)
 	env := testhelpers.NewFullRuntimeEnv(t)
 
@@ -241,8 +241,8 @@ func TestRestoreWithWinding_DirectCall(t *testing.T) {
 	defer cancel()
 	testMC := machine.NewMachineContext(ctx, cont)
 
-	// RestoreWithWinding with nil cont: should rewind to target (calls before thunks)
-	err = testMC.RestoreWithWinding(nil, targetStack)
+	// Nil cont: should rewind to target (calls before thunks)
+	err = testMC.RestoreWithWindingFrom(nil, testMC.WindingStack(), targetStack)
 	c.Assert(err, qt.IsNil)
 	c.Assert(testMC.WindingStack(), qt.HasLen, 1)
 
@@ -251,9 +251,9 @@ func TestRestoreWithWinding_DirectCall(t *testing.T) {
 	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.TrueValue)
 }
 
-// TestRestoreWithWinding_UnwindAndRewind exercises RestoreWithWinding with
-// both source and target stacks requiring unwind then rewind.
-func TestRestoreWithWinding_UnwindAndRewind(t *testing.T) {
+// TestRestoreWithWindingFrom_UnwindAndRewind drives both halves: source and
+// target stacks that require an unwind followed by a rewind.
+func TestRestoreWithWindingFrom_UnwindAndRewind(t *testing.T) {
 	c := qt.New(t)
 	env := testhelpers.NewFullRuntimeEnv(t)
 
@@ -279,7 +279,7 @@ func TestRestoreWithWinding_UnwindAndRewind(t *testing.T) {
 	testMC.PushWindingFrame(srcFrame)
 
 	// Restore to target stack (should unwind source, rewind target)
-	err = testMC.RestoreWithWinding(nil, machine.WindingStack{tgtFrame})
+	err = testMC.RestoreWithWindingFrom(nil, testMC.WindingStack(), machine.WindingStack{tgtFrame})
 	c.Assert(err, qt.IsNil)
 
 	mc, err := runSchemeExpr(t, env, "src-after-called")

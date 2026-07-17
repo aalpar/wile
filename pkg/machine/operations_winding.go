@@ -83,8 +83,8 @@ func (p *OperationPushWind) EqualTo(o values.Value) bool {
 // bytecode stream to ensure proper continuation semantics.
 //
 // The frame is simply removed from the winding stack. If a continuation captured
-// inside the dynamic extent is later restored, the RestoreWithWinding mechanism
-// will handle running the appropriate before/after thunks.
+// inside the dynamic extent is later restored, RestoreWithWindingFrom will handle
+// running the appropriate before/after thunks.
 //
 // R7RS §6.10: dynamic-wind establishes a dynamic extent during which the before
 // and after thunks are called whenever control enters or exits.

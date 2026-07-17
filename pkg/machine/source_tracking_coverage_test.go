@@ -425,9 +425,8 @@ func TestDebugger_ShouldStep_StepOut(t *testing.T) {
 	// Still same frame - should NOT step
 	c.Assert(d.ShouldStep(mc), qt.IsFalse)
 
-	// Pop the continuation - frame changed
-	_, err := mc.PopContinuation()
-	c.Assert(err, qt.IsNil)
+	// Return from the continuation - frame changed
+	mc.RestoreAndRelease(mc.Parent())
 	c.Assert(d.ShouldStep(mc), qt.IsTrue)
 }
 

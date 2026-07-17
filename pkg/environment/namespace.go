@@ -131,8 +131,9 @@ type Namespace struct {
 	// immutableTopLevel, when true, makes the engine treat a top-level define
 	// that is defined-once and never set! within its compilation unit as
 	// rebind-stable (BindingMeta.Stable) and then forbid a later set!/redefine
-	// of such a binding. Opt-in (off by default = strict R7RS) via the
-	// WithImmutableTopLevel engine option; it gates the frame-reclamation
+	// of such a binding. This field's zero value is false, but the engine
+	// default is ON: newEngineConfig seeds it true (wile/options.go), and
+	// WithMutableTopLevel() opts back out. It gates the frame-reclamation
 	// optimizer's top-level payoff. Delegated to root like loadPathStack so the
 	// compiler and validator see one engine-scoped setting.
 	immutableTopLevel bool

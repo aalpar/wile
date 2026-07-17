@@ -168,12 +168,6 @@ const (
 	// TokenizerStateCons represents . (dot for improper lists).
 	TokenizerStateCons
 
-	// TokenizerStateStringStart represents opening " (string start).
-	TokenizerStateStringStart
-	// TokenizerStateStringSpan represents string content.
-	TokenizerStateStringSpan
-	// TokenizerStateStringIntraEscape represents escape sequence within string.
-	TokenizerStateStringIntraEscape
 	// TokenizerStateString represents complete "string".
 	TokenizerStateString
 
@@ -512,14 +506,6 @@ func (p *Tokenizer) scanLineEnding() bool {
 // curr returns the current rune being examined.
 func (p *Tokenizer) curr() rune {
 	return p.cur
-}
-
-// reset resets the tokenizer state after an error or token completion.
-func (p *Tokenizer) reset() {
-	p.runeStart = p.tokenEnd
-	p.runeEnd = p.tokenEnd
-	p.tokenStart = p.tokenEnd // set the next token to start at tokenEndIndex
-	p.err = nil
 }
 
 // mark marks the current position as the beginning of a new token.

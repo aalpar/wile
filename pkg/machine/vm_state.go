@@ -83,8 +83,8 @@ type markEntry struct {
 // The authority for the per-(site, field) discipline is a single reviewed data
 // table, contDescriptor in continuation_descriptor_test.go, driven against the real
 // method bodies by the oracle in continuation_descriptor_oracle_test.go. It covers
-// all six sites — NewMachineContinuationFromMachineContext, SaveContinuation,
-// Restore, RestoreAndRelease, PopContinuation, and Copy — and every field here plus
+// all five sites — NewMachineContinuationFromMachineContext, SaveContinuation,
+// Restore, RestoreAndRelease, and Copy — and every field here plus
 // the MachineContinuation-only fields (parent, shared, promptHandler, inlineEvals).
 // See plans/2026-07-02-continuation-vmstate-descriptor-oracle.md. Do not re-inline
 // a summary grid here: the ASCII table formerly at this spot drifted (it omitted
@@ -115,7 +115,7 @@ type vmState struct {
 	// Write sites:
 	//   - NewMachineContext: copies from continuation (typically 0)
 	//   - Apply: sets to 0 for fresh closure invocation
-	//   - Restore/RestoreAndRelease/PopContinuation: restores saved pc
+	//   - Restore/RestoreAndRelease: restores saved pc
 	//   - SaveContinuation: saves pc + offset into continuation
 	//   - Opcodes: mc.pc++ or mc.pc += offset (branches)
 	//
@@ -167,7 +167,7 @@ type vmState struct {
 	// callDepth caches the continuation chain length to avoid O(d) traversals.
 	//
 	// On MachineContext: number of frames in the cont chain (mc.cont → ... → nil).
-	//   Maintained by SaveContinuation (++), PopContinuation (--), Restore (read
+	//   Maintained by SaveContinuation (++) and Restore/RestoreAndRelease (read
 	//   from continuation).
 	//
 	// On MachineContinuation: number of ancestor frames (parent → ... → nil).
@@ -196,7 +196,6 @@ type vmState struct {
 	//  │ Apply (nil-parent path)  │ false    │ none (old env is in continuation) │
 	//  │ RestoreAndRelease        │ from cont│ yes, if oldPooled && old != new   │
 	//  │ Restore (shared/callcc)  │ false    │ no (may be in shared chain → GC)  │
-	//  │ PopContinuation          │ from cont│ no (caller manages old frame)     │
 	//  │ OpPopEnv                 │ false    │ no (parent was never pooled)      │
 	//  │ OpMakeClosure            │ false    │ no (closure takes ownership)      │
 	//  │ BindPatternVars          │ false    │ no (childEnv is heap-allocated)   │
@@ -222,7 +221,7 @@ type vmState struct {
 	// buried behind the dead one.
 	//
 	// Propagation: SaveContinuation copies to continuation then nils mc.marks
-	// (callee starts clean). Restore/PopContinuation restores from continuation.
+	// (callee starts clean). Restore/RestoreAndRelease restores from continuation.
 	// cloneMarks does a shallow copy for call/cc re-invocation safety.
 	marks []markEntry
 
@@ -340,7 +339,7 @@ func (p *vmState) pushValueRegisterTo(s *Stack) {
 
 // copyValueRegisterFrom copies both halves of the value register from src.
 // Shallow: multiValues is shared (slice header copy). Used by
-// SaveContinuation, PopContinuation, and NewMachineContext initialization
+// SaveContinuation and NewMachineContext initialization
 // — sites where the source and destination represent the same logical
 // register state across a save/restore boundary.
 func (p *vmState) copyValueRegisterFrom(src *vmState) {

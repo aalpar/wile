@@ -29,25 +29,24 @@ type StackFrame struct {
 }
 
 // String formats the frame for display.
+//
+// Both locations render through SourceContext.Location, so a context carrying no
+// position contributes nothing rather than a bare ":0:0". A frame whose
+// CurrentLoc is position-less therefore falls through to its CallSite, and one
+// with no position at all degrades to the name alone.
 func (p *StackFrame) String() string {
 	name := p.FunctionName
 	if name == "" {
 		name = "<anonymous>"
 	}
 
-	if p.CurrentLoc != nil {
-		return fmt.Sprintf("  at %s (%s:%d:%d)",
-			name,
-			p.CurrentLoc.File,
-			p.CurrentLoc.Start.Line(),
-			p.CurrentLoc.Start.Column())
+	currentLoc := p.CurrentLoc.Location()
+	if currentLoc != "" {
+		return fmt.Sprintf("  at %s (%s)", name, currentLoc)
 	}
-	if p.CallSite != nil {
-		return fmt.Sprintf("  at %s (called from %s:%d:%d)",
-			name,
-			p.CallSite.File,
-			p.CallSite.Start.Line(),
-			p.CallSite.Start.Column())
+	callSite := p.CallSite.Location()
+	if callSite != "" {
+		return fmt.Sprintf("  at %s (called from %s)", name, callSite)
 	}
 	return fmt.Sprintf("  at %s", name)
 }

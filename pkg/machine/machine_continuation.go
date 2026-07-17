@@ -50,8 +50,8 @@ type MachineContinuation struct {
 }
 
 // restoreInlineEvals clears dst and pushes the inline eval values into it.
-// Used by Restore, RestoreAndRelease, and PopContinuation when a continuation
-// has inlined evals (evals == nil).
+// Used by Restore and RestoreAndRelease when a continuation has inlined evals
+// (evals == nil).
 func restoreInlineEvals(dst *Stack, cont *MachineContinuation) {
 	dst.Clear()
 	for i := uint8(0); i < cont.inlineEvalsLen; i++ {
