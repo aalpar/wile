@@ -427,15 +427,18 @@ func (p *BigComplex) IsZero() bool {
 // Following R7RS, < is not mathematically defined for complex numbers,
 // but we follow the existing Complex.LessThan pattern of comparing real parts.
 //
-// The NaN guard is this method's own. It used to delegate to Compare, and so
-// inherited Compare's NaN-yields-0, which made a NaN operand report NOT-less-than
-// in both directions — indistinguishable from equal. Every other LessThan in the
-// tower owns its NaN answer locally (BigFloat guards explicitly, Float gets #f
-// free from IEEE <), and this one now does too.
+// LessThan orders BigComplex values on their real parts only, matching Complex
+// (complex.go). This is an internal total order, not mathematical ordering, and
+// nothing may read it as such.
+//
+// The NaN answer is owned by the real-part comparison, not by a guard here. A
+// real-part NaN reaches BigFloat.LessThan (directly on the same-type path, or
+// after promotion on the cross-kind path), which yields #f in both directions,
+// exactly as Float gets #f free from IEEE <. An imaginary-part NaN is irrelevant
+// to a real-parts-only ordering, so it is ignored, again matching Complex. An
+// earlier guard on IsNaN() (real OR imag) over-reached: it made imag-NaN values
+// unordered, a case Complex never treated specially.
 func (p *BigComplex) LessThan(o Number) bool {
-	if p.IsNaN() || o.IsNaN() {
-		return false
-	}
 	v, ok := o.(*BigComplex)
 	if ok {
 		return toBigFloat(p.real).LessThan(toBigFloat(v.real))

@@ -130,13 +130,15 @@ func TestLessThanFloatMatchesFloat64Ordering(t *testing.T) {
 	}
 }
 
-// TestBigComplexLessThanIsNaNSafe pins the guard BigComplex.LessThan gained when
-// Compare was removed.
+// TestBigComplexLessThanIsNaNSafe pins BigComplex.LessThan's NaN contract: it
+// orders on real parts only, matching Complex, and the real-part comparison owns
+// the NaN answer.
 //
-// It used to read `return p.Compare(o) < 0`, making it the one LessThan in the
-// tower that did not own its NaN answer: it inherited Compare's NaN-yields-0, and
-// was correct only because `< 0` happened to turn that 0 into the right false. The
-// guard is now local and explicit, matching every other type.
+// A real-part NaN is unordered (BigFloat.LessThan yields #f both ways, directly or
+// after promotion). An imaginary-part NaN is irrelevant to a real-parts-only order
+// and is ignored, exactly as Complex ignores it. An earlier IsNaN() guard (real OR
+// imag) over-reached and made imag-NaN values unordered, which Complex never did;
+// this test also pins that parity with Complex so the guard cannot come back.
 func TestBigComplexLessThanIsNaNSafe(t *testing.T) {
 	c := qt.New(t)
 
@@ -147,7 +149,8 @@ func TestBigComplexLessThanIsNaNSafe(t *testing.T) {
 	c.Assert(one.LessThan(nan), qt.IsFalse)
 	c.Assert(nan.LessThan(nan), qt.IsFalse)
 
-	// Cross-kind, through the dispatch table BigComplex gained with the guard.
+	// Cross-kind: a real-part NaN reaches BigFloat.LessThan after promotion, so it
+	// stays unordered without any guard in BigComplex.LessThan.
 	c.Assert(nan.LessThan(values.NewInteger(1)), qt.IsFalse)
 	c.Assert(values.NewInteger(1).LessThan(nan), qt.IsFalse)
 
@@ -156,4 +159,16 @@ func TestBigComplexLessThanIsNaNSafe(t *testing.T) {
 	c.Assert(one.LessThan(two), qt.IsTrue)
 	c.Assert(two.LessThan(one), qt.IsFalse)
 	c.Assert(one.LessThan(values.NewInteger(2)), qt.IsTrue)
+
+	// An imaginary-part NaN is irrelevant to a real-parts-only order: the value is
+	// ordered by its (non-NaN) real part, and BigComplex agrees with Complex. This
+	// is the parity an earlier IsNaN() guard broke by treating imag-NaN as unordered.
+	imagNaN := values.NewBigComplex(values.NewBigFloatFromFloat64(1), values.NewBigFloatNaN())
+	c.Assert(imagNaN.LessThan(two), qt.IsTrue)
+	c.Assert(two.LessThan(imagNaN), qt.IsFalse)
+
+	cImagNaN := values.NewComplex(complex(1, math.NaN()))
+	cTwo := values.NewComplex(complex(2, 0))
+	c.Assert(imagNaN.LessThan(two), qt.Equals, cImagNaN.LessThan(cTwo))
+	c.Assert(two.LessThan(imagNaN), qt.Equals, cTwo.LessThan(cImagNaN))
 }
