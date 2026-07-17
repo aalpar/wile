@@ -185,11 +185,24 @@ func (p *Hashtable) get(key Hashable) (Value, bool) {
 	return nil, false
 }
 
+// sizeHint returns the entry count clamped to be non-negative. size is a
+// best-effort atomic that can drift negative under unsynchronized concurrent
+// deletes of the same key (two deletes of one key both decrement), and a
+// negative value must never reach make's capacity argument, which panics and
+// crashes the host — the exact failure the lock-free rewrite exists to avoid.
+func (p *Hashtable) sizeHint() int {
+	n := p.size.Load()
+	if n < 0 {
+		return 0
+	}
+	return int(n)
+}
+
 // snapshot copies every entry out of the sync.Map. Callers that must run user
 // code, render nested values, or touch a second table do so against the
 // snapshot. Buckets are immutable, so this never races a concurrent writer.
 func (p *Hashtable) snapshot() []hashtableEntry {
-	q := make([]hashtableEntry, 0, p.size.Load())
+	q := make([]hashtableEntry, 0, p.sizeHint())
 	p.buckets.Range(func(_, v any) bool {
 		q = append(q, v.([]hashtableEntry)...)
 		return true
@@ -309,9 +322,10 @@ func (p *Hashtable) Values() Tuple {
 }
 
 // Size returns the number of entries in the hash table. Exact single-threaded;
-// best-effort under unsynchronized concurrent mutation.
+// best-effort under unsynchronized concurrent mutation, and never negative even
+// when the counter has drifted below zero.
 func (p *Hashtable) Size() int {
-	return int(p.size.Load())
+	return p.sizeHint()
 }
 
 // Copy returns a shallow copy of the hash table. Buckets are immutable, so each
