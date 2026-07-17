@@ -169,9 +169,27 @@ func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
 }
 
 // AddPrimitives registers multiple primitives with the given phases.
+//
+// Panics on a spec that fails [PrimitiveSpec.Validate]. Callers building specs
+// from anything other than source literals must Validate first — see that method
+// for the contract.
+//
+// Registering a name already registered at the same phase is permitted and
+// silent, and the first registration wins: it is what [Registry.FindPrimitive]
+// returns and what [Registry.Apply] binds. A later duplicate is inert — it is
+// retained in the registration list (Primitives reports it) but never becomes the
+// binding, so it cannot be used to override or patch an earlier primitive. Build
+// the surface you want with Without / WithoutCategory instead.
+//
+// Precedence is per phase: the same name registered at runtime by one spec and at
+// expand by another is two distinct bindings, not a duplicate.
 func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 	for _, spec := range specs {
-		validateParamTypes(spec)
+		err := spec.Validate()
+		if err != nil {
+			panic(werr.WrapForeignErrorWithCause(werr.ErrInvalidArgument, err,
+				"AddPrimitives: invalid spec %q", spec.Name))
+		}
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -183,35 +201,44 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 	}
 }
 
-// validateParamTypes panics if a spec is internally inconsistent.
+// Validate reports the first internal inconsistency in the spec, or nil.
+//
 // A variadic spec must have ParamCount >= 1: the rest parameter occupies
 // slot ParamCount-1, so ParamCount:0 would make bindArgs index bnds[:-1]
 // and panic on first call (machine/arity.go).
 // For ParamTypes (when non-empty): non-variadic requires len == ParamCount;
 // variadic requires len in [1, ParamCount].
-func validateParamTypes(spec PrimitiveSpec) {
-	if spec.IsVariadic && spec.ParamCount < 1 {
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"AddPrimitive %q: variadic spec requires ParamCount >= 1, got %d",
-			spec.Name, spec.ParamCount))
+//
+// [Registry.AddPrimitive] and [Registry.AddPrimitives] panic on a spec that
+// fails this check, on the contract that specs are source literals whose shape
+// is fixed at compile time (the regexp.MustCompile idiom). An embedder that
+// assembles a spec dynamically — from config, a plugin manifest, reflection —
+// is outside that contract and must call Validate first: registering an invalid
+// spec takes down the host process.
+func (p PrimitiveSpec) Validate() error {
+	if p.IsVariadic && p.ParamCount < 1 {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"validate %q: variadic spec requires ParamCount >= 1, got %d",
+			p.Name, p.ParamCount)
 	}
-	n := len(spec.ParamTypes)
+	n := len(p.ParamTypes)
 	if n == 0 {
-		return
+		return nil
 	}
-	if spec.IsVariadic {
-		if n < 1 || n > spec.ParamCount {
-			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-				"AddPrimitive %q: ParamTypes length %d out of range [1, %d] for variadic",
-				spec.Name, n, spec.ParamCount))
+	if p.IsVariadic {
+		if n < 1 || n > p.ParamCount {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"validate %q: ParamTypes length %d out of range [1, %d] for variadic",
+				p.Name, n, p.ParamCount)
 		}
-		return
+		return nil
 	}
-	if n != spec.ParamCount {
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"AddPrimitive %q: ParamTypes length %d != ParamCount %d",
-			spec.Name, n, spec.ParamCount))
+	if n != p.ParamCount {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"validate %q: ParamTypes length %d != ParamCount %d",
+			p.Name, n, p.ParamCount)
 	}
+	return nil
 }
 
 // AddBinding registers a compile-time only binding (no runtime value).
@@ -339,6 +366,11 @@ func (p *Registry) PrimitiveCount() int {
 // FindPrimitive returns the first registered primitive with the given name.
 // If phase is the empty PhaseSet (zero), any phase matches; otherwise only
 // primitives whose Phases overlap with phase are considered.
+//
+// First-match is the registry's duplicate-name precedence, not an accident of
+// iteration order: [Registry.Apply] binds the same first registration, so what this
+// reports (and what ,doc renders from it) is what a caller actually invokes. See
+// [Registry.AddPrimitives].
 //
 // When phase is zero, doc-only primitives (registered via AddDocOnlyPrimitive,
 // stored in docPrimitives with Phases=0) are returned as a fallback after

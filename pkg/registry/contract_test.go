@@ -152,7 +152,7 @@ func TestBuildValidator_Variadic(t *testing.T) {
 // TestBuildValidator_VariadicShortParamTypes verifies that when
 // len(ParamTypes) < ParamCount for a variadic spec, the last declared
 // constraint applies to all unspecified fixed positions as well as to
-// rest-list elements. validateParamTypes permits this shape (n in
+// rest-list elements. PrimitiveSpec.Validate permits this shape (n in
 // [1, ParamCount]); BuildValidator must honor it.
 func TestBuildValidator_VariadicShortParamTypes(t *testing.T) {
 	// ParamCount=3, IsVariadic=true, len(ParamTypes)=1 -> every arg

@@ -184,7 +184,7 @@ func TestBindArgs(t *testing.T) {
 			// The valid zero boundary: a non-variadic 0-param primitive binds
 			// nothing. (The dangerous case — variadic with ParamCount:0, which
 			// would index bnds[:-1] — is rejected at registration by
-			// validateParamTypes, so bindArgs never sees it.)
+			// registry.PrimitiveSpec.Validate, so bindArgs never sees it.)
 			name:       "non-variadic zero params binds nothing",
 			paramCount: 0,
 			isVariadic: false,

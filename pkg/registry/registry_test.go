@@ -15,6 +15,8 @@
 package registry
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // testValue creates a simple string value for testing.
@@ -914,4 +917,195 @@ func TestDeepCopyTouchesEverySliceField(t *testing.T) {
 			t.Errorf("deepCopy: field %q shares its backing array with the source (aliasing)", name)
 		}
 	}
+}
+
+// TestPrimitiveSpec_Validate pins the embedder pre-flight path: a malformed spec
+// yields an ErrInvalidArgument-matchable error rather than a panic, so a host
+// assembling specs from config can reject them without crashing.
+func TestPrimitiveSpec_Validate(t *testing.T) {
+	c := qt.New(t)
+	tests := []struct {
+		name    string
+		spec    PrimitiveSpec
+		wantErr bool
+	}{
+		{
+			name:    "variadic with ParamCount 0 would index bnds[:-1]",
+			spec:    PrimitiveSpec{Name: "bad-variadic", ParamCount: 0, IsVariadic: true},
+			wantErr: true,
+		},
+		{
+			name: "non-variadic ParamTypes shorter than ParamCount",
+			spec: PrimitiveSpec{Name: "short-types", ParamCount: 2,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+			wantErr: true,
+		},
+		{
+			name: "non-variadic ParamTypes longer than ParamCount",
+			spec: PrimitiveSpec{Name: "long-types", ParamCount: 1,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}},
+			wantErr: true,
+		},
+		{
+			name: "variadic ParamTypes longer than ParamCount",
+			spec: PrimitiveSpec{Name: "long-variadic", ParamCount: 1, IsVariadic: true,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}},
+			wantErr: true,
+		},
+		{
+			name:    "variadic with no ParamTypes is unconstrained",
+			spec:    PrimitiveSpec{Name: "ok-variadic", ParamCount: 1, IsVariadic: true},
+			wantErr: false,
+		},
+		{
+			name: "variadic short ParamTypes is the declared catch-all shape",
+			spec: PrimitiveSpec{Name: "ok-short-variadic", ParamCount: 2, IsVariadic: true,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+			wantErr: false,
+		},
+		{
+			name: "non-variadic exact ParamTypes",
+			spec: PrimitiveSpec{Name: "ok-exact", ParamCount: 1,
+				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
+			wantErr: false,
+		},
+		{
+			name:    "zero-arg non-variadic",
+			spec:    PrimitiveSpec{Name: "ok-thunk", ParamCount: 0},
+			wantErr: false,
+		},
+	}
+	for _, test := range tests {
+		c.Run(test.name, func(c *qt.C) {
+			err := test.spec.Validate()
+			if !test.wantErr {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.IsNotNil)
+			// Sentinel identity, not message text: the embedder branches on this.
+			c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+				qt.Commentf("got %v", err))
+		})
+	}
+}
+
+// TestAddPrimitives_PanicsOnInvalidSpec pins the other half of the contract:
+// registration is the Must path, so a spec that fails Validate still panics
+// rather than being silently accepted or silently dropped.
+func TestAddPrimitives_PanicsOnInvalidSpec(t *testing.T) {
+	c := qt.New(t)
+	reg := NewRegistry()
+	bad := PrimitiveSpec{Name: "bad-variadic", ParamCount: 0, IsVariadic: true}
+
+	// Pre-flight sees it, so an embedder had a way to avoid the panic below.
+	c.Assert(bad.Validate(), qt.IsNotNil)
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		reg.AddPrimitives([]PrimitiveSpec{bad}, PhaseSetRuntime)
+	}()
+	c.Assert(recovered, qt.IsNotNil)
+
+	err, ok := recovered.(error)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("panic value %T is not an error", recovered))
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+	// The registration context survives the wrap, and so does the cause chain.
+	c.Assert(err.Error(), qt.Contains, "AddPrimitives")
+	c.Assert(err.Error(), qt.Contains, "bad-variadic")
+
+	// The failed spec left no partial registration behind.
+	_, found := reg.FindPrimitive("bad-variadic", PhaseSetRuntime)
+	c.Assert(found, qt.IsFalse)
+}
+
+// TestDuplicateRegistration_FirstWins pins the registry's duplicate-name
+// precedence, and pins it at the two places that must not disagree: what
+// FindPrimitive reports (the source of ,doc metadata) and what Apply actually
+// binds. Before this, Apply ended in SetOwnGlobalValue and was last-wins while
+// FindPrimitive was first-match, so doc and runtime described different procedures.
+func TestDuplicateRegistration_FirstWins(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	first := PrimitiveSpec{
+		Name: "dup", ParamCount: 0, Doc: "the first one",
+		Impl: func(mc machine.CallContext) error {
+			mc.SetValue(testValue("first"))
+			return nil
+		},
+	}
+	second := PrimitiveSpec{
+		Name: "dup", ParamCount: 0, Doc: "the second one",
+		Impl: func(mc machine.CallContext) error {
+			mc.SetValue(testValue("second"))
+			return nil
+		},
+	}
+	reg.AddPrimitive(first, PhaseSetRuntime)
+	reg.AddPrimitive(second, PhaseSetRuntime)
+
+	// Both registrations are retained; the duplicate is inert, not dropped.
+	c.Assert(reg.PrimitiveCount(), qt.Equals, 2)
+
+	// Lookup: first wins.
+	found, ok := reg.FindPrimitive("dup", PhaseSetRuntime)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(found.Spec.Doc, qt.Equals, "the first one")
+
+	// Apply: the bound closure must be the SAME registration lookup reported.
+	// Compare through the closure's doc, which registerPhasePrimitive copies from
+	// the spec it bound — the observable that would differ under last-wins.
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	binding := env.GetBinding(values.NewSymbol("dup"), nil)
+	c.Assert(binding, qt.IsNotNil)
+	closure, ok := binding.Value().(*machine.ForeignClosure)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("bound value is %T", binding.Value()))
+	c.Assert(closure.Doc(), qt.Equals, "the first one",
+		qt.Commentf("Apply bound a different registration than FindPrimitive reports"))
+
+	// The agreement itself, stated as the invariant rather than as two constants.
+	c.Assert(closure.Doc(), qt.Equals, found.Spec.Doc)
+}
+
+// TestDuplicateRegistration_PhasesAreIndependent guards the scope of first-wins:
+// one name at two phases is two bindings, not a duplicate, so the expand
+// registration must not be suppressed by the runtime one.
+func TestDuplicateRegistration_PhasesAreIndependent(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	reg.AddPrimitive(PrimitiveSpec{
+		Name: "cross", ParamCount: 0, Doc: "runtime flavour",
+		Impl: func(_ machine.CallContext) error { return nil },
+	}, PhaseSetRuntime)
+	reg.AddPrimitive(PrimitiveSpec{
+		Name: "cross", ParamCount: 0, Doc: "expand flavour",
+		Impl: func(_ machine.CallContext) error { return nil },
+	}, PhaseSetExpand)
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	runtimeBinding := env.GetBinding(values.NewSymbol("cross"), nil)
+	c.Assert(runtimeBinding, qt.IsNotNil)
+	runtimeClosure, ok := runtimeBinding.Value().(*machine.ForeignClosure)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(runtimeClosure.Doc(), qt.Equals, "runtime flavour")
+
+	expandBinding := env.Expand().GetBinding(values.NewSymbol("cross"), nil)
+	c.Assert(expandBinding, qt.IsNotNil)
+	expandClosure, ok := expandBinding.Value().(*machine.ForeignClosure)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(expandClosure.Doc(), qt.Equals, "expand flavour",
+		qt.Commentf("per-phase precedence collapsed: the expand registration was suppressed"))
 }

@@ -68,6 +68,9 @@ type NativeTemplate struct {
 // typical in Scheme programs.
 const initialOpsCap = 8
 
+// NewNativeTemplate assembles a template taking pcnt parameters and vcnt local slots,
+// variadic when vd, over an optional initial operation stream. Trusted-producer surface:
+// the operations are not validated, see the package doc.
 func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *NativeTemplate {
 	q := &NativeTemplate{
 		parameterCount: pcnt,
@@ -631,6 +634,10 @@ func (p *NativeTemplate) IsCoverageEnabled() bool {
 // PatchInstructionArg updates the Arg field of the instruction at code[codeIdx].
 // Used for patching branch offsets and continuation save offsets after the
 // target PC is known.
+//
+// An out-of-range codeIdx panics rather than returning an error, and arg is not
+// checked against the opcode's operand domain: a well-formed-looking patch can
+// defer the panic to the dispatch loop. Trusted-producer surface, see the package doc.
 func (p *NativeTemplate) PatchInstructionArg(codeIdx int, arg int32) {
 	p.code[codeIdx].Arg = arg
 }
