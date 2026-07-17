@@ -67,8 +67,8 @@ func TestRegistry_AddPrimitives(t *testing.T) {
 
 	r := NewRegistry()
 	specs := []PrimitiveSpec{
-		{Name: "prim1", ParamCount: 1, Impl: nil},
-		{Name: "prim2", ParamCount: 2, IsVariadic: true, Impl: nil},
+		{Name: "prim1", ParamCount: 1, Impl: noopImpl},
+		{Name: "prim2", ParamCount: 2, IsVariadic: true, Impl: noopImpl},
 	}
 
 	r.AddPrimitives(specs, PhaseSetRuntime|PhaseSetExpand)
@@ -84,9 +84,9 @@ func TestRegistry_FindPrimitive(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddPrimitive(PrimitiveSpec{Name: "runtime-only", ParamCount: 1}, PhaseSetRuntime)
-	r.AddPrimitive(PrimitiveSpec{Name: "expand-only", ParamCount: 0}, PhaseSetExpand)
-	r.AddPrimitive(PrimitiveSpec{Name: "both", ParamCount: 2}, PhaseSetRuntime|PhaseSetExpand)
+	r.AddPrimitive(PrimitiveSpec{Name: "runtime-only", ParamCount: 1, Impl: noopImpl}, PhaseSetRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "expand-only", ParamCount: 0, Impl: noopImpl}, PhaseSetExpand)
+	r.AddPrimitive(PrimitiveSpec{Name: "both", ParamCount: 2, Impl: noopImpl}, PhaseSetRuntime|PhaseSetExpand)
 
 	tcs := []struct {
 		name  string
@@ -118,7 +118,7 @@ func TestRegistry_HasPrimitive(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddPrimitive(PrimitiveSpec{Name: "test-prim"}, PhaseSetRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "test-prim", Impl: noopImpl}, PhaseSetRuntime)
 
 	c.Assert(r.HasPrimitive("test-prim", 0), qt.IsTrue)
 	c.Assert(r.HasPrimitive("test-prim", PhaseSetRuntime), qt.IsTrue)
@@ -177,7 +177,7 @@ func TestRegistry_Clone(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddPrimitive(PrimitiveSpec{Name: "test", ParamCount: 1}, PhaseSetRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "test", ParamCount: 1, Impl: noopImpl}, PhaseSetRuntime)
 	r.AddBinding("if")
 	r.AddMacroSource("source")
 
@@ -246,11 +246,11 @@ func TestRegistryBuilder_AddToRegistry(t *testing.T) {
 
 	builder := NewRegistryBuilder(
 		func(r *Registry) error {
-			r.AddPrimitive(PrimitiveSpec{Name: "prim1"}, PhaseSetRuntime)
+			r.AddPrimitive(PrimitiveSpec{Name: "prim1", Impl: noopImpl}, PhaseSetRuntime)
 			return nil
 		},
 		func(r *Registry) error {
-			r.AddPrimitive(PrimitiveSpec{Name: "prim2"}, PhaseSetExpand)
+			r.AddPrimitive(PrimitiveSpec{Name: "prim2", Impl: noopImpl}, PhaseSetExpand)
 			return nil
 		},
 	)
@@ -286,7 +286,7 @@ func TestRegistry_VariadicParamCountZeroPanics(t *testing.T) {
 	r := NewRegistry()
 	c.Assert(func() {
 		r.AddPrimitives([]PrimitiveSpec{
-			{Name: "bad-variadic", ParamCount: 0, IsVariadic: true},
+			{Name: "bad-variadic", ParamCount: 0, IsVariadic: true, Impl: noopImpl},
 		}, PhaseSetRuntime)
 	}, qt.PanicMatches, ".*variadic.*ParamCount.*")
 }
@@ -296,9 +296,9 @@ func TestRegistry_PrimitiveByName(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitives([]PrimitiveSpec{
-		{Name: "car", ParamCount: 1, Impl: nil, Doc: "Returns the car.", ParamNames: []string{"pair"}, Category: "pairs"},
-		{Name: "cdr", ParamCount: 1, Impl: nil, Doc: "Returns the cdr.", ParamNames: []string{"pair"}, Category: "pairs"},
-		{Name: "+", ParamCount: 1, IsVariadic: true, Impl: nil, Doc: "Returns the sum.", ParamNames: []string{"z"}, Category: "arithmetic"},
+		{Name: "car", ParamCount: 1, Impl: noopImpl, Doc: "Returns the car.", ParamNames: []string{"pair"}, Category: "pairs"},
+		{Name: "cdr", ParamCount: 1, Impl: noopImpl, Doc: "Returns the cdr.", ParamNames: []string{"pair"}, Category: "pairs"},
+		{Name: "+", ParamCount: 1, IsVariadic: true, Impl: noopImpl, Doc: "Returns the sum.", ParamNames: []string{"z"}, Category: "arithmetic"},
 	}, PhaseSetRuntime)
 
 	tcs := []struct {
@@ -329,9 +329,9 @@ func TestRegistry_PrimitiveNames(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitives([]PrimitiveSpec{
-		{Name: "alpha", Impl: nil},
-		{Name: "beta", ParamCount: 1, Impl: nil},
-		{Name: "gamma", ParamCount: 2, Impl: nil},
+		{Name: "alpha", Impl: noopImpl},
+		{Name: "beta", ParamCount: 1, Impl: noopImpl},
+		{Name: "gamma", ParamCount: 2, Impl: noopImpl},
 	}, PhaseSetRuntime)
 
 	names := r.PrimitiveNames()
@@ -343,10 +343,10 @@ func TestRegistry_PrimitivesByCategory(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitives([]PrimitiveSpec{
-		{Name: "car", ParamCount: 1, Impl: nil, Category: "pairs"},
-		{Name: "cdr", ParamCount: 1, Impl: nil, Category: "pairs"},
-		{Name: "+", Impl: nil, Category: "arithmetic"},
-		{Name: "display", ParamCount: 1, Impl: nil},
+		{Name: "car", ParamCount: 1, Impl: noopImpl, Category: "pairs"},
+		{Name: "cdr", ParamCount: 1, Impl: noopImpl, Category: "pairs"},
+		{Name: "+", Impl: noopImpl, Category: "arithmetic"},
+		{Name: "display", ParamCount: 1, Impl: noopImpl},
 	}, PhaseSetRuntime)
 
 	byCategory := r.PrimitivesByCategory()
@@ -370,7 +370,7 @@ func TestRegistry_ClonePreservesMetadata(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitive(PrimitiveSpec{
-		Name: "test", ParamCount: 1, Impl: nil,
+		Name: "test", ParamCount: 1, Impl: noopImpl,
 		Doc: "A test prim.", ParamNames: []string{"x"}, Category: "testing",
 	}, PhaseSetRuntime)
 
@@ -431,11 +431,11 @@ func TestRegistry_Without(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitives([]PrimitiveSpec{
-		{Name: "car", Category: "pairs"},
-		{Name: "cdr", Category: "pairs"},
-		{Name: "set-car!", Category: "pairs"},
-		{Name: "+", Category: "arithmetic"},
-		{Name: "vector-set!", Category: "vectors"},
+		{Name: "car", Category: "pairs", Impl: noopImpl},
+		{Name: "cdr", Category: "pairs", Impl: noopImpl},
+		{Name: "set-car!", Category: "pairs", Impl: noopImpl},
+		{Name: "+", Category: "arithmetic", Impl: noopImpl},
+		{Name: "vector-set!", Category: "vectors", Impl: noopImpl},
 	}, PhaseSetRuntime)
 	r.AddBinding("if")
 	r.AddDocumentation("if", "Conditional.")
@@ -476,11 +476,11 @@ func TestRegistry_WithoutCategory(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitives([]PrimitiveSpec{
-		{Name: "car", Category: "pairs"},
-		{Name: "cdr", Category: "pairs"},
-		{Name: "+", Category: "arithmetic"},
-		{Name: "display", Category: "io"},
-		{Name: "uncategorized"},
+		{Name: "car", Category: "pairs", Impl: noopImpl},
+		{Name: "cdr", Category: "pairs", Impl: noopImpl},
+		{Name: "+", Category: "arithmetic", Impl: noopImpl},
+		{Name: "display", Category: "io", Impl: noopImpl},
+		{Name: "uncategorized", Impl: noopImpl},
 	}, PhaseSetRuntime)
 	r.AddBinding("lambda")
 	r.AddDocumentation("lambda", "Procedure.")
@@ -520,8 +520,8 @@ func TestRegistry_WithoutBindings(t *testing.T) {
 
 	r := NewRegistry()
 	r.AddPrimitives([]PrimitiveSpec{
-		{Name: "set!", Category: "special"},
-		{Name: "+", Category: "arithmetic"},
+		{Name: "set!", Category: "special", Impl: noopImpl},
+		{Name: "+", Category: "arithmetic", Impl: noopImpl},
 	}, PhaseSetRuntime)
 	r.AddBindings([]string{"if", "set!", "lambda", "define"})
 	r.AddDocumentation("set!", "Mutation.")
@@ -736,7 +736,7 @@ func TestExtension(t *testing.T) {
 	c := qt.New(t)
 
 	ext := NewExtension("test-ext", func(r *Registry) error {
-		r.AddPrimitive(PrimitiveSpec{Name: "ext-prim"}, PhaseSetRuntime)
+		r.AddPrimitive(PrimitiveSpec{Name: "ext-prim", Impl: noopImpl}, PhaseSetRuntime)
 		return nil
 	})
 
@@ -931,48 +931,58 @@ func TestPrimitiveSpec_Validate(t *testing.T) {
 	}{
 		{
 			name:    "variadic with ParamCount 0 would index bnds[:-1]",
-			spec:    PrimitiveSpec{Name: "bad-variadic", ParamCount: 0, IsVariadic: true},
+			spec:    PrimitiveSpec{Impl: noopImpl, Name: "bad-variadic", ParamCount: 0, IsVariadic: true},
 			wantErr: true,
 		},
 		{
 			name: "non-variadic ParamTypes shorter than ParamCount",
-			spec: PrimitiveSpec{Name: "short-types", ParamCount: 2,
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "short-types", ParamCount: 2,
 				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
 			wantErr: true,
 		},
 		{
 			name: "non-variadic ParamTypes longer than ParamCount",
-			spec: PrimitiveSpec{Name: "long-types", ParamCount: 1,
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "long-types", ParamCount: 1,
 				ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}},
 			wantErr: true,
 		},
 		{
 			name: "variadic ParamTypes longer than ParamCount",
-			spec: PrimitiveSpec{Name: "long-variadic", ParamCount: 1, IsVariadic: true,
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "long-variadic", ParamCount: 1, IsVariadic: true,
 				ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}},
 			wantErr: true,
 		},
 		{
 			name:    "variadic with no ParamTypes is unconstrained",
-			spec:    PrimitiveSpec{Name: "ok-variadic", ParamCount: 1, IsVariadic: true},
+			spec:    PrimitiveSpec{Impl: noopImpl, Name: "ok-variadic", ParamCount: 1, IsVariadic: true},
 			wantErr: false,
 		},
 		{
 			name: "variadic short ParamTypes is the declared catch-all shape",
-			spec: PrimitiveSpec{Name: "ok-short-variadic", ParamCount: 2, IsVariadic: true,
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "ok-short-variadic", ParamCount: 2, IsVariadic: true,
 				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
 			wantErr: false,
 		},
 		{
 			name: "non-variadic exact ParamTypes",
-			spec: PrimitiveSpec{Name: "ok-exact", ParamCount: 1,
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "ok-exact", ParamCount: 1,
 				ParamTypes: []values.TypeConstraint{values.TypeNumber}},
 			wantErr: false,
 		},
 		{
 			name:    "zero-arg non-variadic",
-			spec:    PrimitiveSpec{Name: "ok-thunk", ParamCount: 0},
+			spec:    PrimitiveSpec{Impl: noopImpl, Name: "ok-thunk", ParamCount: 0},
 			wantErr: false,
+		},
+		{
+			name:    "nil Impl is rejected",
+			spec:    PrimitiveSpec{Name: "no-impl", ParamCount: 1},
+			wantErr: true,
+		},
+		{
+			name:    "empty Name is rejected",
+			spec:    PrimitiveSpec{Impl: noopImpl, ParamCount: 1},
+			wantErr: true,
 		},
 	}
 	for _, test := range tests {
@@ -996,7 +1006,7 @@ func TestPrimitiveSpec_Validate(t *testing.T) {
 func TestAddPrimitives_PanicsOnInvalidSpec(t *testing.T) {
 	c := qt.New(t)
 	reg := NewRegistry()
-	bad := PrimitiveSpec{Name: "bad-variadic", ParamCount: 0, IsVariadic: true}
+	bad := PrimitiveSpec{Impl: noopImpl, Name: "bad-variadic", ParamCount: 0, IsVariadic: true}
 
 	// Pre-flight sees it, so an embedder had a way to avoid the panic below.
 	c.Assert(bad.Validate(), qt.IsNotNil)

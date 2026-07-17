@@ -29,6 +29,12 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
+// noopImpl is an inert primitive Impl for registration-bookkeeping fixtures;
+// Validate rejects a nil Impl.
+func noopImpl(machine.CallContext) error {
+	return nil
+}
+
 // stubLibrarySearcher is an in-memory test double for registry.LibrarySearcher.
 // It removes the need to stand up a compilation.LibraryRegistry to exercise
 // SearchDoc's loaded-library path.
@@ -55,6 +61,7 @@ func buildSearchTestRegistry() *registry.Registry {
 	reg.AddPrimitives([]registry.PrimitiveSpec{
 		{
 			Name:       "string-append",
+			Impl:       noopImpl,
 			ParamCount: 1,
 			IsVariadic: true,
 			Doc:        "Concatenate strings.",
@@ -62,6 +69,7 @@ func buildSearchTestRegistry() *registry.Registry {
 		},
 		{
 			Name:       "+",
+			Impl:       noopImpl,
 			ParamCount: 1,
 			IsVariadic: true,
 			Doc:        "Returns the sum of its arguments.",
@@ -69,6 +77,7 @@ func buildSearchTestRegistry() *registry.Registry {
 		},
 		{
 			Name:       "list-sort",
+			Impl:       noopImpl,
 			ParamCount: 2,
 			Doc:        "Sort a list.",
 			Category:   "lists",
@@ -161,7 +170,8 @@ func TestSearchDoc_PrimitivePrecedence(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name: "apply", ParamCount: 2, IsVariadic: true,
-		Doc: "Apply PROC.", Category: "control",
+		Impl: noopImpl,
+		Doc:  "Apply PROC.", Category: "control",
 	}, registry.PhaseSetRuntime)
 	reg.AddBindingSpecs([]registry.BindingSpec{
 		{Name: "apply", Doc: "Binding-level apply.\nCategory: control"},
@@ -183,6 +193,7 @@ func TestSearchDoc_NilEnvAndLibReg(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name: "car", ParamCount: 1, Doc: "First of pair.", Category: "pairs",
+		Impl: noopImpl,
 	}, registry.PhaseSetRuntime)
 	results := registry.SearchDoc(reg, nil, nil, nil, "car")
 	c.Assert(len(results), qt.Equals, 1)
@@ -438,6 +449,7 @@ func TestSearchDoc_LoadedTakesPrecedenceOverUnloaded(t *testing.T) {
 	// Register "fold" as a primitive so it appears as a loaded binding.
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "fold",
+		Impl:       noopImpl,
 		ParamCount: 3,
 		Doc:        "Fold over a list.",
 		Category:   "lists",

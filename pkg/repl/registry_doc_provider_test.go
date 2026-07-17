@@ -21,15 +21,23 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/values"
 )
+
+// noopImpl is an inert primitive Impl for registration-bookkeeping fixtures;
+// Validate rejects a nil Impl.
+func noopImpl(mc machine.CallContext) error {
+	return nil
+}
 
 func buildTestRegistry() *registry.Registry {
 	reg := registry.NewRegistry()
 	reg.AddPrimitives([]registry.PrimitiveSpec{
 		{
 			Name:       "string-append",
+			Impl:       noopImpl,
 			ParamCount: 1,
 			IsVariadic: true,
 			Doc:        "Concatenate strings.",
@@ -37,6 +45,7 @@ func buildTestRegistry() *registry.Registry {
 		},
 		{
 			Name:       "+",
+			Impl:       noopImpl,
 			ParamCount: 1,
 			IsVariadic: true,
 			Doc:        "Returns the sum of its arguments.",
@@ -44,6 +53,7 @@ func buildTestRegistry() *registry.Registry {
 		},
 		{
 			Name:       "list-sort",
+			Impl:       noopImpl,
 			ParamCount: 2,
 			Doc:        "Sort a list.",
 			Category:   "lists",
@@ -61,6 +71,7 @@ func buildTestRegistryWithDocs() *registry.Registry {
 	// Add an "apply" primitive so we can test primitive-over-binding-spec precedence.
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "apply",
+		Impl:       noopImpl,
 		ParamCount: 2,
 		IsVariadic: true,
 		Doc:        "Apply PROC to ARGS.",
@@ -98,6 +109,7 @@ func TestRegistryDocProvider_Found(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "test-prim",
+		Impl:       noopImpl,
 		ParamCount: 2,
 		Doc:        "A test primitive.",
 		ParamNames: []string{"a", "b"},
@@ -117,6 +129,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "test-contracted",
+		Impl:       noopImpl,
 		ParamCount: 2,
 		Doc:        "A test.",
 		ParamNames: []string{"s", "k"},
@@ -210,6 +223,7 @@ func TestRegistryDocProvider_Categories_ExcludesEmpty(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "no-category",
+		Impl:       noopImpl,
 		ParamCount: 0,
 		Doc:        "Has no category.",
 	}, registry.PhaseSetRuntime)
@@ -449,6 +463,7 @@ func TestRegistryDocProvider_KeywordsInLookup(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "list-sort",
+		Impl:       noopImpl,
 		ParamCount: 2,
 		Doc:        "Sort a list.",
 		Category:   "lists",

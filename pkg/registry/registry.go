@@ -203,6 +203,13 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 
 // Validate reports the first internal inconsistency in the spec, or nil.
 //
+// An empty Name (the primitive's lookup key) or a nil Impl is rejected as an
+// internal inconsistency. A nil Impl passes registration but panics on the first
+// call that dispatches to it, the exact host crash Validate exists to let an
+// embedder pre-empt. A compile-time-only binding with no runtime value belongs on
+// the [Registry.AddDocOnlyPrimitive] / [Registry.AddBinding] paths, which do not
+// run this check.
+//
 // A variadic spec must have ParamCount >= 1: the rest parameter occupies
 // slot ParamCount-1, so ParamCount:0 would make bindArgs index bnds[:-1]
 // and panic on first call (machine/arity.go).
@@ -216,6 +223,14 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 // is outside that contract and must call Validate first: registering an invalid
 // spec takes down the host process.
 func (p PrimitiveSpec) Validate() error {
+	if p.Name == "" {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"validate: spec has empty Name")
+	}
+	if p.Impl == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"validate %q: spec has nil Impl, which panics on first call", p.Name)
+	}
 	if p.IsVariadic && p.ParamCount < 1 {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"validate %q: variadic spec requires ParamCount >= 1, got %d",
