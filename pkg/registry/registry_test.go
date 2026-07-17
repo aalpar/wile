@@ -15,6 +15,7 @@
 package registry
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -1021,3 +1022,90 @@ func TestAddPrimitives_PanicsOnInvalidSpec(t *testing.T) {
 	c.Assert(found, qt.IsFalse)
 }
 
+// TestDuplicateRegistration_FirstWins pins the registry's duplicate-name
+// precedence, and pins it at the two places that must not disagree: what
+// FindPrimitive reports (the source of ,doc metadata) and what Apply actually
+// binds. Before this, Apply ended in SetOwnGlobalValue and was last-wins while
+// FindPrimitive was first-match, so doc and runtime described different procedures.
+func TestDuplicateRegistration_FirstWins(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	first := PrimitiveSpec{
+		Name: "dup", ParamCount: 0, Doc: "the first one",
+		Impl: func(mc machine.CallContext) error {
+			mc.SetValue(testValue("first"))
+			return nil
+		},
+	}
+	second := PrimitiveSpec{
+		Name: "dup", ParamCount: 0, Doc: "the second one",
+		Impl: func(mc machine.CallContext) error {
+			mc.SetValue(testValue("second"))
+			return nil
+		},
+	}
+	reg.AddPrimitive(first, PhaseSetRuntime)
+	reg.AddPrimitive(second, PhaseSetRuntime)
+
+	// Both registrations are retained; the duplicate is inert, not dropped.
+	c.Assert(reg.PrimitiveCount(), qt.Equals, 2)
+
+	// Lookup: first wins.
+	found, ok := reg.FindPrimitive("dup", PhaseSetRuntime)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(found.Spec.Doc, qt.Equals, "the first one")
+
+	// Apply: the bound closure must be the SAME registration lookup reported.
+	// Compare through the closure's doc, which registerPhasePrimitive copies from
+	// the spec it bound — the observable that would differ under last-wins.
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	binding := env.GetBinding(values.NewSymbol("dup"), nil)
+	c.Assert(binding, qt.IsNotNil)
+	closure, ok := binding.Value().(*machine.ForeignClosure)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("bound value is %T", binding.Value()))
+	c.Assert(closure.Doc(), qt.Equals, "the first one",
+		qt.Commentf("Apply bound a different registration than FindPrimitive reports"))
+
+	// The agreement itself, stated as the invariant rather than as two constants.
+	c.Assert(closure.Doc(), qt.Equals, found.Spec.Doc)
+}
+
+// TestDuplicateRegistration_PhasesAreIndependent guards the scope of first-wins:
+// one name at two phases is two bindings, not a duplicate, so the expand
+// registration must not be suppressed by the runtime one.
+func TestDuplicateRegistration_PhasesAreIndependent(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	reg.AddPrimitive(PrimitiveSpec{
+		Name: "cross", ParamCount: 0, Doc: "runtime flavour",
+		Impl: func(_ machine.CallContext) error { return nil },
+	}, PhaseSetRuntime)
+	reg.AddPrimitive(PrimitiveSpec{
+		Name: "cross", ParamCount: 0, Doc: "expand flavour",
+		Impl: func(_ machine.CallContext) error { return nil },
+	}, PhaseSetExpand)
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	runtimeBinding := env.GetBinding(values.NewSymbol("cross"), nil)
+	c.Assert(runtimeBinding, qt.IsNotNil)
+	runtimeClosure, ok := runtimeBinding.Value().(*machine.ForeignClosure)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(runtimeClosure.Doc(), qt.Equals, "runtime flavour")
+
+	expandBinding := env.Expand().GetBinding(values.NewSymbol("cross"), nil)
+	c.Assert(expandBinding, qt.IsNotNil)
+	expandClosure, ok := expandBinding.Value().(*machine.ForeignClosure)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(expandClosure.Doc(), qt.Equals, "expand flavour",
+		qt.Commentf("per-phase precedence collapsed: the expand registration was suppressed"))
+}

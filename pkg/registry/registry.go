@@ -173,6 +173,16 @@ func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
 // Panics on a spec that fails [PrimitiveSpec.Validate]. Callers building specs
 // from anything other than source literals must Validate first — see that method
 // for the contract.
+//
+// Registering a name already registered at the same phase is permitted and
+// silent, and the first registration wins: it is what [Registry.FindPrimitive]
+// returns and what [Registry.Apply] binds. A later duplicate is inert — it is
+// retained in the registration list (Primitives reports it) but never becomes the
+// binding, so it cannot be used to override or patch an earlier primitive. Build
+// the surface you want with Without / WithoutCategory instead.
+//
+// Precedence is per phase: the same name registered at runtime by one spec and at
+// expand by another is two distinct bindings, not a duplicate.
 func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 	for _, spec := range specs {
 		err := spec.Validate()
@@ -356,6 +366,11 @@ func (p *Registry) PrimitiveCount() int {
 // FindPrimitive returns the first registered primitive with the given name.
 // If phase is the empty PhaseSet (zero), any phase matches; otherwise only
 // primitives whose Phases overlap with phase are considered.
+//
+// First-match is the registry's duplicate-name precedence, not an accident of
+// iteration order: [Registry.Apply] binds the same first registration, so what this
+// reports (and what ,doc renders from it) is what a caller actually invokes. See
+// [Registry.AddPrimitives].
 //
 // When phase is zero, doc-only primitives (registered via AddDocOnlyPrimitive,
 // stored in docPrimitives with Phases=0) are returned as a fallback after

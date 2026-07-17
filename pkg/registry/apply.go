@@ -147,11 +147,25 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 		{environment.PhaseRuntime, runtimeEnv, env},
 		{environment.PhaseExpand, expandEnv, expandEnv},
 	}
+	// First-wins on a duplicate name+phase, matching FindPrimitive's first-match
+	// lookup. Without the bound set this loop is last-wins: registerPhasePrimitive
+	// ends in SetOwnGlobalValue, which overwrites, so a later duplicate would replace
+	// both the closure and the CaptureSafe/Stable stamps while ,doc and every other
+	// FindPrimitive caller kept describing the first. Same registry, two answers.
+	//
+	// Precedence is per phase: a name may legitimately be registered at runtime by one
+	// spec and at expand by another, and those are not duplicates of each other.
 	for _, pt := range phaseTargets {
+		bound := make(values.StringSet, len(p.primitives))
 		for _, reg := range p.primitives {
 			if !reg.Phases.Has(pt.phase) {
 				continue
 			}
+			_, dup := bound[reg.Spec.Name]
+			if dup {
+				continue
+			}
+			bound[reg.Spec.Name] = struct{}{}
 			err := registerPhasePrimitive(pt.bindingEnv, pt.closureEnv, pt.phase, reg.Spec, cfg)
 			if err != nil {
 				return err
