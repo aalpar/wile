@@ -95,7 +95,20 @@ func float64FromBigInt(bi *big.Int) float64 {
 	return f
 }
 
-// BigInt returns the underlying big.Int value.
+// BigInt returns p's storage without copying. The result aliases p, and a
+// BigInteger is reachable from every Scheme binding it flowed to, so mutating
+// the result (Set, Neg, an Add writing into it) retroactively changes the value
+// of an exact integer Scheme treats as immutable — at every one of those
+// bindings, not just the one the caller has in hand.
+//
+// The accessor does not copy because it sits on the numeric hot path and nearly
+// every caller only reads (Cmp, Sign, Text, IsInt64, SetInt); a defensive copy
+// here would allocate for all of them to protect against the rare mutator. A
+// caller that intends to mutate owns the copy: new(big.Int).Set(v.BigInt()).
+//
+// The in-place scratch operations in numeric_scratch.go are the mutators this
+// contract is aimed at. They are safe only on a big.Int the caller allocated;
+// none may be pointed at a *BigInteger's storage obtained here.
 func (p *BigInteger) BigInt() *big.Int {
 	return p.value
 }
