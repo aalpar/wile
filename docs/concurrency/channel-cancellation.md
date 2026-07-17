@@ -99,21 +99,29 @@ and "cancelled" so the primitive layer can decide how Scheme sees it, without an
 change to the lifecycle below. Whether the seam is *used* is a separate decision
 (see Option A).
 
-## The policy: Option A — cancelled is surfaced as closed
+## The policy: Option A for send, Option B for receive (updated 2026-07-17)
 
-`PrimChannelSend` / `PrimChannelReceive` collapse the outcome back to the
-historical two-state surface:
+`PrimChannelSend` keeps the historical two-state surface; `PrimChannelReceive`
+surfaces cancellation distinctly:
 
-- `channel-send!`: any outcome that is not `SendSent` raises `ErrChannelClosed`
-  (so `SendCancelled` is reported *as* a closed channel).
-- `channel-receive`: only `RecvReceived` with a non-nil value returns that value;
-  closed, cancelled, or a nil value all return `Void`.
+- `channel-send!` (Option A): any outcome that is not `SendSent` raises
+  `ErrChannelClosed` (so `SendCancelled` is reported *as* a closed channel).
+- `channel-receive` (Option B): `RecvReceived` returns the value; `RecvClosed`
+  (and a nil value) return `Void`; `RecvCancelled` raises `ErrChannelCancelled`,
+  a distinct catchable condition — EXCEPT when the ctx cause is `ErrTimerExpired`
+  (with-timeout), which keeps the `Void` surface. That exception is load-bearing:
+  `callForeignCached`'s eager timer recheck fires only on the error-free return
+  path (its `if err != nil` return precedes the recheck), so returning an error
+  on the `ErrTimerExpired` source would bypass the recheck and defeat the timeout
+  handler.
 
-**Rationale.** A ctx-cancelled operation is, in the common case, a thread being
-unwound; surfacing the cancellation as the ordinary closed-channel contract keeps
-the Scheme surface two-state and avoids a new condition type. The seam means
-**Option B** — a distinct catchable cancellation condition — is a one-line change
-per primitive whenever a consumer needs `guard` to see it. No lifecycle rewrite.
+**Rationale.** Send keeps Option A because a cancelled send is at least an error
+already. Receive took Option B because its laundered outcome was a silent `Void`,
+an ordinary value indistinguishable from a drained channel that could flow into
+program logic unnoticed. This was NOT the "one-line change" an earlier draft
+claimed: the `callForeignCached` return-before-recheck ordering forces receive to
+keep `Void` on the `ErrTimerExpired` source. Send remains free to adopt Option B
+the same way whenever a consumer needs `guard` to see `SendCancelled`.
 
 **This rationale is load-bearing and incomplete on its own.** "The thread is
 unwound anyway" is true for `thread-terminate!` but not for the other two
@@ -235,13 +243,13 @@ primitive boundary as a deliberate minimal-change decision.
 These are genuinely unsettled; the code commits to a default but the design does
 not close them.
 
-1. **Is Option A a committed contract, or a placeholder?** The `SendOutcome` doc
-   treats "distinct condition" as a live future option. If Option A is committed,
-   the seam's forward-looking language should be deleted and the outcome types
-   could collapse toward a bool. If it is a placeholder, the seam should be
-   *used* — surface `RecvCancelled` / `SendCancelled` distinctly so a cancelled
-   op cannot be confused with close (Option B). Today the seam is built,
-   documented as load-bearing, and wired to nothing.
+1. ~~**Is Option A a committed contract, or a placeholder?**~~ **Partially
+   resolved 2026-07-17: receive uses the seam (Option B), send stays Option A.**
+   `channel-receive` now surfaces `RecvCancelled` as `ErrChannelCancelled` on
+   every source except `ErrTimerExpired`, so the seam is used, not wired to
+   nothing. `channel-send!` still launders `SendCancelled` to `ErrChannelClosed`;
+   adopting Option B there is the same change whenever a consumer needs to
+   distinguish a cancelled send from a closed channel.
 
 2. ~~**`channel-select`: delete or wire?**~~ **Resolved 2026-07-16: deleted.**
    Nothing consumed it, so its cost was carrying a function written against a
@@ -250,7 +258,15 @@ not close them.
    had no consumer to justify the surface. Reinstating it is a fresh, bounded
    piece of work whenever one appears; see *Boundaries*.
 
-3. **Embedder-deadline observability.** Is it acceptable that a timed-out
+3. ~~**Embedder-deadline observability.**~~ **Resolved 2026-07-17 via Option B for
+   receive.** A `channel-receive` cancelled by an embedder deadline no longer
+   returns `Void`; because the cause is not `ErrTimerExpired`, it raises
+   `ErrChannelCancelled`, so a cancelled receive is catchable and cannot be
+   confused with a drained channel. The residual ≈1024-op laundering window
+   remains only on the send side and on the deliberately-`Void` `ErrTimerExpired`
+   receive path. The original open question follows, for the record:
+
+   Is it acceptable that a timed-out
    `channel-receive` under an embedder `WithTimeout` returns `Void` (looks
    closed) for up to ≈1024 ops before `DeadlineExceeded` surfaces? It is
    VM-consistent and strictly better than the prior infinite hang, but it is the

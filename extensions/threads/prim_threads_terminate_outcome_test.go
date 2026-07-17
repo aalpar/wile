@@ -48,9 +48,10 @@ import (
 // The thread parks in thread-sleep! rather than a channel op, so this guards the
 // SRFI-18 contract independently of the channel-cancellation coupling that
 // exposed the bug (docs/concurrency/channel-cancellation.md). The two park
-// differently on purpose: thread-sleep! surfaces ctx cancellation as an error,
-// while a cancelled channel-receive launders it into an ordinary value. The
-// outcome must be the same terminated-thread exception either way.
+// differently on purpose: both surface ctx cancellation as an error (thread-sleep!
+// directly, and a cancelled channel-receive as ErrChannelCancelled under Option B),
+// yet the outcome must be the same terminated-thread exception either way — the
+// write-once outcome discards whatever error or value the thunk produced.
 //
 // The 10s sleep cannot elapse within the test, so the thread is still running
 // when terminate lands. If terminate were to beat the goroutine to its first

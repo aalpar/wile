@@ -202,7 +202,8 @@ var (
 
 	// Channel errors
 
-	ErrChannelClosed = NewStaticError("channel is closed")
+	ErrChannelClosed    = NewStaticError("channel is closed")
+	ErrChannelCancelled = NewStaticError("channel operation cancelled")
 
 	// Process errors
 

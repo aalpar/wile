@@ -18,6 +18,9 @@
 package gointerop
 
 import (
+	"context"
+	"errors"
+
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -105,10 +108,19 @@ func PrimChannelSend(mc machine.CallContext) error {
 // (channel-receive ch) -> value
 //
 // A receive on a closed, drained channel returns Void. A receive interrupted by
-// ctx cancellation returns Void the same way — Option A again, and the more
-// dangerous half: a send's laundered outcome is at least an error, whereas Void
-// is an ordinary value that flows on silently. See PrimChannelSend for the
-// out-of-package invariants that make that safe, and where they run out.
+// ctx cancellation raises ErrChannelCancelled — Option B for receive, so a `guard`
+// can tell a cancelled receive from a closed channel rather than both arriving as
+// a silent Void.
+//
+// The one exception is with-timeout, whose ctx cause is ErrTimerExpired. That
+// source is resolved by callForeignCached's eager recheck, which fires ONLY on the
+// error-free return path (call_foreign_cached.go: the `if err != nil` return
+// precedes the recheck). Returning an error here would bypass the recheck and
+// defeat the timeout handler, so ErrTimerExpired keeps the Option A Void surface.
+// The other two sources are safe to raise on: thread-terminate!'s outcome is
+// write-once (the raised error is discarded in favor of the terminated-thread
+// exception), and an embedder deadline is the path that had no protection at all —
+// exactly the confusion Option B removes.
 func PrimChannelReceive(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-receive")
 	if err != nil {
@@ -116,13 +128,26 @@ func PrimChannelReceive(mc machine.CallContext) error {
 	}
 
 	v, outcome := ch.Receive(mc.Context())
-	if outcome == values.RecvReceived && v != nil {
-		mc.SetValue(v)
+	switch outcome {
+	case values.RecvReceived:
+		if v != nil {
+			mc.SetValue(v)
+			return nil
+		}
+		mc.SetValue(values.Void)
+		return nil
+	case values.RecvCancelled:
+		if errors.Is(context.Cause(mc.Context()), machine.ErrTimerExpired) {
+			mc.SetValue(values.Void)
+			return nil
+		}
+		return werr.WrapForeignErrorf(werr.ErrChannelCancelled, "channel-receive")
+	default:
+		// RecvClosed: closed and drained. The historical two-state contract
+		// returns Void, which R7RS-style callers read as end-of-stream.
+		mc.SetValue(values.Void)
 		return nil
 	}
-	// Closed, cancelled, or a nil value: report Void.
-	mc.SetValue(values.Void)
-	return nil
 }
 
 // PrimChannelTrySend attempts to send without blocking
