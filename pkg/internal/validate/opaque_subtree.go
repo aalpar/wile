@@ -138,8 +138,27 @@ func forEachRawSymbol(v values.Value, fn func(*syntax.SyntaxSymbol)) {
 // This is what makes the analysis conservative rather than blind. Marking a name
 // mutated is the permissive direction for every consumer: a mutable let binding is
 // heap-allocated rather than inlined, and a non-StableInUnit define is left
-// assignable rather than frozen. An over-mark costs an optimization; an under-mark
-// costs correctness, silently.
+// assignable rather than frozen. An under-mark costs correctness, silently.
+//
+// What an over-mark costs, precisely. Not merely "an optimization" — say what is
+// withdrawn. A non-StableInUnit define never gets BindingMeta.Stable, and top-level
+// immutability is ENFORCED off that same stamp: the set! rejection
+// (compilation.compileSetBang, keyed on binding.IsStable()) and the redefine guard
+// (compilation.compileDefine, keyed on Meta().Stable) both read it. So over-marking
+// a name silently turns top-level immutability OFF for it: given
+// (begin (define x 1) `(x)), a later unit's (set! x 2) COMPILES, where without the
+// quasiquote it is rejected.
+//
+// That is a real cost to a user-facing guarantee, and it is still safe, for a reason
+// worth stating rather than assuming: enforcement and optimization key on the SAME
+// flag, so an over-mark withdraws both together. No consumer treats a binding as
+// immutable without reading Stable, so there is no reader left holding an assumption
+// the admitted set! could falsify. The two do not want opposite error directions from
+// this data; the set! rejection exists to protect the anchor, so it wants the same
+// direction the optimizer does.
+//
+// The imprecision, not the direction, is the defect: see forEachRawSymbol, which
+// marks template DATA that no unquote can reach.
 func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
 	if result == nil || raw == nil {
 		return
