@@ -28,6 +28,27 @@ import (
 // depth=1 means we're inside one level of quasiquote (the common case).
 // depth=2 means nested quasiquote `(a `(b ,x)), etc.
 // depth=0 would mean we should evaluate (but we start at 1, so this is the trigger).
+// hasSyntaxArity reports whether p is a proper list of exactly n elements. It
+// never panics, where (*syntax.SyntaxPair).Length panics on an improper list. The
+// quasiquote and quasisyntax walks meet malformed templates like `(a unquote x . y);
+// a malformed template must reach a clean compile path, not an internal-error crash.
+// After hasSyntaxArity(p, k) is true, the first k SyntaxCdr().(*SyntaxPair) hops on
+// p are guaranteed safe.
+func hasSyntaxArity(p *syntax.SyntaxPair, n int) bool {
+	if n <= 0 {
+		return false
+	}
+	var cur syntax.SyntaxValue = p
+	for range n {
+		pair, ok := cur.(*syntax.SyntaxPair)
+		if !ok {
+			return false
+		}
+		cur = pair.SyntaxCdr()
+	}
+	return syntax.IsSyntaxEmptyList(cur)
+}
+
 func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallContext, datum syntax.SyntaxValue, depth int) error {
 	// A single guard bounds both the needs-runtime analysis and the expansion;
 	// each is reset (enter/leave is symmetric) before the next phase runs.
@@ -117,7 +138,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 			carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
 			if ok && carSymName == kw.splicing && depth == 1 {
 				flushNormal()
-				if elemPair.Length() == 2 {
+				if hasSyntaxArity(elemPair, 2) {
 					cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
 					expr := cdrPair.SyntaxCar()
 					segments = append(segments, quasiSegment{kind: quasiSegSplice, expr: expr})
@@ -182,11 +203,10 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntime(stx syntax.SyntaxValue,
 				}
 				// Nested unquote at depth > 1 - check if the argument needs runtime
 				// For ,,x at depth 2: the inner ,x is at depth 1 and needs eval
-				if v.Length() == 2 {
+				if hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
-					argSyntax := arg
-					return p.quasiquoteNeedsRuntime(argSyntax, depth-1, g)
+					return p.quasiquoteNeedsRuntime(arg, depth-1, g)
 				}
 				return false
 			case "quasiquote":
@@ -224,7 +244,7 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 		if ok && carSymName == "unquote" && depth == 1 {
 			cdr := current.SyntaxCdr()
 			cdrPair, ok := cdr.(*syntax.SyntaxPair)
-			if ok && cdrPair.Length() == 1 {
+			if ok && hasSyntaxArity(cdrPair, 1) {
 				return true
 			}
 		}

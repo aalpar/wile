@@ -25,20 +25,21 @@ import (
 )
 
 // TestImmutableTopLevel_OpaqueSubtreeOverMark pins what an opaque subtree does to
-// top-level immutability. validate.markOpaqueSubtree records every symbol a
-// quasiquote template mentions as a possible set! target; a marked name never gets
-// the Stable stamp, and the set! rejection keys on Stable. So mentioning a name in
-// a template turns its top-level immutability off.
+// top-level immutability. validate.markOpaqueSubtree marks only the EVALUATED
+// positions of a quasiquote as possible set! targets; a marked name never gets the
+// Stable stamp, and the set! rejection keys on Stable. So a name that appears only
+// as template DATA keeps its immutability, while a name a live unquote reaches
+// loses it.
 //
 // The comparison must span two compilation units. An in-unit set! marks its own
 // target, so a same-unit probe cannot isolate the template's contribution — which
 // is why the review's `(begin `(x) (set! x 1))` repro showed nothing (it has no
 // define to stamp either).
 //
-// Characterization, not endorsement: `(x) mentions x as DATA that no unquote can
-// reach, so accepting the later set! is the imprecision documented on
-// forEachRawSymbol, not a designed behaviour. A quasi-depth-aware walk should flip
-// the `(x) case to rejected; this table is here so that flip has to be deliberate.
+// The depth-aware walk (fix/opaque-subtree-quasi-depth) draws the line: `(x)
+// mentions x as DATA no unquote reaches, so x KEEPS its stamp and a later set! is
+// rejected; `(,(set! x 9)) puts x in an evaluated position, so the mark is earned.
+// The table below pins both directions.
 func TestImmutableTopLevel_OpaqueSubtreeOverMark(t *testing.T) {
 	ctx := context.Background()
 	tcs := []struct {

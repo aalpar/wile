@@ -108,7 +108,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntimeGuarded(stx syntax.Synt
 					return true
 				}
 				// At depth > 1, check the argument at depth-1
-				if v.Length() == 2 {
+				if hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					return p.quasisyntaxNeedsRuntimeGuarded(arg, depth-1, g)
@@ -120,7 +120,7 @@ func (p *CompileTimeContinuation) quasisyntaxNeedsRuntimeGuarded(stx syntax.Synt
 					return true
 				}
 				// At depth > 1, check body at depth+1
-				if v.Length() == 2 {
+				if hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					return p.quasisyntaxNeedsRuntimeGuarded(body, depth+1, g)

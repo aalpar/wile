@@ -274,10 +274,29 @@ func dottedUnquoteTail(cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, b
 		return nil, false
 	}
 	cdrPair, ok := cur.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok || cdrPair.Length() != 1 {
+	// Exactly one proper element: cdrPair is a pair whose cdr is the empty list.
+	// IsSyntaxEmptyList never panics, where Length() panics on an improper list
+	// like the tail of `(a unquote x . y) — a malformed template must reach a
+	// clean validation path, not an internal-error crash.
+	if !ok || !syntax.IsSyntaxEmptyList(cdrPair.SyntaxCdr()) {
 		return nil, false
 	}
 	return cdrPair.SyntaxCar(), true
+}
+
+// markOpaqueCode marks an opaque subtree that is ordinary CODE — a passthrough
+// body, an include, a cond-expand. Every symbol in it is live until a quote or
+// quasiquote inside it says otherwise.
+func markOpaqueCode(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
+	markOpaqueSubtree(env, raw, quasiDepthCode, result)
+}
+
+// markOpaqueTemplate marks a quasiquote TEMPLATE, which the caller has already
+// stepped into: its symbols are data until an unquote makes them live again. The
+// depth split is the whole precision win — a template mentioning a name no unquote
+// reaches must not cost that name its Stable stamp.
+func markOpaqueTemplate(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
+	markOpaqueSubtree(env, raw, quasiDepthTemplate, result)
 }
 
 // markOpaqueSubtree records every binding an opaque subtree mentions as a
@@ -312,21 +331,6 @@ func dottedUnquoteTail(cur *syntax.SyntaxPair, quasi int) (syntax.SyntaxValue, b
 // name no unquote reaches no longer costs that name its stamp. What remains below
 // is an over-approximation within the live positions — every symbol there is a
 // candidate, because what a macro expands to is not knowable here.
-// markOpaqueCode marks an opaque subtree that is ordinary CODE — a passthrough
-// body, an include, a cond-expand. Every symbol in it is live until a quote or
-// quasiquote inside it says otherwise.
-func markOpaqueCode(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
-	markOpaqueSubtree(env, raw, quasiDepthCode, result)
-}
-
-// markOpaqueTemplate marks a quasiquote TEMPLATE, which the caller has already
-// stepped into: its symbols are data until an unquote makes them live again. The
-// depth split is the whole precision win — a template mentioning a name no unquote
-// reaches must not cost that name its Stable stamp.
-func markOpaqueTemplate(env *environment.EnvironmentFrame, raw values.Value, result *ValidationResult) {
-	markOpaqueSubtree(env, raw, quasiDepthTemplate, result)
-}
-
 func markOpaqueSubtree(env *environment.EnvironmentFrame, raw values.Value, quasi int, result *ValidationResult) {
 	if result == nil || raw == nil {
 		return

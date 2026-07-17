@@ -106,12 +106,12 @@ func (p *CompileTimeContinuation) expandQuasi(
 			switch carSymName {
 			case kw.unquote:
 				if depth == 1 {
-					if v.Length() == 2 {
+					if hasSyntaxArity(v, 2) {
 						cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 						return cdr.SyntaxCar(), nil
 					}
 				}
-				if v.Length() == 2 {
+				if hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg, err := p.expandQuasi(ctx, arg, depth-1, kw, g)
@@ -131,7 +131,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 
 			case kw.splicing:
-				if depth > 1 && v.Length() == 2 {
+				if depth > 1 && hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg, err := p.expandQuasi(ctx, arg, depth-1, kw, g)
@@ -151,7 +151,7 @@ func (p *CompileTimeContinuation) expandQuasi(
 				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v), nil
 
 			case kw.nesting:
-				if v.Length() == 2 {
+				if hasSyntaxArity(v, 2) {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					processedBody, err := p.expandQuasi(ctx, body, depth+1, kw, g)
@@ -234,7 +234,7 @@ func (p *CompileTimeContinuation) expandQuasiList(
 			if ok && carSymName == kw.unquote && depth == 1 {
 				cdr := current.SyntaxCdr()
 				cdrPair, ok := cdr.(*syntax.SyntaxPair)
-				if ok && cdrPair.Length() == 1 {
+				if ok && hasSyntaxArity(cdrPair, 1) {
 					tailExpr := cdrPair.SyntaxCar()
 					var result syntax.SyntaxValue
 					result = tailExpr
@@ -360,7 +360,7 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 			if ok && carSymName == kw.unquote && depth == 1 {
 				cdr := current.SyntaxCdr()
 				cdrPair, ok := cdr.(*syntax.SyntaxPair)
-				if ok && cdrPair.Length() == 1 {
+				if ok && hasSyntaxArity(cdrPair, 1) {
 					flushNormal()
 					// Raw, not expanded: the tail expression is evaluated at
 					// runtime, exactly as a splice segment's expr is. append with
@@ -376,7 +376,7 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 			carSymName, ok := p.getSymbolName(carPair.SyntaxCar())
 			if ok && carSymName == kw.splicing && depth == 1 {
 				flushNormal()
-				if carPair.Length() != 2 {
+				if !hasSyntaxArity(carPair, 2) {
 					// Malformed - treat as normal
 					expandedCar, err := p.expandQuasi(ctx, carSyntax, depth, kw, g)
 					if err != nil {
