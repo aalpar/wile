@@ -31,6 +31,20 @@
 //   - [NativeTemplate]: compiled bytecode container
 //   - [MachineClosure]: first-class procedure representation
 //
+// # Bytecode Assembly
+//
+// [NewNativeTemplate], [NativeTemplate.AppendInstruction], [NativeTemplate.AppendOperations],
+// [NativeTemplate.AppendSideTableOp] and [NativeTemplate.PatchInstructionArg] are a
+// trusted-producer surface, exported for the compiler and for test fixtures. The instruction
+// stream is taken as well-formed: an out-of-range Arg (a local-binding index, a branch offset,
+// a side-table index) is not validated and reaches the dispatch loop as an unchecked slice
+// index.
+//
+// The resulting panic is contained only on entry via [MachineContext.RunResumable], which
+// recovers at the VM boundary and returns it as an error. [MachineContext.Run] and
+// [MachineContext.RunWithinBoundary] do not recover, so a malformed template assembled through
+// this surface unwinds into the host goroutine.
+//
 // # Continuations
 //
 //   - [MachineContinuation]: captured continuation state for call/cc
