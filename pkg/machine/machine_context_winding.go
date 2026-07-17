@@ -112,25 +112,18 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 	return nil
 }
 
-// RestoreWithWinding restores a continuation with proper dynamic-wind handling.
-// It unwinds from the current dynamic extent, rewinds to the target extent,
-// then restores the machine state.
+// RestoreWithWindingFrom restores a continuation with proper dynamic-wind handling:
+// it unwinds from sourceStack, rewinds to targetStack, then restores the machine
+// state.
 //
-// If cont is nil (continuation captured in a sub-context), we still perform
-// the winding operations but don't restore machine state - the caller should
-// handle continued execution appropriately.
-func (p *MachineContext) RestoreWithWinding(cont *MachineContinuation, targetStack WindingStack) error {
-	return p.RestoreWithWindingFrom(cont, p.windingStack, targetStack)
-}
-
-// RestoreWithWindingFrom restores a continuation with proper dynamic-wind handling,
-// using an explicit source winding stack instead of the current context's stack.
+// The source stack is explicit because the escape may have originated in a
+// sub-context whose winding stack differs from the restoring context's. When
+// call/cc captures inside a sub-context and the escape propagates up, the source
+// stack holds frames the top-level context never saw. Pass p.WindingStack() to
+// unwind from the restoring context's own extent.
 //
-// This is needed when the escape originated from a sub-context that has a different
-// winding stack than the context where RestoreWithWinding is called. For example,
-// when call/cc captures inside a sub-context and the escape propagates up, the
-// source winding stack (where the escape happened) may have frames that the
-// top-level context doesn't know about.
+// If cont is nil (continuation captured in a sub-context), the winding runs but
+// machine state is not restored; the caller handles continued execution.
 //
 // Parameters:
 //   - cont: The continuation to restore to

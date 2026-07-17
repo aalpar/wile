@@ -155,11 +155,14 @@ func TestVmState(t *testing.T) {
 // vmState field. When a field is added to vmState, this table must be updated for
 // both — the test below enforces this via reflection.
 //
-// SCOPE (D-d): the six save/restore/copy sites
+// SCOPE (D-d): the five save/restore/copy sites
 // (NewMachineContinuationFromMachineContext, SaveContinuation, Restore,
-// RestoreAndRelease, PopContinuation, Copy) formerly lived here as inert strings
-// that nothing verified — the PopContinuation "transfer" cell even lied (the code
-// aliases evals without relinquishing: a SHARE). They now live in contDescriptor
+// RestoreAndRelease, Copy) formerly lived here as inert strings that nothing
+// verified — one cell even lied, claiming a "transfer" at the since-removed
+// PopContinuation site where the code merely aliased evals without relinquishing
+// them (a SHARE). That is the violation the oracle exists to catch: a table no
+// test drives drifts from the code it claims to describe. They now live in
+// contDescriptor
 // (continuation_descriptor_test.go), driven against the real methods by the oracle
 // (continuation_descriptor_oracle_test.go). Only NewMachineContext and
 // NewSubContext remain here: they are construction paths, not save/restore

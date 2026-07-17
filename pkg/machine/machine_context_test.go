@@ -146,28 +146,16 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 2)
 	qt.Assert(t, mc.Parent(), valuestest.SchemeEquals, bottom2)
 	qt.Assert(t, mc.PC(), qt.Equals, 0)
-	_, err := mc.PopContinuation()
-	qt.Assert(t, err, qt.IsNil)
+	mc.RestoreAndRelease(mc.cont)
 	qt.Assert(t, mc.cont, qt.Equals, bottom1)
 	qt.Assert(t, mc.Parent(), qt.Equals, bottom1)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 1)
 	qt.Assert(t, mc.PC(), qt.Equals, 20)
-	_, err = mc.PopContinuation()
-	qt.Assert(t, err, qt.IsNil)
+	mc.RestoreAndRelease(mc.cont)
 	qt.Assert(t, mc.cont, qt.Equals, bottom0)
 	qt.Assert(t, mc.Parent(), qt.IsNil)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 0)
 	qt.Assert(t, mc.PC(), qt.Equals, 10)
-}
-
-func TestPopContinuation_Underflow(t *testing.T) {
-	c := qt.New(t)
-	env := environment.NewNamespace().Runtime()
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
-
-	// Popping from an empty continuation chain must return an error, not panic.
-	_, err := mc.PopContinuation()
-	c.Assert(errors.Is(err, werr.ErrContinuationUnderflow), qt.IsTrue)
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
@@ -1129,7 +1117,10 @@ func TestSaveContinuation_CallDepthTracking(t *testing.T) {
 	}
 }
 
-func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
+// TestRestoreAndRelease_ReleasesCallDepthBudget pins that a normal return gives
+// the call-depth budget back: five saves then three returns must leave room for
+// eight more before the limit bites.
+func TestRestoreAndRelease_ReleasesCallDepthBudget(t *testing.T) {
 	ops := make([]Operation, 20)
 	for i := range ops {
 		ops[i] = NewOperationLoadVoid()
@@ -1149,13 +1140,12 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 		}
 	}
 
-	// Pop 3 of them
+	// Return from 3 of them
 	for range 3 {
-		_, err := mc.PopContinuation()
-		qt.Assert(t, err, qt.IsNil)
+		mc.RestoreAndRelease(mc.cont)
 	}
 
-	// Should be able to save 8 more (was at depth 2 after pops, limit 10)
+	// Should be able to save 8 more (was at depth 2 after returns, limit 10)
 	for i := range 8 {
 		err := mc.SaveContinuation(1)
 		if err != nil {
@@ -2231,7 +2221,7 @@ func TestContMark_SaveContinuation_NilsMarks(t *testing.T) {
 	c.Assert(markGet(mc.cont.marks, key), qt.Equals, values.NewInteger(1))
 }
 
-func TestContMark_PopContinuation_RestoresMarks(t *testing.T) {
+func TestContMark_RestoreAndRelease_RestoresMarks(t *testing.T) {
 	c := qt.New(t)
 	mc := newContMarkTestContext()
 
@@ -2245,9 +2235,8 @@ func TestContMark_PopContinuation_RestoresMarks(t *testing.T) {
 	// Callee sets different mark
 	mc.SetMark(otherKey, values.NewInteger(99))
 
-	// Pop restores saved marks
-	_, err = mc.PopContinuation()
-	c.Assert(err, qt.IsNil)
+	// Returning restores saved marks
+	mc.RestoreAndRelease(mc.cont)
 	c.Assert(mc.GetMark(key), qt.Equals, values.NewInteger(1))
 	c.Assert(mc.GetMark(otherKey), qt.IsNil)
 }

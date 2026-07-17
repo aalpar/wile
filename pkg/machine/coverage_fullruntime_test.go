@@ -2369,7 +2369,7 @@ func TestCoverageDynamicWindFull(t *testing.T) {
 }
 
 // TestCoverageCallCCReentry tests call/cc with continuation re-invocation.
-// Exercises RestoreWithWinding and FindEscapeContinuation paths.
+// Exercises RestoreWithWindingFrom and FindEscapeContinuation paths.
 func TestCoverageCallCCReentry(t *testing.T) {
 	env := testhelpers.NewFullRuntimeEnv(t)
 

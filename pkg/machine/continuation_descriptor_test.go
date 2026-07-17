@@ -16,13 +16,13 @@ package machine
 
 // continuation_descriptor_test.go holds the single reviewed source of truth for
 // how each vmState / MachineContinuation field moves between a MachineContext and
-// a MachineContinuation at the six save/restore/copy sites. It is DATA, not code
+// a MachineContinuation at the five save/restore/copy sites. It is DATA, not code
 // that runs in production: the method bodies stay exactly as they are, and the
 // oracle (continuation_descriptor_oracle_test.go) drives each real method against
 // probe state and asserts the observed behavior matches this table.
 //
 // See plans/2026-07-02-continuation-vmstate-descriptor-oracle.md for the design
-// and the per-site derivation. This supersedes the six save/restore/copy rows of
+// and the per-site derivation. This supersedes the save/restore/copy rows of
 // vmStateFieldCoverage (vm_state_test.go) — that map's cells are inert strings
 // nothing checks; these rules are driven against the methods.
 //
@@ -34,7 +34,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// contOp identifies one of the six field-transcription sites.
+// contOp identifies one of the five field-transcription sites.
 type contOp int
 
 const (
@@ -51,8 +51,6 @@ const (
 	// opRestoreAndRelease is RestoreAndRelease (normal return), cont → mc; branches
 	// on shared and transfers/pools when unshared. The sharpest split.
 	opRestoreAndRelease
-	// opPop is PopContinuation (return), cont → mc.
-	opPop
 	// opCopy is MachineContinuation.Copy (delimited clone), cont → cont.
 	opCopy
 )
@@ -67,8 +65,6 @@ func (op contOp) String() string {
 		return "Restore"
 	case opRestoreAndRelease:
 		return "RestoreAndRelease"
-	case opPop:
-		return "PopContinuation"
 	case opCopy:
 		return "Copy"
 	}
@@ -233,7 +229,7 @@ const (
 	// vmState fields and continuation-only fields carry real disciplines.
 	destCont destKind = iota
 	// destMc: the site writes into a MachineContext's vmState (opRestore,
-	// opRestoreAndRelease, opPop). Continuation-only fields have no destination
+	// opRestoreAndRelease). Continuation-only fields have no destination
 	// slot here, so they are declared SKIP for the ratchet and not value-checked.
 	destMc
 )
@@ -276,11 +272,10 @@ func cat(groups ...[]rule) []rule {
 	return q
 }
 
-// contDescriptor is THE reviewed table. Six entries. Transcribed field-by-field
-// from the six method bodies; see the plan's "Filled descriptor" section for the
-// per-field derivation and the drift-bait asymmetries (multiValues SHARE in
-// Pop/Save but CLONE in Copy; the value register restored by Pop yet SKIP in
-// Restore/RAR; marks SHARE in Pop/unshared-RAR but CLONE in the re-invocable
+// contDescriptor is THE reviewed table. Five entries. Transcribed field-by-field
+// from the five method bodies; see the plan's "Filled descriptor" section for the
+// per-field derivation and the drift-bait asymmetries (multiValues SHARE in Save
+// but CLONE in Copy; marks SHARE in unshared-RAR but CLONE in the re-invocable
 // paths; parent DERIVE on save/restore but SHARE in Copy).
 //
 // The mc.cont pointer derivation (p.cont = cont.parent on the restore paths; the
@@ -359,23 +354,6 @@ var contDescriptor = map[contOp]siteSpec{
 			{when: guard{condUnshared}, effect: effPoolFrame},
 			{when: guard{condUnshared, condOldEnvPooledDistinct}, effect: effReleaseOldEnv},
 		},
-	},
-
-	// Pop — cont → mc (return). Restores the value register (unlike Restore/RAR).
-	opPop: {
-		dest: destMc,
-		fields: cat(
-			always(verbShare, "template", "env", "pc", "singleValue", "multiValues",
-				"envPooled", "marks", "barrierValid"),
-			always(verbDerive, "callDepth"), // --; underflow → ErrContinuationUnderflow
-			always(verbSkip, "windingStack", "promptTag", "threadID",
-				"parent", "promptHandler", "shared", "inlineEvals", "inlineEvalsLen"),
-			guarded(guard{condInline}, verbInline, "evals"),
-			// Heap evals: p.evals = q.evals — src NOT relinquished (q.evals survives
-			// the call); ownership passes only because the caller discards the popped
-			// frame. Observationally a SHARE, not a TRANSFER.
-			guarded(guard{condHeap}, verbShare, "evals"),
-		),
 	},
 
 	// Copy — cont → cont (delimited clone). The only site touching

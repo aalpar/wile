@@ -166,7 +166,6 @@ type siteCall struct {
 
 	off                int
 	preMcPC            int
-	preMcCallDepth     int
 	preParentCallDepth int
 	preMcCont          *MachineContinuation
 }
@@ -460,14 +459,6 @@ var deriveChecks = map[contOp]map[string]deriveCheck{
 			}
 		},
 	},
-	opPop: {
-		"callDepth": func(t *testing.T, sc siteCall) {
-			want := sc.preMcCallDepth - 1
-			if sc.mc.callDepth != want {
-				t.Errorf("Pop.callDepth DERIVE: got %d, want %d", sc.mc.callDepth, want)
-			}
-		},
-	},
 }
 
 // runDeriveCheck dispatches to the registered formula, failing if none exists.
@@ -535,41 +526,6 @@ func verifyEffects(t *testing.T, spec siteSpec, cfg probeConfig, sc siteCall) {
 // ---------------------------------------------------------------------------
 // Per-site oracle tests.
 // ---------------------------------------------------------------------------
-
-func TestOracle_Pop(t *testing.T) {
-	for _, cfg := range []probeConfig{{inline: true}, {inline: false}} {
-		t.Run(evalsShape(cfg), func(t *testing.T) {
-			p := buildProbe(t, cfg)
-			mc, cont := p.mc, p.cont
-			mc.cont = cont
-			mc.callDepth = 5
-			// mc.envPooled stays false so Pop's envPooled SHARE (mc ← cont.envPooled,
-			// which is true) is an observable false→true transition, not a no-op.
-
-			preSrcVm := vmRefs(&cont.vmState)
-			preDestVm := vmRefs(&mc.vmState)
-			preDestZero := vmZeros(&mc.vmState)
-			preSrcZero := vmZeros(&cont.vmState)
-			inlineSnap := inlineSnapshot(cont)
-			preMcCallDepth := mc.callDepth
-			preContParent := cont.parent
-
-			got, err := mc.PopContinuation()
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, got, qt.Equals, cont)
-
-			sc := siteCall{
-				op: opPop, dest: destMc, mc: mc,
-				destVm: &mc.vmState, srcVm: &cont.vmState, srcCont: cont,
-				preSrcVm: preSrcVm, preDestVm: preDestVm,
-				preDestZero: preDestZero, preSrcZero: preSrcZero, destPreExists: true,
-				srcAlive: true, inlineSnap: inlineSnap, preMcCallDepth: preMcCallDepth,
-			}
-			runChecks(t, cfg, sc)
-			qt.Assert(t, mc.cont, qt.Equals, preContParent)
-		})
-	}
-}
 
 func TestOracle_Restore(t *testing.T) {
 	for _, cfg := range []probeConfig{{inline: true}, {inline: false}} {
@@ -740,18 +696,6 @@ func TestOracle_SaveContinuation_CallDepthExceeded(t *testing.T) {
 	qt.Assert(t, mc.callDepth, qt.Equals, 1)
 }
 
-// TestOracle_Pop_Underflow mirrors the Save call-depth guard: popping past the
-// bottom of the chain (callDepth would go negative — a compiler bug) returns
-// ErrContinuationUnderflow and clamps callDepth at zero.
-func TestOracle_Pop_Underflow(t *testing.T) {
-	mc := &MachineContext{}
-	mc.callDepth = 0
-
-	_, err := mc.PopContinuation()
-	qt.Assert(t, errors.Is(err, werr.ErrContinuationUnderflow), qt.IsTrue)
-	qt.Assert(t, mc.callDepth, qt.Equals, 0)
-}
-
 func TestOracle_Copy(t *testing.T) {
 	// shared:true on every cfg so Copy's `shared` RESET (cp.shared ← false from a
 	// true source) is observable, not a vacuous zero→zero. windingPresent is varied
@@ -828,26 +772,28 @@ func TestContDescriptor_Complete(t *testing.T) {
 // descriptor claim to the classifier through a spy *testing.T, and asserts the spy
 // recorded a failure. Guards against a no-op oracle that rubber-stamps everything.
 func TestOracle_RejectsWrongDescriptor(t *testing.T) {
-	// Pop SHAREs marks, heap-evals, and envPooled — so CLONE/TRANSFER/RESET claims on
-	// them are all lies the classifier must catch.
-	t.Run("share-claimed-clone", func(t *testing.T) {
-		sc := poppedSiteCall(t)
+	// Shared RestoreAndRelease CLONEs marks and heap evals and RESETs envPooled — so
+	// SHARE/TRANSFER claims on them are all lies the classifier must catch.
+	t.Run("clone-claimed-share", func(t *testing.T) {
+		sc := restoredSiteCall(t)
 		assertRejects(t, func(spy *testing.T) {
-			checkField(spy, sc, rule{field: "marks", verb: verbClone})
+			checkField(spy, sc, rule{field: "marks", verb: verbShare})
 		})
 	})
-	t.Run("share-claimed-transfer", func(t *testing.T) {
-		sc := poppedSiteCall(t)
+	t.Run("clone-claimed-transfer", func(t *testing.T) {
+		sc := restoredSiteCall(t)
 		assertRejects(t, func(spy *testing.T) {
-			// Pop aliases heap evals without relinquishing them; TRANSFER must fail.
+			// The shared path deep-copies heap evals and leaves the source intact;
+			// TRANSFER (which requires the source to relinquish) must fail.
 			checkField(spy, sc, rule{field: "evals", verb: verbTransfer})
 		})
 	})
-	t.Run("share-claimed-reset", func(t *testing.T) {
-		sc := poppedSiteCall(t)
+	t.Run("reset-claimed-share", func(t *testing.T) {
+		sc := restoredSiteCall(t)
 		assertRejects(t, func(spy *testing.T) {
-			// envPooled is true after Pop (SHAREd from cont); RESET must fail.
-			checkField(spy, sc, rule{field: "envPooled", verb: verbReset})
+			// envPooled is forced false by the shared path while cont's stays true;
+			// SHARE must fail.
+			checkField(spy, sc, rule{field: "envPooled", verb: verbShare})
 		})
 	})
 	t.Run("dropped-pool-frame-effect", func(t *testing.T) {
@@ -867,22 +813,27 @@ func TestOracle_RejectsWrongDescriptor(t *testing.T) {
 	})
 }
 
-// poppedSiteCall builds a Pop probe, runs the real PopContinuation, and returns the
-// post-call siteCall for feeding lying rules to the classifier.
-func poppedSiteCall(t *testing.T) siteCall {
+// restoredSiteCall builds a shared-heap probe, runs the real RestoreAndRelease, and
+// returns the post-call siteCall for feeding lying rules to the classifier.
+//
+// The SHARED arm is the vehicle: it is the only destMc path that leaves the source
+// continuation alive (srcAlive), so src-side reference checks stay meaningful. It
+// also spans three verb classes at once — CLONE (marks, heap evals) and RESET
+// (envPooled) — which is what lets one probe bait the classifier across them.
+func restoredSiteCall(t *testing.T) siteCall {
 	t.Helper()
-	p := buildProbe(t, probeConfig{inline: false})
+	p := buildProbe(t, probeConfig{shared: true, inline: false})
 	mc, cont := p.mc, p.cont
-	mc.cont = cont
-	mc.callDepth = 5
+	// Seed envPooled true so the shared path's RESET is a visible true→false, not a
+	// vacuous false→false a wrong claim could survive.
+	mc.envPooled = true
 	preSrcVm := vmRefs(&cont.vmState)
 	preDestVm := vmRefs(&mc.vmState)
 	preDestZero := vmZeros(&mc.vmState)
 	preSrcZero := vmZeros(&cont.vmState)
-	_, err := mc.PopContinuation()
-	qt.Assert(t, err, qt.IsNil)
+	mc.RestoreAndRelease(cont)
 	return siteCall{
-		op: opPop, dest: destMc, mc: mc,
+		op: opRestoreAndRelease, dest: destMc, mc: mc,
 		destVm: &mc.vmState, srcVm: &cont.vmState, srcCont: cont,
 		preSrcVm: preSrcVm, preDestVm: preDestVm,
 		preDestZero: preDestZero, preSrcZero: preSrcZero,
