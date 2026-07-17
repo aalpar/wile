@@ -177,6 +177,21 @@ type Namespace struct {
 	// The concrete type is *registry.Registry.
 	registry any
 
+	// effectiveRegistry is the narrowed registry the visible top level was
+	// actually bound from: registry after strict-namespace reduction and after a
+	// dialect's PrimitiveRemover/BootstrapProcedureRewriter have run. It differs
+	// from registry precisely when one of those narrowed the surface; the full
+	// registry still backs library environments and imports.
+	//
+	// Held here rather than on the Engine because a namespace built by
+	// wile.NewNamespace and handed to WithNamespace is the only carrier that
+	// survives to engine construction — the narrowing happens during bootstrap,
+	// and the local it was computed in is gone by then.
+	//
+	// Stored as any for the same import-cycle reason as registry. Nil when no
+	// narrowing applied; readers should fall back to registry.
+	effectiveRegistry any
+
 	// authorizer is the security authorizer for this namespace.
 	authorizer security.Authorizer
 
@@ -567,6 +582,20 @@ func (p *Namespace) Registry() any {
 // SetRegistry sets the primitive registry.
 func (p *Namespace) SetRegistry(reg any) {
 	p.registry = reg
+}
+
+// EffectiveRegistry returns the narrowed registry the visible top level was bound
+// from, or nil when nothing narrowed it (in which case Registry is the effective
+// surface). The concrete type is *registry.Registry.
+func (p *Namespace) EffectiveRegistry() any {
+	return p.effectiveRegistry
+}
+
+// SetEffectiveRegistry records the narrowed registry the visible top level was
+// bound from. Set once during bootstrap, after strict-namespace reduction and any
+// dialect narrowing.
+func (p *Namespace) SetEffectiveRegistry(reg any) {
+	p.effectiveRegistry = reg
 }
 
 // ExtensionState returns the namespace-scoped state stored under key, and a

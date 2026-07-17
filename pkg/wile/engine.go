@@ -217,6 +217,12 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		topLevelReg = topLevelReg.WithProcedureSources(rewriter.RewriteBootstrapProcedures(topLevelReg.ProcedureSources()))
 	}
 
+	// Record what the top level was actually bound from, before applyBaseEnvironment
+	// consumes it and the local goes out of scope. Engine.EffectiveRegistry reads this;
+	// without it the only registry an embedder can reach is the pre-dialect reg on the
+	// namespace, which still advertises primitives a dialect removed.
+	ns.SetEffectiveRegistry(topLevelReg)
+
 	env := ns.Runtime()
 	err = applyBaseEnvironment(ctx, env, topLevelReg, applyOptionsFromConfig(cfg)...)
 	if err != nil {
@@ -836,8 +842,55 @@ func (p *Engine) SetDebugger(d *Debugger) {
 // Registry returns a clone of the engine's registry. The returned registry
 // can be filtered with Without, WithoutCategory, or WithoutBindings and
 // passed to NewEngine via WithRegistry to create a restricted engine.
+//
+// This is the pre-dialect base: everything registered, which is what makes it the
+// right input for building a derived engine. It is NOT what this engine can call —
+// WithStrictNamespace and a dialect's PrimitiveRemover both narrow the visible top
+// level below it, and this clone still lists what they removed. For the surface
+// this engine actually has, use [Engine.EffectiveRegistry] and [Engine.Forms].
 func (p *Engine) Registry() *registry.Registry {
 	return p.registry.Clone()
+}
+
+// EffectiveRegistry returns a clone of the registry the engine's visible top level
+// was bound from: [Engine.Registry] narrowed by WithStrictNamespace and by a
+// dialect's PrimitiveRemover. Registry answers "what was registered"; this answers
+// "what can this engine call". They differ only when something narrowed the surface,
+// and are otherwise the same content.
+//
+// Procedures only. A dialect shapes two axes, and special forms live in the forms
+// registry rather than here: wile.NoMutation removes both the set! form and the
+// set-car! procedure, and only [Engine.Forms] shows the former's absence.
+//
+// The full registry still backs library environments and imports, so a narrowed
+// primitive may remain reachable through (import …) — this reports the flat top
+// level, not total reachability.
+func (p *Engine) EffectiveRegistry() *registry.Registry {
+	regAny := p.namespace.EffectiveRegistry()
+	reg, ok := regAny.(*registry.Registry)
+	if !ok {
+		// No narrowing was recorded (a WithNamespace caller built the namespace
+		// without one, or nothing narrowed): the base is the effective surface.
+		return p.registry.Clone()
+	}
+	return reg.Clone()
+}
+
+// Forms returns the sorted names of the special forms this engine's dialect
+// installed. Together with [Engine.EffectiveRegistry] this is the engine's actual
+// surface: syntax here, procedures there.
+//
+// Names rather than the specs themselves: a FormSpec carries validator and codegen
+// hooks that are internal by construction and are not an embedder contract.
+func (p *Engine) Forms() []string {
+	frAny := p.namespace.FormRegistry()
+	fr, ok := frAny.(*forms.FormRegistry)
+	if !ok {
+		return nil
+	}
+	q := fr.Names()
+	slices.Sort(q)
+	return q
 }
 
 // AvailableLibraries returns all importable library names by combining
