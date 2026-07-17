@@ -97,24 +97,28 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 			)
 		}
 	}
-	// Top-level define supersedes an imported binding (R7RS §5.3.1): the define
-	// overwrites the value in the same slot, so drop the import *provenance* and
-	// a subsequent set! on this binding is permitted.
-	if binding.IsImported() {
-		binding.EnsureMeta().Imported = false
-	}
-	m := binding.EnsureMeta()
-	m.Scopes = symbolScopes
-	if symbolSource != nil {
-		m.Source = symbolSource
-	}
-	if immTop {
-		// Discharge the rebind-stability conclusion from in-unit evidence: the
-		// language now forbids the cross-unit set!/redefine that StableInUnit
-		// alone could not rule out (the set! gate + the redefine guard above),
-		// so StableInUnit becomes a sound basis for Stable. Off by default.
-		m.Stable = v.StableInUnit
-	}
+	// This binding is a shared global under concurrent SRFI-18 compiles, so the
+	// metadata write goes through UpdateMeta (copy-on-write CAS) rather than a
+	// write-through pointer that a lock-free reader could tear.
+	binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+		// Top-level define supersedes an imported binding (R7RS §5.3.1): the
+		// define overwrites the value in the same slot, so drop the import
+		// *provenance* and a subsequent set! on this binding is permitted.
+		m.Imported = false
+		m.Scopes = symbolScopes
+		if symbolSource != nil {
+			m.Source = symbolSource
+		}
+		if immTop {
+			// Discharge the rebind-stability conclusion from in-unit evidence:
+			// the language now forbids the cross-unit set!/redefine that
+			// StableInUnit alone could not rule out (the set! gate + the
+			// redefine guard above), so StableInUnit becomes a sound basis for
+			// Stable. Off by default.
+			m.Stable = v.StableInUnit
+		}
+		return true
+	})
 	return sym, nil
 }
 
@@ -239,7 +243,10 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	name := v.Name()
 	binding := p.env.GetBinding(name.Sym, name.Scopes())
 	if binding != nil && validate.ProcedureBodyIsCaptureSafe(v, name.Sym.Key, p.env) {
-		binding.EnsureMeta().CaptureSafe = true
+		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+			m.CaptureSafe = true
+			return true
+		})
 	}
 
 	// Step 2: Set up the closure's environment and bytecode template.

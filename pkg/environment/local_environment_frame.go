@@ -113,10 +113,16 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	for _, i := range slots {
 		if matchAny || syntax.ScopesCompatible(p.bindings[i].Scopes(), scopes) {
 			if p.bindings[i].Scopes() == nil && scopes != nil {
-				p.bindings[i].EnsureMeta().Scopes = scopes
+				p.bindings[i].UpdateMeta(func(m *BindingMeta) bool {
+					m.Scopes = scopes
+					return true
+				})
 			}
 			if p.bindings[i].Source() == nil && source != nil {
-				p.bindings[i].EnsureMeta().Source = source
+				p.bindings[i].UpdateMeta(func(m *BindingMeta) bool {
+					m.Source = source
+					return true
+				})
 			}
 			return NewLocalIndex(i, 0), false
 		}

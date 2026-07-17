@@ -23,6 +23,17 @@ type reclaimNode struct {
 	referencesCapture bool          // body invokes a continuation-capturing operator
 	createsEscaping   bool          // body creates a non-immediately-applied closure
 	callees           []reclaimEdge // call sites that impose a capture constraint
+	// rebindStable reports that this producer is provably non-rebindable: it is
+	// StableInUnit (defined-once ∧ never-set!) AND the namespace enforces immutable
+	// top-level, so a cross-unit redefine/set! is forbidden. This is exactly the
+	// same-unit callee's binding IsStable() the pre-fix classifier read (for a
+	// same-unit define, Imported is false and Stable = StableInUnit ∧ immutable-top),
+	// recomputed from thread-local state — the ValidatedDefine and the
+	// engine-construction-time flag — so the classifier never consults the shared
+	// *Binding. That decoupling is what lets it run concurrently with another
+	// compile that owns the same name (T1.5), and it keeps the classifier sound in
+	// isolation rather than relying on the caller's gate.
+	rebindStable bool
 }
 
 // reclaimEdge is one resolved call site that constrains reclaimability. A call

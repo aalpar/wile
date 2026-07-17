@@ -19,21 +19,22 @@ import (
 	"testing"
 )
 
-// TestFrameReclaimSeam_RealScopeResolution exercises the Stable→classifier seam
+// TestFrameReclaimSeam_RealScopeResolution exercises the frame-reclaim classifier
 // through the REAL compile pipeline under `go test ./...` (no WILE_FRAME_RECLAIM_
-// MEASURE gate, no benchmark execution). The gated measurement harness is the
-// only OTHER place real (compiled, hygienic) scopes flow into the classifier's
-// immutability read, so without this the split-key path — `byName[name]` resolves
-// the edge TARGET by Key while `env.GetBinding(sym, sym.Scopes())` resolves
-// IMMUTABILITY by scope (plan OQ-1) — has zero CI coverage. The internal/validate
-// unit tests all use nil scopes (match-any), which cannot exercise scope-aware
-// resolution.
+// MEASURE gate, no benchmark execution). Real (compiled, hygienic) scopes flow
+// into the classifier here: capture-safe primitive callees (<, +, -) resolve
+// through `env.GetBinding(sym, sym.Scopes())`, and the lexical shadow guard reads
+// the same scopes — the internal/validate unit tests use nil scopes (match-any)
+// and cannot exercise scope-aware resolution.
 //
-// This pins the SAFE direction: a genuine self-recursive define's self-edge must
-// resolve through real scopes to its own Stable binding ⇒ reclaimable when the
-// flag stamps Stable, not reclaimable when it does not. classifyCompiled also
-// runs assertStampLanded, so the stamp-landed positive control is exercised here
-// too.
+// This pins the SAFE direction on a genuine self-recursive define. The same-unit
+// self-edge's immutability comes from the callee node's rebindStable
+// (StableInUnit ∧ immutable-top), computed thread-locally — NOT from a read of the
+// callee's shared *Binding (the T1.5 follow-on removed that dependency and its
+// transient pre-stamp). So fib is reclaimable under the flag and not reclaimable
+// without it, because rebindStable carries the flag conjunct. classifyCompiled
+// also runs assertStampLanded, so the binding stamp (still produced for the
+// redefine/set! guards) is verified here too.
 func TestFrameReclaimSeam_RealScopeResolution(t *testing.T) {
 	ctx := context.Background()
 	// fib over imported, capture-safe primitives (<, +, -); its only same-unit

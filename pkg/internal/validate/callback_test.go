@@ -71,7 +71,11 @@ func TestCallbackIsCaptureSafe(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	sym := syntax.NewSyntaxSymbol("unstable", nil).Sym
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-	env.GetBinding(sym, nil).EnsureMeta().CaptureSafe = true // CaptureSafe but not Imported/Stable
+	// CaptureSafe but not Imported/Stable.
+	env.GetBinding(sym, nil).UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.CaptureSafe = true
+		return true
+	})
 	if CallbackIsCaptureSafe(symRef("unstable"), env) {
 		t.Errorf("a CaptureSafe-but-rebindable symbol must NOT be capture-safe (Stable is required)")
 	}

@@ -95,12 +95,18 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	symbolScopes := keywordSym.Scopes()
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil {
-		if symbolScopes != nil {
-			binding.EnsureMeta().Scopes = symbolScopes
-		}
-		if docstring != "" {
-			binding.EnsureMeta().Doc = docstring
-		}
+		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+			changed := false
+			if symbolScopes != nil {
+				m.Scopes = symbolScopes
+				changed = true
+			}
+			if docstring != "" {
+				m.Doc = docstring
+				changed = true
+			}
+			return changed
+		})
 	}
 
 	err = expandEnv.SetOwnGlobalValue(globalIndex, closure)

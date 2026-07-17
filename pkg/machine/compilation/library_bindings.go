@@ -70,19 +70,21 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 	if target == nil {
 		return
 	}
-	m := target.EnsureMeta()
-	m.Imported = true
-	if source != nil {
-		m.CaptureSafe = source.IsCaptureSafe()
-		// Carry the docstring across the import boundary so ,doc and the doc
-		// tooling find it on the imported binding (e.g. a (wile control) macro
-		// documented at its define-syntax site). The copy path installs only the
-		// value, so without this the docstring would be lost on import.
-		doc := source.Doc()
-		if doc != "" {
-			m.Doc = doc
+	target.UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.Imported = true
+		if source != nil {
+			m.CaptureSafe = source.IsCaptureSafe()
+			// Carry the docstring across the import boundary so ,doc and the doc
+			// tooling find it on the imported binding (e.g. a (wile control) macro
+			// documented at its define-syntax site). The copy path installs only
+			// the value, so without this the docstring would be lost on import.
+			doc := source.Doc()
+			if doc != "" {
+				m.Doc = doc
+			}
 		}
-	}
+		return true
+	})
 	// sourceLib is the library being imported FROM; the inline-HOF stamp is gated
 	// on it (identity), not just the export name — see stampImportedInlineHOF.
 	stampImportedInlineHOF(target, exportName, sourceLib)
