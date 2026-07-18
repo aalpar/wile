@@ -91,7 +91,7 @@ func getOptionalOutputPort(mc machine.CallContext, argIndex int) (*values.PortOb
 		return nil, err
 	}
 	if !found {
-		return resolveCurrentOutputPort(mc), nil
+		return resolveCurrentOutputPort(mc)
 	}
 	_, ok := p.AsWriter()
 	if !ok {
@@ -148,7 +148,10 @@ func getOptionalInputPort(mc machine.CallContext, argIndex int) (*values.PortObj
 		return nil, nil, err
 	}
 	if !found {
-		port := resolveCurrentInputPort(mc)
+		port, err := resolveCurrentInputPort(mc)
+		if err != nil {
+			return nil, nil, err
+		}
 		rr, _ := port.AsRuneReader()
 		return port, rr, nil
 	}

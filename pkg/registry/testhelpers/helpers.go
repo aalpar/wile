@@ -142,3 +142,29 @@ func RunSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (v
 	}
 	return RunSchemeCodeWithEnvAndContext(ctx, t, env, code)
 }
+
+// RunSchemeCodeExpectCatchable asserts that evaluating code raises a condition
+// that Scheme `guard` can catch — not an uncatchable host-boundary panic and not
+// a normal return. It wraps code in `(eq? 'wile-caught (guard (e (#t 'wile-caught)) code))`
+// and requires the result to be #t. A Go panic that escapes RunResumable
+// (recover() != nil here) fails the test, distinguishing "raised a catchable
+// condition" from "panicked"; a non-nil error means the condition escaped guard
+// (uncatchable). Distinct from RunSchemeCodeExpectError, which scores a recovered
+// panic as a satisfied error.
+func RunSchemeCodeExpectCatchable(t *testing.T, code string) {
+	t.Helper()
+	defer func() {
+		r := recover()
+		if r != nil {
+			t.Fatalf("primitive panicked (uncatchable) for %q: %v", code, r)
+		}
+	}()
+	guarded := fmt.Sprintf("(eq? 'wile-caught (guard (e (#t 'wile-caught)) %s))", code)
+	result, err := RunSchemeCode(t, guarded)
+	if err != nil {
+		t.Fatalf("condition escaped guard (uncatchable) for %q: %v", code, err)
+	}
+	if result != values.TrueValue {
+		t.Fatalf("expected a caught condition (#t) for %q, got %v", code, result)
+	}
+}
