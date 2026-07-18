@@ -24,14 +24,19 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EXAMPLES_DIR="$REPO_ROOT/examples"
 EXCLUDE_FILE="$EXAMPLES_DIR/.ci-exclude"
 
-# Detect timeout command (GNU timeout or macOS gtimeout via coreutils)
-if command -v timeout >/dev/null 2>&1; then
-    TIMEOUT_CMD=(timeout --kill-after=5)
-elif command -v gtimeout >/dev/null 2>&1; then
-    TIMEOUT_CMD=(gtimeout --kill-after=5)
-else
-    TIMEOUT_CMD=()
-fi
+# Detect a timeout command that actually supports --kill-after. Presence is not
+# enough: BSD/MacPorts ship a `timeout` that rejects the flag, and picking it by
+# name alone makes EVERY example fail with a usage error. Probe each candidate
+# and take the first that works; gtimeout (coreutils) is tried first because on
+# macOS it is the GNU one. No candidate means run without a timeout.
+TIMEOUT_CMD=()
+for candidate in gtimeout timeout; do
+    if command -v "$candidate" >/dev/null 2>&1 &&
+       "$candidate" --kill-after=5 1 true >/dev/null 2>&1; then
+        TIMEOUT_CMD=("$candidate" --kill-after=5)
+        break
+    fi
+done
 
 # Load exclusion list (paths relative to examples/, comments and blanks skipped)
 declare -A excluded

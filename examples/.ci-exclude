@@ -3,7 +3,6 @@
 
 # Intentionally demonstrate error conditions and exit non-zero.
 basics/error-source-tracking.scm
-control/exceptions.scm
 
 # Flaky: parallel-map spawns many threads; intermittent timeout on CI runners.
 concurrency/parallel-map.scm

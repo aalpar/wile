@@ -13,6 +13,19 @@
 (display "=== Exception Handling in Wile ===\n")
 (newline)
 
+;; Helper for string-contains (not in R7RS-small)
+(define (string-contains str substr)
+  (define (search s-pos)
+    (cond
+     ((> (+ s-pos (string-length substr)) (string-length str)) #f)
+     ((string=? (substring str s-pos (+ s-pos (string-length substr))) substr) #t)
+     (else (search (+ s-pos 1)))))
+  (search 0))
+
+;; Helper for make-error
+(define (make-error msg)
+  (error msg))
+
 ;; Example 1: Basic guard
 (display "Example 1: Catching exceptions with guard\n")
 (display "  ")
@@ -68,16 +81,19 @@
 ;; Example 4: with-exception-handler
 (display "Example 4: with-exception-handler (handler doesn't return)\n")
 (display "  ")
-(with-exception-handler
-  (lambda (err)
-    (display "Handler called: ")
-    (display (error-object-message err))
-    (newline)
-    (display "  Handler exiting via continuation\n"))
-  (lambda ()
-    (display "Body executing...\n  ")
-    (raise (make-error "Test error"))
-    (display "This won't print\n")))
+(call-with-current-continuation
+  (lambda (k)
+    (with-exception-handler
+      (lambda (err)
+        (display "Handler called: ")
+        (display (error-object-message err))
+        (newline)
+        (display "  Handler exiting via continuation\n")
+        (k #f))
+      (lambda ()
+        (display "Body executing...\n  ")
+        (raise (make-error "Test error"))
+        (display "This won't print\n")))))
 (newline)
 
 ;; Example 5: Error object inspection
@@ -101,11 +117,11 @@
 (define (validate-age age)
   (cond
    ((not (number? age))
-    (error 'type-error "Age must be a number" age))
+    (error "Age must be a number" 'type-error age))
    ((< age 0)
-    (error 'value-error "Age cannot be negative" age))
+    (error "Age cannot be negative" 'value-error age))
    ((> age 150)
-    (error 'value-error "Age unrealistic" age))
+    (error "Age unrealistic" 'value-error age))
    (else age)))
 
 (define (test-validate age)
@@ -176,12 +192,12 @@
 (display "Example 8: Using exceptions for control flow (break pattern)\n")
 (define (find-first pred lst)
   (guard (found
-          ((equal? 'found (car (error-object-irritants found)))
-           (cadr (error-object-irritants found))))
+          ((equal? "found" (error-object-message found))
+           (car (error-object-irritants found))))
     (for-each
      (lambda (x)
        (when (pred x)
-         (error 'found 'found x)))
+         (error "found" x)))
      lst)
     #f))
 
@@ -233,19 +249,6 @@
          (newline)))
   (safe-sqrt -4))
 (newline)
-
-;; Helper for string-contains (not in R7RS-small)
-(define (string-contains str substr)
-  (define (search s-pos)
-    (cond
-     ((> (+ s-pos (string-length substr)) (string-length str)) #f)
-     ((string=? (substring str s-pos (+ s-pos (string-length substr))) substr) #t)
-     (else (search (+ s-pos 1)))))
-  (search 0))
-
-;; Helper for make-error
-(define (make-error msg)
-  (error msg))
 
 ;; Summary
 (display "=== Summary ===\n")
