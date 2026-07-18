@@ -48,6 +48,15 @@ var MutableVectorStringMapSource string
 //go:embed bootstrap_maps_immutable.scm
 var ImmutableVectorStringMapSource string
 
+// LateBootstrapMacroSource holds the bootstrap macros whose templates reference
+// bootstrap PROCEDURES (unless -> not, guard -> with-exception-handler). It loads
+// AFTER bootstrap_procedures.scm so those free identifiers pin to the sealed base
+// at macro-definition time (like case -> memv, a Go primitive) instead of degrading
+// to a nil pin a use-site redefinition can capture (R7RS 4.3.2).
+//
+//go:embed bootstrap_macros_late.scm
+var LateBootstrapMacroSource string
+
 // addBootstrapSources registers bootstrap_macros.scm (define-syntax forms) as a macro
 // source and bootstrap_procedures.scm (define forms) as a procedure source. The split
 // is the phase boundary: macros load into the mutable expand frame, procedures into the

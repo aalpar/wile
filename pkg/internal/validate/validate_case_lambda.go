@@ -74,7 +74,14 @@ func validateCaseLambdaClause(ctx context.Context, env *environment.EnvironmentF
 	// Validate parameters
 	params := validateParams(elements[0], result)
 
-	body, ok := validateBodySlice(ctx, env, elements, 1, result)
+	// Bind clause parameters in a child validation env so body expressions
+	// detect parameter shadowing of special forms (R7RS §4.2.2), mirroring
+	// validateLambda. Without this, a parameter named after a special-form
+	// keyword is misvalidated as the keyword rather than as a call to the
+	// bound parameter.
+	childEnv := createLambdaValidationEnv(env, params)
+
+	body, ok := validateBodySlice(ctx, childEnv, elements, 1, result)
 	if !ok {
 		return nil
 	}

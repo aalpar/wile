@@ -1791,3 +1791,56 @@ func TestLetDuplicateBindingWithDifferentScopes(t *testing.T) {
 			qt.Commentf("letrec: two 'x' bindings with different scopes should not be duplicates; errors: %v", result.Errors))
 	})
 }
+
+// TestValidateCaseLambdaShadowing tests that case-lambda clause parameters
+// shadow special forms (R7RS §4.2.2), mirroring TestValidateShadowing for lambda.
+func TestValidateCaseLambdaShadowing(t *testing.T) {
+	tests := []struct {
+		name  string
+		input values.Value
+	}{
+		{
+			// (case-lambda ((quote) (quote))) — quote param shadows special form.
+			// As special form: (quote) fails (requires 1 arg).
+			// As call: (quote) is a valid 0-arg call.
+			name: "case-lambda param shadows quote",
+			input: values.List(
+				values.NewSymbol("case-lambda"),
+				values.List(
+					values.List(values.NewSymbol("quote")),
+					values.List(values.NewSymbol("quote")),
+				),
+			),
+		},
+		{
+			// (case-lambda ((if) (if))) — if param shadows special form.
+			// As special form: (if) fails (requires 2-3 args).
+			// As call: (if) is a valid 0-arg call.
+			name: "case-lambda param shadows if",
+			input: values.List(
+				values.NewSymbol("case-lambda"),
+				values.List(
+					values.List(values.NewSymbol("if")),
+					values.List(values.NewSymbol("if")),
+				),
+			),
+		},
+	}
+
+	env := environment.NewNamespace().Runtime()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), env, makeSyntax(tt.input))
+			c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+			caseLambda, ok := result.Expr.(*ValidatedCaseLambda)
+			c.Assert(ok, qt.IsTrue)
+			clause := caseLambda.Clauses()[0]
+			// Clause body should be a call (param shadows the special form).
+			_, isCall := clause.Body()[0].(*ValidatedCall)
+			c.Assert(isCall, qt.IsTrue,
+				qt.Commentf("expected clause body to be a call (shadowed), got %T", clause.Body()[0]))
+		})
+	}
+}

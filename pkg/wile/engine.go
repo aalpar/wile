@@ -1003,6 +1003,15 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap procedures")
 	}
 
+	// Late macros reference bootstrap procedures (unless -> not, guard ->
+	// with-exception-handler); load them into the expand frame AFTER procedures so
+	// their free identifiers pin to the sealed base, not a nil pin (R7RS 4.3.2).
+	// Mirrors internal/bootstrap's sequence — both paths must stay in step.
+	err = loadBootstrapMacros(ctx, env, []string{core.LateBootstrapMacroSource}, bootstrapResolver)
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load late bootstrap macros")
+	}
+
 	// Stamp the bootstrap-resident curated tail HOFs (for-each, vector-map, …)
 	// with the InlineHOF capability, now that the bootstrap procedures are bound.
 	// A post-load metadata sweep, like the doc injection below. Read by the

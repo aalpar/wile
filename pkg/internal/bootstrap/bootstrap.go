@@ -196,6 +196,14 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap procedures")
 	}
 
+	// Late macros reference bootstrap procedures (unless -> not, guard ->
+	// with-exception-handler); load them into the expand frame AFTER procedures so
+	// their free identifiers pin to the sealed base, not a nil pin (R7RS 4.3.2).
+	err = loadBootstrapMacros(ctx, env, []string{core.LateBootstrapMacroSource}, bootstrapResolver)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "error loading late bootstrap macros")
+	}
+
 	// Set the default file resolver for runtime include/load operations,
 	// but only if no resolver has been configured (e.g., by WithSourceFS).
 	// Invariant: if FileResolver() is nil here after WithSourceFS was called,
