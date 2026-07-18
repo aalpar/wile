@@ -421,6 +421,14 @@ func (p *lineReader) ReadLine() (string, error) {
 	for {
 		n, err := p.f.Read(buf)
 		if err != nil {
+			// A final line with no trailing newline is still a line: flush what
+			// is buffered before propagating EOF, or the last form is silently
+			// swallowed. The next call sees an empty buffer and returns EOF.
+			if errors.Is(err, io.EOF) && p.r.Len() > 0 {
+				line := p.r.String()
+				p.r.Reset()
+				return line, nil
+			}
 			return "", err
 		}
 		if n == 0 {

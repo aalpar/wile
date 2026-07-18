@@ -238,7 +238,7 @@ func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (sy
 	case *syntax.SyntaxPair:
 		car := stx.SyntaxCar()
 		cdr := stx.SyntaxCdr()
-		result, err = p.ExpandSyntaxOrProcedureCall(car, cdr)
+		result, err = p.ExpandSyntaxOrProcedureCall(car, cdr, stx.SourceContext())
 		if err != nil {
 			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "expand: failed to expand list expression"))
 		}
@@ -260,7 +260,7 @@ func (p *ExpanderTimeContinuation) ExpandSymbol(expr *syntax.SyntaxSymbol) (synt
 // ExpandSyntaxOrProcedureCall handles a list expression. The car may be a
 // symbol (possibly a macro), a nested pair (computed procedure), or a
 // self-evaluating value (like in quoted data or malformed expressions).
-func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(car syntax.SyntaxValue, cdr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(car syntax.SyntaxValue, cdr syntax.SyntaxValue, parentCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
 	switch v := car.(type) {
 	case *syntax.SyntaxPair:
 		// Car is a pair - expand it (computed procedure), then expand arguments
@@ -284,8 +284,15 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxOrProcedureCall(car syntax.Syntax
 		}
 		return syntax.NewSyntaxCons(car, rest1, car.SourceContext()), nil
 	default:
-		// Unknown car type - return expression unchanged
-		return syntax.NewSyntaxCons(car, cdr, car.SourceContext()), nil
+		// Unknown car type (e.g. the empty-list operator in `(())`) - the
+		// empty-list singleton carries no source context, so fall back to the
+		// enclosing form's context rather than emitting a location-less node
+		// that codegen would then mislocate to the parent form.
+		ctx := car.SourceContext()
+		if ctx == nil {
+			ctx = parentCtx
+		}
+		return syntax.NewSyntaxCons(car, cdr, ctx), nil
 	}
 }
 

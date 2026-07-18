@@ -72,3 +72,33 @@ func TestRuntimeErrorSourceProvenance(t *testing.T) {
 		})
 	}
 }
+
+// TestEmptyListOperatorSourceLocation verifies that a form whose operator is the
+// empty list — (()) — localizes its runtime error to its own line, not the
+// enclosing (begin ...) wrapper. The empty-list singleton carries no source
+// context, so the expander must fall back to the enclosing form's context when
+// rebuilding the call node. Regression test for finding 5.3.
+func TestEmptyListOperatorSourceLocation(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer eng.Close()
+
+	// (()) sits on line 3; the two filler forms push it down so a line-1
+	// mislocation is distinguishable from the correct line-3 report.
+	const code = "(+ 1 2)\n(+ 3 4)\n(())"
+	_, err = eng.EvalMultipleWithSource(ctx, code, "prog.scm")
+	if err == nil {
+		t.Fatal("expected runtime error")
+	}
+	var re *RuntimeError
+	if !errors.As(err, &re) {
+		t.Fatalf("expected *RuntimeError, got %T: %v", err, err)
+	}
+	const wantPrefix = "prog.scm:3:"
+	if !strings.HasPrefix(re.Source, wantPrefix) {
+		t.Errorf("RuntimeError.Source = %q, want prefix %q", re.Source, wantPrefix)
+	}
+}
