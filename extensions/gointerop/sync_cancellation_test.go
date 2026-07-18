@@ -161,3 +161,78 @@ func TestWithTimeoutInterruptsParkedRWMutex(t *testing.T) {
 
 	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewSymbol("timed-out"))
 }
+
+// TestTerminateUnparksCVWait is the cv-path analogue of
+// TestTerminateUnparksBlockedSyncPrimitive: a thread parked in an UNTIMED
+// (mutex-unlock! m cv) is reaped by thread-terminate! instead of leaking its
+// goroutine. Before ConditionVariable wait grew a ctx arm, the parked <-ch had no
+// cancellation edge: thread-terminate! cancelled the thread ctx but nothing closed
+// the channel, so thread-join! raised JoinTimeoutException. Reaching the
+// terminated-thread exception proves the goroutine exited on ctx cancellation.
+func TestTerminateUnparksCVWait(t *testing.T) {
+	engine := newThreadedEngine(t)
+
+	code := `
+(define ready (make-atomic #f))
+(define m (make-mutex))
+(define cv (make-condition-variable))
+(define th (make-thread (lambda ()
+  (mutex-lock! m)
+  (atomic-store! ready 'here)
+  (mutex-unlock! m cv))))
+(thread-start! th)
+(let loop ()
+  (if (eq? (atomic-load ready) 'here)
+      #t
+      (begin (thread-yield!) (loop))))
+(thread-terminate! th)
+(thread-join! th 5)
+`
+	expr, err := engine.Parse(context.Background(), "(begin "+code+" )")
+	qt.Assert(t, err, qt.IsNil)
+	_, err = engine.Eval(context.Background(), expr)
+
+	qt.Assert(t, err, qt.IsNotNil)
+	var terminated *values.TerminatedThreadException
+	qt.Assert(t, errors.As(err, &terminated), qt.IsTrue,
+		qt.Commentf("want the SRFI-18 terminated-thread exception; a "+
+			"JoinTimeoutException here means the goroutine leaked parked on the "+
+			"condition variable with no cancellable form. got: %v", err))
+}
+
+// TestUnlockCVDeliversSignalAcrossThreads guards the SRFI-18 condition-wait
+// rendezvous: a consumer that releases the mutex and waits on the cv is woken by a
+// producer that (holding the same mutex) sets the predicate and signals. The
+// consumer uses the standard predicate re-check loop with an UNTIMED wait, so a lost
+// wakeup would hang here (caught by the test timeout). Because the waiter is now
+// enqueued before the mutex is released, the signal the producer sends while blocked
+// acquiring the mutex cannot be lost.
+//
+// The predicate is an atomic box, not a top-level `set!`: top-level bindings are
+// immutable by default, so the mutation has to live in a mutable cell. The mutex
+// still guards the predicate transition — the box is the storage, not the
+// synchronization.
+func TestUnlockCVDeliversSignalAcrossThreads(t *testing.T) {
+	engine := newThreadedEngine(t)
+
+	result := eval(t, engine, `
+(define m (make-mutex))
+(define cv (make-condition-variable))
+(define ready (make-atomic #f))
+(define consumer (make-thread (lambda ()
+  (mutex-lock! m)
+  (let loop ()
+    (if (atomic-load ready)
+        (begin (mutex-unlock! m) 'received)
+        (begin (mutex-unlock! m cv) (mutex-lock! m) (loop)))))))
+(define producer (make-thread (lambda ()
+  (mutex-lock! m)
+  (atomic-store! ready #t)
+  (condition-variable-signal! cv)
+  (mutex-unlock! m))))
+(thread-start! consumer)
+(thread-start! producer)
+(thread-join! consumer)
+`)
+	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewSymbol("received"))
+}
