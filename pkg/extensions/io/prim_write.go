@@ -146,7 +146,10 @@ func PrimWriteString(mc machine.CallContext) error {
 		return err
 	}
 	if !found {
-		port = resolveCurrentOutputPort(mc)
+		port, err = resolveCurrentOutputPort(mc)
+		if err != nil {
+			return err
+		}
 	} else {
 		_, ok := port.AsWriter()
 		if !ok {

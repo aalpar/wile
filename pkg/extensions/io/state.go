@@ -101,8 +101,8 @@ func (p *State) SetOutputPort(port *values.PortObject) {
 
 // GetInputPort returns this engine's base input port, or a wrapped sentinel if
 // the parameter does not hold a textual input port. For non-VM callers (tests,
-// embedders) that read the base value without the panic-on-error contract of
-// resolveCurrentInputPort (whose panic is caught by the VM's recover).
+// embedders) that read the base value without the resolve-time error contract of
+// resolveCurrentInputPort.
 func (p *State) GetInputPort() (*values.PortObject, error) {
 	return currentTextualInputPort("current-input-port", p.inPort.Value())
 }
@@ -171,50 +171,40 @@ func currentTextualOutputPort(name string, v values.Value) (*values.PortObject, 
 	return p, nil
 }
 
-// resolveCurrentOutputPort returns the effective current output port,
-// checking continuation marks (from parameterize) before falling back
-// to the base value. Panics with a wrapped error if the resolved value
-// is not a textual output port — the panic is caught by
-// OperationForeignFunctionCall's recover and converted to a Scheme
-// exception.
-func resolveCurrentOutputPort(cc machine.CallContext) *values.PortObject {
+// resolveCurrentOutputPort returns the effective current output port, checking
+// continuation marks (from parameterize) before falling back to the base value.
+// Returns a sentinel-wrapped error (errors.Is-matchable) if the resolved value is
+// not a textual output port, so the calling primitive surfaces it as a
+// guard-catchable Scheme condition rather than an uncatchable host-boundary panic.
+func resolveCurrentOutputPort(cc machine.CallContext) (*values.PortObject, error) {
 	mc, err := machine.RequireMachineContext(cc, "current-output-port")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	st, err := stateFrom(cc)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	v := mc.ResolveParameterValue(st.outPort)
-	p, err := currentTextualOutputPort("current-output-port", v)
-	if err != nil {
-		panic(err)
-	}
-	return p
+	return currentTextualOutputPort("current-output-port", v)
 }
 
-// resolveCurrentInputPort returns the effective current input port,
-// checking continuation marks (from parameterize) before falling back
-// to the base value. Panics with a wrapped error if the resolved value
-// is not a textual input port — the panic is caught by
-// OperationForeignFunctionCall's recover and converted to a Scheme
-// exception.
-func resolveCurrentInputPort(cc machine.CallContext) *values.PortObject {
+// resolveCurrentInputPort returns the effective current input port, checking
+// continuation marks (from parameterize) before falling back to the base value.
+// Returns a sentinel-wrapped error (errors.Is-matchable) if the resolved value is
+// not a textual input port, so the calling primitive surfaces it as a
+// guard-catchable Scheme condition rather than an uncatchable host-boundary panic.
+func resolveCurrentInputPort(cc machine.CallContext) (*values.PortObject, error) {
 	mc, err := machine.RequireMachineContext(cc, "current-input-port")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	st, err := stateFrom(cc)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	v := mc.ResolveParameterValue(st.inPort)
-	p, err := currentTextualInputPort("current-input-port", v)
-	if err != nil {
-		panic(err)
-	}
-	return p
+	return currentTextualInputPort("current-input-port", v)
 }
 
 // readSyntaxCached returns the next datum from the port's cached parser. It

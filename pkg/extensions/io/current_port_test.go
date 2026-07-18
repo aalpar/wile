@@ -29,8 +29,9 @@ import (
 // TestGetCurrentPortReturnsErrorOnNonPort pins R10: the GetCurrent*Port save/
 // restore helpers are called from tests outside any VM recover, so a panic on a
 // non-port parameter value crashes the caller. They must return a wrapped
-// sentinel error instead. (Production code uses resolveCurrent*Port, which keeps
-// its panic-by-design contract because the VM recovers it.)
+// sentinel error instead. (Production code uses resolveCurrent*Port, which now
+// returns the same wrapped sentinel so a wrong-typed current port is a
+// guard-catchable Scheme condition.)
 func TestGetCurrentPortReturnsErrorOnNonPort(t *testing.T) {
 	t.Run("input", func(t *testing.T) {
 		st := NewState()
