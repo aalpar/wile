@@ -55,12 +55,6 @@ var nonDestructiveBangs = map[string]string{
 	"condition-variable-signal!":       "condition signalling",
 	"condition-variable-broadcast!":    "condition signalling",
 	"condition-variable-specific-set!": "per-condvar slot",
-	"channel-send!":                    "message passing, not in-place update",
-	"channel-try-send!":                "message passing, not in-place update",
-	"channel-close!":                   "channel lifecycle",
-	"wait-group-add!":                  "counter lifecycle",
-	"wait-group-done!":                 "counter lifecycle",
-	"wait-group-wait!":                 "blocking, not a write",
 	"once-do!":                         "run-once latch",
 
 	// Process / environment: outside the value world entirely.

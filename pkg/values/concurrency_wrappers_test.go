@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -39,17 +40,14 @@ func TestRWMutex_DefaultName(t *testing.T) {
 
 func TestRWMutex_LockUnlock(t *testing.T) {
 	m := values.NewRWMutex("test")
-	m.Lock()
-	qt.Assert(t, m, qt.Not(qt.IsNil)) // verify lock held
+	qt.Assert(t, m.LockContext(context.Background()), qt.IsTrue)
 	m.Unlock()
 }
 
 func TestRWMutex_RLockRUnlock(t *testing.T) {
 	m := values.NewRWMutex("test")
-	m.RLock()
-	qt.Assert(t, m, qt.Not(qt.IsNil)) // verify rlock held
-	m.RLock()
-	qt.Assert(t, m.Name(), qt.Equals, "test") // verify second rlock held
+	qt.Assert(t, m.RLockContext(context.Background()), qt.IsTrue)
+	qt.Assert(t, m.RLockContext(context.Background()), qt.IsTrue) // second concurrent reader
 	m.RUnlock()
 	m.RUnlock()
 }
@@ -147,51 +145,4 @@ func TestOnce_SchemeString(t *testing.T) {
 
 	var nilO *values.Once
 	qt.Assert(t, nilO.SchemeString(), qt.Equals, "#<once:void>")
-}
-
-// --- WaitGroup ---
-
-func TestWaitGroup_NewWaitGroup(t *testing.T) {
-	wg := values.NewWaitGroup()
-	qt.Assert(t, wg, qt.Not(qt.IsNil))
-	qt.Assert(t, wg.ID() > 0, qt.IsTrue)
-}
-
-func TestWaitGroup_AddDoneWait(t *testing.T) {
-	wg := values.NewWaitGroup()
-	wg.Add(1)
-
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	wg.Done()
-	<-done // should not hang
-}
-
-func TestWaitGroup_IsVoid(t *testing.T) {
-	wg := values.NewWaitGroup()
-	qt.Assert(t, wg.IsVoid(), qt.IsFalse)
-
-	var nilWG *values.WaitGroup
-	qt.Assert(t, nilWG.IsVoid(), qt.IsTrue)
-}
-
-func TestWaitGroup_EqualTo(t *testing.T) {
-	wg1 := values.NewWaitGroup()
-	wg2 := values.NewWaitGroup()
-	qt.Assert(t, wg1.EqualTo(wg1), qt.IsTrue)
-	qt.Assert(t, wg1.EqualTo(wg2), qt.IsFalse)
-	qt.Assert(t, wg1.EqualTo(values.NewInteger(1)), qt.IsFalse)
-}
-
-func TestWaitGroup_SchemeString(t *testing.T) {
-	wg := values.NewWaitGroup()
-	s := wg.SchemeString()
-	qt.Assert(t, strings.Contains(s, "wait-group"), qt.IsTrue)
-
-	var nilWG *values.WaitGroup
-	qt.Assert(t, nilWG.SchemeString(), qt.Equals, "#<wait-group:void>")
 }

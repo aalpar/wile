@@ -28,9 +28,8 @@ import (
 // Terminate must close done when it ends a thread that was never started —
 // nothing else ever will, and Join parks on done before reading the outcome, so
 // such a thread would block its joiner forever. That makes two closers, and a
-// double close is a fatal host panic no recover boundary can catch (the same
-// hazard class as the channel-send! TOCTOU; see
-// TestChannel_ConcurrentSendClose_NoPanic).
+// double close of the done channel is a fatal host panic no recover boundary can
+// catch.
 //
 // The two closers are claimed to be mutually exclusive, and done is claimed to
 // always close. Both rest on Start making the ThreadNew -> ThreadRunnable

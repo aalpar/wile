@@ -231,8 +231,6 @@ func TestTypeSentinelsCarryTypeName(t *testing.T) {
 		"ErrNotAMutex":                 werr.ErrNotAMutex,
 		"ErrNotAConditionVariable":     werr.ErrNotAConditionVariable,
 		"ErrNotATime":                  werr.ErrNotATime,
-		"ErrNotAChannel":               werr.ErrNotAChannel,
-		"ErrNotAWaitGroup":             werr.ErrNotAWaitGroup,
 		"ErrNotARWMutex":               werr.ErrNotARWMutex,
 		"ErrNotAOnce":                  werr.ErrNotAOnce,
 		"ErrNotAnAtomic":               werr.ErrNotAnAtomic,

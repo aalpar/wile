@@ -1471,32 +1471,6 @@ Requires threads extension. Threads map to Go goroutines.
 
 Requires gointerop extension.
 
-**Channels** — Go-style CSP message passing:
-
-| Procedure | Description |
-|-----------|-------------|
-| `(make-channel)` | Unbuffered channel |
-| `(make-channel capacity)` | Buffered channel |
-| `(channel? x)` | Is a channel |
-| `(channel-send! ch v)` | Blocking send |
-| `(channel-receive ch)` | Blocking receive |
-| `(channel-try-send! ch v)` | Non-blocking send (returns `#t`/`#f`) |
-| `(channel-try-receive ch)` | Non-blocking receive (returns value or `#f`) |
-| `(channel-close! ch)` | Close channel |
-| `(channel-closed? ch)` | Is closed |
-| `(channel-length ch)` | Buffered element count |
-| `(channel-capacity ch)` | Buffer capacity |
-
-**WaitGroup** — synchronization counter:
-
-| Procedure | Description |
-|-----------|-------------|
-| `(make-wait-group)` | Create WaitGroup |
-| `(wait-group? x)` | Is WaitGroup |
-| `(wait-group-add! wg n)` | Add n to counter |
-| `(wait-group-done! wg)` | Decrement counter |
-| `(wait-group-wait! wg)` | Block until zero |
-
 **RWMutex** — read-write lock:
 
 | Procedure | Description |
@@ -1568,7 +1542,7 @@ Extension primitives are also importable as R7RS libraries when `WithLibraryPath
 | `(wile files)` | File I/O |
 | `(wile process)` | Process execution, subprocess management |
 | `(wile threads)` | SRFI-18 threading |
-| `(wile gointerop)` | Go channels, WaitGroup, RWMutex, Once, Atomic |
+| `(wile gointerop)` | Go concurrency: RWMutex, Once, Atomic |
 | `(wile introspection)` | Environment introspection |
 
 Import modifiers — `only`, `except`, `prefix`, `rename` — work on all libraries:
@@ -1684,7 +1658,7 @@ Racket-style `call-with-continuation-prompt`, `abort-current-continuation`, and 
 
 ### Go Concurrency Primitives
 
-Channels, WaitGroups, RWMutexes, Once, Atomic values — backed by Go's `sync` and channel primitives. Available via `(wile gointerop)`.
+RWMutexes, Once, Atomic values — backed by Go's `sync` package (RWMutex acquisition is a Wile-owned, cancellation-aware state machine). Available via `(wile gointerop)`.
 
 ### Phase Control
 
@@ -1710,13 +1684,13 @@ Channels, WaitGroups, RWMutexes, Once, Atomic values — backed by Go's `sync` a
 
 R7RS requires these to return `#f` when reading would block. Wile always returns `#t` because Go's `io.Reader` does not expose readiness status.
 
-**Impact**: Low. These predicates are designed for select-style event loops, a pattern superseded by channel-based concurrency. For non-blocking I/O patterns in Wile, use threads with channels:
+**Impact**: Low. These predicates are designed for select-style event loops, a pattern superseded by async-style concurrency. For non-blocking I/O patterns in Wile, read on a thread and publish the result through an atomic box:
 
 ```scheme
-(let ((ch (make-channel)))
+(let ((slot (make-atomic #f)))
   (thread-start!
-    (make-thread (lambda () (channel-send! ch (read-char port)))))
-  (channel-try-receive ch))
+    (make-thread (lambda () (atomic-store! slot (read-char port)))))
+  (atomic-load slot))  ; poll, or join the thread when the value is needed
 ```
 
 This is the only known semantic difference from R7RS-small.

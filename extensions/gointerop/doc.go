@@ -14,19 +14,6 @@
 
 // Package gointerop provides Go concurrency primitive wrappers.
 //
-// # Channels
-//
-//   - make-channel, channel?
-//   - channel-send!, channel-receive
-//   - channel-try-send!, channel-try-receive
-//   - channel-close!
-//
-// # Wait Groups
-//
-//   - make-wait-group, wait-group?
-//   - wait-group-add!, wait-group-done!
-//   - wait-group-wait!
-//
 // # Read-Write Mutexes
 //
 //   - make-rw-mutex, rw-mutex?

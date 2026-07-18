@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Go Interop Primitives for Scheme
-// Exposes Go's concurrency primitives: channels, WaitGroup, RWMutex, Once, AtomicBox
+// Exposes Go's concurrency primitives: RWMutex, Once, AtomicBox
 
 package gointerop
 
@@ -28,252 +28,28 @@ import (
 )
 
 // =============================================================================
-// Channel Primitives
+// Blocking-lock cancellation
 // =============================================================================
 
-// PrimMakeChannel creates a new channel
-// (make-channel [buffer-size]) -> channel
-func PrimMakeChannel(mc machine.CallContext) error {
-	restVal := mc.Arg(0)
-
-	bufferSize := 0
-	// Parse optional buffer-size from rest list
-	if !values.IsEmptyList(restVal) {
-		restList, ok := restVal.(values.Tuple)
-		if ok {
-			n, ok := restList.Car().(*values.Integer)
-			if ok {
-				bufferSize = max(int(n.Value), 0)
-			}
-		}
-	}
-
-	ch := values.NewChannel(bufferSize)
-	mc.SetValue(ch)
-	return nil
-}
-
-// PrimChannelQ tests if an object is a channel
-// (channel? obj) -> boolean
-var PrimChannelQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(*values.Channel)
-	return ok
-})
-
-// PrimChannelSend sends a value on the channel (blocking)
-// (channel-send! ch value) -> void
-//
-// A send on a closed channel raises ErrChannelClosed. A send interrupted by ctx
-// cancellation raises it too — Option A: cancelled is surfaced as closed, rather
-// than as a distinct condition (values.SendOutcome is the seam that keeps the two
-// apart down to this boundary, where the policy discards the difference).
-//
-// What makes Option A safe lives OUTSIDE this package, and differs per
-// cancellation source. Do not weaken the invariants below believing the channel
-// layer protects itself; it does not. channel_cancellation_test.go guards them
-// from this side, and is where a regression surfaces:
-//
-//   - with-timeout: callForeignCached rechecks ctx after every foreign return —
-//     but only when a timer is installed (mc.timer != nil) and the cause is
-//     ErrTimerExpired — and raises ErrTimerInterrupt, so the handler runs before
-//     the laundered error is consumed. Those two gates are why the other two
-//     sources get nothing from it.
-//   - thread-terminate!: Thread.setOutcome is write-once, so a terminated thread
-//     reports its SRFI-18 terminated-thread exception, never this one. (The VM's
-//     ≈1024-op ctx-check window is NOT the protection — a cancelled op in tail
-//     position has no following op to trip it.)
-//   - An embedder-supplied deadline has neither. There the laundering is real and
-//     observable, bounded only by that same ≈1024-op window.
-//
-// See docs/concurrency/channel-cancellation.md for the full argument.
-func PrimChannelSend(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-send!")
-	if err != nil {
-		return err
-	}
-	val := mc.Arg(1)
-
-	if ch.Send(mc.Context(), val) != values.SendSent {
-		// SendClosed, or SendCancelled (Option A: a cancelled send is surfaced
-		// as closed). Anything that is not a positive delivery is an error, not
-		// a silent success.
-		return werr.WrapForeignErrorf(werr.ErrChannelClosed, "channel-send!")
-	}
-
-	mc.SetValue(values.Void)
-	return nil
-}
-
-// PrimChannelReceive receives a value from the channel (blocking)
-// (channel-receive ch) -> value
-//
-// A receive on a closed, drained channel returns Void. A receive interrupted by
-// ctx cancellation raises ErrChannelCancelled — Option B for receive, so a `guard`
-// can tell a cancelled receive from a closed channel rather than both arriving as
-// a silent Void.
-//
-// The one exception is with-timeout, whose ctx cause is ErrTimerExpired. That
-// source is resolved by callForeignCached's eager recheck, which fires ONLY on the
-// error-free return path (call_foreign_cached.go: the `if err != nil` return
-// precedes the recheck). Returning an error here would bypass the recheck and
-// defeat the timeout handler, so ErrTimerExpired keeps the Option A Void surface.
-// The other two sources are safe to raise on: thread-terminate!'s outcome is
-// write-once (the raised error is discarded in favor of the terminated-thread
-// exception), and an embedder deadline is the path that had no protection at all —
-// exactly the confusion Option B removes.
-func PrimChannelReceive(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-receive")
-	if err != nil {
-		return err
-	}
-
-	v, outcome := ch.Receive(mc.Context())
-	switch outcome {
-	case values.RecvReceived:
-		if v != nil {
-			mc.SetValue(v)
-			return nil
-		}
-		mc.SetValue(values.Void)
-		return nil
-	case values.RecvCancelled:
-		if errors.Is(context.Cause(mc.Context()), machine.ErrTimerExpired) {
-			mc.SetValue(values.Void)
-			return nil
-		}
-		return werr.WrapForeignErrorf(werr.ErrChannelCancelled, "channel-receive")
-	default:
-		// RecvClosed: closed and drained. The historical two-state contract
-		// returns Void, which R7RS-style callers read as end-of-stream.
+// finishBlockingSync completes a blocking lock acquisition whose acquire returned
+// `acquired`. On success it sets Void. On cancellation it raises
+// ErrOperationCancelled, EXCEPT when the ctx cause is ErrTimerExpired
+// (with-timeout), where it returns Void so callForeignCached's eager recheck can
+// raise ErrTimerInterrupt and run the handler: the recheck fires only on the
+// error-free return, so raising on the timer source would bypass it and defeat
+// the handler. A cancelled acquire never holds the lock, so returning here leaves
+// nothing half-held.
+func finishBlockingSync(mc machine.CallContext, acquired bool, site string) error {
+	if acquired {
 		mc.SetValue(values.Void)
 		return nil
 	}
+	if errors.Is(context.Cause(mc.Context()), machine.ErrTimerExpired) {
+		mc.SetValue(values.Void)
+		return nil
+	}
+	return werr.WrapForeignErrorf(werr.ErrOperationCancelled, "%s", site)
 }
-
-// PrimChannelTrySend attempts to send without blocking
-// (channel-try-send! ch value) -> boolean
-func PrimChannelTrySend(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-try-send!")
-	if err != nil {
-		return err
-	}
-	val := mc.Arg(1)
-
-	outcome := ch.TrySend(val)
-	if outcome == values.SendClosed {
-		return werr.WrapForeignErrorf(werr.ErrChannelClosed, "channel-try-send!")
-	}
-
-	mc.SetValue(values.BoolToBoolean(outcome == values.SendSent))
-	return nil
-}
-
-// PrimChannelTryReceive attempts to receive without blocking
-// (channel-try-receive ch) -> (values value received? open?)
-func PrimChannelTryReceive(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-try-receive")
-	if err != nil {
-		return err
-	}
-
-	v, outcome := ch.TryReceive()
-
-	// Return three values: the received value (#f when none, not Void — per the
-	// channel-try-receive contract), whether a value was received, and whether
-	// the channel is still open.
-	val := v
-	if val == nil {
-		val = values.FalseValue
-	}
-	received := outcome == values.RecvReceived
-	open := outcome != values.RecvClosed
-	mc.SetValues(val, values.BoolToBoolean(received), values.BoolToBoolean(open))
-	return nil
-}
-
-// PrimChannelClose closes the channel
-// (channel-close! ch) -> void
-func PrimChannelClose(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-close!")
-	if err != nil {
-		return err
-	}
-
-	err = ch.Close()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "channel-close!")
-	}
-
-	mc.SetValue(values.Void)
-	return nil
-}
-
-// PrimChannelClosedQ tests if a channel is closed
-// (channel-closed? ch) -> boolean
-var PrimChannelClosedQ = helpers.MakeUnaryAccessor(werr.ErrNotAChannel, "channel-closed?", func(ch *values.Channel) values.Value {
-	return values.BoolToBoolean(ch.IsClosed())
-})
-
-// PrimChannelLength returns the number of elements in the channel buffer
-// (channel-length ch) -> integer
-var PrimChannelLength = helpers.MakeUnaryAccessor(werr.ErrNotAChannel, "channel-length", func(ch *values.Channel) values.Value {
-	return values.NewInteger(int64(ch.Len()))
-})
-
-// PrimChannelCapacity returns the channel's buffer capacity
-// (channel-capacity ch) -> integer
-var PrimChannelCapacity = helpers.MakeUnaryAccessor(werr.ErrNotAChannel, "channel-capacity", func(ch *values.Channel) values.Value {
-	return values.NewInteger(int64(ch.Cap()))
-})
-
-// =============================================================================
-// WaitGroup Primitives
-// =============================================================================
-
-// PrimMakeWaitGroup creates a new WaitGroup
-// (make-wait-group) -> wait-group
-func PrimMakeWaitGroup(mc machine.CallContext) error {
-	wg := values.NewWaitGroup()
-	mc.SetValue(wg)
-	return nil
-}
-
-// PrimWaitGroupQ tests if an object is a WaitGroup
-// (wait-group? obj) -> boolean
-var PrimWaitGroupQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(*values.WaitGroup)
-	return ok
-})
-
-// PrimWaitGroupAdd adds to the WaitGroup counter
-// (wait-group-add! wg n) -> void
-func PrimWaitGroupAdd(mc machine.CallContext) error {
-	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, werr.ErrNotAWaitGroup, "wait-group-add!")
-	if err != nil {
-		return err
-	}
-
-	n, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "wait-group-add!")
-	if err != nil {
-		return err
-	}
-
-	wg.Add(int(n.Value))
-	mc.SetValue(values.Void)
-	return nil
-}
-
-// PrimWaitGroupDone decrements the WaitGroup counter
-// (wait-group-done! wg) -> void
-var PrimWaitGroupDone = helpers.MakeUnarySideEffect(werr.ErrNotAWaitGroup, "wait-group-done!", func(wg *values.WaitGroup) {
-	wg.Done()
-})
-
-// PrimWaitGroupWait waits for the WaitGroup counter to reach zero
-// (wait-group-wait! wg) -> void
-var PrimWaitGroupWait = helpers.MakeUnarySideEffect(werr.ErrNotAWaitGroup, "wait-group-wait!", func(wg *values.WaitGroup) {
-	wg.Wait()
-})
 
 // =============================================================================
 // RWMutex Primitives
@@ -296,11 +72,17 @@ var PrimRWMutexQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	return ok
 })
 
-// PrimRWMutexReadLock acquires the read lock
+// PrimRWMutexReadLock acquires the read lock, blocking until granted or ctx is
+// cancelled. On cancellation it raises ErrOperationCancelled (with the
+// ErrTimerExpired carve-out); a cancelled acquire never holds the lock.
 // (rw-mutex-read-lock! rwm) -> void
-var PrimRWMutexReadLock = helpers.MakeUnarySideEffect(werr.ErrNotARWMutex, "rw-mutex-read-lock!", func(rwm *values.RWMutex) {
-	rwm.RLock()
-})
+func PrimRWMutexReadLock(mc machine.CallContext) error {
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-read-lock!")
+	if err != nil {
+		return err
+	}
+	return finishBlockingSync(mc, rwm.RLockContext(mc.Context()), "rw-mutex-read-lock!")
+}
 
 // PrimRWMutexReadUnlock releases the read lock
 // (rw-mutex-read-unlock! rwm) -> void
@@ -308,11 +90,17 @@ var PrimRWMutexReadUnlock = helpers.MakeUnarySideEffect(werr.ErrNotARWMutex, "rw
 	rwm.RUnlock()
 })
 
-// PrimRWMutexWriteLock acquires the write lock
+// PrimRWMutexWriteLock acquires the write lock, blocking until granted or ctx is
+// cancelled. On cancellation it raises ErrOperationCancelled (with the
+// ErrTimerExpired carve-out); a cancelled acquire never holds the lock.
 // (rw-mutex-write-lock! rwm) -> void
-var PrimRWMutexWriteLock = helpers.MakeUnarySideEffect(werr.ErrNotARWMutex, "rw-mutex-write-lock!", func(rwm *values.RWMutex) {
-	rwm.Lock()
-})
+func PrimRWMutexWriteLock(mc machine.CallContext) error {
+	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-write-lock!")
+	if err != nil {
+		return err
+	}
+	return finishBlockingSync(mc, rwm.LockContext(mc.Context()), "rw-mutex-write-lock!")
+}
 
 // PrimRWMutexWriteUnlock releases the write lock
 // (rw-mutex-write-unlock! rwm) -> void

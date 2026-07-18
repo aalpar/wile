@@ -376,7 +376,7 @@ func PrimMutexLock(mc machine.CallContext) error {
 		}
 	}
 
-	acquired, err := mutex.Lock(timeout, owner)
+	acquired, err := mutex.LockContext(mc.Context(), timeout, owner)
 	if err != nil {
 		// Check for abandoned mutex exception
 		_, ok := err.(*values.AbandonedMutexException)

@@ -23,7 +23,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. |
 | **Privileged** | process | `extensions/process` | Process execution: `system`, `process-spawn`, `process-wait`, `process-kill`. |
 | **Privileged** | namespace | `internal/extensions/namespace` | Namespace introspection: `namespace?`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. |
-| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation (spawns goroutines). No ambient authority. Safe for trusted code. |
+| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code. |
 
 **Safe** means no ambient authority (Dennis & Van Horn 1966; Miller, "Robust Composition", 2006) — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
@@ -220,7 +220,7 @@ Without an authorizer or `WithSourceFS`, `include` is unrestricted on the OS fil
 
 Isolation invariants are verified in `engine_sandbox_test.go`:
 
-- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-channel`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`)
+- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-rw-mutex`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`)
 - Safe engine allows safe primitives
 - `WithoutCore()` produces a bare engine
 - `WithoutCore()` + extension gives only that extension

@@ -45,7 +45,7 @@ The conservative behavior (always returning `#t`) is **safe**: it may cause bloc
 
 **Workaround:**
 
-Use Go channels or goroutines for non-blocking I/O patterns:
+Read on a dedicated thread and hand the result back through a shared slot:
 
 ```scheme
 ;; Instead of polling with char-ready?:
@@ -53,16 +53,17 @@ Use Go channels or goroutines for non-blocking I/O patterns:
     (read-char port)
     'not-ready)
 
-;; Use a thread to read asynchronously:
-(let ((ch (make-channel)))
+;; Read asynchronously on a thread, publishing into an atomic box:
+(let ((slot (make-atomic #f)))
   (thread-start!
     (make-thread
       (lambda ()
-        (channel-send! ch (read-char port)))))
-  (channel-receive ch))
+        (atomic-store! slot (read-char port)))))
+  ;; ... poll (atomic-load slot) or join the thread when the result is needed.
+  slot)
 ```
 
-**Impact:** **LOW** — `char-ready?` and `u8-ready?` are rarely used in modern Scheme code. These predicates were designed for select-style event loops, a pattern largely superseded by async/await and channel-based concurrency. Most I/O in Wile is either:
+**Impact:** **LOW** — `char-ready?` and `u8-ready?` are rarely used in modern Scheme code. These predicates were designed for select-style event loops, a pattern largely superseded by async/await style concurrency. Most I/O in Wile is either:
 - File-based (always ready, blocking is acceptable)
 - Network streams where blocking semantics are expected
 - Interactive REPL input where immediate blocking is desired

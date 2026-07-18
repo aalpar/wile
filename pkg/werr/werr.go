@@ -106,8 +106,6 @@ var (
 	ErrNotAMutex             = NewTypeSentinel("mutex")
 	ErrNotAConditionVariable = NewTypeSentinel("condition variable")
 	ErrNotATime              = NewTypeSentinel("time")
-	ErrNotAChannel           = NewTypeSentinel("channel")
-	ErrNotAWaitGroup         = NewTypeSentinel("wait-group")
 	ErrNotARWMutex           = NewTypeSentinel("rw-mutex")
 	// "once" is pronounced /wuns/ — letter rule would give "an once", but
 	// the consonant /w/ sound calls for "a". Pass-through preserves the
@@ -200,10 +198,13 @@ var (
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 	ErrInvalidLoadPath        = NewStaticError("invalid load path")
 
-	// Channel errors
+	// Synchronization errors
 
-	ErrChannelClosed    = NewStaticError("channel is closed")
-	ErrChannelCancelled = NewStaticError("channel operation cancelled")
+	// ErrOperationCancelled is raised when a thread blocked acquiring a
+	// synchronization primitive (rw-mutex lock) is unparked by ctx cancellation
+	// before it acquires. mutex-lock! signals the same condition as #f (it has a
+	// did-not-acquire value already).
+	ErrOperationCancelled = NewStaticError("synchronization operation cancelled")
 
 	// Process errors
 

@@ -19,7 +19,7 @@ Every document in `docs/`, organized by topic.
 
 ## Concurrency
 
-- [channel-cancellation.md](concurrency/channel-cancellation.md) -- Channel lifecycle (never-close-the-data-channel) and how blocking channel ops couple to VM cancellation (`with-timeout`, `thread-terminate!`, embedder deadline)
+- [cancellation.md](concurrency/cancellation.md) -- How blocking locks (`rw-mutex-*-lock!`, `mutex-lock!`) couple to VM cancellation (`with-timeout`, `thread-terminate!`, embedder deadline) so a parked acquire is unparked instead of leaking its goroutine
 
 ## Continuations
 

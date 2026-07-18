@@ -47,7 +47,6 @@ var allValueExemplars = []Value{
 	(*Box)(nil),
 	(*Byte)(nil),
 	(*ByteVector)(nil),
-	(*Channel)(nil),
 	(*CharSet)(nil),
 	(*Character)(nil),
 	(*CompileTimeValue)(nil),
@@ -75,7 +74,6 @@ var allValueExemplars = []Value{
 	(*Thread)(nil),
 	(*Time)(nil),
 	(*Vector)(nil),
-	(*WaitGroup)(nil),
 	// Value-receiver singletons — documented exceptions.
 	voidType{},
 	eofType{},

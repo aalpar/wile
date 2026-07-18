@@ -26,85 +26,10 @@ var Extension = registry.NewDescribedExtension("gointerop",
 	AddToRegistry)
 
 // Builder aggregates all Go interop registration functions.
-var Builder = registry.NewRegistryBuilder(addChannels, addWaitGroup, addRWMutex, addOnce, addAtomic)
+var Builder = registry.NewRegistryBuilder(addRWMutex, addOnce, addAtomic)
 
 // AddToRegistry registers all Go interop primitives.
 var AddToRegistry = Builder.AddToRegistry
-
-func addChannels(r *registry.Registry) error {
-	// TODO(contracts): Go concurrency types (Channel, WaitGroup, RWMutex,
-	// Once, AtomicBox) have no ValueType enum entries, so those argument
-	// positions fall back to TypeAny; impl-level RequireArg catches
-	// mismatches.
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "make-channel", ParamCount: 1, IsVariadic: true, Impl: PrimMakeChannel,
-			Doc: "Creates a new Go channel. Optional buffer size (default 0 for unbuffered).", ParamNames: []string{"size"}, Category: "channels",
-			Keywords:   []string{"queue", "message passing", "pipe", "concurrent"},
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "channel?", ParamCount: 1, Impl: PrimChannelQ,
-			Doc: "Returns #t if OBJ is a Go channel.", ParamNames: []string{"obj"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		{Name: "channel-send!", ParamCount: 2, Impl: PrimChannelSend,
-			Doc: "Sends VALUE to CHANNEL, blocking until a receiver is ready or buffer has space.", ParamNames: []string{"channel", "value"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "channel-receive", ParamCount: 1, Impl: PrimChannelReceive,
-			Doc: "Receives a value from CHANNEL, blocking until a value is available. Returns void if CHANNEL is closed.", ParamNames: []string{"channel"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "channel-try-send!", ParamCount: 2, Impl: PrimChannelTrySend,
-			Doc: "Attempts a non-blocking send. Returns #t if VALUE was sent, #f otherwise.", ParamNames: []string{"channel", "value"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		// channel-try-receive returns three values — ReturnType describes the
-		// primary value only.
-		{Name: "channel-try-receive", ParamCount: 1, Impl: PrimChannelTryReceive,
-			Doc: "Attempts a non-blocking receive. Returns three values: the value (or #f), whether a value was received, and whether CHANNEL is open.", ParamNames: []string{"channel"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "channel-close!", ParamCount: 1, Impl: PrimChannelClose,
-			Doc: "Closes CHANNEL. Subsequent sends will raise an error.", ParamNames: []string{"channel"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "channel-closed?", ParamCount: 1, Impl: PrimChannelClosedQ,
-			Doc: "Returns #t if CHANNEL has been closed.", ParamNames: []string{"channel"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		{Name: "channel-length", ParamCount: 1, Impl: PrimChannelLength,
-			Doc: "Returns the number of elements currently buffered in CHANNEL.", ParamNames: []string{"channel"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeInteger},
-		{Name: "channel-capacity", ParamCount: 1, Impl: PrimChannelCapacity,
-			Doc: "Returns the total buffer capacity of CHANNEL. 0 for unbuffered channels.", ParamNames: []string{"channel"}, Category: "channels",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeInteger},
-	}, registry.PhaseSetRuntime)
-	return nil
-}
-
-func addWaitGroup(r *registry.Registry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "make-wait-group", Impl: PrimMakeWaitGroup,
-			Doc: "Creates a new Go-style wait group with counter at zero.", Category: "waitgroups",
-			ReturnType: values.TypeAny},
-		{Name: "wait-group?", ParamCount: 1, Impl: PrimWaitGroupQ,
-			Doc: "Returns #t if OBJ is a wait group.", ParamNames: []string{"obj"}, Category: "waitgroups",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		{Name: "wait-group-add!", ParamCount: 2, Impl: PrimWaitGroupAdd,
-			Doc: "Adds DELTA to the wait group counter. DELTA may be negative.", ParamNames: []string{"wg", "delta"}, Category: "waitgroups",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeInteger},
-			ReturnType: values.TypeVoid},
-		{Name: "wait-group-done!", ParamCount: 1, Impl: PrimWaitGroupDone,
-			Doc: "Decrements the wait group counter by one. Equivalent to (wait-group-add! WG -1).", ParamNames: []string{"wg"}, Category: "waitgroups",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "wait-group-wait!", ParamCount: 1, Impl: PrimWaitGroupWait,
-			Doc: "Blocks until the wait group counter reaches zero.", ParamNames: []string{"wg"}, Category: "waitgroups",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-	}, registry.PhaseSetRuntime)
-	return nil
-}
 
 func addRWMutex(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{

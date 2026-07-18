@@ -78,8 +78,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Type | Description |
 |------|-------------|
-| Channel | Go channel for message passing |
-| WaitGroup | Counter for waiting on goroutines |
 | RWMutex | Read-write mutual exclusion lock |
 | Once | Ensures function runs exactly once |
 | Atomic | Thread-safe mutable value |
@@ -815,31 +813,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `time?` | Test for time object |
 | `time->seconds` | Convert time to seconds |
 | `seconds->time` | Convert seconds to time |
-
-## Go Channels
-
-| Primitive | Description |
-|-----------|-------------|
-| `make-channel` | Create a Go channel |
-| `channel?` | Test for channel |
-| `channel-send!` | Send value to channel (blocking) |
-| `channel-receive` | Receive value from channel (blocking) |
-| `channel-try-send!` | Send value to channel (non-blocking) |
-| `channel-try-receive` | Receive value from channel (non-blocking) |
-| `channel-close!` | Close a channel |
-| `channel-closed?` | Test if channel is closed |
-| `channel-length` | Number of elements in channel buffer |
-| `channel-capacity` | Channel buffer capacity |
-
-## Go WaitGroup
-
-| Primitive | Description |
-|-----------|-------------|
-| `make-wait-group` | Create a WaitGroup |
-| `wait-group?` | Test for WaitGroup |
-| `wait-group-add!` | Add to WaitGroup counter |
-| `wait-group-done!` | Decrement WaitGroup counter |
-| `wait-group-wait!` | Wait for WaitGroup to reach zero |
 
 ## Go RWMutex
 

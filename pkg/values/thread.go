@@ -270,8 +270,8 @@ func (p *Thread) Start(parentCtx context.Context) error {
 // terminated-thread exception, the goroutine it cancelled is merely unwinding,
 // and whatever that unwind produces is not a result: a thread parked in a
 // cancellable operation returns a laundered ordinary value when its context is
-// cancelled (channel-receive yields Void — see
-// docs/concurrency/channel-cancellation.md), and if that return sits in tail
+// cancelled (mutex-lock! yields #f — see
+// docs/concurrency/cancellation.md), and if that return sits in tail
 // position, no further VM op runs to unwind it. Letting the completion path win
 // there reports a terminated thread as having succeeded.
 //

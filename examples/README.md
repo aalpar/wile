@@ -65,7 +65,6 @@ First-class continuations, exceptions, and control operators.
 | [dynamic-wind.scm](control/dynamic-wind.scm) | Resource cleanup with before/after guards, continuation-safe |
 | [exceptions.scm](control/exceptions.scm) | guard, raise, with-exception-handler, error objects |
 | [amb.scm](control/amb.scm) | Non-deterministic computation with backtracking |
-| [coroutines.scm](control/coroutines.scm) | Cooperative multitasking via continuations |
 | [generators.scm](control/generators.scm) | Generators using call/cc |
 
 **Key Feature**: Full `call/cc` support enables advanced control flow patterns. Continuations are first-class values that can be invoked multiple times.
@@ -100,8 +99,6 @@ Threading, synchronization, and message passing backed by Go's runtime.
 |------|-------------|
 | [threads.scm](concurrency/threads.scm) | SRFI-18 basic threading - creation, joining, state |
 | [mutex.scm](concurrency/mutex.scm) | Mutual exclusion, critical sections, race prevention |
-| [channels.scm](concurrency/channels.scm) | Go-style channel messaging and pipelines |
-| [producers-consumers.scm](concurrency/producers-consumers.scm) | Classic work queue pattern |
 | [parallel-map.scm](concurrency/parallel-map.scm) | Parallel computation and thread pools |
 
 **Key Feature**: Wile threads map directly to Go goroutines. Channels provide CSP-style message passing. Mutexes prevent race conditions on shared state.
@@ -238,11 +235,11 @@ Exact arithmetic, rationals, complex numbers, arbitrary precision. See [numeric-
 
 ### 4. First-Class Continuations
 
-`call/cc` for advanced control flow. See [control/](control/) for backtracking and coroutines.
+`call/cc` for advanced control flow. See [control/](control/) for backtracking and generators.
 
 ### 5. Go Integration
 
-- **Concurrency**: Threads backed by goroutines, channels for CSP
+- **Concurrency**: Threads backed by goroutines, mutexes and atomics for coordination
 - **Embedding**: Pure Go, no CGo, clean API for Go developers
 - **Performance**: Go's GC, no FFI overhead
 
@@ -260,7 +257,7 @@ Tail-recursive functions run in constant space. Compare tail vs non-tail in [bas
 
 **Experienced Schemer?** See what's unique:
 1. [macros/state-machine.scm](macros/state-machine.scm) - Hygiene system
-2. [concurrency/channels.scm](concurrency/channels.scm) - Go integration
+2. [concurrency/mutex.scm](concurrency/mutex.scm) - Go integration
 3. [numeric-tower/symbolic-diff.scm](numeric-tower/symbolic-diff.scm) - Exact arithmetic
 4. [logic/schelog/](logic/schelog/) - Logic programming embedding
 5. [algebra/tutorial/chapters/01-getting-started.scm](algebra/tutorial/chapters/01-getting-started.scm) - Algebraic structures and rewriting

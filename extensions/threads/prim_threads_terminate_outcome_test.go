@@ -45,13 +45,11 @@ import (
 // terminated while running raises the terminated-thread exception itself, not
 // whatever error or value the cancelled thunk happened to produce.
 //
-// The thread parks in thread-sleep! rather than a channel op, so this guards the
-// SRFI-18 contract independently of the channel-cancellation coupling that
-// exposed the bug (docs/concurrency/channel-cancellation.md). The two park
-// differently on purpose: both surface ctx cancellation as an error (thread-sleep!
-// directly, and a cancelled channel-receive as ErrChannelCancelled under Option B),
-// yet the outcome must be the same terminated-thread exception either way — the
-// write-once outcome discards whatever error or value the thunk produced.
+// The thread parks in thread-sleep!, so this guards the SRFI-18 contract
+// independently of the lock-cancellation coupling in
+// docs/concurrency/cancellation.md: however the thunk surfaces ctx cancellation,
+// the outcome must be the same terminated-thread exception — the write-once
+// outcome discards whatever error or value the thunk produced.
 //
 // The 10s sleep cannot elapse within the test, so the thread is still running
 // when terminate lands. If terminate were to beat the goroutine to its first
@@ -112,10 +110,9 @@ func TestThreadTerminateEndExceptionIsCatchable(t *testing.T) {
 //
 // This joins with no timeout on purpose. The timeout form would report the
 // regression as JoinTimeoutException, which reads as a slow thread rather than a
-// permanently parked joiner; the bug is the unbounded park. The result-channel
-// handshake proves the join returned, following the convention established by
-// pkg/values/channel_lifecycle_test.go. The engine is touched only by the
-// spawned goroutine, so its one-goroutine contract holds.
+// permanently parked joiner; the bug is the unbounded park. The Go result channel
+// plus select-timeout proves the join returned rather than parking. The engine is
+// touched only by the spawned goroutine, so its one-goroutine contract holds.
 func TestThreadTerminateNeverStartedThreadIsJoinable(t *testing.T) {
 	engine := newEngine(t)
 	expr, err := engine.Parse(context.Background(), `

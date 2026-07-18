@@ -61,97 +61,6 @@ func evalScheme(t *testing.T, env *environment.EnvironmentFrame, code string) (v
 }
 
 // ===========================================================================
-// Channel Tests
-// ===========================================================================
-
-func TestChannelBasic(t *testing.T) {
-	c := qt.New(t)
-	env, err := NewNamespaceFrame(context.TODO())
-	c.Assert(err, qt.IsNil)
-
-	// Test make-channel and channel?
-	result, err := evalScheme(t, env, `(channel? (make-channel))`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.TrueValue)
-
-	result, err = evalScheme(t, env, `(channel? 42)`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.FalseValue)
-}
-
-func TestChannelWithBufferSize(t *testing.T) {
-	c := qt.New(t)
-	env, err := NewNamespaceFrame(context.TODO())
-	c.Assert(err, qt.IsNil)
-
-	// Test buffered channel
-	result, err := evalScheme(t, env, `
-		(let ((ch (make-channel 5)))
-		  (channel-capacity ch))
-	`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(5))
-}
-
-func TestChannelTrySendReceive(t *testing.T) {
-	c := qt.New(t)
-	env, err := NewNamespaceFrame(context.TODO())
-	c.Assert(err, qt.IsNil)
-
-	// Test try-send on buffered channel
-	result, err := evalScheme(t, env, `
-		(let ((ch (make-channel 1)))
-		  (channel-try-send! ch 42))
-	`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.TrueValue)
-
-	// Test try-send on full unbuffered channel
-	result, err = evalScheme(t, env, `
-		(let ((ch (make-channel)))
-		  (channel-try-send! ch 42))
-	`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.FalseValue)
-}
-
-func TestChannelLength(t *testing.T) {
-	c := qt.New(t)
-	env, err := NewNamespaceFrame(context.TODO())
-	c.Assert(err, qt.IsNil)
-
-	result, err := evalScheme(t, env, `
-		(let ((ch (make-channel 5)))
-		  (channel-try-send! ch 1)
-		  (channel-try-send! ch 2)
-		  (channel-length ch))
-	`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(2))
-}
-
-func TestChannelClose(t *testing.T) {
-	c := qt.New(t)
-	env, err := NewNamespaceFrame(context.TODO())
-	c.Assert(err, qt.IsNil)
-
-	result, err := evalScheme(t, env, `
-		(let ((ch (make-channel)))
-		  (channel-close! ch)
-		  (channel-closed? ch))
-	`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.TrueValue)
-
-	result, err = evalScheme(t, env, `
-		(let ((ch (make-channel)))
-		  (channel-closed? ch))
-	`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.FalseValue)
-}
-
-// ===========================================================================
 // Mutex Tests
 // ===========================================================================
 
@@ -280,25 +189,6 @@ func TestTimeConversion(t *testing.T) {
 	c.Assert(result, qt.Equals, values.TrueValue)
 }
 
-// ===========================================================================
-// WaitGroup Tests
-// ===========================================================================
-
-func TestWaitGroupBasic(t *testing.T) {
-	c := qt.New(t)
-	env, err := NewNamespaceFrame(context.TODO())
-	c.Assert(err, qt.IsNil)
-
-	result, err := evalScheme(t, env, `(wait-group? (make-wait-group))`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.TrueValue)
-
-	result, err = evalScheme(t, env, `(wait-group? 42)`)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.Equals, values.FalseValue)
-}
-
-// ===========================================================================
 // RWMutex Tests
 // ===========================================================================
 
@@ -513,24 +403,6 @@ func TestThreadSpecific(t *testing.T) {
 // ===========================================================================
 // Error Handling Tests
 // ===========================================================================
-
-func TestChannelTypeErrors(t *testing.T) {
-	env, err := NewNamespaceFrame(context.TODO())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Test that type errors are properly reported
-	_, err = evalScheme(t, env, `(channel-send! 42 "value")`)
-	if err == nil {
-		t.Error("Expected error for channel-send! with non-channel")
-	}
-
-	_, err = evalScheme(t, env, `(channel-receive 42)`)
-	if err == nil {
-		t.Error("Expected error for channel-receive with non-channel")
-	}
-}
 
 func TestMutexTypeErrors(t *testing.T) {
 	env, err := NewNamespaceFrame(context.TODO())

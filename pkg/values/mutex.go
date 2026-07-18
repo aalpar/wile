@@ -15,6 +15,7 @@
 package values
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -167,15 +168,33 @@ func (p *Mutex) Owner() *Thread {
 	return p.owner
 }
 
-// Lock acquires the mutex with optional timeout and owner.
-// Returns true if acquired, false if timeout.
+// Lock acquires the mutex with optional timeout and owner, without ctx
+// cancellation. It is LockContext with a background ctx — for callers that have
+// no ctx to thread (tests, internal helpers). VM primitives use LockContext so a
+// terminated thread parked here is unparked.
+func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
+	return p.LockContext(context.Background(), timeout, owner)
+}
+
+// LockContext acquires the mutex with optional timeout and owner.
+// Returns true if acquired, false if the wait ended without acquiring (timeout or
+// ctx cancellation).
 //
 // When acquired, state becomes MutexLocked and owner is set to whatever
 // the caller supplied (nil produces a "locked-but-unowned" mutex, valid
 // per SRFI-18). Acquiring an abandoned mutex succeeds but returns
 // *AbandonedMutexException so the caller can observe the prior owner's
 // termination.
-func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
+//
+// ctx cancellation unparks the untimed wait so a thread blocked here is reaped by
+// thread-terminate! rather than stalling on a bare cond.Wait — the same wait-side
+// fix the RWMutex type carries. Unlike RWMutex (which raises
+// ErrOperationCancelled), a cancelled acquire returns false: mutex-lock! already
+// signals "did not acquire" as #f, and returning it error-free lets a wrapping
+// with-timeout handler run via callForeignCached's recheck without a carve-out.
+// The held side is untouched: a terminated holder's lock stays held (abandonment
+// is a separate, owner-driven path via MarkAbandoned).
+func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *Thread) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -194,7 +213,9 @@ func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 	// Slow path: wait for the lock to free, with or without deadline.
 	if timeout == nil {
 		for p.state != MutexUnlocked && p.state != MutexAbandoned {
-			p.cond.Wait()
+			if !waitOnCondCtx(ctx, p.cond) {
+				return false, nil // ctx cancelled: acquire abandoned, lock not held
+			}
 		}
 	} else {
 		deadline := time.Now().Add(*timeout)

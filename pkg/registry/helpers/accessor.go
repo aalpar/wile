@@ -40,7 +40,7 @@ func MakeUnaryAccessor[T any](sentinel error, name string, project func(arg T) v
 // MakeUnarySideEffect returns a 1-argument primitive that requires its argument
 // to have concrete type T, runs act(arg) for its side effect, and returns the
 // unspecified value. It factors the extract → mutate → void shape
-// (mutex-lock!, wait-group-done!, thread-terminate!, hashtable-clear!, ...).
+// (mutex-lock!, rw-mutex-write-unlock!, thread-terminate!, hashtable-clear!, ...).
 func MakeUnarySideEffect[T any](sentinel error, name string, act func(arg T)) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
 		arg, err := RequireArg[T](mc, 0, sentinel, name)
