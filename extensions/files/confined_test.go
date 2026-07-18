@@ -15,8 +15,10 @@
 package files
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/security"
@@ -131,5 +133,53 @@ func TestRelWithinRoot(t *testing.T) {
 				t.Fatalf("relWithinRoot(%q,%q) = (%q,%v), want %q", tc.root, tc.target, got, err, tc.want)
 			}
 		})
+	}
+}
+
+// A custom path-gating authorizer that imposes no os.Root confinement must not
+// have its gate bypassed by a pre-planted symlink. The authorizer allows only
+// targets lexically under allowedDir; a symlink inside allowedDir points at a
+// file outside it. The lexical gate on the link path passes, so before the
+// re-gate the plain os.Open followed it and handed out the outside file. This
+// is the extensions/files twin of the resolver's confinedOpenFile gap: the
+// surface here is open-input-file / open-output-file / file-exists?, not code
+// loading.
+func TestConfinedOpen_SymlinkEscapeDeniedUnconfined(t *testing.T) {
+	allowedDir := t.TempDir()
+	outsideDir := t.TempDir()
+
+	secret := filepath.Join(outsideDir, "secret.txt")
+	err := os.WriteFile(secret, []byte("secret"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(allowedDir, "link.txt")
+	err = os.Symlink(secret, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Lexical prefix gate, deliberately NOT RootConfined.
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if strings.HasPrefix(req.Target, allowedDir+string(filepath.Separator)) {
+			return nil
+		}
+		return security.ErrAccessDenied
+	})
+
+	f, err := confinedOpen(auth, link)
+	if err == nil {
+		_ = f.Close()
+		t.Fatalf("symlink at %q escaping to %q must be denied, not followed", link, secret)
+	}
+	if !errors.Is(err, security.ErrAccessDenied) {
+		t.Fatalf("want ErrAccessDenied, got: %v", err)
+	}
+
+	// Same gate, same escape, through the stat path.
+	_, err = confinedStat(auth, link)
+	if !errors.Is(err, security.ErrAccessDenied) {
+		t.Fatalf("confinedStat: want ErrAccessDenied, got: %v", err)
 	}
 }
