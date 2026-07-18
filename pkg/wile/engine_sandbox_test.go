@@ -841,3 +841,77 @@ func TestAuthorizer_SelectivePolicy(t *testing.T) {
 func writeTestFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
+
+// TestAuthorizer_DenyBlocksCommandLine verifies that (command-line) is gated
+// symmetrically with the other system primitives: under an authorizer that
+// denies ResourceProcess, reading the host argv must raise ErrAccessDenied
+// rather than leaking os.Args.
+func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if req.Resource == security.ResourceProcess {
+			return security.ErrAccessDenied
+		}
+		return nil
+	})
+	engine, err := NewEngine(ctx,
+		WithAuthorizer(auth),
+		WithExtension(system.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(command-line)`))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// TestAuthorizer_DenyAllSweep runs every privileged primitive under DenyAll and
+// asserts each raises ErrAccessDenied. This is the regression net for gate
+// coverage: a primitive that reads a host resource without an authorizer check
+// (as (command-line) once did) shows up here as a nil error. One KitchenSink
+// engine registers every extension; WithAuthorizer(DenyAll()) overrides the
+// profile's (nil) authorizer. Each expression is shaped so the authorizer gate
+// is the FIRST failure (valid arg count and types) — a missing gate surfaces as
+// a nil error, not an unrelated arg/type error. exit's gate fires before
+// os.Exit, so invoking it in-process is safe.
+//
+// The sweep deliberately does NOT assert that (environment '(wile kitchen-sink))
+// is rejected: that constructor is ungated today and the constructed namespace
+// inherits the caller's denying authorizer, so its primitives stay gated and
+// there is no escalation to reject. Whether to add a defense-in-depth gate there
+// is a separate design question.
+func TestAuthorizer_DenyAllSweep(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(security.DenyAll()),
+	)
+	c.Assert(err, qt.IsNil)
+
+	privileged := []struct {
+		name string
+		code string
+	}{
+		{"command-line (system, process:read)", `(command-line)`},
+		{"exit (system, process:exit)", `(exit)`},
+		{"get-environment-variable (envvars, env:read)", `(get-environment-variable "PATH")`},
+		{"file-exists? (files, file:stat)", `(file-exists? "/tmp/x")`},
+		{"open-output-file (files, file:write)", `(open-output-file "/tmp/x")`},
+		{"delete-file (files, file:delete)", `(delete-file "/tmp/x")`},
+		{"eval (eval, code:eval)", `(eval '(+ 1 2))`},
+		{"system (process, process:exec-shell)", `(system "true")`},
+		{"process-spawn (process, process:exec)", `(process-spawn "true")`},
+	}
+	for _, tc := range privileged {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNotNil, qt.Commentf("expected denial for %s", tc.code))
+			c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+				qt.Commentf("expected ErrAccessDenied for %s, got: %v", tc.code, err))
+		})
+	}
+}
