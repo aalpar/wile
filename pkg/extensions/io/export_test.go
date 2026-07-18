@@ -16,10 +16,10 @@ package io
 
 // ExportCacheSizes returns a State's (parsers, tokenizers) cache entry counts,
 // for the io_test package to assert that EOF/close eviction leaves no lingering
-// entries. The caches and their mutex are unexported; this read-locked accessor
+// entries. The caches and their mutex are unexported; this locked accessor
 // exposes only the sizes, without widening the production API.
 func ExportCacheSizes(st *State) (int, int) {
-	st.mu.RLock()
-	defer st.mu.RUnlock()
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	return len(st.parsers), len(st.tokenizers)
 }

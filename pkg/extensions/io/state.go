@@ -42,7 +42,7 @@ type State struct {
 	// only. It is never held across a read: a read runs under the per-port
 	// entry lock (parserEntry.mu / tokenizerEntry.mu), so a blocking read on one
 	// port neither serialises other ports nor freezes the engine's I/O.
-	mu sync.RWMutex
+	mu sync.Mutex
 	// tokenizers caches tokenizers per input port; parsers caches parsers per
 	// input port. Entries are evicted via evictPortCache() on port close or EOF.
 	// Ports abandoned without close or EOF retain their entries until the engine
