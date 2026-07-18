@@ -124,7 +124,7 @@ examples:
 #   make ci
 #   make ci SKIP_LINT=1
 .PHONY: ci
-ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links check-docs-orphans examples verify-mod
+ci: $(if $(SKIP_LINT),,lint) build-all test covercheck readme-check check-readme-links check-docs-orphans examples test-examples verify-mod
 	@echo "CI passed"
 
 # ── CD: release-specific validation ─────────────────────────────────
@@ -246,7 +246,8 @@ bench:
 # Measures time and memory usage. Useful for detecting performance regressions.
 #   make bench-schelog
 SCHELOG_DIR=examples/logic/schelog
-SCHELOG_LIBS=-f $(SCHELOG_DIR)/schelog.scm \
+SCHELOG_LIBS=-i \
+             -f $(SCHELOG_DIR)/schelog.scm \
              -f $(SCHELOG_DIR)/toys.scm \
              -f $(SCHELOG_DIR)/puzzle.scm \
              -f $(SCHELOG_DIR)/mapcol.scm \
@@ -255,11 +256,11 @@ SCHELOG_LIBS=-f $(SCHELOG_DIR)/schelog.scm \
 .PHONY: bench-schelog
 bench-schelog: build
 	@if command -v gtime >/dev/null 2>&1; then \
-		gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
+		gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm < /dev/null 2>&1; \
 	elif [ -x /usr/bin/time ]; then \
-		/usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm 2>&1; \
+		/usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm < /dev/null 2>&1; \
 	else \
-		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm; \
+		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm < /dev/null; \
 	fi
 
 # Run the miniKanren benchmark suite (logic programming via R7RS libraries).

@@ -163,8 +163,8 @@ for run in $(seq 1 "$RUNS"); do
         case "$bench" in
             schelog-zebra)
                 OUTPUT=$(SCHEME_INCLUDE_PATH="$PROJECT_ROOT" \
-                    timeout "$TIMEOUT" "$SCHEME" -q \
-                    --file "$SCRIPT_DIR/schelog-zebra-bench.scm" 2>&1) || true
+                    timeout "$TIMEOUT" "$SCHEME" -q -i \
+                    --file "$SCRIPT_DIR/schelog-zebra-bench.scm" < /dev/null 2>&1)
                 TIME=$(echo "$OUTPUT" | grep "^Total time:" | awk '{print $3}' | tr -d 's')
                 ;;
             kanren-zebra)
