@@ -163,45 +163,16 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		}
 	}
 
-	// Apply registry to environment. Runtime primitives are routed to the sealed-base
-	// frame (immutable) for a namespace-owning runtime env; a flat library env receives
-	// them in its own frame. SealedBaseTarget() picks the right frame for each case.
-	runtimeTarget := env.SealedBaseTarget()
-	err = reg.Apply(ctx, env, registry.WithRuntimeTarget(runtimeTarget))
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error applying registry to environment")
-	}
-
 	// Store registry on namespace so runtime primitives (apropos, doc-topic,
 	// doc-topics) can access it via mc.EnvironmentFrame().Namespace().Registry().
+	// Part of registry construction, not the shared core: pkg/wile does the
+	// equivalent when it builds the Namespace.
 	env.Namespace().SetRegistry(reg)
 
-	// Register syntax compilers (compile env) and primitive expanders (expand env).
-	err = compilation.RegisterAllPhaseHandlers(env)
+	// Run the ordering-sensitive sequence shared with pkg/wile's applyBaseEnvironment.
+	_, err = LoadBootstrapCore(ctx, env, reg)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error registering phase handlers")
-	}
-
-	// Load bootstrap macros into the mutable expand frame FIRST: bootstrap procedures
-	// use bootstrap macros (let/and), so the macros must exist before the procedures
-	// compile. Procedures then load into the sealed-base frame (runtimeTarget), after
-	// macros. Both resolve macros through the shared phase registry.
-	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
-	}
-	err = loadBootstrapProcedures(ctx, runtimeTarget, reg.ProcedureSources(), bootstrapResolver)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap procedures")
-	}
-
-	// Late macros reference bootstrap procedures (unless -> not, guard ->
-	// with-exception-handler); load them into the expand frame AFTER procedures so
-	// their free identifiers pin to the sealed base, not a nil pin (R7RS 4.3.2).
-	err = loadBootstrapMacros(ctx, env, []string{core.LateBootstrapMacroSource}, bootstrapResolver)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error loading late bootstrap macros")
+		return nil, werr.WrapForeignErrorf(err, "initializeEnvironmentWithRegistry: load bootstrap core")
 	}
 
 	// Set the default file resolver for runtime include/load operations,

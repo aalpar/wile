@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/pkg/docparse"
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/bootstrap"
 	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
@@ -970,46 +971,14 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // Steps that can fail wrap errors with ErrEngineInit. Additional registry.ApplyOption
 // values are forwarded to the registry Apply call.
 func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, opts ...registry.ApplyOption) error {
-	// Runtime primitives + bootstrap procedures are routed to the sealed-base frame for
-	// a namespace-owning runtime env (engine root / profile child); a flat library env
-	// receives them in its own frame. SealedBaseTarget() picks the right frame for each
-	// case, keeping the carve decision in one place. WithRuntimeTarget(self) is a no-op,
-	// so the library path is unchanged. A fresh slice avoids racing the shared opts
-	// backing array across concurrent library-env creation.
-	runtimeTarget := env.SealedBaseTarget()
-	applyOpts := make([]registry.ApplyOption, 0, len(opts)+1)
-	applyOpts = append(applyOpts, opts...)
-	applyOpts = append(applyOpts, registry.WithRuntimeTarget(runtimeTarget))
-
-	err := reg.Apply(ctx, env, applyOpts...)
+	// Run the ordering-sensitive sequence shared with internal/bootstrap: apply the
+	// registry, register phase handlers, then load bootstrap macros -> procedures ->
+	// late macros. It returns the runtime target frame (sealed base for a
+	// namespace-owning runtime env, the frame itself for a flat library env) that the
+	// post-steps below operate on.
+	runtimeTarget, err := bootstrap.LoadBootstrapCore(ctx, env, reg, opts...)
 	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
-	}
-
-	err = compilation.RegisterAllPhaseHandlers(env)
-	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register phase handlers")
-	}
-
-	// Macros (define-syntax) load into the mutable expand frame FIRST; procedures
-	// (define) use bootstrap macros (let/and), so they load into the sealed base AFTER.
-	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
-	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap macros")
-	}
-	err = loadBootstrapProcedures(ctx, runtimeTarget, reg.ProcedureSources(), bootstrapResolver)
-	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap procedures")
-	}
-
-	// Late macros reference bootstrap procedures (unless -> not, guard ->
-	// with-exception-handler); load them into the expand frame AFTER procedures so
-	// their free identifiers pin to the sealed base, not a nil pin (R7RS 4.3.2).
-	// Mirrors internal/bootstrap's sequence — both paths must stay in step.
-	err = loadBootstrapMacros(ctx, env, []string{core.LateBootstrapMacroSource}, bootstrapResolver)
-	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load late bootstrap macros")
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap core")
 	}
 
 	// Stamp the bootstrap-resident curated tail HOFs (for-each, vector-map, …)
@@ -1190,20 +1159,6 @@ func newFileResolver(factories []resolverFactory, env *environment.EnvironmentFr
 		resolvers[i] = f(env)
 	}
 	return compilation.NewChainFileResolver(resolvers)
-}
-
-// loadBootstrapMacros and loadBootstrapProcedures delegate to the shared
-// compilation.LoadBootstrapSources pipeline (parse → expand → compile → optimize →
-// pooled execute). They differ only in target frame and error-context kind; macros MUST
-// load before procedures (procedures use bootstrap macros). See compilation/load_bootstrap.go.
-func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	return compilation.LoadBootstrapSources(ctx, env, sources, resolver, "macro")
-}
-
-// loadBootstrapProcedures loads runtime-procedure sources (define forms) into the given
-// target frame — the sealed base for an engine root/profile, or a flat library frame.
-func loadBootstrapProcedures(ctx context.Context, target *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
-	return compilation.LoadBootstrapSources(ctx, target, sources, resolver, "procedure")
 }
 
 // trackTemplateTree registers tpl and every *machine.NativeTemplate
