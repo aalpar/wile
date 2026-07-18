@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -88,6 +89,13 @@ type SchemeWriter struct {
 	needsLabelVector map[*Vector]bool
 	// needsLabelBox tracks which boxes need labels.
 	needsLabelBox map[*Box]bool
+	// seenHashtables maps hashtable pointers to their assigned label numbers.
+	// A Hashtable value slot is mutable, so a cycle can pass through it exactly
+	// as it can through a pair car, vector element, or box; it needs the same
+	// pointer-identity tracking to both label sharing and terminate on cycles.
+	seenHashtables map[*Hashtable]int
+	// needsLabelHashtable tracks which hashtables need labels.
+	needsLabelHashtable map[*Hashtable]bool
 	// displayMode indicates whether to use display format (no quotes on strings).
 	displayMode bool
 	// writeMode controls whether to label all shared or only circular references.
@@ -104,15 +112,17 @@ type SchemeWriter struct {
 // Default mode is WriteModeWrite (labels only circular references).
 func NewSchemeWriter() *SchemeWriter {
 	q := &SchemeWriter{
-		seenPairs:        make(map[*Pair]int),
-		seenVectors:      make(map[*Vector]int),
-		seenBoxes:        make(map[*Box]int),
-		needsLabelPair:   make(map[*Pair]bool),
-		needsLabelVector: make(map[*Vector]bool),
-		needsLabelBox:    make(map[*Box]bool),
-		nextLabel:        0,
-		writeMode:        WriteModeWrite,
-		maxDepth:         DefaultMaxWriteDepth,
+		seenPairs:           make(map[*Pair]int),
+		seenVectors:         make(map[*Vector]int),
+		seenBoxes:           make(map[*Box]int),
+		needsLabelPair:      make(map[*Pair]bool),
+		needsLabelVector:    make(map[*Vector]bool),
+		needsLabelBox:       make(map[*Box]bool),
+		seenHashtables:      make(map[*Hashtable]int),
+		needsLabelHashtable: make(map[*Hashtable]bool),
+		nextLabel:           0,
+		writeMode:           WriteModeWrite,
+		maxDepth:            DefaultMaxWriteDepth,
 	}
 	return q
 }
@@ -145,6 +155,8 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	p.needsLabelPair = make(map[*Pair]bool)
 	p.needsLabelVector = make(map[*Vector]bool)
 	p.needsLabelBox = make(map[*Box]bool)
+	p.seenHashtables = make(map[*Hashtable]int)
+	p.needsLabelHashtable = make(map[*Hashtable]bool)
 
 	// First pass: identify which objects are referenced multiple times. This
 	// is also the depth-enforcing pass — it is the first traversal to descend
@@ -165,6 +177,7 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	p.seenPairs = make(map[*Pair]int)
 	p.seenVectors = make(map[*Vector]int)
 	p.seenBoxes = make(map[*Box]int)
+	p.seenHashtables = make(map[*Hashtable]int)
 
 	// Second pass: generate output with labels
 	q := &strings.Builder{}
@@ -247,6 +260,25 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 		}
 		p.seenBoxes[val] = -1
 		p.findShared(val.Value, depth+1)
+
+	case *Hashtable:
+		if val == nil {
+			return
+		}
+		_, found := p.seenHashtables[val]
+		if found {
+			p.needsLabelHashtable[val] = true
+			return
+		}
+		p.seenHashtables[val] = -1
+		// Only values recurse: no container type is Hashable, so a key is always
+		// a leaf and cannot carry sharing or a cycle (TestNoContainerIsHashable).
+		for _, e := range val.snapshot() {
+			p.findShared(e.value, depth+1)
+			if p.err != nil {
+				return
+			}
+		}
 	}
 }
 
@@ -263,6 +295,9 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 	visitedPairs := make(map[*Pair]bool)
 	visitedVectors := make(map[*Vector]bool)
 	visitedBoxes := make(map[*Box]bool)
+	circularHashtables := make(map[*Hashtable]bool)
+	onStackHashtables := make(map[*Hashtable]bool)
+	visitedHashtables := make(map[*Hashtable]bool)
 
 	var walk func(v Value)
 	walk = func(v Value) {
@@ -335,6 +370,24 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 			onStackBoxes[val] = true
 			walk(val.Value)
 			delete(onStackBoxes, val)
+
+		case *Hashtable:
+			if val == nil {
+				return
+			}
+			if onStackHashtables[val] {
+				circularHashtables[val] = true
+				return
+			}
+			if visitedHashtables[val] {
+				return
+			}
+			visitedHashtables[val] = true
+			onStackHashtables[val] = true
+			for _, e := range val.snapshot() {
+				walk(e.value)
+			}
+			delete(onStackHashtables, val)
 		}
 	}
 
@@ -343,6 +396,7 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 	p.needsLabelPair = circularPairs
 	p.needsLabelVector = circularVectors
 	p.needsLabelBox = circularBoxes
+	p.needsLabelHashtable = circularHashtables
 }
 
 // write outputs a value, handling cycles with datum labels.
@@ -354,6 +408,8 @@ func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 		p.writeVector(sb, val)
 	case *Box:
 		p.writeBox(sb, val)
+	case *Hashtable:
+		p.writeHashtable(sb, val)
 	case *String:
 		// In display mode, strings are printed without quotes
 		if p.displayMode {
@@ -531,6 +587,50 @@ func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box) {
 
 	sb.WriteString("#&")
 	p.write(sb, bx.Value)
+}
+
+// writeHashtable writes a hashtable with cycle detection, mirroring writeVector.
+// Without this arm the default write branch falls through to
+// Hashtable.SchemeString, whose path-scoped recursion emits "..." on a cycle and
+// never assigns datum labels, so sharing or a cycle routed through a hashtable
+// value would be under-represented (R7RS 6.13.3). Only values recurse: no
+// container type is Hashable, so a key is always a leaf. Entries are sorted by
+// rendered key for deterministic output, matching SchemeString.
+func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable) {
+	if h == nil {
+		sb.WriteString("#hash()")
+		return
+	}
+
+	label, found := p.seenHashtables[h]
+	if found && label >= 0 {
+		fmt.Fprintf(sb, "#%d#", label)
+		return
+	}
+
+	if p.needsLabelHashtable[h] {
+		label := p.nextLabel
+		p.nextLabel++
+		p.seenHashtables[h] = label
+		fmt.Fprintf(sb, "#%d=", label)
+	}
+
+	entries := h.snapshot()
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].key.SchemeString() < entries[j].key.SchemeString()
+	})
+	sb.WriteString("#hash(")
+	for i, e := range entries {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString("(")
+		p.write(sb, e.key)
+		sb.WriteString(" . ")
+		p.write(sb, e.value)
+		sb.WriteString(")")
+	}
+	sb.WriteString(")")
 }
 
 // WriteValueToString writes a Scheme value to a string with cycle detection.

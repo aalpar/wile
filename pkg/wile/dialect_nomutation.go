@@ -118,6 +118,7 @@ func mutationPrimitives() []string {
 		"hashtable-delete!",
 		"hashtable-clear!",
 		"set-box!",
+		"%parameter-raw-set!",
 		"atomic-store!",
 		"atomic-swap!",
 		"atomic-compare-and-swap!",

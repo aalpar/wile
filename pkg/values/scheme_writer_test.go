@@ -403,3 +403,25 @@ func TestSchemeWriter_ReusableAcrossCalls(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, s2, qt.Equals, "#0=(2 . #0#)")
 }
+
+func TestWriteSharedValueToString_SharedThroughHashtable(t *testing.T) {
+	// A pair shared between a top-level list element and a hashtable value must
+	// be labeled once (#0=) and back-referenced (#0#) inside the table.
+	shared := values.List(values.NewInteger(1), values.NewInteger(2))
+	h := values.NewEmptyHashtable()
+	qt.Assert(t, h.Set(values.NewSymbol("k"), shared), qt.IsNil)
+	outer := values.List(shared, h)
+
+	result := mustRender(t, values.WriteSharedValueToString, outer)
+	qt.Assert(t, result, qt.Equals, "(#0=(1 2) #hash((k . #0#)))")
+}
+
+func TestWriteValueToString_CycleThroughHashtable(t *testing.T) {
+	// A self-cyclic hashtable (its own value slot points back at the table) must
+	// render a datum label, not SchemeString's "..." depth guard.
+	h := values.NewEmptyHashtable()
+	qt.Assert(t, h.Set(values.NewSymbol("k"), h), qt.IsNil)
+
+	result := mustRender(t, values.WriteValueToString, h)
+	qt.Assert(t, result, qt.Equals, "#0=#hash((k . #0#))")
+}

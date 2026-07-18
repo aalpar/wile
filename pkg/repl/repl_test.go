@@ -73,3 +73,27 @@ func TestRunSimple_ErrorRecovery(t *testing.T) {
 	// The error renders one stack trace, not two (double-render regression).
 	c.Assert(strings.Count(full, "Stack trace:"), qt.Equals, 1, qt.Commentf("out=%q", full))
 }
+
+// TestRunSimple_WithInput_NoTrailingNewline verifies the simple loop evaluates
+// the final form when the input lacks a trailing newline. ReadLine must flush
+// its buffered partial line on EOF instead of discarding it.
+func TestRunSimple_WithInput_NoTrailingNewline(t *testing.T) {
+	c := qt.New(t)
+	eng, err := wile.NewEngine(context.Background(), wile.WithMutableTopLevel())
+	c.Assert(err, qt.IsNil)
+
+	var out bytes.Buffer
+	r := New(eng,
+		WithInput(strings.NewReader("(define x 21)\n(* x 2)")),
+		WithOutput(&out),
+		WithErrorOutput(&out),
+	)
+
+	err = r.RunSimple(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	// The final form "(* x 2)" has no trailing newline; it must still evaluate
+	// to 42 rather than being swallowed on EOF.
+	c.Assert(strings.Contains(out.String(), "42"), qt.IsTrue,
+		qt.Commentf("out=%q", out.String()))
+}

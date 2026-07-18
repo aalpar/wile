@@ -54,8 +54,12 @@ const DefaultMaxCallDepth int = 10000
 // environment. Each goroutine should use its own Engine, or
 // synchronize externally.
 //
-// SRFI-18 threads within a single Engine are safe — the VM handles
-// thread coordination internally.
+// Within an Engine, the VM coordinates its own runtime structures and
+// SRFI-18 thread scheduling. It does NOT make concurrent mutation of shared
+// Scheme objects atomic: vector-set!, set-car!/set-cdr!, record and port
+// writes, and set! on a captured variable are plain stores. Programs that
+// share mutable state across SRFI-18 threads must synchronize it themselves,
+// with SRFI-18 mutexes or the atomic primitives.
 type Engine struct {
 	namespace               *environment.Namespace
 	env                     *environment.EnvironmentFrame

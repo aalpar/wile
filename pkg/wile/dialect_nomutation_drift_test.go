@@ -61,9 +61,6 @@ var nonDestructiveBangs = map[string]string{
 	"set-current-directory!": "process state, not a Scheme value",
 	"namespace-define!":      "reflective definition; define is not mutation, and NoMutation keeps define",
 	"namespace-undefine!":    "reflective definition removal; the mirror of namespace-define!",
-
-	// Internal.
-	"%parameter-raw-set!": "internal parameterize plumbing, not user-reachable as mutation",
 }
 
 // TestNoMutationRemovesEveryDestructivePrimitive is the drift guard REVIEW.md §7
@@ -256,4 +253,28 @@ func TestNoMutationRemovedFormInMacroTemplateIsUnbound(t *testing.T) {
 		qt.Commentf("the unbound identifier must be set! specifically"))
 	qt.Assert(t, err.Error(), qt.Not(qt.Contains), "primitive-expander",
 		qt.Commentf("the internal expand-phase handler must never leak into runtime, got %v", err))
+}
+
+// TestNoMutationRemovesParameterRawSet pins finding 5.1: %parameter-raw-set!
+// destructively writes a parameter's held value (prim_parameters.go:
+// param.SetValue) and is no longer used by the parameterize macro, which stores
+// bindings as continuation marks via %parameter-convert. It is a user-reachable
+// destructive update, the direct analogue of the removed set-box!, so NoMutation
+// must remove it.
+func TestNoMutationRemovesParameterRawSet(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithDialect(wile.NoMutation))
+	qt.Assert(t, err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+
+	// Before the fix this evaluated to 99 — a destructive parameter update
+	// surviving a dialect whose whole claim is that no destructive update survives.
+	_, err = eng.EvalMultiple(ctx,
+		`(let ((p (make-parameter 10))) (%parameter-raw-set! p 99) (p))`)
+	qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+		qt.Commentf("%%parameter-raw-set! must be unbound under no-mutation, got %v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "%parameter-raw-set!",
+		qt.Commentf("the unbound identifier must be %%parameter-raw-set! specifically"))
 }
