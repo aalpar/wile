@@ -73,6 +73,37 @@ func openConfinementRoot(auth security.Authorizer, target string) (root *os.Root
 	return root, rel, true, nil
 }
 
+// unconfinedTarget returns the path to operate on when auth imposes no os.Root
+// confinement. A custom (non-RootConfined) path-gating authorizer authorizes the
+// lexical path the caller supplied; a symlink at that path would redirect the
+// operation to a file outside the authorized subtree, and the plain os call
+// follows it. Resolving symlinks and re-gating the real path under action keeps
+// the gate target and the operation target the same file. A path that does not
+// resolve (missing file, broken link) is returned unchanged so the plain os call
+// reports the underlying error -- and so create can make a file that does not
+// exist yet.
+func unconfinedTarget(auth security.Authorizer, name, action string) (string, error) {
+	realPath, err := filepath.EvalSymlinks(name)
+	if err != nil {
+		// Unresolvable is not a denial: the caller's plain os operation reports
+		// the real reason (ENOENT), and create legitimately targets a path that
+		// does not exist yet.
+		return name, nil //nolint:nilerr // resolution failure defers to the os call
+	}
+	if realPath == name {
+		return name, nil
+	}
+	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceFile,
+		Action:   action,
+		Target:   realPath,
+	})
+	if err != nil {
+		return "", err
+	}
+	return realPath, nil
+}
+
 // confinedOpen opens name for reading, race-free when auth confines file
 // access. The returned *os.File holds an independent descriptor and stays
 // valid after the root is closed.
@@ -82,7 +113,11 @@ func confinedOpen(auth security.Authorizer, name string) (*os.File, error) {
 		return nil, err
 	}
 	if !confined {
-		return os.Open(name)
+		target, terr := unconfinedTarget(auth, name, security.ActionRead)
+		if terr != nil {
+			return nil, terr
+		}
+		return os.Open(target)
 	}
 	defer root.Close() //nolint:errcheck
 	return root.Open(rel)
@@ -95,7 +130,11 @@ func confinedCreate(auth security.Authorizer, name string) (*os.File, error) {
 		return nil, err
 	}
 	if !confined {
-		return os.Create(name)
+		target, terr := unconfinedTarget(auth, name, security.ActionWrite)
+		if terr != nil {
+			return nil, terr
+		}
+		return os.Create(target)
 	}
 	defer root.Close() //nolint:errcheck
 	return root.Create(rel)
@@ -116,7 +155,11 @@ func confinedStat(auth security.Authorizer, name string) (os.FileInfo, error) {
 		return nil, err
 	}
 	if !confined {
-		return os.Stat(name)
+		target, terr := unconfinedTarget(auth, name, security.ActionStat)
+		if terr != nil {
+			return nil, terr
+		}
+		return os.Stat(target)
 	}
 	defer root.Close() //nolint:errcheck
 	return root.Stat(rel)
