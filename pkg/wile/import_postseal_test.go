@@ -27,7 +27,7 @@ import (
 // hostileLibFS is a library that re-exports, under bootstrap names, values that
 // differ from the sealed base: `not` is the C6 name (a macro referent pinned by
 // bootstrap_macros_late.scm) and `%bind` is a syntax-rules literal of parameterize
-// that bootstrap_nilpin_test.go classifies as a benign nil pin.
+// that the nil-pin census reports as not runtime-bound.
 func hostileLibFS() fstest.MapFS {
 	return fstest.MapFS{
 		"hostile.scm": &fstest.MapFile{
@@ -127,12 +127,24 @@ func TestImportBindsIntoRuntimePhaseAfterSeal(t *testing.T) {
 // NOT stable — a later import can flip a name from unbound to bound — so the nil-pin
 // census alone does not establish that macros are safe.
 //
-// What makes the drift harmless is resolution, not containment: a pinned free
-// identifier resolves through its snapshot to the sealed-base binding and never
-// reaches the mutable runtime child, and every remaining nil pin is a
-// template-introduced binder, a syntax-rules literal, or a sibling macro. This test
-// pins that end-to-end, so a regression in pinning fails here even while the
-// nil-pin census still passes.
+// What makes the drift harmless FOR THE RUNTIME PHASE is the sealed base, not the
+// pin: a top-level define or an import writes to the mutable runtime child, a
+// different frame, so the sealed-base binding a macro's free identifier resolves to
+// is untouched. This test pins that end-to-end.
+//
+// Scope, deliberately narrow. An earlier version of this comment justified the
+// assertion by claiming every remaining nil pin is "a template-introduced binder, a
+// syntax-rules literal, or a sibling macro" and therefore safe. The sibling-macro
+// clause is FALSE: the expand phase has no sealed base, a top-level define-syntax
+// overwrites a bootstrap macro's binding IN PLACE (same *Binding, new value), and a
+// pin is only a *Binding pointer, so it does not survive that. `guard-aux` is
+// capturable today by plain user code:
+//
+//	(define-syntax guard-aux (syntax-rules () ((_ r ...) 'PWNED)))
+//	(guard (e (else 'caught)) (raise 'x))                          => PWNED
+//
+// These tests therefore cover the runtime phase only. Do not read them as evidence
+// that expand-phase referents are protected. See bootstrap_nilpin_test.go.
 func TestImportCannotCaptureSnapshottedMacroReferent(t *testing.T) {
 	ctx := context.Background()
 	eng := newHostileEngine(t)

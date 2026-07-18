@@ -51,11 +51,34 @@ type nilPin struct {
 // FreeIds, and fails on any Global == nil && !HasLocalBinding whose name is
 // nevertheless bound in the runtime phase after bootstrap.
 //
-// The expand/compile phases deliberately do NOT fail the test: a macro referencing
-// itself or a sibling macro (and -> and, guard -> guard-aux) resolves in operator
-// position during expansion, where a runtime define cannot reach it.
+// The expand/compile phases do NOT fail the test, but NOT because they are safe.
+// The original rationale here claimed a sibling-macro reference (and -> and,
+// guard -> guard-aux) "resolves in operator position during expansion, where a
+// runtime define cannot reach it". That is FALSE, and measurably so:
 //
-// Run with -v to see the full census, including the benign unbound entries.
+//	(guard (e (else 'caught)) (raise 'x))                          => caught
+//	(define-syntax guard-aux (syntax-rules () ((_ r ...) 'PWNED)))
+//	(guard (e (else 'caught)) (raise 'x))                          => PWNED
+//
+// A top-level define-syntax reaches the expand frame and overwrites the binding
+// IN PLACE (same *Binding, new value), so `guard`'s reference to its private helper
+// is captured by ordinary user code. No library or import is required.
+//
+// Pinning does not prevent this. A pin is a *Binding pointer, so an in-place value
+// overwrite defeats it; verified by reordering guard-aux above guard, which does
+// pin the reference (census drops to 46) and changes nothing about the capture.
+// Runtime-phase referents like `not` survive only because they live in the SEALED
+// BASE while a top-level define writes to the mutable runtime child, a different
+// frame. There is no sealed base for the expand phase, so bootstrap macro bindings
+// are mutable in place and pins into them are not load-bearing.
+//
+// The census therefore certifies bootstrap LOAD ORDER for runtime-phase referents
+// and nothing more. It is not evidence that expand-phase referents are safe; the
+// known-capturable name today is guard-aux. Do not widen this test to assert
+// expand-phase safety without first carving an immutable base for the expand phase
+// (or renaming the helper beyond user reach).
+//
+// Run with -v to see the full census, including the unbound entries.
 func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -79,20 +102,22 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	})
 
 	// Partition. A nil pin on a name that a later bootstrap define binds in the
-	// runtime phase is the C6 signature; a nil pin on a name that no runtime define
-	// reaches is a special form, a sibling macro, or a template-introduced binder.
+	// runtime phase is the C6 signature. The remainder is NOT a clean bill of health:
+	// it mixes genuinely inert entries (special forms, template-introduced binders,
+	// syntax-rules literals) with expand-phase sibling references that this test
+	// cannot see and that ARE capturable — see the doc comment on guard-aux.
 	defects := make([]nilPin, 0, len(pins))
-	benign := make([]nilPin, 0, len(pins))
+	unchecked := make([]nilPin, 0, len(pins))
 	for _, p := range pins {
 		if p.runtimeBound {
 			defects = append(defects, p)
 			continue
 		}
-		benign = append(benign, p)
+		unchecked = append(unchecked, p)
 	}
 
-	t.Logf("nil-pin census: %d total, %d runtime-bound (DEFECT), %d unbound at runtime (benign)",
-		len(pins), len(defects), len(benign))
+	t.Logf("nil-pin census: %d total, %d runtime-bound (DEFECT), %d not runtime-bound (UNCHECKED, not proven safe)",
+		len(pins), len(defects), len(unchecked))
 
 	for _, p := range defects {
 		t.Errorf("macro %q pins free identifier %q as unbound, but %q IS bound in the runtime "+
@@ -103,9 +128,10 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 			p.macro, p.freeID, p.freeID, p.expandBound, p.compileBound, p.freeID)
 	}
 
-	t.Logf("--- benign: nil pin, name unbound in the runtime phase (special form / macro / binder) ---")
+	t.Logf("--- not runtime-bound: inert (special form / binder / literal) OR an expand-phase " +
+		"sibling reference this test does not check (e.g. guard-aux, which IS capturable) ---")
 	byName := map[string][]string{}
-	for _, p := range benign {
+	for _, p := range unchecked {
 		byName[p.freeID] = append(byName[p.freeID], p.macro)
 	}
 	names := make([]string, 0, len(byName))
