@@ -52,6 +52,32 @@ func relWithinRoot(root, target string) (string, error) {
 	return filepath.Rel(realRoot, abs)
 }
 
+// openUnconfined opens absPath when auth imposes no os.Root confinement. A
+// custom (non-RootConfined) path-gating authorizer may authorize absPath
+// lexically while a symlink at that path redirects the open to a file outside
+// the authorized subtree; a plain os.Open would follow it. Resolving symlinks
+// and re-gating the real path keeps the gate target and the open target the
+// same file. When the path does not resolve (missing or broken link) the plain
+// open reports the underlying error.
+func openUnconfined(auth security.Authorizer, absPath string) (*os.File, error) {
+	realPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return os.Open(absPath)
+	}
+	if realPath == absPath {
+		return os.Open(absPath)
+	}
+	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   realPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return os.Open(realPath)
+}
+
 // confinedOpenFile opens absPath for reading, race-free when auth confines
 // filesystem access to a root. Under confinement a non-regular file (FIFO,
 // device) is refused: a sandboxed load has no business blocking on a planted
@@ -59,7 +85,7 @@ func relWithinRoot(root, target string) (string, error) {
 func confinedOpenFile(auth security.Authorizer, absPath string) (*os.File, error) {
 	dir, confined := security.ConfinementRootOf(auth)
 	if !confined {
-		return os.Open(absPath)
+		return openUnconfined(auth, absPath)
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {

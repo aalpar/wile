@@ -40,7 +40,17 @@ func SetCommandLine(args []string) {
 // PrimCommandLine implements the (command-line) primitive per R7RS §6.14.
 // Returns a list whose first element is the script name and the rest are
 // script arguments. Falls back to os.Args when no script is being executed.
+// Reading the host argv is gated as process:read, symmetric with the
+// env:read gate on get-environment-variable: an embedder that installs a
+// denying authorizer does not leak os.Args.
 func PrimCommandLine(mc machine.CallContext) error {
+	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
+		Resource: security.ResourceProcess,
+		Action:   security.ActionRead,
+	})
+	if err != nil {
+		return err
+	}
 	args := commandLineArgs
 	if args == nil {
 		args = os.Args

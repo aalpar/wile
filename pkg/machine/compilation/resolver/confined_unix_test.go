@@ -19,7 +19,9 @@ package resolver
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -61,4 +63,36 @@ func TestOSFileResolver_RelativeArmGatesBeforeOpen(t *testing.T) {
 		// so the test binary will leak it. That is the defect, made visible.
 		t.Fatal("ResolveAndOpen blocked: the file was opened before the authorizer denied it")
 	}
+}
+
+// TestOSFileResolver_SymlinkEscapeDeniedUnconfined proves the non-confining arm
+// (a custom, non-RootConfined path-gating authorizer) does not follow a
+// pre-planted symlink out of the authorized subtree. The authorizer allows only
+// targets lexically under allowedDir; a symlink inside it points at a file
+// outside it. The lexical gate on the symlink path passes, but the open must be
+// denied because the real target escapes the subtree.
+func TestOSFileResolver_SymlinkEscapeDeniedUnconfined(t *testing.T) {
+	allowedDir := realDir(t, t.TempDir())
+	outsideDir := realDir(t, t.TempDir())
+
+	secret := filepath.Join(outsideDir, "secret.scm")
+	err := os.WriteFile(secret, []byte("secret"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	link := filepath.Join(allowedDir, "link.scm")
+	err = os.Symlink(secret, link)
+	qt.Assert(t, err, qt.IsNil)
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if strings.HasPrefix(req.Target, allowedDir+string(filepath.Separator)) {
+			return nil
+		}
+		return security.ErrAccessDenied
+	}))
+	r := NewOSFileResolver(ns.Runtime())
+
+	_, _, err = r.ResolveAndOpen(context.Background(), link)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
