@@ -696,3 +696,32 @@ func TestLargeTokenScansInLinearTime(t *testing.T) {
 	c.Check(len(toks[0].Value()), qt.Equals, n)
 	c.Check(time.Now().Before(deadline), qt.IsTrue, qt.Commentf("scanning a %d-byte symbol took longer than the linear-time budget", n))
 }
+
+// TestStringHexEscapeUnboundedDigits pins R7RS §7.1.1
+// <hex scalar value> ::= <digit 16>+ (no digit-count bound). A string hex
+// escape with gratuitous leading zeros past the historical 8-digit cap denotes
+// the same code point and must be accepted; validateCodePoint owns the range
+// check. The character path is asserted for parity.
+func TestStringHexEscapeUnboundedDigits(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input string
+		typ   TokenizerState
+		value string
+	}{
+		{name: "string 9 digits", input: `"\x000000041;"`, typ: TokenizerStateString, value: "A"},
+		{name: "string 16 digits", input: `"\x0000000000000041;"`, typ: TokenizerStateString, value: "A"},
+		{name: "char 9 digits", input: `#\x000000041`, typ: TokenizerStateCharHexEscape, value: "A"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tok := NewTokenizer(strings.NewReader(tc.input), false)
+			defer tok.Close()
+			token, err := tok.Next()
+			c.Assert(err, qt.IsNil)
+			c.Assert(token.Type(), qt.Equals, tc.typ)
+			c.Assert(token.Value(), qt.Equals, tc.value)
+		})
+	}
+}

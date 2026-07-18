@@ -64,7 +64,7 @@ func (p *Tokenizer) readHexEscapeToken() {
 	if p.err != nil {
 		return
 	}
-	x, n := p.readUnsignedBaseNInteger(16, 8)
+	x, n := p.readUnsignedBaseNInteger(16, 0)
 	if p.err != nil {
 		return
 	}
@@ -198,7 +198,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		// R7RS: \x<hex scalar value>; where hex scalar value is any Unicode code point
 		// (0 to 0x10FFFF) except surrogates (0xD800-0xDFFF)
 		p.state = TokenizerStateCharHexEscape
-		x, n := p.readUnsignedBaseNInteger(16, 32) //nolint:errcheck
+		x, n := p.readUnsignedBaseNInteger(16, 0) //nolint:errcheck
 		if n == 0 {
 			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape)
 			return utf8.RuneError
