@@ -81,8 +81,15 @@ capabilities Scheme code can reach*, enforced in pure Go.
   extension is not loaded, its primitives do not exist for Scheme code to
   call.
 - **One engine per goroutine.** An `Engine` is not safe for concurrent use
-  by multiple goroutines. SRFI-18 threads *within* an engine are coordinated
-  by the VM.
+  by multiple goroutines. Within an engine, the VM coordinates its own
+  runtime structures (continuation chains, thread scheduling, the phase and
+  syntax registries) and SRFI-18 thread scheduling. It does **not** make
+  concurrent mutation of shared Scheme objects atomic: `vector-set!`,
+  `set-car!`/`set-cdr!`, record and port writes, and `set!` on a captured
+  variable are plain stores. Programs that share mutable state across
+  SRFI-18 threads must synchronize it themselves, with SRFI-18 mutexes or
+  the `atomic` primitives. This matches R7RS and SRFI-18, neither of which
+  promises atomic mutation.
 
 ### Two-layer authorization
 

@@ -254,24 +254,46 @@ func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *
 	return true, nil
 }
 
-// Unlock releases the mutex
-// If cv is provided, atomically unlock and wait on condition variable
+// Unlock releases the mutex without ctx cancellation, delegating to UnlockContext
+// with a background ctx — for callers with no ctx to thread (tests, internal
+// helpers). VM primitives use UnlockContext so a thread parked on the condition
+// variable is reaped by thread-terminate!.
 func (p *Mutex) Unlock(cv *ConditionVariable, timeout *time.Duration) bool {
-	p.mu.Lock()
+	return p.UnlockContext(context.Background(), cv, timeout)
+}
 
-	// Release the mutex
-	p.state = MutexUnlocked
-	p.owner = nil
-	p.cond.Signal()
-
+// UnlockContext releases the mutex. If cv is non-nil it performs the SRFI-18 atomic
+// unlock-and-wait: the waiter is enqueued on cv BEFORE the mutex is released, so an
+// idiomatic signaller (which holds this mutex while changing the predicate) cannot
+// signal an empty wait set and lose the wakeup. ctx cancellation unparks the cv wait
+// so thread-terminate! reaps a thread blocked here.
+//
+// cv.mu and this mutex's internal lock are never held simultaneously, so no
+// lock-order inversion arises. A non-idiomatic signaller that signals WITHOUT
+// holding the mutex can still race ahead of registerWaiter; SRFI-18 requires the
+// mutex be held, and closing that window would nest cv.mu inside p.mu and
+// re-introduce a lock-order edge.
+func (p *Mutex) UnlockContext(ctx context.Context, cv *ConditionVariable, timeout *time.Duration) bool {
 	if cv == nil {
+		p.mu.Lock()
+		p.state = MutexUnlocked
+		p.owner = nil
+		p.cond.Signal()
 		p.mu.Unlock()
 		return true
 	}
 
-	// Atomically release mutex and wait on condition variable
+	// Enqueue on the cv while the mutex is still MutexLocked, then release: this pins
+	// the waiter into the wait set before any signaller can acquire the mutex.
+	ch := cv.registerWaiter()
+
+	p.mu.Lock()
+	p.state = MutexUnlocked
+	p.owner = nil
+	p.cond.Signal()
 	p.mu.Unlock()
-	return cv.Wait(p, timeout)
+
+	return cv.blockOnWaiter(ctx, ch, timeout)
 }
 
 // MarkAbandoned marks the mutex as abandoned (called when owner thread terminates).

@@ -15,6 +15,7 @@
 package values
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -94,21 +95,41 @@ func (p *ConditionVariable) Broadcast() {
 	p.waitChs = nil
 }
 
-// Wait waits on the condition variable.
-// Returns true if signaled, false if timeout.
+// Wait waits on the condition variable until signaled or (if timeout is non-nil)
+// the timeout elapses. Returns true if signaled, false if timed out.
 //
-// Each waiter registers a per-waiter channel. Signal/Broadcast close
-// the channel to wake the waiter. Timeouts remove the channel from
-// the queue without disturbing other waiters.
+// The *Mutex argument is unused: atomic unlock-and-wait is owned by
+// Mutex.UnlockContext, which enqueues the waiter (registerWaiter) before releasing
+// the mutex. Wait itself registers and blocks in one step, which is correct only for
+// a caller that holds no mutex.
 func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
+	return p.blockOnWaiter(context.Background(), p.registerWaiter(), timeout)
+}
+
+// registerWaiter appends a fresh notification channel to the wait set and returns
+// it. Separating registration from blocking lets Mutex.UnlockContext enqueue the
+// waiter BEFORE releasing the mutex, closing the SRFI-18 lost-wakeup window in which
+// a signal could land on an empty wait set.
+func (p *ConditionVariable) registerWaiter() chan struct{} {
 	ch := make(chan struct{})
 	p.mu.Lock()
 	p.waitChs = append(p.waitChs, ch)
 	p.mu.Unlock()
+	return ch
+}
 
+// blockOnWaiter parks until ch is closed by Signal/Broadcast, the timeout elapses,
+// or ctx is cancelled. Returns true iff woken by a signal. On timeout or
+// cancellation it deregisters ch; a removeWaiter miss means Signal/Broadcast already
+// claimed ch at the boundary, so that case still reports signaled.
+func (p *ConditionVariable) blockOnWaiter(ctx context.Context, ch chan struct{}, timeout *time.Duration) bool {
 	if timeout == nil {
-		<-ch
-		return true
+		select {
+		case <-ch:
+			return true
+		case <-ctx.Done():
+			return !p.removeWaiter(ch)
+		}
 	}
 
 	timer := time.NewTimer(*timeout)
@@ -117,22 +138,25 @@ func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
 	select {
 	case <-ch:
 		return true
+	case <-ctx.Done():
+		return !p.removeWaiter(ch)
 	case <-timer.C:
-		// Try to remove our channel. If Signal/Broadcast already
-		// closed and removed it, the removal fails and we report
-		// signaled — the signal arrived at the timeout boundary.
-		p.mu.Lock()
-		removed := false
-		for i, c := range p.waitChs {
-			if c == ch {
-				p.waitChs = append(p.waitChs[:i], p.waitChs[i+1:]...)
-				removed = true
-				break
-			}
-		}
-		p.mu.Unlock()
-		return !removed
+		return !p.removeWaiter(ch)
 	}
+}
+
+// removeWaiter removes ch from the wait set, reporting whether it was present. A
+// false return means Signal/Broadcast already closed and removed ch.
+func (p *ConditionVariable) removeWaiter(ch chan struct{}) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i, c := range p.waitChs {
+		if c == ch {
+			p.waitChs = append(p.waitChs[:i], p.waitChs[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // WaiterCount returns the number of threads waiting on this condition variable.

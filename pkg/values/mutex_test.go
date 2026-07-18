@@ -18,6 +18,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -300,4 +301,48 @@ func TestMutex_SchemeString(t *testing.T) {
 
 	var nilM *values.Mutex
 	qt.Assert(t, nilM.SchemeString(), qt.Equals, "#<mutex:void>")
+}
+
+// TestUnlockCVNoLostWakeup drives the SRFI-18 unlock-and-wait rendezvous directly at
+// the Go level, which is where the lost-wakeup window is narrow enough to hit
+// reliably. Each iteration races a consumer (lock, predicate false, unlock-and-wait)
+// against a producer (lock, set predicate, signal, unlock). The producer holds the
+// mutex while signalling, so under enqueue-before-release the signal can never land
+// on an empty wait set.
+//
+// Before the fix, Unlock released the mutex and only then called cv.Wait: a producer
+// that acquired the mutex in that gap signalled nothing and the consumer parked
+// forever. The per-iteration deadline turns that hang into a failure instead of a
+// suite timeout.
+func TestUnlockCVNoLostWakeup(t *testing.T) {
+	const iterations = 20000
+
+	for i := range iterations {
+		m := values.NewMutex("m")
+		cv := values.NewConditionVariable("cv")
+		var ready atomic.Bool
+		done := make(chan struct{})
+
+		go func() {
+			defer close(done)
+			m.Lock(nil, nil)
+			for !ready.Load() {
+				m.Unlock(cv, nil)
+				m.Lock(nil, nil)
+			}
+			m.Unlock(nil, nil)
+		}()
+
+		m.Lock(nil, nil)
+		ready.Store(true)
+		cv.Signal()
+		m.Unlock(nil, nil)
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("iteration %d: consumer never woke — the signal was lost "+
+				"because the waiter was not enqueued before the mutex was released", i)
+		}
+	}
 }

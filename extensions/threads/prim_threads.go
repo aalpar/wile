@@ -446,7 +446,7 @@ func PrimMutexUnlock(mc machine.CallContext) error {
 		owner.UntrackMutex(mutex)
 	}
 
-	result := mutex.Unlock(cv, timeout)
+	result := mutex.UnlockContext(mc.Context(), cv, timeout)
 	mc.SetValue(values.BoolToBoolean(result))
 	return nil
 }
