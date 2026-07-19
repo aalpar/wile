@@ -177,10 +177,16 @@ func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
 // freshly minted scopes, so bindingScopes ⊄ useScopes and an ordinary
 // macro-to-macro reference stops resolving.
 //
-// That is why syntax binders were left unscoped, and it falsifies C2's stated
-// premise that "scope-keying does not have that side effect". The value-binder
-// path does not hit it because a define and its references are scoped in the same
-// pass. Any real fix needs a binder key that survives re-expansion — the
+// CORRECTED 2026-07-19: that diagnosis is wrong in two ways, both recorded in the
+// plan's C2 correction block. (1) bestSlotLocked matches on the STAMPED scope set,
+// not the slot key, so the attempt changed a key that does not decide matching.
+// (2) The measurement above comes from expander_body.go's internal-define-syntax
+// path, NOT compile_define_syntax.go — my-guard-aux is defined inside (let () …).
+// Treating both creation sites takes 9 failures down to 1. C2 is open, not blocked.
+//
+// The value-binder path does not hit any of this because a define and its
+// references are scoped in the same pass. A real fix needs a binder key that
+// survives re-expansion — the
 // macro-introduction scopes alone, or a stable binder identity — which is
 // successor work, not a call-site change.
 func TestTopLevelMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
