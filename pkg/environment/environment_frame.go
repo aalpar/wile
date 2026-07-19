@@ -825,6 +825,16 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // This is used during macro compilation to resolve free identifiers that may
 // be defined in any phase (e.g., define in runtime, define-syntax in expand).
 //
+// scopes is the REFERENCE's scope set and each phase is searched hygienically
+// (maximal subset match), not by bare name. Nil means the empty set, not "any" —
+// the same convention as GetGlobalIndexWithScopes. Bare-name search was correct
+// only while a name owned one slot per frame: once a macro-generating macro is
+// expanded twice, each expansion's phase-0 binder carries its own intro scope, so
+// the name owns two slots and a wildcard walk hands BOTH generated inner macros
+// whichever slot was created first. See the two-expansion jabberwocky case in
+// pkg/wile/toplevel_binder_scope_test.go, which the single-expansion case below
+// cannot detect.
+//
 // The phase-0 (runtime) search reaching the mutable runtime frame's OWN defines
 // is DELIBERATE and load-bearing — it is NOT the accidental parent-chain leak
 // the phase-frame reparent (createPhaseEnv) closed, and must NOT be routed
@@ -845,11 +855,11 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // (Verified 2026-07-10: hermeticizing the phase-0 search passes the
 // compilation/machine/wile suites but fails the integration R7RS conformance
 // suite here. Investigated as a possible "second hermeticity hole"; it is not.)
-func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *GlobalIndex {
+func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
 	phases := p.phases
 	if phases == nil {
 		// No phase registry — try runtime only
-		return p.GetGlobalIndex(key)
+		return p.GetGlobalIndexWithScopes(key, scopes)
 	}
 
 	// Search runtime (phase 0) first, then expand (1), then compile (2)
@@ -858,7 +868,7 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *Globa
 		if phaseEnv == nil {
 			continue
 		}
-		gi := phaseEnv.GetGlobalIndex(key)
+		gi := phaseEnv.GetGlobalIndexWithScopes(key, scopes)
 		if gi != nil {
 			return gi
 		}
@@ -879,7 +889,7 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 		if libEnv == nil {
 			continue
 		}
-		gi := libEnv.GetGlobalIndexAcrossPhases(key)
+		gi := libEnv.GetGlobalIndexAcrossPhases(key, scopes)
 		if gi != nil {
 			return gi
 		}

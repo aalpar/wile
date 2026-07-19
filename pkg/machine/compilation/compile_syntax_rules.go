@@ -338,8 +338,13 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				}
 
 				// Use cross-phase lookup to find bindings in any phase
-				// (runtime for define, expand for define-syntax, compile for auxiliary syntax)
-				gi := env.GetGlobalIndexAcrossPhases(symVal)
+				// (runtime for define, expand for define-syntax, compile for auxiliary syntax).
+				// The reference's own scope set decides WHICH same-named binding:
+				// a template identifier introduced by an enclosing macro carries that
+				// expansion's intro scope, and so does the binder it means, so a second
+				// expansion of the same outer macro resolves to its own binder rather
+				// than to the first expansion's.
+				gi := env.GetGlobalIndexAcrossPhases(symVal, t.Scopes())
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
 				freeIds[symVal.Key] = &FreeIdResolution{

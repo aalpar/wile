@@ -123,3 +123,28 @@ func TestTopLevelMacroBinder_IntroducedNameIsNotReachable(t *testing.T) {
 		hidden`)
 	c.Assert(err, qt.IsNotNil)
 }
+
+// A macro-generating macro expanded TWICE must give each generated inner macro
+// its own copy of the phase-0 define the outer template introduced.
+//
+// This is the jabberwocky/march-hare case that GetGlobalIndexAcrossPhases's doc
+// comment cites as the reason the phase-0 runtime search must stay reachable
+// (environment_frame.go). One expansion always worked. Two did not: each
+// expansion's `march-hare` carries that expansion's intro scope, so the name owns
+// two slots, and the free-identifier resolution behind the generated macro's
+// template resolved it by BARE NAME — taking whichever slot was created first, for
+// both hatters. Definition order decided the answer for everyone.
+func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(define-syntax jabberwocky
+		  (syntax-rules ()
+		    ((_ hatter val)
+		     (begin (define march-hare val)
+		            (define-syntax hatter (syntax-rules () ((_) march-hare)))))))
+		(jabberwocky mad-hatter 1)
+		(jabberwocky dormouse 2)
+		(list (mad-hatter) (dormouse))`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "(1 2)")
+}
