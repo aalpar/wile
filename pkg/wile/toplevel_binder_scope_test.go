@@ -153,44 +153,57 @@ func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
 // bare user reference — the define-syntax analogue of
 // TestTopLevelMacroBinder_DoesNotLeakToUser above.
 //
-// RED and t.Skip-guarded. This is Stage C task C2, ATTEMPTED AND STOPPED on
-// 2026-07-19; see the plan's C2 blocker section for the measurement.
+// RED and t.Skip-guarded. Stage C task C2; see the plan's C2 section.
 //
 // Stage B closed this for VALUE binders by passing the binder's scope set to
-// binding creation. The syntax binder keeps the pre-Stage-B shape: create under
-// nil (compile_define_syntax.go), then stamp m.Scopes afterwards. The set is the
-// slot's KEY, so stamping it after the fact keys the slot under the empty set and
-// then makes it report a set it was never keyed under — the same defect the plan
-// diagnosed and fixed in predeclareBinding (letrec_semantics.go). Both keywords
-// therefore key under {} and dedupe onto ONE slot, so the later define wins.
+// binding creation. Syntax binders keep the pre-Stage-B shape at BOTH creation
+// sites — compile_define_syntax.go:83 (top level) and expander_body.go:166
+// (internal) — create under nil, then stamp m.Scopes afterwards. Creation dedupes
+// with scopeSetsEqual against the STAMPED set (global_environment_frame.go:327),
+// so passing nil compares against the empty set: a macro-introduced {intro}
+// keyword reuses a pre-existing empty-scoped binding and re-stamps it, and the
+// later define wins. Lookup would not discriminate anyway — lookupMacroBinding
+// (expander_time_continuation.go:330) passes nil scopes, which GetBinding
+// documents as MATCH ANY, on all three arms.
 //
 // The obvious fix — pass keywordSym.Scopes() at creation and resolve
-// lookupMacroBinding under the reference's scopes — DOES make this test and its
-// sibling pass, and breaks 9 tests in 4 packages (letrec-syntax self- and mutual
-// recursion; guard/guard-aux). Measured cause: a syntax binder's scope set is not
-// stable across expansion passes, so it is not a usable key. For the guard case,
-// the my-guard-aux BINDER carries [scope:75(let)] while the reference to it from
-// inside my-guard's template carries [scope:102(let) scope:101(lambda)
-// scope:100(lambda) scope:99(lambda) scope:98(lambda) scope:97(intro)] — a
-// DIFFERENT let scope. The binder is created when its define-syntax is compiled;
-// a sibling macro's template reference arrives in a later expansion carrying
-// freshly minted scopes, so bindingScopes ⊄ useScopes and an ordinary
-// macro-to-macro reference stops resolving.
+// lookupMacroBinding under the reference's scopes — makes this test pass and
+// breaks 9 tests in 4 packages (letrec-syntax self- and mutual recursion;
+// guard/guard-aux).
 //
-// CORRECTED 2026-07-19: that diagnosis is wrong in two ways, both recorded in the
-// plan's C2 correction block. (1) bestSlotLocked matches on the STAMPED scope set,
-// not the slot key, so the attempt changed a key that does not decide matching.
-// (2) The measurement above comes from expander_body.go's internal-define-syntax
-// path, NOT compile_define_syntax.go — my-guard-aux is defined inside (let () …).
-// Treating both creation sites takes 9 failures down to 1. C2 is open, not blocked.
+// The cause is NOT that a binder's scope set drifts between passes. Expansion is
+// one pass (ExpandAndCompile, expand_and_compile.go:37, expands to completion then
+// compiles; the compiler never re-enters the expander on expander output).
+// Template identifiers are scope-STRIPPED unconditionally — applyHygieneToSymbol
+// calls srcCtx.WithoutScopes() (match/syntax_expand.go:285) and then adds only the
+// intro scope. So a binder's ambient scopes can never appear on a template
+// reference to it, by design, and keying binders on the full ambient set can never
+// resolve macro-to-macro reference. Measured: binder [scope:97(let)], template ref
+// [scope:98(intro)]; a NON-template reference to the same sibling keeps its let
+// scope intact. In the guard case the [scope:75(let)] binder and the
+// [scope:102(let) …] reference are two DIFFERENT lets (my-guard's handler let and
+// its body let), not one let re-minted.
 //
-// The value-binder path does not hit any of this because a define and its
-// references are scoped in the same pass. A real fix needs a binder key that
-// survives re-expansion — the
-// macro-introduction scopes alone, or a stable binder identity — which is
-// successor work, not a call-site change.
+// The FreeIds pin (compile_syntax_rules.go:310) is what re-establishes the
+// definition-site link out of band, and it covers macro keywords, but it resolves
+// only what is bound at macro-DEFINITION time. my-guard's template names
+// my-guard-aux before that binder exists, so the pin is nil and the reference
+// falls to the strip-plus-intro branch. A non-nil pin would not help either:
+// tryResolvedBinding (compile_time_continuation.go:322) is consumed only by the
+// value-level symbol compiler, never by the macro lookup.
+//
+// The value-binder path avoids all of this because a define and its references are
+// scoped in the same pass, with no stripping between them.
+//
+// Path forward: two defects sit under C2 and are separately observable. (1) The nil
+// creation key above. (2) MaybeCreateOwnGlobalBinding returns a name-only
+// GlobalIndex (matchAny() true), so the following GetGlobalBinding re-resolves to
+// the first live slot of that name and can stamp a different binding than the one
+// just created. Fix both, then re-measure whether keying on the macro-introduction
+// scopes alone is still needed — treating both creation sites that way already
+// takes the fallout from 9 failures to 1.
 func TestTopLevelMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
-	t.Skip("RED: C2 blocker — define-syntax keywords key under {} and dedupe onto one slot; see plan C2 blocker")
+	t.Skip("RED: C2 — define-syntax binders are created under a nil scope key and dedupe onto one slot; see plan C2")
 
 	c := qt.New(t)
 	_, err := evalTopLevel(t, `
@@ -205,12 +218,12 @@ func TestTopLevelMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
 // keyword. Both orders must give the user's transformer for a bare reference;
 // today the two share one slot, so whichever is defined LAST wins.
 //
-// RED and t.Skip-guarded — same C2 blocker as the test above. Measured on HEAD:
+// RED and t.Skip-guarded — same C2 cause as the test above. Measured on HEAD:
 // user-then-macro yields 'introduced (wrong), macro-then-user yields 'user (right
 // answer, wrong reason). Order deciding the answer is the shared-slot signature;
 // two hygiene-distinct slots would make both orders yield 'user.
 func TestTopLevelMacroSyntaxBinder_DoesNotClobberUser(t *testing.T) {
-	t.Skip("RED: C2 blocker — one shared slot, so last define-syntax wins; see plan C2 blocker")
+	t.Skip("RED: C2 — one shared slot, so last define-syntax wins; see plan C2")
 
 	c := qt.New(t)
 
