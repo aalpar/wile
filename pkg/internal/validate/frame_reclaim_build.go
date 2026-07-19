@@ -130,11 +130,18 @@ func buildReclaimGraph(
 			return
 		}
 		name := d.Name().Sym.Key
+		_, dup := byName[name]
 		n := &reclaimNode{
 			label:             name,
 			referencesCapture: bodyReferencesCaptureOperator(d.Body(), isCaptureOp),
 			createsEscaping:   bodyCreatesEscapingClosure(d.Body()),
 			rebindStable:      d.StableInUnit && immTop,
+			// byName is last-wins and the fixpoint's node set comes from its values,
+			// so an earlier same-Key define is dropped before its capture facts are
+			// read. Scope-keyed global storage (8afeb66a) plus the removal of the
+			// top-level rename pass (a60e32e1) made same-Key distinct binders
+			// reachable, so the survivor must not speak for them.
+			collided: dup,
 		}
 		byName[name] = n
 		defs = append(defs, d)

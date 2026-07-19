@@ -34,6 +34,17 @@ type reclaimNode struct {
 	// compile that owns the same name (T1.5), and it keeps the classifier sound in
 	// isolation rather than relying on the caller's gate.
 	rebindStable bool
+	// collided reports that this node's Key names more than one top-level function
+	// define in the unit — two hygiene-distinct binders that scope-keyed global
+	// storage keeps apart but this graph, keyed by Key, cannot. Only the last such
+	// define survives in byName, so the others' capture facts never reach the
+	// fixpoint; publishing the survivor's verdict under the shared Key would hand
+	// it to every define of that name (compilation.frameReuseForDefine reads the
+	// verdict by bare Key, and the verdict alone arms the release path). Forcing
+	// the Key unsafe is the conservative resolution: it costs reclaim on a name
+	// defined twice — which already forfeits StableInUnit — and it is the only
+	// direction this classifier may err in (frame_reclaim.go mayCapture).
+	collided bool
 }
 
 // reclaimEdge is one resolved call site that constrains reclaimability. A call
@@ -49,7 +60,7 @@ type reclaimEdge struct {
 // mayCapture computes, for every node, whether it may expose a frame to a
 // continuation. It is the negation of a greatest-fixpoint Safe predicate:
 //
-//	Safe(n) := ¬referencesCapture(n) ∧ ¬createsEscaping(n)
+//	Safe(n) := ¬collided(n) ∧ ¬referencesCapture(n) ∧ ¬createsEscaping(n)
 //	         ∧ ∀ edge e in n.callees: e.target≠nil ∧ e.immutable ∧ Safe(e.target)
 //
 // Start optimistic (all Safe) and knock out violators until stable. The
@@ -98,7 +109,7 @@ func mayCapture(nodes []*reclaimNode) map[*reclaimNode]bool {
 // reads false, which is the conservative outcome — but the builder guarantees
 // every non-nil edge target is a member of the node set.
 func nodeSafe(n *reclaimNode, safe map[*reclaimNode]bool) bool {
-	if n.referencesCapture || n.createsEscaping {
+	if n.collided || n.referencesCapture || n.createsEscaping {
 		return false
 	}
 	for _, e := range n.callees {

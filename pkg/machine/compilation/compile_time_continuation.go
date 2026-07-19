@@ -83,11 +83,16 @@ type CompileTimeContinuation struct {
 	// compiles, and single-expression (non-begin) programs — there frameReuseForDefine falls
 	// back to the per-body predicate (status quo).
 	//
-	// Keyed by Sym.Key (not BindingID like the inlineCandidates sibling above): its
-	// domain is top-level defines, where a GlobalEnvironmentFrame holds one slot per
-	// Key (keys are symbol values, not scope-multiplexed), so a Key uniquely names a
-	// global binding — and it must match ClassifyFrameReclaim's own map[string]bool
-	// return domain (keyed by Name().Sym.Key). inlineCandidates needs BindingID
+	// Keyed by Sym.Key (not BindingID like the inlineCandidates sibling above),
+	// matching ClassifyFrameReclaim's own map[string]bool return domain (keyed by
+	// Name().Sym.Key). A Key does NOT uniquely name a global binding: since
+	// scope-keyed global storage (a GlobalEnvironmentFrame holds a slot PER SCOPE SET
+	// per Key) two hygiene-distinct top-level binders can share a Key, and
+	// frameReuseForDefine below reads this map by bare Key for every define of that
+	// name. The classifier closes that hole on its side by forcing a colliding Key
+	// unsafe (validate.reclaimNode.collided), so a verdict published here is sound for
+	// every define sharing the Key. Making the domain itself scope-aware is the
+	// general fix and waits on BindingID. inlineCandidates needs BindingID already,
 	// because its local let-bound bindings recur the same Key across nested scopes.
 	frameReclaimVerdict map[string]bool
 	// quasiMaxDepth bounds structural recursion in the quasiquote/quasisyntax
