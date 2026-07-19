@@ -132,6 +132,80 @@ func TestEngineDefineAndGet(t *testing.T) {
 	})
 }
 
+// A host Define must not land on a macro-introduced binding that happens to
+// share the name.
+//
+// Define CREATES under the exact empty scope set (a distinct slot, since a
+// macro-introduced binder carries its intro scope) but WRITES through
+// NewGlobalIndex, a deferred index that resolves MATCH ANY — the name's first
+// live slot. When a macro got there first, that slot is the macro's, so the
+// host's value lands on the macro's variable and the host's own binding is
+// left #!void. Create means exact-empty-set; write means any.
+func TestEngineDefine_DoesNotClobberMacroIntroducedBinding(t *testing.T) {
+	ctx := context.Background()
+
+	engine, err := wile.NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	// The macro's template introduces a top-level `zz`, keyed under its intro
+	// scope, and exposes a reader so we can observe it from Scheme afterwards.
+	_, err = engine.EvalMultiple(ctx, `
+		(define-syntax mk
+		  (syntax-rules ()
+		    ((_ reader)
+		     (begin (define zz 'macro-value)
+		            (define (reader) zz)))))
+		(mk read-zz)`)
+	qt.Assert(t, err, qt.IsNil)
+
+	err = engine.Define("zz", wile.NewInteger(42))
+	qt.Assert(t, err, qt.IsNil)
+
+	// The macro's own variable must be untouched by the host's Define.
+	got, err := engine.EvalMultiple(ctx, `(read-zz)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.SchemeString(), qt.Equals, "macro-value",
+		qt.Commentf("host Define wrote through the macro's slot"))
+
+	// And the host must be able to read back what it defined.
+	val, ok := engine.Get("zz")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, val.SchemeString(), qt.Equals, "42",
+		qt.Commentf("host's own binding was left unwritten"))
+}
+
+// The other half of Get's scoped resolution: a name bound ONLY under a macro's
+// intro scope is reported absent, not handed to the host.
+//
+// The binding is real and the macro can use it, but no source-written reference
+// can reach it either, so there is no name the host could legitimately use to
+// ask for it. A wildcard Get would hand back a binding whose hygiene says it is
+// not addressable.
+func TestEngineGet_DoesNotSeeMacroOnlyBinding(t *testing.T) {
+	ctx := context.Background()
+
+	engine, err := wile.NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `
+		(define-syntax mk
+		  (syntax-rules ()
+		    ((_ reader)
+		     (begin (define hidden 'macro-only)
+		            (define (reader) hidden)))))
+		(mk read-hidden)`)
+	qt.Assert(t, err, qt.IsNil)
+
+	// The macro itself can still reach its own binder.
+	got, err := engine.EvalMultiple(ctx, `(read-hidden)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.SchemeString(), qt.Equals, "macro-only")
+
+	_, ok := engine.Get("hidden")
+	qt.Assert(t, ok, qt.IsFalse,
+		qt.Commentf("macro-introduced binder must not be host-addressable by name"))
+}
+
 func TestEngineCall(t *testing.T) {
 	ctx := context.Background()
 

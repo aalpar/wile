@@ -341,6 +341,20 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt Bind
 	return q, true
 }
 
+// NOTE (2026-07-19): returning a scope-keyed index pinned to (p, i) here — which
+// is task C2b, and which both branches have the information to do — was tried and
+// REVERTED. It is correct in isolation and it breaks the tree, because today's
+// macro path depends on two errors cancelling: define-syntax writes the
+// transformer through this deferred index (wildcard, landing on the name's FIRST
+// slot rather than the one just created) and lookupMacroBinding reads it back
+// wildcard, finding the same wrong slot. Fixing only the write makes the read
+// miss: `(chibi diff)` fails to load with `no such binding "let*-to-let" with
+// compatible scopes`.
+//
+// So C2b cannot land without the macro read path moving in the same commit —
+// the reverse of the plan's sequencing, which lists C2b as a prerequisite OF the
+// read-path work. Do not re-attempt it standalone.
+
 // GetGlobalIndex returns the GlobalIndex for the given symbol.
 // Returns nil if the symbol is not bound in this global environment.
 // Thread-safe: uses RLock for read-only access.

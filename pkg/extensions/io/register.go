@@ -296,8 +296,7 @@ func addPortState(r *registry.Registry) error {
 // parameter set!-able, matching the former AddGlobalValue path.
 func registerPortParam(env *environment.EnvironmentFrame, name string, param *machine.Parameter) error {
 	sym := values.NewSymbol(name)
-	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
-	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), param)
+	err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, param)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "io: binding port parameter %s", name)
 	}

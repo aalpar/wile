@@ -772,6 +772,34 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 	return p.global.CreateGlobalBinding(key, bt, scopes)
 }
 
+// DefineOwnGlobal creates (or reuses) the binding for key under scopes in this
+// frame's own global environment, then writes v to that binding.
+//
+// It exists because create and write disagree about what a nil scope set means:
+// creation treats nil as the EXACT empty set (so a macro-introduced binder gets
+// its own slot), while a GlobalIndex built from a bare symbol resolves MATCH ANY
+// (the name's first live slot, whatever its hygiene). Pairing the two by hand
+// therefore creates one binding and writes a different one as soon as any macro
+// has introduced the same name — the host's value lands on the macro's variable
+// and the host's own binding stays void.
+//
+// Callers that create a global and immediately give it a value should use this
+// instead of pairing MaybeCreateOwnGlobalBinding with SetOwnGlobalValue, so the
+// nil question cannot be asked wrongly at the call site.
+func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) error {
+	p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
+
+	// Re-resolve under the creation key. CreateGlobalBinding hands back a
+	// DEFERRED index carrying neither frame nor scopes, which the write path
+	// would resolve wildcard.
+	gi := p.global.GetGlobalIndexWithScopes(key, scopes)
+	if gi == nil {
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
+			"DefineOwnGlobal: binding %q not found after creation", key)
+	}
+	return p.global.SetOwnGlobalValue(gi, v)
+}
+
 // GetGlobalIndex returns the GlobalIndex of the binding for the given symbol,
 // searching global bindings in the current and parent environments.
 // It returns nil if the binding does not exist.

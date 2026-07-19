@@ -670,14 +670,28 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 // Define binds a value to a name in the top-level environment.
 func (p *Engine) Define(name string, value Value) error {
 	sym := values.NewSymbol(name)
-	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
-	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), unwrapValue(value))
+	return p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, unwrapValue(value))
 }
 
 // Get retrieves a value by name from the environment.
+//
+// Resolution is scoped to the ambient (empty) scope set, symmetric with
+// [Engine.Define], which creates under that same set. A wildcard read would
+// return the name's first slot regardless of hygiene, so once any macro
+// introduced a same-named top-level binder the host could not round-trip its
+// own value: Define would write one slot and Get would read another.
+//
+// A name bound ONLY under a non-empty scope set is correctly reported as
+// absent. Such a binding is macro-introduced and is unreachable from any
+// source-written reference too, so there is no name the host could legitimately
+// use to ask for it. Wildcard lookup remains the right answer for introspection
+// and REPL completion, which is why those callers keep it.
 func (p *Engine) Get(name string) (Value, bool) {
 	sym := values.NewSymbol(name)
-	idx := environment.NewGlobalIndex(sym)
+	idx := p.env.GetGlobalIndexWithScopes(sym, nil)
+	if idx == nil {
+		return nil, false
+	}
 	binding := p.env.GetGlobalBinding(idx)
 	if binding == nil {
 		return nil, false
@@ -688,7 +702,6 @@ func (p *Engine) Get(name string) (Value, bool) {
 // RegisterPrimitive adds a Go function as a Scheme primitive.
 func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 	sym := values.NewSymbol(spec.Name)
-	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 
 	closure := machine.NewForeignClosure(
 		p.env,
@@ -702,7 +715,7 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 
-	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+	return p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
 }
 
 // Call invokes a Scheme procedure with arguments.

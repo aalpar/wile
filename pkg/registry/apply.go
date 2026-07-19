@@ -225,7 +225,6 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 // per Instance C of the dispatch-axis-as-data finding (plans/2026-05-08-dispatch-axis-as-data.md).
 func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
 	sym := values.NewSymbol(spec.Name)
-	gi, _ := bindingEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 
 	closure := machine.NewForeignClosure(
 		closureEnv,
@@ -239,13 +238,25 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 		closure.SetValidator(BuildValidator(spec))
 	}
 
-	err := bindingEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+	err := bindingEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
 	}
 
-	// A nil binding here is an invariant violation — SetOwnGlobalValue just
-	// succeeded against this same gi — so surface it rather than silently skipping
+	// Address the binding just written, not the name's first slot. A GlobalIndex
+	// built from the bare symbol resolves MATCH ANY, so the stamps below would
+	// land on a hygiene-distinct binding of the same name if one existed.
+	gi := bindingEnv.GetGlobalIndexWithScopes(sym, nil)
+	if gi == nil {
+		return werr.WrapForeignErrorf(
+			werr.ErrNoSuchBinding,
+			"registerPhasePrimitive: binding for %s vanished after registration at phase %s",
+			spec.Name, phase,
+		)
+	}
+
+	// A nil binding here is an invariant violation — DefineOwnGlobal just
+	// succeeded against this same name — so surface it rather than silently skipping
 	// the stamps below.
 	b := bindingEnv.GetGlobalBinding(gi)
 	if b == nil {
@@ -286,9 +297,7 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 
 func registerGlobalValue(env *environment.EnvironmentFrame, name string, value values.Value) error {
 	sym := values.NewSymbol(name)
-	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
-
-	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), value)
+	err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering global value %s", name)
 	}
