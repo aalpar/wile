@@ -85,6 +85,10 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// library's environment via the TLE's scope registry.
 	libScope := syntax.NewScopeWithLabel("library:" + libName.SchemeString())
 	p.env.Namespace().RegisterLibraryScope(libScope, libEnv)
+	// The export lookup resolves under this scope; see CompiledLibrary.Scope.
+	// Set before any declaration is processed, because processLibraryDeclaration
+	// can import (and so populate bindings) before the body is compiled.
+	lib.Scope = libScope
 
 	// Process library declarations
 	declsExpr := rest.SyntaxCdr()
@@ -301,17 +305,23 @@ func validateLibraryExports(lib *CompiledLibrary) error {
 		return nil
 	}
 	sort.Strings(missing)
-	// The gap has two distinct causes that look identical at this layer: a genuine
-	// library bug (a name misspelled in the export list, or never defined/imported),
-	// or a name that IS a real primitive the active security profile does not register
-	// (e.g. (scheme base)'s I/O exports under the Tiny profile). We cannot tell them
-	// apart here — the full cross-profile primitive set lives in registry/, which sits
-	// above this layer — so the diagnostic names both possibilities rather than
-	// asserting the names are "undefined".
+	// The gap has three distinct causes that look identical at this layer: a genuine
+	// library bug (a name misspelled in the export list, or never defined/imported);
+	// a name that IS a real primitive the active security profile does not register
+	// (e.g. (scheme base)'s I/O exports under the Tiny profile); or a name that IS
+	// bound in the library but under a scope set the export cannot reach, which
+	// happens when a macro TEMPLATE introduced the binder rather than the library
+	// author writing it (R7RS §4.3.2 — the introduced identifier is not the one the
+	// export list names, so it is deliberately not part of the interface; see
+	// findLibraryBinding). We cannot tell the first two apart here — the full
+	// cross-profile primitive set lives in registry/, which sits above this layer —
+	// so the diagnostic names all three possibilities rather than asserting the
+	// names are "undefined".
 	return werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier,
-		"define-library: %s exports %d identifier(s) with no binding in the library's "+
-			"environment (either a typo in the export list, or the active security "+
-			"profile does not register these primitives): %s",
+		"define-library: %s exports %d identifier(s) with no binding the export list can "+
+			"reach (a typo in the export list; the active security profile does not "+
+			"register these primitives; or the binder was introduced by a macro template, "+
+			"which is hygienically distinct from the exported name): %s",
 		lib.Name.SchemeString(), len(missing), strings.Join(missing, ", "))
 }
 

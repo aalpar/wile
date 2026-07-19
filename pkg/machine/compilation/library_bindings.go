@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -381,6 +382,35 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 // (or the binding pointer) before relying on the returned phase — the
 // phase return cannot carry a sentinel "not found" value because every
 // non-negative Phase is a valid result.
+//
+// Resolution is HYGIENIC, keyed on the library's own scope (CompiledLibrary.Scope),
+// not by bare name. Three cases, all decided by maximal subset resolution rather
+// than by slot-insertion order:
+//
+//   - the library defines the name: the binder carries {libScope} and outranks
+//     an ambient import of the same name sitting at {};
+//   - the library only re-exports the name: only the import's {} slot exists,
+//     and {} ⊆ {libScope}, so it still resolves;
+//   - the name was introduced by a macro TEMPLATE inside the library body: the
+//     binder carries the intro scope, which is not a subset of {libScope}, so
+//     it does NOT resolve and cannot be exported. That is deliberate (R7RS
+//     §4.3.2): an identifier the library author never wrote is not part of the
+//     library's interface. validateLibraryExports turns the miss into an
+//     eager error at define-library time.
+//
+// A name arriving through a macro PATTERN VARIABLE (define-record-type's
+// accessors, any (mk name v) form) carries {libScope} like a hand-written
+// binder, so those stay exportable.
+// ExportedBinding resolves one of the library's exportable bindings by its
+// internal name, using the same hygienic rule the import path uses. Callers
+// outside this package (the doc-registration observer) must go through this
+// rather than reaching into lib.Env with a bare-name lookup, or they will
+// disagree with what an import actually installs.
+func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Binding, bool) {
+	binding, _, found := findLibraryBinding(p, internalName)
+	return binding, found
+}
+
 func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase, bool) {
 	sourceEnvs := []struct {
 		env   *environment.EnvironmentFrame
@@ -391,12 +421,19 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 		{lib.Env.Compile(), environment.PhaseCompile},
 	}
 
+	// A non-nil empty slice, never nil: GetBinding reads nil scopes as "match
+	// any", which is the bare-name lookup this replaced.
+	exportScopes := []*syntax.Scope{}
+	if lib.Scope != nil {
+		exportScopes = append(exportScopes, lib.Scope)
+	}
+
 	libSym := values.NewSymbol(internalName)
 	for _, src := range sourceEnvs {
 		if src.env == nil {
 			continue
 		}
-		binding := src.env.GetBinding(libSym, nil)
+		binding := src.env.GetBinding(libSym, exportScopes)
 		if binding != nil {
 			return binding, src.phase, true
 		}
@@ -475,6 +512,63 @@ func sameImportedBinding(a, b values.Value) bool {
 	}
 }
 
+// installImportedBinding installs source into env under localSym, and is the
+// single implementation behind every import install site (base phase, propagated
+// phase, direct library-internal, and the expand-phase copy of a syntax binding).
+//
+// The binding is created AMBIENT, under the empty scope set. That is what makes
+// an imported name behave like one: a plain top-level reference carries the empty
+// set and reaches it, and the importing unit's own (define ...) of the same name
+// carries the empty set too, so it shares the slot and supersedes the import
+// rather than sitting beside it (R7RS §5.3.1). A library body's own define, by
+// contrast, carries the library scope and gets its own slot; the export lookup
+// prefers it by maximal resolution (see findLibraryBinding).
+//
+// Creation, the conflict check, the value write, and the provenance stamp all
+// address ONE slot, resolved once under that ambient key. They used to be four
+// separate lookups, three of them wildcard by bare name, which agree only while a
+// name has a single slot per frame: a wildcard answer can be a hygienically
+// distinct binding of the same name, or a parent frame's binding while `created`
+// reports on this frame, putting the guard and the write on different variables.
+func installImportedBinding(
+	env *environment.EnvironmentFrame,
+	localSym *values.Symbol,
+	bt environment.BindingType,
+	source *environment.Binding,
+	exportName string,
+	sourceLib LibraryName,
+	phaseContext string,
+) error {
+	ambient := []*syntax.Scope{}
+	_, created := env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
+
+	own := env.GlobalEnvironment()
+	idx := own.GetGlobalIndexWithScopes(localSym, ambient)
+	if idx == nil {
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
+			"import: binding %q vanished immediately after creation%s", localSym.Key, phaseContext)
+	}
+	target := own.GetOwnGlobalBinding(idx)
+
+	// A previously-imported binding of this local name that resolves to a
+	// different binding is a conflicting import (R7RS §5.6): reject rather than
+	// silently last-wins. `created` and `target` now come from the same predicate,
+	// so the guard cannot be asked about a binding other than the one it protects.
+	if !created && importConflicts(target, source) {
+		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
+			"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
+			localSym.Key, sourceLib.SchemeString())
+	}
+
+	err := own.SetOwnGlobalValue(idx, source.Value())
+	if err != nil {
+		return werr.WrapForeignErrorf(err,
+			"import: failed to set binding for %s%s", localSym.Key, phaseContext)
+	}
+	markBindingImported(target, source, exportName, sourceLib)
+	return nil
+}
+
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
@@ -488,25 +582,14 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Create binding in the target at the base phase. A previously-imported
-		// binding of the same local name that resolves to a different binding is a
-		// conflicting import (R7RS §5.6) — reject rather than silently last-wins.
+		// Create binding in the target at the base phase.
 		phaseEnv := targetEnv.AtPhase(targetPhase)
 		localSym := values.NewSymbol(localName)
-		_, created := phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType(), nil)
-		if !created && importConflicts(phaseEnv.GetBinding(localSym, nil), libBinding) {
-			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-				localName, lib.Name.SchemeString())
+		err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
+			libBinding, externalName, lib.Name, " at phase "+targetPhase.String())
+		if err != nil {
+			return err
 		}
-		globalIdx := phaseEnv.GetGlobalIndex(localSym)
-		if globalIdx != nil {
-			err := phaseEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %s", localName, targetPhase)
-			}
-		}
-		markBindingImported(phaseEnv.GetBinding(localSym, nil), libBinding, externalName, lib.Name)
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
@@ -524,27 +607,16 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 					phaseSum, int(targetPhase), int(sourcePhase), math.MaxInt8, localName, lib.Name.SchemeString())
 			}
 			propagatePhase := environment.Phase(phaseSum)
+			// Same conflict guard as the base phase: the base phase catches most
+			// clashes first; this closes the case where the base entry is created
+			// fresh but the propagated (e.g. expand) entry already exists.
 			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
-			_, propagateCreated := propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType(), nil)
-			// Same conflict guard as the base phase: a previously-imported binding at
-			// this propagated phase that resolves differently is a conflict. The base
-			// phase catches most clashes first; this closes the case where the base entry
-			// is created fresh but the propagated (e.g. expand) entry already exists.
-			if !propagateCreated && importConflicts(propagateEnv.GetBinding(propagateSym, nil), libBinding) {
-				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-					localName, lib.Name.SchemeString())
+			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
+				libBinding, externalName, lib.Name, " propagated to phase "+propagatePhase.String())
+			if err != nil {
+				return err
 			}
-			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
-			if propagateIdx != nil {
-				err := propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
-				if err != nil {
-					return werr.WrapForeignErrorf(err,
-						"import: failed to set propagated binding for %s at phase %s", localName, propagatePhase)
-				}
-			}
-			markBindingImported(propagateEnv.GetBinding(propagateSym, nil), libBinding, externalName, lib.Name)
 		}
 	}
 	return nil
@@ -604,39 +676,19 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// libraries with different bindings for one name is rejected per R7RS §5.6,
 		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		_, created := targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType(), nil)
-		if !created && importConflicts(targetEnv.GetBinding(localSym, nil), importedBinding) {
-			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-				localName, lib.Name.SchemeString())
+		err := installImportedBinding(targetEnv, localSym, importedBinding.BindingType(),
+			importedBinding, externalName, lib.Name, "")
+		if err != nil {
+			return err
 		}
-		globalIdx := targetEnv.GetGlobalIndex(localSym)
-		if globalIdx != nil {
-			err := targetEnv.SetOwnGlobalValue(globalIdx, importedBinding.Value())
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
-			}
-		}
-		markBindingImported(targetEnv.GetBinding(localSym, nil), importedBinding, externalName, lib.Name)
 
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
-			expandEnv := targetEnv.Expand()
-			_, expandCreated := expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax, nil)
-			if !expandCreated && importConflicts(expandEnv.GetBinding(localSym, nil), importedBinding) {
-				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
-					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
-					localName, lib.Name.SchemeString())
+			err = installImportedBinding(targetEnv.Expand(), localSym, environment.BindingTypeSyntax,
+				importedBinding, externalName, lib.Name, " in expand phase")
+			if err != nil {
+				return err
 			}
-			expandIdx := expandEnv.GetGlobalIndex(localSym)
-			if expandIdx != nil {
-				err := expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
-				if err != nil {
-					return werr.WrapForeignErrorf(err,
-						"import: failed to install syntax binding for %s in expand phase", localName)
-				}
-			}
-			markBindingImported(expandEnv.GetBinding(localSym, nil), importedBinding, externalName, lib.Name)
 		}
 	}
 	return nil

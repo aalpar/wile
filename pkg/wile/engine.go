@@ -1210,9 +1210,11 @@ func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *regis
 				internalName = name
 			}
 
-			sym := values.NewSymbol(internalName)
-			bnd := lib.Env.GetBinding(sym, nil)
-			if bnd == nil || bnd.BindingType() != environment.BindingTypeVariable {
+			// Resolve exactly as the import path does. A bare-name lookup into
+			// lib.Env agrees only while a name has one slot per frame, so it can
+			// document a different binding than the one the import installed.
+			bnd, found := lib.ExportedBinding(internalName)
+			if !found || bnd.BindingType() != environment.BindingTypeVariable {
 				continue
 			}
 

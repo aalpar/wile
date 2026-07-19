@@ -33,6 +33,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -96,6 +97,15 @@ type CompiledLibrary struct {
 	Exports     map[string]string             // external-name -> internal-name
 	SourceFile  string                        // Path to .sld file (for error messages)
 	Template    *machine.NativeTemplate       // Compiled bytecode (for execution)
+
+	// Scope is the library's own hygiene scope, the one every binder written in
+	// the library body carries. It is the KEY the export lookup resolves under
+	// (findLibraryBinding), which is what lets a library define a name it also
+	// imports: the define lands at {Scope}, the import at {}, and maximal
+	// resolution prefers the define while {} ⊆ {Scope} still reaches a name the
+	// library only re-exports. Nil for a library built without a body scope, in
+	// which case the export lookup degrades to the empty set.
+	Scope *syntax.Scope
 }
 
 // NewCompiledLibrary creates a new compiled library.
