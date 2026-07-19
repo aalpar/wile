@@ -427,7 +427,7 @@ func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 
 	// Bind it in the library environment via direct global binding
 	dataSym := values.NewSymbol("imported-data")
-	gi, _ := lib.MaybeCreateOwnGlobalBinding(dataSym, environment.BindingTypeVariable)
+	gi, _ := lib.MaybeCreateOwnGlobalBinding(dataSym, environment.BindingTypeVariable, nil)
 	err = lib.SetOwnGlobalValue(gi, parentResult)
 	c.Assert(err, qt.IsNil)
 
@@ -466,7 +466,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 
 	// Bind the closure in the library
 	fnSym := values.NewSymbol("get-parent-x")
-	gi, _ := lib.MaybeCreateOwnGlobalBinding(fnSym, environment.BindingTypeVariable)
+	gi, _ := lib.MaybeCreateOwnGlobalBinding(fnSym, environment.BindingTypeVariable, nil)
 	err = lib.SetOwnGlobalValue(gi, closureVal)
 	c.Assert(err, qt.IsNil)
 
@@ -506,7 +506,7 @@ func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 
 	// Bind it in the library
 	paramSym := values.NewSymbol("my-param")
-	gi, _ := lib.MaybeCreateOwnGlobalBinding(paramSym, environment.BindingTypeVariable)
+	gi, _ := lib.MaybeCreateOwnGlobalBinding(paramSym, environment.BindingTypeVariable, nil)
 	err = lib.SetOwnGlobalValue(gi, paramVal)
 	c.Assert(err, qt.IsNil)
 

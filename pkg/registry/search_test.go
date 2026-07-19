@@ -331,7 +331,7 @@ func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
 
 	// Bind it in the global environment.
 	sym := values.NewSymbol("make-widget")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	err = env.SetOwnGlobalValue(gi, fc)
 	c.Assert(err, qt.IsNil)
 

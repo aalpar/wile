@@ -35,6 +35,7 @@ func newNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFra
 		env.MaybeCreateOwnGlobalBinding(
 			values.NewSymbol(name),
 			environment.BindingTypePrimitive,
+			nil,
 		)
 	}
 	return env

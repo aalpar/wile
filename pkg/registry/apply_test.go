@@ -249,6 +249,7 @@ func TestApplyDocs(t *testing.T) {
 	compileEnv := env.Compile()
 	compileEnv.MaybeCreateOwnGlobalBinding(
 		values.NewSymbol("and"), environment.BindingTypeSyntax,
+		nil,
 	)
 
 	reg.ApplyDocs(env)

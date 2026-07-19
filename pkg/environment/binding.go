@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"slices"
 	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/syntax"
@@ -204,9 +205,20 @@ func (p *atomicCell) updateMeta(fn func(*BindingMeta) bool) bool {
 // installation into a GlobalEnvironmentFrame where it may be read lock-free from
 // multiple threads. Every binding entering a global frame must go through this
 // (or ensureGlobalCell) so the "in a global frame => has a cell" invariant holds.
-func newGlobalBinding(value values.Value, bindingType BindingType) *Binding {
+// scopes are the hygiene scope set the binding is created under; they become
+// part of its identity within the frame, so a macro-introduced top-level binder
+// and a user-written one of the same name stay distinct variables. The set is
+// written once here and never mutated afterwards, so it needs no interaction
+// with the copy-on-write UpdateMeta path.
+func newGlobalBinding(value values.Value, bindingType BindingType, scopes []*syntax.Scope) *Binding {
+	if len(scopes) == 0 {
+		return &Binding{
+			cell:        newAtomicCell(value),
+			bindingType: bindingType,
+		}
+	}
 	return &Binding{
-		cell:        newAtomicCell(value),
+		cell:        newAtomicCellWithMeta(value, &BindingMeta{Scopes: slices.Clone(scopes)}),
 		bindingType: bindingType,
 	}
 }

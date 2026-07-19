@@ -66,7 +66,7 @@ func envWithOpaque(t *testing.T, name string, opaque values.Value) *environment.
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol(name)
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	err = env.SetOwnGlobalValue(gi, opaque)
 	qt.Assert(t, err, qt.IsNil)
 

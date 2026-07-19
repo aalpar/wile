@@ -109,7 +109,7 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	qt.Assert(t, gi0, qt.IsNil)
 
 	// Test adding a binding
-	gi0, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
+	gi0, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0, valuestest.SchemeEquals, NewGlobalIndex(tv0))
 
@@ -119,13 +119,13 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 
 	// Re-adding the same binding should not change the index
 	tv0 = values.NewSymbol("testVar0")
-	gi0, ok = env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
+	gi0, ok = env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsFalse)
 	qt.Assert(t, gi0.Index, valuestest.SchemeEquals, tv0)
 
 	// Adding a new binding should create a new index
 	tv1 := values.NewSymbol("testVar1")
-	gi1, ok := env.MaybeCreateOwnGlobalBinding(tv1, BindingTypeVariable)
+	gi1, ok := env.MaybeCreateOwnGlobalBinding(tv1, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi1.Index, valuestest.SchemeEquals, tv1)
 
@@ -146,7 +146,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	// check global environment
 	tv0 := values.NewSymbol("testVar0")
 	qt.Assert(t, env, qt.Not(qt.IsNil))
-	_, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
+	_, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	_, ok = env.MaybeCreateLocalBinding(tv0, BindingTypeVariable, nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -203,7 +203,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 	env := NewNamespaceFrame()
 
 	tv0 := values.NewSymbol("testVar0")
-	gi, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
+	gi, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 
 	_, ok = env.EnsureLocalBinding(tv0, BindingTypeVariable)
@@ -369,8 +369,8 @@ func TestEnvironmentFrame_SymbolEqualityAcrossPhases(t *testing.T) {
 	qt.Assert(t, sym1.EqualTo(sym2), qt.IsTrue)
 
 	// Both phases can create bindings with equal symbols
-	runtime.MaybeCreateOwnGlobalBinding(sym1, BindingTypeVariable)
-	expand.MaybeCreateOwnGlobalBinding(sym2, BindingTypeSyntax)
+	runtime.MaybeCreateOwnGlobalBinding(sym1, BindingTypeVariable, nil)
+	expand.MaybeCreateOwnGlobalBinding(sym2, BindingTypeSyntax, nil)
 
 	gi1 := runtime.GetGlobalIndex(sym1)
 	gi2 := expand.GetGlobalIndex(sym2)
@@ -384,7 +384,7 @@ func TestEnvironmentFrame_GetBinding(t *testing.T) {
 
 	// Create global binding
 	globalSym := values.NewSymbol("global-var")
-	env.MaybeCreateOwnGlobalBinding(globalSym, BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(globalSym, BindingTypeVariable, nil)
 
 	// Create local binding
 	localSym := values.NewSymbol("local-var")
@@ -553,13 +553,13 @@ func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
 	env := NewNamespaceFrame()
 
 	sym := values.NewSymbol("test-global")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 
 	// SetGlobalBindingByIndex takes an int and a binding
 	newBinding := NewBinding(values.NewInteger(99), BindingTypeVariable)
 
 	// Get the index from the global environment's keys map
-	idx := env.global.keys[*gi.Index]
+	idx := env.global.keys[*gi.Index][0]
 	env.SetGlobalBindingByIndex(idx, newBinding)
 
 	binding := env.GetGlobalBinding(gi)
@@ -892,7 +892,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 	topEnv := NewNamespaceFrame()
 	sym := values.NewSymbol("x")
 
-	gi, created := topEnv.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	gi, created := topEnv.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(gi, qt.IsNotNil)
 
@@ -1190,7 +1190,7 @@ func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	c.Assert(gi, qt.IsNil)
 
 	// Add to runtime (phase 0) — should be found
-	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 	gi = env.GetGlobalIndexAcrossPhases(sym)
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Index.Key, qt.Equals, "foo")
@@ -1198,13 +1198,13 @@ func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	// Add a different symbol to expand (phase 1) — should find it there
 	barSym := values.NewSymbol("bar")
 	expandEnv := tle.Expand()
-	expandEnv.MaybeCreateOwnGlobalBinding(barSym, BindingTypeSyntax)
+	expandEnv.MaybeCreateOwnGlobalBinding(barSym, BindingTypeSyntax, nil)
 	gi = env.GetGlobalIndexAcrossPhases(barSym)
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Index.Key, qt.Equals, "bar")
 
 	// Runtime takes priority over expand for same symbol
-	env.MaybeCreateOwnGlobalBinding(barSym, BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(barSym, BindingTypeVariable, nil)
 	gi = env.GetGlobalIndexAcrossPhases(barSym)
 	c.Assert(gi, qt.IsNotNil)
 	// After adding to runtime, runtime binding should be returned (priority order)
@@ -1220,7 +1220,7 @@ func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
 	// Create a library environment with its own bindings
 	libEnv := tle.NewChildRuntime()
 	helperSym := values.NewSymbol("helper-macro")
-	libEnv.MaybeCreateOwnGlobalBinding(helperSym, BindingTypeSyntax)
+	libEnv.MaybeCreateOwnGlobalBinding(helperSym, BindingTypeSyntax, nil)
 
 	// Create and register a library scope
 	libScope := syntax.NewScope()
@@ -1257,7 +1257,7 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	// Only in expand phase (simulates define-syntax in a library)
 	macroSym := values.NewSymbol("my-macro")
 	expandEnv := tle.Expand()
-	expandEnv.MaybeCreateOwnGlobalBinding(macroSym, BindingTypeSyntax)
+	expandEnv.MaybeCreateOwnGlobalBinding(macroSym, BindingTypeSyntax, nil)
 
 	gi := env.GetGlobalIndexAcrossPhases(macroSym)
 	c.Assert(gi, qt.IsNotNil)

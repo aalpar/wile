@@ -487,15 +487,25 @@ func (p *EnvironmentFrame) resolveLocal(
 // The visitor receives the frame and slot index for each matching key.
 // Returns the first non-nil visitor result.
 // Thread-safe: uses RLock for each frame's global keys/bindings access.
+// Within a frame the best scope-set match wins (Flatt's maximal resolution);
+// across frames the first frame yielding any match wins, which is what preserves
+// shadowing of a sealed-base binding by a user redefinition.
+//
+// matchAny selects any binding of the name regardless of scopes. It is NOT the
+// same as passing nil scopes, which means the empty scope set: a reference
+// written outside any macro expansion must not reach a binder introduced inside
+// one.
 func (p *EnvironmentFrame) resolveGlobal(
 	key values.Symbol,
+	scopes []*syntax.Scope,
+	matchAny bool,
 	visitor func(frame *GlobalEnvironmentFrame, slot int) any,
 ) any {
 	ge := p
 	for {
 		// Lock this frame's global environment for reading
 		ge.global.mu.RLock()
-		i, ok := ge.global.keys[key]
+		i, ok := ge.global.bestSlotLocked(key, scopes, matchAny)
 		if ok {
 			// Call visitor while holding lock - visitor may access bindings[i]
 			result := visitor(ge.global, i)
@@ -556,10 +566,11 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 		}
 	}
 
-	matchAny := scopes == nil
-	gResult := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, i int) any {
+	// The scope filter now lives in bestSlotLocked, which both selects the
+	// maximal match and rejects incompatible candidates.
+	gResult := p.resolveGlobal(*key, scopes, scopes == nil, func(g *GlobalEnvironmentFrame, i int) any {
 		binding := g.bindings[i]
-		if binding != nil && (matchAny || syntax.ScopesCompatible(binding.Scopes(), scopes)) {
+		if binding != nil {
 			return binding
 		}
 		return nil
@@ -753,9 +764,12 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 // GlobalEnvironmentFrame.CreateGlobalBinding).
 // It returns the GlobalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
-func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
+//
+// scopes become part of the binding's identity in the frame; a nil set is the
+// ordinary user-written top-level define.
+func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
 	// Delegate to GlobalEnvironmentFrame's thread-safe method
-	return p.global.CreateGlobalBinding(key, bt)
+	return p.global.CreateGlobalBinding(key, bt, scopes)
 }
 
 // GetGlobalIndex returns the GlobalIndex of the binding for the given symbol,
@@ -764,11 +778,25 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 //
 // The returned GlobalIndex records the specific global frame where the binding
 // was found, enabling cross-library macro hygiene (see GlobalIndex.Env).
+//
+// This is the WILDCARD form — see GlobalEnvironmentFrame.GetGlobalIndex.
+// Compiler callers want GetGlobalIndexWithScopes.
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
-	result := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, _ int) any {
-		gi := NewGlobalIndex(key)
-		gi.Env = g
-		return gi
+	result := p.resolveGlobal(*key, nil, true, func(g *GlobalEnvironmentFrame, i int) any {
+		return newResolvedGlobalIndex(key, g, i)
+	})
+	if result != nil {
+		return result.(*GlobalIndex)
+	}
+	return nil
+}
+
+// GetGlobalIndexWithScopes is GetGlobalIndex with hygienic resolution: the
+// binding whose scope set maximally matches scopes wins. A nil scopes slice
+// means the empty scope set, not "any".
+func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
+	result := p.resolveGlobal(*key, scopes, false, func(g *GlobalEnvironmentFrame, i int) any {
+		return newResolvedGlobalIndex(key, g, i)
 	})
 	if result != nil {
 		return result.(*GlobalIndex)
@@ -778,8 +806,10 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 
 // GetGlobalBinding returns the binding for the given GlobalIndex, searching global bindings in the current and parent environments.
 // It returns nil if the binding does not exist.
+// A deferred index (Env == nil) carries the reference's scope set, so this
+// execution-time walk resolves hygienically rather than by bare name.
 func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
-	result := p.resolveGlobal(*key.Index, func(g *GlobalEnvironmentFrame, i int) any {
+	result := p.resolveGlobal(*key.Index, key.Scopes, key.Scopes == nil, func(g *GlobalEnvironmentFrame, i int) any {
 		return g.bindings[i]
 	})
 	if result != nil {

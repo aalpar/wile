@@ -35,7 +35,7 @@ func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFram
 	env.Namespace().SetImmutableTopLevel(true)
 	for _, name := range names {
 		sym := syntax.NewSyntaxSymbol(name, nil).Sym
-		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 		b := env.GetBinding(sym, nil)
 		if b == nil {
 			t.Fatalf("failed to create global binding %q", name)

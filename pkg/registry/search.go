@@ -209,12 +209,18 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 		// the skipped entry is acceptable for a best-effort search.
 		keys := global.Keys()
 		bindings := global.Bindings()
-		for sym, idx := range keys {
+		for sym, slots := range keys {
 			name := sym.Key
-			if seen[name] {
+			if seen[name] || len(slots) == 0 {
 				continue
 			}
 			seen[name] = true
+
+			// Search is name-oriented and already dedupes by name, so the first
+			// slot represents the name. A name can now own several slots (bindings
+			// distinguished by hygiene scope set), but they share a docstring
+			// audience.
+			idx := slots[0]
 
 			doc := ""
 			if idx < len(bindings) {

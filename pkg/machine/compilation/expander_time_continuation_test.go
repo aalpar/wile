@@ -75,7 +75,7 @@ func TestExpandExpression_List(t *testing.T) {
 	// The expander pushes the full form (sym . args) onto the eval stack,
 	// so the transformer receives the complete macro invocation.
 	env := environment.NewNamespace().Runtime()
-	gi, ok := env.MaybeCreateOwnGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
+	gi, ok := env.MaybeCreateOwnGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax, nil)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
 	mcls := machine.NewForeignClosure(env, 1, false, func(mc machine.CallContext) error {

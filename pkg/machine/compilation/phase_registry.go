@@ -44,7 +44,7 @@ func RegisterPhaseBindings[F any](
 	for _, entry := range entries {
 		sym := values.NewSymbol(entry.Name)
 		val := wrapper(entry.Name, entry.Fn)
-		idx, _ := targetEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
+		idx, _ := targetEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
 		targetEnv.SetOwnGlobalValue(idx, val) //nolint:errcheck
 	}
 	return nil

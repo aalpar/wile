@@ -62,6 +62,26 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
+### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
+
+- [ ] **`bestOf` picks arbitrarily on a scope-set weight tie** [Medium, S]: when two candidate
+  bindings have **incomparable, equal-cardinality** scope sets that are both subsets of the
+  reference's scope set, Flatt/Racket raise an *ambiguous binding* error. Wile raises nothing:
+  `pkg/environment/best_of.go:60-68` keeps the **first** candidate on a tie, so the reference
+  resolves silently innermost-first. The macro-introduced-top-level-binder pass documents the
+  same arbitrariness independently — ties "resolve arbitrarily to the first collected"
+  (`pkg/machine/compilation/toplevel_binder_hygiene.go:249-254`).
+
+  **The fix belongs in `bestOf`, not at a call site.** The gap is uniform across local and
+  global resolution; fixing one path alone would make it stricter than the other and create a
+  new inconsistency. Landing it in `bestOf` covers both at once.
+
+  Deliberately scoped **out** of two plans that each touch adjacent code, so it does not get
+  bundled and lost: `plans/2026-07-18-scope-keyed-global-bindings-design.md` (Part III) and
+  `plans/2026-07-18-load-order-independent-binding-resolution-design.md` (Fork C — same
+  conclusion, reached independently). Both are prerequisites in practice, since scope-keyed
+  globals make equal-cardinality ties reachable at top level for the first time.
+
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 
 - [x] **The acceptance was real; the diagnosis was not. Fixed at the cause.** (2026-07-16, `fix/opaque-subtree-quasi-depth`, `57973333` + `3cce6754`)

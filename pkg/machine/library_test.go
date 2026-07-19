@@ -562,7 +562,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 
 	// Add runtime binding (variable)
 	foSym := values.NewSymbol("bindSymbolWithScopes")
-	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(foSym, environment.BindingTypeVariable)
+	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(foSym, environment.BindingTypeVariable, nil)
 	fooIdx := srcEnv.GetGlobalIndex(foSym)
 	_ = srcEnv.SetOwnGlobalValue(fooIdx, values.NewInteger(42))
 	lib.AddExport("bindSymbolWithScopes", "")
@@ -570,7 +570,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	// Add syntax binding (macro)
 	barSym := values.NewSymbol("bar")
 	expandEnv := srcEnv.Expand()
-	_, _ = expandEnv.MaybeCreateOwnGlobalBinding(barSym, environment.BindingTypeSyntax)
+	_, _ = expandEnv.MaybeCreateOwnGlobalBinding(barSym, environment.BindingTypeSyntax, nil)
 	barIdx := expandEnv.GetGlobalIndex(barSym)
 	mockMacro := values.NewSymbol("mock-macro")
 	_ = expandEnv.SetOwnGlobalValue(barIdx, mockMacro)
@@ -613,7 +613,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 
 	// Add binding with internal name different from external
 	internalSym := values.NewSymbol("internal-bindSymbolWithScopes")
-	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(internalSym, environment.BindingTypeVariable)
+	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(internalSym, environment.BindingTypeVariable, nil)
 	idx := srcEnv.GetGlobalIndex(internalSym)
 	_ = srcEnv.SetOwnGlobalValue(idx, values.NewInteger(99))
 	lib.AddExport("bindSymbolWithScopes", "internal-bindSymbolWithScopes")
@@ -763,7 +763,7 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 	// how specialforms.go registers auxiliary syntax
 	elseSym := values.NewSymbol("else")
 	compileEnv := srcEnv.Compile()
-	_, _ = compileEnv.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypeVariable)
+	_, _ = compileEnv.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypeVariable, nil)
 	elseIdx := compileEnv.GetGlobalIndex(elseSym)
 	mockValue := values.NewSymbol("else-marker")
 	_ = compileEnv.SetOwnGlobalValue(elseIdx, mockValue)

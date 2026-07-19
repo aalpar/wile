@@ -70,7 +70,7 @@ func TestCallbackIsCaptureSafe(t *testing.T) {
 	// replaced by a capturing one.
 	env := environment.NewNamespace().Runtime()
 	sym := syntax.NewSyntaxSymbol("unstable", nil).Sym
-	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	// CaptureSafe but not Imported/Stable.
 	env.GetBinding(sym, nil).UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.CaptureSafe = true

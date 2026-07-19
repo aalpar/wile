@@ -17,6 +17,7 @@ package environment
 import (
 	"testing"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 
@@ -50,7 +51,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi1, qt.IsNil)
 
 	// Test adding a binding
-	gi0, ok := env.CreateGlobalBinding(sym0, BindingTypeVariable)
+	gi0, ok := env.CreateGlobalBinding(sym0, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0.Index.EqualTo(values.NewSymbol("testVar0")), qt.IsTrue)
 
@@ -59,7 +60,7 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Adding a new binding should create a new index
-	gi1, ok = env.CreateGlobalBinding(sym1, BindingTypeVariable)
+	gi1, ok = env.CreateGlobalBinding(sym1, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi1.Index.EqualTo(values.NewSymbol("testVar1")), qt.IsTrue)
 
@@ -80,8 +81,8 @@ func TestGlobalEnvironmentFrame_Keys(t *testing.T) {
 	sym1 := values.NewSymbol("var1")
 	sym2 := values.NewSymbol("var2")
 
-	env.CreateGlobalBinding(sym1, BindingTypeVariable)
-	env.CreateGlobalBinding(sym2, BindingTypeVariable)
+	env.CreateGlobalBinding(sym1, BindingTypeVariable, nil)
+	env.CreateGlobalBinding(sym2, BindingTypeVariable, nil)
 
 	keys := env.Keys()
 	qt.Assert(t, keys, qt.HasLen, 2)
@@ -91,7 +92,7 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 	env := newTestGlobalEnvFrame()
 
 	sym := values.NewSymbol("test")
-	env.CreateGlobalBinding(sym, BindingTypeVariable)
+	env.CreateGlobalBinding(sym, BindingTypeVariable, nil)
 
 	copied := env.Copy()
 	qt.Assert(t, copied, qt.Not(qt.IsNil))
@@ -116,7 +117,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	env := ns.Runtime()
 
 	sym := values.NewSymbol("x")
-	_, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	_, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 	c.Assert(created, qt.IsTrue)
 
 	// Verify binding exists
@@ -181,4 +182,137 @@ func TestGlobalIndex_EqualTo_SameEnv_IsEqual(t *testing.T) {
 		qt.Commentf("same symbol key, same resolving frame: one binding"))
 	qt.Assert(t, NewGlobalIndex(sym).EqualTo(NewGlobalIndex(values.NewSymbol("helper"))), qt.IsTrue,
 		qt.Commentf("same symbol key, both unpinned: one binding"))
+}
+
+// TestGlobalFrame_VacuousScopesAreSingleSlot is the Stage A proof obligation for
+// the scope-keyed global frame: while every creation site passes an empty scope
+// set, the multi-slot store must be indistinguishable from the single-slot store
+// it replaced. One slot per name, and resolution equal to first-hit.
+//
+// This is asserted directly rather than inferred from a green suite, because the
+// whole staging argument rests on it.
+func TestGlobalFrame_VacuousScopesAreSingleSlot(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+
+	x := values.NewSymbol("x")
+	_, created := ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
+	c.Assert(created, qt.IsTrue)
+
+	// Redefinition of the same variable reuses the slot — R7RS §5.3.1.
+	_, created = ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
+	c.Assert(created, qt.IsFalse)
+
+	c.Assert(len(ge.Keys()[*x]), qt.Equals, 1)
+	c.Assert(ge.GetGlobalIndex(x), qt.IsNotNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(x, nil), qt.IsNotNil)
+}
+
+// TestGlobalFrame_ScopeSetsSeparateBindings pins the behavior Stage B turns on:
+// a macro-introduced binder and a user-written one of the same name are distinct
+// variables, and neither is reachable from the other's scope set.
+func TestGlobalFrame_ScopeSetsSeparateBindings(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+
+	x := values.NewSymbol("x")
+	m := syntax.NewScope()
+	n := syntax.NewScope()
+
+	// user-written binder: empty scope set
+	_, created := ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
+	c.Assert(created, qt.IsTrue)
+
+	// macro-introduced binder: scope set {m}. Creation compares scope sets by
+	// EXACT equality, so this must NOT reuse the user's slot — compatibility
+	// would have, since an empty binding scope set matches anything.
+	_, created = ge.CreateGlobalBinding(x, BindingTypeVariable, []*syntax.Scope{m})
+	c.Assert(created, qt.IsTrue)
+	c.Assert(len(ge.Keys()[*x]), qt.Equals, 2)
+
+	userSlot := ge.Keys()[*x][0]
+	macroSlot := ge.Keys()[*x][1]
+
+	// A reference written outside any expansion sees only the user's binding:
+	// {m} is not a subset of {}. This is the leak, closed.
+	gi := ge.GetGlobalIndexWithScopes(x, nil)
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Slot, qt.Equals, userSlot)
+
+	// A reference carrying {m} resolves maximally to the macro's binding.
+	gi = ge.GetGlobalIndexWithScopes(x, []*syntax.Scope{m})
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Slot, qt.Equals, macroSlot)
+
+	// A reference from a DIFFERENT expansion {n} cannot see {m}: this is the
+	// collision, closed.
+	gi = ge.GetGlobalIndexWithScopes(x, []*syntax.Scope{n})
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Slot, qt.Equals, userSlot)
+
+	// Wildcard still reaches the name for introspection callers.
+	c.Assert(ge.GetGlobalIndex(x), qt.IsNotNil)
+}
+
+// TestGlobalIndex_EqualToDiscriminatesSlot guards the literal-pool identity:
+// once one symbol can name several bindings in a frame, (Index, Env) no longer
+// identifies a variable.
+func TestGlobalIndex_EqualToDiscriminatesSlot(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	x := values.NewSymbol("x")
+	m := syntax.NewScope()
+
+	ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
+	ge.CreateGlobalBinding(x, BindingTypeVariable, []*syntax.Scope{m})
+
+	user := ge.GetGlobalIndexWithScopes(x, nil)
+	macro := ge.GetGlobalIndexWithScopes(x, []*syntax.Scope{m})
+
+	c.Assert(user.EqualTo(macro), qt.IsFalse)
+	c.Assert(user.EqualTo(ge.GetGlobalIndexWithScopes(x, nil)), qt.IsTrue)
+}
+
+// TestGlobalFrame_PinnedIndexSurvivesDelete pins the F1/F2 regressions found by
+// the Stage A crosscheck. Slot-addressing replaced name-resolution on these
+// paths, and a pinned index must not outlive the binding it names:
+//
+//   - SetOwnGlobalValue must report ErrNoSuchBinding, not dereference a nil slot
+//   - GetOwnGlobalBinding must miss rather than return the emptied slot
+//   - after a redefine, a stale pinned index must find the NEW binding, which is
+//     the self-healing the name lookup used to provide for free
+func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	sym := values.NewSymbol("x")
+
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+	gi := ge.GetGlobalIndexWithScopes(sym, nil)
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Env, qt.Equals, ge)
+
+	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+
+	// No panic, and the same error master produced.
+	err := ge.SetOwnGlobalValue(gi, values.NewInteger(5))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNil)
+
+	// Redefine: the stale pinned index must re-resolve onto the new binding.
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNotNil)
+	c.Assert(ge.SetOwnGlobalValue(gi, values.NewInteger(7)), qt.IsNil)
+	c.Assert(ge.GetOwnGlobalBinding(gi).Value(), valuestest.SchemeEquals, values.NewInteger(7))
+}
+
+// TestGlobalFrame_WildcardSkipsDeletedSlot covers the matchAny branch, which had
+// no nil-slot guard while the scoped branch did (crosscheck N1).
+func TestGlobalFrame_WildcardSkipsDeletedSlot(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	sym := values.NewSymbol("x")
+
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+	c.Assert(ge.GetGlobalIndex(sym), qt.IsNil)
 }

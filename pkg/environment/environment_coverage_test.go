@@ -30,7 +30,7 @@ func TestNewEnvironmentFrame_Isolated(t *testing.T) {
 	local := NewLocalEnvironment(2)
 	global := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
-		keys:     map[values.Symbol]int{},
+		keys:     map[values.Symbol][]int{},
 	}
 	env := newEnvironmentFrame(local, global)
 	c.Assert(env, qt.IsNotNil)
@@ -196,7 +196,7 @@ func TestGetBinding_GlobalPhase_Coverage(t *testing.T) {
 	env := topLevel.Runtime()
 
 	sym := values.NewSymbol("global-var")
-	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 	err := env.SetOwnGlobalValue(NewGlobalIndex(sym), values.NewInteger(42))
 	c.Assert(err, qt.IsNil)
 

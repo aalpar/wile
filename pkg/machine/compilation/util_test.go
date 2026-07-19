@@ -59,7 +59,7 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 // newNamespace sets up a minimal namespace with core special form bindings.
 func newNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFrame {
 	for _, name := range []string{"if", "lambda", "quote", "quasiquote", "define", "set!", "begin", "meta", "include", "include-ci"} {
-		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypePrimitive)
+		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypePrimitive, nil)
 	}
 	err := RegisterAllPhaseHandlers(env)
 	if err != nil {

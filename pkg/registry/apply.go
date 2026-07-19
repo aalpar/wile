@@ -211,7 +211,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {
 	compileEnv := env.Compile()
 	sym := values.NewSymbol(spec.Name)
-	compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
+	compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
 	return nil
 }
 
@@ -225,7 +225,7 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 // per Instance C of the dispatch-axis-as-data finding (plans/2026-05-08-dispatch-axis-as-data.md).
 func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
 	sym := values.NewSymbol(spec.Name)
-	gi, _ := bindingEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	gi, _ := bindingEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 
 	closure := machine.NewForeignClosure(
 		closureEnv,
@@ -286,7 +286,7 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 
 func registerGlobalValue(env *environment.EnvironmentFrame, name string, value values.Value) error {
 	sym := values.NewSymbol(name)
-	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), value)
 	if err != nil {

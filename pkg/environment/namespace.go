@@ -1023,7 +1023,7 @@ func (p *Namespace) SchemeString() string {
 func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
-		keys:     map[values.Symbol]int{},
+		keys:     map[values.Symbol][]int{},
 	}
 	return q
 }

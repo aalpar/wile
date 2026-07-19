@@ -102,7 +102,7 @@ func TestOperation(t *testing.T) {
 			op: NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				sym := values.NewSymbol("bindSymbolWithScopes")
-				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBinding(sym, environment.BindingTypeVariable)
+				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBinding(sym, environment.BindingTypeVariable, nil)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
 				err := mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, values.NewInteger(10))
@@ -120,7 +120,7 @@ func TestOperation(t *testing.T) {
 			evals: NewStack(values.NewInteger(10)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				sym := values.NewSymbol("bindSymbolWithScopes")
-				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBinding(sym, environment.BindingTypeVariable)
+				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBinding(sym, environment.BindingTypeVariable, nil)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
 			},

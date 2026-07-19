@@ -364,7 +364,7 @@ func evalSchemeString(code string) (values.Value, error) {
 
 	// Register list primitive for quasiquote expansion
 	listSym := values.NewSymbol("list")
-	env.MaybeCreateOwnGlobalBinding(listSym, environment.BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(listSym, environment.BindingTypeVariable, nil)
 	listIdx := env.GetGlobalIndex(listSym)
 	if listIdx != nil {
 		listClosure := machine.NewForeignClosure(env, 1, true, func(mc machine.CallContext) error {
@@ -445,7 +445,7 @@ func TestCompileContext_CompileIf(t *testing.T) {
 
 	// Set up a global variable 'x' for non-constant test
 	symX := values.NewSymbol("x")
-	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable, nil)
 
 	// (if x "true" "false") — tests BranchOnFalseValue (value register, no Push)
 	prog := values.List(values.NewSymbol("if"),
@@ -525,7 +525,7 @@ func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
 func TestCompileContext_CompileSetBang(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	symX := values.NewSymbol("x")
-	_, created := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
+	_, created := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable, nil)
 	qt.Assert(t, created, qt.IsTrue)
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -721,7 +721,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 
 	// Register call-depth primitive: returns current continuation stack depth
 	callDepthSym := values.NewSymbol("call-depth")
-	env.MaybeCreateOwnGlobalBinding(callDepthSym, environment.BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(callDepthSym, environment.BindingTypeVariable, nil)
 	callDepthFn := func(cc machine.CallContext) error {
 		mc := cc.(*machine.MachineContext)
 		depth := mc.CallDepth()
@@ -736,7 +736,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 
 	// Register subtraction primitive: (- a b)
 	subSym := values.NewSymbol("-")
-	env.MaybeCreateOwnGlobalBinding(subSym, environment.BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(subSym, environment.BindingTypeVariable, nil)
 	subFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
@@ -748,7 +748,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 
 	// Register equality primitive: (= a b)
 	eqSym := values.NewSymbol("=")
-	env.MaybeCreateOwnGlobalBinding(eqSym, environment.BindingTypeVariable)
+	env.MaybeCreateOwnGlobalBinding(eqSym, environment.BindingTypeVariable, nil)
 	eqFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value

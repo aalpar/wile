@@ -109,7 +109,7 @@ func TestCopyLibraryBindingsPhaseOverflow(t *testing.T) {
 	libEnv := ns.NewChildRuntime()
 	sym := values.NewSymbol("my-macro")
 	expandEnv := libEnv.Expand()
-	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeSyntax)
+	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeSyntax, nil)
 	gi := expandEnv.GetGlobalIndex(sym)
 	qt.Assert(t, gi, qt.IsNotNil)
 	err := expandEnv.SetOwnGlobalValue(gi, values.Void)

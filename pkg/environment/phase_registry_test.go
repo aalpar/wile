@@ -195,11 +195,11 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 
 	// A user define lands in the mutable runtime frame (phase 0).
 	userSym := values.NewSymbol("user-x")
-	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable)
+	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable, nil)
 
 	// A base binding lands in the frozen sealed base (the taproot).
 	baseSym := values.NewSymbol("base-y")
-	ns.SealedBase().MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable)
+	ns.SealedBase().MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
 
 	// Hermeticity: phase 1 must NOT see the phase-0 user define...
 	qt.Assert(t, expand.GetBinding(userSym, nil), qt.IsNil)

@@ -16,10 +16,10 @@ package environment
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"sync"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -33,14 +33,40 @@ import (
 // Env ensures the VM resolves the binding in the library's environment rather
 // than the use-site environment. Nil means "use the current environment"
 // (backward compatible default).
+// Slot addresses the binding within Env.bindings directly. It is meaningful
+// ONLY when Env is non-nil: the two are set together by the frame that resolved
+// the lookup, and a nil Env means no frame has been chosen yet, so the zero Slot
+// is never consulted. This pairing is what lets a resolved global load index the
+// bindings slice instead of re-hashing the symbol at every execution.
+//
+// Scopes is the reference's scope set, carried ONLY for the deferred case
+// (Env == nil), where resolution happens against whatever environment is live
+// when the instruction executes and therefore still needs the hygiene key.
 type GlobalIndex struct {
-	Index *values.Symbol
-	Env   *GlobalEnvironmentFrame
+	Index  *values.Symbol
+	Env    *GlobalEnvironmentFrame
+	Slot   int
+	Scopes []*syntax.Scope
 }
 
-// NewGlobalIndex creates a new GlobalIndex for the given symbol.
+// NewGlobalIndex creates a new deferred GlobalIndex for the given symbol.
+// Env is nil, so Slot is not meaningful; use newResolvedGlobalIndex when the
+// owning frame and slot are known.
 func NewGlobalIndex(key *values.Symbol) *GlobalIndex {
 	return &GlobalIndex{Index: key}
+}
+
+// NewDeferredGlobalIndex creates a deferred GlobalIndex that carries the
+// reference's scope set, so the execution-time parent-chain walk can resolve it
+// hygienically rather than by bare name.
+func NewDeferredGlobalIndex(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
+	return &GlobalIndex{Index: key, Scopes: scopes}
+}
+
+// newResolvedGlobalIndex creates a GlobalIndex pinned to the frame and slot that
+// resolution landed on.
+func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int) *GlobalIndex {
+	return &GlobalIndex{Index: key, Env: env, Slot: slot}
 }
 
 // SchemeString returns a string representation of this global index.
@@ -67,6 +93,11 @@ func (p *GlobalIndex) IsVoid() bool {
 // It is therefore never equal to a pinned index, even one whose frame today's
 // walk would reach: the two are different operations, and a closure with a
 // different env chain resolves them differently.
+//
+// Slot participates whenever Env does. Once a frame keys its bindings by scope
+// set, one symbol can name several distinct bindings in the same frame, so
+// (Index, Env) no longer identifies a variable — the slot is what separates a
+// macro-introduced binder from a user-written one of the same name.
 func (p *GlobalIndex) EqualTo(value values.Value) bool {
 	if p == nil || value == nil {
 		return p == nil && value == nil
@@ -76,6 +107,9 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 		return false
 	}
 	if v.Env != p.Env {
+		return false
+	}
+	if v.Env != nil && v.Slot != p.Slot {
 		return false
 	}
 	return v.Index.EqualTo(p.Index)
@@ -98,8 +132,11 @@ type GlobalEnvironmentFrame struct {
 	// mu protects concurrent access to keys and bindings maps.
 	// Use RLock for reads, Lock for writes and check-then-write patterns.
 	mu sync.RWMutex
-	// symbol to binding index lookup map
-	keys     map[values.Symbol]int
+	// symbol to binding slot lookup map. A symbol maps to SEVERAL slots because
+	// global bindings are keyed by scope set as well as by name (Flatt's sets of
+	// scopes): a macro-introduced top-level binder and a user-written one share a
+	// name but are different variables. Mirrors LocalEnvironmentFrame.keys.
+	keys     map[values.Symbol][]int
 	bindings []*Binding
 }
 
@@ -107,7 +144,7 @@ type GlobalEnvironmentFrame struct {
 func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
-		keys:     map[values.Symbol]int{},
+		keys:     map[values.Symbol][]int{},
 	}
 	return q
 }
@@ -145,8 +182,13 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	}
 
 	if p.keys != nil {
-		q.keys = make(map[values.Symbol]int, len(p.keys))
-		maps.Copy(q.keys, p.keys)
+		// Each slot list must be cloned, not shared: maps.Copy would alias the
+		// slices, so a later append in either frame could be observed by the other
+		// (or silently reallocate in only one).
+		q.keys = make(map[values.Symbol][]int, len(p.keys))
+		for k, slots := range p.keys {
+			q.keys[k] = slices.Clone(slots)
+		}
 	}
 	return q
 }
@@ -167,37 +209,105 @@ func (p *GlobalEnvironmentFrame) SetBindings(vs []*Binding) {
 	p.bindings = vs
 }
 
-// Keys returns a copy of the symbol-to-index mapping.
+// Keys returns a copy of the symbol-to-slots mapping. A symbol may map to more
+// than one slot: same-named bindings with different scope sets are different
+// variables. Callers that only want names can range over the keys and ignore the
+// slot lists.
 // Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol]int {
+func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol][]int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	result := make(map[values.Symbol]int, len(p.keys))
-	maps.Copy(result, p.keys)
+	result := make(map[values.Symbol][]int, len(p.keys))
+	for k, slots := range p.keys {
+		result[k] = slices.Clone(slots)
+	}
 	return result
+}
+
+// scopeSetsEqual reports whether two scope sets are equal, by mutual subset.
+//
+// Binding CREATION compares scope sets with this, not with ScopesCompatible.
+// Compatibility treats an empty binding scope set as matching anything, so a
+// macro-introduced binder (scopes {m}) would reuse — and silently clobber — a
+// user-written binding of the same name (scopes {}). Redefining one variable is
+// precisely the equal-scope-set case; anything else is a different variable.
+func scopeSetsEqual(a, b []*syntax.Scope) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return syntax.ScopesMatch(a, b) && syntax.ScopesMatch(b, a)
+}
+
+// bestSlotLocked returns the slot whose binding best matches the given scope
+// set, per Flatt's maximal resolution: a candidate's scope set must be a subset
+// of the reference's, and among the candidates the largest set wins. matchAny
+// takes the first slot regardless of scopes, for introspection callers that mean
+// "any binding of this name" rather than "the empty scope set".
+//
+// Caller MUST hold at least a read lock on p.mu.
+func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, scopes []*syntax.Scope, matchAny bool) (int, bool) {
+	slots := p.keys[key]
+	if len(slots) == 0 {
+		return 0, false
+	}
+	if matchAny {
+		// Skip nil'd slots for the same reason the scoped branch does: a live key
+		// may point at a slot DeleteBinding emptied. Returning slots[0] blindly
+		// would hand back a nil binding for callers to dereference.
+		for _, i := range slots {
+			if i < len(p.bindings) && p.bindings[i] != nil {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	var best bestOf[int]
+	for _, i := range slots {
+		if i >= len(p.bindings) || p.bindings[i] == nil {
+			continue
+		}
+		bindingScopes := p.bindings[i].Scopes()
+		if !syntax.ScopesCompatible(bindingScopes, scopes) {
+			continue
+		}
+		record, done := best.shouldRecord(len(bindingScopes), len(scopes))
+		if record {
+			best.record(i, len(bindingScopes))
+		}
+		if done {
+			break
+		}
+	}
+	return best.Result()
 }
 
 // CreateGlobalBinding creates a new global binding with the given key and type.
 // Returns the GlobalIndex and whether a new binding was created (false if the
 // binding already existed).
 // Thread-safe: uses full Lock to prevent TOCTOU races.
-func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
+// Reuse requires EXACT scope-set equality — see scopeSetsEqual for why
+// compatibility would be a hygiene hole here.
+func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
 	r := p
 
 	// Use full Lock (not RLock) for check-then-write pattern to prevent TOCTOU
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	_, ok := r.keys[*key]
-	if ok {
-		q := NewGlobalIndex(key)
-		return q, false
+	for _, i := range r.keys[*key] {
+		if i >= len(p.bindings) || p.bindings[i] == nil {
+			continue
+		}
+		if scopeSetsEqual(p.bindings[i].Scopes(), scopes) {
+			q := NewGlobalIndex(key)
+			return q, false
+		}
 	}
 	i := len(p.bindings)
-	p.keys[*key] = i
+	p.keys[*key] = append(p.keys[*key], i)
 	// append the new binding at index i. Global bindings carry an atomicCell so
 	// they can be read lock-free from other threads (see binding.go atomicCell).
-	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt))
+	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt, scopes))
 	q := NewGlobalIndex(key)
 	return q, true
 }
@@ -205,11 +315,15 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt Bind
 // GetGlobalIndex returns the GlobalIndex for the given symbol.
 // Returns nil if the symbol is not bound in this global environment.
 // Thread-safe: uses RLock for read-only access.
+// This is the WILDCARD form: it matches any binding of the name regardless of
+// scopes, which is what introspection and REPL completion mean. Compiler callers
+// must use GetGlobalIndexWithScopes so a bare reference cannot reach a
+// macro-introduced binder.
 func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 	ge := p
 
 	p.mu.RLock()
-	_, ok := ge.keys[*key]
+	_, ok := ge.bestSlotLocked(*key, nil, true)
 	p.mu.RUnlock()
 
 	if !ok {
@@ -217,6 +331,23 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 	}
 	q := NewGlobalIndex(key)
 	return q
+}
+
+// GetGlobalIndexWithScopes returns the GlobalIndex for the binding of key whose
+// scope set maximally matches scopes. A nil scopes slice means the EMPTY scope
+// set, not "any scope set" — that distinction is the whole point of the split
+// from GetGlobalIndex, since a reference written outside any macro expansion must
+// not resolve to a binder introduced inside one.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
+	p.mu.RLock()
+	i, ok := p.bestSlotLocked(*key, scopes, false)
+	p.mu.RUnlock()
+
+	if !ok {
+		return nil
+	}
+	return newResolvedGlobalIndex(key, p, i)
 }
 
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.
@@ -228,15 +359,38 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 	key := gi.Index
 
 	p.mu.RLock()
-	i, ok := ge.keys[*key]
+	defer p.mu.RUnlock()
+
+	i, ok := ge.pinnedSlotLocked(gi)
 	if !ok {
-		p.mu.RUnlock()
+		i, ok = ge.bestSlotLocked(*key, gi.Scopes, gi.Scopes == nil)
+	}
+	if !ok {
 		return nil
 	}
-	bd := ge.bindings[i]
-	p.mu.RUnlock()
+	return ge.bindings[i]
+}
 
-	return bd
+// pinnedSlotLocked resolves a GlobalIndex through its pinned (Env, Slot) pair,
+// which addresses the binding directly with no re-hash of the symbol.
+//
+// The emptiness check is load-bearing, not defensive. DeleteBinding nils a slot
+// but leaves it in range, so a bounds check alone would hand back a nil binding
+// where the name-keyed lookup this replaced would have missed and reported "no
+// such binding". Falling through to bestSlotLocked on a nil slot also restores
+// the self-healing the name lookup gave for free: an index pinned before a
+// delete-then-redefine finds the re-created binding instead of addressing the
+// emptied slot forever.
+//
+// Caller MUST hold at least a read lock on p.mu.
+func (p *GlobalEnvironmentFrame) pinnedSlotLocked(gi *GlobalIndex) (int, bool) {
+	if gi.Env != p || gi.Slot < 0 || gi.Slot >= len(p.bindings) {
+		return 0, false
+	}
+	if p.bindings[gi.Slot] == nil {
+		return 0, false
+	}
+	return gi.Slot, true
 }
 
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
@@ -246,7 +400,10 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	ge := p
 
 	p.mu.Lock()
-	i, ok := ge.keys[*gi.Index]
+	i, ok := ge.pinnedSlotLocked(gi)
+	if !ok {
+		i, ok = ge.bestSlotLocked(*gi.Index, gi.Scopes, gi.Scopes == nil)
+	}
 	if !ok {
 		p.mu.Unlock()
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such global binding %q", gi.Index)
@@ -273,16 +430,22 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	i, ok := p.keys[*sym]
+	slots, ok := p.keys[*sym]
 	if !ok {
 		return false
 	}
 	delete(p.keys, *sym)
-	// Nil out the binding slot so stale GlobalIndex references from
+	// Nil out the binding slots so stale GlobalIndex references from
 	// compiled code see nil (caught by resolveGlobal) instead of
 	// silently returning the old value.
-	if i < len(p.bindings) {
-		p.bindings[i] = nil
+	//
+	// All slots for the name go, not one: deletion is a REPL/namespace
+	// operation meaning "remove this name", and it carries no scope set with
+	// which to single out one of several hygiene-distinct bindings.
+	for _, i := range slots {
+		if i < len(p.bindings) {
+			p.bindings[i] = nil
+		}
 	}
 	return true
 }

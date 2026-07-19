@@ -48,7 +48,7 @@ func setupGlobalEnv(n int) (*EnvironmentFrame, []*GlobalIndex) {
 	gis := make([]*GlobalIndex, n)
 	for i := range n {
 		sym := values.NewSymbol(fmt.Sprintf("g%d", i))
-		env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+		env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 		gi := env.GetGlobalIndex(sym)
 		env.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))
 		gis[i] = gi

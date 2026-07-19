@@ -223,8 +223,11 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 			return nil
 		}
 
-		// Try global binding
-		gi := p.env.GetGlobalIndex(sym)
+		// Try global binding. This arm is the empty-scope-set case (symbolScopes
+		// is empty here), so it must use the scope-carrying form, NOT the wildcard
+		// GetGlobalIndex: a reference written outside any macro expansion must not
+		// reach a binder introduced inside one.
+		gi := p.env.GetGlobalIndexWithScopes(sym, symbolScopes)
 		if gi == nil {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local or global binding %q", sym.Key)
 		}

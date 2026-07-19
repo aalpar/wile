@@ -670,7 +670,7 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 // Define binds a value to a name in the top-level environment.
 func (p *Engine) Define(name string, value Value) error {
 	sym := values.NewSymbol(name)
-	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), unwrapValue(value))
 }
 
@@ -688,7 +688,7 @@ func (p *Engine) Get(name string) (Value, bool) {
 // RegisterPrimitive adds a Go function as a Scheme primitive.
 func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 	sym := values.NewSymbol(spec.Name)
-	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 
 	closure := machine.NewForeignClosure(
 		p.env,
@@ -1278,11 +1278,13 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 	keys := global.Keys()
 	bindings := global.Bindings()
 
-	for sym, idx := range keys {
-		if idx >= len(bindings) {
+	for sym, slots := range keys {
+		// Doc registration is name-oriented; a name can now own several slots
+		// (bindings distinguished by hygiene scope set), so take the first.
+		if len(slots) == 0 || slots[0] >= len(bindings) {
 			continue
 		}
-		bnd := bindings[idx]
+		bnd := bindings[slots[0]]
 		if bnd == nil || bnd.BindingType() != environment.BindingTypeVariable {
 			continue
 		}

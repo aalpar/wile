@@ -278,12 +278,12 @@ func TestConstructorEquivalence(t *testing.T) {
 	c.Assert(child.Expand().PhaseLevel(), qt.Equals, PhaseExpand)
 
 	sym := values.NewSymbol("test-snap")
-	parent.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	parent.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable, nil)
 	report := parent.NewSchemeReportNamespace()
 	c.Assert(report.Runtime().GetGlobalIndex(sym), qt.IsNotNil)
 
 	sym2 := values.NewSymbol("after-snap")
-	parent.Runtime().MaybeCreateOwnGlobalBinding(sym2, BindingTypeVariable)
+	parent.Runtime().MaybeCreateOwnGlobalBinding(sym2, BindingTypeVariable, nil)
 	c.Assert(report.Runtime().GetGlobalIndex(sym2), qt.IsNil)
 }
 

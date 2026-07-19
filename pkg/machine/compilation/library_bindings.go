@@ -493,7 +493,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		// conflicting import (R7RS §5.6) — reject rather than silently last-wins.
 		phaseEnv := targetEnv.AtPhase(targetPhase)
 		localSym := values.NewSymbol(localName)
-		_, created := phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
+		_, created := phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType(), nil)
 		if !created && importConflicts(phaseEnv.GetBinding(localSym, nil), libBinding) {
 			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
@@ -526,7 +526,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			propagatePhase := environment.Phase(phaseSum)
 			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
-			_, propagateCreated := propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
+			_, propagateCreated := propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType(), nil)
 			// Same conflict guard as the base phase: a previously-imported binding at
 			// this propagated phase that resolves differently is a conflict. The base
 			// phase catches most clashes first; this closes the case where the base entry
@@ -604,7 +604,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// libraries with different bindings for one name is rejected per R7RS §5.6,
 		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		_, created := targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
+		_, created := targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType(), nil)
 		if !created && importConflicts(targetEnv.GetBinding(localSym, nil), importedBinding) {
 			return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 				"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",
@@ -622,7 +622,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
 			expandEnv := targetEnv.Expand()
-			_, expandCreated := expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
+			_, expandCreated := expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax, nil)
 			if !expandCreated && importConflicts(expandEnv.GetBinding(localSym, nil), importedBinding) {
 				return werr.WrapForeignErrorf(werr.ErrDuplicateBinding,
 					"import: identifier %q from %s conflicts with a different existing import; disambiguate with (except ...), (prefix ...), or (rename ...)",

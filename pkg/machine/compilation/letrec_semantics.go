@@ -77,7 +77,7 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	}
 	// Create global binding if no local environment exists. This is the case for library and top-level bodies, which
 	// use the global environment for internal definitions.
-	gi, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
+	gi, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, nil)
 	binding := env.GetGlobalBinding(gi)
 	if binding == nil {
 		return

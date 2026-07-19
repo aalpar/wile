@@ -80,7 +80,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// (expander_time_continuation.go) consults the same NextPhase() so storage and
 	// lookup stay symmetric. At phaseLevel 0 this equals Expand() (level-0 identity).
 	expandEnv := p.env.NextPhase()
-	globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+	globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, nil)
 	if !created {
 		// Update existing binding
 		globalIndex = expandEnv.GetGlobalIndex(keyword)

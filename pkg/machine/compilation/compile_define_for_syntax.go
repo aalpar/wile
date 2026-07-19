@@ -100,7 +100,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// Store the result in the expand phase environment with BindingTypeVariable
-	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)
+	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable, nil)
 	if globalIndex == nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: failed to create binding for %s", nameSym.Key))
 	}

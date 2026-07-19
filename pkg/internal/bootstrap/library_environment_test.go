@@ -101,7 +101,7 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 
 	// Define a binding in the library environment
 	libSym := values.NewSymbol("lib-only-binding")
-	libEnv.MaybeCreateOwnGlobalBinding(libSym, environment.BindingTypeVariable)
+	libEnv.MaybeCreateOwnGlobalBinding(libSym, environment.BindingTypeVariable, nil)
 
 	// The caller environment should not see this binding
 	callerBinding := callerEnv.GetBinding(libSym, nil)

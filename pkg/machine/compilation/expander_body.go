@@ -163,7 +163,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	}
 
 	// Store in the expand environment (for macro lookup during expansion)
-	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax)
+	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, nil)
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
