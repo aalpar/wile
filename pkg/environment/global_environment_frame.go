@@ -39,14 +39,35 @@ import (
 // is never consulted. This pairing is what lets a resolved global load index the
 // bindings slice instead of re-hashing the symbol at every execution.
 //
-// Scopes is the reference's scope set, carried ONLY for the deferred case
-// (Env == nil), where resolution happens against whatever environment is live
-// when the instruction executes and therefore still needs the hygiene key.
+// Scopes is the hygiene key. For a deferred index (Env == nil) it is the
+// reference's scope set, resolved against whatever environment is live when the
+// instruction executes. For a PINNED index it is the set resolution matched on,
+// kept so that re-resolution — which happens whenever the pinned slot no longer
+// holds the binding, e.g. after a delete — stays inside the same hygiene
+// boundary instead of falling back to bare name.
 type GlobalIndex struct {
 	Index  *values.Symbol
 	Env    *GlobalEnvironmentFrame
 	Slot   int
 	Scopes []*syntax.Scope
+	// scopeKeyed records that Scopes is this index's hygiene KEY — the set
+	// resolution actually matched on — rather than merely absent. It exists
+	// because a nil Scopes cannot distinguish "matched the empty set" from "no
+	// key at all", and those demand opposite re-resolution behavior. See
+	// matchAny.
+	scopeKeyed bool
+}
+
+// matchAny reports whether re-resolving this index should ignore scope sets.
+//
+// Only a WILDCARD index re-resolves by bare name. A scope-keyed one must
+// re-resolve under its key even when that key is the empty set, or it silently
+// crosses a hygiene boundary: DeleteBinding nils the slots and drops the name,
+// so once anything re-creates the name, a stale pinned index that fell back to
+// wildcard would land on whatever binding now holds it — including one whose
+// scope set its own reference could never have reached.
+func (p *GlobalIndex) matchAny() bool {
+	return p.Scopes == nil && !p.scopeKeyed
 }
 
 // NewGlobalIndex creates a new deferred GlobalIndex for the given symbol.
@@ -67,6 +88,14 @@ func NewDeferredGlobalIndex(key *values.Symbol, scopes []*syntax.Scope) *GlobalI
 // resolution landed on.
 func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int) *GlobalIndex {
 	return &GlobalIndex{Index: key, Env: env, Slot: slot}
+}
+
+// newScopeKeyedGlobalIndex is newResolvedGlobalIndex for a resolution that
+// matched on a scope set, recording that set as the index's key. The scoped
+// lookups compute it and would otherwise discard it, leaving the pinned index
+// indistinguishable from a wildcard one the moment its slot dies.
+func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int, scopes []*syntax.Scope) *GlobalIndex {
+	return &GlobalIndex{Index: key, Env: env, Slot: slot, Scopes: scopes, scopeKeyed: true}
 }
 
 // SchemeString returns a string representation of this global index.
@@ -347,7 +376,7 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, sc
 	if !ok {
 		return nil
 	}
-	return newResolvedGlobalIndex(key, p, i)
+	return newScopeKeyedGlobalIndex(key, p, i, scopes)
 }
 
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.
@@ -363,7 +392,7 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 
 	i, ok := ge.pinnedSlotLocked(gi)
 	if !ok {
-		i, ok = ge.bestSlotLocked(*key, gi.Scopes, gi.Scopes == nil)
+		i, ok = ge.bestSlotLocked(*key, gi.Scopes, gi.matchAny())
 	}
 	if !ok {
 		return nil
@@ -402,7 +431,7 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	p.mu.Lock()
 	i, ok := ge.pinnedSlotLocked(gi)
 	if !ok {
-		i, ok = ge.bestSlotLocked(*gi.Index, gi.Scopes, gi.Scopes == nil)
+		i, ok = ge.bestSlotLocked(*gi.Index, gi.Scopes, gi.matchAny())
 	}
 	if !ok {
 		p.mu.Unlock()

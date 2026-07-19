@@ -796,7 +796,7 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 // means the empty scope set, not "any".
 func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
 	result := p.resolveGlobal(*key, scopes, false, func(g *GlobalEnvironmentFrame, i int) any {
-		return newResolvedGlobalIndex(key, g, i)
+		return newScopeKeyedGlobalIndex(key, g, i, scopes)
 	})
 	if result != nil {
 		return result.(*GlobalIndex)
@@ -809,7 +809,7 @@ func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes [
 // A deferred index (Env == nil) carries the reference's scope set, so this
 // execution-time walk resolves hygienically rather than by bare name.
 func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
-	result := p.resolveGlobal(*key.Index, key.Scopes, key.Scopes == nil, func(g *GlobalEnvironmentFrame, i int) any {
+	result := p.resolveGlobal(*key.Index, key.Scopes, key.matchAny(), func(g *GlobalEnvironmentFrame, i int) any {
 		return g.bindings[i]
 	})
 	if result != nil {

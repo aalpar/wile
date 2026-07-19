@@ -376,8 +376,6 @@ func TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot(t *testing.T) {
 // than re-resolve — a semantic change that would rewrite the assertion in
 // TestGlobalFrame_PinnedIndexSurvivesDelete. That decision needs a human.
 func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
-	t.Skip("RED: stale pinned index re-resolves by wildcard across scope sets; see the plan's C4 section")
-
 	c := qt.New(t)
 	ge := NewGlobalEnvironmentFrame()
 	sym := values.NewSymbol("counter")
