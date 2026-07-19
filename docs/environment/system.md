@@ -39,7 +39,7 @@ The environment system has four key types organized in a hierarchy:
 │  LocalEnvironmentFrame    │    │      GlobalEnvironmentFrame            │
 │  (Single scope bindings)  │    │  (Phase-wide global bindings)          │
 │                           │    │                                        │
-│  keys ─── map[Symbol]int  │    │  keys ──────── map[Symbol]int          │
+│  keys ─ map[Symbol][]int  │    │  keys ────── map[Symbol][]int          │
 │  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
 └───────────────────────────┘    │  namespace ──── *Namespace             │
                                  └────────────────────────────────────────┘
@@ -229,13 +229,17 @@ env := environment.NewNamespaceFrame()
 
 // Create a global binding
 sym := values.NewSymbol("foo")
-gi, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+// nil scopes creates an ambient (empty-scope-set) binding — what a user-written
+// top-level define carries. A macro-introduced binder passes its own scope set,
+// which keys a distinct slot under the same name.
+gi, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 if created {
     env.SetOwnGlobalValue(gi, values.NewInteger(42))
 }
 
-// Look up a binding
-binding := env.GetBinding(sym)
+// Look up a binding. nil scopes means MATCH ANY; pass the reference's own
+// scope set to get hygiene-correct resolution.
+binding := env.GetBinding(sym, nil)
 if binding != nil {
     value := binding.Value()
 }
@@ -262,6 +266,19 @@ These invariants must be maintained:
 4. **Phase environments share Namespace**
    - All phases use the same interning tables
    - Expand-phase macros can reference runtime symbols correctly
+
+5. **Global bindings are scope-keyed, and creation is stricter than lookup**
+   - A name owns a *list* of slots, one per distinct binder scope set, so a
+     user-written `x` and a macro-introduced `x` are different variables
+   - Lookup uses maximal subset match (`bindingScopes ⊆ useScopes`, largest wins);
+     first frame up the parent chain that yields a match wins, which is what
+     preserves sealed-base shadowing
+   - Creation uses **exact scope-set equality**, not subset compatibility.
+     Reusing lookup's predicate here would let a macro-introduced `{m}` binder
+     clobber a user's `{}` binding, since `ScopesCompatible({}, {m})` is true
+   - A nil scope set means MATCH ANY on lookup and the EMPTY SET on creation.
+     The two are opposite; passing nil without deciding which you meant is the
+     recurring defect in this area
 
 ---
 

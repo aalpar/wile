@@ -321,8 +321,15 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			_, isPatternVar := patternVars[symVal.Key]
 			if !isPatternVar {
 				// Resolve the free identifier to its definition-time binding.
-				// Check local binding first (for let-syntax hygiene)
-				li := env.GetLocalIndex(symVal, nil)
+				// Check local binding first (for let-syntax hygiene).
+				//
+				// The reference's own scope set decides WHICH same-named binding,
+				// for the same reason it does on the global arm below: two
+				// expansions of a macro-generating macro each bind under their own
+				// intro scope, so the name owns two slots. Passing nil here means
+				// MATCH ANY (resolveLocal), which takes the first live slot and
+				// hands both generated macros the first expansion's binder.
+				li := env.GetLocalIndex(symVal, t.Scopes())
 				if li != nil {
 					binding := env.GetLocalBinding(li)
 					if binding != nil {

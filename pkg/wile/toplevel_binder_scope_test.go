@@ -149,6 +149,61 @@ func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
 	c.Assert(got, qt.Equals, "(1 2)")
 }
 
+// The LOCAL analogue of the case above. Two expansions of a macro-generating
+// macro inside a body bind `march-hare` as an internal define, so the binders
+// land in a LocalEnvironmentFrame rather than the global one — and the free
+// identifier behind each generated macro's template is resolved by the local
+// arm of collectFreeIdentifiersWithEllipsis, which passed nil scopes.
+//
+// nil is MATCH ANY (resolveLocal, environment_frame.go: matchAny := scopes ==
+// nil), so the walk took the first live slot and both hatters saw expansion
+// one's binder. The local arm also returns EARLY on a hit, so it shadowed the
+// scope-verified global arm eleven lines below it — the two arms of one
+// function disagreed about whether hygiene is checked.
+//
+// Racket gives (1 2).
+func TestMacroGeneratingMacro_TwoLocalExpansionsDoNotShareBinder(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(define-syntax jabberwocky
+		  (syntax-rules ()
+		    ((_ hatter val)
+		     (begin (define march-hare val)
+		            (define-syntax hatter (syntax-rules () ((_) march-hare)))))))
+		(let ()
+		  (jabberwocky mad-hatter 1)
+		  (jabberwocky dormouse 2)
+		  (list (mad-hatter) (dormouse)))`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "(1 2)")
+}
+
+// A template that introduces two sibling defines, where the first forward-
+// references the second, must resolve that reference to its co-introduced
+// sibling. Both binders carry the same expansion's intro scope, so ordinary
+// scoped resolution covers it — but only because the reference and the binder
+// agree on that scope set.
+//
+// This shape had no Go unit test. It was guarded solely by
+// integration/testdata/r7rs-tests.scm:557-567, which runs against the built
+// dist/ binary and therefore passes silently when dist/ is stale (see the
+// make-build-first note in the plan's gates). march-hare, the sibling shape,
+// has two unit tests; this one had none.
+func TestMacroIntroducedSiblingDefines_ForwardReferenceResolves(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(define-syntax ffoo
+		  (syntax-rules ()
+		    ((ffoo ff)
+		     (begin
+		       (define (ff x) (gg x))
+		       (define (gg x) (* x x))))))
+		(ffoo ff)
+		(ff 10)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "100")
+}
+
 // A macro-introduced top-level define-syntax keyword must not be visible to a
 // bare user reference — the define-syntax analogue of
 // TestTopLevelMacroBinder_DoesNotLeakToUser above.

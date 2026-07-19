@@ -187,25 +187,59 @@ func TestGlobalIndex_EqualTo_SameEnv_IsEqual(t *testing.T) {
 // TestGlobalFrame_VacuousScopesAreSingleSlot is the Stage A proof obligation for
 // the scope-keyed global frame: while every creation site passes an empty scope
 // set, the multi-slot store must be indistinguishable from the single-slot store
-// it replaced. One slot per name, and resolution equal to first-hit.
+// it replaced. One slot per name, and the wildcard and scoped entry points must
+// agree on which slot that is.
 //
 // This is asserted directly rather than inferred from a green suite, because the
 // whole staging argument rests on it.
+//
+// Scope note: the "resolution equals first-hit ACROSS THE PARENT CHAIN" half of
+// the invariant cannot be asserted here. A GlobalEnvironmentFrame has no parent
+// — the hierarchy is managed by EnvironmentFrame (see the type's doc comment) —
+// so the cross-frame ordering is covered at that layer, not this one. This test
+// pins the within-frame half. The doc comment formerly claimed the chain half
+// too, which it never asserted.
 func TestGlobalFrame_VacuousScopesAreSingleSlot(t *testing.T) {
 	c := qt.New(t)
 	ge := NewGlobalEnvironmentFrame()
 
-	x := values.NewSymbol("x")
-	_, created := ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
-	c.Assert(created, qt.IsTrue)
+	// Several distinct names, so a bug that collapses or crosses keys is visible.
+	// A single-name test cannot distinguish "one slot per name" from "one slot".
+	names := []string{"x", "y", "z"}
+	for _, n := range names {
+		sym := values.NewSymbol(n)
+		_, created := ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+		c.Assert(created, qt.IsTrue, qt.Commentf("first create of %s", n))
 
-	// Redefinition of the same variable reuses the slot — R7RS §5.3.1.
-	_, created = ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
-	c.Assert(created, qt.IsFalse)
+		// Redefinition of the same variable reuses the slot — R7RS §5.3.1.
+		_, created = ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+		c.Assert(created, qt.IsFalse, qt.Commentf("redefine of %s must reuse", n))
+	}
 
-	c.Assert(len(ge.Keys()[*x]), qt.Equals, 1)
-	c.Assert(ge.GetGlobalIndex(x), qt.IsNotNil)
-	c.Assert(ge.GetGlobalIndexWithScopes(x, nil), qt.IsNotNil)
+	for _, n := range names {
+		sym := values.NewSymbol(n)
+		c.Assert(len(ge.Keys()[*sym]), qt.Equals, 1, qt.Commentf("slots for %s", n))
+
+		// The two entry points return different KINDS of index by design, and the
+		// difference is load-bearing rather than incidental: the wildcard one is
+		// DEFERRED (Env nil, resolved against whatever environment is live when
+		// the instruction executes), the scoped one is PINNED to this frame and
+		// slot. EqualTo deliberately reports them unequal — see its doc comment.
+		// Asserting only IsNotNil would not distinguish these at all.
+		wildcard := ge.GetGlobalIndex(sym)
+		scoped := ge.GetGlobalIndexWithScopes(sym, nil)
+		c.Assert(wildcard, qt.IsNotNil)
+		c.Assert(scoped, qt.IsNotNil)
+
+		c.Assert(wildcard.Env, qt.IsNil,
+			qt.Commentf("wildcard lookup must stay deferred for %s", n))
+		c.Assert(scoped.Env, qt.Equals, ge,
+			qt.Commentf("scoped lookup must pin to this frame for %s", n))
+		c.Assert(scoped.Slot, qt.Equals, ge.Keys()[*sym][0],
+			qt.Commentf("scoped lookup must pin the name's only slot for %s", n))
+		c.Assert(wildcard.EqualTo(scoped), qt.IsFalse,
+			qt.Commentf("deferred and pinned are different operations for %s", n))
+	}
 }
 
 // TestGlobalFrame_ScopeSetsSeparateBindings pins the behavior Stage B turns on:

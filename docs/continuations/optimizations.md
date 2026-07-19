@@ -124,7 +124,7 @@ Embedded `LocalEnvironmentFrame` by value inside `EnvironmentFrame`:
 │  EnvironmentFrame                                    │
 │  ├── parent, global, phaseLevel, phases, namespace   │
 │  └── local: LocalEnvironmentFrame (embedded value)   │
-│       ├── keys map[Symbol]int (shared, CoW)          │
+│       ├── keys map[Symbol][]int (shared, CoW)        │
 │       └── bindings []Binding (fresh copy)            │
 │                                                      │
 │  Sentinel: local.keys == nil means "no local env"    │

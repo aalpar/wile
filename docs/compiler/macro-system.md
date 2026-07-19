@@ -331,7 +331,10 @@ visible** at phase N+1 — observing it there is a loud compile-time
 `no such binding`, not a silent share
 (`TestClimbingTower_CrossPhaseMutationIsHermetic`). The only surviving cross-phase
 reach, `GetGlobalIndexAcrossPhases`, resolves a free template identifier to a
-*single* binding location (the R7RS §4.3 carve-out); a `set!` of that location is
+single binding location *per reference scope set* (the R7RS §4.3 carve-out). The
+name alone does not name a location: since globals became scope-keyed, two
+expansions of a macro-generating macro each bind under their own intro scope and
+resolve to their own slot. A `set!` of a resolved location is still
 observed coherently, with no per-phase divergence
 (`TestClimbingTower_MarchHareMutatedIsCoherent` — mutated `march-hare` still
 yields its mutated value). So no `ErrCrossPhaseMutation` check is needed: the
