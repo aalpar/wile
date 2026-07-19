@@ -183,21 +183,21 @@ func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, s
 	return p.env.HasLocalVariableBinding(sym, scopes)
 }
 
-// ExpandTopLevelExpression expands a whole TOP-LEVEL form and then restores
-// hygiene for any macro-introduced top-level binder it produced: each is given a
-// fresh unique name so it is unique per expansion (no cross-unit collision) and
-// hidden from the use site (R7RS §4.3.2). See toplevel_binder_hygiene.go.
+// ExpandTopLevelExpression expands a whole TOP-LEVEL form.
 //
 // Use this at every top-level entry point (the Engine's ExpandAndCompile, the
-// test-harness pipelines); use ExpandExpression for sub-forms. The rename is a
-// no-op unless the fully-expanded form is a top-level define / begin-of-defines,
-// so calling it on an ordinary expression is harmless.
+// test-harness pipelines); use ExpandExpression for sub-forms.
+//
+// Hygiene for a macro-introduced top-level binder is a property of the GLOBAL
+// FRAME, not of this expansion step: the binder carries the expansion's intro
+// scope and the frame keys its slots by scope set, so two expansions land in
+// two slots and a bare (empty-scope) reference cannot reach either (R7RS
+// §4.3.2). This used to be restored syntactically here, by renaming every
+// macro-introduced binder and its references to a fresh unique name; see
+// pkg/environment/global_environment_frame.go for the storage that replaced it,
+// and pkg/wile/toplevel_binder_scope_test.go for the pinned behavior.
 func (p *ExpanderTimeContinuation) ExpandTopLevelExpression(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	expanded, err := p.ExpandExpression(expr)
-	if err != nil {
-		return nil, err
-	}
-	return renameMacroIntroducedTopLevelBinders(expanded), nil
+	return p.ExpandExpression(expr)
 }
 
 // ExpandExpression expands a syntax expression.

@@ -61,7 +61,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// user-written top-level binder carries an empty set, a macro-introduced one
 	// carries the expansion's intro scope, so they land in different slots and
 	// neither can capture the other. No renaming required.
-	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
+	_, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
 
 	// Top-level immutability (WithImmutableTopLevel, the engine default): when enabled, a
 	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
@@ -82,7 +82,17 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
 		return sym, nil
 	}
-	binding := p.env.GetGlobalBinding(gi)
+	// Address the binding just created, not a parent-chain walk. GetGlobalBinding
+	// resolves a creation-returned (deferred, scope-less) index wildcard, i.e. to
+	// the name's FIRST slot in this frame — for a macro-introduced binder that is
+	// the user's variable, whose meta this would then overwrite. Mirror of
+	// emitDefineStore's re-resolve.
+	own := p.env.GlobalEnvironment()
+	ownIndex := own.GetGlobalIndexWithScopes(sym, symbolScopes)
+	if ownIndex == nil {
+		return sym, nil
+	}
+	binding := own.GetOwnGlobalBinding(ownIndex)
 	if binding == nil {
 		return sym, nil
 	}

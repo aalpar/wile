@@ -77,21 +77,30 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	}
 	// Create global binding if no local environment exists. This is the case for library and top-level bodies, which
 	// use the global environment for internal definitions.
-	gi, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, nil)
-	binding := env.GetGlobalBinding(gi)
-	if binding == nil {
+	// The scope set is the slot's KEY, so it goes in at CREATION. Creating under
+	// nil and stamping m.Scopes afterwards keyed the slot under the empty set and
+	// then made it report a set it was never keyed under, so the next predeclare
+	// of the same name mis-deduplicated against it. newGlobalBinding records the
+	// set for us, which is why nothing below writes m.Scopes.
+	_, _ = env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
+
+	// Address the placeholder in THIS frame, under the binder's own scope set.
+	// The index MaybeCreateOwnGlobalBinding returns is deferred (no frame, no
+	// scopes), and GetGlobalBinding resolves a deferred index by wildcard: it
+	// walks the parent chain and takes the name's first live slot. Once a name
+	// has more than one slot, that slot can belong to another expansion, and the
+	// source stamp below would land on that expansion's variable.
+	own := env.GlobalEnvironment()
+	ownIndex := own.GetGlobalIndexWithScopes(name, scopes)
+	if ownIndex == nil {
+		return
+	}
+	binding := own.GetOwnGlobalBinding(ownIndex)
+	if binding == nil || source == nil {
 		return
 	}
 	binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-		changed := false
-		if scopes != nil {
-			m.Scopes = scopes
-			changed = true
-		}
-		if source != nil {
-			m.Source = source
-			changed = true
-		}
-		return changed
+		m.Source = source
+		return true
 	})
 }

@@ -78,6 +78,42 @@ func TestTopLevelMacroBinder_ExpansionsDoNotCollide(t *testing.T) {
 	c.Assert(got, qt.Equals, "3")
 }
 
+// Nested expansions of a binder-introducing macro produce same-named binders
+// whose scope sets are nested ({s1} and {s1,s2}); a reference carrying the
+// larger set must resolve to the more specific binder, per Flatt's maximal
+// rule. The retired rename pass delivered this by giving each binder a distinct
+// fresh name; scope-keyed globals must deliver it from the scope sets alone.
+func TestTopLevelMacroBinder_NestedBindersResolveMaximally(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(define-syntax inner
+			(syntax-rules ()
+				((_ out) (begin (define tmp 'inner) (define out tmp)))))
+		(define-syntax outer
+			(syntax-rules ()
+				((_ out) (begin (define tmp 'outer) (inner out)))))
+		(outer got)
+		got`)
+	c.Assert(err, qt.IsNil)
+	// `out` is bound by inner's expansion, so it must see inner's tmp, not the
+	// outer expansion's same-named binder one scope up.
+	c.Assert(got, qt.Equals, "inner")
+}
+
+// A quoted symbol is data (R7RS §4.1.2), never a reference, so a
+// macro-introduced binder of the same name must not change what it evaluates
+// to. The rename pass had to special-case quote/quasiquote traversal to avoid
+// rewriting data; scope keying rewrites nothing, so this must hold trivially.
+func TestTopLevelMacroBinder_QuotedDatumIsNotCaptured(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(define-syntax m (syntax-rules () ((_) (define tmp 'introduced))))
+		(m)
+		(quote tmp)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "tmp")
+}
+
 // A macro-introduced binder must stay invisible to user code that names it.
 func TestTopLevelMacroBinder_IntroducedNameIsNotReachable(t *testing.T) {
 	c := qt.New(t)
