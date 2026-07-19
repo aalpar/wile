@@ -316,3 +316,88 @@ func TestGlobalFrame_WildcardSkipsDeletedSlot(t *testing.T) {
 	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
 	c.Assert(ge.GetGlobalIndex(sym), qt.IsNil)
 }
+
+// Deleting a name removes EVERY slot it owns, not just the first. This is the
+// wildcard-delete-all policy DeleteBinding documents: deletion is a
+// REPL/namespace operation meaning "remove this name", and it carries no scope
+// set with which to single out one of several hygiene-distinct bindings.
+//
+// Multi-slot names are ordinary since scope-keyed global storage — a
+// macro-introduced binder carries the expansion's intro scope and a user-written
+// one the empty set — but every pre-existing delete test builds exactly one slot,
+// so the loop over slots had no coverage.
+func TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	sym := values.NewSymbol("counter")
+	introScopes := []*syntax.Scope{syntax.NewScope()}
+
+	// A user-written binder (empty set) and a macro-introduced one (intro scope)
+	// are distinct bindings sharing a name.
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
+
+	ambient := ge.GetGlobalIndexWithScopes(sym, nil)
+	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
+	c.Assert(ambient, qt.IsNotNil)
+	c.Assert(introduced, qt.IsNotNil)
+	c.Assert(ambient.Slot, qt.Not(qt.Equals), introduced.Slot)
+
+	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+
+	// Both slots go. Asserting only the ambient one would pass even if the loop
+	// stopped after the first slot.
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, nil), qt.IsNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, introScopes), qt.IsNil)
+	c.Assert(ge.GetGlobalIndex(sym), qt.IsNil)
+	c.Assert(ge.GetOwnGlobalBinding(ambient), qt.IsNil)
+	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNil)
+}
+
+// A stale resolved index whose slot was deleted must not re-resolve onto a
+// HYGIENE-DISTINCT binding that later takes the name.
+//
+// RED and t.Skip-guarded. TestGlobalFrame_PinnedIndexSurvivesDelete above pins
+// stale-index re-resolution as intended, but it redefines under the SAME scope set,
+// which is the case where re-resolution is harmless. It is not harmless across
+// scope sets: newResolvedGlobalIndex never sets Scopes, so every compiler-resolved
+// index carries Scopes == nil, and both SetOwnGlobalValue and GetOwnGlobalBinding
+// fall through pinnedSlotLocked to bestSlotLocked(key, gi.Scopes, gi.Scopes == nil)
+// — matchAny TRUE, i.e. the name's first live slot, with no scope check at all.
+//
+// Reachable from Scheme, measured on HEAD via namespace-undefine!: after macro A's
+// binding of a name is deleted and macro B introduces its own, A's setter writes
+// B's binding. Its control (identical minus the undefine) keeps them isolated, so
+// the delete is the necessary ingredient.
+//
+// Deliberately NOT fixed with C4: C4's question was delete-all vs scoped-delete,
+// and delete-all is correct. This is the D4 pinned-index axis, and repairing it
+// means deciding whether a pinned index whose slot died should fail closed rather
+// than re-resolve — a semantic change that would rewrite the assertion in
+// TestGlobalFrame_PinnedIndexSurvivesDelete. That decision needs a human.
+func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
+	t.Skip("RED: stale pinned index re-resolves by wildcard across scope sets; see the plan's C4 section")
+
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	sym := values.NewSymbol("counter")
+	aScopes := []*syntax.Scope{syntax.NewScope()}
+	bScopes := []*syntax.Scope{syntax.NewScope()}
+
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, aScopes)
+	aIndex := ge.GetGlobalIndexWithScopes(sym, aScopes)
+	c.Assert(aIndex, qt.IsNotNil)
+
+	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+
+	// A different binder, whose scope set is incompatible with A's, takes the name.
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, bScopes)
+	bBinding := ge.GetOwnGlobalBinding(ge.GetGlobalIndexWithScopes(sym, bScopes))
+	c.Assert(bBinding, qt.IsNotNil)
+
+	// A's dead index must not address B's binding.
+	c.Assert(ge.GetOwnGlobalBinding(aIndex), qt.IsNil)
+	err := ge.SetOwnGlobalValue(aIndex, values.NewInteger(42))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(bBinding.Value(), qt.Not(valuestest.SchemeEquals), values.NewInteger(42))
+}
