@@ -307,6 +307,14 @@ func (p *Namespace) SealedBase() *EnvironmentFrame {
 // sealed base must be included or primitives like `car` vanish from the result (the
 // key map carries no parent walk). Iteration order is unspecified; a name shadowed in
 // both frames appears once (deduped via the seen set).
+//
+// AmbientKeys, not Keys: the listing reports only names resolvable under the
+// ambient (empty) scope set, which is what both read families this listing serves
+// look up — environment-ref/environment-bound? and namespace-ref/namespace-bound?
+// all pass AmbientScopes. Listing a macro-introduced binder would break the
+// listing's primary use, enumerate-then-dereference, on exactly the names it
+// added. Moving any of those reads back to a wildcard silently re-opens that gap,
+// since nothing here can detect it.
 func (p *Namespace) BoundSymbolNames() values.Value {
 	seen := values.StringSet{}
 	var result values.Value = values.EmptyList
@@ -314,7 +322,7 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 		if frame == nil {
 			continue
 		}
-		for key := range frame.GlobalEnvironment().Keys() {
+		for _, key := range frame.GlobalEnvironment().AmbientKeys() {
 			_, dup := seen[key.Key]
 			if dup {
 				continue

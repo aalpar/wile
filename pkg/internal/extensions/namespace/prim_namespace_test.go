@@ -250,3 +250,171 @@ func TestNamespaceTypeErrors(t *testing.T) {
 	schemeEvalExpectError(t, eng, `(namespace-derive 42)`)
 	schemeEvalExpectError(t, eng, `(namespace-require 42 '(scheme base))`)
 }
+
+// Hygiene of the namespace read primitives.
+//
+// namespace-define! creates under the ambient (empty) scope set, so the reads
+// must resolve under that same set. A wildcard read returns the name's first
+// live slot whatever its hygiene, which diverges as soon as a macro introduced
+// the same name earlier in the frame. (interaction-environment) is the engine's
+// own namespace, so macro-introduced top-level binders are reachable through it.
+
+// A wildcard read would return the macro's variable rather than the user's.
+func TestNamespaceRef_ResolvesAmbientNotMacroBinder(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define x 0))))
+		(m)
+		(define x 1)
+		(namespace-ref (interaction-environment) 'x)`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "1")
+}
+
+// namespace-define! must round-trip through namespace-ref even when a macro has
+// already introduced a binder of the same name.
+func TestNamespaceDefine_RoundTripsPastMacroBinder(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define y 0))))
+		(m)
+		(namespace-define! (interaction-environment) 'y 42)
+		(namespace-ref (interaction-environment) 'y)`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "42")
+}
+
+// A macro-introduced binder is unreachable from any source-written reference in
+// the namespace, so namespace-bound? must not report it as bound.
+func TestNamespaceBound_IgnoresMacroOnlyBinder(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define z 0))))
+		(m)
+		(namespace-bound? (interaction-environment) 'z)`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#f")
+}
+
+// The ambient read must still reach the sealed base through the parent chain:
+// scope-keying the lookup must not narrow it to the namespace's own frame.
+func TestNamespaceRef_StillReachesSealedBase(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `(procedure? (namespace-ref (interaction-environment) 'car))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#t")
+}
+
+// namespace-bound-names must list only what the other namespace primitives can
+// reach. Listing a macro-introduced binder would break enumerate-then-dereference
+// — the primary use of the listing — and would disclose a name no reference
+// written in that namespace can resolve.
+func TestNamespaceBoundNames_HidesMacroOnlyBinder(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define w 0))))
+		(m)
+		(list (namespace-bound? (interaction-environment) 'w)
+		      (if (memq 'w (namespace-bound-names (interaction-environment))) 'listed 'not-listed))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(#f not-listed)")
+}
+
+// The listing invariant, swept over the whole namespace rather than one planted
+// name: every name namespace-bound-names reports must resolve. Returns the first
+// offending name instead of #t so a failure names the leak. bound? and ref share
+// their lookup line, so this covers (map (lambda (n) (namespace-ref ns n)) ...)
+// without the raise on failure.
+//
+// The sweep carries its own non-emptiness floor and its own planted-name check.
+// Without them the loop returns #t on an empty listing, so the single most likely
+// regression of a filter — rejecting everything — would leave this test green.
+// Relying on a sibling test for that is not enough: the floor has to live in the
+// assertion it protects, or deleting the sibling silently disarms this one.
+func TestNamespaceBoundNames_EveryListedNameResolves(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define unreachable 0))))
+		(m)
+		(define reachable 1)
+		(let ((ns (interaction-environment)))
+		  (list (> (length (namespace-bound-names ns)) 10)
+		        (if (memq 'reachable (namespace-bound-names ns)) 'planted 'missing)
+		        (let loop ((names (namespace-bound-names ns)))
+		          (cond ((null? names) #t)
+		                ((namespace-bound? ns (car names)) (loop (cdr names)))
+		                (else (car names))))))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(#t planted #t)")
+}
+
+// A macro-introduced shadow of a sealed-base name is the case whose resolution
+// the ambient filter actually changed: the macro's slot no longer matches, so the
+// parent walk falls through to the sealed base instead of stopping at the runtime
+// frame. TestNamespaceRef_StillReachesSealedBase covers the unshadowed path and
+// passes either way, so it cannot pin this.
+func TestNamespaceRef_MacroShadowOfSealedBaseFallsThrough(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define car 0))))
+		(m)
+		(procedure? (namespace-ref (interaction-environment) 'car))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#t")
+}
+
+// Imported names are the third population the listing must keep, alongside
+// sealed-base primitives and user defines. installImportedBinding creates them
+// ambient, so the filter admits them — but that is the assumption AmbientScopes
+// rests on, and nothing else measures it.
+//
+// Needs its own engine: the shared newEngine has no library paths, so a real
+// (scheme base) import cannot resolve there.
+func TestNamespaceBoundNames_KeepsImportedNames(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(wile.StdLibFS),
+		wile.WithLibraryPaths("lib"),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	defer eng.Close()
+
+	result := schemeEval(t, eng, `
+		(let ((ns (namespace-derive (interaction-environment))))
+		  (namespace-require ns '(scheme base))
+		  (list (if (memq 'map (namespace-bound-names ns)) 'listed 'not-listed)
+		        (namespace-bound? ns 'map)))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(listed #t)")
+}
+
+// Filtering to the ambient scope set must not cost the listing its real
+// entries: sealed-base primitives and ordinary top-level defines.
+func TestNamespaceBoundNames_KeepsPrimitivesAndUserDefines(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define user-defined 1)
+		(let ((names (namespace-bound-names (interaction-environment))))
+		  (list (if (memq 'car names) 'listed 'not-listed)
+		        (if (memq 'user-defined names) 'listed 'not-listed)))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(listed listed)")
+}
+
+// The two read families must agree. They take the same *environment.Namespace
+// and share one listing body, so any future move of one family off the ambient
+// set re-opens the split this pins. Asserting agreement rather than a literal
+// keeps the test honest if the shared answer ever changes.
+func TestReadFamiliesAgree_NamespaceAndEnvironment(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_) (define q 'MACRO-VALUE))))
+		(m)
+		(define visible 'USER-VALUE)
+		(let ((ns (interaction-environment)))
+		  (list (eq? (namespace-bound? ns 'q)       (environment-bound? ns 'q))
+		        (eq? (namespace-bound? ns 'visible) (environment-bound? ns 'visible))
+		        (eq? (namespace-ref ns 'visible)    (environment-ref ns 'visible))))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(#t #t #t)")
+}

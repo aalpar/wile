@@ -684,8 +684,17 @@ func (p *Engine) Define(name string, value Value) error {
 // A name bound ONLY under a non-empty scope set is correctly reported as
 // absent. Such a binding is macro-introduced and is unreachable from any
 // source-written reference too, so there is no name the host could legitimately
-// use to ask for it. Wildcard lookup remains the right answer for introspection
-// and REPL completion, which is why those callers keep it.
+// use to ask for it.
+//
+// The same reasoning governs every reflective read of a bare symbol, so
+// environment-ref/environment-bound? and namespace-ref/namespace-bound? resolve
+// under the ambient set as well. Wildcard survives only where a NAME, not a
+// variable, is the unit: registerSchemeDocstrings below and
+// searchEnvironmentBindings (registry/search.go) attach and retrieve docstrings,
+// and one name owns one doc entry however many hygiene-distinct bindings share
+// it, so the ambiguity does not arise. REPL completion still walks the
+// unfiltered key map and can therefore offer a name that resolves to nothing;
+// that is a known defect, filed in TODO.md, not an endorsement of wildcard.
 func (p *Engine) Get(name string) (Value, bool) {
 	sym := values.NewSymbol(name)
 	idx := p.env.GetGlobalIndexWithScopes(sym, nil)

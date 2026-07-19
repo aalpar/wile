@@ -795,9 +795,13 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 	gi := p.global.GetGlobalIndexWithScopes(key, scopes)
 	if gi == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"DefineOwnGlobal: binding %q not found after creation", key)
+			"DefineOwnGlobal: binding %q not found after creation", key.Key)
 	}
-	return p.global.SetOwnGlobalValue(gi, v)
+	err := p.global.SetOwnGlobalValue(gi, v)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "DefineOwnGlobal: write to %q failed after creation", key.Key)
+	}
+	return nil
 }
 
 // GetGlobalIndex returns the GlobalIndex of the binding for the given symbol,

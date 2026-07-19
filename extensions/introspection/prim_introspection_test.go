@@ -269,3 +269,70 @@ func TestAvailableLibraries(t *testing.T) {
 		evalExpectError(t, engine, `(available-libraries 42)`)
 	})
 }
+
+// Hygiene of the environment read primitives.
+//
+// These mirror the namespace-* tests: the two families take the same
+// *environment.Namespace and share environment-bound-names' listing body, so a
+// wildcard read here would make the listing disagree with the probe on exactly
+// the names the listing filters out. The symbol argument carries no scope set,
+// so a wildcard resolves by slot order rather than by anything the caller said.
+
+// A wildcard read would return the macro's variable rather than the user's.
+func TestEnvironmentRef_ResolvesAmbientNotMacroBinder(t *testing.T) {
+	engine := newEngine(t)
+
+	result := schemeEval(t, engine, `
+		(define-syntax m (syntax-rules () ((_) (define x 0))))
+		(m)
+		(define x 1)
+		(environment-ref (interaction-environment) 'x)`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "1")
+}
+
+// A macro-introduced binder is unreachable from any source-written reference, so
+// environment-bound? must not report it as bound and environment-ref must not
+// hand back its value. Before the ambient filter this returned #t and the macro's
+// private value respectively.
+func TestEnvironmentBound_IgnoresMacroOnlyBinder(t *testing.T) {
+	engine := newEngine(t)
+
+	result := schemeEval(t, engine, `
+		(define-syntax m (syntax-rules () ((_) (define z 'MACRO-VALUE))))
+		(m)
+		(environment-bound? (interaction-environment) 'z)`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#f")
+}
+
+// The listing and the probe must agree. This is the invariant the split broke:
+// environment-bound-names filtered to ambient while environment-bound? stayed
+// wildcard, so a name could be unlistable and simultaneously reported bound.
+func TestEnvironmentBoundNames_AgreesWithBoundPredicate(t *testing.T) {
+	engine := newEngine(t)
+
+	result := schemeEval(t, engine, `
+		(define-syntax m (syntax-rules () ((_) (define w 0))))
+		(m)
+		(list (environment-bound? (interaction-environment) 'w)
+		      (if (memq 'w (environment-bound-names (interaction-environment))) 'listed 'not-listed))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(#f not-listed)")
+}
+
+// With two macros introducing the same name, a wildcard read returns whichever
+// expanded first — the same expression answering differently on invocation order
+// alone. Pinning both orders makes that regression visible rather than flaky.
+func TestEnvironmentRef_NotExpansionOrderDependent(t *testing.T) {
+	qt.Assert(t, schemeEval(t, newEngine(t), `
+		(define-syntax m1 (syntax-rules () ((_) (define w 'FROM-M1))))
+		(define-syntax m2 (syntax-rules () ((_) (define w 'FROM-M2))))
+		(m1)
+		(m2)
+		(environment-bound? (interaction-environment) 'w)`).SchemeString(), qt.Equals, "#f")
+
+	qt.Assert(t, schemeEval(t, newEngine(t), `
+		(define-syntax m1 (syntax-rules () ((_) (define w 'FROM-M1))))
+		(define-syntax m2 (syntax-rules () ((_) (define w 'FROM-M2))))
+		(m2)
+		(m1)
+		(environment-bound? (interaction-environment) 'w)`).SchemeString(), qt.Equals, "#f")
+}

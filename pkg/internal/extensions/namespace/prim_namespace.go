@@ -150,7 +150,7 @@ func PrimNamespaceRef(mc machine.CallContext) error {
 	}
 
 	env := ns.Runtime()
-	binding := env.GetBinding(sym, nil)
+	binding := env.GetBinding(sym, environment.AmbientScopes())
 	if binding == nil {
 		if hasDefault {
 			mc.SetValue(defaultVal)
@@ -175,7 +175,7 @@ func PrimNamespaceBound(mc machine.CallContext) error {
 	}
 
 	env := ns.Runtime()
-	binding := env.GetBinding(sym, nil)
+	binding := env.GetBinding(sym, environment.AmbientScopes())
 	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil
 }

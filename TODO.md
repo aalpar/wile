@@ -85,11 +85,11 @@ Items that block production embedded use or prevent silent state corruption.
   conclusion, reached independently). Both are prerequisites in practice, since scope-keyed
   globals make equal-cardinality ties reachable at top level for the first time.
 
-### Name-keyed identity survives in two consumers of scope-keyed bindings (2026-07-19)
+### Name-keyed identity survives in three consumers of scope-keyed bindings (2026-07-19)
 
-Both are consequences of `8afeb66a`/`a60e32e1` making a name own several slots. Filed
-here because each currently exists only inside a plan section marked RESOLVED, where
-anyone scanning for open work will skip it.
+All three are consequences of `8afeb66a`/`a60e32e1` making a name own several slots. The
+first two are filed here because each currently exists only inside a plan section marked
+RESOLVED, where anyone scanning for open work will skip it.
 
 - [ ] **Frame-reclaim's verdict domain is name-keyed** [Medium, M]: `buildReclaimGraph`'s
   `byName` is `map[string]*reclaimNode` keyed on `Sym.Key`, and `frameReuseForDefine`
@@ -112,6 +112,33 @@ anyone scanning for open work will skip it.
   scope-set equality at creation (design D3 of the scope-keyed plan). Currently **latent**,
   masked because locals get a fresh frame per binding form. Fix by mirroring the global
   creation predicate, not by copying lookup's.
+
+- [ ] **`DeleteBinding` is name-keyed while the namespace read surface is scope-exact**
+  [Medium, S, issue #805]: `namespace-ref`/`namespace-bound?`/`namespace-bound-names` (and their
+  `environment-*` twins) resolve under the ambient (empty) scope set; `namespace-undefine!` still
+  resolves by bare name. `GlobalEnvironmentFrame.DeleteBinding`
+  (`pkg/environment/global_environment_frame.go:500`) removes **every** slot a name owns, so
+  `(namespace-undefine! ns 'x)` destroys a macro-introduced `x` that `(namespace-ref ns 'x)`
+  reports as unbound: you can destroy a binding you cannot read. Pre-existing; before the read
+  side became scope-exact the whole surface was uniformly coarse, so the diff promoted this from
+  coarseness to a hole.
+
+  **Fix**: give `DeleteBinding` a scope-set parameter and resolve through
+  `bestSlotLocked(sym, scopes, false)`, the literal call the read makes, so delete cannot drift
+  from ref; nil that one slot and prune its index from `keys[sym]`. Leaving dead indices in place
+  strands the two consumers that treat `slots[0]` as the name's representative
+  (`pkg/wile/engine.go:1293`, `pkg/registry/search.go:210`); both nil-check, so no panic, but
+  they would drop a name whose slot 0 died while slot 1 lives. One production caller
+  (`pkg/internal/extensions/namespace/prim_namespace.go:216`), so change the signature rather
+  than add a variant; the wildcard sealed-base probe at `:219` needs the same treatment.
+
+  **Cost is the tests, not the code.** `TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot`
+  (`global_environment_frame_test.go:363`) and the `DeleteBinding` doc (`:512-515`) pin
+  delete-all deliberately, by name and by comment; both get **inverted**, not updated. Unmeasured
+  risk: a *wildcard* stale index pinned to the deleted slot now falls through to a surviving macro
+  slot where delete-all made it miss. That is the C2b scope-blindness at
+  `global_environment_frame.go:372-384` showing through rather than something the change invents,
+  but it cannot be ruled out by reading and needs coverage.
 
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 
@@ -706,6 +733,7 @@ Directions documents — identify prioritized capability extensions. Priority se
 - [ ] **`make doclint` target** [Tooling, S]: Extract `foo.go:N` citations from `docs/**/*.md` and `plans/**/*.md`; assert each file exists and `N` is within `wc -l file`. Cheap version catches the bulk of drift. Existing `check-readme-links.sh` only validates markdown link targets, not prose citations. Past multi-commit doc sweeps (PRs #707, #710, #711, #712, #713) are evidence the check would pay for itself. Stronger form would `go/ast`-parse the cited line and verify the enclosing decl name matches a nearby identifier in the doc.
 - [ ] **`make planlint` target** [Tooling, S]: Flag plan files whose header status is stale. A plan's status lives in two places — its own `**Status:**`/`status =` header and the central `plans/CLAUDE.md` index — and only the central one is on the post-merge checklist, so per-file headers rot. Cheap version: for each `plans/*.md` whose header matches `not started|design only|design draft|ready to implement|pending`, extract any cited `PR #N` / `#N` and assert it is *not* merged (`gh pr view N`); a merged PR under a "not started" header is the drift signal. Evidence the check pays for itself: a 2026-06-05 audit found **10** plan headers claiming not-done for work merged on master (interval-dataflow-widening, sat-solver, numeric-registry, values-SR, approximate-counting-semirings, bignum-allocation-reduction, algebra-docs). Stronger form: cross-check each header against its `plans/CLAUDE.md` row and flag mismatches. Companion to `make doclint` above. `1` lone candidate left unresolved by that audit: `2026-04-20-axis-b-annotation-bugs` (cleanup-shipped claim unverifiable from git).
 - [ ] **POSIX API / SRFI-170 remaining phases** [Standard library, 9 phases]: Phases 2-10 not started. Phase 1 (directory ops + process extension) completed in PR #565.
+- [ ] **REPL tab completion still offers macro-introduced binders** [Tooling + hygiene, S, 2026-07-19]: `Namespace.BoundSymbolNames` (`pkg/environment/namespace.go:315`) now lists only names resolvable under the ambient scope set, via `GlobalEnvironmentFrame.AmbientKeys` (`global_environment_frame.go:267`). The completion path was deliberately left on the unfiltered walk — `Completer.collectBindingNames` (`pkg/repl/completer.go:83`) → `Engine.BoundNames` (`pkg/wile/engine.go:842`) → `Namespace.BoundNamesAcrossPhases` (`namespace.go:342`), which ranges `global.Keys()` at `:353`. The two listings now disagree, and completion can still offer a name that resolves to nothing. **Why it was not filtered alongside:** `BoundNamesAcrossPhases` also walks the expand and compile phase frames, where `define-syntax` keywords live (`compile_define_syntax.go:91`), so an ambient filter would drop any keyword whose binder carries a non-empty scope set. `ee918fd1`'s message states a top-level user binder carries the empty set, which suggests keywords survive — but that is read off a commit message, not measured, and library-defined + imported macros are unchecked. **Measure first:** apply the filter, diff the completion list before/after on a KitchenSink engine; missing macro keywords (`when`, `unless`, stdlib forms) is the disqualifying signal. Not at risk: `let-syntax`/`letrec-syntax` keywords are local bindings (`expander_let_syntax.go:137`), never in `Keys()`. Same read-path family as A1 above, which fixed the sealed-base half of this walk.
 
 ---
 

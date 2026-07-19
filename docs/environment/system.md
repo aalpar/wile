@@ -276,9 +276,14 @@ These invariants must be maintained:
    - Creation uses **exact scope-set equality**, not subset compatibility.
      Reusing lookup's predicate here would let a macro-introduced `{m}` binder
      clobber a user's `{}` binding, since `ScopesCompatible({}, {m})` is true
-   - A nil scope set means MATCH ANY on lookup and the EMPTY SET on creation.
-     The two are opposite; passing nil without deciding which you meant is the
-     recurring defect in this area
+   - A nil scope set means the EXACT empty set to `GetGlobalIndexWithScopes` and
+     `CreateGlobalBinding`, but MATCH ANY to `GetBinding`, `GetLocalIndex`,
+     `GetGlobalIndex`, and any index built by `NewGlobalIndex` from a bare symbol.
+     The split is by entry point, not by lookup-vs-creation
+   - Passing nil without deciding which you meant is the recurring defect here:
+     create under the empty set, then write through a wildcard index, and the
+     value lands on a different binding than the one just created.
+     `DefineOwnGlobal` exists so that pairing cannot be written by hand
 
 ---
 

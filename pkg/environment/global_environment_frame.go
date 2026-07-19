@@ -253,6 +253,55 @@ func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol][]int {
 	return result
 }
 
+// AmbientScopes returns the ambient scope set: the empty, NON-NIL set that a
+// reference written outside any macro expansion carries.
+//
+// It exists because nil and the empty set are opposite instructions at the read
+// entry points. GetBinding, GetLocalIndex and GetGlobalIndex read nil as MATCH
+// ANY — the name's first live slot whatever its hygiene — while an empty set
+// means "compatible with no scopes", which only an ambient binding satisfies.
+// Both spell `len(scopes) == 0`, so the distinction survives only where a site
+// tests nil-ness, and a caller that means "ambient" and writes nil silently gets
+// a wildcard. Every reflective read of a bare symbol wants this, not nil: a
+// values.Symbol carries no scope set, so when several hygiene-distinct bindings
+// share a name a wildcard resolves by slot order — an expansion-order artifact,
+// not an answer to the caller's question.
+func AmbientScopes() []*syntax.Scope {
+	return []*syntax.Scope{}
+}
+
+// AmbientKeys returns the names holding a live binding under the ambient (empty)
+// scope set: the names a reference written outside any macro expansion resolves.
+//
+// Keys reports every name in the frame, including binders a macro template
+// introduced. Those are different variables that happen to share a name, and no
+// source-written reference in this frame can reach them, so a listing built from
+// Keys disagrees with every scoped read — enumerate-then-dereference fails on
+// exactly those names. Resolution here goes through bestSlotLocked, the same
+// call a single read makes, so the listing cannot drift from what the read
+// finds.
+//
+// Order is unspecified: the result is built by ranging p.keys. Callers needing
+// determinism must sort. (BoundSymbolNames, the only consumer, documents the
+// same.)
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) AmbientKeys() []values.Symbol {
+	ambient := AmbientScopes()
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	q := make([]values.Symbol, 0, len(p.keys))
+	for k := range p.keys {
+		_, ok := p.bestSlotLocked(k, ambient, false)
+		if !ok {
+			continue
+		}
+		q = append(q, k)
+	}
+	return q
+}
+
 // scopeSetsEqual reports whether two scope sets are equal, by mutual subset.
 //
 // Binding CREATION compares scope sets with this, not with ScopesCompatible.
@@ -449,7 +498,8 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	}
 	if !ok {
 		p.mu.Unlock()
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such global binding %q", gi.Index)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
+			"SetOwnGlobalValue: no such global binding %q", gi.Index.Key)
 	}
 	// Publish atomically through the binding's cell so the lock-free
 	// cachedBindings reader (Binding.Value with no frame mutex) never tears the

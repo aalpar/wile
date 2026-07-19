@@ -433,3 +433,48 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(bBinding.Value(), qt.Not(valuestest.SchemeEquals), values.NewInteger(42))
 }
+
+// TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders pins what separates
+// AmbientKeys from Keys. Keys answers "what names does this frame hold"; the
+// bound-names primitives need "what names can a reference reach", and a binder a
+// macro template introduced is reachable from neither source nor any scoped read.
+// The mixed name is the discriminating case: dropping the name outright would be
+// as wrong as listing it, since the user's own binding of it is reachable.
+func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	m := []*syntax.Scope{syntax.NewScope()}
+
+	ambient := values.NewSymbol("ambient")
+	macroOnly := values.NewSymbol("macro-only")
+	mixed := values.NewSymbol("mixed")
+	deleted := values.NewSymbol("deleted")
+
+	ge.CreateGlobalBinding(ambient, BindingTypeVariable, nil)
+	ge.CreateGlobalBinding(macroOnly, BindingTypeVariable, m)
+	ge.CreateGlobalBinding(mixed, BindingTypeVariable, nil)
+	ge.CreateGlobalBinding(mixed, BindingTypeVariable, m)
+	ge.CreateGlobalBinding(deleted, BindingTypeVariable, nil)
+	c.Assert(ge.DeleteBinding(deleted), qt.IsTrue)
+
+	names := values.StringSet{}
+	for _, k := range ge.AmbientKeys() {
+		_, dup := names[k.Key]
+		c.Assert(dup, qt.IsFalse)
+		names[k.Key] = struct{}{}
+	}
+
+	// The delta between the two accessors is macro-only: DeleteBinding drops the
+	// key itself, so a deleted name is already absent from Keys.
+	c.Assert(ge.Keys(), qt.HasLen, 3)
+	c.Assert(names, qt.HasLen, 2)
+
+	_, ok := names["ambient"]
+	c.Assert(ok, qt.IsTrue)
+	_, ok = names["mixed"]
+	c.Assert(ok, qt.IsTrue)
+	_, ok = names["macro-only"]
+	c.Assert(ok, qt.IsFalse)
+	_, ok = names["deleted"]
+	c.Assert(ok, qt.IsFalse)
+}

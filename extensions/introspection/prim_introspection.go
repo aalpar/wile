@@ -62,6 +62,15 @@ func PrimEnvironmentBoundNames(mc machine.CallContext) error {
 // Returns the value bound to a symbol in the given environment.
 // Signals an error if the symbol is unbound.
 // (environment-ref env symbol) -> value
+//
+// Reads under AmbientScopes, not nil. The symbol argument is a runtime
+// values.Symbol carrying no scope set, so when several hygiene-distinct bindings
+// share a name a wildcard read resolves by slot order: two macros each
+// introducing w make this return the one that expanded first, which is an
+// expansion-order artifact rather than an answer to the caller's question. It
+// also hands back a macro's private variable, which no source-written reference
+// in the namespace could name. environment-bound-names lists ambient names only,
+// so a wildcard here would also make the listing disagree with the read.
 func PrimEnvironmentRef(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
@@ -77,7 +86,7 @@ func PrimEnvironmentRef(mc machine.CallContext) error {
 	}
 
 	env := topLevelEnv.Runtime()
-	binding := env.GetBinding(sym, nil)
+	binding := env.GetBinding(sym, environment.AmbientScopes())
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "environment-ref: unbound symbol %s", sym.Key)
 	}
@@ -89,6 +98,9 @@ func PrimEnvironmentRef(mc machine.CallContext) error {
 // PrimEnvironmentBoundQ implements the (environment-bound?) primitive.
 // Returns #t if the symbol is bound in the given environment, #f otherwise.
 // (environment-bound? env symbol) -> boolean
+//
+// Shares environment-ref's lookup line so bound? and ref cannot disagree: a name
+// this reports as bound must be one ref can retrieve.
 func PrimEnvironmentBoundQ(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
@@ -104,7 +116,7 @@ func PrimEnvironmentBoundQ(mc machine.CallContext) error {
 	}
 
 	env := topLevelEnv.Runtime()
-	binding := env.GetBinding(sym, nil)
+	binding := env.GetBinding(sym, environment.AmbientScopes())
 	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil
 }
