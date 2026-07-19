@@ -278,11 +278,33 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		srcCtx = &syntax.SourceContext{Origin: opts.Origin}
 	}
 
-	// Scope-stripped variant for template identifiers (Flatt 2016).
-	// Skip the WithoutScopes() allocation when there are no scopes to strip.
+	// A template identifier carries the scopes it had at the macro's DEFINITION
+	// site (Flatt 2016). UseSiteCtx overrides srcCtx for diagnostics — position
+	// and origin — but its scope set belongs to the invoking code, and letting
+	// that reach a template identifier would let the macro capture use-site
+	// bindings.
+	//
+	// Clearing the set outright defends against that, but also discards the
+	// definition-site scopes, leaving a template reference unable to name
+	// anything bound in the macro's own lexical context: a sibling
+	// define-syntax in the same let body resolves to a binder keyed on that
+	// let's scope, which a scope-less reference is not a superset of.
+	// Substituting the definition-site set defends against the use site without
+	// that collateral loss. The intro scope added below is what keeps the
+	// identifier distinct from a same-named one at the use site.
 	templateCtx := srcCtx
-	if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-		templateCtx = srcCtx.WithoutScopes()
+	if opts.UseSiteCtx != nil && srcCtx != nil {
+		var defScopes []*syntax.Scope
+		defCtx := sym.SourceContext()
+		if defCtx != nil {
+			defScopes = defCtx.Scopes
+		}
+		// Pointer-wise comparison — scopes have identity, not structure. Skips the
+		// clone on the common case where the two sets already agree (both empty).
+		if !slices.Equal(srcCtx.Scopes, defScopes) {
+			templateCtx = srcCtx.Clone()
+			templateCtx.Scopes = defScopes
+		}
 	}
 
 	var isFree bool

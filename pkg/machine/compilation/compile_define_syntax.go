@@ -80,32 +80,26 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// (expander_time_continuation.go) consults the same NextPhase() so storage and
 	// lookup stay symmetric. At phaseLevel 0 this equals Expand() (level-0 identity).
 	expandEnv := p.env.NextPhase()
-	globalIndex, created := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, nil)
-	if !created {
-		// Update existing binding
-		globalIndex = expandEnv.GetGlobalIndex(keyword)
-	}
+	// The scope set is the CREATION key, not a post-stamp. Creation dedupes with
+	// scopeSetsEqual, so creating under nil compares against the EMPTY set and a
+	// macro-introduced {intro} keyword reuses — then re-stamps — a pre-existing
+	// empty-scoped binding. Address the write with a scope-resolved index for the
+	// same reason: the index creation returns is name-only, so a following read
+	// re-resolves to the first live slot of that name, which need not be the slot
+	// just created.
+	symbolScopes := keywordSym.Scopes()
+	expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
+	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, symbolScopes)
 	if globalIndex == nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: failed to create or find binding for %s", keyword.Key))
 	}
 
-	// Set scopes from the keyword symbol for hygiene, plus any docstring.
-	// The scopes ensure local define-syntax bindings resolve correctly; the
-	// docstring (when present) is surfaced by ,doc and the doc tooling.
-	symbolScopes := keywordSym.Scopes()
+	// Docstring only — the scope set is now the creation key, not a post-stamp.
 	binding := expandEnv.GetGlobalBinding(globalIndex)
-	if binding != nil {
+	if binding != nil && docstring != "" {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
-			changed := false
-			if symbolScopes != nil {
-				m.Scopes = symbolScopes
-				changed = true
-			}
-			if docstring != "" {
-				m.Doc = docstring
-				changed = true
-			}
-			return changed
+			m.Doc = docstring
+			return true
 		})
 	}
 

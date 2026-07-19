@@ -267,7 +267,7 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		c.Assert(ss.SourceContext().Origin, qt.Equals, origin)
 	})
 
-	c.Run("global binding strips existing scopes and adds intro scope", func(c *qt.C) {
+	c.Run("global binding keeps definition-site scopes and adds intro scope", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
 		freeIds := map[string]FreeIdResolver{
 			"baz": mockFreeIdResolver{global: globalIdx},
@@ -283,16 +283,20 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		// The recorded global is kept as a fallback (resolved after scope-set
 		// local resolution in CompileSymbol).
 		c.Assert(ss.ResolvedBinding, qt.Equals, globalIdx)
-		// The use-site/template scopes are stripped, but the intro scope is
-		// carried so a binding co-introduced by the same template can shadow the
-		// global (R1 fix — see plans/2026-06-15-macro-hygiene-global-shadow-fix).
+		// The definition-site scope is retained — R7RS §4.3 referential
+		// transparency: a template identifier names what was visible where the
+		// macro was DEFINED, and a binder in that context is keyed on that scope.
+		// The intro scope is carried on top, so a binding co-introduced by the
+		// same template can shadow the global (R1 fix — see
+		// plans/2026-06-15-macro-hygiene-global-shadow-fix), and so a same-named
+		// identifier at the use site stays distinct.
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 1)
-		c.Assert(scopes[0], qt.Equals, introScope)
-		c.Assert(scopes[0], qt.Not(qt.Equals), existingScope)
+		c.Assert(len(scopes), qt.Equals, 2)
+		c.Assert(scopes, qt.Contains, existingScope)
+		c.Assert(scopes, qt.Contains, introScope)
 	})
 
-	c.Run("non-free with existing scopes clears them", func(c *qt.C) {
+	c.Run("non-free keeps definition-site scopes and adds intro scope", func(c *qt.C) {
 		existingScope := syntax.NewScope()
 		srcCtx := &syntax.SourceContext{
 			Text:   "foo",
@@ -301,10 +305,11 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		sym := syntax.NewSyntaxSymbol("foo", srcCtx)
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope})
 		ss := result.(*syntax.SyntaxSymbol)
-		// Should have only intro scope, not the existing scope
+		// Definition-site scope retained, intro scope added on top.
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 1)
-		c.Assert(scopes[0], qt.Equals, introScope)
+		c.Assert(len(scopes), qt.Equals, 2)
+		c.Assert(scopes, qt.Contains, existingScope)
+		c.Assert(scopes, qt.Contains, introScope)
 	})
 }
 
@@ -395,12 +400,14 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		is := syntax.NewScope()
 		result, err := sm.expandEscapedSyntaxTemplate(template, ctx, nil, &ExpandOptions{IntroScope: is, PatternVarSyntax: patternVarSyntax})
 		c.Assert(err, qt.IsNil)
-		// Should NOT substitute — should apply hygiene instead
+		// Should NOT substitute — should apply hygiene instead, which keeps the
+		// template identifier's definition-site scope and adds the intro scope.
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "x")
 		scopes := ss.Scopes()
-		c.Assert(len(scopes), qt.Equals, 1)
-		c.Assert(scopes[0], qt.Equals, is)
+		c.Assert(len(scopes), qt.Equals, 2)
+		c.Assert(scopes, qt.Contains, extraScope)
+		c.Assert(scopes, qt.Contains, is)
 	})
 }
 

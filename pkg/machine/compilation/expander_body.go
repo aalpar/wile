@@ -162,16 +162,25 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(err, "define-syntax: failed to compile transformer for %s", keyword.Key))
 	}
 
-	// Store in the expand environment (for macro lookup during expansion)
-	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, nil)
+	// Store in the expand environment (for macro lookup during expansion).
+	// The scope set is the CREATION key, not a post-stamp: creating under nil
+	// keys the binder on the empty set, which dedupes a macro-introduced keyword
+	// onto any pre-existing same-named binding and then re-stamps it. Address the
+	// write with a scope-resolved index for the same reason — the index the
+	// create returns is name-only, so a following read can land on a different
+	// slot. Same shape as the top-level site in compile_define_syntax.go.
+	expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
+	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, symbolScopes)
+	if globalIndex == nil {
+		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(
+			werr.ErrUnexpectedNil,
+			"define-syntax: failed to create or find binding for %s", keyword.Key,
+		))
+	}
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
 			changed := false
-			if symbolScopes != nil {
-				m.Scopes = symbolScopes
-				changed = true
-			}
 			symbolSource := keywordSym.SourceContext()
 			if symbolSource != nil {
 				m.Source = symbolSource

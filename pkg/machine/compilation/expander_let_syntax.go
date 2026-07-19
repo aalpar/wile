@@ -172,8 +172,26 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 		transformerExpr := transformerPair.SyntaxCar()
 
+		// R7RS §4.3.1: for letrec-syntax the region of the bindings includes the
+		// transformer specs themselves, so a transformer may name its siblings and
+		// itself. That region is expressed two ways at once, and both are needed:
+		// the keywords are pre-registered in childExpandEnv above, so compile the
+		// spec against that frame rather than the outer one, and the spec carries
+		// letScope, so a template identifier naming a sibling is a superset of the
+		// binder keyed on that scope. Compiling against p.env with an unscoped spec
+		// left free-identifier resolution unable to see the very bindings the
+		// pre-registration existed to expose.
+		//
+		// let-syntax keeps the outer environment and the unscoped spec: its
+		// bindings' region is the body only.
+		transformerEnv := p.env
+		if recursive {
+			transformerEnv = childExpandEnv
+			transformerExpr = syntax.AddScopeToSyntax(transformerExpr, letScope)
+		}
+
 		// Compile the transformer (supports syntax-rules, lambda, er-macro-transformer)
-		closure, err := compileTransformerToMachineClosure(p.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
+		closure, err := compileTransformerToMachineClosure(p.ctx, transformerEnv, transformerExpr, p.libraryScope, p.evaluator)
 		if err != nil {
 			return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key))
 		}
@@ -181,7 +199,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		// Store in child expand environment with letScope for free identifier resolution
 		localIndex, created := childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
 		if !created {
-			localIndex = childExpandEnv.GetLocalIndex(keyword, nil)
+			// letrec-syntax pre-registered this keyword above, under letScope.
+			// Re-resolve under the same set, not nil: nil is MATCH ANY, which takes
+			// the first live slot of the name rather than the one just addressed.
+			localIndex = childExpandEnv.GetLocalIndex(keyword, []*syntax.Scope{letScope})
 		}
 		if localIndex == nil {
 			return nil, wrapSourcedError(keywordSym.SourceContext(), werr.WrapForeignErrorf(

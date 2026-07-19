@@ -328,13 +328,19 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 // macro" — a real macro call that the expander itself expands perfectly well. Two
 // copies of a three-step lookup is how one of them ends up two steps long.
 func (p *ExpanderTimeContinuation) lookupMacroBinding(sym0 *values.Symbol, symbolScopes []*syntax.Scope) *environment.Binding {
-	bnd := p.env.GetBinding(sym0, nil)
+	// Resolve under the reference's own scope set, not nil. GetBinding documents
+	// nil as MATCH ANY, which takes the first live slot of the name and so lets a
+	// bare user reference reach a keyword introduced inside a macro expansion.
+	// This is only sound once binders are scope-keyed at creation: a wildcard read
+	// and a wildcard write were cancelling, so fixing either alone relocates the
+	// asymmetry rather than closing it.
+	bnd := p.env.GetBinding(sym0, symbolScopes)
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
 	}
 
 	expandEnv := p.env.NextPhase()
-	bnd = expandEnv.GetBinding(sym0, nil)
+	bnd = expandEnv.GetBinding(sym0, symbolScopes)
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
 	}
