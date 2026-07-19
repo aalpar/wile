@@ -57,7 +57,11 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 		}
 		return sym, nil
 	}
-	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+	// The binder's own scope set is its hygiene identity in the global frame: a
+	// user-written top-level binder carries an empty set, a macro-introduced one
+	// carries the expansion's intro scope, so they land in different slots and
+	// neither can capture the other. No renaming required.
+	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
 
 	// Top-level immutability (WithImmutableTopLevel, the engine default): when enabled, a
 	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
@@ -191,7 +195,17 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 		// Global context (top-level): store to global environment.
 		// Global indices are stored in the literals pool since they're runtime values.
 		// The operation loads the index from literals and stores the value there.
-		gi, _ := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
+		// Mirror of the local branch above: the binding was declared scope-aware,
+		// so address it scope-aware too. CreateGlobalBinding hands back a DEFERRED
+		// index (no frame, no scopes), which OpStoreGlobal would resolve wildcard
+		// to the name's first slot — the user's binding, not the macro's. Re-resolve
+		// to get the pinned (frame, slot) pair for the binding just declared.
+		p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, scopes)
+		gi := p.env.GetGlobalIndexWithScopes(sym, scopes)
+		if gi == nil {
+			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
+				"compile define: binding %q not found in global environment", sym.Key)
+		}
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
 	}

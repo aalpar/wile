@@ -382,8 +382,11 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 			machine.NewOperationLoadVoid(),
 		)
 	} else {
-		// Must be global
-		gi := p.env.GetGlobalIndex(sym)
+		// Must be global. Scope-aware, matching the local lookup above: once a
+		// macro-introduced binder is stored under its intro scope, a wildcard
+		// lookup here would resolve to the name's first slot and mutate the
+		// user's variable instead.
+		gi := p.env.GetGlobalIndexWithScopes(sym, symbolScopes)
 		if gi == nil {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key)
 		}

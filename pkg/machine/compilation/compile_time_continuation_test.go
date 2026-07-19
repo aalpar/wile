@@ -589,7 +589,11 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 		machine.NewMultipleValues(
 			cont.Template().Literals()[0],
 			cont.Template().Literals()[1],
-			environment.NewGlobalIndex(symX),
+			// A top-level define now emits a RESOLVED index (frame + slot), not a
+			// deferred one: the store must address the binding it just declared
+			// under that binder's scope set, and a deferred index would resolve
+			// wildcard to the name's first slot.
+			env.GetGlobalIndexWithScopes(symX, nil),
 			values.NewString("bindSymbolWithScopes"),
 		),
 	)
