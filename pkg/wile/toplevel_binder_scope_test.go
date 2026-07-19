@@ -148,3 +148,84 @@ func TestMacroGeneratingMacro_TwoExpansionsDoNotShareBinder(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.Equals, "(1 2)")
 }
+
+// A macro-introduced top-level define-syntax keyword must not be visible to a
+// bare user reference — the define-syntax analogue of
+// TestTopLevelMacroBinder_DoesNotLeakToUser above.
+//
+// RED and t.Skip-guarded. This is Stage C task C2, ATTEMPTED AND STOPPED on
+// 2026-07-19; see the plan's C2 blocker section for the measurement.
+//
+// Stage B closed this for VALUE binders by passing the binder's scope set to
+// binding creation. The syntax binder keeps the pre-Stage-B shape: create under
+// nil (compile_define_syntax.go), then stamp m.Scopes afterwards. The set is the
+// slot's KEY, so stamping it after the fact keys the slot under the empty set and
+// then makes it report a set it was never keyed under — the same defect the plan
+// diagnosed and fixed in predeclareBinding (letrec_semantics.go). Both keywords
+// therefore key under {} and dedupe onto ONE slot, so the later define wins.
+//
+// The obvious fix — pass keywordSym.Scopes() at creation and resolve
+// lookupMacroBinding under the reference's scopes — DOES make this test and its
+// sibling pass, and breaks 9 tests in 4 packages (letrec-syntax self- and mutual
+// recursion; guard/guard-aux). Measured cause: a syntax binder's scope set is not
+// stable across expansion passes, so it is not a usable key. For the guard case,
+// the my-guard-aux BINDER carries [scope:75(let)] while the reference to it from
+// inside my-guard's template carries [scope:102(let) scope:101(lambda)
+// scope:100(lambda) scope:99(lambda) scope:98(lambda) scope:97(intro)] — a
+// DIFFERENT let scope. The binder is created when its define-syntax is compiled;
+// a sibling macro's template reference arrives in a later expansion carrying
+// freshly minted scopes, so bindingScopes ⊄ useScopes and an ordinary
+// macro-to-macro reference stops resolving.
+//
+// That is why syntax binders were left unscoped, and it falsifies C2's stated
+// premise that "scope-keying does not have that side effect". The value-binder
+// path does not hit it because a define and its references are scoped in the same
+// pass. Any real fix needs a binder key that survives re-expansion — the
+// macro-introduction scopes alone, or a stable binder identity — which is
+// successor work, not a call-site change.
+func TestTopLevelMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
+	t.Skip("RED: C2 blocker — define-syntax keywords key under {} and dedupe onto one slot; see plan C2 blocker")
+
+	c := qt.New(t)
+	_, err := evalTopLevel(t, `
+		(define-syntax mk
+		  (syntax-rules () ((_ u) (define-syntax helper (syntax-rules () ((_) 'introduced))))))
+		(mk ignored)
+		(helper)`)
+	c.Assert(err, qt.IsNotNil)
+}
+
+// A macro-introduced define-syntax keyword must not clobber a user's same-named
+// keyword. Both orders must give the user's transformer for a bare reference;
+// today the two share one slot, so whichever is defined LAST wins.
+//
+// RED and t.Skip-guarded — same C2 blocker as the test above. Measured on HEAD:
+// user-then-macro yields 'introduced (wrong), macro-then-user yields 'user (right
+// answer, wrong reason). Order deciding the answer is the shared-slot signature;
+// two hygiene-distinct slots would make both orders yield 'user.
+func TestTopLevelMacroSyntaxBinder_DoesNotClobberUser(t *testing.T) {
+	t.Skip("RED: C2 blocker — one shared slot, so last define-syntax wins; see plan C2 blocker")
+
+	c := qt.New(t)
+
+	// User's keyword defined FIRST, macro-introduced one after.
+	got, err := evalTopLevel(t, `
+		(define-syntax helper (syntax-rules () ((_) 'user)))
+		(define-syntax mk
+		  (syntax-rules () ((_ u) (define-syntax helper (syntax-rules () ((_) 'introduced))))))
+		(mk ignored)
+		(helper)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "user")
+
+	// Reverse order. This one already answered 'user, but for the wrong reason —
+	// last-definition-wins rather than hygiene.
+	got, err = evalTopLevel(t, `
+		(define-syntax mk
+		  (syntax-rules () ((_ u) (define-syntax helper (syntax-rules () ((_) 'introduced))))))
+		(mk ignored)
+		(define-syntax helper (syntax-rules () ((_) 'user)))
+		(helper)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "user")
+}
