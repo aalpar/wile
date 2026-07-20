@@ -99,8 +99,24 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 }
 
 // MaybeCreateLocalBinding creates a local binding with scope-aware deduplication.
-// Two bindings with the same key but incompatible scopes get separate slots;
-// compatible scopes reuse the existing slot. Nil scopes means "match any".
+// A slot is reused only by a binder carrying the SAME scope set; any other scope
+// set is a different variable and gets its own slot. Nil scopes means "match any".
+//
+// Creation compares with scopeSetsEqual, not ScopesCompatible, for the reason
+// spelled out at scopeSetsEqual (global_environment_frame.go): compatibility
+// treats an empty binding scope set as matching anything, so a macro-introduced
+// binder (scopes {m}) would reuse a scope-less binding of the same name instead
+// of getting a slot of its own. Compatibility is the right predicate for LOOKUP,
+// where a pre-hygiene binding is legitimately visible to every reference; it is
+// the wrong one for deciding identity. This mirrors the global creation path
+// rather than the local lookup path beside it.
+//
+// A reused slot backfills Source but never Scopes. Under exact equality the slot
+// already carries the scope set the caller asked for (or the caller passed nil
+// and asked for nothing), so there is nothing to fill in; a Scopes write here
+// could only overwrite an identity, which is the clobber the predicate above
+// exists to prevent. Source is independent metadata and may legitimately be
+// absent on an existing slot.
 //
 // If the keys map is shared (from Copy), it is cloned before mutation (CoW).
 // The three-index slice on append prevents mutating a shared backing array.
@@ -111,13 +127,7 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	slots := p.keys[*key]
 	matchAny := scopes == nil
 	for _, i := range slots {
-		if matchAny || syntax.ScopesCompatible(p.bindings[i].Scopes(), scopes) {
-			if p.bindings[i].Scopes() == nil && scopes != nil {
-				p.bindings[i].UpdateMeta(func(m *BindingMeta) bool {
-					m.Scopes = scopes
-					return true
-				})
-			}
+		if matchAny || scopeSetsEqual(p.bindings[i].Scopes(), scopes) {
 			if p.bindings[i].Source() == nil && source != nil {
 				p.bindings[i].UpdateMeta(func(m *BindingMeta) bool {
 					m.Source = source

@@ -1308,3 +1308,61 @@ func TestGetLocalIndex_MaximalBinding(t *testing.T) {
 		[]*syntax.Scope{scopeC})
 	c.Assert(idx3, qt.IsNil)
 }
+
+// TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused pins N2: binding CREATION
+// must compare scope sets for equality, not compatibility.
+//
+// ScopesCompatible short-circuits `len(bindingScopes) == 0 -> true` (values/scope.go),
+// which is correct for LOOKUP — a pre-hygiene binding with no scopes is visible to
+// every reference. Reusing a slot on that answer is not: it lets a macro-introduced
+// binder ({m}) land on a scope-less binding of the same name and take it over.
+//
+// The global path already decided this and says so at scopeSetsEqual
+// (global_environment_frame.go): "Redefining one variable is precisely the
+// equal-scope-set case; anything else is a different variable."
+//
+// The sibling TestMaybeCreateLocalBinding_ScopeDistinctKeys covers {A} vs {B},
+// where ScopesCompatible already returns false — it cannot see this hole, which
+// needs the EXISTING set to be the empty one.
+//
+// Order matters, and only one direction is broken: {m}-then-empty already splits
+// correctly (ScopesMatch([], {m}) is false), so a fix keyed on the new binder's
+// scopes rather than on both would pass a one-directional test.
+func TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused(t *testing.T) {
+	macroScope := syntax.NewScope()
+	sym := values.NewSymbol("x")
+
+	for _, tc := range []struct {
+		name     string
+		existing []*syntax.Scope
+	}{
+		{"nil", nil},
+		{"empty", []*syntax.Scope{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			topEnv := NewNamespaceFrame()
+			env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+
+			li0, created0 := env.MaybeCreateLocalBinding(
+				sym, BindingTypeVariable, tc.existing, nil)
+			qt.Assert(t, created0, qt.IsTrue)
+			qt.Assert(t, li0[0], qt.Equals, 0)
+
+			li1, created1 := env.MaybeCreateLocalBinding(
+				sym, BindingTypeVariable, []*syntax.Scope{macroScope}, nil)
+			qt.Assert(t, created1, qt.IsTrue, qt.Commentf(
+				"scoped binder reused the scope-less slot"))
+			qt.Assert(t, li1[0], qt.Equals, 1, qt.Commentf(
+				"scoped binder must get its own slot, not slot 0"))
+
+			// Splitting the slot is not the whole fix: the reuse branch used to
+			// backfill Scopes onto the slot it reused, so a clobber rewrote the
+			// scope-less binding's identity in place rather than merely aliasing it.
+			// That backfill is gone, but the assertion stays — it fails if either
+			// half comes back.
+			b0 := env.GetLocalBindingByIndex(li0[0])
+			qt.Assert(t, len(b0.Scopes()), qt.Equals, 0, qt.Commentf(
+				"existing binding was retroactively re-scoped"))
+		})
+	}
+}

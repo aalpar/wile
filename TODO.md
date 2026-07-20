@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-07-14 (Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
+**Last Updated**: 2026-07-20 (Tier 1: transcribed the scope-keyed-globals arc's open successors out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`, where they were invisible to a TODO scan — `freeIds` name-keyed collapse and the `BindingID` scope-discriminator prerequisite joined the name-keyed-consumers section; new "successor work" section holds the two shorthand-`define` defects, export phase-probe order, no-sealed-base-above-phase-0, and the missing CHANGELOG for 16 commits of user-visible semantic change. Tier 5: `predeclareBinding` orphan slots. Two of the successors carry **unverified repros** and say so. Prior: 2026-07-14 — Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
 
 ### Current Project Status
 
@@ -85,11 +85,13 @@ Items that block production embedded use or prevent silent state corruption.
   conclusion, reached independently). Both are prerequisites in practice, since scope-keyed
   globals make equal-cardinality ties reachable at top level for the first time.
 
-### Name-keyed identity survives in three consumers of scope-keyed bindings (2026-07-19)
+### Name-keyed identity survives in consumers of scope-keyed bindings (2026-07-19)
 
-All three are consequences of `8afeb66a`/`a60e32e1` making a name own several slots. The
-first two are filed here because each currently exists only inside a plan section marked
-RESOLVED, where anyone scanning for open work will skip it.
+All are consequences of `8afeb66a`/`a60e32e1` making a name own several slots. Each is
+filed here because it existed only inside a `plans/` section — several of them marked
+RESOLVED — where anyone scanning for open work will skip it. Written for three consumers;
+`freeIds` and `BindingID` were added 2026-07-20 from the same Stage C review, which raises
+the count to five and is itself the argument for not trusting a hardcoded one.
 
 - [ ] **Frame-reclaim's verdict domain is name-keyed** [Medium, M]: `buildReclaimGraph`'s
   `byName` is `map[string]*reclaimNode` keyed on `Sym.Key`, and `frameReuseForDefine`
@@ -104,14 +106,47 @@ RESOLVED, where anyone scanning for open work will skip it.
   vehicle). Recorded at `plans/2026-07-18-scope-keyed-global-bindings-design.md` under
   "BLOCKER (RESOLVED)".
 
-- [ ] **`MaybeCreateLocalBinding` uses `ScopesCompatible` where exact equality is correct**
-  [Medium, S]: creation reuses a slot when `ScopesCompatible(existing.Scopes(), newScopes)`
+- [x] **`MaybeCreateLocalBinding` uses `ScopesCompatible` where exact equality is correct**
+  [Medium, S, Done 2026-07-20]: creation reused a slot when
+  `ScopesCompatible(existing.Scopes(), newScopes)`
   (`pkg/environment/local_environment_frame.go`), and that predicate returns true whenever
-  the *existing* set is empty — so a `{m}`-scoped binder can reuse a `{}`-scoped slot and
+  the *existing* set is empty — so a `{m}`-scoped binder could reuse a `{}`-scoped slot and
   clobber it. This is the same hole the global path deliberately avoided by using exact
-  scope-set equality at creation (design D3 of the scope-keyed plan). Currently **latent**,
-  masked because locals get a fresh frame per binding form. Fix by mirroring the global
-  creation predicate, not by copying lookup's.
+  scope-set equality at creation (design D3 of the scope-keyed plan).
+
+  **Fix**: the predicate now calls `scopeSetsEqual` — the global creation predicate *itself*,
+  not a copy of it. Same package, already unexported there, so the two creation paths cannot
+  drift. Lookup keeps `ScopesCompatible`, which is correct for lookup: a pre-hygiene binding
+  with no scopes really is visible to every reference. The bug was using a visibility
+  predicate to decide identity.
+
+  **Latency confirmed, not assumed.** The obvious repro — a macro-introduced `(define x 42)`
+  spliced into a body that already has a user `(define x 1)` — returns the hygienic `1` on
+  `4f73936d`. The masking is not "a fresh frame per binding form" as filed: the user's binder
+  in a body *carries the body's scope*, so `len(bindingScopes) != 0` and the short-circuit
+  never fires. Reaching it needs a genuinely **empty** scope set sharing a frame with a scoped
+  binder; the nil-passing callers (`compile_syntax_case.go:347`,
+  `operation_syntax_case.go:219`) use dedicated frames. So the guard is a unit test, not an
+  integration test — there is no Scheme program known to reach it.
+
+  Guard: `TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused` (`environment_frame_test.go`),
+  RED before / GREEN after, over both `nil` and empty-non-nil existing sets. It also asserts
+  the existing binding was not retroactively re-scoped. The sibling
+  `TestMaybeCreateLocalBinding_ScopeDistinctKeys` cannot see this hole — it covers `{A}` vs
+  `{B}`, where `ScopesCompatible` already returns false. Only one direction was ever broken
+  (`{m}`-then-empty already split correctly), so a fix keyed on the *new* binder's scopes
+  alone would pass a one-directional test; the test comment records this.
+
+  - [x] **Residual: the `Scopes` backfill in the reuse branch was dead — deleted**
+    [Tech debt, XS, Done 2026-07-20]: the reuse branch filled `m.Scopes` in when an existing
+    binding had none. Under exact equality that branch needed `scopeSetsEqual(nil, scopes)`
+    true *and* `scopes != nil` — i.e. an empty-but-non-nil set, where the write is a semantic
+    no-op. It was half the clobber mechanism (the reuse aliased the slot, the backfill
+    rewrote its identity in place). Deleted rather than pinned: the dead case is a no-op, so
+    there was nothing to pin. `Source` still backfills, and the now-visible asymmetry is
+    documented on `MaybeCreateLocalBinding` so it does not get "restored" for symmetry.
+    `TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused` keeps its
+    not-retroactively-re-scoped assertion as a guard against either half returning.
 
 - [x] **`DeleteBinding` is name-keyed while the namespace read surface is scope-exact**
   [Medium, S, issue #805, Done 2026-07-20 — sealed-base probe left wildcard, see below]:
@@ -159,10 +194,12 @@ RESOLVED, where anyone scanning for open work will skip it.
   **Sealed-base probe made scope-exact too** (`prim_namespace.go`, `GetGlobalIndexWithScopes`
   under `AmbientScopes()`). Initially left wildcard on the argument that no scope-carrying
   sealed binding exists, so no test could fail first; reversed under the nil-means-NONE
-  convention. A wildcard probe answers "some binding of this name is sealed" to the question
-  "is the binding I just failed to delete sealed", raising `ErrImmutableBinding` for a name the
-  ambient read calls unbound — fail-open, and the same drift class the delete side just closed.
-  Hardening a permissive default outweighs "no failing test" when existing coverage
+  convention. A wildcard probe answers a different question than the one asked: "is *some*
+  binding of this name sealed" rather than "is the binding I just failed to delete sealed",
+  raising `ErrImmutableBinding` for a name the ambient read calls unbound. Same drift class the
+  delete side just closed. Note the effect here is a spurious *denial*, not a permission —
+  wildcard widens the candidate set, and which way that lands on the caller depends on the
+  call. Tightening a wildcard default outweighs "no failing test" when existing coverage
   (`TestNamespaceUndefineSealedRejected`) guards the reachable path.
 
 - [ ] **`namespace-undefine!` does not stop compiled code from reading the binding**
@@ -176,14 +213,29 @@ RESOLVED, where anyone scanning for open work will skip it.
   global binding cache (`memory/global-binding-cache-already-exists.md`) or from a pinned
   `GlobalIndex` whose re-resolution succeeds; the two want different fixes.
 
-- [ ] **Scope-set resolution encodes "All" as nil, which fails open**
+- [ ] **Scope-set resolution lets the zero value answer an unanswerable question**
   [Correctness + API, M, 2026-07-20, follow-up to #805]: convention is **nil means NONE**;
   "All" must be an explicit special value. The environment read surface does the opposite —
   `GetBinding`, `GetLocalIndex` and `GetGlobalIndex` read a nil scope set as MATCH ANY. Nil is
   indistinguishable from an uninitialized value, so a caller that merely forgot to thread its
-  scopes silently gets the *widest* resolution, with nothing in the signature to flag it. The
-  permissive reading grants reach across a hygiene boundary, which is why this is a security
-  posture question and not a style one.
+  scopes silently gets a *wider* resolution, with nothing in the signature to flag it.
+
+  **What the wider resolution actually returns is the defect.** `bestSlotLocked` with
+  `matchAny` true does not return a union; it returns `slots[0]`, the first live slot. That is
+  arbitrary selection from a wider candidate set, and slot order is an expansion-order
+  artifact. `AmbientScopes`' own doc states it exactly: a wildcard "resolves by slot order — an
+  expansion-order artifact, not an answer to the caller's question." So the harm is an
+  arbitrary binding, not a granted permission.
+
+  **Corrected 2026-07-20 — this entry previously called the behavior "fail-open" and a
+  "security posture question."** Both were overstated, and the term was introduced in
+  `4f73936d` rather than inherited. Nothing fails: no fault occurs, a legal value is simply
+  ambiguous between "unset" and "all". And "open" implies permission, while the effect can land
+  either way (the sealed-base probe above widens the match and produces a spurious *denial*).
+  No case has been shown crossing the sandbox boundary (`security.Authorizer`, sealed base);
+  every measured consequence is a wrong binding. Hygiene is a correctness boundary, not an
+  authorization one. The item stands on correctness and API hygiene, and has no claim to
+  priority over demonstrated defects.
 
   **Three symptoms of the same undersized domain**, all in `pkg/environment`:
   - `AmbientScopes()` (`global_environment_frame.go`) returns a non-nil empty slice for no
@@ -214,6 +266,79 @@ RESOLVED, where anyone scanning for open work will skip it.
 
   Supersedes the nil-encoding half of the older "use nil to mean unconstrained" preference,
   which is plausibly where this design came from.
+
+- [ ] **`freeIds` collapses scope-verified answers into a name-keyed map**
+  [Correctness, S, 2026-07-19]: `collectFreeIdentifiersWithEllipsis` resolves each template
+  identifier under its own scope set, then stores the result in a
+  `map[string]*FreeIdResolution` keyed on `symVal.Key` and overwritten unconditionally
+  (`pkg/machine/compilation/compile_syntax_rules.go:339,357`; the map is threaded on through
+  `operation_syntax_rules_transform.go:206` and `operation_syntax_case.go:335`). Two
+  same-named template identifiers carrying different scope sets resolve individually and
+  correctly, and then the second silently discards the first. This is the exact shape C1/C2
+  fixed on the *lookup* side, surviving one layer out in the *storage* of the answer, so a
+  scope-correct resolution is thrown away after the fact. Same fix direction as the other
+  entries here: key the map on something that discriminates scope, not on `Key`.
+
+- [ ] **`BindingID` must carry a scope discriminator before the load-order plan ships**
+  [Correctness + sequencing, M, 2026-07-19]: Part III of
+  `plans/2026-07-18-load-order-independent-binding-resolution-design.md` defines
+  `BindingID{Origin, Phase, Sym, Local}` with no scope component. That was sound only while
+  the (now-deleted, `a60e32e1`) rename pass guaranteed one global per
+  `(frame, phase, symbol)`. **After Stage B it is not**: two hygiene-distinct bindings
+  produce equal `BindingID`s. Since that struct exists specifically to replace three
+  disagreeing notions of "same binding" with one, shipping it name-keyed yields a fourth
+  wrong answer instead of a fix. Not a defect in today's tree — `BindingID` is unbuilt — so
+  this is a **prerequisite recorded against the successor plan**, not a bug. The scope-keyed
+  arc was sequenced first precisely so `BindingID` gets defined once, correctly, after it.
+  Related: the shipped `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and
+  is **not** the vehicle for this (see the frame-reclaim entry above).
+
+### Scope-keyed globals — successor work not built in the arc (2026-07-19)
+
+Surfaced by the Stage C adversarial review and deliberately left out of scope so the arc
+could land. Recorded here 2026-07-20; previously these lived only in
+`plans/2026-07-18-scope-keyed-global-bindings-design.md` under "Successor work (do not build
+here)" and "Found by the Stage C adversarial review", which is not where open work is looked
+for. **Two of the three defects below are marked in the plan as NOT verified first-hand —
+re-confirm each repro before designing a fix.**
+
+- [ ] **Two shorthand-`define` defects adjacent to the C1-local fix** [Correctness, S,
+  2026-07-19]: a silent `#!void`, and a hard `no such local or global binding` for a
+  macro-generating macro defined by an internal `define-syntax`. Both survived `2a0b2941`
+  unchanged. The second is REAL and reproduces in the shorthand `(define (f) …)` body form;
+  it does **not** reproduce under `(let () …)` or `(lambda () …)`, which is why an earlier
+  review pass wrongly concluded it was not a defect — check the shorthand form specifically.
+  The plan's instruction was "file separately; do not bundle," and no issue was ever opened.
+
+- [ ] **Export phase-probe ORDER is a second wrong-binding axis, not closed by C3**
+  [Correctness, M, 2026-07-19, **repro unverified**]: `findLibraryBinding` probes runtime,
+  then expand, then compile, returning on first hit, while `define-syntax` stores into Expand
+  and the import path *also* mirrors imported syntax bindings into the library's RUNTIME frame
+  (`library_bindings.go`, the `copyLibraryBindingsDirect` syntax branch). A library that
+  imports a macro and then defines its own of that name exports the **imported** one.
+  Reported repro: library `(mc)` imports `(mb)` (exporting macro `twice`) then defines its own
+  `twice`; `(import (mc)) (twice 5)` yields mb's transformer. Scope keying does not catch it —
+  the runtime copy sits at `{}`, a subset of `{libScope}`, so a scoped probe still matches and
+  probe 1 still short-circuits. Fix is either best-across-all-three-probes instead of
+  first-hit, or not mirroring syntax bindings into the library runtime frame.
+
+- [ ] **No sealed base above phase 0** [Correctness, M, 2026-07-19, **repro unverified**]: a
+  library's expand-phase install overwrites a bootstrap macro's binding in place (reported:
+  `guard-aux`, same `*Binding` pointer, `(guard …)` compromised). Both binders carry `{}`, so
+  scope keying is structurally blind to it — this is not something the arc could have fixed.
+  Options the codebase already names (`bootstrap_nilpin_test.go`): carve an immutable expand
+  base, or move bootstrap helpers out of user reach.
+
+- [ ] **CHANGELOG says nothing about scope-keyed global storage** [Docs, S, 2026-07-19]:
+  16 commits from `8afeb66a` (Stage A, vacuous) to `4f73936d`, 14 of them fixes, and
+  `grep -c "scope-key" CHANGELOG.md` returns **0**. Several change user-visible R7RS
+  semantics — a macro-generating macro expanded twice now gets two binders instead of
+  sharing one (`c9b6b90c`), template-introduced library exports are now rejected eagerly
+  (C3), and `namespace-undefine!` now deletes one scope-matched slot instead of every slot a
+  name owns (`4f73936d`). The deferral was deliberate and correct at the time: an entry
+  written before C2 landed would have described half a change. C2 landed 2026-07-19, so this
+  is now unblocked and is the cheapest open item in this tier. `docs/` was already brought
+  current (Invariant 5 in `docs/environment/system.md`); the CHANGELOG is the remaining gap.
 
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 
@@ -837,6 +962,16 @@ Directions documents — identify prioritized capability extensions. Priority se
 ---
 
 ## Tier 5 — Tech Debt
+
+### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
+
+- [ ] **Orphan slot per library-body `define`** [Tech debt / allocation, S,
+  **count unverified**]: reported at 104 orphans in `(srfi 1)` alone. C3 (scope-keyed export
+  resolution) made them *unreachable* rather than removing them, so the correctness question
+  is closed and only the allocation remains — which is why this sits in Tier 5 and not with
+  the correctness successors in Tier 1 (see "Scope-keyed globals — successor work"). Verify
+  the count before sizing the work; it comes from the plan's review notes, not from a
+  measurement in-tree.
 
 ### Channel done-channel lifecycle follow-ups (adversarial review 2026-07-16, `fix/channel-lifecycle-ctx`)
 
