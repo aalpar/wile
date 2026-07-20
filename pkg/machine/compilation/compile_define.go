@@ -321,11 +321,16 @@ func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefin
 	// Release path: the interprocedural unit verdict (covers mutual recursion and
 	// define->define tail calls) UNION the per-body predicate (self-recursion over
 	// capture-safe primitives; also the only signal for internal defines and
-	// non-unit compiles, where frameReclaimVerdict is nil and reads false). Both are
+	// non-unit compiles, where the verdict is withheld and reads false). Both are
 	// SOUND "safe" predicates, so their union is sound and can only ADD reclaimable
 	// frames over the shipped per-body gate — no continuation suite that passed
 	// before can regress.
-	if p.frameReclaimVerdict[name.Sym.Key] || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
+	//
+	// The verdict is read through unitFrameReclaimVerdict, NOT off the map: the map
+	// is keyed by bare Sym.Key and stays live while a let body compiles on this same
+	// compiler, so an internal define could otherwise collect a same-named top-level
+	// define's verdict.
+	if p.unitFrameReclaimVerdict(name.Sym.Key) || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
 		return releaseReuse()
 	}
 	return noFrameReuse()

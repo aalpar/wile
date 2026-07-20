@@ -79,9 +79,11 @@ type CompileTimeContinuation struct {
 	inlineThreshold int
 	// frameReclaimVerdict is the interprocedural ClassifyFrameReclaim result for the
 	// top-level unit (name -> reclaimable), computed once in CompileValidatedBegin and
-	// consulted by frameReuseForDefine. nil on child/closure compilers, library/transformer
-	// compiles, and single-expression (non-begin) programs — there frameReuseForDefine falls
-	// back to the per-body predicate (status quo).
+	// consulted by frameReuseForDefine THROUGH unitFrameReclaimVerdict, never read
+	// directly — see that method for the boundary the direct read violated. nil on
+	// child/closure compilers, library/transformer compiles, and single-expression
+	// (non-begin) programs — there frameReuseForDefine falls back to the per-body
+	// predicate (status quo).
 	//
 	// Keyed by Sym.Key (not BindingID like the inlineCandidates sibling above),
 	// matching ClassifyFrameReclaim's own map[string]bool return domain (keyed by
@@ -91,14 +93,49 @@ type CompileTimeContinuation struct {
 	// frameReuseForDefine below reads this map by bare Key for every define of that
 	// name. The classifier closes that hole on its side by forcing a colliding Key
 	// unsafe (validate.reclaimNode.collided), so a verdict published here is sound for
-	// every define sharing the Key. Making the domain itself scope-aware is the
-	// general fix and waits on BindingID. inlineCandidates needs BindingID already,
-	// because its local let-bound bindings recur the same Key across nested scopes.
+	// every TOP-LEVEL define sharing the Key — and only those. An INTERNAL define can
+	// share the Key too, and collided cannot see it, because collectTopLevelDefines
+	// never visits internal defines; unitFrameReclaimVerdict withholds the verdict
+	// there rather than leaving the classifier to guard a case it cannot observe.
+	// Making the domain itself scope-aware is the general fix and waits on BindingID.
+	// inlineCandidates needs BindingID already, because its local let-bound bindings
+	// recur the same Key across nested scopes.
 	frameReclaimVerdict map[string]bool
 	// quasiMaxDepth bounds structural recursion in the quasiquote/quasisyntax
 	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
 	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
 	quasiMaxDepth int
+}
+
+// unitFrameReclaimVerdict reports the interprocedural verdict for key, and only
+// while this compiler is still at the top level of the unit the verdict was
+// computed for.
+//
+// The gate is load-bearing, not defensive. CompileValidatedLet compiles a let
+// body on this SAME compiler with p.env swapped to the body's frame
+// (compile_let.go — the only such swap in the package; every other body compile
+// builds a child continuation, where this map is nil). A define below top level
+// therefore reaches frameReuseForDefine with the map still live, and the map is
+// keyed by bare Sym.Key: an internal define whose name collides with a top-level
+// one would collect the top-level verdict. That is a false positive, which this
+// subsystem defines as silent state corruption rather than lost reclamation
+// (internal/validate/frame_reclaim.go), and the classifier cannot defend against
+// it — collectTopLevelDefines never visits internal defines, so the collision is
+// invisible to reclaimNode.collided.
+//
+// The test is the same one that armed the map in CompileValidatedBegin
+// (ns.Runtime() == p.env), so a verdict is read back only under the conditions it
+// was published under. It can withhold a verdict, never grant one: tightening
+// only, per the subsystem's kill-don't-guard rule.
+func (p *CompileTimeContinuation) unitFrameReclaimVerdict(key string) bool {
+	if p.frameReclaimVerdict == nil {
+		return false
+	}
+	ns := p.env.Namespace()
+	if ns == nil || ns.Runtime() != p.env {
+		return false
+	}
+	return p.frameReclaimVerdict[key]
 }
 
 // effectiveQuasiMaxDepth returns the recursion bound for quasiquote/quasisyntax
