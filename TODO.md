@@ -106,6 +106,20 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   vehicle). Recorded at `plans/2026-07-18-scope-keyed-global-bindings-design.md` under
   "BLOCKER (RESOLVED)".
 
+  - [x] **Sub-hole closed: the verdict leaked below top level** [Correctness, S,
+    Done 2026-07-20, `82046952`]: `collided` closes the same-`Key` hole for **top-level**
+    binders, which is all `collectTopLevelDefines` visits. An **internal** define can share
+    the `Key` too, and reached `frameReuseForDefine` with the map still live:
+    `CompileValidatedLet` compiles a let body on the *same* compiler with `p.env` swapped,
+    the only such swap in the package (every other body compile builds a child continuation,
+    where the map is nil). It collected the top-level verdict — a false positive, which this
+    subsystem defines as silent state corruption rather than lost reclamation, and one the
+    classifier cannot see to guard. Fixed by reading through `unitFrameReclaimVerdict`, which
+    re-tests the `ns.Runtime() == p.env` condition the map was armed under; it can withhold a
+    verdict, never grant one. Guarded over all four binder kinds
+    (`pkg/wile/framereclaim_letbody_leak_test.go`). **The parent item stands**: this narrows
+    *who may read* the verdict, it does not make the domain scope-aware.
+
 - [x] **`MaybeCreateLocalBinding` uses `ScopesCompatible` where exact equality is correct**
   [Medium, S, Done 2026-07-20]: creation reused a slot when
   `ScopesCompatible(existing.Scopes(), newScopes)`
