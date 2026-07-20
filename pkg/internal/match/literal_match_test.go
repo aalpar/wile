@@ -214,10 +214,10 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("free identifier with local scopes", func(c *qt.C) {
 		defScope := syntax.NewScope()
-		freeIds := map[string]FreeIdResolver{
-			"bar": mockFreeIdResolver{localScopes: []*syntax.Scope{defScope}},
-		}
 		sym := syntax.NewSyntaxSymbol("bar", &syntax.SourceContext{Text: "bar"})
+		freeIds := map[string]FreeIdResolver{
+			FreeIdKey("bar", sym.Scopes()): mockFreeIdResolver{localScopes: []*syntax.Scope{defScope}},
+		}
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "bar")
@@ -229,10 +229,10 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("free identifier with global binding", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
-		freeIds := map[string]FreeIdResolver{
-			"baz": mockFreeIdResolver{global: globalIdx},
-		}
 		sym := syntax.NewSyntaxSymbol("baz", &syntax.SourceContext{Text: "baz"})
+		freeIds := map[string]FreeIdResolver{
+			FreeIdKey("baz", sym.Scopes()): mockFreeIdResolver{global: globalIdx},
+		}
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "baz")
@@ -240,10 +240,10 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 	})
 
 	c.Run("free identifier with hasLocalBinding true", func(c *qt.C) {
-		freeIds := map[string]FreeIdResolver{
-			"qux": mockFreeIdResolver{hasLocalBinding: true},
-		}
 		sym := syntax.NewSyntaxSymbol("qux", nil)
+		freeIds := map[string]FreeIdResolver{
+			FreeIdKey("qux", sym.Scopes()): mockFreeIdResolver{hasLocalBinding: true},
+		}
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		c.Assert(ss.Key(), qt.Equals, "qux")
@@ -269,15 +269,15 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("global binding keeps definition-site scopes and adds intro scope", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
-		freeIds := map[string]FreeIdResolver{
-			"baz": mockFreeIdResolver{global: globalIdx},
-		}
 		existingScope := syntax.NewScope()
 		srcCtx := &syntax.SourceContext{
 			Text:   "baz",
 			Scopes: []*syntax.Scope{existingScope},
 		}
 		sym := syntax.NewSyntaxSymbol("baz", srcCtx)
+		freeIds := map[string]FreeIdResolver{
+			FreeIdKey("baz", sym.Scopes()): mockFreeIdResolver{global: globalIdx},
+		}
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
 		ss := result.(*syntax.SyntaxSymbol)
 		// The recorded global is kept as a fallback (resolved after scope-set

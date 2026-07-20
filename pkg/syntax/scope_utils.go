@@ -27,6 +27,12 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 	return values.ScopesMatch(useScopes, bindingScopes)
 }
 
+// ScopeFingerprint builds a deterministic map-key string from a scope set.
+// See values.ScopeFingerprint for the full documentation.
+func ScopeFingerprint(scopes []*Scope) string {
+	return values.ScopeFingerprint(scopes)
+}
+
 // ScopesCompatible checks whether a binding's scopes can match a reference's.
 // A binding with no scopes matches any reference.
 func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {

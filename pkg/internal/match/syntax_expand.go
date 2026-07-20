@@ -50,10 +50,17 @@ type ExpandOptions struct {
 	// template), but NOT to syntax objects preserved from pattern variable substitution.
 	IntroScope *syntax.Scope
 
-	// FreeIds maps free identifier names to their pre-resolved bindings.
-	// A non-nil value carries resolved binding info from macro definition time
-	// (local scopes, global index, library scope). A nil value is treated the
-	// same as an absent key — the identifier receives the intro scope normally.
+	// FreeIds maps free identifiers to their pre-resolved bindings. A non-nil
+	// value carries resolved binding info from macro definition time (local
+	// scopes, global index, library scope). A nil value is treated the same as an
+	// absent key — the identifier receives the intro scope normally.
+	//
+	// Keyed by FreeIdKey (name + scope fingerprint), NOT by bare name: one clause
+	// template can hold two same-named free identifiers under different scope sets
+	// (a macro-generating macro splices the name in from two scope sources), and
+	// each resolves to its own binding. A bare-name key let the second collapse
+	// onto the first. The collector writes each occurrence under its own key; this
+	// map reads back under the template symbol's own scope set at expansion.
 	FreeIds map[string]FreeIdResolver
 
 	// UseSiteCtx, if provided, is used for the source context of newly created syntax
@@ -77,6 +84,19 @@ type ExpandOptions struct {
 	// macro hygiene via scope comparison. When set, template symbols are only substituted
 	// if their scopes match the corresponding pattern variable's scopes.
 	PatternVarSyntax map[string]*syntax.SyntaxSymbol
+}
+
+// FreeIdKey is the map key for a free identifier's pre-resolved binding in
+// ExpandOptions.FreeIds and its compile-time source. It discriminates on the
+// scope set as well as the name, so two same-named template identifiers scoped
+// differently keep separate resolutions. The producer (collectFreeIdentifiers)
+// and this consumer must build the key identically.
+//
+// The fingerprint contains only [0-9,], so the first '|' unambiguously ends it —
+// the name that follows may itself contain '|' without colliding with another
+// (name, scopes) pair.
+func FreeIdKey(name string, scopes []*syntax.Scope) string {
+	return syntax.ScopeFingerprint(scopes) + "|" + name
 }
 
 // resolveSourceContext returns the source context for a newly-constructed
@@ -310,7 +330,11 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	var isFree bool
 	var resolution FreeIdResolver
 	if opts.FreeIds != nil {
-		resolution, isFree = opts.FreeIds[key]
+		// The template symbol's OWN scope set — the definition-site scopes the
+		// collector resolved and keyed under (sym.Scopes() reads the same
+		// immutable SourceContext.Scopes at both points). UseSiteCtx above rebuilds
+		// templateCtx for diagnostics but must not perturb this key.
+		resolution, isFree = opts.FreeIds[FreeIdKey(key, sym.Scopes())]
 	}
 
 	// Not a free identifier (or no resolver) — apply intro scope and return.

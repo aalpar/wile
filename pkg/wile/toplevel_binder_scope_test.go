@@ -178,6 +178,57 @@ func TestMacroGeneratingMacro_TwoLocalExpansionsDoNotShareBinder(t *testing.T) {
 	c.Assert(got, qt.Equals, "(1 2)")
 }
 
+// Two same-named free identifiers in ONE generated template, carrying DIFFERENT
+// scope sets, must each keep their own definition-time resolution.
+//
+// jab introduces its own `mh` (bound to v) and generates a macro whose template
+// is `(list mh mhref)`. After jab expands, `mh` is jab's introduced binder
+// (jab's intro scope) and `mhref` has been substituted with the user's `mh`
+// (top-level scope) — so the generated macro's template holds two free
+// identifiers both named "mh" but scoped differently. collectFreeIdentifiers
+// resolves each correctly (the local/global arms key resolution on t.Scopes()),
+// then stored both under the bare name "mh" in a map[string]*FreeIdResolution:
+// the second write clobbered the first, and at expansion BOTH template `mh`s
+// received the surviving resolution (the user's), yielding (99 99).
+//
+// Racket gives (1 99). Unlike the sibling cases above this reproduces from
+// surface syntax at top level — the generated macro is a top-level binding, so
+// it dodges the internal-define-syntax visibility limitation.
+func TestMacroGeneratingMacro_SameNameFreeIdsDoNotCollapse(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(define mh 99)
+		(define-syntax jab
+		  (syntax-rules ()
+		    ((_ k mhref v)
+		     (begin
+		       (define mh v)
+		       (define-syntax k
+		         (syntax-rules () ((_) (list mh mhref))))))))
+		(jab h1 mh 1)
+		(h1)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "(1 99)")
+
+	// Control: rename jab's introduced binder so the two free identifiers do NOT
+	// share a name. No collapse is possible, so this yields (1 99) on the broken
+	// code too — it proves the expectation is right and isolates the collapse
+	// (same name) as the sole difference that produced (99 99).
+	gotCtl, errCtl := evalTopLevel(t, `
+		(define mh 99)
+		(define-syntax jab
+		  (syntax-rules ()
+		    ((_ k mhref v)
+		     (begin
+		       (define zz v)
+		       (define-syntax k
+		         (syntax-rules () ((_) (list zz mhref))))))))
+		(jab h1 mh 1)
+		(h1)`)
+	c.Assert(errCtl, qt.IsNil)
+	c.Assert(gotCtl, qt.Equals, "(1 99)")
+}
+
 // A template that introduces two sibling defines, where the first forward-
 // references the second, must resolve that reference to its co-introduced
 // sibling. Both binders carry the same expansion's intro scope, so ordinary

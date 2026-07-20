@@ -281,17 +281,32 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   Supersedes the nil-encoding half of the older "use nil to mean unconstrained" preference,
   which is plausibly where this design came from.
 
-- [ ] **`freeIds` collapses scope-verified answers into a name-keyed map**
-  [Correctness, S, 2026-07-19]: `collectFreeIdentifiersWithEllipsis` resolves each template
-  identifier under its own scope set, then stores the result in a
+- [x] **`freeIds` collapses scope-verified answers into a name-keyed map**
+  [Correctness, S, Done 2026-07-20]: `collectFreeIdentifiersWithEllipsis` resolved each
+  template identifier under its own scope set, then stored the result in a
   `map[string]*FreeIdResolution` keyed on `symVal.Key` and overwritten unconditionally
-  (`pkg/machine/compilation/compile_syntax_rules.go:339,357`; the map is threaded on through
-  `operation_syntax_rules_transform.go:206` and `operation_syntax_case.go:335`). Two
-  same-named template identifiers carrying different scope sets resolve individually and
-  correctly, and then the second silently discards the first. This is the exact shape C1/C2
-  fixed on the *lookup* side, surviving one layer out in the *storage* of the answer, so a
-  scope-correct resolution is thrown away after the fact. Same fix direction as the other
-  entries here: key the map on something that discriminates scope, not on `Key`.
+  (`compile_syntax_rules.go`; threaded on through `operation_syntax_rules_transform.go` and
+  `operation_syntax_case.go`). Two same-named template identifiers carrying different scope
+  sets resolved individually and correctly, then the second silently discarded the first —
+  the exact shape C1/C2 fixed on the *lookup* side, surviving one layer out in *storage*.
+
+  **Reachable from surface Scheme, not latent.** A macro-generating macro whose generated
+  template holds one literal `mh` (its own intro scope) beside a pattern-var substituted with
+  a user identifier also named `mh` gave `(99 99)` where hygiene demands `(1 99)`; a
+  distinct-name control gave `(1 99)`, isolating the collapse. Expands at top level, so it
+  dodges the internal-define-syntax visibility limitation. Guarded by
+  `TestMacroGeneratingMacro_SameNameFreeIdsDoNotCollapse` (`pkg/wile`).
+
+  **Fix**: a scope-discriminated key end to end — `match.FreeIdKey(name, scopes) =
+  syntax.ScopeFingerprint(scopes) + "|" + name` — at the one writer (collector) and one
+  reader (`applyHygieneToSymbol`); the two verbatim-copy transfer sites needed no change
+  (key is still a string). `ScopeFingerprint` is the consolidation of validate's private
+  `scopeFingerprint` (impl now in `values` with `Scope`, wrapper in `syntax`, validate
+  delegates). Exact-scope-set keying, not Flatt-maximal: this replays a per-occurrence
+  pre-resolved answer keyed by the same immutable template symbol at both ends, verified
+  (`Scopes()` reads the same `SourceContext.Scopes` field at storage and consumption).
+  `FreeIdKey` contract (incl. the `|`-delimiter unambiguity) pinned by
+  `TestFreeIdKey_DiscriminatesScopeAndName`.
 
 - [ ] **`BindingID` must carry a scope discriminator before the load-order plan ships**
   [Correctness + sequencing, M, 2026-07-19]: Part III of

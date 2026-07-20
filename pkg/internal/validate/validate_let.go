@@ -17,8 +17,6 @@ package validate
 import (
 	"context"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -30,25 +28,6 @@ import (
 type bindingIdentity struct {
 	key      string
 	scopeKey string
-}
-
-// scopeFingerprint builds a deterministic string from sorted scope IDs.
-// Identifiers with different scope sets produce different fingerprints,
-// allowing the duplicate-binding check to respect hygiene.
-func scopeFingerprint(scopes []*syntax.Scope) string {
-	if len(scopes) == 0 {
-		return ""
-	}
-	ids := make([]string, len(scopes))
-	for i, s := range scopes {
-		if s == nil {
-			ids[i] = "0"
-			continue
-		}
-		ids[i] = strconv.FormatUint(s.ID(), 10)
-	}
-	slices.Sort(ids)
-	return strings.Join(ids, ",")
 }
 
 // validateLetCommon validates all four binding forms (let, let*, letrec, letrec*).

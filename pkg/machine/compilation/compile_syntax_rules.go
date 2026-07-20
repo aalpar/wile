@@ -307,6 +307,14 @@ func compileClauseWithEllipsisAndLiterals(
 // binding, either:
 //   - LocalScopes (for local bindings) - enables hygiene for let-syntax capturing local vars
 //   - GlobalIndex (for global bindings) - enables cross-library macro hygiene
+//
+// Each resolution is stored under match.FreeIdKey (name + scope fingerprint), not
+// the bare name: one template can hold two same-named free identifiers under
+// different scope sets — a macro-generating macro splices the name in from two
+// scope sources — and each already resolves individually here (both arms key on
+// t.Scopes()). A bare-name key let the second write clobber the first, so at
+// expansion both occurrences received the surviving resolution. The consumer
+// (syntax_expand.go applyHygieneToSymbol) reads back under the same key.
 func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
@@ -336,7 +344,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 						// Local binding found - store scopes for hygiene
 						// Set HasLocalBinding=true even if scopes are empty,
 						// so expansion knows not to add intro scope.
-						freeIds[symVal.Key] = &FreeIdResolution{
+						freeIds[match.FreeIdKey(symVal.Key, t.Scopes())] = &FreeIdResolution{
 							LocalScopes:     binding.Scopes(),
 							HasLocalBinding: true,
 						}
@@ -354,7 +362,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				gi := env.GetGlobalIndexAcrossPhases(symVal, t.Scopes())
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
-				freeIds[symVal.Key] = &FreeIdResolution{
+				freeIds[match.FreeIdKey(symVal.Key, t.Scopes())] = &FreeIdResolution{
 					Global:   gi,
 					LibScope: libraryScope,
 				}

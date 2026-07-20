@@ -93,7 +93,7 @@ func findDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
 	for _, sym := range syms {
 		id := bindingIdentity{
 			key:      sym.Key(),
-			scopeKey: scopeFingerprint(sym.Scopes()),
+			scopeKey: syntax.ScopeFingerprint(sym.Scopes()),
 		}
 		if seen[id] {
 			dups = append(dups, sym)

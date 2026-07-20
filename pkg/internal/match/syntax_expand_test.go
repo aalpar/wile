@@ -2373,3 +2373,33 @@ func TestSyntaxExpandVectorSubPatternUnderEllipsis(t *testing.T) {
 	}
 	c.Assert(collectSyntaxInts(c, elems), qt.DeepEquals, []int64{2, 4})
 }
+
+// TestFreeIdKey_DiscriminatesScopeAndName pins the key contract the FreeIds map
+// depends on: (name, scopes) is the identity, and the '|' delimiter is
+// unambiguous even when the name itself contains '|'.
+func TestFreeIdKey_DiscriminatesScopeAndName(t *testing.T) {
+	c := qt.New(t)
+	s1 := syntax.NewScope()
+	s2 := syntax.NewScope()
+
+	// Same name, same scope set (any order) → same key.
+	c.Assert(FreeIdKey("x", []*syntax.Scope{s1, s2}),
+		qt.Equals, FreeIdKey("x", []*syntax.Scope{s2, s1}))
+
+	// Same name, different scope sets → different keys. This is the collapse the
+	// bare-name key allowed.
+	c.Assert(FreeIdKey("x", []*syntax.Scope{s1}),
+		qt.Not(qt.Equals), FreeIdKey("x", []*syntax.Scope{s2}))
+	c.Assert(FreeIdKey("x", nil),
+		qt.Not(qt.Equals), FreeIdKey("x", []*syntax.Scope{s1}))
+
+	// nil and empty scope sets fingerprint identically (both "no scopes").
+	c.Assert(FreeIdKey("x", nil),
+		qt.Equals, FreeIdKey("x", []*syntax.Scope{}))
+
+	// A name containing '|' does not collide with a different (name, scopes)
+	// pair. The fingerprint is digits-and-commas only, so the FIRST '|' delimits
+	// it: "<id>|a|b" decomposes only as (fp=<id>, name="a|b").
+	c.Assert(FreeIdKey("a|b", []*syntax.Scope{s1}),
+		qt.Not(qt.Equals), FreeIdKey("b", []*syntax.Scope{s1}))
+}

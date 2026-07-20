@@ -17,6 +17,8 @@ package values
 import (
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"sync/atomic"
 )
 
@@ -87,6 +89,28 @@ func (p *Scope) String() string {
 		return fmt.Sprintf("scope:%d(%s)", p.id, p.Label)
 	}
 	return fmt.Sprintf("scope:%d", p.id)
+}
+
+// ScopeFingerprint builds a deterministic string from a scope set, so the set
+// can key a map: two sets holding the same scopes (in any order) produce the
+// same fingerprint, and any differing set produces a different one. Identity is
+// by scope ID, matching ScopesMatch's pointer-identity model — scopes carry no
+// structure to compare. The empty set fingerprints to "", and a non-empty set
+// to sorted decimal IDs joined by ',', so the output contains only [0-9,].
+func ScopeFingerprint(scopes []*Scope) string {
+	if len(scopes) == 0 {
+		return ""
+	}
+	ids := make([]string, len(scopes))
+	for i, s := range scopes {
+		if s == nil {
+			ids[i] = "0"
+			continue
+		}
+		ids[i] = strconv.FormatUint(s.ID(), 10)
+	}
+	slices.Sort(ids)
+	return strings.Join(ids, ",")
 }
 
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
