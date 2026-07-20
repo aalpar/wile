@@ -197,10 +197,22 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 	// name is owned by the sealed base, the undefine cannot be honored — reject it rather
 	// than silently returning success while the binding stays bound. A user-level shadow
 	// is still removable (DeleteBinding returns true); a name bound nowhere is a no-op.
-	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym)
+	//
+	// Both halves resolve under the ambient scope set, matching namespace-ref, so
+	// a name owned only by a macro-introduced binder is a no-op rather than a
+	// destruction the caller could not have read (issue #805).
+	//
+	// The sealed-base probe is scope-exact for the same reason the delete is, not
+	// because a scope-carrying sealed binding exists today: the sealed base holds
+	// primitives and bootstrap procedures, all ambient, so there is no reachable
+	// case to test. A wildcard probe would answer "some binding of this name is
+	// sealed" to the question "is the binding I just failed to delete sealed",
+	// which fails open — it raises ErrImmutableBinding for a name the ambient
+	// read calls unbound, the same class of drift #805 closed on the delete side.
+	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym, environment.AmbientScopes())
 	if !deleted {
 		base := ns.SealedBase()
-		if base != nil && base.GlobalEnvironment().GetGlobalIndex(sym) != nil {
+		if base != nil && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, environment.AmbientScopes()) != nil {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
 				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",

@@ -125,7 +125,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	c.Assert(b, qt.IsNotNil)
 
 	// Delete it
-	deleted := env.GlobalEnvironment().DeleteBinding(sym)
+	deleted := env.GlobalEnvironment().DeleteBinding(sym, AmbientScopes())
 	c.Assert(deleted, qt.IsTrue)
 
 	// Verify binding is gone via key lookup
@@ -133,7 +133,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	c.Assert(gi, qt.IsNil)
 
 	// Deleting non-existent binding returns false
-	deleted = env.GlobalEnvironment().DeleteBinding(values.NewSymbol("nonexistent"))
+	deleted = env.GlobalEnvironment().DeleteBinding(values.NewSymbol("nonexistent"), AmbientScopes())
 	c.Assert(deleted, qt.IsFalse)
 }
 
@@ -325,7 +325,7 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Env, qt.Equals, ge)
 
-	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsTrue)
 
 	// No panic, and the same error master produced.
 	err := ge.SetOwnGlobalValue(gi, values.NewInteger(5))
@@ -347,20 +347,26 @@ func TestGlobalFrame_WildcardSkipsDeletedSlot(t *testing.T) {
 	sym := values.NewSymbol("x")
 
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
-	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsTrue)
 	c.Assert(ge.GetGlobalIndex(sym), qt.IsNil)
 }
 
-// Deleting a name removes EVERY slot it owns, not just the first. This is the
-// wildcard-delete-all policy DeleteBinding documents: deletion is a
-// REPL/namespace operation meaning "remove this name", and it carries no scope
-// set with which to single out one of several hygiene-distinct bindings.
+// Clearing a name that owns several hygiene-distinct slots takes one delete per
+// scope set: each resolves its own binding, and the name leaves the frame only
+// when the last slot goes.
+//
+// INVERTED for issue #805. This test previously pinned the opposite contract —
+// one delete removing EVERY slot the name owned — which was coherent only while
+// delete was name-level and the read surface was not. Under it,
+// `(namespace-undefine! ns 'x)` destroyed a macro-introduced `x` that
+// `(namespace-ref ns 'x)` reported as unbound. What is worth keeping from the
+// original is its multi-slot coverage: every other delete test builds exactly
+// one slot, so nothing else exercises a name with more than one.
 //
 // Multi-slot names are ordinary since scope-keyed global storage — a
 // macro-introduced binder carries the expansion's intro scope and a user-written
-// one the empty set — but every pre-existing delete test builds exactly one slot,
-// so the loop over slots had no coverage.
-func TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot(t *testing.T) {
+// one the empty set.
+func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 	c := qt.New(t)
 	ge := NewGlobalEnvironmentFrame()
 	sym := values.NewSymbol("counter")
@@ -371,27 +377,81 @@ func TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot(t *testing.T) {
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
 
-	ambient := ge.GetGlobalIndexWithScopes(sym, nil)
+	ambient := ge.GetGlobalIndexWithScopes(sym, AmbientScopes())
 	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
 	c.Assert(ambient, qt.IsNotNil)
 	c.Assert(introduced, qt.IsNotNil)
 	c.Assert(ambient.Slot, qt.Not(qt.Equals), introduced.Slot)
 
-	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+	// The ambient delete takes its own slot and leaves the name in the frame.
+	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsTrue)
+	c.Assert(ge.GetOwnGlobalBinding(ambient), qt.IsNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, AmbientScopes()), qt.IsNil)
+	c.Assert(ge.GetGlobalIndex(sym), qt.IsNotNil)
 
-	// Both slots go. Asserting only the ambient one would pass even if the loop
-	// stopped after the first slot.
-	c.Assert(ge.GetGlobalIndexWithScopes(sym, nil), qt.IsNil)
+	// Deleting under the intro scope set takes the last slot, and only now does
+	// the name stop being reported at all.
+	c.Assert(ge.DeleteBinding(sym, introScopes), qt.IsTrue)
+	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNil)
 	c.Assert(ge.GetGlobalIndexWithScopes(sym, introScopes), qt.IsNil)
 	c.Assert(ge.GetGlobalIndex(sym), qt.IsNil)
-	c.Assert(ge.GetOwnGlobalBinding(ambient), qt.IsNil)
-	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNil)
+}
+
+// Delete resolves through the same call the read makes, so it removes exactly
+// the binding namespace-ref would have returned and leaves every other slot the
+// name owns alone. Issue #805: while delete was name-level and the read surface
+// scope-exact, `(namespace-undefine! ns 'x)` destroyed a macro-introduced `x`
+// that `(namespace-ref ns 'x)` reported as unbound — you could destroy a binding
+// you could not read.
+func TestGlobalFrame_DeleteRemovesOnlyTheScopeMatchedSlot(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	sym := values.NewSymbol("counter")
+	introScopes := []*syntax.Scope{syntax.NewScope()}
+
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
+
+	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
+	c.Assert(introduced, qt.IsNotNil)
+
+	// Delete under the ambient (empty) scope set, which is what the namespace
+	// read surface resolves under.
+	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsTrue)
+
+	// The ambient binding is gone...
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, nil), qt.IsNil)
+	// ...and the hygiene-distinct one is untouched, still readable under its
+	// own scope set.
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, introScopes), qt.IsNotNil)
+	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNotNil)
+	// The name still exists in the frame, so Keys must keep it. Dropping the
+	// map entry here would strand the consumers that treat slots[0] as the
+	// name's representative.
+	c.Assert(ge.GetGlobalIndex(sym), qt.IsNotNil)
+}
+
+// Deleting a name that only a macro-introduced binder owns is a no-op under the
+// ambient scope set: there is nothing the read surface can see, so there is
+// nothing to remove. This is the behavior change issue #805 turns on.
+func TestGlobalFrame_DeleteOfMacroOnlyNameUnderAmbientScopesIsNoOp(t *testing.T) {
+	c := qt.New(t)
+	ge := NewGlobalEnvironmentFrame()
+	sym := values.NewSymbol("counter")
+	introScopes := []*syntax.Scope{syntax.NewScope()}
+
+	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
+	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
+	c.Assert(introduced, qt.IsNotNil)
+
+	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsFalse)
+	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNotNil)
 }
 
 // A stale resolved index whose slot was deleted must not re-resolve onto a
 // HYGIENE-DISTINCT binding that later takes the name.
 //
-// RED and t.Skip-guarded. TestGlobalFrame_PinnedIndexSurvivesDelete above pins
+// TestGlobalFrame_PinnedIndexSurvivesDelete above pins
 // stale-index re-resolution as intended, but it redefines under the SAME scope set,
 // which is the case where re-resolution is harmless. It is not harmless across
 // scope sets: newResolvedGlobalIndex never sets Scopes, so every compiler-resolved
@@ -404,11 +464,11 @@ func TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot(t *testing.T) {
 // B's binding. Its control (identical minus the undefine) keeps them isolated, so
 // the delete is the necessary ingredient.
 //
-// Deliberately NOT fixed with C4: C4's question was delete-all vs scoped-delete,
-// and delete-all is correct. This is the D4 pinned-index axis, and repairing it
-// means deciding whether a pinned index whose slot died should fail closed rather
-// than re-resolve — a semantic change that would rewrite the assertion in
-// TestGlobalFrame_PinnedIndexSurvivesDelete. That decision needs a human.
+// Distinct from the C4/#805 axis, which asked delete-all vs scoped-delete and
+// settled on scoped. This is the D4 pinned-index axis: whether a pinned index
+// whose slot died fails closed rather than re-resolving onto whatever later
+// takes the name. The two interact only in that scoped delete is what lets this
+// test name A's binding directly.
 func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	c := qt.New(t)
 	ge := NewGlobalEnvironmentFrame()
@@ -420,7 +480,9 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	aIndex := ge.GetGlobalIndexWithScopes(sym, aScopes)
 	c.Assert(aIndex, qt.IsNotNil)
 
-	c.Assert(ge.DeleteBinding(sym), qt.IsTrue)
+	// Delete under A's own scope set: the name has no ambient binding, so an
+	// ambient delete would correctly be a no-op (#805) and leave A's slot alive.
+	c.Assert(ge.DeleteBinding(sym, aScopes), qt.IsTrue)
 
 	// A different binder, whose scope set is incompatible with A's, takes the name.
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, bScopes)
@@ -455,7 +517,7 @@ func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	ge.CreateGlobalBinding(mixed, BindingTypeVariable, nil)
 	ge.CreateGlobalBinding(mixed, BindingTypeVariable, m)
 	ge.CreateGlobalBinding(deleted, BindingTypeVariable, nil)
-	c.Assert(ge.DeleteBinding(deleted), qt.IsTrue)
+	c.Assert(ge.DeleteBinding(deleted, AmbientScopes()), qt.IsTrue)
 
 	names := values.StringSet{}
 	for _, k := range ge.AmbientKeys() {

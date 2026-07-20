@@ -113,8 +113,9 @@ RESOLVED, where anyone scanning for open work will skip it.
   masked because locals get a fresh frame per binding form. Fix by mirroring the global
   creation predicate, not by copying lookup's.
 
-- [ ] **`DeleteBinding` is name-keyed while the namespace read surface is scope-exact**
-  [Medium, S, issue #805]: `namespace-ref`/`namespace-bound?`/`namespace-bound-names` (and their
+- [x] **`DeleteBinding` is name-keyed while the namespace read surface is scope-exact**
+  [Medium, S, issue #805, Done 2026-07-20 — sealed-base probe left wildcard, see below]:
+  `namespace-ref`/`namespace-bound?`/`namespace-bound-names` (and their
   `environment-*` twins) resolve under the ambient (empty) scope set; `namespace-undefine!` still
   resolves by bare name. `GlobalEnvironmentFrame.DeleteBinding`
   (`pkg/environment/global_environment_frame.go:500`) removes **every** slot a name owns, so
@@ -139,6 +140,80 @@ RESOLVED, where anyone scanning for open work will skip it.
   slot where delete-all made it miss. That is the C2b scope-blindness at
   `global_environment_frame.go:372-384` showing through rather than something the change invents,
   but it cannot be ruled out by reading and needs coverage.
+
+  **As landed.** `DeleteBinding(sym, scopes)` resolves through `bestSlotLocked(*sym, scopes,
+  false)`, nils that one slot, prunes its index, and drops the map entry when the name owns no
+  more. `matchAny` is hardcoded false, mirroring `AmbientKeys` and `GetGlobalIndexWithScopes`
+  — the two read entry points delete must not drift from — so delete has **no wildcard mode**
+  and `nil` here means the empty set, diverging from this file's nil-means-MATCH-ANY
+  convention. That divergence is deliberate and documented at the function: routing the
+  delete-all operation through the nil case would make the `AmbientScopes` footgun fire
+  destructively.
+
+  The delete-all test was inverted into
+  `TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime` (multi-slot coverage kept, the
+  delete-all contract dropped), plus a scope-matched-only case, a macro-only no-op case, and
+  `TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder` at the primitive layer. All four
+  were verified discriminating by mutating `matchAny` to true and confirming they go red.
+
+  **Sealed-base probe made scope-exact too** (`prim_namespace.go`, `GetGlobalIndexWithScopes`
+  under `AmbientScopes()`). Initially left wildcard on the argument that no scope-carrying
+  sealed binding exists, so no test could fail first; reversed under the nil-means-NONE
+  convention. A wildcard probe answers "some binding of this name is sealed" to the question
+  "is the binding I just failed to delete sealed", raising `ErrImmutableBinding` for a name the
+  ambient read calls unbound — fail-open, and the same drift class the delete side just closed.
+  Hardening a permissive default outweighs "no failing test" when existing coverage
+  (`TestNamespaceUndefineSealedRejected`) guards the reachable path.
+
+- [ ] **`namespace-undefine!` does not stop compiled code from reading the binding**
+  [Correctness, S, 2026-07-20]: found while measuring #805, **pre-existing on master**, not
+  introduced by it. After `(define v 7)` `(define (get-v) v)` `(namespace-undefine! ns 'v)`,
+  `namespace-bound?` correctly answers `#f` but `(get-v)` still returns `7`. The closure reads
+  through a cached/pinned binding that nil-ing the slot does not invalidate. Not macro-specific
+  — plain ambient bindings show it. Cost me a test: the obvious "macro-only binder survives"
+  assertion at the primitive layer measures this cache rather than the delete policy, and so
+  passes under any policy. **Measure first:** determine whether the stale read comes from the
+  global binding cache (`memory/global-binding-cache-already-exists.md`) or from a pinned
+  `GlobalIndex` whose re-resolution succeeds; the two want different fixes.
+
+- [ ] **Scope-set resolution encodes "All" as nil, which fails open**
+  [Correctness + API, M, 2026-07-20, follow-up to #805]: convention is **nil means NONE**;
+  "All" must be an explicit special value. The environment read surface does the opposite —
+  `GetBinding`, `GetLocalIndex` and `GetGlobalIndex` read a nil scope set as MATCH ANY. Nil is
+  indistinguishable from an uninitialized value, so a caller that merely forgot to thread its
+  scopes silently gets the *widest* resolution, with nothing in the signature to flag it. The
+  permissive reading grants reach across a hygiene boundary, which is why this is a security
+  posture question and not a style one.
+
+  **Three symptoms of the same undersized domain**, all in `pkg/environment`:
+  - `AmbientScopes()` (`global_environment_frame.go`) returns a non-nil empty slice for no
+    reason other than to route around the nil default. Its own doc comment documents the
+    footgun. A named workaround is the tell that the default is wrong.
+  - `bestSlotLocked(key, scopes, matchAny bool)` — a bool riding alongside the value because
+    the value could not carry the state. 17 `matchAny` references across
+    `global_environment_frame.go`, `environment_frame.go`, `local_environment_frame.go`.
+  - `GlobalIndex.matchAny()` = `Scopes == nil && !scopeKeyed`, plus the `scopeKeyed` field (4
+    references) that exists *only* because nil cannot distinguish "matched the empty set" from
+    "no key at all".
+
+  **Fix**: a `ScopeSet` type carrying three named states (All / empty / specific) collapses all
+  three into one value. This is `state-trace` shaped — bounded state split across a slice and
+  two bools, where the distributed comparisons reduce to one scalar.
+
+  **Blast radius is smaller than it looks.** 13 non-test call sites pass nil into the scoped
+  reads: 9 in `pkg/machine/compilation`, 2 in `pkg/registry/apply.go`, 1 each in
+  `pkg/wile/engine.go` and `pkg/repl/meta.go`. The wildcard-by-name `GetGlobalIndex` now has
+  exactly **one** non-test caller left (`machine/compilation/er_macro_rename.go`) — the
+  `namespace-undefine!` probe was its other one until #805 moved it to the scoped form.
+
+  **Triage each nil site, don't mass-rewrite.** Some genuinely mean All (introspection,
+  `er_macro_rename`); most are probably unthreaded scopes. The whole point is that the current
+  encoding makes those two indistinguishable, so each site needs its intent decided and then
+  written down — a mechanical `nil` → `AmbientScopes()` sweep would just freeze today's
+  accidents into explicit form. Expect some to be latent hygiene bugs.
+
+  Supersedes the nil-encoding half of the older "use nil to mean unconstrained" preference,
+  which is plausibly where this design came from.
 
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 

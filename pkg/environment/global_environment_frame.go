@@ -510,8 +510,26 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	return nil
 }
 
-// DeleteBinding removes a global binding by symbol key.
-// Returns true if the binding was found and removed, false if not found.
+// DeleteBinding removes the global binding for sym that resolves under the
+// given scope set. Returns true if one was found and removed.
+//
+// Resolution goes through bestSlotLocked with matchAny FALSE — the literal call
+// AmbientKeys and GetGlobalIndexWithScopes make — so delete cannot drift from
+// the read surface. It removes exactly the binding a scoped read would have
+// returned, and deleting a name owned only by a macro-introduced binder is a
+// no-op rather than the destruction of a binding the caller could not read.
+//
+// A nil scopes argument means NONE — the empty scope set, same as
+// AmbientScopes() — and never MATCH ANY. Nil is indistinguishable from an
+// uninitialized value, so resolving it permissively fails open: a caller that
+// merely forgot to thread its scopes would delete across a hygiene boundary
+// with nothing in the signature to flag it. Delete therefore has no wildcard
+// mode at all; "remove the name and every hygiene-distinct binding under it" is
+// a legitimate but different operation, and nothing asks for it.
+//
+// The read entry points (GetBinding, GetLocalIndex, GetGlobalIndex) still read
+// nil as MATCH ANY, which is what AmbientScopes exists to work around. This
+// function does not follow them. See issue #805.
 //
 // Note: the binding slot in p.bindings is not compacted — index-based
 // references from compiled code would be stale. This is only safe for
@@ -519,26 +537,31 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // bytecode.
 //
 // Thread-safe: uses full Lock for write access.
-func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
+func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	slots, ok := p.keys[*sym]
+	i, ok := p.bestSlotLocked(*sym, scopes, false)
 	if !ok {
 		return false
 	}
-	delete(p.keys, *sym)
-	// Nil out the binding slots so stale GlobalIndex references from
-	// compiled code see nil (caught by resolveGlobal) instead of
-	// silently returning the old value.
-	//
-	// All slots for the name go, not one: deletion is a REPL/namespace
-	// operation meaning "remove this name", and it carries no scope set with
-	// which to single out one of several hygiene-distinct bindings.
-	for _, i := range slots {
-		if i < len(p.bindings) {
-			p.bindings[i] = nil
+	// Nil out the slot so stale GlobalIndex references from compiled code see
+	// nil (caught by resolveGlobal) instead of silently returning the old value.
+	p.bindings[i] = nil
+	// Prune the dead index rather than leaving it in place: Keys' consumers
+	// treat slots[0] as the name's representative, so a dead slot 0 would make
+	// them drop a name whose remaining slots are still live.
+	slots := p.keys[*sym]
+	for j, s := range slots {
+		if s != i {
+			continue
 		}
+		p.keys[*sym] = append(slots[:j], slots[j+1:]...)
+		break
+	}
+	// Drop the name once it owns no slots, so Keys stops reporting it at all.
+	if len(p.keys[*sym]) == 0 {
+		delete(p.keys, *sym)
 	}
 	return true
 }

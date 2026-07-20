@@ -418,3 +418,26 @@ func TestReadFamiliesAgree_NamespaceAndEnvironment(t *testing.T) {
 		        (eq? (namespace-ref ns 'visible)    (environment-ref ns 'visible))))`)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "(#t #t #t)")
 }
+
+// The discriminating case for issue #805: one name owning both an ambient
+// binding and a macro-introduced one. Undefining removes exactly the ambient
+// binding — the one namespace-ref would have returned — and leaves the macro's
+// alone. While delete was name-level and the read surface scope-exact, this
+// destroyed a binding the caller could not read.
+//
+// namespace-bound? is the load-bearing assertion. The (get-w) half is a weaker
+// witness than it looks: a closure keeps reading its binding after a successful
+// undefine (true on master for a plain ambient binding too), so it cannot by
+// itself distinguish "spared" from "deleted". The frame-level no-op case is
+// pinned directly by TestGlobalFrame_DeleteOfMacroOnlyNameUnderAmbientScopesIsNoOp.
+func TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder(t *testing.T) {
+	eng := newEngine(t)
+
+	result := schemeEval(t, eng, `
+		(define-syntax m (syntax-rules () ((_ v) (begin (define w v) (lambda () w)))))
+		(define get-w (m 7))
+		(define w 1)
+		(namespace-undefine! (interaction-environment) 'w)
+		(list (namespace-bound? (interaction-environment) 'w) (get-w))`)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "(#f 7)")
+}
