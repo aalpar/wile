@@ -53,6 +53,9 @@ func newThreadedEngine(t *testing.T) *wile.Engine {
 		wile.WithExtension(extthreads.Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
 	return engine
 }
 
