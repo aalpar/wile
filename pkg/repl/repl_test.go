@@ -17,6 +17,8 @@ package repl
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -96,4 +98,40 @@ func TestRunSimple_WithInput_NoTrailingNewline(t *testing.T) {
 	// to 42 rather than being swallowed on EOF.
 	c.Assert(strings.Contains(out.String(), "42"), qt.IsTrue,
 		qt.Commentf("out=%q", out.String()))
+}
+
+// eofWithDataReader delivers its bytes one at a time and returns the FINAL byte
+// together with io.EOF in the same Read — the io.Reader contract case (n > 0 with
+// err == io.EOF) that strings.Reader never exercises.
+type eofWithDataReader struct {
+	data []byte
+	pos  int
+}
+
+func (r *eofWithDataReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	p[0] = r.data[r.pos]
+	r.pos++
+	if r.pos == len(r.data) {
+		return 1, io.EOF
+	}
+	return 1, nil
+}
+
+// TestLineReader_FinalByteWithEOF pins the io.Reader contract: a Read returning
+// the last byte together with io.EOF must not drop that byte. Before the fix,
+// ReadLine handled err before consuming n, so it returned "a" for input "ab".
+func TestLineReader_FinalByteWithEOF(t *testing.T) {
+	c := qt.New(t)
+	lr := newLineReader(&eofWithDataReader{data: []byte("ab")})
+
+	line, err := lr.ReadLine()
+	c.Assert(err, qt.IsNil)
+	c.Assert(line, qt.Equals, "ab")
+
+	// The next read is a clean EOF with nothing buffered.
+	_, err = lr.ReadLine()
+	c.Assert(errors.Is(err, io.EOF), qt.IsTrue)
 }

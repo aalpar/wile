@@ -420,6 +420,17 @@ func (p *lineReader) ReadLine() (string, error) {
 	buf := make([]byte, 1)
 	for {
 		n, err := p.f.Read(buf)
+		// Process the returned byte before the error: io.Reader permits a reader
+		// to return n > 0 together with io.EOF, and handling err first would drop
+		// that final byte and truncate the last line.
+		if n > 0 {
+			if buf[0] == '\n' {
+				line := p.r.String()
+				p.r.Reset()
+				return line, nil
+			}
+			p.r.WriteByte(buf[0])
+		}
 		if err != nil {
 			// A final line with no trailing newline is still a line: flush what
 			// is buffered before propagating EOF, or the last form is silently
@@ -431,14 +442,5 @@ func (p *lineReader) ReadLine() (string, error) {
 			}
 			return "", err
 		}
-		if n == 0 {
-			continue
-		}
-		if buf[0] == '\n' {
-			line := p.r.String()
-			p.r.Reset()
-			return line, nil
-		}
-		p.r.WriteByte(buf[0])
 	}
 }
