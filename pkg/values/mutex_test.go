@@ -338,9 +338,11 @@ func TestUnlockCVNoLostWakeup(t *testing.T) {
 		cv.Signal()
 		m.Unlock(nil, nil)
 
+		timer := time.NewTimer(5 * time.Second)
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+			timer.Stop()
+		case <-timer.C:
 			t.Fatalf("iteration %d: consumer never woke — the signal was lost "+
 				"because the waiter was not enqueued before the mutex was released", i)
 		}
