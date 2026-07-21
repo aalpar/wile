@@ -228,43 +228,6 @@ as `caar`/`map`) is rejected with `ErrImmutableBinding`. This is ordinary Scheme
 
 ---
 
-## SRFI-13 Binary Comparisons Return Boolean (Not the Mismatch Index)
-
-**Affected Procedures:** `string=`, `string<`, `string>`, `string<=`,
-`string>=`, `string<>` and their six `-ci` variants, from `(srfi 13)`.
-
-**SRFI-13 says:** these return the index of the first mismatch (or, for
-`string=`, the index one past the end of the compared range) on success, and
-`#f` on failure. The index is what makes them useful as both a predicate and a
-positional probe in one call.
-
-**Wile returns:** `#t` / `#f`.
-
-```scheme
-(import (srfi 13))
-(string= "abc" "abc")   ; SRFI-13: 3      Wile: #t
-(string< "abc" "abd")   ; SRFI-13: 2      Wile: #t
-(string= "abc" "abd")   ; SRFI-13: #f     Wile: #f
-```
-
-**Why:** the boolean contract is what these procedures' own docstrings state
-(`Returns: boolean`, `pkg/stdlib/lib/srfi/13/comparison.scm`) and what the
-bundled test suite pins (`integration/testdata/srfi-13-tests-phase5.scm`). The
-deviation is deliberate and tested, not an oversight — but it was previously
-undocumented, which is the defect this entry fixes.
-
-**Portability impact:** code ported from another Scheme that uses the return
-value positionally (e.g. `(let ((i (string< a b))) ...)`) will silently get `#t`
-where it expects an integer. Boolean-only uses (`if`, `cond`, `and`) port
-unchanged.
-
-**Workaround:** use the R7RS variadic forms (`string=?`, `string<?`, …) when a
-predicate is all that is needed. For a mismatch index, compare positions
-explicitly; `%string-compare-impl` in the same file already computes one
-internally, so exposing it is mechanically available if a caller needs it.
-
----
-
 ## Continuation Value-Count (Splicing, Not Arity-Checked)
 
 **Affected Primitives:** `call-with-current-continuation` / `call/cc` escape
