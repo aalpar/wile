@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-07-20 (Tier 1: transcribed the scope-keyed-globals arc's open successors out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`, where they were invisible to a TODO scan — `freeIds` name-keyed collapse and the `BindingID` scope-discriminator prerequisite joined the name-keyed-consumers section; new "successor work" section holds the two shorthand-`define` defects, export phase-probe order, no-sealed-base-above-phase-0, and the missing CHANGELOG for 16 commits of user-visible semantic change. Tier 5: `predeclareBinding` orphan slots. Two of the successors carry **unverified repros** and say so. Prior: 2026-07-14 — Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
+**Last Updated**: 2026-07-21 (Tier 1: recorded the **2026-07-17 full-review remediation RESOLVED** — all 14 confirmed defects fixed across PRs #808–#813 plus earlier `1af62cd2`; the CI gap that hid two is closed via `make test-examples`; P2/#10 resolved as a non-deviation, not a documented one. Prior: 2026-07-20 — Tier 1: transcribed the scope-keyed-globals arc's open successors out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`, where they were invisible to a TODO scan — `freeIds` name-keyed collapse and the `BindingID` scope-discriminator prerequisite joined the name-keyed-consumers section; new "successor work" section holds the two shorthand-`define` defects, export phase-probe order, no-sealed-base-above-phase-0, and the missing CHANGELOG for 16 commits of user-visible semantic change. Tier 5: `predeclareBinding` orphan slots. Two of the successors carry **unverified repros** and say so. Prior: 2026-07-14 — Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
 
 ### Current Project Status
 
@@ -455,6 +455,39 @@ re-confirm each repro before designing a fix.**
 - [x] **`GlobalIndex.EqualTo` now compares `Env`, not just `Index`.** (2026-07-14, `fix/globalindex-env-literal-identity`, `fa9804d6`, merged to master)
 
   A literal-pool collision: two distinct globals with the same `Index` symbol but different `Env` deduped to one literal slot. `EqualTo` (`pkg/environment/global_environment_frame.go`) now includes `Env`. Phase 1 shipped + merged; Phase 2 deferred by design. `memory/2026-07-13-globalindex-env-literal-identity.md` (archived).
+
+### ~~2026-07-17 full-review remediation — 14 confirmed defects across 7 phases~~ RESOLVED
+
+- [x] **All 14 confirmed defects fixed; the CI gap that hid two of them closed.**
+  (2026-07-21. Source `reviews/2026-07-17/REVIEW.md`; plan
+  `plans/2026-07-17-review-remediation.md`.) Twelve landed this session across six
+  file-disjoint PRs, each CI-green with Copilot review addressed; two had landed
+  earlier via `1af62cd2`. The one refuted finding (`-specific-set!` under NoMutation,
+  #5) was a documented design nit, out of scope.
+
+  | Phase | Item | Fix |
+  |-------|------|-----|
+  | 1.1 | C1/#8 SRFI-18 cv lost-wakeup | PR #808 (`1ffc83a1`) |
+  | 1.2 | shared-mutation doc — false "threads safe" claim | retracted in #808 (`SECURITY.md`) + #810 (`engine.go` godoc) |
+  | 2.1 | S1/#3 symlink-following resolver | PR #809 (`77b3f474`) |
+  | 2.2 | S2/#14 `(command-line)` ungated argv | PR #809 (`c6009a92`) |
+  | 3.1 | C2/#6+#7 uncatchable port-type panic + dead recover | PR #812 (`2113090a`) |
+  | 4.1 | C3/#2 case-lambda params unbound in body | `1af62cd2` (earlier) |
+  | 4.2 | C6/#16 `unless` referential transparency | `1af62cd2` (earlier) |
+  | 5.1 | C4/#4 `%parameter-raw-set!` survives NoMutation | PR #810 (`24f68cbc`) |
+  | 5.2 | C5/#9 write/write-shared skip hashtable interiors | PR #810 |
+  | 5.3 | C7/#15 empty-operator `(())` mislocates its error | PR #810 |
+  | 5.4 | C8/#13 RunSimple drops final unterminated line | PR #810 |
+  | 6.1 | P1/#1 `\x…;` hex-escape digit cap (R7RS 7.1.1) | PR #813 (`8dc813c2`) |
+  | 6.2 | P2/#10 SRFI-13 comparison return | PR #813 — **no deviation**: SRFI-13 specifies boolean (verified vs spec), Wile is conformant; the mistaken "deviation" doc entry was removed, not added |
+  | 7.1 | C9/#11 flagship `exceptions.scm` crashes | PR #811 (`6f5e2e2d`) |
+  | 7.2 | C10/#12 schelog benchmark path broken | PR #811 |
+  | 7.3 | N5 CI never ran the shipped `.scm` tree | PR #811 adds `test-examples` as a CI stage; DenyAll gate-sweep in #809 |
+
+  Copilot's review on the session PRs caught two real issues beyond the original
+  findings: a create-time parent-symlink escape still open in the #809 fix (closed in
+  `10cdbf56`) and the `ReadLine` `n>0`+EOF byte-drop in the #810 fix (closed in
+  `2c72c925`).
 
 ### Continuation multiple-values follow-ups (from PR #800 crosscheck, 2026-06-25)
 
