@@ -78,17 +78,25 @@ func openConfinementRoot(auth security.Authorizer, target string) (root *os.Root
 // lexical path the caller supplied; a symlink at that path would redirect the
 // operation to a file outside the authorized subtree, and the plain os call
 // follows it. Resolving symlinks and re-gating the real path under action keeps
-// the gate target and the operation target the same file. A path that does not
-// resolve (missing file, broken link) is returned unchanged so the plain os call
-// reports the underlying error -- and so create can make a file that does not
-// exist yet.
+// the gate target and the operation target the same file.
+//
+// When the full path does not resolve — most often because the leaf does not
+// exist yet (a create/write target) — a symlink in the PARENT chain is still
+// followed by the plain os call, so the parent is resolved on its own and the
+// operation re-gated on realParent/leaf. This closes the create-time escape:
+// os.Create("<allowed>/evil/new") where <allowed>/evil links outside the subtree
+// writes outside it, yet EvalSymlinks fails on the missing leaf. If the parent
+// itself does not resolve, the path is handed back unchanged so the plain os call
+// reports the underlying error (ENOENT) and create can still make a new leaf.
 func unconfinedTarget(auth security.Authorizer, name, action string) (string, error) {
 	realPath, err := filepath.EvalSymlinks(name)
 	if err != nil {
-		// Unresolvable is not a denial: the caller's plain os operation reports
-		// the real reason (ENOENT), and create legitimately targets a path that
-		// does not exist yet.
-		return name, nil //nolint:nilerr // resolution failure defers to the os call
+		parent, perr := filepath.EvalSymlinks(filepath.Dir(name))
+		if perr != nil {
+			// Parent unresolvable: defer to the os call, which reports ENOENT.
+			return name, nil //nolint:nilerr // resolution failure defers to the os call
+		}
+		realPath = filepath.Join(parent, filepath.Base(name))
 	}
 	if realPath == name {
 		return name, nil

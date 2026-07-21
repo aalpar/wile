@@ -183,3 +183,63 @@ func TestConfinedOpen_SymlinkEscapeDeniedUnconfined(t *testing.T) {
 		t.Fatalf("confinedStat: want ErrAccessDenied, got: %v", err)
 	}
 }
+
+// TestConfinedCreate_ParentSymlinkEscapeDeniedUnconfined pins the create-time
+// escape: the leaf does not exist yet, so EvalSymlinks(name) fails, but a symlink
+// in the PARENT chain still redirects os.Create outside the authorized subtree.
+// unconfinedTarget must resolve the parent and re-gate realParent/leaf.
+func TestConfinedCreate_ParentSymlinkEscapeDeniedUnconfined(t *testing.T) {
+	// Canonicalize: on macOS t.TempDir() returns a /tmp path but /tmp is a
+	// symlink to /private/tmp. The fix re-gates the RESOLVED path, so a lexical
+	// authorizer must key on the resolved dir — exactly what a correct authorizer
+	// (e.g. the built-in containedInRoot) does. Without this the positive control
+	// below would be denied on the /tmp → /private/tmp difference alone.
+	allowedDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsideDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A directory symlink inside the allowed subtree pointing outside it.
+	evil := filepath.Join(allowedDir, "evil")
+	err = os.Symlink(outsideDir, evil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Lexical prefix gate, deliberately NOT RootConfined.
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if strings.HasPrefix(req.Target, allowedDir+string(filepath.Separator)) {
+			return nil
+		}
+		return security.ErrAccessDenied
+	})
+
+	// The lexical path is under allowedDir, but the real target is outside it.
+	escape := filepath.Join(evil, "planted.txt")
+	f, err := confinedCreate(auth, escape)
+	if err == nil {
+		_ = f.Close()
+		t.Fatalf("create through parent symlink %q escaping to %q must be denied", evil, outsideDir)
+	}
+	if !errors.Is(err, security.ErrAccessDenied) {
+		t.Fatalf("want ErrAccessDenied, got: %v", err)
+	}
+	// The escaping file must not have been created outside the subtree.
+	_, statErr := os.Stat(filepath.Join(outsideDir, "planted.txt"))
+	if !os.IsNotExist(statErr) {
+		t.Fatalf("denied create must not have written outside the subtree; stat err: %v", statErr)
+	}
+
+	// Positive control: a genuinely new leaf directly under the allowed dir (no
+	// parent symlink) still creates — the fix must not block legitimate creation.
+	fresh := filepath.Join(allowedDir, "fresh.txt")
+	g, err := confinedCreate(auth, fresh)
+	if err != nil {
+		t.Fatalf("legitimate create of a new leaf must succeed, got: %v", err)
+	}
+	_ = g.Close()
+}
