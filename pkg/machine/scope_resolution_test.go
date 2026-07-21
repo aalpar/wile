@@ -554,6 +554,27 @@ func TestScopeResolution_LetSyntaxShadowing(t *testing.T) {
 			         (my-val))`,
 			want: values.NewInteger(42),
 		},
+		{
+			// Nested let-syntax rebinding the same keyword: the inner binder wins
+			// in its body. Both binders are visible to the reference, and the
+			// inner binder's scope set is a strict superset of the outer's, so it
+			// resolves by maximality (see expander_let_syntax.go — keywords bind on
+			// the accumulated scope set, not a bare singleton). This is the case
+			// where the two binders would otherwise tie on scope-set cardinality.
+			name: "nested let-syntax resolves innermost keyword",
+			code: `(let-syntax ((m (syntax-rules () ((m) 10))))
+			         (let-syntax ((m (syntax-rules () ((m) 20))))
+			           (m)))`,
+			want: values.NewInteger(20),
+		},
+		{
+			name: "triple-nested let-syntax resolves innermost keyword",
+			code: `(let-syntax ((m (syntax-rules () ((m) 1))))
+			         (let-syntax ((m (syntax-rules () ((m) 2))))
+			           (let-syntax ((m (syntax-rules () ((m) 3))))
+			             (m))))`,
+			want: values.NewInteger(3),
+		},
 	}
 
 	for _, tc := range tcs {

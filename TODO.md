@@ -64,26 +64,45 @@ Items that block production embedded use or prevent silent state corruption.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
-- [ ] **`bestOf` picks arbitrarily on a scope-set weight tie** [Medium, S]: when two candidate
-  bindings have **incomparable, equal-cardinality** scope sets that are both subsets of the
-  reference's scope set, Flatt/Racket raise an *ambiguous binding* error. Wile raises nothing:
-  `pkg/environment/best_of.go:60-68` keeps the **first** candidate on a tie, so the reference
-  resolves silently innermost-first. The macro-introduced-top-level-binder rename pass
-  documented the same arbitrariness independently — ties "resolve arbitrarily to the first
-  collected". That pass was **deleted** in `a60e32e1` once scope-keyed globals made it
-  redundant, so read it at `git show a60e32e1^:pkg/machine/compilation/toplevel_binder_hygiene.go`
-  (lines 249-254). Its deletion does not close this item: `bestOf` is untouched and still
-  first-wins on a tie.
+- [x] **Scope-set weight tie fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21,
+  approach 1a per `plans/2026-07-20-scope-keyed-tier1-remediation.md` Item 1]: the filed fix
+  (raise on every `bestOf` tie) was **rejected** — it regresses ordinary R7RS nested `let-syntax`
+  keyword shadowing, which currently *is* an incomparable equal-cardinality tie:
+  `(let-syntax ((m …outer…)) (let-syntax ((m …inner…)) (m)))` weighs both binders 1 under a
+  weight-2 reference, and keep-first (innermost) is the correct INNER result. Two corrections to
+  the original entry that follows: the fix does **not** belong in `bestOf` (it takes two ints and
+  cannot see scope sets; the local reducer compares across frames while the global one is
+  per-frame first-wins — one edit site, two semantics), and "error on a tie" conflates shadowing
+  with ambiguity.
 
-  **The fix belongs in `bestOf`, not at a call site.** The gap is uniform across local and
-  global resolution; fixing one path alone would make it stricter than the other and create a
-  new inconsistency. Landing it in `bestOf` covers both at once.
+  **1a — fix the cause.** `expander_let_syntax.go` bound each `let-syntax`/`letrec-syntax`
+  keyword on the bare singleton `[]*syntax.Scope{letScope}`, discarding the keyword's accumulated
+  enclosing scopes. It now binds on `slices.Clone(keywordSym.Scopes())` + `letScope` at all three
+  coupled sites (letrec pre-register, compile-loop create, and the re-resolve that must use the
+  identical set or `MaybeCreateLocalBinding` keys a second slot). A nested binder is then a strict
+  scope-set superset of its enclosing binder and wins by maximality (a perfect match), so the tie
+  never forms. Top-level binders are unchanged (empty `Scopes()` ⇒ the set is still `{letScope}`).
 
-  Deliberately scoped **out** of two plans that each touch adjacent code, so it does not get
-  bundled and lost: `plans/2026-07-18-scope-keyed-global-bindings-design.md` (Part III) and
-  `plans/2026-07-18-load-order-independent-binding-resolution-design.md` (Fork C — same
-  conclusion, reached independently). Both are prerequisites in practice, since scope-keyed
-  globals make equal-cardinality ties reachable at top level for the first time.
+  **Census confirms completeness** (throwaway `WILE_TIE_CENSUS` probe on the tie branch, since
+  reverted): before 1a the nested case produced a `weight=1 target=2` tie; after 1a it is gone.
+  Across `r7rs-tests.scm`, `macros-test.scm`, and the ER-macro corpus there are **zero `weight>0`
+  ties** — no genuine ambiguity. Every residual tie is `weight=0` (the empty set; two
+  `{}`-bindings of a name = benign shadowing resolved by frame order). So there is nothing to
+  error on, and 1b (a real `ErrAmbiguousBinding` on a same-frame incomparable tie) stays deferred
+  as the fallback if such a tie is ever constructed (none has been). Guard: nested + triple-nested
+  cases in `TestScopeResolution_LetSyntaxShadowing`.
+
+  **Residual, filed separately:** `resolveNodeByScopes` (`frame_reclaim_build.go`) hand-rolls the
+  same argmax over a Go *map*, so its tie is non-deterministic rather than first-wins. Unreachable
+  in the corpus (no `weight>0` tie feeds it), but it is the one site where a tie would resolve
+  non-deterministically; a determinism follow-up, not gated on this item.
+
+  *Original framing (2026-07-18), retained for provenance:* the macro-introduced-top-level-binder
+  rename pass documented the same arbitrariness independently — ties "resolve arbitrarily to the
+  first collected" — at `git show a60e32e1^:pkg/machine/compilation/toplevel_binder_hygiene.go`
+  (lines 249-254). Scoped out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`
+  (Part III) and `…-load-order-independent-binding-resolution-design.md` (Fork C) so it would not
+  be bundled and lost.
 
 ### Name-keyed identity survives in consumers of scope-keyed bindings (2026-07-19)
 

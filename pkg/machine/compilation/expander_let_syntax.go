@@ -23,6 +23,8 @@ package compilation
 // Extracted from expander_time_continuation.go.
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -133,8 +135,14 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 				return nil, wrapSourcedError(bindingStx.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "%s: keyword must be a symbol", formName))
 			}
 			keyword := keywordSym.Unwrap().(*values.Symbol)
-			// Create binding with letScope so free identifier resolution works
-			_, _ = childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
+			// Bind on the keyword's accumulated scope set plus letScope, not the
+			// bare singleton. A nested same-named binder then carries a strict
+			// superset of its enclosing binder's scopes and wins resolution by
+			// maximality, instead of tying it on cardinality and falling back to
+			// collection order. Clone first: Scopes() hands back the symbol's live
+			// backing slice, so appending into it would corrupt its hygiene state.
+			keywordScopes := append(slices.Clone(keywordSym.Scopes()), letScope)
+			_, _ = childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, keywordScopes, keywordSym.SourceContext())
 
 			cdr := current.SyntaxCdr()
 			nextPair, ok := cdr.(*syntax.SyntaxPair)
@@ -177,9 +185,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		// itself. That region is expressed two ways at once, and both are needed:
 		// the keywords are pre-registered in childExpandEnv above, so compile the
 		// spec against that frame rather than the outer one, and the spec carries
-		// letScope, so a template identifier naming a sibling is a superset of the
-		// binder keyed on that scope. Compiling against p.env with an unscoped spec
-		// left free-identifier resolution unable to see the very bindings the
+		// letScope, which the sibling binder also carries atop the keyword's
+		// accumulated scopes, so a sibling reference is a superset of that binder
+		// and resolves to it. Compiling against p.env with an unscoped spec left
+		// free-identifier resolution unable to see the very bindings the
 		// pre-registration existed to expose.
 		//
 		// let-syntax keeps the outer environment and the unscoped spec: its
@@ -196,13 +205,18 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			return nil, wrapSourcedError(transformerExpr.SourceContext(), werr.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key))
 		}
 
-		// Store in child expand environment with letScope for free identifier resolution
-		localIndex, created := childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
+		// Store on the keyword's accumulated scope set plus letScope (see the
+		// pre-registration above for why the bare singleton is wrong). The
+		// pre-register and this re-resolve must use the identical set, or
+		// MaybeCreateLocalBinding keys a second slot and the transformer lands in
+		// the wrong binding.
+		keywordScopes := append(slices.Clone(keywordSym.Scopes()), letScope)
+		localIndex, created := childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, keywordScopes, keywordSym.SourceContext())
 		if !created {
-			// letrec-syntax pre-registered this keyword above, under letScope.
-			// Re-resolve under the same set, not nil: nil is MATCH ANY, which takes
-			// the first live slot of the name rather than the one just addressed.
-			localIndex = childExpandEnv.GetLocalIndex(keyword, []*syntax.Scope{letScope})
+			// letrec-syntax pre-registered this keyword above, under the same set.
+			// Re-resolve under that set, not nil: nil is MATCH ANY, which takes the
+			// first live slot of the name rather than the one just addressed.
+			localIndex = childExpandEnv.GetLocalIndex(keyword, keywordScopes)
 		}
 		if localIndex == nil {
 			return nil, wrapSourcedError(keywordSym.SourceContext(), werr.WrapForeignErrorf(
