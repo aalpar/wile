@@ -861,21 +861,28 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 		WithExtension(system.Extension),
 	)
 	c.Assert(err, qt.IsNil)
+	defer engine.Close()
 
 	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(command-line)`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
 
-// TestAuthorizer_DenyAllSweep runs every privileged primitive under DenyAll and
-// asserts each raises ErrAccessDenied. This is the regression net for gate
-// coverage: a primitive that reads a host resource without an authorizer check
-// (as (command-line) once did) shows up here as a nil error. One KitchenSink
-// engine registers every extension; WithAuthorizer(DenyAll()) overrides the
-// profile's (nil) authorizer. Each expression is shaped so the authorizer gate
-// is the FIRST failure (valid arg count and types) — a missing gate surfaces as
-// a nil error, not an unrelated arg/type error. exit's gate fires before
+// TestAuthorizer_DenyAllSweep runs a representative privileged primitive for each
+// authorizer gate under DenyAll and asserts each raises ErrAccessDenied. This is
+// the regression net for gate coverage: a primitive that reads a host resource
+// without an authorizer check (as (command-line) once did) shows up here as a nil
+// error. One KitchenSink engine registers every extension; WithAuthorizer(DenyAll())
+// overrides the profile's (nil) authorizer. Each expression is shaped so the
+// authorizer gate is the FIRST failure (valid arg count and types) — a missing gate
+// surfaces as a nil error, not an unrelated arg/type error. exit's gate fires before
 // os.Exit, so invoking it in-process is safe.
+//
+// The sweep is representative, not exhaustive: it covers one primitive per gate
+// action (process:read/exit/exec/exec-shell, env:read, file:stat/write/delete,
+// code:eval), not every gated primitive — e.g. open-input-file shares file:read/stat
+// with the file-exists? row, and current-directory is uncovered. A new gate action
+// should add a row here.
 //
 // The sweep deliberately does NOT assert that (environment '(wile kitchen-sink))
 // is rejected: that constructor is ungated today and the constructed namespace
@@ -891,6 +898,7 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 		WithAuthorizer(security.DenyAll()),
 	)
 	c.Assert(err, qt.IsNil)
+	defer engine.Close()
 
 	privileged := []struct {
 		name string
