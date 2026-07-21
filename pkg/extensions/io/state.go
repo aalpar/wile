@@ -100,9 +100,9 @@ func (p *State) SetOutputPort(port *values.PortObject) {
 }
 
 // GetInputPort returns this engine's base input port, or a wrapped sentinel if
-// the parameter does not hold a textual input port. For non-VM callers (tests,
-// embedders) that read the base value without the resolve-time error contract of
-// resolveCurrentInputPort.
+// the parameter does not hold a textual input port. It serves non-VM callers
+// (tests, embedders) that read the base value directly, without going through
+// the resolve-time error contract of resolveCurrentInputPort.
 func (p *State) GetInputPort() (*values.PortObject, error) {
 	return currentTextualInputPort("current-input-port", p.inPort.Value())
 }
