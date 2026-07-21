@@ -32,6 +32,9 @@ func newEngine(t *testing.T) *wile.Engine {
 		wile.WithExtension(extio.Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
 	return engine
 }
 
