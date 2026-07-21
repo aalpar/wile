@@ -28,12 +28,14 @@ EXCLUDE_FILE="$EXAMPLES_DIR/.ci-exclude"
 # enough: BSD/MacPorts ship a `timeout` that rejects the flag, and picking it by
 # name alone makes EVERY example fail with a usage error. Probe each candidate
 # and take the first that works; gtimeout (coreutils) is tried first because on
-# macOS it is the GNU one. No candidate means run without a timeout.
+# macOS it is the GNU one. No candidate means run without a timeout. The
+# duration ($TIMEOUT) is folded into the array so that an empty TIMEOUT_CMD
+# expands to nothing — otherwise the bare duration would be run as a command.
 TIMEOUT_CMD=()
 for candidate in gtimeout timeout; do
     if command -v "$candidate" >/dev/null 2>&1 &&
        "$candidate" --kill-after=5 1 true >/dev/null 2>&1; then
-        TIMEOUT_CMD=("$candidate" --kill-after=5)
+        TIMEOUT_CMD=("$candidate" --kill-after=5 "$TIMEOUT")
         break
     fi
 done
@@ -62,7 +64,7 @@ while IFS= read -r -d '' scm; do
         continue
     fi
 
-    if "${TIMEOUT_CMD[@]}" "$TIMEOUT" "$SCHEME" --quiet -f "$scm" >/dev/null 2>&1; then
+    if "${TIMEOUT_CMD[@]}" "$SCHEME" --quiet -f "$scm" >/dev/null 2>&1; then
         passed=$((passed + 1))
     else
         failed=$((failed + 1))

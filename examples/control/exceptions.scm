@@ -22,10 +22,6 @@
      (else (search (+ s-pos 1)))))
   (search 0))
 
-;; Helper for make-error
-(define (make-error msg)
-  (error msg))
-
 ;; Example 1: Basic guard
 (display "Example 1: Catching exceptions with guard\n")
 (display "  ")
@@ -92,7 +88,7 @@
         (k #f))
       (lambda ()
         (display "Body executing...\n  ")
-        (raise (make-error "Test error"))
+        (error "Test error")
         (display "This won't print\n")))))
 (newline)
 
