@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-07-21 (Tier 1: recorded the **2026-07-17 full-review remediation RESOLVED** — all 14 confirmed defects fixed across PRs #808–#813 plus earlier `1af62cd2`; the CI gap that hid two is closed via `make test-examples`; P2/#10 resolved as a non-deviation, not a documented one. Prior: 2026-07-20 — Tier 1: transcribed the scope-keyed-globals arc's open successors out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`, where they were invisible to a TODO scan — `freeIds` name-keyed collapse and the `BindingID` scope-discriminator prerequisite joined the name-keyed-consumers section; new "successor work" section holds the two shorthand-`define` defects, export phase-probe order, no-sealed-base-above-phase-0, and the missing CHANGELOG for 16 commits of user-visible semantic change. Tier 5: `predeclareBinding` orphan slots. Two of the successors carry **unverified repros** and say so. Prior: 2026-07-14 — Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
+**Last Updated**: 2026-07-21 (Transcribed a full `plans/` open-work sweep into the tiers under dated "plans/ sweep" subsections — Tier 1 correctness deltas (stderr-flush-on-exit, SRFI-18 uncaught-exception), Tier 5 refactor/tech-debt deltas (extension annotation gaps, frame-reclaim B/C/D/G, iter.Seq Tier-2, staff-sweep residuals, docs sweep), Tier 2 feature deltas (--check/arity, pipeline seams, climbing-tower Tier 2, MCP LLM/SOTA, polynomial-ideal, recurrence, SRFI-204 match, TinyCLOS) — and flagged 3 stale-but-shipped plans for archival plus the possibly-superseded load-order plan. Also, Tier 1: recorded the **2026-07-17 full-review remediation RESOLVED** — all 14 confirmed defects fixed across PRs #808–#813 plus earlier `1af62cd2`; the CI gap that hid two is closed via `make test-examples`; P2/#10 resolved as a non-deviation, not a documented one. Prior: 2026-07-20 — Tier 1: transcribed the scope-keyed-globals arc's open successors out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`, where they were invisible to a TODO scan — `freeIds` name-keyed collapse and the `BindingID` scope-discriminator prerequisite joined the name-keyed-consumers section; new "successor work" section holds the two shorthand-`define` defects, export phase-probe order, no-sealed-base-above-phase-0, and the missing CHANGELOG for 16 commits of user-visible semantic change. Tier 5: `predeclareBinding` orphan slots. Two of the successors carry **unverified repros** and say so. Prior: 2026-07-14 — Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
 
 ### Current Project Status
 
@@ -387,6 +387,29 @@ re-confirm each repro before designing a fix.**
   written before C2 landed would have described half a change. C2 landed 2026-07-19, so this
   is now unblocked and is the cheapest open item in this tier. `docs/` was already brought
   current (Invariant 5 in `docs/environment/system.md`); the CHANGELOG is the remaining gap.
+
+### plans/ sweep — correctness deltas not previously in TODO (2026-07-21)
+
+Transcribed from a full `plans/` open-work triage (2026-07-21) — correctness work that lived
+only inside plan files, invisible to a TODO scan. Same provenance pattern as the scope-keyed
+successors above.
+
+- [ ] **stderr data can be lost on exit** [Correctness, S, plan verified not-started 2026-06-24]:
+  `main` reaches `os.Exit` at 9 sites without flushing buffered stderr, so a program that writes
+  to `current-error-port` and then exits (or errors out) can drop its last output. Fix per
+  `plans/2026-05-14-stderr-flush-on-exit.local.md`: an io `Closeable` extension hook + a
+  `run() int` wrapper in `main` so a deferred flush runs before exit. `NewCloseableExtension` /
+  `closeIO` do not exist yet. Bug-fix plus a small `run() int` refactor.
+- [ ] **SRFI-18 `thread-join!` does not wrap an uncaught exception** [Correctness/conformance, S,
+  design draft]: SRFI-18 requires a thread that dies on an uncaught exception to surface it to the
+  joiner as an `uncaught-exception` object; Wile does not yet. Design at
+  `plans/2026-06-27-srfi18-uncaught-exception-wrapper.local.md`, gated on one semantic decision (Q1).
+
+> **Anchor risk for the `BindingID` item above.** The load-order plan that item points at
+> (`plans/2026-07-18-load-order-independent-binding-resolution-design.md`) reads fully open but is
+> plausibly **superseded** by the scope-keyed-global-bindings arc that shipped (its C6 symptom was
+> fixed tactically via `1af62cd2`). If that plan is dead, the `BindingID` scope-discriminator item
+> needs a new home. Confirm before scheduling either.
 
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 
@@ -1003,6 +1026,55 @@ Directions documents — identify prioritized capability extensions. Priority se
 
 > Explicitly excluded as Part 7 non-goals in `plans/2026-04-17-algebra-foundations-directions.md` (no prospective consumer; documented here so the exclusion is visible rather than mistaken for oversight): tropical algebraic geometry, simplicial complexes / persistent homology, vector spaces as algebraic objects, holographic algorithms / Pfaffians, spectral graph matching, symmetric-function machinery beyond the LIS connection already tracked above.
 
+### plans/ sweep — feature & new-capability deltas (2026-07-21)
+
+Open feature work found only in `plans/` during the 2026-07-21 triage; recorded here so a TODO
+scan sees it. Spans embedding, tooling, macro system, and algebra — kept together by provenance
+rather than split across tiers.
+
+- [ ] **`--check` compile-only mode + call-site arity checking** [Embedding/Tooling, M, plan not-started]:
+  a `--check` CLI flag that compiles without running, plus static arity checking at generic call
+  sites (arity table threaded on the compile continuation). Arity checking is bug-catching, not
+  cosmetic. 6 tasks, none shipped. `plans/2026-07-19-compile-check-and-call-site-arity.md`.
+- [ ] **Pipeline seams as parameters** [Embedding, S–M, plan not-started]: expose `current-eval` /
+  `current-print` / `current-read` as parameters so embedders can intercept the REPL pipeline.
+  `plans/2026-07-11-scheme-pipeline-seams-design.local.md`.
+- [ ] **Climbing-tower Tier 2 — per-phase mutable-state instantiation** [Macro system, L, gated]:
+  Tier 1 shipped; Tier 2 (§6) instantiates fresh per-phase mutable state, plus the Boundary-2
+  resolution rework (§7.3). Explicitly gated on owner sign-off.
+  `plans/2026-07-10-climbing-tower-design.local.md`.
+- [ ] **Bootstrap self-check diagnostics (W2/W3)** [Diagnostic/guard, S]: a load post-condition
+  self-check (W2) and a nil-pin census (W3) over the bootstrap core.
+  `plans/2026-07-18-bootstrap-core-unification-and-signals.md`.
+- [ ] **`er-macro-transformer`-equivalent on the sets-of-scopes core** [Macro system, M, parked]:
+  chibi-derived ergonomics backlog #5 — an explicit-renaming procedural-macro entry point plus a
+  `datum->syntax` companion. `plans/2026-07-11-chibi-derived-ergonomics-backlog.local.md`.
+- [ ] **MCP LLM support / SOTA server** [Tooling, phased]: LLM-support phases
+  (`plans/2026-06-05-mcp-llm-support-design.local.md`, Phase 1 impl-ready) and the bring-to-SOTA
+  design (`plans/2026-04-17-mcp-server-sota-design.local.md`). Distinct from the "MCP triggering
+  rewrite (Lever A)" item in Tier 2 above.
+- [ ] **Copilot-review data mining** [Tooling, not-started]: mine Copilot PR-review data (Tier 2
+  target; Tiers 3–4 gated on Tier 2). `plans/2026-04-20-copilot-review-data-mining.local.md`.
+- [ ] **All-executed-code coverage tracking** [Tooling, queued]: extend Scheme coverage beyond
+  top-level templates to every executed form; blocked on algebra Tier B.
+  `plans/2026-04-23-coverage-library-tracking.local.md`.
+- [ ] **`(wile algebra polynomial-ideal)`** [Algebra, plan impl stalled]: univariate polynomial
+  ideal abstract domain. Design approved; impl 10/41 boxes ticked but **nothing in git** — likely
+  stalled mid-flight, confirm before resuming.
+  `plans/2026-06-09-polynomial-ideal-domain-{design,impl}.local.md`.
+- [ ] **`(wile algebra recurrence)` — set-closure & graph-reachability** [Algebra, impl 0/5]:
+  `plans/2026-04-16-recurrence-{categories-design,impl-plan}.local.md`.
+- [ ] **SRFI-204 `match`** [Standard library, design draft]:
+  `plans/2026-06-04-srfi-204-match-design.local.md`.
+- [ ] **TinyCLOS object system** [Standard library, design only]: classes, MOP, multimethods.
+  `plans/2026-06-24-tinyclos-object-system-design.local.md`.
+- [ ] **Kelso-Crawford many-to-many matching** [Algebra, gated]: stub, gated on the
+  `(wile algebra matroid)` §5.7 item above. `plans/2026-05-02-algebra-matching-many-to-many.local.md`.
+
+> Cross-repo (deliverables land in **wile-goast**, not this repo, but tracked here for
+> visibility): b3-c2-c6 **C5** Galois auto-lifting + **C6** belief graduation
+> (`plans/2026-03-25-b3-c2-c6-design.local.md`).
+
 ---
 
 ## Tier 3 — Tooling & Developer Experience
@@ -1202,6 +1274,40 @@ Items deferred for stated reasons. Re-evaluate when preconditions change.
 - [ ] **Match: consolidate bytecode type files** [Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Postponed]: Requires design decision on canonical pattern.
 - [ ] **Schemeutil: grab-bag reorganization** [Postponed]: Moving functions risks import cycle issues.
+
+### plans/ sweep — refactor & tech-debt deltas (2026-07-21)
+
+Open restructuring work found only in `plans/` during the 2026-07-21 triage.
+
+- [ ] **Extension annotation-coverage gaps** [Tech debt, M, mechanical]: the contract enforcement
+  stack shipped, but the annotations themselves are incomplete — charsets 0/20, system 2/6,
+  eval 13/16, introspection 5/8, threads 27/30, io 38/41. This is the concrete backlog behind the
+  "Extension API contracts Phase 2+" item in Tier 2.
+  `plans/2026-03-26-extension-contracts-{impl,phase2-design}.local.md`.
+- [ ] **Frame-reclaim precision Phases B/C/D/G** [Perf-precision, PAUSED]: sound-escape sibling (B),
+  `OpSelfTailCall` v2 at depth>0 (C), local-recursion release for named-let/letrec (D),
+  quasiquote unquote-aware reject (G). Value core (A/E) shipped; arc paused 2026-06-22, resume
+  gated on a workload profiling as frame-leak-bound. Superset of the "B3 effective capture" item in
+  Tier 4. `plans/2026-06-18-frame-reclaim-precision-coverage.local.md`.
+- [ ] **`iter.Seq` Tier-2 defensive-copy accessors** [Tech debt, M]: 10 steps, sequenced after a
+  charsets structural refactor ships. `plans/2026-05-05-iter-seq-cascade.local.md`.
+- [ ] **Staff-sweep structural residuals** [Refactor, M]: `CompileTimeContinuation` God-object,
+  `engine.go` facade, "N parallel tables" (ValueType ×5, docparse ×3), parser cluster. The `[S]`
+  findings + Tier-1 already shipped. `plans/2026-07-01-staff-engineer-sweep.md`.
+- [ ] **Unscheduled design-only notes** [Refactor/architecture]: engine-services generic keyed slot
+  (`plans/2026-07-10-engine-services-generic-keyed-slot-design.local.md`), layered-environment
+  architecture direction (`plans/2026-06-13-layered-environment-architecture.local.md`),
+  data-driven promoted-primitive inline registry
+  (`plans/2026-06-26-promoted-primitive-inline-registry.local.md`, DRAFT v2 awaiting review).
+- [ ] **`docs/` audit sweep + §4 review audit AU.1** [Docs/verification]: the docs-subsystem sweep
+  (`plans/2026-04-23-docs-sweep-impl.local.md`, follows algebra-docs) and the one unstarted audit
+  task in `plans/2026-07-15-review-2026-07-13-sec4-remediation.md` (22/23 closed).
+
+> **Stale-status housekeeping (planlint evidence).** Three sizable plans show 0/all-unchecked
+> boxes but are fully shipped — the checkboxes lie. Archive to `memory/` and stop trusting their
+> boxes: `2026-07-17-review-remediation.md` + `-impl.md` (all 14 defects landed, TODO already
+> RESOLVED) and `2026-07-12-numeric-zero-and-tier2-fold.local.md` (Tier-2 fold + exact-zero cluster
+> landed). These are exactly the drift the `make planlint` items (Top Priority + Tier 3) target.
 
 ---
 
