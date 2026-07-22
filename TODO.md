@@ -424,6 +424,20 @@ re-confirm each repro before designing a fix.**
     RED (`PWNED` / `let-syntax` "no compiler") and quarantined, #2 confirmed already-GREEN (`c`).
     Arm-trace spike: #1 mis-resolves at **arm 2 (NextPhase)** with a nil pin — pin goes after
     arm 1, before arm 2 (R1-faithful).
+    - **Reorder (execution finding, 2026-07-22):** D3 → phase-0 `sealedBase` regressed the
+      general `Dialect.Forms().Remove()` contract (removed-form expander leaks to runtime value
+      resolution; 3 dialect tests). Resolves design §9 gate #4: phase-0 value frame is NOT
+      collision-free for compile-time handlers. Fix = route D3 into the phase-1 `sealedExpandBase`
+      (design's own contingency); D1 sequenced first, D3 folds into it. Plans updated.
+    - **Phase 1′ DONE (D1 + retargeted D3):** carved per-namespace `sealedExpandBase` (phase-1
+      sealed frame, parent = `sealedBase`); `AtPhase` receiver-branch + `SealedExpandBaseTarget()`
+      route bootstrap macros AND special-form expanders into it; `phaseParent` reparents phase-1
+      only (library frames stay flat islands); enumeration `collect()` added (search + BoundNames).
+      **#3 GREEN** (special forms shadow, not corrupt); 3 dialect removed-form tests GREEN; census
+      retargeted to `sealedExpandBase` (still 47); march-hare + hermetic + climbing-tower GREEN;
+      `,apropos cond` still surfaces bootstrap macros. Gates: lint + build + covercheck (all 41 ≥80%)
+      + `-race` all GREEN. #1 still RED-but-skipped (needs D0+D2). Next: Phase 2′ (D0 reorder + D2
+      pin consult).
 
 - [x] **CHANGELOG now documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: added a
   `[Unreleased] → Changed` entry covering the `8afeb66a…4f73936d` arc and its user-visible

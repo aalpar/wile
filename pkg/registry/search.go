@@ -268,6 +268,10 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 	// phase walk above never reaches it. Collect it so ,apropos still surfaces
 	// binding-level docs on sealed entries, mirroring Namespace.BoundSymbolNames.
 	collect(ns.SealedBase())
+	// Likewise the sealed EXPAND base (phase 1): bootstrap macros and special-form
+	// expanders live here post-carve, also off the phase walk (reached only via the
+	// parent chain), so collect it or their names/docs vanish from ,apropos.
+	collect(ns.SealedExpandBase())
 
 	return q
 }

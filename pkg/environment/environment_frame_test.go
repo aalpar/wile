@@ -322,8 +322,11 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, compile.GlobalEnvironment(), qt.Not(qt.Equals), expand.GlobalEnvironment())
 
 	// Phase environments parent to the frozen sealed base (hermetic), skipping the
-	// mutable runtime frame: a phase-1/2 lookup cannot see phase-0 user defines.
-	qt.Assert(t, expand.Parent(), qt.Equals, topLevel.Namespace().SealedBase())
+	// mutable runtime frame: a phase-1/2 lookup cannot see phase-0 user defines. Phase 1
+	// (expand) parents one level further, to the sealed EXPAND base (D1), which parents to
+	// the phase-0 sealed base; phase 2 (compile) parents straight to the sealed base.
+	qt.Assert(t, expand.Parent(), qt.Equals, topLevel.Namespace().SealedExpandBase())
+	qt.Assert(t, expand.Parent().Parent(), qt.Equals, topLevel.Namespace().SealedBase())
 	qt.Assert(t, compile.Parent(), qt.Equals, topLevel.Namespace().SealedBase())
 
 	// After the sealed-base carve, TopLevel() returns the structural root — the

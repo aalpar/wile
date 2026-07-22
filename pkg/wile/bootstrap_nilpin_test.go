@@ -90,7 +90,10 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	}()
 
 	env := eng.Environment()
-	expandEnv := env.Expand()
+	// D1 (2026-07-22): bootstrap macros now live in the sealed EXPAND base (phase 1),
+	// not the mutable expand child (env.Expand()), which holds only user define-syntax.
+	// Walk the sealed expand base so the census still sees the bootstrap macros.
+	expandEnv := env.Namespace().SealedExpandBase()
 
 	pins := collectNilPins(t, env, expandEnv)
 
