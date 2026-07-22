@@ -43,12 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   invariant). The shorthand body now gets the identical treatment a lambda body gets. The
   form is preserved (not desugared), so the self-tail-call and frame-reclaim optimizations
   are unaffected.
-- **A library-local `define-syntax` now shadows a same-named imported macro.** A library
-  that imported a macro and then defined its own macro of that name used and exported the
-  *imported* one — in both the export surface and the library's own body — while the
-  variable analogue shadowed correctly. Imported macros were mirrored into the library's
-  runtime frame, which the export probe (and body macro resolution) consulted first;
-  imported macros now install into the expand frame only. Imported macros stay usable.
+- **A local `define-syntax` now shadows a same-named imported macro.** Importing a macro and
+  then defining your own macro of that name used the *imported* one — at the top level and
+  inside a library, in both the export surface and the body — while the variable analogue
+  shadowed correctly. Imported macros were mirrored into the runtime frame, which macro
+  resolution and the export probe consulted first; imported macros now install into the
+  expand frame only (on both the library-internal and top-level import paths). Imported
+  macros stay usable.
 - **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
   deterministic when a closed send races a ready receive" described `channel-select`
   as a Scheme primitive. There has never been one; the fix it describes was to the

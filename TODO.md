@@ -390,10 +390,16 @@ re-confirm each repro before designing a fix.**
   `{libScope}`) in both `findLibraryBinding`'s runtime-first probe and body macro resolution.
   **Fix** (the plan's "don't mirror syntax into the runtime frame" option): a syntax binding now
   installs into Expand only; variables still install into runtime, where a local define already
-  shadows the import through the shared frame. Guard:
-  `TestLibraryLocalMacroShadowsImportedMacro` (`pkg/wile`) — export + body + a
-  plain-imported-macro-still-usable regression, RED before / GREEN after. Full stdlib/algebra
-  `.scm` suite + all Go tests green (imported macros stay usable).
+  shadows the import through the shared frame. Applied to **both** install paths —
+  `copyLibraryBindingsDirect` (library-internal) and `CopyLibraryBindingsToEnvAtPhase`
+  (top-level / `(environment …)`); the latter completion was surfaced by the post-fix
+  `/crosscheck` (the first pass fixed only the library path, leaving a top-level
+  import-then-redefine still shadowed). Guard: `TestLibraryLocalMacroShadowsImportedMacro`
+  (`pkg/wile`) — export + library-body + top-level + renamed-import + plain-imported-still-usable,
+  RED before / GREEN after. Full stdlib/algebra `.scm` suite + all Go tests green. **Known
+  residual** (below the fix's bar): because syntax→expand and variable→runtime now land in
+  different frames, a cross-*kind* same-name clash across two imported libraries (macro `foo`
+  vs variable `foo`) is no longer conflict-detected per R7RS §5.6; same-kind clashes still are.
 
 - [ ] **No sealed base above phase 0** [Correctness, M, 2026-07-19 — repro VERIFIED 2026-07-21
   (top-level, not library); fix DEFERRED as architectural]: **the reported library-import vector
