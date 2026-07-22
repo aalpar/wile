@@ -98,6 +98,7 @@ var knownValueTypes = []string{
 	"*values.Thread",
 	"*values.Mutex",
 	"*values.ConditionVariable",
+	"*values.UncaughtException",
 	"*values.RWMutex",
 	"*values.Once",
 	"*values.AtomicBox",

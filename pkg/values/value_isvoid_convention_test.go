@@ -73,6 +73,7 @@ var allValueExemplars = []Value{
 	(*SyntaxVector)(nil),
 	(*Thread)(nil),
 	(*Time)(nil),
+	(*UncaughtException)(nil),
 	(*Vector)(nil),
 	// Value-receiver singletons — documented exceptions.
 	voidType{},
