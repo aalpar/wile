@@ -75,9 +75,10 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"import", (*ExpanderTimeContinuation).expandImportForm},
 }
 
-// RegisterPrimitiveExpanders binds all primitive expanders in the expand-time
-// environment (env.Expand()). These are looked up by ExpandPrimitiveForm()
-// when the expander encounters a special form.
+// RegisterPrimitiveExpanders binds all primitive expanders in the sealed EXPAND base
+// (env.SealedExpandBaseTarget() — the phase-1 sealed frame; the flat frame's own expand
+// child for a library env). These are looked up by ExpandPrimitiveForm() when the expander
+// encounters a special form.
 //
 // Each primitive has different expansion behavior:
 //   - quote, define-syntax, define-library, quasiquote: return unchanged (no expansion)
