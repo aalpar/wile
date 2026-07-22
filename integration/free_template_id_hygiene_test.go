@@ -44,7 +44,7 @@ func TestFreeTemplateIdHygiene(t *testing.T) {
 			code: `(define-syntax guard-aux (syntax-rules () ((_ r ...) 'PWNED)))
 			       (guard (e (else 'x)) (raise 'y))`,
 			expected: "x",
-			closedBy: "Phase 3 (D0+D1+D2)",
+			closedBy: "", // closed by Phase 2′ (D0 pin population + D2 pin consultation)
 		},
 		{
 			name: "guard2_letsyntax_local_no_capture",
@@ -109,4 +109,64 @@ func TestFreeTemplateIdHygiene_CoIntroducedLetSyntaxBeatsGlobalPin(t *testing.T)
 	result, err := engine.EvalMultiple(context.Background(), code)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "LOCAL") // the co-introduced helper, not 'GLOBAL
+}
+
+// TestFreeTemplateIdHygiene_Section6Cases covers the design's §6 soundness cases for the
+// D2 pin consultation beyond #1 (which is in TestFreeTemplateIdHygiene). Each is green after
+// Phase 2′ (D0+D2) and must stay green.
+func TestFreeTemplateIdHygiene_Section6Cases(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			// §6 case 1: a macro that GENERATES an inner macro referencing a define the
+			// outer expansion introduces. The generated reference has no stable def-time
+			// pin (nil), so D2 must fall THROUGH to the current use-site walk to reach the
+			// introduced define. In-process analogue of march-hare/jabberwocky.
+			name: "case1_generated_macro_nil_pin_fallthrough",
+			code: `(define-syntax make-getter
+			         (syntax-rules ()
+			           ((_ name)
+			            (begin
+			              (define secret 42)
+			              (define-syntax name (syntax-rules () ((_) secret)))))))
+			       (make-getter get-secret)
+			       (get-secret)`,
+			expected: "42",
+		},
+		{
+			// §6 case 2 (hygiene direction): a USE-SITE local variable named like a
+			// template free-id (a macro) must NOT capture it. guard's template references
+			// guard-aux; a use-site (let ((guard-aux …))) variable of a different scope does
+			// not shadow it — hasLocalVariableBinding is false, the pin fires, guard works.
+			name: "case2b_use_site_local_var_no_capture",
+			code: `(let ((guard-aux 'i-am-a-variable))
+			         (guard (e (else 'caught)) (raise 'x)))`,
+			expected: "caught",
+		},
+		{
+			// §6 case 4: a pinned template reference and a bare use-site reference of the
+			// same name resolve to DIFFERENT bindings. guard's template ref to guard-aux is
+			// pinned to the sealed bootstrap guard-aux (so guard still works); a direct
+			// (guard-aux …) call reaches the user's top-level redefinition. present/absent
+			// pin IS the def-site/use-site split.
+			name: "case4_pinned_vs_bare_different_bindings",
+			code: `(define-syntax guard-aux (syntax-rules () ((_ . r) 'USER-GUARD-AUX)))
+			       (list (guard (e (else 'guard-works)) (raise 'x))
+			             (guard-aux ignored))`,
+			expected: "(guard-works USER-GUARD-AUX)",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
 }

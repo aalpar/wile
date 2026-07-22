@@ -320,38 +320,70 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
 
-// lookupMacroBinding resolves sym0 to a macro (syntax) binding, or nil.
+// lookupMacroBinding resolves the reference sym to a macro (syntax) binding, or nil.
 //
-// Three places to look, in order: the local env (let-syntax / letrec-syntax), the
-// expand phase one step up from the expanding frame (the symmetric counterpart of
-// define-syntax storage — expanding phase-N code reads macros at phase N+1, so a
-// macro defined inside a transformer body resolves at its climbed phase; at
-// phaseLevel 0, NextPhase() == Expand()), and finally the library env named by any
-// scope the symbol carries, which is how a library macro reaches an UNEXPORTED
-// helper macro of its own library.
+// Four probes, in order: (arm 1) the local env (let-syntax / letrec-syntax), scope-precise;
+// (D2) the definition-site pin sym carries as a free template identifier — consulted between
+// arms 1 and 2 so a co-introduced keyword still shadows it but a use-site define-syntax
+// cannot capture it; (arm 2) the expand phase one step up from the expanding frame (the
+// symmetric counterpart of define-syntax storage — expanding phase-N code reads macros at
+// phase N+1, so a macro defined inside a transformer body resolves at its climbed phase; at
+// phaseLevel 0, NextPhase() == Expand()); and (arm 3) the library env named by any scope the
+// symbol carries, which is how a library macro reaches an UNEXPORTED helper macro of its own
+// library.
 //
-// It exists because ExpandOnce had only the first two. A macro reachable solely
-// through the library-scope arm was therefore reported by (expand-once …) as "not a
-// macro" — a real macro call that the expander itself expands perfectly well. Two
-// copies of a three-step lookup is how one of them ends up two steps long.
-func (p *ExpanderTimeContinuation) lookupMacroBinding(sym0 *values.Symbol, symbolScopes []*syntax.Scope) *environment.Binding {
-	// Resolve under the reference's own scope set, not nil. GetBinding documents
-	// nil as MATCH ANY, which takes the first live slot of the name and so lets a
-	// bare user reference reach a keyword introduced inside a macro expansion.
-	// This is only sound once binders are scope-keyed at creation: a wildcard read
-	// and a wildcard write were cancelling, so fixing either alone relocates the
-	// asymmetry rather than closing it.
+// It takes the full SyntaxSymbol (not the bare *values.Symbol) so it can read the pin; the
+// callers keep their own sym.Unwrap() for the hasLocalVariableBinding / LookupPrimitiveExpander
+// checks. It exists because ExpandOnce once had only arms 1 and 2. A macro reachable solely
+// through the library-scope arm was therefore reported by (expand-once …) as "not a macro" — a
+// real macro call that the expander itself expands perfectly well.
+func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, symbolScopes []*syntax.Scope) *environment.Binding {
+	sym0, ok := sym.Unwrap().(*values.Symbol)
+	if !ok {
+		return nil
+	}
+
+	// ARM 1: current-phase local+global, scope-precise. Resolve under the reference's
+	// own scope set, not nil. GetBinding documents nil as MATCH ANY, which takes the
+	// first live slot of the name and so lets a bare user reference reach a keyword
+	// introduced inside a macro expansion. This is only sound once binders are
+	// scope-keyed at creation: a wildcard read and a wildcard write were cancelling, so
+	// fixing either alone relocates the asymmetry rather than closing it. A co-introduced
+	// let-syntax keyword (shares the intro scope) is caught HERE and MUST win over the pin
+	// (the R1 invariant); a use-site let-syntax binder of a different scope is refused here.
 	bnd := p.env.GetBinding(sym0, symbolScopes)
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
 	}
 
+	// D2: definition-site pin. A free template identifier carrying a GlobalIndex resolves
+	// to its DEFINITION-site macro binding here — AFTER arm 1 (so a co-introduced
+	// let-syntax keyword, which shares the intro scope, still shadows it: the R1 ordering,
+	// mirrored from compile_time_continuation.go's post-GetLocalIndex tryResolvedBinding)
+	// and BEFORE the use-site NextPhase/library arms (so a top-level or use-site
+	// define-syntax cannot capture it). A directly typed reference carries no pin and falls
+	// straight through — the present/absent-pin split IS the def-site/use-site split. The
+	// pin is a specific (frame, slot) via GetOwnGlobalBinding (no parent walk), strictly
+	// more specific than the scope walk, so it cannot reintroduce a wildcard match; and the
+	// BindingTypeSyntax filter excludes compile-time handlers (primitive expanders / syntax
+	// compilers are BindingTypePrimitive), so a pin resolving to one falls through.
+	gi, ok := sym.ResolvedBinding.(*environment.GlobalIndex)
+	if ok && gi != nil {
+		pinned := gi.Env.GetOwnGlobalBinding(gi)
+		if pinned != nil && pinned.BindingType() == environment.BindingTypeSyntax {
+			return pinned
+		}
+	}
+
+	// ARM 2: NextPhase (define-syntax storage). A top-level user (define-syntax …) lands
+	// here; without the pin above, this is where the #1 capture happened.
 	expandEnv := p.env.NextPhase()
 	bnd = expandEnv.GetBinding(sym0, symbolScopes)
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
 	}
 
+	// ARM 3: library-scope (unexported helper macro of the symbol's own library).
 	if p.env.Namespace() == nil {
 		return nil
 	}
@@ -399,7 +431,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 	hasLocalBinding := p.hasLocalVariableBinding(sym0, sym.Scopes())
 
 	if !hasLocalBinding {
-		bnd := p.lookupMacroBinding(sym0, sym.Scopes())
+		bnd := p.lookupMacroBinding(sym, sym.Scopes())
 		if bnd != nil {
 			return p.expandMacroInvocation(sym, expr, bnd)
 		}
@@ -583,7 +615,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// two-step version, missing the library arm, so (expand-once …) reported a macro
 	// reachable only through a library scope as not-a-macro, even though expansion
 	// itself handled it fine.
-	bnd := p.lookupMacroBinding(sym0, sym.Scopes())
+	bnd := p.lookupMacroBinding(sym, sym.Scopes())
 	if bnd == nil {
 		// Not a macro - no expansion
 		return expr, false, nil

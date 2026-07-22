@@ -156,16 +156,12 @@
 ;; template variable. Opaque records are hidden from record? and
 ;; record-type but their type-specific predicates and accessors work
 ;; normally.
-(define-syntax define-record-type
-  (syntax-rules ()
-    ((define-record-type type (constructor constructor-tag ...) predicate field-spec ...)
-     (define-record-type-impl make-record-type type (constructor constructor-tag ...) predicate () () field-spec ...))))
-
-(define-syntax define-opaque-record-type
-  (syntax-rules ()
-    ((define-opaque-record-type type (constructor constructor-tag ...) predicate field-spec ...)
-     (define-record-type-impl make-opaque-record-type type (constructor constructor-tag ...) predicate () () field-spec ...))))
-
+;; define-record-type-impl is defined BEFORE its two delegators (D0, 2026-07-22)
+;; so that their templates, which freely reference define-record-type-impl, pin
+;; that reference to its definition-site binding at macro-definition time — a
+;; use-site (define-syntax define-record-type-impl …) then cannot capture it (D2,
+;; R7RS 4.3.2). It references only define/begin + record primitives (registered
+;; before bootstrap macros), so it compiles standalone here.
 (define-syntax define-record-type-impl
   (syntax-rules ()
     ((define-record-type-impl maker type (constructor constructor-tag ...) predicate (field-name ...) (defn ...))
@@ -184,6 +180,16 @@
        (field-name ... field-tag)
        (defn ... (begin (define accessor (record-accessor type 'field-tag)) (define modifier (record-modifier type 'field-tag))))
        rest ...))))
+
+(define-syntax define-record-type
+  (syntax-rules ()
+    ((define-record-type type (constructor constructor-tag ...) predicate field-spec ...)
+     (define-record-type-impl make-record-type type (constructor constructor-tag ...) predicate () () field-spec ...))))
+
+(define-syntax define-opaque-record-type
+  (syntax-rules ()
+    ((define-opaque-record-type type (constructor constructor-tag ...) predicate field-spec ...)
+     (define-record-type-impl make-opaque-record-type type (constructor constructor-tag ...) predicate () () field-spec ...))))
 
 ;; Multiple values binding forms
 ;;
