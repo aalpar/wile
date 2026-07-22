@@ -95,19 +95,25 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 func TestPhaseRegistry_PhaseEnvParentsToSealedBase(t *testing.T) {
 	topLevel := NewNamespaceFrame() // ns.runtime
 	sealedBase := topLevel.Namespace().SealedBase()
+	sealedExpandBase := topLevel.Namespace().SealedExpandBase()
 
 	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
 	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
 
-	// Phase frames parent to the frozen sealed base (hermetic), NOT the mutable
-	// runtime frame.
-	qt.Assert(t, phase1.Parent(), qt.Equals, sealedBase)
-	qt.Assert(t, phase2.Parent(), qt.Equals, sealedBase)
+	// Phase 1 (expand) parents to the sealed EXPAND base (D1), which in turn parents to
+	// the phase-0 sealed base — the new middle frame. Bootstrap macros/expanders live in
+	// sealedExpandBase, immutable, while a user define-syntax shadows in this mutable
+	// child. Every other phase parents straight to the phase-0 sealed base (hermetic),
+	// NOT the mutable runtime frame — confirming the carve is phase-1-only.
+	qt.Assert(t, phase1.Parent(), qt.Equals, sealedExpandBase)     // was: sealedBase
+	qt.Assert(t, sealedExpandBase.Parent(), qt.Equals, sealedBase) // NEW middle frame
+	qt.Assert(t, phase2.Parent(), qt.Equals, sealedBase)           // unchanged (phase-1-only radius)
 	qt.Assert(t, phase1.Parent(), qt.Not(qt.Equals), topLevel)
 
 	// Climbing-tower hermeticity: higher phases created on demand (the climb adds
 	// HIGHER siblings) must ALSO parent to the frozen sealed base, never to a lower
-	// phase frame — the climb must never reintroduce a phase->phase parent edge.
+	// phase frame — the climb must never reintroduce a phase->phase parent edge. Only
+	// phase 1 carves; phases 2/3/5 stay on the phase-0 sealed base.
 	phase3 := topLevel.phases.GetOrCreate(3)
 	phase5 := topLevel.phases.GetOrCreate(5)
 	qt.Assert(t, phase3.Parent(), qt.Equals, sealedBase)

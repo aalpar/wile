@@ -212,6 +212,19 @@ type Namespace struct {
 	// a report namespace copies the parent's into its own (see NewSchemeReportNamespace).
 	sealedBase *EnvironmentFrame
 
+	// sealedExpandBase is the per-NAMESPACE immutable EXPAND frame (phase 1): bootstrap
+	// macros + special-form primitive expanders, parent = sealedBase. It is the lexical
+	// parent of the mutable expand child (envs[PhaseExpand]); it is NOT a PhaseRegistry
+	// entry, reached only via the parent chain, mirroring sealedBase at phase 0. It makes a
+	// top-level (define-syntax foo …) shadow in the mutable child rather than overwrite the
+	// pinned bootstrap macro/expander in place, AND keeps compile-time handlers off the
+	// phase-0 value frame (a handler there is reachable by runtime value resolution and leaks
+	// a dialect-removed form's #<primitive-expander:…> into the value world). Fresh (empty)
+	// per namespace; a report namespace gets a fresh one too, matching that
+	// scheme-report-environment carries no bootstrap macros. See
+	// plans/2026-07-22-free-template-id-hygiene-impl.local.md (D1+D3).
+	sealedExpandBase *EnvironmentFrame
+
 	// envMap is an optional virtual environment variable map.
 	// When non-nil, envvars primitives read from this map instead of
 	// the process environment (os.Getenv/os.Environ), bypassing the
@@ -300,6 +313,16 @@ func (p *Namespace) SealedBase() *EnvironmentFrame {
 	return p.sealedBase
 }
 
+// SealedExpandBase returns this Namespace's immutable sealed EXPAND-phase frame (phase 1):
+// bootstrap macros and special-form primitive expanders, lexical parent of the mutable expand
+// child. PER-NAMESPACE (like SealedBase), reached only via the parent chain, never a
+// PhaseRegistry entry. Enumeration sites (,apropos, REPL completion) must collect it explicitly
+// or bootstrap-macro names/docs vanish from introspection. See
+// plans/2026-07-22-free-template-id-hygiene-impl.local.md (D1).
+func (p *Namespace) SealedExpandBase() *EnvironmentFrame {
+	return p.sealedExpandBase
+}
+
 // BoundSymbolNames returns a freshly-consed list of every symbol bound in the
 // namespace's runtime, spanning BOTH the mutable runtime global (user defines) and
 // the sealed base (primitives + sealed stdlib procedures). It is the shared body of
@@ -366,6 +389,7 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 		collect(p.phases.Get(phase))
 	}
 	collect(p.sealedBase)
+	collect(p.sealedExpandBase) // phase-1 sealed frame: bootstrap macros/expanders, not a phase entry
 	sort.Strings(names)
 	return names
 }
@@ -1074,6 +1098,19 @@ func wireRuntimeFrames(ns *Namespace, sealedGlobal, mutableGlobal *GlobalEnviron
 		phaseLevel: PhaseRuntime,
 		namespace:  ns,
 	}
+	// sealedExpandBase is the phase-1 sibling of sealedBase: the immutable home of bootstrap
+	// macros and special-form primitive expanders. Parent = sealedBase; a fresh, empty global
+	// (bootstrap fills it for a live engine, or it stays empty for a report namespace, which
+	// carries no bootstrap macros). Built unconditionally here — the single wireRuntimeFrames
+	// funnel — so every namespace-builder (NewNamespace, NewChildNamespace/profile,
+	// NewSchemeReportNamespace) gets it; the WithStableBasePrimitives opt-in-skip is the
+	// cautionary precedent for NOT gating this behind an option.
+	ns.sealedExpandBase = &EnvironmentFrame{
+		parent:     ns.sealedBase,
+		global:     newGlobalEnvironmentFrameForNamespace(ns),
+		phaseLevel: PhaseExpand,
+		namespace:  ns,
+	}
 	ns.runtime = &EnvironmentFrame{
 		parent:     ns.sealedBase,
 		global:     mutableGlobal,
@@ -1083,6 +1120,7 @@ func wireRuntimeFrames(ns *Namespace, sealedGlobal, mutableGlobal *GlobalEnviron
 	ns.phases = newPhaseRegistryForNamespace(ns) // envs[PhaseRuntime] = ns.runtime
 	ns.runtime.phases = ns.phases
 	ns.sealedBase.phases = ns.phases
+	ns.sealedExpandBase.phases = ns.phases
 }
 
 // newPhaseRegistryForChild creates a PhaseRegistry for a child environment

@@ -138,14 +138,34 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 		// returns the frozen sealedBase — skipping user defines + phase-0 imports,
 		// which is the hermeticity cut. For a flat NewChildRuntime library frame
 		// it returns the frame itself, leaving library visibility unchanged.
-		// See plans/2026-07-10-hermetic-phases-core-impl.local.md.
-		parent:     p.envs[PhaseRuntime].SealedBaseTarget(),
+		// Phase 1 (expand) reparents one level further to the sealed EXPAND base
+		// (phaseParent) so bootstrap macros/expanders are immutable while a user
+		// define-syntax shadows in this mutable child.
+		// See plans/2026-07-10-hermetic-phases-core-impl.local.md and
+		// plans/2026-07-22-free-template-id-hygiene-impl.local.md.
+		parent:     phaseParent(p, phase),
 		global:     global,
 		phaseLevel: phase,
 		phases:     p,
 		namespace:  p.owner,
 	}
 	return q
+}
+
+// phaseParent selects a phase frame's lexical parent. Phase 1 (expand) parents to the sealed
+// EXPAND base so bootstrap macros/expanders are immutable while a user define-syntax shadows in
+// the mutable child; every other phase parents straight to the phase-0 sealed-base target,
+// preserving hermeticity and the climbing-tower invariant that higher phases never introduce a
+// phase->phase parent edge. The reparent applies ONLY to a namespace that OWNS a sealed base
+// (base == p.owner.sealedBase): a flat NewChildRuntime library frame's SealedBaseTarget() is the
+// frame itself and it has no sealed expand base, so it stays a flat island (guarding library
+// isolation).
+func phaseParent(p *PhaseRegistry, phase Phase) *EnvironmentFrame {
+	base := p.envs[PhaseRuntime].SealedBaseTarget()
+	if phase == PhaseExpand && p.owner != nil && p.owner.sealedExpandBase != nil && base == p.owner.sealedBase {
+		return p.owner.sealedExpandBase
+	}
+	return base
 }
 
 // Phases returns all currently instantiated phase levels.

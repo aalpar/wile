@@ -69,7 +69,7 @@ func TestFreeTemplateIdHygiene(t *testing.T) {
 			code: `(define-syntax let-syntax (syntax-rules () ((_ bindings body ...) 'shadowed)))
 			       (let-syntax ((tmp (syntax-rules () ((_) 42)))) (tmp))`,
 			expected: "shadowed",
-			closedBy: "Phase 1 (D3)",
+			closedBy: "", // closed by Phase 1′ (D1+D3): special-form expanders now in the sealed expand base
 		},
 	}
 	for _, tc := range tcs {

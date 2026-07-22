@@ -130,6 +130,42 @@ func TestSealedBase_BootstrapProcedureInSealedBase(t *testing.T) {
 	qt.Assert(t, inSealed, qt.IsNotNil) // owned by the sealed base
 }
 
+// TestSealedExpandBase_BootstrapMacroLivesInSealedExpandBase verifies a Scheme-defined
+// bootstrap macro (cond) lands in the sealed EXPAND base (phase 1), not the mutable expand
+// child — the phase-1 analogue of TestSealedBase_BootstrapProcedureInSealedBase (D1). A
+// later top-level (define-syntax cond …) is thus a shadow in the mutable child, not an
+// in-place overwrite of the pinned bootstrap macro (closes the #1 stability leg).
+func TestSealedExpandBase_BootstrapMacroLivesInSealedExpandBase(t *testing.T) {
+	ns := testhelpers.NewBootstrappedNamespace(t)
+	condSym := values.NewSymbol("cond")
+
+	// Own-frame probe (no parent walk): the mutable expand child vs. the sealed expand base.
+	inMutableExpand := ns.Runtime().Expand().GlobalEnvironment().GetGlobalIndex(condSym)
+	inSealedExpand := ns.SealedExpandBase().GlobalEnvironment().GetGlobalIndex(condSym)
+
+	qt.Assert(t, inMutableExpand, qt.IsNil)   // shadowable (absent from the mutable expand child's own frame)
+	qt.Assert(t, inSealedExpand, qt.IsNotNil) // owned by the sealed expand base
+}
+
+// TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase verifies a special-form
+// primitive expander (let-syntax) lands in the sealed EXPAND base after the D3 retarget, not
+// the mutable expand child. This is what makes a user (define-syntax let-syntax …) a clean
+// shadow instead of an in-place corruption of the installed expander (closes #3), while
+// keeping the expander — a compile-time handler — off the phase-0 value frame (so it cannot
+// leak into runtime value resolution).
+func TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase(t *testing.T) {
+	ns := testhelpers.NewBootstrappedNamespace(t)
+	letSyntaxSym := values.NewSymbol("let-syntax")
+
+	inMutableExpand := ns.Runtime().Expand().GlobalEnvironment().GetGlobalIndex(letSyntaxSym)
+	inSealedExpand := ns.SealedExpandBase().GlobalEnvironment().GetGlobalIndex(letSyntaxSym)
+	inSealedBase := ns.SealedBase().GlobalEnvironment().GetGlobalIndex(letSyntaxSym)
+
+	qt.Assert(t, inMutableExpand, qt.IsNil)   // shadowable (absent from the mutable expand child)
+	qt.Assert(t, inSealedExpand, qt.IsNotNil) // owned by the sealed expand base (phase 1)
+	qt.Assert(t, inSealedBase, qt.IsNil)      // NOT on the phase-0 value frame (no runtime-value leak)
+}
+
 // TestBoundNamesAcrossPhases verifies the all-phases name walk that backs
 // Engine.BoundNames and REPL completion: it must span the sealed base (so
 // primitives like car and bootstrap procedures like caar appear, not just the

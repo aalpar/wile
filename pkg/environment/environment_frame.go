@@ -249,6 +249,15 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
 func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
+	// Bootstrap macros compile with env == sealedBase (LoadBootstrapCore routes their load
+	// through runtimeTarget); their define-syntax writes go to p.env.NextPhase() ==
+	// AtPhase(PhaseExpand). Route those — and only those, receiver == the sealed base — into
+	// the sealed expand base, so a bootstrap macro is immutable while a user define-syntax
+	// (compiled with env == the mutable runtime, guard false) shadows in the mutable expand
+	// child. Symmetric with SealedBaseTarget's ns.runtime == p keying.
+	if phase == PhaseExpand && p.namespace != nil && p.namespace.sealedBase == p && p.namespace.sealedExpandBase != nil {
+		return p.namespace.sealedExpandBase
+	}
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
 		panic(werr.WrapForeignErrorf(
@@ -1011,4 +1020,21 @@ func (p *EnvironmentFrame) SealedBaseTarget() *EnvironmentFrame {
 		return ns.sealedBase
 	}
 	return p
+}
+
+// SealedExpandBaseTarget returns the frame that should receive sealed (immutable) EXPAND-phase
+// bindings — the special-form primitive expanders — when a registry is applied with this frame
+// as its target. For a namespace-owning runtime frame (this frame == its namespace's Runtime())
+// that is the namespace's sealed EXPAND base (phase 1); for a flat library frame
+// (NewChildRuntime, which has no sealed expand base) it is the frame's own expand phase,
+// preserving the pre-carve target (env.Expand()). Parallels SealedBaseTarget (phase 0) for the
+// expand phase. It is direct (no AtPhase dependency), so the expander registration and the
+// bootstrap-macro AtPhase redirect are independent mechanisms into the same frame. See
+// plans/2026-07-22-free-template-id-hygiene-impl.local.md (D1+D3).
+func (p *EnvironmentFrame) SealedExpandBaseTarget() *EnvironmentFrame {
+	ns := p.namespace
+	if ns != nil && ns.runtime == p && ns.sealedExpandBase != nil {
+		return ns.sealedExpandBase
+	}
+	return p.Expand()
 }

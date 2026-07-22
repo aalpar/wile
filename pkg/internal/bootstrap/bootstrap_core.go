@@ -76,7 +76,14 @@ func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, r
 	}
 
 	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
+	// Bootstrap macros load against runtimeTarget (= the sealed base for a namespace-owning
+	// env, the flat frame itself for a library env), symmetric with loadBootstrapProcedures
+	// below. Compiling a define-syntax with env == sealedBase makes its NextPhase() write
+	// land in sealedExpandBase (via the AtPhase receiver branch), so a bootstrap macro is
+	// immutable and a later user (define-syntax foo …) shadows in the mutable expand child
+	// instead of overwriting it in place. For a library env runtimeTarget == env, so this is
+	// unchanged there.
+	err = loadBootstrapMacros(ctx, runtimeTarget, reg.MacroSources(), bootstrapResolver)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "LoadBootstrapCore: load bootstrap macros")
 	}
@@ -86,7 +93,7 @@ func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, r
 		return nil, werr.WrapForeignErrorf(err, "LoadBootstrapCore: load bootstrap procedures")
 	}
 
-	err = loadBootstrapMacros(ctx, env, []string{core.LateBootstrapMacroSource}, bootstrapResolver)
+	err = loadBootstrapMacros(ctx, runtimeTarget, []string{core.LateBootstrapMacroSource}, bootstrapResolver)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "LoadBootstrapCore: load late bootstrap macros")
 	}

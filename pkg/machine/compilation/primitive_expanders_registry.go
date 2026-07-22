@@ -88,7 +88,21 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 //   - lambda, case-lambda: expand body expressions
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
-	return RegisterPhaseBindings(env, env.Expand, primitiveExpanderEntries,
+	// Install special-form expanders in the phase-1 SEALED EXPAND base (via
+	// SealedExpandBaseTarget), not the mutable expand child. A user (define-syntax let-syntax
+	// …) then creates a distinct binding in the mutable child (a shadow), instead of reusing
+	// and overwriting this slot in place — CreateGlobalBinding dedups by scopeSetsEqual
+	// ignoring BindingType, and SetOwnGlobalValue overwrites the Primitive-typed slot's value,
+	// which every lookup then rejects (let-syntax, having no Tier-1 fallback, dies). Lookup
+	// still finds these via LookupPrimitiveExpander -> env.Expand() walking the parent chain,
+	// which after the phaseParent reparent reaches sealedExpandBase. It must NOT be the phase-0
+	// SealedBaseTarget(): a compile-time handler there is reachable by RUNTIME value resolution
+	// and leaks a dialect-removed form's #<primitive-expander:…> into the value world. For a
+	// flat library frame SealedExpandBaseTarget() falls back to env.Expand(), unchanged.
+	taproot := func() *environment.EnvironmentFrame {
+		return env.SealedExpandBaseTarget()
+	}
+	return RegisterPhaseBindings(env, taproot, primitiveExpanderEntries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {
 			return NewPrimitiveExpander(name, fn)
 		})
