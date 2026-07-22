@@ -416,6 +416,14 @@ re-confirm each repro before designing a fix.**
   area (see `memory/` immutable-top-level and hygiene notes; the runtime-phase seal already exists,
   extending it to expand is significant). Redefining an internal bootstrap helper is also an
   uncommon footgun. Needs a maintainer architectural decision rather than a unilateral change.
+  - **In progress 2026-07-22** on `feat/free-template-id-hygiene` per
+    `plans/2026-07-22-free-template-id-hygiene-{design,impl}.local.md` (D3 special-form seal +
+    D1 sealed expand base + D0 helper reorder + D2 macro-dispatch pin consult). Phase-0
+    baselines recorded: nil-pin census = **47 total** (0 runtime-bound; expect **44** after the
+    D0 reorder of the 3 helper edges); march-hare (`TestR7RSConformance`) green; #1/#3 confirmed
+    RED (`PWNED` / `let-syntax` "no compiler") and quarantined, #2 confirmed already-GREEN (`c`).
+    Arm-trace spike: #1 mis-resolves at **arm 2 (NextPhase)** with a nil pin — pin goes after
+    arm 1, before arm 2 (R1-faithful).
 
 - [x] **CHANGELOG now documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: added a
   `[Unreleased] → Changed` entry covering the `8afeb66a…4f73936d` arc and its user-visible
