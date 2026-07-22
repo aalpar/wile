@@ -368,17 +368,22 @@ re-confirm each repro before designing a fix.**
   generated shorthand-defines all intact). Guard: `TestInternalDefineSyntax_InShorthandDefineBody`
   + `_LambdaLetParityUnbroken` (`pkg/wile`), RED before / GREEN after over 6 shorthand cases.
 
-- [ ] **Export phase-probe ORDER is a second wrong-binding axis, not closed by C3**
-  [Correctness, M, 2026-07-19, **repro unverified**]: `findLibraryBinding` probes runtime,
-  then expand, then compile, returning on first hit, while `define-syntax` stores into Expand
-  and the import path *also* mirrors imported syntax bindings into the library's RUNTIME frame
-  (`library_bindings.go`, the `copyLibraryBindingsDirect` syntax branch). A library that
-  imports a macro and then defines its own of that name exports the **imported** one.
-  Reported repro: library `(mc)` imports `(mb)` (exporting macro `twice`) then defines its own
-  `twice`; `(import (mc)) (twice 5)` yields mb's transformer. Scope keying does not catch it —
-  the runtime copy sits at `{}`, a subset of `{libScope}`, so a scoped probe still matches and
-  probe 1 still short-circuits. Fix is either best-across-all-three-probes instead of
-  first-hit, or not mirroring syntax bindings into the library runtime frame.
+- [x] **A library-local `define-syntax` did not shadow a same-named imported macro**
+  [Correctness, M, Done 2026-07-21, repro verified]: **broader than the export-only framing** —
+  the imported macro won not just in `findLibraryBinding` (export) but in the library's **own
+  body** too, while the variable analogue shadowed correctly. Repro: library `(mc)` imports
+  `(mb)` (exporting macro `twice`) then defines its own `twice`; both `(import (mc)) (twice 5)`
+  and mc's own `use-twice` yielded mb's transformer. **Root cause**: `copyLibraryBindingsDirect`
+  (`library_bindings.go`) installed *every* imported binding into the library's RUNTIME frame,
+  and syntax bindings *additionally* into Expand. The runtime mirror of the imported macro (at
+  ambient `{}`) then shadowed the library's own `define-syntax` (which stores into Expand at
+  `{libScope}`) in both `findLibraryBinding`'s runtime-first probe and body macro resolution.
+  **Fix** (the plan's "don't mirror syntax into the runtime frame" option): a syntax binding now
+  installs into Expand only; variables still install into runtime, where a local define already
+  shadows the import through the shared frame. Guard:
+  `TestLibraryLocalMacroShadowsImportedMacro` (`pkg/wile`) — export + body + a
+  plain-imported-macro-still-usable regression, RED before / GREEN after. Full stdlib/algebra
+  `.scm` suite + all Go tests green (imported macros stay usable).
 
 - [ ] **No sealed base above phase 0** [Correctness, M, 2026-07-19, **repro unverified**]: a
   library's expand-phase install overwrites a bootstrap macro's binding in place (reported:

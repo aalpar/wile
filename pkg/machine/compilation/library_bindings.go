@@ -656,8 +656,9 @@ func ImportSpecInto(ctx context.Context, specVal values.Value, callerEnv, target
 // is a child runtime frame whose AtPhase() would route to the parent's phase
 // registry rather than the library's own environment.
 //
-// Syntax bindings are additionally copied to targetEnv.Expand() so they are
-// available during macro expansion of the library body.
+// Imported syntax (macro) bindings install into targetEnv.Expand() only;
+// variable bindings install into targetEnv (the runtime frame). See the phase
+// selection below.
 func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
@@ -671,24 +672,32 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Install in the target environment directly. Conflict detection mirrors
-		// CopyLibraryBindingsToEnvAtPhase so that a library declaration importing two
+		// A syntax (macro) binding is an expand-phase concept: install it into the
+		// expand frame only. Mirroring an imported macro into the runtime frame
+		// too made findLibraryBinding's runtime-first probe — and the library
+		// body's own macro resolution — return the imported macro even when the
+		// importing library re-defined that name. A library-body define-syntax
+		// stores into the expand frame at the library scope, so the runtime mirror
+		// shadowed it, and the library exported (and its own body resolved) the
+		// imported macro instead of its own. A variable binding needs no such care
+		// because it and the library's own define share the one runtime frame, so
+		// the local define already shadows the import.
+		//
+		// Conflict detection (installImportedBinding) still mirrors
+		// CopyLibraryBindingsToEnvAtPhase, so a library declaration importing two
 		// libraries with different bindings for one name is rejected per R7RS §5.6,
 		// not just a top-level program import.
 		localSym := values.NewSymbol(localName)
-		err := installImportedBinding(targetEnv, localSym, importedBinding.BindingType(),
-			importedBinding, externalName, lib.Name, "")
+		installEnv := targetEnv
+		phaseNote := ""
+		if importedBinding.BindingType() == environment.BindingTypeSyntax {
+			installEnv = targetEnv.Expand()
+			phaseNote = " in expand phase"
+		}
+		err := installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
+			importedBinding, externalName, lib.Name, phaseNote)
 		if err != nil {
 			return err
-		}
-
-		// Syntax bindings must also be available in the expand phase.
-		if importedBinding.BindingType() == environment.BindingTypeSyntax {
-			err = installImportedBinding(targetEnv.Expand(), localSym, environment.BindingTypeSyntax,
-				importedBinding, externalName, lib.Name, " in expand phase")
-			if err != nil {
-				return err
-			}
 		}
 	}
 	return nil
