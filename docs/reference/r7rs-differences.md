@@ -188,6 +188,27 @@ This mirrors Chez's sealed-base + interaction-environment split: code already co
 against the base does not observe later interactive redefines. It is an intentional,
 documented deviation from R7RS's single mutable top level.
 
+**Free template identifiers resolve definition-site — on the macro path too.** The same
+definition-site pinning applies to a free identifier in a `syntax-rules` template, for macro
+references as well as value references (R7RS §4.3.2 referential transparency). A bootstrap
+macro whose template references a private helper macro — e.g. `guard` referencing `guard-aux`
+— resolves that helper to its definition-site binding, so a later use-site
+`(define-syntax guard-aux …)`, `let-syntax`/`letrec-syntax` binder, or `import` of a
+same-named macro does **not** capture it:
+
+```scheme
+(define-syntax guard-aux (syntax-rules () ((_ . r) 'PWNED)))
+(guard (e (else 'x)) (raise 'y))   ; => x   (guard's own guard-aux, not the redefinition)
+(guard-aux ignored)                ; => PWNED  (a direct call sees the redefinition)
+```
+
+The helper macros are sealed in a per-namespace immutable **expand base** (phase 1), the
+macro-phase analogue of the sealed base above, and macro dispatch consults the pin after the
+local `let-syntax` arm and before the use-site arms (so a co-introduced keyword still shadows,
+the R1 invariant). Scope: this is a *private-helper / definition-site* guarantee, not "freeze
+every public macro" — a user who redefines a public macro like `cond` still sees their
+redefinition in code they subsequently write that expands through it.
+
 **define/set! asymmetry on sealed names.** `(define caar …)` *introduces* a child-frame
 shadow (closures keep the sealed binding); `(set! caar …)` *mutates the existing* binding
 in place (closures observe it) — and in the compiled program, `set!` of a `Stable` sealed

@@ -285,6 +285,51 @@ These invariants must be maintained:
      value lands on a different binding than the one just created.
      `DefineOwnGlobal` exists so that pairing cannot be written by hand
 
+6. **Sealed base (phase 0) and sealed expand base (phase 1) are per-namespace
+   immutable frames, reached only via the parent chain**
+   - Each `Namespace` owns two sealed frames that are **not** `PhaseRegistry`
+     entries: `sealedBase` (phase 0: Go primitives + sealed stdlib procedures +
+     optimizer `Stable` anchors) and `sealedExpandBase` (phase 1: bootstrap
+     macros + special-form primitive expanders). The mutable phase frames parent
+     to them:
+
+     ```
+     phase 0:  runtime          → sealedBase          → nil
+                                  (prims + sealed procs)
+     phase 1:  expand-child      → sealedExpandBase    → sealedBase → nil
+               (user define-syntax   (bootstrap macros,
+                lands here)           special-form expanders)
+     phase 2+: compile           → sealedBase          → nil
+     ```
+
+   - The carve is **phase-1-only**: `createPhaseEnv` reparents only the expand
+     phase to `sealedExpandBase` (via `phaseParent`), and only for a namespace
+     that owns a sealed base (`base == owner.sealedBase`). A flat
+     `NewChildRuntime` library frame has no sealed base and stays a flat island
+     (library isolation). Phases 2+ parent straight to `sealedBase`, preserving
+     hermeticity and the climbing-tower invariant that higher phases never
+     introduce a phase→phase parent edge.
+   - **Why `sealedExpandBase` is distinct from `sealedBase`, not a reuse.** A
+     compile-time handler (a bootstrap macro, `BindingTypeSyntax`, or a
+     special-form expander, `BindingTypePrimitive`) placed on the phase-0 value
+     frame is reachable by **runtime value resolution** (the runtime frame
+     parents to `sealedBase`). That is a phase confusion: a dialect that removes
+     a form (`Dialect.Forms().Remove`) would then leak the form's
+     `#<primitive-expander:…>` into the value world instead of the name being
+     unbound. The phase-1 `sealedExpandBase` is on the expand chain only, so it is
+     invisible to phase-0 value resolution.
+   - **A top-level `(define-syntax foo …)` shadows, it does not overwrite.** It
+     lands in the mutable expand child (`AtPhase(PhaseExpand)` from the mutable
+     runtime), a different frame from the pinned bootstrap `foo` in
+     `sealedExpandBase`. Bootstrap macros compile with `env == sealedBase`, so
+     their `define-syntax` writes route into `sealedExpandBase` via the
+     `AtPhase` receiver branch; expanders register there directly via
+     `SealedExpandBaseTarget()`.
+   - **Enumeration must collect both.** Because neither sealed frame is a
+     `PhaseRegistry` entry, name/doc walks (`BoundNamesAcrossPhases`, `,apropos`)
+     must `collect(SealedBase())` **and** `collect(SealedExpandBase())` explicitly,
+     or primitive / bootstrap-macro names silently vanish from introspection.
+
 ---
 
 ## Load-Path Stack

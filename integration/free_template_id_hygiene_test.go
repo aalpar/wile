@@ -170,3 +170,58 @@ func TestFreeTemplateIdHygiene_Section6Cases(t *testing.T) {
 		})
 	}
 }
+
+// TestFreeTemplateIdHygiene_Adversarial exercises additional use-site capture vectors that
+// must NOT hijack a bootstrap macro's private helper. They are standing guards that the D1/D2
+// changes must not regress. Clauses use (#t …) rather than (else …): the else auxiliary-syntax
+// literal does not resolve inside a let-syntax scope (a pre-existing limitation, present on
+// master b96f8b53 and unrelated to this arc — the #2 guard uses the same workaround), so an
+// (else …) clause here would fail for a reason orthogonal to guard-aux capture. The
+// library-import vector never reproduced (TODO "No sealed base above phase 0") and needs a
+// library registry the in-process EvalMultiple harness does not wire up; it is left uncovered.
+func TestFreeTemplateIdHygiene_Adversarial(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			// A use-site nested let-syntax binding guard-aux must not capture (a variant of
+			// the #2 guard: the binder's intro scope is not a subset of guard's def-site scope).
+			name: "nested_let_syntax_no_capture",
+			code: `(let ()
+			         (let-syntax ((guard-aux (syntax-rules () ((_ . r) 'HIJACK))))
+			           (guard (e (#t 'safe)) (raise 'x))))`,
+			expected: "safe",
+		},
+		{
+			// Same via letrec-syntax.
+			name: "letrec_syntax_no_capture",
+			code: `(letrec-syntax ((guard-aux (syntax-rules () ((_ . r) 'HIJACK))))
+			         (guard (e (#t 'safe)) (raise 'x)))`,
+			expected: "safe",
+		},
+		{
+			// A macro-generating macro that introduces a helper of a colliding name in its
+			// output. guard used in the generated body still resolves guard-aux def-site.
+			name: "macro_generating_macro_colliding_helper",
+			code: `(define-syntax with-evil-guard-aux
+			         (syntax-rules ()
+			           ((_ body)
+			            (let-syntax ((guard-aux (syntax-rules () ((_ . r) 'HIJACK))))
+			              body))))
+			       (with-evil-guard-aux (guard (e (#t 'safe)) (raise 'x)))`,
+			expected: "safe",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}

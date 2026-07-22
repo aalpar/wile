@@ -50,6 +50,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   resolution and the export probe consulted first; imported macros now install into the
   expand frame only (on both the library-internal and top-level import paths). Imported
   macros stay usable.
+- **A free identifier in a macro template now resolves definition-site on the macro path,
+  matching values (R7RS §4.3.2).** A top-level `(define-syntax guard-aux …)` captured
+  `guard`'s private helper — `(guard (e (else 'x)) (raise 'y))` returned the user's
+  transformer instead of `x`. Bootstrap macros/expanders now live in a per-namespace
+  immutable **sealed expand base** (phase 1), so a use-site `define-syntax`,
+  `let-syntax`/`letrec-syntax`, or `import` of a same-named macro **shadows** in the mutable
+  expand child instead of overwriting the pinned binding in place; and macro dispatch consults
+  the template's definition-site pin (after the local `let-syntax` arm, before the use-site
+  arms), so the helper resolves definition-site while a co-introduced keyword still shadows it.
+  This is the private-helper / definition-site guarantee documented for values in
+  `docs/reference/r7rs-differences.md` (Chez two-environment model), now extended to macros;
+  public-macro redefinition is unchanged by intent.
+- **Redefining a core special form now shadows cleanly instead of bricking it.**
+  `(define-syntax let-syntax …)` overwrote the installed primitive-expander slot in place, so
+  every subsequent `(let-syntax …)` failed to compile (`let-syntax` has no fallback). The
+  special-form expanders now install in the sealed expand base, so a user redefine becomes a
+  shadow in the mutable expand child and the user's transformer runs; the original form stays
+  intact for code that does not redefine it.
 - **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
   deterministic when a closed send races a ready receive" described `channel-select`
   as a Scheme primitive. There has never been one; the fix it describes was to the
