@@ -166,6 +166,32 @@ func TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase(t *testing.
 	qt.Assert(t, inSealedBase, qt.IsNil)      // NOT on the phase-0 value frame (no runtime-value leak)
 }
 
+// TestSealedExpandBaseConstructionInvariant asserts every namespace-building entry point
+// wires a non-nil sealedExpandBase parented to the sealed base at phase 1. The routing
+// accessors (SealedExpandBaseTarget, AtPhase's phase-1 branch, phaseParent) trust this
+// invariant rather than nil-guarding, so a builder that forgets it must fail HERE — loudly —
+// not silently degrade the expand-phase seal to the mutable frame (the WithStableBasePrimitives
+// profile-child divergence is the cautionary precedent for an unenforced construction step).
+func TestSealedExpandBaseConstructionInvariant(t *testing.T) {
+	root := environment.NewNamespace()
+	builders := []struct {
+		name string
+		ns   *environment.Namespace
+	}{
+		{"NewNamespace", root},
+		{"NewChildNamespace", root.NewChildNamespace()},
+		{"NewSchemeReportNamespace", root.NewSchemeReportNamespace()},
+	}
+	for _, b := range builders {
+		t.Run(b.name, func(t *testing.T) {
+			seb := b.ns.SealedExpandBase()
+			qt.Assert(t, seb, qt.IsNotNil)
+			qt.Assert(t, seb.Parent(), qt.Equals, b.ns.SealedBase())
+			qt.Assert(t, seb.PhaseLevel(), qt.Equals, environment.PhaseExpand)
+		})
+	}
+}
+
 // TestBoundNamesAcrossPhases verifies the all-phases name walk that backs
 // Engine.BoundNames and REPL completion: it must span the sealed base (so
 // primitives like car and bootstrap procedures like caar appear, not just the

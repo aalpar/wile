@@ -143,7 +143,7 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 		// define-syntax shadows in this mutable child.
 		// See plans/2026-07-10-hermetic-phases-core-impl.local.md and
 		// plans/2026-07-22-free-template-id-hygiene-impl.local.md.
-		parent:     phaseParent(p, phase),
+		parent:     p.phaseParent(phase),
 		global:     global,
 		phaseLevel: phase,
 		phases:     p,
@@ -159,10 +159,11 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 // phase->phase parent edge. The reparent applies ONLY to a namespace that OWNS a sealed base
 // (base == p.owner.sealedBase): a flat NewChildRuntime library frame's SealedBaseTarget() is the
 // frame itself and it has no sealed expand base, so it stays a flat island (guarding library
-// isolation).
-func phaseParent(p *PhaseRegistry, phase Phase) *EnvironmentFrame {
+// isolation). base == p.owner.sealedBase already implies sealedExpandBase is non-nil (both built
+// together in wireRuntimeFrames), so it is not guarded here.
+func (p *PhaseRegistry) phaseParent(phase Phase) *EnvironmentFrame {
 	base := p.envs[PhaseRuntime].SealedBaseTarget()
-	if phase == PhaseExpand && p.owner != nil && p.owner.sealedExpandBase != nil && base == p.owner.sealedBase {
+	if phase == PhaseExpand && p.owner != nil && base == p.owner.sealedBase {
 		return p.owner.sealedExpandBase
 	}
 	return base

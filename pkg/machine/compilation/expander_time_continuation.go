@@ -368,7 +368,11 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// BindingTypeSyntax filter excludes compile-time handlers (primitive expanders / syntax
 	// compilers are BindingTypePrimitive), so a pin resolving to one falls through.
 	gi, ok := sym.ResolvedBinding.(*environment.GlobalIndex)
-	if ok && gi != nil {
+	if ok && gi != nil && gi.Env != nil {
+		// gi.Env != nil guards the immediate deref below: a *GlobalIndex can be a
+		// DEFERRED index (Env == nil, e.g. NewDeferredGlobalIndex). Every pin attached to
+		// SyntaxSymbol.ResolvedBinding today is resolved (Env set), but that is a non-local
+		// invariant the type does not enforce, so guard the field we dereference.
 		pinned := gi.Env.GetOwnGlobalBinding(gi)
 		if pinned != nil && pinned.BindingType() == environment.BindingTypeSyntax {
 			return pinned
