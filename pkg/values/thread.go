@@ -480,6 +480,50 @@ func (p *UncaughtThreadException) Unwrap() error {
 	return p.Reason
 }
 
+// UncaughtException is the SRFI-18 uncaught-exception object. thread-join! raises
+// it into the joining thread when the joined thread terminated by raising an
+// exception it did not handle; uncaught-exception-reason recovers the original
+// condition. Unlike its Go-error sibling UncaughtThreadException, this is a
+// Scheme-visible values.Value, so it can be handed to machine.RaiseInPlace.
+//
+// Pointer-shaped so the values.Value dynamic type stays Go-comparable even though
+// Reason holds an arbitrary Value; identity is pointer identity.
+type UncaughtException struct {
+	Reason Value
+}
+
+// NewUncaughtException wraps the original raised condition in an SRFI-18
+// uncaught-exception object.
+func NewUncaughtException(reason Value) *UncaughtException {
+	q := &UncaughtException{Reason: reason}
+	return q
+}
+
+func (p *UncaughtException) IsVoid() bool {
+	return p == nil
+}
+
+func (p *UncaughtException) EqualTo(v Value) bool {
+	other, ok := v.(*UncaughtException)
+	if !ok {
+		return false
+	}
+	if p == other {
+		return true
+	}
+	if p == nil || other == nil {
+		return false
+	}
+	return Equal(p.Reason, other.Reason)
+}
+
+func (p *UncaughtException) SchemeString() string {
+	if p == nil || p.Reason == nil {
+		return "#<uncaught-exception>"
+	}
+	return fmt.Sprintf("#<uncaught-exception %s>", p.Reason.SchemeString())
+}
+
 // AbandonedMutexException is raised when a mutex owner terminates
 type AbandonedMutexException struct {
 	Mutex Value // *Mutex, but avoid circular import

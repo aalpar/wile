@@ -903,37 +903,62 @@ func TestThreadRespectsParentTimeout(t *testing.T) {
 		qt.Commentf("should terminate within timeout window, took %v", elapsed))
 }
 
-// TestThreadJoinReRaisesUncaughtException pins the SRFI-18 contract: a thread that
-// terminates via an uncaught exception has that exception re-raised in the JOINING
-// thread's dynamic environment, so a guard / with-exception-handler around the
-// thread-join! call catches it. Before the fix, the uncaught-exception carrier
-// passed through applyCallableError untouched and bubbled past the guard to the top
-// level. Each case self-checks in Scheme and returns #t.
-func TestThreadJoinReRaisesUncaughtException(t *testing.T) {
+// TestThreadJoinWrapsUncaughtException pins the SRFI-18 contract: a thread that
+// terminates via an uncaught exception has an uncaught-exception object raised in
+// the JOINING thread's dynamic environment (whose uncaught-exception-reason is the
+// original condition), so a guard / with-exception-handler around the thread-join!
+// call catches it and can recover the original condition. Before the wrapper, the
+// bare condition was re-raised (and earlier still, the carrier bubbled past the
+// guard to the top level). Each case self-checks in Scheme and returns #t.
+func TestThreadJoinWrapsUncaughtException(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngineWithExceptions(t)
 	tcs := []struct {
 		name string
 		code string
 	}{
-		// A guard around thread-join! catches a thread's bare (raise obj).
-		{"guard catches raised symbol",
+		// A guard around thread-join! catches an uncaught-exception wrapper whose
+		// reason is the thread's bare (raise obj).
+		{"guard catches wrapper; reason is the raised symbol",
 			`(let ((t (make-thread (lambda () (raise 'boom)))))
 			   (thread-start! t)
-			   (eq? 'boom
-			        (guard (e (#t e))
-			          (thread-join! t))))`},
+			   (guard (e ((uncaught-exception? e)
+			              (eq? 'boom (uncaught-exception-reason e))))
+			     (thread-join! t)))`},
 
-		// The re-raised condition is the ORIGINAL object: an error-object keeps its
-		// message and irritants (dispatchable in the guard clause), not a flattened
-		// "uncaught exception in thread: ..." string.
-		{"guard catches error-object with irritants",
+		// The reason is the ORIGINAL object: an error-object keeps its message and
+		// irritants (dispatchable after unwrapping), not a flattened string.
+		{"reason is the original error-object with irritants",
 			`(let ((t (make-thread (lambda () (error "boom" 42)))))
 			   (thread-start! t)
-			   (guard (e ((error-object? e)
-			              (and (equal? (error-object-message e) "boom")
-			                   (equal? (error-object-irritants e) '(42)))))
+			   (guard (e ((uncaught-exception? e)
+			              (let ((r (uncaught-exception-reason e)))
+			                (and (error-object? r)
+			                     (equal? (error-object-message r) "boom")
+			                     (equal? (error-object-irritants r) '(42))))))
 			     (thread-join! t)))`},
+
+		// The wrapper is a DISTINCT object from its reason.
+		{"wrapper is not its own reason",
+			`(let ((t (make-thread (lambda () (raise 'boom)))))
+			   (thread-start! t)
+			   (guard (e (#t (not (eq? e (uncaught-exception-reason e)))))
+			     (thread-join! t)))`},
+
+		// Identity is preserved: uncaught-exception-reason returns the SAME object
+		// the thread raised, not a reconstruction.
+		{"reason is eq? to the raised object",
+			`(let ((obj (cons 1 2)))
+			   (let ((t (make-thread (lambda () (raise obj)))))
+			     (thread-start! t)
+			     (guard (e (#t (eq? obj (uncaught-exception-reason e))))
+			       (thread-join! t))))`},
+
+		// uncaught-exception-reason on a non-uncaught-exception raises (the
+		// MakeUnaryAccessor sentinel path), catchable by a guard.
+		{"uncaught-exception-reason rejects a non-wrapper",
+			`(guard (e (#t #t))
+			   (uncaught-exception-reason 'not-a-wrapper))`},
 
 		// No regression: a thread that returns normally still yields its value through
 		// a surrounding guard rather than tripping the handler.

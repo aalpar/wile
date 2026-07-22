@@ -264,17 +264,20 @@ func PrimThreadJoin(mc machine.CallContext) error {
 		// an *ErrExceptionEscape carrier (wrapped in *UncaughtThreadException). The
 		// carrier is already-formed control flow, so applyCallableError passes it
 		// through untouched — straight past any guard/with-exception-handler around
-		// the join. Re-raise the original condition in THIS (the joining) thread's
-		// dynamic environment via RaiseInPlace so its %exception-handlers run and a
-		// guard around thread-join! can catch it (SRFI-18). Other Go errors fall
-		// through to applyCallableError, which already re-raises them.
+		// the join. SRFI-18: raise an uncaught-exception object (whose
+		// uncaught-exception-reason is the original condition) in THIS (the joining)
+		// thread's dynamic environment via RaiseInPlace, so its %exception-handlers
+		// run and a guard around thread-join! can catch it and recover the original
+		// condition. Other Go errors fall through to applyCallableError, which
+		// already re-raises them.
 		var escErr *machine.ErrExceptionEscape
 		if errors.As(err, &escErr) {
 			realMC, mcErr := machine.RequireMachineContext(mc, "thread-join!")
 			if mcErr != nil {
 				return mcErr
 			}
-			return machine.RaiseInPlace(realMC, escErr.Condition, false)
+			wrapped := values.NewUncaughtException(escErr.Condition)
+			return machine.RaiseInPlace(realMC, wrapped, false)
 		}
 		return err
 	}
@@ -490,6 +493,20 @@ var PrimConditionVariableSpecific = helpers.MakeUnaryAccessor(werr.ErrNotACondit
 // (condition-variable-specific-set! cv obj) -> void
 var PrimConditionVariableSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAConditionVariable, "condition-variable-specific-set!", func(cv *values.ConditionVariable, val values.Value) {
 	cv.SetSpecific(val)
+})
+
+// PrimUncaughtExceptionQ tests whether an object is an SRFI-18 uncaught-exception
+// (the object thread-join! raises when a joined thread died via an uncaught
+// exception). (uncaught-exception? obj) -> boolean
+var PrimUncaughtExceptionQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.UncaughtException)
+	return ok
+})
+
+// PrimUncaughtExceptionReason returns the original condition the joined thread
+// raised. (uncaught-exception-reason uncaught-exception) -> value
+var PrimUncaughtExceptionReason = helpers.MakeUnaryAccessor(werr.ErrNotAnUncaughtException, "uncaught-exception-reason", func(u *values.UncaughtException) values.Value {
+	return u.Reason
 })
 
 // PrimConditionVariableSignal signals one waiting thread

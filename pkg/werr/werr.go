@@ -102,11 +102,12 @@ var (
 
 	// Threading errors
 
-	ErrNotAThread            = NewTypeSentinel("thread")
-	ErrNotAMutex             = NewTypeSentinel("mutex")
-	ErrNotAConditionVariable = NewTypeSentinel("condition variable")
-	ErrNotATime              = NewTypeSentinel("time")
-	ErrNotARWMutex           = NewTypeSentinel("rw-mutex")
+	ErrNotAThread             = NewTypeSentinel("thread")
+	ErrNotAMutex              = NewTypeSentinel("mutex")
+	ErrNotAConditionVariable  = NewTypeSentinel("condition variable")
+	ErrNotAnUncaughtException = NewTypeSentinel("uncaught-exception")
+	ErrNotATime               = NewTypeSentinel("time")
+	ErrNotARWMutex            = NewTypeSentinel("rw-mutex")
 	// "once" is pronounced /wuns/ — letter rule would give "an once", but
 	// the consonant /w/ sound calls for "a". Pass-through preserves the
 	// correct article.

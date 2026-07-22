@@ -415,10 +415,16 @@ successors above.
   `plans/2026-05-14-stderr-flush-on-exit.local.md`: an io `Closeable` extension hook + a
   `run() int` wrapper in `main` so a deferred flush runs before exit. `NewCloseableExtension` /
   `closeIO` do not exist yet. Bug-fix plus a small `run() int` refactor.
-- [ ] **SRFI-18 `thread-join!` does not wrap an uncaught exception** [Correctness/conformance, S,
-  design draft]: SRFI-18 requires a thread that dies on an uncaught exception to surface it to the
-  joiner as an `uncaught-exception` object; Wile does not yet. Design at
-  `plans/2026-06-27-srfi18-uncaught-exception-wrapper.local.md`, gated on one semantic decision (Q1).
+- [x] **SRFI-18 `thread-join!` wraps an uncaught exception** [Correctness/conformance, S,
+  Done 2026-07-21]: implemented per `plans/2026-06-27-srfi18-uncaught-exception-wrapper.local.md`
+  with **Q1 = A** (wrap unconditionally — strict SRFI-18; zero external consumers, break-freely).
+  A joined thread that died on an uncaught exception now surfaces to the joiner as an
+  `uncaught-exception` object whose `uncaught-exception-reason` is the original condition
+  (previously the bare condition was re-raised). Added: `values.UncaughtException` (a Go-comparable
+  `values.Value`), `werr.ErrNotAnUncaughtException`, and the `uncaught-exception?` /
+  `uncaught-exception-reason` primitives. Reason identity is preserved (`eq?`). Guard:
+  `TestThreadJoinWrapsUncaughtException` (6 cases incl. identity + sentinel-rejection); threads
+  `-race` green; concurrency examples unaffected (none caught a joined exception).
 
 > **Anchor risk for the `BindingID` item above.** The load-order plan that item points at
 > (`plans/2026-07-18-load-order-independent-binding-resolution-design.md`) reads fully open but is

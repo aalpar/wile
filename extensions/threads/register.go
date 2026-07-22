@@ -76,8 +76,14 @@ func addThreads(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "thread-join!", ParamCount: 2, IsVariadic: true, Impl: PrimThreadJoin,
-			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
+			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value. If the thread died via an uncaught exception, raises an uncaught-exception object (SRFI-18) whose uncaught-exception-reason is the original condition.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
+		{Name: "uncaught-exception?", ParamCount: 1, Impl: PrimUncaughtExceptionQ,
+			Doc: "Returns #t if OBJ is an uncaught-exception object (raised by thread-join! when a joined thread died via an uncaught exception).", ParamNames: []string{"obj"}, Category: "threads",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+		{Name: "uncaught-exception-reason", ParamCount: 1, Impl: PrimUncaughtExceptionReason,
+			Doc: "Returns the original condition object that the joined thread raised.", ParamNames: []string{"uncaught-exception"}, Category: "threads",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 	}, registry.PhaseSetRuntime)
 	return nil
 }
