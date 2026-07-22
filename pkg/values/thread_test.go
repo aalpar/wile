@@ -158,3 +158,33 @@ func TestAbandonedMutexException_Error(t *testing.T) {
 	e := &values.AbandonedMutexException{}
 	qt.Assert(t, e.Error(), qt.Equals, "mutex abandoned by terminated thread")
 }
+
+// UncaughtException compares by pointer identity (an opaque SRFI-18 handle, like
+// Thread/Mutex), NOT structurally over its Reason. This is deliberate: a
+// structural EqualTo would descend into an arbitrary Reason and overflow the
+// host stack on a cycle (the type is not a DeepEqualer). Two wrappers holding an
+// equal reason are therefore not equal; a wrapper equals only itself.
+func TestUncaughtException_EqualTo(t *testing.T) {
+	reason := values.NewSymbol("boom")
+	u1 := values.NewUncaughtException(reason)
+	u2 := values.NewUncaughtException(reason)
+	qt.Assert(t, u1.EqualTo(u1), qt.IsTrue)
+	qt.Assert(t, u1.EqualTo(u2), qt.IsFalse, qt.Commentf("distinct wrappers with the same reason are not equal (pointer identity)"))
+	qt.Assert(t, u1.EqualTo(values.NewInteger(1)), qt.IsFalse)
+}
+
+func TestUncaughtException_Reason(t *testing.T) {
+	reason := values.NewSymbol("boom")
+	u := values.NewUncaughtException(reason)
+	qt.Assert(t, u.Reason, qt.Equals, values.Value(reason))
+	qt.Assert(t, u.IsVoid(), qt.IsFalse)
+	qt.Assert(t, (*values.UncaughtException)(nil).IsVoid(), qt.IsTrue)
+}
+
+func TestUncaughtException_SchemeString(t *testing.T) {
+	u := values.NewUncaughtException(values.NewSymbol("boom"))
+	qt.Assert(t, strings.Contains(u.SchemeString(), "boom"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(u.SchemeString(), "uncaught-exception"), qt.IsTrue)
+	// nil-safe.
+	qt.Assert(t, (*values.UncaughtException)(nil).SchemeString(), qt.Equals, "#<uncaught-exception>")
+}

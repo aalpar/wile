@@ -486,8 +486,14 @@ func (p *UncaughtThreadException) Unwrap() error {
 // condition. Unlike its Go-error sibling UncaughtThreadException, this is a
 // Scheme-visible values.Value, so it can be handed to machine.RaiseInPlace.
 //
-// Pointer-shaped so the values.Value dynamic type stays Go-comparable even though
-// Reason holds an arbitrary Value; identity is pointer identity.
+// It is an opaque control-flow handle, not a structural container: identity is
+// pointer identity across eq?, eqv?, AND equal?, matching the sibling SRFI-18
+// objects (Thread, Mutex, ConditionVariable). Comparing by pointer keeps it
+// Go-comparable regardless of Reason's dynamic type, and — because it is not a
+// DeepEqualer — avoids the host-stack overflow a structural EqualTo would hit on
+// a Reason cycle (equal.go documents that hazard for non-DeepEqualer recursive
+// types). Each thread-join! mints a fresh wrapper, so structural equality would
+// buy nothing.
 type UncaughtException struct {
 	Reason Value
 }
@@ -499,24 +505,19 @@ func NewUncaughtException(reason Value) *UncaughtException {
 	return q
 }
 
+// IsVoid reports whether the receiver is nil, per the default Value convention.
 func (p *UncaughtException) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo compares by pointer identity: an uncaught-exception is equal only to
+// itself. See the type doc for why this is a handle, not a structural container.
 func (p *UncaughtException) EqualTo(v Value) bool {
 	other, ok := v.(*UncaughtException)
-	if !ok {
-		return false
-	}
-	if p == other {
-		return true
-	}
-	if p == nil || other == nil {
-		return false
-	}
-	return Equal(p.Reason, other.Reason)
+	return ok && p == other
 }
 
+// SchemeString renders the wrapper and, for a human reader, the reason it carries.
 func (p *UncaughtException) SchemeString() string {
 	if p == nil || p.Reason == nil {
 		return "#<uncaught-exception>"

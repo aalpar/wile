@@ -88,13 +88,13 @@ func (p *ExpanderTimeContinuation) expandProcedureBody(
 	formals syntax.SyntaxValue,
 	body *syntax.SyntaxPair,
 	src *syntax.SourceContext,
-) (syntax.SyntaxValue, syntax.SyntaxValue, error) {
+) (formalsStx syntax.SyntaxValue, expandedBody syntax.SyntaxValue, err error) {
 	// This scope is added to both formals and body BEFORE any inner expansion,
 	// ensuring that pattern matching in inner macros (like cond) can correctly
 	// detect when identifiers (like =>) have been bound by this procedure.
 	scope := syntax.NewScopeWithLabel("lambda")
 
-	formalsStx := syntax.AddScopeToSyntax(formals, scope)
+	formalsStx = syntax.AddScopeToSyntax(formals, scope)
 	bodyWithScope := body.AddScope(scope).(*syntax.SyntaxPair)
 
 	// Extract formal parameter symbols (now with the body scope included) and
@@ -128,7 +128,6 @@ func (p *ExpanderTimeContinuation) expandProcedureBody(
 	}
 
 	// Rebuild the body as a syntax list, re-wrapping in begin when it arrived so.
-	var expandedBody syntax.SyntaxValue
 	if wasBeginWrapped {
 		beginSym := syntax.NewSyntaxSymbol("begin", src)
 		innerList := syntax.SyntaxList(src, expandedExprs...)

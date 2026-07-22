@@ -77,6 +77,19 @@ func TestInternalDefineSyntax_InShorthandDefineBody(t *testing.T) {
 			src:  `(define (f x) (define-syntax dbl (syntax-rules () ((_ v) (+ v v)))) (dbl x)) (f 21)`,
 			want: "42",
 		},
+		{
+			// Variadic formals: sig.SyntaxCdr() is a bare symbol, so the shared
+			// procedure-body expander must handle a symbol (not a list) of formals.
+			name: "variadic shorthand formals with internal define-syntax",
+			src:  `(define (f . xs) (define-syntax n (syntax-rules () ((_) (length xs)))) (n)) (f 1 2 3)`,
+			want: "3",
+		},
+		{
+			// Improper formals (x . rest): the extractor must walk the improper tail.
+			name: "improper shorthand formals with internal define-syntax",
+			src:  `(define (f x . rest) (define-syntax r (syntax-rules () ((_) (cons x rest)))) (r)) (f 1 2 3)`,
+			want: "(1 2 3)",
+		},
 	}
 
 	for _, tc := range cases {
@@ -86,6 +99,27 @@ func TestInternalDefineSyntax_InShorthandDefineBody(t *testing.T) {
 			result, err := eng.EvalProgram(ctx, tc.src, "<test>")
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// A signature whose name is not a bare symbol (curried or empty) takes the
+// fallback branch that preserves the prior flat expansion; it must produce a
+// clean diagnostic, not a panic or a silently-wrong expansion. Curried define
+// is unsupported in Wile.
+func TestShorthandDefine_MalformedSignatureRejectedCleanly(t *testing.T) {
+	ctx := context.Background()
+	cases := []string{
+		`(define ((f a) b) (+ a b))`, // curried
+		`(define () 1)`,              // empty signature
+	}
+	for _, src := range cases {
+		t.Run(src, func(t *testing.T) {
+			eng, err := wile.NewEngine(ctx)
+			qt.Assert(t, err, qt.IsNil)
+			_, err = eng.EvalProgram(ctx, src, "<test>")
+			qt.Assert(t, err, qt.IsNotNil,
+				qt.Commentf("malformed define signature must be rejected, not silently accepted"))
 		})
 	}
 }

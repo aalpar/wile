@@ -286,6 +286,21 @@ func PrimThreadJoin(mc machine.CallContext) error {
 	return nil
 }
 
+// PrimUncaughtExceptionQ tests whether an object is an SRFI-18 uncaught-exception
+// (the object thread-join! raises when a joined thread died via an uncaught
+// exception). (uncaught-exception? obj) -> boolean
+var PrimUncaughtExceptionQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.UncaughtException)
+	return ok
+})
+
+// PrimUncaughtExceptionReason returns the original condition the joined thread
+// raised. (uncaught-exception-reason uncaught-exception) -> value. ValueOrVoid
+// guards a nil reason so a Go nil never reaches the value register.
+var PrimUncaughtExceptionReason = helpers.MakeUnaryAccessor(werr.ErrNotAnUncaughtException, "uncaught-exception-reason", func(u *values.UncaughtException) values.Value {
+	return values.ValueOrVoid(u.Reason)
+})
+
 // =============================================================================
 // Mutex Primitives
 // =============================================================================
@@ -493,20 +508,6 @@ var PrimConditionVariableSpecific = helpers.MakeUnaryAccessor(werr.ErrNotACondit
 // (condition-variable-specific-set! cv obj) -> void
 var PrimConditionVariableSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAConditionVariable, "condition-variable-specific-set!", func(cv *values.ConditionVariable, val values.Value) {
 	cv.SetSpecific(val)
-})
-
-// PrimUncaughtExceptionQ tests whether an object is an SRFI-18 uncaught-exception
-// (the object thread-join! raises when a joined thread died via an uncaught
-// exception). (uncaught-exception? obj) -> boolean
-var PrimUncaughtExceptionQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(*values.UncaughtException)
-	return ok
-})
-
-// PrimUncaughtExceptionReason returns the original condition the joined thread
-// raised. (uncaught-exception-reason uncaught-exception) -> value
-var PrimUncaughtExceptionReason = helpers.MakeUnaryAccessor(werr.ErrNotAnUncaughtException, "uncaught-exception-reason", func(u *values.UncaughtException) values.Value {
-	return u.Reason
 })
 
 // PrimConditionVariableSignal signals one waiting thread

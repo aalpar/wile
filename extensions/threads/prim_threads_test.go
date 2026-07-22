@@ -954,11 +954,18 @@ func TestThreadJoinWrapsUncaughtException(t *testing.T) {
 			     (guard (e (#t (eq? obj (uncaught-exception-reason e))))
 			       (thread-join! t))))`},
 
-		// uncaught-exception-reason on a non-uncaught-exception raises (the
-		// MakeUnaryAccessor sentinel path), catchable by a guard.
+		// uncaught-exception-reason on a non-uncaught-exception raises the
+		// MakeUnaryAccessor sentinel path — a real error-object, not just any
+		// catchable condition (the guard clause is keyed on error-object? so an
+		// unrelated failure would fall through to #f).
 		{"uncaught-exception-reason rejects a non-wrapper",
-			`(guard (e (#t #t))
-			   (uncaught-exception-reason 'not-a-wrapper))`},
+			`(guard (e ((error-object? e) #t) (#t #f))
+			   (uncaught-exception-reason 'not-a-wrapper)
+			   #f)`},
+
+		// The predicate is #f for a non-wrapper (its #t path is covered above).
+		{"uncaught-exception? is #f for a non-wrapper",
+			`(not (uncaught-exception? 'not-a-wrapper))`},
 
 		// No regression: a thread that returns normally still yields its value through
 		// a surrounding guard rather than tripping the handler.
