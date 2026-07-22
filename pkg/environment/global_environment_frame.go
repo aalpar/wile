@@ -545,8 +545,14 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol, scopes []*syn
 	if !ok {
 		return false
 	}
-	// Nil out the slot so stale GlobalIndex references from compiled code see
-	// nil (caught by resolveGlobal) instead of silently returning the old value.
+	// Nil out the slot so a re-resolving GlobalIndex reference (OpLoadGlobal /
+	// OpPushGlobal) sees nil, caught by resolveGlobal, instead of the old value.
+	// NOTE: this does NOT reach compiled code that captured the *Binding pointer
+	// itself at compile time (OpLoadCachedBinding / OpPushCachedBinding /
+	// OpCallCachedBinding read cachedBindings[i].Value() directly, bypassing the
+	// slot), so a closure over an undefined name can still read its last value.
+	// Making cached reads observe deletion needs a per-read check in those hot
+	// opcodes; see TODO.md "namespace-undefine! does not stop compiled code".
 	p.bindings[i] = nil
 	// Prune the dead index rather than leaving it in place: Keys' consumers
 	// treat slots[0] as the name's representative, so a dead slot 0 would make

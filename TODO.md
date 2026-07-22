@@ -236,15 +236,25 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   (`TestNamespaceUndefineSealedRejected`) guards the reachable path.
 
 - [ ] **`namespace-undefine!` does not stop compiled code from reading the binding**
-  [Correctness, S, 2026-07-20]: found while measuring #805, **pre-existing on master**, not
-  introduced by it. After `(define v 7)` `(define (get-v) v)` `(namespace-undefine! ns 'v)`,
-  `namespace-bound?` correctly answers `#f` but `(get-v)` still returns `7`. The closure reads
-  through a cached/pinned binding that nil-ing the slot does not invalidate. Not macro-specific
-  — plain ambient bindings show it. Cost me a test: the obvious "macro-only binder survives"
-  assertion at the primitive layer measures this cache rather than the delete policy, and so
-  passes under any policy. **Measure first:** determine whether the stale read comes from the
-  global binding cache (`memory/global-binding-cache-already-exists.md`) or from a pinned
-  `GlobalIndex` whose re-resolution succeeds; the two want different fixes.
+  [Correctness, S, 2026-07-20 — root cause MEASURED 2026-07-21, fix DEFERRED as disproportionate]:
+  found while measuring #805, **pre-existing on master**. After `(define v 7)` `(define (get-v) v)`
+  `(namespace-undefine! ns 'v)`, `namespace-bound?` correctly answers `#f` but `(get-v)` still
+  returns `7`. **Measure-first done — it is the global binding cache, not a re-resolving pinned
+  index.** Disassembly shows `get-v` compiles to `OpLoadCachedBinding` (`bindings: [7]`): the
+  closure captures the `*Binding` **pointer** at compile time and reads `cachedBindings[i].Value()`
+  directly, never consulting the slot that `DeleteBinding` nils. This holds in BOTH mutable and
+  immutable top level (the cache captures a live location so `set!` still works through it). A
+  bare `OpLoadGlobal` re-resolver *does* observe the nil'd slot (with a redefine after undefine,
+  `get-v` errors "no such global binding"), which is why two references to the same undefined name
+  can disagree. **Why deferred**: making cached reads observe deletion requires a per-read check in
+  the VM's hottest opcodes (`OpLoadCachedBinding`/`OpPushCachedBinding`/`OpCallCachedBinding`) —
+  there is no existing "undefined value" sentinel to reuse cheaply — a poor risk/perf trade for a
+  non-standard reflective primitive, in the exact global-read path the memory repeatedly warns
+  against ([[global-binding-cache-already-exists]]). The current behavior (undefine removes the
+  NAME — `bound?`→#f, new references fail — while closures keep the captured LOCATION) is also
+  defensible lexical-capture semantics. The `DeleteBinding` comment ("stale GlobalIndex references
+  … see nil, caught by resolveGlobal") is corrected in code to note the cached-pointer path it does
+  not cover. Needs a maintainer call on whether the hot-path cost is worth it before proceeding.
 
 - [ ] **Scope-set resolution lets the zero value answer an unanswerable question**
   [Correctness + API, M, 2026-07-20, follow-up to #805]: convention is **nil means NONE**;
@@ -385,23 +395,28 @@ re-confirm each repro before designing a fix.**
   plain-imported-macro-still-usable regression, RED before / GREEN after. Full stdlib/algebra
   `.scm` suite + all Go tests green (imported macros stay usable).
 
-- [ ] **No sealed base above phase 0** [Correctness, M, 2026-07-19, **repro unverified**]: a
-  library's expand-phase install overwrites a bootstrap macro's binding in place (reported:
-  `guard-aux`, same `*Binding` pointer, `(guard …)` compromised). Both binders carry `{}`, so
-  scope keying is structurally blind to it — this is not something the arc could have fixed.
-  Options the codebase already names (`bootstrap_nilpin_test.go`): carve an immutable expand
-  base, or move bootstrap helpers out of user reach.
+- [ ] **No sealed base above phase 0** [Correctness, M, 2026-07-19 — repro VERIFIED 2026-07-21
+  (top-level, not library); fix DEFERRED as architectural]: **the reported library-import vector
+  does NOT reproduce** — importing a library that rebinds `guard-aux` leaves `(guard …)` intact,
+  even inside that library's own body. What DOES reproduce is a **top-level**
+  `(define-syntax guard-aux …)`: it then compromises `guard` (`(guard (e (#t 'caught)) (raise 'x))`
+  → `HIJACKED`). Mechanism: `guard`'s template freely references `guard-aux`, and both are ambient
+  (`{}`-scoped) bootstrap macros; a top-level `define-syntax guard-aux` shares the same ambient
+  slot and overwrites it, so `guard`'s expansion picks up the user's transformer (a free-template-
+  identifier that should resolve to its definition-site binding does not, because both carry `{}`
+  and share the slot). **Why deferred**: the codebase's own fix options — "carve an immutable
+  expand base" or "move bootstrap helpers out of user reach" (`bootstrap_nilpin_test.go`) — are
+  architectural changes to the sealed-base/hygiene model, the single most-reverted, most-warned
+  area (see `memory/` immutable-top-level and hygiene notes; the runtime-phase seal already exists,
+  extending it to expand is significant). Redefining an internal bootstrap helper is also an
+  uncommon footgun. Needs a maintainer architectural decision rather than a unilateral change.
 
-- [ ] **CHANGELOG says nothing about scope-keyed global storage** [Docs, S, 2026-07-19]:
-  16 commits from `8afeb66a` (Stage A, vacuous) to `4f73936d`, 14 of them fixes, and
-  `grep -c "scope-key" CHANGELOG.md` returns **0**. Several change user-visible R7RS
-  semantics — a macro-generating macro expanded twice now gets two binders instead of
-  sharing one (`c9b6b90c`), template-introduced library exports are now rejected eagerly
-  (C3), and `namespace-undefine!` now deletes one scope-matched slot instead of every slot a
-  name owns (`4f73936d`). The deferral was deliberate and correct at the time: an entry
-  written before C2 landed would have described half a change. C2 landed 2026-07-19, so this
-  is now unblocked and is the cheapest open item in this tier. `docs/` was already brought
-  current (Invariant 5 in `docs/environment/system.md`); the CHANGELOG is the remaining gap.
+- [x] **CHANGELOG now documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: added a
+  `[Unreleased] → Changed` entry covering the `8afeb66a…4f73936d` arc and its user-visible
+  semantics — a macro-generating macro expanded twice now gets two binders instead of sharing one
+  (`c9b6b90c`), template-introduced library exports are rejected eagerly (C3), and
+  `namespace-undefine!` deletes one scope-matched slot instead of every slot a name owns
+  (`4f73936d`). `docs/environment/system.md` Invariant 5 was already current.
 
 ### plans/ sweep — correctness deltas not previously in TODO (2026-07-21)
 
@@ -409,12 +424,19 @@ Transcribed from a full `plans/` open-work triage (2026-07-21) — correctness w
 only inside plan files, invisible to a TODO scan. Same provenance pattern as the scope-keyed
 successors above.
 
-- [ ] **stderr data can be lost on exit** [Correctness, S, plan verified not-started 2026-06-24]:
-  `main` reaches `os.Exit` at 9 sites without flushing buffered stderr, so a program that writes
-  to `current-error-port` and then exits (or errors out) can drop its last output. Fix per
-  `plans/2026-05-14-stderr-flush-on-exit.local.md`: an io `Closeable` extension hook + a
-  `run() int` wrapper in `main` so a deferred flush runs before exit. `NewCloseableExtension` /
-  `closeIO` do not exist yet. Bug-fix plus a small `run() int` refactor.
+- [x] **stderr data can be lost on exit** [Correctness, S, RESOLVED 2026-07-21 — no longer
+  reproduces]: verified against the built binary — no textual output is lost on any exit path.
+  `writeAndFlush` (`pkg/extensions/io/prim_write.go`) flushes the port after **every**
+  `write`/`display`/`newline`/`write-char`/`write-string`, so the bufio buffer never accumulates
+  across writes. Confirmed: 5000 writes then `(exit 7)` and a single 100 000-char `(display …)`
+  both arrive in full; a program that writes to `current-error-port` then `(exit)` or errors out
+  keeps its output. This per-write flushing postdates the 2026-05-14 plan (which explicitly said
+  "no per-message flushing is added") and supersedes its flush-on-exit design — implementing that
+  design now would add redundant machinery for a data-loss that no longer occurs. **Also note**
+  the plan was incomplete regardless: it targeted only `cmd/wile/main.go`'s `os.Exit` sites and
+  missed `(exit)`/`(emergency-exit)` → `os.Exit` in `extensions/system/prim_system.go`, the
+  bug's own canonical repro. `plans/2026-05-14-stderr-flush-on-exit.local.md` is stale/obsolete
+  (archive candidate).
 - [x] **SRFI-18 `thread-join!` wraps an uncaught exception** [Correctness/conformance, S,
   Done 2026-07-21]: implemented per `plans/2026-06-27-srfi18-uncaught-exception-wrapper.local.md`
   with **Q1 = A** (wrap unconditionally — strict SRFI-18; zero external consumers, break-freely).

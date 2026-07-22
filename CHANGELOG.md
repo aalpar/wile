@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Internal `define-syntax` now works in a function-shorthand `define` body.**
+  `(define (f) (define-syntax m …) (m))` raised `no such local or global binding "m"`;
+  the same body under `let`/`lambda`/named-`let` worked. The shorthand-`define` body was
+  expanded as a flat argument list, so internal macros were never registered and body
+  identifiers carried no scope (violating the compiler's "a local always carries a scope"
+  invariant). The shorthand body now gets the identical treatment a lambda body gets. The
+  form is preserved (not desugared), so the self-tail-call and frame-reclaim optimizations
+  are unaffected.
+- **A library-local `define-syntax` now shadows a same-named imported macro.** A library
+  that imported a macro and then defined its own macro of that name used and exported the
+  *imported* one — in both the export surface and the library's own body — while the
+  variable analogue shadowed correctly. Imported macros were mirrored into the library's
+  runtime frame, which the export probe (and body macro resolution) consulted first;
+  imported macros now install into the expand frame only. Imported macros stay usable.
 - **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
   deterministic when a closed send races a ready receive" described `channel-select`
   as a Scheme primitive. There has never been one; the fix it describes was to the
@@ -43,6 +57,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Top-level bindings are now scope-keyed (hygienic global storage).** A top-level name
+  owns one binding slot per distinct hygiene scope set rather than a single shared slot,
+  which corrects several macro-hygiene cases at global scope. User-visible consequences:
+  a macro-generating macro expanded twice now produces two independent binders instead of
+  silently sharing one; a library that re-exports a template-introduced identifier is now
+  rejected eagerly at definition rather than exporting an unhygienic binding; and
+  `namespace-undefine!` now removes the single scope-matched binding (the one
+  `namespace-ref` resolves) instead of every slot the name owns, so it can no longer
+  destroy a macro-introduced binding the reader reports as unbound. (Landed across the
+  `8afeb66a…4f73936d` arc; architecture in `docs/environment/system.md`, Invariant 5.)
+- **SRFI-18: `thread-join!` wraps an uncaught exception.** A thread that terminates via an
+  exception it did not handle is now surfaced to the joiner as an `uncaught-exception`
+  object rather than by re-raising the bare condition. Recover the original with the new
+  `uncaught-exception-reason` (and test with `uncaught-exception?`); the reason is the same
+  object the thread raised. This is the strict SRFI-18 behavior; a joiner that matched the
+  bare condition inside a `guard` must now unwrap via `uncaught-exception-reason`.
 - **Exactness contagion (R7RS §6.2.2) now actually contaminates.** An exact operand
   meeting an inexact one is absorbed into the inexact operand's representation, on
   **both** the real and the complex axis: `(+ 1.5 2)` is a `Float` (it was a 256-bit
