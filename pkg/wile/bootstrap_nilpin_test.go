@@ -40,45 +40,40 @@ type nilPin struct {
 	compileBound bool
 }
 
-// TestBootstrapMacrosPinLateBoundReferents is a ratchet against review finding C6.
+// TestBootstrapMacrosPinLateBoundReferents is a load-order ratchet for bootstrap macro
+// free-identifier references, across BOTH the runtime and expand phases.
 //
 // `unless`'s template referenced `not`, a bootstrap PROCEDURE that loaded after the
 // macros. At macro-definition time the referent was unbound, so the free-id snapshot
-// took a nil pin, resolution degraded to use-site, and a user (define not ...)
-// captured the macro's own identifier (R7RS 4.3.2). Nothing else enforces "which
-// bootstrap file does this macro belong in", and the failure is silent, so this test
-// enumerates every syntax-rules macro in the expand frame, walks each clause's
-// FreeIds, and fails on any Global == nil && !HasLocalBinding whose name is
-// nevertheless bound in the runtime phase after bootstrap.
+// took a nil pin (SyntaxRulesClause.FreeIds[name].Global == nil), resolution degraded to
+// use-site, and a user (define not ...) captured the macro's own identifier (R7RS 4.3.2).
+// The analogous expand-phase case was `guard` -> `guard-aux`: a top-level
+// (define-syntax guard-aux …) captured guard's private helper.
 //
-// The expand/compile phases do NOT fail the test, but NOT because they are safe.
-// The original rationale here claimed a sibling-macro reference (and -> and,
-// guard -> guard-aux) "resolves in operator position during expansion, where a
-// runtime define cannot reach it". That is FALSE, and measurably so:
+// Both are now closed, so this test can certify both phases (updated 2026-07-22, the
+// free-template-id-hygiene arc — plans/2026-07-22-free-template-id-hygiene-impl.local.md):
 //
-//	(guard (e (else 'caught)) (raise 'x))                          => caught
-//	(define-syntax guard-aux (syntax-rules () ((_ r ...) 'PWNED)))
-//	(guard (e (else 'caught)) (raise 'x))                          => PWNED
+//   - D1 carved a sealed EXPAND base (Namespace.SealedExpandBase, phase 1): bootstrap
+//     macros/expanders live there, immutable, so a top-level define-syntax shadows in the
+//     mutable expand child instead of overwriting the pinned binding in place.
+//   - D2 taught macro dispatch (lookupMacroBinding) to consult the pin, after the local
+//     let-syntax arm and before the NextPhase/library arms.
+//   - D0 reordered the sibling helpers (guard-aux, define-record-type-impl) above their
+//     referencers so their pins are non-nil at macro-definition time.
 //
-// A top-level define-syntax reaches the expand frame and overwrites the binding
-// IN PLACE (same *Binding, new value), so `guard`'s reference to its private helper
-// is captured by ordinary user code. No library or import is required.
+// So a pin into a bootstrap macro/expander IS now load-bearing. The census walks every
+// syntax-rules macro in the SEALED EXPAND base, walks each clause's FreeIds, and FAILS on
+// any Global == nil && !HasLocalBinding whose name is bound in the runtime phase (a late
+// bootstrap procedure) OR in the expand phase (an unpinned sibling macro/expander — a real
+// capture exposure). A neither-bound nil-pin is genuinely inert (a special form the
+// expander handles, a template-introduced binder, or a syntax-rules literal like else/=>).
 //
-// Pinning does not prevent this. A pin is a *Binding pointer, so an in-place value
-// overwrite defeats it; verified by reordering guard-aux above guard, which does
-// pin the reference (census drops to 46) and changes nothing about the capture.
-// Runtime-phase referents like `not` survive only because they live in the SEALED
-// BASE while a top-level define writes to the mutable runtime child, a different
-// frame. There is no sealed base for the expand phase, so bootstrap macro bindings
-// are mutable in place and pins into them are not load-bearing.
+// Fixing a flagged entry: reorder the referent's definition above the referencing macro
+// (sibling macro/expander) or into an earlier bootstrap file (runtime procedure). A
+// precisely-justified exclusion (e.g. an auxiliary-syntax literal, or a referent bound only
+// under a fuller profile) must be narrow and commented, not a broad skip.
 //
-// The census therefore certifies bootstrap LOAD ORDER for runtime-phase referents
-// and nothing more. It is not evidence that expand-phase referents are safe; the
-// known-capturable name today is guard-aux. Do not widen this test to assert
-// expand-phase safety without first carving an immutable base for the expand phase
-// (or renaming the helper beyond user reach).
-//
-// Run with -v to see the full census, including the unbound entries.
+// Run with -v to see the full census, including the inert entries.
 func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
@@ -112,27 +107,28 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	defects := make([]nilPin, 0, len(pins))
 	unchecked := make([]nilPin, 0, len(pins))
 	for _, p := range pins {
-		if p.runtimeBound {
+		if p.runtimeBound || p.expandBound {
 			defects = append(defects, p)
 			continue
 		}
 		unchecked = append(unchecked, p)
 	}
 
-	t.Logf("nil-pin census: %d total, %d runtime-bound (DEFECT), %d not runtime-bound (UNCHECKED, not proven safe)",
+	t.Logf("nil-pin census: %d total, %d runtime/expand-bound (DEFECT), %d neither (inert: special form / binder / literal)",
 		len(pins), len(defects), len(unchecked))
 
 	for _, p := range defects {
-		t.Errorf("macro %q pins free identifier %q as unbound, but %q IS bound in the runtime "+
-			"phase after bootstrap (expand=%v compile=%v). The macro is defined before its "+
-			"referent loads, so the reference degrades to use-site resolution and a user "+
-			"(define %s ...) captures it. Move the macro after the definition (see "+
-			"bootstrap_macros_late.scm) or move the definition earlier.",
-			p.macro, p.freeID, p.freeID, p.expandBound, p.compileBound, p.freeID)
+		t.Errorf("macro %q pins free identifier %q as unbound, but %q IS bound after bootstrap "+
+			"(runtime=%v expand=%v compile=%v). The macro is defined before its referent loads, "+
+			"so the reference degrades to use-site resolution and a user (define %s ...) or "+
+			"(define-syntax %s ...) captures it. Move the referent's definition earlier (for a "+
+			"runtime procedure see bootstrap_macros_late.scm; for a sibling macro/expander "+
+			"reorder it above this macro, as guard-aux was above guard).",
+			p.macro, p.freeID, p.freeID, p.runtimeBound, p.expandBound, p.compileBound, p.freeID, p.freeID)
 	}
 
-	t.Logf("--- not runtime-bound: inert (special form / binder / literal) OR an expand-phase " +
-		"sibling reference this test does not check (e.g. guard-aux, which IS capturable) ---")
+	t.Logf("--- neither runtime- nor expand-bound: genuinely inert (special form handled by the " +
+		"expander, template-introduced binder, or syntax-rules literal like else/=>) ---")
 	byName := map[string][]string{}
 	for _, p := range unchecked {
 		byName[p.freeID] = append(byName[p.freeID], p.macro)

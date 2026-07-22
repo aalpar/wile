@@ -12,6 +12,29 @@
 
 ;; Exception handling (R7RS §4.2.7 guard macro)
 ;;
+;; guard-aux is defined BEFORE guard (D0, 2026-07-22) so that guard's template,
+;; which freely references guard-aux, pins that reference to guard-aux's
+;; definition-site binding at macro-definition time (SyntaxSymbol.ResolvedBinding
+;; non-nil). With the pin populated and consulted on the macro path (D2), a
+;; use-site (define-syntax guard-aux …) can no longer capture guard's private
+;; helper (R7RS 4.3.2). guard-aux references only itself + begin/let/if, so it
+;; compiles standalone here.
+(define-syntax guard-aux
+  (syntax-rules (else =>)
+    ((guard-aux re-raise var (else result ...))
+     (begin result ...))
+    ((guard-aux re-raise var (test => proc) clause ...)
+     (let ((t test))
+       (if t
+           (proc t)
+           (guard-aux re-raise var clause ...))))
+    ((guard-aux re-raise var (test result ...) clause ...)
+     (if test
+         (begin result ...)
+         (guard-aux re-raise var clause ...)))
+    ((guard-aux re-raise var)
+     (re-raise))))
+
 ;; Uses the double call/cc pattern from R7RS §7.3 so that when no clause
 ;; matches, the exception is re-raised in the dynamic extent of the
 ;; original raise (where the previous exception handler is current).
@@ -47,19 +70,3 @@
            (lambda ()
              (let ((results (call-with-values (lambda () e1 e2 ...) list)))
                (lambda () (apply values results)))))))))))
-
-(define-syntax guard-aux
-  (syntax-rules (else =>)
-    ((guard-aux re-raise var (else result ...))
-     (begin result ...))
-    ((guard-aux re-raise var (test => proc) clause ...)
-     (let ((t test))
-       (if t
-           (proc t)
-           (guard-aux re-raise var clause ...))))
-    ((guard-aux re-raise var (test result ...) clause ...)
-     (if test
-         (begin result ...)
-         (guard-aux re-raise var clause ...)))
-    ((guard-aux re-raise var)
-     (re-raise))))

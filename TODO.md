@@ -438,6 +438,17 @@ re-confirm each repro before designing a fix.**
       `,apropos cond` still surfaces bootstrap macros. Gates: lint + build + covercheck (all 41 ≥80%)
       + `-race` all GREEN. #1 still RED-but-skipped (needs D0+D2). Next: Phase 2′ (D0 reorder + D2
       pin consult).
+    - **Phase 2′ DONE (D0 + D2, closes #1):** D0 reordered the sibling helpers (`guard-aux` above
+      `guard`; `define-record-type-impl` above its two delegators) so their pins are non-nil at
+      macro-def time — census dropped **47 → 44** exactly (3 helper edges). D2 threaded the
+      `SyntaxSymbol` into `lookupMacroBinding` and consults the pin AFTER arm 1 (local let-syntax)
+      and BEFORE arm 2 (NextPhase)/arm 3 (library) — mirroring the value-path `tryResolvedBinding`
+      R1 ordering. **#1 GREEN** (`guard`+top-level `guard-aux` → `x`, not `PWNED`); #2 + R1-analog
+      stay GREEN (pin did NOT jump ahead of arm 1); march-hare/ER/§6 cases (generated-macro nil-pin
+      fallthrough, use-site local no-capture, pinned-vs-bare) all GREEN. Census tightened into a
+      ratchet: an unpinned expand-bound sibling reference is now a **defect** (was UNCHECKED);
+      passes (0 defects). Gates: lint + build + covercheck (all 41 ≥80%) + `-race` GREEN.
+      Remaining: Phase 3′ (adversarial import tests + docs + CHANGELOG).
 
 - [x] **CHANGELOG now documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: added a
   `[Unreleased] → Changed` entry covering the `8afeb66a…4f73936d` arc and its user-visible
