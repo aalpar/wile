@@ -582,13 +582,25 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				lib.Name.SchemeString(), internalName)
 		}
 
-		// Create binding in the target at the base phase.
-		phaseEnv := targetEnv.AtPhase(targetPhase)
-		localSym := values.NewSymbol(localName)
-		err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
-			libBinding, externalName, lib.Name, " at phase "+targetPhase.String())
-		if err != nil {
-			return err
+		// A syntax (macro) binding is an expand-phase concept: skip the base
+		// (runtime, phase 0 at a top-level import) install so findLibraryBinding's
+		// runtime-first probe cannot return it over the importer's own
+		// define-syntax, which lands in the expand phase — the same shadowing
+		// copyLibraryBindingsDirect avoids, so an imported macro the importer then
+		// re-defines does not win. The source-phase propagation below is then its
+		// sole install (sourcePhase == PhaseExpand for a macro). Skip only when
+		// that propagation will run (sourcePhase > 0); a syntax binding with no
+		// source phase still needs a home, so it falls through to the base install.
+		skipBase := libBinding.BindingType() == environment.BindingTypeSyntax && sourcePhase > 0
+		if !skipBase {
+			// Create binding in the target at the base phase.
+			phaseEnv := targetEnv.AtPhase(targetPhase)
+			localSym := values.NewSymbol(localName)
+			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
+				libBinding, externalName, lib.Name, " at phase "+targetPhase.String())
+			if err != nil {
+				return err
+			}
 		}
 
 		// Propagate to the source phase in the target so the binding is available

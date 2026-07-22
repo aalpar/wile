@@ -77,6 +77,30 @@ func TestLibraryLocalMacroShadowsImportedMacro(t *testing.T) {
 		qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "(mc-triples 15)")
 	})
 
+	// The same shadowing must hold at the TOP LEVEL, not only for a library
+	// body: importing a macro and then redefining it with a local define-syntax
+	// must use the local one. This exercises the CopyLibraryBindingsToEnvAtPhase
+	// import path (distinct from copyLibraryBindingsDirect used by libraries).
+	t.Run("top-level local define-syntax shadows an imported macro", func(t *testing.T) {
+		eng := newEng(t)
+		v, err := eng.EvalMultiple(ctx, `(import (mb))
+			(define-syntax twice (syntax-rules () ((_ x) (list 'top-triples (+ x x x)))))
+			(twice 5)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "(top-triples 15)")
+	})
+
+	// A renamed import that collides with a local define-syntax must also let
+	// the local win (localName != externalName path in the install).
+	t.Run("top-level renamed import shadowed by a local define-syntax", func(t *testing.T) {
+		eng := newEng(t)
+		v, err := eng.EvalMultiple(ctx, `(import (rename (mb) (twice dup)))
+			(define-syntax dup (syntax-rules () ((_ x) (list 'local-dup x))))
+			(dup 7)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "(local-dup 7)")
+	})
+
 	// Regression: importing a macro without redefining it must still work — the
 	// imported macro is usable in the importing library's body.
 	t.Run("plain imported macro still usable", func(t *testing.T) {
