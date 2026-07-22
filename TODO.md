@@ -401,8 +401,9 @@ re-confirm each repro before designing a fix.**
   different frames, a cross-*kind* same-name clash across two imported libraries (macro `foo`
   vs variable `foo`) is no longer conflict-detected per R7RS §5.6; same-kind clashes still are.
 
-- [ ] **No sealed base above phase 0** [Correctness, M, 2026-07-19 — repro VERIFIED 2026-07-21
-  (top-level, not library); fix DEFERRED as architectural]: **the reported library-import vector
+- [x] **No sealed base above phase 0** [Correctness, M, 2026-07-19; **RESOLVED 2026-07-22** on
+  `feat/free-template-id-hygiene`, commits `2f8052bc`/`8f3079b7`/`f70f6aec` — supersedes the
+  "DEFERRED as architectural" call below with the free-template-id-hygiene arc]: **the reported library-import vector
   does NOT reproduce** — importing a library that rebinds `guard-aux` leaves `(guard …)` intact,
   even inside that library's own body. What DOES reproduce is a **top-level**
   `(define-syntax guard-aux …)`: it then compromises `guard` (`(guard (e (#t 'caught)) (raise 'x))`
