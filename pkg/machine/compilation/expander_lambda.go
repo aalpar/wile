@@ -54,25 +54,53 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	// Create a scope for this lambda's bindings.
+	formalsStx, expandedBody, err := p.expandProcedureBody("lambda", formals, cdrPair, sym.SourceContext())
+	if err != nil {
+		return nil, wrapSourcedError(expr.SourceContext(), err)
+	}
+
+	// Build (lambda formals expanded-body...)
+	args := syntax.NewSyntaxCons(formalsStx, expandedBody, sym.SourceContext())
+	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+}
+
+// expandProcedureBody performs the shared expand-time handling for a procedure
+// body — the body of a lambda, and of the function-shorthand define
+// (define (name . formals) body...), which is sugar for
+// (define name (lambda formals body...)). It mints a fresh binding scope, adds
+// it to the formals and the body BEFORE inner expansion, binds the formals in a
+// child expand environment, and expands the body with internal define-syntax
+// processing (R7RS §5.3 letrec* semantics).
+//
+// Both callers must run this identically: the scope is what upholds
+// CompileSymbol's fast-path invariant (a symbol inside a local binding context
+// always carries a scope — see compile_time_continuation.go), and the
+// ExpandBodyWithDefineSyntax pass is what makes internal macros visible to
+// later body forms. The shorthand define previously skipped both (it expanded
+// its body as a flat argument list), so an internal define-syntax was invisible
+// and raised "no such local or global binding" when used.
+//
+// formName ("lambda"/"define") only tunes the error prefix so each caller keeps
+// its own diagnostics. It returns the scoped formals and the rebuilt body; the
+// caller adds the surrounding source context.
+func (p *ExpanderTimeContinuation) expandProcedureBody(
+	formName string,
+	formals syntax.SyntaxValue,
+	body *syntax.SyntaxPair,
+	src *syntax.SourceContext,
+) (syntax.SyntaxValue, syntax.SyntaxValue, error) {
 	// This scope is added to both formals and body BEFORE any inner expansion,
 	// ensuring that pattern matching in inner macros (like cond) can correctly
-	// detect when identifiers (like =>) have been bound by this lambda.
-	//
-	// This also maintains the compiler's fast-path invariant: every symbol inside
-	// a local binding context has at least one scope (lambdaScope), so symbols
-	// with empty scopes can safely skip scope-aware resolution. See CompileSymbol.
-	lambdaScope := syntax.NewScopeWithLabel("lambda")
+	// detect when identifiers (like =>) have been bound by this procedure.
+	scope := syntax.NewScopeWithLabel("lambda")
 
-	// Add lambda scope to formals and body
-	formalsStx := syntax.AddScopeToSyntax(formals, lambdaScope)
-	bodyWithScope := cdrPair.AddScope(lambdaScope).(*syntax.SyntaxPair)
+	formalsStx := syntax.AddScopeToSyntax(formals, scope)
+	bodyWithScope := body.AddScope(scope).(*syntax.SyntaxPair)
 
-	// Extract formal parameter symbols (now with lambda scope included)
+	// Extract formal parameter symbols (now with the body scope included) and
+	// bind them in a child expand environment, so lookups during body expansion
+	// find them.
 	formalSyms := extractFormalSymbols(formalsStx)
-
-	// Create a child environment with the formals as local variable bindings.
-	// The bindings include the lambda scope, so lookups will find them.
 	childEnv := environment.NewEnvironmentFrameWithParent(
 		environment.NewLocalEnvironment(0),
 		p.env,
@@ -81,41 +109,36 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 		childEnv.MaybeCreateLocalBinding(fs.sym, environment.BindingTypeVariable, fs.scopes, fs.source)
 	}
 
-	// R7RS §5.3: Process define-syntax forms before expanding subsequent expressions
-	// This makes locally-defined macros visible to later body expressions
 	bodyExprs, err := collectBodyExpressions(bodyWithScope)
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "lambda: invalid body expression"))
+		return nil, nil, werr.WrapForeignErrorf(err, "%s: invalid body expression", formName)
 	}
 
 	// Handle the case where body is wrapped in (begin ...) - common from let macro
 	unwrappedExprs, wasBeginWrapped, err := unwrapBeginBodyWithFlag(bodyExprs)
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "lambda: invalid body"))
+		return nil, nil, werr.WrapForeignErrorf(err, "%s: invalid body", formName)
 	}
 
 	// Expand body in the child environment, compiling define-syntax as encountered
 	childExpander := p.newChildExpander(childEnv)
 	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(unwrappedExprs)
 	if err != nil {
-		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "lambda: failed to expand body"))
+		return nil, nil, werr.WrapForeignErrorf(err, "%s: failed to expand body", formName)
 	}
 
-	// Rebuild the body as a syntax list
+	// Rebuild the body as a syntax list, re-wrapping in begin when it arrived so.
 	var expandedBody syntax.SyntaxValue
 	if wasBeginWrapped {
-		// Re-wrap in begin
-		beginSym := syntax.NewSyntaxSymbol("begin", sym.SourceContext())
-		innerList := syntax.SyntaxList(sym.SourceContext(), expandedExprs...)
-		beginForm := syntax.NewSyntaxCons(beginSym, innerList, sym.SourceContext())
-		expandedBody = syntax.SyntaxList(sym.SourceContext(), beginForm)
+		beginSym := syntax.NewSyntaxSymbol("begin", src)
+		innerList := syntax.SyntaxList(src, expandedExprs...)
+		beginForm := syntax.NewSyntaxCons(beginSym, innerList, src)
+		expandedBody = syntax.SyntaxList(src, beginForm)
 	} else {
-		expandedBody = syntax.SyntaxList(sym.SourceContext(), expandedExprs...)
+		expandedBody = syntax.SyntaxList(src, expandedExprs...)
 	}
 
-	// Build (lambda formals expanded-body...)
-	args := syntax.NewSyntaxCons(formalsStx, expandedBody, sym.SourceContext())
-	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+	return formalsStx, expandedBody, nil
 }
 
 // collectBodyExpressions collects all expressions from a body syntax pair into a slice.

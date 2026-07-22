@@ -350,13 +350,36 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 	// Check if it's a function definition (define (name args...) body...)
 	_, isSymbol := first.(*syntax.SyntaxSymbol)
 	if !isSymbol {
-		// Function definition - first is (name args...)
-		// Expand the body expressions
-		expandedBody, err := p.ExpandSyntaxArgumentList(cdrPair)
-		if err != nil {
-			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "define: failed to expand body"))
+		// Function shorthand: (define (name . formals) body...) is sugar for
+		// (define name (lambda formals body...)), so its body must get the same
+		// expand-time treatment a lambda body gets — a body scope plus internal
+		// define-syntax registration (R7RS §5.3). Route it through the shared
+		// procedure-body expander (expandProcedureBody). The shorthand form is
+		// preserved, not desugared, so the compiler keeps its shorthand-define
+		// optimizations (self-tail-call, frame reclamation).
+		sig, sigOk := first.(*syntax.SyntaxPair)
+		var name *syntax.SyntaxSymbol
+		if sigOk && !syntax.IsSyntaxEmptyList(sig) {
+			name, _ = sig.SyntaxCar().(*syntax.SyntaxSymbol)
 		}
-		args := syntax.NewSyntaxCons(first, expandedBody, sym.SourceContext())
+		if name == nil {
+			// Malformed or curried signature (name is not a bare symbol): keep the
+			// prior flat expansion so the compiler emits its existing
+			// "expected symbol as function name" diagnostic unchanged.
+			expandedBody, err := p.ExpandSyntaxArgumentList(cdrPair)
+			if err != nil {
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "define: failed to expand body"))
+			}
+			args := syntax.NewSyntaxCons(first, expandedBody, sym.SourceContext())
+			return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+		}
+
+		formalsStx, expandedBody, err := p.expandProcedureBody("define", sig.SyntaxCdr(), cdrPair, sym.SourceContext())
+		if err != nil {
+			return nil, wrapSourcedError(expr.SourceContext(), err)
+		}
+		signature := syntax.NewSyntaxCons(name, formalsStx, first.SourceContext())
+		args := syntax.NewSyntaxCons(signature, expandedBody, sym.SourceContext())
 		return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
 	}
 

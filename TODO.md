@@ -350,13 +350,23 @@ here)" and "Found by the Stage C adversarial review", which is not where open wo
 for. **Two of the three defects below are marked in the plan as NOT verified first-hand —
 re-confirm each repro before designing a fix.**
 
-- [ ] **Two shorthand-`define` defects adjacent to the C1-local fix** [Correctness, S,
-  2026-07-19]: a silent `#!void`, and a hard `no such local or global binding` for a
-  macro-generating macro defined by an internal `define-syntax`. Both survived `2a0b2941`
-  unchanged. The second is REAL and reproduces in the shorthand `(define (f) …)` body form;
-  it does **not** reproduce under `(let () …)` or `(lambda () …)`, which is why an earlier
-  review pass wrongly concluded it was not a defect — check the shorthand form specifically.
-  The plan's instruction was "file separately; do not bundle," and no issue was ever opened.
+- [x] **Internal `define-syntax` is invisible in a shorthand-`define` body** [Correctness, S,
+  Done 2026-07-21]: reproduced and fixed. **Broader than the original two-symptom framing** (a
+  silent `#!void` / a hard `no such local or global binding` for a macro-generating macro): *any*
+  internal `define-syntax` in a shorthand `(define (f) …)` body was invisible to later body forms
+  — even a plain non-generating one — while `(let () …)`, `(lambda () …)`, and named-`let` bodies
+  all worked. **Root cause**: `expandDefineForm`'s function-shorthand branch
+  (`expander_primitive_forms.go`) expanded its body via `ExpandSyntaxArgumentList` (a flat
+  argument-list pass — no letrec* pre-scan, no `define-syntax` registration, no body scope),
+  whereas `expandLambdaForm` runs the body through `ExpandBodyWithDefineSyntax` under a fresh body
+  scope. Two consequences: internal macros were never registered, and the body identifiers carried
+  no scope, violating `CompileSymbol`'s fast-path invariant ("every symbol in a local binding
+  context carries a scope"), so the use fell through to the global lookup and errored. **Fix**:
+  extracted the lambda body-expansion into a shared `expandProcedureBody` helper and route the
+  shorthand-`define` body through it (form preserved, not desugared, so the compiler keeps its
+  self-tail/frame-reclaim optimizations — verified: 5M-iteration tail loop, mutual recursion, and
+  generated shorthand-defines all intact). Guard: `TestInternalDefineSyntax_InShorthandDefineBody`
+  + `_LambdaLetParityUnbroken` (`pkg/wile`), RED before / GREEN after over 6 shorthand cases.
 
 - [ ] **Export phase-probe ORDER is a second wrong-binding axis, not closed by C3**
   [Correctness, M, 2026-07-19, **repro unverified**]: `findLibraryBinding` probes runtime,
