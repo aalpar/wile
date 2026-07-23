@@ -39,63 +39,59 @@ import (
 // is never consulted. This pairing is what lets a resolved global load index the
 // bindings slice instead of re-hashing the symbol at every execution.
 //
-// Scopes is the hygiene key. For a deferred index (Env == nil) it is the
-// reference's scope set, resolved against whatever environment is live when the
-// instruction executes. For a PINNED index it is the set resolution matched on,
-// kept so that re-resolution — which happens whenever the pinned slot no longer
-// holds the binding, e.g. after a delete — stays inside the same hygiene
-// boundary instead of falling back to bare name.
-type GlobalIndex struct {
-	Index  *values.Symbol
-	Env    *GlobalEnvironmentFrame
-	Slot   int
-	Scopes []*syntax.Scope
-	// scopeKeyed records that Scopes is this index's hygiene KEY — the set
-	// resolution actually matched on — rather than merely absent. It exists
-	// because a nil Scopes cannot distinguish "matched the empty set" from "no
-	// key at all", and those demand opposite re-resolution behavior. See
-	// matchAny.
-	scopeKeyed bool
-}
-
-// matchAny reports whether re-resolving this index should ignore scope sets.
+// query is the hygiene key. For a deferred index (Env == nil) it is the
+// reference's scope-set query, resolved against whatever environment is live
+// when the instruction executes. For a PINNED index it is the query resolution
+// matched on, kept so that re-resolution — which happens whenever the pinned
+// slot no longer holds the binding, e.g. after a delete — stays inside the same
+// hygiene boundary instead of falling back to bare name.
 //
-// Only a WILDCARD index re-resolves by bare name. A scope-keyed one must
-// re-resolve under its key even when that key is the empty set, or it silently
-// crosses a hygiene boundary: DeleteBinding nils the slots and drops the name,
-// so once anything re-creates the name, a stale pinned index that fell back to
-// wildcard would land on whatever binding now holds it — including one whose
-// scope set its own reference could never have reached.
-func (p *GlobalIndex) matchAny() bool {
-	return p.Scopes == nil && !p.scopeKeyed
+// A wildcard query (AllScopes) re-resolves by bare name; a specific or empty
+// query re-resolves under its scope set even when that set is empty, or a stale
+// pinned index would silently cross a hygiene boundary after a
+// delete-then-recreate: DeleteBinding nils the slots and drops the name, so once
+// anything re-creates it a wildcard fallback would land on whatever binding now
+// holds the name — including one whose scope set the reference could never
+// reach. This one ScopeSet subsumes what a nil Scopes slice plus a scopeKeyed
+// bool once encoded: a nil slice could not distinguish "matched the empty set"
+// from "no key at all", and those demand opposite re-resolution.
+type GlobalIndex struct {
+	Index *values.Symbol
+	Env   *GlobalEnvironmentFrame
+	Slot  int
+	query syntax.ScopeSet
 }
 
 // NewGlobalIndex creates a new deferred GlobalIndex for the given symbol.
 // Env is nil, so Slot is not meaningful; use newResolvedGlobalIndex when the
-// owning frame and slot are known.
+// owning frame and slot are known. Its query is the wildcard (AllScopes): a
+// deferred bare-name index re-resolves by name.
 func NewGlobalIndex(key *values.Symbol) *GlobalIndex {
-	return &GlobalIndex{Index: key}
+	return &GlobalIndex{Index: key, query: syntax.AllScopes()}
 }
 
 // NewDeferredGlobalIndex creates a deferred GlobalIndex that carries the
 // reference's scope set, so the execution-time parent-chain walk can resolve it
 // hygienically rather than by bare name.
 func NewDeferredGlobalIndex(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	return &GlobalIndex{Index: key, Scopes: scopes}
+	return &GlobalIndex{Index: key, query: syntax.ScopesOf(scopes)}
 }
 
 // newResolvedGlobalIndex creates a GlobalIndex pinned to the frame and slot that
-// resolution landed on.
+// resolution landed on. Its query is the wildcard (AllScopes): a wildcard
+// resolution re-resolves by bare name if its slot dies.
 func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int) *GlobalIndex {
-	return &GlobalIndex{Index: key, Env: env, Slot: slot}
+	return &GlobalIndex{Index: key, Env: env, Slot: slot, query: syntax.AllScopes()}
 }
 
 // newScopeKeyedGlobalIndex is newResolvedGlobalIndex for a resolution that
-// matched on a scope set, recording that set as the index's key. The scoped
-// lookups compute it and would otherwise discard it, leaving the pinned index
-// indistinguishable from a wildcard one the moment its slot dies.
+// matched on a scope set, recording that set as the index's query key. The
+// scoped lookups compute it and would otherwise discard it, leaving the pinned
+// index indistinguishable from a wildcard one the moment its slot dies. ScopesOf
+// is never the wildcard, so re-resolution stays inside the hygiene key even when
+// the set is empty.
 func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int, scopes []*syntax.Scope) *GlobalIndex {
-	return &GlobalIndex{Index: key, Env: env, Slot: slot, Scopes: scopes, scopeKeyed: true}
+	return &GlobalIndex{Index: key, Env: env, Slot: slot, query: syntax.ScopesOf(scopes)}
 }
 
 // SchemeString returns a string representation of this global index.
@@ -286,14 +282,12 @@ func AmbientScopes() []*syntax.Scope {
 // same.)
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) AmbientKeys() []values.Symbol {
-	ambient := AmbientScopes()
-
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
 	q := make([]values.Symbol, 0, len(p.keys))
 	for k := range p.keys {
-		_, ok := p.bestSlotLocked(k, ambient, false)
+		_, ok := p.bestSlotLocked(k, syntax.EmptyScopes())
 		if !ok {
 			continue
 		}
@@ -316,19 +310,20 @@ func scopeSetsEqual(a, b []*syntax.Scope) bool {
 	return syntax.ScopesMatch(a, b) && syntax.ScopesMatch(b, a)
 }
 
-// bestSlotLocked returns the slot whose binding best matches the given scope
-// set, per Flatt's maximal resolution: a candidate's scope set must be a subset
-// of the reference's, and among the candidates the largest set wins. matchAny
-// takes the first slot regardless of scopes, for introspection callers that mean
-// "any binding of this name" rather than "the empty scope set".
+// bestSlotLocked returns the slot whose binding best matches the given
+// scope-set query, per Flatt's maximal resolution: a candidate's scope set must
+// be a subset of the reference's, and among the candidates the largest set wins.
+// A wildcard query (q.IsAll) takes the first slot regardless of scopes, for
+// introspection callers that mean "any binding of this name" rather than "the
+// empty scope set".
 //
 // Caller MUST hold at least a read lock on p.mu.
-func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, scopes []*syntax.Scope, matchAny bool) (int, bool) {
+func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.ScopeSet) (int, bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
 		return 0, false
 	}
-	if matchAny {
+	if q.IsAll() {
 		// Skip nil'd slots for the same reason the scoped branch does: a live key
 		// may point at a slot DeleteBinding emptied. Returning slots[0] blindly
 		// would hand back a nil binding for callers to dereference.
@@ -339,6 +334,7 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, scopes []*syn
 		}
 		return 0, false
 	}
+	scopes := q.Scopes()
 	var best bestOf[int]
 	for _, i := range slots {
 		if i >= len(p.bindings) || p.bindings[i] == nil {
@@ -415,7 +411,7 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 	ge := p
 
 	p.mu.RLock()
-	_, ok := ge.bestSlotLocked(*key, nil, true)
+	_, ok := ge.bestSlotLocked(*key, syntax.AllScopes())
 	p.mu.RUnlock()
 
 	if !ok {
@@ -433,7 +429,7 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
 	p.mu.RLock()
-	i, ok := p.bestSlotLocked(*key, scopes, false)
+	i, ok := p.bestSlotLocked(*key, syntax.ScopesOf(scopes))
 	p.mu.RUnlock()
 
 	if !ok {
@@ -455,7 +451,7 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 
 	i, ok := ge.pinnedSlotLocked(gi)
 	if !ok {
-		i, ok = ge.bestSlotLocked(*key, gi.Scopes, gi.matchAny())
+		i, ok = ge.bestSlotLocked(*key, gi.query)
 	}
 	if !ok {
 		return nil
@@ -494,7 +490,7 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	p.mu.Lock()
 	i, ok := ge.pinnedSlotLocked(gi)
 	if !ok {
-		i, ok = ge.bestSlotLocked(*gi.Index, gi.Scopes, gi.matchAny())
+		i, ok = ge.bestSlotLocked(*gi.Index, gi.query)
 	}
 	if !ok {
 		p.mu.Unlock()
@@ -541,7 +537,7 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol, scopes []*syn
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	i, ok := p.bestSlotLocked(*sym, scopes, false)
+	i, ok := p.bestSlotLocked(*sym, syntax.ScopesOf(scopes))
 	if !ok {
 		return false
 	}

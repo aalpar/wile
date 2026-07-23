@@ -463,11 +463,26 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	return &p.local
 }
 
+// scopesToQueryMatchAny converts a legacy nillable scope-set argument to a
+// ScopeSet under the historical convention that a nil slice means match-any. It
+// is a Phase-1 boundary shim: the public read entry points still take []*Scope,
+// and this preserves their exact nil reading while the private resolvers move to
+// ScopeSet. Phase 2 removes it by having callers pass a ScopeSet directly. Do
+// NOT use it for GetGlobalIndexWithScopes / DeleteBinding, where a nil slice
+// means the EMPTY set — use syntax.ScopesOf there.
+func scopesToQueryMatchAny(scopes []*syntax.Scope) syntax.ScopeSet {
+	if scopes == nil {
+		return syntax.AllScopes()
+	}
+	return syntax.ScopesOf(scopes)
+}
+
 // resolveLocal walks local bindings up the parent chain, calling visitor
 // for each binding that matches key and passes scope filtering.
 //
-// Nil scopes means "match any" — this replaces the former checkScopes=false
-// pattern. Non-nil scopes (even empty) are checked via ScopesCompatible.
+// A wildcard query (q.IsAll) means "match any" — this replaces the former
+// checkScopes=false pattern. A specific or empty query (even the empty set) is
+// checked via ScopesCompatible.
 //
 // When a key maps to multiple slots (same-name bindings with different
 // scope sets from hygienic expansion), all compatible slots are visited.
@@ -477,12 +492,13 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 // a non-nil value to stop the walk and propagate the result.
 func (p *EnvironmentFrame) resolveLocal(
 	key *values.Symbol,
-	scopes []*syntax.Scope,
+	q syntax.ScopeSet,
 	visitor func(binding *Binding, slot int, depth int) any,
 ) any {
 	env := p
 	depth := 0
-	matchAny := scopes == nil
+	matchAny := q.IsAll()
+	scopes := q.Scopes()
 	for env != nil && env.hasLocal() {
 		for _, i := range env.local.keys[*key] {
 			binding := &env.local.bindings[i]
@@ -510,21 +526,19 @@ func (p *EnvironmentFrame) resolveLocal(
 // across frames the first frame yielding any match wins, which is what preserves
 // shadowing of a sealed-base binding by a user redefinition.
 //
-// matchAny selects any binding of the name regardless of scopes. It is NOT the
-// same as passing nil scopes, which means the empty scope set: a reference
-// written outside any macro expansion must not reach a binder introduced inside
-// one.
+// A wildcard query (q.IsAll) selects any binding of the name regardless of
+// scopes. It is NOT the same as the empty-set query: a reference written outside
+// any macro expansion must not reach a binder introduced inside one.
 func (p *EnvironmentFrame) resolveGlobal(
 	key values.Symbol,
-	scopes []*syntax.Scope,
-	matchAny bool,
+	q syntax.ScopeSet,
 	visitor func(frame *GlobalEnvironmentFrame, slot int) any,
 ) any {
 	ge := p
 	for {
 		// Lock this frame's global environment for reading
 		ge.global.mu.RLock()
-		i, ok := ge.global.bestSlotLocked(key, scopes, matchAny)
+		i, ok := ge.global.bestSlotLocked(key, q)
 		if ok {
 			// Call visitor while holding lock - visitor may access bindings[i]
 			result := visitor(ge.global, i)
@@ -554,7 +568,7 @@ func (p *EnvironmentFrame) resolveGlobal(
 func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope) *Binding {
 	if scopes == nil {
 		// Fast path: nil scopes — return first match
-		result := p.resolveLocal(key, nil, func(binding *Binding, _ int, _ int) any {
+		result := p.resolveLocal(key, syntax.AllScopes(), func(binding *Binding, _ int, _ int) any {
 			return binding
 		})
 		if result != nil {
@@ -567,7 +581,7 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 		// unconditionally on shouldRecord = true.
 		var best bestOf[*Binding]
 		target := len(scopes)
-		p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
+		p.resolveLocal(key, syntax.ScopesOf(scopes), func(binding *Binding, _ int, _ int) any {
 			sc := len(binding.Scopes())
 			rec, done := best.shouldRecord(sc, target)
 			if rec {
@@ -587,7 +601,7 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 
 	// The scope filter now lives in bestSlotLocked, which both selects the
 	// maximal match and rejects incompatible candidates.
-	gResult := p.resolveGlobal(*key, scopes, scopes == nil, func(g *GlobalEnvironmentFrame, i int) any {
+	gResult := p.resolveGlobal(*key, scopesToQueryMatchAny(scopes), func(g *GlobalEnvironmentFrame, i int) any {
 		binding := g.bindings[i]
 		if binding != nil {
 			return binding
@@ -642,7 +656,7 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 
 	// Fast path: nil scopes — return first match (no maximal resolution needed)
 	if scopes == nil {
-		result := p.resolveLocal(key, nil, func(_ *Binding, slot int, depth int) any {
+		result := p.resolveLocal(key, syntax.AllScopes(), func(_ *Binding, slot int, depth int) any {
 			return NewLocalIndex(slot, depth)
 		})
 		if result != nil {
@@ -658,7 +672,7 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 	// allocating on every parent-chain visit.
 	var best bestOf[*LocalIndex]
 	target := len(scopes)
-	p.resolveLocal(key, scopes, func(binding *Binding, slot int, depth int) any {
+	p.resolveLocal(key, syntax.ScopesOf(scopes), func(binding *Binding, slot int, depth int) any {
 		sc := len(binding.Scopes())
 		rec, done := best.shouldRecord(sc, target)
 		if rec {
@@ -687,7 +701,7 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 	if p == nil {
 		return false
 	}
-	result := p.resolveLocal(sym, scopes, func(binding *Binding, _ int, _ int) any {
+	result := p.resolveLocal(sym, scopesToQueryMatchAny(scopes), func(binding *Binding, _ int, _ int) any {
 		if binding.BindingType() == BindingTypeVariable {
 			return true
 		}
@@ -833,7 +847,7 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 // This is the WILDCARD form — see GlobalEnvironmentFrame.GetGlobalIndex.
 // Compiler callers want GetGlobalIndexWithScopes.
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
-	result := p.resolveGlobal(*key, nil, true, func(g *GlobalEnvironmentFrame, i int) any {
+	result := p.resolveGlobal(*key, syntax.AllScopes(), func(g *GlobalEnvironmentFrame, i int) any {
 		return newResolvedGlobalIndex(key, g, i)
 	})
 	if result != nil {
@@ -846,7 +860,7 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 // binding whose scope set maximally matches scopes wins. A nil scopes slice
 // means the empty scope set, not "any".
 func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	result := p.resolveGlobal(*key, scopes, false, func(g *GlobalEnvironmentFrame, i int) any {
+	result := p.resolveGlobal(*key, syntax.ScopesOf(scopes), func(g *GlobalEnvironmentFrame, i int) any {
 		return newScopeKeyedGlobalIndex(key, g, i, scopes)
 	})
 	if result != nil {
@@ -860,7 +874,7 @@ func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes [
 // A deferred index (Env == nil) carries the reference's scope set, so this
 // execution-time walk resolves hygienically rather than by bare name.
 func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
-	result := p.resolveGlobal(*key.Index, key.Scopes, key.matchAny(), func(g *GlobalEnvironmentFrame, i int) any {
+	result := p.resolveGlobal(*key.Index, key.query, func(g *GlobalEnvironmentFrame, i int) any {
 		return g.bindings[i]
 	})
 	if result != nil {
