@@ -81,7 +81,7 @@ func TestFrameReclaimVerdict_DoesNotLeakIntoLetBody(t *testing.T) {
 	verdict, err := classifyCompiled(ctx, `(begin
 		(define (f n) (+ n 1)))`, true)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, verdict["f"], qt.IsTrue)
+	qt.Assert(t, verdictsForName(verdict, "f"), qt.DeepEquals, []bool{true})
 
 	// All four binding forms share one compile path (CompileValidatedLet switches
 	// on v.Kind), and that path holds the only p.env swap on a live compiler in the

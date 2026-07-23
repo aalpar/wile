@@ -176,19 +176,25 @@ func measureBenchmark(ctx context.Context, t *testing.T, name string) (frameRecl
 	}
 	counts := counters.CallCounts()
 
+	// Join the per-identity verdicts against name-keyed runtime counters by name.
+	// verdictA and verdictB come from separate engines (each mints its own scope
+	// IDs, so even the ScopedBindingKey fingerprints differ), so they can only be
+	// cross-referenced by name, not by identity.
+	aByName := reclaimByName(verdictA)
+	bByName := reclaimByName(verdictB)
 	row := frameReclaimRow{
 		name:        name,
 		nodes:       len(verdictA),
 		envsCopied:  counters.EnvsCopied,
 		subContexts: counters.SubContextsCreated,
 	}
-	for fnName := range verdictA {
+	for fnName, okA := range aByName {
 		c := counts[fnName]
 		row.nodeCalls += c
-		if verdictA[fnName] {
+		if okA {
 			row.localOK += c
 		}
-		if verdictB[fnName] {
+		if bByName[fnName] {
 			row.toplevelOK += c
 		}
 	}
@@ -220,7 +226,7 @@ func measureBenchmark(ctx context.Context, t *testing.T, name string) (frameRecl
 // GetBinding(callSite, scopes).IsStable() resolves to the binding the compiler
 // stamped (plan OQ-1 — split-key resolution consistency). A separate engine from
 // the dynamic run avoids any expansion side effects leaking into the measured run.
-func classifyCompiled(ctx context.Context, wrapped string, immutable bool) (map[string]bool, error) {
+func classifyCompiled(ctx context.Context, wrapped string, immutable bool) (map[validate.ScopedBindingKey]bool, error) {
 	eng, err := newBenchmarkEngine(ctx, immutable)
 	if err != nil {
 		return nil, err
@@ -270,6 +276,47 @@ func classifyCompiled(ctx context.Context, wrapped string, immutable bool) (map[
 	}
 
 	return validate.ClassifyFrameReclaim(unit, env), nil
+}
+
+// verdictsForName returns the reclaimability of every top-level define named name
+// in a per-identity verdict map. Two entries mean hygiene-distinct binders of one
+// name (a macro-introduced define and a user define), keyed apart by their
+// scope-discriminated ScopedBindingKey — the whole point of identity-keying. Unlike
+// reclaimByName below, it preserves per-identity multiplicity rather than folding it.
+func verdictsForName(m map[validate.ScopedBindingKey]bool, name string) []bool {
+	var out []bool
+	for id, reclaimable := range m {
+		if id.Key == name {
+			out = append(out, reclaimable)
+		}
+	}
+	return out
+}
+
+// reclaimByName projects a per-identity verdict map to name -> reclaimable for
+// name-oriented consumers (the measurement harness joins reclaimability against
+// runtime call counters keyed by function name). A name owning more than one identity
+// (hygiene-distinct binders) AND-s their verdicts, so the weighted measure never
+// over-credits a name some of whose binders forfeit reclamation. The canonical
+// Gabriel benchmarks define each name once, so this is an identity there.
+//
+// The AND is a LOSSY fold, and its masking runs one direction: if two same-name
+// binders disagreed (one a false-positive `true`, a sibling `false`), the AND collapses
+// to `false`, hiding the per-identity over-grant from the reclamation counters. So a
+// caller checking soundness must read per identity (verdictsForName), not through this
+// aggregate. (Distinct from validate.reclaimNames, which projects to name->bool with
+// silent last-wins, not this conservative AND — the two differ in exactly that fold.)
+func reclaimByName(m map[validate.ScopedBindingKey]bool) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for id, reclaimable := range m {
+		prev, seen := out[id.Key]
+		if seen {
+			out[id.Key] = prev && reclaimable
+		} else {
+			out[id.Key] = reclaimable
+		}
+	}
+	return out
 }
 
 // assertStampLanded is the positive control: the first top-level function

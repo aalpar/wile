@@ -45,7 +45,7 @@ func TestFrameReclaimSeam_RealScopeResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("flag off: %v", err)
 	}
-	if off["fib"] {
+	if reclaimByName(off)["fib"] {
 		t.Fatalf("flag off: fib must NOT be reclaimable (self-edge mutable, no Stable bit)")
 	}
 
@@ -53,8 +53,53 @@ func TestFrameReclaimSeam_RealScopeResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("flag on: %v", err)
 	}
-	if !on["fib"] {
+	if !reclaimByName(on)["fib"] {
 		t.Fatalf("flag on: fib's real-scope self-edge must resolve to its Stable binding ⇒ reclaimable")
+	}
+}
+
+// TestFrameReclaimSeam_LetNestedMutualCallResolves pins the SUBSET direction of
+// same-unit edge resolution — the case fingerprint equality cannot handle, and the
+// case a self-recursive define does NOT exercise (its body is independently
+// capture-safe, so its binding's CaptureSafe flag makes the self-edge redundant).
+//
+// Mutual recursion ff↔gg, with ff's cross-call to gg nested one let deep so gg's
+// operator scopes strictly exceed gg's define-name scopes (verified: name-fp="" vs
+// ref-fp a fresh let-scope id). NEITHER define is independently capture-safe (each
+// depends on the other), so the CaptureSafe fallback cannot fire — the ff→gg edge
+// resolves ONLY under env.GetBinding's subset semantics (validate.resolveNodeByScopes).
+// Keying edges by equal fingerprints misses it, leaving ff with an unresolved
+// (unsafe) edge and BOTH defines non-reclaimable. Measured: the same program yields
+// ff=gg=false under equality-keyed edges, ff=gg=true here. A regression to equality
+// fails HERE while leaving the direct-self-call seam test above green.
+func TestFrameReclaimSeam_LetNestedMutualCallResolves(t *testing.T) {
+	ctx := context.Background()
+	wrapped := "(begin " +
+		"(define (ff n) (if (< n 1) n (let ((m (- n 1))) (gg m)))) " +
+		"(define (gg n) (if (< n 1) n (ff (- n 1)))) )"
+
+	// Flag-off control: mutual recursion over mutable (non-Stable) edges is not
+	// reclaimable, whichever way the edge resolves — so a green flag-off here proves
+	// the flag-on recovery below is the Stable bit, not a resolution artifact.
+	off, err := classifyCompiled(ctx, wrapped, false)
+	if err != nil {
+		t.Fatalf("flag off: %v", err)
+	}
+	offV := reclaimByName(off)
+	if offV["ff"] || offV["gg"] {
+		t.Fatalf("flag off: mutual recursion over mutable edges must NOT be reclaimable — got ff=%v gg=%v", offV["ff"], offV["gg"])
+	}
+
+	on, err := classifyCompiled(ctx, wrapped, true)
+	if err != nil {
+		t.Fatalf("flag on: %v", err)
+	}
+	onV := reclaimByName(on)
+	if !onV["ff"] {
+		t.Fatalf("flag on: ff's let-nested cross-call to gg must resolve by subset (not equality) ⇒ reclaimable")
+	}
+	if !onV["gg"] {
+		t.Fatalf("flag on: gg (calls the now-reclaimable ff) must be reclaimable")
 	}
 }
 
@@ -73,10 +118,10 @@ func TestFrameReclaimSeam_LocalShadowSound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("flag on: %v", err)
 	}
-	if !on["sq"] {
+	if !reclaimByName(on)["sq"] {
 		t.Fatalf("sanity: sq over only the capture-safe primitive * must be reclaimable")
 	}
-	if on["use"] {
+	if reclaimByName(on)["use"] {
 		t.Fatalf("OQ-1: use must NOT be reclaimable — (sq 3) calls the local parameter h, not the Stable top-level sq")
 	}
 }

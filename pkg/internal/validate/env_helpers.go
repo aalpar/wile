@@ -88,13 +88,10 @@ func findDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
 	if len(syms) < 2 {
 		return nil
 	}
-	seen := make(map[bindingIdentity]bool, len(syms))
+	seen := make(map[ScopedBindingKey]bool, len(syms))
 	var dups []*syntax.SyntaxSymbol
 	for _, sym := range syms {
-		id := bindingIdentity{
-			key:      sym.Key(),
-			scopeKey: syntax.ScopeFingerprint(sym.Scopes()),
-		}
+		id := ScopedBindingKeyOf(sym)
 		if seen[id] {
 			dups = append(dups, sym)
 			continue

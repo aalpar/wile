@@ -14,15 +14,25 @@
 
 package validate
 
+import "github.com/aalpar/wile/pkg/syntax"
+
 // reclaimNode is one analyzable function in a compilation unit's call graph.
 // Its structural capture facts are precomputed (Layer A predicates) and its
 // call sites resolved to edges (the builder, frame_reclaim_build.go) before the
 // fixpoint runs.
 type reclaimNode struct {
-	label             string        // diagnostic label (define/lambda name)
+	label             string        // the define name's Sym.Key (also the edge-scan name filter)
 	referencesCapture bool          // body invokes a continuation-capturing operator
 	createsEscaping   bool          // body creates a non-immediately-applied closure
 	callees           []reclaimEdge // call sites that impose a capture constraint
+	// scopes is the define name's scope set. Edge resolution matches a reference to
+	// this node by the subset test scopes ⊆ ref.scopes (classifyCallee), replicating
+	// env.GetBinding's maximal resolution over the graph's nodes: a reference nested
+	// in a let/lambda body carries that form's scope, a strict superset of the
+	// top-level define name's scopes, so subset — not fingerprint equality — is what
+	// resolves the edge (a let-wrapped tail self-call, e.g. (define (g n) (let (...)
+	// (g ...)))).
+	scopes []*syntax.Scope
 	// rebindStable reports that this producer is provably non-rebindable: it is
 	// StableInUnit (defined-once ∧ never-set!) AND the namespace enforces immutable
 	// top-level, so a cross-unit redefine/set! is forbidden. This is exactly the
@@ -34,16 +44,16 @@ type reclaimNode struct {
 	// compile that owns the same name (T1.5), and it keeps the classifier sound in
 	// isolation rather than relying on the caller's gate.
 	rebindStable bool
-	// collided reports that this node's Key names more than one top-level function
-	// define in the unit — two hygiene-distinct binders that scope-keyed global
-	// storage keeps apart but this graph, keyed by Key, cannot. Only the last such
-	// define survives in byName, so the others' capture facts never reach the
-	// fixpoint; publishing the survivor's verdict under the shared Key would hand
-	// it to every define of that name (compilation.frameReuseForDefine reads the
-	// verdict by bare Key, and the verdict alone arms the release path). Forcing
-	// the Key unsafe is the conservative resolution: it costs reclaim on a name
-	// defined twice — which already forfeits StableInUnit — and it is the only
-	// direction this classifier may err in (frame_reclaim.go mayCapture).
+	// collided reports that this node's ScopedBindingKey names more than one
+	// top-level function define in the unit — i.e. two defines with the SAME name
+	// AND the SAME scope set, a genuine same-scope redefinition. (Hygiene-distinct
+	// binders carry different scope sets, so they get distinct identities and no
+	// longer collide — that is the recovery binding-identity keying buys.) Only the
+	// last such define survives in byIdent, so the earlier ones' capture facts never
+	// reach the fixpoint; forcing the survivor unsafe is the conservative resolution,
+	// and the only direction this classifier may err in (frame_reclaim.go mayCapture).
+	// A name defined twice at one scope already forfeits StableInUnit, so this costs
+	// no reclamation a sound analysis kept.
 	collided bool
 }
 

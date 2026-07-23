@@ -1713,7 +1713,7 @@ func TestValidateWithContinuationMarkImproperList(t *testing.T) {
 // same symbol key but different scope sets are NOT considered duplicates.
 // In a hygienic macro system (sets-of-scopes), two identifiers "x" introduced
 // by different macro expansions carry different scopes and are distinct.
-// The duplicate detection uses bindingIdentity (key + scope fingerprint).
+// The duplicate detection uses ScopedBindingKey (key + scope fingerprint).
 func TestLetDuplicateBindingWithDifferentScopes(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 

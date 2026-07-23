@@ -95,10 +95,10 @@ func TestFrameReclaimClassifiesForwardEdgeWithoutMutatingBinding(t *testing.T) {
 	// GREEN post-fix: foo's forward edge to bar resolved immutable via bar's
 	// StableInUnit, so foo's frame is reclaimable. RED pre-fix: without the stamp
 	// bar read non-stable, the edge was mutable, and foo classified non-reclaimable.
-	c.Assert(verdict["foo"], qt.IsTrue,
+	c.Assert(verdict[validate.ScopedBindingKeyOf(byName["foo"].Name())], qt.IsTrue,
 		qt.Commentf("forward edge foo→bar must resolve immutable from bar's "+
 			"thread-local StableInUnit, making foo's frame reclaimable"))
-	c.Assert(verdict["bar"], qt.IsTrue)
+	c.Assert(verdict[validate.ScopedBindingKeyOf(byName["bar"].Name())], qt.IsTrue)
 
 	// The shared binding was never mutated by classification: no transient Stable
 	// window exists for a concurrent compile to observe.

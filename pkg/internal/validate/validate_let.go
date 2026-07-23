@@ -22,12 +22,27 @@ import (
 	"github.com/aalpar/wile/pkg/syntax"
 )
 
-// bindingIdentity uniquely identifies a binding by name and scope set.
-// Two identifiers with the same name but different scope sets (e.g., introduced
-// by different macro expansions) are considered distinct.
-type bindingIdentity struct {
-	key      string
-	scopeKey string
+// ScopedBindingKey uniquely identifies a binding by name and scope set. Two
+// identifiers with the same name but different scope sets (e.g. introduced by
+// different macro expansions) are distinct. This is the scope-discriminated
+// identity findDuplicateSymbols dedups by and the frame-reclaim classifier keys
+// its verdict on — the same identity BASIS as match.FreeIdKey ((name,
+// ScopeFingerprint)), though FreeIdKey encodes it as a concatenated string and this
+// as a struct; a binding is named the same way wherever Wile reasons about identity.
+type ScopedBindingKey struct {
+	Key      string
+	ScopeKey string
+}
+
+// ScopedBindingKeyOf returns the scope-discriminated identity of sym: its name key
+// paired with a deterministic fingerprint of its scope set. Producer and consumers
+// must build the identity through this one function so their keys cannot drift
+// (cf. match.FreeIdKey's identical producer/consumer contract).
+func ScopedBindingKeyOf(sym *syntax.SyntaxSymbol) ScopedBindingKey {
+	return ScopedBindingKey{
+		Key:      sym.Key(),
+		ScopeKey: syntax.ScopeFingerprint(sym.Scopes()),
+	}
 }
 
 // validateLetCommon validates all four binding forms (let, let*, letrec, letrec*).

@@ -326,11 +326,14 @@ func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefin
 	// frames over the shipped per-body gate — no continuation suite that passed
 	// before can regress.
 	//
-	// The verdict is read through unitFrameReclaimVerdict, NOT off the map: the map
-	// is keyed by bare Sym.Key and stays live while a let body compiles on this same
-	// compiler, so an internal define could otherwise collect a same-named top-level
-	// define's verdict.
-	if p.unitFrameReclaimVerdict(name.Sym.Key) || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
+	// The verdict is read through unitFrameReclaimVerdict, NOT off the map, keyed by
+	// this define's ScopedBindingKey (validate.ScopedBindingKeyOf(name)) — the same
+	// scope-discriminated identity the classifier keyed the verdict on, an exact match
+	// for the very define being compiled, so a macro-introduced define and a colliding
+	// user define read distinct verdicts. The method's gate stays live while a let body
+	// compiles on this same compiler; it is now an explicit tightening, since an
+	// internal define's name carries the enclosing scope and so misses the top-level map.
+	if p.unitFrameReclaimVerdict(validate.ScopedBindingKeyOf(name)) || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
 		return releaseReuse()
 	}
 	return noFrameReuse()

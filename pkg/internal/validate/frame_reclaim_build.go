@@ -66,31 +66,42 @@ func makeIsCaptureOp(env *environment.EnvironmentFrame) func(*syntax.SyntaxSymbo
 // ClassifyFrameReclaim returns, for every top-level function define in unit,
 // whether its frame is reclaimable at its tail calls. It is the exported entry
 // point over the Layer-B/C internals: build the call graph, run the
-// greatest-fixpoint mayCapture, and project to a name→verdict map. The verdict
-// is conservative (any uncertainty ⇒ not reclaimable).
+// greatest-fixpoint mayCapture, and project to a per-identity verdict map. The
+// verdict is conservative (any uncertainty ⇒ not reclaimable).
 //
-// Same-unit-define immutability is read from the producer's Stable bit via
-// env.GetBinding(...).IsStable() — the single source of truth, backed by
-// Option-B enforcement (the set!-gate + the cross-unit redefine guard). The
-// tier-(a) vs tier-(b) distinction is therefore a property of WHICH env is
-// passed, not a classifier argument: an env whose same-unit defines are NOT
-// stamped Stable (WithImmutableTopLevel off, or a non-compiled env) yields
-// mutable same-unit edges (tier-(a) behavior); an env whose defines ARE Stable
-// (WithImmutableTopLevel on, compiled) yields immutable edges (tier-(b)).
+// The map is keyed by ScopedBindingKey — the define name's (Sym.Key, scope
+// fingerprint) — NOT by Sym.Key alone, and its value is the reclaimable bool. Two
+// hygiene-distinct top-level binders of one name (a macro-introduced define and a
+// user define) carry different scope sets, so each gets its own verdict instead of
+// sharing one. The read side (compilation.frameReuseForDefine) looks up the identity
+// of the very define it is compiling, an exact match against the key built from that
+// same define here, so reference→verdict resolution cannot diverge. The identity is
+// value-stable — it survives env.Copy and cross-library sharing — unlike the *Binding
+// pointer a scope-keyed global slot happens to mint. A name-oriented consumer reads
+// the define name back off the key (id.Key).
 //
-// PRECONDITION: env must be the post-compile env for unit (bindings stamped). An
-// un-stamped (validate-only) env reports IsStable()==false uniformly, yielding
-// the conservative tier-(a) verdict with no diagnostic — sound for the optimizer
-// but a silent artifact for a measurement (guard with a positive control).
+// Same-unit-define immutability is the callee node's rebindStable
+// (d.StableInUnit ∧ the namespace's ImmutableTopLevel), computed thread-locally
+// from the ValidatedDefine and an engine-construction-time flag — never read from
+// the callee's *Binding (the T1.5 decoupling). The tier-(a) vs tier-(b) distinction
+// is therefore a property of WHAT is passed: defines whose StableInUnit is unset, or
+// a namespace without immutable top-level, yield mutable same-unit edges (tier-(a));
+// StableInUnit defines under immutable top-level yield immutable edges (tier-(b)).
+//
+// env is still consulted, but only for binding-side FACTS about non-same-unit
+// callees: capture-operator identity (makeIsCaptureOp) and the capture-safe-primitive
+// gate (Binding.IsCaptureSafe ∧ IsStable). Those reads are fail-safe on a
+// nil/unstamped binding (⇒ unsafe), so an un-stamped env costs only primitive-callee
+// precision, never soundness — though a measurement still wants a positive control.
 func ClassifyFrameReclaim(
 	unit []ValidatedExpr,
 	env *environment.EnvironmentFrame,
-) map[string]bool {
-	nodes, byName := buildReclaimGraph(unit, env)
+) map[ScopedBindingKey]bool {
+	nodes, byIdent := buildReclaimGraph(unit, env)
 	verdict := mayCapture(nodes)
-	out := make(map[string]bool, len(byName))
-	for name, n := range byName {
-		out[name] = frameReclaimable(n, verdict)
+	out := make(map[ScopedBindingKey]bool, len(byIdent))
+	for id, n := range byIdent {
+		out[id] = frameReclaimable(n, verdict)
 	}
 	return out
 }
@@ -101,12 +112,12 @@ func ClassifyFrameReclaim(
 // to an edge.
 //
 // A call to another top-level define yields an edge whose immutability is the
-// callee binding's IsStable() in env. Imported capture-safe primitives
-// contribute no edge.
+// callee node's rebindStable (StableInUnit ∧ immutable-top). Imported capture-safe
+// primitives contribute no edge.
 func buildReclaimGraph(
 	unit []ValidatedExpr,
 	env *environment.EnvironmentFrame,
-) ([]*reclaimNode, map[string]*reclaimNode) {
+) ([]*reclaimNode, map[ScopedBindingKey]*reclaimNode) {
 	isCaptureOp := makeIsCaptureOp(env)
 
 	// A same-unit define is provably non-rebindable only when the namespace
@@ -120,30 +131,38 @@ func buildReclaimGraph(
 		immTop = ns.ImmutableTopLevel()
 	}
 
-	byName := make(map[string]*reclaimNode)
+	byIdent := make(map[ScopedBindingKey]*reclaimNode)
 	var defs []*ValidatedDefine
 	var defNodes []*reclaimNode
 
-	// Pass 1: a node per top-level function define, with its structural facts.
+	// Pass 1: a node per top-level function define, keyed by its ScopedBindingKey,
+	// with its structural facts. The key comes from the define name's own
+	// (Sym.Key, scopes) — NOT from env.GetBinding — so node creation does not depend
+	// on the binding being predeclared or stamped in env (the T1.5 decoupling): a
+	// define always gets a node, and the same-unit graph is resolved structurally
+	// below (resolveNodeByScopes), never through the binding lifecycle.
 	collectTopLevelDefines(unit, func(d *ValidatedDefine) {
 		if !d.IsFunction {
 			return
 		}
-		name := d.Name().Sym.Key
-		_, dup := byName[name]
+		name := d.Name()
+		id := ScopedBindingKeyOf(name)
+		_, dup := byIdent[id]
 		n := &reclaimNode{
-			label:             name,
+			label:             name.Sym.Key,
+			scopes:            name.Scopes(),
 			referencesCapture: bodyReferencesCaptureOperator(d.Body(), isCaptureOp),
 			createsEscaping:   bodyCreatesEscapingClosure(d.Body()),
 			rebindStable:      d.StableInUnit && immTop,
-			// byName is last-wins and the fixpoint's node set comes from its values,
-			// so an earlier same-Key define is dropped before its capture facts are
-			// read. Scope-keyed global storage (8afeb66a) plus the removal of the
-			// top-level rename pass (a60e32e1) made same-Key distinct binders
-			// reachable, so the survivor must not speak for them.
+			// dup is a same-identity redefinition (same name AND scopes): byIdent is
+			// last-wins and the fixpoint's node set comes from its values, so the
+			// earlier node's facts never reach the fixpoint. Hygiene-distinct binders
+			// carry different scopes, so they get distinct identities and no longer
+			// collide — the recovery this keying buys. Forcing the survivor unsafe is
+			// conservative — see reclaimNode.collided.
 			collided: dup,
 		}
-		byName[name] = n
+		byIdent[id] = n
 		defs = append(defs, d)
 		defNodes = append(defNodes, n)
 	})
@@ -151,14 +170,14 @@ func buildReclaimGraph(
 	// Pass 2: resolve each define's constraining call sites to edges (needs the
 	// full node set so same-unit callees resolve).
 	for i, d := range defs {
-		defNodes[i].callees = resolveCallEdges(d, env, byName)
+		defNodes[i].callees = resolveCallEdges(d, env, byIdent)
 	}
 
-	nodes := make([]*reclaimNode, 0, len(byName))
-	for _, n := range byName {
+	nodes := make([]*reclaimNode, 0, len(byIdent))
+	for _, n := range byIdent {
 		nodes = append(nodes, n)
 	}
-	return nodes, byName
+	return nodes, byIdent
 }
 
 // collectTopLevelDefines invokes fn for each *ValidatedDefine directly in the
@@ -188,11 +207,11 @@ func collectTopLevelDefines(unit []ValidatedExpr, fn func(*ValidatedDefine)) {
 func resolveCallEdges(
 	d *ValidatedDefine,
 	env *environment.EnvironmentFrame,
-	byName map[string]*reclaimNode,
+	byIdent map[ScopedBindingKey]*reclaimNode,
 ) []reclaimEdge {
 	var edges []reclaimEdge
 	collect := func(proc ValidatedExpr, bound nameSet) {
-		edge, constrains := classifyCallee(proc, env, byName, bound)
+		edge, constrains := classifyCallee(proc, env, byIdent, bound)
 		if constrains {
 			edges = append(edges, edge)
 		}
@@ -208,7 +227,7 @@ func resolveCallEdges(
 func classifyCallee(
 	proc ValidatedExpr,
 	env *environment.EnvironmentFrame,
-	byName map[string]*reclaimNode,
+	byIdent map[ScopedBindingKey]*reclaimNode,
 	bound nameSet,
 ) (reclaimEdge, bool) {
 	sym, ok := proc.(*ValidatedSymbol)
@@ -218,44 +237,97 @@ func classifyCallee(
 	name := sym.Symbol.Sym.Key
 
 	// Lexical shadow guard (OQ-1): an operator bound by an enclosing local scope
-	// resolves to that local, NOT the same-Key top-level define or imported
+	// resolves to that local, NOT the same-name top-level define or imported
 	// primitive. The classifier resolves against a flat env with no local frames,
-	// so without this guard env.GetBinding(name) would return the global (Stable)
-	// binding and mark the edge immutable — a false positive at the wrong callee
-	// (e.g. (define (use h) (let ((sq h)) (sq 3))) with a Stable top-level sq).
-	// A shadowed operator is therefore unresolved ⇒ unsafe.
+	// so without this guard the callee would resolve to the global (Stable) binding
+	// and mark the edge immutable — a false positive at the wrong callee (e.g.
+	// (define (use h) (let ((sq h)) (sq 3))) with a Stable top-level sq). A shadowed
+	// operator is therefore unresolved ⇒ unsafe.
 	if bound.has(name) {
 		return reclaimEdge{target: nil}, true
 	}
 
-	// Same-unit top-level define: resolvable. Its edge is immutable iff the
-	// producer is provably non-rebindable (rebindStable = StableInUnit ∧ immutable
-	// top-level). Read it off the callee node, NOT the shared *Binding: the node is
-	// thread-local to this compile, so a concurrent compile that owns the same name
-	// cannot perturb this read (and this classifier no longer needs the binding
-	// pre-stamped Stable, which was the T1.5 transient-window hazard). A rebindable
-	// producer ⇒ mutable edge ⇒ unsafe, the sound tier-(a) default.
-	target, ok := byName[name]
-	if ok {
+	// Same-unit top-level define: resolved structurally over the graph's nodes
+	// (resolveNodeByScopes), replicating env.GetBinding's maximal-subset resolution
+	// without consulting the binding — so the edge does not depend on the callee
+	// being predeclared/stamped in env (the T1.5 decoupling). Its edge is immutable
+	// iff the producer is provably non-rebindable (rebindStable = StableInUnit ∧
+	// immutable-top), read off the callee NODE: the node is thread-local to this
+	// compile, so a concurrent compile owning the same name cannot perturb this read.
+	// A rebindable producer ⇒ mutable edge ⇒ unsafe, the sound tier-(a) default.
+	target := resolveNodeByScopes(byIdent, name, sym.Symbol.Scopes())
+	if target != nil {
 		return reclaimEdge{target: target, immutable: target.rebindStable}, true
 	}
 
-	// Capture-safe core primitive, confirmed non-rebindable: no constraint, no
-	// edge. Two binding facts must both hold. CaptureSafe is the static "cannot
+	// Not a same-unit define: consult the binding for the capture-safe-primitive
+	// fact. Two binding facts must both hold. CaptureSafe is the static "cannot
 	// invoke a Scheme procedure" capability, stamped at registration from
 	// !PrimitiveSpec.InvokesProcedure (registry/apply.go) — validate cannot import
-	// registry, so it reads the binding flag. IsStable() (Imported ∨ Stable)
-	// confirms the binding cannot be rebound to a capturing procedure: an imported
-	// primitive is immutable by R7RS, and under WithStableBasePrimitives an ambient
-	// capture-safe primitive is stamped Stable. A user shadow (BindingTypeVariable)
-	// carries neither flag, and a set!-able primitive fails IsStable() — both fall
-	// through to the unsafe default below.
+	// registry, so it reads the binding flag. IsStable() (Imported ∨ Stable) confirms
+	// the binding cannot be rebound to a capturing procedure: an imported primitive
+	// is immutable by R7RS, and under WithStableBasePrimitives an ambient capture-safe
+	// primitive is stamped Stable. A reference whose hygiene matches no binding
+	// resolves to nil, and a user shadow (BindingTypeVariable) or a set!-able
+	// primitive carries neither flag — all fall through to the unsafe default below.
 	b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if b != nil && b.IsCaptureSafe() && b.IsStable() {
 		return reclaimEdge{}, false
 	}
 
 	return reclaimEdge{target: nil}, true // unknown/unsafe ⇒ unresolved ⇒ unsafe
+}
+
+// resolveNodeByScopes finds the same-unit define node a reference resolves to,
+// replicating env.GetBinding's maximal-subset resolution (Flatt's argmax) over the
+// graph's nodes instead of the environment's frame slots: among nodes whose name
+// matches and whose define-site scopes are a subset of the reference's scopes, it
+// returns the one with the LARGEST scope set. Subset — not fingerprint equality —
+// is required because a reference nested in a let/lambda body carries that form's
+// scope, a strict superset of the top-level define name's scopes; e.g. a mutual
+// cross-call nested in a let, (define (ff n) (let (...) (gg m))), resolves to gg's
+// node only by subset. (A self-call in that position happens to be recoverable via
+// the capture-safe fallback too, so mutual recursion is the case that actually needs
+// this — see TestFrameReclaimSeam_LetNestedMutualCallResolves.) Returns nil for "no
+// same-unit define", the caller's cue to try the capture-safe-primitive path.
+//
+// A well-formed program yields a unique maximum. An AMBIGUOUS maximum — two
+// same-name nodes with equal-cardinality but mutually-incomparable scope sets, both
+// subset-matching the reference — is refused (returns nil ⇒ unresolved ⇒ unsafe),
+// NOT resolved by map-iteration order. GetBinding breaks that tie deterministically
+// by binding creation order (global_environment_frame.go bestSlotLocked over a
+// creation-ordered []int); this map cannot cheaply replicate that order, so it
+// declines to guess rather than grant a reclaim verdict on a coin-flip — the sound
+// direction (frame_reclaim.go: a false positive would corrupt). The refusal costs
+// reclamation only on a genuinely ambiguous binder, which a sound analysis would not
+// have reclaimed anyway.
+func resolveNodeByScopes(byIdent map[ScopedBindingKey]*reclaimNode, name string, refScopes []*syntax.Scope) *reclaimNode {
+	var best *reclaimNode
+	bestLen := -1
+	tie := false
+	for _, n := range byIdent {
+		if n.label != name {
+			continue
+		}
+		// ScopesMatch(use, binding) ⟺ binding ⊆ use, so this tests n.scopes ⊆ refScopes.
+		if !syntax.ScopesMatch(refScopes, n.scopes) {
+			continue
+		}
+		// Equal-cardinality matches are necessarily distinct scope sets (equal sets
+		// share a ScopedBindingKey, hence one node), so incomparable ⇒ ambiguous.
+		switch {
+		case len(n.scopes) > bestLen:
+			bestLen = len(n.scopes)
+			best = n
+			tie = false
+		case len(n.scopes) == bestLen:
+			tie = true
+		}
+	}
+	if tie {
+		return nil
+	}
+	return best
 }
 
 // walkCallSites invokes fn with the operator of every ValidatedCall and

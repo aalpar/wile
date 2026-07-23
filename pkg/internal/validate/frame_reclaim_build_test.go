@@ -95,14 +95,74 @@ func markStableInUnit(unit []ValidatedExpr, names ...string) {
 	})
 }
 
+// nodeByLabel returns the graph node whose define name is label. The unit tests
+// build synthetic symbols with nil scopes and unique names, so a label lookup is
+// unambiguous here; production keys the graph on the full ScopedBindingKey.
+func nodeByLabel(m map[ScopedBindingKey]*reclaimNode, label string) *reclaimNode {
+	for _, n := range m {
+		if n.label == label {
+			return n
+		}
+	}
+	return nil
+}
+
+// reclaimNames classifies unit and projects the verdict to name -> reclaimable.
+// Each test define has a unique name, so the name projection is lossless here
+// (production keys on the full ScopedBindingKey).
+func reclaimNames(unit []ValidatedExpr, env *environment.EnvironmentFrame) map[string]bool {
+	out := make(map[string]bool)
+	for id, reclaimable := range ClassifyFrameReclaim(unit, env) {
+		out[id.Key] = reclaimable
+	}
+	return out
+}
+
+// TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess pins the soundness fix for the
+// argmax tie. Two same-name nodes with equal-cardinality, mutually-incomparable scope
+// sets, both subset-matching the reference, form an ambiguous maximum. GetBinding
+// breaks such a tie deterministically by binding creation order; this map cannot, so
+// resolveNodeByScopes refuses (returns nil ⇒ unresolved ⇒ unsafe) rather than pick by
+// map-iteration order — the sound direction (a false positive would corrupt). The
+// control (a strictly larger, unique maximum) still resolves.
+func TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess(t *testing.T) {
+	sa := syntax.NewScope()
+	sb := syntax.NewScope()
+
+	// {sa} and {sb} are both cardinality 1 and incomparable; refScopes ⊇ both.
+	nodeA := &reclaimNode{label: "f", scopes: []*syntax.Scope{sa}}
+	nodeB := &reclaimNode{label: "f", scopes: []*syntax.Scope{sb}}
+	byIdent := map[ScopedBindingKey]*reclaimNode{
+		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeA.scopes)}: nodeA,
+		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeB.scopes)}: nodeB,
+	}
+	refScopes := []*syntax.Scope{sa, sb}
+	got := resolveNodeByScopes(byIdent, "f", refScopes)
+	if got != nil {
+		t.Fatalf("ambiguous maximum must resolve to nil (unsafe), got node with scopes %v", got.scopes)
+	}
+
+	// Control: nodeB now carries {sa,sb}, a strict superset of nodeA's {sa} ⇒ the
+	// maximum is unique and resolution succeeds.
+	nodeB.scopes = []*syntax.Scope{sa, sb}
+	byIdent2 := map[ScopedBindingKey]*reclaimNode{
+		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeA.scopes)}: nodeA,
+		{Key: "f", ScopeKey: syntax.ScopeFingerprint(nodeB.scopes)}: nodeB,
+	}
+	got = resolveNodeByScopes(byIdent2, "f", refScopes)
+	if got != nodeB {
+		t.Fatalf("unique maximum {sa,sb} must resolve to nodeB, got %v", got)
+	}
+}
+
 func TestBuildReclaimGraph_DetectsCallCC(t *testing.T) {
 	env := envWithImported(t, "call/cc")
 	// (define (bad k) (call/cc k)) — references the capture primitive, no
 	// escaping lambda, so this isolates capture-operator detection.
 	bad := defineFn("bad", call(symRef("call/cc"), symRef("k")))
-	nodes, byName := buildReclaimGraph([]ValidatedExpr{bad}, env)
+	nodes, byIdent := buildReclaimGraph([]ValidatedExpr{bad}, env)
 	v := mayCapture(nodes)
-	if frameReclaimable(byName["bad"], v) {
+	if frameReclaimable(nodeByLabel(byIdent, "bad"), v) {
 		t.Fatalf("a define invoking call/cc must not be reclaimable")
 	}
 }
@@ -114,12 +174,12 @@ func TestBuildReclaimGraph_LeafFnReclaimable(t *testing.T) {
 	//                             this env ⇒ mutable edge ⇒ NOT reclaimable.
 	sq := defineFn("sq", call(symRef("*"), symRef("x"), symRef("x")))
 	use := defineFn("use", call(symRef("sq"), lit()))
-	nodes, byName := buildReclaimGraph([]ValidatedExpr{sq, use}, env)
+	nodes, byIdent := buildReclaimGraph([]ValidatedExpr{sq, use}, env)
 	v := mayCapture(nodes)
-	if !frameReclaimable(byName["sq"], v) {
+	if !frameReclaimable(nodeByLabel(byIdent, "sq"), v) {
 		t.Fatalf("sq over only the capture-safe primitive * must be reclaimable")
 	}
-	if frameReclaimable(byName["use"], v) {
+	if frameReclaimable(nodeByLabel(byIdent, "use"), v) {
 		t.Fatalf("use calls a non-Stable top-level define ⇒ NOT reclaimable")
 	}
 }
@@ -128,9 +188,9 @@ func TestBuildReclaimGraph_EscapingClosureNotReclaimable(t *testing.T) {
 	env := envWithImported(t)
 	// (define (esc) (lambda () 1)) — returns a closure that escapes.
 	esc := defineFn("esc", lam(lit()))
-	nodes, byName := buildReclaimGraph([]ValidatedExpr{esc}, env)
+	nodes, byIdent := buildReclaimGraph([]ValidatedExpr{esc}, env)
 	v := mayCapture(nodes)
-	if frameReclaimable(byName["esc"], v) {
+	if frameReclaimable(nodeByLabel(byIdent, "esc"), v) {
 		t.Fatalf("a define returning an escaping closure must not be reclaimable")
 	}
 }
@@ -141,9 +201,9 @@ func TestBuildReclaimGraph_UnlistedPrimitiveNotReclaimable(t *testing.T) {
 	// whitelist (it invokes a procedure that could capture) ⇒ unresolved edge
 	// ⇒ NOT reclaimable. This is the sound-by-default guarantee.
 	cm := defineFn("cm", call(symRef("map"), symRef("f"), symRef("xs")))
-	nodes, byName := buildReclaimGraph([]ValidatedExpr{cm}, env)
+	nodes, byIdent := buildReclaimGraph([]ValidatedExpr{cm}, env)
 	v := mayCapture(nodes)
-	if frameReclaimable(byName["cm"], v) {
+	if frameReclaimable(nodeByLabel(byIdent, "cm"), v) {
 		t.Fatalf("a define calling an unlisted (non-whitelisted) primitive must not be reclaimable")
 	}
 }
@@ -164,7 +224,7 @@ func TestClassifyFrameReclaim_StableDefineUnlocksCaller(t *testing.T) {
 
 	// Env without a Stable sq (tier-(a) equivalent): use's edge to sq is mutable.
 	envA := envWithImported(t, "*")
-	a := ClassifyFrameReclaim(mkUnit(), envA)
+	a := reclaimNames(mkUnit(), envA)
 	if !a["sq"] || a["use"] {
 		t.Fatalf("no-Stable env: want sq reclaimable, use not — got sq=%v use=%v", a["sq"], a["use"])
 	}
@@ -173,7 +233,7 @@ func TestClassifyFrameReclaim_StableDefineUnlocksCaller(t *testing.T) {
 	envB := envWithImported(t, "*")
 	unitB := mkUnit()
 	markStableInUnit(unitB, "sq")
-	b := ClassifyFrameReclaim(unitB, envB)
+	b := reclaimNames(unitB, envB)
 	if !b["sq"] || !b["use"] {
 		t.Fatalf("Stable-sq env: want both reclaimable (use→sq immutable, sq safe) — got sq=%v use=%v", b["sq"], b["use"])
 	}
@@ -194,14 +254,14 @@ func TestClassifyFrameReclaim_SelfRecursiveTopLevel(t *testing.T) {
 	}
 
 	envA := envWithImported(t, "+", "-")
-	if ClassifyFrameReclaim(mkUnit(), envA)["fib"] {
+	if reclaimNames(mkUnit(), envA)["fib"] {
 		t.Fatalf("no-Stable env: a self-recursive top-level define must NOT be reclaimable (mutable self-edge)")
 	}
 
 	envB := envWithImported(t, "+", "-")
 	unitB := mkUnit()
 	markStableInUnit(unitB, "fib")
-	if !ClassifyFrameReclaim(unitB, envB)["fib"] {
+	if !reclaimNames(unitB, envB)["fib"] {
 		t.Fatalf("Stable env: a self-recursive top-level define over safe primitives MUST be reclaimable")
 	}
 }
@@ -230,14 +290,14 @@ func TestClassifyFrameReclaim_TwiceDefinedNotReclaimable(t *testing.T) {
 	control := envWithImported(t, "-")
 	controlUnit := mkUnit()
 	markStableInUnit(controlUnit, "f")
-	if !ClassifyFrameReclaim(controlUnit, control)["f"] {
+	if !reclaimNames(controlUnit, control)["f"] {
 		t.Fatalf("control (Stable f): self-recursive define over safe primitives MUST be reclaimable")
 	}
 
 	// Bug case: twice-defined ⇒ producer leaves f non-Stable ⇒ NOT reclaimable.
 	// The old tier-(b) `!mutated` code returned true here — the soundness gap.
 	twiceDefined := envWithImported(t, "-")
-	if ClassifyFrameReclaim(mkUnit(), twiceDefined)["f"] {
+	if reclaimNames(mkUnit(), twiceDefined)["f"] {
 		t.Fatalf("twice-defined (non-Stable f): a rebindable name must NOT be reclaimable")
 	}
 }
@@ -255,7 +315,7 @@ func TestClassifyFrameReclaim_MutualRecursionPair(t *testing.T) {
 	}
 
 	envA := envWithImported(t, "-")
-	a := ClassifyFrameReclaim(mkUnit(), envA)
+	a := reclaimNames(mkUnit(), envA)
 	if a["f"] || a["g"] {
 		t.Fatalf("no-Stable env: mutual recursion over mutable edges must NOT be reclaimable — got f=%v g=%v", a["f"], a["g"])
 	}
@@ -263,7 +323,7 @@ func TestClassifyFrameReclaim_MutualRecursionPair(t *testing.T) {
 	envB := envWithImported(t, "-")
 	unitB := mkUnit()
 	markStableInUnit(unitB, "f", "g")
-	b := ClassifyFrameReclaim(unitB, envB)
+	b := reclaimNames(unitB, envB)
 	if !b["f"] || !b["g"] {
 		t.Fatalf("both-Stable env: mutual recursion over immutable edges MUST be reclaimable — got f=%v g=%v", b["f"], b["g"])
 	}
@@ -282,7 +342,7 @@ func TestClassifyFrameReclaim_SetBangCalleeNotStable(t *testing.T) {
 	unit := []ValidatedExpr{sq, use}
 
 	env := envWithImported(t, "*") // sq deliberately NOT stamped Stable
-	b := ClassifyFrameReclaim(unit, env)
+	b := reclaimNames(unit, env)
 	if b["use"] {
 		t.Fatalf("use must NOT be reclaimable when its callee sq is not Stable (set! in-unit)")
 	}
@@ -307,7 +367,7 @@ func TestClassifyFrameReclaim_BeginWrappedUnit(t *testing.T) {
 	}
 
 	envA := envWithImported(t, "*")
-	a := ClassifyFrameReclaim(mkUnit(), envA)
+	a := reclaimNames(mkUnit(), envA)
 	if !a["sq"] || a["use"] {
 		t.Fatalf("begin-wrapped no-Stable: want sq reclaimable, use not — got sq=%v use=%v", a["sq"], a["use"])
 	}
@@ -315,7 +375,7 @@ func TestClassifyFrameReclaim_BeginWrappedUnit(t *testing.T) {
 	envB := envWithImported(t, "*")
 	unitB := mkUnit()
 	markStableInUnit(unitB, "sq")
-	b := ClassifyFrameReclaim(unitB, envB)
+	b := reclaimNames(unitB, envB)
 	if !b["sq"] || !b["use"] {
 		t.Fatalf("begin-wrapped Stable-sq: want both reclaimable — got sq=%v use=%v", b["sq"], b["use"])
 	}
@@ -336,16 +396,16 @@ func TestBuildReclaimGraph_QuasiquoteNotReclaimable(t *testing.T) {
 	}
 
 	env := envWithImported(t)
-	nodes, byName := buildReclaimGraph(mkUnit(), env)
+	nodes, byIdent := buildReclaimGraph(mkUnit(), env)
 	vA := mayCapture(nodes)
-	if frameReclaimable(byName["g"], vA) {
+	if frameReclaimable(nodeByLabel(byIdent, "g"), vA) {
 		t.Fatalf("a define whose body contains a quasiquote must not be reclaimable (no-Stable env)")
 	}
 
 	stableEnv := envWithImported(t)
 	stableUnit := mkUnit()
 	markStableInUnit(stableUnit, "g")
-	if ClassifyFrameReclaim(stableUnit, stableEnv)["g"] {
+	if reclaimNames(stableUnit, stableEnv)["g"] {
 		t.Fatalf("a define whose body contains a quasiquote must not be reclaimable (Stable env)")
 	}
 }
@@ -413,7 +473,7 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 	envA := envWithImported(t, "*")
 	unitA := []ValidatedExpr{mkSq(), useParam}
 	markStableInUnit(unitA, "sq")
-	if ClassifyFrameReclaim(unitA, envA)["use"] {
+	if reclaimNames(unitA, envA)["use"] {
 		t.Fatalf("parameter shadow: use must NOT be reclaimable — (sq 3) calls the param, not the Stable top-level sq")
 	}
 
@@ -424,7 +484,7 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 	envB := envWithImported(t, "*")
 	unitLet := []ValidatedExpr{mkSq(), useLet}
 	markStableInUnit(unitLet, "sq")
-	if ClassifyFrameReclaim(unitLet, envB)["use"] {
+	if reclaimNames(unitLet, envB)["use"] {
 		t.Fatalf("let shadow: use must NOT be reclaimable — (sq) calls the let binding, not the Stable top-level sq")
 	}
 
@@ -435,7 +495,7 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 	envC := envWithImported(t, "*")
 	unitReal := []ValidatedExpr{mkSq(), useReal}
 	markStableInUnit(unitReal, "sq")
-	if !ClassifyFrameReclaim(unitReal, envC)["use"] {
+	if !reclaimNames(unitReal, envC)["use"] {
 		t.Fatalf("control: a genuine same-unit call to Stable sq MUST be reclaimable")
 	}
 }

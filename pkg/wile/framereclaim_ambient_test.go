@@ -91,7 +91,10 @@ func classifyAmbient(ctx context.Context, t *testing.T, wrapped string, immutabl
 		t.Fatalf("compile: %v", err)
 	}
 
-	return validate.ClassifyFrameReclaim(unit, env)
+	// Project to name -> reclaimable (reclaimByName, framereclaim_measure_test.go):
+	// this harness's programs define each name once, so the name projection is
+	// lossless and the callers assert by name.
+	return reclaimByName(validate.ClassifyFrameReclaim(unit, env))
 }
 
 // TestAmbientBasePrimitivesReclaimable is the Phase 2.6 positive case + flag-off

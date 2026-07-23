@@ -21,66 +21,72 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestFrameReclaimVerdict_ScopeCollisionUnderApproximates pins the resolution of
-// the C5 blocker: ClassifyFrameReclaim must not report a continuation-capturing
-// top-level define as frame-reclaimable because a same-Key sibling does not
-// capture.
+// TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts pins the
+// scope-aware resolution of the frame-reclaim verdict domain (TODO "Frame-reclaim's
+// verdict domain is name-keyed"): two hygiene-distinct top-level defines of one name
+// each get their OWN reclamation verdict, so a structurally-safe binder recovers
+// reclamation while a capturing binder of the same name stays denied.
 //
-// The verdict map is keyed by Sym.Key, once justified by the claim that a
-// GlobalEnvironmentFrame holds one slot per Key, so a Key uniquely names a global
-// binding. Commit 8afeb66a made keys a map[values.Symbol][]int, and a60e32e1
-// deleted the rename pass that had kept two hygiene-distinct same-name top-level
-// binders differently NAMED. Both halves of that justification are now false, so
-// the classifier detects the collision instead (reclaimNode.collided).
+// History (the C5 blocker): the verdict map was keyed by Sym.Key, once justified by
+// the claim that a GlobalEnvironmentFrame holds one slot per Key, so a Key uniquely
+// names a global binding. Commit 8afeb66a made keys a map[values.Symbol][]int and
+// a60e32e1 deleted the rename pass that had kept two hygiene-distinct same-name
+// top-level binders differently NAMED. Both halves of that justification became
+// false, so the classifier first detected the collision and forced it unsafe
+// (reclaimNode.collided) — sound, but conservative: BOTH binders forfeited
+// reclamation. Keying the domain on the scope-discriminated binding identity (the
+// *Binding env.GetBinding resolves) separates them, recovering the safe one.
 //
-// Mechanism it guards: buildReclaimGraph's byName is last-wins and the fixpoint's
-// node set is built from byName's VALUES, so an earlier define's node is dropped
-// before mayCapture runs. Publishing the survivor's verdict under the shared Key
-// would hand it to every define of that name — frameReuseForDefine
-// (compile_define.go) reads it by bare Key, and the verdict alone is sufficient
-// to return releaseReuse(); there is no second structural gate on the release
-// path.
+// Direction matters: the collision the guard ruled out was the false positive
+// frame_reclaim.go rejects by construction — "A false negative leaks (correct,
+// slow); a false positive would corrupt — so we never default to safe." Binding
+// keying keeps that soundness (the capturing binder is still denied) AND regains the
+// precision the name-keyed collapse lost.
 //
-// Direction matters: the pre-fix behavior was NOT the safe over-approximation
-// BindingRef's doc argues for (pkg/environment/binding_ref.go). It was the false
-// positive frame_reclaim.go rules out by construction — "A false negative leaks
-// (correct, slow); a false positive would corrupt — so we never default to safe."
-//
-// NOT ESTABLISHED: no program was ever known to actually corrupt. The unsoundness
-// was proven at the classifier and releaseReuse() proven reachable from it, but
-// whether OpReleaseEnvFrame corrupts a frame held live by a captured continuation
-// was never demonstrated. Do not cite this test as a crash repro.
-func TestFrameReclaimVerdict_ScopeCollisionUnderApproximates(t *testing.T) {
+// NOT ESTABLISHED: no program was ever known to actually corrupt under the pre-guard
+// false positive. The unsoundness was proven at the classifier and releaseReuse()
+// proven reachable from it, but whether OpReleaseEnvFrame corrupts a frame held live
+// by a captured continuation was never demonstrated. Do not cite this test as a
+// crash repro.
+func TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts(t *testing.T) {
 	ctx := context.Background()
 
-	// Control 1: the capturing define alone must be non-reclaimable. Establishes
-	// that the classifier does see the call/cc, so a true verdict below is a
-	// collision artifact and not a failure to detect capture at all.
+	// Control 1: the capturing define alone is non-reclaimable. Establishes that the
+	// classifier sees the call/cc, so a true verdict below is a real recovery and not
+	// a failure to detect capture at all.
 	solo, err := classifyCompiled(ctx, `(begin
 		(define (f x) (call/cc (lambda (k) (k x)))))`, true)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, solo["f"], qt.IsFalse)
+	qt.Assert(t, verdictsForName(solo, "f"), qt.DeepEquals, []bool{false})
 
-	// Control 2: the structurally safe define alone is reclaimable. Establishes
-	// that `true` is the verdict actually being borrowed below.
+	// Control 2: the structurally safe define alone is reclaimable. Establishes that
+	// `true` is the verdict the safe binder recovers below.
 	safe, err := classifyCompiled(ctx, `(begin
 		(define (f x) (+ x 1)))`, true)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, safe["f"], qt.IsTrue)
+	qt.Assert(t, verdictsForName(safe, "f"), qt.DeepEquals, []bool{true})
 
-	// The defect. Two hygiene-distinct top-level function defines of `f`: the
-	// user's captures a continuation, the macro-introduced one does not. The
-	// macro expansion is LAST, so it wins byName and publishes true under "f".
-	//
-	// Measured on HEAD: map[f:true], one entry.
+	// The recovery. Two hygiene-distinct top-level function defines of `f`: the user's
+	// captures a continuation, the macro-introduced one does not. Under scope-keyed
+	// global storage they are DISTINCT bindings, so the verdict domain keyed by
+	// binding identity holds two entries for "f".
 	got, err := classifyCompiled(ctx, `(begin
 		(define-syntax m (syntax-rules () ((_) (define (f x) (+ x 1)))))
 		(define (f x) (call/cc (lambda (k) (k x))))
 		(m))`, true)
 	qt.Assert(t, err, qt.IsNil)
 
-	// A Key naming two distinct bindings, one of which captures, must not report
-	// reclaimable. Any sound fix satisfies this, whether by collision detection
-	// or by making the domain scope-aware.
-	qt.Assert(t, got["f"], qt.IsFalse)
+	// Exactly one of the two is reclaimable: the safe macro f recovered (precision),
+	// the capturing user f stays denied (soundness). A name-keyed domain collapses
+	// these to a single `false` entry (len 1), so len==2 ∧ trues==1 passes only under
+	// scope-aware keying — the discrimination this test exists to pin.
+	verdicts := verdictsForName(got, "f")
+	qt.Assert(t, len(verdicts), qt.Equals, 2)
+	trues := 0
+	for _, v := range verdicts {
+		if v {
+			trues++
+		}
+	}
+	qt.Assert(t, trues, qt.Equals, 1)
 }

@@ -112,18 +112,34 @@ RESOLVED — where anyone scanning for open work will skip it. Written for three
 `freeIds` and `BindingID` were added 2026-07-20 from the same Stage C review, which raises
 the count to five and is itself the argument for not trusting a hardcoded one.
 
-- [ ] **Frame-reclaim's verdict domain is name-keyed** [Medium, M]: `buildReclaimGraph`'s
-  `byName` is `map[string]*reclaimNode` keyed on `Sym.Key`, and `frameReuseForDefine`
-  (`pkg/machine/compilation/compile_define.go`) reads the verdict back by bare key, so two
-  hygiene-distinct top-level defines of one name share a verdict. The **unsoundness is
-  closed** — `390e1a35` stamps `reclaimNode.collided` and `nodeSafe` treats a collided node
-  as unsafe, verified load-bearing by neutralizing the flag and reproducing `got["f"] == true`.
-  What remains is that the fix is collision-*conservative*: any name defined twice in a unit
-  forfeits reclamation. Making the verdict domain itself scope-aware is the general fix, and
-  it waits on a scope-discriminated binding identity (the shipped
-  `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and is **not** the
-  vehicle). Recorded at `plans/2026-07-18-scope-keyed-global-bindings-design.md` under
-  "BLOCKER (RESOLVED)".
+- [x] **Frame-reclaim's verdict domain is name-keyed** [Medium, M, Done 2026-07-23, branch
+  `fix/framereclaim-scope-keyed-verdict`; resurrected from the parked `901139de` onto the
+  merged ScopeSet foundation]: `ClassifyFrameReclaim` now returns
+  `map[validate.ScopedBindingKey]bool`, keyed on the scope-discriminated identity
+  `{Sym.Key, ScopeFingerprint(scopes)}` — the SAME identity `findDuplicateSymbols` and
+  `match.FreeIdKey` use, NOT the physical-slot `BindingID` the prior note correctly ruled out
+  as the vehicle (`bindingIdentity` in `validate_let.go` was promoted to exported
+  `ScopedBindingKey` + `ScopedBindingKeyOf` — named to disambiguate from `environment.BindingID`
+  and to align with `match.FreeIdKey`'s (name, scope-fingerprint) basis). Two hygiene-distinct
+  same-name defines now carry SEPARATE verdicts, so the safe one recovers reclamation while the
+  capturing one stays denied, retiring the collision-*conservative* forfeiture. Nodes key on
+  `ScopedBindingKeyOf(name)`; same-unit edges resolve by subset over nodes (`resolveNodeByScopes`,
+  Flatt argmax), replicating `env.GetBinding` WITHOUT consulting the binding — so node creation no
+  longer depends on a predeclared/stamped binding, completing the T1.5 decoupling. The read side
+  (`frameReuseForDefine`) does an exact identity lookup. `reclaimNode.collided` stays but now
+  fires only on a genuine same-`(name, scopes)` redefinition. Subset (not fingerprint equality)
+  is load-bearing for a let/lambda-nested cross-call whose ref scopes strictly exceed the callee
+  define-name scopes: pinned + mutation-verified by
+  `TestFrameReclaimSeam_LetNestedMutualCallResolves` (equality ⇒ ff=gg=false; subset ⇒ true);
+  recovery pinned by `TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts`.
+  `resolveNodeByScopes` REFUSES an ambiguous maximum (two same-name nodes with equal-cardinality,
+  incomparable scope sets both subset-matching the ref) — returns nil ⇒ unsafe rather than pick by
+  map-iteration order, since `GetBinding` breaks that tie deterministically by binding creation
+  order and this map cannot cheaply replicate it (sound direction: a false positive would corrupt);
+  pinned by `TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess`.
+  (Chose approach B — scope-set identity — over approach A — `*Binding` pointer keying — which
+  consumed the deprecated pointer-identity artifact; see
+  `plans/2026-07-18-scope-keyed-global-bindings-design.md` "BLOCKER (RESOLVED)".)
 
   - [x] **Sub-hole closed: the verdict leaked below top level** [Correctness, S,
     Done 2026-07-20, `82046952`]: `collided` closes the same-`Key` hole for **top-level**
@@ -136,8 +152,10 @@ the count to five and is itself the argument for not trusting a hardcoded one.
     classifier cannot see to guard. Fixed by reading through `unitFrameReclaimVerdict`, which
     re-tests the `ns.Runtime() == p.env` condition the map was armed under; it can withhold a
     verdict, never grant one. Guarded over all four binder kinds
-    (`pkg/wile/framereclaim_letbody_leak_test.go`). **The parent item stands**: this narrows
-    *who may read* the verdict, it does not make the domain scope-aware.
+    (`pkg/wile/framereclaim_letbody_leak_test.go`). This narrowed *who may read* the verdict;
+    the parent (scope-aware domain) is now resolved above, and identity keying makes this gate
+    belt-and-suspenders (an internal define's name carries the enclosing scope, so its identity
+    misses the top-level map), though the gate is retained as an explicit tightening.
 
 - [x] **`MaybeCreateLocalBinding` uses `ScopesCompatible` where exact equality is correct**
   [Medium, S, Done 2026-07-20]: creation reused a slot when
@@ -367,19 +385,24 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   `FreeIdKey` contract (incl. the `|`-delimiter unambiguity) pinned by
   `TestFreeIdKey_DiscriminatesScopeAndName`.
 
-- [ ] **`BindingID` must carry a scope discriminator before the load-order plan ships**
-  [Correctness + sequencing, M, 2026-07-19]: Part III of
-  `plans/2026-07-18-load-order-independent-binding-resolution-design.md` defines
+- [x] **`BindingID` must carry a scope discriminator before the load-order plan ships**
+  [Correctness + sequencing, M, 2026-07-19; **discharged in design 2026-07-23**]: Part III of
+  `plans/2026-07-18-load-order-independent-binding-resolution-design.md` defined
   `BindingID{Origin, Phase, Sym, Local}` with no scope component. That was sound only while
   the (now-deleted, `a60e32e1`) rename pass guaranteed one global per
   `(frame, phase, symbol)`. **After Stage B it is not**: two hygiene-distinct bindings
   produce equal `BindingID`s. Since that struct exists specifically to replace three
   disagreeing notions of "same binding" with one, shipping it name-keyed yields a fourth
-  wrong answer instead of a fix. Not a defect in today's tree — `BindingID` is unbuilt — so
-  this is a **prerequisite recorded against the successor plan**, not a bug. The scope-keyed
-  arc was sequenced first precisely so `BindingID` gets defined once, correctly, after it.
-  Related: the shipped `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and
-  is **not** the vehicle for this (see the frame-reclaim entry above).
+  wrong answer instead of a fix. Not a defect in any tree — `BindingID` (the load-order
+  variant) is still unbuilt, so building it is the successor plan's whole job, not this
+  item's. **Resolution**: the spec now carries the discriminator so it is correct by
+  construction when built — Part III adds `ScopeKey string` (= `syntax.ScopeFingerprint` of
+  the definition-site scope set, the same basis as `validate.ScopedBindingKey` /
+  `match.FreeIdKey`; a string, so `BindingID` stays a comparable value; `""` for locals), the
+  "`ScopeKey` is load-bearing" note explains why, and impl Step 3 requires `Binding.ID()` to
+  populate it plus a distinct-IDs test for two hygiene-distinct same-name binders. Related:
+  the shipped `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and is
+  **not** the vehicle for this (see the frame-reclaim entry above).
 
 ### Scope-keyed globals — successor work not built in the arc (2026-07-19)
 
