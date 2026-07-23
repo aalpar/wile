@@ -35,7 +35,6 @@ func TestFreeTemplateIdHygiene(t *testing.T) {
 		name     string
 		code     string
 		expected string
-		closedBy string // the phase that flips this GREEN; "" = green today (guard)
 	}{
 		{
 			name: "exposure1_toplevel_guard_aux_hijack",
@@ -44,18 +43,16 @@ func TestFreeTemplateIdHygiene(t *testing.T) {
 			code: `(define-syntax guard-aux (syntax-rules () ((_ r ...) 'PWNED)))
 			       (guard (e (else 'x)) (raise 'y))`,
 			expected: "x",
-			closedBy: "", // closed by Phase 2′ (D0 pin population + D2 pin consultation)
 		},
 		{
 			name: "guard2_letsyntax_local_no_capture",
 			// Filed as #2 but does NOT reproduce on b96f8b53: a use-site
 			// (let-syntax ((guard-aux ...))) carries its own intro scope, which is not a
 			// subset of guard's template free-id def-site scope, so arm 1 already refuses
-			// it (design §1.2). GREEN today; a standing guard that D2 must not regress.
+			// it (design §1.2). A standing guard that D2 must not regress.
 			code: `(let-syntax ((guard-aux (syntax-rules () ((_ . a) 'hijacked))))
 			         (guard (e (#t 'c)) (raise 'b)))`,
 			expected: "c",
-			closedBy: "", // green guard: already correct, never quarantined
 		},
 		{
 			name: "exposure3_letsyntax_special_form_corruption",
@@ -69,14 +66,10 @@ func TestFreeTemplateIdHygiene(t *testing.T) {
 			code: `(define-syntax let-syntax (syntax-rules () ((_ bindings body ...) 'shadowed)))
 			       (let-syntax ((tmp (syntax-rules () ((_) 42)))) (tmp))`,
 			expected: "shadowed",
-			closedBy: "", // closed by Phase 1′ (D1+D3): special-form expanders now in the sealed expand base
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.closedBy != "" {
-				t.Skipf("RED until %s — free-template-id-hygiene (%s)", tc.closedBy, tc.name)
-			}
 			c := qt.New(t)
 			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
 			c.Assert(err, qt.IsNil)
