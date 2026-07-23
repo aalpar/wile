@@ -23,7 +23,7 @@ import (
 // through the REAL compile pipeline under `go test ./...` (no WILE_FRAME_RECLAIM_
 // MEASURE gate, no benchmark execution). Real (compiled, hygienic) scopes flow
 // into the classifier here: capture-safe primitive callees (<, +, -) resolve
-// through `env.GetBinding(sym, sym.Scopes())`, and the lexical shadow guard reads
+// through `env.GetBinding(sym, syntax.ScopesOf(sym.Scopes()))`, and the lexical shadow guard reads
 // the same scopes — the internal/validate unit tests use nil scopes (match-any)
 // and cannot exercise scope-aware resolution.
 //

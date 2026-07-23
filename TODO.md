@@ -256,8 +256,23 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   … see nil, caught by resolveGlobal") is corrected in code to note the cached-pointer path it does
   not cover. Needs a maintainer call on whether the hot-path cost is worth it before proceeding.
 
-- [ ] **Scope-set resolution lets the zero value answer an unanswerable question**
-  [Correctness + API, M, 2026-07-20, follow-up to #805]: convention is **nil means NONE**;
+- [x] **Scope-set resolution lets the zero value answer an unanswerable question**
+  [Correctness + API, M, Phase-2 done 2026-07-23]: the three read entry points
+  `GetBinding`, `GetLocalIndex`, `GetGlobalIndexWithScopes` (both frame overloads)
+  now take `values.ScopeSet`, so `nil` is un-passable at the boundary and a
+  forgotten thread of scopes can no longer silently widen to match-any. All 58
+  call sites triaged per intent (behavior-preserving): scoped refs → `ScopesOf`,
+  bare-name/introspection lookups → `AllScopes`, empty-scope fast paths →
+  `EmptyScopes`. Two latent-hygiene sites surfaced as now-visible `AllScopes()`
+  wildcards, left unchanged pending a separate hygiene call:
+  `expander_time_continuation.go:399` (library-scope helper lookup) and
+  `compile_syntax_form.go:137` (pattern-variable lookup by bare unwrapped symbol).
+  Residual (out of Phase-2 scope, still on `[]*Scope` via `scopesToQueryMatchAny`):
+  the query functions `HasLocalVariableBinding` and `ResolveBindingID`/`Ref` keep
+  the nil=match-any footgun — a smaller follow-up if it's worth closing.
+  Phase 0 (`values.ScopeSet` type) + Phase 1 (internal resolver migration) merged
+  earlier at `d2e2e625`. Original analysis:
+  convention is **nil means NONE**;
   "All" must be an explicit special value. The environment read surface does the opposite —
   `GetBinding`, `GetLocalIndex` and `GetGlobalIndex` read a nil scope set as MATCH ANY. Nil is
   indistinguishable from an uninitialized value, so a caller that merely forgot to thread its

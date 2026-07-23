@@ -170,7 +170,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// create returns is name-only, so a following read can land on a different
 	// slot. Same shape as the top-level site in compile_define_syntax.go.
 	expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
-	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, symbolScopes)
+	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, syntax.ScopesOf(symbolScopes))
 	if globalIndex == nil {
 		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrUnexpectedNil,

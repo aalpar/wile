@@ -84,7 +84,7 @@ func TestCompileERMacroTransformer(t *testing.T) {
 
 	// Verify the binding is an compilation.ERMacroTransformer
 	expandEnv := env.Expand()
-	bnd := expandEnv.GetBinding(values.NewSymbol("my-id"), nil)
+	bnd := expandEnv.GetBinding(values.NewSymbol("my-id"), values.AllScopes())
 	c.Assert(bnd, qt.Not(qt.IsNil))
 
 	_, ok := bnd.Value().(*compilation.ERMacroTransformer)

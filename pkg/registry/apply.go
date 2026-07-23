@@ -245,8 +245,10 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 
 	// Address the binding just written, not the name's first slot. A GlobalIndex
 	// built from the bare symbol resolves MATCH ANY, so the stamps below would
-	// land on a hygiene-distinct binding of the same name if one existed.
-	gi := bindingEnv.GetGlobalIndexWithScopes(sym, nil)
+	// land on a hygiene-distinct binding of the same name if one existed. The
+	// empty query resolves the ambient (unscoped) binding, which is the one
+	// registration just defined.
+	gi := bindingEnv.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	if gi == nil {
 		return werr.WrapForeignErrorf(
 			werr.ErrNoSuchBinding,
@@ -334,7 +336,7 @@ func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 			if phaseEnv == nil {
 				continue
 			}
-			bnd := phaseEnv.GetBinding(sym, nil)
+			bnd := phaseEnv.GetBinding(sym, values.AllScopes())
 			if bnd != nil {
 				bnd.UpdateMeta(func(m *environment.BindingMeta) bool {
 					m.Doc = spec.Doc

@@ -557,7 +557,7 @@ func PrimSyntaxLocalValue(cc machine.CallContext) error {
 	expandEnv := expanderCtx.Env().Expand()
 	sym := syntaxSym.Datum()
 
-	binding := expandEnv.GetBinding(sym, syntaxSym.Scopes())
+	binding := expandEnv.GetBinding(sym, syntax.ScopesOf(syntaxSym.Scopes()))
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "syntax-local-value: no binding for %s", sym.Key)
 	}

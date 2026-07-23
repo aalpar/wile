@@ -19,6 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -328,7 +329,7 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	p.AppendOperations(machine.NewOperationPush())
 
 	// Use scope-aware binding resolution for validation
-	binding := p.env.GetBinding(sym, symbolScopes)
+	binding := p.env.GetBinding(sym, syntax.ScopesOf(symbolScopes))
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
@@ -370,10 +371,10 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	var li *environment.LocalIndex
 	if len(symbolScopes) > 0 {
 		// Symbol has scopes (from macro expansion), use scope-aware lookup
-		li = p.env.GetLocalIndex(sym, symbolScopes)
+		li = p.env.GetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
 	} else {
 		// Fast path: see CompileSymbol invariant — empty scopes implies no locals in scope.
-		li = p.env.GetLocalIndex(sym, nil)
+		li = p.env.GetLocalIndex(sym, syntax.EmptyScopes())
 	}
 
 	if li != nil {
@@ -386,7 +387,7 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 		// macro-introduced binder is stored under its intro scope, a wildcard
 		// lookup here would resolve to the name's first slot and mutate the
 		// user's variable instead.
-		gi := p.env.GetGlobalIndexWithScopes(sym, symbolScopes)
+		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 		if gi == nil {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key)
 		}

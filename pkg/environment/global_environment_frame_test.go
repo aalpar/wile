@@ -121,7 +121,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	c.Assert(created, qt.IsTrue)
 
 	// Verify binding exists
-	b := env.GetBinding(sym, nil)
+	b := env.GetBinding(sym, values.AllScopes())
 	c.Assert(b, qt.IsNotNil)
 
 	// Delete it
@@ -227,7 +227,7 @@ func TestGlobalFrame_VacuousScopesAreSingleSlot(t *testing.T) {
 		// slot. EqualTo deliberately reports them unequal — see its doc comment.
 		// Asserting only IsNotNil would not distinguish these at all.
 		wildcard := ge.GetGlobalIndex(sym)
-		scoped := ge.GetGlobalIndexWithScopes(sym, nil)
+		scoped := ge.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 		c.Assert(wildcard, qt.IsNotNil)
 		c.Assert(scoped, qt.IsNotNil)
 
@@ -269,18 +269,18 @@ func TestGlobalFrame_ScopeSetsSeparateBindings(t *testing.T) {
 
 	// A reference written outside any expansion sees only the user's binding:
 	// {m} is not a subset of {}. This is the leak, closed.
-	gi := ge.GetGlobalIndexWithScopes(x, nil)
+	gi := ge.GetGlobalIndexWithScopes(x, values.EmptyScopes())
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Slot, qt.Equals, userSlot)
 
 	// A reference carrying {m} resolves maximally to the macro's binding.
-	gi = ge.GetGlobalIndexWithScopes(x, []*syntax.Scope{m})
+	gi = ge.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{m}))
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Slot, qt.Equals, macroSlot)
 
 	// A reference from a DIFFERENT expansion {n} cannot see {m}: this is the
 	// collision, closed.
-	gi = ge.GetGlobalIndexWithScopes(x, []*syntax.Scope{n})
+	gi = ge.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{n}))
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Slot, qt.Equals, userSlot)
 
@@ -300,11 +300,11 @@ func TestGlobalIndex_EqualToDiscriminatesSlot(t *testing.T) {
 	ge.CreateGlobalBinding(x, BindingTypeVariable, nil)
 	ge.CreateGlobalBinding(x, BindingTypeVariable, []*syntax.Scope{m})
 
-	user := ge.GetGlobalIndexWithScopes(x, nil)
-	macro := ge.GetGlobalIndexWithScopes(x, []*syntax.Scope{m})
+	user := ge.GetGlobalIndexWithScopes(x, values.EmptyScopes())
+	macro := ge.GetGlobalIndexWithScopes(x, syntax.ScopesOf([]*syntax.Scope{m}))
 
 	c.Assert(user.EqualTo(macro), qt.IsFalse)
-	c.Assert(user.EqualTo(ge.GetGlobalIndexWithScopes(x, nil)), qt.IsTrue)
+	c.Assert(user.EqualTo(ge.GetGlobalIndexWithScopes(x, values.EmptyScopes())), qt.IsTrue)
 }
 
 // TestGlobalFrame_PinnedIndexSurvivesDelete pins the F1/F2 regressions found by
@@ -321,7 +321,7 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	sym := values.NewSymbol("x")
 
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
-	gi := ge.GetGlobalIndexWithScopes(sym, nil)
+	gi := ge.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Env, qt.Equals, ge)
 
@@ -377,8 +377,8 @@ func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
 
-	ambient := ge.GetGlobalIndexWithScopes(sym, AmbientScopes())
-	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
+	ambient := ge.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
+	introduced := ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
 	c.Assert(ambient, qt.IsNotNil)
 	c.Assert(introduced, qt.IsNotNil)
 	c.Assert(ambient.Slot, qt.Not(qt.Equals), introduced.Slot)
@@ -386,14 +386,14 @@ func TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime(t *testing.T) {
 	// The ambient delete takes its own slot and leaves the name in the frame.
 	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsTrue)
 	c.Assert(ge.GetOwnGlobalBinding(ambient), qt.IsNil)
-	c.Assert(ge.GetGlobalIndexWithScopes(sym, AmbientScopes()), qt.IsNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, values.EmptyScopes()), qt.IsNil)
 	c.Assert(ge.GetGlobalIndex(sym), qt.IsNotNil)
 
 	// Deleting under the intro scope set takes the last slot, and only now does
 	// the name stop being reported at all.
 	c.Assert(ge.DeleteBinding(sym, introScopes), qt.IsTrue)
 	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNil)
-	c.Assert(ge.GetGlobalIndexWithScopes(sym, introScopes), qt.IsNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes)), qt.IsNil)
 	c.Assert(ge.GetGlobalIndex(sym), qt.IsNil)
 }
 
@@ -412,7 +412,7 @@ func TestGlobalFrame_DeleteRemovesOnlyTheScopeMatchedSlot(t *testing.T) {
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, nil)
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
 
-	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
+	introduced := ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
 	c.Assert(introduced, qt.IsNotNil)
 
 	// Delete under the ambient (empty) scope set, which is what the namespace
@@ -420,10 +420,10 @@ func TestGlobalFrame_DeleteRemovesOnlyTheScopeMatchedSlot(t *testing.T) {
 	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsTrue)
 
 	// The ambient binding is gone...
-	c.Assert(ge.GetGlobalIndexWithScopes(sym, nil), qt.IsNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, values.EmptyScopes()), qt.IsNil)
 	// ...and the hygiene-distinct one is untouched, still readable under its
 	// own scope set.
-	c.Assert(ge.GetGlobalIndexWithScopes(sym, introScopes), qt.IsNotNil)
+	c.Assert(ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes)), qt.IsNotNil)
 	c.Assert(ge.GetOwnGlobalBinding(introduced), qt.IsNotNil)
 	// The name still exists in the frame, so Keys must keep it. Dropping the
 	// map entry here would strand the consumers that treat slots[0] as the
@@ -441,7 +441,7 @@ func TestGlobalFrame_DeleteOfMacroOnlyNameUnderAmbientScopesIsNoOp(t *testing.T)
 	introScopes := []*syntax.Scope{syntax.NewScope()}
 
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, introScopes)
-	introduced := ge.GetGlobalIndexWithScopes(sym, introScopes)
+	introduced := ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(introScopes))
 	c.Assert(introduced, qt.IsNotNil)
 
 	c.Assert(ge.DeleteBinding(sym, AmbientScopes()), qt.IsFalse)
@@ -477,7 +477,7 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 	bScopes := []*syntax.Scope{syntax.NewScope()}
 
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, aScopes)
-	aIndex := ge.GetGlobalIndexWithScopes(sym, aScopes)
+	aIndex := ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(aScopes))
 	c.Assert(aIndex, qt.IsNotNil)
 
 	// Delete under A's own scope set: the name has no ambient binding, so an
@@ -486,7 +486,7 @@ func TestGlobalFrame_StaleIndexMustNotCrossScopeSets(t *testing.T) {
 
 	// A different binder, whose scope set is incompatible with A's, takes the name.
 	ge.CreateGlobalBinding(sym, BindingTypeVariable, bScopes)
-	bBinding := ge.GetOwnGlobalBinding(ge.GetGlobalIndexWithScopes(sym, bScopes))
+	bBinding := ge.GetOwnGlobalBinding(ge.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(bScopes)))
 	c.Assert(bBinding, qt.IsNotNil)
 
 	// A's dead index must not address B's binding.

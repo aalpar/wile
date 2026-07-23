@@ -48,7 +48,7 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 
 	// Verify the primitive is bound in the runtime environment
 	sym := values.NewSymbol("test-prim")
-	binding := env.GetBinding(sym, nil)
+	binding := env.GetBinding(sym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
 }
@@ -94,7 +94,7 @@ func TestApply_StableBasePrimitives(t *testing.T) {
 			err := reg.Apply(context.Background(), env, opts...)
 			c.Assert(err, qt.IsNil)
 
-			b := env.GetBinding(values.NewSymbol(tc.primName), nil)
+			b := env.GetBinding(values.NewSymbol(tc.primName), values.AllScopes())
 			c.Assert(b, qt.IsNotNil)
 			c.Assert(b.IsStable(), qt.Equals, tc.wantStable)
 			// CaptureSafe is the twin static stamp — applied unconditionally
@@ -124,7 +124,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 	// Verify the primitive is bound in the expand environment
 	expandEnv := env.Expand()
 	sym := values.NewSymbol("expand-prim")
-	binding := expandEnv.GetBinding(sym, nil)
+	binding := expandEnv.GetBinding(sym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
 }
@@ -144,7 +144,7 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	// Verify the binding exists in the compile environment
 	compileEnv := env.Compile()
 	sym := values.NewSymbol("special-form")
-	binding := compileEnv.GetBinding(sym, nil)
+	binding := compileEnv.GetBinding(sym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 }
 
@@ -167,7 +167,7 @@ func TestApply_CompileOnlyPrimitive(t *testing.T) {
 	// Should have a compile-time binding
 	compileEnv := env.Compile()
 	sym := values.NewSymbol("compile-only")
-	binding := compileEnv.GetBinding(sym, nil)
+	binding := compileEnv.GetBinding(sym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 }
 
@@ -208,12 +208,12 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 
 	// Should exist in both runtime and expand environments
 	sym := values.NewSymbol("multi-phase")
-	runtimeBinding := env.GetBinding(sym, nil)
+	runtimeBinding := env.GetBinding(sym, values.AllScopes())
 	c.Assert(runtimeBinding, qt.IsNotNil)
 
 	expandEnv := env.Expand()
 	expandSym := values.NewSymbol("multi-phase")
-	expandBinding := expandEnv.GetBinding(expandSym, nil)
+	expandBinding := expandEnv.GetBinding(expandSym, values.AllScopes())
 	c.Assert(expandBinding, qt.IsNotNil)
 }
 
@@ -265,7 +265,7 @@ func TestApplyDocs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			bnd := compileEnv.GetBinding(values.NewSymbol(tc.sym), nil)
+			bnd := compileEnv.GetBinding(values.NewSymbol(tc.sym), values.AllScopes())
 			c.Assert(bnd, qt.IsNotNil)
 			c.Assert(bnd.Doc(), qt.Equals, tc.wantDoc)
 		})
@@ -292,11 +292,11 @@ func TestApplyDocs_MultiPhase(t *testing.T) {
 
 	sym := values.NewSymbol("multi")
 
-	runtimeBnd := env.GetBinding(sym, nil)
+	runtimeBnd := env.GetBinding(sym, values.AllScopes())
 	c.Assert(runtimeBnd, qt.IsNotNil)
 	c.Assert(runtimeBnd.Doc(), qt.Equals, "Documented across phases.")
 
-	expandBnd := env.Expand().GetBinding(sym, nil)
+	expandBnd := env.Expand().GetBinding(sym, values.AllScopes())
 	c.Assert(expandBnd, qt.IsNotNil)
 	c.Assert(expandBnd.Doc(), qt.Equals, "Documented across phases.")
 }
@@ -349,7 +349,7 @@ func TestApply_ContractEnforcement(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			sym := values.NewSymbol("test-enforced")
-			binding := env.GetBinding(sym, nil)
+			binding := env.GetBinding(sym, values.AllScopes())
 			c.Assert(binding, qt.IsNotNil)
 
 			fcls, ok := binding.Value().(*machine.ForeignClosure)

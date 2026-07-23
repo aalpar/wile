@@ -593,7 +593,7 @@ func TestCompileContext_CompileBegin_0(t *testing.T) {
 			// deferred one: the store must address the binding it just declared
 			// under that binder's scope set, and a deferred index would resolve
 			// wildcard to the name's first slot.
-			env.GetGlobalIndexWithScopes(symX, nil),
+			env.GetGlobalIndexWithScopes(symX, values.EmptyScopes()),
 			values.NewString("bindSymbolWithScopes"),
 		),
 	)

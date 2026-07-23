@@ -309,7 +309,7 @@ func TestScopeCreation(t *testing.T) {
 
 	// Get the transformer from expand phase (syntax bindings live in expand phase)
 	fooSym := values.NewSymbol("bindSymbolWithScopes")
-	binding := env.Expand().GetBinding(fooSym, nil)
+	binding := env.Expand().GetBinding(fooSym, values.AllScopes())
 	qt.Assert(t, binding, qt.Not(qt.IsNil))
 
 	_, ok := binding.Value().(*machine.MachineClosure)

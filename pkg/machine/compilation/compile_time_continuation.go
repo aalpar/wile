@@ -250,7 +250,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// top level, where GetLocalIndex returns nil and falls through to globals.
 	if len(symbolScopes) == 0 {
 		// Try local binding first
-		li := p.env.GetLocalIndex(sym, nil)
+		li := p.env.GetLocalIndex(sym, syntax.EmptyScopes())
 		if li != nil {
 			p.AppendOperations(
 				machine.NewOperationLoadLocalByLocalIndexImmediate(li),
@@ -269,7 +269,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// is empty here), so it must use the scope-carrying form, NOT the wildcard
 		// GetGlobalIndex: a reference written outside any macro expansion must not
 		// reach a binder introduced inside one.
-		gi := p.env.GetGlobalIndexWithScopes(sym, symbolScopes)
+		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 		if gi == nil {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local or global binding %q", sym.Key)
 		}
@@ -295,7 +295,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// co-introduced by the same template carries the same intro scope as this
 	// reference, so it must shadow the pinned/global fallbacks below (R1 fix —
 	// previously the ResolvedBinding pin short-circuited ahead of this check).
-	li := p.env.GetLocalIndex(sym, symbolScopes)
+	li := p.env.GetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
 	if li != nil {
 		// Found a local binding with matching scopes
 		p.AppendOperations(
@@ -329,7 +329,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	}
 
 	// Check global binding with scope matching
-	globalBinding := p.env.GetBinding(sym, symbolScopes)
+	globalBinding := p.env.GetBinding(sym, syntax.ScopesOf(symbolScopes))
 	if globalBinding != nil {
 		// It must be a global binding (since local lookup failed).
 		// globalBinding was found by GetBinding — use it directly

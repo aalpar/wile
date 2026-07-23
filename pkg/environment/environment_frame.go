@@ -463,13 +463,14 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	return &p.local
 }
 
-// scopesToQueryMatchAny converts a legacy nillable scope-set argument to a
-// ScopeSet under the historical convention that a nil slice means match-any. It
-// is a Phase-1 boundary shim: the public read entry points still take []*Scope,
-// and this preserves their exact nil reading while the private resolvers move to
-// ScopeSet. Phase 2 removes it by having callers pass a ScopeSet directly. Do
-// NOT use it for GetGlobalIndexWithScopes / DeleteBinding, where a nil slice
-// means the EMPTY set — use syntax.ScopesOf there.
+// scopesToQueryMatchAny converts a nillable scope-set argument to a ScopeSet
+// under the historical convention that a nil slice means match-any. Phase 2
+// flipped the three read entry points (GetBinding, GetLocalIndex,
+// GetGlobalIndexWithScopes) to take a ScopeSet directly, so this shim now serves
+// only the query functions that still accept []*Scope: HasLocalVariableBinding
+// and ResolveBindingID/ResolveBindingRef (binding_id.go). Do NOT use it for
+// GetGlobalIndexWithScopes / DeleteBinding, where a nil slice means the EMPTY
+// set — use syntax.ScopesOf there.
 func scopesToQueryMatchAny(scopes []*syntax.Scope) syntax.ScopeSet {
 	if scopes == nil {
 		return syntax.AllScopes()
@@ -559,16 +560,16 @@ func (p *EnvironmentFrame) resolveGlobal(
 }
 
 // GetBinding returns the binding for the given symbol that matches the
-// provided scopes. It searches local bindings first (walking up the parent
+// provided query. It searches local bindings first (walking up the parent
 // chain), then globals.
 //
-// Nil scopes means "match any" (no scope filtering). Non-nil scopes enables
-// hygienic resolution per Flatt's model with maximal binding selection
-// (consistent with GetLocalIndex).
-func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope) *Binding {
-	if scopes == nil {
-		// Fast path: nil scopes — return first match
-		result := p.resolveLocal(key, syntax.AllScopes(), func(binding *Binding, _ int, _ int) any {
+// A wildcard query (AllScopes) means "match any" (no scope filtering). A
+// specific or empty query enables hygienic resolution per Flatt's model with
+// maximal binding selection (consistent with GetLocalIndex).
+func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Binding {
+	if q.IsAll() {
+		// Fast path: wildcard query — return first match
+		result := p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
 			return binding
 		})
 		if result != nil {
@@ -580,8 +581,8 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 		// candidate is just the existing *Binding pointer — so we record
 		// unconditionally on shouldRecord = true.
 		var best bestOf[*Binding]
-		target := len(scopes)
-		p.resolveLocal(key, syntax.ScopesOf(scopes), func(binding *Binding, _ int, _ int) any {
+		target := len(q.Scopes())
+		p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
 			sc := len(binding.Scopes())
 			rec, done := best.shouldRecord(sc, target)
 			if rec {
@@ -601,7 +602,7 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 
 	// The scope filter now lives in bestSlotLocked, which both selects the
 	// maximal match and rejects incompatible candidates.
-	gResult := p.resolveGlobal(*key, scopesToQueryMatchAny(scopes), func(g *GlobalEnvironmentFrame, i int) any {
+	gResult := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, i int) any {
 		binding := g.bindings[i]
 		if binding != nil {
 			return binding
@@ -642,21 +643,21 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 }
 
 // GetLocalIndex returns the LocalIndex of the binding for the given symbol
-// that matches the given scopes. Nil scopes means "match any".
+// that matches the given query. A wildcard query (AllScopes) means "match any".
 //
-// When scopes are provided, this implements Flatt's "maximal" binding
+// For a specific or empty query, this implements Flatt's "maximal" binding
 // resolution: among all bindings whose scopes are a subset of the
 // reference's scopes, the one with the LARGEST scope set is returned.
 //
 // Returns nil if no matching local binding exists.
-func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
+func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) *LocalIndex {
 	if p == nil || !p.hasLocal() {
 		return nil
 	}
 
-	// Fast path: nil scopes — return first match (no maximal resolution needed)
-	if scopes == nil {
-		result := p.resolveLocal(key, syntax.AllScopes(), func(_ *Binding, slot int, depth int) any {
+	// Fast path: wildcard query — return first match (no maximal resolution needed)
+	if q.IsAll() {
+		result := p.resolveLocal(key, q, func(_ *Binding, slot int, depth int) any {
 			return NewLocalIndex(slot, depth)
 		})
 		if result != nil {
@@ -671,8 +672,8 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 	// where the candidate actually becomes the new best, instead of
 	// allocating on every parent-chain visit.
 	var best bestOf[*LocalIndex]
-	target := len(scopes)
-	p.resolveLocal(key, syntax.ScopesOf(scopes), func(binding *Binding, slot int, depth int) any {
+	target := len(q.Scopes())
+	p.resolveLocal(key, q, func(binding *Binding, slot int, depth int) any {
 		sc := len(binding.Scopes())
 		rec, done := best.shouldRecord(sc, target)
 		if rec {
@@ -825,7 +826,7 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 	// Re-resolve under the creation key. CreateGlobalBinding hands back a
 	// DEFERRED index carrying neither frame nor scopes, which the write path
 	// would resolve wildcard.
-	gi := p.global.GetGlobalIndexWithScopes(key, scopes)
+	gi := p.global.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
 	if gi == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
 			"DefineOwnGlobal: binding %q not found after creation", key.Key)
@@ -857,11 +858,12 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 }
 
 // GetGlobalIndexWithScopes is GetGlobalIndex with hygienic resolution: the
-// binding whose scope set maximally matches scopes wins. A nil scopes slice
-// means the empty scope set, not "any".
-func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	result := p.resolveGlobal(*key, syntax.ScopesOf(scopes), func(g *GlobalEnvironmentFrame, i int) any {
-		return newScopeKeyedGlobalIndex(key, g, i, scopes)
+// binding whose scope set maximally matches the query wins. The empty query
+// (EmptyScopes) resolves under the empty scope set, not "any" — pass AllScopes
+// for wildcard resolution.
+func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
+	result := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, i int) any {
+		return newScopeKeyedGlobalIndex(key, g, i, q)
 	})
 	if result != nil {
 		return result.(*GlobalIndex)
@@ -924,7 +926,7 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 	phases := p.phases
 	if phases == nil {
 		// No phase registry — try runtime only
-		return p.GetGlobalIndexWithScopes(key, scopes)
+		return p.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
 	}
 
 	// Search runtime (phase 0) first, then expand (1), then compile (2)
@@ -933,7 +935,7 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 		if phaseEnv == nil {
 			continue
 		}
-		gi := phaseEnv.GetGlobalIndexWithScopes(key, scopes)
+		gi := phaseEnv.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
 		if gi != nil {
 			return gi
 		}

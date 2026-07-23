@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // envWithImported builds a runtime env whose global frame holds an imported
@@ -36,7 +37,7 @@ func envWithImported(t *testing.T, names ...string) *environment.EnvironmentFram
 	for _, name := range names {
 		sym := syntax.NewSyntaxSymbol(name, nil).Sym
 		env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
-		b := env.GetBinding(sym, nil)
+		b := env.GetBinding(sym, values.AllScopes())
 		if b == nil {
 			t.Fatalf("failed to create global binding %q", name)
 		}

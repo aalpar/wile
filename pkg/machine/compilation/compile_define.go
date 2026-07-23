@@ -88,7 +88,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// the user's variable, whose meta this would then overwrite. Mirror of
 	// emitDefineStore's re-resolve.
 	own := p.env.GlobalEnvironment()
-	ownIndex := own.GetGlobalIndexWithScopes(sym, symbolScopes)
+	ownIndex := own.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 	if ownIndex == nil {
 		return sym, nil
 	}
@@ -195,7 +195,7 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 		// so retrieve its slot scope-aware too. A bare-name lookup would send two
 		// hygienically-distinct same-named internal defines to slot 0, leaving the
 		// second slot #!void (the internal-define analogue of the let-store bug).
-		li := p.env.GetLocalIndex(sym, scopes)
+		li := p.env.GetLocalIndex(sym, syntax.ScopesOf(scopes))
 		if li == nil {
 			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 				"compile define: binding %q not found in local environment", sym.Key)
@@ -211,7 +211,7 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 		// to the name's first slot — the user's binding, not the macro's. Re-resolve
 		// to get the pinned (frame, slot) pair for the binding just declared.
 		p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, scopes)
-		gi := p.env.GetGlobalIndexWithScopes(sym, scopes)
+		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(scopes))
 		if gi == nil {
 			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 				"compile define: binding %q not found in global environment", sym.Key)
@@ -265,7 +265,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	// trusted. Sound and conservative: a false verdict (e.g. a forward reference to a
 	// not-yet-stamped sibling) only forgoes the optimization.
 	name := v.Name()
-	binding := p.env.GetBinding(name.Sym, name.Scopes())
+	binding := p.env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
 	if binding != nil && validate.ProcedureBodyIsCaptureSafe(v, name.Sym.Key, p.env) {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
 			m.CaptureSafe = true
@@ -314,7 +314,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 //     validate.BodyIsFrameReleasable checks (callee stability enforced there).
 func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefine) frameReuse {
 	name := v.Name()
-	binding := p.env.GetBinding(name.Sym, name.Scopes())
+	binding := p.env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
 	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
 		return selfTailReuse(name.Sym.Key, len(v.Params().Required))
 	}

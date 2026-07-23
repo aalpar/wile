@@ -76,7 +76,7 @@ func bodyCalleesAllCaptureSafe(body []ValidatedExpr, selfName string, env *envir
 			safe = false // shadowed local
 			return
 		}
-		b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
+		b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 		if b == nil || !b.IsCaptureSafe() || !b.IsStable() {
 			// Not a capture-safe, non-rebindable primitive: a user-defined callee
 			// (no CaptureSafe), an unresolved name, or a set!-able primitive. A

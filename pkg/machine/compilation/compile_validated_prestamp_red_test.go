@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -83,7 +84,7 @@ func TestFrameReclaimClassifiesForwardEdgeWithoutMutatingBinding(t *testing.T) {
 		ctc.predeclareDefineBindingFromValidated(e)
 	}
 	barName := byName["bar"].Name()
-	bar := env.GetBinding(barName.Sym, barName.Scopes())
+	bar := env.GetBinding(barName.Sym, syntax.ScopesOf(barName.Scopes()))
 	c.Assert(bar, qt.IsNotNil)
 	c.Assert(bar.IsStable(), qt.IsFalse) // fresh define binding, not yet stable
 

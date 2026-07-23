@@ -701,7 +701,7 @@ func (p *Engine) Define(name string, value Value) error {
 // that is a known defect, filed in TODO.md, not an endorsement of wildcard.
 func (p *Engine) Get(name string) (Value, bool) {
 	sym := values.NewSymbol(name)
-	idx := p.env.GetGlobalIndexWithScopes(sym, nil)
+	idx := p.env.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
 	if idx == nil {
 		return nil, false
 	}

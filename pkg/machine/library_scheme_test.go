@@ -139,58 +139,58 @@ func TestSchemeLibraryImports(t *testing.T) {
 
 	// (scheme base) - car, cdr, cons, list, etc.
 	car := values.NewSymbol("car")
-	c.Assert(env.GetBinding(car, nil), qt.IsNotNil, qt.Commentf("car not found from (scheme base)"))
+	c.Assert(env.GetBinding(car, values.AllScopes()), qt.IsNotNil, qt.Commentf("car not found from (scheme base)"))
 
 	// (scheme char) - char-upcase, char-downcase, etc.
 	charUpcase := values.NewSymbol("char-upcase")
-	c.Assert(env.GetBinding(charUpcase, nil), qt.IsNotNil, qt.Commentf("char-upcase not found from (scheme char)"))
+	c.Assert(env.GetBinding(charUpcase, values.AllScopes()), qt.IsNotNil, qt.Commentf("char-upcase not found from (scheme char)"))
 
 	// (scheme lazy) - delay, force, promise?
 	force := values.NewSymbol("force")
-	c.Assert(env.GetBinding(force, nil), qt.IsNotNil, qt.Commentf("force not found from (scheme lazy)"))
+	c.Assert(env.GetBinding(force, values.AllScopes()), qt.IsNotNil, qt.Commentf("force not found from (scheme lazy)"))
 
 	// (scheme inexact) - exp, log, sin, cos, etc.
 	exp := values.NewSymbol("exp")
-	c.Assert(env.GetBinding(exp, nil), qt.IsNotNil, qt.Commentf("exp not found from (scheme inexact)"))
+	c.Assert(env.GetBinding(exp, values.AllScopes()), qt.IsNotNil, qt.Commentf("exp not found from (scheme inexact)"))
 
 	// (scheme complex) - make-rectangular, make-polar, etc.
 	makeRectangular := values.NewSymbol("make-rectangular")
-	c.Assert(env.GetBinding(makeRectangular, nil), qt.IsNotNil, qt.Commentf("make-rectangular not found from (scheme complex)"))
+	c.Assert(env.GetBinding(makeRectangular, values.AllScopes()), qt.IsNotNil, qt.Commentf("make-rectangular not found from (scheme complex)"))
 
 	// (scheme time) - current-second, current-jiffy, etc.
 	currentSecond := values.NewSymbol("current-second")
-	c.Assert(env.GetBinding(currentSecond, nil), qt.IsNotNil, qt.Commentf("current-second not found from (scheme time)"))
+	c.Assert(env.GetBinding(currentSecond, values.AllScopes()), qt.IsNotNil, qt.Commentf("current-second not found from (scheme time)"))
 
 	// (scheme file) - open-input-file, open-output-file, etc.
 	openInputFile := values.NewSymbol("open-input-file")
-	c.Assert(env.GetBinding(openInputFile, nil), qt.IsNotNil, qt.Commentf("open-input-file not found from (scheme file)"))
+	c.Assert(env.GetBinding(openInputFile, values.AllScopes()), qt.IsNotNil, qt.Commentf("open-input-file not found from (scheme file)"))
 
 	// (scheme read) - read
 	read := values.NewSymbol("read")
-	c.Assert(env.GetBinding(read, nil), qt.IsNotNil, qt.Commentf("read not found from (scheme read)"))
+	c.Assert(env.GetBinding(read, values.AllScopes()), qt.IsNotNil, qt.Commentf("read not found from (scheme read)"))
 
 	// (scheme write) - write, display
 	write := values.NewSymbol("write")
-	c.Assert(env.GetBinding(write, nil), qt.IsNotNil, qt.Commentf("write not found from (scheme write)"))
+	c.Assert(env.GetBinding(write, values.AllScopes()), qt.IsNotNil, qt.Commentf("write not found from (scheme write)"))
 
 	// (scheme eval) - eval, environment
 	eval := values.NewSymbol("eval")
-	c.Assert(env.GetBinding(eval, nil), qt.IsNotNil, qt.Commentf("eval not found from (scheme eval)"))
+	c.Assert(env.GetBinding(eval, values.AllScopes()), qt.IsNotNil, qt.Commentf("eval not found from (scheme eval)"))
 
 	// (scheme process-context) - command-line, exit, get-environment-variable
 	commandLine := values.NewSymbol("command-line")
-	c.Assert(env.GetBinding(commandLine, nil), qt.IsNotNil, qt.Commentf("command-line not found from (scheme process-context)"))
+	c.Assert(env.GetBinding(commandLine, values.AllScopes()), qt.IsNotNil, qt.Commentf("command-line not found from (scheme process-context)"))
 
 	// (scheme case-lambda) - case-lambda (syntax)
 	// Note: case-lambda is a syntax binding, so check expand environment
 	caseLambda := values.NewSymbol("case-lambda")
-	caseLambdaBinding := env.Expand().GetBinding(caseLambda, nil)
+	caseLambdaBinding := env.Expand().GetBinding(caseLambda, values.AllScopes())
 	c.Assert(caseLambdaBinding, qt.IsNotNil, qt.Commentf("case-lambda not found from (scheme case-lambda)"))
 
 	// (scheme r5rs) - provides R5RS compatibility
 	// Check for null-environment which is R5RS-specific
 	nullEnvironment := values.NewSymbol("null-environment")
-	c.Assert(env.GetBinding(nullEnvironment, nil), qt.IsNotNil, qt.Commentf("null-environment not found from (scheme r5rs)"))
+	c.Assert(env.GetBinding(nullEnvironment, values.AllScopes()), qt.IsNotNil, qt.Commentf("null-environment not found from (scheme r5rs)"))
 }
 
 // TestSchemeLibraryImportsWithUsage tests that imported bindings actually work
@@ -381,9 +381,9 @@ func TestIndividualSchemeLibraries(t *testing.T) {
 			sym := values.NewSymbol(lib.verify)
 
 			// Check both runtime and expand environments
-			binding := env.GetBinding(sym, nil)
+			binding := env.GetBinding(sym, values.AllScopes())
 			if binding == nil {
-				binding = env.Expand().GetBinding(sym, nil)
+				binding = env.Expand().GetBinding(sym, values.AllScopes())
 			}
 			c.Assert(binding, qt.IsNotNil,
 				qt.Commentf("%s not found after importing (scheme %s)", lib.verify, lib.name))
@@ -606,7 +606,7 @@ func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
 
 	// The binding in the library's env should carry the library scope
 	myFnSym := values.NewSymbol("my-fn")
-	binding := lib.Env.GetBinding(myFnSym, nil)
+	binding := lib.Env.GetBinding(myFnSym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil, qt.Commentf("my-fn should exist in library env"))
 	c.Assert(len(binding.Scopes()) > 0, qt.IsTrue,
 		qt.Commentf("library binding should carry at least the library scope"))
@@ -623,7 +623,7 @@ func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
 	lib2 := compileAndRegisterLibrary(t, env, libCode2)
 
 	myMacroSym := values.NewSymbol("my-macro")
-	syntaxBinding := lib2.Env.Expand().GetBinding(myMacroSym, nil)
+	syntaxBinding := lib2.Env.Expand().GetBinding(myMacroSym, values.AllScopes())
 	c.Assert(syntaxBinding, qt.IsNotNil, qt.Commentf("my-macro should exist in library expand env"))
 	c.Assert(len(syntaxBinding.Scopes()) > 0, qt.IsTrue,
 		qt.Commentf("library syntax binding should carry at least the library scope"))

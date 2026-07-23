@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -202,7 +203,7 @@ func StampInlineHOFs(frame *environment.EnvironmentFrame) {
 		if !inlineHOFRequirementsMet(frame, spec) {
 			continue
 		}
-		b := frame.GetBinding(values.NewSymbol(name), nil)
+		b := frame.GetBinding(values.NewSymbol(name), syntax.AllScopes())
 		if b != nil {
 			applyInlineHOFStamp(b, spec.callbackParam)
 		}
@@ -216,7 +217,7 @@ func StampInlineHOFs(frame *environment.EnvironmentFrame) {
 // deoptimization rather than an unbound-reference compile error.
 func inlineHOFRequirementsMet(frame *environment.EnvironmentFrame, spec inlineHOFSpec) bool {
 	for _, name := range spec.requires {
-		if frame.GetBinding(values.NewSymbol(name), nil) == nil {
+		if frame.GetBinding(values.NewSymbol(name), syntax.AllScopes()) == nil {
 			return false
 		}
 	}

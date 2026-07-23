@@ -433,7 +433,7 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 		if src.env == nil {
 			continue
 		}
-		binding := src.env.GetBinding(libSym, exportScopes)
+		binding := src.env.GetBinding(libSym, syntax.ScopesOf(exportScopes))
 		if binding != nil {
 			return binding, src.phase, true
 		}
@@ -543,7 +543,7 @@ func installImportedBinding(
 	_, created := env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
 
 	own := env.GlobalEnvironment()
-	idx := own.GetGlobalIndexWithScopes(localSym, ambient)
+	idx := own.GetGlobalIndexWithScopes(localSym, syntax.EmptyScopes())
 	if idx == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
 			"import: binding %q vanished immediately after creation%s", localSym.Key, phaseContext)

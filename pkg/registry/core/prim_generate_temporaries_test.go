@@ -137,6 +137,6 @@ func TestGenerateTemporaries_PrimitiveExists(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol("generate-temporaries")
-	bnd := env.GetBinding(sym, nil)
+	bnd := env.GetBinding(sym, values.AllScopes())
 	qt.Assert(t, bnd, qt.IsNotNil)
 }

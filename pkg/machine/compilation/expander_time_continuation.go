@@ -351,7 +351,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// fixing either alone relocates the asymmetry rather than closing it. A co-introduced
 	// let-syntax keyword (shares the intro scope) is caught HERE and MUST win over the pin
 	// (the R1 invariant); a use-site let-syntax binder of a different scope is refused here.
-	bnd := p.env.GetBinding(sym0, symbolScopes)
+	bnd := p.env.GetBinding(sym0, syntax.ScopesOf(symbolScopes))
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
 	}
@@ -382,7 +382,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// ARM 2: NextPhase (define-syntax storage). A top-level user (define-syntax …) lands
 	// here; without the pin above, this is where the #1 capture happened.
 	expandEnv := p.env.NextPhase()
-	bnd = expandEnv.GetBinding(sym0, symbolScopes)
+	bnd = expandEnv.GetBinding(sym0, syntax.ScopesOf(symbolScopes))
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		return bnd
 	}
@@ -396,7 +396,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 		if libEnv == nil {
 			continue
 		}
-		libBnd := libEnv.Expand().GetBinding(sym0, nil)
+		libBnd := libEnv.Expand().GetBinding(sym0, syntax.AllScopes())
 		if libBnd != nil && libBnd.BindingType() == environment.BindingTypeSyntax {
 			return libBnd
 		}

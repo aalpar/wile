@@ -241,7 +241,7 @@ func firstPhaseBinding(env *environment.EnvironmentFrame, sym *values.Symbol) (*
 		if phaseEnv == nil {
 			continue
 		}
-		bnd := phaseEnv.GetBinding(sym, nil)
+		bnd := phaseEnv.GetBinding(sym, values.AllScopes())
 		if bnd != nil {
 			return bnd, phase, true
 		}

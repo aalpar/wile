@@ -91,7 +91,7 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	// has more than one slot, that slot can belong to another expansion, and the
 	// source stamp below would land on that expansion's variable.
 	own := env.GlobalEnvironment()
-	ownIndex := own.GetGlobalIndexWithScopes(name, scopes)
+	ownIndex := own.GetGlobalIndexWithScopes(name, syntax.ScopesOf(scopes))
 	if ownIndex == nil {
 		return
 	}

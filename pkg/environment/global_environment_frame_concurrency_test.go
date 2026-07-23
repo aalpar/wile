@@ -204,7 +204,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				// Use GetBinding which internally calls resolveGlobal
-				bd := child.GetBinding(symbols[idx%10], nil)
+				bd := child.GetBinding(symbols[idx%10], values.AllScopes())
 				c.Assert(bd, qt.Not(qt.IsNil))
 			}(i)
 		}

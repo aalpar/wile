@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // TestCallbackIsCaptureSafe pins the D2 call-site proof (callback specialization
@@ -72,7 +73,7 @@ func TestCallbackIsCaptureSafe(t *testing.T) {
 	sym := syntax.NewSyntaxSymbol("unstable", nil).Sym
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
 	// CaptureSafe but not Imported/Stable.
-	env.GetBinding(sym, nil).UpdateMeta(func(m *environment.BindingMeta) bool {
+	env.GetBinding(sym, values.AllScopes()).UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.CaptureSafe = true
 		return true
 	})

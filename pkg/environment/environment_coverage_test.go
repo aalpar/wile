@@ -131,14 +131,14 @@ func TestGetLocalIndex_Coverage(t *testing.T) {
 
 	t.Run("nil environment", func(t *testing.T) {
 		var env *EnvironmentFrame
-		result := env.GetLocalIndex(values.NewSymbol("x"), nil)
+		result := env.GetLocalIndex(values.NewSymbol("x"), values.AllScopes())
 		c.Assert(result, qt.IsNil)
 	})
 
 	t.Run("no local frame", func(t *testing.T) {
 		topLevel := NewNamespace()
 		env := topLevel.Runtime()
-		result := env.GetLocalIndex(values.NewSymbol("x"), nil)
+		result := env.GetLocalIndex(values.NewSymbol("x"), values.AllScopes())
 		c.Assert(result, qt.IsNil)
 	})
 
@@ -151,7 +151,7 @@ func TestGetLocalIndex_Coverage(t *testing.T) {
 		local.EnsureLocalBinding(sym, BindingTypeVariable)
 
 		childEnv := NewEnvironmentFrameWithParent(local, env)
-		result := childEnv.GetLocalIndex(sym, nil)
+		result := childEnv.GetLocalIndex(sym, values.AllScopes())
 		c.Assert(result, qt.IsNotNil)
 	})
 
@@ -166,7 +166,7 @@ func TestGetLocalIndex_Coverage(t *testing.T) {
 		childEnv := NewEnvironmentFrameWithParent(local, env)
 		childEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scope}, nil)
 
-		result := childEnv.GetLocalIndex(sym, []*syntax.Scope{scope})
+		result := childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scope}))
 		c.Assert(result, qt.IsNotNil)
 	})
 
@@ -183,7 +183,7 @@ func TestGetLocalIndex_Coverage(t *testing.T) {
 		childEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil)
 
 		// Reference only has scope1, but binding requires both scope1 and scope2
-		result := childEnv.GetLocalIndex(sym, []*syntax.Scope{scope1})
+		result := childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scope1}))
 		c.Assert(result, qt.IsNil)
 	})
 }
@@ -200,7 +200,7 @@ func TestGetBinding_GlobalPhase_Coverage(t *testing.T) {
 	err := env.SetOwnGlobalValue(NewGlobalIndex(sym), values.NewInteger(42))
 	c.Assert(err, qt.IsNil)
 
-	binding := env.GetBinding(sym, nil)
+	binding := env.GetBinding(sym, values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value().SchemeString(), qt.Equals, "42")
 }
@@ -231,7 +231,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 		innerEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil) // 2 scopes
 
 		// Reference has all 3 scopes — all bindings match, but inner (2 scopes) is maximal
-		result := innerEnv.GetLocalIndex(sym, []*syntax.Scope{scope1, scope2, scope3})
+		result := innerEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scope1, scope2, scope3}))
 		c.Assert(result, qt.IsNotNil)
 		// Inner binding is at depth 0 (the frame we call from)
 		c.Assert(result[1], qt.Equals, 0, qt.Commentf("should select innermost binding (depth 0)"))
@@ -256,7 +256,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 
 		// Reference has both — both candidates match with scopeCount=1
 		// First candidate collected is depth 0 (child), wins by first-encountered
-		result := childEnv.GetLocalIndex(sym, []*syntax.Scope{scopeA, scopeB})
+		result := childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB}))
 		c.Assert(result, qt.IsNotNil)
 		c.Assert(result[1], qt.Equals, 0, qt.Commentf("should select child binding (depth 0) on tie"))
 	})
@@ -274,7 +274,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 		childEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil)
 
 		// Reference exactly matches binding scopes — triggers fast path
-		result := childEnv.GetLocalIndex(sym, []*syntax.Scope{scope1, scope2})
+		result := childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scope1, scope2}))
 		c.Assert(result, qt.IsNotNil)
 		c.Assert(result[1], qt.Equals, 0)
 	})
@@ -306,7 +306,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 
 		// Middle binding (3 scopes) should win despite being at depth 1, not depth 0.
 		// This is the core maximality property: scope count trumps position.
-		result := innerEnv.GetLocalIndex(sym, []*syntax.Scope{scopeA, scopeB, scopeC, scopeD})
+		result := innerEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC, scopeD}))
 		c.Assert(result, qt.IsNotNil)
 		c.Assert(result[1], qt.Equals, 1, qt.Commentf("middle binding (3 scopes, depth 1) should beat inner (1 scope, depth 0)"))
 	})
@@ -327,7 +327,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 		innerEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
 
 		// Outer binding (1 scope) should win over inner (0 scopes)
-		result := innerEnv.GetLocalIndex(sym, []*syntax.Scope{scope1})
+		result := innerEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scope1}))
 		c.Assert(result, qt.IsNotNil)
 		c.Assert(result[1], qt.Equals, 1, qt.Commentf("scoped binding at depth 1 should beat scopeless at depth 0"))
 	})
@@ -347,7 +347,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 		childEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2, scope3}, nil)
 
 		// Reference is a strict subset of binding scopes — NOT a match
-		result := childEnv.GetLocalIndex(sym, []*syntax.Scope{scope1, scope2})
+		result := childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scope1, scope2}))
 		c.Assert(result, qt.IsNil)
 	})
 }

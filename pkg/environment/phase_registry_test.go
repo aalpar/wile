@@ -208,9 +208,9 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	ns.SealedBase().MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
 
 	// Hermeticity: phase 1 must NOT see the phase-0 user define...
-	qt.Assert(t, expand.GetBinding(userSym, nil), qt.IsNil)
+	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)
 	// ...but MUST still see the shared taproot base binding.
-	qt.Assert(t, expand.GetBinding(baseSym, nil), qt.Not(qt.IsNil))
+	qt.Assert(t, expand.GetBinding(baseSym, values.AllScopes()), qt.Not(qt.IsNil))
 }
 
 func TestNextPhaseClimbsAndGuards(t *testing.T) {

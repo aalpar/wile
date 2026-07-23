@@ -70,7 +70,7 @@ func (p *envBindingChecker) HasBinding(sym string, scopes []*syntax.Scope) bool 
 		return false
 	}
 	s := values.NewSymbol(sym)
-	binding := p.env.GetBinding(s, scopes)
+	binding := p.env.GetBinding(s, syntax.ScopesOf(scopes))
 	return binding != nil
 }
 
@@ -83,7 +83,7 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 		return nil
 	}
 	s := values.NewSymbol(sym)
-	return p.env.GetBinding(s, scopes)
+	return p.env.GetBinding(s, syntax.ScopesOf(scopes))
 }
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.

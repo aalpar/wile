@@ -216,7 +216,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			// letrec-syntax pre-registered this keyword above, under the same set.
 			// Re-resolve under that set, not nil: nil is MATCH ANY, which takes the
 			// first live slot of the name rather than the one just addressed.
-			localIndex = childExpandEnv.GetLocalIndex(keyword, keywordScopes)
+			localIndex = childExpandEnv.GetLocalIndex(keyword, syntax.ScopesOf(keywordScopes))
 		}
 		if localIndex == nil {
 			return nil, wrapSourcedError(keywordSym.SourceContext(), werr.WrapForeignErrorf(

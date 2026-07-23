@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -267,7 +268,7 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 		return false, nil
 	}
 
-	b := p.env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
+	b := p.env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if b == nil {
 		return false, nil
 	}

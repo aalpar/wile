@@ -55,7 +55,7 @@ func TestEnvironmentFrame_Locals(t *testing.T) {
 
 	tv0 := values.NewSymbol("testVar0")
 	// variable has not been added yet, so GetLocalIndex should return nil
-	li0 := env.GetLocalIndex(tv0, nil)
+	li0 := env.GetLocalIndex(tv0, values.AllScopes())
 	qt.Assert(t, li0, qt.IsNil)
 
 	// Test adding a binding
@@ -159,7 +159,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, gb.Value(), valuestest.SchemeEquals, values.Void)
 
 	// check local environment
-	li0 := env.GetLocalIndex(tv0, nil)
+	li0 := env.GetLocalIndex(tv0, values.AllScopes())
 	qt.Assert(t, li0, qt.IsNotNil)
 	lb := env.GetLocalBinding(li0)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
@@ -394,18 +394,18 @@ func TestEnvironmentFrame_GetBinding(t *testing.T) {
 	env.MaybeCreateLocalBinding(localSym, BindingTypeVariable, nil, nil)
 
 	// Test GetBinding for global
-	gb := env.GetBinding(globalSym, nil)
+	gb := env.GetBinding(globalSym, values.AllScopes())
 	qt.Assert(t, gb, qt.Not(qt.IsNil))
 	qt.Assert(t, gb.BindingType(), qt.Equals, BindingTypeVariable)
 
 	// Test GetBinding for local
-	lb := env.GetBinding(localSym, nil)
+	lb := env.GetBinding(localSym, values.AllScopes())
 	qt.Assert(t, lb, qt.Not(qt.IsNil))
 	qt.Assert(t, lb.BindingType(), qt.Equals, BindingTypeVariable)
 
 	// Test GetBinding for non-existent
 	nonexistent := values.NewSymbol("nonexistent")
-	nb := env.GetBinding(nonexistent, nil)
+	nb := env.GetBinding(nonexistent, values.AllScopes())
 	qt.Assert(t, nb, qt.IsNil)
 }
 
@@ -419,13 +419,13 @@ func TestEnvironmentFrame_GetBinding_Scoped(t *testing.T) {
 	env.SetLocalValue(li1, values.NewInteger(42)) //nolint:errcheck
 
 	// GetBinding should return it (no scopes = always matches)
-	b1 := env.GetBinding(sym1, nil)
+	b1 := env.GetBinding(sym1, values.AllScopes())
 	qt.Assert(t, b1, qt.Not(qt.IsNil))
 	qt.Assert(t, b1.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Test with non-existent symbol
 	sym2 := values.NewSymbol("nonexistent")
-	b2 := env.GetBinding(sym2, nil)
+	b2 := env.GetBinding(sym2, values.AllScopes())
 	qt.Assert(t, b2, qt.IsNil)
 }
 
@@ -632,7 +632,7 @@ func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// GetLocalIndex for non-existent should return nil
-	idx := env.GetLocalIndex(values.NewSymbol("nonexistent"), nil)
+	idx := env.GetLocalIndex(values.NewSymbol("nonexistent"), values.AllScopes())
 	qt.Assert(t, idx, qt.IsNil)
 }
 
@@ -1005,13 +1005,13 @@ func TestGetLocalIndex_ScopeDistinctSameFrame(t *testing.T) {
 		sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
 
 	// Resolve with scopeA superset → should find binding at slot 0
-	idx0 := env.GetLocalIndex(sym, []*syntax.Scope{scopeA, scopeC})
+	idx0 := env.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeC}))
 	c.Assert(idx0, qt.IsNotNil)
 	c.Assert(idx0[0], qt.Equals, 0, qt.Commentf(
 		"reference with scopeA should resolve to the scopeA binding"))
 
 	// Resolve with scopeB superset → should find binding at slot 1
-	idx1 := env.GetLocalIndex(sym, []*syntax.Scope{scopeB, scopeC})
+	idx1 := env.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scopeB, scopeC}))
 	c.Assert(idx1, qt.IsNotNil)
 	c.Assert(idx1[0], qt.Equals, 1, qt.Commentf(
 		"reference with scopeB should resolve to the scopeB binding"))
@@ -1295,20 +1295,20 @@ func TestGetLocalIndex_MaximalBinding(t *testing.T) {
 	// Reference [scopeA, scopeB, scopeC]: both bindings match,
 	// inner wins (more scopes = more specific)
 	idx := inner.GetLocalIndex(sym,
-		[]*syntax.Scope{scopeA, scopeB, scopeC})
+		syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB, scopeC}))
 	c.Assert(idx, qt.IsNotNil)
 	c.Assert(idx[1], qt.Equals, 0) // depth 0 = inner
 
 	// Reference [scopeA, scopeC]: only outer matches
 	// (inner requires scopeB which reference doesn't have)
 	idx2 := inner.GetLocalIndex(sym,
-		[]*syntax.Scope{scopeA, scopeC})
+		syntax.ScopesOf([]*syntax.Scope{scopeA, scopeC}))
 	c.Assert(idx2, qt.IsNotNil)
 	c.Assert(idx2[1], qt.Equals, 1) // depth 1 = outer
 
 	// No matching scopes
 	idx3 := inner.GetLocalIndex(sym,
-		[]*syntax.Scope{scopeC})
+		syntax.ScopesOf([]*syntax.Scope{scopeC}))
 	c.Assert(idx3, qt.IsNil)
 }
 

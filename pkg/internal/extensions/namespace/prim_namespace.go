@@ -150,7 +150,7 @@ func PrimNamespaceRef(mc machine.CallContext) error {
 	}
 
 	env := ns.Runtime()
-	binding := env.GetBinding(sym, environment.AmbientScopes())
+	binding := env.GetBinding(sym, values.EmptyScopes())
 	if binding == nil {
 		if hasDefault {
 			mc.SetValue(defaultVal)
@@ -175,7 +175,7 @@ func PrimNamespaceBound(mc machine.CallContext) error {
 	}
 
 	env := ns.Runtime()
-	binding := env.GetBinding(sym, environment.AmbientScopes())
+	binding := env.GetBinding(sym, values.EmptyScopes())
 	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil
 }
@@ -213,7 +213,7 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym, environment.AmbientScopes())
 	if !deleted {
 		base := ns.SealedBase()
-		if base != nil && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, environment.AmbientScopes()) != nil {
+		if base != nil && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, values.EmptyScopes()) != nil {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
 				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",

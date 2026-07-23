@@ -58,7 +58,7 @@ func makeIsCaptureOp(env *environment.EnvironmentFrame) func(*syntax.SyntaxSymbo
 		if !named {
 			return false
 		}
-		b := env.GetBinding(sym.Sym, sym.Scopes())
+		b := env.GetBinding(sym.Sym, syntax.ScopesOf(sym.Scopes()))
 		return b != nil && b.IsImported()
 	}
 }
@@ -250,7 +250,7 @@ func classifyCallee(
 	// capture-safe primitive is stamped Stable. A user shadow (BindingTypeVariable)
 	// carries neither flag, and a set!-able primitive fails IsStable() — both fall
 	// through to the unsafe default below.
-	b := env.GetBinding(sym.Symbol.Sym, sym.Symbol.Scopes())
+	b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if b != nil && b.IsCaptureSafe() && b.IsStable() {
 		return reclaimEdge{}, false
 	}

@@ -176,7 +176,7 @@ func TestInlineHOFFoldRightImportedIsStable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("import: %v", err)
 			}
-			b := eng.Environment().GetBinding(values.NewSymbol("fold-right"), nil)
+			b := eng.Environment().GetBinding(values.NewSymbol("fold-right"), values.AllScopes())
 			if b == nil {
 				t.Fatal("fold-right unbound after (import (srfi 1))")
 			}

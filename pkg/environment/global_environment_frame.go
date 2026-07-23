@@ -85,13 +85,13 @@ func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slo
 }
 
 // newScopeKeyedGlobalIndex is newResolvedGlobalIndex for a resolution that
-// matched on a scope set, recording that set as the index's query key. The
+// matched on a scope-set query, recording that query as the index's key. The
 // scoped lookups compute it and would otherwise discard it, leaving the pinned
-// index indistinguishable from a wildcard one the moment its slot dies. ScopesOf
-// is never the wildcard, so re-resolution stays inside the hygiene key even when
-// the set is empty.
-func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int, scopes []*syntax.Scope) *GlobalIndex {
-	return &GlobalIndex{Index: key, Env: env, Slot: slot, query: syntax.ScopesOf(scopes)}
+// index indistinguishable from a wildcard one the moment its slot dies. Callers
+// reach it through GetGlobalIndexWithScopes, whose query is never the wildcard,
+// so re-resolution stays inside the hygiene key even when the set is empty.
+func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int, q syntax.ScopeSet) *GlobalIndex {
+	return &GlobalIndex{Index: key, Env: env, Slot: slot, query: q}
 }
 
 // SchemeString returns a string representation of this global index.
@@ -427,15 +427,15 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 // from GetGlobalIndex, since a reference written outside any macro expansion must
 // not resolve to a binder introduced inside one.
 // Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
+func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
 	p.mu.RLock()
-	i, ok := p.bestSlotLocked(*key, syntax.ScopesOf(scopes))
+	i, ok := p.bestSlotLocked(*key, q)
 	p.mu.RUnlock()
 
 	if !ok {
 		return nil
 	}
-	return newScopeKeyedGlobalIndex(key, p, i, scopes)
+	return newScopeKeyedGlobalIndex(key, p, i, q)
 }
 
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.

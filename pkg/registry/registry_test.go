@@ -1074,7 +1074,7 @@ func TestDuplicateRegistration_FirstWins(t *testing.T) {
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
 
-	binding := env.GetBinding(values.NewSymbol("dup"), nil)
+	binding := env.GetBinding(values.NewSymbol("dup"), values.AllScopes())
 	c.Assert(binding, qt.IsNotNil)
 	closure, ok := binding.Value().(*machine.ForeignClosure)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("bound value is %T", binding.Value()))
@@ -1106,13 +1106,13 @@ func TestDuplicateRegistration_PhasesAreIndependent(t *testing.T) {
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
 
-	runtimeBinding := env.GetBinding(values.NewSymbol("cross"), nil)
+	runtimeBinding := env.GetBinding(values.NewSymbol("cross"), values.AllScopes())
 	c.Assert(runtimeBinding, qt.IsNotNil)
 	runtimeClosure, ok := runtimeBinding.Value().(*machine.ForeignClosure)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(runtimeClosure.Doc(), qt.Equals, "runtime flavour")
 
-	expandBinding := env.Expand().GetBinding(values.NewSymbol("cross"), nil)
+	expandBinding := env.Expand().GetBinding(values.NewSymbol("cross"), values.AllScopes())
 	c.Assert(expandBinding, qt.IsNotNil)
 	expandClosure, ok := expandBinding.Value().(*machine.ForeignClosure)
 	c.Assert(ok, qt.IsTrue)

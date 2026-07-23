@@ -45,7 +45,7 @@ func TestInlineHOFStamp(t *testing.T) {
 	for _, name := range inlineHOFs {
 		t.Run("hof/"+name, func(t *testing.T) {
 			c := qt.New(t)
-			b := env.GetBinding(values.NewSymbol(name), nil)
+			b := env.GetBinding(values.NewSymbol(name), values.AllScopes())
 			c.Assert(b, qt.IsNotNil,
 				qt.Commentf("%q must be bound in KitchenSink", name))
 			c.Assert(b.InlineHOFParam(), qt.Equals, 0,
@@ -62,7 +62,7 @@ func TestInlineHOFStamp(t *testing.T) {
 	for _, name := range notInlineHOFs {
 		t.Run("non/"+name, func(t *testing.T) {
 			c := qt.New(t)
-			b := env.GetBinding(values.NewSymbol(name), nil)
+			b := env.GetBinding(values.NewSymbol(name), values.AllScopes())
 			c.Assert(b, qt.IsNotNil, qt.Commentf("%q must be bound", name))
 			c.Assert(b.InlineHOFParam(), qt.Equals, -1,
 				qt.Commentf("%q is not a curated inline HOF and must read -1", name))
@@ -81,7 +81,7 @@ func TestInlineHOFStamp_FoldViaImport(t *testing.T) {
 
 	// Before import, fold is unbound (or at least not a curated inline HOF).
 	preEnv := eng.Environment()
-	preBinding := preEnv.GetBinding(values.NewSymbol("fold"), nil)
+	preBinding := preEnv.GetBinding(values.NewSymbol("fold"), values.AllScopes())
 	if preBinding != nil {
 		qt.Assert(t, preBinding.InlineHOFParam(), qt.Equals, -1,
 			qt.Commentf("fold must not be a curated inline HOF before (import (srfi 1))"))
@@ -91,7 +91,7 @@ func TestInlineHOFStamp_FoldViaImport(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	env := eng.Environment()
-	b := env.GetBinding(values.NewSymbol("fold"), nil)
+	b := env.GetBinding(values.NewSymbol("fold"), values.AllScopes())
 	qt.Assert(t, b, qt.IsNotNil, qt.Commentf("fold must be bound after (import (srfi 1))"))
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0,
 		qt.Commentf("imported fold is a curated tail HOF; its callback (kons) is parameter 0"))
@@ -110,7 +110,7 @@ func TestInlineHOFStamp_RenamedImport(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	env := eng.Environment()
-	b := env.GetBinding(values.NewSymbol("my-fold"), nil)
+	b := env.GetBinding(values.NewSymbol("my-fold"), values.AllScopes())
 	qt.Assert(t, b, qt.IsNotNil, qt.Commentf("my-fold must be bound after the renamed import"))
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0,
 		qt.Commentf("the renamed fold still carries the capability (keyed on the export name)"))
@@ -129,7 +129,7 @@ func TestInlineHOFStamp_UserDefineNotStamped(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	env := eng.Environment()
-	b := env.GetBinding(values.NewSymbol("fold"), nil)
+	b := env.GetBinding(values.NewSymbol("fold"), values.AllScopes())
 	qt.Assert(t, b, qt.IsNotNil)
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1,
 		qt.Commentf("a user define is not a library export and must NOT be stamped an inline HOF"))
@@ -150,7 +150,7 @@ func TestInlineHOFStamp_Srfi13StringMapNotStamped(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	env := eng.Environment()
-	b := env.GetBinding(values.NewSymbol("string-map"), nil)
+	b := env.GetBinding(values.NewSymbol("string-map"), values.AllScopes())
 	qt.Assert(t, b, qt.IsNotNil, qt.Commentf("string-map is bound (SRFI-13 shadows R7RS)"))
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, -1,
 		qt.Commentf("SRFI-13's string-map is a sealed-base re-export, not an import-gated HOF; "+

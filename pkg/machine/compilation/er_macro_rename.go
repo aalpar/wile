@@ -73,7 +73,7 @@ func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *value
 	// sealed base, so this reaches base bindings; phase-0 user/import bindings are
 	// intentionally invisible (hermeticity — see the reparent in
 	// environment/phase_registry.go createPhaseEnv).
-	bnd := defExpandEnv.GetBinding(sym, nil)
+	bnd := defExpandEnv.GetBinding(sym, syntax.AllScopes())
 	if bnd != nil {
 		return symbolWithBindingScopes(sym.Key, bnd, defExpandEnv)
 	}

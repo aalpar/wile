@@ -80,7 +80,7 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 	for _, name := range procedureInvokers {
 		t.Run("invoker/"+name, func(t *testing.T) {
 			c := qt.New(t)
-			b := env.GetBinding(values.NewSymbol(name), nil)
+			b := env.GetBinding(values.NewSymbol(name), values.AllScopes())
 			c.Assert(b, qt.IsNotNil,
 				qt.Commentf("%q must be bound in KitchenSink for the completeness check to cover it", name))
 			c.Assert(b.IsCaptureSafe(), qt.IsFalse,
@@ -106,7 +106,7 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 	for _, name := range captureSafe {
 		t.Run("safe/"+name, func(t *testing.T) {
 			c := qt.New(t)
-			b := env.GetBinding(values.NewSymbol(name), nil)
+			b := env.GetBinding(values.NewSymbol(name), values.AllScopes())
 			c.Assert(b, qt.IsNotNil, qt.Commentf("%q must be bound", name))
 			c.Assert(b.IsCaptureSafe(), qt.IsTrue,
 				qt.Commentf("%q does not invoke a Scheme procedure and must be CaptureSafe (the recovery Lever E unlocks)", name))
@@ -123,7 +123,7 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 	for _, name := range stdlibHigherOrder {
 		t.Run("ho-proc/"+name, func(t *testing.T) {
 			c := qt.New(t)
-			b := env.GetBinding(values.NewSymbol(name), nil)
+			b := env.GetBinding(values.NewSymbol(name), values.AllScopes())
 			c.Assert(b, qt.IsNotNil, qt.Commentf("%q must be bound in KitchenSink", name))
 			c.Assert(b.IsCaptureSafe(), qt.IsFalse,
 				qt.Commentf("%q applies a user procedure (may capture) and MUST NOT be proven CaptureSafe", name))
@@ -147,7 +147,7 @@ func TestImportPropagatesCaptureSafe(t *testing.T) {
 	env := eng.Environment()
 
 	// car: a capture-safe primitive; imported ⇒ CaptureSafe must propagate from source.
-	car := env.GetBinding(values.NewSymbol("car"), nil)
+	car := env.GetBinding(values.NewSymbol("car"), values.AllScopes())
 	c.Assert(car, qt.IsNotNil)
 	c.Assert(car.IsImported(), qt.IsTrue,
 		qt.Commentf("car should be the imported binding after (import (scheme base))"))
@@ -155,7 +155,7 @@ func TestImportPropagatesCaptureSafe(t *testing.T) {
 		qt.Commentf("imported car must carry CaptureSafe from source — else import programs lose the frame optimization"))
 
 	// apply: a procedure-invoking primitive; must stay not-CaptureSafe across import.
-	app := env.GetBinding(values.NewSymbol("apply"), nil)
+	app := env.GetBinding(values.NewSymbol("apply"), values.AllScopes())
 	c.Assert(app, qt.IsNotNil)
 	c.Assert(app.IsCaptureSafe(), qt.IsFalse,
 		qt.Commentf("imported apply invokes a procedure and must NOT be CaptureSafe"))

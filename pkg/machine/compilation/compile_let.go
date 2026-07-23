@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/pkg/internal/forms"
 	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -113,7 +114,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 		// separate slots, so a bare-name (nil-scope) lookup would send every
 		// store to slot 0 and leave the others #!void.
 		for i := n - 1; i >= 0; i-- {
-			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, v.Bindings[i].Name.Scopes())
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, syntax.ScopesOf(v.Bindings[i].Name.Scopes()))
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile let: binding %q not found in local environment",
@@ -137,7 +138,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 				b.Name.Scopes(),
 				b.Name.SourceContext(),
 			)
-			li := childEnv.GetLocalIndex(b.Name.Sym, b.Name.Scopes())
+			li := childEnv.GetLocalIndex(b.Name.Sym, syntax.ScopesOf(b.Name.Scopes()))
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile let*: binding %q not found in local environment",
@@ -156,7 +157,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 			if err != nil {
 				return err
 			}
-			li := childEnv.GetLocalIndex(b.Name.Sym, b.Name.Scopes())
+			li := childEnv.GetLocalIndex(b.Name.Sym, syntax.ScopesOf(b.Name.Scopes()))
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile letrec*: binding %q not found in local environment",
@@ -176,7 +177,7 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 			p.AppendOperations(machine.NewOperationPush())
 		}
 		for i := n - 1; i >= 0; i-- {
-			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, v.Bindings[i].Name.Scopes())
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, syntax.ScopesOf(v.Bindings[i].Name.Scopes()))
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile letrec: binding %q not found in local environment",
@@ -237,7 +238,7 @@ func (p *CompileTimeContinuation) createLetCompileEnv(
 // passes bodyCalleesAllCaptureSafe and reclaims. Stable holds because the synthetic
 // let never set!s the binding; the proof required the callback's own stability.
 func stampLetBindingCaptureSafe(childEnv *environment.EnvironmentFrame, b validate.ValidatedLetBinding) {
-	bound := childEnv.GetBinding(b.Name.Sym, b.Name.Scopes())
+	bound := childEnv.GetBinding(b.Name.Sym, syntax.ScopesOf(b.Name.Scopes()))
 	if bound == nil {
 		return
 	}

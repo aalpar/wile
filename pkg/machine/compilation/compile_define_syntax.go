@@ -89,7 +89,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// just created.
 	symbolScopes := keywordSym.Scopes()
 	expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
-	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, symbolScopes)
+	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, syntax.ScopesOf(symbolScopes))
 	if globalIndex == nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: failed to create or find binding for %s", keyword.Key))
 	}

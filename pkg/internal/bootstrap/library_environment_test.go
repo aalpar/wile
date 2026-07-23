@@ -104,12 +104,12 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 	libEnv.MaybeCreateOwnGlobalBinding(libSym, environment.BindingTypeVariable, nil)
 
 	// The caller environment should not see this binding
-	callerBinding := callerEnv.GetBinding(libSym, nil)
+	callerBinding := callerEnv.GetBinding(libSym, values.AllScopes())
 	c.Assert(callerBinding, qt.IsNil, qt.Commentf(
 		"library bindings must not leak into caller environment"))
 
 	// But the library environment should see it
-	libBinding := libEnv.GetBinding(libSym, nil)
+	libBinding := libEnv.GetBinding(libSym, values.AllScopes())
 	c.Assert(libBinding, qt.IsNotNil)
 }
 

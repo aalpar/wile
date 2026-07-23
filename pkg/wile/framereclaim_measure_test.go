@@ -57,6 +57,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/syntax"
 )
 
 // canonicalGabriel mirrors examples/benchmarks/run-canonical.sh. All sixteen are
@@ -292,7 +293,7 @@ func assertStampLanded(env *environment.EnvironmentFrame, expr validate.Validate
 	// twice-defined): the producer declines to stamp it and the control accepts.
 	for _, def := range defs {
 		name := def.Name()
-		b := env.GetBinding(name.Sym, name.Scopes())
+		b := env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
 		if b == nil {
 			return fmt.Errorf("positive control: define %q has no binding after compile — stamp path broke", name.Sym.Key)
 		}

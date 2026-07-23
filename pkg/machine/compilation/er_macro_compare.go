@@ -77,7 +77,7 @@ func erBindingsEqual(bnd1 *environment.Binding, name1 string, bnd2 *environment.
 func resolveERIdentifier(env *environment.EnvironmentFrame, id values.Value) (*environment.Binding, string, error) {
 	switch v := id.(type) {
 	case *values.Symbol:
-		bnd := env.GetBinding(v, nil)
+		bnd := env.GetBinding(v, syntax.AllScopes())
 		return bnd, v.Key, nil
 	case *syntax.SyntaxSymbol:
 		sym := v.Sym
@@ -93,10 +93,10 @@ func resolveERIdentifier(env *environment.EnvironmentFrame, id values.Value) (*e
 
 		scopes := v.Scopes()
 		if len(scopes) > 0 {
-			bnd := env.GetBinding(sym, scopes)
+			bnd := env.GetBinding(sym, syntax.ScopesOf(scopes))
 			return bnd, sym.Key, nil
 		}
-		bnd := env.GetBinding(sym, nil)
+		bnd := env.GetBinding(sym, syntax.AllScopes())
 		return bnd, sym.Key, nil
 	default:
 		return nil, "", werr.WrapForeignErrorf(

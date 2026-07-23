@@ -14,7 +14,10 @@
 
 package validate
 
-import "github.com/aalpar/wile/pkg/environment"
+import (
+	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
+)
 
 // CallbackIsCaptureSafe reports whether a callback ARGUMENT at a call site is
 // provably capture-safe — the D2 proof the inline-HOF dispatch (callback
@@ -43,7 +46,7 @@ func CallbackIsCaptureSafe(arg ValidatedExpr, env *environment.EnvironmentFrame)
 	}
 	switch a := arg.(type) {
 	case *ValidatedSymbol:
-		b := env.GetBinding(a.Symbol.Sym, a.Symbol.Scopes())
+		b := env.GetBinding(a.Symbol.Sym, syntax.ScopesOf(a.Symbol.Scopes()))
 		return b != nil && b.IsCaptureSafe() && b.IsStable()
 	case *ValidatedLambda:
 		return ProcedureBodyIsCaptureSafe(a, "", env)

@@ -87,9 +87,9 @@ func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
 	qt.Assert(t, ns.Compile().GlobalEnvironment().GetGlobalIndex(sym), qt.IsNil)
 
 	// Ambient: reachable via the parent chain from runtime, expand, and compile.
-	qt.Assert(t, ns.Runtime().GetBinding(sym, nil), qt.IsNotNil)
-	qt.Assert(t, ns.Expand().GetBinding(sym, nil), qt.IsNotNil)
-	qt.Assert(t, ns.Compile().GetBinding(sym, nil), qt.IsNotNil)
+	qt.Assert(t, ns.Runtime().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
+	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
+	qt.Assert(t, ns.Compile().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
 }
 
 func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {

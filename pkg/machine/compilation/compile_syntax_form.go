@@ -134,7 +134,7 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
 		}
-		li := p.env.GetLocalIndex(symVal, nil)
+		li := p.env.GetLocalIndex(symVal, syntax.AllScopes())
 		if li != nil {
 			// This is a pattern variable - load its value
 			p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(li))
