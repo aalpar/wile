@@ -108,6 +108,13 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-syntax: failed to store transformer for %s", keyword.Key))
 	}
 
+	// The transformer was compiled before the binding above existed, so a template
+	// reference to the macro's OWN name (a recursive macro) was snapshotted with a nil pin.
+	// Now that the binding exists, pin those self-references to it so the recursion resolves
+	// definition-site (R7RS §4.3.2) and a use-site redefinition of a private helper cannot
+	// capture it. See pinTemplateSelfReferences.
+	pinTemplateSelfReferences(closure, keyword.Key, globalIndex)
+
 	// define-syntax is compile-time only, emit no runtime operations
 	return nil
 }

@@ -205,9 +205,13 @@ same-named macro does **not** capture it:
 The helper macros are sealed in a per-namespace immutable **expand base** (phase 1), the
 macro-phase analogue of the sealed base above, and macro dispatch consults the pin after the
 local `let-syntax` arm and before the use-site arms (so a co-introduced keyword still shadows,
-the R1 invariant). Scope: this is a *private-helper / definition-site* guarantee, not "freeze
-every public macro" — a user who redefines a public macro like `cond` still sees their
-redefinition in code they subsequently write that expands through it.
+the R1 invariant). This holds for a helper's **own recursion** as well: a recursive macro's
+template reference to itself (e.g. `guard-aux`'s multi-clause recursion, `define-record-type`
+building one accessor per field) resolves to its own definition-site binding, so a use-site
+redefinition of the private helper cannot capture the recursion. Scope: this is a
+*private-helper / definition-site* guarantee, not "freeze every public macro" — a user who
+redefines a public macro like `cond` still sees their redefinition in code they subsequently
+write that expands through it (a directly-typed reference carries no pin).
 
 **define/set! asymmetry on sealed names.** `(define caar …)` *introduces* a child-frame
 shadow (closures keep the sealed binding); `(set! caar …)` *mutates the existing* binding

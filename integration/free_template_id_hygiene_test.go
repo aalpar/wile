@@ -171,6 +171,50 @@ func TestFreeTemplateIdHygiene_Section6Cases(t *testing.T) {
 	}
 }
 
+// TestFreeTemplateIdHygiene_RecursiveHelperSelfReference covers the recursive private-helper
+// case: a bootstrap helper macro (guard-aux, define-record-type-impl) references ITSELF in its
+// template. That self-reference is collected before the macro's own binding exists, so it was
+// nil-pinned and captured by a use-site redefinition — the reported #1 bug generalized to the
+// recursion-firing path (multi-clause guard, a record with fields), which D0's reorder alone
+// cannot pin (a macro cannot be defined before itself). Closed by pinning a template's
+// self-reference to the macro's own definition-site binding after it is created
+// (compile_define_syntax.go). #1's single-else / zero-field cases do not fire the recursion.
+func TestFreeTemplateIdHygiene_RecursiveHelperSelfReference(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			// Multi-clause guard forces guard-aux to recurse via its own name. A use-site
+			// (define-syntax guard-aux …) must not capture that recursion.
+			name: "multiclause_guard_guard_aux_recursion_no_capture",
+			code: `(define-syntax guard-aux (syntax-rules () ((_ . r) 'PWNED)))
+			       (guard (e (#f 'first) (#t 'second)) (raise 'z))`,
+			expected: "second",
+		},
+		{
+			// A record with fields forces define-record-type-impl to recurse (one step per
+			// field). A use-site redefinition of the private impl helper must not capture it.
+			name: "record_with_fields_impl_recursion_no_capture",
+			code: `(define-syntax define-record-type-impl (syntax-rules () ((_ x ...) 'PWNED)))
+			       (define-record-type point (make-point x y) point? (x px) (y py))
+			       (px (make-point 3 4))`,
+			expected: "3",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+			c.Assert(err, qt.IsNil)
+			result, err := engine.EvalMultiple(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}
+
 // TestFreeTemplateIdHygiene_Adversarial exercises additional use-site capture vectors that
 // must NOT hijack a bootstrap macro's private helper. They are standing guards that the D1/D2
 // changes must not regress. Clauses use (#t …) rather than (else …): the else auxiliary-syntax

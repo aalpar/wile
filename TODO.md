@@ -450,6 +450,20 @@ re-confirm each repro before designing a fix.**
       ratchet: an unpinned expand-bound sibling reference is now a **defect** (was UNCHECKED);
       passes (0 defects). Gates: lint + build + covercheck (all 41 ≥80%) + `-race` GREEN.
       Remaining: Phase 3′ (adversarial import tests + docs + CHANGELOG).
+    - **Phase 4′ DONE (crosscheck remediation + recursive-helper completion, option A):** 5-lens
+      `/crosscheck` verified the topology + D2 sound; found two real gaps the single-clause #1
+      repro masked. (1) The nil-pin census was **vacuous** — its discriminator used the composite
+      `FreeIdKey` (`scope-fingerprint|name`) so `GetGlobalIndex(NewSymbol(name))` always missed;
+      added `match.FreeIdName` and recover the bare name. (2) A recursive helper's **self**-
+      reference (`guard-aux`→`guard-aux`, `define-record-type-impl`→itself; multi-clause guard /
+      record-with-fields) was still capturable — reorder can't pin a self-reference. Fixed with
+      `pinTemplateSelfReferences` (`compile_syntax_rules.go`): after `define-syntax` creates the
+      binding, back-patch every nil-pinned template free-id whose name is the macro's own to that
+      binding (R7RS §4.3.2; preserves create-after-compile so a failed compile leaves no binding).
+      Fixed the whole class uniformly (`and`/`or`/`cond`/`case`/`do`/`define-values`/…). Census now
+      **genuinely load-bearing**: mutation-verified it flags 21 recursive self-refs without the
+      back-patch, 0 with (44→23 nil-pins). Plus convergent hardening (dropped silent-degrade
+      guards + construction-invariant test, `gi.Env` guard, `phaseParent`→method, doc fixes).
 
 - [x] **CHANGELOG now documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: added a
   `[Unreleased] → Changed` entry covering the `8afeb66a…4f73936d` arc and its user-visible
