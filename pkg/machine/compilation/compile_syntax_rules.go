@@ -325,7 +325,14 @@ func pinTemplateSelfReferences(closure values.Value, macroName string, gi *envir
 		}
 		for _, clause := range w.Clauses {
 			for key, res := range clause.FreeIds {
-				if res == nil || res.Global != nil {
+				// Back-patch only a GENUINELY-unbound self-reference. Skip an already-resolved
+				// global (Global != nil) and — importantly — a reference that resolved to a
+				// LOCAL binding (HasLocalBinding: an enclosing local variable shadowing the
+				// macro's name; overriding it with the macro's global would break that local
+				// resolution). A nil-Global entry that merely carries a LibScope is a library
+				// macro's own self-reference and IS pinned (it should resolve to the library's
+				// own binding, which is what gi points at).
+				if res == nil || res.Global != nil || res.HasLocalBinding {
 					continue
 				}
 				if match.FreeIdName(key) == macroName {
