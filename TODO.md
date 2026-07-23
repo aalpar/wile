@@ -263,13 +263,28 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   forgotten thread of scopes can no longer silently widen to match-any. All 58
   call sites triaged per intent (behavior-preserving): scoped refs → `ScopesOf`,
   bare-name/introspection lookups → `AllScopes`, empty-scope fast paths →
-  `EmptyScopes`. Two latent-hygiene sites surfaced as now-visible `AllScopes()`
-  wildcards, left unchanged pending a separate hygiene call:
-  `expander_time_continuation.go:399` (library-scope helper lookup) and
-  `compile_syntax_form.go:137` (pattern-variable lookup by bare unwrapped symbol).
-  Residual (out of Phase-2 scope, still on `[]*Scope` via `scopesToQueryMatchAny`):
-  the query functions `HasLocalVariableBinding` and `ResolveBindingID`/`Ref` keep
-  the nil=match-any footgun — a smaller follow-up if it's worth closing.
+  `EmptyScopes`.
+  **Phase-2 residuals CLOSED 2026-07-23** (both open follow-ups):
+  1. *Footgun close.* `HasLocalVariableBinding`, `ResolveBindingID`, and
+     `ResolveBindingRef` now take `syntax.ScopeSet` too; `scopesToQueryMatchAny`
+     deleted. All 8 production callers pass a real symbol's scopes, retriaged to
+     `syntax.ScopesOf(sym.Scopes())` (scoped refs). The nil=match-any footgun is
+     gone from the whole query surface. Verified: build · lint 0 · covercheck
+     41/41 · `-race` on env/validate/machine/integration — no oracle flipped.
+  2. *Latent-hygiene verdict — both wildcards KEPT, documented as deliberate.*
+     `compile_syntax_form.go` pattern-var lookup: pattern vars are bound
+     **scopeless** in the innermost `createPatternVarEnvironment` frame; under a
+     wildcard `GetLocalIndex` returns the FIRST (innermost) match so the pattern
+     var wins. A scoped query switches to *maximal* resolution, where an enclosing
+     scoped lexical of the same name could outrank it — narrowing is a regression,
+     not a fix. `expander_time_continuation.go` ARM 3: the SCOPE already routed to
+     the home library via `LookupLibraryEnv(scope)`; the helper's definition
+     scopes are not a subset of the use-site scopes, so a scoped query would filter
+     it out and break cross-library helper resolution. Mutation-tested: narrowing
+     both to `ScopesOf(...)` kept the suite green (ARM 3 is thin — reached mainly
+     via `expand-once`; the pattern-var/lexical collision is uncovered), so the
+     verdict rests on the resolution semantics, not the suite. Rationale is now in
+     a comment at each site.
   Phase 0 (`values.ScopeSet` type) + Phase 1 (internal resolver migration) merged
   earlier at `d2e2e625`. Original analysis:
   convention is **nil means NONE**;

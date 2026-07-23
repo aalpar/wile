@@ -308,7 +308,7 @@ func (p *CompileTimeContinuation) registerInlineCandidates(
 			continue
 		}
 
-		bid, resolved := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
+		bid, resolved := childEnv.ResolveBindingID(b.Name.Sym, syntax.ScopesOf(b.Name.Scopes()))
 		if !resolved {
 			continue
 		}

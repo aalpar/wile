@@ -624,7 +624,7 @@ func markMutableBindings(
 		return
 	}
 	for i, b := range bindings {
-		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
+		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, syntax.ScopesOf(b.Name.Scopes()))
 		if ok && result.isMutated(environment.LocalRef(bid)) {
 			bindings[i].Mutable = true
 		}

@@ -103,7 +103,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 		if ok {
 			// R7RS §4.2.2: Local variable bindings shadow special forms
 			// Check if there's a local variable binding that shadows this form
-			hasLocal := env.HasLocalVariableBinding(symVal, sym.Scopes())
+			hasLocal := env.HasLocalVariableBinding(symVal, syntax.ScopesOf(sym.Scopes()))
 			if hasLocal {
 				// Local variable shadows the special form - treat as procedure call
 				return validateCall(ctx, env, pair, result)

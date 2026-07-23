@@ -177,10 +177,11 @@ func (p *ExpanderTimeContinuation) Context() context.Context {
 	return p.ctx
 }
 
-// hasLocalVariableBinding delegates to EnvironmentFrame.HasLocalVariableBinding.
+// hasLocalVariableBinding delegates to EnvironmentFrame.HasLocalVariableBinding,
+// resolving the reference hygienically against its own scope set.
 // R7RS §4.2.2: let bindings shadow outer bindings including macros.
 func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
-	return p.env.HasLocalVariableBinding(sym, scopes)
+	return p.env.HasLocalVariableBinding(sym, syntax.ScopesOf(scopes))
 }
 
 // ExpandTopLevelExpression expands a whole TOP-LEVEL form.
@@ -396,6 +397,14 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 		if libEnv == nil {
 			continue
 		}
+		// AllScopes (match-any by name) is deliberate here, unlike arms 1/2. The
+		// SCOPE already did the routing: LookupLibraryEnv(scope) selected the
+		// symbol's home library env. The helper was defined there under the
+		// library's own DEFINITION scopes, which are not a subset of the use-site
+		// symbolScopes (a different expansion universe). A scoped query
+		// (ScopesOf(symbolScopes)) would apply Flatt's subset filter and reject
+		// the helper, breaking the cross-library resolution this arm exists for.
+		// So the final step is a nominal by-name lookup within the routed env.
 		libBnd := libEnv.Expand().GetBinding(sym0, syntax.AllScopes())
 		if libBnd != nil && libBnd.BindingType() == environment.BindingTypeSyntax {
 			return libBnd

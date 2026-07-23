@@ -495,7 +495,7 @@ func TestEnvironmentFrame_HasLocalVariableBinding(t *testing.T) {
 
 			if tc.nilEnv {
 				var env *EnvironmentFrame
-				qt.Assert(t, env.HasLocalVariableBinding(sym, nil), qt.Equals, false)
+				qt.Assert(t, env.HasLocalVariableBinding(sym, syntax.EmptyScopes()), qt.Equals, false)
 				return
 			}
 
@@ -503,12 +503,12 @@ func TestEnvironmentFrame_HasLocalVariableBinding(t *testing.T) {
 			env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 			if tc.noBinding {
-				qt.Assert(t, env.HasLocalVariableBinding(sym, nil), qt.Equals, false)
+				qt.Assert(t, env.HasLocalVariableBinding(sym, syntax.EmptyScopes()), qt.Equals, false)
 				return
 			}
 
 			_, _ = env.MaybeCreateLocalBinding(sym, tc.bindingType, tc.bindScopes, nil)
-			got := env.HasLocalVariableBinding(sym, tc.useScopes)
+			got := env.HasLocalVariableBinding(sym, syntax.ScopesOf(tc.useScopes))
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}
@@ -1177,7 +1177,7 @@ func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {
 
 	// Reference has [scopeA] — inner binding [scopeB] doesn't match,
 	// but outer binding [scopeA] does. Should return true.
-	c.Assert(innerEnv.HasLocalVariableBinding(sym, []*syntax.Scope{scopeA}), qt.IsTrue)
+	c.Assert(innerEnv.HasLocalVariableBinding(sym, syntax.ScopesOf([]*syntax.Scope{scopeA})), qt.IsTrue)
 }
 
 func TestGetGlobalIndexAcrossPhases(t *testing.T) {

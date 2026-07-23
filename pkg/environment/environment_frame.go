@@ -463,21 +463,6 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 	return &p.local
 }
 
-// scopesToQueryMatchAny converts a nillable scope-set argument to a ScopeSet
-// under the historical convention that a nil slice means match-any. Phase 2
-// flipped the three read entry points (GetBinding, GetLocalIndex,
-// GetGlobalIndexWithScopes) to take a ScopeSet directly, so this shim now serves
-// only the query functions that still accept []*Scope: HasLocalVariableBinding
-// and ResolveBindingID/ResolveBindingRef (binding_id.go). Do NOT use it for
-// GetGlobalIndexWithScopes / DeleteBinding, where a nil slice means the EMPTY
-// set — use syntax.ScopesOf there.
-func scopesToQueryMatchAny(scopes []*syntax.Scope) syntax.ScopeSet {
-	if scopes == nil {
-		return syntax.AllScopes()
-	}
-	return syntax.ScopesOf(scopes)
-}
-
 // resolveLocal walks local bindings up the parent chain, calling visitor
 // for each binding that matches key and passes scope filtering.
 //
@@ -690,19 +675,21 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
-// compatible with the given scopes. This is the shared implementation used by
+// satisfying the scope-set query q. This is the shared implementation used by
 // both the macro expander (to decide whether a local variable shadows a macro)
 // and the validator (to decide whether a local variable shadows a special form).
 //
 // The check implements Flatt's hygiene rule: a binding matches a reference when
 // bindingScopes ⊆ useScopes. Bindings with no scopes (user code) match any use.
-// Only BindingTypeVariable bindings are considered; syntax/primitive bindings
-// do not shadow.
-func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
+// A wildcard query (syntax.AllScopes) matches any binding of the name; pass
+// syntax.ScopesOf(ref.Scopes()) for a hygienic reference-scoped check. Only
+// BindingTypeVariable bindings are considered; syntax/primitive bindings do not
+// shadow.
+func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, q syntax.ScopeSet) bool {
 	if p == nil {
 		return false
 	}
-	result := p.resolveLocal(sym, scopesToQueryMatchAny(scopes), func(binding *Binding, _ int, _ int) any {
+	result := p.resolveLocal(sym, q, func(binding *Binding, _ int, _ int) any {
 		if binding.BindingType() == BindingTypeVariable {
 			return true
 		}

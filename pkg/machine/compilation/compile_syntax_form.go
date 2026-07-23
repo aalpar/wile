@@ -134,6 +134,15 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
 		}
+		// AllScopes (match-any, first-match) is deliberate, not an unthreaded
+		// scope set. Pattern variables are bound scopeless in the innermost
+		// createPatternVarEnvironment frame (compile_syntax_case.go), keyed by
+		// bare name — a nominal namespace, not a hygienic one. Under a wildcard
+		// query GetLocalIndex returns the FIRST compatible binding walking
+		// innermost-out, so the scopeless pattern variable wins. A scoped query
+		// (ScopesOf(v.Scopes())) would switch to maximal resolution, where an
+		// enclosing scoped lexical of the same name (larger scope count) could
+		// outrank the pattern variable — a regression, not a hygiene fix.
 		li := p.env.GetLocalIndex(symVal, syntax.AllScopes())
 		if li != nil {
 			// This is a pattern variable - load its value

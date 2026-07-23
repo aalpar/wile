@@ -71,7 +71,7 @@ func buildBindingIdxMap(
 ) map[environment.BindingID]int {
 	idToIdx := make(map[environment.BindingID]int, len(bindings))
 	for i, b := range bindings {
-		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
+		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, syntax.ScopesOf(b.Name.Scopes()))
 		if ok {
 			idToIdx[bid] = i
 		}

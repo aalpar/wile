@@ -32,12 +32,12 @@ type BindingID struct {
 	Slot  int
 }
 
-// ResolveBindingID looks up a local binding by symbol and scopes and
+// ResolveBindingID looks up a local binding by symbol and scope-set query and
 // returns a stable BindingID. Returns the zero BindingID and false if the
 // symbol does not resolve to a local binding.
-func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, scopes []*syntax.Scope) (BindingID, bool) {
+func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, q syntax.ScopeSet) (BindingID, bool) {
 	var bid BindingID
-	result := p.resolveLocal(key, scopesToQueryMatchAny(scopes), func(_ *Binding, slot int, depth int) any {
+	result := p.resolveLocal(key, q, func(_ *Binding, slot int, depth int) any {
 		frame := p
 		for range depth {
 			frame = frame.parent
@@ -54,8 +54,8 @@ func (p *EnvironmentFrame) ResolveBindingID(key *values.Symbol, scopes []*syntax
 // existing binding (a top-level set!/define is named before the compiler
 // creates its global). Unlike ResolveBindingID, callers do not branch on a
 // found/not-found bool; "not local" is itself a nameable (global) outcome.
-func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, scopes []*syntax.Scope) BindingRef {
-	bid, ok := p.ResolveBindingID(key, scopes)
+func (p *EnvironmentFrame) ResolveBindingRef(key *values.Symbol, q syntax.ScopeSet) BindingRef {
+	bid, ok := p.ResolveBindingID(key, q)
 	if ok {
 		return LocalRef(bid)
 	}

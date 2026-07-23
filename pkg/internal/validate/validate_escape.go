@@ -64,7 +64,7 @@ func markEscapedBindings(
 			panic("validate.markEscapedBindings: unhandled RefRole " +
 				"— add a case after introducing the new role")
 		}
-		bid, ok := childEnv.ResolveBindingID(sym.Sym, sym.Scopes())
+		bid, ok := childEnv.ResolveBindingID(sym.Sym, syntax.ScopesOf(sym.Scopes()))
 		if !ok {
 			return
 		}

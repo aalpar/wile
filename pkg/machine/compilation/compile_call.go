@@ -177,7 +177,7 @@ func (p *CompileTimeContinuation) tryInlineCall(
 		return false, nil
 	}
 
-	bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, sym.Symbol.Scopes())
+	bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
 	if !resolved {
 		return false, nil
 	}
