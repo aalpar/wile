@@ -29,6 +29,7 @@ package match
 import (
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -97,6 +98,18 @@ type ExpandOptions struct {
 // (name, scopes) pair.
 func FreeIdKey(name string, scopes []*syntax.Scope) string {
 	return syntax.ScopeFingerprint(scopes) + "|" + name
+}
+
+// FreeIdName recovers the bare identifier from a FreeIdKey — the inverse of FreeIdKey.
+// The fingerprint contains only [0-9,], so the first '|' unambiguously ends it (a name may
+// itself contain '|'). Callers that indexed a freeIds map get the composite key, not the bare
+// name; use this to compare against a symbol's own name (e.g. a template's self-reference).
+func FreeIdName(key string) string {
+	_, name, found := strings.Cut(key, "|")
+	if !found {
+		return key
+	}
+	return name
 }
 
 // resolveSourceContext returns the source context for a newly-constructed

@@ -59,9 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   expand child instead of overwriting the pinned binding in place; and macro dispatch consults
   the template's definition-site pin (after the local `let-syntax` arm, before the use-site
   arms), so the helper resolves definition-site while a co-introduced keyword still shadows it.
-  This is the private-helper / definition-site guarantee documented for values in
-  `docs/reference/r7rs-differences.md` (Chez two-environment model), now extended to macros;
-  public-macro redefinition is unchanged by intent.
+  The guarantee also covers a helper's **own recursion**: a recursive macro's self-reference
+  (a multi-clause `guard`, a `define-record-type` with fields) is pinned to its own binding, so
+  a use-site redefinition cannot capture the recursion either. This is the private-helper /
+  definition-site guarantee documented for values in `docs/reference/r7rs-differences.md` (Chez
+  two-environment model), now extended to macros; public-macro redefinition is unchanged by
+  intent (a directly-typed reference carries no pin).
 - **Redefining a core special form now shadows cleanly instead of bricking it.**
   `(define-syntax let-syntax …)` overwrote the installed primitive-expander slot in place, so
   every subsequent `(let-syntax …)` failed to compile (`let-syntax` has no fallback). The

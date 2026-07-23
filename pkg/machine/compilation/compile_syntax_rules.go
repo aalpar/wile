@@ -294,6 +294,48 @@ func compileClauseWithEllipsisAndLiterals(
 	}, nil
 }
 
+// pinTemplateSelfReferences fills the definition-site pin for a syntax-rules template's free
+// references to the macro BEING DEFINED. collectFreeIdentifiersWithEllipsis runs while compiling
+// the transformer, which is BEFORE CompileDefineSyntax creates the macro's own binding, so a
+// recursive self-reference (guard-aux -> guard-aux, define-record-type-impl -> itself) is
+// snapshotted with a nil Global. R7RS §4.3.2 requires that free self-reference to resolve to the
+// macro's OWN definition-site binding; without the pin it degrades to use-site resolution and a
+// user redefinition of the (private) helper captures the recursion — the reported hijack
+// generalized to any recursion-firing use (a multi-clause guard, a record with fields). Once the
+// binding exists, back-patch every nil-pinned free identifier whose name is the macro's own name
+// to that binding. This preserves the create-after-compile order (a failed transformer compile
+// still leaves no binding). No-op for a non-syntax-rules transformer (ER-macro/lambda carry no
+// ClausesWrapper) and for a nil pin.
+func pinTemplateSelfReferences(closure values.Value, macroName string, gi *environment.GlobalIndex) {
+	if gi == nil {
+		return
+	}
+	cls, ok := closure.(*machine.MachineClosure)
+	if !ok {
+		return
+	}
+	tpl := cls.Template()
+	if tpl == nil {
+		return
+	}
+	for _, lit := range tpl.Literals() {
+		w, ok := lit.(*ClausesWrapper)
+		if !ok {
+			continue
+		}
+		for _, clause := range w.Clauses {
+			for key, res := range clause.FreeIds {
+				if res == nil || res.Global != nil {
+					continue
+				}
+				if match.FreeIdName(key) == macroName {
+					res.Global = gi
+				}
+			}
+		}
+	}
+}
+
 // collectFreeIdentifiersWithEllipsis walks the template and collects all
 // identifiers that are NOT pattern variables, using a custom ellipsis
 // identifier. These "free identifiers" refer to bindings outside the macro and

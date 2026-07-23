@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/match"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/values"
@@ -59,14 +60,20 @@ type nilPin struct {
 //   - D2 taught macro dispatch (lookupMacroBinding) to consult the pin, after the local
 //     let-syntax arm and before the NextPhase/library arms.
 //   - D0 reordered the sibling helpers (guard-aux, define-record-type-impl) above their
-//     referencers so their pins are non-nil at macro-definition time.
+//     referencers so a DIRECT reference's pin is non-nil at macro-definition time.
+//   - pinTemplateSelfReferences back-patches a template's reference to the macro's OWN name
+//     (a recursive macro's self-reference — guard-aux -> guard-aux, and -> and) to the
+//     just-created binding, which reorder alone cannot pin (a macro precedes itself nowhere).
 //
 // So a pin into a bootstrap macro/expander IS now load-bearing. The census walks every
-// syntax-rules macro in the SEALED EXPAND base, walks each clause's FreeIds, and FAILS on
-// any Global == nil && !HasLocalBinding whose name is bound in the runtime phase (a late
-// bootstrap procedure) OR in the expand phase (an unpinned sibling macro/expander — a real
-// capture exposure). A neither-bound nil-pin is genuinely inert (a special form the
-// expander handles, a template-introduced binder, or a syntax-rules literal like else/=>).
+// syntax-rules macro in the SEALED EXPAND base, walks each clause's FreeIds (keyed by
+// FreeIdKey = scope-fingerprint|name — recover the bare name with match.FreeIdName before the
+// discriminator lookups, or every lookup misses and the partition is vacuous), and FAILS on
+// any Global == nil && !HasLocalBinding whose bare name is bound in the runtime phase (a late
+// bootstrap procedure) OR in the expand phase (an unpinned sibling macro/expander or recursive
+// self-reference — a real capture exposure). A neither-bound nil-pin is genuinely inert (a
+// special form the expander handles, a template-introduced binder, or a syntax-rules literal
+// like else/=>).
 //
 // Fixing a flagged entry: reorder the referent's definition above the referencing macro
 // (sibling macro/expander) or into an earlier bootstrap file (runtime procedure). A
@@ -172,13 +179,17 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 		}
 		macroCount++
 		for _, cl := range clauses {
-			for name, res := range cl.FreeIds {
+			for fkey, res := range cl.FreeIds {
 				if res == nil {
 					continue
 				}
 				if res.Global != nil || res.HasLocalBinding {
 					continue
 				}
+				// FreeIds is keyed by FreeIdKey (scope-fingerprint|name); the discriminator
+				// lookups take a bare symbol, so recover the bare name — otherwise every
+				// GetGlobalIndex(NewSymbol("|name")) misses and the partition is vacuous.
+				name := match.FreeIdName(fkey)
 				q = append(q, nilPin{
 					macro:        key.Key,
 					freeID:       name,
