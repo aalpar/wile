@@ -21,7 +21,6 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/match"
-	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
@@ -173,7 +172,7 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 		if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
 			continue
 		}
-		clauses := clausesOf(bnd.Value())
+		clauses := compilation.ClausesFromClosure(bnd.Value())
 		if clauses == nil {
 			continue
 		}
@@ -206,25 +205,4 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 		t.Fatalf("no syntax-rules macros found — the walk is broken, not the bootstrap")
 	}
 	return q
-}
-
-// clausesOf digs the *compilation.ClausesWrapper out of a transformer closure's literal
-// pool. Returns nil for a syntax binding that is not a syntax-rules macro (a primitive
-// expander or a syntax-case transformer), which the caller skips.
-func clausesOf(v values.Value) []*compilation.SyntaxRulesClause {
-	cl, ok := v.(*machine.MachineClosure)
-	if !ok {
-		return nil
-	}
-	tpl := cl.Template()
-	if tpl == nil {
-		return nil
-	}
-	for _, lit := range tpl.Literals() {
-		w, ok := lit.(*compilation.ClausesWrapper)
-		if ok {
-			return w.Clauses
-		}
-	}
-	return nil
 }

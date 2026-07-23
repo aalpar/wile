@@ -310,37 +310,47 @@ func pinTemplateSelfReferences(closure values.Value, macroName string, gi *envir
 	if gi == nil {
 		return
 	}
-	cls, ok := closure.(*machine.MachineClosure)
-	if !ok {
-		return
-	}
-	tpl := cls.Template()
-	if tpl == nil {
-		return
-	}
-	for _, lit := range tpl.Literals() {
-		w, ok := lit.(*ClausesWrapper)
-		if !ok {
-			continue
-		}
-		for _, clause := range w.Clauses {
-			for key, res := range clause.FreeIds {
-				// Back-patch only a GENUINELY-unbound self-reference. Skip an already-resolved
-				// global (Global != nil) and — importantly — a reference that resolved to a
-				// LOCAL binding (HasLocalBinding: an enclosing local variable shadowing the
-				// macro's name; overriding it with the macro's global would break that local
-				// resolution). A nil-Global entry that merely carries a LibScope is a library
-				// macro's own self-reference and IS pinned (it should resolve to the library's
-				// own binding, which is what gi points at).
-				if res == nil || res.Global != nil || res.HasLocalBinding {
-					continue
-				}
-				if match.FreeIdName(key) == macroName {
-					res.Global = gi
-				}
+	for _, clause := range ClausesFromClosure(closure) {
+		for k, res := range clause.FreeIds {
+			// Back-patch only a GENUINELY-unbound self-reference. Skip an already-resolved
+			// global (Global != nil) and — importantly — a reference that resolved to a
+			// LOCAL binding (HasLocalBinding: an enclosing local variable shadowing the
+			// macro's name; overriding it with the macro's global would break that local
+			// resolution). A nil-Global entry that merely carries a LibScope is a library
+			// macro's own self-reference and IS pinned (it should resolve to the library's
+			// own binding, which is what gi points at).
+			if res == nil || res.Global != nil || res.HasLocalBinding {
+				continue
+			}
+			if match.FreeIdName(k) == macroName {
+				res.Global = gi
 			}
 		}
 	}
+}
+
+// ClausesFromClosure recovers the syntax-rules clause set from a compiled transformer
+// closure — the *ClausesWrapper stored as the closure's template literal by
+// createTransformerClosure. Returns nil for a non-syntax-rules transformer (an ER-macro or
+// lambda body carries no ClausesWrapper). A syntax-rules closure carries exactly one wrapper,
+// so the first match is the whole set. Shared by pinTemplateSelfReferences and the bootstrap
+// nil-pin census, so both read clauses through one extractor rather than parallel copies.
+func ClausesFromClosure(closure values.Value) []*SyntaxRulesClause {
+	cls, ok := closure.(*machine.MachineClosure)
+	if !ok {
+		return nil
+	}
+	tpl := cls.Template()
+	if tpl == nil {
+		return nil
+	}
+	for _, lit := range tpl.Literals() {
+		w, ok := lit.(*ClausesWrapper)
+		if ok {
+			return w.Clauses
+		}
+	}
+	return nil
 }
 
 // collectFreeIdentifiersWithEllipsis walks the template and collects all
