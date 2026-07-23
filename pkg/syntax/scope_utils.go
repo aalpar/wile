@@ -39,6 +39,27 @@ func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
 	return values.ScopesCompatible(bindingScopes, useScopes)
 }
 
+// ScopeSet is a hygiene query constraint (all / empty / specific). Defined in
+// package values alongside the Scope type; re-exported here so environment and
+// compiler code can spell it syntax.ScopeSet beside syntax.ScopesCompatible.
+type ScopeSet = values.ScopeSet
+
+// AllScopes returns the wildcard scope-set query. See values.AllScopes.
+func AllScopes() ScopeSet {
+	return values.AllScopes()
+}
+
+// ScopesOf returns a query constrained to the given scope set (nil ≡ empty set,
+// not wildcard). See values.ScopesOf.
+func ScopesOf(scopes []*Scope) ScopeSet {
+	return values.ScopesOf(scopes)
+}
+
+// EmptyScopes returns the ambient (empty) scope-set query. See values.EmptyScopes.
+func EmptyScopes() ScopeSet {
+	return values.EmptyScopes()
+}
+
 // FlipScopeInSet toggles the presence of a scope in a set.
 // This is the core operation for syntax-local-introduce.
 func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
