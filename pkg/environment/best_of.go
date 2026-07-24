@@ -14,6 +14,8 @@
 
 package environment
 
+import "github.com/aalpar/wile/pkg/syntax"
+
 // bestOf accumulates the highest-weight candidate seen so far during a
 // monotone walk. "Best" is the candidate with the largest weight; ties
 // are kept on the *first* candidate seen.
@@ -83,4 +85,63 @@ func (p *bestOf[T]) record(item T, weight int) {
 // could lie for value types or string-like Ts.
 func (p *bestOf[T]) Result() (T, bool) {
 	return p.item, p.has
+}
+
+// scopedBestOf augments bestOf with Flatt ambiguity detection. bestOf ranks by
+// integer weight alone and cannot see incomparability: two candidates of equal
+// maximal cardinality carry distinct — hence mutually incomparable — scope sets,
+// so neither is THE maximal subset of the reference. Racket raises "ambiguous
+// binding" for such a reference; scopedBestOf records that an ambiguous tie
+// occurred so the caller can raise instead of silently returning the first-seen
+// (innermost) candidate.
+//
+// It preserves bestOf's shouldRecord/record split so callers keep deferring
+// candidate construction (e.g. GetLocalIndex's NewLocalIndex allocation) to the
+// visits that actually become the new best. bestScopes records only the current
+// best's scope set — one slice-header assignment per record, no allocation.
+type scopedBestOf[T any] struct {
+	best       bestOf[T]
+	bestScopes []*syntax.Scope
+	ambiguous  bool
+}
+
+// shouldRecord mirrors bestOf.shouldRecord and additionally flags an ambiguous
+// tie. On a non-recording visit that has the same sub-target cardinality as the
+// current best but a DIFFERENT scope set, neither set is a subset of the other
+// (equal cardinality + distinct ⇒ incomparable), so the reference is ambiguous.
+// ScopesMatch(scopes, bestScopes) reports bestScopes ⊆ scopes; at equal
+// cardinality that holds iff the sets are equal, so its negation is exactly
+// "different set". The caller MUST call record(item, scopes) iff rec is true.
+func (p *scopedBestOf[T]) shouldRecord(scopes []*syntax.Scope, target int) (rec, done bool) {
+	weight := len(scopes)
+	rec, done = p.best.shouldRecord(weight, target)
+	if rec {
+		return rec, done
+	}
+	if p.best.has && weight < target && weight == p.best.weight &&
+		!syntax.ScopesMatch(scopes, p.bestScopes) {
+		p.ambiguous = true
+	}
+	return rec, done
+}
+
+// record commits item as the current best and clears any prior ambiguity: a
+// strictly-greater-weight candidate is a new unique maximum that supersedes any
+// tie recorded at a lower weight. Callers MUST call shouldRecord first and only
+// invoke record when it returned rec = true.
+func (p *scopedBestOf[T]) record(item T, scopes []*syntax.Scope) {
+	p.best.record(item, len(scopes))
+	p.bestScopes = scopes
+	p.ambiguous = false
+}
+
+// Result returns the recorded candidate and whether any was recorded.
+func (p *scopedBestOf[T]) Result() (T, bool) {
+	return p.best.Result()
+}
+
+// Ambiguous reports whether the maximal-weight candidate was not unique — two
+// incomparable scope sets tied for the largest subset of the reference.
+func (p *scopedBestOf[T]) Ambiguous() bool {
+	return p.ambiguous
 }

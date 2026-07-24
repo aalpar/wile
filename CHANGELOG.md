@@ -35,6 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **An ambiguous hygienic reference now raises instead of silently resolving to the
+  innermost binding.** When two same-name bindings carry equal-cardinality, mutually
+  incomparable scope sets — both maximal subsets of the reference's scope set — no single
+  binding is *the* maximal match, so the reference is ambiguous (Racket raises here per
+  Flatt's set-of-scopes model). The binding resolver ranked candidates by scope-set
+  cardinality alone and kept the first-seen (innermost) on a tie, silently picking one.
+  Resolution now detects the incomparable tie (`scopedBestOf`) and raises
+  `werr.ErrAmbiguousBinding` at all three resolver sites, surfaced as a `CompilationError`
+  (matchable via `errors.Is`) on `Eval`/`EvalMultiple`/`Compile`. No bundled program
+  produces the tie today — the whole Go and Scheme example/test corpus stays green with the
+  raise live — so this is a conformance guard for the incomparable-tie case rather than a
+  fix to a reachable regression.
 - **Internal `define-syntax` now works in a function-shorthand `define` body.**
   `(define (f) (define-syntax m …) (m))` raised `no such local or global binding "m"`;
   the same body under `let`/`lambda`/named-`let` worked. The shorthand-`define` body was

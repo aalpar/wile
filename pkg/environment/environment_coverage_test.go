@@ -15,10 +15,12 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -237,7 +239,7 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 		c.Assert(result[1], qt.Equals, 0, qt.Commentf("should select innermost binding (depth 0)"))
 	})
 
-	t.Run("same scope count tie-break favors innermost", func(t *testing.T) {
+	t.Run("same scope count incomparable tie raises ambiguous", func(t *testing.T) {
 		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
@@ -254,11 +256,18 @@ func TestGetLocalIndex_Maximality(t *testing.T) {
 		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parentEnv)
 		childEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
 
-		// Reference has both — both candidates match with scopeCount=1
-		// First candidate collected is depth 0 (child), wins by first-encountered
-		result := childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB}))
-		c.Assert(result, qt.IsNotNil)
-		c.Assert(result[1], qt.Equals, 0, qt.Commentf("should select child binding (depth 0) on tie"))
+		// Reference has both — {scopeA} and {scopeB} are equal cardinality (1) and
+		// incomparable (neither a subset of the other), both maximal subsets of the
+		// reference {scopeA,scopeB}. Per Flatt/Racket this reference is ambiguous, so
+		// resolution must raise rather than silently favor the innermost. (Before Fork
+		// C this subtest asserted the non-conformant "tie-break favors innermost".)
+		r := capturePanic(func() {
+			childEnv.GetLocalIndex(sym, syntax.ScopesOf([]*syntax.Scope{scopeA, scopeB}))
+		})
+		c.Assert(r, qt.IsNotNil, qt.Commentf("incomparable equal-cardinality tie must raise"))
+		err, _ := r.(error)
+		c.Assert(errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue,
+			qt.Commentf("panic must carry ErrAmbiguousBinding, got %v", r))
 	})
 
 	t.Run("perfect match returns immediately", func(t *testing.T) {

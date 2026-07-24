@@ -565,10 +565,10 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Bi
 		// See bestOf in best_of.go. Allocation here is trivial — the
 		// candidate is just the existing *Binding pointer — so we record
 		// unconditionally on shouldRecord = true.
-		var best bestOf[*Binding]
+		var best scopedBestOf[*Binding]
 		target := len(q.Scopes())
 		p.resolveLocal(key, q, func(binding *Binding, _ int, _ int) any {
-			sc := len(binding.Scopes())
+			sc := binding.Scopes()
 			rec, done := best.shouldRecord(sc, target)
 			if rec {
 				best.record(binding, sc)
@@ -579,6 +579,11 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Bi
 			return nil
 		})
 
+		if best.Ambiguous() {
+			panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+				"GetBinding: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+				key.Key))
+		}
 		item, ok := best.Result()
 		if ok {
 			return item
@@ -656,10 +661,10 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 	// defer NewLocalIndex(slot, depth) — an allocation — to the cases
 	// where the candidate actually becomes the new best, instead of
 	// allocating on every parent-chain visit.
-	var best bestOf[*LocalIndex]
+	var best scopedBestOf[*LocalIndex]
 	target := len(q.Scopes())
 	p.resolveLocal(key, q, func(binding *Binding, slot int, depth int) any {
-		sc := len(binding.Scopes())
+		sc := binding.Scopes()
 		rec, done := best.shouldRecord(sc, target)
 		if rec {
 			best.record(NewLocalIndex(slot, depth), sc)
@@ -670,6 +675,11 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 		return nil
 	})
 
+	if best.Ambiguous() {
+		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"GetLocalIndex: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+			key.Key))
+	}
 	item, _ := best.Result()
 	return item
 }

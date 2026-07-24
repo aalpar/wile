@@ -39,6 +39,7 @@ var (
 	ErrStopIteration          = NewStaticError("stop iteration")
 	ErrNotAPrimitive          = NewTypeSentinel("primitive")
 	ErrNoSuchBinding          = NewStaticError("no such binding")
+	ErrAmbiguousBinding       = NewStaticError("ambiguous binding")
 	ErrNotANumber             = NewTypeSentinel("number")
 	ErrCannotCompare          = NewStaticError("cannot compare values")
 	ErrNotAReal               = NewTypeSentinel("real number")

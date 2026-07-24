@@ -335,7 +335,7 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 		return 0, false
 	}
 	scopes := q.Scopes()
-	var best bestOf[int]
+	var best scopedBestOf[int]
 	for _, i := range slots {
 		if i >= len(p.bindings) || p.bindings[i] == nil {
 			continue
@@ -344,13 +344,18 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 		if !syntax.ScopesCompatible(bindingScopes, scopes) {
 			continue
 		}
-		record, done := best.shouldRecord(len(bindingScopes), len(scopes))
+		record, done := best.shouldRecord(bindingScopes, len(scopes))
 		if record {
-			best.record(i, len(bindingScopes))
+			best.record(i, bindingScopes)
 		}
 		if done {
 			break
 		}
+	}
+	if best.Ambiguous() {
+		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"bestSlotLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+			key.Key))
 	}
 	return best.Result()
 }
