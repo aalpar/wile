@@ -326,3 +326,51 @@ func TestBinding_Copy_WithSource(t *testing.T) {
 	qt.Assert(t, b2.Source(), qt.Equals, source)
 	qt.Assert(t, b2.Source().File, qt.Equals, "test.scm")
 }
+
+func bindingWithOrigin(lib, name string) *Binding {
+	b := NewBinding(values.Void, BindingTypeVariable)
+	b.UpdateMeta(func(m *BindingMeta) bool {
+		m.Origin = &OriginRef{RootLib: lib, RootName: name}
+		return true
+	})
+	return b
+}
+
+func TestSameBinding(t *testing.T) {
+	same := bindingWithOrigin("(aa)", "foo")
+
+	tcs := []struct {
+		name string
+		a, b *Binding
+		want bool
+	}{
+		{"identical object", same, same, true},
+		// Both-nil is unreachable from the two in-tree callers (each guards nil
+		// first); pinned so the a==b short-circuit's result stays deliberate.
+		{"both nil", nil, nil, true},
+		{"one nil, one bound", NewBinding(values.Void, BindingTypeVariable), nil, false},
+		{"both plain, distinct objects", NewBinding(values.Void, BindingTypeVariable), NewBinding(values.Void, BindingTypeVariable), false},
+		{"equal origins, distinct objects", bindingWithOrigin("(aa)", "foo"), bindingWithOrigin("(aa)", "foo"), true},
+		{"same lib, different defining name", bindingWithOrigin("(aa)", "foo"), bindingWithOrigin("(aa)", "bar"), false},
+		{"different lib, same defining name", bindingWithOrigin("(aa)", "foo"), bindingWithOrigin("(bb)", "foo"), false},
+		{"one has origin, one plain", bindingWithOrigin("(aa)", "foo"), NewBinding(values.Void, BindingTypeVariable), false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, SameBinding(tc.a, tc.b), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestBinding_Copy_PreservesOrigin pins that Copy carries the import-provenance
+// root (the plan's "stable across CloneForMatch" requirement): the copy is a
+// distinct object yet SameBinding still reports it identical to the original.
+func TestBinding_Copy_PreservesOrigin(t *testing.T) {
+	b := bindingWithOrigin("(aa)", "foo")
+
+	cp := b.Copy()
+
+	qt.Assert(t, cp == b, qt.IsFalse)
+	qt.Assert(t, SameBinding(b, cp), qt.IsTrue)
+	qt.Assert(t, *cp.Origin(), qt.Equals, OriginRef{RootLib: "(aa)", RootName: "foo"})
+}

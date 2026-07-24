@@ -386,8 +386,10 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   `TestFreeIdKey_DiscriminatesScopeAndName`.
 
 - [x] **`BindingID` must carry a scope discriminator before the load-order plan ships**
-  [Correctness + sequencing, M, 2026-07-19; **discharged in design 2026-07-23**]: Part III of
-  `plans/2026-07-18-load-order-independent-binding-resolution-design.md` defined
+  [Correctness + sequencing, M, 2026-07-19; **discharged in design 2026-07-23**; **MOOT
+  2026-07-24 — the load-order plan is archived (superseded), so `BindingID` (the load-order
+  variant) will not be built; see the resolved anchor note below**]: Part III of
+  `memory/2026-07-18-load-order-independent-binding-resolution-design.md` (archived 2026-07-24) defined
   `BindingID{Origin, Phase, Sym, Local}` with no scope component. That was sound only while
   the (now-deleted, `a60e32e1`) rename pass guaranteed one global per
   `(frame, phase, symbol)`. **After Stage B it is not**: two hygiene-distinct bindings
@@ -555,11 +557,77 @@ successors above.
   `TestThreadJoinWrapsUncaughtException` (6 cases incl. identity + sentinel-rejection); threads
   `-race` green; concurrency examples unaffected (none caught a joined exception).
 
-> **Anchor risk for the `BindingID` item above.** The load-order plan that item points at
-> (`plans/2026-07-18-load-order-independent-binding-resolution-design.md`) reads fully open but is
-> plausibly **superseded** by the scope-keyed-global-bindings arc that shipped (its C6 symptom was
-> fixed tactically via `1af62cd2`). If that plan is dead, the `BindingID` scope-discriminator item
-> needs a new home. Confirm before scheduling either.
+> **Anchor risk RESOLVED 2026-07-24 — the load-order plan is dead (archived).** A
+> decision-producing scoping pass (verified against code + runtime) confirmed
+> `2026-07-18-load-order-independent-binding-resolution-design.md` is superseded and moved it
+> to `memory/`. Verdict:
+> - **Part II (Tasks 1–5)** motivation is discharged: the C6 capture is fixed by bootstrap
+>   reorder (`1af62cd2`) + the free-template-id-hygiene arc (PR #814, sealed expand base
+>   `885e2a3a` + def-site pin `a7e12c7a`), and `TestBootstrapMacrosPinLateBoundReferents`
+>   (`pkg/wile/bootstrap_nilpin_test.go`) is a CI ratchet reporting 0 capturable nil pins —
+>   the regression guard Part II's cure would have provided. `DefSiteContext` was never
+>   built; its def-site-pin idea shipped for the macro path as D2.
+> - **Part III (Task 6)** is obsoleted as written: `sameImportedBinding` deliberately settled
+>   on by-name (`library_bindings.go:502`) and origin-based identity (`BindingID.Origin`) was
+>   rejected for import conflict (PR #793), so migrating all three sites onto `BindingID`
+>   would regress shipped behavior. The **`BindingID` scope-discriminator item below is now
+>   moot** — it was a prerequisite for a plan that will not ship.
+>
+> The one narrow residual worth keeping is filed as its own item, immediately below.
+
+- [~] **`free-identifier=?` AND ER-compare are both non-conformant — on COMPLEMENTARY cases**
+  [Correctness/conformance, M, **VERIFIED 2026-07-24 vs Racket + Chez**, low impact]: the one
+  live residual from the archived load-order plan's Part III, now confirmed observable — and
+  larger than filed (the plan flagged only `free-identifier=?`; ER-compare is wrong too). Both
+  triggers reproduce against the built binary; the conformant answers are Racket's + Chez's.
+
+  | scenario | conformant (Racket/Chez) | `free-identifier=?` | ER-compare |
+  |---|---|---|---|
+  | two rename-imports of ONE binding, diff names (`foo1`/`foo2`, `(eq? foo1 foo2)` ⇒ `#t`) | **same** | `#f` ✗ | `#t` ✓ |
+  | two DISTINCT defines, same value (`(define a car)(define b car)`) | **diff** | `#f` ✓ | `#t` ✗ |
+
+  `free-identifier=?` compares `binding0 == binding1` (`prim_syntax.go:224`) — pointer-eq, wrong
+  on rename-aliases. `erBindingsEqual` (`er_macro_compare.go:55-67`) adds a `BindingType()`+`Value()`
+  fallback — wrong on distinct-same-value bindings (over-matches). **So "point `free-identifier=?`
+  at ER-compare's comparison" is NOT the fix — it swaps one wrong answer for the other.** Neither
+  pointer-eq nor value-eq is the correct notion; the conformant predicate is "same binding ORIGIN",
+  which is exactly what Part III's `BindingID.Origin` targeted. But Wile stores no origin: imports
+  copy the value into a fresh cell + fresh `*Binding` and `markBindingImported` records only a
+  boolean `m.Imported` (`library_bindings.go`), NOT the source binding / lib / export name. So a
+  correct fix must first ADD origin provenance to the binding, then compare it in BOTH predicates.
+
+  Impact is low: `free-identifier=?` is R6RS (not R7RS-small), and both triggers are exotic (the
+  whole suite is green — no bundled program hits either). Note the origin approach was rejected for
+  import-CONFLICT detection (PR #793) because it false-flags a legal define-over-import shadow — but
+  that tradeoff does NOT transfer to identifier equality, where origin is the correct semantics; the
+  two are different uses of "same binding". Do NOT revive the full load-order `BindingID` machinery
+  for this; scope a minimal origin field. Repro files were the `(rename …)`-import + `syntax-case`/
+  `er-macro-transformer` harness (rebuild from `library_bindings_test.go`).
+  **Scoped** (reframed around the import-provenance graph):
+  `plans/2026-07-24-free-identifier-origin-provenance-design.local.md`. Model: "same binding" =
+  "same root in the provenance graph" — the graph Wile already walks at import
+  (`Exports`/`ApplyToExports`/`internalName`/`findLibraryBinding`) then discards. Phase 1 (~5 files,
+  M): fold each imported binding's ROOT `OriginRef{RootLib,RootName}` at import (no traversal; keyed
+  on `internalName`), compare via `environment.SameBinding`, delete ER's value fallback. Consolidates
+  2 existing ad-hoc provenance consumers (`stampImportedInlineHOF`, `Doc`-carry). Site 3
+  `sameImportedBinding` a gated Phase-2 candidate (PR #793 re-read). D1–D3 need Aaron. §8 boundary:
+  ambient-recompiled `cddr`-from-base ≠ -from-cxr under the root notion.
+  **Phase 1 DONE 2026-07-24** (branch `fix/free-identifier-origin`, D1–D3 as recommended,
+  crosscheck-reviewed by 5 lenses): `OriginRef{RootLib,RootName}` + `Origin` field +
+  `environment.SameBinding` (100% unit-covered); root folded at import in `markBindingImported` keyed
+  on `internalName` (threaded through both copy paths + all 3 `installImportedBinding` sites);
+  **`free-identifier=?` only** flipped to `SameBinding`. free-id §7 matrix green: reexp chain, direct
+  double-rename, renamed re-export, `(dd)` export-rename synthesize-branch, different-libs, sealed-base
+  self-compare.
+  **ER-compare PULLED from Phase 1** — crosscheck (errors lens) + two-binary repro confirmed switching
+  `erBindingsEqual` to `SameBinding` REGRESSES `#t`→`#f` on internal-vs-import compare
+  (`(compare user-id (rename 'exported-name))`: definition-site rename has nil Origin, import has
+  Origin). ER-compare keeps its value fallback (accepting the over-match on `(define a car)(define b
+  car)`). **Finishing ER-compare = option B (deferred, NOT done):** stamp the *defining* binding with
+  its own root so the compare is symmetric — see plan §10 "Option B" for the two sketched mechanisms +
+  the re-review it needs.
+  **Phase 2 (each separate PR) OPEN**: migrate `stampImportedInlineHOF` to gate on `Origin.RootLib`;
+  `,doc` follow `Origin` vs eager-copy; site-3 `sameImportedBinding` root candidate.
 
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 

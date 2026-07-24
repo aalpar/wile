@@ -22,6 +22,21 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
+// OriginRef identifies the provenance ROOT of an imported binding: the
+// (define ...) that ultimately created it, addressed by the KEY of the library
+// that defines it (RootLib) and the DEFINING name inside that library
+// (RootName, invariant to any export/import renaming). It is value-identity —
+// two imports of one binding, however renamed or re-exported, carry equal
+// OriginRefs — and is set once at import and never mutated, so it is safe to
+// share across the copy-on-write BindingMeta path. A nil *OriginRef means "no
+// import provenance": a plain (define ...) is its own root. Identity assumes
+// RootLib (a LibraryName.Key()) names its library uniquely, the same key
+// assumption ScopeKey/FreeIdKey already rely on.
+type OriginRef struct {
+	RootLib  string
+	RootName string
+}
+
 // BindingMeta holds compile-time metadata (scopes and source location) that is
 // never read during VM execution — but IS read and written concurrently across
 // SRFI-18 threads at compile time (two threads compiling a define of the same
@@ -104,6 +119,16 @@ type BindingMeta struct {
 	// InlineHOF is true. Stored as data (not hardcoded 0) so a future HOF whose
 	// callback is not the first parameter is handled by the same path.
 	InlineHOFCallbackParam int
+	// Origin is the import-provenance root of this binding: for an imported
+	// binding, the root (define ...) it ultimately came from (see OriginRef);
+	// nil for a plain define, which is its own root. free-identifier=? reads it
+	// via SameBinding — two imports of one binding share one root and denote the
+	// same variable, while two distinct defines of one name have different roots.
+	// (ER-compare does NOT yet read it; see erBindingsEqual for why and the
+	// deferred option B.) Set once at import by the propagation fold in
+	// markBindingImported; the nil zero value is meaningful, so like the sibling
+	// flags above it needs no constructor edit.
+	Origin *OriginRef
 }
 
 // Binding represents a variable binding in the environment.
@@ -419,6 +444,40 @@ func (p *Binding) InlineHOFParam() int {
 	return m.InlineHOFCallbackParam
 }
 
+// Origin returns the import-provenance root of this binding, or nil if it is a
+// plain (non-imported) define, which is its own root.
+func (p *Binding) Origin() *OriginRef {
+	m := p.Meta()
+	if m == nil {
+		return nil
+	}
+	return m.Origin
+}
+
+// SameBinding reports whether two bindings denote the same variable for the
+// purpose of identifier equality (free-identifier=?): the same binding object,
+// or two imports that share one import-provenance root (a binding imported under
+// several names, directly or through re-exports). Two distinct defines of one
+// name have different roots and are NOT the same, so this deliberately does not
+// collapse into "same value" the way pointer- or value-equality would. Bindings
+// with no origin (plain defines) match only as the identical object.
+//
+// NOTE the asymmetry this cannot yet bridge: a library-internal define has no
+// origin, so comparing it against an IMPORT of itself returns false. That is why
+// ER-compare (which resolves renames at the definition site) keeps its value
+// fallback instead of adopting this; see erBindingsEqual and option B in plan
+// 2026-07-24-free-identifier-origin-provenance-design.
+func SameBinding(a, b *Binding) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	ao, bo := a.Origin(), b.Origin()
+	return ao != nil && bo != nil && *ao == *bo
+}
+
 // Copy creates a deep copy of this binding. The meta struct is copied so
 // that mutations through UpdateMeta on the original do not affect the
 // copy. This method is only used during compilation/expansion, never on
@@ -439,6 +498,11 @@ func (p *Binding) Copy() *Binding {
 			CaptureSafe:            src.CaptureSafe,
 			InlineHOF:              src.InlineHOF,
 			InlineHOFCallbackParam: src.InlineHOFCallbackParam,
+			// Origin is an immutable pointer set once at import; copying the
+			// pointer avoids an allocation. Value-equality (*a == *b in
+			// SameBinding) holds regardless of whether the pointer is shared, so
+			// identity stays stable through CloneForMatch either way.
+			Origin: src.Origin,
 		}
 	}
 	// A global binding's value and meta live in its atomicCell; give the copy a

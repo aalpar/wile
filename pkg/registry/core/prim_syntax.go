@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -220,7 +221,8 @@ func PrimFreeIdentifierEqualQ(mc machine.CallContext) error {
 		return nil
 	}
 
-	// Both bound → same binding object?
-	mc.SetValue(values.BoolToBoolean(binding0 == binding1))
+	// Both bound → same variable? Same object, or two imports sharing one
+	// import-provenance root (renamed/re-exported aliases of one binding).
+	mc.SetValue(values.BoolToBoolean(environment.SameBinding(binding0, binding1)))
 	return nil
 }

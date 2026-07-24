@@ -67,9 +67,27 @@ import (
 // The sealed-base HOFs are stamped only at their real home (StampInlineHOFs). The
 // import path is also the only library seam, so a user's own (define …) of a HOF
 // name is never stamped here.
-func markBindingImported(target, source *environment.Binding, exportName string, sourceLib LibraryName) {
+func markBindingImported(target, source *environment.Binding, exportName, internalName string, sourceLib LibraryName) {
 	if target == nil {
 		return
+	}
+	// Import-provenance root (plan 2026-07-24-free-identifier-origin): propagate
+	// the source's already-resolved root when the source is itself imported (a
+	// re-export hop), else synthesize the root from the defining name in the
+	// source library. Keyed on internalName — the name inside sourceLib that
+	// defines the binding — so a renamed export or import does not fork one
+	// binding's identity. This is the signal SameBinding reads for
+	// free-identifier=?. Computed ONCE here, outside the UpdateMeta closure
+	// below, so the fold stays a pure function of the *BindingMeta it is handed
+	// even when a CAS retry re-runs it (source.Origin() is a cross-binding read).
+	var origin *environment.OriginRef
+	if source != nil {
+		srcOrigin := source.Origin()
+		if srcOrigin != nil {
+			origin = srcOrigin
+		} else {
+			origin = &environment.OriginRef{RootLib: sourceLib.Key(), RootName: internalName}
+		}
 	}
 	target.UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.Imported = true
@@ -83,6 +101,7 @@ func markBindingImported(target, source *environment.Binding, exportName string,
 			if doc != "" {
 				m.Doc = doc
 			}
+			m.Origin = origin
 		}
 		return true
 	})
@@ -536,6 +555,7 @@ func installImportedBinding(
 	bt environment.BindingType,
 	source *environment.Binding,
 	exportName string,
+	internalName string,
 	sourceLib LibraryName,
 	phaseContext string,
 ) error {
@@ -565,7 +585,7 @@ func installImportedBinding(
 		return werr.WrapForeignErrorf(err,
 			"import: failed to set binding for %s%s", localSym.Key, phaseContext)
 	}
-	markBindingImported(target, source, exportName, sourceLib)
+	markBindingImported(target, source, exportName, internalName, sourceLib)
 	return nil
 }
 
@@ -597,7 +617,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			phaseEnv := targetEnv.AtPhase(targetPhase)
 			localSym := values.NewSymbol(localName)
 			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
-				libBinding, externalName, lib.Name, " at phase "+targetPhase.String())
+				libBinding, externalName, internalName, lib.Name, " at phase "+targetPhase.String())
 			if err != nil {
 				return err
 			}
@@ -625,7 +645,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
 			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
-				libBinding, externalName, lib.Name, " propagated to phase "+propagatePhase.String())
+				libBinding, externalName, internalName, lib.Name, " propagated to phase "+propagatePhase.String())
 			if err != nil {
 				return err
 			}
@@ -707,7 +727,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			phaseNote = " in expand phase"
 		}
 		err := installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
-			importedBinding, externalName, lib.Name, phaseNote)
+			importedBinding, externalName, internalName, lib.Name, phaseNote)
 		if err != nil {
 			return err
 		}
