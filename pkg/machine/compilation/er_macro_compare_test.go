@@ -115,6 +115,24 @@ func TestErMacroCompare(t *testing.T) {
 			  (my-when #f 42))`,
 			Expected: values.FalseValue,
 		},
+		{
+			// Over-match fix (option B): two DISTINCT top-level defines holding
+			// the same value are NOT the same identifier. The former same-value
+			// fallback matched them; origin-keyed SameBinding gives each its own
+			// (nil) root — distinct objects, so compare correctly reports diff.
+			Name: "compare distinct defines of one value returns false",
+			Code: `(begin
+			  (define a car)
+			  (define b car)
+			  (define-syntax check-ab
+			    (er-macro-transformer
+			      (lambda (form rename compare)
+			        (if (compare (cadr form) (caddr form))
+			            (list (rename 'quote) 'same)
+			            (list (rename 'quote) 'diff)))))
+			  (check-ab a b))`,
+			Expected: values.NewSymbol("diff"),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

@@ -22,16 +22,18 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// OriginRef identifies the provenance ROOT of an imported binding: the
-// (define ...) that ultimately created it, addressed by the KEY of the library
-// that defines it (RootLib) and the DEFINING name inside that library
+// OriginRef identifies the provenance ROOT of a binding with library identity:
+// the (define ...) that ultimately created it, addressed by the KEY of the
+// library that defines it (RootLib) and the DEFINING name inside that library
 // (RootName, invariant to any export/import renaming). It is value-identity —
-// two imports of one binding, however renamed or re-exported, carry equal
-// OriginRefs — and is set once at import and never mutated, so it is safe to
-// share across the copy-on-write BindingMeta path. A nil *OriginRef means "no
-// import provenance": a plain (define ...) is its own root. Identity assumes
-// RootLib (a LibraryName.Key()) names its library uniquely, the same key
-// assumption ScopeKey/FreeIdKey already rely on.
+// a library define and every import of it, however renamed or re-exported, carry
+// equal OriginRefs — and is set once (at the library's finalization for a define,
+// or by propagation at import) and never mutated, so it is safe to share across
+// the copy-on-write BindingMeta path. A nil *OriginRef means a binding with NO
+// library identity: a program-top-level (define ...), which is never imported and
+// so is only ever compared as the identical object. Identity assumes RootLib (a
+// LibraryName.Key()) names its library uniquely, the same key assumption
+// ScopeKey/FreeIdKey already rely on.
 type OriginRef struct {
 	RootLib  string
 	RootName string
@@ -126,15 +128,14 @@ type BindingMeta struct {
 	// imported-and-renamed onto another curated HOF's name (e.g. fold as fold-right)
 	// would inline the wrong template. Empty on the zero value / unstamped bindings.
 	InlineHOFName string
-	// Origin is the import-provenance root of this binding: for an imported
-	// binding, the root (define ...) it ultimately came from (see OriginRef);
-	// nil for a plain define, which is its own root. free-identifier=? reads it
-	// via SameBinding — two imports of one binding share one root and denote the
+	// Origin is the provenance root of this binding: the root (define ...) it
+	// ultimately came from (see OriginRef); nil for a program-top-level define,
+	// which has no library identity. free-identifier=? AND ER-compare read it via
+	// SameBinding — a library define and its imports share one root and denote the
 	// same variable, while two distinct defines of one name have different roots.
-	// (ER-compare does NOT yet read it; see erBindingsEqual for why and the
-	// deferred option B.) Set once at import by the propagation fold in
-	// markBindingImported; the nil zero value is meaningful, so like the sibling
-	// flags above it needs no constructor edit.
+	// Set at the library's finalization for a library define (stampLibraryExport-
+	// Origins) or propagated at import (markBindingImported); the nil zero value is
+	// meaningful, so like the sibling flags above it needs no constructor edit.
 	Origin *OriginRef
 }
 
@@ -474,18 +475,19 @@ func (p *Binding) Origin() *OriginRef {
 }
 
 // SameBinding reports whether two bindings denote the same variable for the
-// purpose of identifier equality (free-identifier=?): the same binding object,
-// or two imports that share one import-provenance root (a binding imported under
-// several names, directly or through re-exports). Two distinct defines of one
-// name have different roots and are NOT the same, so this deliberately does not
-// collapse into "same value" the way pointer- or value-equality would. Bindings
-// with no origin (plain defines) match only as the identical object.
+// purpose of identifier equality (free-identifier=? and ER-compare): the same
+// binding object, or two bindings that share one provenance root — a library
+// define and its imports, under any rename or re-export. Two distinct defines of
+// one name have different roots and are NOT the same, so this deliberately does
+// not collapse into "same value" the way pointer- or value-equality would.
+// Bindings with no origin (program-top-level defines) match only as the identical
+// object.
 //
-// NOTE the asymmetry this cannot yet bridge: a library-internal define has no
-// origin, so comparing it against an IMPORT of itself returns false. That is why
-// ER-compare (which resolves renames at the definition site) keeps its value
-// fallback instead of adopting this; see erBindingsEqual and option B in plan
-// 2026-07-24-free-identifier-origin-provenance-design.
+// A library define carries its self-root from finalization (stampLibraryExport-
+// Origins), so comparing a library-internal binding against an IMPORT of itself
+// matches — which is what lets ER-compare, resolving renames at the definition
+// site, adopt this (option B in plan 2026-07-24-free-identifier-origin-provenance-
+// design).
 func SameBinding(a, b *Binding) bool {
 	if a == b {
 		return true

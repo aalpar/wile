@@ -79,15 +79,22 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 	// source library. Keyed on internalName — the name inside sourceLib that
 	// defines the binding — so a renamed export or import does not fork one
 	// binding's identity. This is the signal SameBinding reads for
-	// free-identifier=?. Computed ONCE here, outside the UpdateMeta closure
+	// free-identifier=? and ER-compare. Computed ONCE here, outside the UpdateMeta closure
 	// below, so the fold stays a pure function of the *BindingMeta it is handed
 	// even when a CAS retry re-runs it (source.Origin() is a cross-binding read).
 	var origin *environment.OriginRef
 	if source != nil {
 		srcOrigin := source.Origin()
 		if srcOrigin != nil {
+			// Propagate the source's already-resolved root. A library define is
+			// pre-stamped with its self-root at finalization (stampLibraryExport-
+			// Origins), so this branch carries both a re-export hop's root and a
+			// direct import's define-site root.
 			origin = srcOrigin
 		} else {
+			// Fallback for a source with no pre-stamped origin (e.g. a synthetic
+			// library that skipped stampLibraryExportOrigins): synthesize the root
+			// from the defining name in the source library.
 			origin = &environment.OriginRef{RootLib: sourceLib.Key(), RootName: internalName}
 		}
 	}
@@ -122,6 +129,35 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 	// reset above drops a stale stamp when a conflation re-import replaced the
 	// value). See stampImportedInlineHOF.
 	stampImportedInlineHOF(target, exportName, origin)
+}
+
+// stampLibraryExportOrigins gives each library-DEFINED export its own provenance
+// root {lib.Key(), internalName}, intrinsically at library finalization — before
+// any import. So a define-site binding carries the same origin an import of it
+// would otherwise synthesize, which is what makes identifier equality
+// (free-identifier=?, ER-compare's definition-site rename) match a library's
+// internal binding against an import of itself.
+//
+// Only a genuine define in THIS library is stamped: a re-exported binding already
+// carries the propagated root of its true source (it was imported into this
+// library, so its Origin is non-nil), and is left untouched. Runs once per
+// library compile, single-threaded; the nil-guard keeps it idempotent and
+// preserves a re-export's root.
+func stampLibraryExportOrigins(lib *CompiledLibrary) {
+	for _, internalName := range lib.Exports {
+		binding, _, found := findLibraryBinding(lib, internalName)
+		if !found || binding == nil || binding.Origin() != nil {
+			continue
+		}
+		root := &environment.OriginRef{RootLib: lib.Name.Key(), RootName: internalName}
+		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
+			if m.Origin != nil {
+				return false
+			}
+			m.Origin = root
+			return true
+		})
+	}
 }
 
 // ImportSet represents a parsed import specification.

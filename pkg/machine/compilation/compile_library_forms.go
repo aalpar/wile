@@ -132,6 +132,13 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		return p.wrapCompilationError(err)
 	}
 
+	// Give each library-DEFINED export its own provenance root, intrinsically at
+	// finalization (before any import). This makes a define-site binding and an
+	// import of it share one origin, so identifier equality (free-identifier=?,
+	// ER-compare's definition-site rename) matches internal-vs-import — see
+	// stampLibraryExportOrigins.
+	stampLibraryExportOrigins(lib)
+
 	// Peephole optimization on the library template.
 	libTemplate.Optimize()
 

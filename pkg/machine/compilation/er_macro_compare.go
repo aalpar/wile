@@ -50,29 +50,19 @@ func NewERCompareClosure(useEnv *environment.EnvironmentFrame) *machine.ForeignC
 	return cls
 }
 
-// erBindingsEqual checks if two resolved identifiers refer to the same binding.
-// Handles same-env (pointer equality) and cross-library (value equality) cases.
-//
-// This deliberately keeps the value fallback rather than switching to
-// environment.SameBinding the way free-identifier=? did. ER-compare resolves a
-// renamed identifier at its DEFINITION site (resolveERIdentifier, via
-// ResolvedBinding), so a (rename 'foo) of a library-INTERNAL binding (nil
-// Origin, since a plain define is its own root) is routinely compared against an
-// IMPORT of that same binding (Origin set). SameBinding requires an origin on
-// both sides, so it would regress that legitimate "did the caller hand me my own
-// exported foo?" match to #f. The accepted cost of the value fallback is the
-// inverse over-match: two DISTINCT defines holding one value (e.g.
-// (define a car)(define b car)) compare equal. Fixing both correctly needs
-// origin stamped on the defining binding too — deferred as option B in plan
-// 2026-07-24-free-identifier-origin-provenance-design (§10).
+// erBindingsEqual reports whether two resolved identifiers denote the same
+// variable, via environment.SameBinding: the same object, or two bindings sharing
+// one import-provenance root. This replaces the former same-value fallback (which
+// over-matched two DISTINCT defines holding one value, e.g. (define a car)(define
+// b car)). ER-compare resolves a rename at its DEFINITION site (resolveERIdentifier
+// via ResolvedBinding), so it routinely compares a library-INTERNAL binding
+// against an IMPORT of itself; stampLibraryExportOrigins gives every library
+// export its own self-root at finalization (option B), so both the internal
+// binding and its import carry the same origin and this "did the caller hand me
+// my own exported foo?" match holds. Both-unbound identifiers compare by name.
 func erBindingsEqual(bnd1 *environment.Binding, name1 string, bnd2 *environment.Binding, name2 string) bool {
 	if bnd1 != nil && bnd2 != nil {
-		if bnd1 == bnd2 {
-			return true
-		}
-		// Cross-library fallback: both imported from the same library share
-		// the same value pointer even though the Binding objects differ.
-		return bnd1.BindingType() == bnd2.BindingType() && bnd1.Value() == bnd2.Value()
+		return environment.SameBinding(bnd1, bnd2)
 	}
 	if bnd1 == nil && bnd2 == nil {
 		return name1 == name2
