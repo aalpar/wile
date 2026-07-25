@@ -288,7 +288,10 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 	if store == nil {
 		return false, nil
 	}
-	tmplAny, found := store.InlineHOFTemplate(sym.Symbol.Sym.Key)
+	// Select the template by the binding's STAMPED identity, not the call-site
+	// name: an import-renamed curated HOF (e.g. fold imported as fold-right) must
+	// inline its OWN template, not the one its surface name happens to match.
+	tmplAny, found := store.InlineHOFTemplate(b.InlineHOFName())
 	if !found {
 		return false, nil
 	}

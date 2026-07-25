@@ -48,17 +48,25 @@ type inlineHOFSpec struct {
 	importGated bool
 	// homeLib is the LibraryName.Key() of the library that actually DEFINES this
 	// import-gated HOF (e.g. "srfi/1" for fold). The import path stamps the
-	// template ONLY when the binding is imported from this exact library — the
-	// identity gate. A different library exporting a same-named procedure with
-	// different semantics (sourceLib != homeLib) is never stamped, so its own code
-	// runs. Empty for sealed-base specs (importGated false), which are stamped at
-	// their real home by StampInlineHOFs and need no source check.
+	// template ONLY when the binding's provenance root is (homeLib, name) — the
+	// identity gate (stampImportedInlineHOF). A different library exporting a
+	// same-named procedure with different semantics has a different root library
+	// and is never stamped, so its own code runs. Empty for sealed-base specs
+	// (importGated false), which are stamped at their real home by StampInlineHOFs
+	// and need no source check.
 	//
-	// Soundness vs completeness: this gate is sound (never mis-inlines) but
-	// slightly incomplete — a re-export chain ((import (srfi 1)) then (export
-	// fold) from library B) presents sourceLib=B, so the REAL srfi-1 fold imported
-	// through B is no longer inlined. That is a safe deoptimization (correct
-	// result, lost optimization), strictly better than silent miscompilation.
+	// The gate is sound (never mis-inlines): the stamp fires only for a binding
+	// whose root is (homeLib, name), and the inline dispatch (tryInlineHOFCall)
+	// then selects the template by the stamped canonical name, not the call-site
+	// surface name — so an import-renamed curated HOF inlines its OWN template.
+	// It is also complete across NAME-PRESERVING re-export chains: a binding
+	// re-exported through library B ((import (srfi 1)) then (export fold) from B)
+	// still carries root (srfi/1, fold), which survives the hop, so the real srfi-1
+	// fold imported through B is inlined. (Before origin provenance this gate saw
+	// sourceLib=B and deoptimized — a correct-but-slower miss now closed.) A
+	// re-export that RENAMES the curated export ((export (rename fold my-fold)))
+	// presents an uncurated export name, misses the spec lookup, and safely
+	// deoptimizes — completeness stops at name-changing exports, not at hops.
 	homeLib string
 	// requires names the primitives the template's body calls that a dialect might
 	// remove (e.g. vector-map's template fills the result with vector-set!). The
@@ -157,39 +165,48 @@ var inlineHOFSpecs = map[string]inlineHOFSpec{
     (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc)))`},
 }
 
-// applyInlineHOFStamp records the inline-HOF capability on b. Callers guarantee a
-// non-nil b and own the soundness decision (which bindings are eligible); this is
-// just the shared write.
-func applyInlineHOFStamp(b *environment.Binding, callbackParam int) {
+// applyInlineHOFStamp records the inline-HOF capability on b. name is the
+// CANONICAL HOF name (the inlineHOFSpecs key), recorded so the inline dispatch
+// selects the template by this identity rather than the call-site surface name.
+// Callers guarantee a non-nil b and own the soundness decision (which bindings
+// are eligible); this is just the shared write.
+func applyInlineHOFStamp(b *environment.Binding, name string, callbackParam int) {
 	b.UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.InlineHOF = true
 		m.InlineHOFCallbackParam = callbackParam
+		m.InlineHOFName = name
 		return true
 	})
 }
 
 // stampImportedInlineHOF marks the import target b when name is a curated
-// IMPORT-GATED tail HOF (importGated true — currently only fold) imported from
-// the library that actually defines it. A non-curated name, a sealed-base name,
-// or an import from a DIFFERENT library is a no-op. This is the soundness
-// boundary for the import path on two axes:
+// IMPORT-GATED tail HOF (importGated true — currently only fold) whose provenance
+// ROOT is exactly (spec.homeLib, name). A non-curated name, a sealed-base name,
+// or a binding rooted elsewhere is a no-op. This is the soundness boundary for
+// the import path on two axes:
 //   - name: a re-export of a sealed-base name (e.g. SRFI-13's string-map, a
 //     different procedure from R7RS string-map) is NOT import-gated, so it is
 //     never stamped here. The sealed-base HOFs are stamped only at their real
 //     home (StampInlineHOFs).
-//   - identity (sourceLib vs spec.homeLib): a library exporting its own `fold`
-//     with non-SRFI-1 semantics presents sourceLib != "srfi/1" and is not
-//     stamped, so the user's code runs instead of the SRFI-1 inline template.
-func stampImportedInlineHOF(b *environment.Binding, name string, sourceLib LibraryName) {
+//   - identity (the origin root vs (spec.homeLib, name)): keyed on the root, not
+//     the immediate import edge, so the real srfi-1 fold imported THROUGH a
+//     re-exporting library is still stamped (the root survives the hop). Both a
+//     library exporting its own `fold` with non-SRFI-1 semantics (different root
+//     library) and a DIFFERENT srfi-1 procedure re-exported under the name fold
+//     (same root library, different root name) are refused — root points at the
+//     actual defining (library, name), so neither can wear fold's template.
+func stampImportedInlineHOF(b *environment.Binding, name string, root *environment.OriginRef) {
 	spec, ok := inlineHOFSpecs[name]
 	if !ok || !spec.importGated {
 		return
 	}
-	// Identity gate: only the library that defines this HOF may stamp it.
-	if sourceLib.Key() != spec.homeLib {
+	// Identity gate: stamp only when b was ultimately defined as `name` in
+	// spec.homeLib. Checking BOTH root components is load-bearing — the root
+	// library alone would mis-stamp another srfi-1 HOF re-exported as fold.
+	if root == nil || *root != (environment.OriginRef{RootLib: spec.homeLib, RootName: name}) {
 		return
 	}
-	applyInlineHOFStamp(b, spec.callbackParam)
+	applyInlineHOFStamp(b, name, spec.callbackParam)
 }
 
 // StampInlineHOFs sweeps frame's own bindings, stamping every curated SEALED-BASE
@@ -205,7 +222,7 @@ func StampInlineHOFs(frame *environment.EnvironmentFrame) {
 		}
 		b := frame.GetBinding(values.NewSymbol(name), syntax.AllScopes())
 		if b != nil {
-			applyInlineHOFStamp(b, spec.callbackParam)
+			applyInlineHOFStamp(b, name, spec.callbackParam)
 		}
 	}
 }

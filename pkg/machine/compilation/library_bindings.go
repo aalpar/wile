@@ -58,15 +58,17 @@ import (
 //
 // exportName is the binding's name in the library (the external/internal export
 // name, NOT the local alias). It establishes the curated inline-HOF capability on
-// the imported target via stampImportedInlineHOF: keyed by export name so a
-// renamed import still carries it, and applied to the fresh per-import target (not
-// the shared source) so it is race-safe under concurrent imports. stampImported-
-// InlineHOF stamps ONLY import-gated HOFs (fold), so a same-named re-export of a
-// SEALED-BASE HOF — e.g. SRFI-13's string-map, a different procedure from R7RS
-// string-map — is never stamped here and never mis-inlined with the R7RS template.
-// The sealed-base HOFs are stamped only at their real home (StampInlineHOFs). The
-// import path is also the only library seam, so a user's own (define …) of a HOF
-// name is never stamped here.
+// the imported target via stampImportedInlineHOF, which stamps only when the
+// target's provenance ROOT is exactly (spec.homeLib, exportName) — export name
+// selects the spec, the root is the identity gate — and applies the stamp to the
+// fresh per-import target (not the shared source) so it is race-safe under
+// concurrent imports. stampImportedInlineHOF stamps ONLY import-gated HOFs (fold),
+// so a same-named re-export of a SEALED-BASE HOF — e.g. SRFI-13's string-map, a
+// different procedure from R7RS string-map — is never stamped here and never
+// mis-inlined with the R7RS template. The sealed-base HOFs are stamped only at
+// their real home (StampInlineHOFs). The import path is also the only library
+// seam, so a user's own (define …) of a HOF name is never stamped here. Any stale
+// stamp from a prior import of this slot is reset below before re-deriving it.
 func markBindingImported(target, source *environment.Binding, exportName, internalName string, sourceLib LibraryName) {
 	if target == nil {
 		return
@@ -91,6 +93,15 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 	}
 	target.UpdateMeta(func(m *environment.BindingMeta) bool {
 		m.Imported = true
+		// Reset any inline-HOF stamp before re-deriving it below: a re-import can
+		// overwrite target's value (R7RS §5.6 last-import-wins under the
+		// sameImportedBinding name-conflation), and the stamp — since dispatch
+		// selects the template by it — must track the CURRENT value, never a stale
+		// template from a prior import of this slot. stampImportedInlineHOF re-adds
+		// it iff THIS import qualifies. Harmless on a first import (already unset).
+		m.InlineHOF = false
+		m.InlineHOFName = ""
+		m.InlineHOFCallbackParam = 0
 		if source != nil {
 			m.CaptureSafe = source.IsCaptureSafe()
 			// Carry the docstring across the import boundary so ,doc and the doc
@@ -105,9 +116,12 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 		}
 		return true
 	})
-	// sourceLib is the library being imported FROM; the inline-HOF stamp is gated
-	// on it (identity), not just the export name — see stampImportedInlineHOF.
-	stampImportedInlineHOF(target, exportName, sourceLib)
+	// The inline-HOF stamp is gated on the binding's provenance ROOT (origin), not
+	// just the export name — so the real srfi-1 fold is stamped even through a
+	// re-export chain, while a same-named HOF from another library is not (and the
+	// reset above drops a stale stamp when a conflation re-import replaced the
+	// value). See stampImportedInlineHOF.
+	stampImportedInlineHOF(target, exportName, origin)
 }
 
 // ImportSet represents a parsed import specification.

@@ -119,6 +119,13 @@ type BindingMeta struct {
 	// InlineHOF is true. Stored as data (not hardcoded 0) so a future HOF whose
 	// callback is not the first parameter is handled by the same path.
 	InlineHOFCallbackParam int
+	// InlineHOFName is the CANONICAL name of the curated HOF this binding is (the
+	// inlineHOFSpecs key: "fold", "map", …), recorded at stamp time and read ONLY
+	// when InlineHOF is true. The inline dispatch selects the template by THIS
+	// identity, never by the call-site surface name — otherwise a curated HOF
+	// imported-and-renamed onto another curated HOF's name (e.g. fold as fold-right)
+	// would inline the wrong template. Empty on the zero value / unstamped bindings.
+	InlineHOFName string
 	// Origin is the import-provenance root of this binding: for an imported
 	// binding, the root (define ...) it ultimately came from (see OriginRef);
 	// nil for a plain define, which is its own root. free-identifier=? reads it
@@ -444,6 +451,18 @@ func (p *Binding) InlineHOFParam() int {
 	return m.InlineHOFCallbackParam
 }
 
+// InlineHOFName returns the canonical name of the curated HOF this binding is, or
+// "" if it is not a stamped inline HOF. The inline dispatch selects the template
+// by this identity rather than the call-site surface name, so an import-renamed
+// curated HOF inlines its OWN template.
+func (p *Binding) InlineHOFName() string {
+	m := p.Meta()
+	if m == nil || !m.InlineHOF {
+		return ""
+	}
+	return m.InlineHOFName
+}
+
 // Origin returns the import-provenance root of this binding, or nil if it is a
 // plain (non-imported) define, which is its own root.
 func (p *Binding) Origin() *OriginRef {
@@ -498,6 +517,7 @@ func (p *Binding) Copy() *Binding {
 			CaptureSafe:            src.CaptureSafe,
 			InlineHOF:              src.InlineHOF,
 			InlineHOFCallbackParam: src.InlineHOFCallbackParam,
+			InlineHOFName:          src.InlineHOFName,
 			// Origin is an immutable pointer set once at import; copying the
 			// pointer avoids an allocation. Value-equality (*a == *b in
 			// SameBinding) holds regardless of whether the pointer is shared, so
