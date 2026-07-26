@@ -568,14 +568,16 @@ successors above.
 >   the regression guard Part II's cure would have provided. `DefSiteContext` was never
 >   built; its def-site-pin idea shipped for the macro path as D2.
 > - **Part III (Task 6)** is obsoleted as written: `sameImportedBinding` deliberately settled
->   on by-name (`library_bindings.go:502`) and origin-based identity (`BindingID.Origin`) was
+>   on by-name (`sameImportedBinding`, `library_bindings.go:571`) and origin-based identity
+>   (`BindingID.Origin`) was
 >   rejected for import conflict (PR #793), so migrating all three sites onto `BindingID`
 >   would regress shipped behavior. The **`BindingID` scope-discriminator item below is now
 >   moot** — it was a prerequisite for a plan that will not ship.
 >
 > The one narrow residual worth keeping is filed as its own item, immediately below.
 
-- [~] **`free-identifier=?` AND ER-compare are both non-conformant — on COMPLEMENTARY cases**
+- [~] **~~`free-identifier=?` AND ER-compare are both non-conformant — on COMPLEMENTARY cases~~
+  CONFORMANCE FIXED 2026-07-24 (`70a34421` + `36e1d268`); only the Phase-2 consumers remain**
   [Correctness/conformance, M, **VERIFIED 2026-07-24 vs Racket + Chez**, low impact]: the one
   live residual from the archived load-order plan's Part III, now confirmed observable — and
   larger than filed (the plan flagged only `free-identifier=?`; ER-compare is wrong too). Both
@@ -619,15 +621,33 @@ successors above.
   **`free-identifier=?` only** flipped to `SameBinding`. free-id §7 matrix green: reexp chain, direct
   double-rename, renamed re-export, `(dd)` export-rename synthesize-branch, different-libs, sealed-base
   self-compare.
-  **ER-compare PULLED from Phase 1** — crosscheck (errors lens) + two-binary repro confirmed switching
-  `erBindingsEqual` to `SameBinding` REGRESSES `#t`→`#f` on internal-vs-import compare
-  (`(compare user-id (rename 'exported-name))`: definition-site rename has nil Origin, import has
-  Origin). ER-compare keeps its value fallback (accepting the over-match on `(define a car)(define b
-  car)`). **Finishing ER-compare = option B (deferred, NOT done):** stamp the *defining* binding with
-  its own root so the compare is symmetric — see plan §10 "Option B" for the two sketched mechanisms +
-  the re-review it needs.
-  **Phase 2 (each separate PR) OPEN**: migrate `stampImportedInlineHOF` to gate on `Origin.RootLib`;
-  `,doc` follow `Origin` vs eager-copy; site-3 `sameImportedBinding` root candidate.
+  **ER-compare was PULLED from Phase 1, then finished as option B — DONE 2026-07-24 (`36e1d268`).**
+  The pull was real: crosscheck (errors lens) + a two-binary repro confirmed that switching
+  `erBindingsEqual` to `SameBinding` alone REGRESSES `#t`→`#f` on internal-vs-import compare
+  (`(compare user-id (rename 'exported-name))`: the definition-site rename had nil Origin, the import
+  had one). Option B closes that asymmetry: `stampLibraryExportOrigins` gives every library export its
+  own self-root at library FINALIZATION (mechanism 1, eager/intrinsic — chosen over mechanism 2's
+  import-side-effect stamp, so Origin stays a pure function of the definition and imports never mutate
+  library-internal state). `erBindingsEqual`'s value fallback is deleted, killing the `(define a car)
+  (define b car)` over-match. Intended side effect: `free-identifier=?`, sharing `SameBinding`, now
+  also matches a library's internal binding against an import of itself. Crosscheck-reviewed (4 lenses,
+  16 repros, no residual miscompile).
+  **Phase 2 — 1 of 3 items shipped:**
+  - [x] `stampImportedInlineHOF` gates on `Origin.RootLib` — DONE 2026-07-24 (`9b2afa8c`). Fixed the
+    latent re-export miss AND a coupled pre-existing miscompile crosscheck surfaced: inline dispatch
+    selected the template by the CALL-SITE name, so a curated HOF renamed onto another curated HOF's
+    name inlined the wrong body. Dispatch now keys on the stamped `BindingMeta.InlineHOFName`; the
+    stamp is reset on every re-import so a conflation re-import can't strand a stale template.
+  - [ ] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop
+    (`library_bindings.go:118-120` — still copies; `m.Origin` is set four lines later at `:122`).
+    §9-dependent: needs the immediate edge or a root→binding resolve.
+  - [ ] Site 3 `sameImportedBinding` (`library_bindings.go:571`) still compares `*MachineClosure`/
+    `*ForeignClosure` by NAME with an `EqualTo` default. **Still gated, not merely unstarted** — its
+    own doc comment (`:544-570`) frames the by-name conflation as a deliberate irreducible gap, and
+    origin was rejected here by PR #793 for false-flagging define-over-import. The gate is re-reading
+    #793's actual objection: an import-edge origin is a different signal than the source-location it
+    rejected (a define-over-import shadow is a non-imported local with nil `Origin`, so it never
+    enters an import-vs-import root comparison) — a hypothesis to verify, not a claim.
 
 ### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..HEAD`, 2026-07-14)~~ RESOLVED
 

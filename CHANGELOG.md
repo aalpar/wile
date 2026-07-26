@@ -83,6 +83,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   special-form expanders now install in the sealed expand base, so a user redefine becomes a
   shadow in the mutable expand child and the user's transformer runs; the original form stays
   intact for code that does not redefine it.
+- **`free-identifier=?` and an ER-macro's `compare` now decide identity by binding
+  provenance, not by pointer or by value.** Both were wrong, on complementary cases
+  (the conformant answers verified against Racket and Chez). `free-identifier=?`
+  compared `*Binding` pointers, so two rename-imports of one binding — taken directly,
+  through a re-exporting library, or under a renamed export — reported *different*.
+  ER-compare fell back to comparing the bindings' *values*, so two distinct defines
+  that happen to hold one value (`(define a car)` `(define b car)`) reported *same*.
+  Each binding now carries an import-provenance root (`environment.OriginRef{RootLib,
+  RootName}`), folded at import and keyed on the defining name so export/import
+  renaming cannot fork identity, and both predicates compare that root via
+  `environment.SameBinding`. A library's own exports are stamped with their own root
+  at library finalization, so a library-internal binding and an import of itself
+  compare equal too — that is where ER-compare resolves a rename, and
+  `free-identifier=?` now agrees with it. Impact is narrow: `free-identifier=?` is
+  R6RS rather than R7RS-small, and no bundled program reaches either case.
+- **Import-gated `fold`/`fold-right` inlining could inline the wrong template.** The
+  compiler inlines a curated higher-order primitive when the binding comes from the
+  library that owns it, but it selected the inline template by the *call-site* name —
+  so importing one curated HOF renamed onto another curated HOF's name ran the other's
+  body, a silently wrong result. Dispatch now selects by the canonical name stamped on
+  the binding at import time (`BindingMeta.InlineHOFName`). The gate itself follows the
+  binding's provenance root rather than the immediate import library, so the real
+  `(srfi 1)` `fold` is still inlined through a re-export chain while a same-named HOF
+  from elsewhere is refused; and the stamp is cleared on every re-import, so a
+  last-import-wins replacement cannot leave a stale template on the new value.
 - **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
   deterministic when a closed send races a ready receive" described `channel-select`
   as a Scheme primitive. There has never been one; the fix it describes was to the
