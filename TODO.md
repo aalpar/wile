@@ -638,9 +638,29 @@ successors above.
     selected the template by the CALL-SITE name, so a curated HOF renamed onto another curated HOF's
     name inlined the wrong body. Dispatch now keys on the stamped `BindingMeta.InlineHOFName`; the
     stamp is reset on every re-import so a conflation re-import can't strand a stale template.
-  - [ ] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop
-    (`library_bindings.go:118-120` — still copies; `m.Origin` is set four lines later at `:122`).
-    §9-dependent: needs the immediate edge or a root→binding resolve.
+  - [~] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop. **The
+    defect this would have incidentally fixed was found and fixed on its own 2026-07-25** —
+    it needed no origin. Repro: two libraries exporting one macro name, the first documented,
+    the second not; under the §5.6 by-name conflation the second wins the value while `,doc`
+    kept reporting the first's docstring. Cause was not the copying but the `if doc != ""`
+    guard on it, which made the field un-clearable — the same staleness class as the
+    inline-HOF stamp reset three lines above it (`9b2afa8c`), which the doc field was never
+    added to. Fix: assign `m.Doc = source.Doc()` unconditionally (`library_bindings.go:127`),
+    which is smaller than the guarded copy it replaces; the guard turned out to protect
+    nothing (full suite green without it, incl. every doc-registration and sealed-base doc
+    test). Guard: `TestImportedMacroDocTracksTheWinningValue` (3 cases, verified RED first).
+    Procedures were always immune — a closure carries its docstring on its template, so it
+    tracks its value for free.
+    **What actually remains is structural-only and BLOCKED as filed.** "Follow `Origin`"
+    cannot be done where `Doc()` lives: `Binding.Doc()` is in `pkg/environment`, but
+    resolving `OriginRef` needs `LibraryRegistry.Lookup` + `findLibraryBinding` in
+    `pkg/machine/compilation` (three layers up); `OriginRef.RootLib` is a `string` key, not a
+    `LibraryName`, so even from above it needs a key→name reverse or a scan of `All()`; and
+    `repl/` is deliberately decoupled from `machine/compilation` (`registry_doc_provider.go:119`
+    names that decoupling as why it duplicates library search). So the options are re-couple
+    repl→compilation, inject a resolver into `environment`, or store a `*Binding` (rejected by
+    D2). With no defect left motivating it, this is a consolidation with a layering cost —
+    **re-justify before starting, or drop it.**
   - [ ] Site 3 `sameImportedBinding` (`library_bindings.go:571`) still compares `*MachineClosure`/
     `*ForeignClosure` by NAME with an `EqualTo` default. **Still gated, not merely unstarted** — its
     own doc comment (`:544-570`) frames the by-name conflation as a deliberate irreducible gap, and

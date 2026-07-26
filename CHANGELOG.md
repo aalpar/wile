@@ -108,6 +108,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `(srfi 1)` `fold` is still inlined through a re-export chain while a same-named HOF
   from elsewhere is refused; and the stamp is cleared on every re-import, so a
   last-import-wins replacement cannot leave a stale template on the new value.
+- **An imported macro's docstring could outlive the macro it described.** Two
+  libraries exporting one name conflate under the by-name import diamond (R7RS §5.6
+  last-import-wins), so a later import replaces the earlier one's value in the shared
+  slot — but the docstring carried across the import boundary was written only when
+  non-empty, so nothing could ever clear it. Importing a documented macro and then an
+  undocumented macro of that name left `,doc` reporting the displaced macro's
+  documentation for the macro that actually expands. The docstring is now assigned
+  unconditionally at import, so it tracks the current value the same way the
+  inline-HOF stamp does. Procedures were never affected: a closure carries its
+  docstring on its own template, so it travels with the value; the imported binding's
+  metadata is the macro path's only carrier, and so the only one that could go stale.
 - **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
   deterministic when a closed send races a ready receive" described `channel-select`
   as a Scheme primitive. There has never been one; the fix it describes was to the

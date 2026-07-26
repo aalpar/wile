@@ -115,10 +115,16 @@ func markBindingImported(target, source *environment.Binding, exportName, intern
 			// tooling find it on the imported binding (e.g. a (wile control) macro
 			// documented at its define-syntax site). The copy path installs only
 			// the value, so without this the docstring would be lost on import.
-			doc := source.Doc()
-			if doc != "" {
-				m.Doc = doc
-			}
+			//
+			// Assigned unconditionally, for the same reason the inline-HOF stamp is
+			// reset above: a re-import can replace target's value under the
+			// sameImportedBinding name-conflation (R7RS §5.6 last-import-wins), and
+			// a docstring left over from the displaced value documents a binding
+			// that is no longer there. A procedure carries its own docstring on its
+			// template and so tracks its value for free; a macro has no template,
+			// making this field the macro path's only carrier — and the only one
+			// that could go stale.
+			m.Doc = source.Doc()
 			m.Origin = origin
 		}
 		return true
