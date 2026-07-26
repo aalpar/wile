@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`,doc` now reports where an imported binding is defined.** A trailing
+  `From: (srfi 1)` line, or `From: (srfi 1) as fold` when the name you typed differs
+  from the name it is defined under (an export or import rename anywhere along the
+  chain). It reads the import-provenance root recorded on the binding, so it names the
+  **defining** library rather than the one a program happened to import from: a binding
+  taken through a re-exporting library still reports its origin, not the intermediary.
+  Bindings never reached by an import — a top-level `define`, or an ambient bootstrap
+  name usable without importing anything — have no root, and get no line rather than a
+  guess. Embedders building their own doc UI get the same data as
+  `repl.DocInfo.Origin` (an `*environment.OriginRef`, nil when absent). This is the
+  first consumer of the provenance the binding-identity work below recorded.
+
 ### Removed
 
 - **`values.ChannelSelect` and its `SelectCase`/`SelectCaseKind` types are gone.**
