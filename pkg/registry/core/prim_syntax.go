@@ -15,6 +15,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 
@@ -140,18 +141,22 @@ func PrimGenerateTemporaries(mc machine.CallContext) error {
 			"generate-temporaries: expected a list but got %T", arg)
 	}
 
-	// Count the length of the list
-	count := tuple.Length()
-	// Generate fresh identifiers
-	elems := make([]values.Value, count)
-	for i := range elems {
-		id := gensymCounter.Add(1)
-		name := fmt.Sprintf("g%d", id)
-		elems[i] = syntax.NewSyntaxSymbol(name, nil)
+	// Walk with the proper-list eliminator rather than Tuple.Length: Length
+	// panics on an improper tail (an uncatchable error at the Scheme level)
+	// and loops forever on a circular list. ForEachProperList rejects both as
+	// a wrapped ErrNotAList, which guard can catch.
+	var elems []values.Value
+	err := values.ForEachProperList(mc.Context(), tuple, "generate-temporaries",
+		func(_ context.Context, _ int, _ bool, _ values.Value) error {
+			id := gensymCounter.Add(1)
+			elems = append(elems, syntax.NewSyntaxSymbol(fmt.Sprintf("g%d", id), nil))
+			return nil
+		})
+	if err != nil {
+		return err
 	}
-	result := values.List(elems...)
 
-	mc.SetValue(result)
+	mc.SetValue(values.List(elems...))
 	return nil
 }
 

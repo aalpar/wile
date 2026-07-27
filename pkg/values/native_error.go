@@ -194,6 +194,17 @@ func (p *NativeError) SchemeString() string {
 
 // EqualTo returns true if this error object is equal to the given value.
 func (p *NativeError) EqualTo(v Value) bool {
+	return Equal(p, v)
+}
+
+// EqualComponents compares the scalar fields directly and pushes the irritant
+// lists for Equal to descend. Irritants are arbitrary Scheme values, so an
+// irritant graph can cycle back to the error object itself — reachable from
+// pure R7RS with error + guard + set-car!. Descending here rather than
+// re-entering Equal is what lets the visited set close that cycle; comparing
+// the irritants inline allocated a fresh visited set per level and overflowed
+// the host stack.
+func (p *NativeError) EqualComponents(v Value, push func(a, b Value)) bool {
 	other, ok := v.(*NativeError)
 	if !ok {
 		return false
@@ -209,10 +220,6 @@ func (p *NativeError) EqualTo(v Value) bool {
 	} else if p.message != other.message {
 		return false
 	}
-	// Compare irritants
-	if !EqualTo(p.irritants, other.irritants) {
-		return false
-	}
 	// Compare kind
 	if p.kind != other.kind {
 		return false
@@ -221,5 +228,7 @@ func (p *NativeError) EqualTo(v Value) bool {
 	if p.err != other.err {
 		return false
 	}
+	// Compare irritants
+	push(p.irritants, other.irritants)
 	return true
 }

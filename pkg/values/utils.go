@@ -135,6 +135,14 @@ func schemeStringChild(child Value, visited map[Value]bool, depth int) string {
 			visited = make(map[Value]bool)
 		}
 		return c.schemeStringWithVisited(visited, depth)
+	case *AtomicBox:
+		if c == nil {
+			return "#<atomic:void>"
+		}
+		if visited == nil {
+			visited = make(map[Value]bool)
+		}
+		return c.schemeStringWithVisited(visited, depth)
 	}
 	if IsVoid(child) {
 		return "#<void>"

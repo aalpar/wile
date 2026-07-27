@@ -243,3 +243,134 @@ func TestConfinedCreate_ParentSymlinkEscapeDeniedUnconfined(t *testing.T) {
 	}
 	_ = g.Close()
 }
+
+// TestConfinedDirOps_SymlinkEscapeDeniedUnconfined pins the symlink re-gate on
+// the three helpers that previously handed the caller's lexical path straight to
+// the plain os call: confinedRemove, confinedMkdir and confinedReadDir. Their
+// three siblings (confinedOpen/confinedCreate/confinedStat) already routed
+// through unconfinedTarget; these did not, so under a custom (non-RootConfined)
+// authorizer a pre-planted symlink let Scheme list, create in, and delete
+// outside the authorized subtree.
+//
+// Filed independently by three subsystems in the 2026-07-25 review as one
+// defect: directory-files, create-directory and delete-file were the
+// demonstrated escapes.
+func TestConfinedDirOps_SymlinkEscapeDeniedUnconfined(t *testing.T) {
+	// Canonicalize for the same reason as the create-time test above: on macOS
+	// t.TempDir() hands back a /tmp path while /tmp is a symlink to /private/tmp,
+	// and the re-gate keys on the RESOLVED path.
+	allowedDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	outsideDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	victim := filepath.Join(outsideDir, "victim.txt")
+	err = os.WriteFile(victim, []byte("victim"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	link := filepath.Join(allowedDir, "link")
+	err = os.Symlink(outsideDir, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Lexical prefix gate, deliberately NOT RootConfined — the authorizer class
+	// unconfinedTarget exists to protect.
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if strings.HasPrefix(req.Target, allowedDir+string(filepath.Separator)) {
+			return nil
+		}
+		return security.ErrAccessDenied
+	})
+
+	tcs := []struct {
+		name string
+		op   func() error
+	}{
+		{
+			// directory-files: listing the outside directory.
+			name: "readdir through a symlinked directory",
+			op: func() error {
+				_, err := confinedReadDir(auth, link)
+				return err
+			},
+		},
+		{
+			// create-directory: the leaf does not exist, so the parent chain
+			// is what redirects.
+			name: "mkdir under a symlinked directory",
+			op: func() error {
+				return confinedMkdir(auth, filepath.Join(link, "pwned"), 0o700)
+			},
+		},
+		{
+			// delete-file: the full path resolves, straight through the link.
+			name: "remove through a symlinked directory",
+			op: func() error {
+				return confinedRemove(auth, filepath.Join(link, "victim.txt"))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.op()
+			if !errors.Is(err, security.ErrAccessDenied) {
+				t.Fatalf("want ErrAccessDenied, got: %v", err)
+			}
+		})
+	}
+
+	// The escape must have left no trace outside the authorized subtree.
+	_, err = os.Stat(victim)
+	if err != nil {
+		t.Fatalf("victim file must survive the denied remove, got: %v", err)
+	}
+	_, err = os.Stat(filepath.Join(outsideDir, "pwned"))
+	if !os.IsNotExist(err) {
+		t.Fatalf("denied mkdir must not have created outsideDir/pwned, got: %v", err)
+	}
+}
+
+// TestConfinedDirOps_LegitimatePathsStillAllowed is the positive control for the
+// re-gate: operations wholly inside the authorized subtree, with no symlink
+// involved, must still succeed. A re-gate that denied these would be a
+// regression, not a fix.
+func TestConfinedDirOps_LegitimatePathsStillAllowed(t *testing.T) {
+	allowedDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doomed := filepath.Join(allowedDir, "doomed.txt")
+	err = os.WriteFile(doomed, []byte("x"), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	auth := security.AuthorizerFunc(func(req security.AccessRequest) error {
+		if strings.HasPrefix(req.Target, allowedDir+string(filepath.Separator)) {
+			return nil
+		}
+		return security.ErrAccessDenied
+	})
+
+	_, err = confinedReadDir(auth, filepath.Join(allowedDir, "."))
+	if err != nil {
+		t.Fatalf("readdir inside the authorized subtree must succeed, got: %v", err)
+	}
+	err = confinedMkdir(auth, filepath.Join(allowedDir, "sub"), 0o755)
+	if err != nil {
+		t.Fatalf("mkdir inside the authorized subtree must succeed, got: %v", err)
+	}
+	err = confinedRemove(auth, doomed)
+	if err != nil {
+		t.Fatalf("remove inside the authorized subtree must succeed, got: %v", err)
+	}
+}

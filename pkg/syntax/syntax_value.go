@@ -158,22 +158,47 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		if v.IsVoid() {
 			return values.Void
 		}
-		// Pre-register a placeholder pair to handle circular references
-		placeholder := values.NewCons(nil, nil)
-		cache[sv] = placeholder
-		// Now recursively unwrap car and cdr
-		var car, cdr values.Value
-		if v.Values[0] != nil {
-			car = UnwrapAllShared(v.Values[0], cache)
+		// Walk the cdr spine iteratively. Recursing per cdr made list *length*
+		// into Go stack depth with nothing bounding it — DefaultMaxParseDepth
+		// counts nesting, not length — so (read) or syntax->datum of a multi-
+		// million-element flat list overflowed the host stack. Cars still
+		// recurse: their depth is nesting, which is bounded.
+		//
+		// Each spine cell is pre-registered in the cache before its car is
+		// unwrapped, so a circular reference back into the spine resolves to
+		// the placeholder rather than looping (R7RS §2.4 datum labels).
+		head := values.NewCons(nil, nil)
+		cache[sv] = head
+		cur, place := v, head
+		for {
+			var car values.Value
+			if cur.Values[0] != nil {
+				car = UnwrapAllShared(cur.Values[0], cache)
+			}
+			place.SetCar(car)
+
+			next := cur.Values[1]
+			if next == nil {
+				place.SetCdr(values.EmptyList)
+				break
+			}
+			// An already-unwrapped cdr closes a cycle or shares structure.
+			cached, ok := cache[next]
+			if ok {
+				place.SetCdr(cached)
+				break
+			}
+			nextPair, isPair := next.(*SyntaxPair)
+			if !isPair || nextPair.IsVoid() {
+				place.SetCdr(UnwrapAllShared(next, cache))
+				break
+			}
+			cell := values.NewCons(nil, nil)
+			cache[next] = cell
+			place.SetCdr(cell)
+			cur, place = nextPair, cell
 		}
-		if v.Values[1] != nil {
-			cdr = UnwrapAllShared(v.Values[1], cache)
-		} else {
-			cdr = values.EmptyList
-		}
-		placeholder.SetCar(car)
-		placeholder.SetCdr(cdr)
-		return placeholder
+		return head
 
 	case *SyntaxVector:
 		if v.IsVoid() {

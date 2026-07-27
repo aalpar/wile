@@ -137,6 +137,9 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	if mc.ImmutableLiterals().IsImmutable(to) {
+		return werr.WrapForeignErrorf(werr.ErrImmutableVector, "vector-copy!: cannot mutate immutable literal vector")
+	}
 	at, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "vector-copy!")
 	if err != nil {
 		return err

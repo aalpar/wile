@@ -111,7 +111,14 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	}
 
 	if tail {
-		mc = mc.returnImmediate()
+		// Same guard as the non-tail arm below: returnImmediate restores from
+		// mc.cont, so if the foreign function already consumed the continuation
+		// (mc.cont has advanced past savedCont) restoring again pops a second
+		// frame and silently drops one activation. Reachable via
+		// call-with-immediate-continuation-mark and apply in tail position.
+		if mc.cont == savedCont {
+			mc = mc.returnImmediate()
+		}
 	} else if mc.cont == savedCont {
 		// Non-tail: SaveContinuation is in the bytecode. Restore it
 		// to recover the caller's evals, env, template, and pc.

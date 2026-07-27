@@ -119,11 +119,30 @@ func (p *AtomicBox) SchemeString() string {
 	if p == nil {
 		return "#<atomic:void>"
 	}
+	return p.schemeStringWithVisited(make(map[Value]bool), 1)
+}
+
+// schemeStringWithVisited renders the atomic under the same path-scoped cycle
+// detection Pair, Vector, Hashtable and Box use. atomic-store! can point an
+// atomic at a structure that reaches the atomic again, so the naive rendering
+// this replaced recursed until the host Go stack overflowed — an unrecoverable
+// runtime.throw, not a catchable panic.
+//
+// depth is this atomic's nesting level (root = 1); its content sits one level
+// deeper, where schemeStringChild enforces the host-safety bound.
+func (p *AtomicBox) schemeStringWithVisited(visited map[Value]bool, depth int) string {
+	if visited[p] {
+		return "..."
+	}
+	visited[p] = true
+	defer func() {
+		delete(visited, p)
+	}()
 	v := p.Load()
 	if v == nil {
 		return fmt.Sprintf("#<atomic id=%d value=#<void>>", p.id)
 	}
-	return fmt.Sprintf("#<atomic id=%d value=%s>", p.id, v.SchemeString())
+	return fmt.Sprintf("#<atomic id=%d value=%s>", p.id, schemeStringChild(v, visited, depth+1))
 }
 
 // AtomicInt64 provides atomic operations on int64 values

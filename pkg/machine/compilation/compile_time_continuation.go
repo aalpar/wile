@@ -468,26 +468,72 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		if visited == nil {
 			visited = make(map[values.Value]bool)
 		}
-		if visited[val] {
-			return nil, werr.WrapForeignErrorf(
-				werr.ErrInvalidSyntax,
-				"compile: circular datum label in quoted literal",
-			)
+		// Walk the cdr spine iteratively. Recursing per cdr made list *length*
+		// into Go stack depth, so a multi-million-element quoted literal
+		// overflowed the host stack at compile time — the same length-vs-depth
+		// defect fixed in syntax.UnwrapAllShared. Cars still recurse: their
+		// depth is nesting, which the parser already bounds.
+		//
+		// Spine marks stay in visited for the whole walk and are removed on the
+		// way out, preserving the original path-scoped semantics: a reference
+		// back into the live spine is a cycle, while structure shared between
+		// completed sibling subtrees is not.
+		var (
+			spine   []*values.Pair
+			cars    []values.Value
+			tail    values.Value
+			changed bool
+		)
+		unwind := func() {
+			for _, c := range spine {
+				delete(visited, c)
+			}
 		}
-		visited[val] = true
-		car, err := p.validateQuotedLiteralWithVisited(val.Car(), visited)
-		if err != nil {
-			return nil, err
+		cur := val
+		for {
+			if visited[cur] {
+				unwind()
+				return nil, werr.WrapForeignErrorf(
+					werr.ErrInvalidSyntax,
+					"compile: circular datum label in quoted literal",
+				)
+			}
+			visited[cur] = true
+			spine = append(spine, cur)
+
+			car, err := p.validateQuotedLiteralWithVisited(cur.Car(), visited)
+			if err != nil {
+				unwind()
+				return nil, err
+			}
+			cars = append(cars, car)
+			if car != cur.Car() {
+				changed = true
+			}
+
+			next, isPair := cur.Cdr().(*values.Pair)
+			if !isPair || next == nil {
+				tail, err = p.validateQuotedLiteralWithVisited(cur.Cdr(), visited)
+				if err != nil {
+					unwind()
+					return nil, err
+				}
+				if tail != cur.Cdr() {
+					changed = true
+				}
+				break
+			}
+			cur = next
 		}
-		cdr, err := p.validateQuotedLiteralWithVisited(val.Cdr(), visited)
-		if err != nil {
-			return nil, err
-		}
-		delete(visited, val)
-		if car == val.Car() && cdr == val.Cdr() {
+		unwind()
+		if !changed {
 			return val, nil
 		}
-		return values.NewCons(car, cdr), nil
+		out := tail
+		for i := len(spine) - 1; i >= 0; i-- {
+			out = values.NewCons(cars[i], out)
+		}
+		return out, nil
 	case *values.Vector:
 		if val == nil || len(*val) == 0 {
 			return val, nil

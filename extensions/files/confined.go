@@ -180,7 +180,11 @@ func confinedRemove(auth security.Authorizer, name string) error {
 		return err
 	}
 	if !confined {
-		return os.Remove(name)
+		target, terr := unconfinedTarget(auth, name, security.ActionDelete)
+		if terr != nil {
+			return terr
+		}
+		return os.Remove(target)
 	}
 	defer root.Close() //nolint:errcheck
 	return root.Remove(rel)
@@ -193,7 +197,11 @@ func confinedMkdir(auth security.Authorizer, name string, perm os.FileMode) erro
 		return err
 	}
 	if !confined {
-		return os.Mkdir(name, perm)
+		target, terr := unconfinedTarget(auth, name, security.ActionWrite)
+		if terr != nil {
+			return terr
+		}
+		return os.Mkdir(target, perm)
 	}
 	defer root.Close() //nolint:errcheck
 	return root.Mkdir(rel, perm)
@@ -208,7 +216,11 @@ func confinedReadDir(auth security.Authorizer, name string) ([]os.DirEntry, erro
 		return nil, err
 	}
 	if !confined {
-		return os.ReadDir(name)
+		target, terr := unconfinedTarget(auth, name, security.ActionRead)
+		if terr != nil {
+			return nil, terr
+		}
+		return os.ReadDir(target)
 	}
 	defer root.Close() //nolint:errcheck
 	dir, err := root.Open(rel)

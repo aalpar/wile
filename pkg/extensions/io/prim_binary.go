@@ -189,6 +189,10 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	if mc.ImmutableLiterals().IsImmutable(bv) {
+		return werr.WrapForeignErrorf(werr.ErrImmutableBytevector,
+			"read-bytevector!: cannot mutate immutable literal bytevector")
+	}
 
 	p, tuple, err := getRequiredBinaryInputPort(mc.Arg(1), "read-bytevector!")
 	if err != nil {

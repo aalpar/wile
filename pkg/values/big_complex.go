@@ -632,6 +632,17 @@ func (p *BigComplex) Sqrt() *BigComplex {
 		return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), &BigFloat{value: im})
 	}
 
+	// An infinite imaginary component makes both the numerator and the
+	// denominator of the quotient below infinite, and big.Float.Quo panics with
+	// big.ErrNaN on Inf/Inf — in both the a >= 0 arm and its a < 0 mirror.
+	// IEEE-754 gives sqrt(x ± i·inf) = inf ± i·inf for every real x, which is
+	// also what the float64 *Complex path returns.
+	if b.IsInf() {
+		re := new(big.Float).SetPrec(prec).SetInf(false)
+		im := new(big.Float).SetPrec(prec).SetInf(b.Signbit())
+		return NewBigComplexFromBigFloats(&BigFloat{value: re}, &BigFloat{value: im})
+	}
+
 	r := new(big.Float).SetPrec(prec).Set(p.Magnitude().value)
 
 	if a.Sign() >= 0 {
