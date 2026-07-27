@@ -1,25 +1,26 @@
 TODO
 ----
 
-**Last Updated**: 2026-07-26 (Added the **Plan Index** — all 58 files in `plans/` with their in-file status, grouped Open / Design-only / Parked / Trackers — and a "References to `plans/` and `memory/`" convention section documenting that those directories are gitignored, so citations here are deliberately unresolvable and no CI link checker covers this file. Repointed 97 stale plan citations at the file that actually exists (`.local.md` renames, and plans since archived to `memory/`). Corrected the extension inventory in Current Project Status. Prior: 2026-07-21 — transcribed a full `plans/` open-work sweep into the tiers under dated "plans/ sweep" subsections — Tier 1 correctness deltas (stderr-flush-on-exit, SRFI-18 uncaught-exception), Tier 5 refactor/tech-debt deltas (extension annotation gaps, frame-reclaim B/C/D/G, iter.Seq Tier-2, staff-sweep residuals, docs sweep), Tier 2 feature deltas (--check/arity, pipeline seams, climbing-tower Tier 2, MCP LLM/SOTA, polynomial-ideal, recurrence, SRFI-204 match, TinyCLOS) — and flagged 3 stale-but-shipped plans for archival plus the possibly-superseded load-order plan. Also, Tier 1: recorded the **2026-07-17 full-review remediation RESOLVED** — all 14 confirmed defects fixed across PRs #808–#813 plus earlier `1af62cd2`; the CI gap that hid two is closed via `make test-examples`; P2/#10 resolved as a non-deviation, not a documented one. Prior: 2026-07-20 — Tier 1: transcribed the scope-keyed-globals arc's open successors out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`, where they were invisible to a TODO scan — `freeIds` name-keyed collapse and the `BindingID` scope-discriminator prerequisite joined the name-keyed-consumers section; new "successor work" section holds the two shorthand-`define` defects, export phase-probe order, no-sealed-base-above-phase-0, and the missing CHANGELOG for 16 commits of user-visible semantic change. Tier 5: `predeclareBinding` orphan slots. Two of the successors carry **unverified repros** and say so. Prior: 2026-07-14 — Tier 1: recorded the 2026-07-13-review remediation resolved on 2026-07-14 — numeric-lattice `eqv?`/`equal?` F1/F2/F3 + Value Go-comparability (`c302b702`); macro-introduced top-level binder hygiene + `define-values` under NoMutation (`d594beeb`, general form-removal `*PrimitiveExpander` leak STILL OPEN); export supersets + `(description)` documented (`cc3c48bb`); `GlobalIndex` env-literal identity (`fa9804d6`). Opaque-subtree over-marking finding remains open. Prior: 2026-07-01 — D2 thread-shared-global race / `fbcd7654`; stale `peek-char`/`read-line` read-error bugs / `460c73a5`; Scheme-side line coverage, `PrimitiveSpec` capture-safety field / PR #776, Task 6.4 typeswitchlint drift-guard)
+**Last Updated**: 2026-07-27 — closed items collapsed to the one-line archive form used by
+`## Completed`; the three rotted `..HEAD` review ranges pinned to the commits they meant. Per-edit
+history is `git log -p TODO.md`; release history is [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Current Project Status
 
-> Authoritative status lives elsewhere — this header is orientation only and
-> drifts. For the current version see [`VERSION`](VERSION) / `wile --version`
-> and [`CHANGELOG.md`](CHANGELOG.md); for the documentation map see
-> [`docs/INDEX.md`](docs/INDEX.md). Counts below are approximate.
+> Orientation only, and it drifts. Authoritative: [`VERSION`](VERSION) / `wile --version` and
+> [`CHANGELOG.md`](CHANGELOG.md) for the release; [`docs/INDEX.md`](docs/INDEX.md) for the
+> documentation map; `Engine.AvailableLibraries()` for what a build actually exposes.
 
-**Version**: 1.17.x line (see `CHANGELOG.md` for the latest release)
-**Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
-**Extensions**: 12 packages under `extensions/` (algebra, algebragraph, charsets, eval, files, gointerop, introspection, math, process, sat, system, threads) plus internal ones under `pkg/extensions/io` and `pkg/internal/extensions/{all,envvars,namespace}`; all importable as R7RS `(wile <name>)` libraries. `bootstrap.ProfileExtensions` is the single source of truth for which profile grants which — `pkg/internal/bootstrap/bootstrap.go`. Go static analysis extracted to [wile-goast](https://github.com/aalpar/wile-goast).
-**Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); named profiles (`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) via `WithProfile`; orthogonal `WithSandbox` modifier; virtual env map (`WithEnv`, `WithEnvMap`); `Engine.AvailableLibraries()` API for library discovery.
-**Documentation**: Complete documentation system — `procedure-documentation`, `,doc`, `,apropos`, `,topics`, `,topic`, library-level `(description)` clause, docstring examples, examples filtering. All 397 primitive specs + ~243 stdlib procedures + 29 special forms + 15 macros + 11 syntax compilers + 34 library descriptions documented.
-**MCP Server**: Built-in MCP server mode (`wile --mcp`) with eval, doc, apropos, topic, libraries, and reset tools.
-**Examples**: 75 examples across 13 categories, 23 benchmarks (16 Gabriel + Larceny R7RS + Schelog + miniKanren)
-**Tests**: Go test suite comprehensive; Scheme test suite: 3,852 lines across 19 files (11 scheme + 8 algebra) + R7RS conformance suite
-**Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1), (srfi 13), (srfi 14), (srfi 132), (wile strings), (wile charsets); `(wile algebra)` umbrella with 27 sub-libraries — setoid/monoid/group/ring/field/lattice/boolean/heyting/category/closure/differential/galois/semiring/order, plus matrix (Path D, sparse+dense), polynomial (ring-parameterized), incidence (Möbius), unification (AC-matching), combinatorial-graph (1-WL + isomorphism + Kernighan-Lin balanced partition), matching (Roth-Sotomayor + Hungarian), symbolic/abstract-domain/dataflow (wile-goast extraction), fca, pareto, interval, rewrite, graph; stdlib embedded in binary
-
+**Version**: 1.17.x line
+**Core Language**: R7RS-small complete — hygienic macros, composable continuations, numeric tower
+**Extensions**: 12 packages under `extensions/` plus internal ones, all importable as `(wile <name>)`.
+`bootstrap.ProfileExtensions` (`pkg/internal/bootstrap/bootstrap.go`) is the single source of truth
+for which profile grants which. Go static analysis lives in
+[wile-goast](https://github.com/aalpar/wile-goast).
+**Embedding**: CLI runs on the public Engine API; embedded stdlib via `stdlib.FS`; named profiles
+(`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) via `WithProfile`, with `WithSandbox`
+as an orthogonal modifier.
+**Libraries**: R7RS-small, the chibi/SRFI set, and the `(wile algebra)` umbrella (27 sub-libraries).
 ### Ordering
 
 Items ordered by perceived priority for the project's success as an embedding product. Tiers: Security/Correctness → Embedding API → Tooling/DX → Performance → Tech Debt → Deferred → Nice-to-Haves. Completed items at the bottom for reference.
@@ -31,36 +32,19 @@ Items ordered by perceived priority for the project's success as an embedding pr
 
 ### References to `plans/` and `memory/` are intentionally unresolvable here
 
-This file is tracked; **`plans/` and `memory/` are not.** `.gitignore` excludes
-`/plans/`, `/memory/`, and `*.local.md` — they hold private design reasoning and
-must never reach the public surface. So every `plans/…` and `memory/…` citation
-below is a dead link for anyone but the maintainer, and that is deliberate, not
-rot. Do not "fix" them by deleting the citation, inlining the plan's contents
-into this file, or checking `plans/` in.
+This file is tracked; **`plans/` and `memory/` are not** — `.gitignore` excludes `/plans/`,
+`/memory/`, and `*.local.md`, which hold private design reasoning. So every `plans/…` and
+`memory/…` citation below is a dead link for anyone but the maintainer, and that is deliberate,
+not rot. Do not "fix" them by deleting the citation, inlining the plan, or checking `plans/` in.
+No CI target validates them (`make check-readme-links` and `make check-docs-orphans` do not cover
+this file), which is the argument for keeping the Plan Index below current by hand.
 
-Three consequences worth knowing:
-
-- **No CI target validates them.** `make check-readme-links` covers exactly
-  `README.md`, `docs/INDEX.md`, `docs/TOC.md`, and `examples/README.md`;
-  `make check-docs-orphans` covers `docs/`. TODO.md is in neither, so a
-  reference here can rot silently — which is the argument for keeping the index
-  below current by hand.
-- **A plan cited here has one of three homes.** `plans/` = live. `memory/` =
-  shipped or abandoned, archived. Gone entirely = the work moved to another
-  repo (Go AST/static analysis moved to
-  [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans)).
-- **Two different `memory/` directories exist.** The repo's `memory/` holds
-  archived plan files. Claude Code's auto-memory lives outside the repo at
-  `~/.claude/projects/-Users-aalpar-projects-wile-workspace-wile/memory/` and
-  holds topic notes. Citations to the latter are written as
-  "auto-memory `<name>.md`" without a path prefix.
-
-Naming: plan files use the `.local.md` suffix (belt to the ignored directory's
-braces — see `plans/CLAUDE.local.md`). A citation written as plain `.md` is
-almost certainly stale by a rename.
-
----
-
+A cited plan has one of three homes: `plans/` = live, `memory/` = shipped or abandoned, gone
+entirely = moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans). Two
+different `memory/` directories exist — the repo's holds archived plans, while Claude Code's
+auto-memory lives outside the repo and is cited as "auto-memory `<name>.md`" with no path prefix.
+Plan files use the `.local.md` suffix; a citation written as plain `.md` is almost certainly stale
+by a rename.
 ## Plan Index
 
 Every file in `plans/`, with the status recorded in the file itself. **A status
@@ -178,194 +162,117 @@ Items that block production embedded use or prevent silent state corruption.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
-- [x] **Scope-set weight tie fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21,
-  approach 1a per `plans/2026-07-20-scope-keyed-tier1-remediation.md` Item 1]: the filed fix
-  (raise on every `bestOf` tie) was **rejected** — it regresses ordinary R7RS nested `let-syntax`
-  keyword shadowing, which currently *is* an incomparable equal-cardinality tie:
-  `(let-syntax ((m …outer…)) (let-syntax ((m …inner…)) (m)))` weighs both binders 1 under a
-  weight-2 reference, and keep-first (innermost) is the correct INNER result. Two corrections to
-  the original entry that follows: the fix does **not** belong in `bestOf` (it takes two ints and
-  cannot see scope sets; the local reducer compares across frames while the global one is
-  per-frame first-wins — one edit site, two semantics), and "error on a tie" conflates shadowing
-  with ambiguity.
-
-  **1a — fix the cause.** `expander_let_syntax.go` bound each `let-syntax`/`letrec-syntax`
-  keyword on the bare singleton `[]*syntax.Scope{letScope}`, discarding the keyword's accumulated
-  enclosing scopes. It now binds on `slices.Clone(keywordSym.Scopes())` + `letScope` at all three
-  coupled sites (letrec pre-register, compile-loop create, and the re-resolve that must use the
-  identical set or `MaybeCreateLocalBinding` keys a second slot). A nested binder is then a strict
-  scope-set superset of its enclosing binder and wins by maximality (a perfect match), so the tie
-  never forms. Top-level binders are unchanged (empty `Scopes()` ⇒ the set is still `{letScope}`).
-
-  **Census confirms completeness** (throwaway `WILE_TIE_CENSUS` probe on the tie branch, since
-  reverted): before 1a the nested case produced a `weight=1 target=2` tie; after 1a it is gone.
+- [x] **Fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21, approach 1a per
+  `plans/2026-07-20-scope-keyed-tier1-remediation.md` Item 1]: the filed fix — raise on every
+  `bestOf` tie — was **rejected**. It regresses ordinary R7RS nested `let-syntax` keyword shadowing,
+  which currently *is* an incomparable equal-cardinality tie: `(let-syntax ((m …outer…)) (let-syntax
+  ((m …inner…)) (m)))` weighs both binders 1 under a weight-2 reference, and keep-first (innermost)
+  is the correct INNER result. Two further corrections to the original filing: the fix does not
+  belong in `bestOf`, which takes two ints and cannot see scope sets (and whose one edit site serves
+  two semantics — the local reducer compares across frames, the global one is per-frame first-wins);
+  and "error on a tie" conflates shadowing with ambiguity.
+  **1a — fix the cause.** `expander_let_syntax.go` bound each `let-syntax`/`letrec-syntax` keyword
+  on the bare singleton `{letScope}`, discarding the keyword's accumulated enclosing scopes. It now
+  binds on `slices.Clone(keywordSym.Scopes())` + `letScope` at all three coupled sites (letrec
+  pre-register, compile-loop create, and the re-resolve, which must use the identical set or
+  `MaybeCreateLocalBinding` keys a second slot). A nested binder is then a strict scope-set superset
+  of its enclosing binder and wins by maximality — a perfect match — so the tie never forms.
+  Top-level binders are unchanged.
+  **Census confirms completeness**: a throwaway `WILE_TIE_CENSUS` probe on the tie branch (since
+  reverted) showed the nested case producing a `weight=1 target=2` tie before 1a and none after.
   Across `r7rs-tests.scm`, `macros-test.scm`, and the ER-macro corpus there are **zero `weight>0`
-  ties** — no genuine ambiguity. Every residual tie is `weight=0` (the empty set; two
-  `{}`-bindings of a name = benign shadowing resolved by frame order). So there is nothing to
-  error on, and 1b (a real `ErrAmbiguousBinding` on a same-frame incomparable tie) stays deferred
-  as the fallback if such a tie is ever constructed (none has been). Guard: nested + triple-nested
-  cases in `TestScopeResolution_LetSyntaxShadowing`.
-
-  **Residual, filed separately:** `resolveNodeByScopes` (`frame_reclaim_build.go`) hand-rolls the
+  ties** — no genuine ambiguity — and every residual tie is `weight=0`, two `{}`-bindings of a name,
+  which is benign shadowing resolved by frame order. So there is nothing to error on, and 1b (a real
+  `ErrAmbiguousBinding` on a same-frame incomparable tie) stays deferred as the fallback if such a
+  tie is ever constructed. Guard: nested and triple-nested cases in
+  `TestScopeResolution_LetSyntaxShadowing`.
+  **Residual, filed separately**: `resolveNodeByScopes` (`frame_reclaim_build.go`) hand-rolls the
   same argmax over a Go *map*, so its tie is non-deterministic rather than first-wins. Unreachable
-  in the corpus (no `weight>0` tie feeds it), but it is the one site where a tie would resolve
-  non-deterministically; a determinism follow-up, not gated on this item.
-
-  *Original framing (2026-07-18), retained for provenance:* the macro-introduced-top-level-binder
-  rename pass documented the same arbitrariness independently — ties "resolve arbitrarily to the
-  first collected" — at `git show a60e32e1^:pkg/machine/compilation/toplevel_binder_hygiene.go`
-  (lines 249-254). Scoped out of `plans/2026-07-18-scope-keyed-global-bindings-design.md`
-  (Part III) and `…-load-order-independent-binding-resolution-design.md` (Fork C) so it would not
-  be bundled and lost.
-
+  in the corpus, but it is the one site where a tie would resolve non-deterministically — a
+  determinism follow-up, not gated on this item.
 ### Name-keyed identity survives in consumers of scope-keyed bindings (2026-07-19)
 
-All are consequences of `8afeb66a`/`a60e32e1` making a name own several slots. Each is
-filed here because it existed only inside a `plans/` section — several of them marked
-RESOLVED — where anyone scanning for open work will skip it. Written for three consumers;
-`freeIds` and `BindingID` were added 2026-07-20 from the same Stage C review, which raises
-the count to five and is itself the argument for not trusting a hardcoded one.
+Consequences of `8afeb66a`/`a60e32e1` making one name own several slots. Each lived only inside a
+`plans/` section — several marked RESOLVED — where anyone scanning for open work would skip it.
+Filed for three consumers; `freeIds` and `BindingID` joined 2026-07-20 from the same Stage C
+review, which is itself the argument against trusting a hardcoded count.
 
-- [x] **Frame-reclaim's verdict domain is name-keyed** [Medium, M, Done 2026-07-23, branch
-  `fix/framereclaim-scope-keyed-verdict`; resurrected from the parked `901139de` onto the
-  merged ScopeSet foundation]: `ClassifyFrameReclaim` now returns
+- [x] **Frame-reclaim's verdict domain was name-keyed** [Medium, M, Done 2026-07-23, branch
+  `fix/framereclaim-scope-keyed-verdict`]: `ClassifyFrameReclaim` returns
   `map[validate.ScopedBindingKey]bool`, keyed on the scope-discriminated identity
   `{Sym.Key, ScopeFingerprint(scopes)}` — the SAME identity `findDuplicateSymbols` and
-  `match.FreeIdKey` use, NOT the physical-slot `BindingID` the prior note correctly ruled out
-  as the vehicle (`bindingIdentity` in `validate_let.go` was promoted to exported
-  `ScopedBindingKey` + `ScopedBindingKeyOf` — named to disambiguate from `environment.BindingID`
-  and to align with `match.FreeIdKey`'s (name, scope-fingerprint) basis). Two hygiene-distinct
-  same-name defines now carry SEPARATE verdicts, so the safe one recovers reclamation while the
-  capturing one stays denied, retiring the collision-*conservative* forfeiture. Nodes key on
-  `ScopedBindingKeyOf(name)`; same-unit edges resolve by subset over nodes (`resolveNodeByScopes`,
-  Flatt argmax), replicating `env.GetBinding` WITHOUT consulting the binding — so node creation no
-  longer depends on a predeclared/stamped binding, completing the T1.5 decoupling. The read side
-  (`frameReuseForDefine`) does an exact identity lookup. `reclaimNode.collided` stays but now
-  fires only on a genuine same-`(name, scopes)` redefinition. Subset (not fingerprint equality)
-  is load-bearing for a let/lambda-nested cross-call whose ref scopes strictly exceed the callee
-  define-name scopes: pinned + mutation-verified by
-  `TestFrameReclaimSeam_LetNestedMutualCallResolves` (equality ⇒ ff=gg=false; subset ⇒ true);
-  recovery pinned by `TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts`.
-  `resolveNodeByScopes` REFUSES an ambiguous maximum (two same-name nodes with equal-cardinality,
-  incomparable scope sets both subset-matching the ref) — returns nil ⇒ unsafe rather than pick by
-  map-iteration order, since `GetBinding` breaks that tie deterministically by binding creation
-  order and this map cannot cheaply replicate it (sound direction: a false positive would corrupt);
-  pinned by `TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess`.
-  (Chose approach B — scope-set identity — over approach A — `*Binding` pointer keying — which
-  consumed the deprecated pointer-identity artifact; see
-  `plans/2026-07-18-scope-keyed-global-bindings-design.md` "BLOCKER (RESOLVED)".)
-
-  - [x] **Sub-hole closed: the verdict leaked below top level** [Correctness, S,
-    Done 2026-07-20, `82046952`]: `collided` closes the same-`Key` hole for **top-level**
-    binders, which is all `collectTopLevelDefines` visits. An **internal** define can share
-    the `Key` too, and reached `frameReuseForDefine` with the map still live:
-    `CompileValidatedLet` compiles a let body on the *same* compiler with `p.env` swapped,
-    the only such swap in the package (every other body compile builds a child continuation,
-    where the map is nil). It collected the top-level verdict — a false positive, which this
-    subsystem defines as silent state corruption rather than lost reclamation, and one the
-    classifier cannot see to guard. Fixed by reading through `unitFrameReclaimVerdict`, which
-    re-tests the `ns.Runtime() == p.env` condition the map was armed under; it can withhold a
-    verdict, never grant one. Guarded over all four binder kinds
-    (`pkg/wile/framereclaim_letbody_leak_test.go`). This narrowed *who may read* the verdict;
-    the parent (scope-aware domain) is now resolved above, and identity keying makes this gate
-    belt-and-suspenders (an internal define's name carries the enclosing scope, so its identity
-    misses the top-level map), though the gate is retained as an explicit tightening.
-
-- [x] **`MaybeCreateLocalBinding` uses `ScopesCompatible` where exact equality is correct**
-  [Medium, S, Done 2026-07-20]: creation reused a slot when
-  `ScopesCompatible(existing.Scopes(), newScopes)`
-  (`pkg/environment/local_environment_frame.go`), and that predicate returns true whenever
-  the *existing* set is empty — so a `{m}`-scoped binder could reuse a `{}`-scoped slot and
-  clobber it. This is the same hole the global path deliberately avoided by using exact
-  scope-set equality at creation (design D3 of the scope-keyed plan).
-
-  **Fix**: the predicate now calls `scopeSetsEqual` — the global creation predicate *itself*,
-  not a copy of it. Same package, already unexported there, so the two creation paths cannot
-  drift. Lookup keeps `ScopesCompatible`, which is correct for lookup: a pre-hygiene binding
-  with no scopes really is visible to every reference. The bug was using a visibility
-  predicate to decide identity.
-
-  **Latency confirmed, not assumed.** The obvious repro — a macro-introduced `(define x 42)`
-  spliced into a body that already has a user `(define x 1)` — returns the hygienic `1` on
-  `4f73936d`. The masking is not "a fresh frame per binding form" as filed: the user's binder
-  in a body *carries the body's scope*, so `len(bindingScopes) != 0` and the short-circuit
-  never fires. Reaching it needs a genuinely **empty** scope set sharing a frame with a scoped
-  binder; the nil-passing callers (`compile_syntax_case.go:347`,
-  `operation_syntax_case.go:219`) use dedicated frames. So the guard is a unit test, not an
-  integration test — there is no Scheme program known to reach it.
-
-  Guard: `TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused` (`environment_frame_test.go`),
-  RED before / GREEN after, over both `nil` and empty-non-nil existing sets. It also asserts
-  the existing binding was not retroactively re-scoped. The sibling
-  `TestMaybeCreateLocalBinding_ScopeDistinctKeys` cannot see this hole — it covers `{A}` vs
-  `{B}`, where `ScopesCompatible` already returns false. Only one direction was ever broken
-  (`{m}`-then-empty already split correctly), so a fix keyed on the *new* binder's scopes
-  alone would pass a one-directional test; the test comment records this.
-
-  - [x] **Residual: the `Scopes` backfill in the reuse branch was dead — deleted**
-    [Tech debt, XS, Done 2026-07-20]: the reuse branch filled `m.Scopes` in when an existing
-    binding had none. Under exact equality that branch needed `scopeSetsEqual(nil, scopes)`
-    true *and* `scopes != nil` — i.e. an empty-but-non-nil set, where the write is a semantic
-    no-op. It was half the clobber mechanism (the reuse aliased the slot, the backfill
-    rewrote its identity in place). Deleted rather than pinned: the dead case is a no-op, so
-    there was nothing to pin. `Source` still backfills, and the now-visible asymmetry is
-    documented on `MaybeCreateLocalBinding` so it does not get "restored" for symmetry.
-    `TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused` keeps its
-    not-retroactively-re-scoped assertion as a guard against either half returning.
-
-- [x] **`DeleteBinding` is name-keyed while the namespace read surface is scope-exact**
-  [Medium, S, issue #805, Done 2026-07-20 — sealed-base probe left wildcard, see below]:
-  `namespace-ref`/`namespace-bound?`/`namespace-bound-names` (and their
-  `environment-*` twins) resolve under the ambient (empty) scope set; `namespace-undefine!` still
-  resolves by bare name. `GlobalEnvironmentFrame.DeleteBinding`
-  (`pkg/environment/global_environment_frame.go:500`) removes **every** slot a name owns, so
-  `(namespace-undefine! ns 'x)` destroys a macro-introduced `x` that `(namespace-ref ns 'x)`
-  reports as unbound: you can destroy a binding you cannot read. Pre-existing; before the read
-  side became scope-exact the whole surface was uniformly coarse, so the diff promoted this from
-  coarseness to a hole.
-
-  **Fix**: give `DeleteBinding` a scope-set parameter and resolve through
-  `bestSlotLocked(sym, scopes, false)`, the literal call the read makes, so delete cannot drift
-  from ref; nil that one slot and prune its index from `keys[sym]`. Leaving dead indices in place
-  strands the two consumers that treat `slots[0]` as the name's representative
-  (`pkg/wile/engine.go:1293`, `pkg/registry/search.go:210`); both nil-check, so no panic, but
-  they would drop a name whose slot 0 died while slot 1 lives. One production caller
-  (`pkg/internal/extensions/namespace/prim_namespace.go:216`), so change the signature rather
-  than add a variant; the wildcard sealed-base probe at `:219` needs the same treatment.
-
-  **Cost is the tests, not the code.** `TestGlobalFrame_DeleteRemovesEveryHygieneDistinctSlot`
-  (`global_environment_frame_test.go:363`) and the `DeleteBinding` doc (`:512-515`) pin
-  delete-all deliberately, by name and by comment; both get **inverted**, not updated. Unmeasured
-  risk: a *wildcard* stale index pinned to the deleted slot now falls through to a surviving macro
-  slot where delete-all made it miss. That is the C2b scope-blindness at
-  `global_environment_frame.go:372-384` showing through rather than something the change invents,
-  but it cannot be ruled out by reading and needs coverage.
-
-  **As landed.** `DeleteBinding(sym, scopes)` resolves through `bestSlotLocked(*sym, scopes,
-  false)`, nils that one slot, prunes its index, and drops the map entry when the name owns no
-  more. `matchAny` is hardcoded false, mirroring `AmbientKeys` and `GetGlobalIndexWithScopes`
-  — the two read entry points delete must not drift from — so delete has **no wildcard mode**
-  and `nil` here means the empty set, diverging from this file's nil-means-MATCH-ANY
-  convention. That divergence is deliberate and documented at the function: routing the
+  `match.FreeIdKey` use, NOT the physical-slot `BindingID` the prior note correctly ruled out as the
+  vehicle. Two hygiene-distinct same-name defines now carry SEPARATE verdicts, so the safe one
+  recovers reclamation while the capturing one stays denied, retiring the collision-*conservative*
+  forfeiture. Nodes key on `ScopedBindingKeyOf(name)` and same-unit edges resolve by subset over
+  nodes, replicating `env.GetBinding` WITHOUT consulting the binding — so node creation no longer
+  depends on a predeclared binding, completing the T1.5 decoupling. **Subset, not fingerprint
+  equality, is load-bearing** for a let/lambda-nested cross-call whose ref scopes strictly exceed
+  the callee define-name scopes: `TestFrameReclaimSeam_LetNestedMutualCallResolves` pins it
+  (equality ⇒ both false; subset ⇒ both true). `resolveNodeByScopes` **refuses** an ambiguous
+  maximum — two same-name nodes with equal-cardinality incomparable scope sets both subset-matching
+  the ref — returning nil ⇒ unsafe rather than picking by map-iteration order, since `GetBinding`
+  breaks that tie deterministically by binding creation order and this map cannot cheaply replicate
+  it; a false positive would corrupt, so that is the sound direction
+  (`TestResolveNodeByScopes_AmbiguousMaxRefusesToGuess`). Chose scope-set identity over `*Binding`
+  pointer keying, which would have consumed a deprecated artifact.
+  - [x] **Sub-hole: the verdict leaked below top level** [Correctness, S, Done 2026-07-20,
+    `82046952`]: `collided` closes the same-`Key` hole for **top-level** binders, which is all
+    `collectTopLevelDefines` visits — but an **internal** define can share the `Key` too, and
+    reached `frameReuseForDefine` with the map still live: `CompileValidatedLet` compiles a let body
+    on the *same* compiler with `p.env` swapped, the only such swap in the package (every other body
+    compile builds a child continuation, where the map is nil). It collected the top-level verdict —
+    a false positive, which this subsystem defines as silent state corruption rather than lost
+    reclamation, and one the classifier cannot see to guard. Fixed by reading through
+    `unitFrameReclaimVerdict`, which re-tests the condition the map was armed under: it can withhold
+    a verdict, never grant one. Guarded over all four binder kinds
+    (`pkg/wile/framereclaim_letbody_leak_test.go`). Identity keying now makes this belt-and-
+    suspenders, since an internal define's name carries the enclosing scope, but the gate is
+    retained as an explicit tightening.
+- [x] **`MaybeCreateLocalBinding` used `ScopesCompatible` where exact equality is correct** [Medium,
+  S, Done 2026-07-20]: that predicate returns true whenever the *existing* set is empty, so a
+  `{m}`-scoped binder could reuse and clobber a `{}`-scoped slot — the hole the global path
+  deliberately avoided by using exact scope-set equality at creation. **The bug was using a
+  visibility predicate to decide identity.** The predicate now calls `scopeSetsEqual`, the global
+  creation predicate *itself* rather than a copy, so the two creation paths cannot drift; lookup
+  keeps `ScopesCompatible`, which is correct there, since a pre-hygiene binding with no scopes
+  really is visible to every reference. **Latency confirmed, not assumed**: the obvious repro — a
+  macro-introduced `(define x 42)` spliced into a body that already has a user `(define x 1)` —
+  returns the hygienic `1`. The masking is not "a fresh frame per binding form" as filed: a user's
+  binder in a body *carries the body's scope*, so the short-circuit never fires. Reaching it needs a
+  genuinely **empty** scope set sharing a frame with a scoped binder, and the nil-passing callers
+  use dedicated frames. So the guard is a unit test, not an integration test — there is no known
+  Scheme program that reaches it. `TestMaybeCreateLocalBinding_EmptyScopedSlotNotReused` covers both
+  nil and empty-non-nil existing sets and asserts the existing binding was not retroactively
+  re-scoped; the sibling `_ScopeDistinctKeys` test cannot see this hole, since `{A}` vs `{B}` already
+  returns false. Only one direction was ever broken, so a fix keyed on the *new* binder's scopes
+  alone would pass a one-directional test — the test comment records this. The reuse branch's
+  `Scopes` backfill was dead under exact equality (it needed an empty-but-non-nil set, where the
+  write is a semantic no-op) and was **deleted rather than pinned**; it had been half the clobber
+  mechanism, the reuse aliasing the slot and the backfill rewriting its identity in place.
+- [x] **`DeleteBinding` was name-keyed while the namespace read surface is scope-exact** [Medium, S,
+  issue #805, Done 2026-07-20]: `GlobalEnvironmentFrame.DeleteBinding` removed **every** slot a name
+  owns, so `(namespace-undefine! ns 'x)` destroyed a macro-introduced `x` that `(namespace-ref ns
+  'x)` reports as unbound — you could destroy a binding you cannot read. Pre-existing; before the
+  read side became scope-exact the whole surface was uniformly coarse, so the diff promoted this
+  from coarseness to a hole. Now `DeleteBinding(sym, scopes)` resolves through `bestSlotLocked` —
+  the literal call the read makes, so delete cannot drift from ref — nils that one slot, prunes its
+  index, and drops the map entry when the name owns no more (leaving dead indices would strand the
+  two consumers that treat `slots[0]` as the name's representative). `matchAny` is hardcoded false,
+  mirroring the two read entry points, so **delete has no wildcard mode** and `nil` here means the
+  empty set, deliberately diverging from this file's nil-means-match-any convention: routing the
   delete-all operation through the nil case would make the `AmbientScopes` footgun fire
-  destructively.
-
-  The delete-all test was inverted into
-  `TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime` (multi-slot coverage kept, the
-  delete-all contract dropped), plus a scope-matched-only case, a macro-only no-op case, and
-  `TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder` at the primitive layer. All four
-  were verified discriminating by mutating `matchAny` to true and confirming they go red.
-
-  **Sealed-base probe made scope-exact too** (`prim_namespace.go`, `GetGlobalIndexWithScopes`
-  under `AmbientScopes()`). Initially left wildcard on the argument that no scope-carrying
-  sealed binding exists, so no test could fail first; reversed under the nil-means-NONE
-  convention. A wildcard probe answers a different question than the one asked: "is *some*
-  binding of this name sealed" rather than "is the binding I just failed to delete sealed",
-  raising `ErrImmutableBinding` for a name the ambient read calls unbound. Same drift class the
-  delete side just closed. Note the effect here is a spurious *denial*, not a permission —
-  wildcard widens the candidate set, and which way that lands on the caller depends on the
-  call. Tightening a wildcard default outweighs "no failing test" when existing coverage
-  (`TestNamespaceUndefineSealedRejected`) guards the reachable path.
+  destructively. **The cost was the tests, not the code** — the delete-all test and the
+  `DeleteBinding` doc pinned the old contract by name and by comment, so both were **inverted**, not
+  updated: `TestGlobalFrame_DeleteClearsMultiSlotNameOneScopeSetAtATime` keeps the multi-slot
+  coverage and drops the delete-all contract, joined by scope-matched-only, macro-only-no-op, and
+  `TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder` at the primitive layer; all four were
+  verified discriminating by mutating `matchAny` to true. The sealed-base probe was made scope-exact
+  too, reversed from an initial "no test could fail first" call under the nil-means-NONE convention:
+  a wildcard probe answers "is *some* binding of this name sealed" rather than "is the binding I
+  just failed to delete sealed", raising `ErrImmutableBinding` for a name the ambient read calls
+  unbound. Note the effect there is a spurious *denial*, not a permission — wildcard widens the
+  candidate set, and which way that lands depends on the call.
 
 - [ ] **`namespace-undefine!` does not stop compiled code from reading the binding**
   [Correctness, S, 2026-07-20 — root cause MEASURED 2026-07-21, fix DEFERRED as disproportionate]:
@@ -388,958 +295,537 @@ the count to five and is itself the argument for not trusting a hardcoded one.
   … see nil, caught by resolveGlobal") is corrected in code to note the cached-pointer path it does
   not cover. Needs a maintainer call on whether the hot-path cost is worth it before proceeding.
 
-- [x] **Scope-set resolution lets the zero value answer an unanswerable question**
-  [Correctness + API, M, Phase-2 done 2026-07-23]: the three read entry points
-  `GetBinding`, `GetLocalIndex`, `GetGlobalIndexWithScopes` (both frame overloads)
-  now take `values.ScopeSet`, so `nil` is un-passable at the boundary and a
-  forgotten thread of scopes can no longer silently widen to match-any. All 58
-  call sites triaged per intent (behavior-preserving): scoped refs → `ScopesOf`,
-  bare-name/introspection lookups → `AllScopes`, empty-scope fast paths →
-  `EmptyScopes`.
-  **Phase-2 residuals CLOSED 2026-07-23** (both open follow-ups):
-  1. *Footgun close.* `HasLocalVariableBinding`, `ResolveBindingID`, and
-     `ResolveBindingRef` now take `syntax.ScopeSet` too; `scopesToQueryMatchAny`
-     deleted. All 8 production callers pass a real symbol's scopes, retriaged to
-     `syntax.ScopesOf(sym.Scopes())` (scoped refs). The nil=match-any footgun is
-     gone from the whole query surface. Verified: build · lint 0 · covercheck
-     41/41 · `-race` on env/validate/machine/integration — no oracle flipped.
-  2. *Latent-hygiene verdict — both wildcards KEPT, documented as deliberate.*
-     `compile_syntax_form.go` pattern-var lookup: pattern vars are bound
-     **scopeless** in the innermost `createPatternVarEnvironment` frame; under a
-     wildcard `GetLocalIndex` returns the FIRST (innermost) match so the pattern
-     var wins. A scoped query switches to *maximal* resolution, where an enclosing
-     scoped lexical of the same name could outrank it — narrowing is a regression,
-     not a fix. `expander_time_continuation.go` ARM 3: the SCOPE already routed to
-     the home library via `LookupLibraryEnv(scope)`; the helper's definition
-     scopes are not a subset of the use-site scopes, so a scoped query would filter
-     it out and break cross-library helper resolution. Mutation-tested: narrowing
-     both to `ScopesOf(...)` kept the suite green (ARM 3 is thin — reached mainly
-     via `expand-once`; the pattern-var/lexical collision is uncovered), so the
-     verdict rests on the resolution semantics, not the suite. Rationale is now in
-     a comment at each site.
-  Phase 0 (`values.ScopeSet` type) + Phase 1 (internal resolver migration) merged
-  earlier at `d2e2e625`. Original analysis:
-  convention is **nil means NONE**;
-  "All" must be an explicit special value. The environment read surface does the opposite —
-  `GetBinding`, `GetLocalIndex` and `GetGlobalIndex` read a nil scope set as MATCH ANY. Nil is
-  indistinguishable from an uninitialized value, so a caller that merely forgot to thread its
-  scopes silently gets a *wider* resolution, with nothing in the signature to flag it.
-
-  **What the wider resolution actually returns is the defect.** `bestSlotLocked` with
-  `matchAny` true does not return a union; it returns `slots[0]`, the first live slot. That is
-  arbitrary selection from a wider candidate set, and slot order is an expansion-order
-  artifact. `AmbientScopes`' own doc states it exactly: a wildcard "resolves by slot order — an
-  expansion-order artifact, not an answer to the caller's question." So the harm is an
-  arbitrary binding, not a granted permission.
-
-  **Corrected 2026-07-20 — this entry previously called the behavior "fail-open" and a
-  "security posture question."** Both were overstated, and the term was introduced in
-  `4f73936d` rather than inherited. Nothing fails: no fault occurs, a legal value is simply
-  ambiguous between "unset" and "all". And "open" implies permission, while the effect can land
-  either way (the sealed-base probe above widens the match and produces a spurious *denial*).
-  No case has been shown crossing the sandbox boundary (`security.Authorizer`, sealed base);
-  every measured consequence is a wrong binding. Hygiene is a correctness boundary, not an
-  authorization one. The item stands on correctness and API hygiene, and has no claim to
-  priority over demonstrated defects.
-
-  **Three symptoms of the same undersized domain**, all in `pkg/environment`:
-  - `AmbientScopes()` (`global_environment_frame.go`) returns a non-nil empty slice for no
-    reason other than to route around the nil default. Its own doc comment documents the
-    footgun. A named workaround is the tell that the default is wrong.
-  - `bestSlotLocked(key, scopes, matchAny bool)` — a bool riding alongside the value because
-    the value could not carry the state. 17 `matchAny` references across
-    `global_environment_frame.go`, `environment_frame.go`, `local_environment_frame.go`.
-  - `GlobalIndex.matchAny()` = `Scopes == nil && !scopeKeyed`, plus the `scopeKeyed` field (4
-    references) that exists *only* because nil cannot distinguish "matched the empty set" from
-    "no key at all".
-
-  **Fix**: a `ScopeSet` type carrying three named states (All / empty / specific) collapses all
-  three into one value. This is `state-trace` shaped — bounded state split across a slice and
-  two bools, where the distributed comparisons reduce to one scalar.
-
-  **Blast radius is smaller than it looks.** 13 non-test call sites pass nil into the scoped
-  reads: 9 in `pkg/machine/compilation`, 2 in `pkg/registry/apply.go`, 1 each in
-  `pkg/wile/engine.go` and `pkg/repl/meta.go`. The wildcard-by-name `GetGlobalIndex` now has
-  exactly **one** non-test caller left (`machine/compilation/er_macro_rename.go`) — the
-  `namespace-undefine!` probe was its other one until #805 moved it to the scoped form.
-
-  **Triage each nil site, don't mass-rewrite.** Some genuinely mean All (introspection,
-  `er_macro_rename`); most are probably unthreaded scopes. The whole point is that the current
-  encoding makes those two indistinguishable, so each site needs its intent decided and then
-  written down — a mechanical `nil` → `AmbientScopes()` sweep would just freeze today's
-  accidents into explicit form. Expect some to be latent hygiene bugs.
-
-  Supersedes the nil-encoding half of the older "use nil to mean unconstrained" preference,
-  which is plausibly where this design came from.
-
-- [x] **`freeIds` collapses scope-verified answers into a name-keyed map**
-  [Correctness, S, Done 2026-07-20]: `collectFreeIdentifiersWithEllipsis` resolved each
-  template identifier under its own scope set, then stored the result in a
-  `map[string]*FreeIdResolution` keyed on `symVal.Key` and overwritten unconditionally
-  (`compile_syntax_rules.go`; threaded on through `operation_syntax_rules_transform.go` and
-  `operation_syntax_case.go`). Two same-named template identifiers carrying different scope
-  sets resolved individually and correctly, then the second silently discarded the first —
-  the exact shape C1/C2 fixed on the *lookup* side, surviving one layer out in *storage*.
-
-  **Reachable from surface Scheme, not latent.** A macro-generating macro whose generated
-  template holds one literal `mh` (its own intro scope) beside a pattern-var substituted with
-  a user identifier also named `mh` gave `(99 99)` where hygiene demands `(1 99)`; a
-  distinct-name control gave `(1 99)`, isolating the collapse. Expands at top level, so it
-  dodges the internal-define-syntax visibility limitation. Guarded by
-  `TestMacroGeneratingMacro_SameNameFreeIdsDoNotCollapse` (`pkg/wile`).
-
-  **Fix**: a scope-discriminated key end to end — `match.FreeIdKey(name, scopes) =
-  syntax.ScopeFingerprint(scopes) + "|" + name` — at the one writer (collector) and one
-  reader (`applyHygieneToSymbol`); the two verbatim-copy transfer sites needed no change
-  (key is still a string). `ScopeFingerprint` is the consolidation of validate's private
-  `scopeFingerprint` (impl now in `values` with `Scope`, wrapper in `syntax`, validate
-  delegates). Exact-scope-set keying, not Flatt-maximal: this replays a per-occurrence
-  pre-resolved answer keyed by the same immutable template symbol at both ends, verified
-  (`Scopes()` reads the same `SourceContext.Scopes` field at storage and consumption).
-  `FreeIdKey` contract (incl. the `|`-delimiter unambiguity) pinned by
-  `TestFreeIdKey_DiscriminatesScopeAndName`.
-
-- [x] **`BindingID` must carry a scope discriminator before the load-order plan ships**
-  [Correctness + sequencing, M, 2026-07-19; **discharged in design 2026-07-23**; **MOOT
-  2026-07-24 — the load-order plan is archived (superseded), so `BindingID` (the load-order
-  variant) will not be built; see the resolved anchor note below**]: Part III of
-  `memory/2026-07-18-load-order-independent-binding-resolution-design.md` (archived 2026-07-24) defined
-  `BindingID{Origin, Phase, Sym, Local}` with no scope component. That was sound only while
-  the (now-deleted, `a60e32e1`) rename pass guaranteed one global per
-  `(frame, phase, symbol)`. **After Stage B it is not**: two hygiene-distinct bindings
-  produce equal `BindingID`s. Since that struct exists specifically to replace three
-  disagreeing notions of "same binding" with one, shipping it name-keyed yields a fourth
-  wrong answer instead of a fix. Not a defect in any tree — `BindingID` (the load-order
-  variant) is still unbuilt, so building it is the successor plan's whole job, not this
-  item's. **Resolution**: the spec now carries the discriminator so it is correct by
-  construction when built — Part III adds `ScopeKey string` (= `syntax.ScopeFingerprint` of
-  the definition-site scope set, the same basis as `validate.ScopedBindingKey` /
-  `match.FreeIdKey`; a string, so `BindingID` stays a comparable value; `""` for locals), the
-  "`ScopeKey` is load-bearing" note explains why, and impl Step 3 requires `Binding.ID()` to
-  populate it plus a distinct-IDs test for two hygiene-distinct same-name binders. Related:
-  the shipped `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and is
-  **not** the vehicle for this (see the frame-reclaim entry above).
-
+- [x] **Scope-set resolution let the zero value answer an unanswerable question** [Correctness +
+  API, M, Phases 0–2 done 2026-07-23, `d2e2e625` + `eaee2ed0`]: the convention is **nil means
+  NONE**, with "All" an explicit special value — the environment read surface did the opposite,
+  reading a nil scope set as MATCH ANY. Nil is indistinguishable from an uninitialized value, so a
+  caller that merely forgot to thread its scopes silently got a *wider* resolution with nothing in
+  the signature to flag it. **What the wider resolution returns is the defect**: `bestSlotLocked`
+  with `matchAny` does not return a union, it returns `slots[0]`, the first live slot, and slot
+  order is an expansion-order artifact — `AmbientScopes`' own doc says so. So the harm is an
+  arbitrary binding, not a granted permission. **Corrected 2026-07-20**: this entry previously
+  called the behavior "fail-open" and a "security posture question"; both were overstated and are
+  withdrawn. Nothing fails — a legal value is simply ambiguous between "unset" and "all" — and
+  "open" implies permission while the effect can land either way (the sealed-base probe above widens
+  the match and produces a spurious denial). No case crosses the sandbox boundary; hygiene is a
+  correctness boundary, not an authorization one.
+  **Fix**: `values.ScopeSet` carries three named states (All / empty / specific), collapsing the
+  three symptoms of one undersized domain — `AmbientScopes()` existing only to route around the nil
+  default, the `matchAny` bool riding alongside the value because the value could not carry the
+  state (17 references), and `GlobalIndex.scopeKeyed` existing only because nil cannot distinguish
+  "matched the empty set" from "no key at all". This was `state-trace` shaped. `GetBinding`,
+  `GetLocalIndex`, `GetGlobalIndexWithScopes`, `HasLocalVariableBinding`, `ResolveBindingID`, and
+  `ResolveBindingRef` all take it, so nil is un-passable at the boundary and `scopesToQueryMatchAny`
+  is deleted — the footgun is gone from the whole query surface. All 58 call sites were **triaged
+  per intent, not mass-rewritten**: a mechanical `nil` → `AmbientScopes()` sweep would have frozen
+  today's accidents into explicit form. Scoped refs → `ScopesOf`, bare-name/introspection lookups →
+  `AllScopes`, empty-scope fast paths → `EmptyScopes`.
+  **Two wildcards KEPT, documented as deliberate.** `compile_syntax_form.go`'s pattern-var lookup:
+  pattern vars are bound **scopeless** in the innermost `createPatternVarEnvironment` frame, so a
+  wildcard returns the FIRST (innermost) match and the pattern var wins, whereas a scoped query
+  switches to *maximal* resolution where an enclosing scoped lexical of the same name could outrank
+  it — narrowing is a regression, not a fix. `expander_time_continuation.go` ARM 3: the scope already
+  routed to the home library via `LookupLibraryEnv`, and the helper's definition scopes are not a
+  subset of the use-site scopes, so a scoped query would filter it out and break cross-library helper
+  resolution. Mutation-tested — narrowing both kept the suite green (ARM 3 is thin, reached mainly
+  via `expand-once`; the pattern-var/lexical collision is uncovered), so the verdict rests on the
+  resolution semantics, not the suite. Rationale is in a comment at each site.
+- [x] **`freeIds` collapsed scope-verified answers into a name-keyed map** [Correctness, S, Done
+  2026-07-20]: `collectFreeIdentifiersWithEllipsis` resolved each template identifier under its own
+  scope set, then stored the result in a `map[string]*FreeIdResolution` keyed on `symVal.Key` and
+  overwritten unconditionally. Two same-named template identifiers carrying different scope sets
+  resolved individually and correctly, then the second silently discarded the first — the exact
+  shape C1/C2 fixed on the *lookup* side, surviving one layer out in *storage*. **Reachable from
+  surface Scheme, not latent**: a macro-generating macro whose generated template holds one literal
+  `mh` (its own intro scope) beside a pattern var substituted with a user identifier also named `mh`
+  gave `(99 99)` where hygiene demands `(1 99)`, and a distinct-name control gave `(1 99)`,
+  isolating the collapse; it expands at top level, so it dodges the internal-define-syntax
+  visibility limitation. **Fix**: a scope-discriminated key end to end —
+  `match.FreeIdKey(name, scopes) = ScopeFingerprint(scopes) + "|" + name` — at the one writer and
+  the one reader; the two verbatim-copy transfer sites needed no change, since the key is still a
+  string. `ScopeFingerprint` consolidates validate's private copy. Exact-scope-set keying, not
+  Flatt-maximal: this replays a per-occurrence pre-resolved answer keyed by the same immutable
+  template symbol at both ends, verified reading the same field at storage and consumption. Guards:
+  `TestMacroGeneratingMacro_SameNameFreeIdsDoNotCollapse`,
+  `TestFreeIdKey_DiscriminatesScopeAndName` (including the `|`-delimiter unambiguity).
+- [x] **`BindingID` needed a scope discriminator before the load-order plan shipped** [Correctness +
+  sequencing, M, discharged in design 2026-07-23; **MOOT 2026-07-24**]: the load-order plan is
+  archived as superseded, so the `BindingID{Origin, Phase, Sym, Local}` variant it defined will not
+  be built. It was corrected in the spec first regardless, so it would be right by construction if
+  ever built: Part III now carries `ScopeKey string` (the `ScopeFingerprint` of the definition-site
+  scope set — the same basis as `validate.ScopedBindingKey` and `match.FreeIdKey`, and a string, so
+  `BindingID` stays a comparable value; `""` for locals). The reason it mattered: that struct existed
+  specifically to replace three disagreeing notions of "same binding" with one, and after Stage B two
+  hygiene-distinct bindings produce equal name-keyed `BindingID`s — so shipping it name-keyed would
+  have yielded a fourth wrong answer instead of a fix. Note the *shipped*
+  `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and is **not** this.
 ### Scope-keyed globals — successor work not built in the arc (2026-07-19)
 
-Surfaced by the Stage C adversarial review and deliberately left out of scope so the arc
-could land. Recorded here 2026-07-20; previously these lived only in
-`plans/2026-07-18-scope-keyed-global-bindings-design.md` under "Successor work (do not build
-here)" and "Found by the Stage C adversarial review", which is not where open work is looked
-for. **Two of the three defects below are marked in the plan as NOT verified first-hand —
-re-confirm each repro before designing a fix.**
+Surfaced by the Stage C adversarial review and deliberately left out of scope so the arc could
+land. Previously visible only inside a plan's "do not build here" section, which is not where open
+work is looked for. All four closed.
 
-- [x] **Internal `define-syntax` is invisible in a shorthand-`define` body** [Correctness, S,
-  Done 2026-07-21]: reproduced and fixed. **Broader than the original two-symptom framing** (a
-  silent `#!void` / a hard `no such local or global binding` for a macro-generating macro): *any*
-  internal `define-syntax` in a shorthand `(define (f) …)` body was invisible to later body forms
-  — even a plain non-generating one — while `(let () …)`, `(lambda () …)`, and named-`let` bodies
-  all worked. **Root cause**: `expandDefineForm`'s function-shorthand branch
-  (`expander_primitive_forms.go`) expanded its body via `ExpandSyntaxArgumentList` (a flat
-  argument-list pass — no letrec* pre-scan, no `define-syntax` registration, no body scope),
-  whereas `expandLambdaForm` runs the body through `ExpandBodyWithDefineSyntax` under a fresh body
-  scope. Two consequences: internal macros were never registered, and the body identifiers carried
-  no scope, violating `CompileSymbol`'s fast-path invariant ("every symbol in a local binding
-  context carries a scope"), so the use fell through to the global lookup and errored. **Fix**:
-  extracted the lambda body-expansion into a shared `expandProcedureBody` helper and route the
-  shorthand-`define` body through it (form preserved, not desugared, so the compiler keeps its
-  self-tail/frame-reclaim optimizations — verified: 5M-iteration tail loop, mutual recursion, and
-  generated shorthand-defines all intact). Guard: `TestInternalDefineSyntax_InShorthandDefineBody`
-  + `_LambdaLetParityUnbroken` (`pkg/wile`), RED before / GREEN after over 6 shorthand cases.
-
-- [x] **A library-local `define-syntax` did not shadow a same-named imported macro**
-  [Correctness, M, Done 2026-07-21, repro verified]: **broader than the export-only framing** —
-  the imported macro won not just in `findLibraryBinding` (export) but in the library's **own
-  body** too, while the variable analogue shadowed correctly. Repro: library `(mc)` imports
-  `(mb)` (exporting macro `twice`) then defines its own `twice`; both `(import (mc)) (twice 5)`
-  and mc's own `use-twice` yielded mb's transformer. **Root cause**: `copyLibraryBindingsDirect`
-  (`library_bindings.go`) installed *every* imported binding into the library's RUNTIME frame,
-  and syntax bindings *additionally* into Expand. The runtime mirror of the imported macro (at
-  ambient `{}`) then shadowed the library's own `define-syntax` (which stores into Expand at
-  `{libScope}`) in both `findLibraryBinding`'s runtime-first probe and body macro resolution.
-  **Fix** (the plan's "don't mirror syntax into the runtime frame" option): a syntax binding now
-  installs into Expand only; variables still install into runtime, where a local define already
-  shadows the import through the shared frame. Applied to **both** install paths —
-  `copyLibraryBindingsDirect` (library-internal) and `CopyLibraryBindingsToEnvAtPhase`
-  (top-level / `(environment …)`); the latter completion was surfaced by the post-fix
-  `/crosscheck` (the first pass fixed only the library path, leaving a top-level
-  import-then-redefine still shadowed). Guard: `TestLibraryLocalMacroShadowsImportedMacro`
-  (`pkg/wile`) — export + library-body + top-level + renamed-import + plain-imported-still-usable,
-  RED before / GREEN after. Full stdlib/algebra `.scm` suite + all Go tests green. **Known
-  residual** (below the fix's bar): because syntax→expand and variable→runtime now land in
-  different frames, a cross-*kind* same-name clash across two imported libraries (macro `foo`
-  vs variable `foo`) is no longer conflict-detected per R7RS §5.6; same-kind clashes still are.
-
-- [x] **No sealed base above phase 0** [Correctness, M, 2026-07-19; **RESOLVED 2026-07-22** on
-  `feat/free-template-id-hygiene`, commits `2f8052bc`/`8f3079b7`/`f70f6aec` — supersedes the
-  "DEFERRED as architectural" call below with the free-template-id-hygiene arc]: **the reported library-import vector
-  does NOT reproduce** — importing a library that rebinds `guard-aux` leaves `(guard …)` intact,
-  even inside that library's own body. What DOES reproduce is a **top-level**
-  `(define-syntax guard-aux …)`: it then compromises `guard` (`(guard (e (#t 'caught)) (raise 'x))`
-  → `HIJACKED`). Mechanism: `guard`'s template freely references `guard-aux`, and both are ambient
-  (`{}`-scoped) bootstrap macros; a top-level `define-syntax guard-aux` shares the same ambient
-  slot and overwrites it, so `guard`'s expansion picks up the user's transformer (a free-template-
-  identifier that should resolve to its definition-site binding does not, because both carry `{}`
-  and share the slot). **Why deferred**: the codebase's own fix options — "carve an immutable
-  expand base" or "move bootstrap helpers out of user reach" (`bootstrap_nilpin_test.go`) — are
-  architectural changes to the sealed-base/hygiene model, the single most-reverted, most-warned
-  area (see `memory/` immutable-top-level and hygiene notes; the runtime-phase seal already exists,
-  extending it to expand is significant). Redefining an internal bootstrap helper is also an
-  uncommon footgun. Needs a maintainer architectural decision rather than a unilateral change.
-  - **In progress 2026-07-22** on `feat/free-template-id-hygiene` per
-    `plans/2026-07-22-free-template-id-hygiene-{design,impl}.local.md` (D3 special-form seal +
-    D1 sealed expand base + D0 helper reorder + D2 macro-dispatch pin consult). Phase-0
-    baselines recorded: nil-pin census = **47 total** (0 runtime-bound; expect **44** after the
-    D0 reorder of the 3 helper edges); march-hare (`TestR7RSConformance`) green; #1/#3 confirmed
-    RED (`PWNED` / `let-syntax` "no compiler") and quarantined, #2 confirmed already-GREEN (`c`).
-    Arm-trace spike: #1 mis-resolves at **arm 2 (NextPhase)** with a nil pin — pin goes after
-    arm 1, before arm 2 (R1-faithful).
-    - **Reorder (execution finding, 2026-07-22):** D3 → phase-0 `sealedBase` regressed the
-      general `Dialect.Forms().Remove()` contract (removed-form expander leaks to runtime value
-      resolution; 3 dialect tests). Resolves design §9 gate #4: phase-0 value frame is NOT
-      collision-free for compile-time handlers. Fix = route D3 into the phase-1 `sealedExpandBase`
-      (design's own contingency); D1 sequenced first, D3 folds into it. Plans updated.
-    - **Phase 1′ DONE (D1 + retargeted D3):** carved per-namespace `sealedExpandBase` (phase-1
-      sealed frame, parent = `sealedBase`); `AtPhase` receiver-branch + `SealedExpandBaseTarget()`
-      route bootstrap macros AND special-form expanders into it; `phaseParent` reparents phase-1
-      only (library frames stay flat islands); enumeration `collect()` added (search + BoundNames).
-      **#3 GREEN** (special forms shadow, not corrupt); 3 dialect removed-form tests GREEN; census
-      retargeted to `sealedExpandBase` (still 47); march-hare + hermetic + climbing-tower GREEN;
-      `,apropos cond` still surfaces bootstrap macros. Gates: lint + build + covercheck (all 41 ≥80%)
-      + `-race` all GREEN. #1 still RED-but-skipped (needs D0+D2). Next: Phase 2′ (D0 reorder + D2
-      pin consult).
-    - **Phase 2′ DONE (D0 + D2, closes #1):** D0 reordered the sibling helpers (`guard-aux` above
-      `guard`; `define-record-type-impl` above its two delegators) so their pins are non-nil at
-      macro-def time — census dropped **47 → 44** exactly (3 helper edges). D2 threaded the
-      `SyntaxSymbol` into `lookupMacroBinding` and consults the pin AFTER arm 1 (local let-syntax)
-      and BEFORE arm 2 (NextPhase)/arm 3 (library) — mirroring the value-path `tryResolvedBinding`
-      R1 ordering. **#1 GREEN** (`guard`+top-level `guard-aux` → `x`, not `PWNED`); #2 + R1-analog
-      stay GREEN (pin did NOT jump ahead of arm 1); march-hare/ER/§6 cases (generated-macro nil-pin
-      fallthrough, use-site local no-capture, pinned-vs-bare) all GREEN. Census tightened into a
-      ratchet: an unpinned expand-bound sibling reference is now a **defect** (was UNCHECKED);
-      passes (0 defects). Gates: lint + build + covercheck (all 41 ≥80%) + `-race` GREEN.
-      Remaining: Phase 3′ (adversarial import tests + docs + CHANGELOG).
-    - **Phase 4′ DONE (crosscheck remediation + recursive-helper completion, option A):** 5-lens
-      `/crosscheck` verified the topology + D2 sound; found two real gaps the single-clause #1
-      repro masked. (1) The nil-pin census was **vacuous** — its discriminator used the composite
-      `FreeIdKey` (`scope-fingerprint|name`) so `GetGlobalIndex(NewSymbol(name))` always missed;
-      added `match.FreeIdName` and recover the bare name. (2) A recursive helper's **self**-
-      reference (`guard-aux`→`guard-aux`, `define-record-type-impl`→itself; multi-clause guard /
-      record-with-fields) was still capturable — reorder can't pin a self-reference. Fixed with
-      `pinTemplateSelfReferences` (`compile_syntax_rules.go`): after `define-syntax` creates the
-      binding, back-patch every nil-pinned template free-id whose name is the macro's own to that
-      binding (R7RS §4.3.2; preserves create-after-compile so a failed compile leaves no binding).
-      Fixed the whole class uniformly (`and`/`or`/`cond`/`case`/`do`/`define-values`/…). Census now
-      **genuinely load-bearing**: mutation-verified it flags 21 recursive self-refs without the
-      back-patch, 0 with (44→23 nil-pins). Plus convergent hardening (dropped silent-degrade
-      guards + construction-invariant test, `gi.Env` guard, `phaseParent`→method, doc fixes).
-
-- [x] **CHANGELOG now documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: added a
-  `[Unreleased] → Changed` entry covering the `8afeb66a…4f73936d` arc and its user-visible
-  semantics — a macro-generating macro expanded twice now gets two binders instead of sharing one
-  (`c9b6b90c`), template-introduced library exports are rejected eagerly (C3), and
-  `namespace-undefine!` deletes one scope-matched slot instead of every slot a name owns
-  (`4f73936d`). `docs/environment/system.md` Invariant 5 was already current.
-
+- [x] **Internal `define-syntax` was invisible in a shorthand-`define` body** [Correctness, S, Done
+  2026-07-21]: **broader than the filed two-symptom framing** — *any* internal `define-syntax` in a
+  `(define (f) …)` body was invisible to later body forms, even a plain non-generating one, while
+  `(let () …)`, `(lambda () …)`, and named-`let` bodies all worked. `expandDefineForm`'s
+  function-shorthand branch expanded its body via `ExpandSyntaxArgumentList`, a flat argument-list
+  pass with no letrec* pre-scan, no `define-syntax` registration, and no body scope, whereas
+  `expandLambdaForm` runs the body through `ExpandBodyWithDefineSyntax` under a fresh body scope.
+  Two consequences: internal macros were never registered, *and* body identifiers carried no scope,
+  violating `CompileSymbol`'s fast-path invariant, so the use fell through to a global lookup and
+  errored. Fixed by extracting `expandProcedureBody` and routing the shorthand body through it —
+  form preserved, not desugared, so the compiler keeps its self-tail and frame-reclaim
+  optimizations (verified: 5M-iteration tail loop, mutual recursion, generated shorthand-defines).
+  Guards: `TestInternalDefineSyntax_InShorthandDefineBody`, `_LambdaLetParityUnbroken`, RED before /
+  GREEN after over 6 shorthand cases.
+- [x] **A library-local `define-syntax` did not shadow a same-named imported macro** [Correctness,
+  M, Done 2026-07-21]: **broader than the export-only framing** — the imported macro won not just in
+  `findLibraryBinding` but in the library's **own body** too, while the variable analogue shadowed
+  correctly. `copyLibraryBindingsDirect` installed *every* imported binding into the library's
+  RUNTIME frame, and syntax bindings *additionally* into Expand; the runtime mirror at ambient `{}`
+  then shadowed the library's own `define-syntax`, which stores into Expand at `{libScope}`. Fixed
+  by installing a syntax binding into Expand **only** — variables still install into runtime, where
+  a local define already shadows the import through the shared frame. Applied to **both** install
+  paths; the second was surfaced by the post-fix `/crosscheck`, since the first pass fixed only the
+  library path and left top-level import-then-redefine still shadowed. Guard:
+  `TestLibraryLocalMacroShadowsImportedMacro` (export, library-body, top-level, renamed-import,
+  plain-imported-still-usable). **Known residual**, below the fix's bar: because syntax and
+  variables now land in different frames, a cross-*kind* same-name clash across two imported
+  libraries (macro `foo` vs variable `foo`) is no longer conflict-detected per R7RS §5.6; same-kind
+  clashes still are.
+- [x] **No sealed base above phase 0** [Correctness, M, RESOLVED 2026-07-22 on
+  `feat/free-template-id-hygiene`, PR #814]: the reported library-import vector did **not**
+  reproduce — importing a library that rebinds `guard-aux` leaves `(guard …)` intact. What did
+  reproduce is a **top-level** `(define-syntax guard-aux …)` compromising `guard`. `guard`'s
+  template freely references `guard-aux`, both are ambient `{}`-scoped bootstrap macros, so they
+  share a slot and the user's transformer wins: a free template identifier that should resolve to
+  its definition-site binding does not. Fixed by the D0–D3 arc rather than the originally-deferred
+  "architectural decision". A per-namespace `sealedExpandBase` (phase-1 sealed frame parented on
+  `sealedBase`) holds bootstrap macros and special-form expanders; D3 was **retargeted** there after
+  routing it into the phase-0 frame regressed the general `Dialect.Forms().Remove()` contract, which
+  settled the design's own open question — the phase-0 value frame is not collision-free for
+  compile-time handlers. D0 reordered sibling helpers (`guard-aux` above `guard`) so their pins are
+  non-nil at macro-definition time, dropping the census 47 → 44 exactly, the 3 helper edges. D2
+  threads the `SyntaxSymbol` into `lookupMacroBinding` and consults the pin *after* arm 1 (local
+  let-syntax) and *before* arm 2, mirroring the value path's R1 ordering.
+  A 5-lens `/crosscheck` then caught two gaps the single-clause repro masked: the nil-pin census was
+  **vacuous**, because its discriminator used the composite `FreeIdKey` so the bare-name lookup
+  always missed; and a recursive helper's **self**-reference was still capturable, since a reorder
+  cannot pin a self-reference. Fixed by `pinTemplateSelfReferences`, which back-patches after
+  `define-syntax` creates the binding (preserving create-after-compile, so a failed compile leaves no
+  binding) and closes the class uniformly for `and`/`or`/`cond`/`case`/`do`/`define-values`. The
+  census is now a mutation-verified ratchet — it flags 21 recursive self-refs without the back-patch
+  and 0 with (44 → 23 nil-pins) — and an unpinned expand-bound sibling reference is a **defect**
+  rather than merely unchecked.
+- [x] **CHANGELOG documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: covers the
+  `8afeb66a…4f73936d` arc's user-visible semantics — a macro-generating macro expanded twice now
+  gets two binders instead of sharing one, template-introduced library exports are rejected eagerly,
+  and `namespace-undefine!` deletes one scope-matched slot instead of every slot a name owns.
+  `docs/environment/system.md` Invariant 5 was already current.
 ### plans/ sweep — correctness deltas not previously in TODO (2026-07-21)
 
-Transcribed from a full `plans/` open-work triage (2026-07-21) — correctness work that lived
-only inside plan files, invisible to a TODO scan. Same provenance pattern as the scope-keyed
-successors above.
+Correctness work that lived only inside plan files, invisible to a TODO scan.
 
 - [x] **stderr data can be lost on exit** [Correctness, S, RESOLVED 2026-07-21 — no longer
   reproduces]: verified against the built binary — no textual output is lost on any exit path.
   `writeAndFlush` (`pkg/extensions/io/prim_write.go`) flushes the port after **every**
   `write`/`display`/`newline`/`write-char`/`write-string`, so the bufio buffer never accumulates
-  across writes. Confirmed: 5000 writes then `(exit 7)` and a single 100 000-char `(display …)`
-  both arrive in full; a program that writes to `current-error-port` then `(exit)` or errors out
-  keeps its output. This per-write flushing postdates the 2026-05-14 plan (which explicitly said
-  "no per-message flushing is added") and supersedes its flush-on-exit design — implementing that
-  design now would add redundant machinery for a data-loss that no longer occurs. **Also note**
-  the plan was incomplete regardless: it targeted only `cmd/wile/main.go`'s `os.Exit` sites and
-  missed `(exit)`/`(emergency-exit)` → `os.Exit` in `extensions/system/prim_system.go`, the
-  bug's own canonical repro. `plans/2026-05-14-stderr-flush-on-exit.local.md` is stale/obsolete
-  (archive candidate).
-- [x] **SRFI-18 `thread-join!` wraps an uncaught exception** [Correctness/conformance, S,
-  Done 2026-07-21]: implemented per `plans/2026-06-27-srfi18-uncaught-exception-wrapper.local.md`
-  with **Q1 = A** (wrap unconditionally — strict SRFI-18; zero external consumers, break-freely).
-  A joined thread that died on an uncaught exception now surfaces to the joiner as an
-  `uncaught-exception` object whose `uncaught-exception-reason` is the original condition
-  (previously the bare condition was re-raised). Added: `values.UncaughtException` (a Go-comparable
-  `values.Value`), `werr.ErrNotAnUncaughtException`, and the `uncaught-exception?` /
-  `uncaught-exception-reason` primitives. Reason identity is preserved (`eq?`). Guard:
-  `TestThreadJoinWrapsUncaughtException` (6 cases incl. identity + sentinel-rejection); threads
-  `-race` green; concurrency examples unaffected (none caught a joined exception).
+  across writes (5000 writes then `(exit 7)`, a single 100 000-char `display`, and
+  error-port-then-exit all arrive in full). This per-write flushing postdates the 2026-05-14 plan,
+  which explicitly said "no per-message flushing is added", and supersedes its flush-on-exit design:
+  implementing that design now would add redundant machinery for a data loss that no longer occurs.
+  The plan was incomplete regardless — it targeted only `cmd/wile/main.go`'s `os.Exit` sites and
+  missed `(exit)`/`(emergency-exit)` in `extensions/system/prim_system.go`, the bug's own canonical
+  repro. `plans/2026-05-14-stderr-flush-on-exit.local.md` is an archive candidate.
+- [x] **SRFI-18 `thread-join!` wraps an uncaught exception** [Correctness/conformance, S, Done
+  2026-07-21]: implemented with Q1 = A (wrap unconditionally — strict SRFI-18; zero external
+  consumers, break freely). A joined thread that died on an uncaught exception now surfaces to the
+  joiner as an `uncaught-exception` whose `uncaught-exception-reason` is the original condition,
+  where previously the bare condition was re-raised; reason identity is preserved (`eq?`). Added
+  `values.UncaughtException`, `werr.ErrNotAnUncaughtException`, and the two predicates. Guard:
+  `TestThreadJoinWrapsUncaughtException` (6 cases including identity and sentinel rejection).
 
-> **Anchor risk RESOLVED 2026-07-24 — the load-order plan is dead (archived).** A
-> decision-producing scoping pass (verified against code + runtime) confirmed
-> `2026-07-18-load-order-independent-binding-resolution-design.md` is superseded and moved it
-> to `memory/`. Verdict:
-> - **Part II (Tasks 1–5)** motivation is discharged: the C6 capture is fixed by bootstrap
->   reorder (`1af62cd2`) + the free-template-id-hygiene arc (PR #814, sealed expand base
->   `885e2a3a` + def-site pin `a7e12c7a`), and `TestBootstrapMacrosPinLateBoundReferents`
->   (`pkg/wile/bootstrap_nilpin_test.go`) is a CI ratchet reporting 0 capturable nil pins —
->   the regression guard Part II's cure would have provided. `DefSiteContext` was never
->   built; its def-site-pin idea shipped for the macro path as D2.
-> - **Part III (Task 6)** is obsoleted as written: `sameImportedBinding` deliberately settled
->   on by-name (`sameImportedBinding`, `library_bindings.go:571`) and origin-based identity
->   (`BindingID.Origin`) was
->   rejected for import conflict (PR #793), so migrating all three sites onto `BindingID`
->   would regress shipped behavior. The **`BindingID` scope-discriminator item below is now
->   moot** — it was a prerequisite for a plan that will not ship.
->
-> The one narrow residual worth keeping is filed as its own item, immediately below.
+> **The load-order plan is dead (archived 2026-07-24).** Part II's motivation is discharged: the C6
+> capture is fixed by the bootstrap reorder (`1af62cd2`) plus the free-template-id-hygiene arc
+> (PR #814), and `TestBootstrapMacrosPinLateBoundReferents` is a CI ratchet reporting 0 capturable
+> nil pins — the regression guard Part II's cure would have provided. Part III is obsoleted as
+> written: origin-based identity was **rejected** for import conflict (PR #793) in favor of by-name
+> `sameImportedBinding`, so migrating all three sites onto `BindingID` would regress shipped
+> behavior. One narrow residual survives, below.
 
-- [~] **~~`free-identifier=?` AND ER-compare are both non-conformant — on COMPLEMENTARY cases~~
-  CONFORMANCE FIXED 2026-07-24 (`70a34421` + `36e1d268`); only the Phase-2 consumers remain**
-  [Correctness/conformance, M, **VERIFIED 2026-07-24 vs Racket + Chez**, low impact]: the one
-  live residual from the archived load-order plan's Part III, now confirmed observable — and
-  larger than filed (the plan flagged only `free-identifier=?`; ER-compare is wrong too). Both
-  triggers reproduce against the built binary; the conformant answers are Racket's + Chez's.
-
-  | scenario | conformant (Racket/Chez) | `free-identifier=?` | ER-compare |
-  |---|---|---|---|
-  | two rename-imports of ONE binding, diff names (`foo1`/`foo2`, `(eq? foo1 foo2)` ⇒ `#t`) | **same** | `#f` ✗ | `#t` ✓ |
-  | two DISTINCT defines, same value (`(define a car)(define b car)`) | **diff** | `#f` ✓ | `#t` ✗ |
-
-  `free-identifier=?` compares `binding0 == binding1` (`prim_syntax.go:224`) — pointer-eq, wrong
-  on rename-aliases. `erBindingsEqual` (`er_macro_compare.go:55-67`) adds a `BindingType()`+`Value()`
-  fallback — wrong on distinct-same-value bindings (over-matches). **So "point `free-identifier=?`
-  at ER-compare's comparison" is NOT the fix — it swaps one wrong answer for the other.** Neither
-  pointer-eq nor value-eq is the correct notion; the conformant predicate is "same binding ORIGIN",
-  which is exactly what Part III's `BindingID.Origin` targeted. But Wile stores no origin: imports
-  copy the value into a fresh cell + fresh `*Binding` and `markBindingImported` records only a
-  boolean `m.Imported` (`library_bindings.go`), NOT the source binding / lib / export name. So a
-  correct fix must first ADD origin provenance to the binding, then compare it in BOTH predicates.
-
-  Impact is low: `free-identifier=?` is R6RS (not R7RS-small), and both triggers are exotic (the
-  whole suite is green — no bundled program hits either). Note the origin approach was rejected for
-  import-CONFLICT detection (PR #793) because it false-flags a legal define-over-import shadow — but
-  that tradeoff does NOT transfer to identifier equality, where origin is the correct semantics; the
-  two are different uses of "same binding". Do NOT revive the full load-order `BindingID` machinery
-  for this; scope a minimal origin field. Repro files were the `(rename …)`-import + `syntax-case`/
-  `er-macro-transformer` harness (rebuild from `library_bindings_test.go`).
-  **Scoped** (reframed around the import-provenance graph):
-  `plans/2026-07-24-free-identifier-origin-provenance-design.local.md`. Model: "same binding" =
-  "same root in the provenance graph" — the graph Wile already walks at import
-  (`Exports`/`ApplyToExports`/`internalName`/`findLibraryBinding`) then discards. Phase 1 (~5 files,
-  M): fold each imported binding's ROOT `OriginRef{RootLib,RootName}` at import (no traversal; keyed
-  on `internalName`), compare via `environment.SameBinding`, delete ER's value fallback. Consolidates
-  2 existing ad-hoc provenance consumers (`stampImportedInlineHOF`, `Doc`-carry). Site 3
-  `sameImportedBinding` a gated Phase-2 candidate (PR #793 re-read). D1–D3 need Aaron. §8 boundary:
-  ambient-recompiled `cddr`-from-base ≠ -from-cxr under the root notion.
-  **Phase 1 DONE 2026-07-24** (branch `fix/free-identifier-origin`, D1–D3 as recommended,
-  crosscheck-reviewed by 5 lenses): `OriginRef{RootLib,RootName}` + `Origin` field +
-  `environment.SameBinding` (100% unit-covered); root folded at import in `markBindingImported` keyed
-  on `internalName` (threaded through both copy paths + all 3 `installImportedBinding` sites);
-  **`free-identifier=?` only** flipped to `SameBinding`. free-id §7 matrix green: reexp chain, direct
-  double-rename, renamed re-export, `(dd)` export-rename synthesize-branch, different-libs, sealed-base
-  self-compare.
-  **ER-compare was PULLED from Phase 1, then finished as option B — DONE 2026-07-24 (`36e1d268`).**
-  The pull was real: crosscheck (errors lens) + a two-binary repro confirmed that switching
-  `erBindingsEqual` to `SameBinding` alone REGRESSES `#t`→`#f` on internal-vs-import compare
-  (`(compare user-id (rename 'exported-name))`: the definition-site rename had nil Origin, the import
-  had one). Option B closes that asymmetry: `stampLibraryExportOrigins` gives every library export its
-  own self-root at library FINALIZATION (mechanism 1, eager/intrinsic — chosen over mechanism 2's
-  import-side-effect stamp, so Origin stays a pure function of the definition and imports never mutate
-  library-internal state). `erBindingsEqual`'s value fallback is deleted, killing the `(define a car)
-  (define b car)` over-match. Intended side effect: `free-identifier=?`, sharing `SameBinding`, now
-  also matches a library's internal binding against an import of itself. Crosscheck-reviewed (4 lenses,
-  16 repros, no residual miscompile).
-  **Phase 2 — 1 of 3 items shipped:**
-  - [x] `stampImportedInlineHOF` gates on `Origin.RootLib` — DONE 2026-07-24 (`9b2afa8c`). Fixed the
-    latent re-export miss AND a coupled pre-existing miscompile crosscheck surfaced: inline dispatch
-    selected the template by the CALL-SITE name, so a curated HOF renamed onto another curated HOF's
-    name inlined the wrong body. Dispatch now keys on the stamped `BindingMeta.InlineHOFName`; the
-    stamp is reset on every re-import so a conflation re-import can't strand a stale template.
-  - [~] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop. **The
-    defect this would have incidentally fixed was found and fixed on its own 2026-07-25** —
-    it needed no origin. Repro: two libraries exporting one macro name, the first documented,
-    the second not; under the §5.6 by-name conflation the second wins the value while `,doc`
-    kept reporting the first's docstring. Cause was not the copying but the `if doc != ""`
-    guard on it, which made the field un-clearable — the same staleness class as the
-    inline-HOF stamp reset three lines above it (`9b2afa8c`), which the doc field was never
-    added to. Fix: assign `m.Doc = source.Doc()` unconditionally (`library_bindings.go:127`),
-    which is smaller than the guarded copy it replaces; the guard turned out to protect
-    nothing (full suite green without it, incl. every doc-registration and sealed-base doc
-    test). Guard: `TestImportedMacroDocTracksTheWinningValue` (3 cases, verified RED first).
-    Procedures were always immune — a closure carries its docstring on its template, so it
-    tracks its value for free.
-    **What actually remains is structural-only and BLOCKED as filed.** "Follow `Origin`"
-    cannot be done where `Doc()` lives: `Binding.Doc()` is in `pkg/environment`, but
-    resolving `OriginRef` needs `LibraryRegistry.Lookup` + `findLibraryBinding` in
-    `pkg/machine/compilation` (three layers up); `OriginRef.RootLib` is a `string` key, not a
-    `LibraryName`, so even from above it needs a key→name reverse or a scan of `All()`; and
-    `repl/` is deliberately decoupled from `machine/compilation` (`registry_doc_provider.go:119`
-    names that decoupling as why it duplicates library search). So the options are re-couple
-    repl→compilation, inject a resolver into `environment`, or store a `*Binding` (rejected by
-    D2). With no defect left motivating it, this is a consolidation with a layering cost —
-    **re-justify before starting, or drop it.**
+- [~] **`free-identifier=?` and ER-compare were non-conformant on COMPLEMENTARY cases**
+  [Correctness/conformance, M, verified 2026-07-24 vs Racket + Chez, low impact; **conformance FIXED**
+  (`70a34421` + `36e1d268`), Phase-2 consumers remain]: `free-identifier=?` compared bindings by
+  pointer, wrong on rename-aliases — two rename-imports of ONE binding answered "different" where
+  Racket and Chez say same. `erBindingsEqual` added a `BindingType()`+`Value()` fallback, wrong the
+  other way — two DISTINCT defines of the same value answered "same". **So pointing
+  `free-identifier=?` at ER-compare was not the fix**; it swaps one wrong answer for the other.
+  Neither pointer-eq nor value-eq is the correct notion. The conformant one is same binding
+  **origin**, which Wile stored nowhere: imports copy the value into a fresh cell and a fresh
+  `*Binding`, and `markBindingImported` recorded only a boolean.
+  **Fixed** by folding each imported binding's root `OriginRef{RootLib,RootName}` at import (keyed on
+  `internalName`, no traversal) and comparing via `environment.SameBinding`. ER-compare was pulled
+  from Phase 1 and finished as option B: switching it to `SameBinding` *alone* regressed
+  internal-vs-import compare `#t`→`#f`, because a definition-site rename had nil Origin while the
+  import had one. `stampLibraryExportOrigins` closes that by giving every library export its own
+  self-root at library **finalization** — chosen over an import-side-effect stamp so Origin stays a
+  pure function of the definition and imports never mutate library-internal state — and the value
+  fallback is deleted. Note the origin approach was rejected for import-*conflict* detection
+  (PR #793) because it false-flags a legal define-over-import shadow; that trade-off does **not**
+  transfer to identifier *equality*, where origin is the correct semantics. Design:
+  `plans/2026-07-24-free-identifier-origin-provenance-design.local.md` (model: "same binding" = same
+  root in the provenance graph Wile already walks at import, then discards).
+  **Phase 2 — 1 of 3 shipped:**
+  - [x] `stampImportedInlineHOF` gates on `Origin.RootLib` — Done 2026-07-24 (`9b2afa8c`). Fixed the
+    latent re-export miss and a coupled pre-existing miscompile the crosscheck surfaced: inline
+    dispatch selected the template by the CALL-SITE name, so a curated HOF renamed onto another
+    curated HOF's name inlined the wrong body. Dispatch now keys on the stamped
+    `BindingMeta.InlineHOFName`, reset on every re-import so a conflation cannot strand a stale
+    template.
+  - [~] `,doc` follow `Origin` instead of eager-copying `Doc` at every import hop. **The defect this
+    would have incidentally fixed was found and fixed on its own 2026-07-25, and needed no origin.**
+    Repro: two libraries exporting one macro name, the first documented and the second not — under
+    the §5.6 by-name conflation the second won the value while `,doc` kept reporting the first's
+    docstring. The cause was not the copying but the `if doc != ""` guard on it, which made the field
+    un-clearable: the same staleness class as the inline-HOF stamp reset three lines above it, which
+    the doc field was never added to. Unconditional assignment (`library_bindings.go:127`) is smaller
+    than the guarded copy it replaced, and the guard protected nothing (full suite green without it).
+    Guard: `TestImportedMacroDocTracksTheWinningValue`, verified RED first. Procedures were always
+    immune — a closure carries its docstring on its template, so it tracks its value for free.
+    **What remains is structural-only and BLOCKED as filed**: `Binding.Doc()` lives in
+    `pkg/environment`, but resolving `OriginRef` needs `LibraryRegistry.Lookup` + `findLibraryBinding`
+    in `pkg/machine/compilation`, three layers up; `OriginRef.RootLib` is a `string` key, not a
+    `LibraryName`, so even from above it needs a reverse lookup or a scan; and `repl/` is
+    deliberately decoupled from `machine/compilation`. So the options are re-couple, inject a
+    resolver into `environment`, or store a `*Binding` (rejected by D2). With no defect left
+    motivating it, **re-justify before starting, or drop it.**
   - [ ] Site 3 `sameImportedBinding` (`library_bindings.go:571`) still compares `*MachineClosure`/
-    `*ForeignClosure` by NAME with an `EqualTo` default. **Still gated, not merely unstarted** — its
-    own doc comment (`:544-570`) frames the by-name conflation as a deliberate irreducible gap, and
-    origin was rejected here by PR #793 for false-flagging define-over-import. The gate is re-reading
-    #793's actual objection: an import-edge origin is a different signal than the source-location it
+    `*ForeignClosure` by NAME with an `EqualTo` default. **Gated, not merely unstarted** — its own
+    doc comment frames the by-name conflation as a deliberate irreducible gap, and origin was
+    rejected here by PR #793 for false-flagging define-over-import. The gate is re-reading #793's
+    actual objection: an import-edge origin is a different signal than the source location it
     rejected (a define-over-import shadow is a non-imported local with nil `Origin`, so it never
     enters an import-vs-import root comparison) — a hypothesis to verify, not a claim.
+### Resolved Tier-1 defects, 2026-07-14 → 2026-07-21
 
-### ~~Opaque-subtree over-marking may loosen the immutable-top-level check (crosscheck `15b68433..8c297173`, 2026-07-14)~~ RESOLVED
+Closed. One line each so the fix stays findable; detail is in the cited commits and archived plans.
 
-- [x] **The acceptance was real; the diagnosis was not. Fixed at the cause.** (2026-07-16, `fix/opaque-subtree-quasi-depth`, `57973333` + `3cce6754`)
-
-  **(1) Confirmed empirically** — the gate. Cross-unit, under the default immutable top level: `(define x 1)` then `(set! x 2)` is rejected, but ``(begin (define x 1) `(x))`` then `(set! x 2)` **compiled**. Pinned by `TestImmutableTopLevel_OpaqueSubtreeOverMark` (`pkg/wile`). The item's own repro ``(begin `(x) (set! x 1))`` demonstrates nothing: it has no `define` to stamp, and the in-unit `set!` marks `x` by itself, so the quasiquote contributes nothing. The effect only isolates across compilation units.
-
-  **(2) NO separate mutation set — the premise is false.** The item called this "two consumers wanting opposite error directions from the same data." They want the *same* direction. Both enforcement sites key on the **same `Stable` flag the optimizer anchors on**: the `set!` rejection (`compile_validated.go`, `binding.IsStable()`) and the redefine guard (`compile_define.go`, `Meta().Stable`). The `set!` rejection exists *to protect* the frame-reclaim anchor. So an over-mark withdraws the optimization and both enforcements **together**; no consumer treats a binding as immutable without reading `Stable`, so nothing is left holding an assumption the admitted `set!` could falsify. There was no soundness hole, and a second map would have bought nothing.
-
-  **(3) Comment corrected, then obsoleted by the fix.** "An over-mark costs an optimization" undersold it: it costs the `Stable` stamp, and top-level immutability rides on that stamp — so it silently turned immutability off for any name a template mentioned. Recorded in `57973333`, then fixed at the cause in `3cce6754`.
-
-  **The defect was imprecision, not direction.** `forEachRawSymbol` marked template *data* no unquote can reach. It now threads quasiquote depth and marks only evaluated positions, matching the compiler's own walk (`quasiquoteNeedsRuntime`/`expandQuasi`) and the shipped `renamePair` prior art. Agreement with the compiler is the soundness argument: that walk decides what is live, this one only predicts it. `markOpaqueSubtree` split into `markOpaqueCode` (depth 0, ordinary code) and `markOpaqueTemplate` (depth 1, already stepped into) so the callers' real difference is API, not convention.
-
-  Three shapes decide correctness, all pinned: dotted unquote (``` `(a . ,x) ``` parses as `(a unquote x)`, a bare unquote in the **spine** the keyword dispatch cannot see); `quote` as a barrier at depth 0 **only** (its nested unquotes stay live inside a template, R7RS §4.2.6 — the one mistake that fails silently); and nested depth (``` `(a `(b ,(set! x 9))) ``` lands at depth 1, still data). The miscompile the file exists to prevent is re-verified end to end: ``(let ((f (lambda () 7))) `(,(set! f (lambda () 99))) (f))`` still returns 99. Gates: lint 0 issues, covercheck 41/41, full suite green.
-### ~~`Value` Go-comparability is an unenforced invariant, already violated in-tree (2026-07-14)~~ RESOLVED
-
-- [x] **Decided: Option 1 — require comparability. Documented and enforced.** (2026-07-14, `fix/value-comparability-contract`)
-
-  The requirement is now stated on the `Value` doc comment (`pkg/values/values.go`), including the rule that actually decides it: **the RECEIVER, not the underlying type**. `Vector` is `[]Value` and is safe because its methods take pointer receivers.
-
-  Enforced by `reflect.TypeOf(v).Comparable()` over rosters, since Go comparability has no method set and cannot be asserted at compile time:
-  - `TestValue_ImplementorsAreGoComparable` (`pkg/values`, over `allValueExemplars`)
-  - `TestDeepEqualer_ImplementorsAreGoComparable` (hashing is a stricter demand than `==`)
-  - `TestMachineValues_AreGoComparable` (`pkg/machine`, new roster)
-  - `TestMachineValueExemplars_CoverPackage` (pins that `Operations`/`MultipleValues` do not silently re-acquire `Value`)
-
-  **THREE violators, not two.** The audit above listed `Operations` and `MultipleValues`. It missed `machine.boxedValuesType` — a `struct{[]values.Value}` with value receivers — and that was the only one of the three *reachable from Scheme*: `OperationBoxValues` puts it in the value register, so `dynamic-wind` gets there. Found by `reflect`, not by eye, which is the argument for the roster tests.
-  - `Operations` and `MultipleValues` — **no longer `values.Value`**. Neither is a Scheme datum; both took the conformance for container convenience. Production code built untouched, only tests referenced the interface methods. They keep a concrete `EqualTo(T)`: having an equality method is not the same as being a `Value`.
-  - `boxedValues` — genuinely IS a `Value`, so it became **pointer-shaped**.
-
-  **A live host-crash bug was fixed on the way.** `equalWorklist.step` compared `a == b` BEFORE establishing both sides were `DeepEqualer`s, so two same-typed non-comparable leaves meeting as components panicked. The regression test merged earlier that day only paired a leaf against a `*Pair` — differing dynamic types, which Go answers `false` for without faulting — so the hazard sat unmeasured in the one shape that actually faults. `step()` now reaches `==` and the visited-set key only once both operands are `DeepEqualer`s. Guarded by `TestEqual_SameTypedNonComparableLeavesDoNotPanic`.
-
-  **A `SchemeComparable` interface was considered and REJECTED.** It is the intuitive fix and it is the wrong one: it would give `Operations` and `MultipleValues` a *supported* way to be non-comparable `Value`s, ratifying the free ride instead of ending it. Also, identity may not be delegated to a method — R7RS §6.1 defines `eq?`/`eqv?` on aggregates as "denote the same location in the store", and `eq?` is the FINEST equivalence in the lattice: a type that computes its own identity can lie about it, and `eq? ⊆ eqv? ⊆ equal?` stops being structurally guaranteed. The contract, and why it has no compile-time expression, is on `values.Value`'s doc comment; it is enforced module-wide by `TestValue_AllImplementorsAreGoComparable`.
-
-### ~~`eqv?`/`equal?` numeric-lattice nonconformances (F1/F2/F3, from 2026-07-13 review `numeric-tower.md` + Chez probe)~~ RESOLVED
-
-- [x] **One owner for numeric equivalence; contagion lattice and NaN reflexivity fixed.** (2026-07-14, `fix/value-comparability-contract`, `c302b702`)
-
-  `EqvNumber` (`pkg/values/eqv.go`) is now the single authority the three F6 sites consume: two exact numbers compare across representations, so `(eqv? (+ 1/2 1/2) 1) ⇒ #t` — closing the `numeric-tower.md` rational SPEC finding (`rational.go:168`), which the tower also fixes upstream by canonicalizing denom-1 results to `*Integer`. Exactness contagion corrected (`Float ⊕ exact → Float`, F2); NaN is now reflexive (`(eqv? +nan.0 +nan.0) ⇒ #t`, matching Chez, F3), deliberately finer than the literal pool's `literalIdentical`. F4/F5 (records, hashtables/boxes) documented as conformant divergences. Shipped as the same branch as the Value-comparability contract above. Design + per-phase commit map: `memory/2026-07-14-equivalence-predicate-divergence.md` (archived).
-
-### ~~`define-values` broken under NoMutation; no macro could introduce a top-level temporary; general form-removal `*PrimitiveExpander` leak (from 2026-07-13 review `dialects.md`)~~ RESOLVED
-
-- [x] **Macro-introduced top-level binders are now hygienically renamed; `define-values` survives NoMutation.** (2026-07-14, `fix/toplevel-macro-binder-hygiene`, `d594beeb`)
-
-  > **Superseded 2026-07-18 (`a60e32e1`).** The rename pass described below no longer
-  > exists. Macro-introduced top-level binders are now separated by **scope-keyed global
-  > storage** (a name owns one slot per binder scope set) rather than by rewriting the
-  > binder to a crypto-random name. The outcome is unchanged and `TestNoMutationKeepsDefineValues`
-  > still guards it; only the mechanism changed. See
-  > `plans/2026-07-18-scope-keyed-global-bindings-design.md`.
-
-  A new expander pass (`pkg/machine/compilation/toplevel_binder_hygiene.go`) gives each macro-introduced top-level `(define …)` binder a fresh crypto-random name and rewrites the references that resolve to it — quote/quasiquote-aware, since a quoted or quasiquote-literal symbol is data, not an identifier (R7RS §4.3.2 / §4.1.2). `define-values` was rewritten `set!`-free with a template temporary, so it now works under the immutable top level, across compilation units, and under the NoMutation dialect (a definition, not a mutation — R7RS §5.3.3). `TestNoMutationKeepsDefineValues` is now an enforced guard, not a gated RED test. A subsequent quote-in-quasiquote corruption (`` `(quote ,tmp) `` rewriting the temp) was fixed with a quasi-depth barrier (`ba283e86`).
-
-- [x] **RESOLVED — the general form-removal leak.** (2026-07-14, `fix/form-removal-expander-leak`)
-
-  A **user** macro whose template references a *removed* form leaked that form's expand-phase `*PrimitiveExpander` into runtime — `(define-syntax my-set (syntax-rules () ((_ v e) (set! v e)))) (let ((x 1)) (my-set x 2) x)` on a NoMutation engine applied `#<primitive-expander:set!>` instead of failing with `ErrNoSuchBinding`. Root cause: `fr.Remove` drops only the compiler `FormSpec`; the expand-phase `PrimitiveExpander` survives and gets pinned onto the introduced identifier, which `tryResolvedBinding` then materialized as a runtime load. Fixed via the review's second direction (`tryResolvedBinding` refuses a compile-time-only handler): a `compileTimeHandler` marker on `namedHandlerBase` (satisfied by both `PrimitiveExpander` and `SyntaxCompiler`) lets `tryResolvedBinding` (`compile_time_continuation.go`) fall through to `ErrNoSuchBinding` — the documented removed-form contract — for *any* removed form carrying an expander, not just `set!`. Guard `TestNoMutationRemovedFormInMacroTemplateIsUnbound`. The cosmetic residue (the removed form's compile-time `BindingSpec` still listed in `Registry().Bindings()`) is unchanged — it is `dialects.md`'s separate open question, not this correctness leak.
-
-### ~~`(scheme base)`/`(scheme eval)`/`(scheme cxr)` export supersets + non-R7RS `(description)` declaration (from 2026-07-13 review `sld-libraries.md`)~~ RESOLVED
-
-- [x] **Documented as deliberate deviations, not deleted.** (2026-07-14, `docs/r7rs-library-export-supersets`, `cc3c48bb`)
-
-  Deleting exports is a user-visible API break, so the supersets were recorded rather than removed: two new sections in `docs/reference/r7rs-differences.md` (*Standard-Library Export Supersets*, *`(description <string>)` Library Declaration*), pinned by `TestLibraryExportSupersets` — it imports each binding through `(only (scheme …) id)`, so narrowing any library back to the strict R7RS surface fails the test and forces a deliberate doc update rather than a silent API break.
-
-### ~~`GlobalIndex` literal identity must include `Env` (from 2026-07-13 review `codegen.md`, §2c)~~ RESOLVED
-
-- [x] **`GlobalIndex.EqualTo` now compares `Env`, not just `Index`.** (2026-07-14, `fix/globalindex-env-literal-identity`, `fa9804d6`, merged to master)
-
-  A literal-pool collision: two distinct globals with the same `Index` symbol but different `Env` deduped to one literal slot. `EqualTo` (`pkg/environment/global_environment_frame.go`) now includes `Env`. Phase 1 shipped + merged; Phase 2 deferred by design. `memory/2026-07-13-globalindex-env-literal-identity.md` (archived).
-
-### ~~2026-07-17 full-review remediation — 14 confirmed defects across 7 phases~~ RESOLVED
-
-- [x] **All 14 confirmed defects fixed; the CI gap that hid two of them closed.**
-  (2026-07-21. Source `reviews/2026-07-17/REVIEW.md`; plan
-  `plans/2026-07-17-review-remediation.md`.) Twelve landed this session across six
-  file-disjoint PRs, each CI-green with Copilot review addressed; two had landed
-  earlier via `1af62cd2`. The one refuted finding (`-specific-set!` under NoMutation,
-  #5) was a documented design nit, out of scope.
-
-  | Phase | Item | Fix |
-  |-------|------|-----|
-  | 1.1 | C1/#8 SRFI-18 cv lost-wakeup | PR #808 (`1ffc83a1`) |
-  | 1.2 | shared-mutation doc — false "threads safe" claim | retracted in #808 (`SECURITY.md`) + #810 (`engine.go` godoc) |
-  | 2.1 | S1/#3 symlink-following resolver | PR #809 (`77b3f474`) |
-  | 2.2 | S2/#14 `(command-line)` ungated argv | PR #809 (`c6009a92`) |
-  | 3.1 | C2/#6+#7 uncatchable port-type panic + dead recover | PR #812 (`2113090a`) |
-  | 4.1 | C3/#2 case-lambda params unbound in body | `1af62cd2` (earlier) |
-  | 4.2 | C6/#16 `unless` referential transparency | `1af62cd2` (earlier) |
-  | 5.1 | C4/#4 `%parameter-raw-set!` survives NoMutation | PR #810 (`24f68cbc`) |
-  | 5.2 | C5/#9 write/write-shared skip hashtable interiors | PR #810 |
-  | 5.3 | C7/#15 empty-operator `(())` mislocates its error | PR #810 |
-  | 5.4 | C8/#13 RunSimple drops final unterminated line | PR #810 |
-  | 6.1 | P1/#1 `\x…;` hex-escape digit cap (R7RS 7.1.1) | PR #813 (`8dc813c2`) |
-  | 6.2 | P2/#10 SRFI-13 comparison return | PR #813 — **no deviation**: SRFI-13 specifies boolean (verified vs spec), Wile is conformant; the mistaken "deviation" doc entry was removed, not added |
-  | 7.1 | C9/#11 flagship `exceptions.scm` crashes | PR #811 (`6f5e2e2d`) |
-  | 7.2 | C10/#12 schelog benchmark path broken | PR #811 |
-  | 7.3 | N5 CI never ran the shipped `.scm` tree | PR #811 adds `test-examples` as a CI stage; DenyAll gate-sweep in #809 |
-
-  Copilot's review on the session PRs caught two real issues beyond the original
-  findings: a create-time parent-symlink escape still open in the #809 fix (closed in
-  `10cdbf56`) and the `ReadLine` `n>0`+EOF byte-drop in the #810 fix (closed in
-  `2c72c925`).
-
+- [x] **Opaque-subtree over-marking loosened the immutable-top-level check** (2026-07-16,
+  `57973333` + `3cce6754`): `forEachRawSymbol` marked template *data* no unquote can reach. That
+  cost the `Stable` stamp — and top-level immutability rides on that stamp — so it silently turned
+  immutability off for any name a template mentioned; cross-unit, ``(begin (define x 1) `(x))`` then
+  `(set! x 2)` compiled where a plain `define` was rejected. It now threads quasiquote depth and
+  marks only evaluated positions, matching the compiler's own `quasiquoteNeedsRuntime`/`expandQuasi`
+  walk — agreement with that walk is the soundness argument, since it decides what is live and this
+  one only predicts it. The filed premise ("two consumers want opposite error directions from the
+  same data") was **false**: both enforcement sites key on the same `Stable` flag, so an over-mark
+  withdraws the optimization and both enforcements together, and a second map would have bought
+  nothing. Three shapes decide correctness, all pinned: dotted unquote (a bare unquote in the
+  **spine**, which keyword dispatch cannot see), `quote` as a barrier at depth 0 **only** (nested
+  unquotes stay live inside a template per R7RS §4.2.6 — the one mistake that fails silently), and
+  nested depth. Guard: `TestImmutableTopLevel_OpaqueSubtreeOverMark`.
+- [x] **`Value` Go-comparability is now a stated, enforced contract** (2026-07-14,
+  `fix/value-comparability-contract`): the rule that actually decides it — **the receiver, not the
+  underlying type** — is on the `Value` doc comment (`Vector` is `[]Value` and is safe because its
+  methods take pointer receivers), enforced by `reflect.TypeOf(v).Comparable()` over rosters, since
+  Go comparability has no method set and cannot be asserted at compile time. **Three violators, not
+  the two audited**: `reflect` found `machine.boxedValuesType`, the only one reachable from Scheme
+  (`OperationBoxValues` puts it in the value register, so `dynamic-wind` gets there) — it became
+  pointer-shaped. `Operations` and `MultipleValues` are **no longer `values.Value`**; neither is a
+  Scheme datum, and having an equality method is not the same as being a `Value`. A live host-crash
+  was fixed on the way: `equalWorklist.step` compared `a == b` *before* establishing both sides were
+  `DeepEqualer`s, so two same-typed non-comparable leaves meeting as components panicked — the
+  regression test merged that same day paired a leaf against a `*Pair`, differing dynamic types,
+  which Go answers without faulting, so the hazard sat in the one shape that does. A
+  `SchemeComparable` interface was **rejected**: it is the intuitive fix and the wrong one, giving
+  the offenders a *supported* way to be non-comparable and ratifying the free ride. Identity may not
+  be delegated to a method — R7RS §6.1 defines `eq?`/`eqv?` on aggregates as denoting the same
+  location, and `eq?` is the finest equivalence in the lattice, so a type computing its own identity
+  can lie and `eq? ⊆ eqv? ⊆ equal?` stops being structurally guaranteed.
+- [x] **`eqv?`/`equal?` numeric-lattice nonconformances (F1/F2/F3)** (2026-07-14, `c302b702`):
+  `EqvNumber` (`pkg/values/eqv.go`) is the single authority the three sites consume. Two exact
+  numbers now compare across representations (`(eqv? (+ 1/2 1/2) 1)` ⇒ `#t`, which the tower also
+  fixes upstream by canonicalizing denom-1 results to `*Integer`), exactness contagion is corrected
+  (F2), and NaN is reflexive (F3, matching Chez) — deliberately finer than the literal pool's
+  `literalIdentical`. F4/F5 documented as conformant divergences.
+- [x] **Macro-introduced top-level binders; `define-values` under NoMutation** (2026-07-14,
+  `d594beeb`; **mechanism superseded 2026-07-18 by `a60e32e1`**): the crypto-random rename pass no
+  longer exists — binders are separated by scope-keyed global storage instead. `define-values` was
+  rewritten `set!`-free with a template temporary, so it works under the immutable top level, across
+  compilation units, and under NoMutation (a definition, not a mutation — R7RS §5.3.3). Outcome
+  unchanged and `TestNoMutationKeepsDefineValues` still guards it.
+- [x] **General form-removal `*PrimitiveExpander` leak** (2026-07-14,
+  `fix/form-removal-expander-leak`): a **user** macro whose template referenced a *removed* form
+  leaked that form's expand-phase expander into runtime — on a NoMutation engine, a `set!`-using
+  template applied `#<primitive-expander:set!>` instead of failing with `ErrNoSuchBinding`. Root
+  cause: `fr.Remove` drops only the compiler `FormSpec`, so the `PrimitiveExpander` survives and gets
+  pinned onto the introduced identifier. Fixed by a `compileTimeHandler` marker on
+  `namedHandlerBase`, so `tryResolvedBinding` falls through to `ErrNoSuchBinding` — the documented
+  removed-form contract — for *any* removed form carrying an expander, not just `set!`. Guard:
+  `TestNoMutationRemovedFormInMacroTemplateIsUnbound`.
+- [x] **R7RS library export supersets + the `(description)` declaration** (2026-07-14, `cc3c48bb`):
+  documented as deliberate deviations rather than deleted, since removing exports is a user-visible
+  API break. Pinned by `TestLibraryExportSupersets`, which imports each binding through
+  `(only (scheme …) id)` — so narrowing any library back to the strict R7RS surface fails the test
+  and forces a deliberate doc update instead of a silent break.
+- [x] **`GlobalIndex` literal identity must include `Env`** (2026-07-14, `fa9804d6`): a literal-pool
+  collision — two distinct globals with the same `Index` symbol but different `Env` deduped to one
+  slot. `EqualTo` now compares `Env`.
+- [x] **2026-07-17 full-review remediation — all 14 confirmed defects** (2026-07-21; source
+  `reviews/2026-07-17/REVIEW.md`, plan `plans/2026-07-17-review-remediation.md`): twelve landed
+  across six file-disjoint PRs (#808–#813), two earlier via `1af62cd2`. Covered the SRFI-18
+  condition-variable lost wakeup, a symlink-following resolver, ungated `(command-line)` argv, an
+  uncatchable port-type panic plus a dead recover, case-lambda params unbound in body, `unless`
+  referential transparency, `%parameter-raw-set!` surviving NoMutation, write/write-shared skipping
+  hashtable interiors, `(())` mislocating its error, RunSimple dropping a final unterminated line,
+  the `\x…;` hex-escape digit cap (R7RS 7.1.1), and two broken example/benchmark paths. **The CI gap
+  that hid two of them is closed** — `make test-examples` is now a CI stage; CI had never run the
+  shipped `.scm` tree. Two findings did not survive triage: #5 (`-specific-set!` under NoMutation)
+  was refuted as a documented design nit, and #10 (SRFI-13 comparison return) was **no deviation at
+  all** — SRFI-13 specifies boolean and Wile is conformant, so the mistaken doc entry was removed
+  rather than added. Copilot caught two issues beyond the original findings: a create-time
+  parent-symlink escape still open in the #809 fix (closed in `10cdbf56`) and a `ReadLine` `n>0`+EOF
+  byte-drop in the #810 fix (closed in `2c72c925`).
 ### Continuation multiple-values follow-ups (from PR #800 crosscheck, 2026-06-25)
 
-Deferred items surfaced while shipping the multi-value continuation re-invocation
-fix (PR #800). The continuation value-count behavior itself is documented in
-`docs/reference/r7rs-differences.md` → "Continuation Value-Count".
+Value-count behavior is documented in `docs/reference/r7rs-differences.md` → "Continuation
+Value-Count".
 
-- ~~**`dynamic-wind` does not preserve multiple values from its thunk**~~ FIXED
-  on `fix/dynamic-wind-multiple-values`: box/unbox the thunk result so 0/1/N
-  values occupy exactly one eval-stack slot (`OperationBoxValues` /
-  `OperationUnboxValues` in `CompileValidatedDynamicWind`). A call/cc
-  *multiple-value* escape observed through `call-with-values` is still blocked by
-  the paused sub-context truncation bug, not by dynamic-wind.
-- ~~**`procedure-arity` reports continuations as `1`**~~ FIXED on
-  `fix/procedure-arity-continuations`: both `*ComposableContinuation` and (newly
-  handled) `*CapturedContinuation` now report `(0 . #f)` (variadic-from-0,
-  matching their `AcceptsArity` and Racket's arity-at-least-0); docstring updated.
-- **(Investigated 2026-06-25 — NOT pursued)** single-value resumption contexts
-  splice multiple values instead of raising an arity error. Design pass concluded
-  it is not worth it: strictness needs a value-count check on the
-  `RestoreContinuation` hot path + a compile-time single/any classification, and
-  breaks `(wile control)` variadic resumption and pervasive normal-return splices
-  — all to enforce behavior R7RS leaves unspecified (current splice already
-  conforms, documented in r7rs-differences). If ever needed, do it as an opt-in
-  `WithStrictValueArity` engine option, not a default change. Full rationale:
+- [x] **`dynamic-wind` preserves multiple values from its thunk**: box/unbox the thunk result so
+  0/1/N values occupy exactly one eval-stack slot (`OperationBoxValues`/`OperationUnboxValues` in
+  `CompileValidatedDynamicWind`).
+- [x] **`procedure-arity` reports continuations as `(0 . #f)`**: both `*ComposableContinuation` and
+  the newly handled `*CapturedContinuation`, matching their `AcceptsArity` and Racket's
+  arity-at-least-0.
+- [x] **Single-value resumption contexts splice rather than raise** — investigated 2026-06-25,
+  **NOT pursued**: strictness needs a value-count check on the `RestoreContinuation` hot path plus a
+  compile-time single/any classification, and it breaks `(wile control)` variadic resumption and
+  pervasive normal-return splices — all to enforce behavior R7RS leaves unspecified, where the
+  current splice already conforms. If ever needed, do it as an opt-in `WithStrictValueArity` engine
+  option, not a default change. Rationale:
   `memory/2026-06-25-continuation-arity-strictness-design.local.md`.
 
-### Trampoline continuation invocation to bound Go-stack growth (2026-06-26) — SHIPPED 2026-06-28
+### Trampoline continuation invocation to bound Go-stack growth — SHIPPED 2026-06-28
 
-**STATUS: SHIPPED** on `feat/continuation-resume-trampoline`. The unified reification +
-winding-aware resume ("the flip") landed: `applyCapturedContinuation` emits
-`ErrResumeContinuation`, and the resume runs on the driver (`RunResumable` /
-`ReinstallSegment`) instead of nesting a fresh `Run()` — O(1) Go frames. Consequently
-the `maxContinuationDepth` bound and its `threadPools.contNestDepth` tracking were
-RETIRED (the resource they guarded no longer exists), and the `-race` ctak skip plus
-`pkg/wile/raceflag_*_test.go` were removed — `TestDeepConvergingContinuationConverges`
-(ctak 18/12/6) now runs under `-race`. A post-landing A/B `/crosscheck` then found and
-fixed one escalation regression (sticky context-global `isolatedMarks` swallowed R7RS
-§6.11 secondary exceptions after any resume; fixed path-precisely via a
-`resumeGeneration` counter — `pkg/registry/core/continuation_noncontinuable_after_resume_test.go`).
-The chronological design/falsification log below is retained as history; the
-"current mitigation" and "until the trampoline lands" passages in it are SUPERSEDED.
+- [x] **Unified reification + winding-aware resume ("the flip")** [Performance/Correctness, L, Done
+  on `feat/continuation-resume-trampoline`]: `applyCapturedContinuation` used to run the resumed
+  computation in a *nested* sub-context and abort to the prompt, so a continuation-heavy program
+  accumulated live Go frames across its dynamic extent — `ctak(18,12,6)` peaked ~40k and the Gabriel
+  warmup + 10-iteration loop ~525k, against Go's ~675k fatal overflow. It now emits
+  `ErrResumeContinuation` and the resume runs on the driver (`RunResumable`/`ReinstallSegment`) —
+  O(1) Go frames. Consequently `maxContinuationDepth` and its `contNestDepth` tracking were
+  **retired** (the resource they guarded no longer exists), along with the `-race` ctak skip and
+  `pkg/wile/raceflag_*_test.go`, so `TestDeepConvergingContinuationConverges` runs under `-race`
+  again. A post-landing A/B `/crosscheck` found and fixed one escalation regression: a sticky
+  context-global `isolatedMarks` swallowed R7RS §6.11 secondary exceptions after any resume, fixed
+  path-precisely with a `resumeGeneration` counter.
+  **Four falsified attempts preceded it, and why they failed is the durable part.** A
+  resume-side-only trampoline is *provably impossible*: the resume needs a chain-resident boundary
+  to place itself, and reinstall-at-nearest breaks escape-past (an outer continuation invoked to
+  escape past a `call-with-values` producer double-executes the consumer) while abort-to-top breaks
+  guard. Reifying one boundary while the others stay sub-contexts regresses nested guard, because
+  the inner construct runs inside the outer guard's producer sub-context, off the main chain where
+  `FindPrompt` cannot reach it — so the reification is **atomic** across all six boundaries. And
+  reification ⟺ winding-aware resume are themselves one atomic change: implementing the full cluster
+  alone produced 4 CRITICALs and a red `make ci`. Two lessons worth keeping: `go test ./...` does
+  **not** run `control-test.scm`/`exceptions-test.scm`, so `make ci` is the gate; and the suite was
+  **blind** to the escape-past regression class until
+  `pkg/registry/core/continuation_escape_past_oracle_test.go` was committed — proven non-blind by
+  running it against the falsified attempt, where the call-with-values row returns
+  `CONSUMER-WRONGLY-RAN` and the oracle fails on a change that had shipped `make ci`-green. Designs
+  and per-attempt findings: `memory/2026-06-2*` (resume-aware-prompt-catches, coupled-fix,
+  cluster-reification-impl).
 
-`applyCapturedContinuation` (`machine/captured_continuation.go`) invokes a captured
-continuation by running the resumed computation in a *nested* sub-context
-(`sub.Run()` then abort to the prompt) rather than tail-replacing the current
-continuation. So a continuation-heavy program accumulates LIVE Go-goroutine-stack
-frames across its dynamic extent — `ctak`, which a proper Scheme runs in bounded
-space, peaks ~40k live frames for a single `(ctak 18 12 6)` and ~525k for the
-Gabriel benchmark's warmup + 10-iteration loop, approaching Go's ~675k fatal
-stack-overflow point.
+### Restricted-profile `(scheme base)` export-validation — RESOLVED by-design 2026-06-29
 
-The interim mitigation (**RETIRED** when the trampoline landed — see STATUS above) was
-a dedicated, live-nesting bound `maxContinuationDepth` (default
-`DefaultMaxContinuationDepth = 600000`, tracked as `threadPools.contNestDepth`,
-decremented on unwind) that surfaced a runaway `call/cc` loop as a catchable
-`ErrCallDepthExceeded` before the Go fatal overflow. **The margin was necessarily thin**
-(benchmark ~525k vs overflow ~675k):
-a sufficiently long continuation-heavy program can still approach the Go stack
-limit, and on a platform whose overflow point sits below the bound a true runaway
-could fatally crash before the catchable bound trips.
-
-- **Proper fix [Performance/Correctness, L]:** trampoline continuation invocation so
-  a resume does not nest a fresh `Run()` Go frame — replace the current continuation
-  in place instead of running the future nested-then-aborting. This bounds Go-stack
-  growth to the genuine live continuation depth and lets the depth bound be set with
-  comfortable margin (or retired). High-risk VM/continuation work — see the
-  memory's `subcontext-continuation-truncation-redesign` and tail-frame-recycling
-  cautions before attempting; gate on the full continuation/`-race` suite.
-- **ATTEMPTED & FALSIFIED (2026-06-27):** a *resume-side-only* segment-reinstall
-  trampoline (`ErrResumeContinuation` signal → `ReinstallSegment` → resume-aware
-  `sub.Run()` drivers `DriveResume`/`RunResumable`) was built and reverted. It DID
-  fix the `-race` ctak overflow and the dynamic-wind after-thunk double-fire, but
-  **reinstall-at-nearest is unsound**: an outer continuation invoked to *escape past*
-  a `call-with-values` producer double-executes the consumer (base: `n2 done`; the
-  flip: `n2 done CONSUMER`). The whole test suite was BLIND to this class — `make ci`
-  was green; a multi-agent crosscheck caught it. A correct flip needs the Go-frame
-  prompt catches (`call-with-exit`, `call-with-continuation-prompt`, `RaiseInPlace`)
-  reified as continuation-chain frames (archaeology §5) — i.e. it is COUPLED to the
-  sub-context truncation open problem, not separable. The behavior-preserving
-  groundwork (`ReinstallSegment`, `RunResumable` extraction, the inert
-  `ErrResumeContinuation` type) is kept. Recoverable at tag
-  `attempt-resume-aware-catches-falsified`; full design + kill-conditions + crosscheck
-  in `memory/2026-06-27-resume-aware-prompt-catches-design.local.md` (falsified/reverted; moved to memory/ 2026-06-29).
-- **ORACLE + SEPARATELY-FALSIFIED DESIGN LANDED (2026-06-27, re-take):** the prior
-  revert happened because the suite was **blind to escape-past**. That gap is now
-  closed by a committed non-blind oracle,
-  `pkg/registry/core/continuation_escape_past_oracle_test.go`: escape-past guards for
-  every boundary (call-with-values / prompt / exit / apply), nested-guard,
-  normal-completion, consumer-captured, escape-past multi-shot+mutation (all GREEN on
-  master), plus the two open bugs (truncation, dynamic-wind double-fire) each with an
-  always-on "documents-current-bug" tripwire and a `WILE_RUN_RED_CONTINUATION`-gated
-  target acceptance cell. **Proven non-blind:** run against the falsified flip (tag
-  `attempt-resume-aware-catches-falsified`) the call-with-values row returns
-  `CONSUMER-WRONGLY-RAN` and the oracle FAILS — it catches the exact regression that
-  shipped `make ci`-green. The coupled-fix design (adversarially reviewed + corrected)
-  is `memory/2026-06-27-continuation-resume-trampoline-coupled-fix-design.local.md`. It
-  PROVES no resume-side-only fix can exist (the resume needs a chain-resident boundary
-  to place itself; reinstall-at-nearest breaks escape-past, abort-to-top breaks guard)
-  and specifies the coupled fix: a new `RunBodyUnderFrame` VM primitive (the missing
-  normal-completion frame-execution mechanism — build+spike FIRST), reify the four
-  boundaries as chain frames (migrating `call-with-exit`'s Go-local tag to
-  chain-carried), then flip `applyCapturedContinuation` to bounce through the single
-  `RunResumable` driver. Verified corrections vs older docs: the exception handler is
-  ALREADY marks-based (`exceptionHandlerParam`), and the `call-with-values` consumer is
-  ALREADY inline — only the producer is a sub-context. **Gate: RED — implementation
-  NOT started; needs human go + the §6 kill-conditions (incl. KC-9..11 to be added
-  before the flip).**
-- **SPIKE EXECUTED — mechanism PROVEN, change is ATOMIC (2026-06-27):** built
-  `RunBodyUnderPrompt` (`pkg/machine/run_body_under_frame.go`) — a transparent
-  chain prompt frame (`returnTemplate` = one `OpRestoreContinuation`) with the body
-  applied INLINE. Wiring it into `call-with-exit` made the oracle's escape-past rows
-  + a SINGLE guard GREEN. But it tripped the design's own STOP condition: reifying ONE
-  boundary while the others stay sub-contexts regresses NESTED guard + call-with-exit-
-  in-barrier — the inner construct runs inside the OUTER guard's `call-with-values`
-  PRODUCER sub-context, so its prompt frame is off the main chain and the driver's
-  `FindPrompt` can't reach it. The reification is **ATOMIC** across {call-with-exit,
-  call-with-continuation-prompt, call-with-values producer, RaiseInPlace handler,
-  with-continuation-barrier} + the flip — not incremental. `call-with-exit` was
-  REVERTED to its sub-context form (tree non-regressing); `RunBodyUnderPrompt` is kept
-  as proven groundwork. **De-risked the hardest piece:** call-with-values' consumer-
-  apply needs NO hot-path change — a normal frame whose template is
-  `[OpPush, OpLoadLocal(consumer), OpApply]` (capturable via `Copy`), and RaiseInPlace
-  is a marks-carrying transparent frame. Full findings + revised atomic execution
-  order: design doc § "Spike outcome".
-- **cwv REIFICATION PROVEN + COUPLING MAPPED, reverted to clean (2026-06-28):** built
-  `RunBodyUnderFrame` + `RunBodyUnderConsumer` (kept as proven groundwork in
-  `run_body_under_frame.go`; consumer template `[OpPush, OpLoadLiteral 0, OpApply]`,
-  verified for 0/1/N values; lint-clean unwired). Wiring it into `PrimCallWithValues`
-  turned the oracle truncation target GREEN and kept escape-past/nested-guard/multishot/
-  machine all GREEN — **the consumer-frame mechanism works.** But it does NOT stand
-  alone, so it was REVERTED: (1) the real `guard` wraps cwv inside `call-with-exit`
-  (bootstrap_macros.scm:175), so reifying only cwv MOVES guard's truncation out to the
-  call-with-exit boundary (`TestGuardCoupling_C2_RealGuard`: `"2"` → leaked
-  `#<machine-closure>`) — empirically CONFIRMS the atomic coupling for guard; (2) it
-  breaks the frame-reclaim `InvokesProcedure` analyzer (`TestInvokesProcedureStaticGuard`)
-  — the `ApplyCallable` moved behind machine helpers it can't see (must learn
-  `RunBodyUnder*` as sinks). call-with-exit reification blockers: one-shot `valid`
-  invalidation has no home in the transparent-frame model (primitive returns before proc
-  runs); must drop exitFn's `UnwindTo` (driver double-fires otherwise). **Risk #1 (the
-  blind spot):** reifying tag-bearing boundaries under nest-then-abort is BLIND-unsound —
-  a `k` captured inside a reified prompt/exit, re-invoked, re-aborting to the tag escapes
-  the plain `sub.Run()` in `applyCapturedContinuation` → "no prompt found". Commit a
-  replay-reabort oracle cell BEFORE wiring exit/prompt; green oracle ≠ correct for them.
-  Full map + corrected coupled plan: design doc § 8c; memory
-  `continuation-cwv-reification-validated-coupling-mapped`.
-- **FULL CLUSTER (Phase 1) IMPLEMENTED then A/B-FALSIFIED, reverted to clean (2026-06-28):**
-  reified all 6 boundaries (cwv/exit/prompt as chain frames; barrier/RaiseInPlace/composable +
-  ~13 sweep sites routed via a new `RunWithinBoundary` driver) + the call/cc-delimiting fix
-  (PrimCallCC slices at `FindPrompt(DefaultPromptTag)`, not nil). Genuine FIXES confirmed by
-  A/B crosscheck (truncation, marks-survive-exit, delimiting). **But the crosscheck FALSIFIED
-  Phase-1-alone: 4 CRITICALs + `make ci` RED** (control-test.scm + exceptions-test.scm go red;
-  `go test ./...` does NOT run them — MUST run `make ci`). C1 boundary-after-resume crash/silent
-  `#<machine-closure>`; C2 boundary-in-after-thunk forward-escape crash; C3 after-thunk silently
-  skipped through a deeper sub (leak); C4 handler-runs-boundary-then-reraise HANG. **DECISIVE:
-  reification ⟺ winding-aware resume (the flip) are ONE atomic change** — 4 paths still run
-  boundary code under plain Run/non-reconciling re-raise, and routing them all overflows ctak
-  under nest-then-abort. The 4 CRITICALs are the spec for the unified change. Full detail: plan
-  `memory/2026-06-28-continuation-cluster-reification-impl.md` § 7 (OUTCOME); memory
-  `continuation-cwv-reification-validated-coupling-mapped` (ATTEMPT 2026-06-28c). Helpers kept
-  as proven substrate in `run_body_under_frame.go`.
-- **CI mitigation (2026-06-27 — RETIRED when the trampoline landed; the skip + `raceflag_*_test.go` were removed):** the `-race` detector
-  inflates per-Go-frame cost several-fold, so `TestDeepConvergingContinuationConverges`
-  (ctak(18,12,6), ~40k live re-invocation frames) overflowed the 1 GB goroutine stack
-  under `-race` — a *fatal* abort below the `maxContinuationDepth` bound, which turned
-  the whole `race` CI job red from PR #794 (2026-06-25) onward. ctak is single-threaded,
-  so `-race` adds no race-detection value for it; the test now skips under `-race`
-  (`raceEnabled` flag, `pkg/wile/raceflag_*_test.go`) and still runs in the non-race
-  job, which validates the depth-bound + convergence semantics. This is a
-  test/environment mitigation, **not** the fix — the O(depth) Go-stack continuation
-  model above is the root cause, removed only by the trampoline.
-
-### Restricted-profile `(scheme base)` export-validation (from PR #795–#799 crosscheck, 2026-06-25) — RESOLVED by-design 2026-06-29
-
-**Maintainer decision (2026-06-29): NOT a supported combination. Keep the strict eager
-validation; resolved by-design (won't-fix), documented as an embedding contract. #801 closed.**
-Rationale: (1) strict §5.6 enforcement is the *conformant* behavior — a `(scheme base)` that
-cannot define its I/O exports under Tiny is genuinely invalid in that configuration; (2) the error
-is the **security/capability boundary** asserting itself — `Tiny` is a capability/sandbox choice
-(which primitives are *exposed*), **orthogonal** to the language-standard/dialect axis; subset-
-importing R7RS's `(scheme base)` under a sandbox is not the mechanism for "I want a smaller
-standard" (that is the Dialect System — see the follow-on note below); (3) the "yes" path has
-near-zero value (the names that *do* resolve under such a subset, `car`/`cons`, are core primitives
-already bound under Tiny with no import at all); (4) both "yes" fixes are disproportionate-cost —
-tolerating profile-gated primitives inverts the `machine/compilation`→`registry/` layering (see
-`compile_library_forms.go:307-310`), and deny-stubs pollute every namespace; (5) the shipped
-diagnostic (`43d7d085`) already names both causes, so the failure is actionable (pick a profile
-that provides the primitives, or import only what the profile has). Contract documented in
-`docs/embedding/source-loading.md`.
-
-**Follow-on (distinct axis — non-R7RS standard at startup):** the legitimate "configure as R5RS
-(or R6RS) on non-default startup" need is a *language-standard/dialect* selector, NOT a security
-profile. Today `(scheme r5rs)` only layers R5RS names over the full R7RS core (it `(import (scheme
-base) …)`), so there is no non-R7RS baseline; a first-class `WithDialect(r7rs.Dialect)`/`r6rs.Dialect`
-startup point is designed but **unstarted** — tracked under the Dialect System in
-`plans/ARCHITECTURE.local.md` (all 4 phases incomplete). That is the home for this feature, separate
-from #801.
-
-Surfaced by the post-merge crosscheck of the #795–#799 conformance arc.
-`validateLibraryExports` (added in #799) runs eagerly and requires every export
-to resolve, so importing even a subset of `(scheme base)` via `(only …)` now
-fails under the `Tiny`/default profile (its ~64 I/O+numeric primitives are
-unregistered). Verified base-vs-HEAD differential: regression for Tiny/default
-subset import only; Console and full-base import were already failing; no shipped
-consumer affected (CLI/MCP use `KitchenSink`). Arguably *more* R7RS §5.6-conformant
-(a library that can't define its exports is invalid). Diagnostic improved to name
-both causes (merge `43d7d085`).
-
-- **Maintainer decision (#801) — DECIDED 2026-06-29: NO, not supported.** The current
-  stricter behavior + improved diagnostic IS the resolution (the "no" branch). A profile
-  that does not register base's primitives makes `(scheme base)` an invalid library in that
-  configuration, including under `(only …)`; this is correct §5.6 enforcement, not a defect.
-  The "yes" branch (tolerate profile-gated primitives / deny-stubs) is declined — vacuous use
-  case, layering-inverting cost. Full differential in
-  [#801](https://github.com/aalpar/wile/issues/801) (closed by-design).
-- **Note (strict-namespace mode):** `WithStrictNamespace()` lets an embedder run a
-  bare top level over a profile whose extensions *are* registered (e.g.
-  `WithProfile(Small) + WithStrictNamespace()`), so `(import (scheme r5rs))` layers
-  cleanly on a bare baseline. This sidesteps the #801 subset-import friction for that
-  use case (the primitives exist in the importable registry); it does **not** resolve
-  #801 itself, which concerns genuinely-`Tiny` profiles where the primitives are
-  registered nowhere.
-
+- [x] **Not a supported combination; the strict eager validation stays** (#801 closed by-design): a
+  profile that does not register base's primitives makes `(scheme base)` an invalid library in that
+  configuration, including under `(only …)` — correct R7RS §5.6 enforcement, not a defect. The error
+  is the **capability boundary asserting itself**: `Tiny` is a sandbox choice (which primitives are
+  *exposed*), orthogonal to the language-standard axis, and subset-importing `(scheme base)` under a
+  sandbox is not the mechanism for "I want a smaller standard". The "yes" path has near-zero value —
+  the names that do resolve under such a subset (`car`, `cons`) are core primitives already bound
+  with no import at all — and disproportionate cost: tolerating profile-gated primitives inverts the
+  `machine/compilation`→`registry/` layering, and deny-stubs pollute every namespace. The shipped
+  diagnostic (`43d7d085`) names both causes, so the failure is actionable; the contract is documented
+  in `docs/embedding/source-loading.md`. **Follow-on, distinct axis**: the legitimate "start as R5RS
+  or R6RS" need is a *language-standard* selector, not a security profile. Today `(scheme r5rs)` only
+  layers R5RS names over the full R7RS core, so there is no non-R7RS baseline; a first-class
+  `WithDialect` startup point is designed but unstarted, tracked under the Dialect System in
+  `plans/ARCHITECTURE.local.md`. **Note**: `WithStrictNamespace()` sidesteps the friction for profiles
+  whose extensions *are* registered, but does not resolve #801, which concerns genuinely-`Tiny`
+  profiles where the primitives are registered nowhere.
 ### Layered-environment carve regressions (review `d8911c15..b04c6d74`, 2026-06-15)
 
-Findings from the `/code-review` of the sealed-base carve + immutable-top-level-default
-arc on `feat/layered-environment`. Empirically verified against a fresh build unless
-marked otherwise. Two root patterns: (1) own-frame `Keys()` iterators not extended to
-span the sealed base; (2) the immutable default reaching entry points/scopes the design
-intended to stay mutable. **Fix before this branch merges.**
+Sealed-base carve + immutable-top-level-default arc. Two root patterns: own-frame `Keys()`
+iterators that did not span the sealed base, and the immutable default reaching contexts the
+design meant to stay mutable. **Scope decision (2026-06-15):** immutability is scoped to
+**compilation units only** (Chez model) — immutable for files and `-e` batches, which preserves
+the frame-reclaim GC win; mutable for every interactive/eval context (REPL, `--mcp`,
+`(environment …)`, `scheme-report-environment`). Implemented as a root-namespace property, with
+child namespaces always mutable and the `set!`-gate keying on `IsStable()` directly so anchors
+stay protected inside mutable children. Design:
+`plans/2026-06-13-immutable-toplevel-by-default-scoping.local.md`. 14/15 closed; D1 survives.
 
-**Scope decision (2026-06-15, user):** immutability is scoped to **compilation units only**
-(Chez model) — immutable for files / `-e` batches (preserves the frame-reclaim GC win);
-mutable for all interactive/eval contexts (REPL, `--mcp`, `(environment …)`,
-`scheme-report-environment`). Implemented via `ImmutableTopLevel()` being a root-namespace
-property (child namespaces always mutable) + the `set!`-gate keying on `IsStable()`
-directly (anchors stay protected in mutable children) + the CLI/MCP engines opting into
-mutable for interactive sessions. 10/15 items done; A4/B4/D1/D2/E1/E2 are follow-ups below.
-
-**A. Read-path regressions (own-frame `Keys()`, no parent/sealed-base walk) — UNAMBIGUOUS**
-
-- [x] **A1 — REPL tab-completion drops every sealed-base name** [High, S, Done 2026-06-15 — `collectBindingNames` now also walks `topLevel.SealedBase()`]: `repl/completer.go:113` `collectBindingNames` walks `phases.Get(phase).GlobalEnvironment().Keys()` (own-frame only). Post-carve primitives + bootstrap procedures live in the sealed base (not a phase entry), so `caar`, `map`, `zero?`, `not`, all 28 cxr accessors, `call/cc` vanish from completion; only dual-registered expand-phase prims survive. Fix: also walk the sealed base (mirror `Namespace.BoundSymbolNames`, which was already patched). **Verified: `caar`/`map`/`zero?`/`call-cc` absent.**
-- [x] **A2 — weak completer test masks A1** [Low, XS, Done 2026-06-15 — asserts `caar`/`cadr` (sealed-base-only) present]: `repl/completer_test.go:122` asserts only `car` present (survives via the expand phase). Strengthen to assert a sealed-base-only name (`caar`/`map`).
-- [x] **A3 — `,apropos` env-binding search drops sealed-base names** [Medium, S, Done 2026-06-15 — `searchEnvironmentBindings` collects the sealed base via a shared closure]: `registry/search.go:210` `searchEnvironmentBindings` has the same own-frame-`Keys()` walk. Largely masked by the registry `DocPrimitives` index, but binding-level docs on sealed entries absent from the doc tables are missed. Fix: span the sealed base.
-- [x] **A4 — `namespace-undefine!` silent no-op for sealed-base names** [Medium, S, Done 2026-06-15 — checks `DeleteBinding`'s bool; if nothing was removed from the mutable runtime AND the name is owned by the sealed base, raises `ErrImmutableBinding` ("cannot undefine sealed binding") instead of silently succeeding. User shadows still removable; unbound names still a no-op. Test `TestNamespaceUndefineSealedRejected` + doc updated]: `internal/extensions/namespace/prim_namespace.go:195` deletes only from `ns.Runtime()`'s own frame; primitives/bootstrap procedures live in the parent sealed base. **Verified: `(namespace-undefine! (interaction-environment) 'caar)` returns success yet `caar` stays bound.** Decide: error on undefining a sealed name, or document the no-op (do not mutate the shared sealed base).
-
-**B. Immutable-default scope — entry points the scoping plan intended mutable — NEEDS DECISION**
-
-- [x] **B1 — interactive REPL, MCP server, and `-e` inherit the immutable default with no opt-out** [High, M, Done 2026-06-15 — CLI adds `WithMutableTopLevel()` when `enterREPL`; `mcp.go` always mutable]: `cmd/wile/main.go:287` and `cmd/wile/mcp.go:235` build engines with no `WithMutableTopLevel()`, no CLI/env flag. Each REPL line / `-e` expr is a separate unit, so a first `(define x 1)` is stamped `Stable` and a later `(define x 2)` is rejected. **Verified on built binary:** `printf '(define x 1)\n(define x 2)\nx\n' | wile` → `Exception: cannot redefine immutable top-level binding "x"`. The scoping plan (`plans/2026-06-13-immutable-toplevel-by-default-scoping.local.md:357-370`) explicitly models the user/REPL top level as Chez's *mutable* `interaction-environment` (`define`-shadows-`define` permitted; never `Stable`). Default resolution: REPL + MCP opt into mutable; `-e` matches the file path (one begin-wrapped unit). **Confirm with user before changing the deliberately-designed enforcement.**
-- [x] **B2 — `-e` diverges from file mode on redefine** [Medium, S, Done 2026-06-15 — `runEval` begin-wraps into one unit like `runFile`]: file mode (`runFile`, single `begin`-wrap) allows `(define w 1)(define w 2)` → `2`; `-e` (`runEval`/`EvalMultipleWithSource`, per-form units) rejects it. **Verified.** Same-batch entry points should behave identically. Folds into B1's resolution.
-- [x] **B3 — redefine into a first-class `(environment …)` / `scheme-report-environment` rejected** [Medium, S, Done 2026-06-15 — child namespaces now mutable; regression test `TestSealedBase_B3_*`]: `machine/compilation/compile_validated.go:277` gate fires for any namespace where `ns.Runtime()==p.env`, including eval-environment children that inherit immutability via root delegation. **Verified: `(eval '(define zz 1) e)(eval '(define zz 2) e)` raises.** Undocumented for first-class envs. Tie to B1.
-- [x] **B4 — split-brain default: internal bootstrap API mutable vs public `NewEngine` immutable** [Medium, S, Done 2026-06-15 — resolved as DOCUMENTATION: this is mechanism-vs-policy separation, not a bug. `internal/bootstrap` is the policy-free building block; the immutable default is a PRODUCT policy applied by the public Engine, and `internal/` is not an external embedder API. Made internal default immutable was rejected (would churn redefine-heavy testhelpers tests for no external benefit). Comment added to `NewTopLevelWithRegistry`]: `internal/bootstrap/bootstrap.go:246` `NewNamespaceFrame`/`NewTopLevelWithRegistry` never call `SetImmutableTopLevel`. **Verified: `bootstrap.NewNamespaceFrame(ctx).Namespace().ImmutableTopLevel()==false`.** Embedders on the internal API + `WithNamespace` get mutable; via `NewEngine` get immutable. Also makes `environment/sealed_base_frame_test.go` run its "immutable-default" characterizations under mutable mode.
-
-**C. `Stable`-stamping scope — two divergent mechanisms — NEEDS DECISION**
-
-- [x] **C1 — profile children diverge from the engine root on `Stable`** [Medium-High, M, Done 2026-06-15 — mutable child ⇒ bootstrap procs not stamped Stable; `set! car`/`set! caar` both permitted; regression test `TestSealedBase_C1_*`]: `internal/bootstrap/bootstrap.go` ~175 `initializeEnvironmentWithRegistry` (the `(environment '(wile kitchen-sink))` path) omits `WithStableBasePrimitives`, but the child still inherits `ImmutableTopLevel()==true` and the gate still stamps bootstrap procedures `Stable`. **Verified live: in a profile child `(set! car …)` is permitted but `(set! caar …)` is rejected — opposite of the engine root (both rejected).** Capture-safe prims aren't `Stable` in profile children, so the reclaim classifier can't trust them there (silent optimization loss).
-- [x] **C2 — non-capture-safe bootstrap procedures frozen, contradicting docs** [Medium, S, Done 2026-06-15 — DOC FIX: behavior is intentional (anchors); docs now state bootstrap procs ARE frozen in the compiled program, mutable in interaction/eval contexts. NOT a code change: narrowing the stamp would lose the user-recursion GC win]: `machine/compilation/compile_validated.go:318` stamps `m.Stable = v.StableInUnit` with no capture-safety check, so `(set! map/assoc/caar/list? …)` is rejected under the default. **Verified.** But `docs/reference/r7rs-differences.md` says "the sealed base's own bootstrap procedures are not frozen by the stamp." The freeze buys no optimization (the classifier only trusts capture-safe names). Root cause shared with C1: two `Stable`-stamping mechanisms (capture-safe filter in `apply.go` vs `StableInUnit` here). Decide: unify behind one "trusted anchor" predicate, or fix the docs.
-- [x] **C3 — `set!`-gate is not frame-scoped** [Low, S, Done 2026-06-15 — gate now keys on `IsStable()` directly (decoupled from `ImmutableTopLevel()`); a Stable anchor is never `set!`-able, even in a mutable child — sound + documented]: `machine/compilation/compile_validated.go:582` lacks the library exemption the define gate (`:277`) has, so a library `(set! <Stable-sealed-name>)` is rejected. Defensible (anchors must stay frozen) but undocumented as intentional vs the "libraries stay mutable" claim. Decide + document.
-
-**D. Concurrency / isolation (lower incidence)**
+- [x] **A1–A4 — read paths dropped every sealed-base name** [Done 2026-06-15]: post-carve
+  primitives and bootstrap procedures live in the sealed base rather than a phase entry, so
+  own-frame `Keys()` walks lost `caar`, `map`, `zero?`, `call/cc` and the 28 cxr accessors.
+  `collectBindingNames` (REPL completion) and `searchEnvironmentBindings` (`,apropos`) now walk
+  `SealedBase()` too, and the completer test was strengthened to assert a sealed-base-only name —
+  it had asserted only `car`, which survives via the expand phase and so masked the bug.
+  `namespace-undefine!` on a sealed name now raises `ErrImmutableBinding` instead of silently
+  reporting success while the name stayed bound (`TestNamespaceUndefineSealedRejected`); user
+  shadows are still removable.
+- [x] **B1–B4 — the immutable default reached entry points meant to stay mutable**
+  [Done 2026-06-15]: each REPL line is its own unit, so a first `(define x 1)` was stamped
+  `Stable` and a later `(define x 2)` rejected — verified on the built binary. The CLI now adds
+  `WithMutableTopLevel()` when entering the REPL, `mcp.go` is always mutable, `runEval` begin-wraps
+  `-e` into one unit like `runFile` (the two had diverged on redefine), and child namespaces are
+  mutable so `(eval '(define zz 1) e)` twice works (`TestSealedBase_B3_*`). B4 closed as
+  **documentation**: `internal/bootstrap` staying mutable while public `NewEngine` is immutable is
+  mechanism-vs-policy separation, not a split brain — the immutable default is a product policy
+  applied by the public Engine, and `internal/` is not an embedder API.
+- [x] **C1–C3 — two divergent `Stable`-stamping mechanisms** [Done 2026-06-15]: in a profile child
+  `(set! car …)` was permitted while `(set! caar …)` was rejected — the opposite of the engine root,
+  where both are rejected. Profile children are now mutable, so bootstrap procedures go unstamped
+  and the reclaim classifier is not asked to trust them there (`TestSealedBase_C1_*`), and the
+  `set!`-gate keys on `IsStable()` directly, decoupled from `ImmutableTopLevel()`, so a Stable
+  anchor is never `set!`-able even in a mutable child. C2 closed as a **doc fix**: freezing
+  bootstrap procedures in the compiled program is intentional (they are anchors), and narrowing the
+  stamp would lose the user-recursion GC win, so `docs/reference/r7rs-differences.md` was corrected
+  rather than the code.
+- [x] **D2 — lock asymmetry on a thread-shared global** [Low, M, pre-existing, Done 2026-07-01,
+  `fbcd7654`]: `Value()`/`SetValue()` were unsynchronized while `set!` writes locked the frame
+  mutex. Global bindings now publish through an `atomicCell` (atomic publish, lock-free load), with
+  the `noCopy` `atomic.Pointer` in the heap cell so `Binding` stays copylocks-clean for the
+  value-embedded local frame; locals keep the plain field, paying no atomic op on the hot Apply
+  arg-bind path. Every global-frame entry point establishes the cell, so "in a global frame ⇒ has a
+  cell" is structural. `binding_race_test.go` is RED under `-race` pre-fix. **Cost: +4.6% geomean on
+  bench-gabriel, 15/16 slower** (`Binding` 32→40B inflates local slabs; global reads gain two
+  pointer hops) — accepted, correctness over performance. The shrink-`Binding` recovery lever is a
+  Tier 4 follow-up.
+- [x] **E1–E3 — altitude, duplication, and a per-import re-walk** [Done 2026-06-15]: the carve left
+  `TopLevel()` returning the sealed base while 8 production sites migrated to
+  `.Namespace().Runtime()`, each carrying the same explanatory comment — the next contributor
+  reaching for `TopLevel()` would silently get the frozen base. `EnvironmentFrame.MutableRuntime()`
+  replaces all 8 (deliberately not `Runtime()`, which diverges for library frames), with a unit test
+  pinning the distinction. `loadBootstrapSources` existed twice and had **behaviorally diverged** —
+  one path optimized templates and pooled contexts, the other did not, so bootstrap procedures
+  loaded via the internal path ran un-optimized; `compilation.LoadBootstrapSources` is now the single
+  pipeline and `wireRuntimeFrames` the single source of truth for the two-frame topology.
+  `registerSchemeDocstrings` re-parsed ~500 root docstrings on **every** `(import …)` (a library env
+  shares the root namespace) and is now guarded by `SealedBaseTarget() == env`.
 
 - [ ] **D1 — sub-context/thread capture can leak library-eval defines** [Low, S — DEFERRED 2026-06-15, arguably-not-a-bug]: `machine/machine_context_subcontext.go` now captures `MutableRuntime()` (named) which returns the engine-root mutable global even from a library frame. For SRFI-18 THREADS this is correct by design (threads share the engine global). The only edge is a sub-context (`load`/`call-with-exit`) spawned *during a library's own load* landing defines in the engine global rather than the library frame — an extreme, untested case. Revisit only if a concrete isolation bug surfaces; not worth a speculative fix.
-- [x] **D2 — lock asymmetry on thread-shared global** [Low, M, pre-existing — Done 2026-07-01, commit `fbcd7654`]: global bindings now publish their value through an `atomicCell` (atomic publish, lock-free load); the `noCopy` `atomic.Pointer` lives in the heap cell so `Binding` stays copylocks-clean for the value-embedded local frame (`[]Binding`). Locals keep the plain field (no atomic op, no box alloc on the hot Apply arg-bind path). Every global-frame entry point (`CreateGlobalBinding`, `Copy`, `SetGlobalBindingByIndex`) establishes the cell, so "in a global frame ⇒ has a cell" is structural. `binding_race_test.go` reproduces the tear (RED under `-race` pre-fix; clean post-fix). **Cost: +4.6% geomean on bench-gabriel, 15/16 slower** (`Binding` 32→40B inflates local slabs; global reads gain 2 pointer hops) — accepted, correctness over performance. Recovery lever (shrink `Binding`) tracked as a pure-perf follow-up (Tier 4). Original note: out-of-diff root cause (`environment/binding.go`), present before the layered-environment branch; `Value()`/`SetValue()` were unsynchronized while `set!` writes locked the frame mutex.
-
-**E. Altitude / cleanup / efficiency**
-
-- [x] **E1 — `.Namespace().Runtime()` ×8 Demeter band-aid; `TopLevel()` now lies** [Medium, M, Done 2026-06-15 — added `EnvironmentFrame.MutableRuntime()` (wraps `p.namespace.Runtime()`, behavior-identical to the chain — NOT `Runtime()`, which diverges for library frames); migrated all 8 sites + trimmed redundant comments; unit test pins the `TopLevel()` distinction; axis-b manifest regenerated for the line shifts]: the carve left `TopLevel()` returning the sealed base while 8 production call sites migrated to `.Namespace().Runtime()`, each with the same explanatory comment. Add a named `EnvironmentFrame.MutableRuntime()` (or `UserGlobal()`); the next contributor reaching for `TopLevel()` silently gets the frozen base. Altitude root of A4/B1/B3/D1.
-- [x] **E2 — `loadBootstrapSources` duplicated AND behaviorally diverged** [Medium, M, Done 2026-06-15 — extracted `compilation.LoadBootstrapSources` (optimized + pooled, the production behavior, with `kind` error context); engine.go + bootstrap.go reduced to thin wrappers; deleted both diverged copies + `runBootstrapMacroStx`. Divergence fixed: the internal path now optimizes too. ALSO deduped `NewSchemeReportNamespace`/`initRuntimeFrame`: extracted `wireRuntimeFrames` as the single source of truth for the two-frame topology + phase wiring (they differ only in fresh-vs-copied globals)]: `pkg/wile/engine.go:853` vs `internal/bootstrap/bootstrap.go` — one path optimizes templates + pools contexts, the other doesn't, so bootstrap procedures loaded via the internal path run un-optimized. Dedup behind one pipeline; decide the optimize/no-optimize question. (Related: `NewSchemeReportNamespace` re-hand-builds the two-frame stack `initRuntimeFrame` exists to centralize.)
-- [x] **E3 — `registerSchemeDocstrings` re-walks the root sealed base on every `(import …)`** [Low, S, Done 2026-06-15 — guarded with `env.SealedBaseTarget() == env` to skip flat library frames]: `pkg/wile/engine.go:736` is called from `applyBaseEnvironment`, which the library-env factory also invokes; for a library env `Namespace()` is the shared root, so each import re-parses ~500 root docstrings and discards them via dedup. Run once at bootstrap, or guard with `env.SealedBaseTarget()==env`.
 
 ---
 
-- [x] **Data race: error/backtrace capture vs. concurrent VM mutation under SRFI-18 thread-terminate** [High, M, Done]: `go test -race ./extensions/threads/` reports a `DATA RACE` (reproduces deterministically; `TestMutexAbandonedOnTermination` is the trigger). **Pre-existing** — present on `origin/master`, verified by reproducing it at the merge-base independent of any in-flight work. **Not surfaced by `make ci`**, because CI does not run `-race` on the threads package and the happy path never enters the error/teardown path that conflicts.
-
-  **The race.** When one SRFI-18 thread *terminates* another mid-execution, the terminator captures a Scheme exception + backtrace via `goErrorToSchemeException` (`machine/machine_context.go`), whose stack-trace walk *reads* the victim's `mc.template`, `mc.pc`, and continuation chain (`mc.cont` → `cont.template.Name()`, `cont.pc`; ~lines 1087/1097/1125). Concurrently the victim's own `Run` loop *writes* those same fields as it advances — `mc` is reassigned by `pullDrainAndApply` (`OpPullApply`, ~line 600) and `callForeignCached` (`OpCallForeignCached`, ~line 642), driven by the per-thread `RunWithEscapeHandling` loop (`err := p.Run()`, ~line 1438). Reader and writer touch the **same `*MachineContext` / continuation graph** with no happens-before edge: thread-terminate does not quiesce the victim before its context is inspected from the terminator's goroutine.
-
-  **Why it matters.** Reading a torn `mc.pc` / `mc.template` / `cont` during teardown can yield a corrupt backtrace or, under the wrong interleaving, a nil-deref / out-of-bounds in `SourceAt`. It is a correctness hazard in the SRFI-18 termination path, not merely a `-race` tooling warning.
-
-  **Precedent.** Same *family* as **PR #561**, which removed `NoCopyApply` / `computeNoCopyApply` precisely because it was "unsafe under concurrent invocation" (`docs/continuations/optimizations.md`). That fix covered concurrent *apply*; this instance is the concurrent *error / terminate* path and was never recorded.
-
-  **Root cause (narrower than the sketch above).** Not "terminate doesn't quiesce" per se — `NewThreadSubContext` set the thread's `parentMC` to the *live* spawning context. That `parentMC` link is for *synchronous* sub-contexts (eval/apply, parent paused on the same goroutine), but a thread's parent runs concurrently, so every `parentMC` walk — `CaptureStackTrace`, `findParameterInMarks`, the `subContextPool` release counter — crossed the goroutine boundary into the mutating parent. The earlier T4 fix snapshotted the parent's *fields* at spawn but left the *pointer* to be dereferenced later.
-
-  **Fixed.** Sever `parentMC` for thread contexts (a thread is an independent root, not a sub-context): removed the `ParentMC` field from `SubContextParams`/`CaptureSubContextParams` and left `parentMC` nil in `NewThreadSubContext` (`machine/machine_context_subcontext.go`). One change fixes all three `parentMC`-walk races. Confirmed safe: `ParentMC()` has no callers, `CaptureSubContextParams` is thread-only, and the parameter inheritance the live walk provided was untested *and* not SRFI-18-correct (a racy live read, not a creation snapshot). `go test -race ./extensions/threads/` passes; full suite green. Trade-off: cross-thread dynamic-parameter inheritance is dropped (it was unsound) — restoring it correctly via a creation-time parameter snapshot is a separate, properly-scoped enhancement if needed.
-
-  **Discovered:** 2026-06-13, running the Phase-5 continuation / `-race` gate of the escape-gated frame-reclamation work (`memory/2026-06-11-escape-gated-frame-allocation.local.md`); orthogonal to that work.
-
-- [x] **vmState field coverage test** [High, S]: Reflection-based test enumerating vmState fields, asserting each appears in a coverage table keyed by operation. Prevents silent state corruption when fields are added. See [FCA Assessment](#fca-assessment) below.
-- [x] **Error type identity** [Medium]: Determined: `CompilationError` and `RuntimeError` are **public boundary types** — they translate internal errors (`werr.ForeignError`, `machine.SchemeError`, `machine.ErrExceptionEscape`) to the embedder API. They should NOT implement `SchemeError` or `ForeignError`. Embedders use `errors.As` to match them. `RuntimeError` already has `Source`/`StackTrace`; `CompilationError` lacks source because the compiler doesn't propagate `SourceContext` into its errors — fix belongs in "error stack traces" below.
-- [x] **Exceptions and error stack traces** [Medium, Done]: `SourcedError` type in `compilation/`, `CompileExpression` wraps errors with source context, `CompilationError.Source` field populated from cause chain. Phases 1-4 complete (PR #657 + precision fix in `processLibraryImport`). Datum-level functions (`import_set_datum.go`, `library_bindings.go`) operate on `values.Value` without syntax context — callers wrap. Foreign stack trace entries for Native → Foreign → Native callback crossings (P3) remain deferred — design doc moved to `memory/2026-04-14-error-stack-traces-design.local.md` (§P3).
-- [x] **MCP eval fails on schelog `include`** [Not a bug]: Original report was missing `puzzle.scm` include and `(set! *schelog-use-occurs-check?* #t)`. Without occurs check, the puzzle infinite-loops and hits MCP timeout. With correct setup, MCP eval produces the correct answer.
-- [x] **`read` mid-parse EOF should raise read-error, not return EOF** [Done]: Phase 4 exceptions audit G.1 — `(read "(foo")` returned `#!eof` instead of raising. Fixed by `wrapMidParseEOF` helper in `internal/parser/parser.go` that converts `io.EOF` to a `ParserError` wrapping `io.ErrUnexpectedEOF` at all mid-parse sites (readList, readLabeledList, readVector, readByteVector). `PrimRead`/`PrimReadSyntax`/`PrimReadToken` unchanged — the existing `errors.Is(err, io.EOF)` check correctly rejects the new `io.ErrUnexpectedEOF` and falls through to `WrapForeignReadErrorf`, producing a `ForeignReadError` that `goErrorToSchemeException` maps to `NativeErrorKindRead`, making `(read-error? e) → #t`. Test in `registry/core/prim_read_mid_parse_eof_test.go` covers 6 mid-parse cases + 2 clean-EOF regressions.
-- [x] **Silent failures in `compilation/operation_syntax_case.go`** [Medium-High, S–M, Done — PR #732]: Four error-handling defects surfaced by `pr-review-toolkit:silent-failure-hunter` during PR #731 crosscheck (pre-existing — not introduced by that PR). Fix as one cohesive sweep. (1) **HIGH** — `operation_syntax_case.go:95-103` swallows all `matcher.Match` errors via `nolint:errcheck, nilerr`, on the premise that "match failed = normal control flow." `match.ErrNotAMatch` already exists (`internal/match/syntax_compiler.go` re-exports `werr.ErrNotAMatch`); the call site just doesn't use `errors.Is` to discriminate. Context cancellation (`ctx.Err()` returned at `match.go:267`), malformed input, and ellipsis-depth violations all collapse to "set #f and continue", masking real failures as "no matching clause". Fix: gate the swallow on `errors.Is(err, match.ErrNotAMatch)`; propagate other errors via `mc.WrapError`. The `nolint:nilerr` comment is the smoking gun — the linter detected exactly this hazard. (2) **HIGH** — `operation_syntax_case.go:154-165` (the `MaybeCreateLocalBinding` bind loop) discards the error return with `_`; further, when a pattern var is in `p.PatternVars` but missing from `sc.bindings`, falls through to `SetLocalValue(li, nil)` with no diagnostic. Three branches conflated: "binding creation failed", "binding already exists at outer scope" (skip), "value missing for declared pattern var" (currently silent corruption). Fix: separate the three. (3) **MED** — `operation_syntax_case.go:82, 143, 221` use `sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)` then collapse "field nil" and "type mismatch" into the same "no input available" message. The marker-interface revert (PR #731 Q-c) means a wrong type *can* be stored without compile-time rejection; readers should distinguish. Fix: `raw := mc.SyntaxCaseState(); if raw == nil { ... }; sc, ok := raw.(*syntaxCaseState); if !ok { ... unexpected type %T ... }`. (4) **MED** — Generic `mc.Error` strings at lines 84, 145, 196, 223 lack input/source-location context; macro debugging is hard enough without these. Fix: include input syntax (and source location if available via `mc.SourceLocation()`) in each message. **Reference**: silent-failure-hunter agent output captured in PR #731 review aggregation (2026-05-10).
-- [x] **Audit PrimitiveSpec `ReturnType` and `ParamTypes` annotations** [High, L] — **complete**: Phase 1 axis-A (docs ↔ ReturnType) clean. Phase 3 axis-B (ReturnType ↔ impl, 5 tightened in PR #675). Phase 4 axis-C R7RS sweep clean. Phase 5 ParamTypes audit: 5.A (manifest, PR #678), 5.B (analyzer + inventory, PR #679), 5.C (sidecar, `memory/2026-04-20-paramtypes-annotation-bugs.local.md`), 5.D (one partial narrowing: `get-output-bytevector` → `TypeBinaryOutputPort`), 5.E (`memory/2026-04-20-paramtypes-axis-c-findings.local.md` R7RS sweep) all complete. **Finding**: declared-too-narrow bucket empty (3 FPs confirmed); declared-too-wide dominated by TypeConstraint-vocabulary gaps (~85 entries, cross-referenced with axis-B Category C's 28 return-side gaps); ~25 sub-domain refinement-type candidates (R7RS "exact non-negative integer", "byte in [0,255]", etc.) below ValueType granularity. Four-axis framework closed. Next forward work: vocabulary-extension design (Extension API contracts Phase 2+), separately scoped. Original scoping rationale below:
-  1. **Annotation vs implementation** (mechanical, tool-assistable via `wile-goast` belief or fuzz harness): for each primitive, verify the annotation is the narrowest *sound* type covering every return path; flag dead branches.
-  2. **Implementation vs published standard** (R7RS-small first, then R6RS, SRFI, Racket, Chibi/Guile/Chicken where applicable): for each primitive whose name appears in a standard, verify the Wile implementation's domain (accepted params) and codomain (return shape) match the spec. Catches non-standard extensions masquerading as standard primitives (the open-output-bytevector one-arg branch).
-  3. **Annotation vs standard**: cross-check ensures we don't document non-standard behavior as if it were standard.
-  Wile-specific primitives (no entry in any adopted standard) need a **local spec** written before they can be audited — name, intended domain, intended codomain, error cases, any invariants. Without a spec there is nothing to drift *from*. Produce the spec inventory as a deliverable; treat missing specs as a debt sub-item. This audit becomes load-bearing the moment "Extension API contracts Phase 2+" (Tier 2) ships compile-time checking — unsound annotations then turn into wrongly-rejected programs, and the R7RS-compliance-as-baseline product claim starts to depend on evidence rather than assertion.
-- [x] **Bound expander recursion depth** [Medium, Done]: The parser depth limit
-      (memory/2026-06-04-parser-depth-limit-impl.md) closes the textual-input
-      stack-overflow surface, but programmatically-constructed deep syntax (macro
-      output, `datum->syntax`, quasiquote) could still overflow the expander with a
-      fatal, unrecoverable Go stack overflow. **Fixed**: added `werr.ErrExpandDepthExceeded`
-      and a shared `expandDepthGuard` on `machine/compilation`'s `ExpanderTimeContinuation`,
-      incremented/decremented at the single recursion chokepoint `ExpandExpression`
-      (which every descent — nested cars, argument lists, primitive-form bodies via
-      child expanders, and macro re-expansion — funnels through). Unlike the parser
-      (one object per parse), the expander spawns child expanders for lambda/let/
-      let-syntax bodies, so the guard is **shared by pointer** across a run via
-      `newChildExpander` (which otherwise reproduces the prior construction exactly —
-      `libraryScope` deliberately stays nil to preserve hygiene behavior). Default
-      `DefaultMaxExpandDepth = 50000` (0 = unlimited), chosen empirically: the
-      expander overflows the Go stack between ~400k (heavy macro-re-expansion) and
-      ~800k (light call nesting) levels, so 50000 leaves an order-of-magnitude margin
-      while sitting far above any practical program (flat recursive macros like
-      `and`/`or` are O(N²) to expand and unusable well before 50000 clauses).
-      Configurable via `WithMaxExpandDepth` (threaded engine→`ExpandAndCompile` like
-      `inlineThreshold`) and `ExpanderTimeContinuation.SetMaxDepth`. Mirrors the VM's
-      `DefaultMaxCallDepth` and the parser's `DefaultMaxParseDepth` triad. Tests:
-      `machine/compilation/expander_depth_test.go` (trip, default-protects,
-      within-limit, shared-across-child-expanders, unlimited, decrement-on-return),
-      `engine_expand_depth_test.go` (end-to-end via recursive macro + the option).
-- [x] **Bound writer recursion depth** [Medium, Done]: The fourth and final leg
-      of the recursion-depth quad (VM `DefaultMaxCallDepth`, parser
-      `DefaultMaxParseDepth`, expander `DefaultMaxExpandDepth`, now writer
-      `DefaultMaxWriteDepth`). `(write (make-list 10000000))` overflowed the host
-      Go stack with a fatal, unrecoverable crash. **Root cause was two distinct
-      surfaces, fixed separately** (the guiding invariant: *anything the writer
-      emits must be valid on read*): (1) **Length ≠ depth** — `SchemeWriter`'s two
-      analysis passes (`findShared`, `filterToCircular`) recursed once per
-      cdr-spine element while the output pass (`writePairContents`) already
-      iterated it, so a *flat* list of any length (nesting depth 1, perfectly
-      re-readable) overflowed the analysis passes. Both now walk the cdr-spine
-      iteratively, recursing only into cars/elements (genuine nesting). (2)
-      **Nesting bound** — car/element recursion is now capped at
-      `DefaultMaxWriteDepth = 10000`, counted identically to the parser's
-      `readSyntax` (root = 1, +1 per container descent) so the write and read
-      limits trip on exactly the same structures. Pass 1 (`findShared`) enforces
-      the bound, so passes 2–3 run only on depth-valid structure and stay within
-      `maxDepth` Go frames. Added `werr.ErrWriteDepthExceeded`; the three writer
-      entry points (`WriteValueToString`/`WriteSharedValueToString`/
-      `DisplayValueToString`) and `SchemeWriter.WriteString` now return
-      `(string, error)`, so `write`/`display`/`write-shared` raise a catchable
-      Scheme condition rather than emit unreadable output. Configurable via
-      `SchemeWriter.SetMaxDepth` (0 = unlimited). **No `WithMaxWriteDepth` engine
-      option**: unlike parse, the writer has no engine-owned entry point — it is
-      reached only through the io primitives — so per the parser's documented
-      `(read ...)` limitation the primitives use the default. `write-simple`
-      bypasses `SchemeWriter` (it uses `Value.SchemeString`, which was a separate
-      unbounded recursion — **now closed by the SchemeString depth bound below**).
-      Tests:
-      `pkg/values/scheme_writer_test.go` (default-protects, configurable boundary,
-      unlimited, flat-not-bounded-by-depth, long-flat-no-overflow),
-      `pkg/wile/engine_write_depth_test.go` (end-to-end long-flat + deep-nested
-      raise).
-- [x] **Bound `SchemeString` recursion depth (staff-sweep #3)** [Medium, Done]: The
-      fifth leg of the recursion-depth quad. `Value.SchemeString()` — the non-writer
-      render path reached by `write-simple`, error messages, and Go-side `%v`/`%s` —
-      recursed one Go frame per nesting level and **host-crashed** (fatal, unrecoverable
-      `stack overflow`) on a deeply nested *acyclic* value: `(write-simple (deep-nest N))`
-      overflowed at ~10⁶ levels. **Root cause identical to the writer's surface 2**: the
-      cdr-spine walk was already iterative (a flat list of any length is depth 1, safe),
-      but car/element descent recursed unboundedly. Path-scoped *cycle* detection does not
-      bound *depth* — the two guarantees are orthogonal (an acyclic chain never re-hits a
-      marked node). **Fix**: thread a `depth` counter through the single chokepoint
-      `schemeStringChild` (`pkg/values/utils.go`) — the one function all compound descent
-      (Pair car / improper cdr, Vector element, Hashtable key/value) flows through — plus
-      the three `schemeStringWithVisited` methods + `formatIndexable`; guard at
-      `depth > DefaultMaxWriteDepth` (reuse the writer's single host-safe nesting number,
-      counted root = 1 / +1 per container descent, so write and SchemeString trip on the
-      same structures). **Diverges from the writer on failure semantics**: `SchemeString()
-      string` is the `Value` interface contract and cannot raise, so it **degrades** to a
-      distinct marker `#<deep>` (vs. the cycle marker `...`) rather than returning
-      `ErrWriteDepthExceeded`. The `Pair.String()` `fmt.Stringer` twin shared the same
-      defect (`fmt.Sprintf("%v", deepPair)`) and got the same bound (same-pattern-everywhere
-      discipline). Tests: `pkg/values/pair_test.go` (deep-bounded SchemeString + String,
-      exact `DefaultMaxWriteDepth` boundary, flat-list-not-bounded, cross-type
-      pair→vector→pair). Doc: `pkg/extensions/io/CLAUDE.local.md`. Plan:
-      `plans/2026-07-01-staff-engineer-sweep.md` #3.
-- [x] **Unify complex/imaginary number parsing (staff-sweep #5)** [Medium, Done]: The
-      reader (`parser_number.go`) and `string->number` (`extensions/math/prim_conversion.go`
-      via `parser/number_string.go`) implemented the same rectangular-complex / pure-imaginary
-      grammar **twice**, and had already **drifted into two different wrong answers** on the
-      same input: `+3/4i` (pure imaginary, rational coefficient) was *rejected* by the reader
-      (`malformed input`) but accepted by `string->number` as *inexact* `0.0+0.75i` — while
-      R7RS §6.2.5 makes it exact `0+3/4i` (as `0+3/4i` and `3/4+1/2i` already parsed). Root
-      cause: the pure-imaginary path gated its exact branch on `isIntegerString`, so a rational
-      coefficient fell through to the inexact `parseFloatOrInfnan`; the reader's twin used a
-      bare `strconv.ParseFloat` that rejected `3/4` outright. **Fix** (two moves): (1) correct
-      the shared grammar — `ParseImaginaryStringNumber` gates on `isExactPartString` (handles
-      rationals via `parseExactPart`), so a rational coefficient stays exact; (2) unify — the
-      reader's `parseImaginary`/`parseComplex` now **delegate** to
-      `ParseImaginaryStringNumber`/`ParseComplexStringNumber` (the single grammar source of
-      truth), adding only the reader's source-located `NewParserErrorf` on reject. Deleted the
-      now-dead `parseImagPart` (folded into the pure function's inline sign switch). Left
-      `parseImaginaryInf`/`parseImaginaryNan` — tokenizer-driven dedicated infnan tokens, a
-      separate concern from the duplicated grammar. Tests: `pkg/parser/parser_number_test.go`
-      (`TestParseNumber_PureImaginaryRationalIsExact` + `TestParseNumber_ReaderAgreesWithStringParsers`,
-      a reader-vs-pure-function parity guard that pins the single-source-of-truth invariant);
-      `extensions/math/prim_conversion_test.go` (`+3/4i` exact cases); redirected
-      `TestParseImagPart` through the unified `ParseComplexStringNumber`. Plan:
-      `plans/2026-07-01-staff-engineer-sweep.md` #5.
-- [x] **Parser fuzz targets + reader crash-safety hardening** [Medium, Done]: Added
-      the first Go native fuzz targets in the repo — `FuzzReadSyntax` (untrusted-input
-      contract: never panic/overflow the host; every non-EOF error is a located
-      `*ParserError`) and `FuzzReadWriteRoundTrip` (write output must re-read) in
-      `pkg/parser/reader_fuzz_test.go`, seeded from `reader_robustness_test.go`. The
-      example-based reader tests enforced the contract only on inputs someone wrote
-      down; fuzzing found **8 pre-existing reader bugs in ~2 min, 5 of them host
-      panics**, all now fixed with committed regression corpus under
-      `pkg/parser/testdata/fuzz/`: (1) invalid UTF-8 and (3) bad datum-label numbers
-      leaked raw `*tokenizer.TokenizerError`/`*strconv.NumError` — closed as a CLASS by
-      a boundary catch-all `locateReaderErr` that lifts any non-EOF/non-`*ParserError`
-      to a located error; (2) `#0=)` silently mis-parsed to a nil-datum label; (4)
-      `' )` panicked (nil interface conversion in `readQuoteForm`); (5) `#\<NUL>`
-      panicked (`rs[0]` index in `parseCharacter`); (6) `#e)` panicked (nil deref in
-      `readExactnessMarker`); (7) `#b0/0` panicked (`big.Rat` div-by-zero); (8)
-      `#0=(#d)` panicked (nil list element in `readLabeledList`). Each
-      unguarded-`readSyntax`-caller fix follows the existing nil-at-delimiter guard
-      pattern; also made `ParserError.SchemeString` nil-token-safe. `FuzzReadSyntax`
-      now runs clean (180s, ~20M execs). Round-trip target additionally fixed: string
-      escaping (`String.SchemeString` used Go `%q` → proper R7RS `\xHH;`/mnemonics, a
-      real conformance bug) and `#0=()` empty labeled list (→ `()` not `(#<void>)`).
-      **Deferred** to #781: the numeric-tower external-representation round-trip tail
-      (`#m` big floats write without prefix; audit `BigComplex`/`BigInteger`/etc.) —
-      a distinct numeric-formatting conformance pass. **Partially closed 2026-07-09:**
-      the `1e+700`-rejected-on-read half is fixed — scientific/decimal notation whose
-      magnitude overflows float64 now promotes to `BigFloat` (shared
-      `parser.ParseRealFloatString`, mirroring int64→BigInteger) across the reader and
-      `string->number`, so out-of-range bigfloats round-trip. The `#m`
-      write-without-prefix half (in-range bigfloats lose their type on read) remains.
-- [x] **Stable-matching selectors fail + matching tests don't gate CI** [High, M, Done]:
-      **Root cause** (single bug, two symptoms): `walk-for-cycle` in
-      `stdlib/lib/wile/algebra/matching.scm` stored each rotation cycle in
-      *newest-first* (reversed) order because an extra `(reverse …)` undid the
-      oldest-first ordering the cons-accumulation already produced. `apply-rotation`
-      reads a cycle as "proposer mᵢ → receiver of m_{i+1}" (= successor(mᵢ)), which
-      only holds in oldest-first order. A 2-cycle is its own inverse, so the 2×2
-      fixtures masked it; for length-≥3 cycles the reversed traversal ran the
-      rotation backwards, collapsing M_top straight to M_bot and hiding the interior
-      matching. That made `rotations` return 1 instead of 2 ("expected 2 but got 1")
-      and made `enumerate-stable-matchings` (hence the Conway lattice) miss interior
-      stable matchings, so `sex-equal-stable-matching` couldn't find the |Δ|=0
-      optimum M₁ ("expected #t but got #f" / "expected #f but got #t"). **Fix**:
-      removed the stray `reverse` so the cycle is oldest-first. Verified `rotations`
-      now returns both ρ₁ (M_top→M₁) and ρ₂ (M₁→M_bot). **CI-gate gap**: added
-      `(test-exit)` to `algebra-matching-test.scm` and swept every `*-test.scm` under
-      `test/` and `stdlib/lib/` — 12 chibi-test files lacked `(test-exit)`
-      (characters, control, eval, exceptions, lazy, macros, numbers, ports, records,
-      smoke, strings scheme tests + algebra-unification); all now gated.
-      `stdlib/lib/wile/algebra/sat-test.scm` uses a custom `check` harness (not chibi
-      test) that displayed "FAIL:" but exited 0 — same silent-failure class, fixed by
-      raising `(error …)` in its FAIL branch. `stdlib/lib/wile/er-macro-test.scm` is a
-      macro fixture with no assertions (left as-is). `make lint` + `make covercheck`
-      green (53/53 scheme files, 0 failed). Provenance: PR #767 crosscheck, 2026-06-06.
+- [x] **Data race: error/backtrace capture vs concurrent VM mutation under `thread-terminate!`**
+  [High, M, Done 2026-06-13]: pre-existing on master, and **not surfaced by `make ci`**, which does
+  not run `-race` on the threads package. When one SRFI-18 thread terminated another mid-execution,
+  the terminator's stack-trace walk read the victim's `mc.template`/`mc.pc`/continuation chain while
+  the victim's own `Run` loop wrote them — no happens-before edge, so a torn read could yield a
+  corrupt backtrace or a nil-deref in `SourceAt`. **Root cause narrower than "terminate doesn't
+  quiesce"**: `NewThreadSubContext` set the thread's `parentMC` to the *live* spawning context. That
+  link is for *synchronous* sub-contexts, where the parent is paused on the same goroutine; a
+  thread's parent runs concurrently, so every `parentMC` walk (`CaptureStackTrace`,
+  `findParameterInMarks`, the pool release counter) crossed the goroutine boundary. An earlier fix
+  had snapshotted the parent's *fields* at spawn but left the *pointer* to be dereferenced later.
+  Fixed by severing `parentMC` for thread contexts — a thread is an independent root, not a
+  sub-context — one change covering all three walks. Trade-off: cross-thread dynamic-parameter
+  inheritance is dropped, since it was a racy live read rather than a creation-time snapshot and was
+  not SRFI-18-correct anyway. Same family as PR #561, which removed `NoCopyApply` as unsafe under
+  concurrent invocation; that covered concurrent *apply*, this is the concurrent *error/terminate*
+  path and was never recorded.
+- [x] **Five recursion-depth bounds, counted identically** [Medium, Done]: the VM's
+  `DefaultMaxCallDepth` was joined by `DefaultMaxParseDepth`, `DefaultMaxExpandDepth` (50000,
+  configurable via `WithMaxExpandDepth`), `DefaultMaxWriteDepth` (10000), and that same write bound
+  reused for `Value.SchemeString`. All count root = 1, +1 per container descent, so write and read
+  trip on exactly the same structures — the guiding invariant is *anything the writer emits must be
+  valid on read*. **Length ≠ depth was the recurring bug**: the writer's two analysis passes and
+  `SchemeString` each recursed once per cdr-spine element while the output pass already iterated it,
+  so a *flat* list of any length — nesting depth 1, perfectly re-readable — overflowed the host
+  stack. Both now walk the spine iteratively and recurse only into cars/elements. Path-scoped
+  *cycle* detection does not bound *depth*: the guarantees are orthogonal, since an acyclic chain
+  never re-hits a marked node. The expander guard is shared **by pointer** across child expanders,
+  unlike the parser's one-object-per-parse. `SchemeString` diverges on failure semantics — its
+  signature is the `Value` interface contract and cannot raise, so it degrades to a distinct
+  `#<deep>` marker (vs the cycle marker `...`). No `WithMaxWriteDepth` engine option: the writer has
+  no engine-owned entry point, being reached only through the io primitives.
+- [x] **Parser fuzz targets + reader crash-safety hardening** [Medium, Done]: the repo's first Go
+  native fuzz targets — `FuzzReadSyntax` (untrusted input must never panic; every non-EOF error is a
+  located `*ParserError`) and `FuzzReadWriteRoundTrip` — found **8 pre-existing reader bugs in ~2
+  minutes, 5 of them host panics**, all fixed with committed corpus under
+  `pkg/parser/testdata/fuzz/`. The example-based tests had enforced the contract only on inputs
+  someone thought to write down. Two classes: leaked foreign error types (`*tokenizer.TokenizerError`,
+  `*strconv.NumError`), closed as a CLASS by a boundary catch-all `locateReaderErr`; and unguarded
+  nil-at-delimiter derefs (`' )`, `#\<NUL>`, `#e)`, `#b0/0`, `#0=(#d)`). The round-trip target also
+  caught a real conformance bug — `String.SchemeString` used Go `%q` instead of R7RS `\xHH;` and
+  mnemonics. **Deferred**: the numeric external-representation tail — `#m` big floats write without
+  their prefix, so an in-range bigfloat loses its type on read. The other half is closed: scientific
+  notation whose magnitude overflows float64 now promotes to `BigFloat` across both the reader and
+  `string->number`.
+- [x] **Unify complex/imaginary number parsing** [Medium, Done, staff-sweep #5]: the reader and
+  `string->number` implemented the same rectangular-complex grammar twice and had **already drifted
+  into two different wrong answers** on `+3/4i` — the reader rejected it, `string->number` accepted
+  it as inexact `0.0+0.75i`, and R7RS §6.2.5 makes it exact `0+3/4i`. The pure-imaginary path gated
+  its exact branch on `isIntegerString`, so a rational coefficient fell through to the inexact
+  parser, while the reader's twin used a bare `strconv.ParseFloat` that rejected `3/4` outright.
+  Fixed the shared grammar (`isExactPartString`) and made the reader **delegate** to the pure
+  functions, adding only its source-located error. Guard:
+  `TestParseNumber_ReaderAgreesWithStringParsers`, which pins the single-source-of-truth invariant.
+- [x] **Stable-matching selectors failed; matching tests did not gate CI** [High, M, Done]: one bug,
+  two symptoms. `walk-for-cycle` stored each rotation cycle newest-first because an extra `reverse`
+  undid the ordering the cons-accumulation already produced, while `apply-rotation` reads a cycle as
+  "proposer mᵢ → receiver of m_{i+1}", which holds only oldest-first. A 2-cycle is its own inverse,
+  so the 2×2 fixtures masked it; length-≥3 cycles ran the rotation backwards, collapsing M_top
+  straight to M_bot and hiding every interior stable matching. **The CI-gate gap is the more
+  important half**: 12 chibi-test files lacked `(test-exit)` and so reported failures while exiting
+  0, and `sat-test.scm` used a custom harness that printed "FAIL:" and exited 0. All now gated.
+- [x] **Audit `PrimitiveSpec` `ReturnType`/`ParamTypes` annotations** [High, L, complete]: the
+  four-axis framework (docs ↔ annotation ↔ implementation ↔ R7RS) is closed. Findings: the
+  declared-too-narrow bucket is **empty** (3 false positives confirmed); declared-too-wide is
+  dominated by ~85 TypeConstraint-vocabulary gaps; ~25 candidates are R7RS sub-domain refinements
+  ("exact non-negative integer", "byte in [0,255]") below `ValueType` granularity. Wile-specific
+  primitives with no entry in any adopted standard need a **local spec written before they can be
+  audited** — without a spec there is nothing to drift from. This becomes load-bearing the moment
+  Extension API contracts ship compile-time checking, since unsound annotations then turn into
+  wrongly-rejected programs and the R7RS-compliance claim starts depending on evidence rather than
+  assertion. Next work is vocabulary extension, separately scoped.
+- [x] **Silent failures in `compilation/operation_syntax_case.go`** [Medium-High, Done, PR #732]:
+  four error-handling defects, pre-existing. `matcher.Match` errors were swallowed wholesale on the
+  premise that "match failed = normal control flow", collapsing context cancellation, malformed
+  input, and ellipsis-depth violations into "no matching clause" — the `nolint:nilerr` comment was
+  the smoking gun, since the linter had detected exactly this hazard. Now gated on
+  `errors.Is(err, match.ErrNotAMatch)`. The bind loop discarded `MaybeCreateLocalBinding`'s error and
+  fell through to `SetLocalValue(li, nil)` with no diagnostic, conflating three branches (creation
+  failed / already bound outer / value missing for a declared pattern var); they are now separated.
+  The `SyntaxCaseState()` assertions collapsed "field nil" and "type mismatch" into one message,
+  which matters because the marker-interface revert means a wrong type *can* be stored without
+  compile-time rejection. Error messages gained input and source-location context.
+- [x] **Exceptions and error stack traces** [Medium, Done, PR #657]: `SourcedError` in
+  `compilation/`; `CompileExpression` wraps errors with source context and `CompilationError.Source`
+  is populated from the cause chain. Datum-level functions operate on `values.Value` without syntax
+  context, so callers wrap. Foreign stack-trace entries for Native → Foreign → Native callback
+  crossings (P3) remain deferred — `memory/2026-04-14-error-stack-traces-design.local.md` §P3.
+- [x] **`read` mid-parse EOF raises a read-error instead of returning EOF** [Done]: `(read "(foo")`
+  returned `#!eof`. `wrapMidParseEOF` converts `io.EOF` to a `ParserError` wrapping
+  `io.ErrUnexpectedEOF` at all four mid-parse sites; the primitives needed no change, since their
+  existing `errors.Is(err, io.EOF)` check correctly rejects the new error and falls through to
+  `WrapForeignReadErrorf`, producing a condition that maps to `NativeErrorKindRead` so
+  `(read-error? e)` is `#t`.
+- [x] **Error type identity** [Medium, Determined]: `CompilationError` and `RuntimeError` are
+  **public boundary types**, translating internal errors to the embedder API; they should NOT
+  implement `SchemeError` or `ForeignError`. Embedders match them with `errors.As`.
+- [x] **vmState field coverage test** [High, S]: reflection-based, enumerating `vmState` fields and
+  asserting each appears in a coverage table keyed by operation, so adding a field without handling
+  it fails the build rather than silently corrupting state.
+- [x] **MCP eval fails on schelog `include`** [Not a bug]: the report was missing `puzzle.scm` and
+  `(set! *schelog-use-occurs-check?* #t)`; without the occurs check the puzzle infinite-loops into
+  the MCP timeout.
 
 ---
-
 ## Tier 2 — Embedding API & Product Value
 
 The embedding experience that differentiates Wile.
@@ -1510,37 +996,29 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
 
 - [ ] **Cancellation "seam" is built but discarded** [Design, S–M — action (A) DONE, B-vs-C still gated]: **(A) done 2026-07-16:** the `PrimChannelSend` comment (`extensions/gointerop/prim_gointerop.go`) now names the real, non-local invariants per source and points at `docs/concurrency/cancellation.md`. Two corrections to the framing below, which is stale: the old comment's "the thread is unwound anyway" was wrong for `thread-terminate!` *even on its own terms* — safety there is now `Thread.setOutcome`'s write-once rule, **not** the ≈1024-op ctx-check window (a cancelled op in tail position has no following op to trip it; see the `thread-terminate!` items above). And the claim "no channel or timer test would catch the change" is no longer true: `TestWithTimeoutInterruptsParkedReceive` fails if the eager recheck regresses (mutation-verified). **B-vs-C still open**, but narrowed: with `with-timeout` covered by the eager recheck and `thread-terminate!` by write-once, an embedder-supplied deadline is the *only* source where the seam would change an observable result — so item 1's B-vs-C and open decision 3 (embedder-deadline observability) have collapsed into one question. If that laundering is acceptable, B has no consumer and C follows. Original scoping below.
 - [ ] **~~Cancellation seam~~ (original scoping, retained for context)** [Design/Correctness-adjacent, S–M]: `SendOutcome`/`RecvOutcome` (`pkg/values/channel.go`) exist expressly to keep the ctx-cancellation cause visible ("the seam"), but `PrimChannelSend`/`PrimChannelReceive` (`extensions/gointerop/prim_gointerop.go`) collapse it unconditionally (Option A): `RecvCancelled`→`Void` (indistinguishable from a legitimately closed+drained channel), `SendCancelled`→`ErrChannelClosed` (catchable by an ordinary channel-error `guard`). The justifying comment ("the thread is unwound anyway") is true only for `thread-terminate!`; it does **not** cover `with-timeout` (safe only via the eager `ErrTimerExpired` recheck in `callForeignCached`, a non-local invariant the comment never states) or an embedder-supplied deadline (`mc.timer == nil`, cause `DeadlineExceeded` → no eager recheck; body runs up to `contextCheckMask`≈1024 ops with a laundered `Void` before the deadline propagates — bounded, VM-consistent, and strictly better than the old infinite hang, but the one path where "cancelled receive looks exactly like closed channel" is observable). **Possible actions:** (A) tighten the comment to name the real invariant (eager `ErrTimerExpired` check + bounded `thread-terminate!` latency + the embedder-deadline window); (B) *use* the seam — surface `RecvCancelled`/`SendCancelled` distinctly so a cancelled op cannot be confused with close; (C) delete the seam and collapse to a bool if Option A is a committed contract. **Recommendation: A now** (cheap; closes the misleading-comment hazard that guards the test item below). **B or C deferred**, gated on the open question "is Option A a committed contract?" — if committed, C; if placeholder, B. Do not do both A-longterm and C.
-- [x] **`ChannelSelect` is complete, tested, CHANGELOG-cited — and registered nowhere; half-migrated to the old lifecycle** [API/dead-code, S–M, Done]: **Resolved via (A) — deleted.** Removed `ChannelSelect`, `SelectCase`, `SelectCaseKind` + its 3 constants, and `firstDeadCase` (`pkg/values/channel.go`, 124 lines — the whole tail), the now-unused `reflect` import, and the 8 `TestChannelSelect*` functions (`channel_test.go`, ~188 lines, about half the file). ~312 lines total; no consumer anywhere, so nothing else changed. Three corrections to the framing below, found while scoping it: (1) it was **exported from `values/`, a public embedding package** — reachable from Go even though no Scheme program could call it, so this is a public API removal, not internal cleanup, taken under the zero-consumer rule; (2) wiring it would have needed a **ctx arm, not just `done` arms** — `ChannelSelect` took no `context.Context` while `Send`/`Receive` both do, so exposing it as-is would have reintroduced T1.3 at a new site; a throwaway prototype confirmed 2N+1 arms (data + `done` per channel, one ctx) work, `-race` clean, so the decision was never technical; (3) **the CHANGELOG line was not deleted** — 1.18.0 and 1.3.0 are released sections and deleting from them rewrites shipped history; a removal note plus a correction went in `[Unreleased]` instead. That 1.18.0 entry announced `channel-select` as a Scheme primitive that never existed, which needed correcting either way. If a `channel-select` consumer ever appears, note `reflect.Select` panics past 65536 cases and the list would come from Scheme, so it needs an arity guard. Original scoping below.
-- [ ] **~~`ChannelSelect` dead code~~ (original scoping, retained for context)** [API/dead-code, S–M]: No `PrimitiveSpec` names `values.ChannelSelect` (`pkg/values/channel.go`); only tests reference it. It builds `reflect.SelectCase` on the never-closed data channel `ch` directly, so a peer closing a channel mid-block is invisible to a blocked `ChannelSelect` — its own doc admits this and says the fix is to add each channel's `done` arm to the `reflect.Select` set, exactly what the lifecycle rewrite added to `Send`/`Receive` but not here. **Possible actions:** (A) delete it (plus its tests + the CHANGELOG line); (B) wire it as `channel-select`, first adding a `<-done` reflect case per channel so it observes closure mid-block; (C) leave + annotate with an explicit "do-not-expose-until-done-arm-added" marker. **Recommendation: A (delete)** unless `channel-select` has a concrete near-term consumer; choose **B** only if it is actually on the roadmap, and then the done-arm migration is mandatory. Reject C (latent-buggy dead code is what the rubric already flagged). Gated on the open question "is `channel-select` on the roadmap?".
+- [x] **`ChannelSelect` was complete, tested, CHANGELOG-cited — and registered nowhere** [API/dead-code, S–M, Done — deleted]: removed `ChannelSelect`, `SelectCase`, `SelectCaseKind` + its 3 constants, `firstDeadCase`, and the 8 `TestChannelSelect*` functions — ~312 lines, no consumer anywhere. Three corrections found while scoping it: (1) it was **exported from `values/`, a public embedding package**, reachable from Go even though no Scheme program could call it, so this is a public API removal taken under the zero-consumer rule, not internal cleanup; (2) wiring it would have needed a **ctx arm, not just `done` arms** — it took no `context.Context` while `Send`/`Receive` both do, so exposing it as-is reintroduces the T1.3 leak at a new site (a throwaway prototype confirmed 2N+1 arms work `-race`-clean, so the decision was never technical); (3) the CHANGELOG line was **not** deleted — 1.18.0 and 1.3.0 are released sections and deleting from them rewrites shipped history, so a removal note plus a correction went into `[Unreleased]` (the 1.18.0 entry had announced `channel-select` as a Scheme primitive that never existed). If a consumer ever appears: `reflect.Select` panics past 65536 cases and the list would come from Scheme, so it needs an arity guard.
 - [ ] **Stale sub-context comment on `with-timeout`** [Docs, XS]: `PrimWithTimeout` (`pkg/registry/core/prim_timer.go`) header says "The sub-context pattern ... a fresh sub-context isolates the thunk's execution," but the same function's body twelve lines down (and `RunBodyUnderTimer`) says it runs the thunk **INLINE on the live chain, not in a sub-context** (the accurate description). REVIEW.md lists stale comments as a recurring trap; this one misdescribes the isolation model of the code that makes the `with-timeout` cancellation path safe. **Possible actions:** (A) delete the stale sub-context sentence; (B) rewrite it to match the inline model. **Recommendation: A (delete)** — the accurate description already exists in the same comment, so B just duplicates it.
-- [x] **Tests validate the Go layer, not the Scheme integration that makes it safe** [Test-coverage, S, Done]: Shipped A+B+C. `extensions/gointerop/channel_cancellation_test.go`: `TestWithTimeoutInterruptsParkedReceive` (A — asserts the handler value; mutation-verified: disabling the eager `ErrTimerExpired` recheck in `callForeignCached` makes it fail with the laundered `Void`) and `TestTerminateUnparksBlockedThread` (B — `thread-join!` doubles as the goroutine-exit handshake, since `Thread.Join` blocks on the `done` channel closed by `Start`'s last-run defer; mutation-verified: disabling `Receive`'s ctx arm makes it fail with `JoinTimeoutException`). Go-level tests retained (C). **Writing B found a real defect** — see the `Terminate` item below. Original scoping preserved below.
-- [x] **`thread-terminate!` discarded its own SRFI-18 end-exception** [Correctness, S, Done]: Found while writing the test item above. `Thread.Terminate` stored a `TerminatedThreadException` (`pkg/values/thread.go`) and `Thread.Start`'s goroutine then unconditionally overwrote it when the thunk returned; `defer close(p.done)` is registered first and so runs last, guaranteeing the overwrite landed before any joiner was released. A started thread's joiner could therefore *never* observe the exception. Worst case: a thread parked in `channel-receive` in **tail position** of its thunk — the cancelled receive's laundered `Void` (Option A) returned as the thunk's ordinary result with no VM op following it to trip the top-of-loop ctx check, so `(thread-terminate! t)` + `(thread-join! t)` reported a terminated thread as having *succeeded* with `Void`. Not a regression (pre-`fix/channel-lifecycle-ctx` that thread hung forever), and it invalidated the `thread-terminate!` row of the design doc's three-sources table, which argued the ≈1024-op unwind window was itself the protection. **Fix:** the outcome is now write-once (`Thread.setOutcome`/`setOutcomeLocked`) — first writer wins, so `Terminate` beats the completion path, while SRFI-18's "if the thread is not already terminated" clause still holds (a completed thread keeps its result). Existing coverage was vacuous: `prim_threads_test.go`'s "terminate thread" case never started the thread and `prim_thread_test.go`'s `TestThreadTerminate` never joined — both asserted the `#t` literal they wrote. Now guarded channel-free by `extensions/threads/prim_threads_terminate_outcome_test.go`.
-- [x] **`thread-join!` on a terminated but never-started thread blocks forever** [Correctness, S, Done]: Found while probing the SRFI-18 surface for the `Terminate` fix above; was pre-existing. `Thread.Terminate` on a `ThreadNew` thread stored the terminated-thread exception and set `state = ThreadTerminated`, but `done` is closed only by the goroutine `Thread.Start` spawns — which never ran, and never could (`Start` rejects `state != ThreadNew`). So `Thread.Join(nil)` parked on `<-p.done` forever while the exception the joiner wanted sat in the outcome field; with a timeout it raised `JoinTimeoutException` instead. The exception was never the missing piece, only the `done` signal. **Fixed via (A)**: `Terminate` closes `done` when it is the one ending a `ThreadNew` thread. The two closers are mutually exclusive because `Start` makes the `ThreadNew → ThreadRunnable` transition under `p.mu` before spawning and refuses any other state — so `done` closes exactly once, without a `sync.Once`. That mattered: a double close is a fatal host panic, the same hazard class as the `channel-send!` TOCTOU. Guarded by `pkg/values/thread_lifecycle_test.go` (20000-trial `-race` no-double-close race with a starting gate, plus a deterministic test per arm) and `TestThreadTerminateNeverStartedThreadIsJoinable`, which joins with *no* timeout so the regression is an unbounded park rather than a misleading `JoinTimeoutException`.
-- [ ] **~~Tests validate the Go layer~~ (original scoping, retained for context)** [Test-coverage, S]: `pkg/values/channel_lifecycle_test.go` drives cancellation with a raw `context.WithCancel` at the Go layer; nothing exercises `thread-terminate!` or `with-timeout` reaching a parked channel op — the actual integration this branch enables. In particular the `with-timeout ∘ channel-receive` path is safe *only* because of the eager `ErrTimerExpired` recheck in `callForeignCached`; no channel or timer test would fail if that recheck regressed. Also, per the concurrency rubric, no test starts a real SRFI-18 thread that blocks in a cross-thread rendezvous and is then terminated. **Possible actions (do all three):** (A) add a Scheme-level `(with-timeout T handler (lambda () (channel-receive empty-ch)))` test asserting the handler value, not `Void` — the regression guard for the eager recheck; (B) add a cross-thread rendezvous-under-terminate test (park a thread in `channel-receive`, `thread-terminate!`, assert the goroutine exits and the joiner sees `TerminatedThreadException`); (C) keep the existing Go-level cancellation tests (they still prove `Send`/`Receive` honor a raw ctx). **Recommendation: A + B + C** — A/B are additive coverage of the SRFI-18/timer wiring the Go-level tests can't reach; C is retained, not replaced. **Sequence these FIRST**, before touching the comment/seam items above, to lock in current-correct behavior.
+- [x] **Scheme-level cancellation tests added; two real defects found writing them** [Test-coverage + Correctness, S, Done — A+B+C shipped]: `extensions/gointerop/channel_cancellation_test.go` adds `TestWithTimeoutInterruptsParkedReceive` (mutation-verified: disabling the eager `ErrTimerExpired` recheck in `callForeignCached` makes it fail with the laundered `Void`) and `TestTerminateUnparksBlockedThread` (mutation-verified: disabling `Receive`'s ctx arm makes it fail with `JoinTimeoutException`). Go-level cancellation tests retained. Writing them surfaced two defects:
+  - **`thread-terminate!` discarded its own SRFI-18 end-exception** [Correctness, S, Done]: `Thread.Terminate` stored a `TerminatedThreadException` and `Thread.Start`'s goroutine then unconditionally overwrote it; `defer close(p.done)` is registered first and so runs last, guaranteeing the overwrite landed before any joiner was released — a started thread's joiner could **never** observe the exception. Worst case: a thread parked in `channel-receive` in **tail position** returned the cancelled receive's laundered `Void` as its ordinary result, with no following VM op to trip the ctx check, so terminate-then-join reported the terminated thread as having *succeeded*. That invalidated the design doc's three-sources table, which had argued the ≈1024-op unwind window was itself the protection. Fixed by making the outcome write-once (`Thread.setOutcome`): first writer wins, so `Terminate` beats the completion path while SRFI-18's "if the thread is not already terminated" clause still holds. Prior coverage was vacuous — both existing tests asserted the `#t` literal they wrote. Guard: `extensions/threads/prim_threads_terminate_outcome_test.go`.
+  - **`thread-join!` on a terminated but never-started thread blocked forever** [Correctness, S, Done]: `done` is closed only by the goroutine `Start` spawns, which never ran and never could (`Start` rejects `state != ThreadNew`), so `Join` parked forever while the exception the joiner wanted sat in the outcome field. `Terminate` now closes `done` when it is the one ending a `ThreadNew` thread. The two closers are mutually exclusive because `Start` makes the `ThreadNew → ThreadRunnable` transition under `p.mu` before spawning and refuses any other state — so no `sync.Once` is needed, which mattered: a double close is a fatal host panic, the same hazard class as the `channel-send!` TOCTOU. Guards: `pkg/values/thread_lifecycle_test.go` (20000-trial `-race` no-double-close with a starting gate) and `TestThreadTerminateNeverStartedThreadIsJoinable`, which joins with *no* timeout so a regression is an unbounded park rather than a misleading `JoinTimeoutException`.
 
 **Two decisions gate the deferred sub-items:** *is Option A a committed contract?* (drives item 1's B-vs-C) and *is `channel-select` on the roadmap?* (drives item 2's A-vs-B). Everything else (comment fixes + the tests) is safe to do now regardless. Suggested order: tests → delete stale comment → tighten seam rationale → resolve `ChannelSelect` → resolve the seam.
 
 ### List/Pair Primitive Cleanup (from inline annotations)
 
-- [x] **List/pair primitive cleanup notes** [Low, XS–S, Done]: Relocated from inline `// CLAUDE:` source annotations (removed to keep the axis-B manifest stable — inline comments shift primitive line numbers and break `TestBuildAxisBManifest`). Four items:
-  - [x] **`Pair.Append` removal** (`pkg/values/pair.go`, `(*Pair).Append`): **removed.** Confirmed dead — zero production callers (the only `.Append(` in non-test code was `reflect.Append`); superseded by the Scheme `append` primitive (`PrimAppend`), which builds its own spine. Deleted the `Tuple.Append` interface method, both implementers (`*Pair`, `emptyListType`), and the 6 `*_Append*` unit tests.
-  - [x] **`PrimReverse` allocation** (`pkg/registry/core/prim_lists.go`, `PrimReverse`): already `PairBlock` (count pass + back-to-front fill).
-  - [x] **`PrimListCopy` allocation** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): **converted to `PairBlock`.** Reversed the earlier tail-pointer choice — `Tuple.ForEach` gives both the count and the terminating cdr, so an improper tail is preserved by re-pointing the block's last cdr after `LinkSpine`; the tail-pointer form was not load-bearing. Measured: 50-element copy 63→18 allocs / ~10% faster (O(N) cons → 1 block). CLAUDE.local.md allocation guidance updated to move list-copy to the `PairBlock` example and keep `PrimAppend` as the sole tail-pointer exemplar (multi-arg concat genuinely can't pre-count).
-  - [x] **`PrimListCopy` loop shape** (`pkg/registry/core/prim_lists.go`, `PrimListCopy`): explicit `for` spine-walk replaced by two `Tuple.ForEach` passes (mirrors `PrimList`/`PrimReverse`).
+- [x] **List/pair primitive cleanup** [Low, XS–S, Done]: relocated from inline `// CLAUDE:` source annotations, which were removed because inline comments shift primitive line numbers and break `TestBuildAxisBManifest`. `(*Pair).Append` removed — confirmed dead, superseded by `PrimAppend`, which builds its own spine; the `Tuple.Append` interface method and both implementers went with it. `PrimReverse` was already `PairBlock`. `PrimListCopy` converted to `PairBlock`, reversing the earlier tail-pointer choice: `Tuple.ForEach` yields both the count and the terminating cdr, so an improper tail is preserved by re-pointing the block's last cdr after `LinkSpine` — 63→18 allocs, ~10% faster on 50 elements. `PrimAppend` remains the sole tail-pointer exemplar, since multi-arg concat genuinely cannot pre-count.
 
 ### FCA-Derived
 
-- [x] **Structural reduction roadmap** [Top priority, planning-only, Done — closed 2026-07-08]: Selects the next packages to subject to `/structural-reduction` and **gates** the implementation plans below. Tier A targets in priority order: `values/` (Ca=33, 11K LOC, numeric tower + port hierarchy), `environment/` (Ca=16, binding-resolution algebra, recent namespace migration seams), `registry/` (Ca=19, contract surface for ~500 primitives). Tier B: root `wile/` (API design quality), `repl/`, `registry/helpers/`. Tier C uses different lenses (`scheme-conformance` for `registry/core`, `extensions/math`; `signals-engineer` for `security/`; batch `staff-engineer` sweep for `extensions/{eval,files,threads,gointerop,charsets,system,process,introspection}`). Why gating: `internal/` Phase 7 references `values/` as migration precedent; `machine/` Phase 7 boundaries depend on `environment/` frame shape. Run Tier A analyses BEFORE implementing the plans below. `memory/2026-05-07-structural-reduction-roadmap.local.md` (moved to `memory/` on close). **Tier A status (2026-05-13)**: A.2 (`environment/`) shipped via PR #730 (`memory/2026-05-09-environment-structural-reduction.local.md`). A.3 (`registry/`) cross-cutting findings consolidated in `memory/2026-05-08-dispatch-axis-as-data.local.md` — Phase unification shipped (PR #728); remaining instances feed per-package plans. **A.1 (`values/`) complete — Phases 0–4 shipped via PRs #747–#756 (`memory/2026-05-13-values-structural-reduction.local.md`). Tier A closed.** **Tier B closed**: B.1 `wile/` (PR #764); B.2 `repl/` + B.3 `registry/helpers/` SR passes run 2026-07-08 (branch `refactor/structural-reduction-b2-b3` — one state-tightness fix, dead-code removal, and a dispatch drift-guard test; low yield as predicted, most candidate findings refuted/declined as churn). **Tier C** batch reassigned to `2026-07-01-staff-engineer-sweep.md`. Roadmap spent — closed and archived to `memory/`.**
-- [x] **vmCore sub-struct extraction** [High, M, Considered and declined on re-evaluation (2026-06-05)]: Original proposal — extract always-transfer fields (env, template, pc, callDepth) into a sub-struct so 4 hand-copied assignments collapse to 1 struct assignment at each of 6 copy sites. **Declined** after reading all transfer sites (`machine_context_continuation.go`, `machine_continuation.go`, `machine_context.go`). Four reasons: (1) **Field list wrong** — `callDepth` is not an always-transfer datum but a *guarded maintained counter*: `SaveContinuation` `++` (maxCallDepth guard), `PopContinuation` `--` (underflow guard), both continuation constructors compute `depth` from the parent pointer. It transfers verbatim at only 3 of 8 sites; bundling it forces override-after-copy at 4 sites and risks clobbering its guards. (2) **Wrong target** — the genuine always-transfer triple is just `{env, template, pc}`, but those are the *trivial* fields. The FCA assessment's own "High" rating rests on the divergent fields (`evals` 4 ownership modes, `envPooled` 4 behaviors, `marks` clone-vs-direct), none of which a `vmCore` of always-transfer fields touches. (3) **Safety net already exists** — the FCA's "no compile-time guard when fields are added" concern is already answered by `testVmStateFieldCoverage` (`machine/vm_state_test.go:277`), which fails the build if any `vmState` field is missing from any operation's coverage table. (4) **Cost/benefit** — net ~6 lines saved at 3 sites (`Restore`/`RestoreAndRelease`/`Copy`) on the hottest path in the VM (per-call/per-return), requiring a doc-table reorg and bench gate; no realistic future always-transfer CESK register exists to amortize it. Parallels the prior decline of machine SR Finding 7 Stage 3 (sub-record extraction that didn't reduce real risk). See [FCA Assessment](#fca-assessment).
-- [x] **Machine package structural reduction** [High, mixed S/M/L, Done] — **all 7 findings closed (2026-05-13).** 7 findings + 3 opportunities from `/structural-reduction ./machine` (2026-05-06). Status: (1) syntaxCase any → marker interface — **considered and declined** (PR #731); (2) maxStackSize → Stack.Push — **shipped** (PR #734, Finding 5); (3) maxCallDepth type unification — partially shipped (commit `7dc2511c`), sentinel-removal half **declined** (Finding 4); (4) Operation empty contract → OpKind() discriminator — **shipped** (PR #735, Finding 6); (5) singleValue/multiValues accessors → vmState consolidation + ruleguard — **shipped** (PR #736, Finding 3); (6) tail/non-tail opcode collapse via sign-bit encoding — **considered and declined** (PR #737, 2026-05-11; geomean +2.5% regression, all 16 benches slower; see `memory/finding2-collapse-revert.local.md`); (7) named sub-records for correlated `MachineContext` fields — **shipped at stages 1–2** (PR #742 expansion sub-record, PR #743 timer sub-record, PR #745 cumulative crosscheck followups); **Stage 3 declined** (field-independence analysis showed no co-variance between sub-context fields, commit `9382a3b3`). `memory/2026-05-06-machine-structural-reduction.local.md`
-- [x] **Internal package structural reduction** [Medium-High, mixed XS/S/M, Done] — **all 7 findings shipped.** 7 findings + 4 opportunities from `/structural-reduction ./internal` (2026-05-07). Dependency graph is a clean DAG (0 cycles). Phasing: (7) delete dead `SyntaxObject.IsPair()`/`IsEmptyList()`, (4) extract `bindLocalSymbol`+`extendEnvWithSymbols`, (3) extract `detectDuplicateSymbols` fold, (2) extract `parseLetBindingPairs` helper, (6) collapse 4 `match.NewMatcher*` telescoping ctors → 1 + N options — all batched in **PR #739**. (5) generalize binding-reference walker (`WalkBindingRefs` higher-order traversal collapsing `markCaptured` + `markEscaped`) shipped in **PR #740**. (1) finish `*SyntaxPair`/`SyntaxEmptyList` empty-list duality migration (restores Chez-conformant `(equal? (syntax ()) '())`) shipped in **PR #741**. `memory/2026-05-07-internal-structural-reduction.local.md`
-- [x] **Values package structural reduction** [High, mixed S/M/L, Done] — **Tier A.1 complete; Phases 0–4 shipped (PRs #747–#756).** 9 findings + 4 opportunities from `/structural-reduction ./values` (2026-05-13). Phase 0 quick wins (PR #747): `TypeExactInteger` alias deleted, `makeInterfaceCheck` folded into `makeCheck`, `goTypeToValueType` reverse map replaces the `SchemeTypeName` switch. Phase 1 (PR #748): mutex state tightness. Phase 2 **Port unification** (PR #749): ~900 LOC across 9 port types collapsed to one `*Port` struct with capability slots. Phase 3 **NumericTypeSpec registry** (PR #752): the 12-step ADDING-A-NEW-NUMERIC-TYPE guide collapses to one record; numeric loss signals follow-up (PRs #753–#756). Phase 4: `Datum()` deletion + `IsVoid` convention test (commits `d7112b0c`, `e93448c4`). Finding 1 (IsVoid convention) recast after design-intent review — original "delete 51 methods, use reflection" framing retracted; shipped as additive convention test + `allValueExemplars` roster. `memory/2026-05-13-values-structural-reduction.local.md`
-- [x] **Environment package structural reduction** [Medium-High, mixed XS/S/M, Done — Phase 10 deferred] — **Phases 1–9 shipped (PR #730, 2026-05-10).** Closed Tier A.2 of the roadmap. 10 findings + 4 opportunities from `/structural-reduction ./environment` (2026-05-09). Findings 1, 2, 3, 4, 5, 6, 7, 8, 9 implemented (dead-code drops + `Namespace.root()` extraction + `bestOf[T]` reducer + `Binding` accessor collapse + 5 Namespace constructors → `NewChildNamespace` + options + `BindingTypeUnknown` documented + `EnvironmentFrame` delegation surface documented). Phase 10 (Finding 10 — `*LocalIndex` allocation audit across 40 sites; unboxed `slot, depth int` fast path already exists) **deferred — benchmark-gated** per the recommended phasing; re-open if a measured allocation win surfaces. `memory/2026-05-09-environment-structural-reduction.local.md`
+- [x] **Structural-reduction roadmap** [Planning, Done — closed 2026-07-08]: spent and archived to `memory/2026-05-07-structural-reduction-roadmap.local.md`. Tier A closed (`values/` PRs #747–#756, `environment/` PR #730, `registry/` PR #728); Tier B closed (`wile/` PR #764; `repl/` + `registry/helpers/` on `refactor/structural-reduction-b2-b3` — low yield as predicted, most findings refuted or declined as churn); Tier C reassigned to `plans/2026-07-01-staff-engineer-sweep.md`.
+- [x] **Machine package structural reduction** [Done 2026-05-13]: all 7 findings closed. Shipped — `Stack.Push` max-stack (PR #734), `OpKind()` discriminator (PR #735), vmState value-register consolidation + ruleguard (PR #736), correlated-field sub-records (PRs #742/#743/#745). Declined — syntaxCase marker interface (PR #731), maxCallDepth sentinel removal, tail/non-tail opcode collapse via sign-bit encoding (PR #737: geomean +2.5%, all 16 benches slower), Stage-3 sub-records (field-independence analysis found no co-variance, `9382a3b3`). `memory/2026-05-06-machine-structural-reduction.local.md`
+- [x] **Internal / values / environment structural reduction** [Done]: `internal/` all 7 findings (PRs #739–#741, including the `*SyntaxPair`/`SyntaxEmptyList` duality migration that restores Chez-conformant `(equal? (syntax ()) '())`); `values/` Phases 0–4 (PRs #747–#756 — 9 port types collapsed to one `*Port` with capability slots, ~900 LOC, and a `NumericTypeSpec` registry replacing the 12-step ADDING-A-NEW-NUMERIC-TYPE guide); `environment/` Phases 1–9 (PR #730), Phase 10 (`*LocalIndex` allocation audit) deferred benchmark-gated. Plans archived under `memory/2026-05-0*`.
+- [x] **vmCore sub-struct extraction** [High, M, DECLINED on re-evaluation 2026-06-05]: the genuine always-transfer set is only `{env, template, pc}` — the trivial fields. `callDepth` is not always-transfer but a *guarded maintained counter* (`SaveContinuation` ++, `PopContinuation` --, both continuation constructors derive it from the parent), transferring verbatim at 3 of 8 sites, so bundling it forces override-after-copy at 4 sites and risks clobbering its guards. The FCA "High" rating rested on the divergent fields (`evals` 4 ownership modes, `envPooled` 4 behaviors, `marks` clone-vs-direct), none of which a vmCore touches, and the drift concern is already answered by `testVmStateFieldCoverage`. Net ~6 lines saved at 3 sites on the VM's hottest path. Parallels the prior decline of machine SR Finding 7 Stage 3.
 - [ ] **Bidirectional opcode conversion test** [Medium, S]: Verify `operationToInstruction` and `instructionToOperation` cover the same opcode set.
 - [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
 - [ ] **Honor `WithInlineThreshold` for imported libraries** [Low, S]: The library import/load chain (`LoadLibrary` → `loadLibraryFromReader` → `compileAndExecuteLibrary`, `machine/compilation/library_loader.go:215,223`) has **no `inlineThreshold` parameter**, so imported libraries always compile at `DefaultInlineThreshold = 5`, ignoring the engine's `WithInlineThreshold(n)` (`pkg/wile/options.go:275`). Every *in-process* child compiler re-threads the parent's value via the two-line `NewCompileTimeContinuation(...)` + `SetInlineThreshold(p.inlineThreshold)` idiom (6 sites: `compile_syntax_case.go:253`, `compile_closure.go:123`, `compile_library_forms.go:109`, `compile_helpers.go:51`, `compile_time_continuation.go:347`, `expand_and_compile.go:53`); the load path is the one site that cannot reach the value. **Not a correctness bug** — inlining here is the behavior-preserving synthetic-let transform (PR #605), so results are unchanged; it is a config-honoring / debuggability inconsistency (disabling inlining, e.g. for predictable stack traces, is silently not honored across the `import` boundary). Fix: thread `inlineThreshold` through the three `LoadLibrary`/`loadLibraryFromReader`/`compileAndExecuteLibrary` signatures (or expose it via `Namespace`/`EngineServices` so the load path can read it) and `SetInlineThreshold` on the library compiler. Discovered during the `CompileTimeContinuation` God-object triage (2026-07-09); the fix also illustrates why the "stable config should be inherited, not hand-copied" refactor (staff sweep tail) has real payoff — a shared services pointer would close this gap by construction.
-- [x] **Unified binding reference (`BindingRef`) for local+global** [Medium, M, Done — structural tidy, not the bug fix implied]: `BindingID{*LocalEnvironmentFrame, slot}` names only local bindings; `GlobalIndex{*Symbol, *GlobalEnvironmentFrame}` names only globals. The asymmetry forces every cross-cutting "name any binding" consumer to special-case the two — most visibly the validator's mutation set (`mutatedBindings map[BindingID]bool`, `validate_set.go`), which is structurally blind to top-level `set!` because `ResolveBindingID` walks `resolveLocal` only. This surfaced while implementing define-immutability constant tracing (`memory/2026-06-12-define-immutability-and-constant-tracing-impl.local.md`), where the in-unit-`set!` predicate for top-level defines had to fall back to symbol-key tracking precisely because no unified reference exists. **Do NOT fold the two storage structures** — they are tuned for opposite access patterns and folding regresses the VM hot path: locals are positionally-addressed (`LocalIndex{over,up}`, O(1) array index), copied every `Apply`, single-threaded, multi-slot-per-name (hygiene), `[]Binding` by value; globals are symbolically-addressed, shared across SRFI-18 threads (`sync.RWMutex`), `[]*Binding` pointer-stable (required by the lock-free `cachedBindings`/promoted-ops read cache — see auto-memory `global-binding-cache-already-exists.md`), multi-slot-per-name since `8afeb66a` (scope-keyed, like locals — this clause formerly read "single-slot" and was the one premise below that scope-keying invalidated; the other four still hold and the directive stands), deletable. The productive unification is the **reference/identity type, not the storage**: a `BindingRef` sum (local-or-global) resolvable at the `EnvironmentFrame` layer (which already unifies `GetBinding`/`ResolveBindingID`/`GetGlobalIndex` over both frames). Gate behind `/structural-reduction ./environment` measurement; verify by substitution that the validator and any other consumer can name either binding kind through one type. Sibling-of: line 188 (LocalEnvironmentFrame pointer lifecycle doc). **Done (2026-07-08, master `229e0b72`)**: `BindingRef` sum type + `ResolveBindingRef` added to `environment/`; the validator's mutation set collapsed from 3 maps (`mutatedBindings`/`mutatedKeys`/`definedKeyCount`) to 2. **Correction to the premise above**: on inspection the validator was NOT structurally blind to top-level `set!` — the symbolic `mutatedKeys` sidecar already compensated, and `StableInUnit` was correct. So this shipped as a **semantics-preserving structural tidy** (one "name any binding" type, hand-marked duplication removed), not a bug fix. The precise-vs-conservative split was found to be principled (two consumers: per-let-binding `Mutable` vs top-level `StableInUnit`), so storage stayed split as warned; only the reference type unified. The conservative over-mark (a `set!` to a local shadow still marks the top-level name non-stable) is the frame-reclaim soundness margin — now guarded by `TestStableInUnit_SetToLocalShadowStillMarksTopLevel` (verified non-tautological). `/structural-reduction ./environment` gate skipped: the two-consumer pattern was already located. Compiler-side sibling (`inlineCandidates` + `Sym.Key`) left as opportunistic follow-up.
-- [x] **Unify `atan2Operand` with `helpers.ToFloat64`** [Low, S, Done]: PR #754 surfaced 3-lens convergence on a duplication. `extensions/math/prim_transcendental.go::atan2Operand` re-implemented the Number-assertion → ComplexNumber-rejection → float64-extraction sequence that `helpers.ToFloat64` performs, just to swap the loss-policy knob from "strict" to "silent truncate." **Resolved**: extracted shared `screenReal` screening in `registry/helpers/value_conv.go`; added `helpers.ToFloat64Lossy` (screening + `values.ToFloat64WithAccuracy` discard) as the lossy-policy counterpart to strict `ToFloat64`; deleted `atan2Operand` and routed both `PrimAtan` call sites through `helpers.ToFloat64Lossy`. Lossy semantics (`(atan 1/3)` etc.) preserved per R7RS §6.2.6.
+- [x] **Unified binding reference (`BindingRef`) for local+global** [Medium, M, Done 2026-07-08, `229e0b72`]: `BindingRef` sum type + `ResolveBindingRef` in `environment/`; the validator's mutation set collapsed from 3 maps to 2. **Storage stays split, deliberately** — locals are positionally addressed (`LocalIndex{over,up}`), copied every `Apply`, single-threaded, `[]Binding` by value; globals are symbolically addressed, shared across SRFI-18 threads, and `[]*Binding` pointer-stable because the lock-free `cachedBindings` read cache requires it. Only the reference type unified. **Premise correction**: the validator was NOT structurally blind to top-level `set!` — the symbolic `mutatedKeys` sidecar already compensated and `StableInUnit` was correct — so this shipped as a semantics-preserving structural tidy, not the bug fix the original framing implied. The conservative over-mark (a `set!` to a local shadow still marks the top-level name non-stable) is the frame-reclaim soundness margin, now guarded by `TestStableInUnit_SetToLocalShadowStillMarksTopLevel` (verified non-tautological).
+- [x] **Unify `atan2Operand` with `helpers.ToFloat64`** [Low, S, Done, PR #754]: `atan2Operand` re-implemented the Number-assert → complex-reject → float64-extract sequence just to swap the loss policy from strict to silent-truncate. Extracted shared `screenReal` into `registry/helpers/value_conv.go` and added `helpers.ToFloat64Lossy` as the lossy counterpart to strict `ToFloat64`; `atan2Operand` deleted, both `PrimAtan` sites routed through it. Lossy semantics (`(atan 1/3)`) preserved per R7RS §6.2.6.
 
 ### Tech Debt Plan (remaining)
 
@@ -1556,17 +1034,14 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
 
 ### Algebra library consistency (2026-04-23 staff-engineer audit)
 
-- [x] **Promote setoid collection helpers** [High, S, Done]: `setoid-member?`, `setoid-assoc`, `setoid-dedup` now public in `(wile algebra setoid)`; private `%`-copies deleted from `group.scm` and `combinatorial-graph.scm`. All call sites updated.
-- [x] **Promote options-alist helpers** [High, S, Done]: `assv-or` and `validate-opts-keys` folded into `(wile algebra setoid)` as public helpers (noted as "plumbing, not setoid ops" with a section comment; move to a dedicated module later if a third category accumulates). Scope was larger than audit showed: duplication existed in FOUR libraries (group, combinatorial-graph, **incidence, lattice**). All four call sites updated; `incidence.sld` gained a `(wile algebra setoid)` import.
-- [x] **Drift-check test for umbrella `algebra.sld`** [High, S, Done — option (c)]: `algebra_umbrella_drift_test.go` parses every leaf `.sld` export clause and asserts umbrella coverage. First run caught real drift (`rewrite.sld: associativity-axiom-op commutativity-axiom-op`; `semiring.sld: tropical-inf`) — added to umbrella. Deferred decisions (a) delete and (b) generate until test-driven drift frequency justifies either path.
-- [x] **Documented convention for structure API** [Medium, S, Done — supersedes "extract with-X macro skeleton"]: Reviewing the audit's own premise: a `define-with-binder` meta-macro would save ~10 lines across 15 libraries at the cost of indirection. Not worth it. Replaced with `stdlib/lib/wile/algebra/CLAUDE.md` documenting the five-part structure API (`make-X` / `X?` / accessors / `with-X` / `validate-X`), the shared plumbing in `(wile algebra setoid)`, options-alist discipline, validator body shape, and the `with-X` skeleton. New structures and reviewers have an anchor; duplication stays mechanical.
-- [x] **Extract `validate-X` violation-collector idiom** [Medium, S, Done]: `make-violation-reporter` added to `(wile algebra setoid)` — two-mode procedure (call with type + args to record, call with no args to finalize). Retrofitted every `validate-X` across 14 libraries (setoid, monoid, group, ring, field, semiring, lattice + /distributive + /modular, boolean, heyting, category, closure, differential, partial-order + /setoid, galois's gc-sound?, combinatorial-graph). Parent-validator delegation patterns (field→ring, boolean→lattice, heyting→lattice, partial-order/setoid→partial-order, differential→ring) now use `(for-each (lambda (v) (apply fail! v)) parent-result)` instead of `(set! violations (append ...))`.
-- [x] **Resolve `assert-X` asymmetry** [Medium, S, Done — dissolved via generic helper]: Rather than add 18 `assert-X` symbols, added `assert-validation` as a syntax-rules macro in `(wile algebra setoid)`. `(assert-validation (validate-group G s))` raises if the result isn't `#t`, with the source expression preserved in the error datum. Existing `assert-group`/`assert-graph` kept as thin conveniences; new structures should use the generic helper. Net API-surface cost: +1 symbol instead of +18.
-- [x] **Refactor `combinatorial-graph.scm` monolith — first cut** [Medium, M, Done (partial)]: Replaced `%list-sort`/`%insert` (custom insertion sort) with `list-sort` from `(srfi 132)` — 14 lines removed, new library import added. File is now 1,726 lines (down from 1,787 including the setoid/options helper promotion earlier this session). Remaining `%`-prefixed helpers (`%sig<`, `%key<`, `%refine-step`, `%nat-*`, `%backtrack-canonical`, etc.) are genuinely graph-specific or WL/isomorphism-specific — splitting into sub-files (`-isomorphism`, `-polynomials`, `-matching`) is deferred until that provides tangible review-scope benefit.
-- [x] **Normalize `make-X` constructor validation discipline** [Low, S, Done]: Added `assert-procedure` macro to `(wile algebra setoid)` — uses `syntax-rules` to capture the source identifier, so `(assert-procedure "make-ring" plus)` raises `"make-ring: plus must be a procedure"` on non-procedure input. Retrofitted 11 non-validating constructors: `make-setoid`, `make-monoid`, `make-partial-order`, `make-closure-operator` (split into `make-X*` record-type ctor + wrapper), `make-semiring`, `make-ring`, `make-field`, `make-boolean-algebra`, `make-heyting-algebra`, `make-category`, `make-differential-ring`, `make-galois-connection`. The audit noted `make-lattice` as non-validating — it was already validating. Convention documented in `stdlib/lib/wile/algebra/CLAUDE.md` "Procedural-argument discipline for `make-X`" section.
+- [x] **Shared helpers promoted into `(wile algebra setoid)`** [High, S, Done]: `setoid-member?`, `setoid-assoc`, `setoid-dedup`, `assv-or`, and `validate-opts-keys` are public there; the private `%`-copies are deleted from group, combinatorial-graph, incidence, and lattice — four libraries, not the two the audit found.
+- [x] **Drift-check test for umbrella `algebra.sld`** [High, S, Done — option (c)]: `algebra_umbrella_drift_test.go` parses every leaf `.sld` export clause and asserts umbrella coverage. First run caught real drift (`rewrite.sld`, `semiring.sld`). Deleting or generating the umbrella stays deferred until measured drift frequency justifies either.
+- [x] **Structure-API convention documented instead of abstracted** [Medium, S, Done]: a `define-with-binder` meta-macro would have saved ~10 lines across 15 libraries at the cost of indirection — declined. `stdlib/lib/wile/algebra/CLAUDE.md` documents the five-part structure API (`make-X` / `X?` / accessors / `with-X` / `validate-X`), the shared plumbing, options-alist discipline, and validator shape instead; duplication stays mechanical.
+- [x] **`validate-X` / `assert-X` / `make-X` idioms collapsed to generic helpers** [Medium, S, Done]: `make-violation-reporter` (two-mode — call with type+args to record, call bare to finalize) retrofitted across 14 libraries, replacing the `(set! violations (append …))` parent-delegation pattern. `assert-validation` replaces what would have been 18 per-structure `assert-X` symbols (+1 symbol, not +18), preserving the source expression in the error datum. `assert-procedure` retrofits 11 non-validating `make-X` constructors, capturing the source identifier so `(assert-procedure "make-ring" plus)` names both sides.
+- [x] **`combinatorial-graph.scm` monolith — first cut** [Medium, M, Done (partial)]: custom insertion sort replaced by `list-sort` from `(srfi 132)`; 1,787 → 1,726 lines. The remaining `%`-helpers are genuinely WL/isomorphism-specific; splitting into sub-files is deferred until it buys review scope.
 - [ ] **Watch `matrix.scm` for split pressure** [Low, S, Deferred]: 1,302 lines with two record types (`<semiring-matrix>` at 839, `<sparse-semiring-matrix>` at 1137) in one file. Shared helpers justify co-location today. Revisit once a third representation (banded, symmetric, etc.) appears — no action needed now.
 - [ ] **Harmonize `docs/algebra/reference.md` section template** [Low, M, Deferred; 2026-04-23 crosscheck consistency finding]: First 15 sections use a fixed 5-heading template (Constructors → Predicates → Operations → Validation → Destructuring). The 11 sections added in PR #706 (matrix, polynomial, incidence, interval, graph, combinatorial-graph, unification, fca, pareto, abstract-domain, dataflow) use bespoke headings because their library shapes don't match the 5-part structure pattern (e.g. dataflow has no "law checker"; unification has pattern-vars, substitutions, matching as three parallel concerns). Decision at the time: keep bespoke headings since forcing the template would obscure real structural differences. Revisit if either (a) the template gets extended to cover the new shapes cleanly, or (b) a reader reports navigation trouble across sections.
-- [x] **Back-port legacy Sage validators to `check_or_snapshot`** [Low, M, Done 2026-06-09]: 5 of the 6 legacy structure validators (integer-ring, rational-field, modular-ring, boolean-semiring, tropical-semiring) now route through the shared `check_or_snapshot` helper and emit flat top-level `(test …)` fixtures, matching the 6 newer validators. `powerset-lattice` is intentionally exempt and stays hand-rolled (commented at the function): Wile's `lattice-join`/`lattice-meet` return sets in input-order, not a canonical order, so its live check compares the full set (order-insensitive) while its snapshot asserts only cardinality — a live/snapshot divergence the single-expression `check_or_snapshot` cannot express without weakening the membership check. The back-port added a `('num', token)` sentinel to `to_wile_display`/`to_wile_test_literal` for bare self-evaluating number literals, so rational-field now asserts exact rationals by `equal?` (`(test 1/3 (field-plus …))`) instead of string-matching `number->string`. Regenerated 5 fixtures under Sage 10.8 + a built binary; all pass.
+- [x] **Back-port legacy Sage validators to `check_or_snapshot`** [Low, M, Done 2026-06-09]: 5 of the 6 legacy structure validators route through the shared helper and emit flat top-level `(test …)` fixtures. `powerset-lattice` stays hand-rolled and says why at the function: `lattice-join`/`lattice-meet` return sets in input order, not canonical order, so its live check must compare order-insensitively while its snapshot asserts only cardinality — a divergence the single-expression helper cannot express without weakening the membership check. Added a `('num', token)` sentinel to `to_wile_display`/`to_wile_test_literal` so rational-field asserts exact rationals by `equal?` instead of string-matching `number->string`. Fixtures regenerated under Sage 10.8.
 
 ### Helpers TypeName Encoding (PR #725 deferred items)
 
@@ -1579,10 +1054,9 @@ typeName encoding refactor). Deferred per scope or design choice.
 - [ ] **`Lengthable` rename to `IndexedSequence`** [Bikeshed, S, Deferred]: Type analyzer noted the helpers use the constraint as "indexed finite sequence" but the name `Lengthable` promises only `Length() int`. `*String`, `*Pair`, and `emptyListType` accidentally satisfy `Lengthable` but cannot meaningfully participate in `SequenceRef`/`SequenceSet`. Rename when the asymmetry causes real confusion.
 - [ ] **Reflection-based `TestTypeSentinelsCarryTypeName`** [Test debt, S, Deferred]: Currently the inventory test enumerates ~55 type sentinels by hand. Test analyzer recommended a reflection-based variant that walks all exported `*StaticError` vars in `werr/` and asserts any whose `Error()` starts with `"not "` has a non-empty `TypeName()`. Self-maintaining, ~20 lines replacing ~60. Add when a contributor adds a new sentinel and forgets the inventory entry.
 - [ ] **Extension-level message-content tests for new sentinels** [Test debt, M, Deferred]: Test analyzer flagged that no extension-level test asserts the user-visible "expected an integer/namespace/once" message content. Helper-level tests in `registry/helpers/args_test.go` pin the plumbing end-to-end through `TestRequireType_ErrorMessageContainsTypeName`, but a regression that, say, swaps `ErrNotAnInteger` back to `ErrNotANumber` in `make-vector` would not be caught by a test. Belt-and-suspenders coverage; add per primitive when message wording becomes load-bearing for users.
-- [x] **`ParseOptionalStartEnd` / `ParseOptionalArg` literal phrases** [Tech debt, S, Done 2026-07-01 — comment path]: Silent-failure hunter flagged that these helpers hardcode "improper argument list" / "too many arguments" rather than reading from sentinels. These are *shape* errors (proper-list, arity), not type errors, so skipping TypeName plumbing is deliberate — but the file mixed two conventions with nothing explaining why. **Resolved via the comment path** (not migration): both `ParseOptionalStartEnd` and `ParseOptionalArg` doc comments in `pkg/registry/helpers/args.go` now state that shape errors carry literal phrases because there is no expected-type noun to plumb through a `*TypeSentinel`, while the per-argument type checks (start/end must be an integer) still draw their noun from a sentinel. Migration to a parallel mechanism was declined — shape errors genuinely have no type noun.
-- [x] **`read-line` / `peek-char` `UnreadRune` errcheck** [Bug, S, Done 2026-05-06 — commit `460c73a5`]: `read-line`'s `UnreadRune` error (and the non-EOF error from its inner `\r` lookahead `ReadRune`) were dropped via `//nolint:errcheck` / silent fallthrough, masking I/O failures. **Fixed**: both are now captured via `WrapForeignReadErrorf` (`pkg/extensions/io/prim_read_write.go:388-397`); `io.EOF` after `\r` stays silent (line ends with a bare `\r`), any other error propagates as a read-error. Fault-injection test infra added: `pkg/internal/extensions/iotest/` (`FailingTextualInputPort` + `make-failing-unread-port`/`make-failing-read-after-port` primitives), asserted in `pkg/extensions/io/prim_read_error_test.go`. Was a surfaced-but-deferred item from PR #725.
-- [x] **`peek-char` error classification** [Bug, S, Done 2026-05-06 — commit `460c73a5`]: `peek-char`'s `UnreadRune` (and read) failures were wrapped with `WrapForeignErrorf`, so `goErrorToSchemeException` classified them as `NativeErrorKindGeneric` and `(read-error? e)` returned `#f` — a direct R7RS §6.11 violation. **Fixed**: both sites now use `WrapForeignReadErrorf` (`pkg/extensions/io/prim_read_write.go:341,349`), so the condition satisfies `(read-error? e)`. Same commit as the `read-line` fix above.
-- [x] **Library-binding installation swallows errors silently** [Bug, S, Done 2026-07-01]: two `SetOwnGlobalValue` return values in `machine/compilation/library_bindings.go` were discarded via `_ =` — the source-phase propagation branch in `CopyLibraryBindingsToEnvAtPhase` and the syntax-binding branch in `copyLibraryBindingsDirect`; a swallowed failure in the latter means a macro is silently not installed in the expand environment and later macro expansion mysteriously fails. The sibling base-phase installs already wrapped-and-returned — the asymmetry was "evolved separately." **Fixed**: both branches now wrap-and-return per the local convention. While there, added the requested `targetPhase + sourcePhase` int8-overflow guard (`Phase` is `int8`; a `for-meta` target of 127 — permitted by the parse-time `composePhaseShift` guard — plus a syntax binding's source-phase +1 wraps to −128 and silently misroutes the propagated binding). The sum is now checked at int width against `math.MaxInt8` before narrowing, mirroring `composePhaseShift`, returning `ErrInvalidArgument`. The `MaybeCreateOwnGlobalBinding` returns cited in the original note are no longer discarded (PR #793 wired the `created` bool into the conflict guard). Regression test `TestCopyLibraryBindingsPhaseOverflow` (constructs a syntax-only-export library, installs at phase 127, asserts the overflow diagnostic). `make lint` + `make covercheck` green. Pre-existing; surfaced by PR #728 crosscheck.
+- [x] **`ParseOptionalStartEnd` / `ParseOptionalArg` literal phrases** [Tech debt, S, Done 2026-07-01]: resolved by comment, not migration. These are *shape* errors (proper-list, arity) with no expected-type noun to plumb through a `*TypeSentinel`; both doc comments in `pkg/registry/helpers/args.go` now say so, while the per-argument type checks still draw their noun from a sentinel.
+- [x] **`read-line` / `peek-char` dropped `UnreadRune` errors and misclassified read failures** [Bug, S, Done 2026-05-06, `460c73a5`]: both sites now use `WrapForeignReadErrorf`, so `(read-error? e)` is `#t` per R7RS §6.11 — it had been `#f`, a direct violation. `io.EOF` after a bare `\r` stays silent; anything else propagates. Fault-injection infra added at `pkg/internal/extensions/iotest/`, asserted in `pkg/extensions/io/prim_read_error_test.go`.
+- [x] **Library-binding installation swallowed errors silently** [Bug, S, Done 2026-07-01]: two `SetOwnGlobalValue` returns in `machine/compilation/library_bindings.go` were `_ =`-discarded — the asymmetry was evolved, since the sibling base-phase installs already wrapped-and-returned. A swallowed failure in the syntax-binding branch means a macro is silently not installed in the expand environment and expansion later fails mysteriously. Both now wrap-and-return. Also added the `targetPhase + sourcePhase` int8-overflow guard: `Phase` is `int8`, so a `for-meta` target of 127 (permitted by the parse-time guard) plus a syntax binding's +1 wrapped to −128 and misrouted the binding. Guard: `TestCopyLibraryBindingsPhaseOverflow`.
 
 ### Machine value-register follow-ups (PR #736 deferred items)
 
@@ -1602,7 +1076,7 @@ Decisions D-c, Option B). **Do NOT touch continuation method bodies without the 
 A/B `/crosscheck` gate** (most-reverted neighborhood; auto-memory `tail-frame-recycling-unsound.md`,
 auto-memory `c1-continuation-not-frame-reclaim.md`).
 
-- [x] **Tier-2 — wile-goast capture-site shared-invariant belief** [Tech debt / soundness guard, M, Done — `.goast-beliefs/continuation-capture-marks-shared.scm`, commit `3ddbe839`; reaches-call checker added in wile-goast; validated 5/5 capture sites reach `MarkChainShared`]: The field-oracle verifies each method matches its declared per-field discipline, but by construction it **cannot** catch the *upstream-invariant-violated* class — the two canonical continuation reverts (`tail-frame-recycling-unsound`, `c1-continuation-not-frame-reclaim`) both had `RestoreAndRelease` doing exactly what the descriptor says, while a frame a captured continuation still reached was released because a capture site failed to mark the live chain shared. Deliverable: a `wile-goast` belief (belief DSL the project already uses) asserting *every function that constructs a `Captured`/`Composable` continuation marks the live `mc.cont` chain shared (via `MarkChainShared`) before any release path can fire* — the structural guard for the `RELEASE_OLD_ENV`/`POOL_FRAME` precondition the oracle documents but can't enforce. Known capture sites to cover: `Copy`, `SliceContinuationAt`→`MarkChainShared`, `CurrentContinuation`. **Supplement to, not a replacement for, the red-suite** (per plan D-c). Gated on Tier-1 only (now merged) — no perf measurement needed. Watch its false-positive profile (belief DSL); ship as its own scoped item, don't bundle.
+- [x] **Tier-2 — wile-goast capture-site shared-invariant belief** [Tech debt, M, Done, `3ddbe839`, `.goast-beliefs/continuation-capture-marks-shared.scm`]: asserts every function constructing a Captured/Composable continuation marks the live `mc.cont` chain shared (`MarkChainShared`) before any release path can fire — the `RELEASE_OLD_ENV`/`POOL_FRAME` precondition the field-oracle documents but cannot enforce. This is the class the two canonical reverts belong to: both had `RestoreAndRelease` doing exactly what the descriptor says while an upstream capture site failed to mark. Validated 5/5 capture sites; the reaches-call checker was added in wile-goast.
 - [ ] **Option B — codegen the six save/restore/copy bodies from `contDescriptor`** [Perf/structure, L, Deferred — perf-gated]: The literal "data-driven" half of finding #1. `go:generate` the six method bodies *from* the descriptor so the spec lives in data and the code is emitted, not hand-transcribed — identical runtime (generated Go, not interpreted). **Hard gate:** an end-to-end benchmark proving normal-return-path parity (`memory`: micro-benchmarks mislead; sites #3–#5 are the hot path where table/reflection dispatch loses to a `switch`, and this path is the dominant GC contributor). Promotes `contDescriptor` from a `_test.go` spec to a generator-readable data file — a real restructuring, not a freebie. Do NOT gate #1's drift-catching value on this; Tier-1 already delivered that.
 
 ### Internal-SR follow-ups (PR #739 deferred items)
@@ -1624,11 +1098,7 @@ that were made on the impl path but warrant revisiting once usage
 patterns are visible.
 
 - [ ] **Revisit hybrid return shape if helper set grows** [Tech debt, M, Deferred]: Current API uses a **hybrid** return shape — `ToFloat64WithAccuracy` returns positional 4-tuple `(float64, big.Accuracy, bool, error)`; `ToComplex128WithAccuracy` returns `(Complex128Result, error)` with a named struct (fields `Value`, `RealAcc`, `ImagAcc`). The rule: positional when slot types disambiguate roles; struct when adjacent slots share a type and could be silently swapped. Decision rationale + alternatives (all-positional, all-struct) documented at `memory/2026-05-14-numeric-loss-signals-design.local.md` § "Decision record: return shape — hybrid (positional + struct)". **Revisit triggers**: (a) a second `WithAccuracy`-shaped helper with a single accuracy signal is added (rationals, intervals, matrix elements with one component) — re-evaluate whether the new helper should follow `ToFloat64WithAccuracy` (positional) or be promoted to struct for consistency with `ToComplex128WithAccuracy`; (b) a third or fourth multi-component helper is added (quaternion, matrix with N≥3 same-type slots) — at that point the asymmetry-as-domain-structure argument weakens, consider a unified struct convention; (c) FFI converter is refactored to consume the struct directly for both helpers (eliminates the discard-idiom advantage motivating positional `ToFloat64WithAccuracy`); (d) a `realAcc/imagAcc` swap bug is reported despite the struct — indicates the safety property failed, revisit whether stricter encoding is warranted (e.g., distinct newtypes `type RealAccuracy big.Accuracy` / `type ImagAccuracy big.Accuracy`).
-- [x] **BigComplex precision-loss bugs in math primitives & methods** [Correctness, M, Done — sites 1,2,3,5 on `fix/bigcomplex-precision-loss`; site 4 (angle) split out below]: Crosscheck on the PR 1 (Go infrastructure) branch surfaced precision losses on BigComplex that the `Float64Truncated` rename made *visible* but did not introduce (pre-existing, not regressions). **Fixed:** (1) `PrimMagnitude` BigComplex now routes through `(*BigComplex).Magnitude()` (`pkg/values/big_complex.go`) instead of truncating to float64 — `(magnitude 10^400+10^400i)` returns a finite big value, not `+inf.0`. (2) `PrimSqrt` BigComplex routes through the new `(*BigComplex).Sqrt()` — numerically-stable closed form on `big.Float` (larger component from `|z|`, smaller by division), no `+inf.0+inf.0i` overflow. (3) `floor`/`ceiling`/`truncate`/`round` no longer round-trip through float64: `Integer`/`BigInteger` are identity+exact (BigInteger previously collapsed to inexact `Float`), `Rational` rounds exactly (previously `int64(f(Float64Truncated()))` **overflowed** to `MaxInt64` on large magnitudes), and `BigFloat` rounds at its own precision — all via `roundRatToInt` on the exact `big.Rat`. (5) `(*BigComplex).EqualTo(*Complex)` promotes the Complex's float64 components to `big.Float` and compares at full precision instead of truncating the BigComplex first. **Note:** the TODO's site-5 premise was inaccurate — Scheme `=` uses `NumericEquals` (`a.Subtract(b).IsZero()`, already precise), and `equal?`/`eqv?` short-circuit on the exact-vs-inexact mismatch; the truncating `EqualTo` is reached only via the `Value.EqualTo` interface (hashtable keys, cross-type `equal?`), which the fix hardens. Tests: `TestRoundingBigPrecision`, `TestBigComplexTranscendentalPrecision` (Scheme-level), `TestBigComplex_EqualTo_StrictBeyondFloat64`, `TestBigComplex_Sqrt` (values-level).
-- [x] **`floor/`, `truncate/` and the `*-quotient`/`*-remainder` family overflow int64 on large exact operands** [Correctness, M, Done 2026-07-07]: `realDivision` (`extensions/math/prim_rounding.go`) computed the exact path as `int64(roundFn(n0/n1))` on float64s from `helpers.ExtractReal` — the same float64 round-trip + int64-cast overflow class removed from `floor`/`ceiling`/`truncate`/`round` in `#679`. **Verified pre-fix:** `(floor-quotient (expt 10 30) 7)` → `9223372036854775807` (int64 saturation), `(floor-remainder (expt 10 30) 7)` → `52776558133248` (garbage). **Fix:** exact-integer operands (both `Integer`/`BigInteger`) now take a `big.Int` path — `q = roundRatToInt(new(big.Rat).SetFrac(b0,b1), mode)` reusing the rounding family's sign-correct rounder, `r = b0 - q*b1` exact by construction; multi-value return preserved. Signature changed `roundFn func(float64)float64` → `mode roundMode` (single floor/truncate source). Inexact + non-integer(rational) operands keep the float64 path unchanged. Guarded by `TestIntegerDivisionBigPrecision` (14 cases: positive/negative divisor, floor≠truncate divergence, division identity). **Scope note:** the rational-operand remainder is a *separate* pre-existing float64-truncation bug (`(floor-remainder 7/2 2)` → `1`, exact is `3/2`); left untouched — rationals are non-conformant args per R7RS §6.2.6 (integers only).
-- [x] **BigComplex `angle`/`Phase` big-precision atan2** [Correctness, L, Done 2026-07-07 — `feat/bigcomplex-angle-atan2`]: New `pkg/values/big_transcendental.go` — arbitrary-precision `BigPi`/`BigAtan`/`BigAtan2` on `*big.Float` (Go's `math/big` has native `Sqrt` but no transcendentals): argument-reduction Taylor for `atan` (reciprocal to `(0,1]` then halve to <2⁻⁸, bounded ~8 `Sqrt` regardless of magnitude), Machin `π = 16·atan(1/5) − 4·atan(1/239)` cached per precision, quadrant logic on the big-precision ratio `y/x` (finite for any finite operands → no overflow). `(*BigComplex).Phase()` now routes through `BigAtan2`; `PrimAngle` big-complex case → `v.Phase()`; `PrimAtan` 2-arg atan2 and 1-arg real big paths → `BigAtan2`/`BigAtan`. **Return-type change (user-approved):** unbounded-tier input (BigComplex / BigFloat / BigInteger / Rational) now yields `*BigFloat` not `*Float` — coherent precision-tier rule (matches existing big-real `angle`), Scheme numeric behavior unchanged; `TestAngle` + trig-rational tests updated. **Also closed the two residual overflow holes** (2026-07-07, same branch): (1) `*Rational` operands now take the big path (`isUnboundedReal` includes Rational — unbounded range), so a huge rational no longer overflows atan2; (2) 1-arg **complex** atan on a BigComplex whose components exceed float64 range now routes through new `values.BigLog` + `values.BigComplexAtan` (natural log via Machin-style `ln(mant)+e·ln2` from an atanh series; complex atan via `(i/2)[ln(1−iz)−ln(1+iz)]`) instead of `cmplx.Atan` returning NaN. In-float64-range BigComplex still uses branch-cut-correct `cmplx.Atan` (gated on `math.IsInf`), so no regression. **Sole remaining caveat (documented, not a silent hole):** `BigComplexAtan` on the imaginary-axis branch cut (`Re z=0`, `|Im z|>1`) returns the principal `+π/2` vs Go's signed-zero `−π/2` — only reachable out of float64 range where `cmplx.Atan` is NaN anyway (an improvement, not a regression). Tests: precision-honesty (`4·atan(1)=π`, `BigLog(2)=ln2` to 60+ digits) + overflow canaries (`atan2(1e401,1e400)=atan(10)`; huge rational; huge complex real part → π/2) at values + extension levels. Design: `memory/2026-07-07-bigcomplex-angle-atan2-design.local.md`. All gates green (lint/covercheck/ci).
-- [x] **Big-precision real transcendentals sweep (exp/log/sin/cos/tan/asin/acos)** [Correctness/Precision, L, Done 2026-07-07 — `feat/big-transcendentals`]: Extends the atan/angle arc to the remaining transcendentals. New kernels in `pkg/values/big_transcendental.go`: `BigExp` (range-reduce `x=k·ln2+r`, Taylor, rescale `2ᵏ` — overflow-safe), `BigSin`/`BigCos` (reduce mod 2π to `[−π/2,π/2]` with **working precision scaled to the argument's exponent** = the big analogue of Payne–Hanek, so large exact args reduce correctly, not "best-effort"), `BigTan`=sin/cos, `BigAsin`=`BigAtan(x/√(1−x²))`/`BigAcos`=π/2−asin (decline→nil for `|x|>1`, the complex domain), `BigLog`-backed real `log`/`log-base-b`. Wiring: `makeComplexPrimitive(name, cmplxFn, bigRealFn)` prepends an `isUnboundedReal → *BigFloat` guard (nil-return declines); `log` guarded inline; **`exp` is custom** — besides the tier path it rescues a *bounded* operand whose `math.Exp` over/underflows float64 to a finite BigFloat (user-approved: `(exp 1000)` → 1.97e434, not +inf.0 — exp's overflow threshold ~709 sits inside float64 range, unlike the others). Tier rule: unbounded-tier real (BigFloat/BigInteger/Rational) → `*BigFloat`; bounded Integer/Float → float64 (`math.*` is already Payne–Hanek-correct for large trig args); out-of-domain (`asin`/`acos` `|x|>1`, `log` `x≤0`) → complex path. Updated trig-rational tests to `assertBigFloatResult` + added tier-agnostic `assertRealResult` for mixed-tier identity loops. Canaries: `exp(1000)` finite + `log(exp(1000))=1000` round-trip, `log(10^400)≈921`, `sin`/`cos` vs `math.*` incl. `1e15` (validates reduction against Payne–Hanek), `BigExp(1)=e`/`BigLog(2)=ln2` to 60+ digits. **Follow-on shipped same day — see next entry.** Design: `memory/2026-07-07-big-transcendentals-design.local.md`. All gates green.
-- [x] **BigComplex transcendentals (exp/log/sin/cos/tan/asin/acos)** [Correctness, L, Done 2026-07-07 — `feat/big-complex-transcendentals`]: Follow-on to the real sweep. New `pkg/values/big_transcendental_complex.go`: `BigComplexExp` (exp(re)·(cos im+i·sin im)), `BigComplexLog` (½ln(re²+im²)+i·atan2, principal branch), `BigComplexSin`/`Cos` (via `sinhCoshAt`), `BigComplexTan` (complex division), `BigComplexAsin` (−i·ln(iz+√(1−z²)) reusing `BigComplex.Sqrt`)/`BigComplexAcos` — composed from the real kernels + `BigAtan2`. **Gating (user chose overflow-gate all)**: consistent with the shipped complex `atan`. A `rescueBigComplex` helper recomputes at big precision only when the float64 `cmplx.*` result is non-finite **and** the big result is finite (so `log(0)=−∞` and genuine infinities stay float64 `*Complex`; NaN/Inf operands aren't rescued — `math/big` has no NaN). In-float64-range complex operands keep branch-cut-exact `cmplx.*` (the big kernels run only where `cmplx.*` is NaN, so principal-value is an improvement, not a divergence). Also hardened `numberToBigFloat` against NaN/Inf `*Float`. Tests: agreement with `cmplx.*` at in-range off-cut points for all seven; finiteness/round-trip canaries where `cmplx.*` overflows (exp re>709, sin |im|>709, log component>1.8e308) + Scheme-level extension canaries. Design: `memory/2026-07-07-big-transcendentals-design.local.md`. All gates green.
+- [x] **Big-precision numeric sweep — rounding, division, transcendentals** [Correctness, L, Done 2026-07-07; branches `fix/bigcomplex-precision-loss`, `feat/bigcomplex-angle-atan2`, `feat/big-transcendentals`, `feat/big-complex-transcendentals`]: removed the float64 round-trip from every numeric path that had one. `magnitude`/`sqrt`/`floor`/`ceiling`/`truncate`/`round` and the `floor-`/`truncate-quotient`/`remainder` family take exact `big.Int`/`big.Rat` paths — `(floor-quotient (expt 10 30) 7)` used to saturate at int64. `pkg/values/big_transcendental{,_complex}.go` adds arbitrary-precision `BigPi`/`BigAtan2`/`BigExp`/`BigLog`/`BigSin`/`BigCos`/`BigAsin` and the seven complex twins, because `math/big` has native `Sqrt` but no transcendentals; `BigSin`/`BigCos` scale working precision to the argument's exponent (the big analogue of Payne–Hanek), so large exact args reduce correctly rather than best-effort. **Tier rule**: unbounded-tier input (BigFloat/BigInteger/Rational/BigComplex) yields `*BigFloat`, bounded stays float64 since `math.*` is already Payne–Hanek-correct. Complex kernels run only where `cmplx.*` returns non-finite, so in-range branch-cut behavior is unchanged; `exp` additionally rescues a *bounded* operand whose `math.Exp` overflows (its ~709 threshold sits inside float64 range, unlike the others). Documented caveat: `BigComplexAtan` on the imaginary-axis branch cut returns principal `+π/2` where Go gives signed-zero `−π/2` — reachable only out of float64 range, where `cmplx.Atan` is NaN anyway. Guards: `TestRoundingBigPrecision`, `TestIntegerDivisionBigPrecision`, `TestBigComplexTranscendentalPrecision`, `TestBigComplex_Sqrt`, plus precision-honesty canaries (`4·atan(1)=π`, `BigLog(2)=ln2` to 60+ digits). Designs: `memory/2026-07-07-bigcomplex-angle-atan2-design.local.md`, `memory/2026-07-07-big-transcendentals-design.local.md`. Untouched: the rational-operand remainder float64 truncation (`(floor-remainder 7/2 2)` → `1`, exact is `3/2`) — non-conformant args per R7RS §6.2.6.
 - [ ] **Unify `ErrLossyConversion` / `ErrNotAReal` for the imag-drop case** [API design, S, Deferred]: After this PR, two sentinels flag the same underlying condition depending on which surface a caller uses. `ToFloat64Lossless` returns `ErrLossyConversion` (wrapped) for the `!isReal` branch at `values/conversion.go:89-91`; `NumberToFloat64` panics with `ErrNotAReal` at `values/promotion.go:337-338`. The two sentinels carry the same information about the failure but are not interchangeable for `errors.Is` callers. **Options**: (a) reuse `ErrNotAReal` in `ToFloat64Lossless` and reserve `ErrLossyConversion` strictly for rounding loss; (b) accept `ErrLossyConversion` as the canonical sentinel for any precision/component loss and document the historical role of `ErrNotAReal` as a `NumberToFloat64`-only panic discriminator. Revisit when an FFI consumer reports a confusing `errors.Is` mismatch, or when adding a third surface helper that needs to choose between them.
 - [ ] **Reconsider `Exact` overload for NaN/Inf identity** [API design, M, Deferred — design choice Q-6]: The `big.Accuracy` slot returned by `ToFloat64WithAccuracy` is overloaded: (a) genuinely lossless rounding, (b) NaN bit-pattern identity, (c) preserved literal infinity. Doc tightening landed in this PR at `values/conversion.go:54-60` (per design Q-6 resolution). Callers screening "is this a meaningful real number?" must use `math.IsNaN` / `math.IsInf` independently. **Trigger to revisit**: a caller reports being unable to distinguish "rounded-but-real" from "NaN-or-Inf" from the tuple alone, OR a fifth `WithAccuracy` helper is added where the overload becomes too costly to maintain. Possible fix: a 4-valued enum `LossKind { Lossless, RoundedBelow, RoundedAbove, NaNOrInf }` replacing `big.Accuracy` at the public surface; would diverge from Go's stdlib vocabulary at the cost of being self-describing.
 - [ ] **`ToFloat64Lossless` returns rounded value on error** [API design, S, Deferred]: When the conversion would round, `ToFloat64Lossless` returns `(f, ErrLossyConversion)` where `f` is the lossy float64 result — the caller can use the value if they want; the error is advisory. The nil-input error path returns `(0, ErrNotANumber)`. The asymmetry is real: lossy ⇒ best-effort value preserved; nil-input ⇒ zero. Go convention is "non-nil error ⇒ value is unspecified," which the lossy path softly violates. **Decision deferred**: changing this would force every strict-mode caller to abandon their value on rounding (which they wanted to fail-fast on anyway). Document the contract instead. Revisit if a caller reports relying on the "use the rounded value alongside the error" pattern in a way the API should officially support, OR if the asymmetry causes a bug at an FFI boundary.
