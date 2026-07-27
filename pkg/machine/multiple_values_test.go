@@ -86,26 +86,56 @@ func TestMultipleValues_IsVoid(t *testing.T) {
 }
 
 func TestMultipleValues_SchemeString(t *testing.T) {
-	// Empty
-	empty := NewMultipleValues()
-	qt.Assert(t, empty.SchemeString(), qt.Equals, values.SpecialVoid)
+	tests := []struct {
+		name string
+		mv   MultipleValues
+		want string
+	}{
+		{
+			name: "empty",
+			mv:   NewMultipleValues(),
+			want: values.SpecialVoid,
+		},
+		{
+			name: "single void",
+			mv:   NewMultipleValues(values.Void),
+			want: values.SpecialVoid,
+		},
+		{
+			name: "single value",
+			mv:   NewMultipleValues(values.NewInteger(42)),
+			want: "42",
+		},
+		{
+			name: "two values",
+			mv:   NewMultipleValues(values.NewInteger(1), values.NewInteger(2)),
+			want: "1 2",
+		},
+		{
+			// Three values is the smallest case that catches a separator
+			// suppressed at the wrong element: a two-element rendering is
+			// identical whether the guard skips the first or the second.
+			name: "three values",
+			mv:   NewMultipleValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+			want: "1 2 3",
+		},
+		{
+			name: "four values",
+			mv: NewMultipleValues(
+				values.NewInteger(1),
+				values.NewInteger(2),
+				values.NewInteger(3),
+				values.NewInteger(4),
+			),
+			want: "1 2 3 4",
+		},
+	}
 
-	// Single void
-	singleVoid := NewMultipleValues(values.Void)
-	qt.Assert(t, singleVoid.SchemeString(), qt.Equals, values.SpecialVoid)
-
-	// Single value
-	single := NewMultipleValues(values.NewInteger(42))
-	qt.Assert(t, single.SchemeString(), qt.Equals, "42")
-
-	// Two values - special case to test with just 2
-	two := NewMultipleValues(values.NewInteger(1), values.NewInteger(2))
-	qt.Assert(t, two.SchemeString(), qt.Equals, "12")
-
-	// Multiple values - the implementation concatenates first element without space,
-	// then adds space between subsequent elements
-	multiple := NewMultipleValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
-	qt.Assert(t, multiple.SchemeString(), qt.Equals, "12 3")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			qt.Assert(t, test.mv.SchemeString(), qt.Equals, test.want)
+		})
+	}
 }
 
 func TestMultipleValues_EqualTo(t *testing.T) {

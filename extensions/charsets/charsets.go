@@ -463,14 +463,18 @@ func makeNamedCharSet(name string) (*values.CharSet, error) {
 	case "letter+digit":
 		cs = unionTwo(rangeTableToCharSet(unicode.L), rangeTableToCharSet(unicode.Nd))
 	case "graphic":
-		// SRFI-14 graphic = printing characters MINUS whitespace (chars that
-		// "put ink on the page"). Go's PrintRanges is L,M,N,P,S and already
-		// excludes Zs/Zl/Zp and Cc, so no whitespace is present; the difference
-		// below is currently a no-op retained as a guard.
-		cs = differenceTwo(rangeListToCharSet(unicode.PrintRanges),
-			rangeTableToCharSet(unicode.White_Space))
-	case "printing":
+		// SRFI-14: a graphic character "would put ink on paper" — letter, mark,
+		// digit, punctuation, symbol. That is exactly Go's PrintRanges
+		// (L,M,N,P,S), which excludes Zs/Zl/Zp and Cc, so no whitespace is
+		// present. Note that Go's GraphicRanges is NOT the same thing: it adds
+		// Zs, which would put U+0020 in graphic and break the SRFI-14 relation
+		// below. TestNamedCharSetGraphicPrintingRelation pins the exclusion.
 		cs = rangeListToCharSet(unicode.PrintRanges)
+	case "printing":
+		// SRFI-14: char-set:printing is the union of char-set:graphic and
+		// char-set:whitespace, making graphic a proper subset of printing.
+		cs = unionTwo(rangeListToCharSet(unicode.PrintRanges),
+			rangeTableToCharSet(unicode.White_Space))
 	case "whitespace":
 		cs = rangeTableToCharSet(unicode.White_Space)
 	case "iso-control":

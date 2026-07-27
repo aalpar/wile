@@ -278,21 +278,14 @@ func (p *Tokenizer) Text() string {
 }
 
 // Next returns the next token from the input stream.
-// Returns io.EOF when the input is exhausted.
-// A literal U+FFFD in datum position is currently reported as io.EOF as well,
-// truncating the rest of the input; only U+FFFD inside a string, symbol or
-// comment body survives.
+// Returns io.EOF when the input is exhausted. End of input is carried by p.err
+// (readNextRune sets io.EOF), never by p.cur: utf8.RuneError is both the decode
+// sentinel and a writable character, so testing the rune reported a literal
+// U+FFFD as EOF and silently discarded the rest of the input.
 // Comment tokens are always emitted; callers that want them elided (the parser,
 // when constructed with skipComments) drop them themselves.
 func (p *Tokenizer) Next() (Token, error) {
 	for p.err == nil {
-		if p.curr() == utf8.RuneError {
-			if p.err != nil {
-				return nil, p.err
-			}
-			return nil, io.EOF
-		}
-
 		p.skipWhitespace() //nolint:errcheck
 		if p.err != nil {
 			return nil, p.err

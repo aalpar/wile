@@ -34,7 +34,7 @@ import (
 //	│                                                                         │
 //	│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                 │
 //	│  phases ─────────── *PhaseRegistry                                      │
-//	│  libraryRegistry ── LibrarySearcher (*compilation.LibraryRegistry)       │
+//	│  libraryRegistry ── LibrarySearcher (*compilation.LibraryRegistry)      │
 //	│  runtime ────────── *EnvironmentFrame (phase 0)                         │
 //	└─────────────────────────────────────────────────────────────────────────┘
 //	                                    │
@@ -726,6 +726,7 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, q syntax.
 // It returns nil if the binding does not exist.
 func (p *EnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
 	env := p
+	// step up the parent chain for local_index[1]
 	for range li[1] {
 		if env == nil {
 			return nil

@@ -17,6 +17,7 @@ package io_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -74,6 +75,40 @@ func TestReadStringAllocationLimit(t *testing.T) {
 	for _, tc := range errs {
 		t.Run(tc.name, func(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// TestReadStringAllocationGuardOverflow pins the read-string allocation cap
+// across the whole int64 domain. The guard formerly computed k*bytesPerRune,
+// which overflows int64 for k >= 2^61: the product wraps non-positive, the
+// guard passes, and make([]rune, 0, k) then panics or OOMs the host.
+func TestReadStringAllocationGuardOverflow(t *testing.T) {
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name    string
+		k       string
+		wantErr bool
+	}{
+		{"just under cap", "26214400", false},
+		{"over cap, no overflow", "1000000000", true},
+		{"k*4 wraps to MinInt64 (2^61)", "2305843009213693952", true},
+		{"k*4 wraps negative (MaxInt64/2)", "4611686018427387903", true},
+		{"k*4 wraps negative (MaxInt64)", "9223372036854775807", true},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			code := fmt.Sprintf(`(read-string %s (open-input-string "x"))`, tc.k)
+			_, err := engine.EvalMultiple(context.Background(), code)
+			if !tc.wantErr {
+				qt.Assert(t, err, qt.IsNil)
+				return
+			}
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrAllocationLimitExceeded), qt.IsTrue,
+				qt.Commentf("k=%s: want ErrAllocationLimitExceeded, got %v", tc.k, err))
 		})
 	}
 }

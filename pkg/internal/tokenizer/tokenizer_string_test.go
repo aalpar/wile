@@ -676,6 +676,49 @@ func TestInvalidUTF8IsADecodeError(t *testing.T) {
 	c.Check(errors.Is(err, NewTokenizerError(MessageRuneError)), qt.IsTrue)
 }
 
+// TestReplacementCharacterInDatumPositionIsNotEOF is the third face of the same
+// distinction, on the path that does not go through a string or character
+// literal. Next used to treat cur == utf8.RuneError as end of input, so a
+// literal U+FFFD between datums reported io.EOF and the remaining input was
+// discarded without a diagnostic. U+FFFD is not a Wile identifier character
+// (isInitial admits letters and the special initials only), so it is a lexical
+// error exactly like any other unusable character — but an error, not a silent
+// truncation. Invalid UTF-8 must still surface as a decode error.
+func TestReplacementCharacterInDatumPositionIsNotEOF(t *testing.T) {
+	tcs := []struct {
+		name    string
+		input   string
+		wantErr string
+		// tokens successfully read before the error
+		wantTokens []string
+	}{
+		{name: "leading", input: "� (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
+		{name: "after_datum", input: "(a b)� 42", wantErr: MessageExpectingToken, wantTokens: []string{"(", "a", "b", ")"}},
+		{name: "splitting_symbol", input: "ab�cd", wantErr: MessageExpectingToken, wantTokens: []string{"ab"}},
+		{name: "non_identifier_control", input: "§ (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
+		{name: "invalid_utf8_leading", input: "\xff (a b) 42", wantErr: MessageRuneError, wantTokens: []string{}},
+		{name: "invalid_utf8_after_datum", input: "(a b)\xff 42", wantErr: MessageRuneError, wantTokens: []string{"(", "a", "b", ")"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(errors.Is(err, io.EOF), qt.IsFalse)
+			c.Assert(errors.Is(err, NewTokenizerError(tc.wantErr)), qt.IsTrue)
+			// The scanner emits the failed token before reporting the error on
+			// the following call, so only the leading tokens are pinned.
+			got := make([]string, 0, len(toks))
+			for _, tok := range toks {
+				if tok.Type() == TokenizerStateFailed {
+					break
+				}
+				got = append(got, tok.String())
+			}
+			c.Check(got, qt.DeepEquals, tc.wantTokens)
+		})
+	}
+}
+
 // TestLargeTokenScansInLinearTime guards the read-side DoS surface: token text
 // used to be accumulated with a string +=, making one large datum O(n^2) in its
 // length (a 400KB symbol took ~9.5s). Appending into a reused byte buffer is

@@ -83,10 +83,8 @@ func (p MultipleValues) SchemeString() string {
 		return values.SpecialVoid
 	}
 	q.WriteString(p[0].SchemeString())
-	for i, v := range p[1:] {
-		if i != 0 {
-			q.WriteString(" ")
-		}
+	for _, v := range p[1:] {
+		q.WriteString(" ")
 		q.WriteString(v.SchemeString())
 	}
 	return q.String()

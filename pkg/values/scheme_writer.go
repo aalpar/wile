@@ -102,9 +102,9 @@ type SchemeWriter struct {
 	writeMode WriteMode
 	// maxDepth caps structural nesting depth; 0 = unlimited. See DefaultMaxWriteDepth.
 	maxDepth int
-	// err records the first depth-limit violation seen during the findShared
-	// pass; the traversal unwinds and WriteString reports it. It is per-call
-	// working state, reset at the start of each WriteString (see there).
+	// err records the first depth-limit violation seen during the findShared or
+	// the write pass; the traversal unwinds and WriteString reports it. It is
+	// per-call working state, reset at the start of each WriteString (see there).
 	err error
 }
 
@@ -158,15 +158,15 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	p.seenHashtables = make(map[*Hashtable]int)
 	p.needsLabelHashtable = make(map[*Hashtable]bool)
 
-	// First pass: identify which objects are referenced multiple times. This
-	// is also the depth-enforcing pass — it is the first traversal to descend
-	// the car/element recursion, so it trips the nesting bound before any
-	// deeper pass runs. Pass 2 below prunes on the same visited sets as pass 1,
-	// so its recursion tree is the same shape and it inherits the bound. Pass 3
-	// does NOT: it short-circuits only on an assigned datum label, so in
-	// WriteModeWrite (and display mode), where filterToCircular strips
-	// non-circular labels, a shared acyclic subtree is re-expanded on every
-	// path and write can recurse deeper than the depth findShared measured.
+	// First pass: identify which objects are referenced multiple times. It also
+	// enforces the nesting bound on its own recursion, which pass 2 inherits:
+	// pass 2 prunes on the same visited sets, so its recursion tree is the same
+	// shape. Pass 3 does not inherit it — it short-circuits only on an assigned
+	// datum label, so where filterToCircular has stripped the non-circular ones
+	// a shared acyclic subtree is re-expanded on every path it is reachable by,
+	// reaching depths findShared never measured. Pass 3 therefore carries and
+	// checks its own depth counter, counted identically, and reports the same
+	// error. Every pass is bounded; none may run away on the host stack.
 	p.findShared(v, 1)
 	if p.err != nil {
 		return "", p.err
@@ -185,7 +185,10 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 
 	// Third pass: generate output with labels
 	q := &strings.Builder{}
-	p.write(q, v)
+	p.write(q, v, 1)
+	if p.err != nil {
+		return "", p.err
+	}
 	return q.String(), nil
 }
 
@@ -404,16 +407,32 @@ func (p *SchemeWriter) filterToCircular(v Value) {
 }
 
 // write outputs a value, handling cycles with datum labels.
-func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
+//
+// depth is the structural nesting level of v, counted exactly as findShared
+// counts it (root = 1, +1 per container descent). A labeled node short-circuits
+// to a back-reference, but an unlabeled shared node is re-expanded on each path
+// reaching it, so this pass can descend deeper than findShared did and must
+// carry the bound itself. On violation p.err is set and the traversal unwinds;
+// WriteString discards the partial output and reports the error.
+func (p *SchemeWriter) write(sb *strings.Builder, v Value, depth int) {
+	if p.err != nil {
+		return
+	}
+	if p.maxDepth > 0 && depth > p.maxDepth {
+		// "writer:" not "write:" — this path also serves display/write-shared.
+		p.err = werr.WrapForeignErrorf(werr.ErrWriteDepthExceeded,
+			"writer: nesting depth exceeds maximum of %d", p.maxDepth)
+		return
+	}
 	switch val := v.(type) {
 	case *Pair:
-		p.writePair(sb, val)
+		p.writePair(sb, val, depth)
 	case *Vector:
-		p.writeVector(sb, val)
+		p.writeVector(sb, val, depth)
 	case *Box:
-		p.writeBox(sb, val)
+		p.writeBox(sb, val, depth)
 	case *Hashtable:
-		p.writeHashtable(sb, val)
+		p.writeHashtable(sb, val, depth)
 	case *String:
 		// In display mode, strings are printed without quotes
 		if p.displayMode {
@@ -448,12 +467,13 @@ func (p *SchemeWriter) write(sb *strings.Builder, v Value) {
 	}
 }
 
-// writePair writes a pair with cycle detection.
+// writePair writes a pair with cycle detection. depth is the nesting level of
+// the pair itself; its cars sit one level deeper (see writePairContents).
 //
 // Implementation note: Must accept *Pair (not Tuple) because:
 // 1. It needs map lookup with concrete pointer (seenPairs, needsLabelPair)
 // 2. Pointer identity is used for tracking shared/circular structure
-func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
+func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair, depth int) {
 	if pr == nil {
 		sb.WriteString("#<void>")
 		return
@@ -477,28 +497,34 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 
 	// Write the pair content
 	sb.WriteString("(")
-	p.writePairContents(sb, pr)
+	p.writePairContents(sb, pr, depth)
 	sb.WriteString(")")
 }
 
 // writePairContents writes the contents of a list (without outer parens).
+// depth is the nesting level of the spine: cars and an improper tail are one
+// level deeper, while the cdr-spine stays at depth and is walked iteratively,
+// matching findShared — list length is not nesting depth.
 //
 // Implementation note: Must accept *Pair and check for *Pair in the loop because:
 // 1. Need to check if cdr is in seenPairs/needsLabelPair maps (requires *Pair)
 // 2. Pointer identity tracking for back-references
 // 3. Cannot use Tuple because we need access to concrete pointer for map lookup
-func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
+func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair, depth int) {
 	first := true
 	curr := pr
 
 	for curr != nil {
+		if p.err != nil {
+			return
+		}
 		if !first {
 			sb.WriteString(" ")
 		}
 		first = false
 
 		// Write car
-		p.write(sb, curr.Car())
+		p.write(sb, curr.Car(), depth+1)
 
 		// Check cdr
 		cdr := curr.Cdr()
@@ -511,7 +537,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 		if !ok {
 			// Improper list
 			sb.WriteString(" . ")
-			p.write(sb, cdr)
+			p.write(sb, cdr, depth+1)
 			break
 		}
 
@@ -525,9 +551,10 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 		}
 
 		if p.needsLabelPair[nextPair] {
-			// The cdr needs its own label - write as dotted pair
+			// The cdr needs its own label - write as dotted pair. It is a spine
+			// element, not a car, so it stays at the current nesting level.
 			sb.WriteString(" . ")
-			p.writePair(sb, nextPair)
+			p.writePair(sb, nextPair, depth)
 			break
 		}
 
@@ -535,8 +562,9 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 	}
 }
 
-// writeVector writes a vector with cycle detection.
-func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
+// writeVector writes a vector with cycle detection. depth is the nesting level
+// of the vector itself; its elements sit one level deeper.
+func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector, depth int) {
 	if vec == nil {
 		sb.WriteString("#()")
 		return
@@ -559,10 +587,13 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 
 	sb.WriteString("#(")
 	for i, elem := range *vec {
+		if p.err != nil {
+			return
+		}
 		if i > 0 {
 			sb.WriteString(" ")
 		}
-		p.write(sb, elem)
+		p.write(sb, elem, depth+1)
 	}
 	sb.WriteString(")")
 }
@@ -570,7 +601,8 @@ func (p *SchemeWriter) writeVector(sb *strings.Builder, vec *Vector) {
 // writeBox writes a box with cycle detection, mirroring writeVector. Without
 // this arm the default write branch would fall through to Box.SchemeString,
 // whose recursion is not label-aware and overflows the host stack on a cycle.
-func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box) {
+// depth is the nesting level of the box; its content sits one level deeper.
+func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box, depth int) {
 	if bx == nil {
 		sb.WriteString("#<box:void>")
 		return
@@ -590,7 +622,7 @@ func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box) {
 	}
 
 	sb.WriteString("#&")
-	p.write(sb, bx.Value)
+	p.write(sb, bx.Value, depth+1)
 }
 
 // writeHashtable writes a hashtable with cycle detection, mirroring writeVector.
@@ -599,8 +631,9 @@ func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box) {
 // never assigns datum labels, so sharing or a cycle routed through a hashtable
 // value would be under-represented (R7RS 6.13.3). Only values recurse: no
 // container type is Hashable, so a key is always a leaf. Entries are sorted by
-// rendered key for deterministic output, matching SchemeString.
-func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable) {
+// rendered key for deterministic output, matching SchemeString. depth is the
+// nesting level of the table; its entries sit one level deeper.
+func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable, depth int) {
 	if h == nil {
 		sb.WriteString("#hash()")
 		return
@@ -625,13 +658,16 @@ func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable) {
 	})
 	sb.WriteString("#hash(")
 	for i, e := range entries {
+		if p.err != nil {
+			return
+		}
 		if i > 0 {
 			sb.WriteString(" ")
 		}
 		sb.WriteString("(")
-		p.write(sb, e.key)
+		p.write(sb, e.key, depth+1)
 		sb.WriteString(" . ")
-		p.write(sb, e.value)
+		p.write(sb, e.value, depth+1)
 		sb.WriteString(")")
 	}
 	sb.WriteString(")")

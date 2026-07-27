@@ -19,32 +19,45 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// markLiteralImmutable recursively records every pair and vector reachable from
-// v in the engine-scoped immutable-literal set. R7RS §4.1.2 makes quoted-literal
+// markLiteralImmutable records every pair and vector reachable from v in the
+// engine-scoped immutable-literal set. R7RS §4.1.2 makes quoted-literal
 // constants immutable; structure sharing (per-template equal? dedup) means one
 // mark on the canonical instance covers all sharing siblings. The visited map
 // makes cyclic literals (#0=(1 . #0#)) terminate.
 //
-// KNOWN LIMITATION: the cdr spine is walked by recursion, so a proper list's
-// LENGTH becomes Go stack depth, unbounded. That is the same host-stack overflow
-// validateQuotedLiteralWithVisited (compile_time_continuation.go) was made
-// iterative to avoid, and CompileValidatedQuote runs both over the same literal:
-// a multi-million-element quoted list overflows the host stack here at compile
-// time. The spine walk wants to be iterative, like its sibling.
+// The cdr spine is walked iteratively; only cars recurse, matching
+// validateQuotedLiteralWithVisited (compile_time_continuation.go), which
+// CompileValidatedQuote runs over the same literal just before this. Recursing
+// per cdr made a proper list's LENGTH into Go stack depth, so a multi-million-
+// element quoted literal overflowed the host stack at compile time. Car depth
+// is nesting, which the parser already bounds.
+//
+// Unlike the validator's, these marks are never unwound: visited is a
+// termination and de-duplication set, not a path-scoped cycle detector, so a
+// node reached a second time by any route is already done.
 func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, visited map[values.Value]struct{}) {
 	if set == nil {
 		return
 	}
 	switch obj := v.(type) {
 	case *values.Pair:
-		_, seen := visited[obj]
-		if seen {
-			return
+		cur := obj
+		for {
+			_, seen := visited[cur]
+			if seen {
+				return
+			}
+			visited[cur] = struct{}{}
+			set.Mark(cur)
+			markLiteralImmutable(cur.Car(), set, visited)
+
+			next, isPair := cur.Cdr().(*values.Pair)
+			if !isPair || next == nil {
+				markLiteralImmutable(cur.Cdr(), set, visited)
+				return
+			}
+			cur = next
 		}
-		visited[obj] = struct{}{}
-		set.Mark(obj)
-		markLiteralImmutable(obj.Car(), set, visited)
-		markLiteralImmutable(obj.Cdr(), set, visited)
 	case *values.Vector:
 		_, seen := visited[obj]
 		if seen {

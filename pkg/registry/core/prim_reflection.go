@@ -257,7 +257,10 @@ func PrimProcedureType(mc machine.CallContext) error {
 		typeName = "case-lambda"
 	case *machine.Parameter:
 		typeName = "parameter"
-	case *machine.ComposableContinuation:
+	case *machine.ComposableContinuation, *machine.CapturedContinuation:
+		// Both continuation flavours classify alike, matching
+		// PrimProcedureArity: call/cc yields a CapturedContinuation,
+		// call-with-composable-continuation a ComposableContinuation.
 		typeName = "continuation"
 	default:
 		typeName = "unknown"

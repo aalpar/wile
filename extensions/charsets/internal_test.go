@@ -22,4 +22,5 @@ var (
 	ExportedIntersectTwo        = intersectTwo
 	ExportedDifferenceTwo       = differenceTwo
 	ExportedRangeTableToCharSet = rangeTableToCharSet
+	ExportedIsSubset            = isSubset
 )

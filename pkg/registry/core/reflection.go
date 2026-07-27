@@ -41,7 +41,7 @@ func addReflection(r *registry.Registry) error {
 			Doc: "Returns the list of symbols bound in PROC's captured environment, or #f for foreign procedures.\n\nExamples:\n  (procedure-bound-symbols car)  => #f  ; foreign procedure", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "procedure-type", ParamCount: 1, Impl: PrimProcedureType,
-			Doc: "Returns a symbol classifying PROC: closure, foreign, case-lambda, parameter, continuation (composable only), or unknown. Continuations captured by call/cc classify as unknown.\n\nExamples:\n  (procedure-type car)              => foreign\n  (procedure-type (lambda (x) x))  => closure\n  (call/cc (lambda (k) (procedure-type k)))  => unknown", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns a symbol classifying PROC: closure, foreign, case-lambda, parameter, continuation, or unknown. Both call/cc and call-with-composable-continuation captures classify as continuation.\n\nExamples:\n  (procedure-type car)              => foreign\n  (procedure-type (lambda (x) x))  => closure\n  (call/cc (lambda (k) (procedure-type k)))  => continuation", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeSymbol},
 		{Name: "procedure-documentation", ParamCount: 1, Impl: PrimProcedureDocumentation,
 			Doc: "Returns the docstring of PROC, or #f if none. Works for both Scheme-defined and foreign procedures.\n\nExamples:\n  (string? (procedure-documentation car))  => #t", ParamNames: []string{"proc"}, Category: "reflection",

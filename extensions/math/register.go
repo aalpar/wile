@@ -189,7 +189,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "angle", ParamCount: 1, Impl: PrimAngle,
 			Doc: "Returns the angle (argument) of Z in radians. For a positive real the result is exact 0; for a negative real (including -0.0) it is the inexact pi. It is an error to take the angle of an exact zero, which has no direction; (angle +nan.0) is +nan.0.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
-			ReturnType: values.TypeFlonum},
+			ReturnType: values.TypeReal},
 	}, registry.PhaseSetRuntime)
 
 	// Number/string conversion

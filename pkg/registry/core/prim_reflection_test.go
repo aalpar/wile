@@ -350,6 +350,15 @@ func TestProcedureType(t *testing.T) {
 					(lambda (v) v)))`,
 			Expected: values.NewSymbol("continuation"),
 		},
+		{
+			// Regression: a call/cc-captured continuation is a
+			// *machine.CapturedContinuation, a distinct type from the
+			// composable case above. It classified as "unknown" until the
+			// type switch listed it.
+			Name:     "captured continuation",
+			Code:     `(call/cc (lambda (k) (procedure-type k)))`,
+			Expected: values.NewSymbol("continuation"),
+		},
 	}
 
 	for _, tc := range tcs {

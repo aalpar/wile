@@ -477,6 +477,62 @@ func TestMakeNamedCharSet(t *testing.T) {
 	runSchemeExpectError(t, engine, "(%make-named-charset 'unknown-set)")
 }
 
+// TestNamedCharSetGraphicPrintingRelation pins the SRFI-14 relationship
+// char-set:printing = char-set:graphic ∪ char-set:whitespace, which makes
+// graphic a PROPER subset of printing. Regression guard: both sets were once
+// built from unicode.PrintRanges alone, leaving them byte-identical and
+// omitting U+0020 from printing entirely.
+func TestNamedCharSetGraphicPrintingRelation(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+
+	named := func(name string) *values.CharSet {
+		t.Helper()
+		v := runScheme(t, engine, "(%make-named-charset '"+name+")")
+		cs, ok := v.(*values.CharSet)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("%%make-named-charset '%s did not return a char-set", name))
+		return cs
+	}
+
+	graphic := named("graphic")
+	printing := named("printing")
+	whitespace := named("whitespace")
+
+	membership := []struct {
+		name       string
+		ch         rune
+		inGraphic  bool
+		inPrinting bool
+	}{
+		{"space", ' ', false, true},
+		{"tab", '\t', false, true},
+		{"newline", '\n', false, true},
+		{"no-break space", '\u00a0', false, true},
+		{"letter A", 'A', true, true},
+		{"digit 5", '5', true, true},
+		{"punctuation", '!', true, true},
+		{"nul control", '\x00', false, false},
+	}
+	for _, tt := range membership {
+		c.Run(tt.name, func(c *qt.C) {
+			c.Assert(graphic.Contains(tt.ch), qt.Equals, tt.inGraphic,
+				qt.Commentf("graphic membership of U+%04X", tt.ch))
+			c.Assert(printing.Contains(tt.ch), qt.Equals, tt.inPrinting,
+				qt.Commentf("printing membership of U+%04X", tt.ch))
+		})
+	}
+
+	// graphic ⊊ printing, and whitespace supplies the difference.
+	c.Assert(extcharsets.ExportedIsSubset(graphic, printing), qt.IsTrue,
+		qt.Commentf("char-set:graphic must be a subset of char-set:printing"))
+	c.Assert(extcharsets.ExportedIsSubset(printing, graphic), qt.IsFalse,
+		qt.Commentf("char-set:printing must not be a subset of char-set:graphic"))
+	c.Assert(printing.EqualTo(graphic), qt.IsFalse,
+		qt.Commentf("char-set:printing and char-set:graphic must not be equal"))
+	c.Assert(extcharsets.ExportedIsSubset(whitespace, printing), qt.IsTrue,
+		qt.Commentf("char-set:whitespace must be a subset of char-set:printing"))
+}
+
 func TestRangeTableToCharSet_StrideOverflow(t *testing.T) {
 	// Builds a synthetic RangeTable with stride 8 starting at 0xFF00 and
 	// asserts the resulting CharSet matches exactly the stride-expanded points.

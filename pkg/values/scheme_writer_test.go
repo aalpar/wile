@@ -55,6 +55,24 @@ func flatList(n int) values.Value {
 	return values.List(elems...)
 }
 
+// sharedChainDAG builds a shared *acyclic* DAG whose discovery depth and
+// expansion depth diverge. Element i of the returned vector is nest lists
+// wrapped around element i-1, and the vector lists them shallowest first, so
+// findShared meets every chain link as an already-seen node at depth nest+2 and
+// stops — while a pass that expands sharing instead of labeling it descends
+// links*nest+2 levels into the last element. Depth error above ~links*nest.
+func sharedChainDAG(links, nest int) values.Value {
+	elems := make([]values.Value, links)
+	cur := values.Value(values.NewInteger(0))
+	for i := range elems {
+		for range nest {
+			cur = values.List(cur)
+		}
+		elems[i] = cur
+	}
+	return values.NewVector(elems...)
+}
+
 func TestWriteValueToString_SimpleValues(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -424,4 +442,67 @@ func TestWriteValueToString_CycleThroughHashtable(t *testing.T) {
 
 	result := mustRender(t, values.WriteValueToString, h)
 	qt.Assert(t, result, qt.Equals, "#0=#hash((k . #0#))")
+}
+
+// TestWriter_SharedAcyclicDAGCannotEscapeDepthBound pins that the depth bound
+// binds the *output* pass, not only the sharing pass. In write and display mode
+// filterToCircular strips every non-circular label, so a shared acyclic subtree
+// is re-expanded on each path it is reachable by; findShared measured only its
+// first-discovery depth. Without a bound on the output pass, expansion recurses
+// arbitrarily deeper than the depth findShared approved and reaches the host
+// stack. write-shared is not affected — every node that could widen the depth
+// is labeled, hence short-circuited — so it is checked against the same value
+// in the rendering test below.
+func TestWriter_SharedAcyclicDAGCannotEscapeDepthBound(t *testing.T) {
+	// Under the shipped default (10000), 11 links of 1000 puts findShared at
+	// 1002 and the output pass at 11002. Under the small configurable cap, 5
+	// links of 10 puts findShared at 12 and the output pass at 52.
+	capped := func(v values.Value) (string, error) {
+		w := values.NewSchemeWriter()
+		w.SetMaxDepth(20)
+		return w.WriteString(v)
+	}
+	tcs := []struct {
+		name   string
+		render func(values.Value) (string, error)
+		in     values.Value
+	}{
+		{"write, default cap", values.WriteValueToString, sharedChainDAG(11, 1000)},
+		{"display, default cap", values.DisplayValueToString, sharedChainDAG(11, 1000)},
+		{"write, configured cap", capped, sharedChainDAG(5, 10)},
+		{"unshared deep still trips in pass 1", capped, nestList(20)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := tc.render(tc.in)
+			qt.Assert(t, errors.Is(err, werr.ErrWriteDepthExceeded), qt.IsTrue)
+			qt.Assert(t, s, qt.Equals, "")
+		})
+	}
+}
+
+// TestWriter_SharedDAGWithinBoundRenderingUnchanged pins the rendering of the
+// same shapes when they fit inside the bound: bounding the output pass must not
+// alter any output that renders today. write/display re-expand the shared
+// acyclic chain, write-shared labels it, and a genuine cycle still labels.
+func TestWriter_SharedDAGWithinBoundRenderingUnchanged(t *testing.T) {
+	selfCycle := values.NewCons(values.NewInteger(1), values.EmptyList)
+	selfCycle.SetCdr(selfCycle)
+
+	tcs := []struct {
+		name   string
+		render func(values.Value) (string, error)
+		in     values.Value
+		want   string
+	}{
+		{"write expands the shared chain", values.WriteValueToString, sharedChainDAG(3, 1), "#((0) ((0)) (((0))))"},
+		{"display expands the shared chain", values.DisplayValueToString, sharedChainDAG(3, 1), "#((0) ((0)) (((0))))"},
+		{"write-shared labels the shared chain", values.WriteSharedValueToString, sharedChainDAG(3, 1), "#(#0=(0) #1=(#0#) (#1#))"},
+		{"circular value still labels", values.WriteValueToString, selfCycle, "#0=(1 . #0#)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, mustRender(t, tc.render, tc.in), qt.Equals, tc.want)
+		})
+	}
 }

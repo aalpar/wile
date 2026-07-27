@@ -437,3 +437,42 @@ func TestMarkLiteralImmutable_RecursiveAndCyclic(t *testing.T) {
 	// nil set is a no-op (no panic).
 	markLiteralImmutable(top, nil, make(map[values.Value]struct{}))
 }
+
+// TestMarkLiteralImmutable_LongFlatList pins the length-vs-depth invariant on
+// the quote-hook marker: a proper list's LENGTH must not become Go stack depth.
+// CompileValidatedQuote runs markLiteralImmutable over the literal
+// validateQuotedLiteralWithVisited just walked iteratively for exactly this
+// reason, so a recursive cdr spine here undoes that protection one call later.
+//
+// The element count must exceed the pre-fix overflow threshold or this test
+// pins nothing. Measured on darwin/arm64 against the recursive version: 4M
+// passes, 5M crashes, so 6M is the pin. Do not lower it to speed the test up
+// without re-measuring. A Go stack overflow is a fatal runtime.throw, not a
+// recoverable panic, so the pre-fix signal is a killed test binary, not a
+// t.Fatal.
+func TestMarkLiteralImmutable_LongFlatList(t *testing.T) {
+	const elements = 6000000
+
+	q := values.Value(values.EmptyList)
+	for i := range elements {
+		q = values.NewCons(values.NewInteger(int64(i)), q)
+	}
+
+	set := &environment.ImmutableLiterals{}
+	markLiteralImmutable(q, set, make(map[values.Value]struct{}))
+
+	if !set.Contains(q) {
+		t.Fatalf("head of the long list must be marked immutable")
+	}
+	last := q
+	for {
+		next, isPair := last.(*values.Pair).Cdr().(*values.Pair)
+		if !isPair {
+			break
+		}
+		last = next
+	}
+	if !set.Contains(last) {
+		t.Fatalf("last pair of the long list must be marked immutable")
+	}
+}
