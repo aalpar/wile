@@ -41,7 +41,7 @@ type OriginRef struct {
 
 // BindingMeta holds compile-time metadata (scopes and source location) that is
 // never read during VM execution — but IS read and written concurrently across
-// SRFI-18 threads at compile time (two threads compiling a define of the same
+// SRFI-18 threads at compile time (two threads compiling a "define" of the same
 // top-level name). For a global binding it is therefore published copy-on-write
 // through the binding's atomicCell (see UpdateMeta); a reader always sees a
 // complete, immutable snapshot. Stored behind a pointer so that runtime Binding
