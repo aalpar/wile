@@ -50,6 +50,9 @@ CLAUDE.md
 *.mcp.json
 .serena/
 REVIEW.md
+# Index into the gitignored memory/ archive — pure agent scaffolding, and it
+# names 263 private design files, so it stays local like memory/ itself.
+/MEMORY.md
 
 # Sage compiled files
 *.sage.py
