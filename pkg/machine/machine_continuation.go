@@ -86,11 +86,11 @@ func NewMachineContinuation(parent *MachineContinuation, tpl *NativeTemplate, en
 // this function, but other callers do not:
 //
 //   - SaveContinuation: mc.callDepth already incremented → mc.callDepth != chain length
-//   - PrimCallCC sub-context path (prim_control.go): mc.callDepth == 0, mc.cont == nil
+//   - CaptureInterruptContinuationAt (timer interrupt): mc.callDepth == 0,
+//     mc.cont == nil on a rootless context
 //
-// Using mc.callDepth - 1 would underflow to -1 in the PrimCallCC
-// case (mc.callDepth == 0). The parent-pointer formula is correct for all
-// callers and immune to underflow.
+// Using mc.callDepth - 1 would underflow to -1 in that case (mc.callDepth == 0).
+// The parent-pointer formula is correct for all callers and immune to underflow.
 func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *MachineContinuation {
 	var depth int
 	if mc.cont != nil {

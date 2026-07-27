@@ -232,6 +232,10 @@ func parseSummaryDescription(summary *LibrarySummary, args syntax.SyntaxValue) {
 // Libraries already loaded in reg are skipped (their metadata is already
 // available via the registry). If the resolver does not implement
 // FileEnumerator, an empty index is returned (not an error).
+//
+// Best-effort: per-file name and parse errors are joined and returned alongside
+// a valid (partial) index; only an EnumerateFiles failure or a cancelled context
+// returns a nil index.
 func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistry) (*LibraryExportIndex, error) {
 	fileEnum, ok := res.(resolver.FileEnumerator)
 	if !ok {

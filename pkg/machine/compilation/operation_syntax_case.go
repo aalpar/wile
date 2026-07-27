@@ -31,7 +31,7 @@ import (
 // OperationSyntaxCaseMatch performs pattern matching for syntax-case.
 //
 // Expects:
-//   - Value register: syntaxCaseClause with compiled pattern
+//   - Value register: *SyntaxCaseClause with compiled pattern
 //   - Per-context syntaxCaseState.input: input syntax object (set by OperationStoreSyntaxCaseInput)
 //
 // Results:
@@ -43,12 +43,19 @@ type OperationSyntaxCaseMatch struct {
 
 // syntaxCaseState holds per-context state for syntax-case expansion.
 // It is stored via MachineContext.SyntaxCaseState (an any-typed back-channel
-// slot on the clustered expansion sub-record) so that syntax-case is
-// reentrant and safe for concurrent macro expansion. machine/ cannot import
-// this package (one-direction dependency), so the machine-side slot is
+// slot on the clustered expansion sub-record) so that concurrent macro
+// expansions on different MachineContexts do not share state. machine/ cannot
+// import this package (one-direction dependency), so the machine-side slot is
 // any-typed; the constraint that only this concrete type is ever stored
 // there is enforced by the slot's encapsulation rather than by the type
 // system.
+//
+// It is NOT reentrant within a single context: the slot holds exactly one
+// form's state, OperationStoreSyntaxCaseInput overwrites it and
+// OperationClearSyntaxCaseInput nils it. Since compileSyntaxCaseClause
+// compiles a clause body into the same template, a syntax-case nested inside a
+// clause body runs on the same context and destroys the enclosing form's
+// state; the enclosing form then fails with "no state on MachineContext".
 type syntaxCaseState struct {
 	bindings map[string]syntax.SyntaxValue // pattern variable bindings from last match
 	matcher  *match.SyntaxMatcher          // matcher from last match (needed for ellipsis expansion)
@@ -181,45 +188,28 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.EnvironmentFrame())
 
 	// Bind each pattern variable. MaybeCreateLocalBinding returns
-	// (*LocalIndex, created bool); the bool is unused here. The protocol
-	// has four (li, ok) states:
+	// (*LocalIndex, created bool) and the bool is discarded, because on this
+	// frame it carries no information: localEnv is freshly allocated, so its
+	// keys map is empty, no dedup lookup can hit, and every call creates a
+	// slot. For the same reason li is never nil here (a non-nil keys map makes
+	// hasLocal() true); the guard below is defensive only.
 	//
-	//   li != nil, ok == true   — matched non-ellipsis var: write stxVal
-	//                              (the captured syntax value).
-	//   li == nil, ok == true   — outer scope binds the name: skip the
-	//                              local set; the variable resolves via
-	//                              the environment chain.
-	//   li != nil, ok == false  — ELLIPSIS-CAPTURED var. matcher.GetBindings()
-	//                              returns only the ROOT capture context;
-	//                              ellipsis-captured pattern variables
-	//                              (e.g. `x` in `(_ x ...)`) live in the
-	//                              capture context's `children` field,
-	//                              walked at template-expansion time —
-	//                              see internal/match/match.go's
-	//                              "Capture Context" comment block and
-	//                              `findMatchingEllipsisID`. We
-	//                              explicitly write nil to the local
-	//                              slot to override the slot's default
-	//                              `values.Void` initialization (set by
-	//                              NewLocalEnvironment) — the nil
-	//                              signals "captured elsewhere; consult
-	//                              the matcher's children at expand
-	//                              time" and is the long-standing
-	//                              behavior this code path preserved
-	//                              before the structural rewrite.
-	//   li == nil, ok == false  — outer scope binds the name AND the var
-	//                              is ellipsis-captured: nothing to do
-	//                              locally; matcher tracks the captures.
-	//
-	// The two ok=false cases have no top-level binding by design; the
-	// downstream OperationSyntaxTemplateExpand consults sc.matcher's
-	// child contexts when expanding `(syntax (... x ...))` templates.
+	// The ellipsis signal is therefore not in the return values, it is the
+	// ABSENCE of varName from sc.bindings. matcher.GetBindings() exposes only
+	// the ROOT capture context; ellipsis-captured pattern variables (e.g. `x`
+	// in `(_ x ...)`) live in that context's `children` field, walked at
+	// template-expansion time (see internal/match/match.go's "Capture Context"
+	// comment block and findMatchingEllipsisID). Indexing the missing key
+	// yields a nil syntax.SyntaxValue, and writing that nil overrides the
+	// slot's default `values.Void` initialization from NewLocalEnvironment.
+	// The nil is the protocol signal: it tells the downstream
+	// OperationSyntaxTemplateExpand to consult sc.matcher's child contexts
+	// when expanding `(syntax (x ...))` templates.
 	for _, varName := range p.PatternVars {
 		sym := values.NewSymbol(varName)
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
 		if li == nil {
-			// Outer-scope binding wins (var resolves through env chain),
-			// or no local frame to write to: skip.
+			// No local frame to write to: nothing to bind.
 			continue
 		}
 		// stxVal is nil when varName is absent from sc.bindings (the

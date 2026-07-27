@@ -375,8 +375,8 @@ func PrimForce(cc machine.CallContext) error {
 	return nil
 }
 
-// PrimMakeLazyPromise implements the (delay-force) primitive.
-// Creates a lazy promise that delays evaluation of a thunk.
+// PrimMakeLazyPromise implements the internal (%make-lazy-promise thunk)
+// primitive. Creates a lazy promise; the delay/delay-force macros expand to it.
 func PrimMakeLazyPromise(mc machine.CallContext) error {
 	thunk, ok := mc.Arg(0).(values.Callable)
 	if !ok {

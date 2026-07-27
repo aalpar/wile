@@ -50,7 +50,8 @@ func compileERMacroTransformer(
 		))
 	}
 
-	// Validate arity: the lambda must accept exactly 3 parameters (form, rename, compare)
+	// Validate arity: the lambda must be callable with 3 arguments (form, rename,
+	// compare); a variadic lambda qualifies.
 	if !closure.AcceptsArity(3) {
 		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrWrongNumberOfArguments,

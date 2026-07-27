@@ -51,8 +51,9 @@ const (
 // target name, then recurses into its value expression as a normal walk
 // (the value's symbol references appear as RefInBody at the same depth).
 //
-// Symbols are NEVER yielded with RefInClosureBody; "is this inside a
-// closure?" is the depth > 0 predicate.
+// There is no closure-body RefRole; "is this inside a closure?" is the
+// depth > 0 predicate. (RoleClosureBody is a ChildRole, consumed
+// internally by walkBindingRefsAt to bump depth.)
 //
 // Role tagging is shallow: RefInCallProc and RefSetBangTarget are
 // reported only on direct symbol children of the surrounding form. A

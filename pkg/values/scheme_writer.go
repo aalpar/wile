@@ -64,8 +64,8 @@ const (
 // emits #n= definitions on first encounter and #n# references thereafter.
 // See BIBLIOGRAPHY.md "Two-Pass Datum Label Output".
 //
-// Implementation note: Uses maps with concrete *Pair and *Vector keys (not Tuple/Indexable
-// interfaces) because:
+// Implementation note: Uses maps with concrete *Pair, *Vector, *Box and *Hashtable keys
+// (not Tuple/Indexable interfaces) because:
 // 1. Go map keys must be comparable types - interfaces are not suitable
 // 2. Cycle/sharing detection requires pointer identity tracking
 // 3. Each concrete type needs separate tracking for proper label assignment
@@ -161,8 +161,12 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	// First pass: identify which objects are referenced multiple times. This
 	// is also the depth-enforcing pass — it is the first traversal to descend
 	// the car/element recursion, so it trips the nesting bound before any
-	// deeper pass runs. Passes 2 and 3 below therefore execute only on
-	// depth-valid structure and stay within maxDepth Go stack frames.
+	// deeper pass runs. Pass 2 below prunes on the same visited sets as pass 1,
+	// so its recursion tree is the same shape and it inherits the bound. Pass 3
+	// does NOT: it short-circuits only on an assigned datum label, so in
+	// WriteModeWrite (and display mode), where filterToCircular strips
+	// non-circular labels, a shared acyclic subtree is re-expanded on every
+	// path and write can recurse deeper than the depth findShared measured.
 	p.findShared(v, 1)
 	if p.err != nil {
 		return "", p.err
@@ -179,7 +183,7 @@ func (p *SchemeWriter) WriteString(v Value) (string, error) {
 	p.seenBoxes = make(map[*Box]int)
 	p.seenHashtables = make(map[*Hashtable]int)
 
-	// Second pass: generate output with labels
+	// Third pass: generate output with labels
 	q := &strings.Builder{}
 	p.write(q, v)
 	return q.String(), nil
@@ -282,7 +286,7 @@ func (p *SchemeWriter) findShared(v Value, depth int) {
 	}
 }
 
-// filterToCircular removes non-circular entries from needsLabelPair/needsLabelVector.
+// filterToCircular replaces the four needsLabel* maps with only the circular entries.
 // An object is circular if it is reachable from itself — i.e., it appears on the
 // DFS recursion stack when revisited. This uses gray/black DFS coloring.
 func (p *SchemeWriter) filterToCircular(v Value) {
@@ -471,7 +475,7 @@ func (p *SchemeWriter) writePair(sb *strings.Builder, pr *Pair) {
 		fmt.Fprintf(sb, "#%d=", label)
 	}
 
-	// WriteByte the pair content
+	// Write the pair content
 	sb.WriteString("(")
 	p.writePairContents(sb, pr)
 	sb.WriteString(")")
@@ -493,7 +497,7 @@ func (p *SchemeWriter) writePairContents(sb *strings.Builder, pr *Pair) {
 		}
 		first = false
 
-		// WriteByte car
+		// Write car
 		p.write(sb, curr.Car())
 
 		// Check cdr

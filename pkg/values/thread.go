@@ -26,30 +26,18 @@ import (
 
 // Thread state symbol singletons.
 //
-// StateSymbol() and PrimCurrentThread return these package-level singletons
-// instead of allocating fresh symbols on each call. This guarantees
-// self-consistency: (eq? (thread-state t) (thread-state t)) → #t.
+// StateSymbol and PrimCurrentThread return these package-level singletons
+// instead of allocating fresh symbols on each call.
 //
-// However, these are process-global pointers, not per-VM interned symbols.
-// Reader-interned 'new (created via the parser gate) lives in the per-VM
-// Namespace intern table and is a different pointer. Therefore:
+// These are process-global pointers, but symbol identity in Wile is by name,
+// not by pointer: EqIdentity compares *Symbol by .Key, so a singleton is eq?
+// (and equal?) to a reader-produced symbol of the same name. The singletons
+// exist only to avoid allocating a fresh *Symbol on every call. Observable via
+// PrimCurrentThread, which yields SymbolPrimordial off a Thread:
+// (eq? (current-thread) 'primordial) → #t.
 //
-//	(eq? (thread-state t) (thread-state t))  → #t  (same singleton)
-//	(eq? (thread-state t) 'new)              → #f  (singleton ≠ interned)
-//	(equal? (thread-state t) 'new)           → #t  (string comparison)
-//
-// SRFI-18 defines thread states as symbols but does not mandate eq? identity
-// against reader-interned symbols, so this is conformant. The equal? path
-// works because Symbol.EqualTo compares .Key strings.
-//
-// To make eq? work against reader-interned symbols, these singletons would
-// need to participate in the per-VM intern table. That requires either:
-//   - Lazily interning on first use (needs access to an environment)
-//   - Registering these symbols during Engine initialization
-//
-// The values/ package cannot import environment/ (it's lower in the dependency
-// graph), so this would need to be driven from engine.go or registry/. This
-// is deferred until there is a concrete need.
+// The state symbols themselves have no Scheme-level primitive today: nothing
+// exposes StateSymbol, so SRFI-18's thread-state is not reachable from Scheme.
 var (
 	SymbolThreadNew        = NewSymbol("new")
 	SymbolThreadRunnable   = NewSymbol("runnable")
@@ -158,6 +146,9 @@ func (p *Thread) ID() uint64 {
 
 // Context returns the context associated with this thread.
 // Returns nil if the thread has not been started.
+//
+// Hazard: p.ctx is read without holding p.mu, while Start writes it under p.mu.
+// Calling this concurrently with Start is a data race.
 func (p *Thread) Context() context.Context {
 	return p.ctx
 }
@@ -188,10 +179,9 @@ func (p *Thread) State() ThreadState {
 	return p.state
 }
 
-// StateSymbol returns the state as a Scheme symbol.
-// Returns package-level singletons so that repeated calls return the same pointer:
-// (eq? (thread-state t) (thread-state t)) → #t.
-// See the doc comment on SymbolThreadNew for eq? vs equal? caveats.
+// StateSymbol returns the state as a Scheme symbol. Returns package-level
+// singletons rather than fresh symbols; see the doc comment on SymbolThreadNew.
+// StateSymbol has no Scheme-level primitive today.
 func (p *Thread) StateSymbol() *Symbol {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -359,10 +349,9 @@ func (p *Thread) Terminate() {
 	}
 }
 
-// Yield yields execution to other threads
+// Yield is a no-op placeholder. Yielding is done by the thread-yield!
+// primitive, which calls runtime.Gosched directly; nothing calls this method.
 func (p *Thread) Yield() {
-	// In Go, this is a hint to the scheduler
-	// runtime.Gosched() is called in the primitive
 }
 
 // Sleep pauses the thread for the given duration
@@ -436,6 +425,11 @@ func (p *Thread) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme representation of this thread.
+//
+// Hazard: it formats p.state without holding p.mu, unlike every other reader of
+// that field (State, StateSymbol, Sleep, setOutcome) and unlike the sibling
+// Mutex.SchemeString. Displaying a running thread therefore races with its own
+// state transitions.
 func (p *Thread) SchemeString() string {
 	if p == nil {
 		return "#<thread:void>"
@@ -527,7 +521,7 @@ func (p *UncaughtException) SchemeString() string {
 
 // AbandonedMutexException is raised when a mutex owner terminates
 type AbandonedMutexException struct {
-	Mutex Value // *Mutex, but avoid circular import
+	Mutex Value // always *Mutex; typed as Value so Scheme can carry it
 }
 
 func (p *AbandonedMutexException) Error() string {

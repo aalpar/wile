@@ -104,8 +104,8 @@ func (p *ErrorContext) EqualTo(other values.Value) bool {
 }
 
 // errorContextKeyType is a private sentinel type used as the continuation mark
-// key for error context. Because it is unexported, Scheme code cannot forge it
-// — identity is pointer equality, not string comparison.
+// key for error context. Because it is unexported, Scheme code cannot forge it:
+// identity is type identity under values.EqIdentity, not string comparison.
 type errorContextKeyType struct{}
 
 func (errorContextKeyType) SchemeString() string {

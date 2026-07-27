@@ -36,9 +36,9 @@ func NewOperationMakeClosure() *OperationMakeClosure {
 
 // popMakeClosureArgs pops the two MakeClosure operands off the eval stack and
 // validates their types: the compile-time environment frame (top) and the
-// native template beneath it. Both the OpComplex Apply path and the inline
-// OpMakeClosure case in Run() use it so the two-pop validation lives in one
-// place.
+// native template beneath it. Both the (production-vestigial)
+// OperationMakeClosure.Apply method and the inline OpMakeClosure case in Run()
+// use it so the two-pop validation lives in one place.
 func popMakeClosureArgs(mc *MachineContext) (*environment.EnvironmentFrame, *NativeTemplate, error) {
 	envVal, tplVal := mc.evals.Pop2()
 	compiletimeEnv, ok := envVal.(*environment.EnvironmentFrame)

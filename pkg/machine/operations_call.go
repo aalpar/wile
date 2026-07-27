@@ -24,8 +24,9 @@ import (
 // OperationApply is the bytecode operation that dispatches procedure calls.
 // The compiler emits it after pushing arguments onto the eval stack and placing
 // the callee in the value register. Apply pops all arguments and delegates to
-// MachineContext.ApplyCallable, which handles the five callable types
-// (MachineClosure, ForeignClosure, CaseLambdaClosure, Parameter, ComposableContinuation).
+// MachineContext.ApplyCallable, which handles the six callable types
+// (MachineClosure, ForeignClosure, CaseLambdaClosure, Parameter,
+// ComposableContinuation, CapturedContinuation).
 type OperationApply struct {
 	OperationBase
 }

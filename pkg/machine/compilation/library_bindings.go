@@ -352,26 +352,6 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 	return CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, environment.PhaseRuntime)
 }
 
-// CopyLibraryBindingsToEnvAtPhase copies exported bindings from a library to a specific phase.
-// bindings is the map from localName -> externalName produced by ApplyToExports.
-//
-// Phase semantics:
-//   - targetPhase == 0: Runtime import (default). Runtime bindings go to phase 0,
-//     syntax bindings go to both phase 0 (for export) and phase 1 (for use in macros).
-//   - targetPhase > 0: For-syntax import. Bindings are shifted to the target phase.
-//     Runtime bindings become available during macro expansion at targetPhase.
-//     Syntax bindings go to targetPhase and targetPhase+1.
-//   - targetPhase < 0: For-template import. Bindings shifted to negative phase
-//     (used for generating code that will run at a lower phase).
-
-// ResolveAndInstallImportSet parses an import set datum, loads the library,
-// applies modifiers (only, except, prefix, rename), fires the import observer,
-// and copies the resulting bindings into env at the appropriate phase.
-//
-// This is the common path for top-level imports (both expander and compiler).
-// Library-internal imports (processLibraryImport) diverge at installation and
-// use their own loop.
-
 // ResolvedImportSet holds the result of parsing and loading an import set.
 // This is the shared prefix of all import processing: parse the import set
 // datum, load the named library, and apply modifiers (only, except, prefix,
@@ -413,9 +393,13 @@ func resolveImportSet(ctx context.Context, datum values.Value, env *environment.
 }
 
 // ResolveAndInstallImportSet resolves an import set and installs bindings into
-// env at the appropriate phase. Used for top-level imports (both expander and
-// compiler). Library-internal imports share the resolution step (resolveImportSet)
-// but use copyLibraryBindingsDirect for installation.
+// env. Used for top-level imports (both expander and compiler). Library-internal
+// imports share the resolution step (resolveImportSet) but use
+// copyLibraryBindingsDirect for installation.
+//
+// The phase argument is import-observer metadata only; it does NOT select the
+// install phase. That comes from composePhaseShift below, which combines the
+// environment's own phase level with the import set's for-syntax/for-meta shift.
 func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase environment.Phase, evaluator machine.MacroEvaluator) error {
 	res, err := resolveImportSet(ctx, datum, env, evaluator)
 	if err != nil {
@@ -444,6 +428,16 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 	return nil
 }
 
+// ExportedBinding resolves one of the library's exportable bindings by its
+// internal name, using the same hygienic rule the import path uses. Callers
+// outside this package (the doc-registration observer) must go through this
+// rather than reaching into lib.Env with a bare-name lookup, or they will
+// disagree with what an import actually installs.
+func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Binding, bool) {
+	binding, _, found := findLibraryBinding(p, internalName)
+	return binding, found
+}
+
 // findLibraryBinding searches the library's runtime, expand, and compile
 // environments for a binding with the given internal name. The boolean
 // reports whether a binding was found; when false, the binding pointer is
@@ -470,16 +464,6 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 // A name arriving through a macro PATTERN VARIABLE (define-record-type's
 // accessors, any (mk name v) form) carries {libScope} like a hand-written
 // binder, so those stay exportable.
-// ExportedBinding resolves one of the library's exportable bindings by its
-// internal name, using the same hygienic rule the import path uses. Callers
-// outside this package (the doc-registration observer) must go through this
-// rather than reaching into lib.Env with a bare-name lookup, or they will
-// disagree with what an import actually installs.
-func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Binding, bool) {
-	binding, _, found := findLibraryBinding(p, internalName)
-	return binding, found
-}
-
 func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase, bool) {
 	sourceEnvs := []struct {
 		env   *environment.EnvironmentFrame
@@ -490,8 +474,9 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 		{lib.Env.Compile(), environment.PhaseCompile},
 	}
 
-	// A non-nil empty slice, never nil: GetBinding reads nil scopes as "match
-	// any", which is the bare-name lookup this replaced.
+	// exportScopes stays a concrete slice: nil and empty are the same query under
+	// ScopeSet (values.ScopesOf), so this is the ambient (empty) set, never the
+	// wildcard.
 	exportScopes := []*syntax.Scope{}
 	if lib.Scope != nil {
 		exportScopes = append(exportScopes, lib.Scope)
@@ -639,6 +624,19 @@ func installImportedBinding(
 	return nil
 }
 
+// CopyLibraryBindingsToEnvAtPhase copies exported bindings from a library to a specific phase.
+// bindings is the map from localName -> externalName produced by ApplyToExports.
+//
+// Phase semantics:
+//   - targetPhase == 0: Runtime import (default). Runtime bindings go to phase 0.
+//     A syntax binding that came from the library's expand phase skips the phase-0
+//     install (skipBase below) and lands only at phase 1, so it cannot shadow the
+//     importer's own define-syntax.
+//   - targetPhase > 0: For-syntax import. Bindings are shifted to the target phase.
+//     Runtime bindings become available during macro expansion at targetPhase.
+//     Syntax bindings follow the same skipBase rule: targetPhase+1 only.
+//   - targetPhase < 0: For-template import. Bindings shifted to negative phase
+//     (used for generating code that will run at a lower phase).
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)

@@ -58,7 +58,7 @@ import (
 //	│  LocalEnvironmentFrame    │    │      GlobalEnvironmentFrame            │
 //	│  (Single scope bindings)  │    │  (Phase-wide global bindings)          │
 //	│                           │    │                                        │
-//	│  keys ── map[Symbol][]int │    │  keys ──────── map[Symbol]int          │
+//	│  keys ── map[Symbol][]int │    │  keys ────── map[Symbol][]int          │
 //	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
 //	└───────────────────────────┘    └────────────────────────────────────────┘
 //
@@ -234,6 +234,10 @@ func (p *EnvironmentFrame) IsTopLevel() bool {
 }
 
 // TopLevel returns the top-level environment frame in the hierarchy.
+//
+// After the layered-environment carve this is the namespace's immutable SEALED
+// BASE, not the user global. Use MutableRuntime() for the frame where user
+// defines land.
 func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 	frame := p
 	for frame.parent != nil {
@@ -284,7 +288,8 @@ func (p *EnvironmentFrame) PhaseLevel() Phase {
 }
 
 // Runtime returns the runtime phase environment (phase 0).
-// This is the root environment where normal bindings live.
+// This is the mutable user top level where normal bindings live; it is the
+// lexical child of the namespace's sealed base.
 func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
 	return p.AtPhase(PhaseRuntime)
 }
@@ -551,6 +556,10 @@ func (p *EnvironmentFrame) resolveGlobal(
 // A wildcard query (AllScopes) means "match any" (no scope filtering). A
 // specific or empty query enables hygienic resolution per Flatt's model with
 // maximal binding selection (consistent with GetLocalIndex).
+//
+// Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
+// sets tie for the maximal match (Racket's "ambiguous binding"); the tie is
+// refused, never broken by order.
 func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Binding {
 	if q.IsAll() {
 		// Fast path: wildcard query — return first match
@@ -617,8 +626,9 @@ func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType
 }
 
 // MaybeCreateLocalBinding creates a local binding with scope-aware
-// deduplication. Two bindings with the same key but incompatible scopes
-// get separate slots; compatible scopes reuse the existing slot.
+// deduplication. A slot is reused only by a binder carrying the SAME scope
+// set; any other scope set, even a compatible one, is a different variable and
+// gets its own slot (see scopeSetsEqual).
 //
 // Nil scopes means "match any" during dedup (pre-hygiene callers).
 // Returns (index, true) if created, (index, false) if already existed.
@@ -640,6 +650,10 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 // reference's scopes, the one with the LARGEST scope set is returned.
 //
 // Returns nil if no matching local binding exists.
+//
+// Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
+// sets tie for the maximal match (Racket's "ambiguous binding"); the tie is
+// refused, never broken by order.
 func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) *LocalIndex {
 	if p == nil || !p.hasLocal() {
 		return nil
@@ -729,7 +743,8 @@ func (p *EnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
 
 // GetLocalBindingByIndex returns the local binding at the given index in the current local environment.
 // It does not search parent environments.
-// It returns nil if the binding does not exist.
+// It panics if i is out of range for this frame's local bindings; callers must
+// have obtained i from this frame.
 func (p *EnvironmentFrame) GetLocalBindingByIndex(i int) *Binding {
 	return &p.local.bindings[i]
 }
@@ -791,8 +806,7 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 
 // MaybeCreateOwnGlobalBinding creates a new global binding in the current
 // global environment if it does not already exist.
-// The key is interned before use (consistent with
-// GlobalEnvironmentFrame.CreateGlobalBinding).
+// Delegates to GlobalEnvironmentFrame.CreateGlobalBinding.
 // It returns the GlobalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
 //
@@ -941,7 +955,7 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 }
 
 // GetGlobalIndexFromLibraryScopes searches for a binding by checking each
-// scope against the TLE's scope registry. For each scope that maps to a
+// scope against the root Namespace's scope registry. For each scope that maps to a
 // library env, performs a cross-phase lookup in that library's env.
 // Returns the first match, or nil if no library binding is found.
 func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {

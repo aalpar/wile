@@ -180,11 +180,12 @@ const (
 	// TokenizerStateCharGraphic represents #\a (single graphic char).
 	TokenizerStateCharGraphic
 
-	// TokenizerStateLineCommentBody represents comment text (multi-token: body).
+	// TokenizerStateLineCommentBody represents comment text.
 	TokenizerStateLineCommentBody
-	// TokenizerStateBlockCommentBody represents block content (multi-token: body).
+	// TokenizerStateBlockCommentBody represents block content.
 	TokenizerStateBlockCommentBody
-	// TokenizerStateDatumCommentBegin represents #; (multi-token mode).
+	// TokenizerStateDatumCommentBegin represents the #; marker; the following
+	// datum is read by the parser.
 	TokenizerStateDatumCommentBegin
 
 	// TokenizerStateSymbol represents an identifier or symbol.
@@ -278,11 +279,13 @@ func (p *Tokenizer) Text() string {
 
 // Next returns the next token from the input stream.
 // Returns io.EOF when the input is exhausted.
-// Comment tokens are skipped unless emitComments was set to true.
+// A literal U+FFFD in datum position is currently reported as io.EOF as well,
+// truncating the rest of the input; only U+FFFD inside a string, symbol or
+// comment body survives.
+// Comment tokens are always emitted; callers that want them elided (the parser,
+// when constructed with skipComments) drop them themselves.
 func (p *Tokenizer) Next() (Token, error) {
 	for p.err == nil {
-		// Handle comment phase continuation BEFORE EOF check
-		// This allows emitting End tokens even when at EOF
 		if p.curr() == utf8.RuneError {
 			if p.err != nil {
 				return nil, p.err
@@ -380,7 +383,7 @@ func (p *Tokenizer) read() {
 		p.term()
 		return
 	case p.curr() == ';': // line comment
-		// Emit LineCommentBegin, set up for Body/End on subsequent calls
+		// A line comment is one token: body text through the line ending.
 		p.state = TokenizerStateLineCommentBody
 		p.readLineCommentOrPragma() //nolint:errcheck
 		p.term()
@@ -442,9 +445,10 @@ func (p *Tokenizer) skipWhitespace() {
 }
 
 // scanWith matches bytes using the provided comparison function.
-// Returns the number of unmatched bytes (0 = complete match).
+// Returns len(s) minus the number of runes matched (0 = complete match); all
+// call sites pass ASCII, where that is the count of unmatched bytes.
 func (p *Tokenizer) scanWith(s []byte, match func(input, target rune) bool) int {
-	k := len(s) // k = number of runes left to match
+	k := len(s) // k = len(s) less the runes matched so far
 	i := 0      // number of bytes consumed
 	for {
 		r, n := utf8.DecodeRune(s[i:])
@@ -463,7 +467,9 @@ func (p *Tokenizer) scanWith(s []byte, match func(input, target rune) bool) int 
 	}
 }
 
-// scan matches bytes using either case-sensitive or case-insensitive matching
+// scan matches bytes using either case-sensitive or case-insensitive matching.
+// Returns len(s) minus the number of runes matched (0 = complete match); all
+// call sites pass ASCII, where that is the count of unmatched bytes.
 func (p *Tokenizer) scan(s []byte) int {
 	if p.ci {
 		// Case-insensitive mode: accept if either case matches
@@ -474,7 +480,8 @@ func (p *Tokenizer) scan(s []byte) int {
 
 // scanCaseInsensitive matches bytes case-insensitively (always, regardless of p.ci).
 // Used for R7RS-required case-insensitive tokens like booleans.
-// Returns the number of unmatched bytes (0 = complete match).
+// Returns len(s) minus the number of runes matched (0 = complete match); all
+// call sites pass ASCII, where that is the count of unmatched bytes.
 func (p *Tokenizer) scanCaseInsensitive(s []byte) int {
 	return p.scanWith(s, func(input, target rune) bool {
 		return unicode.ToLower(input) == unicode.ToLower(target)
@@ -523,7 +530,7 @@ func (p *Tokenizer) mark() {
 	p.state = TokenizerStateFailed
 }
 
-// term terminates the current token, setting its end position and text.
+// term terminates the current token, setting its end position.
 func (p *Tokenizer) term() {
 	p.tokenEnd = p.runeStart
 }
@@ -577,8 +584,6 @@ func (p *Tokenizer) next() {
 	p.text = utf8.AppendRune(p.text, p.cur)
 	p.readNextRune()
 }
-
-// isUnicodeLetter returns true if c is an ASCII letter (A-Z or a-z) or unicode number-letter
 
 // Close closes the underlying reader if it implements io.Closer.
 func (p *Tokenizer) Close() error {

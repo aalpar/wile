@@ -76,8 +76,9 @@ var PrimBytevectorQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 })
 
 // PrimProcedureQ implements the procedure? predicate.
-// R7RS §6.1: Returns #t for all callable types — lambdas, case-lambdas,
-// parameter objects (R7RS §4.2.6), and composable continuations.
+// R7RS §6.1: Returns #t for all callable types: lambdas, case-lambdas, Go
+// primitives (foreign closures), parameter objects (R7RS §4.2.6), and both
+// captured and composable continuations.
 var PrimProcedureQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(values.Callable)
 	return ok

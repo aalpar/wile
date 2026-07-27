@@ -25,11 +25,12 @@ import (
 
 // The source-load path (include / import / load) opens through os.Root whenever
 // the engine's authorizer confines filesystem access to a root, mirroring the
-// file primitives (extensions/files/confined.go). The authorizer gate runs on a
-// lexical path, so between the check and the open a component of that path can
-// be swapped for a symlink pointing elsewhere; os.Root resolves each component
-// against a directory descriptor and refuses symlink/".." escapes at the syscall
-// level, so the swapped path can no longer redirect the open outside the root.
+// file primitives (extensions/files/confined.go). The authorizer gate is a check
+// by NAME, not on an open descriptor (the built-in authorizers do canonicalize:
+// see security.containedInRoot), so between the check and the open a component of
+// that path can be swapped for a symlink pointing elsewhere; os.Root resolves each
+// component against a directory descriptor and refuses symlink/".." escapes at the
+// syscall level, so the swapped path can no longer redirect the open outside the root.
 // Without a confinement root there is no root to escape, and the plain open is
 // used.
 

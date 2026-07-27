@@ -57,8 +57,8 @@ func StripExamples(doc string) string {
 // DocSearchProvider extends DocProvider with search and category browsing.
 type DocSearchProvider interface {
 	DocProvider
-	// Search returns entries whose name, doc, or category contains pattern
-	// (case-insensitive substring match). Results are sorted by name.
+	// Search returns entries whose name, doc, category, or keywords contain
+	// pattern (case-insensitive substring match). Results are sorted by name.
 	Search(ctx context.Context, pattern string) []registry.DocSearchResult
 	// Categories returns sorted category names.
 	Categories() []string

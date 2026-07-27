@@ -146,9 +146,9 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 // hierarchy is managed by EnvironmentFrame via its parent field. Each phase
 // (runtime, expand, compile) has its own GlobalEnvironmentFrame.
 //
-// Note: Symbol and syntax interning are delegated to Namespace via the
-// owning EnvironmentFrame, ensuring R7RS symbol identity works correctly
-// across all phases. GlobalEnvironmentFrame itself does not hold a back
+// Note: syntax interning is delegated to Namespace via the owning
+// EnvironmentFrame. (Symbols are not interned; eq? on symbols compares the
+// .Key string.) GlobalEnvironmentFrame itself does not hold a back
 // reference to its Namespace; ownership flows through EnvironmentFrame.
 //
 // Thread safety: All access to keys and bindings is protected by mu.
@@ -252,13 +252,15 @@ func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol][]int {
 // AmbientScopes returns the ambient scope set: the empty, NON-NIL set that a
 // reference written outside any macro expansion carries.
 //
-// It exists because nil and the empty set are opposite instructions at the read
-// entry points. GetBinding, GetLocalIndex and GetGlobalIndex read nil as MATCH
-// ANY — the name's first live slot whatever its hygiene — while an empty set
-// means "compatible with no scopes", which only an ambient binding satisfies.
-// Both spell `len(scopes) == 0`, so the distinction survives only where a site
-// tests nil-ness, and a caller that means "ambient" and writes nil silently gets
-// a wildcard. Every reflective read of a bare symbol wants this, not nil: a
+// The read entry points no longer confuse the two: GetBinding and GetLocalIndex
+// take a syntax.ScopeSet, which separates wildcard (ScopeSet.IsAll) from empty
+// structurally, and syntax.ScopesOf(nil) is the empty set rather than a
+// wildcard. (EnvironmentFrame.GetGlobalIndex takes no scope argument at all and
+// is unconditionally a wildcard.) Binding CREATION is the one surviving
+// nil-as-wildcard path (MaybeCreateLocalBinding dedups on `scopes == nil`), so
+// a creation caller that means "ambient" must pass this set rather than nil.
+//
+// Every reflective read of a bare symbol wants this, not a wildcard: a
 // values.Symbol carries no scope set, so when several hygiene-distinct bindings
 // share a name a wildcard resolves by slot order — an expansion-order artifact,
 // not an answer to the caller's question.
@@ -318,6 +320,10 @@ func scopeSetsEqual(a, b []*syntax.Scope) bool {
 // empty scope set".
 //
 // Caller MUST hold at least a read lock on p.mu.
+//
+// It PANICS with a wrapped werr.ErrAmbiguousBinding on an incomparable
+// equal-cardinality tie. Callers that unlock without defer (resolveGlobal,
+// SetOwnGlobalValue) leak p.mu on that path.
 func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.ScopeSet) (int, bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
@@ -527,10 +533,6 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // with nothing in the signature to flag it. Delete therefore has no wildcard
 // mode at all; "remove the name and every hygiene-distinct binding under it" is
 // a legitimate but different operation, and nothing asks for it.
-//
-// The read entry points (GetBinding, GetLocalIndex, GetGlobalIndex) still read
-// nil as MATCH ANY, which is what AmbientScopes exists to work around. This
-// function does not follow them. See issue #805.
 //
 // Note: the binding slot in p.bindings is not compacted — index-based
 // references from compiled code would be stale. This is only safe for

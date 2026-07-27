@@ -191,6 +191,13 @@ const (
 	numZeroOps
 )
 
+// zeroRow is one operation's rule: what to do when the LEFT operand is an exact
+// zero, and what to do when the RIGHT one is.
+type zeroRow struct {
+	left  zeroAction
+	right zeroAction
+}
+
 // exactZeroTable is the exact-zero rule, as data. One row per operation; the two
 // columns are the action to take when the LEFT operand is an exact zero and when
 // the RIGHT one is.
@@ -213,13 +220,6 @@ const (
 // an exact 0 divided by ANYTHING is exactly 0, including by NaN and by an inexact
 // zero. (/ 0 0.0) is 0 in both oracles, NOT NaN -- the strong update overrides IEEE
 // for the same reason (* 0 +inf.0) does.
-// zeroRow is one operation's rule: what to do when the LEFT operand is an exact
-// zero, and what to do when the RIGHT one is.
-type zeroRow struct {
-	left  zeroAction
-	right zeroAction
-}
-
 var exactZeroTable = [numZeroOps]zeroRow{
 	zeroAdd: {left: zeroYieldOther, right: zeroYieldOther},
 	zeroSub: {left: zeroNegateOther, right: zeroYieldOther},

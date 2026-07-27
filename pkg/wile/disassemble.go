@@ -25,7 +25,8 @@ import (
 // FormLabel returns a human-readable type label for a value:
 // "primitive" for foreign (Go-implemented) closures,
 // "procedure" for compiled Scheme closures,
-// "" for non-callable values (including typed nils).
+// "" for everything else, including parameters, continuations, typed nils,
+// and non-callable values.
 func (p *Engine) FormLabel(v Value) string {
 	inner := unwrapValue(v)
 	switch c := inner.(type) {
@@ -52,7 +53,9 @@ func (p *Engine) FormLabel(v Value) string {
 // DisassembleValue returns the formatted disassembly of a callable value.
 // For compiled closures, shows bytecode instructions. For case-lambda,
 // shows each clause separately. For foreign closures, shows name, arity,
-// and documentation. Returns an error for non-procedure values.
+// and documentation. Returns an error for anything other than a compiled
+// closure, a case-lambda, or a foreign closure, parameters and continuations
+// included.
 func (p *Engine) DisassembleValue(v Value) (string, error) {
 	inner := unwrapValue(v)
 	switch c := inner.(type) {

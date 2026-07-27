@@ -91,8 +91,9 @@ func rescueBigComplex(mc machine.CallContext, arg values.Value, result complex12
 
 // makeComplexPrimitive builds a unary transcendental. An unbounded-tier real
 // operand (BigFloat/BigInteger/Rational) takes bigRealFn at big precision when one
-// is supplied; a complex operand whose float64 result over/underflows takes
-// bigCplxFn (overflow-gating); everything else truncates to complex128 and applies fn.
+// is supplied; any operand whose float64 result comes back non-finite (±Inf/NaN)
+// takes bigCplxFn, underflow-to-zero is not rescued here; everything else truncates
+// to complex128 and applies fn.
 func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn func(*big.Float, uint) *big.Float, bigCplxFn bigComplexFn) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
 		arg := mc.Arg(0)
@@ -295,8 +296,9 @@ func PrimAtan(mc machine.CallContext) error {
 
 // isUnboundedReal reports whether v is a real number whose range or precision
 // exceeds float64 — *BigFloat (unbounded precision), *BigInteger and *Rational
-// (unbounded range). These take the big-precision atan paths so they cannot
-// overflow to a wrong angle. Bounded *Integer (int64) and *Float (float64) stay
+// (unbounded range). These take the big-precision kernel in whichever
+// transcendental is calling, so a value outside the float64 range is not
+// truncated before the computation. Bounded *Integer (int64) and *Float (float64) stay
 // on the fast float64 path.
 func isUnboundedReal(v values.Value) bool {
 	switch v.(type) {
@@ -307,8 +309,9 @@ func isUnboundedReal(v values.Value) bool {
 	}
 }
 
-// numberToBigFloat converts a real numeric value to *big.Float at default
-// precision, or returns nil for non-real / non-numeric values.
+// numberToBigFloat converts a real numeric value to *big.Float: at default
+// precision, except a *BigFloat which keeps its own. Returns nil for non-numeric
+// or complex values, and for a NaN/±Inf float, which math/big cannot represent.
 func numberToBigFloat(v values.Value) *big.Float {
 	prec := uint(values.DefaultBigFloatPrecision)
 	switch n := v.(type) {

@@ -26,7 +26,8 @@ import (
 //
 // This form defines a binding in the expand phase environment that is
 // available during macro expansion. The expression is compiled and
-// evaluated at compile time, and the result is stored in env.Expand().
+// evaluated at compile time, and the result is stored one phase up from the
+// defining frame (env.NextPhase(); equals env.Expand() at phase 0).
 //
 // Unlike define-syntax (which stores macro transformers), define-for-syntax
 // stores regular values with BindingTypeVariable.
@@ -110,6 +111,5 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// define-for-syntax has no runtime effect - don't emit any operations
-	// The caller expects us to emit something, so emit void
 	return nil
 }

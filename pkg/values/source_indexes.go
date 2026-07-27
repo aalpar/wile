@@ -68,8 +68,12 @@ func (p *SourceIndexes) NewLine() int {
 	return p.index
 }
 
-// Tab updates column tracking for a tab character (8-column tab stops).
-// The index should already have been advanced by Inc(n) before calling this.
+// Tab advances the column to the next 8-column tab stop, assuming the column
+// still points AT the tab (i.e. has not been stepped past it). Do not call it
+// after Inc(1) for the tab character: Inc advances the column too, so the stop
+// is computed one column late and over-advances by a whole stop when the tab
+// lands on a column congruent to 7 mod 8. See tokenizer.tabStop, which computes
+// the stop itself rather than using this method.
 func (p *SourceIndexes) Tab() int {
 	p.column += 8 - (p.column % 8)
 	return p.index

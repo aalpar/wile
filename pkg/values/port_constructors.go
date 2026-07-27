@@ -24,8 +24,8 @@ import (
 
 // Port constructors — produce *PortObject with the slot configuration
 // matching the named R7RS port flavor. Each factory writes both the
-// portKind* tag and the slot set in the same struct literal; Validate
-// enforces the cross-slot invariants I1–I7.
+// portKind* tag and the slot set in the same function body, adjacent to
+// one another; Validate enforces the cross-slot invariants I1–I7.
 //
 // Slots are populated with guarding wrappers (see port_helpers.go)
 // that check portBase.closed before delegating to the raw underlying

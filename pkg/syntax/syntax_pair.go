@@ -83,11 +83,15 @@ func (p *SyntaxPair) SetSyntaxCdr(v SyntaxValue) {
 }
 
 // SetCar sets the car of the pair.
+// It panics if v is not a SyntaxValue; use SetSyntaxCar for the
+// statically-checked form.
 func (p *SyntaxPair) SetCar(v values.Value) {
 	p.Values[0] = v.(SyntaxValue)
 }
 
 // SetCdr sets the cdr of the pair.
+// It panics if v is not a SyntaxValue; use SetSyntaxCdr for the
+// statically-checked form.
 func (p *SyntaxPair) SetCdr(v values.Value) {
 	p.Values[1] = v.(SyntaxValue)
 }
@@ -188,6 +192,8 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 }
 
 // Length returns the length of the list.
+// Unlike the values.Tuple contract, it panics with werr.ErrNotAList on an
+// improper list rather than counting the proper prefix.
 func (p *SyntaxPair) Length() int {
 	q := 0
 	r, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, i int, _ bool, _ SyntaxValue) error {

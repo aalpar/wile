@@ -237,6 +237,8 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 //   - *CaseLambdaClosure: R7RS case-lambda (§4.2.9)
 //   - *Parameter: R7RS parameter object (§4.2.6)
 //   - *ComposableContinuation: delimited continuation
+//   - *CapturedContinuation: full call/cc continuation, resumed by returning an
+//     *ErrResumeContinuation trampoline signal to the RunResumable driver
 //
 // Precondition: p.ctx must be set (always true for contexts created via
 // NewMachineContext or NewSubContext).
@@ -480,7 +482,8 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 // ReinstallSegment installs a captured/composable continuation segment into the
 // current context. It is the single resume primitive shared by composable resume
 // (boundary = p.cont, isolate = compose) and abortive call/cc resume
-// (boundary = nil, isolate = true).
+// (boundary = the matching prompt frame from FindPrompt, or nil at the
+// top-level context boundary; isolate = true).
 //
 // Returns wasEmpty = true when the captured continuation is empty (no chain to
 // drive): the values are delivered and the CALLER performs its own post-delivery
@@ -584,13 +587,11 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	vals := make([]values.Value, len(args))
 	copy(vals, args)
 
-	// Compose onto p.cont. isolate = p.isolatedMarks preserves the pre-refactor
-	// behavior exactly: this method never touched isolatedMarks, and it runs both
-	// directly (isolatedMarks=false) AND inside applyCapturedContinuation's
-	// isolatedMarks=true sub-context. Passing the current value makes the extraction
-	// a true no-op. Phase 4 switches this to a constant false once the flip removes
-	// the captured→composable sub-context path (composable resume composes marks;
-	// see call-with-composable-continuation, which does not snapshot).
+	// Compose onto p.cont. Since the call/cc path now trampolines through
+	// ErrResumeContinuation, this method only ever runs directly, where
+	// p.isolatedMarks is the driver's current value. Composable resume composes
+	// the invoker's marks; see call-with-composable-continuation, which does not
+	// snapshot.
 	wasEmpty, err := p.ReinstallSegment(cc, p.cont, p.windingStack, vals, p.isolatedMarks)
 	if err != nil {
 		return p, err

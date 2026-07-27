@@ -83,11 +83,17 @@ func (p *BigComplex) Imag() Number {
 }
 
 // RealAsBigFloat returns the real part converted to BigFloat for calculations.
+//
+// The result ALIASES the component when it is already a *BigFloat: no copy is made.
+// Callers that intend to mutate must copy: new(big.Float).Set(x.BigFloatValue()).
 func (p *BigComplex) RealAsBigFloat() *BigFloat {
 	return toBigFloat(p.real)
 }
 
 // ImagAsBigFloat returns the imaginary part converted to BigFloat for calculations.
+//
+// The result ALIASES the component when it is already a *BigFloat: no copy is made.
+// Callers that intend to mutate must copy: new(big.Float).Set(x.BigFloatValue()).
 func (p *BigComplex) ImagAsBigFloat() *BigFloat {
 	return toBigFloat(p.imag)
 }
@@ -178,8 +184,8 @@ var bigComplexMultiply [numKinds]func(*BigComplex, Number) Number
 var bigComplexDivide [numKinds]func(*BigComplex, Number) (Number, error)
 
 // bigComplexSimplifyDown is an identity: BigComplex's cross-kind reduction
-// to its real part (when imag.IsZero()) lives in numeric_tower.go's
-// Simplify(), so the per-kind step is a no-op.
+// to its real part (when the imaginary part is an EXACT zero, see IsReal) lives
+// in numeric_tower.go's Simplify(), so the per-kind step is a no-op.
 func bigComplexSimplifyDown(n Number) Number {
 	return n
 }
@@ -502,8 +508,10 @@ func (p *BigComplex) IsNaN() bool {
 // ToExact converts this BigComplex to an exact representation.
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
-// If already exact, returns itself. Otherwise converts BigFloat parts to BigInteger
-// by truncating (may lose precision).
+// If already exact, returns itself. Otherwise converts BigFloat parts exactly to
+// *Rational (integer-valued results collapse to *BigInteger); the conversion is
+// lossless. Returns the real part alone when the resulting imaginary part is zero.
+// Non-finite parts return werr.ErrExactnessConversion.
 func (p *BigComplex) ToExact() (Number, error) {
 	if p.IsExact() {
 		return p, nil
@@ -551,7 +559,10 @@ func toExactPart(n Number) (Number, error) {
 // ToInexact converts this BigComplex to an inexact representation.
 //
 // R7RS §6.2.6: inexact returns an inexact representation of its argument.
-// Converts BigInteger parts to BigFloat.
+// Only a wholly-exact BigComplex is converted: the guard is IsExact(), a
+// conjunction over both parts, so a mixed-exactness BigComplex (exact real,
+// inexact imag) is returned unchanged, converting nothing. When the converted
+// imaginary part is zero, the real part alone is returned as a *BigFloat.
 func (p *BigComplex) ToInexact() Number {
 	if !p.IsExact() {
 		return p

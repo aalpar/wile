@@ -32,8 +32,10 @@ import (
 //
 //  1. Apply the registry, routing runtime primitives to the runtime target.
 //  2. Register phase handlers (syntax compilers + primitive expanders).
-//  3. Load bootstrap macros into the mutable expand frame. These must precede the
-//     procedures, which are written in terms of them (let, and).
+//  3. Load bootstrap macros against the runtime target (the sealed base for a
+//     namespace-owning env). Their define-syntax writes land in sealedExpandBase, so
+//     they are immutable and a user define-syntax shadows in the mutable expand child.
+//     These must precede the procedures, which are written in terms of them (let, and).
 //  4. Load bootstrap procedures into the runtime target.
 //  5. Load the LATE macros, which reference bootstrap procedures (unless -> not,
 //     guard -> with-exception-handler). Loading them after step 4 is what makes their

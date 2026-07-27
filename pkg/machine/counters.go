@@ -53,8 +53,9 @@ type VMCounters struct {
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
 	// Per-callee call counting. Tracks both ForeignClosure (Go primitives) and
-	// named MachineClosure (Scheme-defined procedures) calls. Gated by
-	// WILE_OPCODE_HITS (same as opcodeHits). nil when profiling is disabled.
+	// named MachineClosure (Scheme-defined procedures) calls. Enabled by
+	// WILE_OPCODE_HITS or by SetCallCounting(true); unlike opcodeHits it has its
+	// own programmatic gate. nil when both are off.
 	callCounts map[string]uint64
 
 	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation

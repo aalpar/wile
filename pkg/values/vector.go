@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package values provides Scheme runtime value types.
 package values
 
 var _ Value = (*Vector)(nil)
@@ -29,8 +28,9 @@ func NewVector(vs ...Value) *Vector {
 	return q
 }
 
-// NewVectorWithLength creates a new Vector of the given length,
-// with all elements initialized to the specified fill value.
+// NewVectorWithLength creates a new Vector of the given length. Every element is
+// the nil Value (not Void); the caller is expected to fill all slots before the
+// vector escapes.
 func NewVectorWithLength(length int) *Vector {
 	slice := make([]Value, length)
 	q := Vector(slice)

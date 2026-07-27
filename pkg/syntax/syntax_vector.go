@@ -31,7 +31,7 @@ func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
 
 func init() {
 	// Recursive scope propagation across nested syntax types lives here in
-	// internal/syntax (where the concrete syntax types are defined). The
+	// pkg/syntax (where the concrete syntax types are defined). The
 	// values.SyntaxVector.AddScope method dispatches to this hook.
 	values.SyntaxVectorAddScopeFunc = func(p *SyntaxVector, scope *Scope) values.SyntaxValue {
 		return mapSyntaxTree(p, func(node values.SyntaxValue) values.SyntaxValue {

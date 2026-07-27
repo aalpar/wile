@@ -35,7 +35,8 @@ func BigComplexExp(re, im *big.Float, prec uint) (*big.Float, *big.Float) {
 }
 
 // BigComplexLog returns log(re + im·i) = ½·ln(re²+im²) + i·atan2(im, re) — the
-// principal branch (atan2 gives Arg ∈ (−π, π]).
+// principal branch (atan2 gives Arg ∈ [−π, π]; the −π endpoint is reached only for
+// a negative-zero imaginary part, per IEEE atan2(−0, x<0) = −π).
 func BigComplexLog(re, im *big.Float, prec uint) (*big.Float, *big.Float) {
 	wp := atanWorkPrec(prec)
 	re2 := new(big.Float).SetPrec(wp).Mul(re, re)

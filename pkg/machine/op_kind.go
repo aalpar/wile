@@ -136,14 +136,14 @@ func (*OperationReleaseEnvFrame) OpKind() OpCode {
 // routing through the Run() switch case rather than the side table.
 //
 // Apply is preserved so OperationMakeClosure satisfies InlinedOperation,
-// allowing TestEditPlan_SideTableGC (edit_plan_test.go:320) to use it as
+// allowing TestEditPlan_SideTableGC to use it as
 // a no-arg placeholder when populating tpl.sideTable. That test asserts
 // only GC remapping of indices and never invokes Apply itself, so the
 // production and test code paths are decoupled. If Apply's body is ever
 // changed, the matching OpMakeClosure inline case in machine_context.go's
 // Run() must be updated to keep production and test behavior consistent
 // (or Apply should be removed and the test migrated to use testInlinedOp
-// from machine_context_test.go:1374).
+// from machine_context_test.go).
 func (*OperationMakeClosure) OpKind() OpCode {
 	return OpMakeClosure
 }

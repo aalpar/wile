@@ -58,8 +58,9 @@ var Builder = registry.NewRegistryBuilder(
 var AddToRegistry = Builder.AddToRegistry
 
 // SafeBuilder includes only the safe parts of all: records, promises, strings,
-// and characters. It excludes sub-extensions that grant ambient authority
-// (files, system, eval, gointerop, threads, process).
+// and characters. It excludes every sub-extension the full Builder pulls in: the
+// ambient-authority ones (files, system, eval, gointerop, threads, process,
+// namespace) and also io and math.
 var SafeBuilder = registry.NewRegistryBuilder(
 	addRecords,
 	addPromises,

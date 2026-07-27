@@ -162,7 +162,7 @@ var EOFObject Value = eofType{}
 // (values/port.go — AsReader, AsByteWriter, etc.). Document any new
 // slot invariants in a Validate() method that constructors call.
 //
-// For numeric types, see the more detailed guide in values/numeric_kind.go (12 items).
+// For numeric types, see the more detailed guide in values/numeric_kind.go (11 items).
 type Value interface {
 	SchemeString() string
 	IsVoid() bool
@@ -201,8 +201,8 @@ type Callable interface {
 // and the hash function must be consistent with the equality predicate:
 // if a.EqualTo(b) then a.HashCode() == b.HashCode().
 //
-// Implemented by: Integer, BigInteger, Float, BigFloat, Rational, Boolean,
-// Character, Symbol, Byte, String.
+// Implemented by: Integer, BigInteger, Float, BigFloat, Rational, Complex,
+// BigComplex, Boolean, Character, Symbol, Byte, String.
 type Hashable interface {
 	Value
 	HashCode() uint64
@@ -230,7 +230,8 @@ type ForEachFunc func(ctx context.Context, i int, hasNext bool, v Value) error
 // Tuple captures the operations needed to traverse, measure, and convert
 // list-shaped values without requiring a concrete *Pair type.
 //
-// Implemented by: Pair, emptyListType (EmptyList singleton).
+// Implemented by: Pair, emptyListType (EmptyList singleton), and
+// syntax.SyntaxPair (the syntax-phase pair, asserted in pkg/syntax).
 //
 // IsVoid is listed explicitly because Pair uses a nil-receiver convention
 // where (*Pair)(nil) represents void, and the method must be dispatched
@@ -278,13 +279,6 @@ type Immutable interface {
 	IsImmutable() bool
 }
 
-// ---------------------------------------------------------------------------
-// Indexable — random-access containers
-// ---------------------------------------------------------------------------
-
-// Indexable represents a fixed-size, random-access container of values.
-//
-// R7RS §6.8 (vectors), §6.7 (strings as character sequences), §6.9 (bytevectors).
 // ---------------------------------------------------------------------------
 // SourceLocation — source positions
 // ---------------------------------------------------------------------------

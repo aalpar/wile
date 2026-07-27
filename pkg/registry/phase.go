@@ -48,7 +48,8 @@ import (
 //     extend phaseSetBits if the bitset width must grow.
 //  3. registry/apply.go — extend phaseTargets with the new phase if
 //     primitives may register at it.
-//  4. wile/options.go — add re-export so embedders can name the constant.
+//  4. wile/options.go — re-export the new environment.Phase constant (PhaseSet
+//     bit constants are named through the registry package directly).
 //
 // The init() assertion below verifies bit positions match Phase indices,
 // catching drift from steps (1)+(2).

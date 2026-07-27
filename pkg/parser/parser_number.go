@@ -171,8 +171,10 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 }
 
 // parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
-// Per R7RS §7.1.1, the exponent marker indicates inexact notation, so all scientific
-// notation produces Float (inexact). The #e prefix can convert to exact after parsing.
+// Per R7RS §7.1.1, the exponent marker indicates inexact notation, so scientific
+// notation always produces an inexact number: a Float, or a BigFloat when the
+// magnitude is outside float64 range. The #e prefix can convert to exact after
+// parsing.
 func (p *Parser) parseScientificNotation() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := replaceHashDigits(p.cur.String())
 

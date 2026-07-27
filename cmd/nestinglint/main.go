@@ -79,6 +79,9 @@ import (
 // is reported. Calibrated against the codebase: the overwhelming majority of
 // functions sit at or below this depth, so a violation is a genuine outlier
 // worth splitting, not routine code.
+//
+// NOTE: this default is not the gate. make lint runs the tool with -max 6; 11
+// functions currently exceed depth 4.
 const defaultMaxDepth = 4
 
 type finding struct {

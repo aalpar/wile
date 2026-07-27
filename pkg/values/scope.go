@@ -32,7 +32,8 @@ type Scope struct {
 	// IsRebinding indicates whether this scope can potentially rebind auxiliary syntax.
 	// True for let-syntax/letrec-syntax scopes which create local macro bindings.
 	// False for with-binding-scope which only adds scopes for binding hygiene.
-	// This distinction is used in literalScopesMatch to correctly handle auxiliary
+	// This distinction is used in (*SyntaxMatcher).literalScopesMatchWithChecker
+	// (pkg/internal/match/syntax_adapter.go) to correctly handle auxiliary
 	// syntax like => and else in cond/case.
 	IsRebinding bool
 	// Label is an optional human-readable description for debugging.
@@ -179,9 +180,9 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 //
 // Note: nil useScopes does NOT mean "match any" here. A nil reference scope
 // set means "this reference has no scopes" and behaves like an empty set —
-// only bindings with no scopes match. Callers that want "match any"
-// (replacing the old checkScopes=false pattern) guard with an explicit
-// nil check before calling this function.
+// only bindings with no scopes match. Callers that want "match any" ask for it
+// with AllScopes and short-circuit on ScopeSet.IsAll() before reaching this
+// function (see EnvironmentFrame.resolveLocal).
 func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
 	if len(bindingScopes) == 0 {
 		return true

@@ -29,7 +29,7 @@ var (
 // SyntaxVector wraps a Scheme vector with source context.
 //
 // The pair-side recursive scope-propagation logic for SyntaxVector lives in
-// the internal/syntax package alongside the other concrete syntax data
+// the pkg/syntax package alongside the other concrete syntax data
 // types. Only the data type itself is here so the SyntaxTuple interface
 // (which references *SyntaxVector via AsSyntaxVector) can also live in
 // values.
@@ -50,19 +50,19 @@ func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
 // SyntaxValueUnwrapAllFunc is the cycle-aware recursive unwrapper.
 //
 // The full recursive unwrap traverses concrete syntax types (SyntaxPair,
-// SyntaxObject, SyntaxSymbol, etc.) defined in internal/syntax. Since
-// values cannot import internal/syntax (layering), the syntax package
+// SyntaxObject, SyntaxSymbol, etc.) defined in pkg/syntax. Since
+// values cannot import pkg/syntax (layering), the syntax package
 // registers its UnwrapAllShared implementation here at init time.
 //
 // MUST be non-nil before any SyntaxVector method that depends on it is
-// called. internal/syntax/syntax_vector.go init() sets this. A nil hook
+// called. pkg/syntax/syntax_vector.go init() sets this. A nil hook
 // at call time indicates an init-order or import-graph violation; the
 // methods that depend on it panic rather than silently degrade — silent
 // degradation would corrupt hygiene or stack-overflow on cyclic data.
 var SyntaxValueUnwrapAllFunc func(SyntaxValue, map[SyntaxValue]Value) Value
 
 // SyntaxVectorVoidValue is the syntax-level void value, set by
-// internal/syntax at init time. SyntaxVector.SyntaxForEach with a nil
+// pkg/syntax at init time. SyntaxVector.SyntaxForEach with a nil
 // receiver returns this value to preserve the original "syntax void
 // tail" semantics (distinguishable from the empty-list tail).
 //
@@ -70,7 +70,7 @@ var SyntaxValueUnwrapAllFunc func(SyntaxValue, map[SyntaxValue]Value) Value
 var SyntaxVectorVoidValue SyntaxValue
 
 // SyntaxVectorAddScopeFunc implements recursive scope propagation across
-// nested syntax types. The implementation lives in internal/syntax
+// nested syntax types. The implementation lives in pkg/syntax
 // (where the concrete syntax types are) and is registered here at init
 // time.
 //
@@ -91,7 +91,7 @@ func (p *SyntaxVector) AddScope(scope *Scope) SyntaxValue {
 	}
 	if SyntaxVectorAddScopeFunc == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrInternal,
-			"SyntaxVector.AddScope: SyntaxVectorAddScopeFunc not registered (internal/syntax must be imported before macro expansion)"))
+			"SyntaxVector.AddScope: SyntaxVectorAddScopeFunc not registered (pkg/syntax must be imported before macro expansion)"))
 	}
 	return SyntaxVectorAddScopeFunc(p, scope)
 }
@@ -105,7 +105,7 @@ func (p *SyntaxVector) AddScope(scope *Scope) SyntaxValue {
 func (p *SyntaxVector) UnwrapAll() Value {
 	if SyntaxValueUnwrapAllFunc == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrInternal,
-			"SyntaxVector.UnwrapAll: SyntaxValueUnwrapAllFunc not registered (internal/syntax must be imported before unwrapping syntax values)"))
+			"SyntaxVector.UnwrapAll: SyntaxValueUnwrapAllFunc not registered (pkg/syntax must be imported before unwrapping syntax values)"))
 	}
 	return SyntaxValueUnwrapAllFunc(p, make(map[SyntaxValue]Value))
 }
@@ -201,7 +201,7 @@ func (p *SyntaxVector) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) 
 	if p.IsVoid() {
 		if SyntaxVectorVoidValue == nil {
 			panic(werr.WrapForeignErrorf(werr.ErrInternal,
-				"SyntaxVector.SyntaxForEach: SyntaxVectorVoidValue not registered (internal/syntax must be imported)"))
+				"SyntaxVector.SyntaxForEach: SyntaxVectorVoidValue not registered (pkg/syntax must be imported)"))
 		}
 		return SyntaxVectorVoidValue, nil
 	}

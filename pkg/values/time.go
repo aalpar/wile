@@ -78,7 +78,7 @@ func (p *Time) DurationFromNow() time.Duration {
 	return time.Until(p.t)
 }
 
-// buf interface implementation
+// Value interface implementation
 
 // IsVoid returns true if the time is nil.
 func (p *Time) IsVoid() bool {

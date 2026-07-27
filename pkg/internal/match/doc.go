@@ -14,7 +14,7 @@
 
 // Package match implements the pattern matching engine for syntax-rules and syntax-case.
 //
-// The package provides three layers:
+// The package provides four layers:
 //
 // # Pattern Compiler
 //
@@ -26,7 +26,7 @@
 //
 // [Matcher] executes bytecode against input forms at macro invocation time,
 // capturing pattern variable bindings. The VM uses two stacks:
-//   - Value stack: tracks position in the input tree
+//   - Syntax stack: tracks position in the input tree
 //   - Capture stack: tracks captured bindings with nesting for ellipsis
 //
 // # Syntax Adapter

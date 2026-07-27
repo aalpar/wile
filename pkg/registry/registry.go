@@ -494,7 +494,8 @@ func (p *Registry) BindingSpecs() []BindingSpec {
 // Docs returns a defensive copy of the doc-only binding specs (those
 // with DocOnly=true). These are simple Name+Doc entries registered via
 // AddDocumentation — they carry doc text but install no environment
-// binding. Real bindings (DocOnly=false) are returned by BindingSpecs.
+// binding. Real bindings (DocOnly=false) are returned by Bindings;
+// BindingSpecs returns the unfiltered slice.
 //
 // Doc-only *primitives* with full metadata (registered via
 // AddDocOnlyPrimitive) live in DocPrimitives, not here.

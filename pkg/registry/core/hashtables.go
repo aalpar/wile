@@ -22,7 +22,7 @@ import (
 func addHashtables(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-hashtable", Impl: PrimMakeHashtable,
-			Doc: "Returns a new empty hashtable using equal? for key comparison.\n\nExamples:\n  (hashtable-size (make-hashtable))  => 0", Category: "hashtables",
+			Doc: "Returns a new empty hashtable. Keys are compared with equal?, but must be atomic (symbols, numbers, characters, strings, booleans): pairs and vectors are not hashable and raise an error.\n\nExamples:\n  (hashtable-size (make-hashtable))  => 0", Category: "hashtables",
 			ReturnType: values.TypeHashtable,
 			Keywords:   []string{"hash map", "dictionary", "map", "associative array", "hash table"}},
 		{Name: "hashtable?", ParamCount: 1, Impl: PrimHashtableQ,

@@ -277,7 +277,8 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 // When WithNamespace is used, the engine uses the pre-built namespace
 // and ignores registry/extension/core options (they were applied when
 // the namespace was created). Library paths and other engine-specific
-// options still apply.
+// options still apply. See WithNamespace for the full list of options
+// this path silently ignores, several of them security-relevant.
 //
 // # Initialization Order Invariant
 //
@@ -297,8 +298,10 @@ func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
 //     library env factory. Requires file resolver (step 5)
 //     and bootstrap macros (step 4) for define-library parsing.
 //
-// The WithNamespace path (pre-built namespace) skips steps 2-5 and trusts that
-// the caller bootstrapped correctly. NewNamespace() performs steps 2-4.
+// The WithNamespace path (pre-built namespace) skips steps 2-4 and trusts that
+// the caller bootstrapped correctly. Step 5 still runs on that path, but only
+// if the supplied namespace has no file resolver of its own; step 6 runs
+// unconditionally. NewNamespace() performs steps 2-4.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := newEngineConfig()
 	for _, opt := range opts {
@@ -834,7 +837,7 @@ func (p *Engine) Environment() *environment.EnvironmentFrame {
 }
 
 // Namespace returns the Namespace for advanced use.
-// This provides access to per-instance symbol interning and phase management.
+// This provides access to per-instance syntax interning and phase management.
 //
 // Like Environment, this is an advanced escape hatch exposing an internal type
 // (environment.Namespace) that may change between minor versions; it is not

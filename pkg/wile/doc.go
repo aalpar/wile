@@ -21,7 +21,7 @@
 //	    log.Fatal(err)
 //	}
 //	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2 3)"))
-//	fmt.Println(result) // 6
+//	fmt.Println(result.SchemeString()) // 6
 //
 // Profile-based configuration:
 //

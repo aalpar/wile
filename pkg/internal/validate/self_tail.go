@@ -153,7 +153,8 @@ func ProcedureBodyIsCaptureSafe(proc ValidatedBodyAndParams, selfName string, en
 // self-tail reuse — the local-binding analogue of selfTailForDefine. ok is true iff
 //
 //   - the binding's Init is a lambda whose body is self-tail-reusable on the
-//     binding name (bodyIsSelfTailReusable), AND
+//     binding name (BodyIsSelfTailReusable, i.e. the in-body facts AND
+//     bodyCalleesAllCaptureSafe), AND
 //   - the binding name is immutable across the WHOLE let: never set! in any
 //     binding init or in the let body.
 //

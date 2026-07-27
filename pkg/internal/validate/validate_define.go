@@ -174,7 +174,8 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	// slice (don't alias params.Required) so the append for Rest cannot
 	// mutate the params field.
 	//
-	// Per validate/CLAUDE.md's error-accumulation convention, emit one error
+	// Per this package's error-accumulation convention
+	// (validate/CLAUDE.local.md), emit one error
 	// per duplicate rather than stopping at the first — matches the peer
 	// paths in validate_let.go (letrec dup loop, checkDuplicateBindingNames).
 	allSyms := append([]*syntax.SyntaxSymbol{}, params.Required...)

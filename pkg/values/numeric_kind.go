@@ -25,7 +25,7 @@ package values
 //  7. registry/helpers/value_conv.go  — update ToComplex128, ToFloat64
 //  8. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
 //  9. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
-//  10. internal/parser/parser_number.go — if the type can be parsed from source
+//  10. parser/parser_number.go        — if the type can be parsed from source
 //  11. registry/helpers/equality.go   — update Eqv if the type has special eqv? semantics
 //
 // Several historically-manual cold paths are now derived from the item-3 registry

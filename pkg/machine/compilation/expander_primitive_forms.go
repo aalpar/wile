@@ -16,8 +16,7 @@ package compilation
 
 // expander_primitive_forms.go implements expand-time handlers for primitive
 // special forms: quote-family (via expandUnchanged), if, begin, set!, define,
-// import, with-binding-scope, syntax-error, dynamic-wind, and
-// with-continuation-mark.
+// import, with-binding-scope, syntax-error, and with-continuation-mark.
 //
 // Each handler is registered in primitive_expanders_registry.go and invoked
 // by ExpandSyntaxExpression when the expander encounters a primitive keyword.
@@ -70,6 +69,11 @@ func (p *ExpanderTimeContinuation) expandSub(expr, sub syntax.SyntaxValue, what 
 // under- or over-arity yields ok=false so the caller bails to formUnchanged and
 // lets the validator report the arity error. Arity is checked structurally,
 // before any sub-expression is expanded.
+//
+// An improper spine is silently truncated rather than refused: the loop stops
+// at the first non-pair tail without recording it, so (if #t 1 . 2) collects two
+// arguments, reports ok=true, and the caller rebuilds a proper (if #t 1). The
+// dotted tail is dropped and never reaches the validator.
 func expectArgs(args syntax.SyntaxValue, lo, hi int) ([]syntax.SyntaxValue, bool) {
 	q := make([]syntax.SyntaxValue, 0, hi)
 	rest := args
@@ -107,15 +111,19 @@ func (p *ExpanderTimeContinuation) expandEach(expr syntax.SyntaxValue, args []sy
 // expandUnchanged returns the form unchanged. Used for forms whose subexpressions
 // are processed at a later stage (compile time) or should not be expanded (quote).
 //
-// Forms using this expander:
+// Forms using this expander (see primitiveExpanderEntries for the current set):
 //   - quote: Content is literal data, not code
-//   - define-syntax: Transformer is compiled, not expanded
+//   - define-syntax, TransformerERMacro: Transformer is compiled, not expanded
 //   - quasiquote: Has special expansion rules handled at compile time
 //   - unquote, unquote-splicing: Only valid inside quasiquote
 //   - include, include-ci: Files are read at compile time
 //   - cond-expand: Feature expressions use special syntax, not macros
 //   - syntax, syntax-case, quasisyntax, unsyntax, unsyntax-splicing, with-syntax:
 //     Compile-time forms handled during compilation
+//   - define-library, library, export: Library forms handled by the library
+//     compiler, which walks the declarations itself
+//   - meta, define-for-syntax, begin-for-syntax, eval-when: Phase-shifting
+//     forms whose bodies belong to a phase this expander is not running in
 func (*ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return formUnchanged(sym, expr)
 }
@@ -143,8 +151,9 @@ func (*ExpanderTimeContinuation) expandUnchanged(sym *syntax.SyntaxSymbol, expr 
 //	→ expander adds scope S to body: ((lambda (x+S) (+ x+S 1)) 1)
 //	→ returns: ((lambda (x+S) (+ x+S 1)) 1)
 //
-// The identifier list (x) is currently unused but reserved for future use
-// (e.g., selective scope application or debugging).
+// The identifier list (id ...) is used to create placeholder variable bindings
+// in a child expand environment (below), so a macro such as cond can detect
+// that an auxiliary keyword like => is bound.
 func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// expr is the cdr of (with-binding-scope (id ...) body)
 	// which is ((id ...) body)

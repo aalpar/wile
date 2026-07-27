@@ -973,6 +973,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 }
 
 // Close closes the parser and releases resources.
+// It returns ErrAlreadyClosed if the parser is already closed or was never read
+// from (the tokenizer is created lazily on the first ReadSyntax).
 func (p *Parser) Close() error {
 	if p.toks == nil {
 		return NewParserErrorWithWrapf(ErrAlreadyClosed, nil, "parser already closed")

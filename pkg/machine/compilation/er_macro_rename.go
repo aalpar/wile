@@ -69,8 +69,9 @@ func NewERRenameClosure(
 // is added to ensure the renamed identifier is distinct from any use-site
 // binding with the same name, preventing variable capture.
 func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
-	// Definition-site lookup. The expand frame now parents directly to the frozen
-	// sealed base, so this reaches base bindings; phase-0 user/import bindings are
+	// Definition-site lookup. The expand frame parents to the namespace's sealed
+	// EXPAND base, which in turn parents to the frozen sealed base, so this reaches
+	// base bindings; phase-0 user/import bindings are
 	// intentionally invisible (hermeticity — see the reparent in
 	// environment/phase_registry.go createPhaseEnv).
 	bnd := defExpandEnv.GetBinding(sym, syntax.AllScopes())

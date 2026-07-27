@@ -138,7 +138,7 @@ type vmState struct {
 	//   MachineContinuation. Every SaveContinuation stamps the current threadID
 	//   into the saved frame. Continuations need it for cross-thread rejection:
 	//
-	//     - applyComposableContinuation (machine_context.go) compares
+	//     - applyComposableContinuation (machine_context_apply.go) compares
 	//       mc.threadID against cc.threadID.
 	//     - call/cc escape closures (prim_control.go, prim_exit.go) compare
 	//       the invoking context's ThreadID() against the capturing thread's.
@@ -150,13 +150,15 @@ type vmState struct {
 	//   pointer in vmState would add heap pressure to every continuation frame
 	//   for no benefit. The Scheme object is needed only by:
 	//
-	//     - current-thread (prim_threads.go:83) — returns mc.Thread() to Scheme.
-	//     - thread-specific mutation (prim_threads.go:405) — needs the owner.
-	//     - eval sub-contexts (prim_eval.go) — propagates thread via SetThread().
+	//     - PrimCurrentThread (extensions/threads/prim_threads.go) — returns
+	//       mc.Thread() to Scheme.
+	//     - PrimMutexLock (same file) — needs the owning thread.
 	//
 	// Invariant: when MachineContext.thread is non-nil,
 	//   thread.ID() == threadID.
-	// Enforced by SetThread(), which is the single write path for both fields.
+	// Enforced by SetThread(), and by NewSubContext, which copies BOTH fields
+	// from the parent in one step (machine_context_subcontext.go). Any new site
+	// must write both.
 	//
 	// Propagation:
 	//   NewSubContext      — copies both threadID and thread from parent.

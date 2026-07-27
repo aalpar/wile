@@ -22,7 +22,7 @@ import (
 
 // Extension is the Go interop extension.
 var Extension = registry.NewDescribedExtension("gointerop",
-	"Go interop: Go value wrapping, struct access, method calls.",
+	"Go concurrency primitives: read-write mutexes, once, atomic boxes.",
 	AddToRegistry)
 
 // Builder aggregates all Go interop registration functions.

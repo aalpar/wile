@@ -23,11 +23,6 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// compileQuasiquoteDatum compiles a quasiquoted datum at the given nesting depth.
-//
-// depth=1 means we're inside one level of quasiquote (the common case).
-// depth=2 means nested quasiquote `(a `(b ,x)), etc.
-// depth=0 would mean we should evaluate (but we start at 1, so this is the trigger).
 // hasSyntaxArity reports whether p is a proper list of exactly n elements. It
 // never panics, where (*syntax.SyntaxPair).Length panics on an improper list. The
 // quasiquote and quasisyntax walks meet malformed templates like `(a unquote x . y);
@@ -49,6 +44,11 @@ func hasSyntaxArity(p *syntax.SyntaxPair, n int) bool {
 	return syntax.IsSyntaxEmptyList(cur)
 }
 
+// compileQuasiquoteDatum compiles a quasiquoted datum at the given nesting depth.
+//
+// depth=1 means we're inside one level of quasiquote (the common case).
+// depth=2 means nested quasiquote `(a `(b ,x)), etc.
+// depth=0 would mean we should evaluate (but we start at 1, so this is the trigger).
 func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallContext, datum syntax.SyntaxValue, depth int) error {
 	// A single guard bounds both the needs-runtime analysis and the expansion;
 	// each is reset (enter/leave is symmetric) before the next phase runs.

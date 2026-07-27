@@ -12,19 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package runtime provides the runtime environment initialization for the Scheme interpreter.
-//
-// This package is responsible for:
-//   - Creating and initializing the top-level environment with all R7RS primitives
-//   - Loading bootstrap macros (and, or, let, let*, letrec, cond, when, unless)
-//
-// # Architecture
-//
-// The runtime creates a three-phase environment hierarchy:
-//
-//	TopLevel (Runtime) -> Expand -> Compile
-//
-// Primitives are registered via the registry pattern from registry/core and extensions/*.
 package bootstrap
 
 import (
@@ -199,7 +186,8 @@ func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFram
 //
 // This function:
 //  1. Creates a registry with core primitives
-//  2. Adds all extensions (io, files, math, introspection, eval, threads, gointerop, all, system)
+//  2. Adds all extensions (io, files, math, introspection, eval, namespace, threads,
+//     gointerop, all, system, process, sat, charsets, envvars, algebragraph)
 //  3. Creates a new Namespace with per-instance symbol interning
 //  4. Applies the registry to register all primitives
 //  5. Registers primitive compilers in the compile environment

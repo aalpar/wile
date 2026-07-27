@@ -19,8 +19,8 @@ func (p *MachineContext) WindingStack() WindingStack {
 	return p.windingStack
 }
 
-// SetWindingStack sets the winding stack. Used by tests; production code
-// should prefer NewSubContextWithWinding for override sites.
+// SetWindingStack sets the winding stack. Currently unused (no caller anywhere
+// in the repo); production override sites use NewSubContextWithWinding.
 func (p *MachineContext) SetWindingStack(stack WindingStack) {
 	p.windingStack = stack
 }
@@ -145,10 +145,11 @@ func (p *MachineContext) RestoreWithWindingFrom(cont *MachineContinuation, sourc
 		return err
 	}
 
-	// Restore the machine state (if we have a valid continuation).
-	// The continuation chain was already marked shared at capture time
-	// (MarkChainShared in CurrentContinuation / PrimCallCC), so
-	// RestoreAndRelease will copy evals and skip pooling for these frames.
+	// Restore the machine state (if we have a valid continuation). This uses
+	// Restore, not RestoreAndRelease, so evals are copied and the frame is left
+	// for GC rather than pooled — required because the chain was marked shared at
+	// capture time (MarkChainShared in CurrentContinuation / PrimCallCC). Both
+	// production callers pass cont == nil, so this branch is test-only today.
 	if cont != nil {
 		p.Restore(cont)
 	}

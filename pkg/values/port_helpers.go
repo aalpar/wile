@@ -133,10 +133,10 @@ func guardedFlush(b *portBase, f Flusher) error {
 // flushThenClose flushes buffered data then closes the port.
 // If both flush and close fail, both errors are preserved via errors.Join.
 //
-// Called from (*PortObject).Close on the raw underlying flusher (the
-// flush is done while the port is still open). Subsequent Close calls
-// short-circuit at the *PortObject level; this function does not need
-// idempotence of its own.
+// Called from (*PortObject).Close on the port's guardedFlusher slot (the
+// flush is done while the port is still open, so the wrapper's closed-guard
+// passes). Subsequent Close calls short-circuit at the *PortObject level;
+// this function does not need idempotence of its own.
 func flushThenClose(f Flusher, b *portBase) error {
 	flushErr := f.Flush()
 	closeErr := b.Close()

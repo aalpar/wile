@@ -117,7 +117,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 
 	// Create a rebinding scope for the let-syntax body.
 	// Rebinding scopes indicate that auxiliary syntax could be shadowed.
-	// This is used in literalScopesMatch to correctly reject shadowed literals.
+	// This is used in (*SyntaxMatcher).literalScopesMatchWithChecker
+	// (internal/match/syntax_adapter.go) to correctly reject shadowed literals.
 	letScope := syntax.NewRebindingScopeWithLabel("let-syntax")
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other

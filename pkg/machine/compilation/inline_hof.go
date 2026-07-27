@@ -34,17 +34,18 @@ type inlineHOFSpec struct {
 	// importGated distinguishes the two load paths, which have different soundness
 	// boundaries:
 	//   - false (sealed-base): the procedure lives in the sealed base (for-each,
-	//     vector-map, vector-for-each, string-map, string-for-each). StampInlineHOFs
+	//     map, vector-map, vector-for-each, string-map, string-for-each). StampInlineHOFs
 	//     sweeps that frame post-bootstrap. The sealed base holds only system
 	//     definitions, so a name match there is always the real curated HOF.
 	//   - true (import-gated): the procedure is reachable only by importing its
-	//     library (fold, srfi/1). stampImportedInlineHOF stamps the per-import
+	//     library (fold and fold-right, srfi/1). stampImportedInlineHOF stamps the per-import
 	//     target binding by export name. CRITICAL: only import-GATED specs are
 	//     stamped on the import path. A sealed-base name re-exported by an unrelated
 	//     library (e.g. SRFI-13's string-map, which differs from R7RS string-map)
 	//     must NOT be stamped — its binding is a different procedure, and inlining
 	//     this template for it would be unsound. So the import path stamps fold and
-	//     nothing else; the sealed-base names are stamped only at their real home.
+	//     fold-right and nothing else; the sealed-base names are stamped only at
+	//     their real home.
 	importGated bool
 	// homeLib is the LibraryName.Key() of the library that actually DEFINES this
 	// import-gated HOF (e.g. "srfi/1" for fold). The import path stamps the
@@ -180,7 +181,7 @@ func applyInlineHOFStamp(b *environment.Binding, name string, callbackParam int)
 }
 
 // stampImportedInlineHOF marks the import target b when name is a curated
-// IMPORT-GATED tail HOF (importGated true — currently only fold) whose provenance
+// IMPORT-GATED tail HOF (importGated true — currently fold and fold-right) whose provenance
 // ROOT is exactly (spec.homeLib, name). A non-curated name, a sealed-base name,
 // or a binding rooted elsewhere is a no-op. This is the soundness boundary for
 // the import path on two axes:
@@ -211,7 +212,8 @@ func stampImportedInlineHOF(b *environment.Binding, name string, root *environme
 
 // StampInlineHOFs sweeps frame's own bindings, stamping every curated SEALED-BASE
 // tail HOF bound there. Called post-bootstrap on the sealed base. Import-gated
-// entries (fold) are skipped here and stamped on their import path instead.
+// entries (fold, fold-right) are skipped here and stamped on their import path
+// instead.
 func StampInlineHOFs(frame *environment.EnvironmentFrame) {
 	for name, spec := range inlineHOFSpecs {
 		if spec.importGated {

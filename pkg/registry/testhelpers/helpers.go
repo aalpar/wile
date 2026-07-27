@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package testhelpers provides shared test infrastructure for Scheme primitive tests.
-//
-// All functions use the internal pipeline (parser → expander → compiler → VM)
-// with a full environment including all extensions. This matches the environment
-// available in the standalone scheme binary.
 package testhelpers
 
 import (

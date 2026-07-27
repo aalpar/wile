@@ -62,8 +62,8 @@ func (p *validatedProcBase) Docstring() string {
 }
 
 // validatedBase provides the common FormName/SetFormName/Source implementation
-// embedded by all ValidatedExpr types. This eliminates ~36 identical method
-// definitions across the 13 validated form structs.
+// embedded by all ValidatedExpr types. This eliminates ~48 identical method
+// definitions across the 16 validated form structs.
 type validatedBase struct {
 	formName string
 	source   *syntax.SourceContext

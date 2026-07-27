@@ -14,9 +14,10 @@
 
 package compilation
 
-// Bridge types shared between the compiler (machine/compilation) and the
-// runtime (machine). The compiler creates instances and stores them in
-// NativeTemplate literals; the VM operations type-assert and consume them.
+// Bridge types that cross the compile-time / run-time seam inside this
+// package. The compiler creates instances and stores them in NativeTemplate
+// literals; the VM operations, which also live here, type-assert and consume
+// them.
 
 import (
 	"github.com/aalpar/wile/pkg/environment"

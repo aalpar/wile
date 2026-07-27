@@ -133,6 +133,11 @@ func (p *Debugger) Breakpoints() []*Breakpoint {
 }
 
 // CheckBreakpoint checks if execution should break at current location.
+//
+// It is not a pure query: a matching breakpoint's HitCount is incremented under
+// the READ lock, so CheckBreakpoint is NOT safe to call from multiple goroutines.
+// The returned *Breakpoint is the live object, not a copy, so callers read fields
+// that Enable/Disable mutate under the write lock.
 func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 	source := mc.CurrentSource()
 	if source == nil {

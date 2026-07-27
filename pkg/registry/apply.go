@@ -84,8 +84,9 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 	}
 }
 
-// Apply materializes registry contents into an environment: compile-time bindings,
-// runtime/expand-time primitives, global values, and init functions (in that order).
+// Apply materializes registry contents into an environment, in order: compile-time
+// bindings, runtime/expand-time primitives, global values, per-engine namespace
+// initializers, then init functions.
 func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
@@ -97,8 +98,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 
 	// Register compile-time bindings first. DocOnly entries carry doc
 	// strings but install no binding — they're emitted to bindingSpecs
-	// by AddDocumentation / AddDocOnlyPrimitive and consumed only by
-	// ApplyDocs / SearchDoc.
+	// by AddDocumentation, consumed only by ApplyDocs / SearchDoc.
 	for _, spec := range p.bindingSpecs {
 		if spec.DocOnly {
 			continue
@@ -174,11 +174,10 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 	}
 
 	// Register global values into the runtime target (sealed base when carving).
-	// The only AddGlobalValue callers are the three I/O port parameters
-	// (current-input/output/error-port); the binding to the parameter object is
-	// constant, so sealing it is correct — parameterize changes the dynamic value via
-	// continuation marks, not the binding. None are capture-safe, so none get the Stable
-	// stamp: a user (set! current-output-port ...) stays permitted.
+	// Today's only callers are the math extension's pi/euler constants. None get the
+	// Stable stamp, so a user (set! pi ...) stays permitted. The I/O port parameters
+	// used to live here; they now bind via AddNamespaceInit (extensions/io/register.go,
+	// registerPortParam) so each engine gets its own.
 	for _, gv := range p.globalValues {
 		err := registerGlobalValue(runtimeEnv, gv.Name, gv.Value)
 		if err != nil {

@@ -160,7 +160,8 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libs LibrarySea
 }
 
 // NonPrimitiveDocs returns doc search results from binding specs (including
-// DocOnly entries registered via AddDocumentation / AddDocOnlyPrimitive).
+// DocOnly entries registered via AddDocumentation). Entries added via
+// AddDocOnlyPrimitive live in docPrimitives and are walked by SearchDoc directly.
 // Each entry's Doc, Category, and Keywords are extracted via docparse.ParseDocstring.
 //
 // Post-Phase-1: single walk. Pre-Phase-1 this walked BindingSpecs + Docs

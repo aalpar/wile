@@ -31,8 +31,8 @@ import (
 // letrec, letrec* (binding forms compiled in compile_let.go).
 //
 // Extension forms (define-syntax, import, include, syntax-case, etc.) pass through
-// validation as ValidatedLiteral and are compiled via registerSyntaxCompiler() in
-// register.go, which registers compile functions in the forms registry.
+// validation as ValidatedLiteral and are compiled via the syntaxCompiler adapter
+// in register.go, whose init() registers each entry with forms.RegisterCompiler.
 //
 // Decision criteria: if a form has fixed syntax that can be validated once before
 // compilation, it goes through the validated path. If a form's syntax is
@@ -334,9 +334,10 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
-	// R7RS §5.2: reject set! on imported bindings. By default this is the only
-	// binding-level set! restriction — a program-defined top-level variable is
-	// mutable (R7RS §4.1.6), "mutable unless imported."
+	// R7RS §5.2: reject set! on imported bindings. Under WithMutableTopLevel()
+	// this is the only binding-level set! restriction, "mutable unless imported"
+	// (R7RS §4.1.6). Under the engine default (WithImmutableTopLevel) the
+	// IsStable() check below also fires, on a defined-once top-level variable.
 	if binding.IsImported() {
 		return werr.WrapForeignErrorf(
 			werr.ErrImmutableBinding,
@@ -475,8 +476,9 @@ func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 }
 
 // compileValidatedLiteral handles self-evaluating values (numbers, strings, booleans, etc.).
-// Passthrough forms (define-syntax, syntax-case, etc.) are handled by registerSyntaxCompiler
-// in register.go via the forms registry, so they never reach here.
+// Passthrough forms (define-syntax, syntax-case, etc.) are handled by the
+// syntaxCompiler adapter in register.go via the forms registry, so they never
+// reach here.
 func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallContext, v *validate.ValidatedLiteral) error {
 	return p.CompileSelfEvaluating(ctctx, v.Value)
 }
@@ -519,7 +521,7 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 // BOX_VALUES/UNBOX_VALUES keep the saved result at exactly one eval-stack slot:
 // OpPush pushes every value in the register (PushAll for multiple, nothing for
 // zero), so without boxing a thunk returning (values …) would mis-align the
-// PeekK/Drop offsets (R7RS §6.4 requires dynamic-wind to return the thunk's
+// PeekK/Drop offsets (R7RS §6.10 requires dynamic-wind to return the thunk's
 // values, including zero or several).
 func CompileValidatedDynamicWind(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedDynamicWind)

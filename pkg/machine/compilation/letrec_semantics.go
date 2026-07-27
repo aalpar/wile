@@ -45,7 +45,8 @@ package compilation
 //     Pre-scan: ValidatedDefine type check -> predeclareBinding
 //     Process: compileValidated / compileValidatedSequence
 //
-// Full generic unification was evaluated (see plans/MACHINE-TECH-DEBT.md Phase 5)
+// Full generic unification was evaluated (see
+// memory/2026-06-15-tech-debt-remediation.local.md)
 // and rejected: type heterogeneity (SyntaxValue vs ValidatedExpr), different
 // receiver types (ExpanderTimeContinuation vs CompileTimeContinuation), and
 // phase differences (expansion vs compilation) make a generic scanner more

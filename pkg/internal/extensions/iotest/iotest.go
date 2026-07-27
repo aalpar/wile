@@ -18,7 +18,7 @@
 //
 // Post-port-unification (Phase 2) the wrapper composes by feeding
 // custom rune-reader and rune-unreader values into the
-// values.NewTextualInputPortWithReaders factory. The result is a
+// values.NewStringInputPortWithReaders factory. The result is a
 // *values.PortObject — production code's type assertions accept it
 // unchanged. The fault injection lives in the rune-reader/unreader
 // implementations.

@@ -141,7 +141,9 @@ func (p *ExpanderTimeContinuation) expandProcedureBody(
 }
 
 // collectBodyExpressions collects all expressions from a body syntax pair into a slice.
-// Used by expandLambdaForm (this file) and expandBeginForm (expander_primitive_forms.go).
+// Used by expandProcedureBody and unwrapBeginBodyWithFlag (this file),
+// expandBindingBody (expander_let.go) and expandBeginForm
+// (expander_primitive_forms.go).
 func collectBodyExpressions(body *syntax.SyntaxPair) ([]syntax.SyntaxValue, error) {
 	var exprs []syntax.SyntaxValue
 	current := body

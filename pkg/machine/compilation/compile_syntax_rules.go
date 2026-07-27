@@ -20,7 +20,7 @@ package compilation
 // (syntax-rules (literal ...) (pattern template) ...) forms into transformer
 // closures that can be invoked during macro expansion.
 //
-// Design: The macro system uses a layered architecture (see DESIGN.md):
+// Design: The macro system uses a layered architecture:
 //   1. Pattern Matching VM (match/) - unhygienic core engine
 //   2. Syntax Adapter Layer - bridges syntax objects and raw values
 //   3. Hygienic Layer - scope management per Flatt's "sets of scopes" model
@@ -47,7 +47,7 @@ import (
 // Free identifiers can be resolved to either global bindings (via GlobalIndex) or
 // local bindings (via their scope set at macro definition time).
 // FreeIdResolution, SyntaxRulesClause, and ClausesWrapper are defined in
-// machine/syntax_bridge_types.go (shared between compiler and runtime).
+// syntax_bridge_types.go in this package.
 
 // CompileSyntaxRules compiles a syntax-rules form into a transformer procedure.
 //
@@ -809,7 +809,11 @@ func validateTemplateEllipsisDepth(tmpl syntax.SyntaxValue, variables map[string
 // The literalSyntax map stores each literal's SyntaxSymbol to enable hygiene:
 // if an input symbol has the same name but different scopes (shadowed),
 // it won't match the pattern literal.
-// R7RS §4.3.2: It is a syntax violation if the ellipsis appears in <literals>.
+// The ellipsis parameter is accepted for symmetry with the other extraction
+// helpers but never inspected: an ellipsis in <literals> is not rejected here.
+// The caller implements the accepting policy instead (see CompileSyntaxRules,
+// which turns the ellipsis into an ordinary literal and disables ellipsis
+// functionality for the form via the "\x00" sentinel).
 //
 //nolint:unparam
 func extractLiteralsWithSyntax(ctx context.Context,
@@ -845,32 +849,23 @@ func extractLiteralsWithSyntax(ctx context.Context,
 	return nil
 }
 
-// createTransformerClosure creates a closure that implements the transformer
+// createTransformerClosure creates a closure that implements the transformer.
+//
+// The whole transformer is two operations: load the compiled clauses out of the
+// literal pool, then OperationSyntaxRulesTransform, which reads the input form
+// from parameter 0, tries each clause's pattern in order, expands the first
+// match's template and applies intro-scope hygiene to the result. See
+// operation_syntax_rules_transform.go.
 func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*machine.MachineClosure, error) { //nolint:unparam
-	// Create a native template that implements the transformer logic
-	// This will be called with the input form on the eval stack
-
-	// For now, create a simple template that will be filled in
-	// In a complete implementation, this would generate bytecode that:
-	// 1. Gets the input form from parameter 0
-	// 2. Tries each clause's pattern in order
-	// 3. On first match, expands the template
-	// 4. Returns the expanded result
-
 	// Takes 1 parameter - the input form to transform
 	template := machine.NewNativeTemplate(1, 0, false)
 
-	// Add transformer logic operations
-	// This is a placeholder - the actual implementation would generate
-	// operations that implement the pattern matching and expansion
-
-	// For now, store the clauses as a literal and use a special operation
-	// Need to create a values.Value wrapper for the clauses
+	// values.Value wrapper so the clauses can live in the literal pool
 	clausesValue := &ClausesWrapper{Clauses: clauses}
 	clausesIdx := template.MaybeAppendLiteral(clausesValue)
 	template.AppendOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(clausesIdx),
-		NewOperationSyntaxRulesTransform(), // New operation type needed
+		NewOperationSyntaxRulesTransform(),
 	)
 	template.Optimize()
 

@@ -20,12 +20,14 @@
 // statement and its opening and closing braces sit on the same source line.
 // Empty bodies are exempt: there is nothing to spread.
 //
-// Function *literals* (anonymous closures passed as arguments — predicate
-// tables, comparators, field accessors) are deliberately NOT checked. The
-// codebase uses one-line literals idiomatically and pervasively
-// (e.g. `func(a, b rune) bool { return a < b }`); the rule, like the style
-// guide's "spread function bodies" wording, targets declarations. Widening
-// to literals would flag dozens of correct, deliberate call sites.
+// Function *literals* (anonymous closures passed as arguments: predicate
+// tables, comparators, field accessors) are NOT checked by this tool, even
+// though CLAUDE.md's rule covers them ("named functions, methods, closures
+// (inline, deferred, goroutine, or assigned), and function arguments... No
+// exceptions."). This is a limitation of the linter, not a carve-out in the
+// rule: the codebase currently contains ~40 one-line literals in
+// predicate/comparator tables (e.g. `func(a, b rune) bool { return a < b }`),
+// and widening here would flag all of them at once.
 //
 // Same-line detection is a positional property the gocritic/ruleguard DSL
 // cannot express (it matches AST shape, not brace lines), so this lives as a
@@ -39,7 +41,8 @@
 //
 // If no directories are given, it scans the current directory recursively.
 // Test files (_test.go) are skipped, consistent with the ruleguard rules in
-// ruleguard/rules.go that exempt tests from the production-only conventions.
+// tools/ruleguard/rules.go that exempt tests from the production-only
+// conventions.
 package main
 
 import (

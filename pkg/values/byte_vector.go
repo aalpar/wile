@@ -49,7 +49,7 @@ func NewByteVectorFromBytes(vs ...byte) *ByteVector {
 }
 
 // NewByteVectorFromIntegers creates a new bytevector from integer values.
-// Each integer must be in the range [0, 255] per R7RS §6.4.
+// Each integer must be in the range [0, 255] per R7RS §6.9.
 func NewByteVectorFromIntegers(vs ...*Integer) (*ByteVector, error) {
 	if len(vs) == 0 {
 		return &ByteVector{}, nil
@@ -105,7 +105,7 @@ func (p *ByteVector) Length() int {
 // AsBytes converts the bytevector to a Go byte slice.
 // The starti and endi parameters specify the range of bytes to include.
 // If starti is negative, it is treated as 0.
-// If endi is greater than the length of the bytevector or non-positive, it is treated as the length of the bytevector.
+// If endi is greater than the length of the bytevector or negative, it is treated as the length of the bytevector.
 // If starti is greater than endi, it is treated as equal to endi.
 func (p *ByteVector) AsBytes(is ...int) []byte {
 	starti := 0

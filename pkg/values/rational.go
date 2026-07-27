@@ -311,10 +311,10 @@ func (p *Rational) ToExact() (Number, error) {
 	return p, nil
 }
 
-// ToInexact converts this Rational to an inexact BigFloat.
+// ToInexact converts this Rational to an inexact Float. A rational too large for
+// float64 becomes ±Inf, which is what Chez gives.
 //
 // R7RS §6.2.6: inexact returns an inexact representation of its argument.
-// L18: Use big.Float.SetRat to preserve precision for large rationals.
 func (p *Rational) ToInexact() Number {
 	// Float, not BigFloat. Integer.ToInexact and BigInteger.ToInexact both already
 	// return Float; Rational was the odd one out, and the inconsistency was invisible

@@ -130,12 +130,10 @@ func (p *BigFloat) Float64WithAccuracy() (float64, big.Accuracy) {
 }
 
 // HashCode returns a hash code for this BigFloat.
-// For Inf and NaN, delegates to float64 bit pattern matching Float.HashCode,
-// ensuring Float and BigFloat produce identical hashes for equal values.
 //
-// Note: NaN != NaN (IEEE 754), so two NaN BigFloats are never EqualTo each
-// other. A NaN key stored in a hashtable is therefore unretrievable — the
-// Hashable contract is not violated, but NaN is not a useful hashtable key.
+// Every NaN hashes alike, via hashNaN: eqv? (and so equal?) identifies any two
+// BigFloat NaNs, so the Hashable contract requires one hash for all payloads.
+// ±Inf keep their bits: +inf.0 and -inf.0 are NOT eqv? and must be free to differ.
 func (p *BigFloat) HashCode() uint64 {
 	if p.nan {
 		return hashNaN()
@@ -334,7 +332,7 @@ func (p *BigFloat) IsNegative() bool {
 // SignBit reports whether this big float carries a negative sign bit, INCLUDING -0.0.
 //
 // big.Float.Sign() returns 0 for BOTH +0 and -0, so a negative zero is invisible to
-// it -- the trap documented in Divide below. Signbit() reads the bit. NaN has no
+// it -- the trap documented in Divide above. Signbit() reads the bit. NaN has no
 // meaningful sign, so it reports false.
 func (p *BigFloat) SignBit() bool {
 	return !p.nan && p.value.Signbit()

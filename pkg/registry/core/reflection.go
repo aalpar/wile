@@ -21,9 +21,10 @@ import (
 
 func addReflection(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		// procedure-arity returns a pair for ordinary closures, a list of
-		// pairs for case-lambda, (0 . #f) for continuations (variadic), and #f
-		// for callables with unknown arity — TypeAny covers the union.
+		// procedure-arity returns an integer for fixed-arity procedures, a pair
+		// (min . #f) for variadic ones, a list of such descriptors for
+		// case-lambda, (0 . #f) for continuations, and #f for callables with
+		// unknown arity; TypeAny covers the union.
 		{Name: "procedure-arity", ParamCount: 1, Impl: PrimProcedureArity,
 			Doc: "Returns PROC's arity. For fixed-arity procedures, returns an integer — the parameter count. For variadic procedures, returns a pair (min . #f) where min is the required-argument count and #f signals no upper limit. Case-lambda returns a list of such arity descriptors. Continuations accept any number of values, so they return (0 . #f).\n\nExamples:\n  (procedure-arity car)   => 1\n  (procedure-arity +)     => (0 . #f)", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
@@ -40,13 +41,13 @@ func addReflection(r *registry.Registry) error {
 			Doc: "Returns the list of symbols bound in PROC's captured environment, or #f for foreign procedures.\n\nExamples:\n  (procedure-bound-symbols car)  => #f  ; foreign procedure", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "procedure-type", ParamCount: 1, Impl: PrimProcedureType,
-			Doc: "Returns a symbol classifying PROC: closure, foreign, case-lambda, parameter, or continuation.\n\nExamples:\n  (procedure-type car)              => foreign\n  (procedure-type (lambda (x) x))  => closure", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns a symbol classifying PROC: closure, foreign, case-lambda, parameter, continuation (composable only), or unknown. Continuations captured by call/cc classify as unknown.\n\nExamples:\n  (procedure-type car)              => foreign\n  (procedure-type (lambda (x) x))  => closure\n  (call/cc (lambda (k) (procedure-type k)))  => unknown", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeSymbol},
 		{Name: "procedure-documentation", ParamCount: 1, Impl: PrimProcedureDocumentation,
 			Doc: "Returns the docstring of PROC, or #f if none. Works for both Scheme-defined and foreign procedures.\n\nExamples:\n  (string? (procedure-documentation car))  => #t", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "apropos", ParamCount: 1, Impl: PrimApropos,
-			Doc: "Returns a list of symbols whose name, doc, or category matches PATTERN (case-insensitive substring).\n\nExamples:\n  (pair? (memq 'car (apropos \"car\")))  => #t", ParamNames: []string{"pattern"}, Category: "reflection",
+			Doc: "Returns a list of symbols whose name, doc, category, or keywords match PATTERN (case-insensitive substring).\n\nExamples:\n  (pair? (memq 'car (apropos \"car\")))  => #t", ParamNames: []string{"pattern"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeString}, ReturnType: values.TypeList},
 		{Name: "doc-topics", ParamCount: 0, Impl: PrimDocTopics,
 			Doc: "Returns a sorted list of documentation category name strings.\n\nExamples:\n  (pair? (doc-topics))  => #t", Category: "reflection",

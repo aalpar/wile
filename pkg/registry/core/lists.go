@@ -59,7 +59,7 @@ func addLists(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeList, values.TypeInteger}, ReturnType: values.TypeAny,
 			Keywords: []string{"drop", "skip", "nthcdr"}},
 		{Name: "list-copy", ParamCount: 1, Impl: PrimListCopy,
-			Doc: "Returns a shallow copy of LIST. The spine is copied but elements are shared with the original.\n\nExamples:\n  (list-copy '(1 2 3))  => (1 2 3)", ParamNames: []string{"list"}, Category: "lists",
+			Doc: "Returns a shallow copy of LIST. The spine is copied but elements are shared with the original, as is the terminating cdr of an improper list. A non-list argument is returned unchanged.\n\nExamples:\n  (list-copy '(1 2 3))  => (1 2 3)", ParamNames: []string{"list"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeList},
 	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 

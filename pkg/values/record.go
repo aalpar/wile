@@ -56,7 +56,7 @@ func (p *Record) RecordType() *RecordType {
 	return p.recordType
 }
 
-// Field returns the value at the given field index.
+// Field returns the value at the given field index, or nil if index is out of range.
 func (p *Record) Field(index int) Value {
 	if index < 0 || index >= len(p.fields) {
 		return nil
@@ -65,6 +65,7 @@ func (p *Record) Field(index int) Value {
 }
 
 // SetField sets the value at the given field index.
+// Does nothing if index is out of range.
 func (p *Record) SetField(index int, value Value) {
 	if index >= 0 && index < len(p.fields) {
 		p.fields[index] = value

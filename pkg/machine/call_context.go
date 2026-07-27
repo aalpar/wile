@@ -23,20 +23,20 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+// Compile-time assertion: *MachineContext must satisfy CallContext.
+var _ CallContext = (*MachineContext)(nil)
+
 // CallContext is the extension-facing subset of MachineContext.
 // Extensions and ForeignFunctions should depend on this interface,
 // not on *MachineContext directly.
 //
-// This interface captures the 7 methods that extensions actually use,
-// reducing coupling from 30+ methods to 7. *MachineContext satisfies
+// This interface captures the 8 methods that extensions actually use,
+// reducing coupling from 30+ methods to 8. *MachineContext satisfies
 // this interface with zero implementation cost.
 //
 // Internal code that needs full VM access (sub-context creation,
 // continuation manipulation, exception handling) should type-assert
 // to *MachineContext.
-// Compile-time assertion: *MachineContext must satisfy CallContext.
-var _ CallContext = (*MachineContext)(nil)
-
 type CallContext interface {
 	// Arg returns the argument at the given positional index.
 	// For variadic functions, the last parameter index holds the rest list.

@@ -111,11 +111,15 @@ func (p *OperationPopWind) EqualTo(o values.Value) bool {
 
 // --- PopEnv ---
 
-// OperationPopEnv unconditionally restores the parent environment.
-// It pops one level from the environment chain (restoring the parent environment).
+// OperationPopEnv pops one level from the environment chain, restoring the parent
+// environment. A nil parent is an error (wrapped werr.ErrNilParentEnvironment): the
+// top-level environment cannot be popped. It also clears envPooled, since the parent
+// frame was never acquired from the pool and RestoreAndRelease must not release it.
 //
-// This is used in syntax-case fender evaluation to restore the environment
-// when the fender returns false, before branching to the next clause.
+// Emitted to close a frame opened by OpPushEnv: at the end of a non-tail
+// let/let*/letrec/letrec* body (compile_let.go), and in syntax-case fender evaluation
+// to restore the environment when the fender returns false, before branching to the
+// next clause.
 type OperationPopEnv struct {
 	OperationBase
 }

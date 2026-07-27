@@ -62,13 +62,14 @@ func addPrimitives(r *registry.Registry) error {
 			ReturnType: values.TypeList},
 		{Name: "disassemble", ParamCount: 1, Impl: PrimDisassemble,
 			Doc: "Returns structured disassembly of a procedure as a list of alists. " +
-				"The first element (car) is always a header alist with metadata " +
-				"(type, name, params, variadic, doc). For native closures, the header " +
-				"also includes literals and bindings vectors, and remaining elements " +
+				"The first element (car) is always a header alist. For native and " +
+				"foreign closures it carries type, name, params, variadic, and doc; " +
+				"for case-lambda it carries only type and a clauses key holding " +
+				"per-clause disassemblies. For native closures, the header also " +
+				"includes literals and bindings vectors, and remaining elements " +
 				"are instruction alists with keys: pc, op, arg, slot, depth, target, " +
-				"literal, binding, side-op, source. For case-lambda, the header " +
-				"contains a clauses key with per-clause disassemblies. For foreign " +
-				"closures, the header is the only element.",
+				"literal, binding, side-op, source. For foreign closures, the " +
+				"header is the only element.",
 			ParamNames: []string{"proc"}, Category: "introspection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure},
 			ReturnType: values.TypeList},

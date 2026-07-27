@@ -18,7 +18,7 @@
 //
 // # Token Categories
 //
-//   - Delimiters: (, ), (), .
+//   - Delimiters: (, ), [, ], (), .
 //   - Quotation: ', `, ,, ,@ and syntax variants
 //   - Numbers: integers, decimals, rationals, scientific, complex, polar
 //   - Special: +inf.0, -inf.0, +nan.0, imaginary variants
@@ -34,7 +34,7 @@
 //	tok := tokenizer.NewTokenizer(reader, caseInsensitive)
 //	for {
 //	    token, err := tok.Next()
-//	    if err == io.EOF {
+//	    if errors.Is(err, io.EOF) {
 //	        break
 //	    }
 //	    // process token

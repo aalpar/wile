@@ -25,8 +25,8 @@ import "github.com/aalpar/wile/pkg/werr"
 // call graphs do not exhaust the Go stack.
 
 // SCCResult describes the strongly-connected-component decomposition of a
-// directed graph. Components are numbered 0..NumSCCs-1 in reverse
-// topological order of the condensation: SCC 0 has no incoming inter-SCC
+// directed graph. Components are numbered 0..NumSCCs-1 in topological
+// order of the condensation: SCC 0 has no incoming inter-SCC
 // edges (a "root" in the condensation); SCC NumSCCs-1 has no outgoing
 // inter-SCC edges (a "leaf"). Equivalently, for every condensed edge
 // (c, d) with c != d, c < d.
@@ -166,7 +166,7 @@ func ComputeSCC(numNodes int, edges []Edge) (*SCCResult, error) {
 	numSCCs := c
 
 	// Pearce assigns SCC IDs in finalization order (sinks/leaves first,
-	// roots last). Flip so the result is in reverse-topological order
+	// roots last). Flip so the result is in topological order
 	// with sources at low IDs and leaves at high IDs.
 	for i := range component {
 		component[i] = numSCCs - 1 - component[i]

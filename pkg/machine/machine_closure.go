@@ -24,7 +24,7 @@ var (
 	_ NamedCallable   = (*MachineClosure)(nil)
 )
 
-// Linked closure (Church 1936, Landin 1964, Cardelli 1983). A closure is
+// MachineClosure is a linked closure (Church 1936, Landin 1964, Cardelli 1983):
 // a pair of compiled code and the lexical environment at definition time.
 //
 //	closure = ⟨λ, E⟩, where:
@@ -38,7 +38,9 @@ var (
 //	  Mutations via set! are visible through the closure because the
 //	  closure shares the frame, not a snapshot.
 //	Constrains: OperationMakeClosure (must link E to runtime parent),
-//	  Apply (always copies E to prevent aliasing and thread races).
+//	  Apply (copies E on every call with a parented env, to prevent aliasing
+//	  and thread races; a parentless E, which by invariant has zero
+//	  parameters, is reused in place).
 //	Constrained by: de Bruijn addressing (free vars addressed by
 //	  slot,depth in E's chain), CESK model (E is the environment component).
 //

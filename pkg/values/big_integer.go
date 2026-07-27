@@ -42,18 +42,16 @@ var (
 //
 // # Precision Preservation
 //
-// BigInteger operations with Float preserve precision by promoting to BigFloat
-// for comparison and arithmetic. This avoids precision loss from converting
-// large BigIntegers to float64 (which has only 53 bits of mantissa precision).
+// COMPARISON with a Float is lossless: comparisonTable (promotion.go) promotes
+// both operands to BigFloat, so a BigInteger with more than 53 significant bits
+// is not truncated into the Float's mantissa. Comparing 2^53+1 with 2^53.0 would
+// otherwise report equality, both operands having landed on the same float64.
 //
-// Prior to M5 fix, BigIntegers with >53 significant bits would be truncated
-// when compared with Float, causing incorrect comparison results. For example,
-// comparing 2^53+1 with 2^53.0 would incorrectly report equality after both
-// were converted to the same float64 value.
-//
-// The fix promotes both operands to BigFloat (arbitrary precision), ensuring
-// correct comparisons and arithmetic while preserving R7RS exactness contagion
-// (exact + inexact → inexact).
+// ARITHMETIC with a Float does NOT promote to BigFloat. It follows R7RS §6.2.2
+// exactness contagion to the inexact operand's own kind (promotionTable Zone 2),
+// because sending exact × Float to BigFloat "to preserve precision" silently
+// minted 256-bit bignums. A program that needs the extra precision must stay
+// exact, or pass an explicit #m operand.
 type BigInteger struct {
 	value *big.Int
 }
@@ -118,11 +116,8 @@ func (p *BigInteger) Int64() int64 {
 	return p.value.Int64()
 }
 
-// Per-type conversion helpers for BigInteger.
-// These eliminate repeated conversion expressions in the type-switch
-// dispatch methods below. Each produces the representation needed by
-// the target type's native arithmetic.
-
+// float64Val returns the value as a float64, rounding beyond 53 mantissa bits.
+// Used by ToInexact.
 func (p *BigInteger) float64Val() float64 {
 	return float64FromBigInt(p.value)
 }

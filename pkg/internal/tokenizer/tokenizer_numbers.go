@@ -48,6 +48,10 @@ func signedState(signed bool, s, u TokenizerState) TokenizerState {
 	return u
 }
 
+// readSpecialNumber reads inf.0 or nan.0 special number literals.
+// If onMismatch is provided, it is called when the keyword doesn't match and no
+// error is set; otherwise mismatchErr is raised. After the keyword it requires
+// '.' followed by at least one digit in radix r.
 func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMismatch func()) {
 	n := p.scanCaseInsensitive([]byte(s))
 	if p.err != nil {
@@ -362,7 +366,6 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 //   - Ellipsis and peculiar identifiers: ..., .foo
 //
 // Parameters:
-//   - e: unused (reserved for exactness tracking)
 //   - r: radix (base) for parsing digits (2, 8, 10, or 16)
 //
 // The function uses a decision tree based on the first character:
@@ -382,7 +385,7 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 //	digit:
 //	  ├─ '/' after digits → rational fraction (1/2)
 //	  ├─ '.' after digits → decimal fraction (1.5)
-//	  ├─ 'e'/'E' after digits → scientific notation (1e10)
+//	  ├─ 'e'/'E' after digits → scientific notation (1e10), in radix 0/10 only
 //	  └─ otherwise → unsigned integer
 func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(r int) {
 	// Branch 1: Starts with explicit sign (+/-)

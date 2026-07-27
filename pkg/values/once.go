@@ -57,7 +57,9 @@ func (p *Once) Do(f func()) bool {
 	return called
 }
 
-// Done returns true if Do has been called
+// Done reports whether Do's function has run to completion. It is false while
+// the function is executing, and stays false if the function panicked, even
+// though the Once is then consumed and further Do calls return false.
 func (p *Once) Done() bool {
 	return p.done.Load() == 1
 }

@@ -24,10 +24,12 @@ import "github.com/aalpar/wile/pkg/syntax"
 // bindings (EnvironmentFrame.GetBinding and EnvironmentFrame.GetLocalIndex —
 // see memory/2026-05-09-environment-structural-reduction.md, Finding 6 +
 // Opportunity 1). In that setting the weight is the size of a binding's
-// scope set: the parent-chain walk is innermost-first, so first-seen-on-tie
-// corresponds to "innermost wins" — which is exactly Flatt's tie-breaking
-// rule. The helper itself stays domain-neutral; callers attach whatever
-// "weight" semantics they want.
+// scope set. bestOf's own first-seen-on-tie is a raw accumulator policy, NOT
+// Flatt's rule: the binding-resolution call sites wrap it in scopedBestOf,
+// which detects an incomparable equal-cardinality tie and raises
+// ErrAmbiguousBinding instead of keeping the first candidate. The helper
+// itself stays domain-neutral; callers attach whatever "weight" semantics
+// they want.
 //
 // API shape: callers split each step into (1) shouldRecord, a pure
 // predicate, and (2) record, which actually stores the candidate. This

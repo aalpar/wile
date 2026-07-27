@@ -20,7 +20,7 @@
 // via virtual env maps.
 //
 // When the caller's Namespace has a non-nil EnvMap, lookups read from
-// that virtual map. Otherwise, they fall through to os.Getenv/os.Environ
+// that virtual map. Otherwise, they fall through to os.LookupEnv/os.Environ
 // gated by the authorizer.
 //
 // Primitives:

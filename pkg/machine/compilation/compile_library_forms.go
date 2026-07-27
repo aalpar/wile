@@ -44,9 +44,13 @@ import (
 //	  | (begin <command-or-definition> ...)
 //	  | (include <filename> ...)
 //	  | (include-ci <filename> ...)
+//	  | (include-library-declarations <filename> ...)
+//	  | (cond-expand <ce-clause> ...)
+//	  | (description <string>)
 //
 // This creates an isolated environment for the library, processes declarations
-// in order, and registers the compiled library in the registry.
+// in order, and hands the finished CompiledLibrary to the library callback
+// (LoadLibrary is what installs it in the registry).
 func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	// expr is ((lib-name) <declaration> ...) - args after 'define-library' keyword
 	rest, ok := expr.(*syntax.SyntaxPair)
@@ -82,7 +86,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// Create a unique library scope for cross-library macro hygiene.
 	// When a macro defined in this library references an unexported binding,
 	// the library scope enables the compiler to redirect lookup to this
-	// library's environment via the TLE's scope registry.
+	// library's environment via the Namespace's library-scope registry.
 	libScope := syntax.NewScopeWithLabel("library:" + libName.SchemeString())
 	p.env.Namespace().RegisterLibraryScope(libScope, libEnv)
 	// The export lookup resolves under this scope; see CompiledLibrary.Scope.

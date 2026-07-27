@@ -23,7 +23,9 @@ package machine
 //  1. opcode.go — add OpXxx constant and entry in opcodeTable (name + metadata flags;
 //     operandKind must match step 3's extraction logic)
 //  2. machine_context.go Run() — add dispatch case in the main switch
-//  3. native_template.go — add a case in instructionToOperation() (always required) and in
+//  3. native_template.go — add a case in instructionToOperation() (required unless the new
+//     op's operandKind is OperandCachedBinding or OperandLocalIdx, which the default branch
+//     decomposes generically) and in
 //     operationToInstruction() (required for operand-bearing ops; zero-operand ops fall
 //     through the default branch, which cross-checks opcodeTable[kind].operandKind == OperandNone)
 //  4. operation_xxx.go — create new operation type (or add to existing file)

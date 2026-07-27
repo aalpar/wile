@@ -52,7 +52,7 @@ import (
 
 // DefaultMaxExpandDepth bounds structural recursion depth during macro
 // expansion. Without a bound, deeply nested syntax — reachable not from text
-// (the parser caps that, see internal/parser DefaultMaxParseDepth) but from
+// (the parser caps that, see parser.DefaultMaxParseDepth) but from
 // programmatically-constructed syntax such as macro output, datum->syntax, and
 // quasiquote — triggers a fatal, unrecoverable Go stack overflow that kills the
 // host process. 0 means unlimited. Mirrors the VM's DefaultMaxCallDepth and the
@@ -623,9 +623,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return expr, false, nil
 	}
 
-	// The SAME three-step lookup the expander itself uses — local, next phase, then
-	// the library env named by the symbol's scopes. This used to be a hand-copied
-	// two-step version, missing the library arm, so (expand-once …) reported a macro
+	// The SAME four-probe lookup the expander itself uses — local, definition-site
+	// pin, next phase, then the library env named by the symbol's scopes. This used
+	// to be a hand-copied two-step version, missing the library arm, so (expand-once …) reported a macro
 	// reachable only through a library scope as not-a-macro, even though expansion
 	// itself handled it fine.
 	bnd := p.lookupMacroBinding(sym, sym.Scopes())

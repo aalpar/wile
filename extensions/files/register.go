@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package files provides file I/O primitives.
 package files
 
 import (
@@ -26,14 +25,14 @@ import (
 // These are implemented as macros using parameterize to ensure proper integration
 // with the continuation system (fixes T3 from architectural review).
 //
-// Source: go/extensions/files/with_file_macros.scm (embedded at compile-time)
+// Source: extensions/files/with_file_macros.scm (embedded at compile-time)
 //
 //go:embed with_file_macros.scm
 var withFileMacroSource string
 
 // Extension is the file I/O extension.
 var Extension = registry.NewDescribedExtension("files",
-	"Filesystem operations: file I/O, directory traversal, temporary files.",
+	"Filesystem operations: file I/O, directory creation/listing, working directory.",
 	AddToRegistry)
 
 // Builder aggregates all file registration functions.

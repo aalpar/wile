@@ -20,6 +20,17 @@ import (
 	"unicode/utf8"
 )
 
+// readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment handles # prefixed tokens.
+// Called after '#' is consumed. Dispatches based on the next character to parse:
+//   - #' #` #, #,@ : syntax quotation
+//   - #| : block comment
+//   - a letter (#t/#f/#u8(/#e/#i/#b/#o/#d/#x/#m/#z) : typed array, exactness,
+//     radix or boolean marker
+//   - a digit (#n= / #n#) : datum label assignment or reference
+//   - #\ : character
+//   - #( : vector
+//   - #; : datum comment
+//   - #! : directive
 func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() {
 	switch {
 	case isQuote(p.curr()): // #' (syntax)
@@ -45,7 +56,8 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		return
 
 	case isVerticalLine(p.curr()):
-		// Emit BlockCommentBegin, set up for Body/End on subsequent calls
+		// A block comment is one token: everything through the matching |#,
+		// nesting included.
 		p.next() // skip '|'
 		p.blockDepth = 0
 		p.continueBlockComment()
@@ -56,7 +68,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		return
 
 	case isDigit(10, p.curr()):
-		// label: #[0-9]+# #[0-9]+[=]value#
+		// label reference #<digits>#  or label assignment #<digits>=<datum>
 		p.state = TokenizerStateLabelReference
 		p.next()
 		for p.err == nil && isDigit(10, p.curr()) {
@@ -154,7 +166,8 @@ func (p *Tokenizer) readBoolean(key string, state TokenizerState) {
 }
 
 // readTypedArrayOrExactnessOrRadixOrBooleanMarker parses letter-prefixed # tokens.
-// Handles: #t/#true, #f/#false, #u8(, #i, #e, #b, #o, #d, #x.
+// Handles: #t/#true, #f/#false, #u8(, #i, #e, #b, #o, #d, #x, #m (big float),
+// #z (big integer); any other letter falls back to a generic marker token.
 // Called when curr() is a letter following '#'.
 // Note: R7RS requires booleans to be case-insensitive, so #T, #TRUE, #F, #FALSE are valid.
 func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
@@ -237,6 +250,3 @@ func (p *Tokenizer) readDirective() {
 		p.next()
 	}
 }
-
-// readSpecialNumber reads inf.0 or nan.0 special number literals.
-// If onMismatch is provided, it's called when the keyword doesn't match;

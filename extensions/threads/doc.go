@@ -42,9 +42,7 @@
 //
 // # Exceptions
 //
-//   - join-timeout-exception?, abandoned-mutex-exception?
-//   - terminated-thread-exception?, uncaught-exception?
-//   - uncaught-exception-reason
+//   - uncaught-exception?, uncaught-exception-reason
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.
 package threads

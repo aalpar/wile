@@ -34,6 +34,10 @@ import (
 // confirm as a capture primitive returns false — the safety net for an
 // unconfirmed operator is the edge-resolution path in mayCapture (an
 // unresolved callee ⇒ unsafe), not this predicate.
+//
+// It ALSO reports true for an opaque subtree (a quasiquote template, or a
+// ValidatedLiteral wrapping a passthrough form): an un-analysed subtree counts
+// as unsafe whether or not it captures.
 func bodyReferencesCaptureOperator(
 	body []ValidatedExpr,
 	isCaptureOp func(sym *syntax.SyntaxSymbol) bool,

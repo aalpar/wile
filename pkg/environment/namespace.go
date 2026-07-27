@@ -73,14 +73,21 @@ var _ values.Value = (*Namespace)(nil)
 //
 //	Delegated to root via root() walk (the field lives only on the root
 //	namespace; children reach it through the parent chain in O(depth)):
-//	  fileResolver, loadPathStack, scopeRegistry
+//	  fileResolver, loadPathStack, scopeRegistry, immutableLiterals,
+//	  immutableTopLevel
 //
 //	Pointer-shared via *EngineServices (allocated once in NewNamespace;
 //	every child receives the same pointer at construction — no root() walk,
 //	one struct, one optional mutex for the lazy-cache block):
-//	  ioState, exportIndex, formRegistry — add new engine-lifetime services here
-//	  (add a field on EngineServices + two Namespace accessors; children inherit
-//	  automatically because they copy the services pointer at construction)
+//	  ioState, formRegistry, inlineThreshold, maxExpandDepth, exportIndex —
+//	  add new engine-lifetime services here (add a field on EngineServices +
+//	  two Namespace accessors; children inherit automatically because they
+//	  copy the services pointer at construction)
+//
+//	Per-namespace, owned outright (never inherited; each namespace builds
+//	its own, and a child's is unrelated to its parent's):
+//	  sealedBase, sealedExpandBase, inlineHOFTemplates, effectiveRegistry,
+//	  extensionState
 //
 // Adding a new field: choose a policy above, document it in this block,
 // then:
@@ -123,7 +130,8 @@ type Namespace struct {
 	immutableLiterals *ImmutableLiterals
 
 	// services holds the engine-lifetime, layering-opaque services (ioState,
-	// exportIndex, and Phase-2 formRegistry). Allocated once by the root
+	// formRegistry, the forwarded inlineThreshold/maxExpandDepth compiler
+	// bounds, and the lazy exportIndex). Allocated once by the root
 	// NewNamespace and shared by pointer into every child constructor, so the
 	// whole namespace tree reads/writes one struct. See engine_services.go.
 	services *EngineServices
@@ -818,7 +826,8 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //
 // The child is a fully independent Namespace with its own:
 //
-//   - EnvironmentFrame (runtime, phase 0) — the root lexical scope
+//   - EnvironmentFrame (runtime, phase 0) — the mutable user scope, lexical
+//     child of the child's own sealed base (wireRuntimeFrames), not a root
 //   - GlobalEnvironmentFrame — isolated global bindings (define, set!, etc.)
 //   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
 //
@@ -872,6 +881,13 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //	                                  | bindings: []            |
 //	                                  +-------------------------+
 //
+//	                         envC.parent ──► the child's OWN sealed base
+//	                         +-------------------------------+
+//	                         | EnvironmentFrame (sealedBaseC)|
+//	                         | parent: nil (structural root) |
+//	                         | global: sealed *GlobalEnvFrame|
+//	                         +-------------------------------+
+//
 // # Interning delegation
 //
 // The child stores a parent pointer and has nil interning maps. InternSyntax
@@ -921,8 +937,8 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //	              shared NS via the
 //	              owning EnvFrame)
 //
-//	envC.Namespace() == parent    envC.Namespace() == child
-//	TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
+//	envC.Namespace() == parent         envC.Namespace() == child
+//	parentNS.Runtime() returns envP    child.Runtime() returns envC  ✓
 //
 // NewChildNamespace returns a new *Namespace that can be
 // passed as a first-class Scheme value (e.g., returned from the (environment)
@@ -936,8 +952,8 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 // environments that are identity-compatible with the caller's symbol
 // table while providing isolated bindings. Optional NamespaceOption
 // arguments override fields that would otherwise be inherited from the
-// parent (currently registry and authorizer); see WithRegistry and
-// WithAuthorizer.
+// parent (currently registry and authorizer); see WithChildRegistry and
+// WithChildAuthorizer.
 //
 // All captured fields (libraryRegistry, libraryEnvFactory, registry,
 // authorizer, envMap) are copied from the parent in one place — adding
@@ -1019,6 +1035,9 @@ func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
 
 // SyntaxInternCount returns the number of interned syntax objects.
 // This is intended for testing and debugging purposes.
+//
+// On a child Namespace this returns 0: children have no map of their own and
+// delegate interning to the parent. Call it on the root.
 func (p *Namespace) SyntaxInternCount() int {
 	p.syntaxInternsMu.RLock()
 	defer p.syntaxInternsMu.RUnlock()

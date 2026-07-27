@@ -22,7 +22,8 @@ import (
 )
 
 // floatToExact converts a float64 to its exact Number representation.
-// Returns Integer or BigInteger if the float is integral, Rational otherwise.
+// Returns BigInteger if the float is integral, Rational otherwise. (Callers
+// wanting the canonical smallest exact representation must Simplify the result.)
 //
 // R7RS §6.2.6: (exact z) returns an exact representation of z.
 // R7RS says (exact +inf.0) and (exact +nan.0) should raise an error.

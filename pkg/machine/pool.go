@@ -24,10 +24,13 @@ import (
 // lifecycle. Each non-tail call creates a continuation frame and eval stack;
 // pooling avoids per-call heap allocations.
 //
-// Two pool implementations are used: Pool[T] (sync.Pool-backed) for
-// sub-contexts; FreeList[T] (mutex-guarded slice) for stacks, continuations,
-// and environment frames where sync.Pool's GC-clearing behavior causes a
-// feedback loop (high alloc rate → frequent GC → pool cleared → more allocs).
+// Three pool implementations are used: Pool[T] (sync.Pool-backed) for
+// sub-contexts; unsyncFreeList[T] (lock-free, single-goroutine) for the
+// per-thread stack, continuation, and environment-frame freelists that serve
+// every rooted context; and FreeList[T] (mutex-guarded slice) as the
+// process-global fallback for rootless contexts, where sync.Pool's GC-clearing
+// behavior causes a feedback loop (high alloc rate → frequent GC → pool cleared
+// → more allocs).
 //
 // See BIBLIOGRAPHY.md "Object Pooling".
 
@@ -40,9 +43,10 @@ const stackInitialCap = 8
 // unified observation and control (stats, drain, enable/disable).
 var pools = NewPoolManager()
 
-// stackPool recycles Stack allocations. Stacks are created on every
-// non-tail call (SaveContinuation) and discarded on return (Restore).
-// Pooling avoids repeated heap allocation of the backing slice.
+// stackPool recycles Stack allocations. A non-tail call (SaveContinuation)
+// acquires a stack only when the eval stack is deeper than inlineEvalsCap;
+// a shallower save inlines its values into the continuation frame and reuses
+// mc's stack. Pooling avoids repeated heap allocation of the backing slice.
 var stackPool = registerFreeList(pools, NewFreeList("stack", newStackPoolEntry, resetStackPoolEntry))
 
 func newStackPoolEntry() *Stack {

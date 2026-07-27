@@ -38,11 +38,10 @@
 //
 // # I/O Ports (R7RS 6.13)
 //
-// Port types implement [Port], [InputPort], [OutputPort], and related interfaces:
-//   - [CharacterInputPort], [CharacterOutputPort]: textual I/O
-//   - [BinaryInputPort], [BinaryOutputPort]: binary I/O
-//   - [StringInputPort], [StringOutputPort]: in-memory string ports
-//   - [ByteVectorInputPort], [ByteVectorOutputPort]: in-memory byte ports
+// A single concrete type, [PortObject], implements the [Port] marker interface and
+// covers every port flavor. Capability-conditional surfaces are reached through its
+// As*() (T, bool) accessors; the narrow flavors are named by the [TypeInputPort] …
+// [TypeBinaryOutputPort] [ValueType] constants.
 //
 // # Concurrency (SRFI-18+)
 //

@@ -56,7 +56,7 @@ func addPredicates(r *registry.Registry) error {
 			Doc: "Returns #t if OBJ is an inexact number. Inexact numbers use floating-point representation. Raises an error if OBJ is not a number.\n\nExamples:\n  (inexact? 3.14)       => #t\n  (inexact? 42)         => #f", ParamNames: []string{"obj"}, Category: "predicates",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "symbol?", ParamCount: 1, Impl: PrimSymbolQ,
-			Doc: "Returns #t if OBJ is a symbol. Symbols are interned names used as identifiers and keys.\n\nExamples:\n  (symbol? 'foo)        => #t\n  (symbol? \"foo\")       => #f", ParamNames: []string{"obj"}, Category: "predicates",
+			Doc: "Returns #t if OBJ is a symbol. Symbols are names used as identifiers and keys; two symbols with the same name are eq? even though they are distinct objects.\n\nExamples:\n  (symbol? 'foo)        => #t\n  (symbol? \"foo\")       => #f", ParamNames: []string{"obj"}, Category: "predicates",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "string?", ParamCount: 1, Impl: PrimStringQ,
 			Doc: "Returns #t if OBJ is a string. Strings are sequences of characters.\n\nExamples:\n  (string? \"hello\")     => #t\n  (string? 'hello)      => #f", ParamNames: []string{"obj"}, Category: "predicates",

@@ -156,8 +156,8 @@ func NumericFoldWithFirst(
 }
 
 // NumericChainCompare is a helper for numeric chain comparison primitives.
-// First arg at index 0, rest at index 1. Returns true if all consecutive
-// pairs satisfy the comparator, false otherwise.
+// First arg at index 0, rest at index 1. The fails callback returns true when a
+// pair violates the relation; the primitive yields #t only when no pair fails.
 func NumericChainCompare(
 	mc machine.CallContext,
 	name string,

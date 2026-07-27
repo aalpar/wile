@@ -64,8 +64,10 @@ func PrimCommandLine(mc machine.CallContext) error {
 }
 
 // exitWithCode implements the shared logic for exit and emergency-exit.
-// Both parse an optional status argument (#f → 1, integer → value, default → 0)
-// and call os.Exit. Currently identical; the distinction exists for R7RS
+// Both first gate on process:exit via security.CheckWithAuthorizer, so a denied
+// call returns that error instead of exiting. Both then parse an optional status
+// argument (#f → 1, integer → value, default → 0) and call os.Exit.
+// Currently identical; the distinction exists for R7RS
 // compliance (emergency-exit should skip cleanup, which is not yet implemented).
 func exitWithCode(mc machine.CallContext) error {
 	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{

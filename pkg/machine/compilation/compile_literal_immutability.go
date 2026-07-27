@@ -24,6 +24,13 @@ import (
 // constants immutable; structure sharing (per-template equal? dedup) means one
 // mark on the canonical instance covers all sharing siblings. The visited map
 // makes cyclic literals (#0=(1 . #0#)) terminate.
+//
+// KNOWN LIMITATION: the cdr spine is walked by recursion, so a proper list's
+// LENGTH becomes Go stack depth, unbounded. That is the same host-stack overflow
+// validateQuotedLiteralWithVisited (compile_time_continuation.go) was made
+// iterative to avoid, and CompileValidatedQuote runs both over the same literal:
+// a multi-million-element quoted list overflows the host stack here at compile
+// time. The spine walk wants to be iterative, like its sibling.
 func markLiteralImmutable(v values.Value, set *environment.ImmutableLiterals, visited map[values.Value]struct{}) {
 	if set == nil {
 		return

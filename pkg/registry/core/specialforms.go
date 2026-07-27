@@ -29,9 +29,11 @@ type nameDoc struct {
 	Doc  string
 }
 
-// compileTimeBindingSpecs are names that exist only at compile time.
-// The expander recognizes these as primitive forms and dispatches to
-// registered primitive expanders rather than treating them as applications.
+// compileTimeBindingSpecs names the forms the expander recognizes as
+// primitive forms and dispatches to registered primitive expanders rather
+// than treating as applications. Most exist only at compile time; apply is
+// also registered as a runtime primitive (control.go) so it can be used as a
+// first-class value.
 //
 //nolint:govet
 var compileTimeBindingSpecs = []nameDoc{
@@ -331,8 +333,9 @@ var compileTimeBindingSpecs = []nameDoc{
 }
 
 // macroDocs provides documentation for bootstrap macros defined in Scheme.
-// These macros are loaded from bootstrap_macros.scm; their documentation
-// is registered here so it's accessible via the REPL's ,doc command.
+// These macros are loaded from bootstrap_macros.scm and
+// bootstrap_macros_late.scm; their documentation is registered here so it's
+// accessible via the REPL's ,doc command.
 //
 //nolint:govet
 var macroDocs = []nameDoc{

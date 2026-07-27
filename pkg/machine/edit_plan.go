@@ -32,7 +32,11 @@ import (
 //
 // These are stable across Apply and not touched:
 //   - Literal pool indices: LoadLiteral, LoadGlobal, StoreGlobal, PushLiteral, PushGlobal
-//   - Local indices: LoadLocal, StoreLocal, PushLocal
+//   - Local indices: LoadLocal, StoreLocal, PushLocal, CallLocal
+//   - Cached binding indices: every OperandCachedBinding op (LoadCachedBinding,
+//     PushCachedBinding, CallCachedBinding, CallForeignCached and its tail
+//     variant, the promoted primitives) — the dominant operand class after
+//     peephole; Apply never touches tpl.cachedBindings
 //   - Stack offsets: PeekK
 type EditPlan struct {
 	tpl   *NativeTemplate

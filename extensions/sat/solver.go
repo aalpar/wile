@@ -37,12 +37,12 @@ type solver struct {
 	// Length 2*(numVars+1).
 	watches [][]clauseRef
 
-	// VSIDS-related fields filled in later tasks.
+	// VSIDS activity scores and the decay/rescale increment.
 	activity      []float32
 	activityInc   float32
 	activityDecay float32
 
-	// Restart + clause-DB policy filled in later tasks.
+	// Luby restart schedule and learnt-clause-DB budget.
 	conflicts      int64
 	conflictBudget int64 // -1 = unlimited
 	nextRestart    int64
@@ -155,8 +155,8 @@ func (s *solver) backjump(target int32) {
 	s.trailLim = s.trailLim[:target]
 }
 
-// propagate runs watched-literal unit propagation from the current trail
-// head. Returns noClauseRef on success (no conflict, all units enqueued)
+// propagate runs watched-literal unit propagation over the whole current
+// trail. Returns noClauseRef on success (no conflict, all units enqueued)
 // or the clauseRef of a falsified clause on conflict.
 //
 // Algorithm: for each literal l on the trail not yet processed, walk
@@ -170,7 +170,8 @@ func (s *solver) backjump(target int32) {
 //   - If no replacement and the other watched lit is false, the clause
 //     is empty under the assignment: conflict.
 //
-// qhead tracks how far down the trail we've processed.
+// qhead is a per-call cursor, not a persistent watermark: every call
+// re-scans from the trail base.
 func (s *solver) propagate() clauseRef {
 	qhead := 0
 	for qhead < len(s.trail) {
@@ -184,7 +185,7 @@ func (s *solver) propagate() clauseRef {
 			cr := ws[i]
 			c := &s.clauses[cr]
 			if len(c.lits) == 0 {
-				// Tombstoned by reduceClauseDB (added in Task 13); skip without re-watching.
+				// Tombstoned by reduceClauseDB; skip without re-watching.
 				i++
 				continue
 			}

@@ -226,7 +226,7 @@ func (p *Float) Abs() Number {
 // ToExact converts this Float to an exact Number.
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
-// Returns Integer if the float is integral, Rational otherwise.
+// Returns BigInteger if the float is integral, Rational otherwise.
 func (p *Float) ToExact() (Number, error) {
 	return floatToExact(p.Value)
 }

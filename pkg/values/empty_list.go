@@ -106,12 +106,14 @@ func (p emptyListType) UnwrapAll() Value {
 	return p
 }
 
-// SyntaxCar panics with werr.ErrNotAPair. R7RS: (syntax-car '()) is an error.
+// SyntaxCar panics with werr.ErrNotAPair: the empty list has no car (the
+// syntax-phase analogue of R7RS (car '()) being an error).
 func (emptyListType) SyntaxCar() SyntaxValue {
 	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.SyntaxCar: empty list has no car"))
 }
 
-// SyntaxCdr panics with werr.ErrNotAPair. R7RS: (syntax-cdr '()) is an error.
+// SyntaxCdr panics with werr.ErrNotAPair: the empty list has no cdr (the
+// syntax-phase analogue of R7RS (cdr '()) being an error).
 func (emptyListType) SyntaxCdr() SyntaxValue {
 	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.SyntaxCdr: empty list has no cdr"))
 }

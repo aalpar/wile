@@ -160,7 +160,7 @@ func PrimGenerateTemporaries(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimBoundIdentifierEqualQ implements the bound-identifier=? predicate (R7RS).
+// PrimBoundIdentifierEqualQ implements the bound-identifier=? predicate (R6RS).
 // Returns #t if two identifiers have the same name AND the same scope sets,
 // meaning they would create the same binding if used as binding occurrences.
 func PrimBoundIdentifierEqualQ(mc machine.CallContext) error {
@@ -190,7 +190,7 @@ func PrimBoundIdentifierEqualQ(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimFreeIdentifierEqualQ implements the free-identifier=? predicate (R7RS).
+// PrimFreeIdentifierEqualQ implements the free-identifier=? predicate (R6RS).
 // Returns #t if two identifiers would resolve to the same binding in the current environment.
 // For unbound identifiers, returns #t if they have the same name.
 func PrimFreeIdentifierEqualQ(mc machine.CallContext) error {

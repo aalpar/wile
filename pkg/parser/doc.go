@@ -23,14 +23,14 @@
 //   - Quote forms: ', `, ,, ,@ and syntax variants #', #`, #,, #,@
 //   - Datum labels: #n= and #n# for shared/circular structures (R7RS 2.4)
 //   - Case folding: #!fold-case and #!no-fold-case directives
-//   - Symbol interning at parse time
+//   - Symbol creation at parse time (with fold-case applied when active)
 //
 // # Usage
 //
 //	p := parser.NewParserWithFile(env, true, reader, "example.scm")
 //	for {
 //	    stx, err := p.ReadSyntax(ctx)
-//	    if err == io.EOF {
+//	    if errors.Is(err, io.EOF) {
 //	        break
 //	    }
 //	    // process stx
@@ -39,5 +39,7 @@
 // # Error Handling
 //
 // Parse errors are wrapped in [ParserError] with source location from the
-// offending token. The parser accumulates no state across expressions.
+// offending token. State that persists across expressions is deliberate and
+// limited to fold-case mode (R7RS §2.1) and the trailing-EOF lookahead; datum
+// labels are scoped to a single datum and cleared on every read (R7RS §2.4).
 package parser

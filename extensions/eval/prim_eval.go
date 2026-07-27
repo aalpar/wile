@@ -273,8 +273,10 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 	// R7RS specifies version 5 (for R5RS)
 	switch versionInt.Value {
 	case 5, 7:
-		// Create a new empty top-level environment with only syntax bindings.
-		// Shares the caller's symbol interning for R7RS §6.5 symbol identity.
+		// Create a new empty top-level environment. R7RS specifies syntax-only
+		// bindings here; this returns a fully empty child instead.
+		// Shares the caller's syntax-object interning (Namespace.InternSyntax
+		// delegates to the parent) for R7RS §6.5 symbol identity.
 		callerTopLevel := mc.EnvironmentFrame().Namespace()
 		newTopLevel := callerTopLevel.NewChildNamespace()
 		newTopLevel.Name = "null-environment"
@@ -361,8 +363,9 @@ func PrimEnvironment(mc machine.CallContext) error {
 		return nil
 	}
 
-	// Create child top-level environment sharing the caller's symbol interning
-	// and library registry for R7RS §6.5 symbol identity.
+	// Create child top-level environment sharing the caller's syntax-object
+	// interning (Namespace.InternSyntax delegates to the parent) and library
+	// registry for R7RS §6.5 symbol identity.
 	callerTopLevel := mc.EnvironmentFrame().Namespace()
 	// Import source = the mutable runtime (reaches the sealed base via its parent walk,
 	// so resolution is preserved); TopLevel() now returns the sealed base alone.

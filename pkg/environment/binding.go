@@ -64,8 +64,8 @@ type BindingMeta struct {
 	// gate + redefine guard in compile_validated.go), making unit-closure hold
 	// by enforcement rather than inference. When the option is off (WithMutableTopLevel),
 	// this flag stays false for non-imported bindings — asserting it from
-	// partial evidence would be a false conclusion. Read by the frame
-	// optimizer's MayCapture. Distinct from set!-permission (Imported alone,
+	// partial evidence would be a false conclusion. Read by the frame-reclaim
+	// classifier (validate.classifyCallee). Distinct from set!-permission (Imported alone,
 	// unless the option is on) and from the retired "Constant" flag (which
 	// conflated provenance, stability, and compile-time-value-known).
 	//
@@ -412,7 +412,7 @@ func (p *Binding) IsImported() bool {
 // rebound. Imported is standing evidence for that conclusion (R7RS forbids set!
 // on imports); Stable carries it when a proof discharges it by other means.
 // This is NOT a set!-permission — that is IsImported alone (R7RS §5.2). Read by
-// the frame optimizer's MayCapture (sibling escape-gated plan). Renamed from the
+// the frame-reclaim classifier (validate.classifyCallee). Renamed from the
 // retired IsConstant, which falsely asserted "value known at compile time".
 func (p *Binding) IsStable() bool {
 	m := p.Meta()

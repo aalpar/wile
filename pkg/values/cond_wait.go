@@ -38,8 +38,10 @@ import (
 // Broadcasts. Because the caller holds cond.L continuously until cond.Wait
 // atomically releases it and parks, that Broadcast cannot land before the caller
 // is parked — the lost-wakeup that would otherwise hang the waiter forever. The
-// goroutine is bounded: it exits on ctx.Done() or on the done channel closed
-// after Wait returns, so none outlives the call.
+// goroutine is bounded: it always terminates, at the latest once the caller
+// releases cond.L. It may briefly outlive this call while blocked on that lock
+// (the caller holds cond.L from Wait's return through its own deferred unlock),
+// but it cannot leak.
 func waitOnCondCtx(ctx context.Context, cond *sync.Cond) bool {
 	if ctx.Err() != nil {
 		return false

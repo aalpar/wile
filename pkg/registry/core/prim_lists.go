@@ -296,7 +296,7 @@ func PrimListTail(mc machine.CallContext) error {
 //
 // Two-pass block construction (mirrors PrimReverse/PrimList): pass 1 counts the
 // pairs and captures the terminating cdr, pass 2 block-allocates the whole spine
-// as one PairBlock and fills the cars front-to-front. This amortizes N cons
+// as one PairBlock and fills the cars front-to-back. This amortizes N cons
 // allocations to a single block. Unlike a proper-list copy, list-copy preserves
 // an improper tail: ForEach visits each car and returns the final cdr
 // (EmptyList for a proper list, the shared atom otherwise), which we re-point

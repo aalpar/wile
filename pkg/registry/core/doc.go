@@ -32,8 +32,8 @@
 // # Bootstrap Macros
 //
 // The package also defines essential derived forms as syntax-rules macros:
-// and, or, let, let*, letrec, cond, case, when, unless, guard, do,
-// define-record-type, let-values, define-values, map, for-each.
+// and, or, cond, case, when, unless, do, delay, delay-force, parameterize,
+// guard, define-record-type, let-values, let*-values, define-values.
 //
 // # Registration
 //

@@ -167,7 +167,7 @@ var metaCommands = []commandInfo{
 			"Looks up the named binding across all phase environments\n" +
 			"(runtime, expand, compile) and displays documentation.\n" +
 			"For primitives, shows signature, description, and category.\n" +
-			"For user bindings, shows type and current value.\n" +
+			"For user bindings, shows the current value and the phase it is bound in.\n" +
 			"For libraries, shows description, source, and export list.\n\n" +
 			"Options:\n  -x    Include usage examples in the output",
 		"session"},
@@ -175,7 +175,7 @@ var metaCommands = []commandInfo{
 		"Usage: ,edit <file>\n\nOpens the given file in the editor specified by the $EDITOR\nenvironment variable. The REPL blocks until the editor exits.",
 		"session"},
 	{"apropos", []string{"a"}, "Search bindings by name, doc, or category",
-		"Usage: ,apropos <pattern>\n\nSearches all bindings for case-insensitive substring matches\nagainst names, documentation, and categories.\nResults show name, category, and one-line description.",
+		"Usage: ,apropos <pattern>\n\nSearches all bindings for case-insensitive substring matches\nagainst names, documentation, categories, and keywords.\nResults show name, category, and one-line description.",
 		"session"},
 	{"topics", nil, "List documentation categories",
 		"Usage: ,topics\n\nShows all available documentation categories with entry counts.",
@@ -184,7 +184,7 @@ var metaCommands = []commandInfo{
 		"Usage: ,topic <category>\n\nLists all bindings in the named category.\nUse ,topics to see available categories.",
 		"session"},
 	{"libraries", []string{"libs"}, "List loaded Scheme libraries",
-		"Usage: ,libraries\n\nLists all Scheme libraries currently loaded in the environment,\nsorted alphabetically, with their descriptions.",
+		"Usage: ,libraries\n\nLists the Scheme libraries currently loaded, then the libraries\ndiscoverable but not yet imported, each sorted alphabetically\nwith their descriptions.",
 		"session"},
 	{"disassemble", []string{"dis"}, "Show bytecode disassembly of a procedure",
 		"Usage: ,disassemble <name> or ,dis <name>\n\n" +
@@ -224,7 +224,7 @@ func (p *MetaCommandHandler) env() *environment.EnvironmentFrame {
 // phase order and returns the first binding found for sym, along with the phase
 // it was found in. Returns found=false when env is nil, has no namespace, or no
 // phase binds sym. The binding's value is the source of truth for ,doc and
-// ,disasm, so both walk the phases in the same order.
+// ,disassemble, so both walk the phases in the same order.
 func firstPhaseBinding(env *environment.EnvironmentFrame, sym *values.Symbol) (*environment.Binding, environment.Phase, bool) {
 	if env == nil {
 		return nil, 0, false

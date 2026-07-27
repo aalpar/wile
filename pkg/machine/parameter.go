@@ -25,7 +25,9 @@ var (
 // Parameters are dynamically-scoped variables that can be temporarily
 // rebound using parameterize. They act as procedures:
 //   - (param) returns the current value
-//   - (param val) sets the current value (after applying converter if present)
+//   - (param val) sets the parameter's BASE value (after applying converter if
+//     present); it does not affect an active parameterize binding, which is
+//     carried as a continuation mark and read first by (param)
 type Parameter struct {
 	value     values.Value // current value
 	converter Closure      // optional converter procedure (Closure), or nil

@@ -48,8 +48,10 @@ type NativeTemplate struct {
 	literalIndex map[uint64][]int
 
 	// Integer dispatch: all operations compiled to Instructions.
-	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
-	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
+	// Ops with a dedicated opcode (all of opcode.go's waves) are direct switch
+	// cases; the remaining complex ops (case-lambda closures, dynamic-wind,
+	// continuation marks, box/unbox, the un-fused FFI call) are in sideTable and
+	// dispatched via OpComplex.
 	code      []Instruction      // bytecode instructions
 	sideTable []InlinedOperation // complex ops referenced by OpComplex
 
@@ -134,9 +136,13 @@ func (p *NativeTemplate) Operations() Operations {
 // instructionToOperation converts a direct instruction back to its
 // corresponding Operation value. Used by Operations() for test support.
 //
-// Fused and promoted opcodes (emitted by peephole only) are decomposed
-// back to their pre-fusion originals so tests can assert against the
-// compiler's logical output independent of peephole optimization.
+// Fused and promoted opcodes (emitted by peephole only) map back to the FIRST
+// operation of the sequence they replaced, so tests can assert against the
+// compiler's logical output independent of peephole optimization. The mapping is
+// one Operation per instruction and is therefore lossy: OpPullApply drops the
+// Apply, OpPushLiteral/OpPushGlobal drop the Push, and every
+// OperandCachedBinding opcode collapses to LoadCachedBinding, losing both the
+// call and the promoted primitive.
 func instructionToOperation(instr Instruction) Operation {
 	switch instr.Op {
 	// --- Wave 1: zero-operand operations ---
@@ -244,8 +250,11 @@ func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint32 {
 }
 
 // AppendOperationsWithSource converts operations to instructions and tags
-// each with the given source. Wave 1-3 operations become direct switch cases;
-// complex operations go through the sideTable and are dispatched via OpComplex.
+// each with the given source. Operations with a dedicated opcode (all of
+// opcode.go's waves) become direct switch cases; the remaining complex
+// operations (case-lambda closures, dynamic-wind, continuation marks,
+// box/unbox, the un-fused FFI call) go through the sideTable and are dispatched
+// via OpComplex.
 // This is a public method for test use.
 func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, ops ...Operation) {
 	idx := p.internSource(src)
@@ -407,7 +416,7 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 
 // literalIdentical reports whether two values are interchangeable for literal-pool
 // deduplication. It is THE pool's only equality predicate — every dedup path goes
-// through it (AddLiteral and findLiteral both).
+// through it (MaybeAppendLiteral and findLiteral both).
 //
 // It is STRICTER than EqualTo in exactly one way: KIND. Two values of different
 // concrete types never dedup, even when they are eqv?. An Integer 1 and a BigInteger 1
@@ -442,7 +451,7 @@ func literalIdentical(a, b values.Value) bool {
 // findLiteral returns the pooled literal interchangeable with v, or nil.
 //
 // It uses literalIdentical, NOT a bare EqualTo. It used to use EqualTo, which made the
-// pool carry two dedup predicates that disagreed: AddLiteral refused to merge across
+// pool carry two dedup predicates that disagreed: MaybeAppendLiteral refused to merge across
 // concrete types while this path merged freely, so deduplicateLiteral could hand back a
 // pooled Integer 1 in place of a BigInteger 1 and silently re-type the literal.
 func (p *NativeTemplate) findLiteral(v values.Value) values.Value {

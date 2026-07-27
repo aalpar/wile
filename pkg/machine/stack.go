@@ -38,6 +38,8 @@ func (p *Stack) Push(v values.Value) {
 // model (Landin 1964), the procedure is evaluated first but needed last.
 // Pull retrieves it from the bottom after all arguments have been pushed
 // on top. See BIBLIOGRAPHY.md "Stack-Based Virtual Machines".
+// An empty stack panics with a wrapped sentinel rather than letting a
+// downstream index run out of range.
 func (p *Stack) Pull() values.Value {
 	if len(*p) == 0 {
 		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "Stack.Pull: stack is empty"))
@@ -54,6 +56,9 @@ func (p *Stack) Pull() values.Value {
 //
 // The returned args slice shares the stack's backing array (same contract
 // as Drain). Valid only until the next stack mutation.
+//
+// An empty stack panics with a wrapped sentinel rather than letting a
+// downstream index run out of range.
 func (p *Stack) PullDrain() (values.Value, []values.Value) {
 	n := len(*p)
 	if n == 0 {
@@ -70,7 +75,9 @@ func (p *Stack) PullDrain() (values.Value, []values.Value) {
 
 // Pop2 removes and returns the top two values from the stack. q0 is the
 // top-most value (popped first), q1 is the value beneath it. It checks the
-// length once and is equivalent to two successive Pop() calls.
+// length once and is equivalent to two successive Pop() calls. Fewer than two
+// values panics with a wrapped sentinel rather than letting a downstream index
+// run out of range.
 func (p *Stack) Pop2() (q0, q1 values.Value) {
 	l := len(*p)
 	if l < 2 {
@@ -82,7 +89,9 @@ func (p *Stack) Pop2() (q0, q1 values.Value) {
 	return q0, q1
 }
 
-// Pop removes and returns the top value from the stack.
+// Pop removes and returns the top value from the stack. An empty stack panics
+// with a wrapped sentinel rather than letting a downstream index run out of
+// range.
 func (p *Stack) Pop() values.Value {
 	l := len(*p)
 	if l == 0 {
@@ -95,7 +104,9 @@ func (p *Stack) Pop() values.Value {
 
 // PopN removes and returns the top n values from the stack.
 // Values are returned in stack order (top-most element last).
-// This is more efficient than calling Pop() n times.
+// This is more efficient than calling Pop() n times. A negative n, or one
+// larger than the stack, panics with a wrapped sentinel rather than letting a
+// downstream index run out of range.
 func (p *Stack) PopN(n int) []values.Value {
 	l := len(*p)
 	if n < 0 {
@@ -201,6 +212,8 @@ func (p *Stack) PopAll() []values.Value {
 
 // PeekK returns the kth value from the top of the stack without removing it.
 // `K` is zero-based, so PeekK(0) returns the top value. `K` is used for methods that need a numeric index.
+// An index outside [0, len) panics with a wrapped sentinel rather than letting a
+// downstream index run out of range.
 func (p Stack) PeekK(i int) values.Value {
 	l := len(p)
 	if i < 0 || i >= l {

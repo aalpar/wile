@@ -382,9 +382,12 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type, lossyAllowed
 	funcType := t
 	return func(mc *MachineContext, v values.Value) (reflect.Value, error) {
 		// Validate that the value is a supported callback procedure type.
-		// Note: *machine.ComposableContinuation is callable via ApplyCallable, but is
-		// intentionally not accepted here as a Go callback target because it represents
-		// a captured continuation rather than a standalone procedure.
+		// Three values.Callable types are excluded. *machine.CapturedContinuation
+		// and *machine.ComposableContinuation are callable via ApplyCallable but
+		// represent captured continuations rather than standalone procedures.
+		// *machine.ForeignClosure is the surprising exclusion: it covers every
+		// Go-implemented primitive, including anything the embedder registered
+		// through RegisterFunc or RegisterPrimitive.
 		switch v.(type) {
 		case *machine.MachineClosure, *machine.CaseLambdaClosure, *machine.Parameter:
 			// valid callback procedure

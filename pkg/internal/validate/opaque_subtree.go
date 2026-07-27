@@ -135,8 +135,7 @@ const (
 // compiler says live) a hidden set! goes unmarked and the inliner miscompiles
 // silently — the exact failure this file exists to prevent.
 //
-// The rules the compiler and the shipped prior art
-// (compilation.renamePair, which does this for macro-binder renaming) both hold to:
+// The rules the compiler's own walk holds to, and that this predicate must match:
 //
 //   - quasiquote: arguments are one level deeper.
 //   - unquote / unquote-splicing: one level shallower, but ONLY when already
@@ -220,10 +219,10 @@ func forEachRawSymbol(v values.Value, quasi int, fn func(*syntax.SyntaxSymbol)) 
 // forEachRawSymbolPair walks a pair, dispatching on a quasiquote keyword head via
 // quasiHeadDepth before falling through to an ordinary car/cdr walk.
 //
-// Heads are matched by NAME. That is the same limitation the prior art accepts
-// (compilation.renamePair): a program that lexically shadows quote/quasiquote/
-// unquote would be misread. Detecting that needs binding information this walk does
-// not carry.
+// Heads are matched by NAME. That is the same limitation the compiler's own walk
+// accepts (compilation.quasiquoteNeedsRuntimeList): a program that lexically
+// shadows quote/quasiquote/unquote would be misread. Detecting that needs binding
+// information this walk does not carry.
 func forEachRawSymbolPair(p *syntax.SyntaxPair, quasi int, fn func(*syntax.SyntaxSymbol)) {
 	head, ok := p.SyntaxCar().(*syntax.SyntaxSymbol)
 	if ok {
@@ -312,11 +311,11 @@ func markOpaqueTemplate(env *environment.EnvironmentFrame, raw values.Value, res
 // What an over-mark costs, precisely. Not merely "an optimization" — say what is
 // withdrawn. A non-StableInUnit define never gets BindingMeta.Stable, and top-level
 // immutability is ENFORCED off that same stamp: the set! rejection
-// (compilation.compileSetBang, keyed on binding.IsStable()) and the redefine guard
-// (compilation.compileDefine, keyed on Meta().Stable) both read it. So over-marking
-// a name silently turns top-level immutability OFF for it: given
-// (begin (define x 1) `(x)), a later unit's (set! x 2) COMPILES, where without the
-// quasiquote it is rejected.
+// (compilation.CompileValidatedSetBang, keyed on binding.IsStable()) and the
+// redefine guard (compilation.declareDefineBinding, keyed on Meta().Stable) both
+// read it. So over-marking a name silently turns top-level immutability OFF for
+// it: given (begin (define x 1) `(,x)), a later unit's (set! x 2) COMPILES, where
+// without the unquote it is rejected.
 //
 // That is a real cost to a user-facing guarantee, and it is still safe, for a reason
 // worth stating rather than assuming: enforcement and optimization key on the SAME

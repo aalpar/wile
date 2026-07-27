@@ -178,6 +178,10 @@ func (p *String) Get(i int) Value {
 // Set sets the character at the given rune index from a Character value.
 // Returns an error if the string is immutable.
 //
+// PANICS if v is not a *Character (the assertion is unchecked) or if i is out of
+// range. Callers are expected to have type- and bounds-checked their arguments;
+// the sibling (*ByteVector).Set does check, and returns a wrapped sentinel.
+//
 // R7RS §6.7: (string-set! string k char) stores char in element k.
 func (p *String) Set(i int, v Value) error {
 	if p.immutable {

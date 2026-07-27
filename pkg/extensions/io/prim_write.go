@@ -81,12 +81,11 @@ func makeWriteVariant(name string, render func(values.Value) (string, error)) ma
 // DAG) is NOT mistaken for a cycle: a node reachable by two sibling paths is
 // rendered in full at each occurrence, with no datum label.
 //
-// NOTE: SchemeString still has no DEPTH bound, so a programmatically built,
-// genuinely deeply nested (acyclic) value can overflow the host stack — this is
-// the same depth surface as before. That differs from the SchemeWriter path
-// (write/display/write-shared), which is bounded by DefaultMaxWriteDepth;
-// bounding SchemeString by depth touches the core Value contract and is out of
-// scope here.
+// DEPTH: SchemeString is depth-bounded too: schemeStringChild degrades to the
+// marker "#<deep>" past DefaultMaxWriteDepth, the same bound the SchemeWriter
+// uses. Unlike write/display/write-shared, which return ErrWriteDepthExceeded
+// and refuse to emit, SchemeString satisfies the non-erroring Value contract and
+// so degrades rather than raising.
 func schemeStringRender(v values.Value) (string, error) {
 	return v.SchemeString(), nil
 }

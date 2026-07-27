@@ -34,7 +34,8 @@ func (p *schemeEqualsChecker) ArgNames() []string {
 	return []string{"got", "want"}
 }
 
-// Check implements Checker.Check by checking that got == args[0].
+// Check implements Checker.Check by comparing got and args[0] with
+// values.EqualTo.
 func (p *schemeEqualsChecker) Check(got any, args []any, note func(key string, value any)) (err error) {
 	defer func() {
 		// A panic is raised when the provided args are not comparable.
@@ -46,7 +47,7 @@ func (p *schemeEqualsChecker) Check(got any, args []any, note func(key string, v
 
 	want := args[0]
 
-	// Customize error message for non-nil errors.
+	// Unreachable: got.(error) succeeds only for a non-nil interface.
 	_, ok := got.(error)
 	if ok && got == nil {
 		return errors.New("got non-nil error") //nolint:gocritic // test helper, not Scheme runtime
@@ -73,7 +74,6 @@ func (p *schemeEqualsChecker) Check(got any, args []any, note func(key string, v
 		return errors.New("got and want must be of type Datum") //nolint:gocritic // test helper, not Scheme runtime
 	}
 
-	// Binding(nil).(Binding) == false so check
 	if values.EqualTo(gotValue, wantValue) {
 		return nil
 	}

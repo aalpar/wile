@@ -226,7 +226,6 @@ func PrimMagnitude(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimAngle implements the angle primitive.
 // PrimAngle implements R7RS §6.2.6 angle.
 //
 // The five real kinds used to be hand-unrolled here, one arm each, and every arm

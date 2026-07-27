@@ -14,7 +14,9 @@
 
 package tokenizer
 
-// ErrorCode represents a tokenizer error classification.
+// ErrorCode is currently unused: no value is ever constructed and no error
+// carries one. TokenizerError classifies by message string instead (Is compares
+// mess).
 type ErrorCode int
 
 // TokenizerError represents an error that occurred during tokenization.

@@ -197,9 +197,11 @@ func (p *NativeError) EqualTo(v Value) bool {
 	return Equal(p, v)
 }
 
-// EqualComponents compares the scalar fields directly and pushes the irritant
-// lists for Equal to descend. Irritants are arbitrary Scheme values, so an
-// irritant graph can cycle back to the error object itself — reachable from
+// EqualComponents compares message, kind and the wrapped Go error directly, and
+// pushes the irritant lists for Equal to descend. Raise-site state
+// (sourceLocation, stackTraceVal) is deliberately not compared: it records where
+// an object was raised, not what it is. Irritants are arbitrary Scheme values,
+// so an irritant graph can cycle back to the error object itself — reachable from
 // pure R7RS with error + guard + set-car!. Descending here rather than
 // re-entering Equal is what lets the visited set close that cycle; comparing
 // the irritants inline allocated a fresh visited set per level and overflowed

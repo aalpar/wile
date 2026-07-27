@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package eval provides eval and environment primitives.
 package eval
 
 import (
@@ -22,7 +21,7 @@ import (
 
 // Extension is the eval extension.
 var Extension = registry.NewDescribedExtension("eval",
-	"Code evaluation: eval, load, include, macroexpand.",
+	"Code evaluation: eval, load, environment constructors, expand/expand-once, compile, syntax-local operations.",
 	AddToRegistry)
 
 // Builder aggregates all eval registration functions.

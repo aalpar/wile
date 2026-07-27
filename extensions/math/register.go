@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package math provides transcendental math functions.
-//
 //nolint:revive // package name conflicts with stdlib
 package math
 
@@ -185,11 +183,11 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeReal},
 		{Name: "magnitude", ParamCount: 1, Impl: PrimMagnitude,
-			Doc: "Returns the magnitude (absolute value) of Z. For real numbers, equivalent to abs, and preserves exactness: (magnitude 5) => 5, (magnitude 3/4) => 3/4. Contrast angle, which is always inexact.", ParamNames: []string{"z"}, Category: "math",
+			Doc: "Returns the magnitude (absolute value) of Z. For real numbers, equivalent to abs, and preserves exactness: (magnitude 5) => 5, (magnitude 3/4) => 3/4.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeReal},
 		{Name: "angle", ParamCount: 1, Impl: PrimAngle,
-			Doc: "Returns the angle (argument) of Z in radians, always as an inexact real (flonum). For positive reals the result is 0.0 (not exact 0); for negative reals it is pi (3.141592653589793). This is asymmetric with magnitude, which preserves exactness for exact real arguments; R7RS leaves the exactness of angle unspecified, so the inexact result is conforming.", ParamNames: []string{"z"}, Category: "math",
+			Doc: "Returns the angle (argument) of Z in radians. For a positive real the result is exact 0; for a negative real (including -0.0) it is the inexact pi. It is an error to take the angle of an exact zero, which has no direction; (angle +nan.0) is +nan.0.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeFlonum},
 	}, registry.PhaseSetRuntime)

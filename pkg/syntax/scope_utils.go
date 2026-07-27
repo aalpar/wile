@@ -18,7 +18,7 @@ import "github.com/aalpar/wile/pkg/values"
 
 // Scope-set primitives are defined in package values (the empty-list
 // duality merge — see values/scope.go). Wrapper functions keep the
-// internal/syntax import surface unchanged for existing callers; the
+// pkg/syntax import surface unchanged for existing callers; the
 // implementations live with the Scope type they operate on.
 
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
@@ -61,7 +61,8 @@ func EmptyScopes() ScopeSet {
 }
 
 // FlipScopeInSet toggles the presence of a scope in a set.
-// This is the core operation for syntax-local-introduce.
+// It is the set-level half of FlipScope, whose only intended consumer
+// (syntax-local-introduce) is not wired; see FlipScope.
 func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
 	return values.FlipScopeInSet(scopes, target)
 }
@@ -146,8 +147,10 @@ func mapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 
 // FlipScope toggles the presence of a scope on a syntax object.
 // Returns a new syntax object with the scope flipped.
-// This is used by syntax-local-introduce to make introduced identifiers
-// behave as if they came from the macro use site.
+// Intended for syntax-local-introduce, which is currently NOT wired: the
+// expander context never carries an introduction scope, so that primitive
+// raises werr.ErrNotImplemented and this function has no live production
+// caller.
 func FlipScope(stx SyntaxValue, scope *Scope) SyntaxValue {
 	if stx == nil || scope == nil {
 		return stx
@@ -185,10 +188,10 @@ func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
 
 // AddScopeToSyntax adds a scope to a syntax object.
 // Returns a new syntax object with the scope added.
-// This is used by syntax-local-identifier-as-binding to mark identifiers
-// as binding sites.
-// Only symbols and pairs receive scopes; self-evaluating literals
-// (SyntaxObject) are returned unchanged.
+// Symbols, pairs, and vectors receive the scope; self-evaluating literals
+// (SyntaxObject) and other types are returned unchanged.
+// Used by the binding-form expanders (let, letrec, lambda, let-syntax,
+// include).
 func AddScopeToSyntax(stx SyntaxValue, scope *Scope) SyntaxValue {
 	if stx == nil || scope == nil {
 		return stx

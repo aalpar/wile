@@ -395,8 +395,8 @@ func PrimLibraryDescription(mc machine.CallContext) error {
 }
 
 // PrimApropos implements (apropos pattern).
-// Returns a sorted list of symbols whose name, doc, or category contains
-// the pattern as a case-insensitive substring. Searches all documentation
+// Returns a sorted list of symbols whose name, doc, category, or keywords
+// contain the pattern as a case-insensitive substring. Searches all documentation
 // sources: primitives, binding specs, doc entries, environment bindings,
 // loaded libraries, and unloaded library exports.
 func PrimApropos(mc machine.CallContext) error {
@@ -537,9 +537,9 @@ func PrimRegisteredPrimitives(mc machine.CallContext) error {
 	result := make([]values.Value, len(prims))
 	for i := range prims {
 		// Copy the registration into a heap-allocated value so the
-		// OpaqueValue payload is stable — reg.Primitives() returns a
-		// defensive copy, but we still want a stable pointer identity
-		// across multiple calls for the same index.
+		// OpaqueValue payload does not alias reg.Primitives()'s backing
+		// array. Identity is per-call: two calls yield non-eq? specs for
+		// the same index.
 		r := prims[i]
 		result[i] = values.NewOpaqueValue(primitiveSpecTag, &r)
 	}

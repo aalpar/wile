@@ -118,7 +118,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamCount: 3,
 			IsVariadic: true,
 			Impl:       primUcsRangeToCharSet,
-			Doc:        "Returns a char-set containing codepoints in the half-open range [LO, HI). Optional ERROR? (default #t) controls handling of codepoints exceeding 0x10FFFF: any non-#f value (Scheme-truthy) raises an error, #f silently clips. Optional BASE-CS is unioned into the result. (SRFI-14)",
+			Doc:        "Returns a char-set containing codepoints in the half-open range [LO, HI). Optional ERROR? (default #t) controls out-of-range codepoints at either bound (negative LO, or HI above 0x10FFFF+1): any non-#f value (Scheme-truthy) raises an error, #f silently clips. A malformed range (LO > HI) always raises, regardless of ERROR?. Optional BASE-CS is unioned into the result. (SRFI-14)",
 			ParamNames: []string{"lo", "hi", "rest"},
 			Category:   "char-sets",
 			Keywords:   []string{"ucs", "codepoint", "range", "char-set", "srfi-14"},

@@ -25,8 +25,9 @@ import (
 var ErrTimerExpired = werr.NewStaticError("timer expired")
 
 // ErrTimerInterrupt signals that a wall-clock timer has expired.
-// It propagates through the Go error return path and is handled by
-// the with-timeout primitive or (as a safety net) by RunWithEscapeHandling.
+// It propagates through the Go error return path and is resolved by the nearest
+// driver (RunResumable at the top level, or RunWithinBoundary in a surviving
+// sub-context), which locates the with-timeout's finalizer frame via FindPrompt(Tag).
 //
 // This is a signal, not an exception. It is NOT caught by Scheme exception
 // handlers — only by the VM infrastructure that installed the timer.

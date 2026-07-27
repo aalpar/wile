@@ -39,7 +39,10 @@ type Edge struct {
 // unreachable from source have count 0.
 //
 // Returns nil if the subgraph reachable from `source` contains a cycle.
-// Cycles unreachable from `source` are ignored.
+// Cycles unreachable from `source` are ignored. nil is also returned for
+// invalid input: numNodes <= 0, an out-of-range source, or any edge endpoint
+// outside [0, numNodes). A nil result therefore does not by itself
+// distinguish "cyclic" from "bad input".
 //
 // Algorithm: DFS from source produces a reverse-postorder, which is a valid
 // topological order of the reachable subgraph. Cycle detection via gray-state

@@ -29,9 +29,10 @@ var (
 	ErrNotABox          = NewTypeSentinel("box")
 	ErrNotAnOpaqueValue = NewTypeSentinel("opaque value")
 	ErrNotAByte         = NewTypeSentinel("byte")
-	// "binary" matches the user-facing terminology used in R7RS and
-	// values/value_type.go; the var name keeps "Byte" for historical
-	// reasons but the message phrase tracks the rest of the codebase.
+	// ErrNotAByteInputPort and ErrNotAByteOutputPort use "binary" to match the
+	// user-facing terminology in R7RS and values/value_type.go; the var names
+	// keep "Byte" for historical reasons but the message phrases track the
+	// rest of the codebase.
 	ErrNotAByteInputPort      = NewTypeSentinel("binary input port")
 	ErrNotAByteOutputPort     = NewTypeSentinel("binary output port")
 	ErrNotATextualPort        = NewTypeSentinel("textual port")
@@ -109,9 +110,10 @@ var (
 	ErrNotAnUncaughtException = NewTypeSentinel("uncaught-exception")
 	ErrNotATime               = NewTypeSentinel("time")
 	ErrNotARWMutex            = NewTypeSentinel("rw-mutex")
-	// "once" is pronounced /wuns/ — letter rule would give "an once", but
-	// the consonant /w/ sound calls for "a". Pass-through preserves the
-	// correct article.
+	// ErrNotAOnce passes an explicit article because "once" is pronounced
+	// /wuns/: the letter rule would give "an once", but the consonant /w/
+	// sound calls for "a". The "a "-prefix pass-through in NewTypeSentinel
+	// preserves it.
 	ErrNotAOnce                = NewTypeSentinel("a once")
 	ErrNotAnAtomic             = NewTypeSentinel("atomic")
 	ErrPortClosed              = NewStaticError("port is closed")

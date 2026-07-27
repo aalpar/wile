@@ -22,7 +22,7 @@ import (
 func addEquality(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "eq?", ParamCount: 2, Impl: PrimEqQ,
-			Doc: "Returns #t if OBJ1 and OBJ2 are the same object (pointer identity). Reliable for symbols, booleans, and the empty list.\n\nExamples:\n  (eq? 'a 'a)           => #t\n  (eq? '() '())         => #t\n  (eq? (list 1) (list 1))  => #f", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
+			Doc: "Returns #t if OBJ1 and OBJ2 are the same object: pointer identity for all types except symbols, which compare by name (R7RS §6.5). Reliable for symbols, booleans, and the empty list.\n\nExamples:\n  (eq? 'a 'a)           => #t\n  (eq? '() '())         => #t\n  (eq? (list 1) (list 1))  => #f", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean,
 			Keywords: []string{"identity", "pointer equality", "same object"}},
 		{Name: "eqv?", ParamCount: 2, Impl: PrimEqvQ,

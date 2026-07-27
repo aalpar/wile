@@ -137,7 +137,7 @@ func PrimMakeThread(cc machine.CallContext) error {
 }
 
 // PrimThreadName returns the thread's name
-// (thread-name thread) -> string or symbol
+// (thread-name thread) -> string
 var PrimThreadName = helpers.MakeUnaryAccessor(werr.ErrNotAThread, "thread-name", func(thread *values.Thread) values.Value {
 	return values.NewString(thread.Name())
 })
@@ -325,7 +325,7 @@ func PrimMakeMutex(mc machine.CallContext) error {
 }
 
 // PrimMutexName returns the mutex's name
-// (mutex-name mutex) -> string or symbol
+// (mutex-name mutex) -> string
 var PrimMutexName = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-name", func(mutex *values.Mutex) values.Value {
 	return values.NewString(mutex.Name())
 })
@@ -351,7 +351,9 @@ var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state",
 
 // PrimMutexLock acquires the mutex
 // (mutex-lock! mutex [timeout [thread]]) -> boolean
-// Returns #t if acquired, #f if timeout
+// Returns #t if acquired, #f if timeout. Acquiring a mutex abandoned by a
+// terminated owner returns #t and additionally signals an abandoned-mutex
+// exception.
 func PrimMutexLock(mc machine.CallContext) error {
 	mutex, err := helpers.RequireArg[*values.Mutex](mc, 0, werr.ErrNotAMutex, "mutex-lock!")
 	if err != nil {
@@ -493,7 +495,7 @@ func PrimMakeConditionVariable(mc machine.CallContext) error {
 }
 
 // PrimConditionVariableName returns the condition variable's name
-// (condition-variable-name cv) -> string or symbol
+// (condition-variable-name cv) -> string
 var PrimConditionVariableName = helpers.MakeUnaryAccessor(werr.ErrNotAConditionVariable, "condition-variable-name", func(cv *values.ConditionVariable) values.Value {
 	return values.NewString(cv.Name())
 })

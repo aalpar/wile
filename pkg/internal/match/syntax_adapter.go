@@ -40,7 +40,8 @@ import (
 )
 
 // FreeIdResolver provides free identifier resolution information for
-// template expansion hygiene. Implemented by machine.FreeIdResolution.
+// template expansion hygiene. Implemented by
+// machine/compilation.FreeIdResolution.
 //
 // In ExpandOptions.FreeIds, a non-nil FreeIdResolver carries binding
 // information from macro definition time. A nil map value is treated
@@ -56,7 +57,8 @@ type FreeIdResolver interface {
 // BindingChecker is an interface for checking if a symbol has a lexical binding.
 // This is used for R7RS auxiliary syntax hygiene: literals like => and else
 // should not match when the identifier has been locally bound.
-// Implemented by machine package to avoid circular imports.
+// Implemented by machine/compilation (*envBindingChecker) to avoid circular
+// imports.
 type BindingChecker interface {
 	// HasBinding checks if sym with the given scopes has a lexical binding.
 	// Returns true if the symbol is bound (to a variable, macro, etc.).
@@ -89,10 +91,10 @@ type BindingChecker interface {
 // This implements R7RS's requirement that auxiliary syntax like => and else
 // be treated as regular expressions when locally shadowed.
 //
-// R7RS Binding Check: For full R7RS compliance (§4.3.2), we also check if
-// the input identifier has a lexical binding. If it does and the pattern
-// literal doesn't, they don't match. This is handled via the bindingChecker
-// field set during Match().
+// R7RS Binding Check: For full R7RS compliance (§4.3.2), we also compare the
+// input identifier's binding with the pattern literal's. This is handled via
+// the bindingChecker field, which only MatchWithBindingChecker sets; Match()
+// passes nil and so skips the binding check.
 type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                          // Custom ellipsis identifier (default "...")
@@ -295,10 +297,11 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 // This function returns true if the input symbol refers to the same binding
 // as the pattern literal. It performs two checks:
 //
-// 1. Binding check (R7RS compliant): If a binding checker is available, we check
-// if the input has a lexical binding. Pattern literals (like => and else) are
-// by definition not bound in the macro definition. If the input IS bound
-// (e.g., via let or lambda), it doesn't match the unbound pattern literal.
+// 1. Binding check (R7RS compliant): If a binding checker is available, compare
+// the input's binding with the pattern literal's binding by pointer identity.
+// They match only when both resolve to the same binding, or both are unbound.
+// This is an identity comparison, not a boundness test: after library import,
+// auxiliary syntax like => is bound on both sides.
 //
 // 2. Scope check (for let-syntax): We also check rebinding scopes from
 // let-syntax/letrec-syntax. If input has rebinding scopes that pattern doesn't,

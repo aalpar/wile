@@ -47,7 +47,7 @@ import (
 //  3. Pattern variables are bound as local variables in the body's scope
 //  4. If fender exists, it's evaluated as a guard condition
 func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
+	// expr is the CDR of the form (keyword stripped by syntaxCompiler in register.go).
 	// So expr = (input-expr (literals) clause ...)
 	argsPair, err := formArgs(expr, "syntax-case", "expression and clauses")
 	if err != nil {
@@ -95,7 +95,8 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "syntax-case: error compiling input expression"))
 	}
 
-	// Store input in global for clause matching (not on eval stack to avoid interference with body procedure calls)
+	// Store input in the per-context syntax-case state for clause matching (not
+	// on eval stack to avoid interference with body procedure calls)
 	p.AppendOperations(NewOperationStoreSyntaxCaseInput())
 
 	// Collect jump addresses that need to be patched after all clauses are compiled
@@ -159,7 +160,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		p.patchBranchTarget(patch.opIndex, endIndex)
 	}
 
-	// Clear the syntax-case input global
+	// Clear the input from the per-context syntax-case state
 	p.AppendOperations(NewOperationClearSyntaxCaseInput())
 
 	return nil
@@ -227,18 +228,19 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Generate code:
 	// 1. Load compiled clause from literals
-	// 2. Peek input from eval stack
-	// 3. Call match operation (leaves match result in value register)
-	// 4. Branch on match failure to next clause
-	// 5. If fender, evaluate and branch on false
-	// 6. Bind pattern variables
-	// 7. Execute body
-	// 8. Jump to end
+	// 2. Call match operation (leaves match result in value register)
+	// 3. Branch on match failure to next clause
+	// 4. Bind pattern variables
+	// 5. If fender, evaluate and branch on false. The fender is an expression
+	//    over the pattern variables, so it must follow the binding step.
+	// 6. Execute body
+	// 7. Jump to end
 
 	// Load the clause
 	p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(clauseIdx))
 
-	// Match operation: takes clause from value reg, peeks input from eval stack
+	// Match operation: takes clause from value reg, reads the input from the
+	// per-context syntax-case state.
 	// Result (#t or #f) goes into value register
 	p.AppendOperations(NewOperationSyntaxCaseMatch())
 
@@ -350,5 +352,4 @@ func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars map[st
 	return childEnv
 }
 
-// SyntaxCaseClause is defined in machine/syntax_bridge_types.go
-// (shared between compiler and runtime).
+// SyntaxCaseClause is defined in syntax_bridge_types.go in this package.

@@ -27,7 +27,7 @@ var (
 
 // ResolvedRef is the type for a pre-resolved binding stored on a SyntaxSymbol.
 // The concrete type is always *environment.GlobalIndex; this interface exists
-// solely to break the circular import between internal/syntax and environment.
+// solely to break the circular import between pkg/syntax and environment.
 type ResolvedRef interface {
 	values.Value
 }
@@ -60,6 +60,8 @@ func NewSyntaxSymbolForSymbol(sym *values.Symbol, sctx *SourceContext) *SyntaxSy
 }
 
 // NewSyntaxSymbolForSyntaxSymbol creates a new syntax symbol with a different source context.
+// The source symbol's ResolvedBinding is NOT carried over; re-apply it with
+// WithResolvedBinding if the caller needs it.
 func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *SyntaxSymbol {
 	q := &SyntaxSymbol{
 		Sym:        sym.Sym,
@@ -106,8 +108,9 @@ func (p *SyntaxSymbol) WithResolvedBinding(binding ResolvedRef) *SyntaxSymbol {
 
 // Scopes returns the scopes of this syntax symbol.
 // Always returns a non-nil slice (empty when the symbol has no scopes).
-// This guarantees that callers passing Scopes() to environment.GetBinding
-// trigger scope checking rather than the "match any" nil-scopes path.
+// Callers wrap the result in ScopesOf to form the ScopeSet query taken by
+// environment.GetBinding / GetLocalIndex; ScopesOf(nil) is the empty set,
+// never the wildcard (that is AllScopes).
 func (p *SyntaxSymbol) Scopes() []*Scope {
 	if p.SourceContext() == nil {
 		return []*Scope{}

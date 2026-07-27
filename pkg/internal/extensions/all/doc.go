@@ -17,7 +17,8 @@
 //
 // # Records (SRFI-9 style)
 //
-//   - make-record-type, record-type?, record?, record-type
+//   - make-record-type, make-opaque-record-type
+//   - record-type?, record?, record-type
 //   - record-constructor, record-predicate
 //   - record-accessor, record-modifier
 //
@@ -28,7 +29,6 @@
 // # Extended String Operations
 //
 //   - string-copy!, string-fill!
-//   - string-map, string-for-each
 //   - string-ci=?, string-ci<?, string-ci>?, string-ci<=?, string-ci>=?
 //   - string-upcase, string-downcase, string-foldcase
 //

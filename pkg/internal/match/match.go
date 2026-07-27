@@ -16,12 +16,13 @@ package match
 
 // match.go implements the pattern matching VM for syntax-rules.
 //
-// This is Layer 1 of the macro system - the unhygienic core that operates
-// on raw values.wrt types. It knows nothing about syntax objects or scopes;
-// those are handled by the syntax adapter layer (syntax_adapter.go).
+// This is Layer 1 of the macro system - the bytecode matching core. It operates
+// on syntax.SyntaxValue throughout, but leaves binding-level hygiene (literal
+// and binding comparison, intro scopes) to the syntax adapter layer
+// (syntax_adapter.go), which supplies the LiteralMatcher callback.
 //
 // The VM uses two stacks:
-//   - valueStack: Tracks position in the input tree during matching
+//   - syntaxStack: Tracks position in the input tree during matching
 //   - captureStack: Tracks captured bindings, with nesting for ellipsis
 //
 // Execution Model:
@@ -325,7 +326,10 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 							// Input is not a symbol, can't match literal
 							return ErrNotAMatch
 						}
-						// Check if input symbol key matches (shadowed symbols have $shadowed$ suffix)
+						// Same spelling is required before the binding check.
+						// This is stricter than R7RS 4.3.2, which lets two
+						// differently-spelled identifiers match when they share
+						// a binding; a known deviation, not a shadowing marker.
 						if inputSym.Key() != symKey {
 							return ErrNotAMatch
 						}

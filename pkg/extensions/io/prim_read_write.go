@@ -30,6 +30,11 @@ import (
 const (
 	// MaxReadStringBytes is the maximum memory that read-string can allocate
 	// for the character buffer (100 MB). Assumes 4 bytes per rune (worst case).
+	// KNOWN GAP: the guard in PrimReadString multiplies k by 4, which overflows
+	// int64 for k >= 2^61 and wraps non-positive, so the cap is not enforced
+	// across the whole input domain and such a k reaches the make([]rune, 0, k).
+	// The sibling guard in internal/extensions/all/prim_strings.go subtracts
+	// instead of multiplying and has no such gap.
 	MaxReadStringBytes = 100 * 1024 * 1024 // 100 MB
 )
 

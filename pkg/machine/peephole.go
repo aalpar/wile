@@ -22,11 +22,16 @@ package machine
 // Superinstruction formation (Ertl & Gregg 2003). Fusing adjacent
 // instructions reduces dispatch overhead in the Run() switch loop.
 //
-//	Fusions:
-//	  Load* + Push  → Push*       (eliminates 1 dispatch)
-//	  Pull + Apply  → PullApply   (eliminates 1 dispatch)
-//	  SaveCont + PushCachedBinding ... PullApply
-//	              → CallForeignCached  (eliminates ~5 dispatches)
+//	Four EditPlan passes, each applied before the next matches on its output:
+//	  1. markDeadLoadVoidEdits, fuseLoadPush, fusePullApply
+//	       Load* + Push  → Push*       (eliminates 1 dispatch)
+//	       Pull + Apply  → PullApply   (eliminates 1 dispatch)
+//	  2. fuseCallForeignCached
+//	       PushCachedBinding ... PullApply → CallForeignCached
+//	         (SaveCont retained; eliminates ~5 dispatches)
+//	       or, for a promoted primitive, one of the 34 promoted opcodes
+//	  3. fuseCallGeneric → CallLocal / CallCachedBinding
+//	  4. fusePromotedCompoundArgs (gated on a preceding OpReleaseEnvFrame)
 //
 //	Cost model: each fusion saves one (fetch opcode + switch branch).
 //	  In switch-dispatch interpreters, dispatch dominates execution time.
@@ -90,8 +95,9 @@ func writesValueRegister(op OpCode) bool {
 	return opcodeTable[op].writesValue
 }
 
-// markDeadLoadVoidEdits scans code[0..len-2] and adds Delete edits for
-// LoadVoid instructions immediately followed by a load-family opcode.
+// markDeadLoadVoidEdits scans code[0..len-2] and adds Delete edits for LoadVoid
+// instructions immediately followed by an opcode that unconditionally writes the
+// value register (opcodeTable.writesValue).
 func markDeadLoadVoidEdits(code []Instruction, plan *EditPlan) {
 	for i := 0; i < len(code)-1; i++ {
 		if code[i].Op == OpLoadVoid && writesValueRegister(code[i+1].Op) {
@@ -108,10 +114,11 @@ var loadToFusedPush = [opCount]OpCode{
 	OpLoadCachedBinding: OpPushCachedBinding,
 }
 
-// fuseLoadPush scans for LoadLiteral+Push, LoadGlobal+Push, LoadLocal+Push
-// pairs and adds Replace edits that fuse them into single PushLiteral,
-// PushGlobal, or PushLocal instructions. The fused instruction inherits
-// the source attribution from the Load instruction.
+// fuseLoadPush scans for LoadLiteral+Push, LoadGlobal+Push, LoadLocal+Push, and
+// LoadCachedBinding+Push pairs and adds Replace edits that fuse them into single
+// PushLiteral, PushGlobal, PushLocal, or PushCachedBinding instructions. The
+// fused instruction inherits the source attribution from the Load instruction.
+// PushCachedBinding is the input every later call-fusion pass matches on.
 //
 // A Load+Push pair is NOT fused if the Push is a branch target, because
 // the Push may be a convergence point for multiple control flow paths
@@ -168,8 +175,10 @@ func branchTargets(code []Instruction) []bool {
 }
 
 // isPushOp returns true for opcodes that push a value onto the eval stack
-// without side effects relevant to call fusion. Used by fuseCallForeignCached
-// to identify argument-pushing instructions between the callee load and apply.
+// without side effects relevant to call fusion. Used by every call-fusion pass
+// (fuseCallForeignCached, fuseCallGeneric, fusePromotedCompoundArgs, and
+// walkCallArgs) to identify argument-pushing instructions between the callee
+// load and apply.
 func isPushOp(op OpCode) bool {
 	switch op {
 	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding:
@@ -198,7 +207,8 @@ func isPushOp(op OpCode) bool {
 // isolation), replace PullApply with OpCallForeignCached(idx). The runtime
 // restores the continuation after the call to recover the caller's state.
 //
-// Promoted primitives (eq?, vector?, vector-ref) delete both SaveCont and
+// Promoted primitives (the 17 names in promotedOpForName: predicates, car/cdr,
+// vector-ref, cons, and 2-arg arithmetic/comparison) delete both SaveCont and
 // PushCachedBinding because they use fixed Pop() counts instead of Drain().
 //
 // Tail pattern (no preceding SaveContinuation):

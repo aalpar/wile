@@ -195,9 +195,10 @@ func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, cod
 	return evalSchemeInEnvCore(env, code)
 }
 
-// NewMinimalNamespace creates a minimal namespace with core special form
-// bindings registered (if, lambda, quote, etc.). Useful for unit tests
-// that need compilation without a full bootstrap.
+// NewMinimalNamespace registers core special-form bindings (if, lambda, quote,
+// etc.) into env and returns env itself: it mutates its argument rather than
+// constructing a new frame. Panics if phase-handler registration fails.
+// Useful for unit tests that need compilation without a full bootstrap.
 func NewMinimalNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFrame {
 	for _, name := range []string{
 		"if", "lambda", "quote", "quasiquote", "define",

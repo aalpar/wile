@@ -67,7 +67,7 @@ func PrimCdr(mc machine.CallContext) error {
 // core list mutation reachable from tight loops (Larceny destruc/maze), and the
 // factory's extra indirect call measured ~2% slower on a set-car!-dominated
 // microbenchmark. Kept as an explicit func per the FACTORY-AUDIT hot-path
-// exclusion. See ArgShape unification notes.
+// exclusion.
 func PrimSetCar(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-car!")
 	if err != nil {

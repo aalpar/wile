@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package threads provides SRFI-18 threading primitives.
 package threads
 
 import (
@@ -22,7 +21,7 @@ import (
 
 // Extension is the threads extension.
 var Extension = registry.NewDescribedExtension("threads",
-	"Concurrency: SRFI-18 threads, mutexes, condition variables, channels.",
+	"Concurrency: SRFI-18 threads, mutexes, condition variables, time objects.",
 	AddToRegistry)
 
 // Builder aggregates all threading registration functions.
@@ -68,11 +67,11 @@ func addThreads(r *registry.Registry) error {
 			Doc: "Voluntarily yields the current thread to the Go scheduler.", Category: "threads",
 			ReturnType: values.TypeVoid},
 		{Name: "thread-sleep!", ParamCount: 1, Impl: PrimThreadSleep,
-			Doc: "Suspends the current thread for TIMEOUT duration. Accepts time objects, integers, or floats (seconds).", ParamNames: []string{"timeout"}, Category: "threads",
+			Doc: "Suspends the current thread. A number is a duration in seconds; a time object is an absolute wake-up instant (already-past times return immediately).", ParamNames: []string{"timeout"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "thread-terminate!", ParamCount: 1, Impl: PrimThreadTerminate,
-			Doc: "Terminates THREAD. Abandoned mutexes are automatically released.", ParamNames: []string{"thread"}, Category: "threads",
+			Doc: "Terminates THREAD. Mutexes it still owns are marked abandoned, so a later mutex-lock! on them acquires the mutex and signals an abandoned-mutex exception.", ParamNames: []string{"thread"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "thread-join!", ParamCount: 2, IsVariadic: true, Impl: PrimThreadJoin,
@@ -112,7 +111,7 @@ func addMutexes(r *registry.Registry) error {
 			Doc: "Returns the state of MUTEX: the symbol not-owned, abandoned, or the owning thread.", ParamNames: []string{"mutex"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "mutex-lock!", ParamCount: 2, IsVariadic: true, Impl: PrimMutexLock,
-			Doc: "Locks MUTEX, blocking until acquired. Optional TIMEOUT and owner (thread or #f for unowned).", ParamNames: []string{"mutex", "timeout"}, Category: "mutexes",
+			Doc: "Locks MUTEX, blocking until acquired. Optional TIMEOUT and owner (thread or #f for unowned). Acquiring a mutex abandoned by a terminated owner returns #t and additionally signals an abandoned-mutex exception.", ParamNames: []string{"mutex", "timeout"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeBoolean},
 		{Name: "mutex-unlock!", ParamCount: 2, IsVariadic: true, Impl: PrimMutexUnlock,

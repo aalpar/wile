@@ -59,6 +59,9 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 // let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
 // letrec:  OpPushEnv | <inits> Push... | StoreLocal(reverse) | body | OpPopEnv
 // letrec*: OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
+//
+// The trailing OpPopEnv is emitted only in non-tail position; a tail let leaves
+// the frame for the enclosing return to unwind.
 func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedLet)
 	n := len(v.Bindings)

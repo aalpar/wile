@@ -45,7 +45,9 @@ type ValidatorFunc func(ctx context.Context, env *environment.EnvironmentFrame, 
 // forms → validate import cycle. Type safety is restored at registration
 // time in validate/register.go.
 //
-// Compiler dispatch lives in machine/compilation (typed, no [any]).
+// The Compile field is likewise [any]-typed, for the same reason: its concrete
+// type lives in machine/compilation, which forms cannot import. The comma-ok
+// assertion back to CompilerFunc happens at the dispatch site there.
 type FormSpec struct {
 	// Name is the keyword that triggers this form (e.g., "if", "lambda").
 	Name string
@@ -64,7 +66,7 @@ type FormSpec struct {
 
 // FormRegistry is a per-engine set of special-form specs. The package-level
 // default (defaultRegistry) backs the delegator functions and the built-in
-// R7RS forms; a dialect forks a Clone at engine origin (later tasks).
+// R7RS forms; a dialect forks a Clone at engine origin (see wile/engine.go).
 type FormRegistry struct {
 	specs map[string]*FormSpec
 }
@@ -202,7 +204,7 @@ func Verify() error {
 // RegistryFor returns the per-engine FormRegistry reachable from env, or the
 // package default when env is nil, has no Namespace, or has no registry set.
 // This guard absorbs every nil-env / fresh-namespace caller with no signature
-// change at the readers (wired in the next task).
+// change at the readers.
 func RegistryFor(env *environment.EnvironmentFrame) *FormRegistry {
 	if env == nil {
 		return defaultRegistry

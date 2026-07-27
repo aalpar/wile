@@ -21,7 +21,7 @@ import (
 
 // Extension is the process execution extension.
 var Extension = registry.NewDescribedExtension("process",
-	"OS processes: command execution, exit, environment variables.",
+	"OS processes: shell command execution, subprocess spawn/wait/kill with piped stdio.",
 	AddToRegistry)
 
 // Builder aggregates all process registration functions.

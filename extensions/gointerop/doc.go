@@ -17,20 +17,19 @@
 // # Read-Write Mutexes
 //
 //   - make-rw-mutex, rw-mutex?
-//   - rw-mutex-lock!, rw-mutex-unlock!
-//   - rw-mutex-rlock!, rw-mutex-runlock!
+//   - rw-mutex-read-lock!, rw-mutex-read-unlock!
+//   - rw-mutex-write-lock!, rw-mutex-write-unlock!
+//   - rw-mutex-try-read-lock!, rw-mutex-try-write-lock!
 //
 // # Once
 //
 //   - make-once, once?
-//   - once-do!
+//   - once-do!, once-done?
 //
 // # Atomics
 //
 //   - make-atomic, atomic?
-//   - atomic-load, atomic-store!, atomic-swap!, atomic-cas!
-//   - make-atomic-int64, atomic-int64?
-//   - atomic-int64-load, atomic-int64-store!, atomic-int64-add!
+//   - atomic-load, atomic-store!, atomic-swap!, atomic-compare-and-swap!
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.
 package gointerop

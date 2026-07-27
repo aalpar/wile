@@ -192,7 +192,9 @@ func validateNumericSpecs(specs [numKinds]NumericTypeSpec, filled [numKinds]bool
 // NumberToComplex128Lossy). NumberToFloat64/NumberToComplex128Lossy are also
 // reached from the IEEE 754 special-value guard inside the arithmetic
 // dispatch closures; those fire only when a Float operand is Inf/NaN, not
-// on every arithmetic op.
+// on every arithmetic op. They are also reached unconditionally by the
+// real ⊕ complex dispatch closures (promotion.go), which convert the real
+// receiver on every such operation.
 func LookupNumericSpec(kind NumericKind) *NumericTypeSpec {
 	if int(kind) >= int(numKinds) {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,

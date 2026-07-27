@@ -31,9 +31,11 @@ import (
 // thunk finishes, the thunk is suspended and handler is called with a
 // composable continuation that can resume the computation.
 //
-// The sub-context pattern follows call-with-continuation-barrier
-// (prim_barrier.go): a fresh sub-context isolates the thunk's execution
-// while inheriting the parent's environment and winding stack.
+// The thunk runs inline on the live continuation chain under a finalizer prompt
+// frame (RunBodyUnderTimer), mirroring call-with-continuation-barrier
+// (prim_barrier.go): a continuation captured inside the thunk spans the
+// finalizer frame and the rest of the program rather than being truncated at a
+// sub-context boundary.
 func PrimWithTimeout(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "with-timeout")
 	if err != nil {

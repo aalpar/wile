@@ -26,9 +26,11 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// errHalt is the internal VM sentinel returned by OperationRestoreContinuation
-// when mc.cont == nil (i.e., no more frames to pop — execution is complete).
-// Run() catches this and returns nil, so callers never see it.
+// errHalt is the internal VM sentinel an InlinedOperation may return from the
+// OpComplex side table to stop execution early. Run catches it in the OpComplex
+// arm and returns nil, so callers never see it. (The inline
+// OpRestoreContinuation case does not use it: it returns nil directly when
+// mc.cont == nil.)
 var errHalt = werr.NewStaticError("machine halt: no more operations to run")
 
 // contextCheckMask gates how often the VM loop checks ctx.Done().
@@ -68,15 +70,20 @@ type MachineContext struct {
 	vmState
 	cont      *MachineContinuation // current continuation
 	expansion *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
-	// capturedMarks is set when this context runs a resumed call/cc continuation
-	// (isolatedMarks): it is the capture-time reachable-marks snapshot, consulted by
-	// findParameterInMarks at the isolatedMarks break so the continuation's outer
-	// parameter/handler marks (from above the sub-context boundary it was captured
-	// behind) survive resume. See collectReachableMarks / SnapshotReachableMarksInto.
+	// capturedMarks has two producers, both pairing it with isolatedMarks so that
+	// findParameterInMarks can consult it at the isolatedMarks break instead of
+	// walking parentMC. ReinstallSegment copies the segment's capture-time
+	// reachable-marks snapshot (comp.capturedMarks) so a resumed continuation's
+	// outer parameter/handler marks survive resume. unwindStackTo and RewindTo
+	// copy frame.entryMarks into the dynamic-wind thunk sub-context, which is the
+	// wind frame's entry mark environment, not a call/cc snapshot.
+	// See collectReachableMarks / SnapshotReachableMarksInto.
 	capturedMarks []markEntry
-	debugger      *Debugger            // optional debugger for breakpoints and stepping
-	parentMC      *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
-	escapeCont    *MachineContinuation // escape continuation for sub-contexts: where to continue after sub-context completes
+	debugger      *Debugger       // optional debugger for breakpoints and stepping
+	parentMC      *MachineContext // parent context for sub-contexts, enables call/cc escape tracking
+	// escapeCont is vestigial: it is propagated into sub-contexts and threads but
+	// never consulted. Nothing resumes from it.
+	escapeCont *MachineContinuation
 	// barrierValid moved to vmState so it rides the continuation chain (crossing
 	// detection survives capture/re-entry); BarrierValid()/SetBarrierValid promote from there.
 	counters VMCounters // performance counters (plain uint64, single-goroutine)
@@ -85,11 +92,14 @@ type MachineContext struct {
 	// The numeric half (threadID) lives in vmState and propagates into
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
-	thread        *values.Thread
-	maxCallDepth  int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
-	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
-	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
-	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
+	thread       *values.Thread
+	maxCallDepth int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
+	maxStackSize uint64           // 0 = unlimited (default), otherwise max eval stack entries
+	restArgBuf   values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
+	// isolatedMarks, when true, stops findParameterInMarks from walking parentMC.
+	// Set by ReinstallSegment (from its isolate argument) and by the dynamic-wind
+	// thunk sub-contexts built in unwindStackTo and RewindTo.
+	isolatedMarks bool
 
 	// resumeGeneration counts continuation-segment reinstatements (ReinstallSegment)
 	// on this driver. raiseToHandlers snapshots it when it arms a non-continuable
@@ -332,9 +342,11 @@ func (p *MachineContext) Context() context.Context {
 //   - Resource management for long-running computations
 //
 // Run executes the VM loop using switch-dispatch with integer opcodes.
-// Hot-path operations (Wave 1-3) are inlined as switch cases; complex
-// operations (closures, macros, FFI) are dispatched via OpComplex to
-// the template's sideTable.
+// Waves 1-10 are inlined as switch cases: stack, branch, load/store, fused
+// calls, promoted primitives and arithmetic, closures, direct foreign calls.
+// The remaining complex operations (macro expansion, build-syntax,
+// syntax-case, continuation marks) are dispatched via OpComplex to the
+// template's sideTable.
 //
 // Set the context via SetContext() before calling Run().
 func (p *MachineContext) Run() error {
@@ -1398,12 +1410,8 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 // is invoked from outside, the escape error propagates up. This method catches it
 // and restores the continuation with proper dynamic-wind handling.
 //
-// For continuations captured inside sub-contexts (like dynamic-wind thunks):
-//   - Continuation: the inner state (inside the thunk)
-//   - EscapeCont: the outer continuation (after the original sub-context would have completed)
-//
-// After the inner execution completes and unwinds, if there's a pending escape
-// continuation, execution continues from there.
+// The loop resolves ErrPromptAbort, ErrResumeContinuation, ErrTimerInterrupt,
+// and recovered panics. It never consults escapeCont.
 //
 // When execution completes normally (Run returns nil), any remaining
 // frames on the winding stack are unwound (after thunks are called).

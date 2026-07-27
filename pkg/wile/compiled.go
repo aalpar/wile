@@ -25,7 +25,7 @@ import (
 // always executes using that captured environment, regardless of which Engine
 // is used to run it. Using a different Engine instance affects only that
 // Engine's own bookkeeping (for example, evaluation counters), not the
-// environment bindings or symbol interning.
+// environment bindings or syntax interning.
 //
 // CompiledCode can be run multiple times. It is not safe for concurrent
 // execution (the underlying Engine is not goroutine-safe).

@@ -70,8 +70,6 @@ func (p *SimpleToken) String() string {
 
 // Value returns the processed value of the token (e.g., with escape sequences converted).
 func (p *SimpleToken) Value() string {
-	// For string tokens, always use val (which may be empty for "")
-	// For other tokens, fall back to src if val is not set
 	return p.val
 }
 

@@ -136,6 +136,9 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // subsequent body expressions.
 //
 // errContext identifies the call site for error messages (e.g. "include", "library").
+//
+// When compiling inside a library, forms is rewritten IN PLACE to stamp each form
+// with the library scope; pass a slice you own.
 func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, errContext string) error {
 	// Flatt §3.3: when including inside a library, stamp all forms with the
 	// library scope so that bindings and references carry the same scope set

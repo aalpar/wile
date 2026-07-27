@@ -25,26 +25,13 @@
 // production callers and was deleted in favor of the method form, which
 // also handles circular structures correctly via its visited-set cache.
 //
-// # Boolean Conversion
-//
-// For implementing Scheme predicates and control flow:
-//
-//   - [BoolToBoolean]: Go bool -> Scheme #t/#f
-//   - [BooleanToBool]: Scheme #t/#f -> Go bool
-//   - [ValueToBool]: Scheme truthiness (only #f is false)
-//   - [ValueToBoolean]: coerce any value to Scheme boolean
-//
-// # Collection
-//
-//   - [AsList]: convert Go slice to proper Scheme list
-//
-// # Case-Insensitive String Utilities
-//
-// ASCII case-insensitive prefix/suffix operations for R7RS lexical syntax:
+// # String Utilities for R7RS Lexical Syntax
 //
 //   - [TrimPrefixCI]: case-insensitive strings.TrimPrefix
 //   - [TrimSuffixCI]: case-insensitive strings.TrimSuffix
-//   - [HasPrefixCI]: case-insensitive strings.HasPrefix
-//   - [HasSuffixCI]: case-insensitive strings.HasSuffix
-//   - [ToLowerASCII]: single-byte ASCII lowercase
+//   - [NormalizeExponentMarker]: fold a short float exponent marker (s/f/d/l) to 'e'
+//   - [IndexExponentMarker]: locate the first float exponent marker (e/s/f/d/l)
+//
+// Boolean conversion (BoolToBoolean and friends) lives in package values,
+// not here.
 package schemeutil

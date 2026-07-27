@@ -62,8 +62,9 @@ func validateBodySlice(
 func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
 	switch e := expr.(type) {
 	case *syntax.SyntaxPair:
-		// Empty list '() is a self-evaluating literal, not a form.
-		// R7RS §4.1.2: The empty list is a literal expression.
+		// Empty list '() is accepted here as a self-evaluating literal.
+		// R7RS §4.1.3 makes () a syntax error (a combination needs at least one
+		// subexpression); Wile deliberately admits it.
 		if e.IsEmptyList() {
 			return newLiteralExpr(e.SourceContext(), e)
 		}

@@ -29,6 +29,10 @@ import (
 // If the resolver does not implement FileEnumerator, only registry
 // libraries are returned. If reg is nil, only filesystem libraries are
 // returned.
+//
+// Two error shapes: an EnumerateFiles failure aborts with (nil, err),
+// discarding any partial result; per-path FilePathToLibraryName failures
+// are joined and returned alongside a complete list.
 func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]LibraryName, error) {
 	seen := make(map[string]bool)
 	var result []LibraryName

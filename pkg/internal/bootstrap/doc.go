@@ -23,7 +23,7 @@
 //
 // [NewNamespaceFrame] performs these steps:
 //  1. Creates a registry with core primitives
-//  2. Adds all extensions (io, files, math, eval, exceptions, threads, etc.)
+//  2. Adds all extensions (io, files, math, eval, namespace, threads, etc.)
 //  3. Creates a new Namespace with per-instance symbol interning
 //  4. Applies all primitives to the environment
 //  5. Registers syntax compilers and primitive expanders
@@ -34,7 +34,7 @@
 // [NewLibraryEnvironmentFrame] creates environments for R7RS libraries that
 // share symbol interning with the caller but isolate bindings:
 //
-//	libEnv, err := bootstrap.NewLibraryEnvironmentFrame(ctx, callerEnv)
+//	libEnv, err := bootstrap.NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 //
 // This ensures (eq? 'foo (string->symbol "foo")) returns #t across library
 // boundaries per R7RS 6.5.

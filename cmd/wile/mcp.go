@@ -133,7 +133,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 	s.AddTool(
 		mcp.NewTool("apropos",
 			mcp.WithDescription(
-				"Search Scheme bindings by name, documentation text, or category. "+
+				"Search Scheme bindings by name, documentation text, category, or keywords. "+
 					"Case-insensitive substring match. "+
 					"Returns matching names with category and one-line description."),
 			mcp.WithString("pattern",
@@ -169,8 +169,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 	s.AddTool(
 		mcp.NewTool("libraries",
 			mcp.WithDescription(
-				"List all Scheme libraries currently loaded in the session, "+
-					"sorted alphabetically with their descriptions. "+
+				"List the Scheme libraries currently loaded in the session, then the "+
+					"libraries discoverable but not yet imported, each sorted "+
+					"alphabetically with their descriptions. "+
 					"Use doc with a library name (e.g. \"(scheme base)\") to see its exports."),
 		),
 		srv.handleLibraries,

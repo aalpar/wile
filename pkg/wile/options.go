@@ -322,8 +322,9 @@ func WithoutCore() EngineOption {
 }
 
 // WithAuthorizer sets the Authorizer for the engine. The authorizer is
-// injected into every context passed to Eval, Compile, Run, and Call,
-// gating runtime primitives and compile-time code loading.
+// recorded on the engine's namespace at construction and consulted by gate
+// sites via MachineContext.Authorizer(), gating runtime primitives and
+// compile-time code loading.
 //
 // An explicit WithAuthorizer takes precedence over any profile's built-in
 // authorizer regardless of option order: WithAuthorizer(a) and WithProfile(p)
@@ -372,6 +373,15 @@ func (p *engineConfig) resolveAuthorizer() security.Authorizer {
 //
 // This enables sharing a namespace across engines or pre-configuring
 // namespaces with specific capabilities.
+//
+// Every option consumed by namespace construction is silently ignored on this
+// path, because NewEngine skips the bootstrap step that would apply them:
+// WithAuthorizer, WithSandbox, a profile's built-in authorizer, WithEnv,
+// WithEnvMap, and WithImmutableTopLevel/WithMutableTopLevel. The omission is
+// security-relevant: WithNamespace(ns) combined with WithSandbox() yields no
+// sandbox and no error. Apply those options to NewNamespace, which runs the
+// bootstrap step, and pass its result here. (WithDialect is the one such
+// option NewEngine rejects outright instead of dropping.)
 func WithNamespace(ns *environment.Namespace) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.namespace = ns
@@ -386,6 +396,9 @@ func WithNamespace(ns *environment.Namespace) EngineOption {
 //
 // Bootstrap macros are unaffected — they always load from the embedded
 // bootstrap filesystem.
+//
+// WithSourceFS panics if fsys is nil: a nil filesystem is a programming error,
+// not a runtime condition an embedder can recover from.
 //
 // Example:
 //

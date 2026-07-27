@@ -25,7 +25,10 @@ package compilation
 //
 // Hygiene Implementation (Flatt's "sets of scopes" model):
 //   - Each macro invocation creates a fresh "intro scope"
-//   - This scope is added to ALL identifiers in the macro expansion
+//   - This scope is added to the identifiers the TEMPLATE introduces.
+//     Identifiers substituted from pattern variables keep the use site's
+//     scopes, and a free template identifier that resolved to a local binding
+//     at definition time is emitted with those definition-site scopes instead.
 //   - When resolving variables, the scope sets must be compatible:
 //     bindingScopes ⊆ useScopes (see syntax/scope_utils.go:ScopesMatch)
 //   - This prevents a macro's internal "tmp" from capturing a user's "tmp"
@@ -35,9 +38,13 @@ package compilation
 //     (syntax-rules ()
 //       ((swap! x y) (let ((tmp x)) (set! x y) (set! y tmp)))))
 //
-// Without hygiene, (let ((tmp 5)) (swap! a b) tmp) would return b, not 5.
-// With hygiene, the macro's "tmp" gets an intro scope that distinguishes it
-// from the user's "tmp", so the user's "tmp" is correctly returned.
+// The capture needs the user's binding to reach the macro's ARGUMENTS, so take
+// (define b 99) and (let ((tmp 5)) (swap! tmp b) tmp). Without hygiene the
+// template's own (let ((tmp x)) ...) captures the user's "tmp": the (set! x y)
+// meant for the user's variable writes the macro's instead, nothing is swapped,
+// and the form returns 5. With hygiene the macro's "tmp" gets an intro scope
+// that distinguishes it from the user's, the swap happens, and the form
+// returns 99.
 //
 // Reference: "Binding as Sets of Scopes" (Flatt, 2016)
 

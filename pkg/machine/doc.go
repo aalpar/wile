@@ -19,8 +19,8 @@
 // # Compilation Pipeline
 //
 // Scheme source undergoes three phases:
-//  1. Expansion: macro-expand via [ExpanderTimeContinuation]
-//  2. Compilation: generate bytecode via [CompileTimeContinuation]
+//  1. Expansion: macro-expand via compilation.ExpanderTimeContinuation
+//  2. Compilation: generate bytecode via compilation.CompileTimeContinuation
 //  3. Execution: run bytecode via [MachineContext]
 //
 // # Virtual Machine
@@ -54,7 +54,7 @@
 // # Macro System
 //
 // Implements R7RS hygienic macros with Flatt's "sets of scopes" model:
-//   - [ExpanderTimeContinuation]: macro expansion driver
+//   - compilation.ExpanderTimeContinuation: macro expansion driver
 //   - syntax-rules pattern matching via internal/match
 //   - syntax-case with fenders and procedural macros
 //
@@ -64,6 +64,6 @@
 //
 //	type ForeignFunction func(CallContext) error
 //
-// [CallContext] is the narrow interface (7 methods) that extensions depend on.
+// [CallContext] is the narrow interface (8 methods) that extensions depend on.
 // The [ForeignClosure] type wraps these for the VM.
 package machine

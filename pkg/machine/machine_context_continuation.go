@@ -39,8 +39,9 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// equals the chain length of cont.parent (which is now p.cont).
 	// This replaces an O(d) chain walk with an O(1) field read.
 	p.callDepth = cont.callDepth
-	// Restore always comes from a shared/composable continuation (call/cc
-	// re-entry, composable continuation invocation). The old mc.env is NOT
+	// Restore is the non-consuming restore path: captured/composable segment
+	// reinstatement AND prompt-frame restores during an abort (where the frame
+	// came off the live chain via FindPrompt). The old mc.env is NOT
 	// released because it may be referenced by continuation frames still in
 	// the chain (e.g., SaveContinuation frames created before the composable
 	// continuation was invoked). Let GC collect it naturally.

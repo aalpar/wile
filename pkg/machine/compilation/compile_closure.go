@@ -16,8 +16,11 @@ package compilation
 
 // compile_closure.go contains closure compilation infrastructure: parameter
 // binding, body compilation with letrec* semantics, and rest-parameter handling.
-// These are shared by CompileValidatedLambda, CompileValidatedCaseLambda, and
-// CompileValidatedBegin in compile_validated.go.
+// The closure machinery has four consumers: CompileValidatedLambda and
+// CompileValidatedCaseLambda (compile_validated.go), CompileValidatedDefineFn
+// (compile_define.go), and compileLetrecBindingInit (compile_let.go).
+// CompileValidatedBegin shares only the letrec* pre-declaration helper
+// (predeclareDefineBindingFromValidated), not the closure path.
 
 import (
 	"strings"
@@ -39,7 +42,7 @@ const maxLocalSlots = 32767
 // The frame-building sites own this check because they are the only places that
 // know the total slot count before any Load/StoreLocal is emitted. Past that
 // point the count is only discoverable inside machine.EncodeLocalIndex, which is
-// reached through the 107-call-site AppendOperations path and cannot return an
+// reached through the many-call-site AppendOperations path and cannot return an
 // error. EncodeLocalIndex keeps its panic as an internal invariant backstop; this
 // guard is what keeps user-reachable input from ever tripping it.
 func checkLocalSlotCapacity(slots int, form string) error {

@@ -31,9 +31,15 @@
 //   - [ValidatedDefine]: (define name expr) or (define (name params...) body...)
 //   - [ValidatedLambda]: (lambda (params...) body...)
 //   - [ValidatedCaseLambda]: (case-lambda [clause] ...)
+//   - [ValidatedCaseLambdaClause]: one clause of a case-lambda
 //   - [ValidatedSetBang]: (set! name expr)
 //   - [ValidatedQuote]: (quote datum)
+//   - [ValidatedQuasiquote]: (quasiquote template)
 //   - [ValidatedBegin]: (begin expr...)
+//   - [ValidatedLet]: let, let*, letrec, letrec*, and named let (Kind selects)
+//   - [ValidatedDynamicWind]: (dynamic-wind before thunk after)
+//   - [ValidatedWithContinuationMark]: (with-continuation-mark key val body)
+//   - [ValidatedApply]: (apply proc arg... args)
 //   - [ValidatedCall]: (proc arg...)
 //   - [ValidatedSymbol]: variable reference
 //   - [ValidatedLiteral]: self-evaluating or passthrough

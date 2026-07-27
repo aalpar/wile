@@ -35,7 +35,7 @@ func isVerticalLine(c rune) bool {
 }
 
 // isDelimiter returns true if c is a token delimiter per R7RS 7.1.1.
-// Delimiters are: whitespace, |, (, ), ", and ;
+// Delimiters are: whitespace, |, (, ), [, ], ", and ;
 //
 // R7RS §2.1 makes [ and ] equivalent to ( and ), so they delimit too. Omitting
 // them broke the #-boolean forms, whose scanners are the ones that consult this
@@ -46,8 +46,9 @@ func isDelimiter(c rune) bool {
 		c == '(' || c == ')' || c == '[' || c == ']' || c == '"' || c == ';'
 }
 
-// isDelimiterOrMarker returns true if c is a token delimiter per R7RS 7.1.1.
-// Delimiters are: whitespace, |, (, ), [, ], ", and ;
+// isDelimiterOrMarker reports whether c ends a token: any isDelimiter
+// character, or '#' (so a following prefix such as the #e in #d#e is accepted
+// as a valid follower rather than symbol text).
 func isDelimiterOrMarker(c rune) bool {
 	return isDelimiter(c) || isMarker(c)
 }

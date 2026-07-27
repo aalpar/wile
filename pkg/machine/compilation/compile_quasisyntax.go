@@ -27,14 +27,14 @@ import (
 // CompileQuasisyntax compiles the (quasisyntax template) form.
 //
 // quasisyntax is like quasiquote but for syntax objects. It supports:
-//   - (unsyntax expr) - evaluate expr and splice result at depth 1
+//   - (unsyntax expr) - evaluate expr and insert the result at depth 1
 //   - (unsyntax-splicing expr) - evaluate and splice list at depth 1
 //   - nested quasisyntax increases depth
 //
 // Like quasiquote, unsyntax only evaluates when depth reaches 0.
 // The result is a syntax object, not a raw datum.
 func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in
+	// expr is the CDR of the form (keyword stripped by syntaxCompiler in
 	// register.go). So expr = (template) — exactly one element.
 	template, err := formSingleArg(expr, "quasisyntax")
 	if err != nil {

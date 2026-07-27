@@ -35,8 +35,8 @@ type StringExtractor interface {
 //
 // Field-set invariants are documented on Validate. The kind tag and
 // slot configuration are paired by construction (every factory writes
-// both in the same struct literal); Validate enforces only the
-// cross-slot invariants I1–I7.
+// both in the same function body, adjacent to one another); Validate
+// enforces only the cross-slot invariants I1–I7.
 type PortObject struct {
 	portBase
 
@@ -236,7 +236,7 @@ func (p *PortObject) AsByteVectorExtractor() (ByteVectorExtractor, bool) {
 // interface for the caller to invoke. The asymmetry is a deliberate
 // deferral — converging the two extractor APIs (either both
 // returning the interface, or both returning the resolved value) is
-// tracked as a follow-up in memory/2026-05-14-port-unification-impl.md
+// tracked as a follow-up in memory/2026-05-14-port-unification-impl.local.md
 // under "Deferred follow-ups".
 func (p *PortObject) StringContent() (string, bool) {
 	if p == nil || p.sext == nil {
@@ -263,8 +263,9 @@ func (p *PortObject) StringContent() (string, bool) {
 //   - I7: ext and sext are mutually exclusive
 //
 // I8 (kind matches capability profile) is enforced by construction —
-// every factory writes both kind and the slot set in the same struct
-// literal — and is asserted at the per-factory test level.
+// every factory writes both kind and the slot set in the same function
+// body, adjacent to one another — and is asserted at the per-factory
+// test level.
 func (p *PortObject) Validate() error {
 	if p == nil {
 		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,

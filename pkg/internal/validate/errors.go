@@ -30,7 +30,7 @@ const DefaultMaxOriginDepth = 10
 type ValidationError struct {
 	Source  *syntax.SourceContext
 	Message string
-	Form    string // p.g., "if", "define", "lambda"
+	Form    string // e.g., "if", "define", "lambda"
 }
 
 func (p ValidationError) Error() string {
@@ -104,7 +104,7 @@ func (p *ValidationResult) recordDefinedKey(key string) {
 }
 
 // finalizeStability stamps StableInUnit on every top-level define once the unit
-// is fully validated (so mutatedKeys/definedKeyCount are complete). A define is
+// is fully validated (so mutated/definedKeyCount are complete). A define is
 // in-unit-stable iff its name is defined exactly once and never set! in the
 // unit. Top-level only: internal/local defines never reach the compiler's
 // global Stable stamp, so they are intentionally not visited here.

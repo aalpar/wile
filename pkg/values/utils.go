@@ -72,17 +72,19 @@ func formatIndexable(prefix string, length int, get func(int) Value, visited map
 }
 
 // schemeStringChild renders a single element of a compound structure,
-// threading the shared visited set through nested Pair/Vector/Hashtable so that
-// cross-collection cycles (vector→pair→vector, pair→hashtable→pair, and the
-// like) are bounded. Marking is path-scoped: each compound renderer unmarks
-// itself on exit, so structural sharing (an acyclic DAG) renders in full and
-// only a true self-cycle collapses to "...". Non-compound elements render via
-// SchemeString; void and nil pointers render as "#<void>".
+// threading the shared visited set through nested Pair/Vector/Hashtable/Box/
+// AtomicBox so that cross-collection cycles (vector→pair→vector,
+// pair→hashtable→pair, and the like) are bounded. Marking is path-scoped: each
+// compound renderer unmarks itself on exit, so structural sharing (an acyclic
+// DAG) renders in full and only a true self-cycle collapses to "...".
+// Non-compound elements render via SchemeString; void and nil pointers render
+// as "#<void>".
 //
 // The visited set is keyed on pointer-identity Value types only (*Pair,
-// *Vector, *Hashtable — the only types inserted). Never insert a value-equality
-// or non-comparable Value: the former would alias distinct nodes to one slot
-// (false cycles), the latter would panic on map insertion.
+// *Vector, *Hashtable, *Box, *AtomicBox — the only types inserted). Never
+// insert a value-equality or non-comparable Value: the former would alias
+// distinct nodes to one slot (false cycles), the latter would panic on map
+// insertion.
 //
 // A nil visited set means "no cycle tracking requested" — used by callers
 // whose elements can never be compound (e.g. ByteVector, whose elements are
@@ -177,7 +179,9 @@ func ForEach(ctx context.Context, o Value, fn ForEachFunc) (Value, error) {
 
 // ForEachProperList calls fn on each element of t and returns ErrNotAList
 // if the tail is not the empty list (i.e., t is an improper list). If fn
-// returns an error, that error is returned unchanged.
+// returns an error, that error is returned unchanged, except that any error
+// matching werr.ErrCircularList is rewrapped as ErrNotAList (with the cycle
+// sentinel chained as its cause), since a circular list is an improper list.
 //
 // This is the canonical proper-list eliminator — every site that walks a
 // list and rejects improper tails should funnel through this function so

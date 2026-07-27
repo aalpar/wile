@@ -26,11 +26,11 @@ import (
 // It's equivalent to:
 //
 //	(syntax-case (list expr ...) ()
-//	  ((pattern ...) (let () body ...)))
+//	  ((pattern ...) (begin body ...)))
 //
 // For now, this implements a simple transformation approach.
 func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
+	// expr is the CDR of the form (keyword stripped by syntaxCompiler in register.go).
 	// So expr = (((pattern expr) ...) body ...)
 	argsPair, err := formArgs(expr, "with-syntax", "bindings and body")
 	if err != nil {

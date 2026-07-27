@@ -73,7 +73,8 @@ func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, b
 // The kw parameter selects which keywords to match (unquote vs unsyntax, etc.).
 //
 // At depth=1, unquotes are evaluated. At depth>1, they produce literal unquote forms.
-// Vector handling is NOT done here — the quasiquote caller handles vectors separately.
+// Vectors are handled here too, by delegating to expandQuasiquoteVector; the
+// quasiquote entry point pre-dispatches them as well, so both paths agree.
 func (p *CompileTimeContinuation) expandQuasi(
 	ctx context.Context, stx syntax.SyntaxValue, depth int, kw quasiKeywords, g *expandDepthGuard,
 ) (syntax.SyntaxValue, error) {

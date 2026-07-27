@@ -36,7 +36,7 @@ var _ values.Value = (*boxedValues)(nil)
 // hash of the interface — values.EqIdentity (eq?) is exactly such an `==`. A
 // pointer is comparable, which is what keeps this carrier inside the Value
 // contract while it sits in the value register. See values.Value's doc comment,
-// and TestMachineValues_AreGoComparable.
+// and TestSliceCarriersAreNotValues.
 type boxedValues struct {
 	vals []values.Value
 }
@@ -55,7 +55,7 @@ func (p *boxedValues) EqualTo(o values.Value) bool {
 }
 
 // OperationBoxValues collapses the value register (0, 1, or N values) into a
-// single boxedValuesType carrier left in the value register. A following OpPush
+// single *boxedValues carrier left in the value register. A following OpPush
 // then saves it as exactly one eval-stack slot, so callers that must preserve a
 // multiple-value result across an intervening call (dynamic-wind's after-thunk)
 // keep a fixed one-slot footprint regardless of value count. Paired with
@@ -94,7 +94,7 @@ func (p *OperationBoxValues) EqualTo(o values.Value) bool {
 	return SameType(p, v, ok)
 }
 
-// OperationUnboxValues expands a boxedValuesType carrier in the value register
+// OperationUnboxValues expands a *boxedValues carrier in the value register
 // back into the value register's 0/1/N values (the inverse of OperationBoxValues).
 // A preceding OpPeekK loads the carrier into the value register; this op replaces
 // it with the boxed values.

@@ -81,7 +81,7 @@ func addReadWrite(r *registry.Registry) error {
 			Keywords:   []string{"get-string-n"},
 			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeTextualInputPort}, ReturnType: values.TypeAny},
 		{Name: "char-ready?", ParamCount: 1, IsVariadic: true, Impl: PrimCharReadyQ,
-			Doc: "Returns #t if a character is available for reading on PORT without blocking. Defaults to current-input-port.\n\nExamples:\n  (char-ready? (open-input-string \"x\"))  => #t", ParamNames: []string{"port"}, Category: "io",
+			Doc: "Returns #t if a character is available for reading on PORT without blocking. Defaults to current-input-port. Wile always returns #t: non-blocking readiness detection is not implemented.\n\nExamples:\n  (char-ready? (open-input-string \"x\"))  => #t", ParamNames: []string{"port"}, Category: "io",
 			ParamTypes: []values.TypeConstraint{values.TypeTextualInputPort},
 			ReturnType: values.TypeBoolean},
 		{Name: "write", ParamCount: 2, IsVariadic: true, Impl: makeWriteVariant("write", values.WriteValueToString),
@@ -130,11 +130,11 @@ func addReadWrite(r *registry.Registry) error {
 			Keywords:   []string{"lookahead-u8"},
 			ParamTypes: []values.TypeConstraint{values.TypeBinaryInputPort}, ReturnType: values.TypeAny},
 		{Name: "u8-ready?", ParamCount: 1, IsVariadic: true, Impl: PrimU8ReadyQ,
-			Doc: "Returns #t if a byte is available for reading on the binary port without blocking.\n\nExamples:\n  (u8-ready? (open-input-bytevector #u8(1)))  => #t", ParamNames: []string{"port"}, Category: "io",
+			Doc: "Returns #t if a byte is available for reading on the binary port without blocking. Wile always returns #t: non-blocking readiness detection is not implemented.\n\nExamples:\n  (u8-ready? (open-input-bytevector #u8(1)))  => #t", ParamNames: []string{"port"}, Category: "io",
 			ParamTypes: []values.TypeConstraint{values.TypeBinaryInputPort},
 			ReturnType: values.TypeBoolean},
 		{Name: "write-u8", ParamCount: 2, IsVariadic: true, Impl: PrimWriteU8,
-			Doc: "Writes BYTE (0-255) to a binary port. Defaults to current-output-port.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 65 p) (get-output-bytevector p))  => #u8(65)", ParamNames: []string{"byte", "port"}, Category: "io",
+			Doc: "Writes BYTE (0-255) to a binary port. The port argument is required: binary I/O has no current-port default.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 65 p) (get-output-bytevector p))  => #u8(65)", ParamNames: []string{"byte", "port"}, Category: "io",
 			Keywords:   []string{"put-u8"},
 			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeBinaryOutputPort},
 			ReturnType: values.TypeVoid},
@@ -291,8 +291,8 @@ func addPortState(r *registry.Registry) error {
 }
 
 // registerPortParam binds a port-parameter name into the engine's runtime frame.
-// It replicates registry.registerGlobalValue's three exported environment calls
-// (that helper is unexported). BindingTypeVariable (no Stable stamp) keeps the
+// It replicates registry.registerGlobalValue's DefineOwnGlobal call (that helper
+// is unexported). BindingTypeVariable (no Stable stamp) keeps the
 // parameter set!-able, matching the former AddGlobalValue path.
 func registerPortParam(env *environment.EnvironmentFrame, name string, param *machine.Parameter) error {
 	sym := values.NewSymbol(name)

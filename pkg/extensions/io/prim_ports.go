@@ -306,9 +306,6 @@ func PrimBinaryPortQ(mc machine.CallContext) error {
 	return nil
 }
 
-// closePort closes a port regardless of its type and evicts
-// any cached tokenizer/parser for the port.
-
 // evictPortCache removes any cached tokenizer and parser for the given port.
 // This is the single eviction choke point — all port cleanup paths
 // (explicit close, EOF, call-with-port) must go through here.
@@ -319,6 +316,8 @@ func evictPortCache(st *State, port values.Value) {
 	st.mu.Unlock()
 }
 
+// closePort closes a port regardless of its type and evicts
+// any cached tokenizer/parser for the port.
 func closePort(st *State, o values.Value) error {
 	var err error
 	p, ok := o.(values.Port)

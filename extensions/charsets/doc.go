@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // Package charsets implements the SRFI-14 Character-Set Library FFI surface.
-// The Scheme-side library lives at stdlib/lib/srfi/14.sld and re-exports
-// these primitives plus 23 derived procedures and 17 named char-set constants.
+// The Scheme-side library lives at pkg/stdlib/lib/srfi/14.sld and re-exports
+// these primitives plus 34 derived procedures and 17 named char-set constants.
 //
-// See memory/2026-05-04-srfi-14-design.md for the design rationale.
+// See memory/2026-05-04-srfi-14-design.local.md for the design rationale.
 package charsets

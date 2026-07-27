@@ -52,7 +52,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		return err
 	}
 	// expr is (keyword [docstring] transformer-expr) — the define-syntax keyword
-	// was stripped by registerSyntaxCompiler in register.go.
+	// was stripped by syntaxCompiler in register.go.
 	parts, err := syntax.FormParts(expr, "define-syntax", 2, 3)
 	if err != nil {
 		return p.wrapCompilationError(err)

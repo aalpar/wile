@@ -35,8 +35,8 @@ import (
 //	Invariant: exactness is monotone w.r.t. T. If a is exact and b is
 //	  exact, T(a,b) must also be exact-capable. Exact types never route
 //	  through float64 (lossy). Enforced by initPromotionTable.
-//	Constrains: makeArithmeticDispatch (all 294 closures assume LUB
-//	  correctness), Simplify (demotes within same exactness class).
+//	Constrains: the arithmetic and ordering dispatch tables (all 245 entries
+//	  assume LUB correctness), Simplify (demotes within same exactness class).
 //	Constrained by: Exactness lattice {exact < inexact} — the transfer
 //	  function for arithmetic must be monotone in this ordering.
 //
@@ -114,7 +114,9 @@ var comparisonTable [numKinds][numKinds]NumericKind
 // promoter maps (srcKind, resultKind) → conversion function.
 // promoter[src][dst](n) converts a Number of kind src to a Number of kind dst.
 // Only entries reachable via promotionTable are populated; others are nil.
-// All conversions are lossless — no float64 truncation of exact types.
+// Exact→exact and exact→Big* conversions are lossless. Exact→Float and
+// exact→Complex are the exactness-contagion promotions and ARE lossy: the exact
+// operand is rounded to float64 (±Inf beyond range). See initPromoters.
 //
 // Diagonal entries (src == dst) are identity functions.
 var promoter [numKinds][numKinds]func(Number) Number
@@ -125,8 +127,9 @@ var promotionOnce sync.Once
 // by the dispatch generators (makeArithmeticDispatch, makeLessThanDispatch)
 // which may run from type-file init() functions before promotion.go's own
 // init().
-// Startup cost: populates 7×7 promotion table (49 entries) and 245 dispatch
-// closures for arithmetic and ordering operations.
+// Startup cost: populates two 7×7 kind tables (promotion + comparison, 98
+// entries) and the 7×7 promoter-function table. The 245 dispatch-table entries
+// are built separately, by each numeric type's init().
 func ensurePromotionInit() {
 	promotionOnce.Do(func() {
 		initPromotionTable()
@@ -341,8 +344,8 @@ func initPromoters() {
 	// is the right answer, and that is what Promote (the public accessor) means.
 	//
 	// The four arithmetic operations never route a real operand through here — they
-	// compute real ⊕ complex part-wise (realSubtractComplex / realDivideComplex in
-	// complex.go, and a commuting redirect for the other two), which never
+	// compute real ⊕ complex part-wise (the four real⊕complex helpers in complex.go,
+	// wired into the dispatch generators as realComplexOp), which never
 	// manufactures an imaginary component at all. Float has worked this way since
 	// Float ⊔ Complex was Complex; the exact kinds now do too. If you find yourself
 	// reaching for this promoter inside an arithmetic path, that is the bug.
@@ -497,9 +500,11 @@ func validatePromotionTable() {
 	}
 }
 
-// Promote converts a Number to the target NumericKind using the lossless
-// promoter table. Panics if no promotion path exists (indicates a bug in
-// the promotion table — all reachable paths should be populated).
+// Promote converts a Number to the target NumericKind using the promoter table.
+// Conversions to Float/Complex from an exact kind are the lossy contagion
+// promotions; all others are lossless. Panics if no promotion path exists
+// (indicates a bug in the promotion table — all reachable paths should be
+// populated).
 func Promote(n Number, target NumericKind) Number {
 	src := n.Kind()
 	if src == target {
@@ -513,8 +518,9 @@ func Promote(n Number, target NumericKind) Number {
 }
 
 // isSpecialFloat reports whether a Float holds IEEE 754 Inf or NaN.
-// Used by comparison dispatches (LessThan, Compare) to fall back to
-// float64 comparisons when the LUB is BigFloat/BigComplex.
+// Used by the arithmetic dispatches (makeArithmeticDispatch, makeDivideDispatch)
+// to fall back to float64/complex128 arithmetic when the LUB is
+// BigFloat/BigComplex. The comparison dispatch deliberately has no such guard.
 func isSpecialFloat(f *Float) bool {
 	return math.IsInf(f.Value, 0) || math.IsNaN(f.Value)
 }
@@ -557,10 +563,11 @@ func NumberToComplex128Lossy(n Number) complex128 {
 // operands to the LUB type via the promotion table and delegate to the
 // LUB type's operation via applyOp.
 //
-// IEEE 754 special-value guard: the promotion table maps Float×Exact → BigFloat
-// for precision. When Float holds Inf or NaN, precision is irrelevant — the
-// result is determined by the special value. The guard short-circuits to
-// float64 arithmetic in that case, preserving the *Float return type.
+// IEEE 754 special-value guard: when the LUB goes beyond float64/complex128
+// (Float×BigFloat → BigFloat, Float×BigComplex → BigComplex) and the Float
+// operand holds Inf or NaN, precision is irrelevant: the result is determined by
+// the special value. The guard short-circuits to float64 arithmetic in that
+// case, preserving the *Float return type.
 //
 // For the Float×BigComplex → BigComplex case, the guard uses complex128
 // arithmetic but wraps the result in BigComplex (not Complex) so the imaginary

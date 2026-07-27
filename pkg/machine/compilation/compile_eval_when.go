@@ -121,8 +121,8 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 			return err
 		}
 	} else {
-		// No runtime effect - emit void if we haven't already emitted code
-		// Note: if hasExpand was true, we still need to emit void for runtime
+		// No runtime phase requested: the form still yields a value, so emit void
+		// (compile-time execution above leaves nothing in the value register).
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(
 			p.template.MaybeAppendLiteral(values.Void),
 		))

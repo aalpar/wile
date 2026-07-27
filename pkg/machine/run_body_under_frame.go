@@ -27,9 +27,9 @@ package machine
 // runs on these helpers as the live continuation path:
 //   - RunBodyUnderConsumer → call-with-values        (prim_control.go)
 //   - RunBodyUnderExitFrame → call-with-exit         (prim_exit.go)
-//   - RunBodyUnderPrompt    → call-with-continuation-prompt + raise-continuable
-//                                                     (prim_prompt.go, exception_raise.go)
-//   - RunBodyUnderFrame     → the non-continuable raise escalator (exception_raise.go)
+//   - RunBodyUnderPrompt    → call-with-continuation-prompt  (prim_prompt.go)
+//   - RunBodyUnderFrame     → raise-continuable and the non-continuable raise
+//                             escalator                       (exception_raise.go)
 //   - RunWithinBoundary     → barrier / RaiseInPlace handler / composable / the sweep
 //                             sites (machine_context.go and call sites)
 //
@@ -47,7 +47,8 @@ import "github.com/aalpar/wile/pkg/values"
 
 // returnTemplate is a one-instruction template whose sole opcode returns control
 // to the executing frame's parent, leaving the value register untouched. A
-// synthetic prompt frame (RunBodyUnderPrompt) carries it so that:
+// transparent chain frame carries it (RunBodyUnderPrompt's prompt frame,
+// RunBodyUnderBarrier's barrier frame, raise-continuable's frame) so that:
 //
 //   - On NORMAL completion of the body, the body's result — single OR multiple
 //     values, since RestoreAndRelease/Restore never touch the value register —
@@ -57,7 +58,7 @@ import "github.com/aalpar/wile/pkg/values"
 //     OpRestoreContinuation delivers the abort values to the parent.
 //
 // INVARIANT: returnTemplate MUST remain this single instruction and MUST NOT be
-// mutated — it is shared by every prompt frame.
+// mutated: it is shared by every transparent frame.
 var returnTemplate = &NativeTemplate{
 	code: []Instruction{{Op: OpRestoreContinuation}},
 }
@@ -71,10 +72,17 @@ var returnTemplate = &NativeTemplate{
 //	OpLoadLiteral 0 — load the applied closure (literal 0) into the value register
 //	OpApply         — apply that closure to the spread args, draining the stack
 //
-// Its result then flows to the frame's parent. Two callers:
-//   - call-with-values: literal = the consumer; no prompt tag.
-//   - call-with-exit:   literal = a finalizer closure that clears the one-shot and
-//     forwards the value(s); a prompt tag so an (exit v) abort routes here.
+// Its result then flows to the frame's parent. Callers:
+//   - call-with-values (via RunBodyUnderConsumer): literal = the consumer; no prompt tag.
+//   - make-parameter (via RunBodyUnderConsumer): literal = a finalizer that wraps the
+//     converted value in a Parameter; no prompt tag.
+//   - call-with-exit (via RunBodyUnderExitFrame): literal = a finalizer closure that
+//     clears the one-shot and forwards the value(s); a prompt tag so an (exit v) abort
+//     routes here.
+//   - with-timeout (via RunBodyUnderTimer): literal = the idempotent teardown finalizer;
+//     a prompt tag so a fired timer routes here.
+//   - the non-continuable raise escalator (exception_raise.go), which builds its own
+//     template directly on this code: literal = the escalator; no prompt tag.
 //
 // Either way a continuation captured inside the body spans this chain-resident
 // frame, so re-entry replays it instead of truncating.
@@ -92,11 +100,18 @@ var applyToValuesCode = []Instruction{
 // everything below it. frame.parent MUST already be the current p.cont (the
 // continuation constructors used by the callers below set it).
 //
-// frame is either a transparent prompt frame (RunBodyUnderPrompt) or a plain
-// continuation frame whose code runs on the body's normal return
-// (RunBodyUnderConsumer). On normal completion the VM restores frame and
-// executes its template; on abort to a frame-carried tag the driver's FindPrompt
-// routes to it.
+// frame comes in three shapes:
+//
+//   - a transparent prompt frame (RunBodyUnderPrompt): carries a tag, and
+//     returnTemplate passes the body's value(s) straight through on normal return;
+//   - a plain continuation frame (RunBodyUnderConsumer, raise-continuable, the raise
+//     escalator): no tag, so it is not an abort target, and its code runs on normal
+//     return;
+//   - a non-transparent prompt frame (RunBodyUnderExitFrame, RunBodyUnderTimer): carries
+//     a tag AND runs a finalizer template on normal return, so it is reached both ways.
+//
+// On normal completion the VM restores frame and executes its template; on abort to a
+// frame-carried tag the driver's FindPrompt routes to it.
 func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body values.Value, args ...values.Value) (*MachineContext, error) {
 	frame.threadID = p.threadID
 	if len(p.windingStack) > 0 {

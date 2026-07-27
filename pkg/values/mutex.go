@@ -24,9 +24,9 @@ import (
 
 // Mutex state symbol singletons.
 //
-// StateValue() returns these instead of allocating fresh symbols on each call.
-// Same process-global vs per-VM identity subtlety as the thread state symbols
-// — see the doc comment on SymbolThreadNew in thread.go for details.
+// StateValue returns these instead of allocating fresh symbols on each call.
+// The singletons avoid re-allocating the symbol; eq? on symbols is by name
+// (see EqIdentity), so a singleton is eq? to a reader-produced 'not-owned.
 var (
 	SymbolMutexNotOwned  = NewSymbol("not-owned")
 	SymbolMutexAbandoned = NewSymbol("abandoned")
@@ -133,9 +133,8 @@ func (p *Mutex) State() MutexState {
 }
 
 // StateValue returns the state as a Scheme value per R7RS SRFI-18.
-// Returns package-level singletons for symbol states so that repeated calls
-// return the same pointer: (eq? (mutex-state m) (mutex-state m)) → #t.
-// See the doc comment on SymbolThreadNew in thread.go for eq? vs equal? caveats.
+// Returns package-level singletons for symbol states; the singletons avoid
+// re-allocating the symbol, and eq? on symbols is by name (see EqIdentity).
 // Returns: 'not-owned, 'abandoned, or the owner thread.
 //
 // SRFI-18 collapses "unlocked" and "locked without owner" into the single
@@ -188,8 +187,9 @@ func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 //
 // ctx cancellation unparks the untimed wait so a thread blocked here is reaped by
 // thread-terminate! rather than stalling on a bare cond.Wait — the same wait-side
-// fix the RWMutex type carries. Unlike RWMutex (which raises
-// ErrOperationCancelled), a cancelled acquire returns false: mutex-lock! already
+// fix the RWMutex type carries. Unlike the rw-mutex primitives (whose shared
+// helper finishBlockingSync raises ErrOperationCancelled on a false return),
+// mutex-lock! reports a cancelled acquire as #f: that primitive already
 // signals "did not acquire" as #f, and returning it error-free lets a wrapping
 // with-timeout handler run via callForeignCached's recheck without a carve-out.
 // The held side is untouched: a terminated holder's lock stays held (abandonment

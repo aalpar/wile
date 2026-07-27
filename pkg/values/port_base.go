@@ -40,14 +40,15 @@ const (
 )
 
 // portBase tracks the closed state of a port and optionally holds
-// an io.Closer for the underlying stream. Concrete port types embed
-// portBase to inherit IsClosed, Close, and guardClosed.
+// an io.Closer for the underlying stream. *PortObject is its sole embedder;
+// portBase supplies guardClosed and a base Close, and *PortObject shadows
+// IsClosed/Close with nil-safe wrappers.
 //
 // Close semantics:
 //   - Idempotent: calling Close on an already-closed port returns nil.
 //   - If clsr is non-nil, delegates to clsr.Close().
-//   - Output ports that buffer writes (variant B) must override Close
-//     to flush before calling portBase.Close().
+//   - Flush-before-close is handled by (*PortObject).Close via the flsh
+//     slot (see flushThenClose), not by overriding this method.
 type portBase struct {
 	closed bool
 	clsr   io.Closer

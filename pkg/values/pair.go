@@ -46,8 +46,8 @@ var (
 
 	// SyntaxEmptyList is the empty-list singleton typed as SyntaxTuple,
 	// for use in contexts that build syntax-level lists or return
-	// SyntaxValue. It is the same struct value as EmptyList; the package
-	// `internal/syntax` re-exports this name for backward compatibility.
+	// SyntaxValue. It is the same struct value as EmptyList; the public
+	// package pkg/syntax re-exports this name.
 	SyntaxEmptyList SyntaxTuple = emptyListType{}
 )
 
@@ -262,7 +262,12 @@ const contextCheckMask = 1023
 // The provided function fn is called for each element with the index i,
 // a boolean hasNext indicating if there are more elements, and the value v.
 // If fn returns an error, the iteration stops and the error is returned.
-// If the list ends with a non-empty cdr, that cdr is returned as the second return value.
+// If the list ends with a non-empty cdr, that cdr is returned as the first
+// return value; a proper list returns EmptyList.
+//
+// Two further error returns: ctx.Err() when the embedder's context is cancelled,
+// and a wrapped werr.ErrCircularList when Brent's cycle detection fires. Unlike
+// Length and AsVector, ForEach terminates on circular input.
 //
 // Stays open-coded rather than consuming Spine: a Spine-consuming
 // variant was measured ~40–56% slower across 10/100/1000-element

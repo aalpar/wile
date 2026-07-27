@@ -138,10 +138,11 @@ func init() {
 // Both oracles (Chez, Racket) give the "want" column. So real ⊕ complex is computed
 // part-wise, and the imaginary component is never invented in the first place.
 //
-// ADD and MULTIPLY are commutative: a real receiver hands the complex operand back to
-// the complex kind, which absorbs the real via realPartsOf below. SUBTRACT and DIVIDE
-// are not, so they are spelled out here. All four kinds whose LUB with Complex is
-// Complex — Float, Integer, BigInteger, Rational — share these.
+// All four operations are spelled out here and wired into the dispatch generators as
+// realComplexOp (promotion.go), so a REAL receiver meeting a Complex operand never
+// promotes. The mirror case, a Complex receiver meeting a real operand, is absorbed by
+// realPartsOf below. All four kinds whose LUB with Complex is Complex — Float, Integer,
+// BigInteger, Rational — share these.
 //
 // This is the operation-level half of a rule the promotion table used to carry alone,
 // badly: it escalated exact × Complex to BigComplex so the exact zero would survive in
@@ -415,8 +416,6 @@ func (p *Complex) IsExact() bool {
 	return false
 }
 
-// IsInteger returns true if this complex has zero imaginary part and an integer real part.
-//
 // IsInteger reports whether this complex number is an integer.
 //
 // R7RS §6.2: the predicate hierarchy is integer? ⟹ rational? ⟹ real? ⟹

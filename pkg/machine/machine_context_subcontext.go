@@ -22,26 +22,6 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// NewSubContext creates a new MachineContext for running sub-calls (e.g., apply, map, for-each).
-// The sub-context shares the global environment but has a fresh call stack, eval stack, and value register.
-// This allows foreign functions to call Scheme closures without corrupting the parent context's state.
-//
-// The parent's dynamic-wind winding stack is inherited automatically so that continuations
-// captured inside the sub-context preserve the enclosing dynamic-wind context. For the rare
-// sites that need a different stack (unwind truncation, exception cleanup), use
-// NewSubContextWithWinding.
-//
-// Note: Sub-contexts have isolated continuation chains (cont = nil). When call/cc captures a
-// continuation inside a sub-context, it captures mc.Parent() which refers to the sub-context's
-// chain (nil). For continuations to escape back to the outer context, the escape error propagates
-// up through the call stack and is handled by RunWithEscapeHandling at the top level.
-//
-// The parentMC field tracks the parent context, allowing call/cc to find an outer continuation
-// for proper R7RS continuation semantics when captured inside sub-contexts.
-//
-// The escapeCont field is inherited, allowing nested sub-contexts to know where execution
-// should continue after their completion (set by dynamic-wind and similar constructs).
-
 // mutableRuntimeFor resolves the mutable runtime global for a sub-context of p. It
 // tries p's lexical env chain first (the common case: one frame, with a namespace),
 // then falls back along the parentMC chain — necessary when p.env is a detached
@@ -65,6 +45,25 @@ func mutableRuntimeFor(p *MachineContext) *environment.EnvironmentFrame {
 		"mutableRuntimeFor: no namespace reachable via env chain or parentMC"))
 }
 
+// NewSubContext creates a new MachineContext for running sub-calls (e.g., apply, map, for-each).
+// The sub-context shares the global environment but has a fresh call stack, eval stack, and value register.
+// This allows foreign functions to call Scheme closures without corrupting the parent context's state.
+//
+// The parent's dynamic-wind winding stack is inherited automatically so that continuations
+// captured inside the sub-context preserve the enclosing dynamic-wind context. For the rare
+// sites that need a different stack (unwind truncation, exception cleanup), use
+// NewSubContextWithWinding.
+//
+// Note: Sub-contexts have isolated continuation chains (cont = nil). When call/cc captures a
+// continuation inside a sub-context, it captures mc.Parent() which refers to the sub-context's
+// chain (nil). For continuations to escape back to the outer context, the escape error propagates
+// up through the call stack and is handled by RunWithEscapeHandling at the top level.
+//
+// The parentMC field tracks the parent context, allowing call/cc to find an outer continuation
+// for proper R7RS continuation semantics when captured inside sub-contexts.
+//
+// The escapeCont field is inherited, allowing nested sub-contexts to know where execution
+// should continue after their completion (set by dynamic-wind and similar constructs).
 func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
@@ -108,8 +107,8 @@ func (p *MachineContext) NewSubContextWithWinding(windingStack WindingStack) *Ma
 // all parent fields automatically via NewSubContext, preventing the "forgotten
 // field" bug class that NewMachineContext + manual setters is vulnerable to.
 //
-// The template and env override NewSubContext's defaults (nil template,
-// parent's TopLevel env). pc starts at 0 (pool zero-value).
+// The template and env override NewSubContext's defaults (nil template, the
+// parent's mutable runtime global). pc starts at 0 (pool zero-value).
 func (p *MachineContext) NewSubContextWithTemplate(
 	tpl *NativeTemplate,
 	env *environment.EnvironmentFrame,

@@ -15,8 +15,8 @@
 // Package docparse parses structured metadata from Guile-style docstrings.
 //
 // Docstrings may contain metadata sections (Syntax:, Parameters:, Returns:,
-// Category:) that are extracted into structured fields, and prose sections
-// (Examples:, See also:) that remain in the Doc text.
+// Category:, Keywords:) that are extracted into structured fields, and prose
+// sections (Examples:, See also:) that remain in the Doc text.
 package docparse
 
 import (
@@ -147,8 +147,9 @@ func parseKeywords(raw string) []string {
 }
 
 // ParseDocstring parses a raw docstring into structured metadata.
-// Metadata sections (Syntax:, Parameters:, Returns:, Category:) are extracted
-// into typed fields. Prose sections (Examples:, See also:) remain in the Doc text.
+// Metadata sections (Syntax:, Parameters:, Returns:, Category:, Keywords:) are
+// extracted into typed fields. Prose sections (Examples:, See also:) remain in
+// the Doc text.
 func ParseDocstring(raw string) DocInfo {
 	if raw == "" {
 		return DocInfo{}

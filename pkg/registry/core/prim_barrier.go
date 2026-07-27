@@ -35,7 +35,8 @@ import (
 // Exceptions, prompt aborts, and call-with-exit escapes propagate normally through
 // the barrier, since they are upward-only unwinds that do not cross boundaries.
 //
-// See plans/CALL_WITH_EXIT_AND_WITH_BAFFLE.md for full semantics and test cases.
+// Semantics and cases are pinned by prim_barrier_test.go and
+// continuation_subcontext_truncation_red_test.go.
 func PrimCallWithContinuationBarrier(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "call-with-continuation-barrier")
 	if err != nil {

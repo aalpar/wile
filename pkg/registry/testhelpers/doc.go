@@ -14,7 +14,9 @@
 
 // Package testhelpers provides shared test infrastructure for Scheme primitive tests.
 //
-// Each helper creates a fresh [environment.EnvironmentFrame] via bootstrap, ensuring test isolation:
+// Each RunSchemeCode* helper creates a fresh [environment.EnvironmentFrame] via
+// bootstrap, ensuring test isolation; the *WithEnv and Setup* helpers take or
+// return an environment the caller owns:
 //
 //	result, err := testhelpers.RunSchemeCode(t, "(+ 1 2)")
 //	c.Assert(err, qt.IsNil)

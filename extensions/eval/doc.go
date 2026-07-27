@@ -18,13 +18,21 @@
 //
 //   - eval: evaluate expression in given environment
 //   - load: read and evaluate file contents
+//   - current-load-path, current-load-directory, current-load-depth
 //
 // # Environments
 //
 //   - environment: create environment from import sets
 //   - null-environment: create minimal R5RS environment
 //   - scheme-report-environment: create R5RS environment
-//   - interaction-environment: return current REPL environment
+//
+// # Expansion and compilation
+//
+//   - expand, expand-once: macro-expand a syntax object or datum
+//   - compile: compile an expression to a callable thunk
+//   - syntax-local-value, syntax-local-value/immediate
+//   - make-compile-time-value
+//   - syntax-local-introduce, syntax-local-identifier-as-binding
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.
 package eval

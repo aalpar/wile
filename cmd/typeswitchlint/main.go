@@ -44,7 +44,7 @@
 //
 // Usage:
 //
-//	go run ./cmd/typeswitchlint [dir...]
+//	go run ./cmd/typeswitchlint [-v] [dir...]
 //
 // If no directories are given, it scans the current directory recursively.
 package main

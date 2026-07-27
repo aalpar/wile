@@ -80,8 +80,9 @@ func ListToVector(mc machine.CallContext, name string) error {
 	return nil
 }
 
-// CollectVectors extracts a non-empty list of vectors from a rest argument,
-// validates that each element is a vector, and returns the minimum length.
+// CollectVectors extracts a list of vectors from a rest argument, validates that
+// each element is a vector, and returns the minimum length. An empty rest list
+// returns (nil, 0, nil); the caller decides whether that is an error.
 // Used by vector-append (prim_vectors.go).
 func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, error) {
 	var vectors []*values.Vector

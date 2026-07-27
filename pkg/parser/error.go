@@ -106,10 +106,9 @@ func (p *ParserError) Unwrap() error {
 // "line:col" when the input is unnamed (e.g. a REPL stream, where the parser
 // has no file name). It returns "" when the error has no located token.
 //
-// Unlike SourceContext.Location it does not require a file name, so a parse
-// error from unnamed REPL input still reports its line and column rather than
-// dropping the location. Line is 1-based and column 0-based, matching
-// SourceContext.Location's formatting for parity with compiler-side locations.
+// Unlike SourceContext.Location, the unnamed-input form omits the leading colon
+// ("1:0" rather than ":1:0"); line is 1-based and column 0-based, as in
+// SourceContext.Location.
 func (p *ParserError) Location() string {
 	if p.tok == nil {
 		return ""

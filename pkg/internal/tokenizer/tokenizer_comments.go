@@ -44,7 +44,8 @@ func (p *Tokenizer) continueBlockComment() Token {
 			}
 			if isMarker(p.curr()) { // Found |#
 				if p.blockDepth == 0 {
-					// Found closing |# - remove the | from scratch and stop.
+					// Found closing |#; consume it and stop. (p.value is unused for
+					// block comments: the token carries only raw text.)
 					// Consuming the '#' may hit EOF; the comment is closed all the
 					// same, so no error check may intervene before this return.
 					p.next()
@@ -83,7 +84,3 @@ func (p *Tokenizer) readLineCommentOrPragma() {
 		p.next()
 	}
 }
-
-// readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment handles # prefixed tokens.
-// Called after '#' is consumed. Dispatches based on the next character to parse:
-//   - #' #` #, #,@ : syntax quotation

@@ -594,9 +594,8 @@ func Failf(err error, format string, args ...any) {
 	fail(err, fmt.Sprintf(format, args...))
 }
 
-// Fail prints "Error: <err>" and exits 1. A nil err exits EX_OK: several call
-// sites hand Failf/Fail whatever error a step returned and rely on the nil case
-// being a clean exit.
+// Fail prints "Error: <err>" and exits 1. A nil err with no message exits
+// EX_OK, so fail's joined-empty case can never emit a bare "Error: ".
 func Fail(err error) {
 	fail(err, "")
 }

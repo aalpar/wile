@@ -129,10 +129,16 @@ type ffiSpec struct {
 // # Callbacks
 //
 // Callback parameters (func types) receive a Go closure that invokes a
-// Scheme procedure through a VM sub-context. Callbacks must be called
-// synchronously during the registered function's execution. Storing a
-// callback for later invocation or calling it from another goroutine is
-// unsafe — the closure captures VM state that is not goroutine-safe.
+// Scheme procedure through a VM sub-context. The Scheme argument must be a
+// lambda, a case-lambda, or a parameter object; Go-implemented primitives
+// (foreign closures, including functions registered through RegisterFunc or
+// RegisterPrimitive) and continuations are rejected at call time with
+// [werr.ErrNotAProcedure], even though Scheme considers them procedures.
+//
+// Callbacks must be called synchronously during the registered function's
+// execution. Storing a callback for later invocation or calling it from
+// another goroutine is unsafe — the closure captures VM state that is not
+// goroutine-safe.
 //
 // Returns an error wrapping [werr.ErrFFIRegistration] if fn is not a function or uses unsupported types.
 func (p *Engine) RegisterFunc(name string, fn any) error {

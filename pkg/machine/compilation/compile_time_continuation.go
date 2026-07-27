@@ -184,7 +184,7 @@ func (p *CompileTimeContinuation) SetInlineThreshold(n int) {
 }
 
 // formArgs extracts the argument list from a compiled form's expression.
-// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
+// expr is the CDR of the form (keyword stripped by syntaxCompiler in register.go).
 // usage describes what the form expects (e.g. "bindings and body") for error
 // messages. Returns the arguments as a non-empty SyntaxPair, or an error if
 // expr is not a SyntaxPair or is the empty list.
@@ -448,9 +448,14 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	return nil
 }
 
-// validateQuotedLiteral recursively walks a quoted literal value to detect
-// circular pair structures from datum labels (e.g., '#0=(a . #0#)).
-// Returns an error if circular references are found.
+// validateQuotedLiteral walks a quoted literal value to detect circular pair
+// structures from datum labels (e.g., '#0=(a . #0#)), returning an error when it
+// finds one. The value returned is the literal to compile: the original when the
+// walk changed nothing, a rebuilt copy otherwise (both callers use the returned
+// value, not the argument).
+//
+// The cdr spine is walked iteratively; only cars recurse. See
+// validateQuotedLiteralWithVisited for why.
 func (p *CompileTimeContinuation) validateQuotedLiteral(v values.Value) (values.Value, error) {
 	return p.validateQuotedLiteralWithVisited(v, nil)
 }

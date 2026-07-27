@@ -18,12 +18,17 @@
 // validation functions. This decouples the validate and machine/compilation
 // packages by providing a shared name table that both can reference.
 //
-// Compiler dispatch lives in machine/compilation with fully typed
-// function signatures (no [any] parameters).
+// A form's codegen function is registered here too, on [FormSpec.Compile].
+// That field is [any]-typed because its concrete type
+// (machine/compilation.CompilerFunc) cannot be named without a
+// forms → machine/compilation import cycle. machine/compilation asserts it back
+// to the typed signature at the dispatch site, and its VerifyCompilers
+// backstops a mis-typed Compile.
 //
 // # Registration
 //
 //	forms.RegisterValidator("if", validateIf)
+//	forms.RegisterCompiler("if", compileIf)
 //
 // # Lookup
 //

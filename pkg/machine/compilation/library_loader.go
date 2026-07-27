@@ -43,8 +43,8 @@ import (
 // Returns the CompiledLibrary which can be used to import bindings.
 //
 // The function:
-// 1. Checks if already loaded (returns cached library)
-// 2. Checks for circular dependencies
+// 1. Checks for circular dependencies
+// 2. Checks if already loaded (returns cached library)
 // 3. Resolves and opens the library file via FileResolver
 // 4. Parses and compiles the define-library form
 // 5. Executes the library to create runtime bindings

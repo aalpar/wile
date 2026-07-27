@@ -25,7 +25,9 @@ import (
 // NewERCompareClosure creates the `compare` closure for an ER macro invocation.
 // useEnv is the use-site environment for resolving identifiers.
 // The closure accepts two identifier arguments and returns #t if both resolve
-// to the same binding (pointer equality) or both are unbound with the same name.
+// to the same binding (the same binding object, or two bindings sharing one
+// import-provenance root, see erBindingsEqual) or both are unbound with the
+// same name.
 func NewERCompareClosure(useEnv *environment.EnvironmentFrame) *machine.ForeignClosure {
 	fn := func(mc machine.CallContext) error {
 		id1 := mc.Arg(0)

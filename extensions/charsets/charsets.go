@@ -464,10 +464,9 @@ func makeNamedCharSet(name string) (*values.CharSet, error) {
 		cs = unionTwo(rangeTableToCharSet(unicode.L), rangeTableToCharSet(unicode.Nd))
 	case "graphic":
 		// SRFI-14 graphic = printing characters MINUS whitespace (chars that
-		// "put ink on the page"). Go's unicode.GraphicRanges classifies space
-		// (and other Zs) as graphic, which is the Unicode notion, not SRFI-14's:
-		// SRFI-14 places whitespace in char-set:printing only. Subtract
-		// whitespace from printing so space/tab/newline are NOT graphic.
+		// "put ink on the page"). Go's PrintRanges is L,M,N,P,S and already
+		// excludes Zs/Zl/Zp and Cc, so no whitespace is present; the difference
+		// below is currently a no-op retained as a guard.
 		cs = differenceTwo(rangeListToCharSet(unicode.PrintRanges),
 			rangeTableToCharSet(unicode.White_Space))
 	case "printing":

@@ -47,8 +47,10 @@ import (
 // additional or missing scopes (e.g., from an outer macro's intro scope) is not
 // substituted.
 type ExpandOptions struct {
-	// IntroScope is the hygiene scope added to newly created syntax objects (from the
-	// template), but NOT to syntax objects preserved from pattern variable substitution.
+	// IntroScope is the hygiene scope added to template-introduced symbols. It is
+	// not added to newly created pairs or vectors (those carry only a source
+	// context), nor to symbols preserved from pattern variable substitution, nor
+	// to symbols resolved to a definition-site local binding.
 	IntroScope *syntax.Scope
 
 	// FreeIds maps free identifiers to their pre-resolved bindings. A non-nil

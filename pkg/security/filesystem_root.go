@@ -26,6 +26,10 @@ import (
 // followed and rejected, while the root itself may legitimately be a symlink.
 // Paths that do not exist yet (e.g. a file about to be created) are still
 // admitted as long as their existing ancestry stays within root.
+//
+// code:eval (dynamic (eval <datum>)/(compile <datum>)) is denied outright: its
+// Target is a label, not a path, so there is nothing to confine. Use
+// ConsoleWithLoadAuthorizer if sandboxed eval is required.
 func FilesystemRoot(root string) Authorizer {
 	return &filesystemRootAuthorizer{root: root}
 }

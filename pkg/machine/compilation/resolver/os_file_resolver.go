@@ -154,8 +154,9 @@ func (p *OSFileResolver) buildSearchedList(dirs []string) []string {
 }
 
 // EnumerateFiles walks the OS filesystem to discover .sld/.scm files.
-// Searches the same directories as ResolveAndOpen: library registry paths,
-// SCHEME_INCLUDE_PATH, and CWD.
+// Searches osSearchDirs: library registry paths, SCHEME_INCLUDE_PATH, and CWD.
+// Unlike ResolveAndOpen it does NOT consult the load-path stack's current
+// directory, nor fall back to the filesystem root.
 //
 // Best-effort: non-existent directories and unauthorized files are skipped.
 // Walk errors are joined and returned alongside partial results.

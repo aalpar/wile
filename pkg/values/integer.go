@@ -77,11 +77,6 @@ func (p *Integer) HashCode() uint64 {
 	return hashExactNumeric(new(big.Rat).SetInt64(p.Value))
 }
 
-// Per-type conversion helpers for Integer.
-// These eliminate repeated conversion expressions in the type-switch
-// dispatch methods below. Each produces the representation needed by
-// the target type's native arithmetic.
-
 // Overflow-detecting arithmetic helpers for int64.
 //
 // R7RS §6.2.3 allows implementations to support arbitrarily large exact
