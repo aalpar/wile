@@ -59,8 +59,8 @@ func popTwoReals(mc *MachineContext, name string) (values.Number, values.Number,
 }
 
 // inlineAdd pops two numbers and sets value register to their sum.
-func inlineAdd(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "+")
+func inlineAdd(mc *MachineContext, name string) error {
+	a, b, err := popTwoNumbers(mc, name)
 	if err != nil {
 		return err
 	}
@@ -69,8 +69,8 @@ func inlineAdd(mc *MachineContext) error {
 }
 
 // inlineSub pops two numbers and sets value register to a - b.
-func inlineSub(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "-")
+func inlineSub(mc *MachineContext, name string) error {
+	a, b, err := popTwoNumbers(mc, name)
 	if err != nil {
 		return err
 	}
@@ -93,8 +93,8 @@ func isNonRealComplex(n values.Number) bool {
 }
 
 // inlineNumLt pops two numbers and sets value register to (< a b).
-func inlineNumLt(mc *MachineContext) error {
-	a, b, err := popTwoReals(mc, "<")
+func inlineNumLt(mc *MachineContext, name string) error {
+	a, b, err := popTwoReals(mc, name)
 	if err != nil {
 		return err
 	}
@@ -104,8 +104,8 @@ func inlineNumLt(mc *MachineContext) error {
 
 // inlineNumLe pops two numbers and sets value register to (<= a b).
 // R7RS + IEEE 754: NaN fails all comparisons.
-func inlineNumLe(mc *MachineContext) error {
-	a, b, err := popTwoReals(mc, "<=")
+func inlineNumLe(mc *MachineContext, name string) error {
+	a, b, err := popTwoReals(mc, name)
 	if err != nil {
 		return err
 	}
@@ -118,8 +118,8 @@ func inlineNumLe(mc *MachineContext) error {
 }
 
 // inlineNumGt pops two numbers and sets value register to (> a b).
-func inlineNumGt(mc *MachineContext) error {
-	a, b, err := popTwoReals(mc, ">")
+func inlineNumGt(mc *MachineContext, name string) error {
+	a, b, err := popTwoReals(mc, name)
 	if err != nil {
 		return err
 	}
@@ -129,8 +129,8 @@ func inlineNumGt(mc *MachineContext) error {
 
 // inlineNumGe pops two numbers and sets value register to (>= a b).
 // R7RS + IEEE 754: NaN fails all comparisons.
-func inlineNumGe(mc *MachineContext) error {
-	a, b, err := popTwoReals(mc, ">=")
+func inlineNumGe(mc *MachineContext, name string) error {
+	a, b, err := popTwoReals(mc, name)
 	if err != nil {
 		return err
 	}
@@ -143,8 +143,8 @@ func inlineNumGe(mc *MachineContext) error {
 }
 
 // inlineNumEq pops two numbers and sets value register to (= a b).
-func inlineNumEq(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "=")
+func inlineNumEq(mc *MachineContext, name string) error {
+	a, b, err := popTwoNumbers(mc, name)
 	if err != nil {
 		return err
 	}
@@ -153,8 +153,8 @@ func inlineNumEq(mc *MachineContext) error {
 }
 
 // inlineMul pops two numbers and sets value register to a * b.
-func inlineMul(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "*")
+func inlineMul(mc *MachineContext, name string) error {
+	a, b, err := popTwoNumbers(mc, name)
 	if err != nil {
 		return err
 	}
@@ -164,15 +164,15 @@ func inlineMul(mc *MachineContext) error {
 
 // inlineDiv pops two numbers and sets value register to a / b.
 // Returns an error on division by exact zero.
-func inlineDiv(mc *MachineContext) error {
-	a, b, err := popTwoNumbers(mc, "/")
+func inlineDiv(mc *MachineContext, name string) error {
+	a, b, err := popTwoNumbers(mc, name)
 	if err != nil {
 		return err
 	}
 	result, divErr := a.Divide(b)
 	if divErr != nil {
 		return werr.WrapForeignErrorf(
-			divErr, "/: division error")
+			divErr, "%s: division error", name)
 	}
 	mc.SetValue(result)
 	return nil
