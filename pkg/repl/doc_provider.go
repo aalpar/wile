@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -34,6 +35,12 @@ type DocInfo struct {
 	ParamTypes []values.TypeConstraint
 	ReturnType values.TypeConstraint
 	Keywords   []string
+	// Origin is the binding's import-provenance root: the library that DEFINES
+	// it and the name it is defined under, invariant to any export/import
+	// renaming along the way. Nil for anything not reached by import (a
+	// top-level define, a primitive read straight off the registry), which is
+	// why it is rendered only when present.
+	Origin *environment.OriginRef
 }
 
 // DocProvider looks up documentation for named bindings.

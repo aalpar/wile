@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`,doc` now reports where an imported binding is defined.** A trailing
+  `From: (srfi 1)` line, or `From: (srfi 1) as fold` when the name you typed differs
+  from the name it is defined under (an export or import rename anywhere along the
+  chain). It reads the import-provenance root recorded on the binding, so it names the
+  **defining** library rather than the one a program happened to import from: a binding
+  taken through a re-exporting library still reports its origin, not the intermediary.
+  Bindings never reached by an import — a top-level `define`, or an ambient bootstrap
+  name usable without importing anything — have no root, and get no line rather than a
+  guess. Embedders building their own doc UI get the same data as
+  `repl.DocInfo.Origin` (an `*environment.OriginRef`, nil when absent). This is the
+  first consumer of the provenance the binding-identity work below recorded.
+
 ### Removed
 
 - **`values.ChannelSelect` and its `SelectCase`/`SelectCaseKind` types are gone.**
@@ -83,6 +97,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   special-form expanders now install in the sealed expand base, so a user redefine becomes a
   shadow in the mutable expand child and the user's transformer runs; the original form stays
   intact for code that does not redefine it.
+- **`free-identifier=?` and an ER-macro's `compare` now decide identity by binding
+  provenance, not by pointer or by value.** Both were wrong, on complementary cases
+  (the conformant answers verified against Racket and Chez). `free-identifier=?`
+  compared `*Binding` pointers, so two rename-imports of one binding — taken directly,
+  through a re-exporting library, or under a renamed export — reported *different*.
+  ER-compare fell back to comparing the bindings' *values*, so two distinct defines
+  that happen to hold one value (`(define a car)` `(define b car)`) reported *same*.
+  Each binding now carries an import-provenance root (`environment.OriginRef{RootLib,
+  RootName}`), folded at import and keyed on the defining name so export/import
+  renaming cannot fork identity, and both predicates compare that root via
+  `environment.SameBinding`. A library's own exports are stamped with their own root
+  at library finalization, so a library-internal binding and an import of itself
+  compare equal too — that is where ER-compare resolves a rename, and
+  `free-identifier=?` now agrees with it. Impact is narrow: `free-identifier=?` is
+  R6RS rather than R7RS-small, and no bundled program reaches either case.
+- **Import-gated `fold`/`fold-right` inlining could inline the wrong template.** The
+  compiler inlines a curated higher-order primitive when the binding comes from the
+  library that owns it, but it selected the inline template by the *call-site* name —
+  so importing one curated HOF renamed onto another curated HOF's name ran the other's
+  body, a silently wrong result. Dispatch now selects by the canonical name stamped on
+  the binding at import time (`BindingMeta.InlineHOFName`). The gate itself follows the
+  binding's provenance root rather than the immediate import library, so the real
+  `(srfi 1)` `fold` is still inlined through a re-export chain while a same-named HOF
+  from elsewhere is refused; and the stamp is cleared on every re-import, so a
+  last-import-wins replacement cannot leave a stale template on the new value.
+- **An imported macro's docstring could outlive the macro it described.** Two
+  libraries exporting one name conflate under the by-name import diamond (R7RS §5.6
+  last-import-wins), so a later import replaces the earlier one's value in the shared
+  slot — but the docstring carried across the import boundary was written only when
+  non-empty, so nothing could ever clear it. Importing a documented macro and then an
+  undocumented macro of that name left `,doc` reporting the displaced macro's
+  documentation for the macro that actually expands. The docstring is now assigned
+  unconditionally at import, so it tracks the current value the same way the
+  inline-HOF stamp does. Procedures were never affected: a closure carries its
+  docstring on its own template, so it travels with the value; the imported binding's
+  metadata is the macro path's only carrier, and so the only one that could go stale.
 - **Release note correction (1.18.0).** The 1.18.0 entry "`channel-select` is
   deterministic when a closed send races a ready receive" described `channel-select`
   as a Scheme primitive. There has never been one; the fix it describes was to the

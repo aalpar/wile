@@ -473,6 +473,37 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	if len(info.Keywords) > 0 {
 		fmt.Fprintf(w, "  Keywords: %s\n", strings.Join(info.Keywords, ", "))
 	}
+
+	// Provenance
+	writeOrigin(w, name, info.Origin)
+}
+
+// writeOrigin renders a binding's import-provenance root as a "From:" line, or
+// nothing when the binding has no root (never imported). displayName is the name
+// being documented, so a root reached under a different name — an export or
+// import rename anywhere along the chain — is called out rather than silently
+// showing a name the user never typed.
+func writeOrigin(w *strings.Builder, displayName string, o *environment.OriginRef) {
+	if o == nil {
+		return
+	}
+	if o.RootName != "" && o.RootName != displayName {
+		fmt.Fprintf(w, "  From: %s as %s\n", schemeLibraryName(o.RootLib), o.RootName)
+		return
+	}
+	fmt.Fprintf(w, "  From: %s\n", schemeLibraryName(o.RootLib))
+}
+
+// schemeLibraryName renders a library registry key ("scheme/base") in the form
+// the user writes it ("(scheme base)"). repl/ cannot call LibraryName.Scheme-
+// String directly because it is deliberately decoupled from machine/compilation
+// (see RegistryDocProvider.Search), but the two encodings are the same Parts
+// slice joined on different separators, so the reconstruction is exact.
+func schemeLibraryName(key string) string {
+	if key == "" {
+		return "?"
+	}
+	return "(" + strings.ReplaceAll(key, "/", " ") + ")"
 }
 
 // paramTypeForDoc returns the TypeConstraint for parameter position i.
@@ -491,7 +522,7 @@ func paramTypeForDoc(types []values.TypeConstraint, i int) values.TypeConstraint
 // tryStructuredBindingDoc attempts to parse a docstring and render it via
 // formatPrimitiveDoc when structured metadata is found. Returns true if
 // the structured path was taken (caller should return early).
-func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, showExamples bool) bool {
+func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, origin *environment.OriginRef, showExamples bool) bool {
 	if doc == "" {
 		return false
 	}
@@ -508,22 +539,24 @@ func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, sh
 		ReturnType: parsed.ReturnType,
 		Category:   parsed.Category,
 		Keywords:   parsed.Keywords,
+		Origin:     origin,
 	}, showExamples)
 	return true
 }
 
 func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase environment.Phase, eng *wile.Engine, showExamples bool) {
 	phaseName := phase.String()
+	origin := bnd.Origin()
 
 	switch bnd.BindingType() {
 	case environment.BindingTypePrimitive:
-		if tryStructuredBindingDoc(w, name, bnd.Doc(), "special form", showExamples) {
+		if tryStructuredBindingDoc(w, name, bnd.Doc(), "special form", origin, showExamples) {
 			return
 		}
 		fmt.Fprintf(w, "%s: special form (%s)\n", name, phaseName)
 
 	case environment.BindingTypeSyntax:
-		if tryStructuredBindingDoc(w, name, bnd.Doc(), "syntax", showExamples) {
+		if tryStructuredBindingDoc(w, name, bnd.Doc(), "syntax", origin, showExamples) {
 			return
 		}
 		fmt.Fprintf(w, "%s: syntax transformer (%s)\n", name, phaseName)
@@ -536,7 +569,7 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		if eng != nil {
 			typeLabel = eng.FormLabel(wile.WrapValue(val))
 		}
-		if tryStructuredBindingDoc(w, name, callableDoc(val), typeLabel, showExamples) {
+		if tryStructuredBindingDoc(w, name, callableDoc(val), typeLabel, origin, showExamples) {
 			return
 		}
 
@@ -562,6 +595,10 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		indented := strings.ReplaceAll(doc, "\n", "\n  ")
 		fmt.Fprintf(w, "\n  %s\n", indented)
 	}
+
+	// Provenance last, matching formatPrimitiveDoc's order on the structured
+	// paths (which returned early above): description first, metadata trailing.
+	writeOrigin(w, name, origin)
 }
 
 // callableDoc extracts the docstring from a callable value.

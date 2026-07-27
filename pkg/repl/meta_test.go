@@ -24,6 +24,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/docparse"
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
@@ -947,4 +948,95 @@ func TestMetaHandleDebugDelegation(t *testing.T) {
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
 	}
+}
+
+// ,doc reports where an imported binding is DEFINED, from the provenance root
+// folded onto the binding at import. The root survives export/import renaming
+// and re-export hops, so a renamed import is called out by its defining name
+// and a re-export chain names the defining library rather than the immediate
+// one the program imported.
+func TestWriteOrigin(t *testing.T) {
+	tests := []struct {
+		name        string
+		displayName string
+		origin      *environment.OriginRef
+		want        string
+	}{
+		{
+			// Never imported (a plain top-level define, or an ambient bootstrap
+			// name reachable without an import): no root, so no claim about one.
+			name:        "nil origin renders nothing",
+			displayName: "mine",
+			origin:      nil,
+			want:        "",
+		},
+		{
+			name:        "root name matches the display name",
+			displayName: "fold",
+			origin:      &environment.OriginRef{RootLib: "srfi/1", RootName: "fold"},
+			want:        "  From: (srfi 1)\n",
+		},
+		{
+			// (import (rename (srfi 1) (fold my-fold))) — the user typed my-fold,
+			// but it is fold that is defined, and that is worth saying.
+			name:        "renamed import names the defining name too",
+			displayName: "my-fold",
+			origin:      &environment.OriginRef{RootLib: "srfi/1", RootName: "fold"},
+			want:        "  From: (srfi 1) as fold\n",
+		},
+		{
+			name:        "single-part library key",
+			displayName: "mac",
+			origin:      &environment.OriginRef{RootLib: "maca", RootName: "mac"},
+			want:        "  From: (maca)\n",
+		},
+		{
+			// Defensive: a root with no library cannot be rendered as one, but it
+			// must not silently print "()" as though it named a real library.
+			name:        "empty library key is marked unknown",
+			displayName: "x",
+			origin:      &environment.OriginRef{RootLib: "", RootName: "x"},
+			want:        "  From: ?\n",
+		},
+		{
+			name:        "empty root name falls back to the library alone",
+			displayName: "x",
+			origin:      &environment.OriginRef{RootLib: "scheme/base", RootName: ""},
+			want:        "  From: (scheme base)\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf strings.Builder
+			writeOrigin(&buf, tt.displayName, tt.origin)
+			qt.Assert(t, buf.String(), qt.Equals, tt.want)
+		})
+	}
+}
+
+// The structured doc path renders provenance too, trailing the metadata block
+// rather than interrupting the description.
+func TestFormatPrimitiveDoc_RendersOrigin(t *testing.T) {
+	c := qt.New(t)
+	var buf strings.Builder
+	info := DocInfo{
+		Doc:      "Fold left over lists.",
+		Category: "srfi-1",
+		Origin:   &environment.OriginRef{RootLib: "srfi/1", RootName: "fold"},
+	}
+	formatPrimitiveDoc(&buf, "fold", info, true)
+	output := buf.String()
+	c.Assert(strings.Contains(output, "From: (srfi 1)"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+	c.Assert(strings.Index(output, "Fold left over lists.") < strings.Index(output, "From:"), qt.IsTrue,
+		qt.Commentf("provenance must trail the description, not precede it; output: %s", output))
+}
+
+// A binding with no import provenance must not grow a From line.
+func TestFormatPrimitiveDoc_NoOriginNoLine(t *testing.T) {
+	c := qt.New(t)
+	var buf strings.Builder
+	formatPrimitiveDoc(&buf, "mine", DocInfo{Doc: "Local thing."}, true)
+	c.Assert(strings.Contains(buf.String(), "From:"), qt.IsFalse,
+		qt.Commentf("output: %s", buf.String()))
 }
