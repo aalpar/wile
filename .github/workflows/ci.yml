@@ -34,7 +34,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         if: github.event_name == 'push'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: build/coverage.out
@@ -54,7 +54,7 @@ jobs:
       # the step is skipped entirely on PR runs (where no CSVs exist).
       - name: Upload benchmark results
         if: always() && github.event_name == 'push'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-results-${{ github.sha }}
           path: examples/benchmarks/canonical-results-*.csv
