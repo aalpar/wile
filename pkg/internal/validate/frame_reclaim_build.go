@@ -415,6 +415,11 @@ type localBinding struct {
 	// params and body ARE the procedure). Everything else records nil — a
 	// parameter, a computed or non-procedure init, and any position where the
 	// name does not yet denote this initializer (a plain let's own inits).
+	//
+	// Recording it is a PROMISE that walkCallSites descends into that
+	// initializer, which is what lets localCaptureSafe accept the local without
+	// re-proving it. Both recording sites below sit next to the descent that
+	// keeps the promise; a new binder form must add both or neither.
 	init ValidatedBodyAndParams
 	// mutated records a set! of this name anywhere within its own binding form.
 	// A mutated name's init no longer describes what an operator of that name

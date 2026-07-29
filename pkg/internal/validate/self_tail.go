@@ -60,6 +60,16 @@ func BodyIsSelfTailReusable(
 // seed their params (bodyIsSelfTailReusable, resolveCallEdges); this one did not.
 // Taking proc rather than its body is what keeps the seed from being forgotten again.
 //
+// A LEXICALLY BOUND operator is not refused outright. If the shadow set records
+// what the name is bound to — a lambda init or a function-form internal define,
+// never set! within its binding form — the call imposes no obligation this walk
+// has not already discharged, because that initializer's body is walked in place
+// (see localCaptureSafe for the premise). Every loop-shaped Scheme procedure
+// binds its loop this way — a named let is a letrec whose single binding is the
+// loop lambda — so the blanket refusal denied the stamp to most of the corpus:
+// 19/68 top-level defines across the Gabriel corpus, against 42/68 with the
+// local rule. A binder the walk cannot see through still refuses.
+//
 // This is conservative — it refuses a same-unit user define callee (mutual
 // recursion), which the interprocedural classifier (ClassifyFrameReclaim) admits —
 // but it is SOUND, which the kill criterion demands.
@@ -73,29 +83,60 @@ func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, selfName string, env
 		if !safe {
 			return
 		}
-		sym, ok := op.(*ValidatedSymbol)
-		if !ok {
-			safe = false // computed operator ⇒ unknown ⇒ could capture
-			return
-		}
-		name := sym.Symbol.Sym.Key
-		if name == selfName && !bound.has(name) {
-			return // the genuine self call
-		}
-		if bound.has(name) {
-			safe = false // shadowed local
-			return
-		}
-		b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
-		if b == nil || !b.IsCaptureSafe() || !b.IsStable() {
-			// Not a capture-safe, non-rebindable primitive: a user-defined callee
-			// (no CaptureSafe), an unresolved name, or a set!-able primitive. A
-			// same-unit define callee is rejected here (interprocedural mutual
-			// recursion is the classifier's job, not the per-body predicate's).
-			safe = false
-		}
+		safe = calleeCaptureSafe(op, bound, selfName, env)
 	})
 	return safe
+}
+
+// calleeCaptureSafe decides one call operator under the shadow set in force at
+// its call site.
+func calleeCaptureSafe(
+	op ValidatedExpr,
+	bound nameSet,
+	selfName string,
+	env *environment.EnvironmentFrame,
+) bool {
+	sym, ok := op.(*ValidatedSymbol)
+	if !ok {
+		return false // computed operator ⇒ unknown ⇒ could capture
+	}
+	name := sym.Symbol.Sym.Key
+	local, shadowed := bound[name]
+	if shadowed {
+		return localCaptureSafe(local)
+	}
+	if name == selfName {
+		return true // the genuine self call
+	}
+	// Not a capture-safe, non-rebindable primitive: a user-defined callee (no
+	// CaptureSafe), an unresolved name, or a set!-able primitive. A same-unit
+	// define callee is rejected here (interprocedural mutual recursion is the
+	// classifier's job, not the per-body predicate's).
+	b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	return b != nil && b.IsCaptureSafe() && b.IsStable()
+}
+
+// localCaptureSafe answers for an operator bound by an enclosing local scope.
+// A binder the walk cannot see through, or a name set! within its own binding
+// form, refuses — which was every local's answer before A-local.
+//
+// A VISIBLE, UNMUTATED LOCAL IMPOSES NO FURTHER OBLIGATION, and that is the
+// whole of A-local. It needs no recursive proof of the initializer, because the
+// enclosing walk has already proven it in place: withLet and withInternalDefines
+// record init only for binders whose initializer walkCallSites descends into on
+// the very next statement (frame_reclaim_build.go — the *ValidatedLet arm walks
+// every binding's Init, walkBodySeq walks every body expression). So every call
+// operator inside that initializer has already been decided by this same pass,
+// under its own lexical scope, into this same accumulator. Calling the local
+// reaches nothing the walk has not already reached.
+//
+// That coupling — record evidence only where the body is walked — is the
+// predicate's soundness premise, and it is what the shape tests pin: a local
+// whose body calls a procedure-invoking callee must refuse, for each binder
+// kind (alocal_test.go). A binder form added to the shadow set without a
+// matching descent would break the premise silently.
+func localCaptureSafe(local localBinding) bool {
+	return local.init != nil && !local.mutated
 }
 
 // BodyIsFrameReleasable reports whether proc's activation frame may be released to
