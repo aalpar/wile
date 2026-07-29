@@ -15,6 +15,8 @@
 package validate
 
 import (
+	"maps"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 )
@@ -366,11 +368,13 @@ func walkCallSites(expr ValidatedExpr, bound nameSet, fn func(proc ValidatedExpr
 		// Conservative: the let's bound names shadow in the body AND (over-
 		// approximating plain-let scoping) in the inits. Over-approximation only
 		// drops a same-name-init edge to unsafe (a leak, sound), never the reverse.
-		inner := bound.withLetBindings(e.Bindings)
+		// The two scopes carry the same membership and differ only in the evidence
+		// recorded — see withLet.
+		initScope, bodyScope := bound.withLet(e)
 		for _, b := range e.Bindings {
-			walkCallSites(b.Init, inner, fn)
+			walkCallSites(b.Init, initScope, fn)
 		}
-		walkBodySeq(e.Body(), inner, fn)
+		walkBodySeq(e.Body(), bodyScope, fn)
 
 	case *ValidatedBegin:
 		// A begin in a body context can splice internal defines into the sequence.
@@ -395,37 +399,54 @@ func walkCallSites(expr ValidatedExpr, bound nameSet, fn func(proc ValidatedExpr
 // body, including their own bodies and earlier siblings), then descending each
 // expression with that augmented shadow set.
 func walkBodySeq(body []ValidatedExpr, bound nameSet, fn func(proc ValidatedExpr, bound nameSet)) {
-	var defined []string
-	for _, e := range body {
-		d, ok := e.(*ValidatedDefine)
-		if ok {
-			defined = append(defined, d.Name().Sym.Key)
-		}
-	}
-	inner := bound
-	if len(defined) > 0 {
-		inner = bound.with(defined...)
-	}
+	inner := bound.withInternalDefines(body)
 	for _, e := range body {
 		walkCallSites(e, inner, fn)
 	}
 }
 
-// nameSet is a set of identifier Keys lexically bound in an enclosing local
-// scope. A call operator whose name is in the set is shadowed by a local binding
-// and therefore is NOT the same-Key top-level define or imported primitive.
-type nameSet map[string]struct{}
+// localBinding is what the shadow walk knows about one lexically bound name.
+// The zero value — no initializer, not mutated — means "bound, but opaque", and
+// is what every name in the set carries as far as the current consumers are
+// concerned: they query membership only (has) and every hit refuses.
+type localBinding struct {
+	// init is the binder's initializer when it is a procedure the walk can see
+	// through: a lambda init, or a function-form internal define (whose own
+	// params and body ARE the procedure). Everything else records nil — a
+	// parameter, a computed or non-procedure init, and any position where the
+	// name does not yet denote this initializer (a plain let's own inits).
+	init ValidatedBodyAndParams
+	// mutated records a set! of this name anywhere within its own binding form.
+	// A mutated name's init no longer describes what an operator of that name
+	// resolves to at the call, so the initializer is not evidence about it.
+	mutated bool
+}
 
-// with returns a copy of s extended with names. Copy-on-extend keeps sibling
-// scopes independent — a name bound in one let does not leak to its siblings.
+// nameSet maps an identifier Key lexically bound in an enclosing local scope to
+// what the walk knows about that binding. A call operator whose name is in the
+// set is shadowed by a local binding and therefore is NOT the same-Key top-level
+// define or imported primitive.
+//
+// The recorded localBinding is the evidence a proof of a locally-bound operator
+// would need (the A-local lever): it is populated here and deliberately not yet
+// read, so the type change and the semantic change stay separable.
+type nameSet map[string]localBinding
+
+// with returns a copy of s extended with names bound opaquely.
 func (s nameSet) with(names ...string) nameSet {
-	out := make(nameSet, len(s)+len(names))
-	for k := range s {
-		out[k] = struct{}{}
-	}
+	out := s.clone(len(names))
 	for _, n := range names {
-		out[n] = struct{}{}
+		out[n] = localBinding{}
 	}
+	return out
+}
+
+// clone copies s with room for extra further entries. Copy-on-extend keeps
+// sibling scopes independent — a name bound in one let does not leak to its
+// siblings.
+func (s nameSet) clone(extra int) nameSet {
+	out := make(nameSet, len(s)+extra)
+	maps.Copy(out, s)
 	return out
 }
 
@@ -445,7 +466,11 @@ func (s nameSet) withParams(p *ValidatedParams) nameSet {
 	return s.with(names...)
 }
 
-// withLetBindings returns a copy of s extended with a let form's bound names.
+// withLetBindings returns a copy of s extended with a let form's bound names,
+// all opaque. This is the membership-only extender, for callers that ask nothing
+// but "is this name shadowed" — notably exprMutatesName, which cannot use withLet
+// because recording evidence there runs letMutatesName, whose own scan re-enters
+// exprMutatesName once per enclosing let.
 func (s nameSet) withLetBindings(bindings []ValidatedLetBinding) nameSet {
 	if len(bindings) == 0 {
 		return s
@@ -455,6 +480,86 @@ func (s nameSet) withLetBindings(bindings []ValidatedLetBinding) nameSet {
 		names = append(names, b.Name.Sym.Key)
 	}
 	return s.with(names...)
+}
+
+// withLet returns the two shadow sets a let form's sub-scopes run under: inits
+// and body. They differ because a name denotes its own initializer only in the
+// letrec family (LetKind.InitsInScope) — in a plain let or let*, a reference to
+// the name inside its own init is the OUTER binding, so recording the init there
+// would be evidence about the wrong procedure. The init scope binds every name
+// opaquely in that case, preserving the walk's existing over-approximation
+// (shadowed ⇒ refuse) rather than narrowing it.
+func (s nameSet) withLet(v *ValidatedLet) (nameSet, nameSet) {
+	if len(v.Bindings) == 0 {
+		return s, s
+	}
+	body := s.clone(len(v.Bindings))
+	for _, b := range v.Bindings {
+		body[b.Name.Sym.Key] = letBindingLocal(v, b)
+	}
+	if v.Kind.InitsInScope() {
+		return body, body
+	}
+	inits := s.clone(len(v.Bindings))
+	for _, b := range v.Bindings {
+		inits[b.Name.Sym.Key] = localBinding{}
+	}
+	return inits, body
+}
+
+// letBindingLocal records what one let binding is known to bind. Only a lambda
+// init is evidence. letMutatesName covers the two set! paths a lexical binding
+// has — a sibling init and the let body — and nothing outside the let can reach
+// the name, which is the same argument LetBindingSelfTailReusable relies on.
+func letBindingLocal(v *ValidatedLet, b ValidatedLetBinding) localBinding {
+	lam, ok := b.Init.(*ValidatedLambda)
+	if !ok {
+		return localBinding{}
+	}
+	return localBinding{init: lam, mutated: letMutatesName(v, b.Name.Sym.Key)}
+}
+
+// withInternalDefines returns a copy of s extended with a body sequence's
+// internal define names (letrec* — mutually visible across the whole body,
+// including their own bodies and earlier siblings). A function-form define
+// records itself as its own init: its params and body ARE the procedure.
+func (s nameSet) withInternalDefines(body []ValidatedExpr) nameSet {
+	var defines []*ValidatedDefine
+	for _, e := range body {
+		d, ok := e.(*ValidatedDefine)
+		if ok {
+			defines = append(defines, d)
+		}
+	}
+	if len(defines) == 0 {
+		return s
+	}
+	out := s.clone(len(defines))
+	for _, d := range defines {
+		out[d.Name().Sym.Key] = internalDefineLocal(d, body)
+	}
+	return out
+}
+
+// internalDefineLocal records what one internal define is known to bind.
+func internalDefineLocal(d *ValidatedDefine, body []ValidatedExpr) localBinding {
+	if !d.IsFunction {
+		return localBinding{}
+	}
+	return localBinding{init: d, mutated: bodyMutatesOwnDefine(body, d.Name().Sym.Key)}
+}
+
+// bodyMutatesOwnDefine reports whether a body sequence contains a set! of name,
+// where name is bound BY this sequence's own internal defines. It cannot be
+// seqMutatesName: that one hoists every internal define name into the shadow
+// set, which would mask exactly the set! this asks about.
+func bodyMutatesOwnDefine(body []ValidatedExpr, name string) bool {
+	for _, e := range body {
+		if exprMutatesName(e, name, nameSet(nil)) {
+			return true
+		}
+	}
+	return false
 }
 
 // has reports whether name is lexically shadowed in this scope.
