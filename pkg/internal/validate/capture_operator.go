@@ -117,12 +117,18 @@ func exprReferencesCaptureOperator(
 // bodyCreatesEscapingClosure reports whether body creates a lambda or
 // case-lambda that is not in immediately-applied operator position.
 //
-// v1 (conservative): any closure that is not the operator of its enclosing
-// call (RoleCallProc) is assumed to escape — it may be stored, returned, or
-// passed onward, parenting the enclosing frame via OpMakeClosure
-// (operations_closure.go sets envPooled=false). An immediately-applied lambda
-// does not itself escape, but its own body is still walked (a closure created
-// inside it can escape). Precision relaxation via depth tracking is deferred.
+// Any closure that is not the operator of its enclosing call (RoleCallProc) is
+// assumed to escape — it may be stored, returned, or passed onward, parenting
+// the enclosing frame via OpMakeClosure (operations_closure.go sets
+// envPooled=false). An immediately-applied lambda does not itself escape, but
+// its own body is still walked (a closure created inside it can escape).
+//
+// ONE SHAPE IS EXEMPT: a let-bound lambda every one of whose references is a
+// call (letBoundClosureEscapes). Without that exemption a named let — which
+// validates to a letrec whose single binding is the loop lambda, handed to this
+// walk as an ordinary init at RoleNormal — made every loop-shaped procedure in
+// the language escaping, which is why the capture-safe stamp count could reach
+// 42/68 while the reclaim verdict stayed at 19/68.
 func bodyCreatesEscapingClosure(body []ValidatedExpr) bool {
 	for _, e := range body {
 		if exprCreatesEscapingClosure(e, RoleNormal) {
@@ -135,6 +141,11 @@ func bodyCreatesEscapingClosure(body []ValidatedExpr) bool {
 func exprCreatesEscapingClosure(expr ValidatedExpr, role ChildRole) bool {
 	if expr == nil {
 		return false
+	}
+
+	let, isLet := expr.(*ValidatedLet)
+	if isLet {
+		return letCreatesEscapingClosure(let)
 	}
 
 	switch expr.(type) {
@@ -154,4 +165,31 @@ func exprCreatesEscapingClosure(expr ValidatedExpr, role ChildRole) bool {
 		}
 	})
 	return found
+}
+
+// letCreatesEscapingClosure handles the one binder form whose lambda inits get a
+// verdict rather than a blanket refusal. A binding proven non-escaping is walked
+// as RoleCallProc — the role an immediately-applied lambda already carries — so
+// the lambda itself is admitted while its body is still searched for closures
+// that DO escape. Everything else keeps RoleNormal and the old answer.
+//
+// The let form is walked here in full rather than falling through to
+// WalkSubExprs, because that generic descent is what hands a proven init back at
+// RoleNormal and re-refuses it.
+func letCreatesEscapingClosure(v *ValidatedLet) bool {
+	for i := range v.Bindings {
+		role := RoleNormal
+		if !letBoundClosureEscapes(v, i) {
+			role = RoleCallProc
+		}
+		if exprCreatesEscapingClosure(v.Bindings[i].Init, role) {
+			return true
+		}
+	}
+	for _, e := range v.Body() {
+		if exprCreatesEscapingClosure(e, RoleNormal) {
+			return true
+		}
+	}
+	return false
 }

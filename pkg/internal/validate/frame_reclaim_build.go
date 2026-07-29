@@ -241,11 +241,27 @@ func classifyCallee(
 	// Lexical shadow guard (OQ-1): an operator bound by an enclosing local scope
 	// resolves to that local, NOT the same-name top-level define or imported
 	// primitive. The classifier resolves against a flat env with no local frames,
-	// so without this guard the callee would resolve to the global (Stable) binding
+	// so falling through would resolve the callee to the global (Stable) binding
 	// and mark the edge immutable — a false positive at the wrong callee (e.g.
-	// (define (use h) (let ((sq h)) (sq 3))) with a Stable top-level sq). A shadowed
-	// operator is therefore unresolved ⇒ unsafe.
-	if bound.has(name) {
+	// (define (use h) (let ((sq h)) (sq 3))) with a Stable top-level sq).
+	//
+	// A VISIBLE, UNMUTATED LOCAL CONSTRAINS NOTHING — the A-local rule, applied at
+	// the classifier's own callee site rather than only at the per-body predicate's
+	// (localCaptureSafe, self_tail.go). The premise is identical and so is the
+	// walk: resolveCallEdges descends into that initializer, so every call the
+	// local's body makes has already contributed its own edge to this same
+	// accumulator, and the constraint survives transitively. The `sq`-bound-to-a-
+	// parameter hazard above is exactly what localCaptureSafe's init != nil clause
+	// refuses — a parameter records no initializer.
+	//
+	// Widening only the escape fact was not enough to move any verdict: a shadowed
+	// operator resolved to a nil target here and failed nodeSafe's edge test
+	// regardless of createsEscaping, so both refusals had to lift together.
+	local, shadowed := bound[name]
+	if shadowed {
+		if localCaptureSafe(local) {
+			return reclaimEdge{}, false
+		}
 		return reclaimEdge{target: nil}, true
 	}
 
