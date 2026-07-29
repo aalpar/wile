@@ -8,12 +8,21 @@ GO_MOD=$(GO) mod
 GO_BUILD_DIR=./build
 SH_TOOLS_DIR=./tools/sh
 
-SOURCES=$(shell find . -type f -name "*.go" -print)
+# Build prerequisites, scoped to the roots ./cmd/wile actually depends on
+# (verify with: go list -deps -f '{{.Dir}}' ./cmd/wile). Sweeping the whole
+# tree instead is not merely wasteful, it is unsound: a prerequisite path
+# containing `%` silently voids the $(DIST_DIR)/%/$(MY_BIN) pattern rule
+# below. Make stem-substitutes `%` in a pattern rule's prerequisites, cannot
+# make the resulting phantom path, discards the rule, then reports the
+# existing stale binary as up to date. An untracked corpus of third-party
+# Scheme (Akku encodes `:` as `%3a` in directory names) is enough to do it.
+SOURCE_ROOTS=cmd coverage extensions pkg
+SOURCES=$(shell find $(SOURCE_ROOTS) -type f -name "*.go" -print)
 # Embedded stdlib: both Scheme source (.scm) and library-definition (.sld)
 # files are baked in via go:embed, so both must be build prerequisites —
 # otherwise editing only a library's (export ...) list in a .sld leaves
 # `make build` with a stale binary.
-EMBED_SOURCES=$(shell find . -type f \( -name "*.scm" -o -name "*.sld" \) -print)
+EMBED_SOURCES=$(shell find $(SOURCE_ROOTS) -type f \( -name "*.scm" -o -name "*.sld" \) -print)
 SOURCE_DIRS=$(shell go list -f "{{.Dir}}" ./...)
 BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
 BUILD_VERSION:=$(shell cat ./VERSION 2>/dev/null || echo "v0.0.0")
