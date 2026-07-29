@@ -100,23 +100,28 @@ type inlineHOFSpec struct {
 // adjacent to the template it indexes, so the two cannot drift apart.
 //
 // v1 = for-each (P3); the vector/string index loops and fold's arity-3 list fold
-// were widened in P6. map/fold-right are non-tail in their real definitions, so
-// their templates are TAIL REWRITES (accumulate + reverse): sound here because a
-// template is reached only when the callback is provably capture-safe, so the
-// call/cc-capturability that map/fold-right's non-tail shapes preserve
-// (bootstrap_procedures.scm / srfi/1/fold.scm) is moot — a capturing callback
-// falls through to the real, non-tail HOF. The rewrite also sheds the original's
-// O(n) call-depth ceiling. Application order is preserved (verified): map applies
-// f left-to-right; fold-right reverses first so kons still fires right-to-left.
+// were widened in P6. fold-right is non-tail in its real definition, so its template
+// is a TAIL REWRITE (accumulate + reverse): sound here because a template is reached
+// only when the callback is provably capture-safe, so the call/cc-capturability that
+// fold-right's non-tail shape preserves (srfi/1/fold.scm) is moot — a capturing
+// callback falls through to the real, non-tail HOF. The rewrite also sheds the
+// original's O(n) call-depth ceiling. Application order is preserved (verified):
+// map applies f left-to-right; fold-right reverses first so kons still fires
+// right-to-left.
+//
+// map used to need the same rewrite and no longer does: its real single-list clause
+// is accumulate + reverse (bootstrap_procedures.scm), so the template below is once
+// again a plain transcription and map's own definition carries no depth ceiling for
+// the fall-through path to inherit.
 var inlineHOFSpecs = map[string]inlineHOFSpec{
 	"for-each": {callbackParam: 0, template: `(lambda (f lst)
   (let loop ((lst lst))
     (if (null? lst) (if #f #f)
         (begin (f (car lst)) (loop (cdr lst))))))`},
-	// map's real single-list clause conses in non-tail position
-	// ((cons (f (car lst)) (loop (cdr lst)))); the tail rewrite accumulates the
-	// mapped results front-to-back and reverses once at the end, so f is still
-	// applied left-to-right and the result order is unchanged.
+	// Transcribed from map's real single-list clause: accumulate front-to-back,
+	// reverse once at the end. What the inlining still buys is the callback —
+	// substituted and stamped capture-safe, so the loop reclaims its env frame,
+	// which the real map cannot do while f is an unknown callee.
 	"map": {callbackParam: 0, template: `(lambda (f lst)
   (let loop ((lst lst) (acc '()))
     (if (null? lst) (reverse acc)

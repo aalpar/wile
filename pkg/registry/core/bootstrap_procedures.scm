@@ -116,22 +116,44 @@
 ;; Higher-order list operations
 ;; Implemented in Scheme so that iteration produces capturable Scheme
 ;; continuation frames (enabling call/cc inside map/for-each callbacks).
+;;
+;; Both loops are TAIL recursive, so neither saves a continuation per element and
+;; neither has a call-depth ceiling. for-each gets that for free (it discards
+;; results); map has to work for it — see below.
+;;
+;; map accumulates results front-to-back and reverses once at the end. The obvious
+;; alternative, structural recursion — (cons (f (car lst)) (loop (cdr lst))) —
+;; leaves the cons pending, which is one continuation per element and
+;; ErrCallDepthExceeded on a list longer than maxCallDepth.
+;;
+;; The other tail form, a set-cdr! tail pointer, allocates n+1 cells against this
+;; form's 2n and is nonetheless MUCH slower — measured, interleaved A/B, min-of-5:
+;; mapbench +34.6% and deriv +16.2% against the old non-tail map, versus +8.2% and
+;; +8.9% for this form. Two reasons, both structural rather than incidental. Per
+;; element it runs set-cdr! and an extra cdr on top of the same f and cons this
+;; form runs, while reverse links n cells in ONE primitive call through a single
+;; PairBlock. And its set-cdr! never reaches the promoted OpSetCdr opcode: the
+;; cell argument is compound ((cons (f ...) '())), which demotes the outer call to
+;; a generic apply. Restructuring to make it promotable needs a let, whose env
+;; frame per iteration costs more than the fused dispatch saves (+38.9%). Promoting
+;; set-cdr! does not rescue it; that was tried and measured.
 (define map
   (case-lambda
     ((f lst)
      "Apply F to each element of LST, returning a list of results.\nWith multiple lists, F receives one element from each list per\ncall. Stops at the shortest list.\n\nParameters:\n  f : procedure\n  lst : list\nReturns: list\nCategory: lists\n\nSee also: `for-each', `vector-map', `string-map'."
-     (let loop ((lst lst))
-       (if (null? lst) '()
-           (cons (f (car lst)) (loop (cdr lst))))))
+     (let loop ((rest lst) (acc '()))
+       (if (null? rest)
+           (reverse acc)
+           (loop (cdr rest) (cons (f (car rest)) acc)))))
     ((f lst . lsts)
-     (let loop ((all (cons lst lsts)))
+     (let loop ((all (cons lst lsts)) (acc '()))
        (if (let any-null? ((ls all))
              (if (null? ls) #f
                  (if (null? (car ls)) #t
                      (any-null? (cdr ls)))))
-           '()
-           (cons (apply f (map car all))
-                 (loop (map cdr all))))))))
+           (reverse acc)
+           (loop (map cdr all)
+                 (cons (apply f (map car all)) acc)))))))
 
 (define for-each
   (case-lambda

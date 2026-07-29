@@ -85,6 +85,47 @@ func TestMapErrors(t *testing.T) {
 	}
 }
 
+// The call-depth property lives in pkg/wile (TestMapCallDepthCeiling): these helpers
+// build a MachineContext directly, which leaves maxCallDepth at 0 = unlimited, so a
+// depth assertion here would pass against ANY map shape and prove nothing.
+
+// TestMapResultIsFreshAndMutable guards the accumulate-and-reverse construction:
+// the result must be freshly allocated cells the caller owns, never a splice of the
+// input's spine. R7RS §6.4 leaves map's sharing unspecified, so this is a Wile
+// guarantee rather than a conformance point — and it is the property a future
+// allocation optimization is most likely to trade away without noticing.
+func TestMapResultIsFreshAndMutable(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "set-car! on result does not disturb input",
+			Code:     `(let* ((in (list 1 2 3)) (out (map (lambda (x) x) in))) (set-car! out 99) in)`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			Name:     "set-cdr! on result does not disturb input",
+			Code:     `(let* ((in (list 1 2 3)) (out (map (lambda (x) x) in))) (set-cdr! out '()) in)`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			Name:     "result is not eq? to input",
+			Code:     `(let ((in (list 1 2 3))) (eq? in (map (lambda (x) x) in)))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "no accumulator artifact leads the result",
+			Code:     `(car (map (lambda (x) (* x 10)) '(5 6)))`,
+			Expected: values.NewInteger(50),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 func TestMapExceptionGuard(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{

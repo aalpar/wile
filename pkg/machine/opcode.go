@@ -143,6 +143,8 @@ const (
 	OpMulTail       // Tail inlined 2-arg *
 	OpDiv           // Non-tail inlined 2-arg /
 	OpDivTail       // Tail inlined 2-arg /
+	OpSetCdr        // Non-tail inlined set-cdr!
+	OpSetCdrTail    // Tail inlined set-cdr!
 
 	// Fallback: dispatch to sideTable[Arg]
 
@@ -262,6 +264,8 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpMulTail:               {name: "MulTail", operandKind: OperandCachedBinding},
 	OpDiv:                   {name: "Div", operandKind: OperandCachedBinding},
 	OpDivTail:               {name: "DivTail", operandKind: OperandCachedBinding},
+	OpSetCdr:                {name: "SetCdr", operandKind: OperandCachedBinding},
+	OpSetCdrTail:            {name: "SetCdrTail", operandKind: OperandCachedBinding},
 	OpComplex:               {name: "Complex", operandKind: OperandSideTable},
 }
 

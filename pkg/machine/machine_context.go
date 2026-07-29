@@ -950,6 +950,20 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 
+		case OpSetCdr:
+			var err error
+			mc, err = execPromoted(mc, instr, &promotedSetCdr, false)
+			if err != nil {
+				return err
+			}
+
+		case OpSetCdrTail:
+			var err error
+			mc, err = execPromoted(mc, instr, &promotedSetCdr, true)
+			if err != nil {
+				return err
+			}
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

@@ -33,15 +33,15 @@ func TestPromotedOpsCoverPromotedOpcodes(t *testing.T) {
 			covered[code] = op.name
 		}
 	}
-	for code := OpEqQ; code <= OpDivTail; code++ {
+	for code := OpEqQ; code <= OpSetCdrTail; code++ {
 		_, ok := covered[code]
 		if !ok {
 			t.Errorf("opcode %s is in the promoted range but no promotedOps entry claims it", code)
 		}
 	}
-	if len(covered) != int(OpDivTail-OpEqQ+1) {
+	if len(covered) != int(OpSetCdrTail-OpEqQ+1) {
 		t.Errorf("promotedOps covers %d opcodes, promoted range holds %d",
-			len(covered), OpDivTail-OpEqQ+1)
+			len(covered), OpSetCdrTail-OpEqQ+1)
 	}
 }
 

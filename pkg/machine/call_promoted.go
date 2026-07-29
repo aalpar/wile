@@ -90,6 +90,7 @@ var (
 	promotedNumGt     = promotedOp{name: ">", arity: 2, nonTail: OpNumGt, tail: OpNumGtTail, fn: inlineNumGt}
 	promotedNumGe     = promotedOp{name: ">=", arity: 2, nonTail: OpNumGe, tail: OpNumGeTail, fn: inlineNumGe}
 	promotedNumEq     = promotedOp{name: "=", arity: 2, nonTail: OpNumEq, tail: OpNumEqTail, fn: inlineNumEq}
+	promotedSetCdr    = promotedOp{name: "set-cdr!", arity: 2, nonTail: OpSetCdr, tail: OpSetCdrTail, fn: inlineSetCdr}
 )
 
 // promotedOps is the registry of promoted primitives. Listing a descriptor here
@@ -102,7 +103,7 @@ var promotedOps = []*promotedOp{
 	&promotedPairQ, &promotedCar, &promotedCdr, &promotedCons,
 	&promotedAdd, &promotedSub, &promotedMul, &promotedDiv,
 	&promotedNumLt, &promotedNumLe, &promotedNumGt, &promotedNumGe,
-	&promotedNumEq,
+	&promotedNumEq, &promotedSetCdr,
 }
 
 // promotedByName indexes promotedOps by Scheme name. Built once at init; read
@@ -238,6 +239,36 @@ func inlineCons(mc *MachineContext, _ string) error {
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++
 	mc.SetValue(values.NewCons(car, cdr))
+	return nil
+}
+
+// inlineSetCdr is the promoted set-cdr!. It is the first promoted op that MUTATES
+// rather than computing a value, so it carries two obligations the pure ops do not:
+// it must reject an immutable literal pair exactly as PrimSetCdr does
+// (registry/core/prim_pairs.go), and it must leave the value register holding Void
+// rather than the mutated pair.
+//
+// The *values.Pair type assertion is deliberately narrower than inlineCar's
+// values.Tuple: R7RS §6.4 makes set-cdr! a pair-only operation, and the empty list
+// implements Tuple, so accepting Tuple here would admit a mutation target with no
+// cdr to set.
+func inlineSetCdr(mc *MachineContext, name string) error {
+	val, o := mc.evals.Pop2()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained += 2
+	mc.counters.ForeignCalls++
+
+	p, ok := o.(*values.Pair)
+	if !ok {
+		return werr.WrapForeignErrorf(
+			werr.ErrNotAPair, "%s: expected pair, got %s", name, o.SchemeString())
+	}
+	if mc.ImmutableLiterals().IsImmutable(p) {
+		return werr.WrapForeignErrorf(
+			werr.ErrImmutablePair, "%s: cannot mutate immutable literal pair", name)
+	}
+	p.SetCdr(val)
+	mc.SetValue(values.Void)
 	return nil
 }
 
