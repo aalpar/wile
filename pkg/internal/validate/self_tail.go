@@ -74,11 +74,30 @@ func BodyIsSelfTailReusable(
 // recursion), which the interprocedural classifier (ClassifyFrameReclaim) admits —
 // but it is SOUND, which the kill criterion demands.
 func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+	return bodyCalleesAllCaptureSafeUnder(proc, selfName, env, nil)
+}
+
+// bodyCalleesAllCaptureSafeUnder is bodyCalleesAllCaptureSafe with an explicit
+// starting shadow set, on top of which proc's parameters are seeded as always.
+// The base carries an ASSUMPTION the caller is responsible for discharging: the
+// only caller that passes one is LetBindingFrameReleasable, which seeds a
+// letrec group's sibling bindings so a call to a sibling can be cleared, and
+// then verifies every member of that group under the same seed.
+//
+// Passing a base is therefore not a way to widen the walk locally. A base whose
+// entries are not independently proven turns localCaptureSafe's premise — the
+// walk has already reached this initializer — into an unchecked claim.
+func bodyCalleesAllCaptureSafeUnder(
+	proc ValidatedBodyAndParams,
+	selfName string,
+	env *environment.EnvironmentFrame,
+	base nameSet,
+) bool {
 	if env == nil {
 		return false
 	}
 	safe := true
-	seed := nameSet(nil).withParams(proc.Params())
+	seed := base.withParams(proc.Params())
 	walkBodySeq(proc.Body(), seed, func(op ValidatedExpr, bound nameSet) {
 		if !safe {
 			return
@@ -230,6 +249,86 @@ func LetBindingSelfTailReusable(v *ValidatedLet, i int, env *environment.Environ
 		return 0, false
 	}
 	return len(lam.Params().Required), true
+}
+
+// LetBindingFrameReleasable reports whether the i-th binding's lambda may have
+// its OWN activation frame released at its tail calls (OpReleaseEnvFrame) — the
+// local analogue of BodyIsFrameReleasable, and the release-path sibling of
+// LetBindingSelfTailReusable.
+//
+// WHAT THIS COVERS THAT SELF-TAIL DOES NOT. A loop whose tail call is to a
+// SIBLING binding rather than to itself: mutual local recursion, which has no
+// depth-0 self call and so fails bodyIsSelfTailReusable's clause (4) outright.
+// Measured at 2 env-frame allocations per iteration before this predicate
+// existed. A loop whose self call sits inside a further let is NOT covered —
+// that call is at depth > 0, where the reuse disposition is cleared on the let
+// descent (compile_let.go), so no arming here can reach it.
+//
+// THE CO-INDUCTION, AND WHY IT IS A GROUP PREDICATE. Clearing a call to sibling
+// `o` rests on `o` not capturing, which is exactly the property being proven for
+// `o`. The shadow set therefore seeds the WHOLE letrec group (withLet), and this
+// function discharges the resulting assumption by verifying every lambda-bound
+// member under that same seed. Verifying only the binding asked about would
+// leave the assumption standing on itself. The group answer is uniform — one
+// unsafe member refuses the whole group — which loses precision when an unrelated
+// sibling is unsafe, and is the conservative direction.
+//
+// Only a lambda init is ever assumed anything: withLet records evidence solely
+// for lambda inits (letBindingLocal), so a sibling bound to a parameter or a
+// computed value stays opaque and refuses at its call site. A sibling set! within
+// the let is likewise already folded in as localBinding.mutated, so a name that
+// can be rebound to a capturing procedure is never cleared.
+//
+// TWO CHECKS BELOW ARE REDUNDANT TODAY, and are kept as explicit tightenings
+// (they can withhold a verdict, never grant one — the subsystem's kill-don't-guard
+// rule). Both survive mutation testing, so neither is load-bearing at present and
+// a reader must not infer that it is:
+//
+//   - The InitsInScope precondition. The group seed is withLet's INIT scope, which
+//     for a plain let binds every name opaquely, so a sibling call already refuses
+//     there. The guard becomes load-bearing the moment that seed changes to the
+//     body scope.
+//   - The group capture-operator scan. An INVOKED capture operator is also a call
+//     operator, and call/cc carries no CaptureSafe stamp, so the callee walk
+//     refuses it first. The scan is what would catch a capture reached other than
+//     by direct invocation, and it keeps this predicate's shape identical to
+//     bodyCannotCaptureCaller's.
+//
+// PRECONDITION: v.Kind must be recursive (letrec family), or the bindings are not
+// in scope in each other's inits and the group seed would describe outer bindings.
+func LetBindingFrameReleasable(v *ValidatedLet, i int, env *environment.EnvironmentFrame) bool {
+	if env == nil {
+		return false
+	}
+	if !v.Kind.InitsInScope() {
+		return false
+	}
+	lam, ok := v.Bindings[i].Init.(*ValidatedLambda)
+	if !ok {
+		return false
+	}
+	// Releasing THIS binding's frame additionally requires that no closure it
+	// creates parents that frame — the same extra clause BodyIsFrameReleasable
+	// carries over ProcedureBodyIsCaptureSafe, and it applies to i alone.
+	if bodyCreatesEscapingClosure(lam.Body()) {
+		return false
+	}
+	group, _ := nameSet(nil).withLet(v)
+	for j := range v.Bindings {
+		sib, isLambda := v.Bindings[j].Init.(*ValidatedLambda)
+		if !isLambda {
+			// Not assumed safe by the seed, so nothing to discharge for it.
+			continue
+		}
+		name := v.Bindings[j].Name.Sym.Key
+		if bodyReferencesCaptureOperator(sib.Body(), makeIsCaptureOp(env)) {
+			return false
+		}
+		if !bodyCalleesAllCaptureSafeUnder(sib, name, env, group) {
+			return false
+		}
+	}
+	return true
 }
 
 // letMutatesName reports whether name is set! anywhere in the let's binding inits

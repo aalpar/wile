@@ -40,17 +40,29 @@ import (
 // self reference resolves to the letrec binding.
 func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCallContext, v *validate.ValidatedLet, i int) error {
 	lam, isLam := v.Bindings[i].Init.(*validate.ValidatedLambda)
-	if isLam {
-		arity, ok := validate.LetBindingSelfTailReusable(v, i, p.env)
-		if ok {
-			name := v.Bindings[i].Name.Sym.Key
-			lenv := environment.NewLocalEnvironment(0)
-			tpl := machine.NewNativeTemplate(0, 0, false)
-			tpl.SetName(name)
-			return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, selfTailReuse(name, arity))
-		}
+	if !isLam {
+		return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
 	}
-	return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
+	name := v.Bindings[i].Name.Sym.Key
+	reuse := noFrameReuse()
+	arity, selfTail := validate.LetBindingSelfTailReusable(v, i, p.env)
+	// Self-tail takes precedence: rebinding the frame in place is strictly better
+	// than releasing it and re-acquiring one in the callee. The release path is
+	// what covers a loop with no depth-0 self call at all — mutual recursion
+	// between sibling bindings, which self-tail cannot express.
+	if selfTail {
+		reuse = selfTailReuse(name, arity)
+	}
+	if !selfTail && validate.LetBindingFrameReleasable(v, i, p.env) {
+		reuse = releaseReuse()
+	}
+	if reuse.kind == frameReuseNone {
+		return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
+	}
+	lenv := environment.NewLocalEnvironment(0)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	tpl.SetName(name)
+	return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, reuse)
 }
 
 // CompileValidatedLet compiles all binding forms based on Kind.
