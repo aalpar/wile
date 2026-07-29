@@ -62,7 +62,6 @@ The core benchmarks from Richard Gabriel's classic Lisp/Scheme benchmark suite:
 | `deriv.scm` | Symbolic differentiation | List manipulation, symbolic computation |
 | `destruct.scm` | List destructuring | Cons cell allocation, list operations |
 | `browse.scm` | Tree browsing | Tree traversal, GC stress |
-| `puzzle.scm` | Combinatorial puzzle | Backtracking, list manipulation |
 
 ### Additional Benchmarks
 
@@ -145,8 +144,14 @@ These were created for this repository and may differ from canonical versions:
 
 - browse.scm - Simplified tree traversal (canonical version has AI database pattern matching)
 - destruct.scm - Functional list operations (canonical "destruc.scm" uses set-car!/set-cdr!)
-- puzzle.scm - Simple list permutations (canonical has complex 3D puzzle placement backtracking)
 - sumloop.scm - Not in canonical suite
+
+The canonical Gabriel `puzzle` (Forest Baskett's 3D piece-placement search) is run from the
+Larceny suite as `benchmarks/larceny/src/puzzle.scm` via `make bench-extended`. A home-grown
+`puzzle.scm`/`puzzle-debug.scm` pair once sat here; both were removed in 2026-07 — the
+benchmark raised a type error on every run since the commit that introduced it (its search
+target `'(1 2 3 4)` was a flat list, while `puzzle-choose` yields permutations of *sublists*),
+and no runner script referenced it.
 
 **For benchmark comparisons with other Schemes**, use only the canonical benchmarks above.
 The non-canonical versions test Wile's performance but aren't comparable across implementations.
