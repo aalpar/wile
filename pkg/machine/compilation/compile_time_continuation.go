@@ -266,10 +266,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 
 		bd := p.env.GetGlobalBinding(gi)
 		if bd != nil {
-			idx := p.template.AppendCachedBinding(bd)
-			p.AppendOperations(
-				machine.NewOperationLoadCachedBinding(idx),
-			)
+			p.emitCachedBindingLoad(bd)
 			return nil
 		}
 		// Binding not yet defined at compile time — fall back to runtime resolution
@@ -294,7 +291,50 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		return nil
 	}
 
-	// No lexical binding shadows. A free template identifier carrying a
+	// No LOCAL binding shadows — but a template that introduces a top-level
+	// `define` creates a GLOBAL binding, which GetLocalIndex above cannot see. Such
+	// a binder is co-introduced by this very expansion and must shadow the pin for
+	// the same reason a co-introduced `let` binder does: R7RS §4.3 renames an
+	// identifier a transformer inserts a binding for throughout its scope, so a
+	// same-named global that merely happened to exist when the transformer compiled
+	// must not reach it. This arm is the R1 invariant's global half; without it a
+	// (define-syntax m … (begin (define (rec …) …) (define export rec))) bound
+	// `export` to the definition site's `rec`.
+	//
+	// THE CARDINALITY GUARD IS WHAT KEEPS THIS FROM SWALLOWING THE PIN.
+	// bestSlotLocked has already filtered candidates on bindingScopes ⊆
+	// symbolScopes, so a NON-EMPTY match shares at least one scope object with this
+	// reference; scopes are minted per expansion, so sharing one means the binding
+	// came from this expansion (or this library). An ambient ∅-scoped global shares
+	// nothing — ScopesMatch accepts ∅ ⊆ anything, which is exactly why the naive
+	// reorder is wrong — so it does not qualify here and falls through to the pin,
+	// which is what protects a genuine free template identifier (guard/guard-aux,
+	// %prompt-reinstall; PR #814). Ranking among qualifying candidates is
+	// scopedBestOf's, not this arm's: the {intro}-scoped co-introduced binder beats
+	// the ∅-scoped user global on cardinality without any new comparison.
+	//
+	// Global-only by construction. GetBinding would search locals first, and
+	// emitting a cached-binding load for a local would be wrong. A nil GetLocalIndex
+	// does imply GetBinding's local phase is empty today (both walk resolveLocal
+	// with the same scopedBestOf and ScopesCompatible filter), but that is a
+	// non-local invariant, so use the accessor that cannot depend on it — the same
+	// one the empty-scope path above uses.
+	// Read the binding off the (Env, Slot) the index already names, via
+	// GetOwnGlobalBinding's pinned-slot path, rather than GetGlobalBinding's
+	// re-walk: one lock, no re-hash, and no chance of a second walk landing on a
+	// different slot than the one whose scopes the guard below inspects. The
+	// Env != nil guard covers a DEFERRED index (NewDeferredGlobalIndex), which
+	// resolveGlobal never produces but the type does not forbid.
+	coGI := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
+	if coGI != nil && coGI.Env != nil {
+		coBD := coGI.Env.GetOwnGlobalBinding(coGI)
+		if coBD != nil && len(coBD.Scopes()) > 0 {
+			p.emitCachedBindingLoad(coBD)
+			return nil
+		}
+	}
+
+	// No co-introduced binder either. A free template identifier carrying a
 	// definition-time GlobalIndex (cross-library hygiene / ER rename) resolves to
 	// that binding now, before the library-scope and scoped-global fallbacks.
 	if p.tryResolvedBinding(expr) {
@@ -324,15 +364,29 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// It must be a global binding (since local lookup failed).
 		// globalBinding was found by GetBinding — use it directly
 		// as a cached binding to skip runtime map/lock overhead.
-		idx := p.template.AppendCachedBinding(globalBinding)
-		p.AppendOperations(
-			machine.NewOperationLoadCachedBinding(idx),
-		)
+		p.emitCachedBindingLoad(globalBinding)
 		return nil
 	}
 
 	// No binding found that matches the scopes
 	return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
+}
+
+// emitCachedBindingLoad emits a load of an already-resolved global binding,
+// caching the *Binding on the template so the VM skips the runtime map lookup and
+// its lock. Every arm of CompileSymbol that ends at a resolved global funnels
+// through here; there are three, and the two that predate the co-introduced-binder
+// arm each carried the same two statements inline.
+//
+// Callers must have established that bd is a GLOBAL binding. A local resolves by
+// slot (LoadLocalByLocalIndex) and caching its *Binding would be wrong twice over:
+// the wrong opcode, and a pointer into a []Binding that EnsureLocalBinding can
+// reallocate.
+func (p *CompileTimeContinuation) emitCachedBindingLoad(bd *environment.Binding) {
+	idx := p.template.AppendCachedBinding(bd)
+	p.AppendOperations(
+		machine.NewOperationLoadCachedBinding(idx),
+	)
 }
 
 // tryResolvedBinding emits a load for the symbol's pre-resolved global binding,

@@ -730,6 +730,156 @@ func TestScopeResolution_GlobalShadowsIntroducedBinder(t *testing.T) {
 	}
 }
 
+// TestScopeResolution_CoIntroducedGlobalShadowsPin is R1's un-mirrored half. R1
+// demoted the definition-time pin (tryResolvedBinding) below the scope-precise
+// LOCAL match, which fixed a template-introduced `let` binder. A template that
+// introduces a top-level `define` creates a GLOBAL binding, invisible to
+// GetLocalIndex, so the pin kept beating the binder co-introduced by the same
+// expansion.
+//
+// R7RS §4.3 is explicit: an identifier a transformer inserts a binding for is in
+// effect renamed throughout its scope. A same-named global that merely happened to
+// exist when the transformer was compiled must not reach it.
+//
+// TRIGGER CONDITION, and why the "definition order" reading of it is wrong. The
+// pin is filled by collectFreeIdentifiersWithEllipsis while the transformer
+// compiles, so the collision must be resolvable in the env AT THAT MOMENT — which
+// is not the same as appearing earlier in the source. A file executes
+// (begin …)-wrapped and predeclareBodyDefines creates every top-level define's
+// binding before any of them compiles, so within one compilation unit the
+// collision is visible wherever it is written. The unit boundary is what
+// discriminates, which is why the last case below is a two-unit split rather than
+// a reordering.
+//
+// See plans/2026-07-29-name-keyed-identity-residuals-design.local.md Finding 2.
+func TestScopeResolution_CoIntroducedGlobalShadowsPin(t *testing.T) {
+	// mkdef introduces a top-level (define (rec i) …) AND names it from a second
+	// introduced define. `rec` is therefore BOUND by the template, not free, but
+	// the collector calls every non-pattern-variable identifier free.
+	mkdef := `(define-syntax mkdef
+	   (syntax-rules ()
+	     ((_ f export)
+	      (begin (define (rec i) (if (= i 3) (f i) (rec (+ i 1))))
+	             (define export rec)))))`
+
+	tcs := []struct {
+		name  string
+		setup []string
+		code  string
+		want  values.Value
+	}{
+		{
+			// Headline. The user's rec exists when mkdef compiles, so the pin
+			// points at it and `entry` binds (* 0 100) instead of the template's
+			// own loop. Bug: 0. Correct: (* 3 7) = 21.
+			name: "co-introduced global binder shadows def-time pin",
+			setup: []string{
+				"(define (rec x) (* x 100))",
+				"(define (other x) (* x 7))",
+				mkdef,
+				"(mkdef other entry)",
+			},
+			code: "(entry 0)",
+			want: values.NewInteger(21),
+		},
+		{
+			// Control: identical shape, no collision. Isolates the user `rec` as
+			// the sole cause — without this the headline could pass for shape
+			// reasons. Correct at HEAD.
+			name: "no colliding global at all",
+			setup: []string{
+				"(define (other x) (* x 7))",
+				mkdef,
+				"(mkdef other entry)",
+			},
+			code: "(entry 0)",
+			want: values.NewInteger(21),
+		},
+		{
+			// Control: the collision arrives in a LATER unit than the
+			// define-syntax, so the pin is never filled and resolution falls
+			// through to the scoped global match. Correct at HEAD; pins that the
+			// fix does not disturb the unresolved-pin path.
+			name: "colliding global defined in a later unit",
+			setup: []string{
+				"(define (other x) (* x 7))",
+				mkdef,
+				"(mkdef other entry)",
+				"(define (rec x) (* x 100))",
+			},
+			code: "(entry 0)",
+			want: values.NewInteger(21),
+		},
+		{
+			// Over-correction guard for the global path, the analogue of the
+			// "same name free and bound in one template" case above. The
+			// intro-scoped reference must reach the co-introduced global (7)
+			// while a bare use-site reference still reaches the user's (100).
+			// A fix that hoists the scoped global lookup unconditionally passes
+			// this one but fails the pin guards; a fix that does not hoist it at
+			// all fails this one.
+			name: "co-introduced global and same-named user global coexist",
+			setup: []string{
+				"(define n 100)",
+				`(define-syntax mkn
+				   (syntax-rules ()
+				     ((_ export) (begin (define n 7) (define export n)))))`,
+				"(mkn en)",
+			},
+			code: "(list en n)",
+			want: values.List(values.NewInteger(7), values.NewInteger(100)),
+		},
+		{
+			// The mixed case, which is what killed R1's Approach A. Both `n`s in
+			// the template are at the SAME scope (unlike the local analogue, where
+			// the introduced let contributes an extra scope), so they are one
+			// FreeIdKey and cannot be resolved differently. R7RS §4.3 settles which
+			// way: the introduced `define n` renames n "throughout its scope", and
+			// the second reference is inside that scope, so BOTH are the introduced
+			// binder. Bug: (101 100), the free reference reaching the user's n.
+			name: "template's own binder wins for every reference at its scope",
+			setup: []string{
+				"(define n 100)",
+				`(define-syntax mkn2
+				   (syntax-rules ()
+				     ((_ export) (begin (define n 7) (define export (+ n 1))))))`,
+				"(mkn2 en)",
+			},
+			code: "(list en n)",
+			want: values.List(values.NewInteger(8), values.NewInteger(100)),
+		},
+		{
+			// Two expansions must get two binders, not one shared slot: each mints
+			// a fresh intro scope, and CreateGlobalBinding reuses a slot only on
+			// exact scope-set equality. Collapsing them would make both names read
+			// whichever define ran last.
+			name: "two expansions introduce two distinct globals",
+			setup: []string{
+				`(define-syntax mk3
+				   (syntax-rules ()
+				     ((_ nm x) (begin (define v x) (define nm v)))))`,
+				"(mk3 a 1)",
+				"(mk3 b 2)",
+			},
+			code: "(list a b)",
+			want: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := scopeResolutionEnv(t)
+			for _, s := range tc.setup {
+				_, err := evalScope(t, env, s)
+				qt.Assert(t, err, qt.IsNil)
+			}
+			result, err := evalScope(t, env, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
 // TestScopeResolution_CrossLibraryIntroducedBinderShadow guards the libScope
 // sub-branch of the R1 fix. A macro defined in library A that introduces a
 // binder (`tmp`) whose name ALSO names a global exported by A must let the
