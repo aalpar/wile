@@ -54,6 +54,83 @@ func TestLetrecMutualRecursionFrameRelease(t *testing.T) {
 	}
 }
 
+// TestInternalDefineMutualRecursionFrameRelease is the same lever at the spelling
+// that actually occurs. R7RS §5.3.2 gives internal defines letrec* semantics, but
+// they are never rewritten into a ValidatedLet — they stay ValidatedDefine nodes
+// compiled in the enclosing lambda's own frame, so they reach the release decision
+// through frameReuseForDefine rather than through compileLetrecBindingInit.
+//
+// benchmarks/larceny/src carries 255 internal defines in compiler.scm and 32 in
+// earley.scm, against zero explicit letrec forms in either benchmark corpus, so
+// this is where the lever meets real code.
+func TestInternalDefineMutualRecursionFrameRelease(t *testing.T) {
+	const mutual = "(begin (define (mid n) " +
+		"(define (ev i) (if (= i 0) 'done (od (- i 1)))) " +
+		"(define (od i) (if (= i 0) 'done (ev (- i 1)))) " +
+		"(ev n))\n)"
+
+	slope := letrecSlope(t, mutual, "(mid 10000)", "(mid 30000)")
+	t.Logf("internal-define mutual recursion slope = %.3f frames/iter", slope)
+	if slope > 0.1 {
+		t.Errorf("mutually recursive internal defines leak env frames: %.3f frames/iter "+
+			"(want < 0.1) — each member's call to its sibling resolves through a flat env, "+
+			"finds nothing because the sibling is local, and refuses without the group seed",
+			slope)
+	}
+}
+
+// TestInternalDefineReleaseRefusals mirrors the letrec refusals at the
+// internal-define site. Same reasoning: each case must KEEP allocating.
+func TestInternalDefineReleaseRefusals(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup string
+		small string
+		big   string
+		why   string
+	}{
+		{
+			name: "a sibling captures the continuation",
+			setup: "(begin (define (m2 n) " +
+				"(define (ev i) (if (= i 0) 'done (od (- i 1)))) " +
+				"(define (od i) (if (= i 0) 'done (begin (call/cc (lambda (k) i)) (ev (- i 1))))) " +
+				"(ev n))\n)",
+			small: "(m2 10000)", big: "(m2 30000)",
+			why: "one capturing member refuses the whole group",
+		},
+		{
+			name: "a sibling calls a procedure-invoking primitive",
+			setup: "(begin (define (m3 n) " +
+				"(define (ev i) (if (= i 0) 'done (od (- i 1)))) " +
+				"(define (od i) (if (= i 0) 'done (begin (map (lambda (x) x) '(1)) (ev (- i 1))))) " +
+				"(ev n))\n)",
+			small: "(m3 10000)", big: "(m3 30000)",
+			why: "map invokes an unknown callback that could capture",
+		},
+		{
+			name: "a member is set! within the body",
+			setup: "(begin (define (m4 n) " +
+				"(define (ev i) (if (= i 0) 'done (od (- i 1)))) " +
+				"(define (od i) (if (= i 0) 'done (ev (- i 1)))) " +
+				"(set! od od) (ev n))\n)",
+			small: "(m4 10000)", big: "(m4 30000)",
+			why: "after a set! the define no longer describes what the name denotes — " +
+				"bodyMutatesOwnDefine is what refuses it",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			slope := letrecSlope(t, tt.setup, tt.small, tt.big)
+			t.Logf("slope = %.3f frames/iter", slope)
+			if slope < 1.0 {
+				t.Errorf("loop stopped allocating (%.3f frames/iter) — release fired on a "+
+					"shape it must refuse: %s", slope, tt.why)
+			}
+		})
+	}
+}
+
 // TestLetrecReleaseRefusals pins every path that must NOT arm release. Each case
 // keeps allocating; a case that drops to zero means the predicate cleared a
 // binding it cannot prove, which is a use-after-release rather than a lost

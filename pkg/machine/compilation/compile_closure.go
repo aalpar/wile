@@ -160,6 +160,10 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 	lambdaBodyContext = lambdaBodyContext.WithFrameReuse(fr)
 
 	body := clause.Body()
+	// This body is the letrec* group for any internal define it contains, and
+	// lambdaBodyContext is freshly built rather than inherited, so no enclosing
+	// group can leak in from the surrounding compile.
+	lambdaBodyContext = lambdaBodyContext.WithEnclosingDefines(body)
 
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work

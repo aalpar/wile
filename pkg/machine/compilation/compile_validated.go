@@ -471,8 +471,10 @@ func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 		p.frameReclaimVerdict = validate.ClassifyFrameReclaim(v.Body(), p.env)
 	}
 
-	// Pass 2: Compile each expression in sequence
-	return p.compileValidatedSequence(ctctx, v.Body())
+	// Pass 2: Compile each expression in sequence. The begin's own body is the
+	// letrec* group for defines it predeclared above, so it overrides any group
+	// inherited from an enclosing body.
+	return p.compileValidatedSequence(ctctx.WithEnclosingDefines(v.Body()), v.Body())
 }
 
 // compileValidatedLiteral handles self-evaluating values (numbers, strings, booleans, etc.).

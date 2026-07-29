@@ -15,6 +15,8 @@
 package validate
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 )
@@ -79,9 +81,10 @@ func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, selfName string, env
 
 // bodyCalleesAllCaptureSafeUnder is bodyCalleesAllCaptureSafe with an explicit
 // starting shadow set, on top of which proc's parameters are seeded as always.
-// The base carries an ASSUMPTION the caller is responsible for discharging: the
-// only caller that passes one is LetBindingFrameReleasable, which seeds a
-// letrec group's sibling bindings so a call to a sibling can be cleared, and
+// The base carries an ASSUMPTION the caller is responsible for discharging. The
+// two callers that pass one are LetBindingFrameReleasable and
+// InternalDefineFrameReleasable — the two spellings of a local recursive binding
+// group. Each seeds its group's siblings so a call to a sibling can be cleared,
 // then verifies every member of that group under the same seed.
 //
 // Passing a base is therefore not a way to widen the walk locally. A base whose
@@ -325,6 +328,64 @@ func LetBindingFrameReleasable(v *ValidatedLet, i int, env *environment.Environm
 			return false
 		}
 		if !bodyCalleesAllCaptureSafeUnder(sib, name, env, group) {
+			return false
+		}
+	}
+	return true
+}
+
+// InternalDefineFrameReleasable is LetBindingFrameReleasable's twin for the OTHER
+// spelling of a local recursive binding group: internal defines. R7RS §5.3.2 gives
+// them letrec* semantics, but they are never rewritten into a ValidatedLet — they
+// stay ValidatedDefine nodes compiled in the enclosing lambda's own frame — so the
+// let-binding predicate never sees them, while the shape and the hazard are
+// identical. body is the enclosing body sequence whose internal defines form the
+// group; d must be one of them.
+//
+// This is the spelling that occurs in practice: benchmarks/larceny/src alone
+// carries 255 internal defines in compiler.scm and 32 in earley.scm, against zero
+// explicit letrec forms in either corpus. Mutual recursion between two internal
+// defines allocated a frame per iteration (2.0 measured) for exactly the reason
+// the letrec form did — a call to a sibling resolves through env.GetBinding, finds
+// nothing because the sibling is local, and refuses.
+//
+// The co-induction, the uniform group answer, and the per-binding escape clause
+// are LetBindingFrameReleasable's, unchanged; see there for why each is shaped
+// that way. Only the seed differs (withInternalDefines rather than withLet).
+//
+// MEMBERSHIP IS CHECKED, and that check is load-bearing rather than defensive
+// hygiene. The group arrives from the compiler, which must supply the body that
+// predeclared d — there are three such sites. If a caller ever passes a STALE
+// enclosing body, an unrelated define sharing a sibling's name would be recorded
+// as evidence for a call to a different procedure entirely, which is unsound. A
+// stale body does not contain d, so refusing when d is absent converts that whole
+// class of plumbing error into a forgone optimization.
+func InternalDefineFrameReleasable(
+	d *ValidatedDefine,
+	body []ValidatedExpr,
+	env *environment.EnvironmentFrame,
+) bool {
+	if env == nil || !d.IsFunction {
+		return false
+	}
+	if !slices.Contains(body, ValidatedExpr(d)) {
+		return false
+	}
+	if bodyCreatesEscapingClosure(d.Body()) {
+		return false
+	}
+	group := nameSet(nil).withInternalDefines(body)
+	for _, e := range body {
+		sib, isDefine := e.(*ValidatedDefine)
+		if !isDefine || !sib.IsFunction {
+			// A non-function define binds a value, for which withInternalDefines
+			// records no evidence, so nothing is assumed and nothing to discharge.
+			continue
+		}
+		if bodyReferencesCaptureOperator(sib.Body(), makeIsCaptureOp(env)) {
+			return false
+		}
+		if !bodyCalleesAllCaptureSafeUnder(sib, sib.Name().Sym.Key, env, group) {
 			return false
 		}
 	}

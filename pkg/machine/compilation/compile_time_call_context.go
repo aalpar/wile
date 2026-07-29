@@ -16,6 +16,8 @@ package compilation
 
 import (
 	"context"
+
+	"github.com/aalpar/wile/pkg/internal/validate"
 )
 
 // CompileTimeCallContext carries contextual information through the compilation process.
@@ -58,6 +60,13 @@ type CompileTimeCallContext struct {
 	// (let) via WithoutFrameReuse — so a non-none frameReuse at a call site means a
 	// DEPTH-0 tail call. The emit site discriminates on frameReuse.kind.
 	frameReuse frameReuse
+	// enclosingDefines is the body sequence whose internal defines form the
+	// letrec* group being compiled, carried so frameReuseForDefine can prove a
+	// member releasable against its siblings. Unlike frameReuse it is NOT a
+	// depth signal: it is set where defines are predeclared and overridden on
+	// entry to a nested body, never merely dropped. nil means "no group known",
+	// which refuses.
+	enclosingDefines []validate.ValidatedExpr
 }
 
 // frameReuseKind discriminates how a depth-0 tail call may reuse the parameter
@@ -134,6 +143,14 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 		inTail: false,
 		// frameReuse intentionally dropped (zero value = frameReuseNone): a non-tail
 		// position can never be a rewritable self-tail call or a frame-release site.
+		//
+		// enclosingDefines intentionally PRESERVED, and the asymmetry is the point:
+		// it is lexical group membership, not a statement about depth or tail
+		// position. An internal define is a non-final body expression, so it is
+		// always compiled through here — dropping the group would leave every
+		// internal define unable to name its own siblings, which is precisely the
+		// bug this preserves against.
+		enclosingDefines: p.enclosingDefines,
 	}
 }
 
@@ -142,6 +159,23 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 func (p CompileTimeCallContext) WithFrameReuse(fr frameReuse) CompileTimeCallContext {
 	q := p
 	q.frameReuse = fr
+	return q
+}
+
+// WithEnclosingDefines returns a copy carrying the body sequence whose internal
+// defines form the letrec* group currently being compiled — the group
+// InternalDefineFrameReleasable needs to prove one member releasable, since a
+// define alone cannot name its own siblings.
+//
+// It must be set wherever internal defines are PREDECLARED (the three
+// predeclareDefineBindingFromValidated / predeclareBodyDefines sites), and reset
+// rather than inherited on the way into a nested body: a lambda body starts a
+// fresh context, and a let body overrides with its own. Inheriting a stale body
+// would be a correctness bug, not just imprecision, which is why the predicate
+// independently verifies the define is a member of what it is handed.
+func (p CompileTimeCallContext) WithEnclosingDefines(body []validate.ValidatedExpr) CompileTimeCallContext {
+	q := p
+	q.enclosingDefines = body
 	return q
 }
 

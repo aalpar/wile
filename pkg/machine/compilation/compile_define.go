@@ -285,7 +285,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 
 	// Step 3: Compile the closure - binds parameters, compiles body, emits MakeClosure.
 	// After this, the closure is in the value register ready to be stored.
-	err = p.compileClosure(ctctx, tpl, lenv, v, p.frameReuseForDefine(v))
+	err = p.compileClosure(ctctx, tpl, lenv, v, p.frameReuseForDefine(ctctx, v))
 	if err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 //     apply (re-resolving the callee), so the define's own rebindability is
 //     irrelevant; only the body's capture/escape/callee-safety matters, which
 //     validate.BodyIsFrameReleasable checks (callee stability enforced there).
-func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefine) frameReuse {
+func (p *CompileTimeContinuation) frameReuseForDefine(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) frameReuse {
 	name := v.Name()
 	binding := p.env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
 	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
@@ -334,6 +334,17 @@ func (p *CompileTimeContinuation) frameReuseForDefine(v *validate.ValidatedDefin
 	// compiles on this same compiler; it is now an explicit tightening, since an
 	// internal define's name carries the enclosing scope and so misses the top-level map.
 	if p.unitFrameReclaimVerdict(validate.ScopedBindingKeyOf(name)) || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
+		return releaseReuse()
+	}
+	// Third disjunct, for an INTERNAL define only: prove it against its letrec*
+	// sibling group. BodyIsFrameReleasable above seeds only this define's own
+	// parameters, so a call to a sibling resolves through a flat env, finds
+	// nothing (the sibling is local), and refuses — which is why mutually
+	// recursive internal defines allocated a frame per iteration. The group
+	// predicate discharges that with the same co-induction the letrec-binding
+	// form uses. ctctx.enclosingDefines is nil at top level, where there is no
+	// group and the two disjuncts above are the whole story.
+	if ctctx.enclosingDefines != nil && validate.InternalDefineFrameReleasable(v, ctctx.enclosingDefines, p.env) {
 		return releaseReuse()
 	}
 	return noFrameReuse()

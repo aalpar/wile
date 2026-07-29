@@ -206,7 +206,10 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	// at the enclosing closure's parameter-frame depth: clear any self-tail context
 	// so a self call inside the body is NOT rewritten to the in-place OpSelfTailCall
 	// (which rebinds the parameter frame). Tail position itself is preserved.
-	err = p.compileValidatedSequence(ctctx.WithoutFrameReuse(), v.Body())
+	// A let body predeclares its own internal defines, so it is their letrec*
+	// group — override rather than inherit the enclosing one, which would name
+	// different procedures.
+	err = p.compileValidatedSequence(ctctx.WithoutFrameReuse().WithEnclosingDefines(v.Body()), v.Body())
 	if err != nil {
 		return err
 	}
