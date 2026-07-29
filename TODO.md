@@ -90,6 +90,7 @@ Sections below hold the detail; this table is the map.
 | `2026-07-12-numeric-zero-and-tier2-fold.local.md` | Four verified defects from the 2026-07-12 review |
 | `2026-07-22-free-template-id-hygiene-design.local.md`<br>`2026-07-22-free-template-id-hygiene-impl.local.md` | Shipped PR #814; retained for the D0–D3 reasoning |
 | `2026-07-24-free-identifier-origin-provenance-design.local.md` | Phase 1 + inline-HOF P2 shipped; scoping doc retained |
+| `2026-07-29-anonymous-lambda-inlining-impl.local.md` | Implementation-ready, ~25 LOC; Q1 (arity mismatch: refuse vs compile error) open |
 | `ARCHITECTURE.local.md` | 1/4 sections complete |
 | `DEBUGGER.local.md` | Both proposals unstarted |
 | `MACRO_SYSTEM.local.md` | Both sections unstarted |
