@@ -288,7 +288,8 @@ bench-gabriel: build
 	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-canonical.sh
 
 # Run all Scheme benchmarks (canonical + non-canonical).
-# Includes 21 total benchmarks, some of which are Wile-specific.
+# Globs examples/benchmarks/*.scm, so a new file there is picked up with no edit
+# here. Some are Wile-specific and not comparable across implementations.
 #   make bench-gabriel-all
 .PHONY: bench-gabriel-all
 bench-gabriel-all: build

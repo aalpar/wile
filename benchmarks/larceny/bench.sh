@@ -32,6 +32,11 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 WILE_ROOT="$(cd "$DIR/../.." && pwd)"
 SCHEME="${WILE_SCHEME:-$WILE_ROOT/dist/wile}"
+# Absolutize against the caller's CWD: run_benchmark runs the interpreter from
+# $DIR, and the Makefile passes WILE_SCHEME as a repo-root-relative path.
+if [ "${SCHEME#/}" = "$SCHEME" ]; then
+    SCHEME="$PWD/$SCHEME"
+fi
 LIBDIR="$WILE_ROOT/pkg/stdlib/lib"
 SRC="$DIR/src"
 INPUTS="$DIR/inputs"
@@ -45,28 +50,34 @@ QUIET=false
 GABRIEL="browse deriv destruc diviter divrec puzzle triangl tak takl ntakl cpstak ctak"
 NUMERICAL="fib fibc fibfp sum sumfp fft mbrot pnpoly simplex"
 KVW="ack"
-OTHER="conform dynamic earley graphs lattice matrix maze nqueens paraffins peval primes quicksort scheme"
+OTHER="compiler conform dynamic earley graphs lattice matrix maze mazefun nqueens nucleic paraffins peval primes quicksort ray scheme"
 GC="nboyer sboyer gcbench mperm"
 SYNTH="equal"
 
-# Benchmarks with known Wile incompatibilities.
-# compiler:  vector-ref gets pair instead of vector (Wile bug)
-# mazefun:   number->string gets () instead of number (Wile bug)
-# nucleic:   vector-ref index out of bounds (Wile bug)
-# ray:       needs output file directory (external dependency)
+# Not runnable here, and listed so the gap stays visible. mbrotZ, pi, slatex,
+# parsing and bv2string appear in download.sh's SOURCES but are absent from src/;
+# cat, tail, wc, read1, sum1 and string are not fetched at all. run_benchmark
+# skips any absent source anyway, so this list is documentation, not a gate.
 # mbrotZ:    needs (scheme complex) -- not tested yet
 # pi:        needs bignum arithmetic -- not tested yet
 # slatex:    needs file I/O (slatex-data) -- not tested yet
 # parsing:   needs file I/O (parsing.data) -- not tested yet
 # cat/tail/wc/read1/sum1/string: need file I/O (Bible text etc.)
 # bv2string: needs bytevector<->string conversion -- not tested yet
-# dynamic:   reads "inputs/dynamic.data" relative to CWD, fails when run from repo root
-SKIP="compiler mazefun nucleic ray mbrotZ pi slatex parsing cat tail wc read1 sum1 string bv2string dynamic"
+#
+# compiler, mazefun, nucleic, ray and dynamic were skipped here as Wile bugs
+# ("vector-ref gets pair instead of vector", "number->string gets ()",
+# "vector-ref index out of bounds"). All five pass as of 2026-07-28; the three
+# bug claims no longer reproduce, and the other two were harness faults, fixed
+# by running the interpreter from $DIR (dynamic reads inputs/dynamic.data
+# relative to CWD) and pre-creating outputs/ (ray writes outputs/ray.output).
+SKIP="mbrotZ pi slatex parsing cat tail wc read1 sum1 string bv2string"
 
 ALL="$GABRIEL $NUMERICAL $KVW $OTHER $GC $SYNTH"
 
-# Quick subset: benchmarks that complete in <2s each at count=1.
-QUICK="fib tak ack cpstak ctak deriv destruc diviter divrec primes nqueens sum fibc fibfp sumfp fft mbrot pnpoly simplex conform dynamic maze matrix peval quicksort scheme gcbench browse puzzle"
+# Quick subset: benchmarks that complete in <2s each at count=1. ray is left out
+# -- it straddles the bound (1.96-2.06s measured over four runs on an M-series Mac).
+QUICK="fib tak ack cpstak ctak deriv destruc diviter divrec primes nqueens sum fibc fibfp sumfp fft mbrot pnpoly simplex compiler conform dynamic earley graphs lattice maze matrix mazefun nucleic peval quicksort scheme gcbench browse puzzle"
 
 usage() {
     sed -n '2,/^$/s/^# //p' "$0"
@@ -126,11 +137,15 @@ run_benchmark() {
         input=$(cat "$INPUTS/$name.input")
     fi
 
+    # Run from $DIR in a subshell: some benchmarks resolve data paths against the
+    # CWD (dynamic reads "inputs/dynamic.data", ray writes "outputs/ray.output"),
+    # so the interpreter's CWD must not depend on where bench.sh was invoked. Every
+    # other path here is absolute, and the subshell keeps $0 valid for usage().
     if [ "$QUIET" = true ]; then
-        echo "$input" | timeout "$TIMEOUT" "$SCHEME" -q -L "$LIBDIR" --file "$TMP/$name.scm" 2>&1 \
+        ( cd "$DIR" && echo "$input" | timeout "$TIMEOUT" "$SCHEME" -q -L "$LIBDIR" --file "$TMP/$name.scm" 2>&1 ) \
             | grep -E "^(Running |Elapsed time:|ERROR:)" || echo "FAIL $name (timeout or crash)"
     else
-        echo "$input" | timeout "$TIMEOUT" "$SCHEME" -q -L "$LIBDIR" --file "$TMP/$name.scm" 2>&1 \
+        ( cd "$DIR" && echo "$input" | timeout "$TIMEOUT" "$SCHEME" -q -L "$LIBDIR" --file "$TMP/$name.scm" 2>&1 ) \
             || echo "FAIL $name (exit $?)"
     fi
 }
@@ -175,7 +190,7 @@ for arg in "$@"; do
     esac
 done
 
-mkdir -p "$TMP"
+mkdir -p "$TMP" "$DIR/outputs"
 
 echo "Larceny R7RS Benchmarks — Wile"
 echo "Binary: $SCHEME"

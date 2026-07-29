@@ -72,6 +72,15 @@ The core benchmarks from Richard Gabriel's classic Lisp/Scheme benchmark suite:
 | `primes.scm` | Prime generation (trial division) | Integer arithmetic, simple algorithms |
 | `nqueens.scm` | N-Queens puzzle | Backtracking, constraint satisfaction |
 | `peval.scm` | Partial evaluation | Higher-order functions, composition |
+| `mapbench.scm` | `map` through an opaque callback | Scheme-level `map` (defeats the inline-HOF rewrite) |
+| `vmapbench.scm` | `vector-map` through an opaque callback | `vector-set!`/`vector-ref` dispatch |
+
+`mapbench` and `vmapbench` pass the callback as a lambda *parameter*, so
+`CallbackIsCaptureSafe` fails and `tryInlineHOFCall` deoptimizes to the real
+`bootstrap_procedures.scm` definition. A benchmark that hands `map` a literal
+lambda measures the inlined template instead, and moves for unrelated reasons.
+They are the only coverage of `vector-set!`/`vector-ref` here: the canonical
+Gabriel suite contains no vector operations at all.
 
 ## Performance Expectations
 

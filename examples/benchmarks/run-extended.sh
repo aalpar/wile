@@ -42,14 +42,26 @@ if [ ! -x "$SCHEME" ]; then
     exit 1
 fi
 
-# Working Larceny benchmarks (excludes known-incompatible ones).
-# Skipped: compiler mazefun nucleic ray dynamic mbrotZ pi slatex parsing
-#          cat tail wc read1 sum1 string bv2string
+# Working Larceny benchmarks. Never listed here because no source exists under
+# benchmarks/larceny/src: mbrotZ pi slatex parsing cat tail wc read1 sum1 string
+# bv2string. See bench.sh for what each would need.
+#
+# This list is now exactly bench.sh's ALL. Keep it that way: it drifted before,
+# and a benchmark missing from one script but present in the other is invisible.
+#
+# compiler, mazefun, nucleic, ray and dynamic were excluded here as known
+# incompatibilities; earley, graphs and lattice were simply never listed though
+# nothing skipped them. All eight pass as of 2026-07-28 (see bench.sh's SKIP
+# note). They carry the suite's heaviest vector and map load -- compiler is 80
+# vector-set! / 195 vector-ref / 72 map, earley 25/79, graphs 23/34, nucleic
+# 75/79, dynamic 78 map -- so results from before this date are not comparable
+# with results after it.
 LARCENY_BENCHMARKS=(
     browse deriv destruc diviter divrec puzzle triangl tak takl ntakl cpstak ctak
     fib fibc fibfp sum sumfp fft mbrot pnpoly simplex
     ack
-    conform maze matrix nqueens paraffins peval primes quicksort scheme
+    compiler conform dynamic earley graphs lattice maze matrix mazefun nqueens
+    nucleic paraffins peval primes quicksort ray scheme
     nboyer sboyer gcbench mperm
     equal
 )
@@ -80,7 +92,7 @@ RAW_CSV=$(mktemp)
 
 echo "run,benchmark,total_time_seconds" > "$RAW_CSV"
 
-mkdir -p "$LARCENY_TMP"
+mkdir -p "$LARCENY_TMP" "$LARCENY_DIR/outputs"
 
 # run_larceny NAME — run one Larceny benchmark, echo elapsed seconds or empty
 run_larceny() {
@@ -98,8 +110,10 @@ run_larceny() {
     local input
     input=$(echo "$LARCENY_COUNT"; tail -n +2 "$LARCENY_INPUTS/$name.input")
 
+    # Run from $LARCENY_DIR: dynamic reads "inputs/dynamic.data" and ray writes
+    # "outputs/ray.output", both relative to CWD, which is examples/benchmarks here.
     local output
-    output=$(echo "$input" | timeout "$TIMEOUT" "$SCHEME" -q -L "$LIBDIR" --file "$LARCENY_TMP/$name.scm" 2>&1) || true
+    output=$(cd "$LARCENY_DIR" && echo "$input" | timeout "$TIMEOUT" "$SCHEME" -q -L "$LIBDIR" --file "$LARCENY_TMP/$name.scm" 2>&1) || true
 
     # Parse "Elapsed time: X seconds (...) for NAME"
     local time
