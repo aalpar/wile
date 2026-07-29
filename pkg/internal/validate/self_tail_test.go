@@ -306,6 +306,59 @@ func TestProcedureBodyIsCaptureSafe(t *testing.T) {
 	}
 }
 
+// TestCalleeShadowedByOwnParameter pins the shadow-set seed in
+// bodyCalleesAllCaptureSafe: the analysed procedure's OWN parameters must shadow a
+// same-named global callee.
+//
+// The walk resolves every call operator through env.GetBinding against a FLAT env
+// with no local frames, so the nameSet is what stands in for local resolution.
+// Unseeded, a parameter sharing a capture-safe global's name resolved to that
+// global and the body was wrongly trusted: (define (f car x) (car x)) stamped
+// CaptureSafe, though `car` is bound to whatever the caller passes — including
+// call/cc. That is a FALSE POSITIVE, the direction the kill criterion forbids, and
+// no continuation or coroutine suite caught it. The sibling walkers already seeded
+// their parameters (bodyIsSelfTailReusable, resolveCallEdges); this one did not.
+//
+// All three exported entry points are covered, since all three route through the
+// same seed.
+func TestCalleeShadowedByOwnParameter(t *testing.T) {
+	env := envWithImported(t, "car", "<=")
+
+	// (define (f car x) (car x)) — `car` is a PARAMETER, not the primitive.
+	shadowed := fnWith("f", params("car", "x"), call(symRef("car"), symRef("x")))
+	if ProcedureBodyIsCaptureSafe(shadowed, "f", env) {
+		t.Errorf("a callee shadowed by the procedure's own parameter must NOT be capture-safe-as-callee")
+	}
+	if BodyIsFrameReleasable(shadowed, "f", env) {
+		t.Errorf("a callee shadowed by the procedure's own parameter must NOT be frame-releasable")
+	}
+
+	// Self-tail path: (define (loop car n) (if (<= n 0) n (loop car (car n)))).
+	// bodyIsSelfTailReusable already seeds params for self-call and set! detection;
+	// the callee half did not, so this shape passed the exported predicate.
+	loopShadowed := fnWith("loop", params("car", "n"),
+		ifx(call(symRef("<="), symRef("n"), lit()),
+			symRef("n"),
+			call(symRef("loop"), symRef("car"), call(symRef("car"), symRef("n")))))
+	if BodyIsSelfTailReusable(loopShadowed, "loop", env) {
+		t.Errorf("a loop whose callee is shadowed by its own parameter must NOT be self-tail-reusable")
+	}
+
+	// Positive controls: the same bodies with the parameter renamed are trusted
+	// again, so the rejection above is the shadow and not the shape.
+	unshadowed := fnWith("f", params("p", "x"), call(symRef("car"), symRef("x")))
+	if !ProcedureBodyIsCaptureSafe(unshadowed, "f", env) {
+		t.Errorf("an unshadowed capture-safe primitive callee must stay capture-safe-as-callee")
+	}
+	loopUnshadowed := fnWith("loop", params("p", "n"),
+		ifx(call(symRef("<="), symRef("n"), lit()),
+			symRef("n"),
+			call(symRef("loop"), symRef("p"), call(symRef("car"), symRef("n")))))
+	if !BodyIsSelfTailReusable(loopUnshadowed, "loop", env) {
+		t.Errorf("an unshadowed capture-safe primitive callee must stay self-tail-reusable")
+	}
+}
+
 // TestBodyIsSelfTailReusable_CalleeSafety covers the interprocedural half of
 // capture-safety added at the exported boundary: a loop is reusable only if every
 // call operator is the self name or a capture-safe, non-rebindable primitive. This

@@ -34,11 +34,11 @@ func BodyIsSelfTailReusable(
 	env *environment.EnvironmentFrame,
 ) bool {
 	return bodyIsSelfTailReusable(proc, selfName, makeIsCaptureOp(env)) &&
-		bodyCalleesAllCaptureSafe(proc.Body(), selfName, env)
+		bodyCalleesAllCaptureSafe(proc, selfName, env)
 }
 
-// bodyCalleesAllCaptureSafe reports whether every call operator in body is either
-// the self name or a confirmed capture-safe, non-rebindable callee. This is the
+// bodyCalleesAllCaptureSafe reports whether every call operator in proc's body is
+// either the self name or a confirmed capture-safe, non-rebindable callee. This is the
 // interprocedural half of capture-safety that the textual bodyReferencesCaptureOperator
 // cannot see: a loop that calls an unknown function — a user callback (map/for-each's
 // `proc`), a computed operator, a procedure-invoking or set!-able binding — could
@@ -51,19 +51,29 @@ func BodyIsSelfTailReusable(
 // calls are safe by the co-inductive assumption that the function under analysis
 // does not itself capture.
 //
+// THE SHADOW SET IS SEEDED WITH proc'S OWN PARAMETERS, and that seed is load-bearing.
+// The walk resolves each operator through env.GetBinding against a FLAT env with no
+// local frames, so the nameSet is what stands in for local resolution. Unseeded, a
+// parameter sharing a capture-safe global's name resolves to that global and the body
+// is wrongly trusted: (define (f car x) (car x)) stamped CaptureSafe, though `car` is
+// bound to whatever the caller passes — including call/cc. The sibling walkers already
+// seed their params (bodyIsSelfTailReusable, resolveCallEdges); this one did not.
+// Taking proc rather than its body is what keeps the seed from being forgotten again.
+//
 // This is conservative — it refuses a same-unit user define callee (mutual
 // recursion), which the interprocedural classifier (ClassifyFrameReclaim) admits —
 // but it is SOUND, which the kill criterion demands.
-func bodyCalleesAllCaptureSafe(body []ValidatedExpr, selfName string, env *environment.EnvironmentFrame) bool {
+func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
 	if env == nil {
 		return false
 	}
 	safe := true
-	walkBodySeq(body, nameSet(nil), func(proc ValidatedExpr, bound nameSet) {
+	seed := nameSet(nil).withParams(proc.Params())
+	walkBodySeq(proc.Body(), seed, func(op ValidatedExpr, bound nameSet) {
 		if !safe {
 			return
 		}
-		sym, ok := proc.(*ValidatedSymbol)
+		sym, ok := op.(*ValidatedSymbol)
 		if !ok {
 			safe = false // computed operator ⇒ unknown ⇒ could capture
 			return
@@ -109,23 +119,23 @@ func BodyIsFrameReleasable(proc ValidatedBodyAndParams, selfName string, env *en
 	if env == nil {
 		return false
 	}
-	body := proc.Body()
 	// Frame-releasable = capture-safe-as-callee AND no escaping closure: releasing
 	// proc's OWN frame additionally requires that no closure parents it (escape),
 	// which calling proc does not.
-	return bodyCannotCaptureCaller(body, selfName, env) &&
-		!bodyCreatesEscapingClosure(body)
+	return bodyCannotCaptureCaller(proc, selfName, env) &&
+		!bodyCreatesEscapingClosure(proc.Body())
 }
 
 // bodyCannotCaptureCaller is the shared core of BodyIsFrameReleasable and
 // ProcedureBodyIsCaptureSafe: the body runs no capture operator (call/cc &c.) and
 // every callee is itself capture-safe (bodyCalleesAllCaptureSafe resolves each
-// callee's IsCaptureSafe()/IsStable()). It deliberately omits the escaping-closure
-// check — escape governs whether the body's OWN frame may be released, not whether
-// CALLING the body captures the caller's continuation. env must be non-nil.
-func bodyCannotCaptureCaller(body []ValidatedExpr, selfName string, env *environment.EnvironmentFrame) bool {
-	return !bodyReferencesCaptureOperator(body, makeIsCaptureOp(env)) &&
-		bodyCalleesAllCaptureSafe(body, selfName, env)
+// callee's IsCaptureSafe()/IsStable() under a shadow set seeded with proc's
+// parameters). It deliberately omits the escaping-closure check — escape governs
+// whether the body's OWN frame may be released, not whether CALLING the body
+// captures the caller's continuation. env must be non-nil.
+func bodyCannotCaptureCaller(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+	return !bodyReferencesCaptureOperator(proc.Body(), makeIsCaptureOp(env)) &&
+		bodyCalleesAllCaptureSafe(proc, selfName, env)
 }
 
 // ProcedureBodyIsCaptureSafe reports whether CALLING proc can never capture the
@@ -145,7 +155,7 @@ func ProcedureBodyIsCaptureSafe(proc ValidatedBodyAndParams, selfName string, en
 	if env == nil {
 		return false
 	}
-	return bodyCannotCaptureCaller(proc.Body(), selfName, env)
+	return bodyCannotCaptureCaller(proc, selfName, env)
 }
 
 // LetBindingSelfTailReusable reports the arity and eligibility of the i-th
