@@ -16,7 +16,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.19.0] - 2026-07-27
+## [1.19.1] - 2026-07-29
+
+A compiler release: environment-frame elimination for `or`, frame release for
+mutually recursive `letrec` bindings and internal defines, and the escape/capture
+analysis relaxations those depend on. One soundness fix in the capture-safe
+analysis. No language-visible semantic change.
+
+### Changed
+
+- **`or` no longer allocates an environment frame per operand.** `or` expands to
+  `(let ((t E)) (if t t B))`, one frame per operand beyond the first, and that frame is
+  unobservable: `t` is bound only to be tested and returned. `OpBranchOnFalseValue` reads
+  the value register without writing it, so the value `E` already left there *is* the
+  consequent's value — the form now compiles to `E`, a branch, and `B`, with no slot, no
+  `OpPushEnv`/`OpPopEnv` pair and no reload. `(or x y)` goes from 9 instructions to 5, and
+  an `or` in a tail loop drops from 2.0 to 0.0 env-frame allocations per iteration while
+  its self call now earns `OpSelfTailCall`. Result values are unchanged: the register
+  passthrough returns `E`'s own value, so `(or 5 1)` is still `5` rather than `#t`. A
+  hand-written `let` of the same shape whose body references the bound temp, and the
+  sibling shape `(cond (test => f))` whose consequent *consumes* the bound value, are both
+  refused; matching is by name **and** binder-scope containment, through the same
+  `syntax.ScopesCompatible` the environment's local resolution uses. 340 such frames exist
+  across 181 stdlib and Larceny sources. No interleaved A/B was run for this change, so
+  there is no end-to-end suite figure to quote.
+- **A `letrec` binding whose tail call goes to a sibling now releases its frame.** Previously
+  only a *self* tail call qualified, so a mutually recursive group allocated a frame per
+  iteration (measured 2.0, now 0.0). Because clearing a call to sibling `o` rests on `o` not
+  capturing — the very property being proven for `o` — the safety predicate is co-inductive
+  over the whole `letrec` group and answers uniformly: one unsafe member refuses the group.
+  Self-tail reuse keeps precedence, since rebinding in place beats releasing and
+  re-acquiring. `examples/benchmarks` contains no `letrec` at all, so the corpus prices this
+  at zero; named lets do desugar to `letrec` but carry a depth-0 self call and take the
+  self-tail path instead. The lever is generality, not measured throughput.
+- **Internal defines get the same frame release.** R7RS §5.3.2 gives internal defines
+  `letrec*` semantics, but they are never rewritten into a `let` — they stay define nodes
+  compiled in the enclosing lambda's frame — so they reached the release decision by a
+  different path and the `letrec` predicate never saw them. Same shape, same 2.0 → 0.0
+  allocations per iteration. Six armed sites corpus-wide (`compiler.scm` 522 → 527,
+  `gcbench.scm` 2 → 3); timing is correspondingly flat. Mutually recursive internal defines
+  whose sibling call sits in tail position are rare even in code carrying 255 internal
+  defines.
+- **A lexically-bound call operator is now proven capture-safe instead of refused.** Since a
+  named `let` validates to a `letrec` whose single binding is the loop lambda, the blanket
+  refusal covered every loop-shaped procedure in the language and propagated to each of
+  their callers. The capture-safe stamp count across `examples/benchmarks` goes 19/68 →
+  42/68. This is the change with a measured end-to-end win: the stamp travels one edge up
+  through non-tail callee resolution, so `primes.scm` improves **−4.23%** (interleaved
+  min-of-5 across both binaries, reproducing a −4.94% eight-round reading), and
+  `(primes-upto 1000)` drops 17570 → 15574 allocations per op — ~2 per iteration, the
+  binding frame. A recursive formulation of the proof was built first and deleted: it
+  produced exactly the same 42/68.
+- **Escape analysis no longer treats every loop-shaped procedure as escaping.** A
+  `let`/`letrec`-bound lambda's frame cannot outlive the call iff every reference to the
+  binding sits in call-operator position; called is not escaping, while stored, returned,
+  passed as an argument, or `set!` is. Frame-reclaim verdicts over `examples/benchmarks` go
+  84.6% → 90.7% aggregate, with `diviter`, `nqueens`, `primes` and `sumfp` each 0.0% →
+  100.0%. **This one changes zero emitted instructions on its own** — opcode counts are
+  identical in both arms — and is recorded as a precondition for later work rather than as a
+  win.
+
+### Removed
+
+- **`examples/benchmarks/puzzle.scm` and `puzzle-debug.scm`.** `puzzle.scm` raised a type
+  error on every run since it was introduced: its search target `'(1 2 3 4)` is a flat list
+  of integers while the generator yields permutations of *sublists*, so the fit test always
+  handed `=` a pair. Both the shape and the length were wrong, and there is no input for
+  which it reaches its base case. No runner script referenced it, so the failure had no path
+  to a red build — it compiled fine, which is why static-analysis harnesses globbing
+  `examples/benchmarks/*.scm` accepted it as a corpus member. `puzzle-debug.scm` was a
+  leftover diagnostic written to isolate exactly this mismatch. The canonical Gabriel
+  `puzzle` (Baskett's 3D piece-placement search) is unaffected and still runs from
+  `benchmarks/larceny/src/puzzle.scm` via `make bench-extended`.
+
+### Fixed
+
+- **A parameter sharing a capture-safe global's name no longer inherits that global's
+  stamp.** The capture-safe body walk ran with an empty shadow set against a flat
+  environment with no local frames, so in `(define (f car x) (car x))` the operator `car`
+  resolved through the global environment to the capture-safe primitive, and `f` was stamped
+  capture-safe — even though `car` is bound to whatever the caller passes, including
+  `call/cc`. The analysed procedure's own parameters are now seeded into the shadow set,
+  which is what local resolution means in that walk.
 
 ### Added
 
@@ -1247,7 +1328,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.19.1...HEAD
+[1.19.1]: https://github.com/aalpar/wile/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/aalpar/wile/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/aalpar/wile/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/aalpar/wile/compare/v1.16.0...v1.17.0
