@@ -177,6 +177,27 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 		if p.cont != nil {
 			p.RestoreAndRelease(p.cont)
 		} else {
+			// Rootless (sub-context) return. There is no continuation to return
+			// through, so RestoreAndRelease never runs and the frame acquired
+			// above must be released here instead. The rooted arm already
+			// recycles it under the same precondition — a foreign call that
+			// neither reconfigured the VM nor repointed the template (both
+			// return early above) does not retain its argument frame — so
+			// releasing here makes the two arms agree rather than introducing a
+			// new assumption. Without it the frame is left for GC, the env-frame
+			// freelist drains, and every subsequent acquire allocates.
+			//
+			// env is repointed at the parent (live, never pool-owned; guaranteed
+			// non-nil by InitApplyFrame) so no field references the recycled
+			// frame, mirroring OpPopEnv. Clearing envPooled prevents
+			// ReleaseSubContext from releasing the same frame a second time.
+			if p.envPooled {
+				p.counters.EnvFramePoolReleases++
+				dead := p.env
+				p.env = dead.Parent()
+				p.envPooled = false
+				p.releaseEnvFrame(dead)
+			}
 			p.template = immediateReturnTemplate
 			p.pc = 0
 		}
