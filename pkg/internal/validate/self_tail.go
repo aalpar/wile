@@ -598,6 +598,21 @@ func tailExprHasSelfCall(expr ValidatedExpr, depth int, bound nameSet, selfName 
 	case *ValidatedBegin:
 		return tailSeqHasSelfCall(v.Body(), depth, bound, selfName, arity)
 	case *ValidatedLet:
+		// The (let ((t E)) (if t t B)) shape `or` expands to compiles WITHOUT a
+		// frame (compileOrShapedLet), so its alternative's tail self calls stay at
+		// this depth. Keeping the two readings in step is why LetIsOrShaped is
+		// exported instead of being a shape match local to codegen: if only the
+		// compiler dropped the frame, this walk would still count the call at
+		// depth+1 and refuse to rewrite the very site the lowering just freed.
+		//
+		// The bound set is deliberately NOT extended. LetIsOrShaped has already
+		// established that the binder does not occur in B at a compatible scope, so
+		// there is nothing there for it to shadow — including the case where the
+		// binder happens to spell selfName, which that same scan refuses outright.
+		_, orAlt, isOrShaped := LetIsOrShaped(v)
+		if isOrShaped {
+			return tailExprHasSelfCall(orAlt, depth, bound, selfName, arity)
+		}
 		// A let runs its body in a frame pushed above the parameter frame, so its
 		// tail self calls are at depth+1 (v1 leaves them un-rewritten). Its bound
 		// names shadow.

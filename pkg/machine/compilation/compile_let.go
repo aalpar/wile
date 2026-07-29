@@ -76,6 +76,14 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 // the frame for the enclosing return to unwind.
 func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedLet)
+
+	// (let ((t E)) (if t t B)) — what `or` expands to — binds a value only to
+	// test and return it, so it compiles without a frame at all.
+	orInit, orAlt, isOrShaped := validate.LetIsOrShaped(v)
+	if isOrShaped {
+		return p.compileOrShapedLet(ctctx, orInit, orAlt)
+	}
+
 	n := len(v.Bindings)
 
 	// For plain let: compile inits BEFORE creating the env frame
@@ -349,4 +357,51 @@ func (p *CompileTimeContinuation) unregisterInlineCandidates(bids []environment.
 	for _, bid := range bids {
 		delete(p.inlineCandidates, bid)
 	}
+}
+
+// compileOrShapedLet emits the frameless form of (let ((t E)) (if t t B)),
+// validate.LetIsOrShaped's decomposition into init and alternative:
+//
+//	<E> | OpBranchOnFalseValue →alt | OpBranch →end | alt: <B> | end:
+//
+// THE CONSEQUENT EMITS NOTHING, and that is the whole optimization.
+// OpBranchOnFalseValue reads the value register without writing it
+// (machine_context.go), so when the branch is not taken the register still holds
+// E's own value — which is exactly what the consequent `t` would have reloaded
+// from the frame. Dropping the binding therefore costs no instruction to
+// compensate: the OpPushEnv, the OpStoreLocal, the reload and the matching
+// OpPopEnv all go, and every name the alternative mentions moves back down one
+// frame depth.
+//
+// E's value passes through unchanged, so this does not depend on E yielding a
+// boolean and (or 5 1) is still 5.
+//
+// The alternative inherits ctctx and E does not, mirroring CompileValidatedIf's
+// split: E is a test, B is the form's tail.
+func (p *CompileTimeContinuation) compileOrShapedLet(
+	ctctx CompileTimeCallContext,
+	init validate.ValidatedExpr,
+	alt validate.ValidatedExpr,
+) error {
+	err := p.compileValidated(ctctx.NotInTail(), init)
+	if err != nil {
+		return err
+	}
+
+	branchOnFalseIndex := p.template.CodeLen()
+	p.AppendOperations(machine.NewOperationBranchOnFalseValueOffsetImmediate(0)) // placeholder
+
+	branchToEndIndex := p.template.CodeLen()
+	p.AppendOperations(machine.NewOperationBranchOffsetImmediate(0)) // placeholder
+
+	altStart := p.template.CodeLen()
+	err = p.compileValidated(ctctx, alt)
+	if err != nil {
+		return err
+	}
+
+	endIndex := p.template.CodeLen()
+	p.patchBranchTarget(branchOnFalseIndex, altStart)
+	p.patchBranchTarget(branchToEndIndex, endIndex)
+	return nil
 }

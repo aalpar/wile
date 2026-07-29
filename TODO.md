@@ -61,7 +61,7 @@ Sections below hold the detail; this table is the map.
 | `2026-03-26-extension-contracts-impl.local.md` | Phase 1 + Phase 4 (runtime enforcement) shipped; Phases 2–3 annotation rollout **partial** |
 | `2026-03-26-extension-contracts-phase2-design.local.md` | Infrastructure + enforcement complete; extension annotations partial |
 | `2026-05-14-stderr-flush-on-exit.local.md` | Design locked, implementation **not started** (re-verified against source) |
-| `2026-06-18-frame-reclaim-precision-coverage.local.md` | Value core (A, E) **shipped**; arc **paused** 2026-06-22; levers B/C/D/F/G open |
+| `2026-06-18-frame-reclaim-precision-coverage.local.md` | A/E/B/D + A-local **shipped**, only A-local converted to clock (`primes` −4.2%); B/D moved verdicts, emitted ~nothing; **C deferred** 2026-07-29 (the `or` lowering removed 340 macro frames more cheaply, but reaches a disjoint set — Appendix A); F/G open |
 | `2026-07-15-review-2026-07-13-sec4-remediation.md` | 22/23 closed; **AU.1 audit open** |
 | `2026-07-17-review-remediation-impl.md` | Confirmed at HEAD; documented guarantee and runtime disagree |
 | `2026-07-18-bootstrap-core-unification-and-signals.md` | W1 shipped; remainder open |
