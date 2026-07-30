@@ -352,9 +352,28 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 	// fixing either alone relocates the asymmetry rather than closing it. A co-introduced
 	// let-syntax keyword (shares the intro scope) is caught HERE and MUST win over the pin
 	// (the R1 invariant); a use-site let-syntax binder of a different scope is refused here.
+	//
+	// A ∅-scoped match is DEMOTED below the pin, per coIntroducedByExpansion — this arm
+	// is the macro-path twin of CompileSymbol's co-introduced-global arm and needs the
+	// same guard. Phase 0 never exercises the demotion (every BindingTypeSyntax creation
+	// site writes an Expand-phase global or a scoped local, so no ∅-scoped syntax global
+	// is reachable from a phase-0 p.env), but a PROCEDURAL transformer body compiles
+	// against env.NextPhase() (compile_transformer.go's compileAndEvalLambdaTransformer,
+	// shared by lambda and er-macro-transformer), so there p.env IS the phase-1 frame where
+	// phase-0 define-syntax deposits exactly such globals, and a same-named user keyword
+	// captured a library macro's pinned template identifier.
+	//
+	// Demoted, not dropped: with no pin the ∅-scoped match is still the right answer, and
+	// it is the only arm that finds it (arm 2 looks a phase ABOVE p.env). So the fallback
+	// sits between the pin and arm 2, which makes pin-beats-ambient the whole behavior
+	// change.
+	var ambient *environment.Binding
 	bnd := p.env.GetBinding(sym0, syntax.ScopesOf(symbolScopes))
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
-		return bnd
+		if coIntroducedByExpansion(bnd) {
+			return bnd
+		}
+		ambient = bnd
 	}
 
 	// D2: definition-site pin. A free template identifier carrying a GlobalIndex resolves
@@ -378,6 +397,13 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(sym *syntax.SyntaxSymbol, 
 		if pinned != nil && pinned.BindingType() == environment.BindingTypeSyntax {
 			return pinned
 		}
+	}
+
+	// ARM 1, demoted: no pin resolved, so the ambient ∅-scoped match from the current
+	// phase stands. This is how a direct reference inside a procedural transformer body
+	// reaches a phase-0 (define-syntax …): that keyword lives in p.env's own phase there.
+	if ambient != nil {
+		return ambient
 	}
 
 	// ARM 2: NextPhase (define-syntax storage). A top-level user (define-syntax …) lands

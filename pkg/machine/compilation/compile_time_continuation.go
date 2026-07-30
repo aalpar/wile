@@ -213,6 +213,29 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 	p.libraryCallback = cb
 }
 
+// coIntroducedByExpansion reports whether a binding found by a scope-precise walk
+// under a reference's own scope set was introduced by the SAME expansion (or
+// library) as that reference, and therefore outranks the reference's
+// definition-time pin.
+//
+// THIS PREDICATE IS WHAT SEPARATES THE FIX FROM A NAIVE REORDER, at both sites that
+// place a scope-precise arm ahead of a pin: CompileSymbol's co-introduced-global arm
+// and ExpanderTimeContinuation.lookupMacroBinding's arm 1. The walk (bestSlotLocked /
+// scopedBestOf) has already filtered candidates on bindingScopes ⊆ symbolScopes, so a
+// NON-EMPTY match shares at least one scope object with the reference; scopes are
+// minted per expansion, so sharing one means shared provenance, which is the R7RS §4.3
+// renaming the arm implements. An ambient ∅-scoped binding shares nothing yet passes
+// the subset filter vacuously (∅ ⊆ anything), so it does NOT qualify — that is the
+// binding class the pin exists to protect from capture (guard/guard-aux,
+// %prompt-reinstall; PR #814).
+//
+// It does not decide what happens to a non-qualifying match: CompileSymbol falls
+// through to later arms that can still reach it, lookupMacroBinding retains it as its
+// post-pin fallback. Only the ranking against the pin is shared.
+func coIntroducedByExpansion(bnd *environment.Binding) bool {
+	return bnd != nil && len(bnd.Scopes()) > 0
+}
+
 // CompileSymbol compiles a syntax symbol expression.
 //
 // Resolution order (Flatt 2016 "sets of scopes"): a scope-set local match wins
@@ -301,17 +324,11 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// (define-syntax m … (begin (define (rec …) …) (define export rec))) bound
 	// `export` to the definition site's `rec`.
 	//
-	// THE CARDINALITY GUARD IS WHAT KEEPS THIS FROM SWALLOWING THE PIN.
-	// bestSlotLocked has already filtered candidates on bindingScopes ⊆
-	// symbolScopes, so a NON-EMPTY match shares at least one scope object with this
-	// reference; scopes are minted per expansion, so sharing one means the binding
-	// came from this expansion (or this library). An ambient ∅-scoped global shares
-	// nothing — ScopesMatch accepts ∅ ⊆ anything, which is exactly why the naive
-	// reorder is wrong — so it does not qualify here and falls through to the pin,
-	// which is what protects a genuine free template identifier (guard/guard-aux,
-	// %prompt-reinstall; PR #814). Ranking among qualifying candidates is
-	// scopedBestOf's, not this arm's: the {intro}-scoped co-introduced binder beats
-	// the ∅-scoped user global on cardinality without any new comparison.
+	// coIntroducedByExpansion IS WHAT KEEPS THIS FROM SWALLOWING THE PIN: a ∅-scoped
+	// global qualifies for nothing and falls through to the pin. Ranking among
+	// qualifying candidates is scopedBestOf's, not this arm's: the {intro}-scoped
+	// co-introduced binder beats the ∅-scoped user global on cardinality without any
+	// new comparison.
 	//
 	// Global-only by construction. GetBinding would search locals first, and
 	// emitting a cached-binding load for a local would be wrong. A nil GetLocalIndex
@@ -328,7 +345,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	coGI := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
 	if coGI != nil && coGI.Env != nil {
 		coBD := coGI.Env.GetOwnGlobalBinding(coGI)
-		if coBD != nil && len(coBD.Scopes()) > 0 {
+		if coIntroducedByExpansion(coBD) {
 			p.emitCachedBindingLoad(coBD)
 			return nil
 		}

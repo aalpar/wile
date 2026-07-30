@@ -200,9 +200,9 @@ Consequences of `8afeb66a`/`a60e32e1` making one name own several slots. Each li
 `plans/` section — several marked RESOLVED — where anyone scanning for open work would skip it.
 Filed for three consumers; `freeIds` and `BindingID` joined 2026-07-20 from the same Stage C
 review, and the self-tail emit and `CompileSymbol` pin ordering joined 2026-07-29 from a targeted
-audit — which is itself the argument against trusting a hardcoded count. Six of eight are closed;
-open are the self-tail family (Finding 1) and the for-syntax half of the `lookupMacroBinding`
-symmetry, which the `CompileSymbol` fix surfaced and left unproven.
+audit — which is itself the argument against trusting a hardcoded count. Seven of eight are closed;
+only the self-tail family (Finding 1) is open. The `lookupMacroBinding` for-syntax symmetry, filed
+UNPROVEN by the `CompileSymbol` fix, was **proven reachable and fixed** 2026-07-29.
 
 - [x] **Frame-reclaim's verdict domain was name-keyed** [Medium, M, Done 2026-07-23, branch
   `fix/framereclaim-scope-keyed-verdict`]: `ClassifyFrameReclaim` returns
@@ -425,8 +425,26 @@ symmetry, which the `CompileSymbol` fix surfaced and left unproven.
   undecidable in general (a template may contain `(my-binder x …)` where `my-binder` is a
   binding macro), so it would be a partial precision improvement on top of this arm, not a
   substitute — see the design's "Option D rejected".
-- [ ] **`lookupMacroBinding` arm 1 has no cardinality guard (for-syntax symmetry)** [Correctness, S,
-  filed 2026-07-29, **UNPROVEN, no repro**]: the macro-path twin of the item above. Arm 1
+- [x] **`lookupMacroBinding` arm 1 has no cardinality guard (for-syntax symmetry)** [Correctness, S,
+  filed 2026-07-29, **Done 2026-07-29**, branch `fix/compilesymbol-cointroduced-global`]: the
+  macro-path twin of the item above. **PROVEN reachable, and the filed mechanism was right about the
+  phase and wrong about the site.** `begin-for-syntax` / `define-for-syntax` / `eval-when` do NOT
+  reach it: all three deliberately root the expander at `p.env` and let arm 2's `NextPhase()` do the
+  climb (`compile_helpers.go:82`'s own comment says so), which is why the filed `begin-for-syntax`
+  probes could not discriminate. The reaching site is a **procedural transformer body**:
+  `compileAndEvalLambdaTransformer` (`compile_transformer.go:108-110`, shared by `lambda` and
+  `er-macro-transformer`) calls `ExpandAndCompile` with `env.NextPhase()`, so `expand_and_compile.go`
+  roots the expander at the phase-1 frame where phase-0 `define-syntax` deposits its `∅`-scoped
+  keywords. Repro: a library exports `mac` over a private `helper` macro; the use site defines its own
+  `define-syntax helper` and puts `(mac 1)` in a lambda transformer body. **`user-helper` → `lib-helper`**
+  (`TestForSyntaxPin_TransformerBodyKeepsPinnedTemplateID`). Fixed by DEMOTING the `∅`-scoped arm-1
+  match below the pin, not skipping it: arm 1 is the only arm that finds a current-phase macro (arm 2
+  looks a phase *above* `p.env`), so a *drop* regresses every direct macro reference in a transformer
+  body. **Mutation-verified both directions**: reverting the guard restores `user-helper`; dropping
+  instead of demoting makes both the collision case and the ambient-macro control fail to expand.
+  Both arms now share `coIntroducedByExpansion`, which answers this item's open question — the shared
+  helper is warranted now that both call sites are proven, and it gives the cardinality argument one
+  home. Original filing, kept because the reachability audit it records is still the useful part: arm 1
   (`expander_time_continuation.go:355`) is a scope-precise `p.env.GetBinding` ahead of the D2 pin with
   **no** `len(binding.Scopes()) > 0` guard, so an ambient `∅`-scoped syntax binding reachable from
   `p.env` would capture a pinned free template identifier. Reachability, as far as it was established:
@@ -439,10 +457,7 @@ symmetry, which the `CompileSymbol` fix surfaced and left unproven.
   `p.env` is a **phase-1** frame, which is exactly where a phase-0 `define-syntax` deposits
   `∅`-scoped syntax globals, so the mechanism is present there. **No repro constructed**: the `guard`
   vector inside `begin-for-syntax` fails identically with and without the collision, for the
-  unrelated reason that `raise` aborts to the exit prompt at expand time. Deliberately left as a
-  local patch rather than a shared arm-1 helper: one proven call site, one unproven. Next step is to
-  build a discriminating for-syntax repro or refute reachability; the answer decides whether the two
-  arms should share one helper.
+  unrelated reason that `raise` aborts to the exit prompt at expand time.
 
 ### Scope-keyed globals — successor work not built in the arc (2026-07-19)
 
