@@ -10,7 +10,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Ten known differences exist:
+Eleven known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -20,7 +20,8 @@ Ten known differences exist:
 7. Invoking a continuation with a number of values other than one **splices** those values into the capture position rather than raising an arity error. R7RS §6.10 leaves this **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory (Racket instead raises an arity error); both conform.
 8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
 9. `equal?` is **structural** on records, hashtables, and boxes, where Chez and Racket answer `#f` for distinct objects. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here.
-10. `(eqv? +nan.0 +nan.0)` returns `#t`. R7RS §6.1 makes this **explicitly unspecified** ("As an exception, the behavior of `eqv?` is unspecified when both `obj1` and `obj2` are NaN"), so this is a choice within unspecified territory, matching Chez and Racket. Numeric `=` keeps IEEE-754 semantics: `(= +nan.0 +nan.0)` is still `#f`.
+10. Procedure calls evaluate **strictly left to right**, operator before operands, and `let` evaluates its inits in written order. R7RS §4.1.3 leaves that order **unspecified**, so the guarantee is stricter than the standard requires: a program that relies on it does not port to an implementation that evaluates right to left.
+11. `(eqv? +nan.0 +nan.0)` returns `#t`. R7RS §6.1 makes this **explicitly unspecified** ("As an exception, the behavior of `eqv?` is unspecified when both `obj1` and `obj2` are NaN"), so this is a choice within unspecified territory, matching Chez and Racket. Numeric `=` keeps IEEE-754 semantics: `(= +nan.0 +nan.0)` is still `#f`.
 
 ---
 
@@ -111,7 +112,7 @@ Because Wile shares structure for same-shape literals (`(eq? '(a b c) '(a b c)) 
 
 **Implementation:**
 
-`*values.Pair` (`[2]Value`) and `*values.Vector` (`[]Value`) are not structs, so an inline `immutable` flag like `*values.String`'s is not available without growing the 32-byte cons cell ~25% (the dominant heap object). Instead, an engine-scoped side-set (`environment.ImmutableLiterals`, a `sync.Map` keyed by pointer identity) records literal pairs/vectors. The set is populated once at compile time when the quote hook interns a literal (`machine/compilation/compile_validated.go`, `markLiteralImmutable`) and read on the cold mutation path by the five mutator primitives. Membership is by pointer identity, so structure-shared siblings are covered by a single mark, and only literals — never `list`/`cons`/`make-vector` allocations — are members. Internal Go `SetCar`/`Set` calls bypass the guard (it lives in the primitive, not in `values`), so scratch reuse of literal structure is unaffected.
+`*values.Pair` (`[2]Value`) and `*values.Vector` (`[]Value`) are not structs, so an inline `immutable` flag like `*values.String`'s is not available without growing the 32-byte cons cell ~25% (the dominant heap object). Instead, an engine-scoped side-set (`environment.ImmutableLiterals`, a `sync.Map` keyed by pointer identity) records literal pairs/vectors. The set is populated once at compile time when the quote hook interns a literal (`markLiteralImmutable`, `machine/compilation/compile_literal_immutability.go`, which marks every pair and vector reachable from the literal) and read on the cold mutation path by the five mutator primitives. Membership is by pointer identity, so structure-shared siblings are covered by a single mark, and only literals — never `list`/`cons`/`make-vector` allocations — are members. Internal Go `SetCar`/`Set` calls bypass the guard (it lives in the primitive, not in `values`), so scratch reuse of literal structure is unaffected.
 
 **Workaround (for programs that must mutate):**
 
@@ -164,8 +165,9 @@ immutability opt-in:
   landing in the engine's own user runtime are frozen, and the sealed base's *defined-once*
   bootstrap procedures (`map`, `assoc`, the `cxr` accessors, …) **are** stamped `Stable` and
   frozen too: a top-level `(set! map …)` is rejected. (Go primitives are stamped `Stable`
-  only when they are *capture-safe*, so `(set! car …)` is rejected but `(set! vector-ref …)`
-  — not capture-safe — stays permitted.) Two contexts stay **mutable**: **user-loaded
+  only when they are *capture-safe*, so `(set! car …)` and `(set! vector-ref …)` are both
+  rejected, while `(set! apply …)` — a procedure-invoking primitive, hence not
+  capture-safe — stays permitted.) Two contexts stay **mutable**: **user-loaded
   libraries** — a library body's cross-form `(define *x* …)` / `(set! *x* …)` works — and
   **interactive / first-class eval environments** — the REPL, the `--mcp` session, and the
   namespaces built by `(environment …)` / `scheme-report-environment` are mutable scratch
@@ -287,11 +289,12 @@ and Racket's arity error conform. `AcceptsArity` returns `true` for continuation
 by an arity gate. See `docs/continuations/delimited.md` and
 `docs/continuations/escape-design.md` for the capture/restore mechanism.
 
-**Open follow-ups** (tracked in `TODO.md` → Tier 1 "Continuation multiple-values
-follow-ups"): whether single-value resumption contexts should *enforce* their
-value-count (strict R7RS-error behavior); `procedure-arity` still reporting
-continuations as `1`; and `dynamic-wind` not preserving multiple values from its
-thunk.
+**Settled follow-ups** (`TODO.md` → "Continuation multiple-values follow-ups"):
+`dynamic-wind` now preserves multiple values from its thunk, and
+`procedure-arity` reports a continuation as `(0 . #f)`, matching its
+`AcceptsArity`. Enforcing a value-count in single-value resumption contexts was
+investigated and **declined**: it costs a check on the `RestoreContinuation` hot
+path to constrain behavior R7RS leaves unspecified.
 
 ---
 
@@ -332,9 +335,9 @@ Wile provides reader syntax for explicitly constructing arbitrary-precision numb
 
 Both prefixes are case-insensitive (`#Z`, `#M` also work), following R7RS §7.1.1 conventions.
 
-**BigInteger (`#z`)** supports radix prefixes: `#z#b101` (binary), `#z#o77` (octal), `#z#x1F` (hex).
+**BigInteger (`#z`)** is decimal only; it does not combine with the radix prefixes `#b` / `#o` / `#d` / `#x` in either order.
 
-**BigFloat (`#m`)** supports optional sign, decimal point, and exponent markers (`e`, `s`, `f`, `d`, `l`).
+**BigFloat (`#m`)** supports optional sign, decimal point, and an `e` exponent marker. The precision markers `s` / `f` / `d` / `l` accepted on ordinary scientific notation are rejected here.
 
 **Note:** R7RS requires implementations to support arbitrarily large exact integers (§6.2.3). Wile satisfies this via automatic overflow promotion from `Integer` (int64) to `BigInteger` — the `#z` prefix is a convenience for explicit construction, not a conformance requirement. Standard R7RS programs never need `#z` or `#m`.
 
@@ -344,7 +347,7 @@ Both prefixes are case-insensitive (`#Z`, `#M` also work), following R7RS §7.1.
 
 **Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process. Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
 
-**Mitigation:** The primitive is gated by `security.ResourceProcess` / `security.ActionWrite` / target `"cwd"`, so embedders can deny it via their authorizer. When denied, all file operations should use absolute paths.
+**Mitigation:** The primitive is gated by `security.ResourceFile` / `security.ActionWrite` with the *destination path* as the target, so embedders can deny it via their authorizer, and a path-confining authorizer evaluates the new working directory rather than an opaque `"cwd"` target it would never inspect. When denied, all file operations should use absolute paths.
 
 R7RS does not specify directory operations. This follows SRFI-170 conventions.
 
@@ -445,8 +448,8 @@ The string is captured at compile time into the library's summary
 (`CompiledLibrary.Description` / `LibrarySummary.Description`) and surfaced by the
 documentation and reflection tooling (`,doc` and `,apropos` in the REPL, `apropos`
 search, and the `library-description` reflection primitive). It has no runtime
-effect and does not alter the library's exports or imports. 60 of the 61 bundled
-`.sld` files carry one (`wile/algebra/matching.sld` is the exception).
+effect and does not alter the library's exports or imports. All 61 bundled
+`.sld` files carry one.
 
 A strict R7RS reader rejects an unrecognized library declaration, so a `.sld`
 using `(description …)` does not port to such an implementation; the declaration

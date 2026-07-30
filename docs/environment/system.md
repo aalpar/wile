@@ -10,27 +10,29 @@ The environment system has four key types organized in a hierarchy:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        Namespace                              │
-│  (Per-VM instance: owns syntax interning, phases, libraries)           │
+│                            Namespace                                    │
+│  (Per-VM instance: owns syntax interning, phases, libraries)            │
 │                                                                         │
-│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe, per-instance)  │
-│  phases ─────────── *PhaseRegistry                                     │
-│  libraryRegistry ── any (*machine.LibraryRegistry)                     │
-│  runtime ────────── *EnvironmentFrame (phase 0)                        │
+│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe, per-instance)   │
+│  phases ─────────── *PhaseRegistry                                      │
+│  libraryRegistry ── LibrarySearcher (*compilation.LibraryRegistry)      │
+│  runtime ────────── *EnvironmentFrame (phase 0, mutable user global)    │
+│  sealedBase ─────── *EnvironmentFrame (phase 0, immutable, parent nil)  │
+│  sealedExpandBase ─ *EnvironmentFrame (phase 1, immutable)              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     │ owns
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         EnvironmentFrame                                │
-│  (Lexical scope node: links local/global bindings, parent chain)       │
+│  (Lexical scope node: links local/global bindings, parent chain)        │
 │                                                                         │
-│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)     │
-│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)    │
-│  global ─────────── *GlobalEnvironmentFrame (define bindings)          │
-│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)               │
-│  phases ─────────── *PhaseRegistry (shared reference)                  │
-│  namespace ───────── *Namespace (back-reference)                        │
+│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)      │
+│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)     │
+│  global ─────────── *GlobalEnvironmentFrame (define bindings)           │
+│  phaseLevel ─────── Phase (-1=template, 0=runtime, 1=expand, 2=compile) │
+│  phases ─────────── *PhaseRegistry (shared reference)                   │
+│  namespace ──────── *Namespace (back-reference)                         │
 └─────────────────────────────────────────────────────────────────────────┘
           │                                    │
           │ contains                           │ contains
@@ -39,10 +41,9 @@ The environment system has four key types organized in a hierarchy:
 │  LocalEnvironmentFrame    │    │      GlobalEnvironmentFrame            │
 │  (Single scope bindings)  │    │  (Phase-wide global bindings)          │
 │                           │    │                                        │
-│  keys ─ map[Symbol][]int  │    │  keys ────── map[Symbol][]int          │
-│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
-└───────────────────────────┘    │  namespace ──── *Namespace             │
-                                 └────────────────────────────────────────┘
+│  keys ── map[Symbol][]int │    │  keys ────── map[Symbol][]int          │
+│  bindings ── []Binding    │    │  bindings ──── []*Binding              │
+└───────────────────────────┘    └────────────────────────────────────────┘
 ```
 
 ---
@@ -62,7 +63,7 @@ The `Namespace` is the root of the environment hierarchy. Each Wile VM instance 
 ns := environment.NewNamespace()
 env := ns.Runtime()  // Get the runtime (phase 0) environment
 
-// Convenience wrapper (creates Namespace internally)
+// Convenience wrapper (deprecated; delegates to NewNamespace().Runtime())
 env := environment.NewNamespaceFrame()
 ```
 
@@ -157,7 +158,7 @@ The `NewChildRuntime` method creates an environment that:
 The `LibraryEnvFactory` field on `Namespace` creates environments for R7RS libraries. It must share the caller's `Namespace`:
 
 ```go
-// In internal/bootstrap/environment_tiny.go
+// In pkg/internal/bootstrap/bootstrap.go — NewLibraryEnvironmentFrame
 func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
     // Create a new environment that shares the caller's Namespace
     libEnv := callerEnv.Namespace().NewChildRuntime()
@@ -188,7 +189,7 @@ import (
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     // Create complete environment with primitives and macros
-    env, err := bootstrap.NewNamespaceFrameTiny(ctx)
+    env, err := bootstrap.NewNamespaceFrame(ctx)
     if err != nil {
         return nil, err
     }
@@ -212,7 +213,7 @@ func TestSomething(t *testing.T) {
     env := environment.NewNamespaceFrame()
 
     // Or with full primitives
-    env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+    env, err := bootstrap.NewNamespaceFrame(context.TODO())
     if err != nil {
         t.Fatal(err)
     }
@@ -227,19 +228,21 @@ func TestSomething(t *testing.T) {
 ```go
 env := environment.NewNamespaceFrame()
 
-// Create a global binding
+// Create a global binding and give it a value. Creation takes a plain
+// []*syntax.Scope: a nil slice is the ambient (empty) scope set — what a
+// user-written top-level define carries. A macro-introduced binder passes its
+// own scope set, which keys a distinct slot under the same name.
+// DefineOwnGlobal pairs the create and the write under one key; see Invariant 5.
 sym := values.NewSymbol("foo")
-// nil scopes creates an ambient (empty-scope-set) binding — what a user-written
-// top-level define carries. A macro-introduced binder passes its own scope set,
-// which keys a distinct slot under the same name.
-gi, created := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, nil)
-if created {
-    env.SetOwnGlobalValue(gi, values.NewInteger(42))
+err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(42))
+if err != nil {
+    return err
 }
 
-// Look up a binding. nil scopes means MATCH ANY; pass the reference's own
-// scope set to get hygiene-correct resolution.
-binding := env.GetBinding(sym, nil)
+// Look up a binding. The query is a syntax.ScopeSet, not a slice:
+// AllScopes() is the wildcard, ScopesOf(ref.Scopes()) is hygiene-correct
+// resolution, EmptyScopes() is the ambient reference.
+binding := env.GetBinding(sym, syntax.AllScopes())
 if binding != nil {
     value := binding.Value()
 }
@@ -276,13 +279,23 @@ These invariants must be maintained:
    - Creation uses **exact scope-set equality**, not subset compatibility.
      Reusing lookup's predicate here would let a macro-introduced `{m}` binder
      clobber a user's `{}` binding, since `ScopesCompatible({}, {m})` is true
-   - A nil scope set means the EXACT empty set to `GetGlobalIndexWithScopes` and
-     `CreateGlobalBinding`, but MATCH ANY to `GetBinding`, `GetLocalIndex`,
-     `GetGlobalIndex`, and any index built by `NewGlobalIndex` from a bare symbol.
-     The split is by entry point, not by lookup-vs-creation
-   - Passing nil without deciding which you meant is the recurring defect here:
-     create under the empty set, then write through a wildcard index, and the
-     value lands on a different binding than the one just created.
+   - A resolution can also come back **ambiguous**: two incomparable scope sets
+     tied for the maximal match. That is a third answer, not "unresolved";
+     `GetBinding` / `GetLocalIndex` panic with a wrapped `werr.ErrAmbiguousBinding`
+     rather than break the tie by order (Racket's "ambiguous binding")
+   - The query side is the `syntax.ScopeSet` type (`pkg/values/scope_set.go`), not
+     a `[]*Scope` whose nil once meant "match any" at some entry points and "the
+     empty set" at others. `AllScopes()` is the wildcard, `EmptyScopes()` the
+     ambient reference, `ScopesOf(s)` a specific set; the zero value is the empty
+     set, so a forgotten initialization can never silently widen a resolution.
+     `GetGlobalIndex` has no query parameter at all: it is the wildcard form by
+     construction, as is any index built by `NewGlobalIndex` from a bare symbol
+   - Creation is **not** converted: it still takes a plain `[]*syntax.Scope`.
+     `CreateGlobalBinding` (via `MaybeCreateOwnGlobalBinding`) reads nil as the
+     exact empty set; `LocalEnvironmentFrame.MaybeCreateLocalBinding` still reads
+     nil as "match any", the last surviving instance of the old overload
+   - Pairing a create with a write through a wildcard index therefore still lands
+     the value on a different binding than the one just created;
      `DefineOwnGlobal` exists so that pairing cannot be written by hand
 
 6. **Sealed base (phase 0) and sealed expand base (phase 1) are per-namespace
@@ -355,9 +368,10 @@ The engine wires in the concrete implementation via `ns.SetLoadPathStack(sourcel
 Filename resolution goes through the `FileResolver` interface (`environment/file_resolver.go`). Concrete implementations live in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. The load stack's current directory is consulted as the relative base:
 
 ```
-1. Absolute path     → use as-is (if exists)
+1. Absolute path     → use as-is (authorizer-gated)
 2. Stack-relative    → path relative to stack.CurrentDir()
-3. Fallback dirs     → SCHEME_INCLUDE_PATH, CWD
+3. Fallback dirs     → library registry paths, SCHEME_INCLUDE_PATH, CWD
+4. Filesystem root   → "."
 ```
 
 Stack-relative takes precedence over fallback directories. Error messages list all searched paths.
@@ -368,9 +382,9 @@ All three file-loading operations push/pop the stack:
 
 | Operation | Location | Phase |
 |-----------|----------|-------|
-| `load` | `internal/extensions/eval/prim_eval.go` | Runtime |
-| `include` | `machine/compile_time_continuation_include.go` | Compile-time |
-| `import` (library loading) | `machine/library_loader.go` | Compile-time |
+| `load` | `extensions/eval/prim_eval.go` | Runtime |
+| `include` | `machine/compilation/compile_time_continuation_include.go` | Compile-time |
+| `import` (library loading) | `machine/compilation/library_loader.go` | Compile-time |
 
 This enables correct nested resolution: `(load "a.scm")` containing `(load "b.scm")` resolves `b.scm` relative to `a.scm`'s directory.
 
@@ -413,7 +427,9 @@ The stack lives on `Namespace`, shared across all child environments via delegat
 - `Namespace.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
 - `PathTracker` / concrete `LoadStack` - Thread-safe for individual operations (uses RWMutex); LIFO ordering only guaranteed single-threaded
-- Binding operations - Not thread-safe (single-threaded compilation assumed)
+- `GlobalEnvironmentFrame` keys/slots - Thread-safe (RWMutex; `CreateGlobalBinding` takes the write lock for its check-then-write)
+- Global `Binding` value and metadata - Thread-safe: a global binding's value and its `*BindingMeta` live in an `atomicCell`, read lock-free and published by store / copy-on-write CAS (`Binding.UpdateMeta`). Never write a global's meta field in place
+- Local `Binding` operations - Not thread-safe (locals are frame-private, single-threaded compilation assumed)
 
 ---
 
@@ -421,5 +437,5 @@ The stack lives on `Namespace`, shared across all child environments via delegat
 
 - R7RS §6.5: Symbols - Symbol identity requirements
 - Flatt 2016: "Binding as Sets of Scopes" - Hygiene model
-- `environment/` - Implementation
-- `internal/bootstrap/environment_tiny.go` - Runtime initialization
+- `pkg/environment/` - Implementation
+- `pkg/internal/bootstrap/bootstrap.go` - Runtime initialization (`NewNamespaceFrame`, `NewLibraryEnvironmentFrame`)

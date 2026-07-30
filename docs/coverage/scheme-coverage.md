@@ -13,6 +13,10 @@ go tool cover -html=cov.out -o cov.html
 open cov.html
 ```
 
+The profile records the path exactly as it was given to `--file`, and
+`go tool cover` resolves it through `go list`. Outside a Go module,
+pass `--file` an absolute path.
+
 ## What is covered
 
 Each `(file, start-line, start-col, end-line, end-col)` corresponding
@@ -72,9 +76,10 @@ For users of the `wile` package:
 ```go
 import (
     "context"
+    "os"
 
-    "github.com/aalpar/wile/pkg/wile"
     "github.com/aalpar/wile/coverage"
+    "github.com/aalpar/wile/pkg/wile"
 )
 
 col := coverage.NewCollector()

@@ -2,29 +2,34 @@
 
 Wile's extension system provides capability-based sandboxing for embedded Scheme engines (Rees, "A Security Kernel Based on the Lambda Calculus", 1996). Primitives not in the engine's registry don't exist — attempts to use them produce compile-time errors, not runtime checks that could be bypassed.
 
+Sandboxing has **two layers**. The registry layer decides which primitives are *nameable*; it is the mechanism described above. The authorization layer decides what a nameable primitive may *do*: every privileged operation calls `security.CheckWithAuthorizer` with a resource/action/target triple, which a `security.Authorizer` (installed by `WithAuthorizer` or by a profile) allows or denies. The first layer removes a capability; the second bounds one you chose to keep.
+
 ## How it works
 
 By default, `NewEngine(ctx)` includes only core primitives (arithmetic, pairs, lists, vectors, strings, characters, bytevectors, control flow, syntax, parameters). Extensions are opt-in via `WithExtension()`. If the filesystem extension isn't loaded, `open-input-file` is an unbound variable — the binding doesn't exist in the environment at all.
 
-This restriction is **transitive**: when the library system is enabled (`WithLibraryPaths`), library environments are created by a factory that closes over the engine's registry. A library loaded from a `.sld` file gets the same set of primitives as the engine that loaded it. There is no way for Scheme code to escalate privileges within a single engine (Hardy, "The Confused Deputy", 1988).
+This restriction is **transitive**: when the library system is enabled (`WithLibraryPaths`), library environments are created by a factory that closes over the engine's registry (`Engine.applyBaseEnvironment`, wired via `Namespace.SetLibraryEnvFactory` in `pkg/wile/engine.go`). A library loaded from a `.sld` file gets the same set of primitives as the engine that loaded it, and inherits the engine's authorizer (Hardy, "The Confused Deputy", 1988). One construct escapes the registry half of that statement: see [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface).
 
 ## Extension security classification
 
 | Category | Extensions | Package | Risk |
 |----------|-----------|---------|------|
 | **Safe** | core | `registry/core` | None. Pure computation. |
-| **Safe** | io | `internal/extensions/io` | None. In-memory and caller-provided ports only. No filesystem access. |
+| **Safe** | io | `pkg/extensions/io` | None. In-memory and caller-provided ports only. No filesystem access. |
 | **Safe** | math | `extensions/math` | None. `sqrt`, `sin`, `cos`, transcendental functions. |
-| **Safe** | introspection | `extensions/introspection` | None. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`. Read-only. |
-| **Safe** | all (safe subset) | `internal/extensions/all` | None. Records, promises, additional string/character ops. |
+| **Safe** | introspection | `extensions/introspection` | None on its own. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`. Read-only: it observes an environment, it cannot add bindings to one. Note `environment-ref` returns the *value* of a binding, so any environment object handed to it yields the capabilities that environment holds. |
+| **Safe** | charsets | `extensions/charsets` | None. SRFI-14 character sets. |
+| **Safe** | sat | `extensions/sat` | None beyond CPU/memory. CDCL SAT solver: pure computation on caller-supplied clauses. |
+| **Safe** | algebragraph | `extensions/algebragraph` | None. Graph analytics backing `(wile algebra …)`. |
+| **Safe** | all (safe subset) | `pkg/internal/extensions/all` | None. Records, promises, additional string/character ops. |
 | **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`, `create-directory`, `delete-directory`, `directory-files`, `current-directory`, `set-current-directory!`. |
 | **Privileged** | eval | `extensions/eval` | Evaluation / compilation: `eval`, `load`, `environment`, `expand`, `compile`, `syntax-local-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`. |
-| **Privileged** | envvars | `internal/extensions/envvars` | Environment variables: `get-environment-variable`, `get-environment-variables`. `Console`/`ConsoleWithLoad` allocate an empty virtual map (no OS fallthrough); `Small`/`KitchenSink` fall through to `os.Getenv` when the envMap is unset. |
-| **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. |
+| **Privileged** | envvars | `pkg/internal/extensions/envvars` | Environment variables: `get-environment-variable`, `get-environment-variables`. `Console`/`ConsoleWithLoad` allocate an empty virtual map (no OS fallthrough); `Small`/`KitchenSink` fall through to `os.Getenv` when the envMap is unset. |
+| **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. Gated: `exit`/`emergency-exit` as `process:exit`, `command-line` as `process:read`; the clock primitives are ungated. |
 | **Privileged** | process | `extensions/process` | Process execution: `system`, `process-spawn`, `process-wait`, `process-kill`. |
-| **Privileged** | namespace | `internal/extensions/namespace` | Namespace introspection: `namespace?`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. |
-| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
-| **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code. |
+| **Privileged** | namespace | `pkg/internal/extensions/namespace` | Namespace introspection: `namespace?`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. Not gated by any authorizer; exclude it from the registry rather than relying on a policy. |
+| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Not gated by any authorizer. Safe for trusted code. |
+| **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Not gated by any authorizer. Safe for trusted code. |
 
 **Safe** means no ambient authority (Dennis & Van Horn 1966; Miller, "Robust Composition", 2006) — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
 
@@ -37,39 +42,87 @@ The primary API is `WithProfile`, which bundles an extension set with a matching
 | Profile | Extensions | Authorizer |
 |---------|-----------|------------|
 | `Tiny` | core only | none |
-| `Console` | core + io + files + math + all-safe + envvars | `ConsoleAuthorizer` (file ops restricted to `/tmp`, env reads allowed, no code-load) |
-| `ConsoleWithLoad` | Console set + eval | `ConsoleWithLoadAuthorizer` (Console + `code:load` under `/tmp`) |
-| `Small` | R7RS-small baseline (io, files, math, introspection, eval, all, system, envvars) | none |
+| `Console` | core + io + files + math + all-safe + charsets + envvars | `ConsoleAuthorizer` (file ops restricted to `/tmp`, env reads allowed, all `code` and `process` denied) |
+| `ConsoleWithLoad` | Console set + eval | `ConsoleWithLoadAuthorizer` (Console + `code:load` under `/tmp` + unrestricted `code:eval`) |
+| `Small` | R7RS-small baseline (io, files, math, introspection, eval, all, charsets, system, envvars) | none |
 | `KitchenSink` | every extension | none |
+
+The mapping is defined once, in `bootstrap.ProfileExtensions`; `Profile.extensions` and the Scheme-level constructor both dispatch through it.
 
 ```go
 engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Console))
 ```
 
-Use `Console` for untrusted code that needs basic I/O without filesystem escape. Use `ConsoleWithLoad` when you also need `(load ...)` from a `/tmp`-staged source. Use `KitchenSink` to match the CLI's full surface.
+Use `Console` for untrusted code that needs basic I/O without filesystem escape. Use `ConsoleWithLoad` when you also need `(load ...)` from a `/tmp`-staged source. Use `KitchenSink` to match the CLI's full surface. `Small` and `KitchenSink` install **no** authorizer, so on those profiles every gate site is open by default.
+
+`WithSandbox()` is an orthogonal modifier, not a profile: it intersects `security.SandboxAuthorizer` (file reads and stats only, env reads filtered by prefix, default `WILE_`, all code and process denied) on top of whatever authorizer the profile or `WithAuthorizer` resolved to. Intersection is most-restrictive-wins, so a sandbox layer can only tighten.
+
+### Authorization vocabulary
+
+An `AccessRequest` is a resource, an action, and an operation-specific target (`pkg/security/access.go`).
+
+| Resource | Actions used at gate sites | Target |
+|----------|---------------------------|--------|
+| `file` | `read`, `write`, `delete`, `stat` | the path |
+| `code` | `load` (run a resolved file), `eval` (compile+run an in-memory datum) | the resolved path, or `<eval>`/`<compile>` |
+| `env` | `read` | the variable name, or `*` for a whole-map read |
+| `process` | `read` (argv), `exit`, `exec`, `exec-shell` | the command, or empty |
+
+Both sets are open: an extension may define additional resources and actions without changing `pkg/security`.
+
+### Gate sites
+
+Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `security.Check(ctx, req)` is deprecated: the authorizer lives on the `Namespace`, not on the context, so `Check` finds nil (open) unless a caller injected one explicitly.
+
+| Site | Request |
+|------|---------|
+| `extensions/files`: `openFilePort`, `callWithFile`, `PrimFileExistsQ`, `PrimDeleteFile`, `PrimCreateDirectory`/`PrimDeleteDirectory`/`PrimDirectoryFiles`/`PrimCurrentDirectory`/`PrimSetCurrentDirectory`, plus `unconfinedTarget` in `confined.go` re-gating a resolved real path | `file:{read,write,delete,stat}` on the path |
+| `extensions/eval`: `PrimEval`, `PrimCompile` | `code:eval` |
+| `extensions/system`: `PrimCommandLine`, `PrimExit`/`PrimEmergencyExit` | `process:read`, `process:exit` |
+| `extensions/process`: `PrimSystem`, `PrimProcessSpawn` (`PrimProcessWait`/`PrimProcessKill` are ungated: they act on a process handle already obtained through a gated spawn) | `process:exec-shell`, `process:exec` |
+| `pkg/internal/extensions/envvars`: `PrimGetEnvironmentVariable`, `PrimGetEnvironmentVariables` | `env:read` |
+| Source loading (`include`, `include-ci`, `load`, library `import`): `resolver.openAuthorized`, `isAuthorized`, `openUnconfined`, `FSFileResolver.ResolveAndOpen`, `OSFileResolver.ResolveAndOpen` | `code:load` on the resolved path |
+
+`EmbedFileResolver` performs no check: it serves the compiled-in bootstrap sources, which are not attacker-controlled.
+
+Note that the resolver gate keys on the resolved *target string*. Under `WithSourceFS`, that string is a virtual path, so a path-confining authorizer (`ConsoleAuthorizer`, `FilesystemRoot`) will reject it for being outside the root. Confine either with the resolver chain or with a path authorizer, not both.
 
 ### Profile with library support
 
 ```go
 engine, err := wile.NewEngine(ctx,
-    wile.WithProfile(wile.Console),
-    wile.WithLibraryPaths("./stdlib/lib"),
+    wile.WithProfile(wile.ConsoleWithLoad),
+    wile.WithLibraryPaths("/tmp/stagedlib"),
 )
 ```
 
-Libraries loaded from `./stdlib/lib` inherit the profile's restrictions transitively. A library that tries to call `open-input-file` outside `/tmp` is denied at runtime by the authorizer; primitives absent from the profile are unbound and fail at compile time.
+Libraries loaded from `/tmp/stagedlib` inherit the profile's restrictions transitively. A library that tries to call `open-input-file` outside `/tmp` is denied at runtime by the authorizer; primitives absent from the profile are unbound and fail at compile time.
+
+The profile matters here. `Console` denies the whole `code` resource, so under `Console` a file-backed `import` or `include` is refused before the file is opened, whatever path it names. Pair `WithLibraryPaths` with `ConsoleWithLoad` (which permits `code:load` under `/tmp`) or with a custom authorizer that admits your library root.
 
 ### Profile + extra extensions
 
-`WithProfile` composes with subsequent `WithExtension` calls. Order matters when you also override the authorizer (`WithAuthorizer(nil)` opens fully):
+`WithProfile` composes with subsequent `WithExtension` calls. Authorizer resolution is order-independent (`engineConfig.resolveAuthorizer`): an explicit `WithAuthorizer` always overrides the profile's built-in one, even `WithAuthorizer(nil)`, which opens the engine fully; any `WithSandbox` layer is then intersected on top. Across several `WithProfile` calls, the last profile that *defines* an authorizer wins, and a later authorizer-less profile does not clear an earlier one.
 
 ```go
 engine, err := wile.NewEngine(ctx,
-    wile.WithProfile(wile.Console),
+    wile.WithProfile(wile.ConsoleWithLoad),
     wile.WithExtension(threads.Extension),
-    wile.WithLibraryPaths("./stdlib/lib"),
+    wile.WithLibraryPaths("/tmp/stagedlib"),
 )
 ```
+
+### Profile namespaces widen the surface
+
+When the eval extension is present, Scheme code can construct a namespace for any *named* profile:
+
+```scheme
+(eval '(+ 1 2) (environment '(wile tiny)))
+```
+
+`PrimEnvironment` routes a sole `(wile <name>)` spec through `tryWileProfile` to `bootstrap.NewProfileEnvironment`, which builds a child namespace registered with that profile's full extension set. The name is not checked against the engine's own profile, and the constructor itself is not gated, so `(environment '(wile kitchen-sink))` materializes primitives the engine never registered, including `threads`, `gointerop`, and `namespace`, none of which have an authorizer gate.
+
+What the child namespace does inherit is the authorizer: `Namespace.NewChildNamespace` copies it, so gated operations (`file`, `code`, `env`, `process`) stay under the same policy no matter which profile named them. The registry layer is therefore not an authority boundary against Scheme code that holds `environment`; the authorization layer is. If you rely on an extension's *absence* for safety, do not also grant the eval extension, or install an authorizer that covers the operations you care about.
 
 ### Virtual environment variables
 
@@ -108,7 +161,7 @@ Note: Both `WithoutCore()` and `WithRegistry(reg)` set the registry. `WithRegist
 
 ## Enforcement mechanism
 
-Sandboxing is enforced at the **registry level**, which operates at engine construction time:
+The first layer is enforced at the **registry level**, which operates at engine construction time:
 
 1. `NewEngine` builds a `Registry` and populates it with core + requested extensions.
 2. The registry is applied to the environment, creating global bindings for each primitive.
@@ -119,6 +172,10 @@ This means:
 - **No runtime overhead**: There are no permission checks in the hot path. Absent primitives simply don't exist.
 - **Fail-fast**: Errors are caught at compile time, not at execution time.
 - **No bypass**: There is no `eval`-like escape hatch unless the eval extension is explicitly loaded.
+
+The second layer is enforced at the **gate sites** listed above, at the moment the operation runs. `MachineContext.Authorizer()` reads the authorizer recorded on the namespace at construction (it is immutable thereafter), and a denial returns an error wrapping `security.ErrAccessDenied` with the action, resource, and target attached. Two properties follow: the check costs one call per privileged operation and nothing at all on ordinary computation, and the policy sees a *value* (a path, a variable name, a command) that the registry layer could never inspect.
+
+Where the target is a path, the check and the subsequent syscall must agree on which file they mean. Containment is not a lexical prefix test: `security.containedInRoot` canonicalizes both the root and the target through `filepath.EvalSymlinks` (resolving as far as the path exists, so a not-yet-created file is still admissible under an existing root), which is what lets a symlinked root such as macOS `/tmp` work and what rejects a symlink staged inside the root that points out of it. On top of that, an authorizer implementing `security.RootConfined` causes both the file primitives (`extensions/files/confined.go`) and the source loader (`resolver/confined.go`) to open through `os.Root`, closing the TOCTOU window between the by-name check and the by-descriptor open. When no root is reported, `resolver.openUnconfined` re-gates the symlink-resolved real path before opening it.
 
 ## Why Scheme makes sandboxing tractable
 
@@ -158,7 +215,7 @@ Scheme provides no built-in mechanism to:
 - Bypass access controls via a metaobject protocol
 - Load arbitrary code without an explicit `eval` binding
 
-Wile's `introspection` extension (`environment-bound-names`, `environment-ref`) is opt-in and read-only. Even when loaded, it operates within the engine's existing environment — it cannot introduce new bindings or access extensions that weren't registered.
+Wile's `introspection` extension (`environment-bound-names`, `environment-ref`) is opt-in and read-only: it observes an environment object, it cannot add a binding to one. It is not, however, a reachability bound. `environment-ref` yields the *value* of a binding, so it hands out whatever capability the environment it is given already holds, and the eval extension's `(environment '(wile <profile>))` can supply an environment holding a wider set than the engine registered (see [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface)). The authorization layer, not the extension list, is what bounds authority once `environment` is in scope.
 
 This is a sharp contrast with languages like Python (where `__builtins__` and `getattr` provide universal introspection), Java (where reflection can bypass `private` access), or JavaScript (where property enumeration and `Proxy` provide deep metaprogramming). In those languages, sandboxing must anticipate every reflective path to authority. In Scheme, there are no reflective paths unless you create them.
 
@@ -176,7 +233,7 @@ In capability-secure systems, the hard problem is *attenuation*: granting partia
 ;; Full authority: can write anywhere
 (define write-file open-output-file)
 
-;; Attenuated: can only write to /tmp
+;; Attenuated: only accepts paths spelled under /tmp
 (define (safe-write-file path)
   (if (string-prefix? "/tmp/" path)
       (open-output-file path)
@@ -185,13 +242,15 @@ In capability-secure systems, the hard problem is *attenuation*: granting partia
 
 The attenuated capability is a first-class value that can be passed, stored, and composed — using the same mechanisms as any other Scheme value. There is no separate "policy language" or "permission descriptor" — the language's own composition mechanism *is* the security mechanism.
 
+The shape is the point, not the predicate. A lexical prefix test is not path containment: `/tmp/../etc/passwd` passes it, and so does a symlink under `/tmp`. Wile's own `/tmp` confinement is `security.containedInRoot`, which canonicalizes both sides first. Write the attenuation as a closure, but put a containment check inside it.
+
 This is the central thesis of Miller (2006): in a language where authority flows through closures, capability security and software engineering are the same discipline. Good modularity *is* good security.
 
 ### The practical consequence
 
-These properties compound. Because authority is lexical, removing a binding from the registry makes it inexpressible — not merely blocked. Because there are no ambient escape hatches, there are no runtime permission checks on the hot path. Because closures compose, fine-grained attenuation uses the same tools as ordinary programming.
+These properties compound. Because authority is lexical, removing a binding from the registry makes it inexpressible — not merely blocked. Because there are no ambient escape hatches, no permission check is needed on the hot path; the checks that do exist sit at the handful of gate sites where a capability actually touches the host. Because closures compose, fine-grained attenuation uses the same tools as ordinary programming.
 
-The result is that Wile's sandboxing has zero runtime cost, fails at compile time, and requires no ongoing maintenance against new escape vectors — because the language doesn't generate escape vectors.
+The result is that the registry layer costs nothing at runtime and fails at compile time, the authorization layer costs one check per privileged operation, and neither requires ongoing maintenance against new escape vectors — because the language doesn't generate escape vectors.
 
 ## What sandboxing does NOT cover
 
@@ -200,13 +259,14 @@ The result is that Wile's sandboxing has zero runtime cost, fails at compile tim
 | CPU time | Not covered | Use `context.WithTimeout` on the `ctx` passed to `Eval`. |
 | Memory / allocation | Not covered | Use OS-level limits (cgroups, ulimits). |
 | Stack depth | Partially covered | `WithMaxCallDepth(n)` limits continuation stack depth. |
-| Goroutine exhaustion | Not covered (if threads or gointerop extension loaded) | Don't load threads or gointerop extensions for untrusted code. |
+| Goroutine exhaustion | Not covered (if threads or gointerop extension loaded) | Don't load threads or gointerop extensions for untrusted code. Note that omitting them is not sufficient when the eval extension is present: `(environment '(wile kitchen-sink))` re-registers them, and neither has an authorizer gate. |
 | Information flow | Not covered | A privileged library can pass capabilities (e.g., an open file handle) to unprivileged code via exported values. Preventing this requires an object-capability model. |
-| `include` | Covered by authorizer | `include` is a compile-time form that reads files. It is NOT gated by the files extension — it's part of the compiler. However, it is gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so an authorizer can restrict it. Without an authorizer, it is unrestricted. `include-ci` currently raises `ErrInvalidSyntax` before any security decision (case-insensitive includes not yet supported). |
+| Extension-set escalation | Not covered by the registry layer | `(environment '(wile <profile>))` is ungated and builds a namespace holding the *named* profile's extensions, not the engine's. Gated resources stay under the inherited authorizer; ungated extensions (threads, gointerop, namespace) do not. |
+| `include` | Covered by authorizer | `include` is a compile-time form that reads files. It is NOT gated by the files extension — it's part of the compiler. However, it is gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so an authorizer can restrict it. Without an authorizer, it is unrestricted. `include-ci` is the same code path (`compileIncludeImpl` with case folding on) and is gated identically. |
 
 ### The `include` note
 
-`(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file during compilation, regardless of whether the files extension is loaded. However, `include` and library loading are gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so a `WithAuthorizer` policy can restrict which files are loaded.
+`(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file during compilation, regardless of whether the files extension is loaded. However, `include`, `include-ci`, runtime `(load ...)`, and library `import` all resolve through the same `FileResolver` chain, and every OS- or FS-backed resolver in it gates on `security.CheckWithAuthorizer` (resource `code`, action `load`), so a `WithAuthorizer` policy can restrict which files are loaded. `EmbedFileResolver` is the exception, and it serves only the compiled-in bootstrap sources.
 
 `WithSourceFS(fsys)` adds a virtual filesystem layer to the source resolver chain. Multiple calls add layers searched in order. When only `WithSourceFS` is used (without `WithSourceOS()`), the OS filesystem is excluded — Scheme code can only access files in the configured virtual filesystems.
 
@@ -218,13 +278,15 @@ Without an authorizer or `WithSourceFS`, `include` is unrestricted on the OS fil
 
 ## Testing
 
-Isolation invariants are verified in `engine_sandbox_test.go`:
+Isolation invariants are verified in `pkg/wile/engine_sandbox_test.go`:
 
-- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-rw-mutex`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`)
-- Safe engine allows safe primitives
-- `WithoutCore()` produces a bare engine
-- `WithoutCore()` + extension gives only that extension
-- Library propagation respects restrictions
+- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-rw-mutex`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`) (`TestConsole_RejectsPrivileged`)
+- Safe engine allows safe primitives (`TestConsole_AllowsSafe`)
+- `WithoutCore()` produces a bare engine, and `WithoutCore()` + extension gives only that extension (`TestWithoutCore_BareEngine`, `TestWithoutCore_PlusExtension`)
+- Library propagation respects restrictions (`TestConsole_LibraryPropagation`)
+- Every gate action denies under `DenyAll()` (`TestAuthorizer_DenyAllSweep`), which is one row per action and is meant to grow when a gate action is added
+
+Two companion files carry the rest: `pkg/wile/engine_sandbox_escape_test.go` (symlink escape denied; eval allowed under `ConsoleWithLoad` and denied by a denying authorizer) and `pkg/wile/authorizer_precedence_test.go` (explicit authorizer beats profile, order-independently; sandbox layers accumulate). Path containment itself is tested in `pkg/security/path_containment_test.go` and `pkg/machine/compilation/resolver/confined_test.go`.
 
 ## References
 

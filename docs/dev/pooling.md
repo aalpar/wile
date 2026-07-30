@@ -1,14 +1,25 @@
 # Object Pooling Contract
 
-The VM uses four pools to recycle short-lived allocations on the call/return
-hot path. Each non-tail call creates a continuation frame and eval stack;
-pooling avoids per-call heap allocations.
+The VM recycles short-lived allocations on the call/return hot path. Each
+non-tail call creates a continuation frame and eval stack; pooling avoids
+per-call heap allocations.
 
-Three pools use `FreeList[T]` (mutex-guarded slice): stacks, continuations,
-and environment frames. These survive GC, unlike `sync.Pool` which is cleared
-every GC cycle — a problem for recursive Scheme workloads where GC runs 1000+
-times per second. One pool uses `Pool[T]` (`sync.Pool`-backed): sub-contexts,
-which have a longer lifecycle and lower churn.
+Three kinds of object (stacks, continuations, and environment frames) are
+pooled **per thread**. `threadPools` (`pkg/machine/pool.go`) mints one set of
+freelists at each thread root (`NewMachineContext`, `NewThreadSubContext`,
+`AcquireTopLevelContext`) and every same-goroutine context inherits it by
+reference, so no two goroutines ever touch the same freelist. Those use
+`unsyncFreeList[T]`, which drops the mutex, the atomic counters, and the
+enabled flag that the process-global pools carry: a frame allocated by one
+thread is never released by another. A context with no thread root
+(cold/expand-time) falls back to the process-global `FreeList[T]`
+(mutex-guarded slice) of the same three kinds; the acquire/release helpers on
+`MachineContext` branch between the two.
+
+Both freelist flavors survive GC, unlike `sync.Pool` which is cleared every GC
+cycle — a problem for recursive Scheme workloads where GC runs 1000+ times per
+second. One pool uses `Pool[T]` (`sync.Pool`-backed): sub-contexts, which have
+a longer lifecycle and lower churn.
 
 For performance motivation and benchmark data, see
 `docs/continuations/optimizations.md`.
@@ -17,15 +28,22 @@ For performance motivation and benchmark data, see
 
 ## Pool Inventory
 
-All pools are registered with the package-level `PoolManager` (`pools`) and
-defined in `machine/pool.go`.
+The process-global pools are registered with the package-level `PoolManager`
+(`pools`) and defined in `pkg/machine/pool.go`. The per-thread freelists are
+deliberately **not** registered: they are single-goroutine, so they must not
+share the manager's lock or aggregate its counters.
 
 | Pool | Type | Backend | Acquired | Released | Reset |
 |------|------|---------|----------|----------|-------|
-| `stackPool` | `*Stack` | FreeList | `SaveContinuation` (standard path), `AcquireTopLevelContext`, `acquireMacroContext` | `RestoreAndRelease` (old mc.evals), `releaseStack` | Nil all slots, reset length to 0, retain backing array |
-| `subContextPool` | `*MachineContext` | sync.Pool | `acquireSubContext`, `AcquireTopLevelContext` | `ReleaseSubContext`, `ReleaseTopLevelContext` | Release inner evals stack, zero all fields |
-| `continuationPool` | `*MachineContinuation` | FreeList | `NewMachineContinuationFromMachineContext`, `Copy` | `RestoreAndRelease` (unshared only) | Release inner evals stack, zero all fields |
-| `envFramePool` | `*EnvironmentFrame` | FreeList | `Apply` (copy path) | `RestoreAndRelease` (when `envPooled && oldEnv != newEnv`) | `ResetForPool()`, pre-allocates bindings cap 4 |
+| `stackPool` | `*Stack` | per-thread `unsyncFreeList`, global `FreeList` fallback | `SaveContinuation` (standard path, depth > `inlineEvalsCap`), `AcquireTopLevelContext`, `acquireMacroContext`, `NewSubContext` | `RestoreAndRelease` (old mc.evals), `releaseStack` | Nil all slots, reset length to 0, retain backing array |
+| `subContextPool` | `*MachineContext` | sync.Pool (global only) | `acquireSubContext`, `AcquireTopLevelContext` | `ReleaseSubContext`, `ReleaseTopLevelContext` | Release inner evals stack, zero all fields |
+| `continuationPool` | `*MachineContinuation` | per-thread `unsyncFreeList`, global `FreeList` fallback | `NewMachineContinuationFromMachineContext`, `Copy` (global, by design) | `RestoreAndRelease` (unshared only) | Release inner evals stack, zero all fields |
+| `envFramePool` | `*EnvironmentFrame` | per-thread `unsyncFreeList`, global `FreeList` fallback | `Apply` (copy path), `applyForeign`, `callForeignCached` | `RestoreAndRelease` (when `envPooled && oldEnv != newEnv`), `OpReleaseEnvFrame` | `ResetForPool()`, pre-allocates bindings cap 4 |
+
+`Copy` acquires from the global continuation pool even when the copying thread
+has its own, so a copied frame can be released into a per-thread pool later.
+The asymmetry is accounting drift, not a race: see the comment on
+`MachineContinuation.Copy`.
 
 ---
 
@@ -115,6 +133,8 @@ where `oldEnv` and `cont.env` are the same pointer).
 |------|-------|-----------|
 | `Apply` (copy path) | `true` | Frame from pool; safe to recycle |
 | `Apply` (nil-parent path) | `false` | Closure's own env; must not recycle |
+| `applyForeign`, `callForeignCached` | `true` | Fresh frame per foreign call (SRFI-18 binding-slot races) |
+| `OpReleaseEnvFrame` | `false` | Frame released early before a reclaimable tail call; clearing prevents a double release |
 | `RestoreAndRelease` (unshared) | from continuation | Propagates caller's ownership |
 | `RestoreAndRelease` (shared) | `false` | Shared chain may be re-invoked; env must stay live |
 | `OpMakeClosure` | `false` | Closure captures `mc.env` via parent chain; must not recycle |
@@ -161,8 +181,11 @@ slots, clearing them before pooling (unshared) or leaving them intact
 
 ## Observability
 
-`PoolManager` (`machine/pool_generic.go`) provides unified observation and
-control over all four pools.
+`PoolManager` (`pkg/machine/pool_generic.go`) provides unified observation and
+control over the four process-global pools. It does **not** see the per-thread
+freelists, so on a rooted context (which is every ordinary execution) the
+stack, continuation, and env-frame counters it reports stay near zero. Read
+`unsyncFreeList.Stats()` from the owning goroutine for those.
 
 | Method | Purpose |
 |--------|---------|

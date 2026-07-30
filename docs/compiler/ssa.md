@@ -86,7 +86,7 @@ The most profitable SSA optimizations are type-specialized:
 
 Wile's `+` must handle integers, rationals, reals, and complex numbers — determined at runtime by the actual values. Without a type inference pass (which Scheme's semantics make extremely hard), SSA gives you def-use chains to values whose types you don't know. You can see that `a` flows to the `+` in `(+ a b)`, but you can't specialize the `+` because `a` might be anything.
 
-This is not a Wile limitation — it's a Scheme limitation. Languages like JavaScript invested enormous effort in speculative type specialization (V8's TurboFan uses SSA + profiling feedback). But they're willing to deoptimize and fall back when speculation is wrong. That's a fundamentally different cost model than a pedagogical interpreter.
+This is not a Wile limitation — it's a Scheme limitation. Languages like JavaScript invested enormous effort in speculative type specialization (V8's TurboFan uses SSA + profiling feedback). But they're willing to deoptimize and fall back when speculation is wrong. That's a fundamentally different cost model than an embeddable bytecode interpreter.
 
 ### 3. First-class continuations break SSA assumptions
 

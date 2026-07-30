@@ -74,7 +74,7 @@ Each chapter covers one problem that composes several sub-libraries.
 
 ## Quick-tour files
 
-One per sub-library not featured in a deep chapter. Each is ~50-100 lines: construct the structure, exercise 3-5 core operations, validate if applicable, one representative use case.
+One per sub-library not featured in a deep chapter, except `tree` (tree edit distance), which has neither yet. Each is ~50-100 lines: construct the structure, exercise 3-5 core operations, validate if applicable, one representative use case.
 
 | File | Library | Focus |
 |------|---------|-------|
@@ -124,7 +124,7 @@ One per sub-library not featured in a deep chapter. Each is ~50-100 lines: const
 - `(check-approx= actual expected tolerance label)` -- floating-point
 - `(check-true actual label)` -- must be truthy
 - `(check-false actual label)` -- must be strictly #f
-- `(check-error thunk label)` -- thunk must raise
+- `(check-error thunk label)` -- thunk must raise; `(check-error thunk pred? label)` additionally requires `pred?` to accept the raised condition
 
 ## See also
 

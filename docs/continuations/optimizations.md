@@ -131,7 +131,7 @@ Embedded `LocalEnvironmentFrame` by value inside `EnvironmentFrame`:
 └──────────────────────────────────────────────────────┘
 ```
 
-The fused allocation `NewApplyFrame()` replaces the old `CopyForApply() + NewEnvironmentFrameWithParent()` two-step.
+The fused allocation `NewApplyFrame()` replaces the old `CopyForApply() + NewEnvironmentFrameWithParent()` two-step. `Apply` itself no longer allocates at all in the common case: it takes a frame from the env-frame pool and fills it with `InitApplyFrame(dst)`, the non-allocating counterpart that `NewApplyFrame` is now a thin wrapper over.
 
 ### Why the code looks this way
 
@@ -197,11 +197,11 @@ This is the most architecturally significant optimization and the one most likel
 
 ### Solution: Lazy Sharing Protocol
 
-Instead of eagerly deep-copying on capture, mark frames as shared and defer the work to restore time:
+Instead of eagerly deep-copying the *whole* chain on capture, mark frames as shared and defer the work to restore time:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Capture (call/cc): O(depth) mark, not O(depth) copy             │
+│ Capture: O(depth) mark, not O(depth) chain copy                 │
 │                                                                  │
 │  cont chain:  [A] → [B] → [C] → [D] → nil                      │
 │                                                                  │
@@ -232,9 +232,11 @@ Instead of eagerly deep-copying on capture, mark frames as shared and defer the 
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+Where `call/cc` now sits in this protocol: since the capture became delimited, `PrimCallCC` goes through `SliceContinuationAt`, which per-frame `Copy()`s the segment down to the nearest `DefaultPromptTag` (bounded by the prompt, not the whole chain) *and* calls `MarkChainShared()` on the live source chain. Both halves are load-bearing: `Copy()` shares each frame's `env` pointer, so the mark is what stops a later normal return from pooling an env the captured segment still aliases.
+
 ### Why the code looks this way
 
-**`MachineContinuation.shared bool`**: This field controls whether `RestoreAndRelease` can pool the frame. It is set by `MarkChainShared()` during `call/cc` capture and never cleared. Once shared, always shared — clearing it would allow pooling of a frame that another continuation still references.
+**`MachineContinuation.shared bool`**: This field controls whether `RestoreAndRelease` can pool the frame. It is set by `MarkChainShared()` during capture and never cleared. Once shared, always shared — clearing it would allow pooling of a frame that another continuation still references.
 
 **`MarkChainShared()` early exit**: The `if frame.shared { return }` in `MarkChainShared()` is the critical optimization for repeated captures. In a coroutine-style workload, `call/cc` is called many times with mostly the same ancestor chain. Without the early exit, each capture would re-walk the entire chain. With it, each capture only marks the new frames since the last capture.
 
@@ -242,14 +244,14 @@ Instead of eagerly deep-copying on capture, mark frames as shared and defer the 
 
 **`releaseContinuation` precondition**: The comment on `releaseContinuation` in `pool.go` states shared frames must NOT be passed to it. This is enforced by the `if cont.shared` check in `RestoreAndRelease`. There is no runtime assertion — the check is structural, not defensive.
 
-**`DeepCopy` still exists**: It is still used by composable continuations (`applyComposableContinuation`), which need a full independent copy of a continuation segment before grafting it onto a different chain. The `call/cc` path no longer uses it. **Do not remove `DeepCopy`** — it serves a different use case.
+**`DeepCopy` still exists**: Its one production caller is `ComposableContinuation.AcquireSegment`, which needs a full independent copy of a segment on *re-invocation*; the first invocation uses the original frames and marks them shared. Because a `call/cc` continuation is itself wrapped in a `ComposableContinuation`, re-invoking one reaches `DeepCopy` by that route; no capture path calls it. **Do not remove `DeepCopy`**: it is what makes multi-shot continuations independent.
 
 ### Invariants
 
 1. If `frame.shared == true`, all ancestors of `frame` are also shared
 2. `shared` is monotonic: once true, never reverted to false
 3. `RestoreAndRelease` never pools a shared frame
-4. `DeepCopy` is only used for composable continuations, not `call/cc`
+4. `DeepCopy` is reached only through `AcquireSegment` re-invocation, never on capture
 
 ---
 
@@ -358,7 +360,7 @@ reads — one thread's type pointer with another's data pointer.
 | `EnvironmentFrame.hasLocal()` | nil pointer check | `local.keys != nil` sentinel | Zero-value sentinel for embedded struct |
 | `NewApplyFrame()` | `CopyForApply() + NewEnvironmentFrameWithParent()` | Single fused method | One allocation instead of two |
 | `Stack.PopAll()` | `*p = nil` | Copy out, retain backing array | Prevents growth-from-nil chain |
-| `CurrentContinuation()` | `DeepCopy()` | `MarkChainShared()` | O(new) mark vs O(depth) copy |
+| `call/cc` capture | `DeepCopy()` of the whole chain | `SliceContinuationAt()` + `MarkChainShared()` | Copy bounded at the prompt; O(new) mark keeps the aliased envs alive |
 | `RestoreAndRelease()` | Always pool | Branch on `shared` flag | Preserves shared frames for re-invocation |
 | `OpLoadLocal` / `OpStoreLocal` | `NewLocalIndex()` → `*[2]int` | `GetLocalBindingBySlotDepth(slot, depth)` | Bypasses pointer allocation |
 | `NativeTemplate.noCopyApply` | N/A | ~~Compile-time escape analysis flag~~ | **Removed** (PR #561) — SRFI-18 thread safety |
@@ -379,7 +381,7 @@ reads — one thread's type pointer with another's data pointer.
 
 1. **Do not merge the `BySlotDepth` methods with the `*LocalIndex` methods.** The duplication avoids a heap allocation per VM instruction.
 
-2. **Do not remove the `shared` flag and go back to `DeepCopy` for call/cc.** The flag turns O(chain depth) copies into O(new frames) marks.
+2. **Do not remove the `shared` flag and go back to `DeepCopy` for call/cc.** The flag is what keeps the envs aliased by a captured segment out of the pool, and it costs O(new frames) rather than an O(chain depth) copy.
 
 3. **Do not remove `clear()` from `PopAll`.** It prevents stale GC references in the retained backing array.
 

@@ -62,11 +62,16 @@ Resolves files from the OS filesystem. Resolution order:
 3. `SCHEME_INCLUDE_PATH` environment variable (colon-separated on Unix,
    semicolon-separated on Windows)
 4. Current working directory
+5. Filesystem root, as a last resort (mirroring `sourceload.Finder`'s `"."`
+   fallback; not reported in the searched-dirs list on failure)
 
 Absolute paths bypass the search list and are opened directly (still
-subject to authorization). Before returning, runs a security
+subject to authorization). Before returning, runs a `code`/`load`
 authorization check via `security.CheckWithAuthorizer`. This gates file
-access in sandboxed engines.
+access in sandboxed engines. When the authorizer reports a
+`security.RootConfined` confinement root, the open itself goes through
+`os.Root`, closing the TOCTOU gap between the check and the open
+(`resolver/confined.go`).
 
 ### FSFileResolver
 
@@ -219,21 +224,27 @@ forms; a dialect that also implements `PrimitiveRemover` or
 The `LibraryRegistry` holds an ordered list of search paths. Default:
 
 ```go
-var DefaultLibraryPaths = []string{".", "./stdlib/lib"}
+var DefaultLibraryPaths = []string{"."}
 ```
 
+Only the current directory is searched by default. The embedded standard
+library is reached through the FileResolver chain (`WithSourceFS(stdlib.FS)`),
+not through a search path. An earlier `"./pkg/stdlib/lib"` default was a
+development-tree convenience that resolves nothing in a deployed binary.
+
 `WithLibraryPaths(paths...)` prepends user-supplied paths before the
-defaults. Within each resolver, search paths are tried in order before
-falling back to the FS root or CWD.
+default. Calling it at all is what enables the library system: without it,
+`(import ...)` raises a configuration error. Within each resolver, search
+paths are tried in order before falling back to the FS root or CWD.
 
 ## Embedded Standard Library
 
-The `stdlib/` package embeds the full R7RS standard library tree. The
-raw `embed.FS` is sub'd via `fs.Sub(rawFS, "lib")` so that paths in
-the exported `FS` match the library name convention directly (e.g.,
-`"scheme/base.sld"`, not `"lib/scheme/base.sld"`). This means `"."`
-in `DefaultLibraryPaths` resolves libraries from the embedded FS
-without any path prefix gymnastics.
+The `pkg/stdlib/` package embeds the full R7RS standard library tree, in a
+single `//go:embed lib`. The raw `embed.FS` is sub'd via
+`fs.Sub(rawFS, "lib")` so that paths in the exported `FS` match the library
+name convention directly (e.g., `"scheme/base.sld"`, not
+`"lib/scheme/base.sld"`). This means `"."` in `DefaultLibraryPaths` resolves
+libraries from the embedded FS without any path prefix gymnastics.
 
 ```go
 package stdlib
@@ -246,14 +257,21 @@ import (
 //go:embed lib
 var rawFS embed.FS
 
-var FS fs.FS  // = fs.Sub(rawFS, "lib") in init()
+var FS fs.FS         // = fs.Sub(rawFS, "lib") in init()
+var LibFS fs.FS = rawFS  // "lib/" prefix retained
 ```
 
-The directory structure under `stdlib/lib/` mirrors the library name
+Both shapes are exported off the one embed. `wile.StdLibFS` re-exports
+`stdlib.LibFS` (so `pkg/wile` needs no second embed of the same tree), which
+means it keeps the `lib/` prefix and must be paired with
+`WithLibraryPaths("lib")`. `WithSourceFS(stdlib.FS)` needs no extra search
+path; `WithSourceFS(wile.StdLibFS)` alone resolves nothing.
+
+The directory structure under `pkg/stdlib/lib/` mirrors the library name
 hierarchy:
 
 ```
-stdlib/lib/
+pkg/stdlib/lib/
 ├── scheme/
 │   ├── base.sld
 │   ├── write.sld
@@ -262,7 +280,7 @@ stdlib/lib/
 ├── chibi/
 │   └── test.sld
 ├── srfi/
-│   └── 1.sld
+│   └── 1.scm
 └── wile/
     ├── algebra.sld
     └── kanren.sld
@@ -300,6 +318,7 @@ ChainFileResolver (in WithSource* call order)
     2. LibraryRegistry search paths, each + path
     3. SCHEME_INCLUDE_PATH dirs, each + path
     4. CWD + path
+    5. filesystem root + path (last resort)
 
 Bootstrap: always from core.BootstrapFS via EmbedFileResolver (separate)
 ```
@@ -353,19 +372,21 @@ the default search paths.
 
 | Component | File |
 |-----------|------|
-| `Finder` (file search) | `machine/compilation/sourceload/finder.go` |
-| `LoadStack` (load tracking) | `machine/compilation/sourceload/load_stack.go` |
-| `Walk` (file enumeration) | `machine/compilation/sourceload/walk.go` |
-| `ErrNotFound` sentinel | `machine/compilation/sourceload/doc.go` |
-| `FileResolver` interface | `environment/file_resolver.go` |
-| `PathTracker` interface | `environment/file_resolver.go` |
-| `OSFileResolver` | `machine/compilation/resolver/os_file_resolver.go` |
-| `FSFileResolver` | `machine/compilation/resolver/fs_file_resolver.go` |
-| `EmbedFileResolver` | `machine/compilation/resolver/embed_file_resolver.go` |
-| `ChainFileResolver` | `machine/compilation/resolver/chain_file_resolver.go` |
-| Engine resolver wiring | `engine.go` (`newFileResolver`) |
-| Engine options | `options.go` (`WithSourceFS`, `WithSourceOS`) |
-| Library loader | `machine/compilation/library_loader.go` |
-| Library registry / search paths | `machine/compilation/library_registry.go` |
-| Embedded stdlib | `stdlib/stdlib.go` |
+| `Finder` (file search) | `pkg/machine/compilation/sourceload/finder.go` |
+| `LoadStack` (load tracking) | `pkg/machine/compilation/sourceload/load_stack.go` |
+| `Walk` (file enumeration) | `pkg/machine/compilation/sourceload/walk.go` |
+| `ErrNotFound` sentinel | `pkg/machine/compilation/sourceload/doc.go` |
+| `FileResolver` interface | `pkg/environment/file_resolver.go` |
+| `PathTracker` interface | `pkg/environment/file_resolver.go` |
+| `OSFileResolver` | `pkg/machine/compilation/resolver/os_file_resolver.go` |
+| `FSFileResolver` | `pkg/machine/compilation/resolver/fs_file_resolver.go` |
+| `EmbedFileResolver` | `pkg/machine/compilation/resolver/embed_file_resolver.go` |
+| `ChainFileResolver` | `pkg/machine/compilation/resolver/chain_file_resolver.go` |
+| Resolver aliases for older call sites | `pkg/machine/compilation/resolver_compat.go` |
+| Sandbox path containment | `pkg/machine/compilation/resolver/confined.go` |
+| Engine resolver wiring | `pkg/wile/engine.go` (`newFileResolver`) |
+| Engine options | `pkg/wile/options.go` (`WithSourceFS`, `WithSourceOS`) |
+| Library loader | `pkg/machine/compilation/library_loader.go` |
+| Library registry / search paths | `pkg/machine/compilation/library_registry.go` |
+| Embedded stdlib | `pkg/stdlib/stdlib.go` |
 | CLI configuration | `cmd/wile/main.go` |

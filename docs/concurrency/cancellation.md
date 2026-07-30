@@ -1,19 +1,25 @@
 # Blocking synchronization primitives and VM cancellation
 
 How Scheme-visible blocking locks (`rw-mutex-write-lock!`, `rw-mutex-read-lock!`,
-SRFI-18 `mutex-lock!`) couple to the VM's context-cancellation machinery, so a
-thread parked *acquiring* one observes `thread-terminate!` / a VM deadline instead
-of parking a goroutine forever.
+SRFI-18 `mutex-lock!`, and the condition-variable wait `(mutex-unlock! m cv)`)
+couple to the VM's context-cancellation machinery, so a thread parked *acquiring*
+one observes `thread-terminate!` / a VM deadline instead of parking a goroutine
+forever.
 
 **Status:** as-built. `values.RWMutex` and the SRFI-18 `values.Mutex` acquire
 through a single cond-based ctx bridge; a thread blocked on either is unparked by
-`thread-terminate!`. Go channels and Go-style wait-groups, which previously shared
-this concern, were removed from the Scheme surface 2026-07-17 (`git log` for the
-history); this document covers only the locks that remain.
+`thread-terminate!`. The SRFI-18 condition-variable wait, `(mutex-unlock! m cv)`,
+is cancellable too, by its own channel-based route rather than the cond bridge.
+Go channels and Go-style wait-groups, which previously shared this concern, were
+removed from the Scheme surface and from `pkg/values` in 1.19.1 (`git log` for the
+history); this document covers only the primitives that remain.
 
 **Code:** `pkg/values/cond_wait.go` (`waitOnCondCtx`, the one ctx-to-cond bridge),
 `pkg/values/rw_mutex.go` (the cond-based `RWMutex` state machine),
-`pkg/values/mutex.go` (`Mutex.LockContext`, the SRFI-18 mutex),
+`pkg/values/mutex.go` (`Mutex.LockContext`, the SRFI-18 mutex;
+`Mutex.UnlockContext`, the atomic unlock-and-wait),
+`pkg/values/condition_variable.go` (`registerWaiter`/`blockOnWaiter`, the cv wait's
+own ctx arm),
 `extensions/gointerop/prim_gointerop.go` (`finishBlockingSync`, the primitive-layer
 cancellation policy), `pkg/machine/call_foreign_cached.go` (`callForeignCached`,
 the eager timer recheck this design leans on), `pkg/values/thread.go`
@@ -87,7 +93,7 @@ exists to prevent. A stuck lock is the safe outcome; there is deliberately no
 abandonment for `RWMutex` (SRFI-18 `Mutex` keeps its own owner-driven
 `MarkAbandoned`, which is a different, spec-mandated path).
 
-How a cancelled acquire surfaces to Scheme differs by primitive, and the
+How a cancelled wait surfaces to Scheme differs by primitive, and the
 difference is real, not accidental:
 
 - `rw-mutex-*-lock!` return `Void` on success, so they have no value channel for
@@ -97,6 +103,11 @@ difference is real, not accidental:
 - `mutex-lock!` already signals "did not acquire" as `#f` (its timeout form does),
   so a cancelled acquire returns `#f`. Returning it *error-free* also lets a
   wrapping `with-timeout` handler run without a carve-out (see below).
+- `(mutex-unlock! m cv)` takes the same shape: it already reports "the wait ended
+  without a signal" as `#f`, so a cancelled cv wait returns `#f` and needs no
+  carve-out either. `blockOnWaiter` deregisters the waiter on the ctx arm, except
+  when `Signal`/`Broadcast` claimed it at the boundary, which still reports
+  signaled.
 
 ## Who cancels the ctx: three sources, three safety arguments
 
@@ -105,9 +116,9 @@ and correctness holds for a *different reason* in each case.
 
 | Source | Cause on ctx | Why the handling is safe |
 |---|---|---|
-| `with-timeout` | `ErrTimerExpired` (`WithTimeoutCause`) | **Eager recheck + carve-out.** `callForeignCached` does a non-blocking `ctx.Done()` check *after every foreign return* and, on `ErrTimerExpired`, returns `ErrTimerInterrupt` — but only on the *error-free* return path (`if err != nil` returns first). So `finishBlockingSync` returns a placeholder `Void` (not `ErrOperationCancelled`) on this source, and `mutex-lock!` returns `#f`; the recheck then fires and the timeout handler runs, discarding the placeholder before anything observes it. |
-| `thread-terminate!` | `context.Canceled` (plain `cancel()`) | **The outcome is claimed, not raced.** The eager recheck is `ErrTimerExpired`-only, so it does not fire here; the acquire raises `ErrOperationCancelled` (or returns `#f`). Safety comes from `Terminate` storing the SRFI-18 terminated-thread exception *before* it cancels, plus the outcome being write-once (`Thread.setOutcome`): neither the raised error nor a returned value can become the thread's result, whichever path ends the goroutine. |
-| Embedder deadline | `context.DeadlineExceeded`, `mc.timer == nil` | **The path the distinct sentinel exists for.** No eager recheck (not a timer) and no thread teardown, so `ErrOperationCancelled` propagates as a distinct, catchable condition. The op still parks up to `contextCheckMask` (≈1024) ops before `DeadlineExceeded` reaches it — the same VM-wide cancellation latency every primitive has — but it replaces the old **infinite hang** with a bounded, correctly-labelled result. |
+| `with-timeout` | `ErrTimerExpired` (`WithTimeoutCause`) | **Eager recheck + carve-out.** `callForeignCached` does a non-blocking `ctx.Done()` check *after every foreign return under an active timer* (`mc.timer != nil`) and, on `ErrTimerExpired`, returns `ErrTimerInterrupt` — but only on the *error-free* return path (`if err != nil` returns first). So `finishBlockingSync` returns a placeholder `Void` (not `ErrOperationCancelled`) on this source, and `mutex-lock!` returns `#f`; the recheck then fires and the timeout handler runs, discarding the placeholder before anything observes it. |
+| `thread-terminate!` | `context.Canceled` (plain `cancel()`) | **The outcome is claimed, not raced.** The eager recheck is `ErrTimerExpired`-only, so it does not fire here; the acquire raises `ErrOperationCancelled` (or returns `#f`). Safety comes from `Terminate` holding the thread's own lock across both `cancel()` and the store of the SRFI-18 terminated-thread exception, so a goroutine unparked by that cancellation cannot slip its own outcome in between, plus the outcome being write-once (`Thread.setOutcome`): neither the raised error nor a returned value can become the thread's result, whichever path ends the goroutine. |
+| Embedder deadline | `context.DeadlineExceeded`, `mc.timer == nil` | **The path the distinct sentinel exists for.** No eager recheck (not a timer) and no thread teardown, so `ErrOperationCancelled` propagates as a distinct, catchable condition. The op still parks up to one ctx-poll period (1024 ops; `contextCheckMask` is the 1023 mask) before `DeadlineExceeded` reaches it — the same VM-wide cancellation latency every primitive has — but it replaces the old **infinite hang** with a bounded, correctly-labelled result. |
 
 The single mechanism that makes the first row work — the eager `ErrTimerExpired`
 recheck in `callForeignCached` — is the invariant `finishBlockingSync`'s carve-out
@@ -142,7 +153,7 @@ be reported as a terminated thread's result. Pinned channel-free by
   — but it remains an unproposed follow-up, deliberately not built, because
   releasing mid-transition is the race we are avoiding.
 - **The timed `mutex-lock!` path wakes within its timeout, not immediately.** Only
-  the *untimed* `Mutex.Lock` slow path was made ctx-aware; a thread in
+  the *untimed* `Mutex.LockContext` slow path was made ctx-aware; a thread in
   `(mutex-lock! m T)` under termination wakes within `T` (bounded, never an
   infinite stall), which was judged sufficient.
 - **No transactional guarantee across operations.** These are locks, not
@@ -164,6 +175,11 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
 - `TestWithTimeoutInterruptsParkedRWMutex` — a `rw-mutex-write-lock!` parked inside
   a `with-timeout` runs the handler (returns its value), guarding the
   `ErrTimerExpired` carve-out.
+- `TestTerminateUnparksCVWait` — the cv-path analogue of the first: a thread parked
+  in an untimed `(mutex-unlock! m cv)` is reaped rather than leaking its goroutine.
+  Its sibling `TestUnlockCVDeliversSignalAcrossThreads` pins the other half of that
+  path, that enqueueing the waiter before releasing the mutex closes the SRFI-18
+  lost-wakeup window.
 
 The SRFI-18 write-once outcome the terminate test leans on is pinned separately,
 and lock-free, in `extensions/threads/prim_threads_terminate_outcome_test.go`

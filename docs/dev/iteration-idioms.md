@@ -8,8 +8,9 @@ the nearest file uses.
 ## 1. Scheme/Go boundary: `ForEach(ctx, fn) (Value, error)`
 
 Used by types that participate in Scheme list discipline:
-`values.Tuple` (`Pair`, `EmptyList`), `internal/syntax.SyntaxValue`,
-and `registry/helpers.ForEachList`.
+`values.Tuple` (`Pair`, `EmptyList`), `syntax.SyntaxValue` (whose
+`SyntaxForEach` is the same shape over `SyntaxValue`), and
+`registry/helpers.ForEachList`.
 
 ```go
 ForEach(ctx context.Context,
@@ -39,7 +40,10 @@ func (p *T) All() iter.Seq[ElemT]
 func (p *T) Pairs() iter.Seq2[KeyT, ValT]   // when both key+value matter
 ```
 
-Examples: `values.CharSet.All`, `values.CharSet.Codepoints`.
+Examples: `values.CharSet.All`, `values.CharSet.Codepoints`, and the
+spine walkers `values.Spine` / `values.SpineWithCycleCheck` (declared
+`iter.Seq2[*Pair, struct{}]` only so the call site can range with one
+variable or two; there is no second value).
 
 **Why:**
 
@@ -144,5 +148,5 @@ Do not file PRs whose sole purpose is converting Tier 3 to Tier 2 — the
 mechanical cost outweighs the convention benefit when there's no
 underlying friction.
 
-See `plans/2026-05-05-iter-seq-cascade.md` for the active selective
+See `plans/2026-05-05-iter-seq-cascade.local.md` for the active selective
 migration list.

@@ -5,6 +5,10 @@ accessors. Useful, sure. But when a type theorist says "type," they mean
 something precise — and Scheme records fit that definition with surprising
 exactness. Let's see how.
 
+**Status:** conceptual essay about R7RS records, not a Wile design document.
+Every Scheme form it shows is R7RS §5.5 `define-record-type`, which Wile ships;
+nothing here is proposed.
+
 ## What *Is* a Type?
 
 Forget the programming language meaning for a moment ("int, string, bool").

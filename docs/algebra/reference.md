@@ -33,6 +33,15 @@ Sets with explicit equivalence relations.
 - `(setoid-equiv? S a b)` -- test whether a and b are equivalent under setoid S
 - `(setoid-equivalence-class S x samples)` -- return elements of samples equivalent to x under S
 
+### Shared helpers
+
+This library also hosts the plumbing every other sub-library's constructors and validators use, so those names are reachable from `(wile algebra setoid)` as well as the umbrella.
+
+- `(setoid-member? S x lst)` / `(setoid-assoc S key alist)` / `(setoid-dedup S lst)` -- equivalence-parameterized collection operations
+- `(assv-or opts key fallback)` -- trailing-options-alist lookup with a fallback; `(validate-opts-keys site opts known-keys)` -- raise on an option key outside `known-keys`, so a typo fails at construction instead of silently taking the fallback
+- `(make-violation-reporter)` -- returns the two-mode `fail!` procedure behind the `validate-X` return convention: call it with `(type args ...)` to record, with no arguments to finalize to `#t` or the violation list
+- `(assert-validation (validate-X ...))` -- syntax; raises unless the wrapped call returns `#t`, keeping the source expression in the error datum. `(assert-procedure site expr)` -- syntax; raises when a constructor argument is not a procedure
+
 ### Validation
 
 - `(validate-setoid S samples)` -- spot-check reflexivity, symmetry, and transitivity on samples; returns `#t` or a list of `(violation-type element ...)` entries
@@ -344,12 +353,12 @@ Two monoidal operations where times distributes over plus.
 ### Built-in Instances
 
 - `(boolean-semiring)` -- plus is `or`, times is `and`, zero is `#f`, one is `#t`; carrier `'boolean`, idempotent plus (cycle-safe)
-- `(tropical-semiring)` -- plus is `min`, times is `+`, zero is `tropical-inf`, one is `0`; carrier `'tropical`, idempotent plus (cycle-safe); useful for shortest-path problems
+- `(tropical-semiring)` -- plus is `min`, times is `+`, zero is `tropical-inf`, one is `0`; carrier `'tropical`, idempotent plus (cycle-safe); useful for shortest-path problems. `(tropical-eq? a b)` compares two tropical values, `tropical-inf` included
 - `(counting-semiring)` -- plus is `+`, times is `*`, zero is `0`, one is `1`; exact-integer arithmetic, auto-promotes to bignum
 
 #### Counting variants
 
-The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `memory/2026-05-24-approximate-counting-semirings.md`.
+The counting semiring's exact arithmetic is intractable on cyclic graphs (the path set is infinite, so the sum diverges) and expensive on deep walks. These variants trade exactness for tractability; all four are *true semirings* (every semiring axiom holds). They declare a carrier symbol so `(wile algebra graph)` can dispatch on it. See `memory/2026-05-24-approximate-counting-semirings.local.md`.
 
 - `(bigint-counting-semiring)` -- same arithmetic as `counting-semiring`, but carrier `'big-int` opts into the `count-paths-in-dag` Go kernel when consumed by `make-graph-analysis` under three conditions (carrier `'big-int`, unit weights, atomic node ids); advisory -- never changes results, only dispatch cost
 - `(modular-counting-semiring P)` -- carrier is Z/PZ; plus and times are arithmetic mod `P` (an exact integer >= 2); carrier `'modular`. For fingerprints, parity, and Schwartz-Zippel identity testing -- NOT approximate counts (a true count divisible by `P` reads as 0). Not cycle-safe: Z/PZ has no absorbing top, so worklist iteration on cycles hits the safety cap. `mersenne-31` (`2^31 - 1`) and `mersenne-61` (`2^61 - 1`) are provided as named modulus choices
@@ -628,6 +637,7 @@ Axiom-driven term rewriting via abstract term protocols.
 - `(negation-axiom? x)` -- test for negation axiom
 - `(directional-axiom? x)` -- test whether x is directional (associativity and De Morgan axioms)
 - `(axiom? x)` -- test whether x is any recognized axiom type
+- `(commutativity-axiom-op ax)` / `(associativity-axiom-op ax)` -- the operator symbol carried by those two axiom types; `(wile algebra unification)` reads both to decide which operators are AC
 
 ### Rule Compilation
 
@@ -717,7 +727,7 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 
 ## Matrix -- `(wile algebra matrix)`
 
-Semiring-parameterized dense and sparse matrices. Arithmetic follows the coefficient semiring; the same matrix type covers Boolean (reachability), tropical (shortest path), counting (ordinary arithmetic), and user-defined semirings. See `plans/2026-04-21-matrix-path-d-impl.md` for the polymorphism design.
+Semiring-parameterized dense and sparse matrices. Arithmetic follows the coefficient semiring; the same matrix type covers Boolean (reachability), tropical (shortest path), counting (ordinary arithmetic), and user-defined semirings. See `memory/2026-04-21-matrix-path-d-impl.local.md` for the polymorphism design.
 
 ### Constructors
 
@@ -735,23 +745,29 @@ Semiring-parameterized dense and sparse matrices. Arithmetic follows the coeffic
 - `(sparse-semiring-matrix? x)` -- sparse matrix predicate
 - `(matrix? x)` -- polymorphic predicate (dense or sparse)
 - `(matrix-rep-tag M)` -- representation tag symbol (`'dense` or `'sparse`; extensible)
+- `(matrix-op-supported? op M ...)` -- `#t` iff a kernel exists that would dispatch for those operands' representations. A capability query, not a call-validity check: shape, semiring identity, and aliasing rules are still enforced at invocation. Returns `#f` rather than raising on a non-matrix argument
 
 ### Accessors
 
 - `(semiring-matrix-ref M r c)` / `(sparse-semiring-matrix-ref M r c)` / `(matrix-ref M r c)` -- element at (r, c)
-- `(semiring-matrix-rows M)` / `(semiring-matrix-cols M)` -- dimensions
-- `(matrix-rows M)` / `(matrix-cols M)` / `(matrix-shape M)` -- polymorphic dimensions
+- `(semiring-matrix-rows M)` / `(semiring-matrix-cols M)` / `(semiring-matrix-shape M)` -- dense dimensions; `(sparse-semiring-matrix-rows M)` / `(sparse-semiring-matrix-cols M)` / `(sparse-semiring-matrix-semiring M)` -- the sparse counterparts
+- `(matrix-rows M)` / `(matrix-cols M)` / `(matrix-shape M)` -- polymorphic dimensions; `matrix-shape` returns `(rows . cols)`
 - `(semiring-matrix-semiring M)` / `(matrix-semiring M)` -- the coefficient semiring
 - `(semiring-matrix->rows M)` -- convert to list-of-lists form
 - `(matrix-for-each-entry M proc)` / `(matrix-fold-entries M seed proc)` -- iterator API
 
 ### Arithmetic
 
-- `(semiring-matrix-add A B)` / `(matrix-add A B)` / `(matrix-add! A B)` -- addition; `!` form is in-place
-- `(semiring-matrix-mul A B)` -- multiplication; inner dimensions must match
-- `(semiring-matrix-power M n)` -- repeated multiplication; `M^0 = I`, `M^n = M * M^(n-1)`
-- `(semiring-matrix-closure M)` -- Kleene-star closure (I + M + M^2 + ...) for Kleene-algebra semirings
-- `(semiring-matrix-permanent M)` -- permanent (over a commutative semiring with subtraction not required)
+The `semiring-matrix-*` forms are dense-only; the `matrix-*` forms dispatch on representation. Bang forms take the destination first and return it. Result-rep rule: dense op dense, dense op sparse, and sparse op dense all yield dense; sparse op sparse yields sparse.
+
+- `(semiring-matrix-add A B)` / `(matrix-add A B)` / `(matrix-add! C A B)` -- addition. Any aliasing is legal on the bang form, so `(matrix-add! A A B)` is the idiomatic `A += B`
+- `(semiring-matrix-mul A B)` / `(matrix-mul A B)` / `(matrix-mul! C A B)` -- multiplication; inner dimensions must match. `C` must not alias `A` or `B`
+- `(semiring-matrix-power M n)` / `(matrix-power M n)` -- repeated multiplication; `M^0 = I`, `M^n = M * M^(n-1)`
+- `(semiring-matrix-closure M)` / `(matrix-closure M)` -- Kleene-star closure (I + M + M^2 + ...) for Kleene-algebra semirings
+- `(semiring-matrix-permanent M)` / `(matrix-permanent M)` -- permanent (over a commutative semiring with subtraction not required)
+- `(matrix-copy M)` -- fresh matrix with M's representation, shape, semiring, and contents; `(matrix-copy! C M)` -- in-place copy, requiring C and M to share representation, shape, and semiring, and rejecting `(eq? C M)`
+
+The three polymorphic unary operations (`matrix-power`, `matrix-closure`, `matrix-permanent`) have dense kernels only; convert a sparse operand with `sparse->semiring-matrix`, or branch on `matrix-op-supported?` first.
 
 ### Destructuring
 
@@ -817,6 +833,7 @@ Locally-finite posets and their incidence algebras over a ring. Supports zeta an
 - `(lf-poset-interval P)` -- the interval-enumeration procedure
 - `(lf-poset-elements P)` -- optional element enumeration (or `#f`)
 - `(incidence-algebra-poset IA)` / `(incidence-algebra-ring IA)` -- underlying poset and ring
+- `(incidence-algebra-mu-cache IA)` -- the memo table `mobius-function` fills in; exposed for inspection, not for mutation
 
 ### Zeta, Möbius, convolution
 
@@ -833,7 +850,7 @@ Infinity-aware interval arithmetic. Intervals are `(lo . hi)` pairs where `lo` a
 
 ### Lattice and representation
 
-- `(interval-lattice)` -- the lattice over intervals represented as `(lo . hi)` pairs; bottom is the empty interval, top is `(neg-inf . pos-inf)`; order is reverse-inclusion (`(a . b) <= (c . d)` iff `c <= a` and `b <= d` under `inf<=`)
+- `(interval-lattice)` -- the lattice over intervals represented as `(lo . hi)` pairs; bottom is the empty interval `'interval-bot`, top is `(neg-inf . pos-inf)`; order is containment, narrower below wider (`(a . b) <= (c . d)` iff `c <= a` and `b <= d` under `inf<=`)
 
 Intervals are ordinary pairs: build with `cons lo hi`; access with `car` and `cdr`. Use the infinity-aware comparisons below for predicates over the endpoints.
 
@@ -847,15 +864,15 @@ Intervals are ordinary pairs: build with `cons lo hi`; access with `car` and `cd
 
 ### Interval arithmetic
 
-- `(interval-add a b)` -- sum; componentwise `inf+`. Returns `interval-bot` if either operand is `interval-bot` (absorbing)
-- `(interval-sub a b)` -- difference. `interval-bot`-absorbing
-- `(interval-mul a b)` -- product via four-corner multiplication (min and max of the four endpoint products). `interval-bot`-absorbing
+- `(interval-add a b)` -- sum; componentwise `inf+`. Returns `'interval-bot` if either operand is `'interval-bot` (absorbing)
+- `(interval-sub a b)` -- difference. `'interval-bot`-absorbing
+- `(interval-mul a b)` -- product via four-corner multiplication (min and max of the four endpoint products). `'interval-bot`-absorbing
 
 ### Abstraction, widening, and the Galois connection
 
 - `(abstract-interval n)` -- abstract an integer `n` to the point interval `(n . n)`; the interval analog of `abstract-sign`
-- `(interval-widen cur next)` -- widening operator (Cousot & Cousot 1977): keep a bound if stable, else jump to infinity (lower → `neg-inf`, upper → `pos-inf`); `interval-bot` is absorbed in either position. Forces ascending chains finite so fixpoint iteration over the infinite-height interval lattice terminates. Pass to `run-analysis` via `(widen interval-widen)`, or to `fixpoint/widen` directly
-- `(interval-galois-connection)` -- the Galois connection between finite integer sets (containment order) and the interval lattice: `alpha(S) = [min S, max S]` (`interval-bot` for `()`), `gamma([a,b]) = {x : a <= x <= b}` (sentinel `'unbounded` for unbounded intervals). The soundness certificate for an interval dataflow result; passes `gc-sound?`
+- `(interval-widen cur next)` -- widening operator (Cousot & Cousot 1977): keep a bound if stable, else jump to infinity (lower → `neg-inf`, upper → `pos-inf`); `'interval-bot` is absorbed in either position. Forces ascending chains finite so fixpoint iteration over the infinite-height interval lattice terminates. Pass to `run-analysis` via `(widen interval-widen)`, or to `fixpoint/widen` directly
+- `(interval-galois-connection)` -- the Galois connection between finite integer sets (containment order) and the interval lattice: `alpha(S) = [min S, max S]` (`'interval-bot` for `()`), `gamma([a,b]) = {x : a <= x <= b}` (sentinel `'unbounded` for unbounded intervals). The soundness certificate for an interval dataflow result; passes `gc-sound?`
 
 ---
 
@@ -870,11 +887,24 @@ Semiring-parameterized single-source graph analysis. Lazy Bellman-Ford-style tra
 ### Predicates and accessors
 
 - `(graph-analysis? x)` -- predicate
+- `(graph-analysis-fast-path? ga)` / `(graph-analysis-fast-path-kind ga)` -- whether a Go kernel is attached, and which (`'bigint-counting`, or `#f`). The kernel attaches only for carrier `'big-int` with `#f` weight-fn; advisory, never changes results
 
 ### Queries
 
 - `(graph-query ga source target)` -- return the semiring-value between source and target; `semiring-zero` when unreachable; lazily computes and caches single-source distances per source
 - `(graph-query-all ga source)` -- return an alist `((node . value) ...)` for all reachable nodes
+
+### SCC introspection
+
+Structural, independent of the semiring: a Boolean analysis and a counting analysis over the same adjacency share one decomposition. Requires the `(wile algebragraph)` extension (kitchen-sink profile); raises otherwise.
+
+- `(graph-node-in-cycle? ga node)` -- whether `node` lies in a non-trivial SCC; raises on an unknown node rather than answering `#f`
+- `(graph-cyclic-nodes ga)` -- the cyclic nodes in adjacency-insertion order
+- `(graph-analysis-sccs ga)` -- force and return the `<graph-scc>` record; idempotent (`eq?` on repeat calls). The lower-level hook behind the two predicates above
+- `(graph-scc? x)` / `(graph-scc-has-cycle? s)` -- predicate, and whether any SCC is non-trivial
+- `(graph-scc-scc-vec s)` -- node index → SCC id; `(graph-scc-non-trivial-vec s)` -- SCC id → `#t` iff that SCC contains a cycle
+- `(graph-scc-name->idx s)` / `(graph-scc-idx->name s)` / `(graph-scc-num-nodes s)` -- the name-interning state (a hashtable, a vector, and the interned-node count); each takes the record alone
+- `(make-graph-scc scc-vec non-trivial-vec name->idx idx->name num-nodes edges)` -- constructor; intended for internal use by the analysis itself
 
 ### Semiring choice on cyclic graphs
 
@@ -883,12 +913,12 @@ Counting on cyclic graphs has no finite answer in the strict counting semiring `
 - **Boolean reachability, tropical shortest path:** idempotent operations. Worklist Bellman-Ford converges in finite time. Cycles handled correctly.
 - **Counting semiring on a DAG:** topological-order single-pass propagation. Each edge relaxed exactly once. Counts exact (bignum-promoted as needed).
 - **Counting semiring on a cyclic graph:** worklist Bellman-Ford does not terminate (over-counts on each re-pop). Use one of:
-  - **SCC condensation** via `(import (wile algebragraph))` and `count-paths-cyclic` (see below). Gives exact counts per SCC, with "entry count" semantics on non-trivial SCCs (the path-count to the SCC, not within it).
-  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `memory/2026-05-24-approximate-counting-semirings.md`.
+  - **`bigint-counting-semiring`**: `make-graph-analysis` attaches the SCC-condensation kernel for that carrier (with `#f` weight-fn) and `graph-query` routes through it, so cyclic adjacencies answer without the caller touching `count-paths-cyclic`. Counts on non-trivial SCCs carry "entry count" semantics: the path-count *to* the SCC, not within it.
+  - **Approximate-counting semirings** (`saturating-counting-semiring`, `modular-counting-semiring`, `log-counting-semiring`) — bounded carriers that converge even on cycles. See `memory/2026-05-24-approximate-counting-semirings.local.md`.
 
 ## SCC Condensation Fast Path -- `(wile algebragraph)`
 
-Auto-generated extension library exposing the Go-side graph kernels in `extensions/algebra/graph/`. Available under the `KitchenSink` profile or via explicit `WithExtension(algebragraph.Extension)`. Designed for callers who want exact path counts on arbitrary directed graphs, including cyclic ones.
+Extension library (registered in `extensions/algebragraph/`) exposing the Go-side graph kernels in `extensions/algebra/graph/`. Available under the `KitchenSink` profile or via explicit `WithExtension(algebragraph.Extension)`. Designed for callers who want exact path counts on arbitrary directed graphs, including cyclic ones. `(wile algebra graph)` consumes both primitives internally for its `'big-int` carrier; call them directly only when you want the raw index-level result.
 
 Inputs use integer-indexed nodes; the caller is responsible for mapping symbolic names to indices.
 
@@ -905,7 +935,7 @@ Inputs use integer-indexed nodes; the caller is responsible for mapping symbolic
 
 ### Scale
 
-On a graph the size of the wile/machine package call graph (539 nodes, 623 edges, 12 back-edges — the workload that triggered the 3-hour incident documented in `memory/feedback-counting-semiring-on-cycles.md`), `count-paths-cyclic` completes in ~36 µs (Apple M4 Max). Empirically O(V + E) — the SCC pass, condensation pass, and monotone-add pass each touch every node and edge once.
+On a graph the size of the wile/machine package call graph (539 nodes, 623 edges, 12 back-edges — the workload that motivated the kernel), `count-paths-cyclic` completes in ~36 µs (Apple M4 Max). Empirically O(V + E) — the SCC pass, condensation pass, and monotone-add pass each touch every node and edge once.
 
 ---
 
@@ -915,7 +945,7 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 
 ### Constructors
 
-- `(make-graph adjacency)` -- adjacency given as `((v (w edge-data) ...) ...)`; see `plans/2026-04-22-combinatorial-graph-impl.md` for the record shape
+- `(make-graph adjacency)` -- adjacency given as `((v (w edge-data) ...) ...)`; see `memory/2026-04-22-combinatorial-graph-impl.local.md` for the record shape
 
 ### Presets
 
@@ -929,9 +959,11 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 ### Predicates and accessors
 
 - `(graph? x)` / `(finite-graph? x)` / `(finitely-generated-graph? x)` -- tier predicates
+- `(enumerate-finite-graph G [opts...])` -- promote a finitely-generated graph to a finite one via BFS closure from the seed; idempotent when G already carries an adjacency. `(max-size . N)` aborts if the closure exceeds N vertices
 - `(graph-order G)` -- vertex count
 - `(graph-size G)` -- edge count
 - `(graph-vertices G)` / `(graph-edges G)` / `(graph-neighbors G v)` / `(graph-degree G v)` -- structure accessors
+- `(graph-in-degree G v)` -- count of edges arriving at v (a loop counts 1 when directed, 2 when not); `(graph-predecessors G v)` -- the `((u . edge-data) ...)` reverse-adjacency alist; `(graph-reverse G)` -- every directed edge flipped, cached on G (`eq?` on repeat calls) and returning G itself when undirected. All three raise on a vertex not in G
 - `(graph-edge? G u v)` / `(graph-has-vertex? G v)` -- membership predicates
 - `(graph-vertex-equiv? G)` / `(graph-setoid G)` -- vertex-equality access
 - `(graph-directed? G)` / `(graph-multi? G)` / `(graph-self-loops? G)` -- shape predicates
@@ -947,6 +979,7 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 
 - `(graph-isomorphic? G H)` -- true iff G and H are isomorphic
 - `(graph-canonical-form G)` -- canonical representation
+- `(graph-maximum-common-subgraph G H [opts...])` -- maximum common *connected* induced subgraph as a vertex correspondence `((g-vertex . h-vertex) ...)`; exact branch-and-bound with a bipartite-matching bound. MCS is NP-hard, so this is for small graphs (per-function CFGs and ASTs). Opts: `(disconnected? . #t)` drops the connectivity requirement, `(compatible? . PROC)` gates which vertex pairs may match (label equality for clone detection) and also tightens the bound. Topology only: edge-data and multi-edge multiplicity are ignored
 
 ### Invariants
 
@@ -961,7 +994,7 @@ Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refine
 ### Partition (balanced cut)
 
 - `(graph-partition G [opts...])` -- two-way partition minimizing cut weight at a fixed balance, via Kernighan-Lin pair-swaps. Returns an alist with keys `group-a`, `group-b`, `cut-weight`, `sizes` (`(NA . NB)`), and `normalized-cut` (`cut-weight / total-edge-weight`; a cost, lower is better; `0.0` if no edges).
-  - **This is a *balanced* cut, NOT a minimum cut.** A global minimum cut degenerates to isolating a single vertex, so KL holds the partition sizes (set by the seed) and optimizes only the cut. The s–t and global min-cut algorithms (Ford-Fulkerson, Dinic, Karger, Stoer-Wagner) were considered and rejected; see `plans/2026-06-08-balanced-graph-partition-design.md` §4 for why.
+  - **This is a *balanced* cut, NOT a minimum cut.** A global minimum cut degenerates to isolating a single vertex, so KL holds the partition sizes (set by the seed) and optimizes only the cut. The s–t and global min-cut algorithms (Ford-Fulkerson, Dinic, Karger, Stoer-Wagner) were considered and rejected; see `memory/2026-06-08-balanced-graph-partition-design.local.md` §4 for why.
   - Opts (trailing alist entries): `(method . 'kernighan-lin)` (default; only value), `(balance . 0.25)` (imbalance tolerance in `(0,1)`, bounding the seed ratio KL preserves), `(weight . PROC)` (`edge-data -> non-negative number`; default unit weight), `(seed . ALIST)` (`vertex -> 'a|'b`; default balanced `⌈n/2⌉` split).
 
 ### Validation
@@ -992,7 +1025,7 @@ Syntactic and AC-modulo unification. Pattern variables as records, substitutions
 
 ### Diophantine basis
 
-- `(diophantine-basis a b)` -- minimal non-negative integer solutions of `a·u = b·v`; returns list of `(u . v)` pairs; finite by Dickson's lemma
+- `(diophantine-basis a b)` -- minimal non-negative integer solutions of `a·u = b·v`, where `a` and `b` are non-empty lists of non-negative integers (length m and n); returns a list of `(u . v)` pairs whose `u` and `v` are integer lists of length m and n; finite by Dickson's lemma
 
 ### Matching and unification
 
@@ -1048,7 +1081,7 @@ Multi-objective Pareto dominance and frontier computation. Mixed factor types (b
 
 ### Dominance and frontier
 
-- `(dominates? factors-x factors-y)` -- test Pareto dominance: X dominates Y iff X is factor-leq to Y on every key and factor-less on at least one
+- `(dominates? factors-x factors-y)` -- test Pareto dominance: X dominates Y iff Y is factor-leq to X on every key and factor-less on at least one (higher is better on every axis)
 - `(pareto-frontier candidates factor-names)` -- candidates is `((id alist) ...)`; factor-names is documentation only; returns `((frontier id ...) (dominated (dominator . dominated-ids) ...))`
 
 ---
@@ -1195,6 +1228,7 @@ Context-free-language reachability: a path counts iff its edge-label string lies
 
 ### Grammar (typed production kernels)
 - `(cfl-epsilon A)` / `(cfl-terminal A t)` / `(cfl-unary A B)` / `(cfl-binary A B C)` -- the four normal-form productions; grammars are normalized by construction
+- `(cfl-production? x)` / `(cfl-production-kind p)` (`'epsilon`, `'terminal`, `'unary`, `'binary`) / `(cfl-production-lhs p)` / `(cfl-production-rhs1 p)` / `(cfl-production-rhs2 p)` -- production accessors
 - `(make-cfl-grammar start productions)` / `cfl-grammar?` / `cfl-grammar-start` / `cfl-grammar-productions`
 - `(cfl-grammar-nonterminals g)` / `(cfl-grammar-terminals g)` -- derived symbol sets
 - `(validate-cfl-grammar g)` -- `#t` or violation list; checks terminal/nonterminal disjointness, defined start, RHS-nonterminal
@@ -1204,7 +1238,7 @@ Context-free-language reachability: a path counts iff its edge-label string lies
 - `cfl-graph?` / `cfl-graph-nodes` / `cfl-graph-edges` / `(validate-cfl-graph G)`
 
 ### Solve + query
-- `(cfl-solve grammar graph)` -- closes the relation; returns `<cfl-solution>`. Fails fast (domain error) on a malformed grammar/graph: an edge naming an undeclared node, or a production RHS that is not a defined nonterminal.
+- `(cfl-solve grammar graph)` -- closes the relation; returns `<cfl-solution>` (`cfl-solution?` is the predicate). Fails fast (domain error) on a malformed grammar/graph: an edge naming an undeclared node, or a production RHS that is not a defined nonterminal.
 - `(cfl-reachable? sol s t)` -- start-symbol reachability; raises if `s` or `t` is not a node
 - `(cfl-reachable-from sol s)` -- start-reachable targets; raises if `s` is not a node
 - `(cfl-reachable-pairs sol)` -- all `(s . t)` under start

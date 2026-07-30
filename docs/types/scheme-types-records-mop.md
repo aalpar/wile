@@ -12,6 +12,12 @@ The short answer: less than you might expect from a standard, and more than you
 might expect from the ecosystem. Let's trace the path from "nothing" to "full
 meta-object protocol" and see where the standards draw their lines.
 
+**Status:** survey of the Scheme record standards. Wile's own position is
+recorded in "The Practical Landscape for Wile" below, and only the rows marked
+Implemented there exist; the SRFI-99, SRFI-131, SRFI-136, R6RS, and Tiny CLOS
+forms are quoted from those specifications and are neither Wile syntax nor
+proposals for it.
+
 ## The Baseline: Disjoint Record Types (R7RS-small, SRFI-9)
 
 R7RS-small gives you exactly one tool: `define-record-type`. It creates a new type
@@ -289,7 +295,7 @@ Here's where Wile sits today:
 | Procedural layer (`make-record-type`, accessors, modifiers) | Implemented |
 | Inspection layer (`record?`, `record-type`, `record-type?`) | Implemented |
 | Opaque record types (`define-opaque-record-type`, `make-opaque-record-type`) | Implemented |
-| Record inheritance (Scheme-level API) | Not implemented (Go-level `values.NewDerivedRecordType` exists but is not wired to any Scheme primitive) |
+| Record inheritance (Scheme-level API) | Not implemented (Go-level `values.NewDerivedRecordType` in `pkg/values/record_type.go` exists but is not wired to any Scheme primitive) |
 | Sealed/nongenerative | Not implemented |
 | Object system / MOP | Not implemented |
 

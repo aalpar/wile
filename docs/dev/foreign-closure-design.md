@@ -24,17 +24,23 @@ Closure (interface)
 ```
 
 `ForeignClosure` holds a `ForeignFunction` directly with no `NativeTemplate`.
-`applyForeign` does arity check, arg binding, error conversion, and
-continuation restore — the same work the VM loop did, except panic recovery,
-which remains in the bytecode path's `OperationForeignFunctionCall`. Foreign
-functions reachable via the direct fast path must return errors rather than
-panic; the type-coercion helpers in `values/promotion.go` and `values/numeric_tower.go`
-panic on `ErrNotANumber`/`ErrNotAPair` when handed unexpected types, and must
-not be invoked from `*ForeignClosure` primitives without an explicit type
-check or `defer recover()`. (R7RS-specified errors like division by zero
-already return `(Number, error)` — those flow through the normal error path.)
-This contract is currently enforced by code review only; there is no test
-or lint that catches a primitive that violates it.
+`applyForeign` does arity check, arg binding, optional contract validation
+(`ForeignClosure.SetValidator`), error conversion, and continuation restore —
+the same work the VM loop did, except per-call panic recovery, which remains in
+the bytecode path's `OperationForeignFunctionCall`. Foreign functions reachable
+via the direct fast path must return errors rather than panic; the
+type-coercion helpers in `pkg/values/promotion.go` and
+`pkg/values/numeric_tower.go` panic on `ErrNotANumber` / `ErrNotAReal` /
+`ErrInvariantViolation` when handed unexpected types, and
+`emptyList.Car`/`Cdr` (`pkg/values/empty_list.go`) panic on `ErrNotAPair`.
+None of them may be invoked from `*ForeignClosure` primitives
+without an explicit type check or `defer recover()`. (R7RS-specified errors like
+division by zero already return `(Number, error)` — those flow through the
+normal error path.) A panic that escapes anyway is contained at the VM boundary
+by `MachineContext.RunResumable`, but only as an uncatchable `*SchemeError`
+returned to the embedder, not as a Scheme condition `guard` can see. This
+contract is otherwise enforced by code review only; there is no test or lint
+that catches a primitive that violates it.
 
 ### Closure Interface
 
@@ -53,10 +59,11 @@ Storage sites (`DynamicWindFrame.Before/After`, `MachineContinuation.promptHandl
 
 The `NamedCallable` embedding lets `(procedure-name)` and `(procedure-documentation)`
 read `Name()`/`Doc()` through one interface assertion instead of a six-way
-type switch. The two consumers live in `registry/core/prim_reflection.go:136,275`.
+type switch. The two consumers are `PrimProcedureName` and
+`PrimProcedureDocumentation` in `pkg/registry/core/prim_reflection.go`.
 Stack-trace builders use a different mechanism — they read `*NativeTemplate.Name()`
-off the saved continuation directly (`machine/machine_context.go:1002,1015`),
-not through `NamedCallable`. `CaseLambdaClosure` also satisfies `NamedCallable`
+off the saved continuation directly (`MachineContext.CaptureStackTrace` in
+`pkg/machine/machine_context.go`), not through `NamedCallable`. `CaseLambdaClosure` also satisfies `NamedCallable`
 but is not a `Closure`: it doesn't define `closureMarker()`, and its application
 path is arity dispatch (`ApplyCaseLambda` → `Apply` of the matched clause),
 not direct invocation.
@@ -106,20 +113,26 @@ to a nested `applyForeign`, which already consumes the saved continuation via
 again — that would restore from a frame that has already been freed and
 returned to the pool.
 
-**Detection.** Save both `p.template` and `p.cont` before calling `fn(p)`.
-After the call, the template guard skips the entire restore path if the
-template changed (Case A); the cont guard skips only the restore step if
-the continuation was already consumed (Case B).
+**Detection.** Save both `p.template` and `p.cont` before calling `fn(p)`, and
+clear the `p.reconfigured` flag that `Apply` sets. After the call, the
+reconfigured/template guard skips the entire restore path if the foreign
+function repointed the VM (Case A); the cont guard skips only the restore step
+if the continuation was already consumed (Case B). `reconfigured` is
+authoritative for in-place `Apply` because it catches self-application, where
+the template is unchanged; the template comparison additionally covers
+continuation-restore paths that repoint the template without going through
+`Apply`.
 
 ```go
 savedTemplate := p.template
 savedCont := p.cont
+p.reconfigured = false
 
 err := fcls.fn(p)
 // ... error handling, immediate timeout check ...
 
 // Case A: VM state was reconfigured by the foreign function.
-if p.template != savedTemplate {
+if p.reconfigured || p.template != savedTemplate {
     return p, nil
 }
 
@@ -135,17 +148,22 @@ if p.cont == savedCont {
 return p, nil
 ```
 
-Both checks are pointer comparisons, reliable because each callable that
-manipulates VM state writes a distinct pointer: `Apply` sets `p.template`
-to the callee's template; nested `applyForeign` advances `p.cont` past the
-consumed frame (typically to its parent) before returning.
+The two saved-state checks are pointer comparisons, reliable because each
+callable that manipulates VM state writes a distinct pointer: `Apply` sets
+`p.template` to the callee's template; nested `applyForeign` advances `p.cont`
+past the consumed frame (typically to its parent) before returning. The
+`reconfigured` flag is only meaningful inside the clear→call→read window; no
+other opcode may read it without first establishing its own clear.
 
 The savedCont guard was added in PR #573 after a test failure exposed
 double-restore in the inline-Foreign-via-Foreign path. `callForeignCached`
-(`machine/call_foreign_cached.go:83-126`) carries an analogous guard for
-the non-tail path; the tail-call branch calls `returnImmediate()`
-unconditionally because tail calls do not have a `SaveContinuation` frame
-to consume in the first place.
+(`pkg/machine/call_foreign_cached.go`) carries the analogous guard on **both**
+of its arms: the non-tail arm restores only when `mc.cont == savedCont`, and
+the tail arm guards `returnImmediate()` the same way, because a foreign
+function reachable in tail position (via
+`call-with-immediate-continuation-mark` or `apply`) can consume the frame
+itself, and restoring again would pop a second frame and silently drop an
+activation.
 
 **Why this matters.** Without these guards, `applyForeign` either
 overwrites VM state set up by `Apply` (Case A) or restores from a freed
@@ -155,38 +173,40 @@ only `PrimCallCC` inline mode (and any future primitives that themselves
 invoke user procedures) trigger these paths.
 
 **Generality.** The Case A/B framing is illustrative, not exhaustive.
-`ApplyCallable` dispatches to six callable types
-(`machine/machine_context_apply.go:224-246`), and four of them can mutate
+`ApplyCallable` (`pkg/machine/machine_context_apply.go`) dispatches to six
+callable types, and four of them can mutate
 either pointer: `*MachineClosure` and `*CaseLambdaClosure` both reach
 `Apply` (template change → Case A); `*Parameter` and `*ComposableContinuation`
-consume `p.cont` via `returnImmediate`/`Restore` (Case B). The two
-pointer guards fire defensively for any callable in the dispatch table —
-the named cases are the only ones that occur today via `PrimCallCC`,
-but the guards do not depend on which case actually triggered.
+consume `p.cont` via `returnImmediate`/`Restore` (Case B). The guards fire
+defensively for any callable in the dispatch table — the named cases are the
+only ones that occur today via `PrimCallCC`, but the guards do not depend on
+which case actually triggered.
 
 ## Edge Case 2: Go Stack Overflow (Recursive Foreign Closures)
 
 `applyForeign` calls `fn(p)` synchronously on the Go call stack. For leaf
 primitives (`+`, `car`, `cons`), this is fine — they return immediately.
 
-But some callables create sub-contexts and call `Run()`:
+But some callables create sub-contexts and drive them to completion:
 
 ```go
-// CapturedContinuation (call/cc escape value)
-// applyCapturedContinuation:
-sub := innerMC.NewSubContext()
-_, err := sub.ApplyCallable(cc, val)  // graft continuation
-err = sub.Run()                        // execute restored frames
+// applyParameter, converter path:
+sub := p.NewSubContext()
+defer ReleaseSubContext(sub)
+_, err := sub.ApplyCallable(converter, newVal)
+err = sub.RunWithinBoundary()   // execute the converter on a nested Run loop
 // ...
 ```
 
-When the restored computation invokes another `CapturedContinuation`, the
-pattern repeats: `applyCapturedContinuation` → `sub.Run()` → `ApplyCallable` →
-`applyCapturedContinuation` → `sub.Run()` → ...
+When the nested computation reaches another such callable, the pattern
+repeats and each level adds Go stack frames that persist until the inner run
+returns. Deeply nested invocations consume the 1GB Go stack limit.
 
-Each level adds ~4 Go stack frames that persist until the inner `Run()`
-returns. The `ctak` benchmark (continuation-based Takeuchi) creates thousands
-of nested continuation invocations, consuming the 1GB Go stack limit.
+The historical instance was `call/cc` resume: `applyCapturedContinuation` used
+to graft the captured chain into a fresh sub-context and `Run()` it, nesting
+O(live continuation depth) Go frames per resume, which is what overflowed on
+`ctak` (continuation-based Takeuchi). That is no longer how resume works; see
+"Resume Is a Trampoline, Not a Nested Run" below.
 
 **In the old bytecode path:** `Apply(*MachineClosure)` returned to the
 existing `Run()` loop. `OpForeignFunctionCall` was just another iteration of
@@ -214,11 +234,21 @@ This creates a `*MachineClosure` (not `*ForeignClosure`), so `ApplyCallable`
 dispatches through `Apply` → VM loop → `OpForeignFunctionCall` — keeping the
 loop iterative.
 
-**`NewVMForeignClosure` now has zero callers in production code.** Call/cc
-escape values became `CapturedContinuation` (dispatched via
-`applyCapturedContinuation`), which handles the nested VM execution directly
-without going through the bytecode trampoline. All registered primitives
-(~200+) use the direct `*ForeignClosure` / `applyForeign` fast path.
+**`NewVMForeignClosure` now has zero callers anywhere, production or test.**
+All registered primitives use the direct `*ForeignClosure` / `applyForeign`
+fast path. The constructor is kept as the documented escape hatch for the
+decision below, not because anything currently needs it.
+
+### Resume Is a Trampoline, Not a Nested Run
+
+`applyCapturedContinuation` (`pkg/machine/captured_continuation.go`) no longer
+runs the captured chain at all. After checking thread identity and barrier
+validity it returns an `*ErrResumeContinuation` control signal, which the
+nearest `DefaultPromptTag` driver (`MachineContext.RunResumable`) reinstalls
+onto its own live continuation and keeps looping. Resume therefore costs O(1)
+Go frames regardless of continuation depth, and the winding stack reconciles
+exactly once instead of twice on an escape-out. The bytecode trampoline was
+never the fix here; returning the segment unrun was.
 
 ### Decision Criteria: Which Path?
 
@@ -230,6 +260,15 @@ without going through the bytecode trampoline. All registered primitives
 The distinction is about Go stack safety, not performance. The bytecode path
 is slightly slower (two opcode dispatches) but prevents unbounded Go stack
 growth.
+
+**Arity gotcha, both paths.** A variadic closure binds its rest list into slot
+`ParamCount-1`, so `ParamCount: 0` with `IsVariadic: true` makes `bindArgs`
+index `bnds[:-1]` and panic. `PrimitiveSpec.Validate`
+(`pkg/registry/registry.go`) rejects that combination, and `AddPrimitive`
+panics on a spec that fails it, so a registered primitive fails loudly at
+startup rather than on first call. A direct `NewForeignClosure(env, 0, true,
+fn)` bypasses the check and still panics on first call. A no-fixed-argument
+variadic is `ParamCount: 1`.
 
 ## PairBlock
 

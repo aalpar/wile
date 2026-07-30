@@ -11,8 +11,9 @@ Wile implements R7RS `syntax-rules` macros using Flatt's "sets of scopes" hygien
 │  Layer 3: Hygiene Layer                                     │
 │  - Scope creation and propagation                           │
 │  - Variable resolution with scope matching                  │
-│  - Files: internal/syntax/scope_utils.go,                   │
-│    machine/operation_syntax_rules_transform.go              │
+│  - Files: values/scope.go, syntax/scope_utils.go,           │
+│    machine/compilation/                                     │
+│      operation_syntax_rules_transform.go                    │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 2: Syntax Adapter                                    │
 │  - Bridges syntax objects ↔ raw values                      │
@@ -71,7 +72,7 @@ type SyntaxSymbol struct {
 }
 ```
 
-### Scopes (`internal/syntax/syntax_value.go`)
+### Scopes (`values/scope.go`, re-exported as `syntax.Scope`)
 
 A scope is a unique identifier created at specific points:
 
@@ -90,24 +91,29 @@ type Scope struct {
 
 ### Transformer Closure (`machine/compilation/compile_syntax_rules.go`)
 
-A `syntax-rules` form compiles to a `MachineClosure` containing:
+`CompileSyntaxRules` turns a `syntax-rules` form into a `MachineClosure` whose
+template literals carry a `*ClausesWrapper`, holding one clause per
+`(pattern template)` pair:
 
-- **Compiled clauses**: Pattern bytecode + template for each `(pattern template)` pair
+- **Compiled clauses**: Pattern bytecode + template for each pair
 - **Literals set**: Symbols that match literally, not as pattern variables
-- **Free identifiers**: Template symbols that shouldn't get intro scope
+- **Free identifiers**: Template symbols resolved at macro-definition time
+
+The clause type lives in `machine/compilation/syntax_bridge_types.go` (the
+compiler writes it, `OperationSyntaxRulesTransform` reads it at expansion
+time, so its fields are exported):
 
 ```go
 type SyntaxRulesClause struct {
-    pattern          syntax.SyntaxValue
-    template         syntax.SyntaxValue
-    bytecode         []match.SyntaxCommand
-    matcher          *match.SyntaxMatcher
-    patternVars      map[string]struct{}
-    patternVarSyntax map[string]*syntax.SyntaxSymbol
-    ellipsisVars     map[int]map[string]struct{}
-    freeIds          map[string]*FreeIdResolution
-    ellipsis         string
-    literalSyntax    map[string]*syntax.SyntaxSymbol
+    Template         syntax.SyntaxValue
+    Bytecode         []match.SyntaxCommand
+    Matcher          *match.SyntaxMatcher
+    PatternVars      map[string]struct{}
+    PatternVarSyntax map[string]*syntax.SyntaxSymbol
+    EllipsisVars     map[int]map[string]struct{}
+    FreeIds          map[string]*FreeIdResolution
+    Ellipsis         string
+    LiteralSyntax    map[string]*syntax.SyntaxSymbol
 }
 ```
 
@@ -154,19 +160,21 @@ The binding's scope set must be a **subset** of the reference's scope set.
 
 ### Implementation in Code
 
-**Scope creation** (`machine/compilation/operation_syntax_rules_transform.go:193`):
+**Scope creation** (`machine/compilation/operation_syntax_rules_transform.go`):
 ```go
 introScope := syntax.NewScopeWithLabel("intro")
 ```
 
-**Scope addition** (`internal/match/syntax_expand.go:293-294`):
+**Scope addition** (`applyHygieneToSymbol`, `internal/match/syntax_expand.go`):
 ```go
 if opts.IntroScope != nil {
     newSym = newSym.AddScope(opts.IntroScope).(*syntax.SyntaxSymbol)
 }
 ```
 
-**Scope matching** (`internal/syntax/scope_utils.go:58`):
+**Scope matching** (`values/scope.go`; `syntax.ScopesMatch` wraps it, and
+`ScopesCompatible` is the entry point resolution actually calls, since a binding
+with no scopes matches any reference):
 ```go
 func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
     // bindingScopes ⊆ useScopes
@@ -236,8 +244,8 @@ SyntaxSymbol → values.Symbol
 SyntaxObject → underlying value
 ```
 
-**Re-wrap expanded values with syntax** (`capturedValueToSyntax` at
-`internal/match/syntax_expand.go:332`):
+**Re-wrap expanded values with syntax** (`SyntaxMatcher.capturedValueToSyntax`,
+`internal/match/syntax_expand.go`):
 ```go
 values.Pair → SyntaxPair (with intro scope)
 values.Symbol → SyntaxSymbol (with intro scope, unless free identifier)
@@ -264,13 +272,31 @@ Free identifiers in a template are symbols that are NOT pattern variables. They 
 - References to other macros (`if`, `let`, `lambda`)
 - References to primitives and library functions
 
-These identifiers must NOT receive the intro scope, or they would fail to resolve.
+Each is resolved once, at macro-definition time, and the resolution travels with
+the expansion rather than being redone at the use site (R7RS §4.3.2 referential
+transparency):
 
 ```go
-// In compileClause:
-freeIds := make(map[string]struct{})
-collectFreeIdentifiers(template, patternVars, freeIds)
+// In compileClauseWithEllipsisAndLiterals:
+freeIds := make(map[string]*FreeIdResolution)
+collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis, libraryScope)
 ```
+
+The map is keyed by `FreeIdKey(name, definitionScopes)`, not by name alone: two
+template identifiers spelled the same but carrying different definition-site
+scope sets are different free identifiers.
+
+`applyHygieneToSymbol` then does one of three things with the resolution:
+
+- **Local binding at the definition site**: substitute the definition-site
+  scopes, no intro scope. A scope-less reference would not be a superset of a
+  binder keyed on the enclosing `let`'s scope.
+- **Global binding**: keep the intro scope *and* attach the resolved
+  `*GlobalIndex` via `WithResolvedBinding`, plus the library scope when there is
+  one. The intro scope is what lets a binder co-introduced by the same template
+  shadow the pin; the pin is consulted below that local match, and is what keeps
+  a user's top-level `(define car 42)` from capturing a template's `car`.
+- **Unresolvable at definition time**: fall through to the intro scope.
 
 ### Let Bindings Shadow Macros
 
@@ -351,18 +377,20 @@ and the Tier 2 sketch in the design doc.
 
 ## Bootstrap Macros
 
-R7RS derived expressions are implemented as macros loaded during bootstrap. The bootstrap surface lives in `internal/bootstrap/bootstrap.go`, which embeds the macro source from `registry/core/bootstrap_macros.scm`. Binding forms (`let`, `let*`, `letrec`, `letrec*`) are *not* listed here — they are core compiled forms handled by the expander/validator/compiler pipeline; see [`core-let.md`](core-let.md) for the design.
+R7RS derived expressions are implemented as macros loaded during bootstrap. The sources are embedded in `registry/core/bootstrap.go` and loaded by `internal/bootstrap/bootstrap.go`. Binding forms (`let`, `let*`, `letrec`, `letrec*`) are *not* listed here — they are core compiled forms handled by the expander/validator/compiler pipeline; see [`core-let.md`](core-let.md) for the design.
 
-The following forms are defined as `define-syntax` entries in `bootstrap_macros.scm`:
+There are two macro sources, and the split is load order. `bootstrap_macros.scm` loads first; `bootstrap_macros_late.scm` (`unless`, `guard`, `guard-aux`) loads *after* `bootstrap_procedures.scm`, because those templates reference bootstrap procedures (`not`, `with-exception-handler`) rather than Go primitives. Loading them early would leave those free identifiers with a nil definition-time pin, which a use-site redefinition could then capture.
+
+The following forms are defined as `define-syntax` entries across the two files:
 
 | Macro | Sketch |
 |-------|--------|
 | `and`, `or` | Short-circuit boolean expansion |
 | `cond`, `case` | Conditional forms with `else` / `=>` auxiliary syntax |
-| `when`, `unless` | One-armed conditionals |
+| `when` | One-armed conditional (`unless` is in the late file) |
 | `delay`, `delay-force` | Lazy evaluation via `%make-lazy-promise` |
 | `parameterize` | Dynamic binding via `with-continuation-mark` (see [`r7rs-differences.md`](../reference/r7rs-differences.md)) |
-| `guard`, `guard-aux` | Exception handling with `call-with-values` body capture |
+| `unless`, `guard`, `guard-aux` | Late file: one-armed conditional; exception handling via the R7RS §7.3 double-`call/cc` pattern |
 | `define-record-type`, `define-opaque-record-type`, `define-record-type-impl` | SRFI-9 records and the opaque-record variant |
 | `let-values`, `let*-values`, `define-values` | Multiple-value binding |
 | `do` | R7RS §4.2.4 iteration |
@@ -377,14 +405,17 @@ These are loaded during environment initialization and use the same macro system
 | `internal/match/match.go` | Pattern matching VM |
 | `internal/match/syntax_compiler.go` | Pattern → bytecode compiler |
 | `internal/match/syntax_adapter.go` | Syntax ↔ value conversion |
-| `internal/syntax/syntax_value.go` | Scope type definition |
-| `internal/syntax/scope_utils.go` | Scope set operations, `ScopesMatch` |
-| `internal/syntax/syntax_symbol.go` | Symbol with scopes |
-| `internal/syntax/syntax_pair.go` | Pair with recursive scope propagation |
+| `internal/match/syntax_expand.go` | Template expansion, hygiene, free-identifier resolution |
+| `values/scope.go` | `Scope` type, `ScopesMatch` / `ScopesCompatible`, `ScopeSet` |
+| `syntax/scope_utils.go` | Re-exports of the above, syntax-tree scope operations |
+| `syntax/syntax_symbol.go` | Symbol with scopes |
+| `syntax/syntax_pair.go` | Pair with recursive scope propagation |
 | `machine/compilation/compile_syntax_rules.go` | `syntax-rules` compilation |
+| `machine/compilation/syntax_bridge_types.go` | `SyntaxRulesClause`, `FreeIdResolution`, `ClausesWrapper` |
 | `machine/compilation/operation_syntax_rules_transform.go` | Runtime macro expansion |
 | `machine/compilation/expander_time_continuation.go` | Expansion-phase walker |
-| `internal/bootstrap/bootstrap.go` | Bootstrap surface (macro sources embedded from `registry/core/bootstrap_macros.scm`) |
+| `registry/core/bootstrap.go` | Embeds `bootstrap_macros.scm` and `bootstrap_macros_late.scm` |
+| `internal/bootstrap/bootstrap.go` | Bootstrap load order |
 
 ## References
 

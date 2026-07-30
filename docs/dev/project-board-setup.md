@@ -156,7 +156,7 @@ You can create additional auto-add workflows for specific labels:
 5. Under "Set status to", choose **Ready**
 6. Save and enable
 
-**Limitation:** Free plan allows 1 workflow. Pro/Team allows 5. Enterprise allows 20.
+**Limitation:** the cap is on *auto-add* workflows specifically. Free allows 1, Pro/Team 5, Enterprise Cloud/Server 20.
 
 ---
 

@@ -6,12 +6,12 @@ Every document in `docs/`, organized by topic.
 
 - [overview.md](algebra/overview.md) -- Introduction, design philosophy, structure hierarchy, learning path
 - [reference.md](algebra/reference.md) -- Complete API reference for all structures, projections, rewriting, symbolic ops
-- [tutorial.md](algebra/tutorial.md) -- Runnable, self-verifying tutorial (11 deep chapters + 9 quick-tour files); integrated into `make tutorial-test`
+- [tutorial.md](algebra/tutorial.md) -- Runnable, self-verifying tutorial (11 deep chapters + 13 quick-tour files); integrated into `make tutorial-test`
 
 ## Compiler
 
 - [macro-system.md](compiler/macro-system.md) -- Macro system design (three-layer architecture, sets of scopes)
-- [peephole-optimizer.md](compiler/peephole-optimizer.md) -- Superinstruction formation, 3-pass pipeline, promoted opcodes
+- [peephole-optimizer.md](compiler/peephole-optimizer.md) -- Superinstruction formation, 4-pass pipeline, promoted opcodes
 - [core-let.md](compiler/core-let.md) -- Core `let` as a compiler-recognized form
 - [inlining.md](compiler/inlining.md) -- Procedure inlining after core `let`
 - [ssa.md](compiler/ssa.md) -- Would SSA help the Wile compiler?

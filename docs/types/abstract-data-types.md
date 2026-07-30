@@ -4,6 +4,11 @@ In the [previous document](records-as-formal-types.md), we saw that records are
 nominally-typed labeled product types. You get a constructor, accessors, a
 predicate. Clean correspondence with type theory. But there's a problem.
 
+**Status:** conceptual essay. Existential types are type-theory vocabulary for
+reading Scheme code, not a Wile feature; the abstraction mechanisms it describes
+(library export control, closures) are ordinary Scheme. The one Wile-specific
+facility it names, opaque record types, ships: see "Where Wile is" below.
+
 ## The Problem: Records Don't Hide Anything
 
 ```scheme

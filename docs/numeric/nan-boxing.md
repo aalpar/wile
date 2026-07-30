@@ -1,5 +1,9 @@
 # NaN-Boxing
 
+**Status:** Design exploration. **Not implemented, and ruled out.** Nothing in this document describes Wile's value representation.
+
+Wile boxes every value, numbers included, as a Go heap object behind the `values.Value` interface, managed by Go's GC. There is no NaN-boxed representation anywhere in the tree, no tagged `uint64` value word, and no `unsafe` in production code (the only `unsafe` imports are three `_test.go` files that assert struct sizes and field offsets). The reason is in "Why Go Can't Do This" below, and it is a constraint on the project rather than an unfinished task: this note exists to record *why* the idea was closed, so it is not reopened without new information.
+
 You just profiled an interpreter and discovered that 60% of wall time is the garbage collector scanning and collecting heap objects. The #1 allocated type is `EnvironmentFrame` — a struct that holds pointers to your value type. The #2 is a `[]Binding` slice copied on every function call. Your value type is a Go interface:
 
 ```go
@@ -161,11 +165,13 @@ The common thread: NaN-boxing and pointer tagging require either a custom GC or 
 
 ## What This Means for Wile
 
-Wile uses Go interfaces for values. Every `values.Value` is a 16-byte interface (type pointer + data pointer). The profiling data shows the cost:
+Wile uses Go interfaces for values. Every `values.Value` is a 16-byte interface (type pointer + data pointer). The profile that motivated this note showed:
 
 - 55.5M pool misses for `EnvironmentFrame` allocation
 - 54.4M `[]Binding` slice copies (each binding holds a `values.Value` interface)
 - 60% of wall time in GC on allocation-heavy benchmarks
+
+Those three figures are a **historical snapshot and no longer describe the allocation profile.** Per-thread frame pooling has since taken the frame-allocation term down to near zero on call-bound benchmarks, which moved the bottleneck rather than removing it: the dominant remaining contributor to object *count* is float boxing, `values.NewFloat`. That is the one place where the argument below still has real money on the table, since a NaN-boxed word carries a `float64` for free.
 
 NaN-boxing would eliminate most of these allocations. Integers, booleans, characters, and symbols would be inline 8-byte words. Environment bindings would be `[N]uint64` arrays instead of `[N]*Binding` with interface indirection. The GC scan set would shrink dramatically.
 

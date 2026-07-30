@@ -21,9 +21,9 @@ R7RS library system is enabled — automatically importable from Scheme via
                ┌───────────────▼───────────────┐
                │         Registry              │
                │                               │
-               │  core primitives   (~80)      │
-               │  + math extension  (+30)      │
-               │  + myExt           (+N)       │
+               │  core primitives              │
+               │  + math extension             │
+               │  + myExt                      │
                │  + bindings, macros, globals  │
                └───────────────┬───────────────┘
                                │ Apply()
@@ -39,7 +39,7 @@ R7RS library system is enabled — automatically importable from Scheme via
 ### Lifecycle
 
 1. **Registration** — Extensions call `Registry.AddPrimitives`, `AddBindings`,
-   `AddMacroSource`, `AddGlobalValue` during `NewEngine`.
+   `AddMacroSource`, `AddGlobalValue`, `AddNamespaceInit` during `NewEngine`.
 2. **Application** — `Registry.Apply` materializes everything into a live
    environment, following a strict phase order.
 3. **Library creation** — If `WithLibraryPaths` was called, each extension's
@@ -159,28 +159,22 @@ Extensions can implement additional interfaces for extra behavior:
 | `LibraryNamer` | `LibraryName() []string` | Custom R7RS library name (default: `(wile <name>)`) |
 | `Closeable` | `Close() error` | Resource cleanup when `Engine.Close()` is called |
 
+`registry.ExtensionFunc` satisfies all three unconditionally and carries them as
+slots filled by `ExtensionOption` values, so a hand-rolled struct is not needed:
+
 ```go
 // Custom library name: (myorg utils) instead of (wile custom)
-type myExtension struct{}
-
-func (e *myExtension) Name() string {
-	return "custom"
-}
-
-func (e *myExtension) AddToRegistry(r *registry.Registry) error {
-	// ... register primitives ...
-	return nil
-}
-
-func (e *myExtension) LibraryName() []string {
-	return []string{"myorg", "utils"}
-}
-
-func (e *myExtension) Close() error {
-	// cleanup
-	return nil
-}
+var Extension = registry.NewExtension("custom", AddToRegistry,
+    registry.WithDescription("Brief description of this extension."),
+    registry.WithLibraryName("myorg", "utils"),
+    registry.WithClose(func() error {
+        // cleanup
+        return nil
+    }))
 ```
+
+An unset slot reports the zero value, which the engine reads as "not set" and
+replaces with the default.
 
 ---
 
@@ -223,6 +217,19 @@ r.AddPrimitives([]registry.PrimitiveSpec{
 | `ParamTypes` | `[]values.TypeConstraint` | no | Per-parameter type contract. For variadic, last slot annotates rest-list element type |
 | `ReturnType` | `values.TypeConstraint` | no | Return-type declaration (nil = unspecified) |
 | `Keywords` | `[]string` | no | Searchable tags for `apropos` discovery |
+| `InvokesProcedure` | `bool` | see below | Marks a primitive that may call back into a Scheme procedure |
+
+`PrimitiveSpec.Validate` rejects an empty `Name`, a nil `Impl`, a variadic spec
+with `ParamCount < 1`, and a `ParamTypes` slice of the wrong length.
+`AddPrimitive`/`AddPrimitives` **panic** on a spec that fails it, on the contract
+that specs are source literals. An embedder assembling a spec dynamically must
+call `Validate` first.
+
+`InvokesProcedure` defaults to `false`, meaning "capture-safe": the frame-reclaim
+classifier may trust a tail call to this primitive as non-capturing. Any `Impl`
+that reaches `ApplyCallable` or runs a sub-context MUST set it to `true`. The
+flipped default is a soundness commitment, and `TestInvokesProcedureStaticGuard`
+in `pkg/wile` fails CI when the annotation is missing.
 
 ### Registering Other Items
 
@@ -239,8 +246,19 @@ r.AddMacroSource(`
          (if test (begin body ...)))))
 `)
 
-// Global values (parameters, promises, or any Value)
-r.AddGlobalValue("current-input-port", portParam)
+// Bootstrap procedure source (define forms, loaded into the sealed base frame;
+// the file boundary between define-syntax and define is the phase boundary)
+r.AddProcedureSource(`(define (my-helper x) (* x x))`)
+
+// Global values (parameters, promises, or any Value), shared by every engine
+// that applies this registry
+r.AddGlobalValue("euler", eulerConstant)
+
+// Per-engine state (run once per engine, with that engine's runtime frame)
+r.AddNamespaceInit(func(env *environment.EnvironmentFrame) error {
+    // build per-Namespace state here, not in a package global
+    return nil
+})
 
 // Initialization callbacks (run after Apply, environment is fully populated)
 r.AddInitFunc(func() error {
@@ -248,6 +266,14 @@ r.AddInitFunc(func() error {
     return nil
 })
 ```
+
+A `NamespaceInit` **must be idempotent**. The engine re-runs `Apply` (and so the
+hook) for every library environment it builds, and those library environments
+share the engine's `Namespace`. Minting fresh state on each re-run would reset
+the engine mid-eval; this is why `extensions/io` reuses the `State` already on
+the `Namespace` instead of allocating a new one (`addPortState` in
+`pkg/extensions/io/register.go`), so `(import ...)` cannot discard a redirected
+`current-output-port`.
 
 ### Application Order
 
@@ -259,27 +285,33 @@ r.AddInitFunc(func() error {
 3. Runtime primitives        (PhaseRuntime → ForeignClosure at phase 0)
 4. Expand-time primitives    (PhaseExpand → ForeignClosure at phase 1)
 5. Global values             (AddGlobalValue)
-6. Init functions            (AddInitFunc)
+6. Namespace initializers    (AddNamespaceInit → per-engine state)
+7. Init functions            (AddInitFunc)
 ```
 
-Macro sources are loaded separately by the engine after `Apply()`.
+Macro and procedure sources are loaded separately by the engine after `Apply()`.
 
 ---
 
 ## Phases
 
-Phases control when a primitive is available. They are bit flags that compose
-with `|`.
+Phases control when a primitive is available. `registry.PhaseSet` is a bitset
+over `environment.Phase` values, and its bits compose with `|`.
 
-| Phase | Bit | Environment | Purpose |
-|-------|-----|-------------|---------|
-| `PhaseRuntime` | `1` | Top-level (phase 0) | Normal runtime evaluation |
-| `PhaseExpand` | `2` | Expand (phase 1) | Available during macro expansion |
-| `PhaseCompile` | `4` | Compile (phase 2) | Binding-only, no runtime value |
+| `PhaseSet` bit | Bit | `environment.Phase` | Environment | Purpose |
+|----------------|-----|---------------------|-------------|---------|
+| `PhaseSetRuntime` | `1` | `PhaseRuntime` (0) | Top-level (phase 0) | Normal runtime evaluation |
+| `PhaseSetExpand` | `2` | `PhaseExpand` (1) | Expand (phase 1) | Available during macro expansion |
+| `PhaseSetCompile` | `4` | `PhaseCompile` (2) | Compile (phase 2) | Binding-only, no runtime value |
 
-Most extension primitives use `PhaseRuntime` only. Primitives needed during
-`syntax-rules` expansion use `PhaseRuntime | PhaseExpand`. Compile-time
-bindings (auxiliary syntax keywords) use `PhaseCompile` or `AddBinding`.
+Most extension primitives use `PhaseSetRuntime` only. Primitives needed during
+`syntax-rules` expansion use `PhaseSetRuntime | PhaseSetExpand`. Compile-time
+bindings (auxiliary syntax keywords) use `PhaseSetCompile` or `AddBinding`.
+
+Under the default immutable top level, `PhaseSetRuntime` primitives are bound in
+the sealed base frame rather than the mutable runtime frame, while the closure
+still captures the mutable frame so it resolves user definitions. The
+registration API does not change.
 
 ```go
 // Available at runtime only
@@ -358,6 +390,12 @@ func primMySum(mc machine.CallContext) error {
 }
 ```
 
+`ParamCount` must be at least 1 when `IsVariadic` is set: the rest parameter
+occupies slot `ParamCount-1`, so `ParamCount: 0` with `IsVariadic: true` is
+rejected by `PrimitiveSpec.Validate` (and would index past the argument slice in
+the dispatch layer). `helpers.VariadicArgs` gathers the fixed arguments and the
+rest list into one type-checked slice.
+
 ### Return Values
 
 - **Single value**: `mc.SetValue(result)`
@@ -402,9 +440,9 @@ A recursive value type that does **not** implement `DeepEqualer` is compared
 through its own `EqualTo`. If that `EqualTo` recurses, `equal?` on a cyclic
 instance is a Go `fatal error: stack overflow` — which `recover()` **cannot**
 catch, so it kills the embedding host process. Core containers (`*Pair`,
-`*Vector`, `*Record`, `*Hashtable`, `*Box`, `*CompileTimeValue`) all implement it;
-extension types are the remaining exposure, and only the extension author can
-close it.
+`*Vector`, `*Record`, `*Hashtable`, `*Box`, `*NativeError`, `*CompileTimeValue`)
+all implement it; extension types are the remaining exposure, and only the
+extension author can close it.
 
 Values that cannot contain other values (a handle, a wrapped `int`, an opaque Go
 struct) are leaves and need nothing.
@@ -436,16 +474,24 @@ engine.RegisterFunc("greet", func(name string) string {
 |---------|-------------|
 | `int64`, `int` | integer |
 | `float64` | inexact real |
+| `complex128` | complex number (parameter only) |
 | `string` | string |
 | `bool` | `#t` / `#f` |
 | `[]byte` | bytevector |
 | `[]T` | proper list (elements converted recursively) |
 | `map[K]V` | hashtable (K must be string, int64, int, or bool) |
 | `struct` | alist `((FieldName . value) ...)` |
-| `func(...)` | callback (invokes Scheme lambda via VM sub-context) |
+| `func(...)` | callback, parameter only (invokes Scheme lambda via VM sub-context) |
 | `wile.Value` | any Scheme value (pass-through) |
 | `context.Context` | auto-forwarded (first param only, invisible to Scheme) |
 | `error` | last return only — returned as Go error |
+
+Parameter and return conversion are deliberately asymmetric: `complex128` and
+`func(...)` are accepted as parameters but rejected as return types, and the
+rejection happens at `RegisterFunc` time rather than at call time. Narrowing a
+Scheme number to `float64`/`complex128` errors on precision loss unless the
+engine was built with `WithLossyConversionsAllowed()`, which is frozen into the
+converters at registration.
 
 ### Batch Registration
 
@@ -498,13 +544,14 @@ engine.RegisterFunc("fetch", func(ctx context.Context, url string) (string, erro
 
 ## Built-in Extensions
 
-### Public Extensions (`extensions/`)
+### Public Extensions (`extensions/`, `pkg/extensions/`)
 
 These are importable by external Go code:
 
 | Package | Library Name | Primitives |
 |---------|-------------|------------|
-| `extensions/math` | `(wile math)` | `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `expt`, `floor`, `ceiling`, `truncate`, `round`, `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `finite?`, `infinite?`, `nan?`, `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt`, `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle`, `number->string`, `string->number` (35 primitives) |
+| `pkg/extensions/io` | `(wile io)` | R7RS I/O: `read`, `write`, `display`, `newline`, string/bytevector ports, port state (41 primitives). Per-engine `State` via `AddNamespaceInit` |
+| `extensions/math` | `(wile math)` | `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `expt`, `floor`, `ceiling`, `truncate`, `round`, `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `finite?`, `infinite?`, `nan?`, `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt`, `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle`, `number->string`, `string->number`, `inexact-with-accuracy`, `inexact-accuracy`, `inexact-lossless?`, `complex-inexact-with-accuracy` (39 primitives, plus the `pi` and `euler` global values) |
 | `extensions/system` | `(wile system)` | `command-line`, `exit`, `emergency-exit`, `current-second`, `current-jiffy`, `jiffies-per-second` (6 primitives) |
 | `extensions/files` | `(wile files)` | `open-input-file`, `open-output-file`, `open-binary-input-file`, `open-binary-output-file`, `file-exists?`, `delete-file`, `call-with-input-file`, `call-with-output-file`, `create-directory`, `delete-directory`, `directory-files`, `current-directory`, `set-current-directory!` (13 primitives) |
 | `extensions/process` | `(wile process)` | `system`, `process-spawn`, `process-stdout`, `process-stderr`, `process-stdin`, `process-wait`, `process-kill`, `process?` (8 primitives) |
@@ -512,17 +559,28 @@ These are importable by external Go code:
 | `extensions/gointerop` | `(wile gointerop)` | Go concurrency: `make-rw-mutex`, `rw-mutex-write-lock!`, `make-once`, `once-do!`, `make-atomic`, `atomic-compare-and-swap!`, etc. |
 | `extensions/introspection` | `(wile introspection)` | `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`, `disassemble` (8 primitives) |
 | `extensions/eval` | `(wile eval)` | `eval`, `load`, `current-load-path`, `current-load-directory`, `current-load-depth`, `scheme-report-environment`, `null-environment`, `environment`, `expand`, `expand-once`, `compile`, `syntax-local-value`, `syntax-local-value/immediate`, `make-compile-time-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding` (16 primitives) |
+| `extensions/charsets` | `(wile charsets)` | SRFI-14 character sets: `char-set?`, `char-set-contains?`, `char-set-size`, set algebra, named char-sets (20 primitives) |
+| `extensions/sat` | `(wile sat)` | CDCL SAT kernel backing `(wile algebra sat)`: `sat-cnf-flat?`, `sat-cnf-flat-model` (2 primitives) |
+| `extensions/algebragraph` | `(wile algebragraph)` | Graph kernels backing `(wile algebra graph)`: `count-paths-in-dag`, `count-paths-cyclic` (2 primitives) |
 
-### Internal Extensions (`internal/extensions/`)
+`extensions/algebra/graph` is a plain Go support package, not an extension: it
+holds the algorithms `extensions/algebragraph` exposes.
+
+### Internal Extensions (`pkg/internal/extensions/`)
 
 Not importable by external code:
 
 | Package | Purpose |
 |---------|---------|
-| `internal/extensions/io` | R7RS I/O: `read`, `write`, `display`, port operations |
-| `internal/extensions/envvars` | Environment-variable primitives: `get-environment-variable`, `get-environment-variables` (sandbox-aware) |
-| `internal/extensions/namespace` | Namespace introspection and management |
-| `internal/extensions/all` | Records, promises, exceptions, strings, characters, and other R7RS primitives |
+| `pkg/internal/extensions/envvars` | Environment-variable primitives: `get-environment-variable`, `get-environment-variables` (sandbox-aware) |
+| `pkg/internal/extensions/namespace` | Namespace introspection and management: `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, etc. |
+| `pkg/internal/extensions/all` | Records, promises, exceptions, strings, characters, and other R7RS primitives. Exports both `Extension` and a reduced `SafeExtension` (the `Console` profile's subset) |
+| `pkg/internal/extensions/iotest` | Fault-injecting I/O ports, composed with `io` in tests only |
+
+Extension registration is wired in `pkg/internal/bootstrap/bootstrap.go`
+(`allExtensions` and `ProfileExtensions`), the first package that sees both
+`pkg/registry` and `pkg/machine/compilation`. Its `ADDING A NEW EXTENSION`
+comment is the authoritative checklist.
 
 ---
 
@@ -534,14 +592,17 @@ Not importable by external code:
 | `WithExtensions(ext...)` | Add multiple extensions |
 | `WithProfile(p)` | Apply a named profile bundle: `Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink` |
 | `WithoutCore()` | Skip core primitives — creates a bare engine with only explicitly added extensions |
+| `WithContractEnforcement()` | Validate arguments against declared `ParamTypes` before each call. Off by default; a correctness aid for extension authors |
+| `WithLossyConversionsAllowed()` | Let `RegisterFunc` conversions truncate instead of raising `ErrLossyConversion` |
 | `WithLibraryPaths(paths...)` | Enable R7RS library system with optional search paths |
+| `WithStrictNamespace()` | Register the profile's extension primitives but withhold them from the top level, so `(import ...)` is the only path to them |
 | `WithRegistry(reg)` | Use a custom registry (skips core primitives) |
 | `WithMaxCallDepth(n)` | Set maximum VM recursion depth |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy (see [`sandboxing.md`](../security/sandboxing.md)) |
 | `WithSandbox()` | Compose the sandbox env-prefix wrapper with the current authorizer |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 
-`WithProfile(KitchenSink)` matches the CLI's full extension set; `WithProfile(Console)` is the safe-by-default bundle (io with in-memory ports, files restricted to `/tmp`, math, the safe subset of `all`, and envvars) plus a matching `ConsoleAuthorizer`. See [`sandboxing.md`](../security/sandboxing.md) for the full profile table.
+`WithProfile(KitchenSink)` matches the CLI's full extension set; `WithProfile(Console)` is the safe-by-default bundle (io with stdin/stdout/stderr, files restricted to `/tmp`, math, `all.SafeExtension`, charsets, and envvars) plus a matching `ConsoleAuthorizer`. The profile-to-extensions mapping has a single source of truth in `bootstrap.ProfileExtensions`. See [`sandboxing.md`](../security/sandboxing.md) for the full profile table.
 
 ---
 
@@ -573,9 +634,15 @@ Extensions should depend only on public packages:
 ```
 extensions/myext
   ├── github.com/aalpar/wile/pkg/registry       ← Extension, Registry, PrimitiveSpec
-  ├── github.com/aalpar/wile/pkg/machine        ← MachineContext, ForeignFunction
-  ├── github.com/aalpar/wile/pkg/values         ← Value types, error types
-  └── github.com/aalpar/wile/pkg/registry/helpers  ← Type conversion helpers
+  ├── github.com/aalpar/wile/pkg/machine        ← CallContext, ForeignFunction
+  ├── github.com/aalpar/wile/pkg/values         ← Value types, type constraints
+  ├── github.com/aalpar/wile/pkg/werr           ← Sentinels, WrapForeignErrorf
+  ├── github.com/aalpar/wile/pkg/environment    ← EnvironmentFrame (AddNamespaceInit only)
+  └── github.com/aalpar/wile/pkg/registry/helpers  ← Argument extraction, type conversion
 ```
+
+Depend on `machine.CallContext`, not `*machine.MachineContext`: the interface is
+the extension-facing surface, and `machine.RequireMachineContext` is the
+documented escape hatch for the few primitives that need full VM internals.
 
 No circular dependencies between extensions. Each is independently importable.

@@ -8,6 +8,12 @@ behavior?*
 
 The result is a system that does things R7RS records can't even express.
 
+**Status:** comparative survey of Racket, not a Wile design document. No Racket
+form shown here is Wile syntax and none is proposed for Wile. Of the three
+differences it draws, only opacity exists in Wile, as
+`define-opaque-record-type`; inheritance, guards, and struct type properties do
+not. The "Where Wile is" note marks that one overlap.
+
 ## Starting Simple
 
 A Racket struct declaration looks deceptively familiar:
@@ -60,7 +66,10 @@ is a true abstract data type — clients can test and read, but can't forge inst
 R7RS records give you this only if your module system cooperates (which it usually
 does), but Racket makes it a property of the *type itself*.
 
-> **Where Wile is:** Wile's `NewOpaqueRecordType` implements the opaque level.
+> **Where Wile is:** Wile implements the opaque level, exposed to Scheme as
+> `define-opaque-record-type` (`pkg/registry/core/bootstrap_macros.scm`) and
+> `make-opaque-record-type`, over `values.NewOpaqueRecordType`
+> (`pkg/values/record_type.go`).
 > Opaque records print as `#<point>` instead of `#<record:point>`, and they're
 > invisible to `record?` — making them behave like built-in types rather than
 > user-defined records. This is the same design goal as Racket's default opacity,

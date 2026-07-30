@@ -150,7 +150,7 @@ leak that defeats the purpose of tail-call optimization.
 ## Collecting Marks: Walking the Chain
 
 To collect marks, you walk the continuation chain — the same linked list that
-`CaptureStackTrace` already walks in `machine/machine_context.go:996`:
+`CaptureStackTrace` (`machine/machine_context.go`) already walks:
 
 ```go
 // CaptureStackTrace walks mc.cont chain for error reporting.
@@ -158,7 +158,7 @@ To collect marks, you walk the continuation chain — the same linked list that
 // current frame first (marks set on the live mc before the next
 // SaveContinuation live on p.marks, not in any cont frame yet):
 for _, entry := range p.marks {
-    if eqIdentity(entry.key, key) {
+    if values.EqIdentity(entry.key, key) {
         result = append(result, entry.val)
         break
     }
@@ -166,7 +166,7 @@ for _, entry := range p.marks {
 cont := p.cont
 for cont != nil {
     for _, entry := range cont.marks {
-        if eqIdentity(entry.key, key) {
+        if values.EqIdentity(entry.key, key) {
             result = append(result, entry.val)
             break // one value per frame; inner shadows outer
         }
@@ -175,7 +175,7 @@ for cont != nil {
 }
 ```
 
-The real implementation (`CollectContinuationMarks` at `machine/continuation_mark_set.go:129`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost.
+The real implementation (`CollectContinuationMarks` in `machine/continuation_mark_set.go`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost. Its sibling `CollectMarksFromContinuation` runs the same walk over a *captured* chain, which is what `(continuation-marks k)` uses.
 
 The walk produces a list of values for a given key, ordered from innermost
 (current frame) to outermost (top-level). This is a `ContinuationMarkSet` —
@@ -198,34 +198,43 @@ marks below the prompt boundary are invisible.
 ;; Only collects marks above the prompt
 ```
 
-Wile already has `FindPrompt(tag)` for locating prompt boundaries in the
-continuation chain (`machine/machine_context_continuation.go`). Mark
-collection reuses this: walk frames, collect marks, stop at prompt.
+Collection does its own walk rather than calling `FindPrompt(tag)`
+(`machine/machine_context_continuation.go`): it stops at the first *frame*
+whose `promptTag` matches and deliberately does not consult the context's own
+`promptTag`, since `current-continuation-marks` is only reachable from inside
+that boundary anyway.
 
 ## What Would Break Without Marks
 
-Consider implementing `parameterize` (Scheme's scoped dynamic bindings). The
-current implementation uses `dynamic-wind`:
+Take `parameterize` (Scheme's scoped dynamic bindings):
 
 ```scheme
 (parameterize ((current-log-level 'debug))
   (do-stuff))
 ```
 
-Under the hood, `dynamic-wind` runs a thunk on entry to set the parameter and
-a thunk on exit to restore it. That's two closure allocations and two
-invocations per `parameterize` — even if nothing ever reads the parameter.
+The `dynamic-wind` spelling runs a thunk on entry to set the parameter and a
+thunk on exit to restore it. That's two closure allocations and two invocations
+per `parameterize` (even if nothing ever reads the parameter), and the
+before/after thunks can clobber an unrelated `parameterize` extent when a
+composable continuation is spliced in.
 
-With continuation marks, `parameterize` becomes:
+Wile's `parameterize` is a mark form instead. The macro
+(`registry/core/bootstrap_macros.scm`) evaluates each parameter object and its
+converted value in the *outer* dynamic extent, per R7RS §4.2.6, then nests one
+`with-continuation-mark` per binding:
 
 ```scheme
-(with-continuation-mark <parameter-key> 'debug
+(with-continuation-mark <parameter-object> 'debug
   (do-stuff))
 ```
 
-Reading the parameter means "find the nearest mark for this key." No thunks,
-no allocations, no entry/exit overhead. This is exactly how Racket implements
-parameters, and it's why continuation marks were invented.
+Reading the parameter means "find the nearest mark for this key"
+(`findParameterInMarks` in `machine/machine_context_apply.go`, falling back to
+the parameter's base value). No thunks, no entry/exit overhead, and composing a
+captured continuation carries its parameter bindings automatically because the
+marks ride the frames. This is how Racket implements parameters, and it's why
+continuation marks were invented.
 
 Without marks, you're stuck choosing between:
 - **Global mutation** (wrong in the presence of continuations)
@@ -242,21 +251,26 @@ continuation, the marks are restored along with everything else. This is
 correct: the marks describe the execution context, and restoring a
 continuation means restoring that context.
 
-But `Copy()` vs `DeepCopy()` matters. A shallow copy shares the marks map;
-if the original frame's marks are later mutated (by another
-`with-continuation-mark` on that frame), the copy sees the mutation. Deep
-copy avoids this but costs more. For composable continuations (which can be
-invoked multiple times), deep copy is required.
+Marks are not shared across a copy: `MachineContinuation.Copy()` already does
+`q.marks = cloneMarks(p.marks)`, so a later `with-continuation-mark` on the
+original frame cannot be seen by the copy. `Copy()` vs `DeepCopy()` is a
+question of *how much chain* is duplicated (one frame versus every frame down
+to the root), not of mark sharing. Composable continuations, which can be
+invoked multiple times, need the whole chain, so `AcquireSegment` uses
+`DeepCopy` on re-invocation.
 
 **Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
-not a Go map. Keys are compared with `eq?` via `eqIdentity` (`machine/
-call_promoted.go:47`): pointer equality for most values, but *symbols
+not a Go map. Keys are compared with `eq?` via `values.EqIdentity`
+(`values/utils.go`): pointer equality for most values, but *symbols
 compare by name* (`sa.Key == sb.Key`) — symbol interning was removed in
 PR #529, so two `'foo` symbol values may be distinct pointers that must
-still compare equal. A Go map keyed by `values.Value` can't express this
-(hash equality on comparable types, panic on non-comparable), which is
-why PR #508 switched to a slice with linear scan. Cheap in practice
-because mark sets are typically small (0-3 entries per frame).
+still compare equal. A Go map keyed by `values.Value` can't express that at
+all: it hashes by dynamic type and value, so the two `'foo` allocations land
+on different keys. That is the whole reason PR #508 switched to a slice with
+linear scan. (The older second reason, that a map key would panic on a
+non-comparable `Value`, is gone: Go-comparability is now a hard contract on
+`Value`.) Cheap in practice because mark sets are typically small (0-3 entries
+per frame).
 
 **Lazy allocation.** Most frames never carry marks. The `marks` field is a
 slice initialized to `nil`. Only `with-continuation-mark` allocates backing
@@ -269,28 +283,34 @@ Code should not depend on iteration order within a frame. (Ordering across
 frames is well-defined: the chain walk produces innermost-first values.)
 
 **Save/restore semantics.** When `SaveContinuation` fires, it **transfers**
-`mc.marks` to the new frame: the slice header moves over (`q.marks =
-mc.marks` at `machine_continuation.go:111`) and then `mc.marks` is nilled,
-so the callee starts clean (see comments at `machine/vm_state.go:219-223`).
-This is a move, not a deep copy — the backing array is shared until
-`cloneMarks` runs on a call/cc restore (`machine_continuation.go:177`),
-where shared-chain safety requires duplication. On normal return,
-`Restore`/`PopContinuation` lifts the saved marks back. This is why a
+`mc.marks` to the new frame: the slice header moves over (`q.marks = mc.marks`
+in `NewMachineContinuationFromMachineContext`) and then `SaveContinuation`
+nils `mc.marks`, so the callee starts clean (see the `marks` comment on
+`vmState` in `machine/vm_state.go`). This is a move, not a copy: the backing
+array is shared until `cloneMarks` duplicates it, which `Copy`, `Restore`, and
+`RestoreAndRelease`'s shared branch all do, since a chain that may be
+re-invoked cannot share mutable mark storage with the live context. On normal
+return, `Restore`/`RestoreAndRelease` lifts the saved marks back. This is why a
 tail-recursive loop with a mark does not accumulate entries: tail calls
 skip `SaveContinuation` and just overwrite the current frame's entry.
 
 **Tail-position detection.** The compiler must know whether the body of
-`with-continuation-mark` is in tail position. If it is, no `SaveContinuation`
-is emitted and the mark is set on the current frame. If it isn't,
-`SaveContinuation` creates a new frame first, and the mark goes on that new
-frame. This is the same tail-position tracking (`CompileTimeCallContext.inTail`)
-that already governs whether function calls are optimized.
+`with-continuation-mark` is in tail position
+(`CompileValidatedWithContinuationMark`, `machine/compilation/compile_validated.go`),
+using the same tail-position tracking (`CompileTimeCallContext.inTail`) that
+governs whether function calls are optimized. In tail position it emits a bare
+`SetContMark` and compiles the body in tail: the mark lands on the current
+frame, overwriting any prior value for that key, with no restore. Out of tail
+position it brackets the body with `SaveContMark` / `RestoreContMark`, which
+stash the key's previous value on the eval stack and put it back afterwards.
+The *new frame* in the accumulating example comes from the enclosing non-tail
+call's own `SaveContinuation`, not from the mark form.
 
 ## Summary
 
 Continuation marks are per-frame key-value annotations on the continuation
 chain. They solve a specific problem: attaching metadata to execution context
 in a way that respects tail calls, survives continuation capture, and costs
-nothing when unused. The mechanism is simple — a map on each frame, a chain
-walk to collect — but the interaction with tail-call semantics is what makes
+nothing when unused. The mechanism is simple — a small slice on each frame, a
+chain walk to collect — but the interaction with tail-call semantics is what makes
 it genuinely useful rather than just a different spelling for global variables.

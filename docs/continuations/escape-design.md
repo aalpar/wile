@@ -2,9 +2,8 @@
 
 ## Summary
 
-Call/cc escapes use the composable-continuation-then-abort model, following
-Racket's approach where `call/cc` is defined in terms of composable
-continuations and prompt abort:
+Call/cc follows Racket's model, where `call/cc` is defined in terms of a
+composable capture delimited at the default prompt plus an abort to that prompt:
 
 ```scheme
 (call/cc f) ≡
@@ -14,17 +13,23 @@ continuations and prompt abort:
     default-prompt-tag)
 ```
 
-Call/cc now returns a `CapturedContinuation` value (defined in
+That is the *semantics*. The *mechanism* is the resume trampoline. Call/cc
+returns a `CapturedContinuation` value (defined in
 `machine/captured_continuation.go`), which wraps the `ComposableContinuation`
-rather than building a Go closure directly. When invoked, `CapturedContinuation`
-applies the composable continuation in a sub-context (running the captured
-frames to completion), then aborts to `DefaultPromptTag` with the result.
-This produces a regular `ErrPromptAbort` that the standard prompt handling
-path catches — no special-case escape detection needed.
+rather than building a Go closure directly. When invoked,
+`applyCapturedContinuation` does not run the captured chain: it checks thread
+and barrier identity and then *returns* an `ErrResumeContinuation` carrying the
+segment **unrun**, the resume values, and a copy of the winding stack live at
+the `(k v)` site. That control signal rides the VM's ordinary `return err`
+plumbing to the nearest `DefaultPromptTag` driver (`RunResumable`), which
+reinstalls the segment on its own live chain via `ReinstallSegment` and keeps
+looping. Resuming therefore costs O(1) Go frames and reconciles `dynamic-wind`
+exactly once. See [`resume-trampoline.md`](resume-trampoline.md) for the full
+mechanism and the bugs it fixed.
 
 ## Design Rationale
 
-### Why composable-continuation-then-abort?
+### Why one control signal instead of a payload carrier?
 
 The previous design used a `continuationEscapePayload` carrier tunneled
 through `ErrPromptAbort`, with a dedicated `HandleContinuationEscapeAbort`
@@ -34,28 +39,30 @@ function to detect and process escape payloads. This required:
 - A `pendingEscape` field for nested escape scenarios
 - `escapeCont` tracking for sub-context chain breaks
 
-The composable-continuation-then-abort model eliminates all of this:
-- The escape closure does its own work (applies cc, runs frames, aborts with result)
-- `RunWithEscapeHandling` handles all aborts uniformly via `FindPrompt`
+Routing the escape through `ErrPromptAbort` eliminated all of this:
 - No special carrier type, no detection logic, no pending escape mechanism
+- The driver handles every abort uniformly via `FindPrompt`
+
+An intermediate form of that design still had the escape closure *run* the
+captured chain in a fresh sub-context and then abort with the result. That was
+superseded in turn by the trampoline, because running the chain on the spot
+nests one Go frame per resume (the `ctak` stack overflow under `-race`) and
+reconciles `dynamic-wind` twice on an escape out of an extent.
 
 ### Dynamic-wind integration
 
-When the escape closure applies the composable continuation,
-`applyComposableContinuation` calls `RestoreWithWindingFrom` which handles
-all dynamic-wind transitions (unwinding source frames, rewinding target
-frames). The escape closure's sub-context runs the restored frames to
-completion, executing any dynamic-wind thunks along the way.
-
-The abort to `DefaultPromptTag` then propagates to `RunWithEscapeHandling`,
-which does a final `RestoreWithWindingFrom` from the current winding state
-to the prompt's winding state (nil for the context-level prompt), unwinding
-any remaining frames.
+`ReinstallSegment` performs the *single* winding reconcile, calling
+`RestoreWithWindingFrom` with the `SourceWinding` carried on the resume signal:
+the winding live at the `(k v)` site, which may be a deeper sub-context than the
+driver's. That is what makes after thunks fire exactly once and makes a deeper
+sub-context's after thunks fire at all. Marks are installed before the reconcile,
+because before/after thunks are arbitrary Scheme that may read parameters.
 
 ### Thread and barrier checks
 
-Both checks happen at the point of escape closure invocation, before any
-continuation manipulation:
+Both checks happen in `applyCapturedContinuation` (and its composable twin
+`applyComposableContinuation`) at the point the continuation is invoked, before
+the resume signal is built and before any continuation manipulation:
 
 1. **Thread check**: Compares capture-time thread ID with invocation-time
    thread ID. Prevents cross-thread continuation invocation that would
@@ -68,30 +75,45 @@ continuation manipulation:
 
 ### Two execution modes in PrimCallCC
 
-**Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the
-current VM context via `mc.Apply()`. This preserves the full continuation
-chain, critical for cooperative coroutines and patterns that capture/invoke
-multiple continuations. PC is compensated for `OperationForeignFunctionCall`'s
-post-increment.
+The continuation is captured **once**, before the mode is chosen, and delimited
+at `FindPrompt(DefaultPromptTag)`, not unconditionally at the whole chain. At
+the top-level context boundary that lookup yields nil and the whole chain is
+sliced; inside a `call-with-continuation-prompt` reusing the default tag it
+yields that prompt's chain frame, so only the delimited segment is captured. The
+two modes then differ in one thing only: which context the lambda is applied in,
+i.e. driver provenance.
 
-**Sub-context mode** (`mc.Parent() == nil`): Falls back to an isolated
-sub-context when call/cc is inside a foreign function's sub-context. The
-escape closure's abort to `DefaultPromptTag` is caught directly by PrimCallCC
-(tag match → extract value → return nil), ensuring call/cc works in contexts
-without `RunWithEscapeHandling` (e.g., threads that call `Run()` directly).
+**Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the
+current VM context via `mc.ApplyCallable()`. This preserves the full continuation
+chain, critical for cooperative coroutines and patterns that capture/invoke
+multiple continuations. Resume is resolved by the ambient `DefaultPromptTag`
+driver already running above this frame. No PC compensation is needed:
+`applyForeign` does not post-increment `pc`.
+
+**Sub-context mode** (`mc.Parent() == nil`): call/cc is rootless (inside another
+foreign function's sub-context, or at a thread root), so there is no ambient
+driver. The lambda is applied in a fresh sub-context which then runs
+`RunWithEscapeHandling` (installing its own `DefaultPromptTag` and resolving
+this call/cc's resume signal) before its value(s) are delivered to `mc`. This
+ensures call/cc works in contexts that would otherwise call `Run()` directly.
+
+`PrimCallWithComposableContinuation` mirrors the same single-seam shape: capture,
+then select `mc` (proc runs in place, composing) or a fresh sub-context when
+rootless.
 
 ## Code Locations
 
 | Component | File |
 |-----------|------|
-| `PrimCallCC` | `registry/core/prim_control.go:140` |
-| `NewCapturedContinuation` | `machine/captured_continuation.go:39` |
-| `CapturedContinuation` | `machine/captured_continuation.go` |
-| `ComposableContinuation` | `machine/composable_continuation.go` |
+| `PrimCallCC` | `registry/core/prim_control.go` |
+| `NewCapturedContinuation`, `applyCapturedContinuation`, `CapturedContinuation` | `machine/captured_continuation.go` |
+| `ComposableContinuation`, `AcquireSegment` | `machine/composable_continuation.go` |
+| `ErrResumeContinuation`, `ErrPromptAbort` | `machine/prompt_abort.go` |
 | `BarrierToken` | `machine/barrier_token.go` |
-| `applyComposableContinuation` | `machine/machine_context_apply.go:403` |
-| `RunWithEscapeHandling` | `machine/machine_context.go:1278` |
-| `RestoreWithWindingFrom` | `machine/machine_context_winding.go:125` |
+| `ReinstallSegment`, `applyComposableContinuation` | `machine/machine_context_apply.go` |
+| `RunResumable`, `RunWithEscapeHandling`, `resolveAbort` | `machine/machine_context.go` |
+| `RestoreWithWindingFrom` | `machine/machine_context_winding.go` |
 
-For operational details (error propagation paths, RunWithEscapeHandling
-pseudocode, end-to-end examples), see [`prompt-abort.md`](prompt-abort.md).
+For operational details (error propagation paths, driver pseudocode, end-to-end
+examples), see [`prompt-abort.md`](prompt-abort.md). For the resume mechanism
+itself, see [`resume-trampoline.md`](resume-trampoline.md).

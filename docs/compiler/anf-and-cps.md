@@ -83,7 +83,7 @@ This is the simplest possible approach. No intermediate representation, no trans
 
 ### The benefits
 
-**Uniform call/cc handling.** In CPS, `call/cc` is trivial — it just captures the current continuation parameter and packages it as a value. In direct-style, `call/cc` requires special VM support (`SaveContinuation`, `MachineContinuation`, escape closures, prompt abort propagation). Wile has ~500 lines of continuation machinery.
+**Uniform call/cc handling.** In CPS, `call/cc` is trivial — it just captures the current continuation parameter and packages it as a value. In direct-style, `call/cc` requires special VM support (`SaveContinuation`, `MachineContinuation`, escape closures, prompt abort propagation). Wile carries roughly a thousand lines of continuation machinery across `machine_continuation.go`, `captured_continuation.go`, `composable_continuation.go`, and the winding files.
 
 But that machinery *already works*. It's been tested, debugged, and handles edge cases (cross-thread rejection, winding stack preservation, inline vs. sub-context modes). CPS would eliminate this machinery but replace it with closure-conversion complexity.
 
@@ -111,13 +111,13 @@ In practice, a CPS compiler spends significant effort *undoing* the CPS transfor
   (*/k x 2 k)))
 ```
 
-In Wile today, `let` expands to a lambda application — but the peephole optimizer can fuse the call sequence when the lambda is applied immediately. In CPS, you have *more* lambdas (every intermediate is one), and they all need the same fusion treatment. The optimizer would need to handle more patterns to achieve the same result as today's direct compilation.
+In Wile, `let` compiles to a frame push and slot stores with no lambda at all. In CPS, every intermediate becomes a lambda, and each one would need to be recognized and eliminated to get back to what core `let` already emits. The optimizer would have to handle more patterns to reach the same result as today's direct compilation.
 
 ### Who benefits from CPS?
 
 Compilers targeting native code: Gambit (compiles to C), Chicken (compiles to C), Chez Scheme (compiles to machine code). For them, CPS lambdas become jump labels, not heap objects. The overhead is in the compiler, not the runtime.
 
-## ANF: Closer to Home, But Still Overhead
+## ANF: Closer to Home
 
 ANF is the tempting choice because it's simpler than CPS and addresses a real issue: naming intermediate values enables analysis.
 
@@ -136,58 +136,13 @@ With an ANF pass before compilation:
 
 Now `t1` and `t2` are named. An optimization pass could check: is `t1` used once? Is `t2` a constant? Does this `+` always receive integers?
 
-### The problem: Wile's `let` is a lambda
+### The `let` cost objection, and why it no longer holds
 
-Here's the critical Wile-specific issue. In `bootstrap_macros.scm`:
+When this document was written, `let` was a macro expanding to `((lambda (name ...) body ...) val ...)`, so an ANF-introduced `let` binding cost a closure allocation plus a full call protocol: easily 10+ instructions and a heap-allocated environment frame, where direct compilation emitted four instructions and no allocation. That was the sharpest objection to ANF here: **ANF names intermediates by binding them in `let`, and Wile's `let` was expensive.**
 
-```scheme
-(define-syntax let
-  (syntax-rules ()
-    ((let ((name val) ...) body ...)
-     (with-binding-scope (name ...)
-       ((lambda (name ...) (begin body ...)) val ...)))))
-```
+That objection is retired. `let` is now a core compiled form (see [Core `let`](core-let.md)); `CompileValidatedLet` emits `OpPushEnv(n)`, one `StoreLocal` per binding, and (on a non-tail exit) `OpPopEnv`, with no closure and no template boundary. An ANF-introduced binding would cost a slot in a frame that the enclosing form is pushing anyway.
 
-`let` expands to `((lambda (name ...) body ...) val ...)`. That means an ANF-introduced `let` binding becomes a closure allocation + function call.
-
-For `(+ (car x) (* y 2))`, the ANF form compiles to something like:
-
-```
-;; For (let ((t1 (car x))) ...)
-SaveContinuation →after
-LoadLocal x / Push
-Car / Push                    ; t1's value
-MakeClosure [lambda(t1)...]   ; closure for the body
-Push
-PullApply
-after:
-;; ... body with t1 as a local variable ...
-```
-
-Compare that to what direct compilation produces:
-
-```
-LoadLocal x
-Push
-Car
-Push
-```
-
-The direct version is 4 instructions. The ANF version creates a closure, saves a continuation, applies the closure, and restores — easily 10+ instructions, plus a heap allocation for the closure's environment frame.
-
-This is the fundamental tension: **ANF names intermediates by binding them in `let`, but Wile's `let` is expensive.** A native-code compiler can optimize away the `let` binding into a register move. Wile's VM must create a local environment slot, which lives in a heap-allocated environment frame.
-
-### Could you fix this?
-
-Yes, in principle. You could:
-
-1. **Make `let` a core form** instead of a macro. Compile `let` bindings directly to `StoreLocal`/`LoadLocal` without lambda overhead. This would make ANF-introduced `let`s cheap.
-
-2. **Compile the ANF directly to stack operations**, bypassing the `let` → lambda expansion. The ANF would be a compiler-internal IR, not actual Scheme syntax.
-
-Either approach is a significant architectural change. Option 1 means `let` is no longer a derived form (violating the R7RS "library syntax" philosophy). Option 2 means building a second compilation path — one for the ANF IR, separate from the syntax-driven compilation.
-
-Both are doable. The question is whether the analysis opportunities justify the complexity.
+So the remaining question is not cost of representation but payoff of analysis, which is the subject of the next section.
 
 ### What analysis would ANF enable?
 
@@ -248,7 +203,7 @@ Direct style ──── ANF ──── CPS ──── SSA ──── Nat
 
 Each step right adds compilation complexity and enables more optimization. Each step is justified when the runtime savings exceed the compilation cost. For a Go-hosted bytecode interpreter with REPL latency requirements, Wile is at the right point on this spectrum.
 
-The interesting observation is that Wile's `ValidatedExpr` types already function as a lightweight IR — they guarantee syntactic correctness and enable dispatch by form type. They just don't name intermediate values. If Wile ever needed to move one step right on this spectrum, the path would be: extend `ValidatedExpr` with ANF-style intermediate naming, make `let` a core compiled form (not a macro), and add constant propagation. That's a meaningful project, but the motivation would need to come from profiling data, not from theory.
+The interesting observation is that Wile's `ValidatedExpr` types already function as a lightweight IR — they guarantee syntactic correctness and enable dispatch by form type. They just don't name intermediate values. The second step of the path one place right on this spectrum has since been taken: `let` is a core compiled form, and the compiler already synthesizes a `ValidatedLet` to inline a call. What remains is extending `ValidatedExpr` with ANF-style intermediate naming and adding constant propagation. That's a meaningful project, but the motivation would need to come from profiling data, not from theory.
 
 ## References
 

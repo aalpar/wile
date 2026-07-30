@@ -1479,3 +1479,8 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 
 - Update skills to explicitly state where wile-goast is a fit for refactoring.  Add guidance.
 - Add guidance to skills where Serena use makes sense.
+- Reader fixes
+    - BigInteger readers accept radix (eg, #z#x) tags
+    - Boxes can be read. #& prefix: Denotes a box value, where #&5 means a box containing the number 5
+    - Floats (including BigFloats): radix for floating point number reading set by radix tag (eg #d).  Exponent markers on read and output denote precision ( s: Short precision.f: Single precision.d: Double precision.l: Long precision.e: Default system precision.) - CLAUDE: verify against R7RS and/or R6RS
+

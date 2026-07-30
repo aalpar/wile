@@ -30,6 +30,10 @@ NativeTemplate.Optimize()
 │   └─ fuseCallGeneric         (SaveCont+PushLocal...PullApply → CallLocal)
 │   └─ plan3.Apply()
 │
+├─ Pass 4: EditPlan
+│   └─ fusePromotedCompoundArgs (tail promoted call whose args are calls;
+│   └─ plan4.Apply()             gated on a preceding OpReleaseEnvFrame)
+│
 └─ optimizeSubTemplates()      (recurse into lambda sub-templates in literals pool)
 ```
 
@@ -38,7 +42,8 @@ fixup is computed from the pre-compaction code, so edits from different
 passes cannot share a plan. Pass 2 depends on Pass 1's output
 (`PullApply` must exist before `fuseCallForeignCached` can match it).
 Pass 3 depends on Pass 2 having claimed all foreign-closure patterns
-first.
+first. Pass 4 picks up the tail calls Passes 2 and 3 could not claim
+because an argument was itself a call.
 
 ## Pass 1: Dead Code Elimination and Basic Fusion
 
@@ -182,6 +187,26 @@ Same non-tail and tail patterns as Pass 2, but without promoted
 specialization and without `ForeignClosure` type checking. Pass 3 only
 matches `PullApply` instructions not already claimed by Pass 2.
 
+## Pass 4: Promoted Tail Calls With Compound Arguments
+
+Pass 2's tail pattern requires every instruction between the callee push
+and `PullApply` to be push-family, so a promoted call whose arguments are
+themselves calls (fib's tail `(+ (fib ...) (fib ...))`) never matches.
+`fusePromotedCompoundArgs` walks the argument region with `walkCallArgs`
+instead, counts the arguments, and rewrites the tail `PullApply` to the
+promoted tail opcode when the count equals the promoted arity.
+
+The safety gate is a preceding `OpReleaseEnvFrame`: codegen emits it only
+where it has proved the env frame dead (no capture, no escaping closure,
+only capture-safe callees). Without that proof an argument may capture a
+continuation that re-enters needing the frame's locals, which the inline
+tail op cannot preserve: it pops the eval stack and returns, abandoning
+the frame. This is what separates fib's tail `+` (proof present)
+from a tail `cons` inside `map`, whose unknown callback may call `call/cc`
+(no proof); the latter stays on the generic apply path. Pass 4 is
+tail-only: the non-tail case would also need its outer
+`SaveContinuation` removed.
+
 ## The EditPlan Abstraction
 
 All three passes use `EditPlan` to accumulate edits and apply them
@@ -246,8 +271,8 @@ compacts the slice in place.
 
 ## Promoted Opcodes
 
-Sixteen primitives have dedicated opcodes inlined directly in the
-`Run()` switch loop. Each has a non-tail and tail variant (32 opcodes
+Eighteen primitives have dedicated opcodes inlined directly in the
+`Run()` switch loop. Each has a non-tail and tail variant (36 opcodes
 total):
 
 | Category | Primitives |
@@ -257,10 +282,13 @@ total):
 | Arithmetic | `+`, `-`, `*`, `/` |
 | Comparison | `<`, `<=`, `>`, `>=`, `=` |
 | Constructor | `cons` |
+| Mutator | `set-cdr!` |
 
-The `promotedOpForName` function maps primitive names to their opcode
-pairs and expected arity. Pass 2 checks this mapping when fusing foreign
-call sequences.
+Each is one `promotedOp` descriptor (name, arity, opcode pair, inline Go
+implementation), and the `promotedOps` list of descriptors is what makes
+the optimizer aware of it. `promotedOpForName` indexes that list by
+Scheme name. Passes 2 and 4 check this mapping when fusing foreign call
+sequences.
 
 ### Runtime Fallback
 
@@ -384,8 +412,8 @@ lambda bodies). Non-template literals are skipped.
 | `applyForeign` (unfused runtime) | `machine/machine_context_apply.go` |
 | `promotedOpForName` mapping | `machine/call_promoted.go` |
 | Peephole tests | `machine/peephole_test.go` |
-| Opcode fusion integration tests | `opcode_fusion_test.go` |
-| call/cc regression tests | `callcc_engine_test.go` |
+| Opcode fusion integration tests | `wile/opcode_fusion_test.go` |
+| call/cc regression tests | `wile/callcc_engine_test.go` |
 
 ## References
 

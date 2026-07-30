@@ -97,7 +97,8 @@ continuation primitives follow Flatt et al. (2007).
 | `continuation-prompt-tag?` | `registry/core/prim_prompt.go` |
 | `continuation?` | `registry/core/prim_cont_marks.go` |
 | `call-with-exit` (≈ `call/ec`) | `registry/core/prim_exit.go` |
-| `with-continuation-barrier` | Derived form |
+| `call-with-continuation-barrier` | `registry/core/prim_barrier.go` |
+| `with-continuation-barrier` | Macro over the above, `registry/core/bootstrap_macros.scm` |
 
 **Added in PR #547:**
 
@@ -118,7 +119,11 @@ continuation primitives follow Flatt et al. (2007).
 All of the named operators from `racket/control` — `shift`/`reset`,
 `prompt`/`control`, `shift0`/`reset0`, `prompt0`/`control0`, `spawn`,
 `set`/`cupto`, and their tagged variants — are *derived* from the three
-core primitives Wile already has. No Go code needed:
+core primitives Wile already has. No Go code needed. The two sketches below are
+simplified for exposition; the shipped definitions live in
+`pkg/stdlib/lib/wile/control.scm`, where `reset-at` routes through a
+`%prompt-reinstall` helper (so the prompt is reinstalled after each abort) and
+`shift-at` wraps `k` so invoking it re-delimits its result:
 
 ```scheme
 ;; reset installs a prompt with the default tag
@@ -324,8 +329,6 @@ compile-time binding manipulation is where gaps remain.
 |-----------|----------|----------|
 | `syntax-local-value` | Compile-time lookup | `extensions/eval/prim_eval.go` |
 | `make-compile-time-value` | Compile-time values | `extensions/eval/prim_eval.go` |
-| `syntax-local-introduce` | Scope manipulation | `extensions/eval/prim_eval.go` |
-| `syntax-local-identifier-as-binding` | Binding preparation | `extensions/eval/prim_eval.go` |
 | `bound-identifier=?` | Scope comparison | `registry/core/syntax.go` |
 | `free-identifier=?` | Binding comparison | `registry/core/syntax.go` |
 | `identifier?` | Predicate | `registry/core/syntax.go` |
@@ -336,12 +339,21 @@ compile-time binding manipulation is where gaps remain.
 | `environment` | Create env from library specs | `extensions/eval/prim_eval.go` |
 | `interaction-environment` | REPL env | Introspection extension |
 | `environment?` / `environment-bound-names` / `environment-ref` / `environment-bound?` | Env introspection | Introspection extension |
+| `namespace?` / `namespace-name` / `make-namespace` / `namespace-derive` / `namespace-define!` / `namespace-ref` / `namespace-bound?` / `namespace-undefine!` / `namespace-bound-names` / `namespace-require` | First-class namespaces | `internal/extensions/namespace/prim_namespace.go` |
 
 **Added in PR #547 (compile-time):**
 
 | Primitive | Location |
 |-----------|----------|
 | `syntax-local-value/immediate` | `extensions/eval/prim_eval.go` — identical to `syntax-local-value` (no rename-transformers yet) |
+
+**Registered but non-functional** (callable, so a program gets a diagnosis rather
+than an unbound-variable error, but neither does its job today):
+
+| Primitive | Location | Actual behavior |
+|-----------|----------|-----------------|
+| `syntax-local-introduce` | `extensions/eval/prim_eval.go` (`PrimSyntaxLocalIntroduce`) | Always raises `werr.ErrNotImplemented`. Nothing in production calls `ExpanderContext.SetIntroductionScope`, and there is no single scope to store: each of the three transformer entry points mints its own intro scope per invocation. |
+| `syntax-local-identifier-as-binding` | `extensions/eval/prim_eval.go` (`PrimSyntaxLocalIdentifierAsBinding`) | Returns its argument unchanged. `ExpanderContext.SetUseSiteScope` is likewise never called, so `UseSiteScope()` is always nil. |
 
 **Could add at zero cost (compile-time only):**
 
@@ -355,7 +367,7 @@ compile-time binding manipulation is where gaps remain.
 **Added in PR #547 (syntax accessors):**
 
 Source location data already exists on every syntax object via `SourceContext`
-(`internal/syntax/source_context.go`). These are now exposed as primitives
+(`syntax/source_context.go`). These are now exposed as primitives
 in `registry/core/prim_syntax_loc.go`:
 
 | Primitive | Maps to |
@@ -528,11 +540,8 @@ Wile has a two-phase system (0 = runtime, 1 = compile-time via `define-for-synta
 `begin-for-syntax`). It does not have Racket's arbitrary integer phase levels, nor
 does it enforce strict phase separation — phase-1 code can reference phase-0 bindings.
 
-**Already implemented:**
-
-| Primitive | Location |
-|-----------|----------|
-| `syntax-local-introduce` | `extensions/eval/prim_eval.go` |
+**Already implemented:** none. `syntax-local-introduce` is registered but always
+raises `werr.ErrNotImplemented` (see §3).
 
 **Could add at zero cost (compile-time only):**
 
@@ -628,7 +637,7 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 | What | Status | Location |
 |------|--------|----------|
 | `call/ec` / `call-with-escape-continuation` | ✅ Done | `(wile control)` — alias for `call-with-exit` |
-| `shift` / `reset` and all `racket/control` operators | ✅ Done | `(wile control)` — 24 operators + tagged variants |
+| `shift` / `reset` and all `racket/control` operators | ✅ Done | `(wile control)` — 27 exported bindings, tagged variants included |
 | `continuation-prompt-available?` | ✅ Done | `registry/core/prim_prompt.go` |
 | `continuation-mark-set->list*` | ✅ Done | `registry/core/prim_cont_marks.go` |
 | `continuation-mark-set->iterator` | ✅ Done | `(wile control)` — Scheme closure over `->list*` |
@@ -741,18 +750,31 @@ And the alias `new-prompt` for `make-continuation-prompt-tag`.
 
 #### Namespaces — runtime bindings (§14.1)
 
+A first-class Scheme environment in Wile *is* an `environment.Namespace`, so the
+`environment-*` and `namespace-*` families operate on the same objects
+(`(environment? (make-namespace))` and `(namespace? (environment '(scheme base)))`
+are both `#t`). The `namespace-*` primitives are registered by
+`pkg/internal/extensions/namespace`.
+
 | Primitive | Purpose | Wile |
 |-----------|---------|------|
-| `make-empty-namespace` | Empty namespace (only `#%kernel`) | No |
-| `make-base-namespace` | Namespace with `racket/base` bindings | No |
-| `namespace?` | Predicate | `environment?` |
+| `make-empty-namespace` | Empty namespace (only `#%kernel`) | `make-namespace` |
+| `make-base-namespace` | Namespace with `racket/base` bindings | `(environment '(scheme base))` |
+| `namespace?` | Predicate | Yes (also `environment?`) |
 | `current-namespace` | Parameter: current namespace | No |
-| `namespace-require` | Import module bindings into namespace | No |
-| `namespace-variable-value` | Read a variable's value by symbol | `environment-ref` |
-| `namespace-set-variable-value!` | Set a variable's value by symbol | No |
-| `namespace-mapped-symbols` | List all bound symbols | `environment-bound-names` |
+| `namespace-require` | Import module bindings into namespace | Yes — `(namespace-require ns '(scheme base))` |
+| `namespace-variable-value` | Read a variable's value by symbol | `namespace-ref` / `environment-ref` |
+| `namespace-set-variable-value!` | Set a variable's value by symbol | `namespace-define!` |
+| `namespace-mapped-symbols` | List all bound symbols | `namespace-bound-names` / `environment-bound-names` |
+| — | Derive a child namespace | `namespace-derive` |
+| — | Remove a binding | `namespace-undefine!` |
+| — | Test a binding | `namespace-bound?` / `environment-bound?` |
 | `eval` | Evaluate in namespace | Yes |
 | `environment` | Create environment from library specs | Yes |
+
+Not shipped: a `current-namespace` parameter, namespace anchors, and module
+attachment (`Namespace.AttachModule` exists in Go but is not exposed to Scheme
+and has no non-test caller).
 
 #### Compile-time bindings (§12.4)
 
@@ -807,8 +829,8 @@ And the alias `new-prompt` for `make-continuation-prompt-tag`.
 |-----------|---------|------|
 | `syntax-local-phase-level` | Current phase level (integer) | No (Tier 2, trivial) |
 | `syntax-local-context` | Expansion context | No (Tier 2, low effort) |
-| `syntax-local-introduce` | Flip macro-introduction scope on syntax | Yes |
-| `syntax-local-identifier-as-binding` | Prepare identifier for use as binding | Yes |
+| `syntax-local-introduce` | Flip macro-introduction scope on syntax | Registered, raises `ErrNotImplemented` |
+| `syntax-local-identifier-as-binding` | Prepare identifier for use as binding | Registered, identity no-op |
 | `syntax-local-name` | Inferred name for current expression position | No (Tier 2, low effort) |
 | `syntax-local-transforming?` / `syntax-transforming?` | Are we inside a syntax transformer? | No (Tier 2, trivial) |
 

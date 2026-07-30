@@ -25,7 +25,7 @@ The R7RS canonical definitions are macro-level, each expanding to `lambda` or re
 
 **Wile Implementation:**
 
-All four binding forms are **core compiled**: the expander / validator / compiler pipeline handles them directly as recognized syntactic forms. They are not macros defined in `bootstrap_macros.scm`. See the comment at `registry/core/bootstrap_macros.scm:44-46`:
+All four binding forms are **core compiled**: the expander / validator / compiler pipeline handles them directly as recognized syntactic forms. They are not macros defined in `bootstrap_macros.scm`. See the comment there that stands where the binding forms used to be defined:
 
 > Binding forms (let, let*, letrec, letrec*) are now core compiled forms,
 > handled directly by the expander/validator/compiler pipeline.
@@ -40,7 +40,7 @@ Treating them as core forms eliminates an entire layer of macro expansion and le
 
 - `let` — parallel binding; inits evaluated in an outer scope, then `OpPushEnv` allocates the frame and `StoreLocal` stores each value into the body scope.
 - `let*` — sequential binding; `OpPushEnv` first, then each init is compiled followed by its `StoreLocal`, so each later init sees the prior vars.
-- `letrec` / `letrec*` — `OpPushEnv` first so all slots exist before any init is evaluated; inits are then compiled in definition order, each followed by a `StoreLocal` into its slot. The ordered stores satisfy R7RS §4.2.2 for `letrec*` (strict left-to-right) and the weaker R7RS guarantee for `letrec`. See the comment summary at `machine/compilation/compile_let.go:33-37` for the opcode sequence per form.
+- `letrec` / `letrec*` — `OpPushEnv` first so all slots exist before any init is evaluated. `letrec*` then compiles each init followed immediately by its `StoreLocal`, satisfying R7RS §4.2.2's strict left-to-right requirement; `letrec` compiles all inits onto the stack first and stores them in reverse, which meets the weaker R7RS guarantee. See the comment summary on `CompileValidatedLet` (`machine/compilation/compile_let.go`) for the opcode sequence per form.
 
 **Reference:** R7RS §4.2.2 (Binding constructs), `docs/compiler/core-let.md`.
 
@@ -48,16 +48,16 @@ Treating them as core forms eliminates an entire layer of macro expansion and le
 
 ## Derived Forms Still Implemented as Macros
 
-Not every R7RS derived form is core-compiled. The following remain `define-syntax` entries in `registry/core/bootstrap_macros.scm`, faithful to the R7RS §7.3 reference implementations except where noted:
+Not every R7RS derived form is core-compiled. The following remain `define-syntax` entries in `registry/core/bootstrap_macros.scm`, faithful to the R7RS §7.3 reference implementations except where noted. A macro whose template references a bootstrap *procedure* rather than a Go primitive lives instead in `registry/core/bootstrap_macros_late.scm`, which loads after `bootstrap_procedures.scm` so that free identifier pins to the sealed base at macro-definition time (R7RS §4.3.2).
 
 | Form | Notes |
 |------|-------|
 | `and` / `or` | Standard short-circuit expansion to `if`. |
 | `cond`, `case` | Standard expansion with `else` / `=>` auxiliary syntax. |
-| `when`, `unless` | One-armed conditionals. |
-| `delay`, `delay-force`, `force`, `make-promise` | Lazy promises via `%make-lazy-promise`. |
+| `when`, `unless` | One-armed conditionals. `unless` is in the late file. |
+| `delay`, `delay-force` | Lazy promises via `%make-lazy-promise`. `force` and `make-promise` are Go primitives, not macros. |
 | `parameterize` | Uses `with-continuation-mark` rather than `dynamic-wind` — see [`r7rs-differences.md`](r7rs-differences.md) § "Parameterize Implementation". |
-| `guard`, `guard-aux` | Uses `call-with-values` so the body can return multiple values — see [`r7rs-differences.md`](r7rs-differences.md) § "Guard Body Multiple Values". |
+| `guard`, `guard-aux` | In the late file. Uses `call-with-values` so the body can return multiple values — see [`r7rs-differences.md`](r7rs-differences.md) § "Guard Body Multiple Values". |
 | `define-record-type` | SRFI-9 records via `make-record-type` helpers. |
 | `define-opaque-record-type` | Wile extension: hidden from `record?`. |
 | `let-values`, `let*-values`, `define-values` | Multiple-value binding (proper / dotted / rest patterns). |

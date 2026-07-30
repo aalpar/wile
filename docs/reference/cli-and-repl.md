@@ -13,7 +13,8 @@ wile [options] [file...]
 
 With no arguments, `wile` enters the interactive REPL. Positional arguments
 are treated as Scheme files to load before evaluation begins. Files can also
-be passed via `-f`/`--file`.
+be passed via `-f`/`--file`. A bare `-` names standard input, positionally or
+as `--file -`.
 
 ### Options
 
@@ -29,6 +30,11 @@ be passed via `-f`/`--file`.
 |       | `--mcp-timeout`  | float      | Default eval timeout in seconds for MCP mode (default: 30) |
 |       | `--cpuprofile`   | string     | Write CPU profile to file |
 |       | `--memprofile`   | string     | Write memory profile to file |
+|       | `--mutexprofile` | string     | Write mutex contention profile to file |
+|       | `--blockprofile` | string     | Write goroutine blocking profile to file |
+|       | `--cover`        | string     | Write Scheme-level coverage report to file (Go cover format) |
+|       | `--cover-stdlib` | bool       | Include stdlib files in `--cover` output (default excludes `scheme/`, `wile/`, `srfi/`) |
+|       | `--cover-summary`| string     | Write human-readable coverage summary to file |
 
 `--` terminates flag parsing; everything after is a positional argument.
 

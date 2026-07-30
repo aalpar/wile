@@ -76,7 +76,8 @@ If `wile` is not on `$PATH`, use the full path to the binary.
 
 Evaluate one or more Scheme expressions in a persistent session. Definitions,
 imports, and state carry forward across calls. Forward references between
-definitions within a single call work (code is wrapped in `(begin ...)`).
+definitions within a single call work: the tool routes through
+`Engine.EvalProgram`, which splices every top-level form into one `(begin ...)`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -98,12 +99,13 @@ Show documentation for a Scheme binding or library.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | yes | Binding name (e.g. `car`) or library name (e.g. `(scheme base)`) |
+| `examples` | boolean | no | Include usage examples in the output (default `false`) |
 
 Returns signature, description, parameter types, category, and source.
 
 ### `apropos`
 
-Search Scheme bindings by name, documentation text, or category.
+Search Scheme bindings by name, documentation text, category, or keywords.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -123,7 +125,9 @@ List all bindings in a documentation category.
 
 ### `libraries`
 
-List all Scheme libraries currently loaded in the session. No parameters.
+List the libraries currently loaded in the session, then the libraries
+discoverable but not yet imported, each sorted alphabetically with its
+description. No parameters.
 
 ### `disassemble`
 
@@ -178,8 +182,9 @@ count fields are omitted.
 
 ### `wile://libraries`
 
-All Scheme libraries available in the session. Initializes the engine on first
-access. Returns a JSON array:
+The libraries currently loaded in the session. Unlike the `libraries` tool, this
+resource omits the discoverable-but-not-yet-imported ones. Initializes the
+engine on first access. Returns a JSON array:
 
 ```json
 [
@@ -225,7 +230,8 @@ what the AI assistant should accomplish.
 
 ## Engine configuration
 
-The MCP server creates an engine equivalent to the CLI:
+The MCP server creates an engine equivalent to the CLI's, plus a mutable top
+level:
 
 ```go
 wile.NewEngine(ctx,
@@ -233,7 +239,11 @@ wile.NewEngine(ctx,
     wile.WithSourceFS(stdlib.FS),
     wile.WithSourceOS(),
     wile.WithLibraryPaths(...),
+    wile.WithMutableTopLevel(),
 )
 ```
 
 This means all R7RS libraries and wile extensions are available via `(import ...)`.
+`WithMutableTopLevel` opts out of the engine-wide immutable-top-level default:
+redefining a binding across `eval` calls is a primary workflow here, as in the
+REPL. It costs the frame-reclamation optimizer's top-level payoff.

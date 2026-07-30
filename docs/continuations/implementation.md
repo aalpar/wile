@@ -36,10 +36,11 @@ type vmState struct {
     callDepth    int
     envPooled    bool
     marks        []markEntry
+    barrierValid *BarrierToken
 }
 ```
 
-`singleValue` and `multiValues` form a split value register (single-value fast path plus R7RS `values` slow path); `envPooled` is a release flag for the environment-frame pool; `marks` carries continuation-mark entries (see [`marks.md`](marks.md)).
+`singleValue` and `multiValues` form a split value register (single-value fast path plus R7RS `values` slow path); `envPooled` is a release flag for the environment-frame pool; `marks` carries continuation-mark entries (see [`marks.md`](marks.md)); `barrierValid` rides `vmState` rather than the live context so a captured continuation carries the `with-continuation-barrier` it was captured under.
 
 This is everything the VM needs to resume execution from a given point: which function it's in (`template`), where in that function (`pc`), what variables are in scope (`env`), what intermediate values are on the eval stack (`evals`), and what dynamic-wind extent is active (`windingStack`).
 
@@ -55,6 +56,10 @@ type MachineContinuation struct {
     parent        *MachineContinuation
     promptHandler Closure
     shared        bool
+    // Inline eval storage: evals == nil ⟺ the saved values live in
+    // inlineEvals[0:inlineEvalsLen].
+    inlineEvalsLen uint8
+    inlineEvals    [inlineEvalsCap]values.Value
 }
 ```
 
@@ -84,7 +89,7 @@ The VM loop (`MachineContext.Run`) steps through instructions. Two opcodes manag
 
 When the compiler encounters a non-tail call like `(f (+ 1 2))`, it emits `OpSaveContinuation` before the call and expects `OpRestoreContinuation` after the callee finishes.
 
-**OpSaveContinuation**: Takes the current `vmState` — the program counter, environment, eval stack, everything — packages it into a new `MachineContinuation`, and pushes it onto the chain. The offset argument tells it where to resume: "when this frame is restored, set `pc` to here."
+**OpSaveContinuation**: Takes the current `vmState` — the program counter, environment, eval stack, everything — packages it into a new `MachineContinuation`, and pushes it onto the chain. The offset argument tells it where to resume: "when this frame is restored, set `pc` to here." Shallow eval stacks (depth ≤ `inlineEvalsCap`) are copied into the frame's inline slots and the live `Stack` is cleared and reused instead of handed over; only deeper stacks are transferred wholesale.
 
 ```
 before SaveContinuation:              after SaveContinuation:
@@ -145,10 +150,10 @@ The semantic model still follows Racket's unification: `call/cc` is composable-c
 
 — but read this as the *meaning*, not the runtime path. The implementation reinstalls the captured segment directly via `ReinstallSegment` (with `boundary == nil`, the abortive "replace the whole chain" case) rather than literally raising an abort after running it.
 
-**3. Two execution modes.** `PrimCallCC` has a critical branch on `mc.Parent() != nil`:
+**3. One apply seam, two targets.** The capture above is unconditional; the only per-mode difference is which context applies the lambda, so `PrimCallCC` selects a *target* and then calls `target.ApplyCallable(mcls, capt)` once. The selector is `mc.Parent()`, which returns the continuation chain pointer `mc.cont` (*not* a parent context):
 
-- **Inline mode** (`mc.Parent() != nil`): The lambda runs directly in the current VM context via `mc.ApplyCallable()`. This preserves the full continuation chain — crucial for coroutines where multiple continuations interact with the same call stack.
-- **Sub-context mode** (`mc.Parent() == nil`): The lambda runs in an isolated sub-context. Used when `call/cc` is itself inside a foreign function's sub-context (e.g., inside `apply`).
+- **Inline** (`mc.Parent() != nil`): a live continuation chain exists above this frame, so the lambda runs directly in the current VM context. This preserves the full chain, which is what coroutines need when multiple continuations interact with the same call stack. The escape propagates through the VM to the ambient driver.
+- **Rootless** (`mc.Parent() == nil`): `call/cc` sits inside another foreign function's sub-context or at a thread root, with no chain above it. A fresh sub-context becomes the target and *is* the implicit `call-with-continuation-prompt` for this capture: it owns a `DefaultPromptTag` driver (`RunWithEscapeHandling`), and its result is copied back into `mc`.
 
 ## The Escape Path: Two Control Signals, One Driver
 
@@ -192,9 +197,9 @@ So `call/cc` is still *unified* with delimited continuations — both resume thr
 
 ### Shared Frames and the Copy Problem
 
-When `call/cc` captures a continuation, it calls `SliceContinuationAt` which deep-copies every frame via `Copy()` per frame. The copy is what gets stored in the `ComposableContinuation` — the live chain is not marked or mutated by `call/cc` directly.
+When `call/cc` captures a continuation, it calls `SliceContinuationAt`, which copies every frame down to the prompt via `Copy()` per frame. The copy is what gets stored in the `ComposableContinuation`. But `Copy()` shares each frame's `env` pointer, so the captured segment aliases the *live* chain's activation frames, which is why `SliceContinuationAt` also calls `p.cont.MarkChainShared()` on the live source chain. Without that, a later normal return through one of those frames would pool an environment the captured segment still needs.
 
-`MarkChainShared()` is called by `CurrentContinuation()` and by `ComposableContinuation.AcquireSegment()`, not by `call/cc`. It sets `shared = true` on every frame in the live chain when those paths are used.
+`MarkChainShared()` sets `shared = true` on every frame from a given frame to the root, early-exiting at the first already-shared frame. It is reached from `SliceContinuationAt` (so from `call/cc`), from `CurrentContinuation()`, and from `ComposableContinuation.AcquireSegment()`.
 
 Normally, when a function returns, `RestoreAndRelease` destructively transfers the frame's eval stack to the VM and pools the frame for reuse. But if a frame has been marked shared, it might be re-invoked later. Destroying the eval stack would corrupt the captured continuation.
 
@@ -214,7 +219,7 @@ This happens transparently whenever a continuation crosses a dynamic-wind bounda
 Foreign functions (Go primitives) that need to call Scheme closures create sub-contexts via `NewSubContext()`. Sub-contexts have their own call stacks (`cont = nil`) but share the global environment. This matters for continuations because:
 
 - A continuation captured in a sub-context only captures frames up to the sub-context boundary — not the parent's frames.
-- The `parentMC` pointer lets `call/cc` detect whether inline mode is safe.
+- `mc.Parent()` (the chain pointer) is what tells `call/cc` whether to apply inline or in a fresh sub-context; `parentMC` is the separate context link, used for mark and stack-trace walks across the boundary.
 - Cross-context continuation jumps are mediated by control signals (`ErrResumeContinuation` for a `call/cc` resume, `ErrPromptAbort` for a value-delivery abort), not by direct frame manipulation.
 
 ## Seeing It In Action
@@ -233,8 +238,8 @@ Here's what happens inside the VM:
 
 1. `(+ 1 ...)` compiles to: push `1`, then evaluate the `call/cc` expression, then apply `+`.
 2. Before the `call/cc` call, `SaveContinuation` saves a frame: "resume at the `+` application, with `1` on the eval stack."
-3. `PrimCallCC` fires. It deep-copies the continuation chain (which includes the frame from step 2). It builds an escape closure wrapping this copy.
-4. The lambda `(lambda (k) (set! saved k) 10)` runs. It stashes `k` (the escape closure) in `saved` and returns `10`.
+3. `PrimCallCC` fires. `SliceContinuationAt` copies the continuation chain (which includes the frame from step 2) and marks the live chain shared. It wraps the copy in a `ComposableContinuation`, then in a `CapturedContinuation` value.
+4. The lambda `(lambda (k) (set! saved k) 10)` runs. It stashes `k` (the `CapturedContinuation`) in `saved` and returns `10`.
 5. `10` flows back through `RestoreContinuation`, the saved frame is popped, `(+ 1 10)` evaluates to `11`.
 6. Later, `(saved 42)` invokes the continuation with `42`. Rather than running the captured chain on the spot, it returns it *unrun* as an `ErrResumeContinuation` control signal. The nearest `DefaultPromptTag` driver (`RunResumable`) catches the signal, grafts the captured chain onto its own live continuation, puts `42` in the value register, and keeps looping — resuming at the `+` application with `1` on the eval stack. `(+ 1 42)` evaluates to `43`, which is returned.
 

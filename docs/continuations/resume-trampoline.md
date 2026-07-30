@@ -79,7 +79,7 @@ does **not** run the segment. It packages the segment, the values, and a snapsho
 of the current dynamic-wind state into a control signal and *returns* it:
 
 ```go
-// pkg/machine/captured_continuation.go:132
+// applyCapturedContinuation, pkg/machine/captured_continuation.go
 return p, &ErrResumeContinuation{
     Tag:           DefaultPromptTag,
     Segment:       capt.cc,            // carried UNRUN
@@ -88,19 +88,19 @@ return p, &ErrResumeContinuation{
 }
 ```
 
-`ErrResumeContinuation` (`pkg/machine/prompt_abort.go:55`) implements Go's
+`ErrResumeContinuation` (`pkg/machine/prompt_abort.go`) implements Go's
 `error` interface. That is the clever part: by being an error, it rides the VM's
 existing `return err` plumbing all the way up — through however many nested Go
 frames happen to be on the stack — to the **one** loop that knows how to deal
 with it. No special unwinding path. `errors.As` finds it whether it's bare or
 wrapped inside other errors.
 
-That one loop is `RunResumable` (`pkg/machine/machine_context.go:1417`), the
+That one loop is `RunResumable` (`pkg/machine/machine_context.go`), the
 single driver under the default prompt. It catches the signal, reinstalls the
 segment onto *its own* live chain, and loops:
 
 ```go
-// pkg/machine/machine_context.go:1505 (condensed)
+// RunResumable's resume arm, pkg/machine/machine_context.go (condensed)
 var resumeErr *ErrResumeContinuation
 if errors.As(err, &resumeErr) {
     boundary, _ := p.FindPrompt(resumeErr.Tag)
@@ -137,7 +137,7 @@ frames no matter how many times you resume**. `ctak` now bounces off
 
 A single resume is four moves. Let's name the pieces, then walk them.
 
-The actor is `ReinstallSegment` (`pkg/machine/machine_context_apply.go:505`).
+The actor is `ReinstallSegment` (`pkg/machine/machine_context_apply.go`).
 It is the *one* resume primitive — both the abortive `call/cc` resume and
 composable-continuation resume route through it. Its signature:
 
@@ -157,7 +157,7 @@ load-bearing: dynamic-wind before/after thunks are arbitrary Scheme that may
 read parameters, so the marks must already be in place when they run.
 
 **Move 2 — acquire the segment.** `comp.AcquireSegment()`
-(`pkg/machine/composable_continuation.go:104`) decides one-shot vs. multi-shot.
+(`pkg/machine/composable_continuation.go`) decides one-shot vs. multi-shot.
 On the *first* invocation it returns the original frames and marks the chain
 shared. On *re-invocation* it deep-copies, so a second resume of the same
 continuation gets independent frames. (This is what makes the multi-shot
@@ -170,7 +170,7 @@ which is why escaping out of a `dynamic-wind` now fires its after-thunk exactly
 once.
 
 **Move 4 — graft and restore.** `GraftContinuation`
-(`pkg/machine/machine_context_continuation.go:292`) walks to the bottom frame of
+(`pkg/machine/machine_context_continuation.go`) walks to the bottom frame of
 the segment and points its parent at `boundary`, splicing the segment onto the
 live chain. Then `p.Restore(segment)` makes that the current state and
 `SetValues(vals...)` drops the resume values into the value register. The driver
@@ -240,10 +240,9 @@ escalated.
 
 How do you tell those two apart? They look identical at the frame: a value shows
 up. The answer is a counter. `ReinstallSegment` bumps
-`p.resumeGeneration` on *every* reinstatement
-(`machine_context_apply.go:517`). The finalizer snapshots the counter when it
-arms (`armGen`), and compares at fire time
-(`pkg/machine/exception_raise.go:134`):
+`p.resumeGeneration` on *every* reinstatement (`ReinstallSegment`,
+`pkg/machine/machine_context_apply.go`). The finalizer snapshots the counter
+when it arms (`armGen`), and compares at fire time (`pkg/machine/exception_raise.go`):
 
 ```go
 armGen := mc.resumeGeneration

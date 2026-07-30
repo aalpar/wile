@@ -85,8 +85,7 @@ A complete reference for Wile's Scheme language, covering lexical syntax, data t
 **Arbitrary precision** (Wile extension):
 
 ```scheme
-#z12345678901234567890         ; BigInteger (exact)
-#z#xff00ff00ff00ff00ff00       ; BigInteger hex
+#z12345678901234567890         ; BigInteger (exact, always decimal)
 #m3.14159265358979323846       ; BigFloat (inexact, 256-bit)
 ```
 
@@ -187,13 +186,6 @@ Vertical-bar syntax allows arbitrary characters in symbol names:
 `#(a ,(+ 1 2))               ; → #(a 3)  (vector quasiquote)
 ```
 
-### Special Constants
-
-```scheme
-#!void                  ; void value
-#!eof                   ; end-of-file object
-```
-
 ### Reader Directives
 
 ```scheme
@@ -201,6 +193,11 @@ Vertical-bar syntax allows arbitrary characters in symbol names:
 #!no-fold-case          ; restore case sensitivity (default)
 #!r7rs                  ; R7RS mode marker (accepted, no effect)
 ```
+
+Every `#!<name>` token is read as a directive and discarded, so an unrecognized
+one contributes no datum rather than raising. There is no `#!void` or `#!eof`
+read syntax: the void value comes from `(if #f #f)` and the end-of-file object
+from `(eof-object)`.
 
 ### Datum Labels
 
@@ -210,6 +207,9 @@ Datum labels allow shared and circular structure in read syntax:
 #0=(a b . #0#)          ; circular list
 (#1="hello" #1#)        ; shared structure
 ```
+
+Circular labels are a reader feature: `read` returns the cyclic structure, but a
+cyclic `quote` literal in a program is rejected at compile time.
 
 ---
 
@@ -246,6 +246,7 @@ Scheme numbers form a tower: integer < rational < real < complex. Wile maps this
 | Float | `real?` | inexact | Go `float64` |
 | BigFloat | `real?` | inexact | `math/big.Float` (256-bit) |
 | Complex | `complex?` | inexact | Go `complex128` |
+| BigComplex | `complex?` | exact if both parts are | `math/big` parts (`3+4i` is exact) |
 
 **Key rules**:
 
@@ -299,7 +300,7 @@ User-defined record types via `define-record-type`:
 
 ### Void
 
-`#!void` — returned by side-effecting operations like `set!`, `display`, `vector-set!`. Not a "false" value — only `#f` is false in conditionals.
+The void value, written `#<void>` and tested by `void?`, is returned by side-effecting operations like `set!`, `display`, `vector-set!`. Not a "false" value — only `#f` is false in conditionals.
 
 ---
 
@@ -314,7 +315,7 @@ Special forms are handled at compile time. They cannot be passed as values or ap
 (if <test> <consequent> <alternate>)
 ```
 
-Only `#f` is false. Everything else — including `0`, `""`, `'()`, and `#!void` — is true.
+Only `#f` is false. Everything else — including `0`, `""`, `'()`, and the void value — is true.
 
 ### `lambda` — Procedure Creation
 
@@ -362,7 +363,7 @@ Dispatches on argument count. First matching clause wins.
 (set! <variable> <expression>)
 ```
 
-Mutates an existing binding. The variable must already be defined.
+Mutates an existing binding. The variable must already be defined. Top-level definitions are immutable by default, so a top-level `set!` raises unless the engine was built with `WithMutableTopLevel()`; see [`r7rs-differences.md`](r7rs-differences.md).
 
 ### `quote` — Literal Data
 
@@ -516,6 +517,7 @@ Compile-time conditional. Feature requirements:
 
 ```scheme
 (define-library (<name> ...)
+  (description <string>)                     ; Wile extension
   (export <export-spec> ...)
   (import <import-set> ...)
   (begin <body> ...)
@@ -558,6 +560,14 @@ Calls `before` on entry, `thunk` for the body, `after` on exit. The before/after
   ...)
 ```
 
+### `with-continuation-mark` (Wile Extension)
+
+```scheme
+(with-continuation-mark <key> <value> <body>)
+```
+
+Evaluates `body` with `value` marked under `key` on the current continuation frame, where the procedures under [Continuation Marks](#continuation-marks) can read it back.
+
 ### Phase Control (Wile Extension)
 
 ```scheme
@@ -578,7 +588,7 @@ Signals a compile-time error. Useful in macro templates for invalid pattern matc
 
 ## Derived Forms
 
-These are implemented as macros in the bootstrap environment. They expand to core special forms.
+These are defined in the bootstrap environment rather than the compiler: macros expanding to core special forms, except `map` and `for-each`, which are Scheme procedures.
 
 ### `and` / `or`
 
@@ -711,7 +721,8 @@ Promises support proper tail recursion via `delay-force`:
 
 ```scheme
 (guard (exn
-        ((string? exn) (string-append "caught: " exn))
+        ((error-object? exn)
+         (string-append "caught: " (error-object-message exn)))
         (else "unknown error"))
   (error "something went wrong"))
 ; → "caught: something went wrong"
@@ -726,12 +737,12 @@ Wile extension: `guard` correctly propagates multiple values from the body (R7RS
 (for-each <procedure> <list> ...)
 ```
 
-These are implemented as Scheme macros (not Go primitives) so that continuations captured inside the procedure body work correctly.
+These are `case-lambda` procedures written in Scheme (not Go primitives) so that continuations captured inside the procedure body work correctly. Both loops are tail-recursive, so neither has a call-depth ceiling.
 
 ### `with-continuation-barrier`
 
 ```scheme
-(with-continuation-barrier <thunk>)
+(with-continuation-barrier <body> ...)
 ```
 
 Prevents continuations from re-entering or escaping across the barrier.
@@ -1099,8 +1110,7 @@ All compositions of `car` and `cdr` up to 4 levels deep: `caar`, `cadr`, `cdar`,
 | `(make-continuation-prompt-tag name)` | Create named prompt tag |
 | `(default-continuation-prompt-tag)` | Get default tag |
 | `(continuation-prompt-tag? x)` | Is a prompt tag |
-| `(call-with-continuation-prompt thunk tag)` | Install prompt |
-| `(call-with-continuation-prompt thunk tag handler)` | With handler |
+| `(call-with-continuation-prompt thunk tag handler)` | Install prompt with abort handler (all three required) |
 | `(abort-current-continuation tag v ...)` | Abort to prompt |
 | `(call-with-composable-continuation proc tag)` | Capture composable continuation |
 | `(continuation-prompt-available? tag)` | Is a prompt with this tag on the current continuation |
@@ -1284,6 +1294,11 @@ All compositions of `car` and `cdr` up to 4 levels deep: `caar`, `cadr`, `cdar`,
 | `(call-with-output-file path proc)` | |
 | `(file-exists? path)` | File exists |
 | `(delete-file path)` | Delete file |
+| `(create-directory path)` | Create directory |
+| `(delete-directory path)` | Remove directory |
+| `(directory-files path)` | List directory entries |
+| `(current-directory)` | Process working directory |
+| `(set-current-directory! path)` | Change process working directory |
 
 ### Evaluation and Loading
 
@@ -1295,8 +1310,9 @@ Requires the eval extension:
 | `(environment spec ...)` | Create environment from import specs |
 | `(scheme-report-environment version)` | R5RS environment |
 | `(null-environment version)` | Minimal environment |
-| `(interaction-environment)` | Interactive environment |
 | `(load path)` | Load and execute file |
+
+`interaction-environment` lives in the introspection extension, alongside the [Introspection](#introspection) procedures.
 
 ### Expansion and Compilation
 
@@ -1340,6 +1356,9 @@ Requires the eval extension:
 | `(environment-bound-names env)` | List all bound names |
 | `(environment-ref env sym)` | Lookup binding by symbol |
 | `(environment-bound? env sym)` | Is symbol bound |
+| `(interaction-environment)` | Interactive environment |
+| `(available-libraries)` | Library names the resolver chain can load |
+| `(disassemble proc)` | Bytecode listing for a procedure, as an alist per instruction |
 
 ### Reflection
 
@@ -1349,7 +1368,7 @@ Requires the eval extension:
 | `(procedure-name proc)` | Name (or `#f`) |
 | `(procedure-source-location proc)` | Source location (or `#f`) |
 | `(procedure-bound-symbols proc)` | Closed-over symbols |
-| `(procedure-type proc)` | Type tag symbol: `closure` (Scheme lambda), `foreign` (Go primitive), `case-lambda` (case-lambda closure), `parameter` (parameter object), `continuation` (composable continuation), or `unknown` (any other callable) |
+| `(procedure-type proc)` | Type tag symbol: `closure` (Scheme lambda), `foreign` (Go primitive), `case-lambda` (case-lambda closure), `parameter` (parameter object), `continuation` (captured or composable continuation), or `unknown` (any other callable) |
 
 ### Records (Procedural API)
 
@@ -1366,7 +1385,7 @@ Requires the eval extension:
 
 ### Process Context
 
-Requires system extension:
+Requires the system extension, except the two environment-variable procedures, which come from the envvars extension:
 
 | Procedure | Description |
 |-----------|-------------|
@@ -1510,7 +1529,7 @@ Requires gointerop extension.
 
 ### R7RS Standard Libraries
 
-These are provided as `.sld` files in the `lib/` directory. Require `WithLibraryPaths()` on the engine.
+These ship as `.sld` files embedded from `pkg/stdlib/lib/` and served through the engine's `FileResolver` chain. Require `WithLibraryPaths()` on the engine.
 
 | Library | Contents |
 |---------|----------|
@@ -1537,13 +1556,21 @@ Extension primitives are also importable as R7RS libraries when `WithLibraryPath
 
 | Library | Contents |
 |---------|----------|
+| `(wile io)` | Ports, `read`/`write`/`display`, string and bytevector ports |
 | `(wile math)` | Transcendental functions, complex number ops, rounding, conversion |
-| `(wile system)` | Process context, time, features |
-| `(wile files)` | File I/O |
+| `(wile system)` | Process context, time |
+| `(wile envvars)` | `get-environment-variable`, `get-environment-variables` |
+| `(wile files)` | File and directory I/O |
 | `(wile process)` | Process execution, subprocess management |
 | `(wile threads)` | SRFI-18 threading |
 | `(wile gointerop)` | Go concurrency: RWMutex, Once, Atomic |
-| `(wile introspection)` | Environment introspection |
+| `(wile introspection)` | Environment introspection, `features`, `available-libraries`, `disassemble` |
+| `(wile eval)` | `eval`, `environment`, `load`, `expand`, `compile`, load-path accessors |
+| `(wile namespace)` | Namespace introspection and management |
+| `(wile all)` | Records, promises, extra string and character operations |
+| `(wile sat)` | CDCL SAT solver |
+| `(wile charsets)` | SRFI-14 character sets, plus `char-set-ranges` |
+| `(wile algebragraph)` | Graph analytics backing `(wile algebra ...)` |
 
 Import modifiers — `only`, `except`, `prefix`, `rename` — work on all libraries:
 
@@ -1558,9 +1585,10 @@ Import modifiers — `only`, `except`, `prefix`, `rename` — work on all librar
 | Library | Contents |
 |---------|----------|
 | `(wile control)` | Delimited continuation operators — `shift`/`reset`, `prompt`/`control`, `shift0`/`reset0`, `prompt0`/`control0`, `spawn`, `set`/`cupto`, all with `-at` tagged variants; `call/ec`, `new-prompt` aliases; `continuation-mark-set->iterator`, `continuation-mark-set->context` |
+| `(wile strings)` | SRFI-13 surface plus Wile extras (`string-split`, `string-replace-all`), as one import |
 | `(wile kanren)` | miniKanren — `run`, `run*`, `fresh`, `conde` |
 | `(wile microkanren)` | microKanren core — `==`, `call/fresh`, `disj`, `conj` |
-| `(wile algebra)` | Algebraic structures umbrella over 26 sub-libraries (`setoid`, `order`, `lattice`, `closure`, `heyting`, `boolean`, `monoid`, `group`, `semiring`, `ring`, `differential`, `category`, `galois`, `rewrite`, `symbolic`, `polynomial`, `matrix`, `incidence`, `interval`, `graph`, `combinatorial-graph`, `fca`, `pareto`, `abstract-domain`, `dataflow`, `unification`). See [`docs/algebra/overview.md`](../algebra/overview.md). |
+| `(wile algebra)` | Algebraic structures umbrella over 30 sub-libraries (`setoid`, `order`, `lattice`, `closure`, `heyting`, `boolean`, `monoid`, `group`, `semiring`, `ring`, `differential`, `category`, `galois`, `rewrite`, `symbolic`, `polynomial`, `matrix`, `incidence`, `interval`, `graph`, `combinatorial-graph`, `fca`, `pareto`, `abstract-domain`, `dataflow`, `unification`, `matching`, `sat`, `cfl`, `tree`). See [`docs/algebra/overview.md`](../algebra/overview.md). |
 
 ### Third-Party Libraries
 
@@ -1571,6 +1599,9 @@ Import modifiers — `only`, `except`, `prefix`, `rename` — work on all librar
 | `(chibi diff)` | Diff algorithm |
 | `(chibi term ansi)` | ANSI terminal colors |
 | `(srfi 1)` | List library (complete) — `xcons`, `cons*`, `iota`, `zip`, `filter`, `partition`, `fold`, `unfold`, `any`, `every`, etc. |
+| `(srfi 13)` | String library — `string-prefix?`, `string-contains`, `string-join`, `string-trim`, `string-tokenize`, etc. |
+| `(srfi 14)` | Character sets |
+| `(srfi 132)` | Sort libraries — list and vector sort, merge, select, median |
 
 ---
 
@@ -1635,9 +1666,10 @@ The `features` procedure and `cond-expand` recognize these identifiers:
 
 ```scheme
 #z12345678901234567890
-#z#xff00ff00ff00ff
 #m3.14159265358979323846264338327950288
 ```
+
+`#z` reads decimal digits only; a radix prefix after it (`#z#x...`) is a parse error.
 
 Standard R7RS programs never need these — integer overflow promotes automatically, and `#e`/`#i` prefixes handle explicit conversion. These are convenience syntax for direct construction.
 
@@ -1670,7 +1702,7 @@ RWMutexes, Once, Atomic values — backed by Go's `sync` package (RWMutex acquis
 
 ### Boxes
 
-`box`, `unbox`, `set-box!`, `box?` — mutable single-value containers with `#&` read syntax.
+`box`, `unbox`, `set-box!`, `box?` — mutable single-value containers. A box writes as `#&<value>`; there is no `#&` read syntax, so boxes are constructed by calling `box`.
 
 ### Hashtables
 
@@ -1693,7 +1725,7 @@ R7RS requires these to return `#f` when reading would block. Wile always returns
   (atomic-load slot))  ; poll, or join the thread when the value is needed
 ```
 
-This is the only known semantic difference from R7RS-small.
+This is one of several documented differences; the full catalogue, including immutable pair/vector literals, immutable top-level definitions, marks-based `parameterize`, signalled import conflicts, and continuation value-count splicing, is in [`r7rs-differences.md`](r7rs-differences.md).
 
 ---
 
@@ -1702,11 +1734,11 @@ This is the only known semantic difference from R7RS-small.
 ### Command Line
 
 ```bash
-make build                                     # Build interpreter
-./dist/wile                                  # Start REPL
-./dist/wile --file program.scm               # Run file
-./dist/wile --file program.scm --interactive # Run file then REPL
-./dist/wile -e '(+ 1 2)'                     # Evaluate expression
+make build                                               # Build to ./dist/<os>/<arch>/wile
+./dist/<os>/<arch>/wile                                  # Start REPL
+./dist/<os>/<arch>/wile --file program.scm               # Run file
+./dist/<os>/<arch>/wile --file program.scm --interactive # Run file then REPL
+./dist/<os>/<arch>/wile -e '(+ 1 2)'                     # Evaluate expression
 ```
 
 ### REPL

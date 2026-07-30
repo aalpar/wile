@@ -10,39 +10,41 @@ See [system.md](system.md) for detailed API documentation.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│                         Engine (engine.go)                                    │
-│  namespace ──→ Namespace                                                    │
-│  env ────────→ runtime EnvironmentFrame (phase 0)                             │
-│  registry ──→ Registry (Go-side primitive registration)                       │
+│                       Engine (pkg/wile/engine.go)                             │
+│  namespace ──→ *environment.Namespace                                         │
+│  env ────────→ runtime EnvironmentFrame (phase 0, mutable user global)        │
+│  registry ───→ *registry.Registry (Go-side primitive registration)            │
 └───────────────────────────────────────────────────────────────────────────────┘
                     │
                     │ owns
                     ▼
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│              Namespace (root, one per VM)                           │
+│                     Namespace (root, one per VM)                              │
 │                                                                               │
-│  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance           │
+│  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance          │
 │  loadPathStack ─── PathTracker           ← interface; impl *LoadStack         │
-│  libraryRegistry ─ any                   ← *machine.LibraryRegistry           │
+│  libraryRegistry ─ LibrarySearcher       ← *compilation.LibraryRegistry       │
 │  phases ────────── *PhaseRegistry        ← owns phase→env mapping             │
-│  runtime ──────── *EnvironmentFrame      ← the phase 0 env                    │
+│  runtime ───────── *EnvironmentFrame     ← mutable phase 0 (user defines)     │
+│  sealedBase ────── *EnvironmentFrame     ← immutable; parent of runtime       │
+│  sealedExpandBase  *EnvironmentFrame     ← immutable phase 1 (macros)         │
 │  parent ────────── nil (root)                                                 │
 └───────────────────────────────────────────────────────────────────────────────┘
          │                                      │
          │ phases registry                      │ NewChildNamespace()
-         │ (lazily created)                     │ (for R7RS (environment),
+         │ (entries lazily created)             │ (for R7RS (environment),
          ▼                                      │  (null-environment))
 ┌─────────────────────────────┐                 ▼
 │     PhaseRegistry           │    ┌──────────────────────────────────────────┐
-│                             │    │   Child Namespace              │
+│                             │    │   Child Namespace                        │
 │  envs:                      │    │                                          │
-│    0 → runtime EnvFrame ────┼──→ │  parent ──→ root Namespace     │
+│    0 → runtime EnvFrame ────┼──→ │  parent ──→ root Namespace               │
 │    1 → expand EnvFrame      │    │  syntaxInterns ── nil (delegates up)     │
-│    2 → compile EnvFrame     │    │  syntaxInterns ── nil (delegates up)     │
-│   -1 → template EnvFrame    │    │  phases ────── own PhaseRegistry         │
-│   ...                       │    │  runtime ───── own EnvironmentFrame      │
-│                             │    │  libraryReg ── inherited (shared ptr)    │
-│  owner → Namespace           │    └──────────────────────────────────────────┘
+│    2 → compile EnvFrame     │    │  phases ────── own PhaseRegistry         │
+│   -1 → template EnvFrame    │    │  runtime ───── own EnvironmentFrame      │
+│   ...                       │    │  sealedBase ── own (fresh, never shared) │
+│                             │    │  libraryReg ── captured (shared ptr)     │
+│  owner → Namespace          │    └──────────────────────────────────────────┘
 │                             │
 └─────────────────────────────┘
 ```
@@ -51,27 +53,21 @@ See [system.md](system.md) for detailed API documentation.
 
 ## Phase Environments
 
-Each phase has its own `GlobalEnvironmentFrame` (isolated bindings) but shares the `PhaseRegistry`, `Namespace`, and parents to the runtime frame.
+Each phase has its own `GlobalEnvironmentFrame` (isolated bindings) but shares the `PhaseRegistry` and `Namespace`. Phase frames parent to the **sealed base**, not to the mutable runtime frame (`createPhaseEnv` / `phaseParent` in `pkg/environment/phase_registry.go`).
 
 ```
-Phase -1 (Template)     Phase 0 (Runtime)     Phase 1 (Expand)     Phase 2 (Compile)
-┌──────────────┐       ┌──────────────┐       ┌──────────────┐    ┌──────────────┐
-│ EnvFrame     │       │ EnvFrame     │       │ EnvFrame     │    │ EnvFrame     │
-│              │       │              │       │              │    │              │
-│ parent: ─────┼──┐    │ parent: nil  │  ┌──→ │ parent: ─────┼─┐  │ parent: ─────┼─┐
-│ global: own  │  │    │ global: own  │  │    │ global: own  │ │  │ global: own  │ │
-│ local: nil   │  │    │ local: nil   │  │    │ local: nil   │ │  │ local: nil   │ │
-│ phaseLevel:-1│  │    │ phaseLevel:0 │  │    │ phaseLevel:1 │ │  │ phaseLevel:2 │ │
-└──────────────┘  │    └──────────────┘  │    └──────────────┘ │  └──────────────┘ │
-                  │           ▲          │           ▲         │          ▲        │
-                  └───────────┘          └───────────┘         └──────────┘        │
-                   parent→runtime         parent→runtime        parent→runtime     │
-                                                                                   │
-                  ┌────────────────────────────────────────────────────────────────┘
-                  └──→ runtime (parent→runtime)
+sealedBase          (phase 0, parent nil)  ← Go primitives, sealed stdlib,
+│                                            optimizer Stable anchors
+├── runtime          (phase 0)              ← mutable user global; Namespace.Runtime()
+├── sealedExpandBase (phase 1)              ← bootstrap macros, special-form expanders
+│   └── expand       (phase 1)              ← user define-syntax lands here
+├── compile          (phase 2)
+└── template         (phase -1)
 ```
 
-**Key:** Phase environments parent to runtime, not to each other. The phase hierarchy is flat — each phase has its own `GlobalEnvironmentFrame` but falls back to runtime globals through the parent pointer.
+**Key:** phases parent to the sealed base, never to each other and never to the mutable runtime. That cut is the hermeticity property: a phase-1 or phase-2 lookup cannot see phase-0 user defines or imports, but still reaches the shared frozen base. Phase 1 reparents one level further, onto `sealedExpandBase`, so a top-level `define-syntax` shadows a bootstrap macro in the mutable child rather than overwriting it in place.
+
+`sealedBase` and `sealedExpandBase` are **not** `PhaseRegistry` entries; they are reached only through the parent chain. `runtime`, `expand`, `compile`, and `template` are the registry entries, created lazily.
 
 All phase environments share:
 - The same `*PhaseRegistry` (back-pointer)
@@ -88,7 +84,7 @@ Created by `lambda`, `let`, `letrec`, etc. via `NewEnvironmentFrameWithParent`.
 │ Runtime (phase 0) │◄───│ Lambda body       │◄───│ Inner let         │
 │ EnvFrame          │    │ EnvFrame          │    │ EnvFrame          │
 │                   │    │                   │    │                   │
-│ parent: nil       │    │ parent: ──────────┘    │ parent: ──────────┘
+│ parent: sealedBase│    │ parent: ──────────┘    │ parent: ──────────┘
 │ local: nil        │    │ local: params     │    │ local: let-vars   │
 │ global: ──────┐   │    │ global: ──────┐   │    │ global: ──────┐   │
 └───────────────┼───┘    └───────────────┼───┘    └───────────────┼───┘
@@ -107,21 +103,21 @@ Child frames inherit `global`, `phases`, and `namespace` from the parent. Only `
 Created by `Namespace.NewChildRuntime()`. Shares syntax interning but has isolated bindings and phases.
 
 ```
-Root Namespace                Library environment
-┌──────────────────────┐               ┌──────────────────────┐
-│  syntaxInterns: {...} │◄──────────────│  namespace: ─────────┤ (same pointer!)
-│  syntaxInterns: {...} │  shared NS    │  global: OWN         │ (isolated bindings)
-│  phases: rootPhases   │               │  phases: ownPhases   │ (isolated phases)
-│  runtime: rootEnv     │               │  parent: nil         │
-└──────────────────────┘               │  phaseLevel: 0       │
+Root Namespace                          Library environment
+┌───────────────────────┐               ┌──────────────────────┐
+│  syntaxInterns: {...} │◄──────────────┤  namespace: ─────────┤ (same pointer!)
+│  phases: rootPhases   │  shared NS    │  global: OWN         │ (isolated bindings)
+│  runtime: rootEnv     │               │  phases: ownPhases   │ (isolated phases)
+│  sealedBase: rootBase │               │  parent: nil         │ (flat island: no
+└───────────────────────┘               │  phaseLevel: 0       │  sealed base)
       │                                 └──────────────────────┘
       │ rootPhases                              │ ownPhases
       ▼                                         ▼
-┌──────────┐                              ┌──────────┐
-│ 0:runtime │                              │ 0:libRT  │  ← library's own runtime
-│ 1:expand  │                              │ 1:libExp │  ← library's own expand
-│ 2:compile │                              │ 2:libCmp │  ← library's own compile
-└──────────┘                              └──────────┘
+┌───────────┐                             ┌───────────┐
+│ 0:runtime │                             │ 0:libRT   │  ← library's own runtime
+│ 1:expand  │                             │ 1:libExp  │  ← library's own expand
+│ 2:compile │                             │ 2:libCmp  │  ← library's own compile
+└───────────┘                             └───────────┘
 ```
 
 ---
@@ -202,7 +198,7 @@ MachineContext
 ┌──────────────────────────────────────┐
 │ vmState.env ── current EnvFrame      │ ← mutated by opcodes
 │                                      │
-│ expanderCtx ── ExpanderContext       │
+│ expansion.expanderCtx ── ExpanderCtx │ ← impl: compilation.ExpanderContext
 │   .env ─── expand-time EnvFrame      │ ← used during macro expansion
 │   .introScope ── hygiene scope       │
 │   .useSiteScope ─ hygiene scope      │
@@ -222,7 +218,9 @@ MachineContext
 |---|---|---|---|---|---|
 | Root Namespace | `NewNamespace()` | Own | Own tables | Own registry | VM instance |
 | Child Namespace | `NewChildNamespace()` | Own | Delegates to parent | Own registry | `(environment)`, `(null-environment)` |
-| Runtime frame | `ns.Runtime()` | Phase 0 global | Via Namespace | Shared | Normal execution |
+| Runtime frame | `ns.Runtime()` | Phase 0 global (mutable) | Via Namespace | Shared | Normal execution |
+| Sealed base | `ns.SealedBase()` | Phase 0 global (immutable) | Via Namespace | Shared | Primitives, sealed stdlib; parent of every phase frame |
+| Sealed expand base | `ns.SealedExpandBase()` | Phase 1 global (immutable) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
 | Expand frame | `env.Expand()` / `AtPhase(1)` | Phase 1 global | Via Namespace | Shared | Macro bindings |
 | Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via Namespace | Shared | Syntax compilers |
 | Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via Namespace | Shared | `lambda`, `let`, `letrec` |

@@ -1,5 +1,16 @@
 # Procedure Inlining: The Next Step After Core `let`
 
+Status: shipped, for **`let`-bound** lambdas. `registerInlineCandidates`
+(`compile_let.go`) admits a binding whose init is a non-variadic
+`*ValidatedLambda` that is neither `Mutable` nor `Escapes` and whose body is
+within `inlineThreshold` expressions (`DefaultInlineThreshold = 5`, settable per
+engine with `WithInlineThreshold`); `tryInlineCall` (`compile_call.go`) then
+rewrites a matching call into a synthetic `ValidatedLet`. A procedure introduced
+by a top-level `define`, like the `square` below, is **not** inlined. The
+document's argument still describes the design, but read the `define` examples
+as the shape of the transformation, not as what the compiler does with them
+today.
+
 Suppose you write this:
 
 ```scheme
@@ -92,9 +103,9 @@ Inlining a call requires three pieces of information that the compiler currently
 
 If `square` can be reassigned, inlining it is unsound — the inlined body might not match what `square` actually holds at runtime. The compiler must prove that the binding is never targeted by `set!`.
 
-Wile's `BindingType` enum has `Variable`, `Syntax`, `Primitive`, and `Unknown`. There's no `Mutable` flag. The `CompileValidatedSetBang` method compiles `set!` but doesn't mark the target binding. The `set!` is fire-and-forget — the compiler generates a `StoreLocal` or `StoreGlobal` and moves on.
+`BindingType` (`Variable`, `Syntax`, `Primitive`, `Unknown`) does not carry this, and `CompileValidatedSetBang` does not mark its target: it emits a `StoreLocal` or `StoreGlobal` and moves on.
 
-**What's needed:** A mutability analysis pass. After validation, scan all `ValidatedSetBang` nodes and mark their target bindings as mutable. Any binding not marked is an inlining candidate. This is a simple whole-module pass — visit every expression, collect `set!` targets into a set.
+**Shipped:** the validator answers it instead, at `let` scope. `markMutableBindings` (`internal/validate/validate_let.go`) walks the body for `ValidatedSetBang` targets and sets `ValidatedLetBinding.Mutable`; the inline predicate rejects a mutable binding. This is per-`let`, not whole-module, which is exactly as far as the shipped inliner reaches.
 
 > Note: R7RS primitive bindings are a special case. Bindings like `+`, `car`, `cons` are `BindingTypePrimitive` and are never `set!`-able (the language guarantees this). The existing `CallForeignCached` optimization already exploits this — it resolves the binding at compile time and emits a direct call. Inlining extends this: instead of calling `+`, emit `Add` directly. The opcode promotion system already does this for the 11 hottest primitives. Inlining user-defined procedures is the generalization.
 
@@ -102,9 +113,9 @@ Wile's `BindingType` enum has `Variable`, `Syntax`, `Primitive`, and `Unknown`. 
 
 Inlining duplicates the body at every call site. If `square` has a 2-instruction body, duplicating it saves net cycles. If `fibonacci` has a 50-instruction body with recursive calls, duplicating it bloats the code and may *slow things down* (instruction cache pressure, larger templates).
 
-**What's needed:** A cost model. Assign each bytecode instruction a cost (1 for simple loads/stores, 2 for branches, N for calls). Sum the costs for the closure's template. If the total is below a threshold, the closure is an inlining candidate.
+**Shipped, in the crudest form that works:** the cost model is a count of top-level expressions in the lambda body against `inlineThreshold` (`DefaultInlineThreshold = 5`). No per-instruction weighting, no recursion into the body's own calls.
 
-The cost model doesn't need to be sophisticated. Chez Scheme's initial heuristic was roughly "inline if the body is a single expression." GHC's is "inline if the body is smaller than the call site would be." For Wile, a reasonable starting point:
+The cost model doesn't need to be sophisticated. Chez Scheme's initial heuristic was roughly "inline if the body is a single expression." GHC's is "inline if the body is smaller than the call site would be." A finer model for Wile would grade:
 
 - **Always inline**: Body is a single non-call expression (literal, variable reference, arithmetic on locals). This covers accessors, predicates, and simple arithmetic.
 - **Maybe inline**: Body is 2-5 instructions with no internal calls. Decision depends on call frequency (but we don't have profile data, so use static heuristics).
@@ -122,9 +133,9 @@ The cost model doesn't need to be sophisticated. Chez Scheme's initial heuristic
 
 `add5` holds a closure returned by `make-adder`. The closure captures `n`. To inline `(add5 3)`, we'd need to know *which* closure `add5` holds and what `n` was bound to. This requires escape analysis and interprocedural constant propagation — well beyond what a simple inlining pass can do.
 
-**For now:** Only inline closures whose definition is visible at the call site. If `square` is defined in the same scope (or a lexically enclosing scope) and is not `set!`-ed, the compiler can see its body directly via the `cachedBindings` or the compile-time environment. Closures returned from other functions or stored in data structures are not candidates.
+**Shipped:** `markEscapedBindings` (`internal/validate/validate_escape.go`) sets `ValidatedLetBinding.Escapes` when the binding is referenced anywhere but the operator position of a call, and the inline predicate rejects it. Escape and mutation are orthogonal (each carries information the other does not), so both flags are checked.
 
-This is exactly how the existing `CallForeignCached` optimization works: it checks whether `cachedBindings[idx].Value()` is a `*ForeignClosure` at compile time. The same mechanism can check whether it's a `*MachineClosure` and, if so, whether its template is small enough to inline.
+The call-site side is tighter still. `tryInlineCall` inlines only when the binding resolves (by `BindingID`, not by name) to a registered candidate *and* `p.env` is the same compile-time environment the candidate was registered in, so a nested scope that might shadow a free variable the lambda captured cannot inline. Candidates are unregistered when the `let` scope exits, and a re-entrant call to the same binding is refused via `currentlyInlining`.
 
 ## Where Inlining Fits in the Pipeline
 
@@ -164,16 +175,16 @@ The peephole optimizer already transforms bytecode patterns. A new pass could re
 
 ### The Right Answer
 
-**Option A is the right design for Wile.** The validated IR carries the binding information that makes inlining profitable. Bytecode splicing is the kind of low-level surgery that compilers do when they have no higher-level representation — but Wile *has* one (the `Validated*` types).
+**Option A is the design Wile shipped.** The validated IR carries the binding information that makes inlining profitable. Bytecode splicing is the kind of low-level surgery that compilers do when they have no higher-level representation — but Wile *has* one (the `Validated*` types).
 
-The implementation sketch:
+What `tryInlineCall` does:
 
-1. The compiler encounters a `ValidatedApply` in `compileValidated`
-2. It resolves the callee symbol to a binding
-3. If the binding is immutable and holds a `ValidatedLambda`:
-   a. Check the body cost against the threshold
-   b. If below threshold and non-recursive: synthesize a `ValidatedLet` from the lambda's parameters and the call's arguments
-   c. Compile the `ValidatedLet` instead of emitting a call
+1. `compileValidatedCall` reaches a `*ValidatedCall` whose `Proc()` is a `*ValidatedSymbol` (after `tryEmitSelfTailCall` has declined it)
+2. It resolves the symbol to a `BindingID` under the reference's own scope set
+3. If that ID is a registered inline candidate in the current compile-time environment, and is not already being inlined:
+   a. Check the argument count against the lambda's required parameters (a mismatch is a compile-time error, not a deferred runtime one)
+   b. Synthesize a `ValidatedLet` binding each parameter to the corresponding argument, marked `Escapes` so the synthetic bindings are not themselves treated as candidates
+   c. Compile that `ValidatedLet` instead of emitting a call
 
 This is a source-to-source transformation at the IR level. The core `let` compiler handles the rest.
 
@@ -187,20 +198,25 @@ Here's a concrete inventory.
 |-----------|----------|
 | Compile-time binding resolution | `cachedBindings` on `NativeTemplate`, used by `CallForeignCached` |
 | Callee specialization | Peephole checks `cachedBindings[idx].Value().(*ForeignClosure)` |
-| Per-template optimization | `Optimize()` with `EditPlan`, branch target tracking, multi-pass |
-| Opcode promotion (primitive inlining) | 11 primitives inlined as VM opcodes (Phases 1-3) |
-| Cost-free binding forms | Core `let` (planned) — `OpPushEnv`/`StoreLocal`/`OpPopEnv` |
+| Per-template optimization | `Optimize()` with `EditPlan`, branch target tracking, four passes |
+| Opcode promotion (primitive inlining) | 18 primitives inlined as VM opcodes |
+| Cost-free binding forms | Core `let` — `OpPushEnv`/`StoreLocal`/`OpPopEnv` |
 | Body compilation infrastructure | `compileBody`, `compileClosureBody`, `compileValidatedSequence` |
+| Mutability tracking | `markMutableBindings` → `ValidatedLetBinding.Mutable` |
+| Escape tracking | `markEscapedBindings` → `ValidatedLetBinding.Escapes` |
+| Body cost estimation | `inlineThreshold` on body expression count |
+| Inline decision at compile time | `tryInlineCall` synthesizes a `ValidatedLet` |
+| Recursion guard | `currentlyInlining` set, keyed by `BindingID` |
+| Callback specialization | `inline_hof.go` — curated tail HOFs (`for-each`, `map`, `fold`, …) inline their loop at a call site that independently proves the callback capture-safe |
 
 ### Missing
 
 | Capability | Needed for | Difficulty |
 |-----------|-----------|------------|
-| **Mutability tracking** | Knowing which bindings are safe to inline | Low — single pass over `ValidatedSetBang` nodes |
-| **Body cost estimation** | Deciding whether to inline | Low — count instructions in template or validated exprs |
-| **Inline decision at compile time** | Replacing `ValidatedApply` with `ValidatedLet` | Medium — needs access to callee's validated IR at the call site |
-| **Recursion detection** | Preventing infinite inlining | Low — check if callee's body references the callee |
+| **Inlining `define`d procedures** | The `(define (square x) …)` case in this document's opening | Medium — needs the same Mutable/Escapes analysis at top level and inside bodies, where the validator does not currently run it |
+| **Call-graph cycle detection** | Refusing a recursive candidate up front rather than expanding it one level and stopping | Medium — call graph over the validated IR; `currentlyInlining` bounds the expansion but does not avoid the duplicated body |
 | **Cross-module inlining** | Inlining library-exported functions | High — requires storing validated IR in library registry |
+| **Constant propagation through inlined parameters** | Collapsing `(let ((x 3)) (* x x))` to `9` | Medium — the synthetic `let` makes the value visible; nothing consumes it yet |
 
 ## The Progression
 
@@ -212,8 +228,8 @@ Level 1: Compile to bytecode (Wile baseline)
 Level 2: Fuse instruction sequences (peephole — done)
 Level 3: Specialize known calls (CallForeignCached — done)
 Level 4: Inline hot primitives (opcode promotion — done)
-Level 5: Eliminate false template boundaries (core let — planned)
-Level 6: Inline user-defined procedures (this document)
+Level 5: Eliminate false template boundaries (core let — done)
+Level 6: Inline user-defined procedures (done for let-bound lambdas)
 Level 7: Propagate constants through inlined code (future)
 Level 8: Eliminate dead bindings (future)
 ```
@@ -224,9 +240,9 @@ The key insight: **levels 5-8 are all about making binding information visible t
 
 ## A Concrete Example
 
-Walk through what happens to `(+ (square 3) (square 4))` at each level:
+Walk through what happens to `(+ (square 3) (square 4))` at each level. Because `square` here is a top-level `define`, Level 3 is what actually compiles today; binding it with `(let ((square (lambda (x) (* x x)))) …)` instead reaches Level 6.
 
-**Level 3 (current):**
+**Level 3 (top-level `define`):**
 ```
 SaveContinuation(+6)
 PushLiteral 3
@@ -302,7 +318,7 @@ The entire computation collapsed to a single literal. This is what Chez Scheme d
 
 Inlining `fib` into itself is obviously an infinite loop. The compiler must detect self-reference in the callee's body and refuse to inline. But what about *mutual* recursion? `even?` calls `odd?` which calls `even?` — inlining either one starts a cycle. Detection requires building a call graph at the validated IR level and checking for cycles.
 
-For a first implementation: refuse to inline any closure whose body contains a reference to itself. This misses mutual recursion but catches the common case and is trivially cheap.
+The shipped guard is cheaper still and covers both shapes for the scopes it reaches: `currentlyInlining` holds the `BindingID`s currently being expanded, and `tryInlineCall` declines any binding already in that set. Expansion terminates because the set only grows on the way down. A `letrec`-bound mutually recursive pair is caught the same way, one level in.
 
 ### Closures that capture variables
 
@@ -335,19 +351,20 @@ Inlining `(f (read) (print "hi"))` to `(let ((x (read)) (y (print "hi"))) (+ x y
 
 ## What This Means for Wile
 
-Inlining is the natural next optimization after core `let`, and the infrastructure for it is largely already present. The missing pieces are small (mutability tracking, cost estimation) and the architecture fits cleanly into the existing validated IR → compiler path.
+Inlining was the natural next optimization after core `let`, and it landed cleanly on the existing validated IR → compiler path: the transform is behavior-preserving, so it changes cost and not results.
 
 The immediate benefit is eliminating call overhead for small utility functions — the kind that Scheme programs use constantly (accessors, predicates, simple combinators). The long-term benefit is opening the door to constant propagation and dead binding elimination, which together can collapse entire computation chains.
 
-The recommended path:
+Steps 1 through 3 of the original path are done:
 
-1. **Ship core `let`** (all four binding forms). This provides the target representation.
-2. **Add mutability tracking** — flag bindings targeted by `set!` during validation.
-3. **Implement simple inlining** — single-expression non-recursive closures with visible definitions. Use `ValidatedLet` as the inlined representation.
+1. **Core `let`** (all four binding forms) — provides the target representation.
+2. **Mutability and escape tracking** — `Mutable` / `Escapes` on `ValidatedLetBinding`, computed during validation.
+3. **Simple inlining** — non-variadic `let`-bound lambdas under the body-size threshold, expanded into a synthetic `ValidatedLet`.
 4. **Measure** — run Gabriel benchmarks. The binding-heavy programs (fib, ackermann, nqueens) should benefit most.
-5. **Extend** — raise the body size threshold, add cross-module inlining, add constant propagation.
+5. **Extend** — reach `define`d procedures, add cross-module inlining, add constant propagation.
 
 > See [Core `let` in Compiler Design](core-let.md) for why core
 > `let` is the standard approach. See [CPS and ANF](anf-and-cps.md)
-> for how intermediate representations relate to binding structure. See
-> `plans/CORE-LET.md` for the core `let` implementation plan.
+> for how intermediate representations relate to binding structure. The
+> core `let` and procedure-inlining implementation plans are archived as
+> `memory/CORE-LET.local.md` and `memory/PROCEDURE-INLINING.local.md`.

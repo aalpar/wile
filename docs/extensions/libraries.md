@@ -15,7 +15,7 @@ raises a configuration error.
 engine, _ := wile.NewEngine(ctx)
 // (import ...) → error: "no library registry configured"
 
-// Library system enabled with default search paths ("." and "./stdlib/lib")
+// Library system enabled with the default search path (".")
 engine, _ := wile.NewEngine(ctx,
     wile.WithLibraryPaths(),
 )
@@ -24,8 +24,13 @@ engine, _ := wile.NewEngine(ctx,
 engine, _ := wile.NewEngine(ctx,
     wile.WithLibraryPaths("/app/libs", "./vendor"),
 )
-// Search order: /app/libs, ./vendor, ., ./stdlib/lib
+// Search order: /app/libs, ./vendor, .
 ```
+
+The embedded standard library is not a search path: it is served by the
+`FileResolver` chain over `stdlib.FS` (see
+[`source-loading.md`](../embedding/source-loading.md)).
+`compilation.DefaultLibraryPaths` holds the sole default, `"."`.
 
 ## Importing Extension Primitives
 
@@ -60,7 +65,8 @@ registered as an R7RS library named `(wile <extension-name>)`:
 
 | Library name | Go package | Primitives |
 |-------------|------------|------------|
-| `(wile math)` | `extensions/math` | 35 math primitives |
+| `(wile io)` | `pkg/extensions/io` | 41 port/read/write primitives |
+| `(wile math)` | `extensions/math` | 39 math primitives |
 | `(wile system)` | `extensions/system` | 6 system primitives |
 | `(wile files)` | `extensions/files` | 13 file/directory primitives |
 | `(wile process)` | `extensions/process` | 8 process execution primitives |
@@ -68,6 +74,15 @@ registered as an R7RS library named `(wile <extension-name>)`:
 | `(wile gointerop)` | `extensions/gointerop` | Go concurrency primitives |
 | `(wile introspection)` | `extensions/introspection` | Environment introspection, features, disassembler |
 | `(wile eval)` | `extensions/eval` | 16 eval/load/expand/syntax-local primitives |
+| `(wile charsets)` | `extensions/charsets` | 20 SRFI-14 character-set primitives |
+| `(wile sat)` | `extensions/sat` | 2 CDCL SAT kernel primitives |
+| `(wile algebragraph)` | `extensions/algebragraph` | 2 graph path-counting primitives |
+
+Which of these exist in a given engine depends on the extension set: an
+extension becomes a library only if it was loaded via `WithExtension` or a
+profile. Internal extensions are registered the same way and yield
+`(wile all)` or `(wile all-safe)`, `(wile envvars)`, and `(wile namespace)`, but
+their Go packages are not importable by external code.
 
 ## How It Works
 
@@ -80,33 +95,33 @@ in synthetic `CompiledLibrary` objects and registered in the
 
 ```
 NewEngine initialization:
-                                          primitive count
-  ┌─ core.AddToRegistry(reg)             0 → 80
+                                          registration index
+  ┌─ core.AddToRegistry(reg)             0 → C
   │
-  ├─ snapshot = 80
-  ├─ math.AddToRegistry(reg)             80 → 110
-  ├─ record: "math" contributed prims[80:110]
+  ├─ math.AddToRegistry(reg)             C → M
+  ├─ record snapshot: "math" = [C, M)
   │
-  ├─ snapshot = 110
-  ├─ system.AddToRegistry(reg)           110 → 119
-  ├─ record: "system" contributed prims[110:119]
+  ├─ system.AddToRegistry(reg)           M → S
+  ├─ record snapshot: "system" = [M, S)
   │
   └─ ... (library system setup)
       ├─ Create LibraryRegistry
-      ├─ For "math": create library (wile math) exporting prims[80:110]
-      └─ For "system": create library (wile system) exporting prims[110:119]
+      ├─ For "math": create library (wile math) exporting prims[C:M]
+      └─ For "system": create library (wile system) exporting prims[M:S]
 ```
 
-The snapshot mechanism uses `Registry.RuntimePrimitiveNamesSince(startIndex)`
-to determine exactly which runtime primitives an extension contributed.
+Each snapshot records the extension's half-open index range plus its
+`LibraryNamer` and `Describer`, if any. `registerExtensionLibraries`
+(`pkg/wile/engine.go`) then calls `Registry.RuntimePrimitiveNamesRange(start,
+end)` to determine exactly which runtime primitives that extension contributed.
 Extensions that register only compile-time bindings (no `PhaseRuntime`
-primitives) do not produce a library.
+primitives) yield no names, so no library is created for them.
 
 ### Extension Primitives vs. Library Imports
 
-Extension primitives are **always** available in the top-level environment
-regardless of whether the library system is enabled. The library system adds
-a *second* path for accessing the same primitives:
+Extension primitives are pre-bound in the top-level environment regardless of
+whether the library system is enabled. The library system adds a *second* path
+to the same closures:
 
 ```
                     ┌──────────────────────────┐
@@ -126,6 +141,10 @@ a *second* path for accessing the same primitives:
                     └──────────────────────────┘
 ```
 
+`WithStrictNamespace()` is the exception: the profile's extension primitives are
+still registered (so libraries can import them) but are withheld from the top
+level, leaving `(import ...)` as the only path.
+
 The library system is useful for:
 - **Selective import**: Only pull in the bindings you need
 - **Namespacing**: Prefix bindings to avoid collisions
@@ -134,21 +153,22 @@ The library system is useful for:
 
 ## Custom Library Names
 
-Extensions can implement `registry.LibraryNamer` to override the default
-`(wile <name>)` naming:
+Extensions can supply `registry.WithLibraryName` (or implement
+`registry.LibraryNamer` directly) to override the default `(wile <name>)`
+naming:
 
 ```go
-type myExtension struct{}
-
-func (e *myExtension) Name() string              { return "utils" }
-func (e *myExtension) LibraryName() []string     { return []string{"myorg", "utils"} }
-func (e *myExtension) AddToRegistry(r *registry.Registry) error {
-    r.AddPrimitive(registry.PrimitiveSpec{
-        Name: "helper", ParamCount: 0, Impl: primHelper,
-    }, registry.PhaseSetRuntime)
-    return nil
-}
+var Extension = registry.NewExtension("utils",
+    func(r *registry.Registry) error {
+        r.AddPrimitive(registry.PrimitiveSpec{
+            Name: "helper", ParamCount: 0, Impl: primHelper,
+        }, registry.PhaseSetRuntime)
+        return nil
+    },
+    registry.WithLibraryName("myorg", "utils"))
 ```
+
+An empty name part is rejected at engine construction with `ErrEngineInit`.
 
 ```scheme
 ;; Imports as (myorg utils) instead of (wile utils)
@@ -184,21 +204,23 @@ greeting  ; → "hello from library"
 
 ### File Search
 
-The `LibraryRegistry` searches for library files by converting the library
-name to a path:
+`ResolveLibraryFile` converts the library name to a relative path and hands it
+to the engine's `FileResolver`, once per recognized extension. The **extension
+is the outer loop**: every resolver and every search directory is tried with
+`.sld` before `.scm` is tried anywhere.
 
 ```
-Library name     →  Search paths tried
-(mylib greet)    →  /path/to/libs/mylib/greet.sld
-                    /path/to/libs/mylib/greet.scm
-                    ./mylib/greet.sld
-                    ./mylib/greet.scm
-                    ./stdlib/lib/mylib/greet.sld
-                    ./stdlib/lib/mylib/greet.scm
+Library name     →  Path probed
+(mylib greet)    →  mylib/greet.sld   (whole resolver chain)
+                    mylib/greet.scm   (whole resolver chain, only if no .sld hit)
 ```
 
-User-supplied paths are searched first (in order), then the defaults
-(`"."` and `"./stdlib/lib"`).
+Within `OSFileResolver`, the directories tried for each probe are, in order: the
+current load directory from the load-path stack, the library registry's search
+paths (user-supplied first, then the default `"."`), `$SCHEME_INCLUDE_PATH`, the
+working directory, and the filesystem root as a last resort. Each candidate is
+located with `os.Stat` and opened only after the authorizer permits
+`code:load` on it.
 
 ## Combining Extensions, Libraries, and RegisterFunc
 
@@ -235,18 +257,25 @@ imported via `(import ...)`. They are always available without import.
 
 When a `.sld` library file is loaded, it runs in an isolated environment that
 mirrors the engine's configuration (same registry, same macros) but does not
-share mutable state with the caller. This is standard R7RS library semantics.
+share the caller's bindings. This is standard R7RS library semantics.
 
-The `LibraryEnvFactory` creates these isolated environments:
+The `LibraryEnvFactory` creates these environments:
 
 ```
-Caller env ──► LibraryEnvFactory ──► Fresh env (same config)
+Caller env ──► LibraryEnvFactory ──► Namespace.NewChildRuntime()
                                          │
                                          ├─ Apply registry
                                          ├─ Register syntax compilers
                                          ├─ Register primitive expanders
-                                         └─ Load bootstrap macros
+                                         ├─ Load bootstrap macros
+                                         ├─ Load bootstrap procedures
+                                         └─ Inject documentation
 ```
+
+The frame is fresh; the `Namespace` is the engine's, shared with the caller.
+That is why a `NamespaceInit` must be idempotent: it re-runs for every library
+environment the engine builds. See "Registering Other Items" in
+[`architecture.md`](architecture.md).
 
 ## Complete Example
 
@@ -307,8 +336,8 @@ func main() {
    populated during `NewEngine` and cannot be modified afterward.
 
 3. **`RegisterFunc` bindings are not importable.** Functions registered via
-   `RegisterFunc`/`RegisterFuncs` go directly to the top-level environment
-   and are not wrapped in a library.
+   `RegisterFunc`/`RegisterFuncs`/`RegisterPrimitive` bind directly into the
+   top-level environment and are not wrapped in a library.
 
 4. **`LibraryEnvFactory` is per-`Namespace`.** Each engine stores
    its own factory via `SetLibraryEnvFactory`, so multiple engines can coexist
@@ -318,5 +347,6 @@ func main() {
    extension registers no `PhaseRuntime` primitives, no library is created
    for it.
 
-6. **Cycle detection.** The `LibraryRegistry` detects circular imports and
-   reports an error.
+6. **Cycle detection.** `LoadLibrary` carries a per-goroutine load chain on the
+   context and raises `ErrCircularDependency` on synchronous re-entry. A name
+   another goroutine is still loading is a wait, not a cycle.

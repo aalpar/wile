@@ -125,14 +125,14 @@ projection chain but connect concrete and abstract domains.
 
 ## Patterns
 
-**Validation.** Every structure type has a `validate-X` procedure that
+**Validation.** Each algebraic structure type has a `validate-X` procedure that
 spot-checks algebraic laws against sample elements. Pass a structure and a
 list of sample values; it returns `#t` if all laws hold or a list of
 violation descriptions if any fail. This is not a proof -- it is a
 property-based sanity check. Use it during development to catch mistakes in
 custom structure definitions.
 
-**Destructuring macros.** Each structure type has a `with-X` syntax macro
+**Destructuring macros.** Each structure type with a fixed operation tuple has a `with-X` syntax macro
 that binds its operations to local names. `(with-ring Z (plus times zero
 one negate) ...)` lets you write `(times (plus a b) (plus a (negate b)))`
 instead of `(ring-times Z (ring-plus Z a b) (ring-plus Z a (ring-negate Z

@@ -1,6 +1,6 @@
 # Numeric Tower Architecture
 
-This document describes the numeric tower implementation in `values/numeric_tower.go`.
+This document describes the numeric tower implementation in `pkg/values/`: the promotion and dispatch machinery in `pkg/values/promotion.go`, the cross-kind utilities (`Simplify`, `ExactnessOf`, `NumericEquals`) in `pkg/values/numeric_tower.go`, and one file per numeric type.
 
 **Status:** Stable (2026-02-05)
 
@@ -37,7 +37,7 @@ This eliminates the need for Inf/NaN guard paths in the dispatch table — the p
 
 ### Promotion Beyond Machine Types
 
-Certain operations promote values to arbitrary-precision types (`BigInteger`, `BigFloat`, `Rational`, `BigComplex`). Once a value enters the Big* domain, subsequent operations produce Big* results — there is no automatic demotion back to machine types during computation (only `Simplify` demotes after the fact, and only at parse time).
+Certain operations promote values to arbitrary-precision types (`BigInteger`, `BigFloat`, `Rational`, `BigComplex`). Once a value enters the Big* domain, subsequent operations produce Big* results — there is no automatic demotion back to machine types during computation. `Simplify` demotes only where a producer calls it: parse-time literal normalization, and the complex/rational reductions (`canonicalRational` in `pkg/values/rational.go`, `maybeSimplify` in `pkg/values/big_complex.go`). The `+`/`-`/`*` results of `pkg/values/integer.go`'s overflow helpers flow through the dispatch tables unsimplified, so a `BigInteger` result that fits in `int64` stays a `BigInteger`.
 
 An **exact** operand meeting an **inexact** one does NOT enter the Big* domain. It is absorbed into the inexact operand's representation — R7RS §6.2.2 exactness contagion:
 
@@ -62,7 +62,7 @@ Exact × `Complex` used to escalate to `BigComplex`, and the reason was real: an
 (equal? (* 1.0+2.0i 1) 1.0+2.0i)                  ; => #f   ← multiply by exact 1
 ```
 
-**The exact zero is protected at the operation, not in the table.** A real operand has *no* imaginary component, so `real ⊕ complex` is computed part-wise and the component is never manufactured in the first place — `(/ 10 2.0+0.0i)` is still `5.0-0.0i`. `Float` has always worked this way (`Float` ⊔ `Complex` has always been `Complex`); the exact kinds now share that path. See the `real ⊕ complex` helpers in `values/complex.go` and `promotionTable` Zone 3.
+**The exact zero is protected at the operation, not in the table.** A real operand has *no* imaginary component, so `real ⊕ complex` is computed part-wise and the component is never manufactured in the first place — `(/ 10 2.0+0.0i)` is still `5.0-0.0i`. `Float` has always worked this way (`Float` ⊔ `Complex` has always been `Complex`); the exact kinds now share that path. See the `real ⊕ complex` helpers in `pkg/values/complex.go` and `initPromotionTable`'s Zone 3 in `pkg/values/promotion.go`.
 
 The rule, stated once: **contagion is a promotion question and the table owns it; the exact zero is an operation question and `complex.go` owns it.** They were tangled together, and the tangle cost the semilattice.
 
@@ -90,15 +90,13 @@ The two tables differ on exactly the pairs where arithmetic would round an exact
 | exact × `BigFloat` | `BigFloat` | `BigFloat` — agree |
 | exact × `BigComplex` | `BigComplex` | `BigComplex` — agree |
 
-`BigFloat` and `BigComplex` hold an exact operand without rounding it, so there is nothing to split. Everywhere else the tables agree. `TestComparisonResultKind_API` pins exactly this, and both tables are held to the semilattice laws (`TestPromotionTable_Associativity`, `TestComparisonTable_Associativity`).
+`BigFloat` and `BigComplex` hold an exact operand without rounding it, so there is nothing to split. Everywhere else the tables agree. `TestComparisonResultKind_API` pins exactly this (it asserts the tables differ on every exact × float64-backed pair and agree on every other pair), and both tables are held to the semilattice laws (`TestPromotionTable_Associativity`, `TestComparisonTable_Associativity`).
 
-The two tables differ on exactly one pair-shape: an exact kind meeting `Float`. `TestComparisonResultKind_API` pins that, and fails if they diverge anywhere else.
-
-Public accessors: `values.PromotionResultKind(a, b)` and `values.ComparisonResultKind(a, b)`.
+`PromotionResultKind(a, b)` and `ComparisonResultKind(a, b)` are **test-only** accessors, declared in `pkg/values/export_test.go` and not part of the public API. They were exported from `promotion.go` once; the doc comment there records why they were demoted (a raw index panic on an out-of-range `NumericKind`, and two same-typed functions whose confusion silently rounds an operand). Production code indexes the tables directly.
 
 ### Hot-Loop Allocation Reduction (`BigInteger` only)
 
-For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting-semiring path queries on DAGs — `values/numeric_scratch.go` provides unexported in-place arithmetic helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`). These reuse the destination's existing `[]Word` backing rather than allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op (the path through `(*BigInteger).Add`).
+For Go-side callers operating on `*BigInteger` in tight loops — e.g., counting-semiring path queries on DAGs — `pkg/values/numeric_scratch.go` provides unexported in-place arithmetic helpers (`addBigIntInPlace`, `subBigIntInPlace`, `mulBigIntInPlace`, `negateBigIntInPlace`). These reuse the destination's existing `[]Word` backing rather than allocating a fresh `*BigInteger` + `*big.Int` + `[]Word` per op (the path through `(*BigInteger).Add`).
 
 The public `(*BigInteger).Add` etc. remain immutable per R7RS Number semantics; the in-place API is for library-internal Go callers only. The motivating consumer is `extensions/algebra/graph.CountPathsInDAG`, which the `(wile algebra graph)` library dispatches to when a semiring declares `(carrier . big-int)`. The helpers' contract (aliasing rules, storage reuse) is documented on the declarations in `pkg/values/numeric_scratch.go`.
 
@@ -123,13 +121,13 @@ The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. E
 
 ### Dispatch Table Architecture
 
-Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch` and `makeLessThanDispatch`. All seven numeric types carry five tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`), pre-indexed by `NumericKind`. Total: **35 tables, 245 closures**.
+Tables are populated at `init()` time by generators in `pkg/values/promotion.go` — `makeArithmeticDispatch` and `makeLessThanDispatch`. All seven numeric types carry five tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`), pre-indexed by `NumericKind`. Total: **35 tables, 245 closures**.
 
-`LessThan` is the tower's only ordering primitive. A `Compare(Number) int` sat alongside it until it was removed: it answered a four-state question (less, equal, greater, unordered) in a three-state return, so a NaN operand got `0` and read as "equal". Equality is `NumericEquals` (R7RS `=`) or `EqvNumber` (`eqv?`), never the absence of ordering. See the `Number` doc comment in `values/values.go`. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
+`LessThan` is the tower's only ordering primitive. A `Compare(Number) int` sat alongside it until it was removed: it answered a four-state question (less, equal, greater, unordered) in a three-state return, so a NaN operand got `0` and read as "equal". Equality is `NumericEquals` (R7RS `=`) or `EqvNumber` (`eqv?`), never the absence of ordering. See the `Number` doc comment in `pkg/values/values.go`. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
 
 **Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
 
-**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, the dispatch closures short-circuit to `float64`/`complex128` arithmetic. This logic is centralized in `makeArithmeticDispatch` (see `values/promotion.go` → `isSpecialFloat`), not replicated per type.
+**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, the dispatch closures short-circuit to `float64`/`complex128` arithmetic. This logic is centralized in `makeArithmeticDispatch` (see `pkg/values/promotion.go` → `isSpecialFloat`), not replicated per type. The guard changes the result *kind*, not only the arithmetic: the `BigFloat` LUB returns a `*Float`, while the `BigComplex` LUB returns a `*BigComplex` so the operand's imaginary part survives. The `LessThan` dispatch deliberately carries no such guard.
 
 ### Why This Instead of a Unified Tower
 
@@ -137,7 +135,7 @@ A unified tower dispatch (`TowerAdd`, etc.) was prototyped but **abandoned** bec
 
 1. **Exact complex bug**: Linear promotion (Integer → BigInteger → Rational → Float → Complex) loses exactness when combining exact reals with complex numbers
 2. **Battle-tested code**: The dispatch-table approach has been tested across all 49 type combinations
-3. **Explicit cases**: Each promotion path is an explicit, generator-populated table entry — debuggable by reading `values/promotion.go`
+3. **Explicit cases**: Each promotion path is an explicit, generator-populated table entry — debuggable by reading `pkg/values/promotion.go`
 
 ---
 
@@ -164,7 +162,7 @@ const (
 )
 ```
 
-**Deleted (2026-02-05):** `NumericRank`, `Rank`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. `Promote` was retained (`values/promotion.go:303`) for use by the dispatch-table generators.
+**Deleted (2026-02-05):** `NumericRank`, `Rank`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. `Promote` was retained (`pkg/values/promotion.go` → `Promote`) for use by the dispatch-table generators.
 
 ---
 
@@ -211,16 +209,16 @@ Where:
 
 ## Simplification Rules
 
-`Simplify` reduces numbers to simpler types when no information is lost:
+`Simplify` reduces numbers to simpler types when no information is lost. It descends **within** an exactness class, never across one: exactness, not magnitude, licenses a descent.
 
 | Input | Simplification |
 |-------|---------------|
-| BigComplex with zero imaginary | → real part (recursive) |
-| Complex with zero imaginary | → Float → possibly Integer |
-| BigFloat that is an integer | → BigInteger → possibly Integer |
-| Float that is a whole number | → Integer |
+| BigComplex with an **exact** zero imaginary | → real part (recursive; the one cross-kind case, handled in `Simplify` itself) |
 | Rational with denominator 1 | → BigInteger → possibly Integer |
 | BigInteger that fits int64 | → Integer |
+| Integer, Float, BigFloat, Complex | identity |
+
+The inexact tier does not descend. `Float` is the bottom of it, and demoting a whole-valued `Float` or an integral `BigFloat` to an exact `Integer` (which earlier versions did) crosses the exactness class and would make `(exact? 2.0)` answer `#t`. A `*Complex` never descends either: its parts are `float64`, so a `0.0` imaginary part is always an *inexact* zero, and R7RS §6.2.6 says the component is still there (`(real? -2.5+0.0i)` is `#f`). See the `SimplifyDown` functions registered per kind in `pkg/values/numeric_registry.go`.
 
 ---
 
@@ -292,12 +290,14 @@ imag-acc)` and the symbols apply to each component independently.
 
 Coverage tests are in:
 
-- `numeric_tower_coverage_test.go` — 245-case coverage matrix (7×7×5 operations)
-- `numeric_lattice_test.go` — Lattice-based promotion model validation
+- `pkg/values/numeric_tower_coverage_test.go` — 245-case coverage matrix (7×7×5 operations)
+- `pkg/values/numeric_lattice_test.go` — Lattice-based promotion model validation
+- `pkg/values/promotion_test.go` — the two tables' semilattice laws, and the exact set of pairs on which they are permitted to diverge
+- `pkg/values/numeric_dispatch_test.go` — `TestAllDispatchEntriesPopulated`: no nil entry in any of the 35 tables
 
 Run tests:
 ```bash
-go test -v ./values/ -run "TestNumericTower|TestLattice"
+go test -v ./pkg/values/ -run "TestNumericTower|TestLattice"
 ```
 
 ---
@@ -307,5 +307,5 @@ go test -v ./values/ -run "TestNumericTower|TestLattice"
 - R7RS §6.2.1 — Numerical types (tower definition)
 - R7RS §6.2.2 — Exactness (contagion rules)
 - R7RS §6.2.3 — Implementation restrictions
-- `pkg/values/` — package sources: `numeric_kind.go` (dispatch), `numeric_scratch.go` (in-place helpers)
-- Design rationale: Unified tower dispatch was prototyped and abandoned (see "Why Direct Dispatch" above)
+- `pkg/values/` — package sources: `numeric_kind.go` (the `NumericKind` enum and the "adding a new numeric type" checklist), `promotion.go` (tables and dispatch generators), `numeric_registry.go` (per-kind `NumericTypeSpec`), `numeric_scratch.go` (in-place helpers)
+- Design rationale: Unified tower dispatch was prototyped and abandoned (see "Why This Instead of a Unified Tower" above)

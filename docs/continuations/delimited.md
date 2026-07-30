@@ -45,7 +45,7 @@ Re-invoking `saved-k` later re-enters the callback at `x=2` but cannot resume th
 
 ### The general pattern
 
-Any Go primitive that calls a Scheme closure in a loop creates a "sub-context boundary" that truncates continuations. This affected `map`, `for-each`, `apply` (when the applied procedure is called in a sub-context), and `call-with-values`.
+Any Go primitive that calls a Scheme closure in a sub-context creates a boundary that truncates continuations. This affected `map`, `for-each`, `apply`, and `call-with-values`. The two remedies below were the first; the general one arrived later, when every such boundary was *reified* as a continuation chain frame that the body runs under inline (`RunBodyUnderFrame` and friends in `machine/run_body_under_frame.go`): `call-with-values` now pushes a consumer frame, `call-with-exit` a finalizer frame, `call-with-continuation-prompt` a transparent prompt frame. A continuation captured inside the body spans those frames instead of stopping at them.
 
 ## The Solution: Two Complementary Changes
 
@@ -57,23 +57,28 @@ The direct fix: make the iteration itself consist of Scheme continuation frames.
 (define map
   (case-lambda
     ((f lst)
-     (let loop ((lst lst))
-       (if (null? lst) '()
-           (cons (f (car lst)) (loop (cdr lst))))))
+     (let loop ((rest lst) (acc '()))
+       (if (null? rest)
+           (reverse acc)
+           (loop (cdr rest) (cons (f (car rest)) acc)))))
     ((f lst . lsts)
-     (let loop ((all (cons lst lsts)))
+     (let loop ((all (cons lst lsts)) (acc '()))
        (if (let any-null? ((ls all))
              (if (null? ls) #f
                  (if (null? (car ls)) #t
                      (any-null? (cdr ls)))))
-           '()
-           (cons (apply f (map car all))
-                 (loop (map cdr all))))))))
+           (reverse acc)
+           (loop (map cdr all)
+                 (cons (apply f (map car all)) acc)))))))
 ```
 
-Now the named-let `loop` compiles to tail-recursive Scheme frames. When `call/cc` captures inside `(f (car lst))`, the continuation chain includes the `cons`, the recursive `loop` call, and the full outer computation. Re-entering the continuation resumes the iteration naturally.
+Now the named-let `loop` compiles to Scheme frames. When `call/cc` captures inside `(f (car rest))`, the continuation chain includes the pending `cons`, the `loop` call, and the full outer computation. Re-entering the continuation resumes the iteration naturally.
+
+The accumulate-and-reverse shape is load-bearing, not a stylistic choice. The structural form `(cons (f (car lst)) (loop (cdr lst)))` leaves a `cons` pending per element, so a long list raises `ErrCallDepthExceeded`; the tail form has no ceiling. A `set-cdr!` tail pointer allocates n+1 cells instead of 2n and measured much slower. Do not "simplify" it back; see `pkg/wile/map_depth_test.go` for the pin.
 
 The multi-list case uses `any-null?` (a named-let helper) to check if any input list is exhausted, matching R7RS's behavior of stopping at the shortest list.
+
+The definitions live in `registry/core/bootstrap_procedures.scm`, alongside `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, and `assoc`, all moved to Scheme for the same reason.
 
 ### 2. Add delimited continuations
 
@@ -86,52 +91,53 @@ Delimited continuations (Racket-style prompts) provide a general mechanism for c
 ```
 PromptTag                    Opaque identity (pointer equality, atomic ID)
 ComposableContinuation       Callable value: continuation segment + winding stack
-ErrPromptAbort               Error type for abort propagation
+CapturedContinuation         call/cc escape value wrapping a ComposableContinuation
+ErrPromptAbort               Control signal for abort propagation
+ErrResumeContinuation        Control signal for call/cc resume (the trampoline)
 ```
 
 ### Where prompts live
 
 A prompt can be either:
 
-1. **On the continuation chain**: a `MachineContinuation` frame with a non-nil `promptTag` field.
-2. **On the MachineContext**: the `promptTag` field of a sub-context, set by `call-with-continuation-prompt`.
+1. **On the continuation chain**: a `MachineContinuation` frame with a non-nil `promptTag` field. This is what `call-with-continuation-prompt` installs, via `RunBodyUnderPrompt`.
+2. **On the MachineContext**: the `promptTag` field, set only by `RunResumable` when it installs `DefaultPromptTag` on its own context.
 
-`FindPrompt` checks both locations. The context-level prompt exists because `call-with-continuation-prompt` runs its thunk in a sub-context (for error isolation), and the sub-context's continuation chain starts empty. The prompt tag on the context marks the sub-context boundary.
+`FindPrompt` checks both, returning `(frame, true)`, `(nil, true)` for the context-level boundary, or `(nil, false)`. The two "true" answers are distinct and both are used: a chain frame is a delimiter to slice at or restore past, while `nil` means "the boundary of this context", which for a resume means *replace the whole chain* (the abortive case).
+
+Earlier versions ran the prompt thunk in a sub-context and used `SetPromptTag` to mark it. That truncated any continuation captured inside the thunk, which is exactly the sub-context boundary problem described above. `SetPromptTag` has no production caller today.
 
 ### Error propagation
 
-`ErrPromptAbort` propagates through the call stack:
+Two control signals, both declared in `machine/prompt_abort.go`, ride the VM's ordinary `return err` plumbing:
 
 ```
-Scheme code calls abort-current-continuation (or call/cc escape closure)
-    │
-    ▼
-Returns ErrPromptAbort
-    │
-    ▼
-OperationForeignFunctionCall sees ErrPromptAbort, propagates it
-    │                         (does NOT wrap in ErrExceptionEscape)
-    ▼
-Run() returns ErrPromptAbort to caller
-    │
-    ▼
-Caught by either:
-  ┌─ PrimCallWithContinuationPrompt (sub-context, user prompt tag)
-  ├─ PrimCallCC sub-context mode    (call/cc escapes to DefaultPromptTag)
-  └─ RunWithEscapeHandling          (top-level, all aborts via FindPrompt)
+        abort-current-continuation       call/cc continuation invoked
+        call-with-exit exit closure      │
+        shift / control                  │
+        │                                │
+        ▼                                ▼
+        ErrPromptAbort                   ErrResumeContinuation
+        {tag, values,                    {tag, unrun segment, values,
+         SourceWinding}                   SourceWinding}
+        │                                │
+        └────────────────┬───────────────┘
+                         ▼
+   applyCallableError (machine/foreign_closure.go): control signals
+   pass through unchanged; anything else becomes a Scheme condition
+                         │
+                         ▼
+           Run() returns the signal to its driver
+                         │
+        ┌────────────────┴───────────────┐
+        ▼                                ▼
+        RunWithinBoundary                RunResumable
+        (prompt frame on the             (the DefaultPromptTag driver;
+         sub-context's own chain;         RunWithEscapeHandling
+         otherwise re-raises)             delegates to it)
 ```
 
-The key detail in `OperationForeignFunctionCall`: `ErrPromptAbort` is checked before wrapping errors as exceptions:
-
-```go
-// Priority order for error handling:
-1. Panic recovery (deferred)  — Go panics from values.Number arithmetic
-2. ErrPromptAbort             — prompt aborts and call/cc escapes
-3. ErrExceptionEscape         — Scheme exceptions (propagated as-is)
-4. Any other error            — wrapped in ErrExceptionEscape
-```
-
-Without the `ErrPromptAbort` check, the abort would be wrapped in a Scheme exception and the prompt handler would never see it.
+The order in `applyCallableError` matters: `ErrPromptAbort`, `ErrExceptionEscape`, `ErrTimerInterrupt`, and `ErrResumeContinuation` are each recognized *before* the fallthrough. Without those checks, an abort or a resume would be converted into a catchable Scheme condition and its driver would never see it.
 
 ## How Each Primitive Works
 
@@ -141,15 +147,15 @@ Without the `ErrPromptAbort` check, the abort would be wrapped in a Scheme excep
 (call-with-continuation-prompt thunk tag handler)
 ```
 
-Implementation in Go (`PrimCallWithContinuationPrompt`):
+Implementation in Go (`PrimCallWithContinuationPrompt` → `RunBodyUnderPrompt`):
 
-1. Create a sub-context. Set its `promptTag` to `tag`.
-2. Apply `thunk` in the sub-context. Run it.
-3. If the thunk returns normally, propagate its value.
-4. If `ErrPromptAbort` is caught and the tag matches:
-   a. Unwind the sub-context's winding stack down to the parent's depth (call after thunks for any `dynamic-wind` extents entered inside the prompt).
-   b. Run the handler with the abort values (in a fresh sub-context).
-5. If the tag doesn't match, propagate the abort upward.
+1. Push a *transparent* prompt frame onto `mc.cont`, carrying `tag` and `handler`. The frame inherits the current winding stack, marks, barrier token, and thread ID.
+2. Inline-apply `thunk` on the live chain. No sub-context.
+3. If the thunk returns normally, the frame's `returnTemplate` passes its value(s) straight through.
+4. An abort to `tag` is routed by the driver's `FindPrompt` to this frame, and `resolveAbort` reconciles dynamic-wind, restores *past* the frame, and applies the handler (or delivers the abort values when the handler is nil / `#f`).
+5. An abort to a different tag simply does not match this frame and keeps walking.
+
+Reifying the prompt on the chain is what lets a continuation captured inside the thunk span the prompt, and what lets `call-with-composable-continuation` slice at a real frame.
 
 ### abort-current-continuation
 
@@ -157,7 +163,7 @@ Implementation in Go (`PrimCallWithContinuationPrompt`):
 (abort-current-continuation tag v ...)
 ```
 
-Simply returns `&ErrPromptAbort{Tag: tag, Values: vs}`. The error propagates up through the VM until a matching prompt catches it.
+Simply returns `&ErrPromptAbort{Tag: tag, Values: vs}`. The signal propagates up through the VM until a driver's `FindPrompt` matches it. (The `call-with-exit` exit closure and `shift`/`control` emit the same signal, the first with a private per-invocation tag and a `SourceWinding` copy.)
 
 ### call-with-composable-continuation
 
@@ -167,24 +173,28 @@ Simply returns `&ErrPromptAbort{Tag: tag, Values: vs}`. The error propagates up 
 
 This is the most complex primitive. Implementation:
 
-1. `FindPrompt(tag)` — walk the continuation chain and check the context-level prompt.
-2. `SliceContinuationAt(prompt)` — deep-copy the continuation frames from the current position down to (but not including) the prompt. The bottom frame's parent is set to nil, creating a standalone segment.
-3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack.
-4. Run `proc` with the composable continuation **in place** on the live chain — mirroring `call/cc`'s inline mode (`prim_control.go`), NOT in a sub-context and NOT aborting. The deep copy in step 2 left the originals on the live chain, so `proc`'s result flows back through them.
+1. `FindPrompt(tag)`: walk the continuation chain and check the context-level prompt. No match is an error: there is nothing to delimit at.
+2. `SliceContinuationAt(prompt)`: deep-copy the continuation frames from the current position down to (but not including) the prompt. The bottom frame's parent is set to nil, creating a standalone segment. The live source chain is marked shared, since the copies alias its environment frames.
+3. Create a `ComposableContinuation` wrapping the segment and a copy of the current winding stack (plus thread ID and barrier token). No mark snapshot is taken: composable resume composes the invoker's marks, unlike `call/cc`.
+4. Apply `proc` with the composable continuation **in place** on the live chain, mirroring `call/cc`'s inline mode (`prim_control.go`), NOT aborting. The deep copy in step 2 left the originals on the live chain, so `proc`'s result flows back through them. When the capture is rootless (`mc.Parent() == nil`), `proc` runs in a fresh sub-context under its own `DefaultPromptTag` driver instead, exactly as call/cc's sub-context mode; its value(s) are then delivered to `mc`.
 
 This is the defining behavior of a *composable* continuation (Racket semantics, verified against Racket v9.2): `proc` runs in the continuation of the `call-with-composable-continuation` call — it does not remove the current continuation — and applying the captured continuation **composes** (extends) rather than replaces, so the captured frames may legitimately run more than once. For example `(+ 1 (call-with-composable-continuation (lambda (k) (k (k 10))) tag))` under a prompt yields **13**: `(k 10)`→11, `(k 11)`→12, then `proc`'s 12 flows in place into the live `(+ 1 _)` → 13. `shift`/`control` add their own `abort-current-continuation` on top of this raw capture (`wile/control.scm`); the primitive itself must not. (Earlier versions aborted to the prompt — `control`/frame-removing semantics — which was non-conformant to the Racket primitive this primitive follows.)
 
 ### Applying a composable continuation
 
-When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCallable`):
+When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCallable` to `applyComposableContinuation`):
 
-1. Thread check: reject if invoked from a different SRFI-18 thread.
-2. Deep-copy the segment for safe re-invocation.
-3. Graft the segment's bottom frame onto the current continuation chain.
-4. Handle dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack.
-5. Restore from the segment's top frame and set the argument as the value.
+1. Thread check: reject if invoked from a different SRFI-18 thread. Barrier check: reject if the barrier token differs.
+2. Copy the argument values off the eval stack, whose backing array `Restore` recycles.
+3. Delegate to `ReinstallSegment` with `boundary = p.cont`, which:
+   a. installs the captured marks and bumps `resumeGeneration`;
+   b. calls `AcquireSegment()`: the original frames on first invocation (marking the chain shared), a deep copy on re-invocation;
+   c. reconciles dynamic-wind: `RestoreWithWindingFrom(nil, current, captured)` unwinds extents not in the captured stack and rewinds captured extents not in the current stack;
+   d. grafts the segment's bottom frame onto `boundary`, restores from the segment's top frame, and delivers the values.
 
-The deep copy in step 2 is essential. Without it, re-invoking the composable continuation would corrupt the continuation chain (the frames are mutable and get modified during execution).
+`ReinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain) and `isolate` (true, restoring the captured mark snapshot).
+
+The share-then-copy discipline in step 3b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
 
 ## Interaction with dynamic-wind
 
@@ -199,7 +209,7 @@ When transitioning between dynamic extents (whether from `call/cc`, abort, or co
 
 ### Abort + dynamic-wind
 
-When an abort crosses a `dynamic-wind` boundary, the after thunks must run. This is handled in `PrimCallWithContinuationPrompt`: after catching the abort, it calls `sub.UnwindTo(mc.WindingStack().Depth())` to run after thunks for any dynamic-wind extents that were active inside the prompt.
+When an abort crosses a `dynamic-wind` boundary, the after thunks must run. This is handled once, in the driver's `resolveAbort`, which reconciles from `abortErr.SourceWinding` (the winding live at the *escape point*, possibly a deeper sub-context than the driver's) to the found prompt frame's winding. The abort's emitter must therefore not unwind itself: `call-with-exit`'s exit closure carries the source winding and deliberately does no `UnwindTo`, because unwinding at both ends double-fires the after thunks, and reconciling from the driver's own winding instead skips a deeper sub-context's.
 
 ### Composable continuation + dynamic-wind
 
@@ -221,31 +231,31 @@ This is correct: D2 is exited, D3 is entered, and D1 (the common ancestor) is le
 
 ## Unified continuation control flow
 
-All continuation control flow — both `call/cc` escapes and delimited continuations — uses `ErrPromptAbort` as the single error propagation mechanism. Call/cc uses the composable-continuation-then-abort model: the escape closure applies a composable continuation in a sub-context, then aborts to `DefaultPromptTag` with the result. This follows Racket's model where `call/cc` is defined in terms of composable continuations and abort.
+Both kinds of continuation control flow share one resume primitive (`ReinstallSegment`) and one driver (`RunResumable`), and differ only in the signal that reaches it. Call/cc still follows Racket's model, where a call/cc escape is a composable capture delimited at the default prompt plus an abort to it, but the *mechanism* is the resume trampoline rather than an abort carrying an already-computed result. See [`resume-trampoline.md`](resume-trampoline.md).
 
 ```
-┌──────────────────┬─────────────────────────┬────────────────────────────┐
-│                  │ call/cc escape           │ Prompt abort               │
-├──────────────────┼─────────────────────────┼────────────────────────────┤
-│ Error type       │ ErrPromptAbort           │ ErrPromptAbort             │
-│                  │ (to DefaultPromptTag)    │ (to user tag)              │
-├──────────────────┼─────────────────────────┼────────────────────────────┤
-│ Carries          │ Result value (from       │ Prompt tag + values        │
-│                  │ composable cont. run)    │                            │
-├──────────────────┼─────────────────────────┼────────────────────────────┤
-│ Caught by        │ PrimCallCC sub-context   │ PrimCallWithContinuation   │
-│                  │ or RunWithEscapeHandling │   Prompt (sub-context)     │
-│                  │ (unified FindPrompt)     │ or RunWithEscapeHandling   │
-│                  │                         │   (top-level)              │
-├──────────────────┼─────────────────────────┼────────────────────────────┤
-│ Effect           │ Replaces current         │ Unwinds to prompt,         │
-│                  │ continuation             │ invokes handler             │
-├──────────────────┼─────────────────────────┼────────────────────────────┤
-│ Composable       │ No (aborts computation)  │ Yes (via ComposableCont.)  │
-└──────────────────┴─────────────────────────┴────────────────────────────┘
+┌──────────────────┬───────────────────────────┬─────────────────────────────┐
+│                  │ call/cc resume            │ Prompt abort                │
+├──────────────────┼───────────────────────────┼─────────────────────────────┤
+│ Signal type      │ ErrResumeContinuation     │ ErrPromptAbort              │
+│                  │ (to DefaultPromptTag)     │ (to a user or exit tag)     │
+├──────────────────┼───────────────────────────┼─────────────────────────────┤
+│ Carries          │ Unrun segment, values,    │ Tag, values,                │
+│                  │ SourceWinding             │ SourceWinding               │
+├──────────────────┼───────────────────────────┼─────────────────────────────┤
+│ Resolved by      │ RunResumable →            │ RunResumable or             │
+│                  │ ReinstallSegment          │ RunWithinBoundary →         │
+│                  │                           │ resolveAbort                │
+├──────────────────┼───────────────────────────┼─────────────────────────────┤
+│ Effect           │ Reinstalls the segment;   │ Restores past the prompt;   │
+│                  │ nil boundary replaces     │ runs its handler or         │
+│                  │ the live chain            │ delivers the values         │
+├──────────────────┼───────────────────────────┼─────────────────────────────┤
+│ Composable       │ No (replaces)             │ Yes (via ComposableCont.)   │
+└──────────────────┴───────────────────────────┴─────────────────────────────┘
 ```
 
-`ComposableContinuation` is the qualitatively new capability. Unlike `call/cc` escapes which discard the current computation, composable continuations splice frames in and resume normally. This enables patterns like:
+`ComposableContinuation` is the qualitatively new capability. Unlike a `call/cc` continuation, which replaces the live chain, a composable continuation splices frames in and resumes normally. This enables patterns like:
 
 ```scheme
 (define tag (make-continuation-prompt-tag))
@@ -260,7 +270,8 @@ All continuation control flow — both `call/cc` escapes and delimited continuat
          #f))
 ;; k captures (+ 1 <hole>)
 ;; (k 2) = 3, (k 3) = 4, sum = 7
-;; prompt returns 7, outer + 10 = 17
+;; the capture did NOT remove the live (+ 1 _), so proc's 7 flows in place
+;;   through it => 8; prompt returns 8, outer + 10 = 18
 ```
 
 ## Continuation chain operations
@@ -300,21 +311,25 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 | File | Contents |
 |------|----------|
 | `machine/prompt_tag.go` | `PromptTag` type, `DefaultPromptTag` |
-| `machine/composable_continuation.go` | `ComposableContinuation` callable value |
-| `machine/prompt_abort.go` | `ErrPromptAbort` error type |
+| `machine/composable_continuation.go` | `ComposableContinuation` callable value, `AcquireSegment` |
+| `machine/prompt_abort.go` | `ErrPromptAbort`, `ErrResumeContinuation` |
 | `machine/dynamic_wind.go` | `DynamicWindFrame`, `WindingStack`, `FindCommonWindingPrefix` |
 | `machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopy()` |
 | `machine/barrier_token.go` | `BarrierToken` opaque barrier identity |
-| `machine/machine_context.go` | `RunWithEscapeHandling` |
+| `machine/machine_context.go` | `RunResumable`, `RunWithEscapeHandling`, `RunWithinBoundary`, `resolveAbort` |
+| `machine/run_body_under_frame.go` | `RunBodyUnderPrompt` and the other reified-boundary constructors |
 | `machine/machine_context_continuation.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation` |
 | `machine/machine_context_winding.go` | `RestoreWithWindingFrom` |
-| `machine/machine_context_apply.go` | `applyComposableContinuation` |
-| `machine/operations_call.go` | `OperationForeignFunctionCall` (`ErrPromptAbort` passthrough) |
+| `machine/machine_context_apply.go` | `ReinstallSegment`, `applyComposableContinuation` |
+| `machine/foreign_closure.go` | `applyCallableError` (control-signal passthrough) |
+| `machine/operations_call.go` | `OperationForeignFunctionCall` (panic recovery → `bridgeForeignError`) |
 | `registry/core/prim_prompt.go` | Prompt primitive implementations |
-| `machine/captured_continuation.go` | `CapturedContinuation`: call/cc escape value wrapping `ComposableContinuation` |
-| `registry/core/prim_control.go` | `PrimCallCC`, `NewCapturedContinuation` |
+| `machine/captured_continuation.go` | `CapturedContinuation` and `applyCapturedContinuation`: the call/cc escape value |
+| `registry/core/prim_control.go` | `PrimCallCC` |
+| `registry/core/prim_barrier.go` | `PrimCallWithContinuationBarrier` |
+| `registry/core/prim_exit.go` | `PrimCallWithExit` (reified exit frame) |
 | `registry/core/prompts.go` | Primitive registration |
-| `registry/core/bootstrap.go` | Scheme `map`/`for-each` definitions |
+| `registry/core/bootstrap_procedures.scm` | Scheme `map`/`for-each` definitions |
 
 ## References
 

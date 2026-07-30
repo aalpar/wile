@@ -56,10 +56,10 @@ In Scheme, a simplification rule looks like this:
 ```scheme
 (define (simplify expr)
   (match expr
-    [(list '+ a a)           (list '* 2 a)]
     [(list '* a 0)           0]
     [(list '* 0 a)           0]
     [(list '+ a 0)           a]
+    [(list '+ a b)           (if (equal? a b) (list '* 2 a) expr)]
     [(list 'deriv (list '* f g) x)
      (list '+ (list '* (list 'deriv f x) g)
               (list '* f (list 'deriv g x)))]
@@ -70,11 +70,16 @@ Each `match` clause is a rewrite rule. The pattern is on the left. The replaceme
 on the right. Both are lists — the same data structure as the expressions themselves.
 Writing a rewrite rule and writing an expression are the same activity.
 
+(`match` is a library form, not R7RS core: Racket's `racket/match`, `(chibi
+match)`. Wile does not ship one. A pattern variable also cannot repeat within a
+single pattern, which is why the *a + a* rule binds two variables and compares
+them in the body.)
+
 In SymPy, the equivalent uses `.replace()` with `Wild` patterns, or a custom
 function that walks `.args`:
 
 ```python
-from sympy import Wild, symbols, Mul, Add
+from sympy import Wild, symbols, Mul, Add, Integer
 
 a, b = Wild('a'), Wild('b')
 expr = expr.replace(Mul(a, 0), lambda a: Integer(0))
@@ -173,6 +178,10 @@ functional abstraction makes it explicit:
   (let ((v (velocity local)))
     (* 1/2 mass (dot-product v v))))
 ```
+
+(The curried `(define ((f a) b) ...)` header is MIT Scheme's, not R7RS; Wile and
+other R7RS implementations spell it `(define (f a) (lambda (b) ...))`.
+`velocity` and `dot-product` come from SCMUTILS, not from the standard library.)
 
 The Lagrangian is a function that returns a function. The structure of the
 computation is visible in the code. You can differentiate it, compose it, pass it to

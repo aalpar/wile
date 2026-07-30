@@ -74,6 +74,8 @@ In Java, `FileInputStream` exists in every JVM. The SecurityManager intercepts t
 
 In Scheme, the binding either exists or it doesn't. Nothing remains to intercept.
 
+That covers the capabilities you can remove outright. It does not cover the ones you want present but bounded: "you may open files, but only under `/tmp`" is not a statement about which bindings exist, because the path is a runtime value. So Wile has a second, smaller layer for exactly those: a `security.Authorizer` that each privileged primitive consults with a resource, an action, and a target before it acts. That is a runtime check, and it is the same *kind* of thing the SecurityManager did. The difference is scale. There is no stack walking, and there is nothing to enumerate, because the set of operations that can reach the host is the set you registered. A couple of dozen call sites, enumerable in a grep, not an open-ended search for the next reflective path.
+
 ## Five properties that make this work
 
 Lexical scoping alone is not enough. Scheme has a cluster of properties that cooperate with capability security[^capability]. Remove any one and the story weakens.
@@ -127,10 +129,9 @@ In most languages, attenuation requires a separate mechanism — a policy langua
 ;; Full authority: write anywhere
 (define write-file open-output-file)
 
-;; Attenuated: write only to /tmp/
+;; Attenuated: write only where CONFINED-TO-TMP? says so
 (define (safe-write path)
-  (if (and (>= (string-length path) 5)
-           (string=? (substring path 0 5) "/tmp/"))
+  (if (confined-to-tmp? path)
       (open-output-file path)
       (error "access denied" path)))
 
@@ -139,6 +140,8 @@ In most languages, attenuation requires a separate mechanism — a policy langua
 ```
 
 The attenuated capability is a first-class value[^firstclass] — passed, stored, and composed using the same tools as any other Scheme value. No policy DSL to learn, no `Permission` object hierarchy, no XML configuration. The language's composition mechanism — the closure — *is* the security mechanism.
+
+Note what the closure does *not* give you for free. `confined-to-tmp?` has to be a real containment check, canonicalizing the path before comparing, because a prefix test on the spelling admits `/tmp/../etc/passwd` and follows any symlink staged under `/tmp`. Wile's built-in `/tmp` policy resolves symlinks on both the root and the target, and opens through `os.Root` so the check and the `open` cannot end up on different files. Closures make attenuation cheap to *express*; they do not make the predicate correct.
 
 This is the central argument of Mark Miller's 2006 dissertation, "Robust Composition": in a language where authority flows through closures, capability security and software engineering are the same discipline. Writing modular code with clear interfaces *is* writing secure code.
 

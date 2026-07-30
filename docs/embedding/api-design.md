@@ -16,8 +16,8 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 │                                                      │
 ├──────────────────────────────────────────────────────┤
 │  wile.Engine                                         │
-│  - Parse / Eval / EvalIn / EvalMultiple / Compile    │
-│  - Run / Call / Define / Get / RegisterPrimitive     │
+│  - Parse / Eval / EvalMultiple / EvalProgram         │
+│  - Compile / Run / Call / Define / RegisterFunc      │
 │  - Value wrapping/unwrapping boundary                │
 ├──────────────────────────────────────────────────────┤
 │  Internal Pipeline                                   │
@@ -42,6 +42,8 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 
 If any step fails (including bootstrap macro loading), the engine is not returned.
 
+`Close()` releases resources held by extensions implementing `registry.Closeable`; individual closer errors are joined. A second call returns `ErrEngineClosed`.
+
 ### Per-Instance Isolation
 
 Each `Engine` has its own `Namespace` and symbol table. This means:
@@ -57,11 +59,13 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 | `Parse(ctx, code)` | `string` | Parse exactly one expression to `*Expression`; errors if empty, malformed, or multi-expression |
 | `ParseWithSource(ctx, code, source)` | `string` + source name | Parse with source file attribution |
 | `ReadExpression(ctx, r)` | `io.Reader` | Read the first complete expression from a reader; ignores trailing input. Pairs with `IsIncompleteInput` for REPL input handling |
+| `ReadExpressions(ctx, r)` | `io.Reader` | Read every expression from a reader to EOF |
 | `MustParse(ctx, code)` | `string` | Parse or panic |
 | `MustParseWithSource(ctx, code, source)` | `string` + source name | MustParse with source attribution |
 | `Eval(ctx, expr)` | `*Expression` | Evaluate a single parsed expression |
-| `EvalMultiple(ctx, code)` | `string` | Parse and evaluate all expressions, return last result |
+| `EvalMultiple(ctx, code)` | `string` | Compile and run each top-level form independently, return last result. Forward references between separate `define`s do not resolve |
 | `EvalMultipleWithSource(ctx, code, source)` | `string` + source name | EvalMultiple with source attribution |
+| `EvalProgram(ctx, code, source)` | `string` + source name | Whole-program semantics: every top-level form is spliced into one `(begin ...)` and compiled as a unit, so top-level `define`s are mutually visible. The recommended entry point for a script or file |
 | `Compile(ctx, expr)` | `*Expression` | Compile a parsed expression without executing |
 | `Run(ctx, compiled)` | `*CompiledCode` | Execute pre-compiled code |
 | `Call(ctx, proc, args...)` | `Value` + args | Call a Scheme procedure from Go |
@@ -155,10 +159,17 @@ type PrimitiveSpec struct {
     ParamTypes []values.TypeConstraint // per-parameter type contract
     ReturnType values.TypeConstraint   // return type
     Keywords   []string        // searchable tags
+    InvokesProcedure bool      // Impl may call back into a Scheme procedure
 }
 ```
 
 The `ForeignFunction` receives a `CallContext` (interface implemented by `MachineContext`). Arguments are accessed positionally via `mc.Arg(i)` (and `mc.Arg(n-1)` for the variadic rest tail when `IsVariadic` is set). The return value is set via `mc.SetValue()`. Primitives that need full VM access (sub-contexts, continuations, exception handling) type-assert to `*MachineContext`.
+
+`InvokesProcedure` is a soundness commitment, not documentation: the default `false` tells the frame-reclaim classifier the primitive is capture-safe. Any `Impl` that reaches `ApplyCallable` or runs a sub-context MUST set it to `true`. A static guard in `pkg/wile` fails CI when the annotation is missing.
+
+### Registering Go Functions by Signature
+
+`RegisterFunc(name, fn)` (and `RegisterFuncs(map[string]any)`) registers a plain Go function without writing a `ForeignFunction`. Argument and return converters are computed once at registration time from the reflected signature. Supported: `int64`, `int`, `float64`, `complex128`, `string`, `bool`, `[]byte`, typed slices, maps, structs with exported fields, `func(...)` callbacks, `Value`, and `error` as the last return. A leading `context.Context` parameter receives the VM's context and does not count toward the Scheme arity. Callbacks must be invoked synchronously during the call; they capture VM state that is not goroutine-safe. Numeric conversions that would lose precision fail with `werr.ErrLossyConversion` unless `WithLossyConversionsAllowed()` is set.
 
 ### Calling Scheme from Go
 
@@ -183,16 +194,26 @@ Engine behavior can be customized via functional options:
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
-| `WithLibraryPaths(paths...)` | Set R7RS library search paths |
+| `WithLibraryPaths(paths...)` | Enable the R7RS library system (`define-library`/`import`) and set its search paths. Without it, `(import ...)` raises a configuration error |
 | `WithNamespace(ns)` | Use a pre-built namespace |
+| `WithDialect(d)` | Fork the forms registry per engine so a dialect can install, replace, or remove special forms (`DefaultDialect` is R7RS; `NoMutation` also ships). Incompatible with `WithNamespace` |
+| `WithMutableTopLevel()` | Opt out of the immutable-top-level default and take strict R7RS redefinable/`set!`-able top-level bindings |
+| `WithImmutableTopLevel()` | Explicit, redundant selector for the default. Retained for source compatibility |
 | `WithContractEnforcement()` | Enable runtime enforcement of `PrimitiveSpec.ParamTypes`/`ReturnType` contracts |
+| `WithLossyConversionsAllowed()` | Let FFI converters truncate Scheme numerics into fixed-precision Go types instead of failing with `werr.ErrLossyConversion` |
 | `WithMaxCallDepth(n)` | Cap the continuation chain depth (default `DefaultMaxCallDepth`) |
 | `WithMaxStackSize(n)` | Cap the eval stack size. Opt-in: when not set (or set to `0`), the stack is unlimited |
+| `WithMaxParseDepth(n)` | Cap parser nesting depth (default `parser.DefaultMaxParseDepth`, 10000); yields `ErrParseDepthExceeded` instead of a fatal Go stack overflow |
+| `WithMaxExpandDepth(n)` | Cap expander recursion depth (default 50000), bounding programmatically-built syntax that never passed through the parser |
 | `WithInlineThreshold(n)` | Tune the procedure inliner's size budget |
 | `WithImportObserver(obs)` | Observe library imports (called on each `(import ...)`) |
 | `WithCoverage(c)` | Attach a `*coverage.Collector` to record per-line Scheme execution |
 
-**Option ordering.** `WithAuthorizer` *assigns* the authorizer; `WithSandbox` *composes* via `security.All(...)` only if an authorizer is already set. Therefore `WithSandbox` must appear **after** `WithProfile`/`WithAuthorizer`. A later `WithAuthorizer(...)` silently overwrites any sandbox installed earlier — there is no diagnostic. Place authorizer-assigning options first and `WithSandbox` last.
+**Immutable top level is the default.** A top-level `define` that is defined once and never `set!` within its compilation unit becomes rebind-stable, and a later `set!` of it is rejected with `ErrImmutableBinding`. This is a documented deviation from R7RS §4.1.6/§5.3 that unlocks the frame-reclamation optimizer; `WithMutableTopLevel()` opts out and forfeits it. Enforcement is scoped to the engine's own user runtime global: redefining a sealed primitive or stdlib name is a child-frame shadow, and user-loaded libraries stay mutable.
+
+**Option ordering.** Authorizer selection is resolved once at construction (`resolveAuthorizer` in `options.go`) from three separate fields, so it is order-independent: an explicit `WithAuthorizer` (even `nil`) overrides a profile's authorizer, and a `WithSandbox` layer is always intersected on top via `security.All(...)`. Multiple `WithSandbox` calls accumulate, so restrictions only tighten. `WithEnv`/`WithEnvMap` is the exception that still depends on order: `WithProfile(Console*)` fills in an empty env map only when none is set, so a later `WithEnvMap(nil)` re-nils it and opens the sandbox.
+
+**`WithNamespace` drops the security options.** Every option consumed by namespace construction is silently ignored on that path, because `NewEngine` skips the bootstrap step that would apply them: the registry/extension/core options, `WithStrictNamespace`, `WithAuthorizer`, `WithSandbox`, a profile's built-in authorizer, `WithEnv`/`WithEnvMap`, and `WithImmutableTopLevel`/`WithMutableTopLevel`. `WithNamespace(ns)` plus `WithSandbox()` yields no sandbox and no error. Apply those options to `NewNamespace` and pass its result here. `WithDialect` is the one such option `NewEngine` rejects outright instead of dropping.
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
 
@@ -200,9 +221,9 @@ Extensions implement `registry.Extension` and register primitives, macros, and c
 
 Wile provides two independent sandboxing layers.
 
-**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithProfile(Console)` selects a curated bundle (io with in-memory ports, files, math, the safe subset of `all`, and envvars) plus a matching `ConsoleAuthorizer` that restricts file ops to `/tmp` and denies code/process. `WithProfile(Tiny)` registers no extensions beyond core; `WithProfile(KitchenSink)` registers every extension and matches the CLI. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
+**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithProfile(Console)` selects a curated bundle (io with in-memory ports, files, math, the safe subset of `all`, charsets, and envvars) plus a matching `ConsoleAuthorizer` that restricts file ops to `/tmp` and denies code/process. `WithProfile(Tiny)` registers no extensions beyond core; `WithProfile(KitchenSink)` registers every extension and matches the CLI. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
 
-**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (resources: `file`, `code`, `env`, `process`; actions: `read`, `write`, `delete`, `stat`, `load`, `exit`, `exec`, `exec-shell`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `ReadOnlyWithLoad()`, `FilesystemRoot(path)`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`, `SandboxAuthorizer(envPrefix)`, `All(authorizers...)`. Profiles bundle a matching authorizer; `WithSandbox` adds `SandboxAuthorizer` on top via `All(...)`.
+**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (resources: `file`, `code`, `env`, `process`; actions: `read`, `write`, `delete`, `stat`, `load`, `eval`, `exit`, `exec`, `exec-shell`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `ReadOnlyWithLoad()`, `FilesystemRoot(path)`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`, `SandboxAuthorizer(envPrefix)`, `All(authorizers...)`. Profiles bundle a matching authorizer; `WithSandbox` adds `SandboxAuthorizer` on top via `All(...)`.
 
 The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`security/sandboxing.md`](../security/sandboxing.md) for the full security model.
 
@@ -285,11 +306,17 @@ Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files 
 | File | Purpose |
 |------|---------|
 | `engine.go` | Engine type, evaluation methods, initialization |
-| `expression.go` | `Expression` type, `Parse`, `ParseWithSource`, `MustParse`, `MustParseWithSource`, `ReadExpression` |
-| `value.go` | `Value` interface, constructors, wrapping |
-| `options.go` | Functional options for engine configuration |
+| `expression.go` | `Expression` type, `Parse`, `ParseWithSource`, `MustParse`, `MustParseWithSource`, `ReadExpression`, `ReadExpressions` |
+| `value.go`, `value_helpers.go` | `Value` interface, constructors, wrapping |
+| `options.go` | Functional options for engine configuration, `resolveAuthorizer` |
 | `profile.go` | `Profile` type and `WithProfile` |
 | `sandbox.go` | `WithSandbox`, `SandboxOption`, `SandboxEnvPrefix` |
+| `dialect.go`, `dialect_nomutation.go` | `Dialect` interface, `WithDialect`, `DefaultDialect`, `NoMutation` |
+| `primitive.go` | `PrimitiveSpec`, `ForeignFunction`, `CallContext` re-exports |
+| `ffi.go`, `ffi_*.go` | `RegisterFunc`/`RegisterFuncs` and the reflection-based converters |
+| `stdlib.go` | `StdLibFS` (re-export of `stdlib.LibFS`) |
+| `library_info.go` | `LibraryName`, `LibraryInfo`, library introspection |
+| `disassemble.go` | `DisassembleValue`, `FormLabel` |
 | `debugger.go` | `Debugger` type (breakpoints, stepping) |
 | `compiled.go` | `CompiledCode` type |
 | `error.go` | `CompilationError`, `RuntimeError`, `IsIncompleteInput` |

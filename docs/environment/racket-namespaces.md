@@ -1,5 +1,8 @@
 # Racket Namespaces
 
+*Comparative reference. This describes Racket's namespace model, not Wile's; see
+"How This Relates to Wile" at the end for what Wile actually ships.*
+
 You write `(eval '(+ 1 2))` and get `3`. Simple. But now ask: where does `eval`
 find `+`? In "the environment," sure — but *which* environment? Who decides what
 bindings are available? And what happens when you want two independent `eval`
@@ -226,8 +229,9 @@ You could try to fake it with R7RS `environment`:
 (eval '(+ 1 2) (environment '(scheme base)))
 ```
 
-But `environment` returns a frozen snapshot. `define` inside `eval` doesn't persist.
-You can't build a REPL on it — each evaluation forgets everything.
+But as R7RS specifies it, `environment` returns a frozen snapshot. `define` inside
+`eval` doesn't persist. You can't build a REPL on it — each evaluation forgets
+everything. (Wile deviates here; see below.)
 
 The alternative is what Python does: pass a raw dictionary as the "globals" for
 `exec`. This works for variables, but it doesn't handle modules, doesn't handle
@@ -236,17 +240,30 @@ principled version of that idea, extended to handle Racket's phased module syste
 
 ## How This Relates to Wile
 
-Wile has first-class environments with introspection (`environment?`,
-`environment-ref`, `environment-bound-names`, `environment-bound?`) and `eval`
-accepts an environment argument. This covers the "frozen dictionary" use case.
+Wile ships the mutable version. A first-class Wile environment *is* a namespace:
+`(environment '(scheme base))`, `(environment '(wile console))`, and
+`(make-namespace)` all return the same object kind (`environment.Namespace`),
+`eval` accepts it, and a `define` evaluated in it persists, so REPL state
+accumulates across evaluations. Mutation and introspection are `namespace?`,
+`namespace-name`, `namespace-derive`, `namespace-define!`, `namespace-ref`,
+`namespace-bound?`, `namespace-undefine!`, and `namespace-bound-names`, with
+`environment?` / `environment-ref` / `environment-bound?` /
+`environment-bound-names` covering the same read side under R7RS-flavored names.
+`namespace-require` is the dynamic import, Racket's `namespace-require`: it pulls
+a library's bindings into an existing namespace after the fact.
 
-What Wile *doesn't* have is the mutable, module-registry-carrying namespace that
-Racket uses for REPL state accumulation and sandboxed evaluation with controlled
-imports. Wile's security model takes a different approach: instead of controlling
-what *bindings* are available, it controls what *extensions* are loaded
-(`WithExtension()`) and what *operations* are authorized (`security.Authorizer`).
-The effect is similar — untrusted code can't call `delete-file` — but the mechanism
-is at the Go embedding layer rather than the Scheme namespace layer.
+Two pieces are absent. There is no `current-namespace` parameter: the target is
+always an explicit argument, never ambient. And there are no namespace anchors,
+because Wile has no module-embedded evaluation context to capture. Module
+instances are cached per namespace and `Namespace.AttachModule` is
+`namespace-attach-module` at the Go level, but nothing exposes attachment to
+Scheme.
+
+Sandboxing does not run through namespaces. Wile controls which *extensions* are
+loaded (`WithProfile()`, `WithExtension()`) and which *operations* are authorized
+(`security.Authorizer`). The effect is similar, untrusted code can't call
+`delete-file`, but the mechanism sits at the Go embedding layer rather than the
+Scheme namespace layer.
 
 See [racket-primitives.md](../continuations/racket-primitives.md) §3 for the
 full primitive reference and Wile feasibility assessment.

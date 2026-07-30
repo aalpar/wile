@@ -102,9 +102,10 @@ The power comes from three properties:
    continuation, enabling sampling profilers without instrumentation overhead
    in the profiled thread.
 
-Clements and Felleisen proved (ESOP 2001) that continuation marks provide
-stack inspection without violating proper tail calls -- a result that was
-believed impossible before their work.
+Clements, Flatt, and Felleisen introduced continuation marks (ESOP 2001, see
+`BIBLIOGRAPHY.md`); Clements and Felleisen later proved that marks provide stack
+inspection without violating proper tail calls -- a result that was believed
+impossible before their work.
 
 ### The second pillar: source locations on syntax objects
 

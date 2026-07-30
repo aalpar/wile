@@ -78,7 +78,7 @@ A scope is just a unique integer wrapped in a struct. There is nothing
 structurally complex about it:
 
 ```go
-// values/scope.go
+// pkg/values/scope.go
 type Scope struct {
     id          uint64  // unique identity
     IsRebinding bool    // for let-syntax / letrec-syntax
@@ -104,7 +104,7 @@ Every identifier in the parsed program is not a bare string. It is a
 among other things, a list of scopes:
 
 ```go
-// internal/syntax/syntax_symbol.go
+// pkg/syntax/syntax_symbol.go
 type SyntaxSymbol struct {
     Sym             *values.Symbol
     syntaxBase                      // holds *SourceContext (with Scopes []*Scope)
@@ -119,7 +119,7 @@ Syntax objects are **immutable**. `AddScope` does not modify the existing
 object; it returns a new one:
 
 ```go
-// internal/syntax/syntax_symbol.go
+// pkg/syntax/syntax_symbol.go
 func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
     newCtx := p.SourceContext().WithScope(scope)
     if newCtx == p.SourceContext() {
@@ -153,14 +153,15 @@ called with the whole form `(swap! a b)` as its argument.
 
 **Step 3 — Match the pattern.**  
 The pattern `(swap! x y)` is matched against `(swap! a b)`. This is done by a
-bytecode-based pattern-matching VM (see `internal/match/`). On success, the
+bytecode-based pattern-matching VM (see `pkg/internal/match/`). On success, the
 matcher has captured `x → a` and `y → b`.
 
 **Step 4 — Mint the intro scope.**  
 A fresh scope `S1` is created for *this invocation*:
 
 ```go
-// machine/compilation/operation_syntax_rules_transform.go:193
+// pkg/machine/compilation/operation_syntax_rules_transform.go
+//   (*OperationSyntaxRulesTransform).Apply
 introScope := syntax.NewScopeWithLabel("intro")
 ```
 
@@ -189,7 +190,7 @@ the user's binding. Hygiene is maintained.
 The resolution check itself is five lines:
 
 ```go
-// values/scope.go
+// pkg/values/scope.go
 func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
     if len(bindingScopes) > len(useScopes) {
         return false
@@ -203,6 +204,13 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 }
 ```
 
+Several bindings of the same name can pass that check at once, so the resolver
+keeps the candidate with the *largest* scope set, the most specific one. If two
+candidates tie on size and neither one's scope set contains the other's, there is
+no most-specific answer, and the resolver raises `werr.ErrAmbiguousBinding` rather
+than picking arbitrarily (`scopedBestOf` in `pkg/environment/best_of.go` flags the
+tie; `EnvironmentFrame.GetBinding` and its siblings raise on it).
+
 ---
 
 ## The Subtle Part: Free Identifiers
@@ -212,30 +220,45 @@ references that the *macro itself* needs — like `let`, `set!`, or a helper
 function the macro calls:
 
 ```scheme
+(define (helper) 'skipped)
+
 (define-syntax my-when
   (syntax-rules ()
     ((my-when condition body ...)
-     (if condition (begin body ...) (void)))))
+     (if condition (begin body ...) (helper)))))
 ```
 
-Here `if`, `begin`, and `void` are **free identifiers** — they are not pattern
+Here `if`, `begin`, and `helper` are **free identifiers** — they are not pattern
 variables, and they are not introduced by the macro to be bound. They are
 references to existing definitions.
 
-If we stamped them with the intro scope `S1`, they would fail to resolve.
-The binding for `if` was created with scope set `{}` (no scopes), so it would
-only resolve against references that also have no scopes. Adding `S1` to
-the reference would prevent the match.
+The intro scope alone does not protect them. Adding `S1` to a reference is
+harmless for a top-level binding, because that binding's scope set is `{}` and
+`{} ⊆ {S1}` holds. But that same subset rule is the exposure: a top-level binding
+of the same name at the *use* site also has scope set `{}`, so it satisfies the
+check just as well as the definition-site one does. A user who defines their own
+top-level `helper` would capture the macro's.
 
-The compiler therefore identifies free identifiers at compile time
-(everything in the template that is neither a pattern variable nor a literal)
-and tags them specially. During expansion, the adapter skips adding the intro
-scope to free identifiers. In Wile, free identifiers also get their binding
-pre-resolved at macro-definition time (`ResolvedBinding` on `SyntaxSymbol`),
-so they carry the *definition-site* binding rather than relying on the
-use-site environment to find them. This handles cross-library hygiene: a macro
-defined in library A that references `if` will always resolve to the `if` that
-library A saw, even when used in library B.
+So the compiler identifies free identifiers at macro-definition time (everything
+in the template that is neither a pattern variable nor a literal) and resolves
+each one against the *definition* environment right there
+(`collectFreeIdentifiersWithEllipsis` in
+`pkg/machine/compilation/compile_syntax_rules.go`). What happens next depends on
+what it found:
+
+- A binding in the macro's own lexical context: the template identifier is
+  rebuilt carrying that binder's scope set, and no intro scope, so it still names
+  the same variable after expansion.
+- A global binding: the identifier keeps the intro scope and additionally carries
+  the resolved binding itself (`ResolvedBinding` on `SyntaxSymbol`) plus the
+  defining library's scope. The compiler consults that pin ahead of the use-site
+  global, so the use site cannot hijack the name. (It still sits below the
+  scope-set match against local bindings, so a binder the same template
+  introduced can shadow it.)
+
+That pin is also what gives cross-library hygiene: a macro defined in library A
+that references `car` resolves to the `car` that library A saw, even when the
+macro is used in library B, and even if B has its own `car`.
 
 ---
 
@@ -244,33 +267,34 @@ library A saw, even when used in library B.
 The macro system is split into three layers so each can be simple:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ Layer 3: Hygiene                                    │
-│   Mints intro scopes, stamps template identifiers, │
-│   handles free-identifier resolution.               │
-│   Files: operation_syntax_rules_transform.go,       │
-│          internal/syntax/scope_utils.go             │
-├─────────────────────────────────────────────────────┤
-│ Layer 2: Syntax Adapter                             │
-│   Converts SyntaxSymbol/SyntaxPair ↔ raw values    │
-│   so the pattern VM doesn't have to know about      │
-│   scopes. Preserves original syntax for captured    │
-│   pattern variables.                                │
-│   Files: internal/match/syntax_expand.go            │
-├─────────────────────────────────────────────────────┤
-│ Layer 1: Pattern Matching VM                        │
-│   Bytecode-based matcher and template expander.     │
-│   Knows nothing about hygiene — works on raw        │
-│   values.Value types.                               │
-│   Files: internal/match/match.go,                   │
-│          internal/match/syntax_compiler.go          │
-└─────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│ Layer 3: Hygiene                                      │
+│   Mints the intro scope for each invocation and       │
+│   resolves free identifiers against the macro's       │
+│   definition environment.                             │
+│   Files: pkg/machine/compilation/                     │
+│            compile_syntax_rules.go,                   │
+│            operation_syntax_rules_transform.go        │
+├───────────────────────────────────────────────────────┤
+│ Layer 2: Syntax Adapter                               │
+│   Scope-aware literal matching, plus the template     │
+│   expander that stamps the intro scope and keeps      │
+│   captured pattern variables' original syntax.        │
+│   Files: pkg/internal/match/syntax_adapter.go,        │
+│          pkg/internal/match/syntax_expand.go          │
+├───────────────────────────────────────────────────────┤
+│ Layer 1: Pattern Matching VM                          │
+│   Bytecode pattern compiler and matcher. Operates     │
+│   on syntax values but knows nothing about hygiene.   │
+│   Files: pkg/internal/match/syntax_compiler.go,       │
+│          pkg/internal/match/match.go                  │
+└───────────────────────────────────────────────────────┘
 ```
 
-Layer 1 can be tested and debugged without thinking about scopes. Layer 2
-translates between the syntax-aware world and the hygiene-naive VM. Layer 3
-is where the invariant — *macro-introduced names get the intro scope, captured
-names keep their original scopes* — is enforced.
+Layer 1 can be tested and debugged without thinking about scopes: it captures
+pattern variables and never mints or adds a scope. Layer 2 is where scopes enter
+the expanded output. Layer 3 is where the invariant — *macro-introduced names get the
+intro scope, captured names keep their original scopes* — is enforced.
 
 ---
 

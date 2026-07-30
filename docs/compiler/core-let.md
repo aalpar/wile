@@ -1,8 +1,12 @@
 # Core `let` in Compiler Design
 
-You've just written a plan to make `let` a core form in Wile — recognized by the expander, validated into a `ValidatedLet`, compiled into direct slot-store bytecode. The macro that expands `let` into `((lambda (x ...) body) val ...)` goes away.
+Status: shipped. All four binding forms (`let`, `let*`, `letrec`, `letrec*`) are
+core forms: expanded by `expander_let.go`, validated into a `validate.ValidatedLet`
+carrying a `LetKind`, and compiled by `CompileValidatedLet` into
+`OpPushEnv` / `StoreLocal` / `OpPopEnv`. The macro that expanded `let` into
+`((lambda (x ...) body) val ...)` is gone from `bootstrap_macros.scm`.
 
-A natural question: is this just a Wile-specific optimization, or is it how compilers actually work? Who else does this? And what forced them to?
+This document is the design rationale behind that move: is it a Wile-specific optimization, or is it how compilers actually work? Who else does this? And what forced them to?
 
 ## The Pedagogical Illusion
 
@@ -20,7 +24,7 @@ But here's the thing: the R7RS spec is describing *what* `let` means, not *how* 
 
 ## What Goes Wrong When `let` Expands to Lambda
 
-Consider what happens in Wile today when you write `(let ((x 1)) x)`:
+Consider what the macro expansion did to `(let ((x 1)) x)`:
 
 1. The macro expander rewrites it to `((lambda (x) x) 1)`
 2. The compiler sees an application of a lambda literal
@@ -89,13 +93,13 @@ There are really two decisions, and they're independent:
 
 Some systems (Racket, Chez) have the *expander* recognize `let` and produce a core form. The compiler never sees `let` as a keyword — it sees a core IR node. Other systems could hypothetically have the compiler pattern-match on the lambda expansion to recover binding info.
 
-Wile's plan uses the first approach: the expander recognizes `let`, the validator produces `ValidatedLet`, and the compiler emits direct bytecode. This is the clean design — the information is preserved where it originates, not reconstructed later.
+Wile uses the first approach: the expander recognizes `let`, the validator produces `ValidatedLet`, and the compiler emits direct bytecode. This is the clean design — the information is preserved where it originates, not reconstructed later.
 
 **Decision 2: What does the compiler emit — specialized binding ops, or generic call ops?**
 
 Even if the compiler sees `let` as a core form, it could still compile it as a function call (just with metadata attached). The alternative is dedicated opcodes for binding: push an env frame, store into slots, pop the frame.
 
-Wile's plan uses `OpPushEnv` / `StoreLocal` / `OpPopEnv` — dedicated binding operations. This is also standard. Chez Scheme, Guile (in its VM), and Chicken all have binding-specific bytecodes or instructions. The reason is the same as before: if the VM can distinguish "this is a local binding" from "this is a function call," it can optimize accordingly (frame reuse, stack allocation, avoiding arity checks).
+Wile uses `OpPushEnv` / `StoreLocal` / `OpPopEnv` — dedicated binding operations. This is also standard. Chez Scheme, Guile (in its VM), and Chicken all have binding-specific bytecodes or instructions. The reason is the same as before: if the VM can distinguish "this is a local binding" from "this is a function call," it can optimize accordingly (frame reuse, stack allocation, avoiding arity checks).
 
 ## The Deeper Pattern: Compilers Need Binding Structure
 
@@ -115,15 +119,15 @@ The lambda-expansion trick (`let` is just `((lambda ...) ...)`) collapses this s
 
 ## Where Wile's Core `let` Sits
 
-Wile's plan occupies a specific point in this design space:
+Wile occupies a specific point in this design space:
 
 - **Not a tree-walking interpreter** — it compiles to bytecode, so it *has* an IR (the bytecode itself, plus the `Validated*` types)
-- **Not yet doing ANF/CPS** — the `Validated*` types are a direct-style IR, not CPS or ANF
-- **Foundation for future optimization** — as the plan states, core `let` is the prerequisite for ANF, constant propagation, and dead binding elimination
+- **Not doing ANF/CPS** — the `Validated*` types are a direct-style IR, not CPS or ANF
+- **Foundation for further optimization** — core `let` is the prerequisite for ANF, constant propagation, and dead binding elimination. The first thing built on it was procedure inlining, which synthesizes a `ValidatedLet` at the call site; see [Procedure Inlining](inlining.md)
 
 This is the standard progression. You can't do ANF without `let` — ANF *is* `let` all the way down. You can't do constant propagation without knowing which bindings exist. You can't do dead binding elimination without seeing bindings as first-class IR nodes.
 
-The plan is moving Wile from the "pedagogical interpreter" design (where `let` is a macro) to the "production compiler" design (where `let` is core). Every Scheme implementation that grew beyond educational use made this move at some point. It's not an optimization — it's infrastructure.
+The move took Wile from the "pedagogical interpreter" design (where `let` is a macro) to the "production compiler" design (where `let` is core). Every Scheme implementation that grew beyond educational use made this move at some point. It's not an optimization — it's infrastructure.
 
 > For how ANF and CPS use `let` as their fundamental building block, see
 > [CPS and ANF as Intermediate Forms](anf-and-cps.md).
