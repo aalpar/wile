@@ -151,6 +151,13 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
+	// The unit's arity table follows the body down. Nearly every call to a
+	// same-unit define sits inside some procedure, so a table that stopped at the
+	// top level would never be consulted where it matters. Propagating it is safe
+	// because checkCallArity re-resolves each operator against childEnv, so an
+	// internal define or a parameter shadowing a top-level name is rejected there
+	// rather than being looked up by name in this table.
+	childCompiler.unitArity = p.unitArity
 	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true)
 	// The body is the closure's parameter-frame depth-0 tail. Arm the frame-reuse
 	// disposition here; it flows through if/begin to the tail call sites and is

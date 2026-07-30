@@ -466,9 +466,19 @@ func CompileValidatedBegin(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 	// (child-runtime frame), and lambda-body child compilers (p.env is a local
 	// frame). The nil guard fires it once per root compiler (a nested top-level begin
 	// re-enters on the same p but finds the map already set).
+	//
+	// The unit's arity table is collected here too, under the same gate and the
+	// same once-guard, because it wants exactly the same three conditions: it is
+	// only sound where top-level immutability holds, only meaningful for the user
+	// unit, and only correct for the whole unit rather than a sub-body. It feeds
+	// checkCallArity for callees whose binding exists but whose closure value does
+	// not yet. Sharing the guard is safe in the empty case: collectTopLevelDefines
+	// recurses into nested begins, so an outer walk that finds no stable define
+	// leaves nothing for a re-entering inner walk to find either.
 	ns := p.env.Namespace()
 	if ns != nil && ns.ImmutableTopLevel() && ns.Runtime() == p.env && p.frameReclaimVerdict == nil {
 		p.frameReclaimVerdict = validate.ClassifyFrameReclaim(v.Body(), p.env)
+		p.unitArity = validate.UnitArityOf(v.Body())
 	}
 
 	// Pass 2: Compile each expression in sequence. The begin's own body is the

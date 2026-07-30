@@ -118,6 +118,86 @@ func (p *ValidationResult) finalizeStability() {
 	})
 }
 
+// UnitArityInfo is a top-level define's arity as parsed from its formals.
+// RequiredCount excludes any rest parameter; Variadic is true when one exists.
+// That is ValidatedParams' convention, NOT NativeTemplate's, which counts the
+// rest parameter in its parameterCount — the two meet at exactly one conversion
+// point in the compiler.
+type UnitArityInfo struct {
+	RequiredCount int
+	Variadic      bool
+}
+
+// UnitArityOf returns the arity of every top-level define in unit whose name the
+// unit neither redefines nor mutates. Callers may trust each entry without
+// re-checking a flag: an unstable name is absent rather than
+// present-but-doubtful. Run it after validation, which is what stamps
+// StableInUnit.
+//
+// It answers the question Binding.Value() cannot for a same-unit define: the
+// binding exists at compile time (that is what makes forward references
+// resolve), but its closure is built by the emitted code at run time, so there
+// is no callable to interrogate. The formals are the only compile-time evidence
+// of that define's arity.
+//
+// Gating on StableInUnit does two jobs, and the second is the non-obvious one.
+//
+// The plain job: a name defined twice, or set! in unit, has no single arity, so
+// there is nothing sound to record.
+//
+// The load-bearing job: it is also what makes the string key safe. A symbol
+// Key() drops hygiene, so two hygiene-distinct top-level bindings of one name
+// collide here. binding_ref.go makes the parallel over-match safe for BindingRef
+// by arguing it "can only forfeit an optimization, never wrongly apply one" —
+// and that argument does NOT transfer to arity, where applying one h's arity to
+// a hygiene-distinct h would be a false compile error on correct code. A
+// collision means definedKeyCount[key] >= 2, which forfeits StableInUnit, so
+// neither entry is recorded and the call site falls through unchecked. Do not
+// relax this to last-definition-wins without first replacing the key with
+// something hygiene-aware — and note a reference's scope set is a superset of
+// its binder's, so a ScopeFingerprint cannot serve as that key.
+func UnitArityOf(unit []ValidatedExpr) map[string]UnitArityInfo {
+	var q map[string]UnitArityInfo
+	collectTopLevelDefines(unit, func(d *ValidatedDefine) {
+		if !d.StableInUnit {
+			return
+		}
+		params := unitDefineParams(d)
+		if params == nil {
+			return
+		}
+		if q == nil {
+			q = make(map[string]UnitArityInfo)
+		}
+		q[d.name.Key()] = UnitArityInfo{
+			RequiredCount: len(params.Required),
+			Variadic:      params.Rest != nil,
+		}
+	})
+	return q
+}
+
+// unitDefineParams returns the formals a define binds a procedure with, or nil
+// when it binds something whose arity is not syntactically apparent.
+//
+// define has two shapes and the formals live in different places:
+// (define (h x y) ...) carries them on the define itself, while
+// (define h (lambda (x y) ...)) carries them on the lambda. Reading only the
+// second would miss the function form, which is the common one.
+//
+// A define of anything else — a literal, a call, a case-lambda — yields nil, so
+// no entry is recorded and no call site is checked against it.
+func unitDefineParams(d *ValidatedDefine) *ValidatedParams {
+	if d.IsFunction {
+		return d.Params()
+	}
+	lam, ok := d.SubExp().(*ValidatedLambda)
+	if !ok {
+		return nil
+	}
+	return lam.Params()
+}
+
 // Ok returns true if no validation errors were encountered.
 func (p *ValidationResult) Ok() bool {
 	return len(p.Errors) == 0

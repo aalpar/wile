@@ -23,7 +23,12 @@
 (test-group "make-record-type errors"
   (test-error (make-record-type "point" '(x y)))
   (test-error (make-record-type 'point '(x "y")))
-  (test-error (make-record-type)))
+  ;; Wrong arity, deliberately. Written through apply because the compiler
+  ;; rejects a statically-visible arity mismatch against a non-rebindable
+  ;; callee before the program runs, and this test is asserting the RUNTIME
+  ;; error. apply hides the argument count until then. Do not "simplify" this
+  ;; back to (make-record-type) — the file stops compiling.
+  (test-error (apply make-record-type (list))))
 
 ;; -- record-type? -----------------------------------------------------------
 

@@ -146,7 +146,12 @@
 (test-group "string-map errors"
   (test-error (string-map 42 "hello"))
   (test-error (string-map char-upcase 42))
-  (test-error (string-map char-upcase)))
+  ;; Wrong arity, deliberately. Written through apply because the compiler
+  ;; rejects a statically-visible arity mismatch against a non-rebindable
+  ;; callee before the program runs, and this test is asserting the RUNTIME
+  ;; error. apply hides the argument count until then. Do not "simplify" this
+  ;; back to (string-map char-upcase) — the file stops compiling.
+  (test-error (apply string-map (list char-upcase))))
 
 ;; ── string-for-each ──────────────────────────────────────────────
 

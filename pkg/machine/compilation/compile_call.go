@@ -142,6 +142,14 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 		return nil
 	}
 
+	// After the three specializations, which reach callees this cannot see and
+	// carry their own arity checks where they need one (tryInlineCall reads the
+	// let-bound lambda's AST, not a binding).
+	err = p.checkCallArity(v)
+	if err != nil {
+		return err
+	}
+
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call

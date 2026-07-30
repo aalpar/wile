@@ -97,6 +97,19 @@ type CompileTimeContinuation struct {
 	// top-level define and misses this top-level map — though that gate is kept as an
 	// explicit tightening.
 	frameReclaimVerdict map[validate.ScopedBindingKey]bool
+	// unitArity maps each StableInUnit top-level define in this unit to its
+	// formals' arity. Set beside frameReclaimVerdict in CompileValidatedBegin,
+	// under the same gate, and read by checkCallArity for a callee whose binding
+	// exists but whose closure value does not (a same-unit define builds its
+	// closure at run time, so Binding.Value() holds nothing to interrogate).
+	//
+	// Keyed by symbol Key, unlike frameReclaimVerdict's scoped identity, and the
+	// difference is forced: frameReuseForDefine looks up the define it is
+	// compiling and so holds the binder's own scopes, while a call site holds
+	// only a reference, whose scope set is a strict superset of its binder's. A
+	// fingerprint cannot answer a subset query. What makes the name key sound
+	// here is instead validate.UnitArityOf's StableInUnit gate — see its comment.
+	unitArity map[string]validate.UnitArityInfo
 	// quasiMaxDepth bounds structural recursion in the quasiquote/quasisyntax
 	// expander. 0 means use DefaultMaxExpandDepth; tests set a low value to
 	// exercise the bound cheaply. See effectiveQuasiMaxDepth.
