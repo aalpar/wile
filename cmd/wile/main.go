@@ -44,6 +44,7 @@ type Options struct {
 	Eval         []string `short:"e" long:"eval" description:"Evaluate Scheme expression (repeatable)"`
 	File         []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)"`
 	Interactive  bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
+	Check        bool     `long:"check" description:"Parse and compile without executing; report errors and exit"`
 	LibraryPath  string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
 	Version      bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet        bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
@@ -218,9 +219,23 @@ func main() {
 	}
 
 	// --mcp is exclusive: check conflicts before any defer is registered.
-	if opts.MCP && (len(opts.Eval) > 0 || len(opts.File) > 0 || opts.Interactive) {
-		fmt.Fprintln(os.Stderr, "Error: --mcp cannot be combined with -e, -f, or -i")
+	if opts.MCP && (len(opts.Eval) > 0 || len(opts.File) > 0 || opts.Interactive || opts.Check) {
+		fmt.Fprintln(os.Stderr, "Error: --mcp cannot be combined with -e, -f, -i, or --check")
 		os.Exit(1)
+	}
+
+	// --check means "do not execute"; -i means "execute, then hand me a REPL".
+	// With no input at all it would fall through to the REPL, which is the one
+	// thing --check must never do, so require something to check.
+	if opts.Check {
+		if opts.Interactive {
+			fmt.Fprintln(os.Stderr, "Error: --check cannot be combined with -i")
+			os.Exit(1)
+		}
+		if len(opts.File) == 0 && len(opts.Eval) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: --check requires a file or -e expression")
+			os.Exit(1)
+		}
 	}
 	if opts.MCPTimeout < 0 {
 		fmt.Fprintln(os.Stderr, "Error: --mcp-timeout must be non-negative")
@@ -313,6 +328,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Warning: engine close error: %v\n", closeErr)
 		}
 	}()
+	if opts.Check {
+		runCheck(ctx, eng, opts.File, opts.Eval, positionalFile)
+		return
+	}
+
 	// Load files if any
 	if len(opts.File) > 0 {
 		for i, filename := range opts.File {
@@ -449,6 +469,10 @@ func writeSummaryFile(path string, col *coverage.Collector, includeStdlib bool) 
 // program source, following the Unix "-" idiom used by cat, sh, and friends.
 const stdinFilename = "-"
 
+// evalSourceName labels -e expressions in diagnostics. Shared by the run and
+// check paths so a -e program reports the same location either way.
+const evalSourceName = "<eval>"
+
 // openScriptFile opens a Scheme source for execution. The filename "-" reads the
 // program from standard input; the returned closer is then a no-op so stdin is
 // left open for the running process. For any other name it opens the file and
@@ -521,13 +545,84 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 	}
 }
 
+// runCheck compiles every input without executing it, reporting the first
+// failure and exiting 1, or exiting 0 when everything compiles clean.
+//
+// It is a mode of its own rather than a branch inside the run paths because
+// every way those paths differ is a difference about executing: which file
+// prints its result, which files load silently, and whether a REPL follows.
+// Checking treats every file and every -e expression the same way. Routing here
+// once is also what keeps the silent multi-file load path from running a program
+// under --check — that path is a second EvalProgram call site, and patching only
+// runFile would miss it.
+//
+// Files are checked in order against one engine, so a later file resolves names
+// an earlier file defined, matching how execution would see them.
+func runCheck(ctx context.Context, eng *wile.Engine, files []string, evals []string, shebang bool) {
+	for _, filename := range files {
+		descriptor, closeSource, openErr := openScriptFile(filename)
+		if openErr != nil {
+			// The os error already reads "open <path>: ..." — adding the
+			// filename again would print it twice.
+			Fail(openErr)
+		}
+		func(fn string, fd *os.File, closeFn func() error) {
+			defer func() {
+				_ = closeFn()
+			}()
+			checkFile(ctx, eng, bufio.NewReader(fd), fn, shebang)
+		}(filename, descriptor, closeSource)
+	}
+
+	if len(evals) > 0 {
+		// Joined into one unit exactly as runEval does, so -e under --check
+		// reports what -e without it would have compiled.
+		checkErr := eng.CheckProgram(ctx, strings.Join(evals, "\n"), evalSourceName)
+		if checkErr != nil {
+			Fail(checkErr)
+		}
+	}
+}
+
+// checkFile compiles one source without executing it. The file's directory goes
+// on the load path because include resolves at compile time and so is reached by
+// checking.
+func checkFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename string, shebang bool) {
+	if shebang {
+		peek, peekErr := fin.Peek(2)
+		if peekErr == nil && peek[0] == '#' && peek[1] == '!' {
+			_, _ = fin.ReadString('\n')
+		}
+	}
+
+	content, readErr := io.ReadAll(fin)
+	if readErr != nil {
+		Failf(readErr, "Cannot read file %s", filename)
+	}
+	if len(content) == 0 {
+		return
+	}
+
+	absPath, absErr := filepath.Abs(filename)
+	if absErr != nil {
+		Failf(absErr, "cannot resolve path")
+	}
+
+	checkErr := eng.WithLoadPath(absPath, func() error {
+		return eng.CheckProgram(ctx, string(content), filename)
+	})
+	if checkErr != nil {
+		Fail(checkErr)
+	}
+}
+
 // runEval evaluates expressions supplied via -e flags.
 // The -e expressions are joined and evaluated as ONE compilation unit via
 // EvalProgram, exactly like runFile: mutually-recursive defines and
 // redefine-within-the-batch work, and the -e path does not diverge from file
 // execution under the immutable top-level default (B2).
 func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
-	result, err := eng.EvalProgram(ctx, strings.Join(exprs, "\n"), "<eval>")
+	result, err := eng.EvalProgram(ctx, strings.Join(exprs, "\n"), evalSourceName)
 	if err != nil {
 		Fail(err)
 	}
