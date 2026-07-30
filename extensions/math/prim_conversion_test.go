@@ -111,8 +111,69 @@ func TestStringToNumber(t *testing.T) {
 	}
 }
 
-// TestStringToNumberInexactPrefix covers the #i prefix case for various number types
-// which exercises stringToNumberMakeInexact with different types.
+// TestStringToNumberExactnessAgreesWithReader locks string->number's #e/#i
+// handling to the reader's. Both now route through parser.MakeExactNumber /
+// parser.MakeInexactNumber; before that unification string->number carried its
+// own switch that handled only Integer/BigInteger/Rational/Float, so every
+// other numeric type fell through a `default: return n` arm and the prefix was
+// silently dropped:
+//
+//	(string->number "#e1.0e400") => 1e+400 (inexact!)  -- BigFloat unhandled
+//	(string->number "#i1+2i")    => 1+2i   (exact!)    -- BigComplex unhandled
+//
+// The literal-vs-string cases are the real guard: they fail the moment the two
+// paths diverge again, whichever side moves.
+func TestStringToNumberExactnessAgreesWithReader(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// #e on a BigFloat (magnitude beyond float64 range).
+		{"#e bigfloat exact", `(exact? (string->number "#e1.0e400"))`, values.TrueValue},
+		{"#e bigfloat integer", `(integer? (string->number "#e1.0e400"))`, values.TrueValue},
+		{"#e bigfloat matches reader", `(= (string->number "#e1.0e400") #e1.0e400)`, values.TrueValue},
+		{"#e negative bigfloat matches reader",
+			`(= (string->number "#e-2.5e400") #e-2.5e400)`, values.TrueValue},
+		// #i on an exact BigComplex.
+		{"#i bigcomplex inexact", `(inexact? (string->number "#i1+2i"))`, values.TrueValue},
+		{"#i bigcomplex matches reader", `(= (string->number "#i1+2i") #i1+2i)`, values.TrueValue},
+		// #e on an inexact Complex.
+		{"#e complex exact", `(exact? (string->number "#e1.5+2.5i"))`, values.TrueValue},
+		{"#e complex matches reader",
+			`(= (string->number "#e1.5+2.5i") #e1.5+2.5i)`, values.TrueValue},
+		// #i on a BigFloat is the identity — already inexact, must not error.
+		{"#i bigfloat stays inexact", `(inexact? (string->number "#i1.0e400"))`, values.TrueValue},
+		// R7RS §7.1.1: #e converts the number as WRITTEN, so a decimal literal
+		// converts from its digits — not from the binary float they parse into,
+		// which for 1e400 differs from 10^400 starting at the 78th digit.
+		{"#e decimal is exact decimal",
+			`(= (string->number "#e1e400") (expt 10 400))`, values.TrueValue},
+		{"#e tenth is one tenth", `(= (string->number "#e0.1") 1/10)`, values.TrueValue},
+		{"#e negative exponent", `(= (string->number "#e1e-4") 1/10000)`, values.TrueValue},
+		// ...while the `exact` PROCEDURE, which never sees the decimal, keeps
+		// returning the float's own exact value.
+		{"exact procedure unchanged",
+			`(= (exact 0.1) 3602879701896397/36028797018963968)`, values.TrueValue},
+		// R7RS §6.2.6: inf/nan have no exact representation. §6.2.7 gives
+		// string->number no error channel, so the answer is #f. (The reader,
+		// which does have one, raises instead — hence no literal comparand.)
+		{"#e inf is false", `(eq? (string->number "#e+inf.0") #f)`, values.TrueValue},
+		{"#e -inf is false", `(eq? (string->number "#e-inf.0") #f)`, values.TrueValue},
+		{"#e nan is false", `(eq? (string->number "#e+nan.0") #f)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestStringToNumberInexactPrefix covers the #i prefix case for various number
+// types, which exercises parser.MakeInexactNumber with different types.
 func TestStringToNumberInexactPrefix(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)

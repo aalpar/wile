@@ -17,6 +17,7 @@ package parser
 import (
 	"errors"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -235,4 +236,121 @@ func ParseComplexStringNumber(s string) (values.Number, error) {
 // hasSuffixFoldedI returns true if s ends with 'i' or 'I'.
 func hasSuffixFoldedI(s string) bool {
 	return len(s) > 0 && (s[len(s)-1] == 'i' || s[len(s)-1] == 'I')
+}
+
+// MakeExactNumber returns the exact representation of n, implementing the #e
+// prefix (R7RS §7.1.1) and the exact procedure (R7RS §6.2.6).
+//
+// It is the single source of truth for the conversion, shared by the reader
+// (parser_number.go makeExact) and string->number (extensions/math). The two
+// must not diverge: a type handled by one and not the other silently drops the
+// caller's #e prefix, which is exactly how *BigFloat came to be honored by the
+// reader and ignored by string->number.
+//
+// On a magnitude with no exact representation (inf, NaN, an inexact BigComplex)
+// it returns a wrapped ErrExactnessConversion. Callers choose the policy: the
+// reader wraps it with a source location, string->number discards it and yields
+// #f per R7RS §6.2.7.
+func MakeExactNumber(n values.Number) (values.Number, error) {
+	switch v := n.(type) {
+	case *values.Integer, *values.BigInteger, *values.Rational:
+		return v, nil // already exact
+	case *values.Float:
+		f := v.Value
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert inf or nan to exact")
+		}
+		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			return values.NewInteger(int64(f)), nil
+		}
+		return values.Simplify(values.NewRationalFromRat(new(big.Rat).SetFloat64(f))), nil
+	case *values.BigFloat:
+		bf := v.BigFloatValue()
+		if bf.IsInf() {
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert inf to exact")
+		}
+		if bf.IsInt() {
+			i, _ := bf.Int(nil)
+			return values.NewBigInteger(i), nil
+		}
+		r, _ := bf.Rat(nil)
+		return values.Simplify(values.NewRationalFromRat(r)), nil
+	case *values.Complex:
+		re := v.Real()
+		im := v.Imag()
+		if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert complex with inf or nan to exact")
+		}
+		reNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(re))
+		imNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(im))
+		return values.NewBigComplex(reNum, imNum), nil
+	case *values.BigComplex:
+		if v.IsExact() {
+			return v, nil
+		}
+		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert inexact BigComplex to exact")
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: unsupported number type %T", n)
+	}
+}
+
+// MakeExactFromLiteral implements the #e prefix (R7RS §7.1.1), which applies to
+// the number **as written** rather than to the value it would otherwise denote.
+//
+// That distinction is the whole point of this function. A decimal literal is
+// notation for a decimal value, so #e must convert its digits:
+//
+//	#e1e400  =>  10^400 exactly
+//	#e0.1    =>  1/10
+//
+// Reading the literal first and converting the result instead gives the nearest
+// binary float's exact value, which is a different number:
+//
+//	(exact 1e400) =>  the 256-bit BigFloat neighbour of 10^400
+//	(exact 0.1)   =>  3602879701896397/36028797018963968
+//
+// Both answers are correct for their own question; only the first is #e. The
+// procedure `exact` keeps the second, since by then the decimal is already gone.
+//
+// text is the literal's source text with '#' digit placeholders already
+// substituted; parsed is what reading it produced. Only Float and BigFloat
+// (i.e. decimal or scientific notation) take the digits path; every other shape
+// — already exact, radix-prefixed, complex — defers to MakeExactNumber, as does
+// any text big.Rat rejects (inf, nan), which MakeExactNumber then refuses.
+func MakeExactFromLiteral(text string, parsed values.Number) (values.Number, error) {
+	switch parsed.(type) {
+	case *values.Float, *values.BigFloat:
+		r, ok := new(big.Rat).SetString(schemeutil.NormalizeExponentMarker(text))
+		if ok {
+			return values.Simplify(values.NewRationalFromRat(r)), nil
+		}
+	}
+	return MakeExactNumber(parsed)
+}
+
+// MakeInexactNumber returns the inexact representation of n, implementing the
+// #i prefix (R7RS §7.1.1), the '#' digit placeholder (§7.1.1), and the inexact
+// procedure (§6.2.6). Companion to MakeExactNumber and likewise the single
+// source of truth, shared by the reader and string->number.
+//
+// It cannot fail: every exact number has an inexact image, and the already-
+// inexact types (Float, BigFloat, Complex) are the identity. §6.2.6 sanctions
+// silent precision loss here, so the accuracy/exact bools returned by
+// big.Float and big.Rat are deliberately discarded.
+func MakeInexactNumber(n values.Number) values.Number {
+	switch v := n.(type) {
+	case *values.Integer:
+		return values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		return values.NewFloat(f)
+	case *values.Rational:
+		return values.NewFloat(v.Float64Truncated())
+	case *values.BigComplex:
+		reFloat := v.RealAsBigFloat().Float64Truncated()
+		imFloat := v.ImagAsBigFloat().Float64Truncated()
+		return values.NewComplexFromParts(reFloat, imFloat)
+	default:
+		return n // Float, BigFloat, Complex are already inexact
+	}
 }

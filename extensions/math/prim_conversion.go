@@ -165,12 +165,20 @@ func PrimStringToNumber(mc machine.CallContext) error {
 		return nil
 	}
 
-	// Apply exactness conversion if a prefix was specified.
+	// Apply exactness conversion if a prefix was specified. Both conversions are
+	// the reader's, shared via pkg/parser so #e/#i cannot mean one thing in a
+	// literal and another in a string. R7RS §6.2.7 has no error channel here, so
+	// a magnitude with no exact representation (#e+inf.0) yields #f.
 	switch exactness {
 	case 1:
-		result = stringToNumberMakeExact(result)
+		exact, err := parser.MakeExactFromLiteral(input, result)
+		if err != nil {
+			mc.SetValue(values.FalseValue)
+			return nil //nolint:nilerr // §6.2.7 has no error channel: unrepresentable answers #f
+		}
+		result = exact
 	case -1:
-		result = stringToNumberMakeInexact(result)
+		result = parser.MakeInexactNumber(result)
 	}
 
 	mc.SetValue(result)
@@ -180,7 +188,7 @@ func PrimStringToNumber(mc machine.CallContext) error {
 // parseStringToNumber parses a numeric string in the given radix.
 // Returns nil if the string is not a valid number.
 // R7RS §6.2.7: handles integers, rationals, floats, complex, and special values.
-func parseStringToNumber(input string, radix int) values.Value {
+func parseStringToNumber(input string, radix int) values.Number {
 	if len(input) == 0 {
 		return nil
 	}
@@ -251,48 +259,6 @@ func parseStringToNumber(input string, radix int) values.Value {
 	}
 
 	return nil
-}
-
-// stringToNumberMakeExact converts a number to its exact representation.
-//
-// R7RS §6.2.6: exact returns an exact representation of z.
-func stringToNumberMakeExact(n values.Value) values.Value {
-	switch v := n.(type) {
-	case *values.Integer, *values.BigInteger, *values.Rational:
-		return v
-	case *values.Float:
-		f := v.Value
-		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
-			return values.NewInteger(int64(f))
-		}
-		r := new(big.Rat).SetFloat64(f)
-		if r == nil {
-			return n // inf/nan — cannot convert
-		}
-		return values.Simplify(values.NewRationalFromRat(r))
-	default:
-		return n
-	}
-}
-
-// stringToNumberMakeInexact converts a number to its inexact representation.
-//
-// R7RS §6.2.6: inexact returns an inexact representation of z.
-func stringToNumberMakeInexact(n values.Value) values.Value {
-	switch v := n.(type) {
-	case *values.Float:
-		return v
-	case *values.Integer:
-		return values.NewFloat(float64(v.Value))
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-		return values.NewFloat(f)
-	case *values.Rational:
-		f, _ := v.Rat().Float64()
-		return values.NewFloat(f)
-	default:
-		return n
-	}
 }
 
 // --- Loss-signal primitives ---

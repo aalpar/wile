@@ -112,7 +112,7 @@ func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.
 			r := new(big.Rat).SetFrac(bigNum, bigDen)
 			q1 := values.Simplify(values.NewRationalFromRat(r))
 			if p.cur.HasHashDigit() {
-				q := p.wrapSyntax(p.numberToInexact(q1), p.cur)
+				q := p.wrapSyntax(MakeInexactNumber(q1), p.cur)
 				return q, p.cur, nil
 			}
 			q := p.wrapSyntax(q1, p.cur)
@@ -134,7 +134,7 @@ func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.
 			r := new(big.Rat).SetFrac(bigNum, bigDen)
 			q1 := values.Simplify(values.NewRationalFromRat(r))
 			if p.cur.HasHashDigit() {
-				q := p.wrapSyntax(p.numberToInexact(q1), p.cur)
+				q := p.wrapSyntax(MakeInexactNumber(q1), p.cur)
 				return q, p.cur, nil
 			}
 			q := p.wrapSyntax(q1, p.cur)
@@ -151,7 +151,7 @@ func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.
 	r := new(big.Rat).SetFrac64(num, den)
 	q1 := values.Simplify(values.NewRationalFromRat(r))
 	if p.cur.HasHashDigit() {
-		q := p.wrapSyntax(p.numberToInexact(q1), p.cur)
+		q := p.wrapSyntax(MakeInexactNumber(q1), p.cur)
 		return q, p.cur, nil
 	}
 	q := p.wrapSyntax(q1, p.cur)
@@ -459,7 +459,7 @@ func parseFloatOrInfnan(s string) (float64, error) {
 // ("makeExact" / "makeInexact") for the not-a-number error message. It is the
 // shared scaffolding of makeExact and makeInexact: both differ only in the
 // per-type conversion body supplied by convert.
-func (p *Parser) convertWrappedNumber(stx syntax.SyntaxValue, op string, convert func(values.Number) (values.Value, error)) (syntax.SyntaxValue, error) {
+func (p *Parser) convertWrappedNumber(stx syntax.SyntaxValue, op string, convert func(values.Number) (values.Number, error)) (syntax.SyntaxValue, error) {
 	num, ok := stx.Unwrap().(values.Number)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: value is not numeric", op)
@@ -471,106 +471,38 @@ func (p *Parser) convertWrappedNumber(stx syntax.SyntaxValue, op string, convert
 	return p.rewrapSyntax(stx, result), nil
 }
 
-// makeExact converts a syntax-wrapped number to its exact representation.
-// R7RS §6.2.6: exact converts an inexact number to exact.
-// For integers and rationals, they are already exact.
-// For floats, they are converted to rationals or integers if they represent whole numbers.
+// makeExact converts a syntax-wrapped number to its exact representation,
+// implementing the reader's #e prefix. The conversion itself lives in
+// MakeExactNumber (number_string.go), shared with string->number; this method
+// contributes only the syntax unwrap/rewrap and the reader's error policy.
 func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.convertWrappedNumber(stx, "makeExact", func(num values.Number) (values.Value, error) {
-		switch v := num.(type) {
-		case *values.Integer, *values.BigInteger, *values.Rational:
-			return v, nil // already exact
-		case *values.Float:
-			f := v.Value
-			if math.IsNaN(f) || math.IsInf(f, 0) {
-				return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf or nan to exact")
-			}
-			if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
-				return values.NewInteger(int64(f)), nil
-			}
-			return values.NewRationalFromRat(new(big.Rat).SetFloat64(f)), nil
-		case *values.BigFloat:
-			bf := v.BigFloatValue()
-			if bf.IsInf() {
-				return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf to exact")
-			}
-			if bf.IsInt() {
-				i, _ := bf.Int(nil)
-				return values.NewBigInteger(i), nil
-			}
-			r, _ := bf.Rat(nil)
-			return values.NewRationalFromRat(r), nil
-		case *values.Complex:
-			re := v.Real()
-			im := v.Imag()
-			if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
-				return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert complex with inf or nan to exact")
-			}
-			reNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(re))
-			imNum := values.NewRationalFromRat(new(big.Rat).SetFloat64(im))
-			return values.NewBigComplex(reNum, imNum), nil
-		case *values.BigComplex:
-			if v.IsExact() {
-				return v, nil
-			}
-			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inexact BigComplex to exact")
-		default:
-			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: unsupported number type")
-		}
+	return p.convertWrappedNumber(stx, "makeExact", MakeExactNumber)
+}
+
+// makeExactLiteral implements the reader's #e prefix on a bare (non-radix-
+// prefixed) datum, where the literal's source text is still available and
+// therefore authoritative: #e1e400 is 10^400, not the binary float 1e400 names.
+// See MakeExactFromLiteral. tok is the datum's own token, whose '#' digit
+// placeholders are substituted before the text is re-read.
+func (p *Parser) makeExactLiteral(stx syntax.SyntaxValue, tok tokenizer.Token) (syntax.SyntaxValue, error) {
+	return p.convertWrappedNumber(stx, "makeExact", func(num values.Number) (values.Number, error) {
+		return MakeExactFromLiteral(replaceHashDigits(tok.String()), num)
 	})
 }
 
-// numberToInexact converts a Number to its inexact representation.
-//
-// R7RS §7.1.1: Numbers containing # digit placeholders are inexact.
-// R7RS §6.2.6: Inexact numbers use floating-point representation.
-//
-// The accuracy/exact-bool returns from big.Float/big.Rat are intentionally
-// discarded: R7RS §6.2.6 sanctions silent precision loss when constructing
-// an inexact number from an exact one. The loss-signal helpers in
-// values/conversion.go are not used here for the same reason.
-func (p *Parser) numberToInexact(num values.Number) values.Number {
-	switch v := num.(type) {
-	case *values.Integer:
-		return values.NewFloat(float64(v.Value))
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-		return values.NewFloat(f)
-	case *values.Rational:
-		return values.NewFloat(v.Float64Truncated())
-	case *values.BigComplex:
-		reFloat := v.RealAsBigFloat().Float64Truncated()
-		imFloat := v.ImagAsBigFloat().Float64Truncated()
-		return values.NewComplexFromParts(reFloat, imFloat)
-	default:
-		// Float, BigFloat, Complex are already inexact
-		return num
-	}
+// makeInexactLiteral implements the reader's #i prefix. Unlike #e, inexactness
+// discards information rather than recovering it, so the source text adds
+// nothing and the token is ignored.
+func (p *Parser) makeInexactLiteral(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
+	return p.makeInexact(stx)
 }
 
-// makeInexact converts a syntax-wrapped number to its inexact representation.
-// R7RS §6.2.6: inexact converts an exact number to inexact. Per R7RS, the
-// conversion is sanctioned to lose precision silently — the discarded
-// accuracy/exact bools below are deliberate.
+// makeInexact converts a syntax-wrapped number to its inexact representation,
+// implementing the reader's #i prefix. Delegates to MakeInexactNumber
+// (number_string.go), which cannot fail.
 func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.convertWrappedNumber(stx, "makeInexact", func(num values.Number) (values.Value, error) {
-		switch v := num.(type) {
-		case *values.Float, *values.BigFloat, *values.Complex:
-			return v, nil // already inexact
-		case *values.Integer:
-			return values.NewFloat(float64(v.Value)), nil
-		case *values.BigInteger:
-			f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-			return values.NewFloat(f), nil
-		case *values.Rational:
-			return values.NewFloat(v.Float64Truncated()), nil
-		case *values.BigComplex:
-			reFloat := v.RealAsBigFloat().Float64Truncated()
-			imFloat := v.ImagAsBigFloat().Float64Truncated()
-			return values.NewComplexFromParts(reFloat, imFloat), nil
-		default:
-			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeInexact: unsupported number type")
-		}
+	return p.convertWrappedNumber(stx, "makeInexact", func(num values.Number) (values.Number, error) {
+		return MakeInexactNumber(num), nil
 	})
 }
 

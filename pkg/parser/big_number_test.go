@@ -362,8 +362,16 @@ func TestScientificNotationBigFloatOverflow(t *testing.T) {
 }
 
 // TestScientificNotationExactPrefixOverflow tests that the #e exact prefix on
-// out-of-range scientific notation yields an exact BigInteger, exercising the
-// BigFloat -> exact path in makeExact.
+// out-of-range scientific notation yields an exact BigInteger — and that the
+// integer is the mathematical 10^1000.
+//
+// This assertion used to read the other way. It compared against
+// exact(BigFloat("1e+1000")) and its comment called that "the exact value of
+// that approximation, not the mathematical 10^1000", treating the loss as
+// inherent. It was not: #e applies to the number as written (R7RS §7.1.1), so
+// the 256-bit BigFloat was never the thing to convert. The test passed for as
+// long as it did because it asserted self-consistency with the wrong path
+// rather than correctness. See MakeExactFromLiteral.
 func TestScientificNotationExactPrefixOverflow(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
@@ -376,11 +384,6 @@ func TestScientificNotationExactPrefixOverflow(t *testing.T) {
 	bigInt, ok := obj.(*values.BigInteger)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T: %v", obj, obj))
 
-	// #e converts the (inexact, 256-bit) BigFloat 1e+1000 to its exact integer
-	// value. Precision is bounded by the BigFloat, so the result is the exact
-	// value of that approximation, not the mathematical 10^1000. Assert the
-	// pipeline is self-consistent: reader(#e1e+1000) == exact(BigFloat 1e+1000).
-	bf := values.NewBigFloatFromString("1e+1000")
-	expected, _ := bf.BigFloatValue().Int(nil)
+	expected := new(big.Int).Exp(big.NewInt(10), big.NewInt(1000), nil)
 	c.Assert(bigInt.BigInt().Cmp(expected), qt.Equals, 0)
 }

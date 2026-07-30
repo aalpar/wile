@@ -424,6 +424,128 @@ func TestParseNumber_ReaderAgreesWithStringParsers(t *testing.T) {
 	}
 }
 
+// TestExactPrefix_ConvertsTheWrittenDecimal pins R7RS §7.1.1's #e: the prefix
+// applies to the number as WRITTEN, so a decimal literal converts from its
+// digits and not from the binary float those digits happen to land on.
+//
+// The reader used to parse the literal first and convert the result, which is a
+// different number whenever the decimal is not binary-representable — the error
+// is unbounded, not a rounding wobble: #e1e400 came back as a 401-digit integer
+// whose tail read ...25262527574416492..., and #e0.1 as
+// 3602879701896397/36028797018963968.
+func TestExactPrefix_ConvertsTheWrittenDecimal(t *testing.T) {
+	pow10 := func(n int) *big.Int {
+		return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
+	}
+	tcs := []struct {
+		input string
+		want  values.Number
+	}{
+		// Beyond float64 range: parses to BigFloat, whose precision is finite.
+		{"#e1e400", values.NewBigInteger(pow10(400))},
+		{"#e1.0e400", values.NewBigInteger(pow10(400))},
+		{"#e-1e400", values.NewBigInteger(new(big.Int).Neg(pow10(400)))},
+		// Within float64 range but not binary-representable.
+		{"#e1e100", values.NewBigInteger(pow10(100))},
+		{"#e0.1", values.NewRationalFromRat(big.NewRat(1, 10))},
+		{"#e1e-4", values.NewRationalFromRat(big.NewRat(1, 10000))},
+		{"#e-2.5e3", values.NewInteger(-2500)},
+		// Binary-representable: unchanged by the fix, and must stay that way.
+		{"#e1.5", values.NewRationalFromRat(big.NewRat(3, 2))},
+		{"#e1e2", values.NewInteger(100)},
+		// Scheme's short exponent markers normalize before big.Rat sees them.
+		{"#e1s2", values.NewInteger(100)},
+		// '#' digit placeholders substitute to 0 before the text is re-read.
+		{"#e1##", values.NewInteger(100)},
+		// Already exact, or radix-prefixed: no decimal text to consult.
+		{"#e1/3", values.NewRationalFromRat(big.NewRat(1, 3))},
+		{"#e#x1A", values.NewInteger(26)},
+		{"#x#e1A", values.NewInteger(26)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			got := parseSingle(t, tc.input)
+			num, ok := got.(values.Number)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(values.ExactnessOf(num), qt.Equals, values.Exact)
+			c.Assert(num.SchemeString(), qt.Equals, tc.want.SchemeString())
+		})
+	}
+}
+
+// TestExactPrefix_IsNotTheExactProcedure guards the distinction the fix rests
+// on. #e0.1 reads a decimal literal exactly (1/10); (exact 0.1) converts a
+// float64 that no longer remembers being written in decimal, and must keep
+// returning that float's own exact value. Collapsing the two — in either
+// direction — is the regression this test exists to catch.
+func TestExactPrefix_IsNotTheExactProcedure(t *testing.T) {
+	c := qt.New(t)
+	literal := parseSingle(t, "#e0.1").(values.Number)
+	c.Assert(literal.SchemeString(), qt.Equals, "1/10")
+
+	// The value-level conversion is what `exact` uses; it sees only the float.
+	viaValue, err := MakeExactNumber(values.NewFloat(0.1))
+	c.Assert(err, qt.IsNil)
+	c.Assert(viaValue.SchemeString(), qt.Equals, "3602879701896397/36028797018963968")
+}
+
+// TestMakeExactInexactNumber_EveryNumericKind pins MakeExactNumber and
+// MakeInexactNumber across the whole numeric tower, one row per values.Kind*.
+//
+// This is the row that was missing when BigFloat was added: the conversion
+// switches were duplicated (reader + string->number) and only one of them grew
+// the new case, so #e1.0e400 was honored in a literal and silently dropped in
+// string->number for as long as BigFloat has existed.
+//
+// ADDING A NEW NUMERIC TYPE: add its row here. numKinds is unexported, so this
+// table cannot self-check its own completeness — the checklist in
+// values/numeric_kind.go is what points you at this test.
+func TestMakeExactInexactNumber_EveryNumericKind(t *testing.T) {
+	tcs := []struct {
+		name string
+		kind values.NumericKind
+		in   values.Number
+		// exactErrs is true when the value has no exact representation, so
+		// MakeExactNumber must REFUSE rather than hand back its inexact input.
+		exactErrs bool
+	}{
+		{"Integer", values.KindInteger, values.NewInteger(3), false},
+		{"BigInteger", values.KindBigInteger, values.NewBigIntegerFromInt64(1 << 62), false},
+		{"Float", values.KindFloat, values.NewFloat(1.5), false},
+		{"Float inf", values.KindFloat, values.NewFloat(math.Inf(1)), true},
+		{"BigFloat", values.KindBigFloat, values.NewBigFloatFromString("1e400"), false},
+		{"Rational", values.KindRational, values.NewRationalFromRat(big.NewRat(3, 2)), false},
+		{"Complex", values.KindComplex, values.NewComplexFromParts(1.5, 2.5), false},
+		{"Complex nan", values.KindComplex, values.NewComplexFromParts(math.NaN(), 1), true},
+		{"BigComplex", values.KindBigComplex, values.NewBigComplex(
+			values.NewBigIntegerFromInt64(1), values.NewBigIntegerFromInt64(2)), false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			// A constructor that quietly yields a different kind would make the
+			// row test something other than what it claims to.
+			c.Assert(tc.in.Kind(), qt.Equals, tc.kind)
+
+			exact, err := MakeExactNumber(tc.in)
+			if tc.exactErrs {
+				c.Assert(err, qt.ErrorIs, werr.ErrExactnessConversion)
+				c.Assert(exact, qt.IsNil)
+			} else {
+				c.Assert(err, qt.IsNil)
+				c.Assert(values.ExactnessOf(exact), qt.Equals, values.Exact)
+			}
+
+			// MakeInexactNumber cannot fail, and must not let an exact input
+			// through unconverted — that fall-through is the original bug's
+			// shape, still reachable via its `default:` arm.
+			inexact := MakeInexactNumber(tc.in)
+			c.Assert(values.ExactnessOf(inexact), qt.Equals, values.Inexact)
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Exactness prefixes (#e, #i)
 // ---------------------------------------------------------------------------

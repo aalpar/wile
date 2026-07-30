@@ -323,7 +323,10 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 // readExactnessMarker handles #e and #i exactness prefixes.
 // It advances the tokenizer, reads the next datum, and applies the conversion
 // function (makeExact or makeInexact) to it.
-func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxValue) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
+// convert receives the datum's own token as well as its value: #e must be able
+// to consult the literal's source text, since it converts the number as written
+// (see MakeExactFromLiteral). #i has no such need and ignores it.
+func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxValue, tokenizer.Token) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
 	markerTok := p.curr()
 	err := p.advance()
 	if err != nil {
@@ -341,7 +344,7 @@ func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxVal
 	if err != nil {
 		return nil, tok, err
 	}
-	result, err := convert(q)
+	result, err := convert(q, tok)
 	if err != nil {
 		return nil, tok, NewParserErrorWithWrapf(err, tok, "cannot convert to %s", label)
 	}
@@ -864,7 +867,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, err
 		}
 		if p.cur.HasHashDigit() {
-			q = p.wrapSyntax(p.numberToInexact(q1), p.cur)
+			q = p.wrapSyntax(MakeInexactNumber(q1), p.cur)
 		} else {
 			q = p.wrapSyntax(q1, p.cur)
 		}
@@ -908,7 +911,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, err
 		}
 		if p.cur.HasHashDigit() {
-			q1 = p.numberToInexact(q1)
+			q1 = MakeInexactNumber(q1)
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
@@ -925,7 +928,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			return nil, p.cur, err
 		}
 		if p.cur.HasHashDigit() {
-			q1 = p.numberToInexact(q1)
+			q1 = MakeInexactNumber(q1)
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
@@ -938,9 +941,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerNumberExact:
-		return p.readExactnessMarker("exact", p.makeExact)
+		return p.readExactnessMarker("exact", p.makeExactLiteral)
 	case tokenizer.TokenizerStateMarkerNumberInexact:
-		return p.readExactnessMarker("inexact", p.makeInexact)
+		return p.readExactnessMarker("inexact", p.makeInexactLiteral)
 	case tokenizer.TokenizerStateBigInteger:
 		// #z is always decimal.
 		return p.parseBigIntegerWithBase(10)

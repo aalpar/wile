@@ -26,7 +26,15 @@ package values
 //  8. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
 //  9. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
 //  10. parser/parser_number.go        — if the type can be parsed from source
-//  11. registry/helpers/equality.go   — update Eqv if the type has special eqv? semantics
+//  11. parser/number_string.go        — add a case to MakeExactNumber and (if the
+//     new kind is EXACT) to MakeInexactNumber. This is the single site behind
+//     both the reader's #e/#i and string->number's; missing it means the prefix
+//     is silently dropped for the new type. Add the row to
+//     TestMakeExactInexactNumber_EveryNumericKind, which enumerates by hand
+//     because numKinds is unexported. If the new kind is written in a notation
+//     whose exact value differs from the value it parses to (as decimal does),
+//     it also belongs in MakeExactFromLiteral's text-consulting switch.
+//  12. registry/helpers/equality.go   — update Eqv if the type has special eqv? semantics
 //
 // Several historically-manual cold paths are now derived from the item-3 registry
 // (Simplify, ExactnessOf, NumberToFloat64, NumberToComplex128Lossy), so the
