@@ -69,6 +69,9 @@ Sections below hold the detail; this table is the map.
 | `2026-07-20-scope-keyed-tier1-remediation.md` | **Partially implemented** (2026-07-21) |
 | `2026-07-23-scope-set-type-impl.local.md` | Impl draft on `refactor/scope-set-type` |
 | `2026-07-26-claude-local-md-accuracy-audit.local.md` | Audit complete; remediation applied 2026-07-26 |
+| `2026-07-29-name-keyed-identity-residuals.local.md` | Finding report; all 4 repros re-verified on `ba93c936` 2026-07-29 |
+| `2026-07-29-name-keyed-identity-residuals-design.local.md` | Design **resolved**; 2 of the report's conclusions corrected |
+| `2026-07-29-name-keyed-identity-residuals-impl.local.md` | Branch A (Finding 2) **DONE** `bff525a8`; Branch B (Finding 1) not started |
 
 ### Design-only — approved or drafted, no code
 
@@ -196,7 +199,10 @@ Items that block production embedded use or prevent silent state corruption.
 Consequences of `8afeb66a`/`a60e32e1` making one name own several slots. Each lived only inside a
 `plans/` section — several marked RESOLVED — where anyone scanning for open work would skip it.
 Filed for three consumers; `freeIds` and `BindingID` joined 2026-07-20 from the same Stage C
-review, which is itself the argument against trusting a hardcoded count.
+review, and the self-tail emit and `CompileSymbol` pin ordering joined 2026-07-29 from a targeted
+audit — which is itself the argument against trusting a hardcoded count. Six of eight are closed;
+open are the self-tail family (Finding 1) and the for-syntax half of the `lookupMacroBinding`
+symmetry, which the `CompileSymbol` fix surfaced and left unproven.
 
 - [x] **Frame-reclaim's verdict domain was name-keyed** [Medium, M, Done 2026-07-23, branch
   `fix/framereclaim-scope-keyed-verdict`]: `ClassifyFrameReclaim` returns
@@ -360,6 +366,84 @@ review, which is itself the argument against trusting a hardcoded count.
   hygiene-distinct bindings produce equal name-keyed `BindingID`s — so shipping it name-keyed would
   have yielded a fourth wrong answer instead of a fix. Note the *shipped*
   `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and is **not** this.
+- [ ] **The self-tail / frame-reclaim family decides self-identity by name** [Correctness, M, filed
+  2026-07-29, `plans/2026-07-29-name-keyed-identity-residuals.local.md` Finding 1]: a **sixth**
+  consumer in this class, unfiled when the other five were. `validate`'s self-tail predicates thread
+  the closure's own name as a bare `string` (`self_tail.go:130` tests `name == selfName` *ahead* of
+  the scoped `env.GetBinding` at `:137`) and the lexical shadow set is a `map[string]…` (`nameSet`,
+  `frame_reclaim_build.go:260,587`); the emit gate compares spellings
+  (`compile_call.go:64`, `frameReuse.name` from `compile_time_call_context.go:105`). The predicates
+  run post-expansion, so a macro-introduced and a user identifier differ *only* in scopes. **Two live
+  repros, each discriminated against a distinct-name control** (counting `OpSelfTailCall` sites):
+  (a) a tail escape to a same-spelled *different* binding is emitted as `OpSelfTailCall`, so
+  `machine_context.go:564` jumps to pc=0 instead of calling it — control 1 site/`300`, collision
+  2 sites/**hangs**; (b) a macro-introduced local named like the loop makes `seqMutatesName` blind to
+  a `set!` of the real loop, arming self-tail on a mutable name — control 0 sites/correct raise,
+  collision 2 sites/**hangs**. Both fail **open**. Fix is two mechanisms, not one: self-identity
+  becomes resolved-`*Binding` comparison (subset-based, so extra body scopes still resolve —
+  `ScopedBindingKey` *equality* would silently total-deopt every loop, invisible to value
+  assertions), and `nameSet` becomes scope-discriminated with a **subset** query per
+  `environment.scopedBestOf`. `frameReuseForDefine` shares the mechanism but armed 0 sites without
+  `WithImmutableTopLevel` — exposed-but-unproven, in scope. Needs an **arming-count ratchet**, not
+  just value tests.
+  **Scope narrowed by the design pass** (`…-design.local.md` §2, `…-impl.local.md` Branch B): the
+  report reads as "migrate `selfName string` wholesale", which is wider than needed. Repro (a)'s
+  corrupting site is the **emit gate alone** — the extra `OpSelfTailCall` is the escaped `(f i)`,
+  reached by `compile_call.go:64`, while clause (4) correctly found only the genuine self call. That
+  splits the family into three roles: emit gate = *authority* (false positive corrupts),
+  `calleeCaptureSafe` = *safety* (false positive trusts a same-named capturer), the mutation/tail
+  walks = *applicability* (errors are deopts once the gate is exact). So 7 signatures move and 5 keep
+  `string`; `exprMutatesName` **must** stay name-only, since narrowing it by identity risks missing a
+  `set!` of the real self, which fails open. `nameSet` becomes `map[string][]localBinding` with
+  per-entry scopes, **not** `ScopedBindingKey`-keyed: a fingerprint cannot serve a subset query and a
+  composite key forces a whole-map scan per call operator. The shadow query needs a **tri-state**,
+  because `exprMutatesName` reads "shadowed" with the OPPOSITE safety polarity from
+  `calleeCaptureSafe`/`classifyCallee`/`tailExprHasSelfCall` — there it *suppresses* the `set!`
+  report, so one boolean cannot be conservative for both.
+- [x] **`CompileSymbol`'s definition-time pin outranks the scoped *global* match** [Correctness, S,
+  filed 2026-07-29, **Done 2026-07-29**, branch `fix/compilesymbol-cointroduced-global`, `bff525a8`]:
+  fixed by Option A, with the recommended cardinality guard, as a global-only arm between
+  `GetLocalIndex` and `tryResolvedBinding` (`GetGlobalIndexWithScopes` + `GetOwnGlobalBinding`'s
+  pinned-slot read, not `GetBinding` — the latter searches locals first and a cached-binding load for
+  a local would be wrong). `(entry 0)`: **0 → 21**. A second live case the report did not file, a
+  co-introduced global binder coexisting with a same-named user global, went **(100 100) → (7 100)**.
+  **Mutation-verified both directions**: disabling the arm fails 3 of 6 new subtests; dropping the
+  cardinality guard (the naive reorder) fails `TestGlobalIndexCollision_MacroReadsLibraryBinding`,
+  `_UserDefineDoesNotWriteLibraryFrame`, `_SetBangDoesNotWriteLibraryFrame` and
+  `TestLibraryInternalSyntaxCaseEllipsisHygiene` — exactly the cross-library free-identifier class the
+  pin protects. nil-pin census unchanged (23/0). Guards in
+  `TestScopeResolution_CoIntroducedGlobalShadowsPin` (`pkg/machine/scope_resolution_test.go`).
+  **Report correction**: the "user `rec` defined after the expansion" variant was filed as a separate
+  path; it is the SAME defect. `predeclareBodyDefines` creates every top-level define's binding before
+  any of them compiles, so in a `(begin …)`-wrapped unit the collision is visible at
+  macro-definition time wherever it is written, and the `#!void` was just the un-run slot (it now
+  yields `21` too). The **compilation-unit boundary** is the discriminator, not source order, so the
+  real control is a two-unit split. Design + phased impl in
+  `plans/2026-07-29-name-keyed-identity-residuals-{design,impl}.local.md`.
+  Root cause noted but **not** fixed: `collectFreeIdentifiersWithEllipsis` calls every
+  non-pattern-variable template identifier free, including ones the template BINDS. Filtering it is
+  undecidable in general (a template may contain `(my-binder x …)` where `my-binder` is a
+  binding macro), so it would be a partial precision improvement on top of this arm, not a
+  substitute — see the design's "Option D rejected".
+- [ ] **`lookupMacroBinding` arm 1 has no cardinality guard (for-syntax symmetry)** [Correctness, S,
+  filed 2026-07-29, **UNPROVEN, no repro**]: the macro-path twin of the item above. Arm 1
+  (`expander_time_continuation.go:355`) is a scope-precise `p.env.GetBinding` ahead of the D2 pin with
+  **no** `len(binding.Scopes()) > 0` guard, so an ambient `∅`-scoped syntax binding reachable from
+  `p.env` would capture a pinned free template identifier. Reachability, as far as it was established:
+  all three `BindingTypeSyntax` creation sites write to an **Expand-phase** global
+  (`compile_define_syntax.go:91`, `expander_body.go:172`) or a **local** with `keywordScopes`
+  (`expander_let_syntax.go:146,215`), so **no `∅`-scoped syntax global lands in phase 0** and
+  phase-0 expansion is safe — confirmed empirically, the `guard-aux` hijack vector returns
+  `(caught boom)` with and without the colliding top-level `define-syntax`. But under **for-syntax**
+  expansion (`compile_define_for_syntax.go:97`, `compile_eval_when.go:194`, `compile_helpers.go:82`)
+  `p.env` is a **phase-1** frame, which is exactly where a phase-0 `define-syntax` deposits
+  `∅`-scoped syntax globals, so the mechanism is present there. **No repro constructed**: the `guard`
+  vector inside `begin-for-syntax` fails identically with and without the collision, for the
+  unrelated reason that `raise` aborts to the exit prompt at expand time. Deliberately left as a
+  local patch rather than a shared arm-1 helper: one proven call site, one unproven. Next step is to
+  build a discriminating for-syntax repro or refute reachability; the answer decides whether the two
+  arms should share one helper.
+
 ### Scope-keyed globals — successor work not built in the arc (2026-07-19)
 
 Surfaced by the Stage C adversarial review and deliberately left out of scope so the arc could
