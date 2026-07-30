@@ -164,6 +164,46 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
+### `(environment '(wile <profile>))` is ungated and crosses profile boundaries (2026-07-29)
+
+- [ ] **Gate the profile-environment constructor** [High, M, filed from the `docs/` refresh]:
+  `(environment '(wile kitchen-sink))` evaluated from a `Small` or `ConsoleWithLoad` engine
+  returns a namespace carrying the *named* profile's extensions, not the engine's. The path is
+  `PrimEnvironment` → `tryWileProfile` (`extensions/eval/prim_eval.go`) → `eval.ProfileFactory`
+  (wired in `pkg/internal/bootstrap/bootstrap.go`'s `init`) → `ProfileExtensions(name)` +
+  `NewProfileEnvironment`, and **no `security.Check`/`CheckWithAuthorizer` appears anywhere on
+  it**. Contrast `PrimEval`/`PrimCompile`, which are gated `code:eval` in the same package.
+  **What is already bounded, and why this is not a total escape:** `NewProfileEnvironment` builds
+  the child via `callerNS.NewChildNamespace()`, which copies the authorizer, and `tryWileProfile`
+  copies the caller's `EnvMap`. So every *gated* resource stays under the engine's authorizer, and
+  `WithSandbox()`'s env restriction carries. **What is not bounded:** extensions that define no
+  gate sites at all — `threads`, `gointerop`, `namespace` — become reachable from an engine that
+  never registered them, and an authorizer cannot refuse what it is never asked about.
+  **Aspirational behavior:** the constructor is a privileged operation and asks the authorizer
+  before it builds anything. Open design questions, in the order they need answering:
+  1. **Vocabulary.** Reuse `code:eval` with the profile name as target, or add a resource for
+     namespace construction? `code:eval` is the closest existing fit and needs no new constants,
+     but it conflates "may run new code" with "may widen the extension set", so an authorizer
+     that permits `eval` under `/tmp` would still hand over `gointerop`.
+  2. **Policy, not just a gate.** A gate that a permissive authorizer waves through does not fix
+     the widening. The stronger rule is that a profile may only construct a namespace no wider
+     than the engine's own, which needs a containment order over profiles
+     (`Tiny ⊆ Console ⊆ ConsoleWithLoad ⊆ Small? ⊆ KitchenSink` is *not* currently a chain —
+     `Small` is an R7RS-small baseline, not a superset of `Console`). Deriving that order from
+     `ProfileExtensions` set-inclusion is mechanical; deciding whether incomparable profiles are
+     refused or merely gated is not.
+  3. **Compatibility.** `(environment '(wile <profile>))` widening is the documented way to get a
+     richer namespace from Scheme. Tightening it is a breaking change for any embedder relying on
+     it; needs a decision on whether the default is refuse-by-default with an opt-out option, or
+     permit-by-default with the gate only consulted when an authorizer is installed.
+  **Test-coverage trap:** `pkg/wile/engine_sandbox_test.go`'s `TestAuthorizer_DenyAllSweep`
+  already concedes in a comment that the constructor is ungated, and concludes "no escalation to
+  reject". That conclusion holds only for gated primitives, so the suite is green and will stay
+  green while the widening is live. Any fix needs a test that asserts on an *ungated* extension's
+  primitive becoming reachable, not on an authorizer denial.
+  Documented as a known limitation in `docs/security/sandboxing.md` ("does NOT cover" table) as of
+  the 2026-07-29 docs refresh; that row comes back out when this ships.
+
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
 - [x] **Fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21, approach 1a per
