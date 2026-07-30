@@ -123,9 +123,12 @@ func calleeCaptureSafe(
 		return false // computed operator ⇒ unknown ⇒ could capture
 	}
 	name := sym.Symbol.Sym.Key
-	local, shadowed := bound[name]
-	if shadowed {
+	local, verdict := bound.shadowLookup(name, sym.Symbol.Scopes())
+	if verdict == shadowYes {
 		return localCaptureSafe(local)
+	}
+	if verdict == shadowUnknown {
+		return false // no single binder resolves ⇒ unknown callee ⇒ could capture
 	}
 	if name == selfName {
 		return true // the genuine self call
@@ -477,11 +480,11 @@ func bodyIsSelfTailReusable(
 // shadows the enclosing name across the whole sequence).
 func seqMutatesName(body []ValidatedExpr, name string, bound nameSet) bool {
 	inner := bound
-	var defined []string
+	var defined []*syntax.SyntaxSymbol
 	for _, e := range body {
 		d, ok := e.(*ValidatedDefine)
 		if ok {
-			defined = append(defined, d.Name().Sym.Key)
+			defined = append(defined, d.Name())
 		}
 	}
 	if len(defined) > 0 {
@@ -505,7 +508,13 @@ func exprMutatesName(expr ValidatedExpr, name string, bound nameSet) bool {
 	}
 	switch v := expr.(type) {
 	case *ValidatedSetBang:
-		if v.Name.Sym.Key == name && !bound.has(name) {
+		// OPPOSITE POLARITY from the other three consumers: here "shadowed" SUPPRESSES
+		// the report, so only a definite shadowYes may suppress. shadowUnknown reports
+		// the mutation — refusing to suppress is the conservative direction, because a
+		// missed set! of the real self arms self-tail on a mutable binding, which fails
+		// OPEN (repro (b)).
+		_, verdict := bound.shadowLookup(name, v.Name.Scopes())
+		if v.Name.Sym.Key == name && verdict != shadowYes {
 			return true
 		}
 		return exprMutatesName(v.SubExp(), name, bound)
@@ -557,11 +566,11 @@ func tailSeqHasSelfCall(body []ValidatedExpr, depth int, bound nameSet, selfName
 		return false
 	}
 	inner := bound
-	var defined []string
+	var defined []*syntax.SyntaxSymbol
 	for _, e := range body {
 		d, ok := e.(*ValidatedDefine)
 		if ok {
-			defined = append(defined, d.Name().Sym.Key)
+			defined = append(defined, d.Name())
 		}
 	}
 	if len(defined) > 0 {
@@ -587,7 +596,11 @@ func tailExprHasSelfCall(expr ValidatedExpr, depth int, bound nameSet, selfName 
 		if !ok {
 			return false
 		}
-		if sym.Symbol.Sym.Key != selfName || bound.has(selfName) {
+		// An operator that resolves to an enclosing binder is not the self call, and an
+		// ambiguous lookup is not provably the self call either — both refuse, which
+		// only forgoes the rewrite.
+		_, verdict := bound.shadowLookup(selfName, sym.Symbol.Scopes())
+		if sym.Symbol.Sym.Key != selfName || verdict != shadowNo {
 			return false
 		}
 		return depth == 0 && len(v.Body()) == arity

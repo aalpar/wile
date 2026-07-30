@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/pkg/internal/validate"
+	"github.com/aalpar/wile/pkg/syntax"
 )
 
 // CompileTimeCallContext carries contextual information through the compilation process.
@@ -86,12 +87,21 @@ const (
 	frameReuseRelease
 )
 
-// frameReuse describes the parameter frame's reuse disposition. name and arity
+// frameReuse describes the parameter frame's reuse disposition. selfSym and arity
 // are meaningful only for frameReuseSelfTail; the zero value is frameReuseNone.
 type frameReuse struct {
-	kind  frameReuseKind
-	name  string
-	arity int
+	kind frameReuseKind
+	// selfSym is the armed closure's own binder IDENTIFIER, not its spelling. The
+	// emit gate resolves it against the call site's env and compares BINDINGS, so a
+	// tail call to a same-spelled DIFFERENT binding — a macro template's escape to a
+	// user global of the loop's name — is not rewritten into a jump to pc=0.
+	//
+	// A symbol and not a resolved *environment.Binding: a local binding is
+	// &frame.local.bindings[i], a pointer into a slice EnsureLocalBinding can
+	// reallocate, so it is not a stable identity to carry across compilation steps.
+	// Resolving both sides inside one call has no such window.
+	selfSym *syntax.SyntaxSymbol
+	arity   int
 }
 
 // noFrameReuse is the frameReuseNone disposition (the zero value), named for use
@@ -101,9 +111,10 @@ func noFrameReuse() frameReuse {
 	return frameReuse{kind: frameReuseNone}
 }
 
-// selfTailReuse arms the self-tail (in-place rebind) mode for name with arity.
-func selfTailReuse(name string, arity int) frameReuse {
-	return frameReuse{kind: frameReuseSelfTail, name: name, arity: arity}
+// selfTailReuse arms the self-tail (in-place rebind) mode for the closure bound by
+// selfSym, at arity.
+func selfTailReuse(selfSym *syntax.SyntaxSymbol, arity int) frameReuse {
+	return frameReuse{kind: frameReuseSelfTail, selfSym: selfSym, arity: arity}
 }
 
 // releaseReuse arms the frame-release mode.

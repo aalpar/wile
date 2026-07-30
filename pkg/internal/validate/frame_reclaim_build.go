@@ -16,6 +16,7 @@ package validate
 
 import (
 	"maps"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -257,11 +258,18 @@ func classifyCallee(
 	// Widening only the escape fact was not enough to move any verdict: a shadowed
 	// operator resolved to a nil target here and failed nodeSafe's edge test
 	// regardless of createsEscaping, so both refusals had to lift together.
-	local, shadowed := bound[name]
-	if shadowed {
+	// The lookup is scope-precise, so a binder this operator does not resolve to —
+	// a macro-introduced one of the same spelling, say — does not divert it from the
+	// same-unit define below. shadowUnknown (an ambiguous tie) is treated exactly
+	// like an opaque local: unsafe.
+	local, verdict := bound.shadowLookup(name, sym.Symbol.Scopes())
+	if verdict == shadowYes {
 		if localCaptureSafe(local) {
 			return reclaimEdge{}, false
 		}
+		return reclaimEdge{target: nil}, true
+	}
+	if verdict == shadowUnknown {
 		return reclaimEdge{target: nil}, true
 	}
 
@@ -441,25 +449,117 @@ type localBinding struct {
 	// A mutated name's init no longer describes what an operator of that name
 	// resolves to at the call, so the initializer is not evidence about it.
 	mutated bool
+	// scopes is the BINDER identifier's own scope set, which is what makes this
+	// entry answerable to a reference rather than to a spelling. These predicates
+	// run POST-expansion, where a macro-introduced binder and a user binder of the
+	// same name differ in nothing else.
+	scopes []*syntax.Scope
 }
 
-// nameSet maps an identifier Key lexically bound in an enclosing local scope to
-// what the walk knows about that binding. A call operator whose name is in the
-// set is shadowed by a local binding and therefore is NOT the same-Key top-level
-// define or imported primitive.
+// nameSet maps an identifier Key to EVERY enclosing local binder of that name,
+// outermost first. A reference resolves against them by scope set, not by
+// membership.
 //
-// The recorded localBinding is the evidence a proof of a locally-bound operator
-// would need (the A-local lever): it is populated here and deliberately not yet
-// read, so the type change and the semantic change stay separable.
-type nameSet map[string]localBinding
+// WHY A SLICE. The obvious map[string]localBinding overwrote an outer binder with
+// an inner one, which is correct only when the inner one is the answer. It is not:
+// a macro-introduced binder carries the intro scope, so a use-site reference does
+// NOT resolve to it, and the answer is an OUTER same-named binder (or none). That
+// is repro (b) — a template's own (let ((loop 0)) …) around a set! of a
+// use-site-supplied name made the real loop look shadowed, hiding the set! and
+// arming self-tail on a mutable self.
+//
+// NOT keyed by a composite (name, scopes) key: a fingerprint answers equality, and
+// resolution needs a SUBSET query, so a composite key would force a whole-map scan
+// per call operator. Name-keyed with a per-entry scope set keeps the common case
+// one map probe over a one- or two-element slice.
+//
+// Entries are appended outermost-first, so shadowLookup scans in reverse to give
+// the innermost binder precedence among equally-scoped matches.
+type nameSet map[string][]localBinding
 
-// with returns a copy of s extended with names bound opaquely.
-func (s nameSet) with(names ...string) nameSet {
-	out := s.clone(len(names))
-	for _, n := range names {
-		out[n] = localBinding{}
+// shadowVerdict is shadowLookup's tri-state answer. shadowUnknown exists because
+// the two-valued form cannot be conservative for every consumer at once: the
+// callee/tail walks read "shadowed" as a REFUSAL and exprMutatesName reads it as
+// a SUPPRESSION of the set! report. Collapsing an ambiguous lookup to either
+// boolean is unsound for one of them, so each consumer maps shadowUnknown to its
+// OWN refusing answer:
+//
+//   - calleeCaptureSafe: false (do not clear the callee).
+//   - classifyCallee: reclaimEdge{target: nil}, unsafe (same as an opaque local).
+//   - tailExprHasSelfCall: false (not a rewritable self call).
+//   - exprMutatesName: treat as NOT shadowed, i.e. REPORT the mutation. Opposite
+//     polarity, and the reason the tri-state is not optional.
+type shadowVerdict int
+
+const (
+	// shadowNo — no enclosing binder of that name resolves for this reference.
+	shadowNo shadowVerdict = iota
+	// shadowYes — exactly one maximal binder resolves; the localBinding is it.
+	shadowYes
+	// shadowUnknown — two incomparable binders tie for maximal, so no one binder
+	// is THE resolution (the Flatt ambiguity, per environment.scopedBestOf).
+	shadowUnknown
+)
+
+// shadowLookup answers "which enclosing binder does a reference carrying refScopes
+// resolve to?" by the rule environment.scopedBestOf implements over frame slots: a
+// binder matches when binderScopes ⊆ refScopes, and among matches the largest
+// scope set wins. Equal-cardinality matches with different sets are mutually
+// incomparable, so neither is the maximum — shadowUnknown.
+//
+// Reverse iteration is load-bearing: entries are appended outermost-first, and for
+// the ordinary nested-let case every binder is ∅-scoped, so all of them match with
+// equal cardinality. Scanning innermost-first with a strict improvement test makes
+// the innermost one win, which is what lexical scoping means.
+func (s nameSet) shadowLookup(name string, refScopes []*syntax.Scope) (localBinding, shadowVerdict) {
+	cands := s[name]
+	best := -1
+	ambiguous := false
+	for i := len(cands) - 1; i >= 0; i-- {
+		if !syntax.ScopesCompatible(cands[i].scopes, refScopes) {
+			continue
+		}
+		if best < 0 || len(cands[i].scopes) > len(cands[best].scopes) {
+			best = i
+			ambiguous = false
+			continue
+		}
+		if len(cands[i].scopes) == len(cands[best].scopes) &&
+			!syntax.ScopesMatch(cands[i].scopes, cands[best].scopes) {
+			// Equal cardinality and not the same set ⇒ incomparable.
+			ambiguous = true
+		}
+	}
+	if best < 0 {
+		return localBinding{}, shadowNo
+	}
+	if ambiguous {
+		return localBinding{}, shadowUnknown
+	}
+	return cands[best], shadowYes
+}
+
+// with returns a copy of s extended with binders recorded opaquely, carrying each
+// binder symbol's own scope set.
+func (s nameSet) with(syms ...*syntax.SyntaxSymbol) nameSet {
+	out := s.clone(len(syms))
+	for _, sym := range syms {
+		out.add(sym, localBinding{})
 	}
 	return out
+}
+
+// add appends one binder for sym's name, retaining any outer binders already
+// recorded, and stamps the entry with sym's own scope set — the single place scopes
+// are populated, so a new binder form cannot record an unscoped entry.
+//
+// slices.Clip forces the next append to copy rather than extend a shared backing
+// array, which is the same independence clone gives the map: two sibling scopes
+// must not see each other's binders.
+func (s nameSet) add(sym *syntax.SyntaxSymbol, bnd localBinding) {
+	bnd.scopes = sym.Scopes()
+	key := sym.Sym.Key
+	s[key] = append(slices.Clip(s[key]), bnd)
 }
 
 // clone copies s with room for extra further entries. Copy-on-extend keeps
@@ -477,14 +577,12 @@ func (s nameSet) withParams(p *ValidatedParams) nameSet {
 	if p == nil {
 		return s
 	}
-	names := make([]string, 0, len(p.Required)+1)
-	for _, req := range p.Required {
-		names = append(names, req.Sym.Key)
-	}
+	syms := make([]*syntax.SyntaxSymbol, 0, len(p.Required)+1)
+	syms = append(syms, p.Required...)
 	if p.Rest != nil {
-		names = append(names, p.Rest.Sym.Key)
+		syms = append(syms, p.Rest)
 	}
-	return s.with(names...)
+	return s.with(syms...)
 }
 
 // withLetBindings returns a copy of s extended with a let form's bound names,
@@ -496,11 +594,11 @@ func (s nameSet) withLetBindings(bindings []ValidatedLetBinding) nameSet {
 	if len(bindings) == 0 {
 		return s
 	}
-	names := make([]string, 0, len(bindings))
+	syms := make([]*syntax.SyntaxSymbol, 0, len(bindings))
 	for _, b := range bindings {
-		names = append(names, b.Name.Sym.Key)
+		syms = append(syms, b.Name)
 	}
-	return s.with(names...)
+	return s.with(syms...)
 }
 
 // withLet returns the two shadow sets a let form's sub-scopes run under: inits
@@ -516,14 +614,14 @@ func (s nameSet) withLet(v *ValidatedLet) (nameSet, nameSet) {
 	}
 	body := s.clone(len(v.Bindings))
 	for _, b := range v.Bindings {
-		body[b.Name.Sym.Key] = letBindingLocal(v, b)
+		body.add(b.Name, letBindingLocal(v, b))
 	}
 	if v.Kind.InitsInScope() {
 		return body, body
 	}
 	inits := s.clone(len(v.Bindings))
 	for _, b := range v.Bindings {
-		inits[b.Name.Sym.Key] = localBinding{}
+		inits.add(b.Name, localBinding{})
 	}
 	return inits, body
 }
@@ -557,7 +655,7 @@ func (s nameSet) withInternalDefines(body []ValidatedExpr) nameSet {
 	}
 	out := s.clone(len(defines))
 	for _, d := range defines {
-		out[d.Name().Sym.Key] = internalDefineLocal(d, body)
+		out.add(d.Name(), internalDefineLocal(d, body))
 	}
 	return out
 }
@@ -581,10 +679,4 @@ func bodyMutatesOwnDefine(body []ValidatedExpr, name string) bool {
 		}
 	}
 	return false
-}
-
-// has reports whether name is lexically shadowed in this scope.
-func (s nameSet) has(name string) bool {
-	_, ok := s[name]
-	return ok
 }

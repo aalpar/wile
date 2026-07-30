@@ -43,7 +43,7 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 	if !isLam {
 		return p.compileValidated(ctctx.NotInTail(), v.Bindings[i].Init)
 	}
-	name := v.Bindings[i].Name.Sym.Key
+	name := v.Bindings[i].Name
 	reuse := noFrameReuse()
 	arity, selfTail := validate.LetBindingSelfTailReusable(v, i, p.env)
 	// Self-tail takes precedence: rebinding the frame in place is strictly better
@@ -61,7 +61,7 @@ func (p *CompileTimeContinuation) compileLetrecBindingInit(ctctx CompileTimeCall
 	}
 	lenv := environment.NewLocalEnvironment(0)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	tpl.SetName(name)
+	tpl.SetName(name.Sym.Key)
 	return p.compileClosure(ctctx.NotInTail(), tpl, lenv, lam, reuse)
 }
 

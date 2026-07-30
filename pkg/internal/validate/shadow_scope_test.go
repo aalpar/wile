@@ -143,12 +143,13 @@ func TestShadowWalkRecordsLocalBindings(t *testing.T) {
 			if bound == nil {
 				t.Fatalf("no call site with operator %q was walked", tt.probe)
 			}
-			// Membership is what every current consumer queries, and it must be
-			// exactly what it was before the value type widened.
-			if !bound.has(tt.subject) {
-				t.Fatalf("%q not shadowed at %q", tt.subject, tt.probe)
+			// Every binder here is ∅-scoped, so a nil-scoped reference resolves to it
+			// (∅ ⊆ ∅). The scope-discriminated lookup must give the same answers the
+			// membership test did for unscoped code.
+			got, verdict := bound.shadowLookup(tt.subject, nil)
+			if verdict != shadowYes {
+				t.Fatalf("%q not shadowed at %q: verdict %v", tt.subject, tt.probe, verdict)
 			}
-			got := bound[tt.subject]
 			if got.init != tt.wantInit {
 				t.Errorf("init for %q at %q = %v, want %v", tt.subject, tt.probe, got.init, tt.wantInit)
 			}
@@ -166,10 +167,97 @@ func TestShadowWalkScopesDoNotLeak(t *testing.T) {
 	right := letOf(LetKindLet, "b", lamOf(nil, lit()), call(symRef("in-right")))
 	scopes := walkScopes([]ValidatedExpr{left, right})
 
-	if scopes["in-left"].has("b") {
+	_, leftSeesB := scopes["in-left"].shadowLookup("b", nil)
+	if leftSeesB != shadowNo {
 		t.Error("binding from the right let leaked into the left let's scope")
 	}
-	if scopes["in-right"].has("a") {
+	_, rightSeesA := scopes["in-right"].shadowLookup("a", nil)
+	if rightSeesA != shadowNo {
 		t.Error("binding from the left let leaked into the right let's scope")
+	}
+}
+
+// TestShadowLookupRetainsOuterBinder pins the retention rule the slice-valued
+// nameSet exists for: an INNER binder that the reference does not resolve to must
+// not erase an OUTER one that it does. The map-valued form overwrote, which is
+// exactly how a macro-introduced binder hid a use-site name (repro (b)).
+func TestShadowLookupRetainsOuterBinder(t *testing.T) {
+	intro := syntax.NewScope()
+	useScope := syntax.NewScope()
+
+	outerLam := lamOf(nil, lit())
+	outer := scopedBinder("loop", outerLam, useScope).Name
+	inner := scopedBinder("loop", lit(), useScope, intro).Name
+
+	set := nameSet(nil).clone(2)
+	set.add(outer, localBinding{init: outerLam})
+	set.add(inner, localBinding{})
+
+	// A use-site reference carries {use}: the inner binder's {use, intro} is not a
+	// subset of it and must be skipped, leaving the outer binder as the answer. This
+	// is repro (b)'s shape — the introduced binder must not hide the use-site name.
+	got, verdict := set.shadowLookup("loop", []*syntax.Scope{useScope})
+	if verdict != shadowYes {
+		t.Fatalf("use-site reference: verdict %v, want shadowYes", verdict)
+	}
+	if got.init != outerLam {
+		t.Errorf("use-site reference resolved to the inner binder; the outer one was overwritten")
+	}
+
+	// A reference carrying BOTH scopes resolves to the inner binder, whose {use, intro}
+	// is the strictly larger matching set. Ordinary lexical shadowing, unregressed.
+	got, verdict = set.shadowLookup("loop", []*syntax.Scope{useScope, intro})
+	if verdict != shadowYes {
+		t.Fatalf("macro-site reference: verdict %v, want shadowYes", verdict)
+	}
+	if got.init != nil {
+		t.Errorf("a reference carrying the intro scope must resolve to the inner binder")
+	}
+}
+
+// TestShadowLookupAmbiguousTie pins the tri-state: two binders whose scope sets
+// are distinct but equal in size are mutually incomparable, so neither is THE
+// resolution. Every consumer maps this to its own refusing answer.
+func TestShadowLookupAmbiguousTie(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+
+	first := scopedBinder("f", lit(), a).Name
+	second := scopedBinder("f", lit(), b).Name
+
+	set := nameSet(nil).clone(2)
+	set.add(first, localBinding{init: lamOf(nil, lit())})
+	set.add(second, localBinding{init: lamOf(nil, lit())})
+
+	_, verdict := set.shadowLookup("f", []*syntax.Scope{a, b})
+	if verdict != shadowUnknown {
+		t.Errorf("equal-cardinality incomparable binders: verdict %v, want shadowUnknown", verdict)
+	}
+}
+
+// TestShadowSetSiblingsDoNotShareBackingArray pins the slices.Clip half of
+// copy-on-extend. The map clone is not enough once values are slices: two children
+// extending the same parent entry would otherwise append into one array and each
+// see the other's binder.
+func TestShadowSetSiblingsDoNotShareBackingArray(t *testing.T) {
+	parent := nameSet(nil).with(syntax.NewSyntaxSymbol("x", nil))
+
+	leftSym := syntax.NewSyntaxSymbol("x", nil)
+	leftLam := lamOf(nil, lit())
+	left := parent.clone(1)
+	left.add(leftSym, localBinding{init: leftLam})
+
+	right := parent.clone(1)
+	right.add(syntax.NewSyntaxSymbol("x", nil), localBinding{})
+
+	got, verdict := left.shadowLookup("x", nil)
+	if verdict != shadowYes {
+		t.Fatalf("left scope: verdict %v, want shadowYes", verdict)
+	}
+	if got.init != leftLam {
+		t.Error("the right sibling's binder overwrote the left sibling's through a shared backing array")
+	}
+	if len(parent["x"]) != 1 {
+		t.Errorf("parent entry grew to %d binders; a child appended into the parent's array", len(parent["x"]))
 	}
 }

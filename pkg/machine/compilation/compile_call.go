@@ -61,7 +61,26 @@ func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallConte
 	if !ok {
 		return false, nil
 	}
-	if sym.Symbol.Sym.Key != ctctx.frameReuse.name || len(v.Body()) != ctctx.frameReuse.arity {
+	// IDENTITY, NOT SPELLING. This gate is the AUTHORITY for the rewrite: a false
+	// positive here does not merely forgo an optimization, it turns a call to some
+	// OTHER procedure into a jump to pc=0 (machine_context.go's OpSelfTailCall). The
+	// safety predicates run post-expansion, so a macro-introduced binder and a user
+	// identifier of the same name are distinguished by scopes alone — a template that
+	// opens (let loop …) and tail-calls a pattern variable instantiated with the
+	// user's own top-level `loop` reaches here with matching spelling and arity.
+	//
+	// Both sides resolve inside this one call, which is what makes comparing
+	// *environment.Binding pointers sound: a local binding is a pointer into a slice
+	// EnsureLocalBinding can reallocate, so the pointer is an identity only within a
+	// window that contains no binding creation.
+	//
+	// self == nil should not happen — the arming site resolved this very symbol — but
+	// it refuses rather than guesses, and the ratchet test is what would catch a
+	// systematic refusal. op != self covers both "same spelling, different binding"
+	// and "does not resolve at all".
+	self := p.env.GetBinding(ctctx.frameReuse.selfSym.Sym, syntax.ScopesOf(ctctx.frameReuse.selfSym.Scopes()))
+	op := p.env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	if self == nil || op != self || len(v.Body()) != ctctx.frameReuse.arity {
 		return false, nil
 	}
 	for _, arg := range v.Body() {

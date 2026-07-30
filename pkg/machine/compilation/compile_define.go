@@ -316,7 +316,7 @@ func (p *CompileTimeContinuation) frameReuseForDefine(ctctx CompileTimeCallConte
 	name := v.Name()
 	binding := p.env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
 	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
-		return selfTailReuse(name.Sym.Key, len(v.Params().Required))
+		return selfTailReuse(name, len(v.Params().Required))
 	}
 	// Release path: the interprocedural unit verdict (covers mutual recursion and
 	// define->define tail calls) UNION the per-body predicate (self-recursion over
