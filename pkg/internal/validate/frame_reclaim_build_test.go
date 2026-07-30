@@ -499,3 +499,23 @@ func TestClassifyFrameReclaim_LocalShadowNotReclaimable(t *testing.T) {
 		t.Fatalf("control: a genuine same-unit call to Stable sq MUST be reclaimable")
 	}
 }
+
+// selfIn creates a plain (non-imported, non-capture-safe) binding for name in env
+// and returns the symbol naming it, so a predicate under test resolves its own self
+// exactly as production does.
+//
+// The bare-string form these tests used before asserted against an env that never
+// contained the self binding at all: the predicate cleared its self call by
+// spelling, so the test could not distinguish the genuine self from a same-named
+// other procedure. resolveSelf now refuses a self it cannot resolve, which is what
+// makes supplying it mandatory rather than cosmetic.
+func selfIn(t *testing.T, env *environment.EnvironmentFrame, name string) *syntax.SyntaxSymbol {
+	t.Helper()
+	q := syntax.NewSyntaxSymbol(name, nil)
+	env.MaybeCreateOwnGlobalBinding(q.Sym, environment.BindingTypeVariable, nil)
+	b := env.GetBinding(q.Sym, values.AllScopes())
+	if b == nil {
+		t.Fatalf("failed to create self binding %q", name)
+	}
+	return q
+}

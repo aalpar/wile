@@ -24,7 +24,7 @@ import (
 // BodyIsSelfTailReusable is the compiler entry point: it builds the production
 // capture-operator identity test from env (hygiene-correct: a locally-shadowed
 // call/cc is not the primitive) and runs the self-tail-reuse safety predicate.
-// selfName is the closure's own bound name as a symbol Key.
+// selfSym is the closure's own binder identifier, or nil for an anonymous body.
 //
 // NOTE: this is the IN-BODY safety half. The caller must additionally ensure the
 // self BINDING is immutable against cross-unit redefinition — for a top-level
@@ -32,11 +32,57 @@ import (
 // in-body ¬set! this predicate checks is the whole story.
 func BodyIsSelfTailReusable(
 	proc ValidatedBodyAndParams,
-	selfName string,
+	selfSym *syntax.SyntaxSymbol,
 	env *environment.EnvironmentFrame,
 ) bool {
-	return bodyIsSelfTailReusable(proc, selfName, makeIsCaptureOp(env)) &&
-		bodyCalleesAllCaptureSafe(proc, selfName, env)
+	self, ok := resolveSelf(selfSym, env)
+	if !ok {
+		return false
+	}
+	return bodyIsSelfTailReusable(proc, selfKey(selfSym), makeIsCaptureOp(env)) &&
+		bodyCalleesAllCaptureSafe(proc, self, env)
+}
+
+// resolveSelf resolves the analysed closure's own binder to the binding identity
+// calleeCaptureSafe compares against. It is called ONCE per exported entry and the
+// *Binding is threaded down, so every resolution in one verdict happens inside one
+// call — the window in which a &frame.local.bindings[i] pointer is a stable
+// identity (EnsureLocalBinding can reallocate that slice).
+//
+// Three-valued, and the middle case is why:
+//
+//   - selfSym == nil: ANONYMOUS. self = nil, ok. No callee is ever cleared as a
+//     self call; this is callback.go's case and must keep working.
+//   - selfSym resolves: that binding is the self.
+//   - selfSym does NOT resolve: REFUSE the whole predicate. Not because proceeding
+//     would be unsound — the mutation and tail walks are still fed selfSym's Key, so
+//     a set! of the real self is still detected — but because an unresolvable self
+//     means the caller did not supply the env the binder lives in, and refusing turns
+//     that plumbing error into a measurable arming-count DROP (which the ratchet test
+//     catches) rather than a silent precision loss at one clause.
+func resolveSelf(selfSym *syntax.SyntaxSymbol, env *environment.EnvironmentFrame) (*environment.Binding, bool) {
+	if selfSym == nil {
+		return nil, true
+	}
+	if env == nil {
+		return nil, false
+	}
+	q := env.GetBinding(selfSym.Sym, syntax.ScopesOf(selfSym.Scopes()))
+	if q == nil {
+		return nil, false
+	}
+	return q, true
+}
+
+// selfKey is the name the five name-keyed walkers take. They deliberately stay
+// name-only: clause (4) and the mutation scan are APPLICABILITY tests, conservative
+// once the emit gate is authoritative, and narrowing exprMutatesName by identity
+// would risk missing a set! of the real self — which fails OPEN.
+func selfKey(selfSym *syntax.SyntaxSymbol) string {
+	if selfSym == nil {
+		return ""
+	}
+	return selfSym.Sym.Key
 }
 
 // bodyCalleesAllCaptureSafe reports whether every call operator in proc's body is
@@ -75,8 +121,8 @@ func BodyIsSelfTailReusable(
 // This is conservative — it refuses a same-unit user define callee (mutual
 // recursion), which the interprocedural classifier (ClassifyFrameReclaim) admits —
 // but it is SOUND, which the kill criterion demands.
-func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
-	return bodyCalleesAllCaptureSafeUnder(proc, selfName, env, nil)
+func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, self *environment.Binding, env *environment.EnvironmentFrame) bool {
+	return bodyCalleesAllCaptureSafeUnder(proc, self, env, nil)
 }
 
 // bodyCalleesAllCaptureSafeUnder is bodyCalleesAllCaptureSafe with an explicit
@@ -92,7 +138,7 @@ func bodyCalleesAllCaptureSafe(proc ValidatedBodyAndParams, selfName string, env
 // walk has already reached this initializer — into an unchecked claim.
 func bodyCalleesAllCaptureSafeUnder(
 	proc ValidatedBodyAndParams,
-	selfName string,
+	self *environment.Binding,
 	env *environment.EnvironmentFrame,
 	base nameSet,
 ) bool {
@@ -105,39 +151,43 @@ func bodyCalleesAllCaptureSafeUnder(
 		if !safe {
 			return
 		}
-		safe = calleeCaptureSafe(op, bound, selfName, env)
+		safe = calleeCaptureSafe(op, bound, self, env)
 	})
 	return safe
 }
 
 // calleeCaptureSafe decides one call operator under the shadow set in force at
 // its call site.
+// This is a SAFETY clause, not an authority: a false positive here does not
+// mis-emit, it grants capture-safety to a callee that may capture. The self test
+// therefore compares the resolved BINDING and sits AFTER operator resolution, so a
+// same-spelled other procedure — repro (a)'s mechanism, applied to this clause —
+// cannot inherit the self call's co-inductive exemption.
 func calleeCaptureSafe(
 	op ValidatedExpr,
 	bound nameSet,
-	selfName string,
+	self *environment.Binding,
 	env *environment.EnvironmentFrame,
 ) bool {
 	sym, ok := op.(*ValidatedSymbol)
 	if !ok {
 		return false // computed operator ⇒ unknown ⇒ could capture
 	}
-	name := sym.Symbol.Sym.Key
-	local, verdict := bound.shadowLookup(name, sym.Symbol.Scopes())
+	local, verdict := bound.shadowLookup(sym.Symbol.Sym.Key, sym.Symbol.Scopes())
 	if verdict == shadowYes {
 		return localCaptureSafe(local)
 	}
 	if verdict == shadowUnknown {
 		return false // no single binder resolves ⇒ unknown callee ⇒ could capture
 	}
-	if name == selfName {
-		return true // the genuine self call
-	}
 	// Not a capture-safe, non-rebindable primitive: a user-defined callee (no
 	// CaptureSafe), an unresolved name, or a set!-able primitive. A same-unit
 	// define callee is rejected here (interprocedural mutual recursion is the
 	// classifier's job, not the per-body predicate's).
 	b := env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
+	if self != nil && b == self {
+		return true // the genuine self call: safe by the co-inductive assumption
+	}
 	return b != nil && b.IsCaptureSafe() && b.IsStable()
 }
 
@@ -181,14 +231,18 @@ func localCaptureSafe(local localBinding) bool {
 // (fib, tak) but refuses a tail call to another user-defined function (mutual
 // recursion), which the full call graph would admit. Sound either way; the
 // call-graph precision is a later refinement.
-func BodyIsFrameReleasable(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+func BodyIsFrameReleasable(proc ValidatedBodyAndParams, selfSym *syntax.SyntaxSymbol, env *environment.EnvironmentFrame) bool {
 	if env == nil {
+		return false
+	}
+	self, ok := resolveSelf(selfSym, env)
+	if !ok {
 		return false
 	}
 	// Frame-releasable = capture-safe-as-callee AND no escaping closure: releasing
 	// proc's OWN frame additionally requires that no closure parents it (escape),
 	// which calling proc does not.
-	return bodyCannotCaptureCaller(proc, selfName, env) &&
+	return bodyCannotCaptureCaller(proc, self, env) &&
 		!bodyCreatesEscapingClosure(proc.Body())
 }
 
@@ -199,9 +253,9 @@ func BodyIsFrameReleasable(proc ValidatedBodyAndParams, selfName string, env *en
 // parameters). It deliberately omits the escaping-closure check — escape governs
 // whether the body's OWN frame may be released, not whether CALLING the body
 // captures the caller's continuation. env must be non-nil.
-func bodyCannotCaptureCaller(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+func bodyCannotCaptureCaller(proc ValidatedBodyAndParams, self *environment.Binding, env *environment.EnvironmentFrame) bool {
 	return !bodyReferencesCaptureOperator(proc.Body(), makeIsCaptureOp(env)) &&
-		bodyCalleesAllCaptureSafe(proc, selfName, env)
+		bodyCalleesAllCaptureSafe(proc, self, env)
 }
 
 // ProcedureBodyIsCaptureSafe reports whether CALLING proc can never capture the
@@ -217,11 +271,15 @@ func bodyCannotCaptureCaller(proc ValidatedBodyAndParams, selfName string, env *
 // hand-maintained whitelist. Conservative on forward references: a callee not yet
 // stamped reads IsCaptureSafe()==false, so proc is left unstamped (sound — a missed
 // stamp only forgoes the optimization).
-func ProcedureBodyIsCaptureSafe(proc ValidatedBodyAndParams, selfName string, env *environment.EnvironmentFrame) bool {
+func ProcedureBodyIsCaptureSafe(proc ValidatedBodyAndParams, selfSym *syntax.SyntaxSymbol, env *environment.EnvironmentFrame) bool {
 	if env == nil {
 		return false
 	}
-	return bodyCannotCaptureCaller(proc, selfName, env)
+	self, ok := resolveSelf(selfSym, env)
+	if !ok {
+		return false
+	}
+	return bodyCannotCaptureCaller(proc, self, env)
 }
 
 // LetBindingSelfTailReusable reports the arity and eligibility of the i-th
@@ -247,11 +305,11 @@ func LetBindingSelfTailReusable(v *ValidatedLet, i int, env *environment.Environ
 	if !ok {
 		return 0, false
 	}
-	name := v.Bindings[i].Name.Sym.Key
+	name := v.Bindings[i].Name
 	if !BodyIsSelfTailReusable(lam, name, env) {
 		return 0, false
 	}
-	if letMutatesName(v, name) {
+	if letMutatesName(v, name.Sym.Key) {
 		return 0, false
 	}
 	return len(lam.Params().Required), true
@@ -326,11 +384,14 @@ func LetBindingFrameReleasable(v *ValidatedLet, i int, env *environment.Environm
 			// Not assumed safe by the seed, so nothing to discharge for it.
 			continue
 		}
-		name := v.Bindings[j].Name.Sym.Key
 		if bodyReferencesCaptureOperator(sib.Body(), makeIsCaptureOp(env)) {
 			return false
 		}
-		if !bodyCalleesAllCaptureSafeUnder(sib, name, env, group) {
+		// The sibling's OWN name is in the group seed, so its self call is decided by
+		// the shadow set (localCaptureSafe on its lambda init) and never reaches the
+		// self-binding test. self is nil here for that reason, not by omission: a
+		// letrec binder is local, and this walk resolves against a flat env.
+		if !bodyCalleesAllCaptureSafeUnder(sib, nil, env, group) {
 			return false
 		}
 	}
@@ -388,7 +449,9 @@ func InternalDefineFrameReleasable(
 		if bodyReferencesCaptureOperator(sib.Body(), makeIsCaptureOp(env)) {
 			return false
 		}
-		if !bodyCalleesAllCaptureSafeUnder(sib, sib.Name().Sym.Key, env, group) {
+		// self is nil for the same reason as in LetBindingFrameReleasable: every group
+		// member is in the seed, so a self call is answered by the shadow set.
+		if !bodyCalleesAllCaptureSafeUnder(sib, nil, env, group) {
 			return false
 		}
 	}
@@ -513,6 +576,13 @@ func exprMutatesName(expr ValidatedExpr, name string, bound nameSet) bool {
 		// the mutation — refusing to suppress is the conservative direction, because a
 		// missed set! of the real self arms self-tail on a mutable binding, which fails
 		// OPEN (repro (b)).
+		//
+		// THE shadowUnknown HALF IS NOT LOAD-BEARING TODAY, and a reader must not infer
+		// that it is: flipping it to "shadowed" fails nothing in the suite or the corpus,
+		// because no case reaches a set! target through an ambiguous tie. It is kept as
+		// an explicit tightening (it can only ADD a refusal, never grant one) in the same
+		// spirit as LetBindingFrameReleasable's two redundant checks, and
+		// TestExprMutatesNameReportsThroughAmbiguousTie pins the intended direction.
 		_, verdict := bound.shadowLookup(name, v.Name.Scopes())
 		if v.Name.Sym.Key == name && verdict != shadowYes {
 			return true

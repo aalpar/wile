@@ -266,7 +266,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 	// not-yet-stamped sibling) only forgoes the optimization.
 	name := v.Name()
 	binding := p.env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
-	if binding != nil && validate.ProcedureBodyIsCaptureSafe(v, name.Sym.Key, p.env) {
+	if binding != nil && validate.ProcedureBodyIsCaptureSafe(v, name, p.env) {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
 			m.CaptureSafe = true
 			return true
@@ -315,7 +315,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefineFn(ctctx CompileTimeCall
 func (p *CompileTimeContinuation) frameReuseForDefine(ctctx CompileTimeCallContext, v *validate.ValidatedDefine) frameReuse {
 	name := v.Name()
 	binding := p.env.GetBinding(name.Sym, syntax.ScopesOf(name.Scopes()))
-	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name.Sym.Key, p.env) {
+	if binding != nil && binding.IsStable() && validate.BodyIsSelfTailReusable(v, name, p.env) {
 		return selfTailReuse(name, len(v.Params().Required))
 	}
 	// Release path: the interprocedural unit verdict (covers mutual recursion and
@@ -333,7 +333,7 @@ func (p *CompileTimeContinuation) frameReuseForDefine(ctctx CompileTimeCallConte
 	// user define read distinct verdicts. The method's gate stays live while a let body
 	// compiles on this same compiler; it is now an explicit tightening, since an
 	// internal define's name carries the enclosing scope and so misses the top-level map.
-	if p.unitFrameReclaimVerdict(validate.ScopedBindingKeyOf(name)) || validate.BodyIsFrameReleasable(v, name.Sym.Key, p.env) {
+	if p.unitFrameReclaimVerdict(validate.ScopedBindingKeyOf(name)) || validate.BodyIsFrameReleasable(v, name, p.env) {
 		return releaseReuse()
 	}
 	// Third disjunct, for an INTERNAL define only: prove it against its letrec*

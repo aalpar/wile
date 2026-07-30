@@ -77,7 +77,7 @@ func TestALocalProvesLocallyBoundOperators(t *testing.T) {
 			[]ValidatedExpr{ifx(call(symRef("<="), symRef("i"), lit()),
 				symRef("i"),
 				call(symRef("loop"), call(symRef("-"), symRef("i"), lit())))}))
-	if !ProcedureBodyIsCaptureSafe(loopOK, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(loopOK, selfIn(t, env, "g"), env) {
 		t.Error("a named let over capture-safe primitives must be provable")
 	}
 
@@ -86,7 +86,7 @@ func TestALocalProvesLocallyBoundOperators(t *testing.T) {
 	loopBad := fnWith("g", params("n"),
 		namedLet("loop", params("i"),
 			[]ValidatedExpr{call(symRef("map"), symRef("f"), symRef("xs"))}))
-	if ProcedureBodyIsCaptureSafe(loopBad, "g", env) {
+	if ProcedureBodyIsCaptureSafe(loopBad, selfIn(t, env, "g"), env) {
 		t.Error("a named let whose body calls a procedure-invoking callee must be refused")
 	}
 
@@ -94,7 +94,7 @@ func TestALocalProvesLocallyBoundOperators(t *testing.T) {
 	innerDefine := fnWith("g", params("n"),
 		defineFn("h", call(symRef("car"), symRef("i"))),
 		call(symRef("h"), symRef("n")))
-	if !ProcedureBodyIsCaptureSafe(innerDefine, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(innerDefine, selfIn(t, env, "g"), env) {
 		t.Error("a function-form internal define must be provable from its own body")
 	}
 
@@ -102,7 +102,7 @@ func TestALocalProvesLocallyBoundOperators(t *testing.T) {
 	computedInit := fnWith("g", params("n"),
 		letBinds(LetKindLet, []string{"h"}, []ValidatedExpr{call(symRef("car"), symRef("n"))},
 			call(symRef("h"))))
-	if ProcedureBodyIsCaptureSafe(computedInit, "g", env) {
+	if ProcedureBodyIsCaptureSafe(computedInit, selfIn(t, env, "g"), env) {
 		t.Error("a local bound to a computed init is not provable and must be refused")
 	}
 }
@@ -120,7 +120,7 @@ func TestALocalRefusesMutatedLocal(t *testing.T) {
 	clean := fnWith("g", params("n"),
 		letBinds(LetKindLet, []string{"h"}, []ValidatedExpr{safeInit()},
 			call(symRef("h"), symRef("n"))))
-	if !ProcedureBodyIsCaptureSafe(clean, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(clean, selfIn(t, env, "g"), env) {
 		t.Fatal("control: an un-mutated local with a capture-safe body must be provable")
 	}
 
@@ -129,7 +129,7 @@ func TestALocalRefusesMutatedLocal(t *testing.T) {
 		letBinds(LetKindLet, []string{"h"}, []ValidatedExpr{safeInit()},
 			setBang("h", symRef("map")),
 			call(symRef("h"), symRef("n"))))
-	if ProcedureBodyIsCaptureSafe(mutated, "g", env) {
+	if ProcedureBodyIsCaptureSafe(mutated, selfIn(t, env, "g"), env) {
 		t.Error("a local set! after binding must be refused — its init no longer describes it")
 	}
 }
@@ -153,7 +153,7 @@ func TestALocalLetInitPositionDoesNotSeeOwnBinding(t *testing.T) {
 			safeInit(),
 			lamOf(nil, call(symRef("a"))),
 		}, call(symRef("b"))))
-	if ProcedureBodyIsCaptureSafe(plain, "g", env) {
+	if ProcedureBodyIsCaptureSafe(plain, selfIn(t, env, "g"), env) {
 		t.Error("a plain let's own name in an init position is the OUTER binding and must refuse")
 	}
 
@@ -163,7 +163,7 @@ func TestALocalLetInitPositionDoesNotSeeOwnBinding(t *testing.T) {
 			safeInit(),
 			lamOf(nil, call(symRef("a"))),
 		}, call(symRef("b"))))
-	if !ProcedureBodyIsCaptureSafe(rec, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(rec, selfIn(t, env, "g"), env) {
 		t.Error("a letrec init does see its own bindings and must be provable")
 	}
 }
@@ -187,7 +187,7 @@ func TestALocalCoInductionDischargesCycles(t *testing.T) {
 				symRef("n"),
 				call(symRef("a"), call(symRef("-"), symRef("n"), lit())))),
 		}, call(symRef("a"), symRef("n"))))
-	if !ProcedureBodyIsCaptureSafe(mutual, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(mutual, selfIn(t, env, "g"), env) {
 		t.Error("clean local mutual recursion must be provable — the cycle is discharged")
 	}
 
@@ -198,7 +198,7 @@ func TestALocalCoInductionDischargesCycles(t *testing.T) {
 			lamOf([]string{"n"}, call(symRef("b"), symRef("n"))),
 			lamOf([]string{"n"}, call(symRef("map"), symRef("f"), symRef("xs"))),
 		}, call(symRef("a"), symRef("n"))))
-	if ProcedureBodyIsCaptureSafe(mutualBad, "g", env) {
+	if ProcedureBodyIsCaptureSafe(mutualBad, selfIn(t, env, "g"), env) {
 		t.Error("local mutual recursion where one member is unprovable must be refused")
 	}
 
@@ -211,7 +211,7 @@ func TestALocalCoInductionDischargesCycles(t *testing.T) {
 			[]ValidatedExpr{ifx(call(symRef("<="), symRef("i"), lit()),
 				call(symRef("g"), symRef("i")),
 				call(symRef("loop"), call(symRef("-"), symRef("i"), lit())))}))
-	if !ProcedureBodyIsCaptureSafe(callsEnclosing, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(callsEnclosing, selfIn(t, env, "g"), env) {
 		t.Error("a local calling back into the define being proven must be discharged, not refused")
 	}
 }
@@ -235,7 +235,7 @@ func TestALocalNestedSameNameLocalIsStillInspected(t *testing.T) {
 					lamOf(nil, call(symRef("map"), symRef("f"), symRef("xs"))),
 				}, call(symRef("h")))),
 		}, call(symRef("h"))))
-	if ProcedureBodyIsCaptureSafe(shadowed, "g", env) {
+	if ProcedureBodyIsCaptureSafe(shadowed, selfIn(t, env, "g"), env) {
 		t.Error("an inner same-named local must be decided on its own merits, not as the outer one")
 	}
 }
@@ -259,7 +259,7 @@ func TestALocalNearerBinderDoesNotMask(t *testing.T) {
 		}, letBinds(LetKindLet, []string{"h"}, []ValidatedExpr{
 			lamOf(nil, call(symRef("car"), symRef("xs"))),
 		}, call(symRef("loop")))))
-	if ProcedureBodyIsCaptureSafe(nearerIsSafe, "g", env) {
+	if ProcedureBodyIsCaptureSafe(nearerIsSafe, selfIn(t, env, "g"), env) {
 		t.Error("a nearer harmless binder must not mask the unprovable body the local actually calls")
 	}
 
@@ -273,7 +273,7 @@ func TestALocalNearerBinderDoesNotMask(t *testing.T) {
 		}, letBinds(LetKindLet, []string{"h"}, []ValidatedExpr{
 			lamOf(nil, call(symRef("car"), symRef("xs"))),
 		}, call(symRef("loop")))))
-	if !ProcedureBodyIsCaptureSafe(nearerIsUnsafe, "g", env) {
+	if !ProcedureBodyIsCaptureSafe(nearerIsUnsafe, selfIn(t, env, "g"), env) {
 		t.Error("control: a local whose binder-scope callees are all provable must stay provable")
 	}
 }

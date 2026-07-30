@@ -34,8 +34,8 @@ import (
 //     (cannot invoke a Scheme procedure, so cannot capture) and stable (not
 //     rebindable to something that can), or
 //   - a lambda literal whose body ProcedureBodyIsCaptureSafe proves cannot capture
-//     the caller's continuation. selfName is "" — an argument callback is anonymous,
-//     so no callee is exempted as a self-recursive tail call.
+//     the caller's continuation. The self symbol is nil — an argument callback is
+//     anonymous, so no callee is exempted as a self-recursive tail call.
 //
 // Anything else — a procedure-invoking, unbound, or rebindable symbol; a lambda
 // that runs a capture operator or a procedure-invoking callee; or a computed
@@ -49,7 +49,7 @@ func CallbackIsCaptureSafe(arg ValidatedExpr, env *environment.EnvironmentFrame)
 		b := env.GetBinding(a.Symbol.Sym, syntax.ScopesOf(a.Symbol.Scopes()))
 		return b != nil && b.IsCaptureSafe() && b.IsStable()
 	case *ValidatedLambda:
-		return ProcedureBodyIsCaptureSafe(a, "", env)
+		return ProcedureBodyIsCaptureSafe(a, nil, env)
 	default:
 		return false
 	}

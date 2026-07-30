@@ -261,3 +261,34 @@ func TestShadowSetSiblingsDoNotShareBackingArray(t *testing.T) {
 		t.Errorf("parent entry grew to %d binders; a child appended into the parent's array", len(parent["x"]))
 	}
 }
+
+// TestExprMutatesNameReportsThroughAmbiguousTie pins the tri-state's opposite
+// polarity. In exprMutatesName "shadowed" SUPPRESSES the set! report, so an
+// ambiguous lookup must NOT suppress: refusing to suppress is the conservative
+// direction here, and the direction the other three consumers do not share.
+//
+// The mutation test for this branch is dead today — flipping the polarity fails
+// nothing in the suite or the corpus, because no case reaches a set! target through
+// an ambiguous tie. This test is what keeps the intent pinned anyway.
+func TestExprMutatesNameReportsThroughAmbiguousTie(t *testing.T) {
+	a := syntax.NewScope()
+	b := syntax.NewScope()
+
+	// Two incomparable binders named `loop`, and a set! target carrying both scopes:
+	// each binder is a subset, neither is maximal.
+	set := nameSet(nil).clone(2)
+	set.add(scopedBinder("loop", lamOf(nil, lit()), a).Name, localBinding{init: lamOf(nil, lit())})
+	set.add(scopedBinder("loop", lamOf(nil, lit()), b).Name, localBinding{init: lamOf(nil, lit())})
+
+	target := scopedSym("loop", a, b).Symbol
+	mutation := &ValidatedSetBang{
+		validatedBase: validatedBase{formName: "set!"},
+		Name:          target,
+		subExp:        lit(),
+	}
+
+	if !exprMutatesName(mutation, "loop", set) {
+		t.Error("an ambiguous shadow lookup must not suppress the set! report: a missed " +
+			"set! of the real self arms self-tail on a mutable binding, which fails open")
+	}
+}

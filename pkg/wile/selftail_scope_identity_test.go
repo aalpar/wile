@@ -278,3 +278,56 @@ func TestSelfTailArmingCountRatchet(t *testing.T) {
 		})
 	}
 }
+
+// F1a-define: repro (a)'s shape on the OTHER producer. frameReuseForDefine arms a
+// top-level define, and the finding report's probe armed 0 sites there because
+// frameReuseSelfTail also demands binding.IsStable() — which the report read as a
+// mutable top level. The default is immutable, so the arm does fire, and the
+// template's escape to a same-spelled user global is the same hazard.
+//
+// The template exports its own hygienic `loop` through `export` so the test can
+// invoke it; there is no other way to reach a macro-introduced top-level binder.
+const f1aDefineCollide = `
+	(define (loop x) (* x 100))
+	(define-syntax mkdef
+	  (syntax-rules ()
+	    ((_ f export)
+	     (begin (define (loop i) (if (= i 3) (f i) (loop (+ i 1))))
+	            (define export loop)))))
+	(mkdef loop entry)
+`
+
+const f1aDefineControl = `
+	(define (other x) (* x 100))
+	(define-syntax mkdef
+	  (syntax-rules ()
+	    ((_ f export)
+	     (begin (define (loop i) (if (= i 3) (f i) (loop (+ i 1))))
+	            (define export loop)))))
+	(mkdef other entry)
+`
+
+// TestSelfTailEmit_DefineArmEscape closes the `define`-arm half of repro (a).
+// Measured on the branch: pre-fix the collision emitted 2 sites and hung, exactly
+// as the named-let arm did, so frameReuseForDefine was a second LIVE repro rather
+// than the "exposed but unproven" the report recorded — the missing conjunct was
+// that immutable top level is the default, not that the arm was unreachable.
+func TestSelfTailEmit_DefineArmEscape(t *testing.T) {
+	t.Run("control", func(t *testing.T) {
+		sites := procSelfTailSites(t, f1aDefineControl, "entry")
+		qt.Assert(t, sites, qt.Equals, 1)
+		v, err := runCapped(t, f1aDefineControl+"\n(entry 0)")
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v, qt.Equals, "300")
+	})
+
+	t.Run("collision", func(t *testing.T) {
+		sites := procSelfTailSites(t, f1aDefineCollide, "entry")
+		qt.Assert(t, sites, qt.Equals, 1,
+			qt.Commentf("the define arm resolves its self through the same emit gate; the "+
+				"escaped (f i) is the user's top-level `loop` and must not be rewritten"))
+		v, err := runCapped(t, f1aDefineCollide+"\n(entry 0)")
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v, qt.Equals, "300")
+	})
+}

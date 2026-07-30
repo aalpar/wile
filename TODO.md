@@ -200,9 +200,10 @@ Consequences of `8afeb66a`/`a60e32e1` making one name own several slots. Each li
 `plans/` section — several marked RESOLVED — where anyone scanning for open work would skip it.
 Filed for three consumers; `freeIds` and `BindingID` joined 2026-07-20 from the same Stage C
 review, and the self-tail emit and `CompileSymbol` pin ordering joined 2026-07-29 from a targeted
-audit — which is itself the argument against trusting a hardcoded count. Seven of eight are closed;
-only the self-tail family (Finding 1) is open. The `lookupMacroBinding` for-syntax symmetry, filed
-UNPROVEN by the `CompileSymbol` fix, was **proven reachable and fixed** 2026-07-29.
+audit — which is itself the argument against trusting a hardcoded count. **All eight are closed** as of
+2026-07-29: the `lookupMacroBinding` for-syntax symmetry, filed UNPROVEN by the `CompileSymbol` fix,
+was proven reachable and fixed, and the self-tail family (Finding 1) landed on
+`fix/selftail-scope-identity`.
 
 - [x] **Frame-reclaim's verdict domain was name-keyed** [Medium, M, Done 2026-07-23, branch
   `fix/framereclaim-scope-keyed-verdict`]: `ClassifyFrameReclaim` returns
@@ -366,8 +367,39 @@ UNPROVEN by the `CompileSymbol` fix, was **proven reachable and fixed** 2026-07-
   hygiene-distinct bindings produce equal name-keyed `BindingID`s — so shipping it name-keyed would
   have yielded a fourth wrong answer instead of a fix. Note the *shipped*
   `BindingID{*LocalEnvironmentFrame, slot}` is a physical local slot and is **not** this.
-- [ ] **The self-tail / frame-reclaim family decides self-identity by name** [Correctness, M, filed
-  2026-07-29, `plans/2026-07-29-name-keyed-identity-residuals.local.md` Finding 1]: a **sixth**
+- [x] **The self-tail / frame-reclaim family decides self-identity by name** [Correctness, M, filed
+  2026-07-29, **Done 2026-07-29**, branch `fix/selftail-scope-identity`]: measured, per repro, as
+  `OpSelfTailCall` site counts **and** values (each against its distinct-name control, which was
+  correct before and after):
+
+  | repro | mechanism | before | after |
+  |---|---|---|---|
+  | (a) named-let arm | emit gate | 2 sites / hangs | 1 site / `300` |
+  | (a) `define` arm | emit gate | 2 sites / hangs | 1 site / `300` |
+  | (b) macro-hidden `set!` | shadow set | 2 sites / hangs | 0 sites / raises |
+
+  **The `define` arm was a second LIVE repro, not "exposed but unproven".** The report attributed its
+  0 armed sites to `frameReuseSelfTail`'s `IsStable()` conjunct under a mutable top level; the missing
+  fact is that **immutable top level is the DEFAULT** (the layered-environment carve), so the arm fires
+  and mis-emitted exactly as the named-let arm did. Same fix, no extra code (`TestSelfTailEmit_DefineArmEscape`).
+  Ratchet unchanged across all three phases: primes 1/1, plain named let 1, `tak` default 1, `tak`
+  explicit-immutable 1, `tak` explicit-**mutable** 0 — that last row, not the immutable one, is the
+  discriminator, since the default already arms.
+  **Mutation-verified**: ignoring `shadowLookup`'s subset filter fails repro (b) plus
+  `TestShadowLookupRetainsOuterBinder`; restoring the emit gate's `Sym.Key` comparison fails both (a)
+  cases. The tri-state's `shadowUnknown` branch in `exprMutatesName` killed **nothing** in the suite or
+  corpus — recorded as a non-load-bearing tightening in the code (the file's own convention) and pinned
+  by `TestExprMutatesNameReportsThroughAmbiguousTie` rather than left implied.
+  **Two design corrections to the impl plan.** (1) The seven signatures do not all take `selfSym`: the
+  exported entries do, and the internals take the **resolved `*Binding`**, which is what "resolve once
+  per entry and thread it down" actually requires. (2) The plan justified the unresolvable-self entry
+  guard by "a nil self reaching a mutation walk stops detecting `set!`, which fails open" — that is
+  **wrong**, because the five walkers stay name-fed from `selfKey`, so detection is unaffected. The
+  guard is kept on the other ground: an unresolvable self means the caller passed the wrong env, and
+  refusing converts that plumbing error into an arming-count drop the ratchet catches.
+  `LetBindingFrameReleasable` / `InternalDefineFrameReleasable` pass `self = nil` deliberately — every
+  group member is in the seed, so a self call is answered by the shadow set before the identity test.
+  Original filing: a **sixth**
   consumer in this class, unfiled when the other five were. `validate`'s self-tail predicates thread
   the closure's own name as a bare `string` (`self_tail.go:130` tests `name == selfName` *ahead* of
   the scoped `env.GetBinding` at `:137`) and the lexical shadow set is a `map[string]…` (`nameSet`,

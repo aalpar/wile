@@ -241,7 +241,8 @@ func TestBodyIsFrameReleasable(t *testing.T) {
 				call(symRef("fib"), call(symRef("-"), symRef("n"), lit())))))
 
 	// Positive: <= + - imported (capture-safe ∧ Stable); fib is self.
-	if !BodyIsFrameReleasable(fib, "fib", envWithImported(t, "<=", "+", "-")) {
+	fibEnv := envWithImported(t, "<=", "+", "-")
+	if !BodyIsFrameReleasable(fib, selfIn(t, fibEnv, "fib"), fibEnv) {
 		t.Errorf("fib over capture-safe primitives + self must be frame-releasable")
 	}
 
@@ -251,7 +252,8 @@ func TestBodyIsFrameReleasable(t *testing.T) {
 		ifx(call(symRef("<="), symRef("n"), lit()),
 			symRef("n"),
 			call(symRef("pong"), call(symRef("-"), symRef("n"), lit()))))
-	if BodyIsFrameReleasable(mutual, "ping", envWithImported(t, "<=", "-", "pong")) {
+	mutualEnv := envWithImported(t, "<=", "-", "pong")
+	if BodyIsFrameReleasable(mutual, selfIn(t, mutualEnv, "ping"), mutualEnv) {
 		t.Errorf("a tail call to another user function must not be frame-releasable (v1)")
 	}
 
@@ -260,7 +262,8 @@ func TestBodyIsFrameReleasable(t *testing.T) {
 		ifx(call(symRef("<="), symRef("n"), lit()),
 			symRef("n"),
 			call(symRef("call/cc"), symRef("k"))))
-	if BodyIsFrameReleasable(captures, "c", envWithImported(t, "<=", "call/cc", "k")) {
+	capturesEnv := envWithImported(t, "<=", "call/cc", "k")
+	if BodyIsFrameReleasable(captures, selfIn(t, capturesEnv, "c"), capturesEnv) {
 		t.Errorf("a body that calls call/cc must not be frame-releasable")
 	}
 }
@@ -278,7 +281,8 @@ func TestProcedureBodyIsCaptureSafe(t *testing.T) {
 		ifx(call(symRef("<="), symRef("n"), lit()),
 			symRef("n"),
 			call(symRef("p"), call(symRef("-"), symRef("n"), lit()))))
-	if !ProcedureBodyIsCaptureSafe(safe, "p", envWithImported(t, "<=", "-")) {
+	safeEnv := envWithImported(t, "<=", "-")
+	if !ProcedureBodyIsCaptureSafe(safe, selfIn(t, safeEnv, "p"), safeEnv) {
 		t.Errorf("body over capture-safe primitives + self must be capture-safe-as-callee")
 	}
 
@@ -286,22 +290,24 @@ func TestProcedureBodyIsCaptureSafe(t *testing.T) {
 	// callers) but NOT frame-releasable — the exact distinction the two predicates encode.
 	escapes := fnWith("mk", params("n"), lam(lit()))
 	env := envWithImported(t)
-	if !ProcedureBodyIsCaptureSafe(escapes, "mk", env) {
+	if !ProcedureBodyIsCaptureSafe(escapes, selfIn(t, env, "mk"), env) {
 		t.Errorf("a body that only returns a closure is capture-safe-as-callee (escape does not capture the caller)")
 	}
-	if BodyIsFrameReleasable(escapes, "mk", env) {
+	if BodyIsFrameReleasable(escapes, selfIn(t, env, "mk"), env) {
 		t.Errorf("guard: the same escaping body must NOT be frame-releasable (its own frame is pinned)")
 	}
 
 	// Negative: a capture operator in the body.
 	captures2 := fnWith("c", params("n"), call(symRef("call/cc"), symRef("k")))
-	if ProcedureBodyIsCaptureSafe(captures2, "c", envWithImported(t, "call/cc", "k")) {
+	captures2Env := envWithImported(t, "call/cc", "k")
+	if ProcedureBodyIsCaptureSafe(captures2, selfIn(t, captures2Env, "c"), captures2Env) {
 		t.Errorf("a body that calls call/cc must NOT be capture-safe-as-callee")
 	}
 
 	// Negative: a procedure-invoking callee — map applies a user proc that may capture.
 	usesMap := fnWith("u", params("f", "xs"), call(symRef("map"), symRef("f"), symRef("xs")))
-	if ProcedureBodyIsCaptureSafe(usesMap, "u", envWithImported(t, "map", "f", "xs")) {
+	usesMapEnv := envWithImported(t, "map", "f", "xs")
+	if ProcedureBodyIsCaptureSafe(usesMap, selfIn(t, usesMapEnv, "u"), usesMapEnv) {
 		t.Errorf("a body calling a procedure-invoking primitive (map) must NOT be capture-safe-as-callee")
 	}
 }
@@ -326,10 +332,10 @@ func TestCalleeShadowedByOwnParameter(t *testing.T) {
 
 	// (define (f car x) (car x)) — `car` is a PARAMETER, not the primitive.
 	shadowed := fnWith("f", params("car", "x"), call(symRef("car"), symRef("x")))
-	if ProcedureBodyIsCaptureSafe(shadowed, "f", env) {
+	if ProcedureBodyIsCaptureSafe(shadowed, selfIn(t, env, "f"), env) {
 		t.Errorf("a callee shadowed by the procedure's own parameter must NOT be capture-safe-as-callee")
 	}
-	if BodyIsFrameReleasable(shadowed, "f", env) {
+	if BodyIsFrameReleasable(shadowed, selfIn(t, env, "f"), env) {
 		t.Errorf("a callee shadowed by the procedure's own parameter must NOT be frame-releasable")
 	}
 
@@ -340,21 +346,21 @@ func TestCalleeShadowedByOwnParameter(t *testing.T) {
 		ifx(call(symRef("<="), symRef("n"), lit()),
 			symRef("n"),
 			call(symRef("loop"), symRef("car"), call(symRef("car"), symRef("n")))))
-	if BodyIsSelfTailReusable(loopShadowed, "loop", env) {
+	if BodyIsSelfTailReusable(loopShadowed, selfIn(t, env, "loop"), env) {
 		t.Errorf("a loop whose callee is shadowed by its own parameter must NOT be self-tail-reusable")
 	}
 
 	// Positive controls: the same bodies with the parameter renamed are trusted
 	// again, so the rejection above is the shadow and not the shape.
 	unshadowed := fnWith("f", params("p", "x"), call(symRef("car"), symRef("x")))
-	if !ProcedureBodyIsCaptureSafe(unshadowed, "f", env) {
+	if !ProcedureBodyIsCaptureSafe(unshadowed, selfIn(t, env, "f"), env) {
 		t.Errorf("an unshadowed capture-safe primitive callee must stay capture-safe-as-callee")
 	}
 	loopUnshadowed := fnWith("loop", params("p", "n"),
 		ifx(call(symRef("<="), symRef("n"), lit()),
 			symRef("n"),
 			call(symRef("loop"), symRef("p"), call(symRef("car"), symRef("n")))))
-	if !BodyIsSelfTailReusable(loopUnshadowed, "loop", env) {
+	if !BodyIsSelfTailReusable(loopUnshadowed, selfIn(t, env, "loop"), env) {
 		t.Errorf("an unshadowed capture-safe primitive callee must stay self-tail-reusable")
 	}
 }
@@ -372,13 +378,15 @@ func TestBodyIsSelfTailReusable_CalleeSafety(t *testing.T) {
 			call(symRef("loop"), call(symRef("+"), symRef("i"), lit()), symRef("n"))))
 
 	// Positive: + and >= are imported (capture-safe whitelist ∧ Stable).
-	if !BodyIsSelfTailReusable(counter, "loop", envWithImported(t, "+", ">=")) {
+	counterEnv := envWithImported(t, "+", ">=")
+	if !BodyIsSelfTailReusable(counter, selfIn(t, counterEnv, "loop"), counterEnv) {
 		t.Errorf("counter over imported capture-safe primitives must be reusable")
 	}
 
 	// Negative: + is rebindable (not imported/Stable) — a set! could turn it into
 	// a capturer, so the frame is no longer safe to reuse.
-	if BodyIsSelfTailReusable(counter, "loop", envWithImported(t, ">=")) {
+	rebindableEnv := envWithImported(t, ">=")
+	if BodyIsSelfTailReusable(counter, selfIn(t, rebindableEnv, "loop"), rebindableEnv) {
 		t.Errorf("a rebindable primitive callee must block reuse")
 	}
 
@@ -389,7 +397,8 @@ func TestBodyIsSelfTailReusable_CalleeSafety(t *testing.T) {
 		ifx(call(symRef(">="), symRef("i"), symRef("n")),
 			symRef("i"),
 			call(symRef("loop"), call(symRef("proc"), symRef("i")), symRef("n"))))
-	if BodyIsSelfTailReusable(withCallback, "loop", envWithImported(t, ">=", "proc")) {
+	withCallbackEnv := envWithImported(t, ">=", "proc")
+	if BodyIsSelfTailReusable(withCallback, selfIn(t, withCallbackEnv, "loop"), withCallbackEnv) {
 		t.Errorf("a loop calling an unknown (non-capture-safe) callee must not be reusable")
 	}
 
@@ -406,7 +415,56 @@ func TestBodyIsSelfTailReusable_CalleeSafety(t *testing.T) {
 					call(symRef("loop"), call(symRef("+"), symRef("i"), lit()), symRef("n")),
 				},
 			}))
-	if BodyIsSelfTailReusable(computedOp, "loop", envWithImported(t, ">=", "+", "car", "fns")) {
+	computedOpEnv := envWithImported(t, ">=", "+", "car", "fns")
+	if BodyIsSelfTailReusable(computedOp, selfIn(t, computedOpEnv, "loop"), computedOpEnv) {
 		t.Errorf("a loop with a computed-operator call must not be reusable")
 	}
+}
+
+// TestResolveSelfTriState pins the three self shapes resolveSelf distinguishes, one
+// of which is new and one of which had no coverage at all.
+//
+// The anonymous case is callback.go's: an argument lambda has no name, so no callee
+// may be cleared as a self call, and the predicate must still answer on the body's
+// own merits. The unresolvable case is the guard: a non-nil self the caller's env
+// does not contain means the caller supplied the wrong env, and refusing turns that
+// into a measurable arming-count drop instead of a silent loss at one clause.
+func TestResolveSelfTriState(t *testing.T) {
+	// (lambda (n) (- n 1)) — capture-safe body, no self reference.
+	body := lam(call(symRef("-"), symRef("n"), lit()))
+	body.params = params("n")
+
+	t.Run("anonymous self admits a capture-safe body", func(t *testing.T) {
+		env := envWithImported(t, "-")
+		if !ProcedureBodyIsCaptureSafe(body, nil, env) {
+			t.Error("a nil self must be the anonymous case, not a refusal: an argument " +
+				"callback has no name and callback.go depends on this")
+		}
+	})
+
+	t.Run("unresolvable self refuses", func(t *testing.T) {
+		env := envWithImported(t, "-")
+		absent := syntax.NewSyntaxSymbol("nowhere", nil)
+		if ProcedureBodyIsCaptureSafe(body, absent, env) {
+			t.Error("a non-nil self absent from env must refuse the whole predicate")
+		}
+		if BodyIsFrameReleasable(body, absent, env) {
+			t.Error("BodyIsFrameReleasable must refuse an unresolvable self too")
+		}
+		if BodyIsSelfTailReusable(body, absent, env) {
+			t.Error("BodyIsSelfTailReusable must refuse an unresolvable self too")
+		}
+	})
+
+	t.Run("a same-spelled other binding is not the self", func(t *testing.T) {
+		// (define (f n) (g n)) where `g` is a plain user binding: not capture-safe,
+		// not the self. The pre-fix clause cleared a callee whose SPELLING matched the
+		// self name; with identity comparison, only the resolved self binding clears.
+		fn := fnWith("f", params("n"), call(symRef("g"), symRef("n")))
+		env := envWithImported(t)
+		selfIn(t, env, "g") // a `g` binding exists, but it is not f's self
+		if ProcedureBodyIsCaptureSafe(fn, selfIn(t, env, "f"), env) {
+			t.Error("a callee that is neither the self binding nor capture-safe must refuse")
+		}
+	})
 }
