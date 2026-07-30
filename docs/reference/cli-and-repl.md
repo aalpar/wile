@@ -24,6 +24,7 @@ as `--file -`.
 | `-f`  | `--file`         | string (repeatable) | Load a Scheme file |
 | `-i`  | `--interactive`  | bool       | Enter REPL after loading file(s) |
 | `-L`  | `--library-path` | string     | Library search paths (colon-separated) |
+|       | `--check`        | bool       | Parse and compile without executing; report errors and exit |
 | `-q`  | `--quiet`        | bool       | Suppress informational messages |
 | `-V`  | `--version`      | bool       | Print version and exit |
 |       | `--mcp`          | bool       | Start as MCP server on stdio |
@@ -37,6 +38,62 @@ as `--file -`.
 |       | `--cover-summary`| string     | Write human-readable coverage summary to file |
 
 `--` terminates flag parsing; everything after is a positional argument.
+
+### Checking Without Running
+
+`--check` parses, expands, and compiles the program and then stops, reporting
+the first error as `file:line:col: ...` with exit status 1, or exiting 0 in
+silence. It is the `go build` of a Scheme program: every diagnostic the compiler
+already produces, including for code a test run would have to reach to discover.
+
+```bash
+wile --check program.scm                # Check one file
+wile --check -f lib.scm -f program.scm  # Check both, in order, sharing a namespace
+wile --check -e '(car 1 2)'             # Check an expression
+```
+
+Two classes of error are caught inside a procedure that is never called: a name
+that resolves nowhere, and a call whose argument count the callee cannot accept.
+
+```scheme
+(define (start)
+  (helper 1))
+(define (helper a b) a)
+```
+
+```
+$ wile --check chk.scm
+Error: chk.scm:2:3: expand/compile error: compilation: chk.scm:2:3: call to helper: expected 2 argument(s), got 1: wrong number of arguments
+```
+
+Checking stops at the first failing input. Files are checked in order against
+one namespace, so a later file resolves names an earlier one defines, matching
+what execution would see. `--check` cannot be combined with `-i` or `--mcp`, and
+requires a file or `-e` expression.
+
+### What the arity check covers
+
+Arity checking is not confined to `--check`: a call that provably cannot succeed
+is reported by every compile, since reporting it earlier never changes what a
+correct program does. It applies wherever the callee is statically known and
+cannot be rebound to a different arity:
+
+| Callee | Checked | Why |
+|--------|---------|-----|
+| Ambient primitive (`car`, `cons`, `+`) | Yes | Non-rebindable under the immutable top level |
+| Imported library procedure | Yes | R7RS forbids `set!` on imports |
+| `define` in the same compilation unit | Yes | Defined once and never `set!`, including forward references |
+| `define` that is redefined or `set!` in the unit | No | No single arity to check against |
+| Anything under `-i` or a mutable top level | No | The name may be rebound before the call runs |
+| A procedure reached through a parameter, or `apply` | No | The callee is not known until run time |
+| `case-lambda` | Accepted or rejected correctly, but the message says "one of its clause arities" rather than listing them |
+
+Uncheckable calls are left to the existing run-time arity error; nothing is
+weakened, only reported earlier where it can be.
+
+**Not fully side-effect-free.** `(import ...)` executes the imported library's
+body at compile time, so checking a program that imports a side-effecting
+library runs those effects. The checked program's own top level never runs.
 
 ### Environment Variables
 

@@ -57,6 +57,7 @@ wile                                  # Start the REPL
 wile program.scm                      # Run a file and exit
 wile -f program.scm -i                # Run a file, then enter the REPL
 wile -e '(+ 1 2)'                     # Evaluate an expression
+wile --check program.scm              # Compile without running; report errors
 wile -L /path/to/libs program.scm     # Add a library search path
 wile --version                        # Print the version
 ```

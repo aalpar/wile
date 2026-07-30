@@ -16,6 +16,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`wile --check` compiles a program without running it.** Parses, expands, and
+  compiles every input, reports the first error as `file:line:col: ...` and exits 1,
+  or exits 0 in silence — the `go build` of a Scheme program. It reaches code a test
+  run would have to execute to discover, such as the body of a procedure that is
+  never called. Files are checked in order against one namespace, so a later file
+  resolves names an earlier one defines. Cannot be combined with `-i` or `--mcp`, and
+  requires a file or `-e` expression. Embedders get the same seam as
+  `Engine.CheckProgram`.
+
+  Two caveats are inherent and documented rather than fixed: `(import ...)` executes
+  the imported library's body at compile time, so checking a program that imports a
+  side-effecting library runs those effects; and compiling a top-level `define`
+  registers its binding, so checking is not read-only with respect to the engine's
+  namespace.
+
+- **Call-site arity is checked at compile time.** A call passing an argument count
+  the callee cannot accept is now a compile error rather than a run-time one, wherever
+  the callee is statically known and cannot be rebound to a different arity: ambient
+  primitives, imported library procedures, and `define`s in the same compilation unit
+  (including forward references). The soundness gate is the existing
+  `Binding.IsStable()` rebind-stability proof for the first two, and the validator's
+  `StableInUnit` evidence for the third; the accept/reject decision is delegated
+  entirely to `values.Callable.AcceptsArity`, the same predicate the VM's apply path
+  uses. Calls through a parameter, through `apply`, or under a mutable top level are
+  not statically decidable and remain the run-time check's business.
+
+  This fires in **all** compiles, not only under `--check`, on the grounds that
+  reporting a guaranteed run-time failure earlier never changes what a correct program
+  does. It does change one thing: a test that deliberately calls a known procedure
+  with the wrong argument count in order to assert the *run-time* error no longer
+  compiles. Write such a call through `apply` to keep the argument count hidden until
+  run time.
+
 ## [1.19.1] - 2026-07-29
 
 A compiler release: environment-frame elimination for `or`, frame release for

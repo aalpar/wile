@@ -1062,10 +1062,28 @@ Open feature work found only in `plans/` during the 2026-07-21 triage; recorded 
 scan sees it. Spans embedding, tooling, macro system, and algebra — kept together by provenance
 rather than split across tiers.
 
-- [ ] **`--check` compile-only mode + call-site arity checking** [Embedding/Tooling, M, plan not-started]:
-  a `--check` CLI flag that compiles without running, plus static arity checking at generic call
-  sites (arity table threaded on the compile continuation). Arity checking is bug-catching, not
-  cosmetic. 6 tasks, none shipped. `plans/2026-07-19-compile-check-and-call-site-arity.md`.
+- [x] **`--check` compile-only mode + call-site arity checking** [Embedding/Tooling, M, Done]:
+  `wile --check` compiles without running (`Engine.CheckProgram`, `pkg/wile/check.go`;
+  `runCheck` in `cmd/wile/main.go`), plus static call-site arity checking against primitives,
+  imports, and same-unit defines (`pkg/machine/compilation/compile_call_arity.go`,
+  `validate.UnitArityOf`). All 3 phases shipped.
+  `plans/2026-07-19-compile-check-and-call-site-arity.md`.
+  Five plan claims were wrong and are corrected in the implementation — recorded here because
+  each one is a trap for anyone re-reading that plan:
+  (1) compiling a `define` **does** register its binding, so the plan's "does not execute" test
+  premise was false; the real proof is differential against `EvalProgram`.
+  (2) `EvalProgram` has **three** call sites in `main.go`, not two — patching only
+  `runFile`/`runEval` would let `--check -f a.scm -f b.scm` execute `a.scm`.
+  (3) resolving the callee globals-only (`GetGlobalIndexWithScopes` alone) is a **false compile
+  error** on `(define (k car) (car 1 2))`; identity against `GetBinding` is required.
+  (4) formals for `(define (h x y) ...)` live on the define, not on a `SubExp` lambda.
+  (5) the unit arity table cannot live on `CompileExpression` (re-entrant, 11 call sites), and
+  cannot be gated on `Binding.IsStable()` — that flag is not stamped until the define itself
+  compiles, which silently skipped every forward reference.
+  Behavior note: arity checking fires in **all** compiles, not only `--check`. Two Scheme tests
+  asserting *runtime* arity errors were rewritten through `apply` to keep the count hidden until
+  run time (`test/scheme/records-test.scm`, `test/scheme/strings-test.scm`); that was the entire
+  blast radius across `test/`, `examples/`, `pkg/stdlib/lib/`, and `benchmarks/`.
 - [ ] **Pipeline seams as parameters** [Embedding, S–M, plan not-started]: expose `current-eval` /
   `current-print` / `current-read` as parameters so embedders can intercept the REPL pipeline.
   `plans/2026-07-11-scheme-pipeline-seams-design.local.md`.
@@ -1109,7 +1127,7 @@ rather than split across tiers.
 
 ## Tier 3 — Tooling & Developer Experience
 
-- [ ] **Scheme linter** [Tooling, High, Needs Scoping]: Static analysis for Wile Scheme code — catch "plausible but wrong" before execution. Potential checks: unused bindings, arity mismatches, type mismatches, unreachable code, style warnings. Research needed: what do Racket (Check Syntax), Guile, CHICKEN lint tools actually check? How much at expand time vs separate pass? Interaction with type system is a key design question.
+- [ ] **Scheme linter** [Tooling, High, Partially Closed]: Static analysis for Wile Scheme code — catch "plausible but wrong" before execution. **Closed:** unbound bindings and arity mismatches, via `wile --check` and the compile-time call-site arity check (see the `--check` item above). **Still open:** unused bindings, type mismatches, unreachable code, style warnings — plus the two structural limits the shipped work accepted rather than solved: only the *first* error is reported (the compiler stops there, so there is no multi-diagnostic pass), and `--check` is not side-effect-free because `(import ...)` executes library bodies at compile time. Research needed: what do Racket (Check Syntax), Guile, CHICKEN lint tools actually check? How much at expand time vs separate pass? Interaction with type system is a key design question.
 - [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.local.md`
 - [x] **Scheme-side line coverage** [Tooling, M, Done]: Shipped and merged to master — `WithCoverage(*coverage.Collector)` engine option (`options.go:443`), `pkg/coverage/` package, `--cover PATH` + `--cover-stdlib` CLI flags (`cmd/wile/main.go:56-57`), Go cover v1 output consumable by `go tool cover -html`, end-to-end `cmd/wile/cover_integration_test.go`. Docs: `docs/coverage/scheme-coverage.md`. `memory/2026-04-18-scheme-line-coverage.local.md`
 - [ ] **Source file tracking in Syntax Objects** [Tooling]: Utilities for finding source locations and providing source lines.
