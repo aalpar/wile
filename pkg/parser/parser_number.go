@@ -170,6 +170,70 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 	return q, p.cur, nil
 }
 
+// widenToBigInteger implements #z as a datum introducer: read one number datum,
+// then widen it to BigInteger.
+//
+// This is the whole of #z's contribution, and deliberately so. Radix, exactness,
+// and digit-set validation are all inherited, because the datum was read by the
+// ordinary number reader — #z never looks at a digit. #z#x1f is 31, #z#e#x1f
+// works without #z knowing #e exists, and #z#b19 fails because #b19 does.
+//
+// The one constraint #z adds is that the datum denote an exact integer, which is
+// what a BigInteger is; #m is the prefix for the inexact side. That guard is the
+// failure mode of this rework: replacing the old inline base-10 scan with "read
+// a datum and widen it" invites accepting any number and truncating it, so
+// #z1.5, #z1e3, #z#x1.8, and #z#i#x1f all have to stay errors.
+//
+// #z is a coercion, not a container, so it does not nest: #z#z5 is 5, where the
+// container introducer #& gives #&#&5 two boxes deep. That falls out of the
+// BigInteger arm being the identity.
+func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
+	switch v := stx.Unwrap().(type) {
+	case *values.BigInteger:
+		return stx, nil
+	case *values.Integer:
+		return p.rewrapSyntax(stx, values.NewBigIntegerFromInt64(v.Value)), nil
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"widenToBigInteger: #z requires an exact integer datum, got %T", v)
+	}
+}
+
+// widenToBigFloat implements #m as a datum introducer, the inexact counterpart
+// of widenToBigInteger: read one real datum, then widen it to BigFloat.
+//
+// The datum must be real — a complex number has no BigFloat image — but need not
+// be inexact: #m5 is 5.0 at 256-bit precision, as it was before #m became an
+// introducer.
+//
+// Precision is the value's, not the literal's. #m#x1.8 widens the Float 1.5, so
+// it carries float64 precision rather than 256 bits, while the one-token decimal
+// spelling #m1.2345678901234567890123456789 keeps every digit. Consulting how
+// the operand was spelled is exactly what the introducer model gives up, and
+// re-reading the inner token to recover it would make #m inspect its operand's
+// notation. Precision beyond float64 is available through the unprefixed decimal
+// spelling or the l marker.
+func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
+	switch v := stx.Unwrap().(type) {
+	case *values.BigFloat:
+		return stx, nil
+	case *values.Float:
+		return p.rewrapSyntax(stx, values.NewBigFloatFromFloat64(v.Value)), nil
+	case *values.Integer:
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
+		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
+	case *values.BigInteger:
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(v.BigInt())
+		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
+	case *values.Rational:
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(v.Rat())
+		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"widenToBigFloat: #m requires a real datum, got %T", v)
+	}
+}
+
 // parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
 // Per R7RS §7.1.1, the exponent marker indicates inexact notation, so scientific
 // notation always produces an inexact number: a Float, or a BigFloat when the

@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/big"
 	"strings"
@@ -95,6 +96,107 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 
 			expected, _, _ := big.ParseFloat(tc.expect, 10, values.DefaultBigFloatPrecision, big.ToNearestEven)
 			c.Assert(bigFloat.BigFloatValue().Cmp(expected), qt.Equals, 0)
+		})
+	}
+}
+
+// TestIntroducerAcceptsIntertokenSpace decides, rather than inherits, what
+// intertoken space means between #z / #m and their datum.
+//
+// It is a consequence of the introducer model, not a special case: the marker
+// and the number are separate tokens, so the whitespace between them is ordinary
+// intertoken space. #; and #& behave the same way, and so does every other
+// introducer in R7RS §2.1. Only the numeric product (#e#i#b#o#d#x) is glued to
+// its operand, and that is because a radix prefix steers a digit *scan*.
+//
+// Pinned because "#z 5 reads as 5" would otherwise be a side effect nobody chose,
+// and the opposite reading — requiring adjacency — is a defensible design that
+// this test now rules out.
+func TestIntroducerAcceptsIntertokenSpace(t *testing.T) {
+	tcs := []struct {
+		input string
+		big   bool // true: expect BigInteger; false: expect BigFloat
+	}{
+		{"#z 5", true},
+		{"#z\n5", true},
+		{"#z  \t 5", true},
+		{"#z #x1f", true},
+		{"#m 5", false},
+		{"#m\n1.5", false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(tc.input)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			obj := syn.Unwrap()
+			if tc.big {
+				_, ok := obj.(*values.BigInteger)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigInteger, got %T: %v", obj, obj))
+				return
+			}
+			_, ok := obj.(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigFloat, got %T: %v", obj, obj))
+		})
+	}
+}
+
+// TestIntroducerWithoutDatumIsLocated pins the two ways an introducer can be
+// left dangling. Both must be located parser errors: a bare marker at end of
+// input is malformed input rather than a clean EOF, and a marker before a close
+// delimiter must not leak errNoDatum into the enclosing compound reader, which
+// would silently read "(#z)" as "()".
+//
+// Same rule as #e / #i / #d, whose guards this shares (readNumericIntroducer).
+func TestIntroducerWithoutDatumIsLocated(t *testing.T) {
+	for _, input := range []string{"#z", "#m", "(#z)", "(#m)", "#z)", "#e", "(#e)"} {
+		t.Run(input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(input)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil, qt.Commentf("got %v", syn))
+			var perr *ParserError
+			c.Assert(errors.As(err, &perr), qt.IsTrue,
+				qt.Commentf("a dangling introducer must carry a source location, got %T: %v", err, err))
+		})
+	}
+}
+
+// TestBigNumberIntroducerComposition pins the compositions the introducer model
+// buys by construction. Each row is a property the third-slot design would have
+// had to enumerate an ordering rule for.
+func TestBigNumberIntroducerComposition(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  string // SchemeString
+	}{
+		{"#z#z#z5", "5"},   // coercion, not container: applying it thrice is applying it once
+		{"#m#z5", "5.0"},   // #m widens the BigInteger #z produced
+		{"#m#m1.5", "1.5"}, // likewise idempotent
+		{"#e#z9", "9"},     // exactness is post-hoc, so it composes the other way too
+		{"#z#e#x1f", "31"},
+		{"#z#x#e1f", "31"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(tc.input)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			c.Check(syn.Unwrap().SchemeString(), qt.Equals, tc.want)
+		})
+	}
+
+	// #z demands an exact integer, so a BigFloat operand is rejected however it
+	// was spelled. This is the pair that shows #z and #m are not interchangeable
+	// coercions: #m accepts what #z produces, never the reverse.
+	for _, bad := range []string{"#z#m5", "#z#m1.5"} {
+		t.Run(bad, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(bad)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil, qt.Commentf("got %v", syn))
 		})
 	}
 }

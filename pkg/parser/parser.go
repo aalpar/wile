@@ -320,33 +320,42 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	return result, p.cur, nil
 }
 
-// readExactnessMarker handles #e and #i exactness prefixes.
-// It advances the tokenizer, reads the next datum, and applies the conversion
-// function (makeExact or makeInexact) to it.
-// convert receives the datum's own token as well as its value: #e must be able
-// to consult the literal's source text, since it converts the number as written
-// (see MakeExactFromLiteral). #i has no such need and ignores it.
-func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxValue, tokenizer.Token) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
+// readNumericIntroducer handles the four "#" forms that dispatch once and then
+// take one complete datum: #e, #i (exactness) and #z, #m (widening). It advances
+// past the marker, reads the datum, and applies convert.
+//
+// This shape is the whole reason radix and exactness composition is inherited
+// rather than enumerated: the inner datum is read by the ordinary number reader,
+// so #z#e#x1f works without #z knowing that #e exists, and #z#b19 fails because
+// #b19 fails. See CLAUDE.local.md → "`#` Reader Dispatch".
+//
+// convert receives the datum's own token as well as its value, because #e must
+// consult the literal's source text — it converts the number as written, and the
+// token's radix decides whether those digits are authoritative (makeExactLiteral).
+// The other three ignore it.
+//
+// label names the marker in diagnostics, e.g. "exact number marker".
+func (p *Parser) readNumericIntroducer(label string, convert func(syntax.SyntaxValue, tokenizer.Token) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
 	markerTok := p.curr()
 	err := p.advance()
 	if err != nil {
 		// A prefix with nothing after it is malformed input, not a clean EOF —
 		// same rule as the errNoDatum guard below, which rejects "#e)".
-		return nil, p.cur, wrapMidParseEOF(err, markerTok, label+" number marker")
+		return nil, p.cur, wrapMidParseEOF(err, markerTok, label)
 	}
 	q, tok, err := p.readSyntax()
-	// An exactness marker with no number (e.g. "#e)") must be a located error,
-	// not a nil deref in convert. Covers both #e and #i.
+	// A marker with no number (e.g. "#e)", "(#z)") must be a located error, not
+	// a nil deref in convert.
 	if errors.Is(err, errNoDatum) {
 		return nil, tok, NewParserErrorWithWrapf(werr.ErrNotANumber, tok,
-			"%s number marker requires a datum", label)
+			"%s requires a datum", label)
 	}
 	if err != nil {
 		return nil, tok, err
 	}
 	result, err := convert(q, tok)
 	if err != nil {
-		return nil, tok, NewParserErrorWithWrapf(err, tok, "cannot convert to %s", label)
+		return nil, tok, NewParserErrorWithWrapf(err, tok, "%s: cannot convert datum", label)
 	}
 	return result, tok, nil
 }
@@ -941,14 +950,22 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerNumberExact:
-		return p.readExactnessMarker("exact", p.makeExactLiteral)
+		return p.readNumericIntroducer("exact number marker", p.makeExactLiteral)
 	case tokenizer.TokenizerStateMarkerNumberInexact:
-		return p.readExactnessMarker("inexact", p.makeInexactLiteral)
+		return p.readNumericIntroducer("inexact number marker", p.makeInexactLiteral)
 	case tokenizer.TokenizerStateBigInteger:
-		// #z is always decimal.
-		return p.parseBigIntegerWithBase(10)
+		// A bare "#z" token is the introducer: the tokenizer's readBigNum scans
+		// nothing when the next character is '#', so token text longer than the
+		// prefix means the digits are attached (#z123) and stay base 10.
+		if schemeutil.TrimPrefixCI(p.cur.String(), "#z") != "" {
+			return p.parseBigIntegerWithBase(10)
+		}
+		return p.readNumericIntroducer("big integer marker", p.widenToBigInteger)
 	case tokenizer.TokenizerStateBigFloat:
-		return p.parseBigFloat()
+		if schemeutil.TrimPrefixCI(p.cur.String(), "#m") != "" {
+			return p.parseBigFloat()
+		}
+		return p.readNumericIntroducer("big float marker", p.widenToBigFloat)
 	case tokenizer.TokenizerStateMarkerBooleanTrue:
 		q = p.wrapSyntax(values.TrueValue, p.cur)
 		return q, p.cur, nil
