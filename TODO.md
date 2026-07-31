@@ -1532,13 +1532,65 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 
 - [x] **Promote `eval` extension to public** [Done]: Moved `internal/extensions/eval/` → `extensions/eval/`, importable as `github.com/aalpar/wile/extensions/eval`. Required by wile-goast and any embedder wanting sandboxed `(eval ...)` / `(load ...)`. The naive composition `WithProfile(Console) + WithExtension(eval.Extension)` does **not** work — `ConsoleAuthorizer` denies `code:load`, so `(load ...)` fails. The fix is a baked `ConsoleWithLoad` profile (extensions + matching authorizer that allows `code:load` under `/tmp`), now part of `memory/2026-03-26-environment-profiles-impl.local.md`.
 
-</details>
-
-
 - Update skills to explicitly state where wile-goast is a fit for refactoring.  Add guidance.
 - Add guidance to skills where Serena use makes sense.
-- Reader fixes
-    - BigInteger readers accept radix (eg, #z#x) tags
-    - Boxes can be read. #& prefix: Denotes a box value, where #&5 means a box containing the number 5
-    - Floats (including BigFloats): radix for floating point number reading set by radix tag (eg #d).  Exponent markers on read and output denote precision ( s: Short precision.f: Single precision.d: Double precision.l: Long precision.e: Default system precision.) - CLAUDE: verify against R7RS and/or R6RS
+- [ ] **Reader fixes** [Medium, M; design APPROVED 2026-07-31, implementation plan
+  written 2026-07-31, implementation NOT started]:
+  three additions to the `#` reader space. Design + spec evidence + constraints:
+  `plans/2026-07-31-reader-hash-dispatch-model.local.md`. Phased implementation,
+  verified code sites, and three open decisions:
+  `plans/2026-07-31-reader-hash-dispatch-impl.local.md`. RED tests:
+  `pkg/parser/{bigint_radix,box_read,float_radix,precision_marker}_test.go`
+  (17 failing test functions, 73 failing subtests — expected until implemented).
+  The governing rule is now an invariant in `CLAUDE.local.md` → "`#` Reader
+  Dispatch", with detail in `pkg/internal/tokenizer/CLAUDE.local.md` and
+  `pkg/parser/CLAUDE.local.md`.
+    - **Prerequisite the design missed: out-of-radix digits are not an error.**
+      `#b19` reads as `1` and leaves `9`, so `(#b19)` is `(1 9)`; the tokenizer
+      treats a digit outside the radix as a token boundary. Both digit-validation
+      RED tests are unreachable until this is fixed, and `#b1.9` errors today
+      only by accident. Scoping fork (radix-only vs. all numerals) is decision D1
+      in the impl plan.
+    - **BigInteger readers accept radix (eg, `#z#x`) tags.** Resolved as a
+      *datum introducer*, not a third prefix slot: `#z <number datum>` reads the
+      datum with the ordinary number reader and widens it, so radix, exactness,
+      and digit validation are all inherited (`#z#x1f` = 31; `#z#e#x1f` works
+      without `#z` knowing `#e` exists; `#z#b19` fails because `#b19` fails).
+      Constraints: `#x#z1f` stays an error (radix is lexical, so its operand must
+      be a literal) while `#e#z9` / `#i#z9` already work and must keep working
+      (exactness is post-hoc); `#z#z5` is 5, not a nested anything; the datum
+      must be an exact integer, so `#z1.5` and `#z#x1.8` are errors. `#m` gets
+      the same shape. **Doc edit owed on landing:**
+      `docs/reference/r7rs-differences.md` says `#z` "does not combine with the
+      radix prefixes … in either order" — half of that goes wrong.
+    - **Boxes can be read.** `#&5` is a box containing 5. The write side already
+      exists (`values.PrefixBox`, `writeBox`), so this is a broken round trip,
+      not a new feature. `#&` is an introducer, so `#&#x1f` is `#&31`. Must also
+      read behind a datum label (`#0=#&…`, `#n#`) because the writer already
+      emits them for shared and cyclic boxes — Racket accepts this, Chez does
+      not, and matching Chez would leave Wile's own output unreadable.
+    - **Floats (including BigFloats): radix for floating point reading set by
+      radix tag.** `#x1.8` = 1.5, `#b1.1` = 1.5, and the same under `#m`.
+      Extension, not conformance: R7RS §7.1.1 defines `⟨decimal R⟩` only for
+      R = 10. Racket, Chez, and MIT all support it.
+    - **Exponent markers denote precision, on read and output.** Verified against
+      R7RS §6.2.5 (p.34) — the markers are an *optional* extension, and an
+      implementation with fewer than four inexact representations maps the four
+      size specs onto what it has. Wile has two, so `s`/`f`/`d`/`e` → `Float`,
+      `l` → `BigFloat`. Output too: `1e+1000` becomes `1l+1000`, and because
+      `BigFloat` currently writes `#m1.5` as bare `1.5`, round-tripping forces a
+      marker where none is emitted today. Pinned as a *property*
+      (`TestBigFloatWriteReadRoundTrip`), not a spelling. Note Wile will be the
+      only Scheme where `l` selects a different representation — all three
+      reference implementations collapse the four markers to one flonum type.
+      **Exponent markers stay decimal-only** (decided): `#x1e2` is 482, since
+      `e` is a hex digit. This is the R7RS §7.1.1 reading and diverges from all
+      three implementations, which accept `#x1s3` = 4096.0 with the exponent
+      base being the *radix*.
+    - Not adopted, recorded for later: R6RS mantissa width `x|p` (r6rs.pdf p.16),
+      which Chez and MIT implement (`1.1|24` → 1.100000023841858). A bit count
+      maps onto `big.Float`'s precision parameter more directly than a
+      four-letter code, and complements `l` rather than competing with it.
+
+</details>
 
