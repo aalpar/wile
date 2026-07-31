@@ -341,8 +341,14 @@ func (p *Tokenizer) read() {
 		p.next()
 		p.term()
 		return
-	case isDot(p.curr()):
-		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(10) //nolint:errcheck
+	// Every numeral shape — leading dot, sign, digit — scans under the pending
+	// radix and clears it. The dot arm used to hardcode base 10 and skip the
+	// reset, so `#x.f` scanned as the symbol `.f` and the 16 leaked into the
+	// token after `#x.8`.
+	case isDot(p.curr()), isExplicitSign(p.curr()), isDigit(p.radix, p.curr()):
+		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(p.radix) //nolint:errcheck
+		p.requireDelimiterAfterRadixNumeral(p.radix)
+		p.radix = 0 // Reset radix after parsing number
 		p.term()
 		return
 	case isQuote(p.curr()):
@@ -401,12 +407,6 @@ func (p *Tokenizer) read() {
 			return
 		}
 		p.readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() //nolint:errcheck
-		p.term()
-		return
-	case isExplicitSign(p.curr()), isDigit(p.radix, p.curr()):
-		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(p.radix) //nolint:errcheck
-		p.requireDelimiterAfterRadixNumeral(p.radix)
-		p.radix = 0 // Reset radix after parsing number
 		p.term()
 		return
 	case isInitial(p.curr()): // read symbol

@@ -370,6 +370,53 @@ func TestIntegerTokenRadix(t *testing.T) {
 	}
 }
 
+// TestRadixGovernsLeadingDotFraction pins the leading-dot numeral against the
+// prevailing radix. That arm of read() used to hardcode base 10 and skip the
+// radix reset, which produced two independent defects:
+//
+//   - `#x.f` scanned as the peculiar identifier `.f`, because a-f are
+//     dot-subsequents as well as hex digits and the symbol test ran first.
+//     `#x.8` "worked" only because 8 is not a letter.
+//   - the 16 from `#x` leaked past the numeral, so the 19 in `(#x.8 19)` was
+//     scanned as hex and read as 25.
+func TestRadixGovernsLeadingDotFraction(t *testing.T) {
+	tcs := []struct {
+		input     string
+		wantType  TokenizerState
+		wantText  string
+		wantRadix int
+	}{
+		{"#x.f", TokenizerStateUnsignedDecimalFraction, ".f", 16},
+		{"#x-.f", TokenizerStateSignedDecimalFraction, "-.f", 16},
+		{"#x.8", TokenizerStateUnsignedDecimalFraction, ".8", 16},
+		{"#b-.1", TokenizerStateSignedDecimalFraction, "-.1", 2},
+		{".5", TokenizerStateUnsignedDecimalFraction, ".5", 10},
+		{"-.5", TokenizerStateSignedDecimalFraction, "-.5", 10},
+		// Peculiar identifiers are unaffected: none of their characters is a
+		// digit in any supported radix.
+		{"...", TokenizerStateSymbol, "...", 0},
+		{".foo", TokenizerStateSymbol, ".foo", 0},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			ts, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			num := ts[len(ts)-1]
+			c.Check(num.Type(), qt.Equals, tc.wantType)
+			c.Check(num.String(), qt.Equals, tc.wantText)
+			c.Check(num.Radix(), qt.Equals, tc.wantRadix)
+		})
+	}
+
+	qt.New(t).Run("radix does not leak past a leading-dot numeral", func(c *qt.C) {
+		ts, err := Tokenize("#x.8 19", false)
+		c.Assert(err, qt.ErrorIs, io.EOF)
+		last := ts[len(ts)-1]
+		c.Check(last.String(), qt.Equals, "19")
+		c.Check(last.Radix(), qt.Equals, 10, qt.Commentf("the #x must not still be in force"))
+	})
+}
+
 // TestRadixExponentMarkerNotConsumed pins that exponent markers (e/s/f/d/l)
 // are radix-aware: they are meaningful only in radix 10. In a non-decimal
 // radix the integer token must stop before such a marker instead of mis-reading

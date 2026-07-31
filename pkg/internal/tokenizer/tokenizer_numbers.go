@@ -261,13 +261,17 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 		return
 	}
 	switch {
+	// A digit in the current radix is a digit, not a symbol character. The two
+	// sets overlap only in hex, where a-f are dot-subsequents as well: under #x,
+	// `-.f` is the fraction -0.9375 rather than the peculiar identifier -.f.
+	case isDigit(r, p.curr()):
+		p.state = TokenizerStateSignedDecimalFraction
+		p.tokRadix = effectiveRadix(r)
 	case p.readDotSubsequentSymbol():
 		// Symbol consumed; falls through to no-op digit/exponent reads below
-	case !isDigit(r, p.curr()):
+	default:
 		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
 		return
-	default:
-		p.state = TokenizerStateSignedDecimalFraction
 	}
 	// read decimal fractional part
 	p.readDigitsAndHash(r)
@@ -354,13 +358,17 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 	if p.err != nil {
 		return
 	}
-	if p.readDotSubsequentSymbol() {
-		p.value = append(p.value[:0], p.text...)
-	}
+	// Digit before symbol, for the reason given in
+	// readSignedDecimalFractionOrExponentWithImaginary: under #x, `.f` is a
+	// fraction and not the peculiar identifier .f.
 	if !isDigit(r, p.curr()) {
+		if p.readDotSubsequentSymbol() {
+			p.value = append(p.value[:0], p.text...)
+		}
 		return
 	}
 	p.state = TokenizerStateUnsignedDecimalFraction
+	p.tokRadix = effectiveRadix(r)
 	p.next()
 	if p.err != nil {
 		return
@@ -473,7 +481,8 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		if p.err != nil {
 			return
 		}
-		if !p.readDotSubsequentSymbol() && !isDigit(r, p.curr()) {
+		// Digit before symbol, as in the two readers above.
+		if !isDigit(r, p.curr()) && !p.readDotSubsequentSymbol() {
 			p.err = NewTokenizerError(MessageExpectingDecimalFraction)
 			return
 		}

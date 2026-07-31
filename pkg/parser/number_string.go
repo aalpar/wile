@@ -54,6 +54,48 @@ func ParseRealFloatString(s string) (values.Number, error) {
 	return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid real number: %s", s)
 }
 
+// ParseRealFloatStringWithBase parses a real fraction written in an explicit
+// radix, e.g. "1.8" in base 16 (1.5) or "101.101" in base 2 (5.625).
+//
+// This is an extension, not conformance: R7RS §7.1.1 defines ⟨decimal R⟩ only
+// for R = 10, so a radix-prefixed fraction is outside the standard grammar.
+// Racket, Chez, and MIT all accept it, and this matches them.
+//
+// Base 10 delegates to ParseRealFloatString so the decimal path — which every
+// bare literal and every string->number call takes — stays exactly one
+// implementation. Only the non-decimal bases are new code.
+//
+// The 'p'/'P' rejection is not defensive clutter. big.ParseFloat accepts a
+// *binary* exponent in a non-decimal base, so "1.8p3" in base 16 is 12, a
+// grammar Scheme does not have. The reader cannot currently supply such a
+// string (the tokenizer stops the numeral at 'p'; see
+// requireDelimiterAfterRadixNumeral), but this function is exported next to
+// parsers string->number already calls, so the guard belongs on the function
+// rather than on its present caller. Note the asymmetry: 'e' is a hex *digit*,
+// so big.ParseFloat("1e2", 16) is 482 — which is precisely what
+// TestExponentMarkersStayDecimalOnly requires, and comes for free.
+func ParseRealFloatStringWithBase(text string, base int) (values.Number, error) {
+	if base == 10 {
+		return ParseRealFloatString(text)
+	}
+	if strings.ContainsAny(text, "pP") {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+			"ParseRealFloatStringWithBase: binary exponents are not Scheme notation: %s", text)
+	}
+	bf, _, err := big.ParseFloat(text, base, values.DefaultBigFloatPrecision, big.ToNearestEven)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+			"ParseRealFloatStringWithBase: invalid base-%d real number: %s", base, text)
+	}
+	// Magnitudes beyond float64 range promote to BigFloat rather than saturating
+	// to ±Inf, matching ParseRealFloatString's ErrRange branch.
+	f, _ := bf.Float64()
+	if math.IsInf(f, 0) {
+		return values.NewBigFloat(bf), nil
+	}
+	return values.NewFloat(f), nil
+}
+
 // ParseSpecialFloat checks if s is +inf.0, -inf.0, +nan.0, or -nan.0
 // and returns the corresponding Float value.
 // Returns (nil, false) if s is not a special-value string.

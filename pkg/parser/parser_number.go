@@ -236,10 +236,14 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 	// Parse the number in the given base.
 	var q syntax.SyntaxValue
 	var tok tokenizer.Token
-	if p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction ||
-		p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction {
+	switch p.cur.Type() {
+	case tokenizer.TokenizerStateUnsignedRationalFraction,
+		tokenizer.TokenizerStateSignedRationalFraction:
 		q, tok, err = p.parseRationalWithBase(base)
-	} else {
+	case tokenizer.TokenizerStateUnsignedDecimalFraction,
+		tokenizer.TokenizerStateSignedDecimalFraction:
+		q, tok, err = p.parseDecimalFractionWithBase(base)
+	default:
 		q, tok, err = p.parseIntegerWithBase(base)
 	}
 	if err != nil {
@@ -484,7 +488,18 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 // therefore authoritative: #e1e400 is 10^400, not the binary float 1e400 names.
 // See MakeExactFromLiteral. tok is the datum's own token, whose '#' digit
 // placeholders are substituted before the text is re-read.
+//
+// A non-decimal datum is routed to the value instead, because MakeExactFromLiteral
+// re-reads the text as a *decimal* rational: it would turn #e#x1.8 into 9/5 where
+// #x#e1.8 (the same prefix pair, the other order) gives 3/2. The two orders name
+// one number, so the digits path is only correct where the digits are decimal.
+// Bases 2, 8, and 16 lose nothing by it — they are powers of two, so the literal
+// is already exactly the float that was parsed.
 func (p *Parser) makeExactLiteral(stx syntax.SyntaxValue, tok tokenizer.Token) (syntax.SyntaxValue, error) {
+	base := tok.Radix()
+	if base != 0 && base != 10 {
+		return p.makeExact(stx)
+	}
 	return p.convertWrappedNumber(stx, "makeExact", func(num values.Number) (values.Number, error) {
 		return MakeExactFromLiteral(replaceHashDigits(tok.String()), num)
 	})
@@ -511,6 +526,22 @@ func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, er
 	n, err := ParseRealFloatString(replaceHashDigits(p.cur.String()))
 	if err != nil {
 		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid decimal fraction: %s", p.cur.String())
+	}
+	q := p.wrapSyntax(n, p.cur)
+	return q, p.cur, nil
+}
+
+// parseDecimalFractionWithBase parses a fraction token whose digits are in the
+// given base, e.g. "1.8" under #x (1.5). The tokenizer already scanned the
+// digits against that radix and recorded it on the token, so the digit set is
+// enforced upstream; this only converts.
+//
+// R7RS §6.2.4: a literal written with a decimal point is inexact, whatever its
+// radix, so this always yields a Float (or a BigFloat past float64 range).
+func (p *Parser) parseDecimalFractionWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	n, err := ParseRealFloatStringWithBase(replaceHashDigits(p.cur.String()), base)
+	if err != nil {
+		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid base-%d decimal fraction: %s", base, p.cur.String())
 	}
 	q := p.wrapSyntax(n, p.cur)
 	return q, p.cur, nil

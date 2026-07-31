@@ -29,7 +29,7 @@ type Token interface {
 	String() string
 	Value() string      // Returns processed value (e.g., with escape sequences converted)
 	HasHashDigit() bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
-	Radix() int         // Effective parse base for integer tokens (2/8/10/16); 0 for non-integer tokens
+	Radix() int         // Effective parse base for integer and decimal-fraction tokens (2/8/10/16); 0 otherwise
 }
 
 // SimpleToken is the concrete implementation of Token used by the tokenizer.
@@ -90,10 +90,15 @@ func (p *SimpleToken) HasHashDigit() bool {
 	return p.hash
 }
 
-// Radix returns the effective parse base for an integer token (2, 8, 10, or 16).
-// It is 0 for tokens where base is not meaningful (non-numeric tokens and numeric
-// shapes other than integers). The tokenizer records the base here so the parser
-// reads it directly rather than re-deriving a base literal from the token state.
+// Radix returns the effective parse base for an integer or decimal-fraction
+// token (2, 8, 10, or 16). It is 0 for tokens where base is not meaningful
+// (non-numeric tokens, and numeric shapes other than those two). The tokenizer
+// records the base here so the parser reads it directly rather than re-deriving
+// a base literal from the token state.
+//
+// Fractions carry it for the same reason integers do, plus one of their own:
+// the reader's #e converts a decimal literal from its digits, and must not do
+// that to a hex one (makeExactLiteral, pkg/parser).
 func (p *SimpleToken) Radix() int {
 	return p.rad
 }

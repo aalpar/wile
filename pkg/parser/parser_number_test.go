@@ -433,6 +433,46 @@ func TestParseNumber_ReaderAgreesWithStringParsers(t *testing.T) {
 // is unbounded, not a rounding wobble: #e1e400 came back as a 401-digit integer
 // whose tail read ...25262527574416492..., and #e0.1 as
 // 3602879701896397/36028797018963968.
+// TestExactPrefixOrderIndependentUnderRadix pins that the two slots of the
+// numeric prefix product commute. R7RS §7.1.1 admits either order, so #e#x1.8
+// and #x#e1.8 must name one number.
+//
+// They did not, once radix fractions became readable: #e is implemented as "the
+// number as written" (MakeExactFromLiteral), which re-reads the literal's text
+// as a *decimal* rational. Applied to the hex fraction 1.8 that yields 9/5,
+// while the trailing-prefix order converts the parsed value and yields 3/2. The
+// digits path is only correct where the digits are decimal — see makeExactLiteral.
+//
+// The decimal rows are the control: there the digits path must still win, or
+// this test would be satisfied by deleting MakeExactFromLiteral outright.
+func TestExactPrefixOrderIndependentUnderRadix(t *testing.T) {
+	tcs := []struct {
+		leading  string // #e before the radix prefix
+		trailing string // #e after it
+		want     string
+	}{
+		{"#e#x1.8", "#x#e1.8", "3/2"},
+		{"#e#b1.1", "#b#e1.1", "3/2"},
+		{"#e#o1.4", "#o#e1.4", "3/2"},
+		{"#e#xF.C", "#x#eF.C", "63/4"},
+		{"#e#x1f", "#x#e1f", "31"},
+		// Decimal keeps consulting the digits: 0.1 is one tenth as written, not
+		// the exact value of the nearest float64 (3602879701896397/36028797018963968).
+		{"#e#d0.1", "#d#e0.1", "1/10"},
+		{"#e0.1", "#e0.1", "1/10"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.leading, func(t *testing.T) {
+			c := qt.New(t)
+			lead := parseSingle(t, tc.leading)
+			trail := parseSingle(t, tc.trailing)
+			c.Check(lead.SchemeString(), qt.Equals, tc.want)
+			c.Check(trail.SchemeString(), qt.Equals, tc.want,
+				qt.Commentf("%q and %q must denote the same number", tc.leading, tc.trailing))
+		})
+	}
+}
+
 func TestExactPrefix_ConvertsTheWrittenDecimal(t *testing.T) {
 	pow10 := func(n int) *big.Int {
 		return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
