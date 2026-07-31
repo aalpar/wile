@@ -166,6 +166,52 @@ const (
 
 ---
 
+## Which Type a Literal Makes
+
+The reader picks a type from the literal's notation, before any promotion
+happens. Two independent axes decide it.
+
+**Prefixes.** `#b`/`#o`/`#d`/`#x` (radix) and `#e`/`#i` (exactness) form a
+two-slot product — either order, at most one from each slot. `#z` and `#m` are
+not a third slot; they read one complete datum and widen it, so they inherit
+whatever the inner datum's prefixes decided.
+
+| Notation | Type | Note |
+|----------|------|------|
+| `123` | `Integer` | promotes to `BigInteger` on int64 overflow |
+| `1/2` | `Rational` | |
+| `1.5`, `1e3` | `Float` | promotes to `BigFloat` past float64 range |
+| `#x1.8` | `Float` | radix-prefixed fraction: 1.5. Extension, see `docs/reference/r7rs-differences.md` |
+| `#z…` | `BigInteger` | datum must denote an exact integer |
+| `#m…` | `BigFloat` | datum must be real; precision is the value's |
+| `1+2i` | `BigComplex` if both parts exact, else `Complex` | |
+
+**Exponent markers.** R7RS §6.2.5 makes `s`/`f`/`d`/`l` an optional precision
+request, and lets an implementation with fewer than four inexact representations
+map the four size specifications onto what it has. Wile has two:
+
+| Marker | Requests | Type |
+|--------|----------|------|
+| `e` | default precision | `Float` |
+| `s` | short | `Float` |
+| `f` | single | `Float` |
+| `d` | double | `Float` |
+| `l` | long | `BigFloat` |
+
+`l` is the only marker that selects a representation distinct from the default,
+so it is the only one that changes the type. It is symmetric on output: a
+`BigFloat` writes with `l` (`1e1000` renders as `1l+1000`), because writing `e`
+would claim default precision and the value would read back as a `Float`.
+
+Two consequences worth stating, since they look like inconsistencies and are not:
+
+- **Precision is the value's, not the literal's, once an introducer is involved.**
+  `1.2345678901234567890123456789l0` is one token and keeps every digit;
+  `#m#d1.2345678901234567890123456789` widens an already-rounded float64.
+- **Markers are decimal-only.** `#x1e2` is 482, because `e` is a hex digit.
+
+---
+
 ## Type Promotion (Lattice Model)
 
 Direct dispatch implements a **lattice** with two dimensions:

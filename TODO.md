@@ -1534,17 +1534,38 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 
 - Update skills to explicitly state where wile-goast is a fit for refactoring.  Add guidance.
 - Add guidance to skills where Serena use makes sense.
-- [ ] **Reader fixes** [Medium, M; design APPROVED 2026-07-31, implementation plan
-  written 2026-07-31, implementation NOT started]:
-  three additions to the `#` reader space. Design + spec evidence + constraints:
-  `plans/2026-07-31-reader-hash-dispatch-model.local.md`. Phased implementation,
-  verified code sites, and three open decisions:
-  `plans/2026-07-31-reader-hash-dispatch-impl.local.md`. RED tests:
-  `pkg/parser/{bigint_radix,box_read,float_radix,precision_marker}_test.go`
-  (17 failing test functions, 73 failing subtests — expected until implemented).
-  The governing rule is now an invariant in `CLAUDE.local.md` → "`#` Reader
+- [x] **Reader fixes** [Done 2026-07-31, branch `feat/reader-hash-dispatch`]:
+  three additions to the `#` reader space, plus the delimiter prerequisite the
+  design missed. Design + spec evidence + constraints:
+  `plans/2026-07-31-reader-hash-dispatch-model.local.md`. Phased implementation
+  and the three decisions (all resolved as recommended — D1-a, D2-a, D3-a):
+  `plans/2026-07-31-reader-hash-dispatch-impl.local.md`. The tests that were RED
+  (`pkg/parser/{bigint_radix,box_read,float_radix,precision_marker}_test.go`:
+  17 functions, 73 subtests) are green, and the whole suite is green.
+  The governing rule is an invariant in `CLAUDE.local.md` → "`#` Reader
   Dispatch", with detail in `pkg/internal/tokenizer/CLAUDE.local.md` and
-  `pkg/parser/CLAUDE.local.md`.
+  `pkg/parser/CLAUDE.local.md`; user-facing docs in
+  `docs/reference/r7rs-differences.md` and `docs/numeric/tower.md`.
+
+  **Four defects surfaced during implementation that the plan did not name**,
+  each fixed in the phase that exposed it:
+    - `#e#x1.8` was 9/5 while `#x#e1.8` was 3/2. `#e` is "the number as written"
+      and re-read the text as a *decimal* rational; it now defers a non-decimal
+      literal to the value (`makeExactLiteral`).
+    - `#x.f` scanned as the peculiar identifier `.f` — a-f are dot-subsequents as
+      well as hex digits, and the symbol test ran first.
+    - `read()`'s leading-dot arm hardcoded base 10 and never reset the radix, so
+      the 16 in `(#x.8 19)` leaked and 19 read as 25.
+    - `#0=#&#0#` reported "undefined datum label": `readLabelAssignment` read the
+      whole datum before registering the label. It now pre-registers a box
+      placeholder, as the list and vector arms do.
+
+  Two behaviour changes worth knowing about, both deliberate:
+    - `#x1f#t` is now an error. `readHashDigits` eats the `#` as an R7RS §7.1.1
+      inexact-digit placeholder (the token is `1f#` = 496.0), leaving `t`
+      adjacent to the numeral.
+    - A `BigFloat` writes `l` instead of `e`, so `1e+1000` renders as `1l+1000`
+      and `#m1.5` as `1.5l0`. Inside a complex the marker is omitted.
     - **Prerequisite the design missed: out-of-radix digits are not an error.**
       `#b19` reads as `1` and leaves `9`, so `(#b19)` is `(1 9)`; the tokenizer
       treats a digit outside the radix as a token boundary. Both digit-validation
@@ -1591,6 +1612,23 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
       which Chez and MIT implement (`1.1|24` → 1.100000023841858). A bit count
       maps onto `big.Float`'s precision parameter more directly than a
       four-letter code, and complements `l` rather than competing with it.
+
+- [ ] **`BigFloat` rendering hangs on a huge exponent** [Low, S; found by
+  `FuzzReadWriteRoundTrip` 2026-07-31, **pre-existing**, not caused by the reader
+  fixes]: `(write 1e10000010000000)` takes ~11 s, effectively all of it inside
+  `big.Float.Text('g', -1)`, which renders the value to roughly 10^7 decimal
+  digits before formatting discards nearly all of them. Measured at 11.34 s on
+  `47ae48dc` and 11.16 s on `feat/reader-hash-dispatch`; master's fuzzer reaches
+  the same class of input within ~14 s, so both branches are equally affected.
+  Reproducer: `"#I100000000E0000010000000"`. Deliberately **not** committed to
+  `pkg/parser/testdata/fuzz/`, where it would add 11 s to every
+  `go test ./pkg/parser/`. Note the artifact the fuzzer writes for this is
+  *not* a reproducer: the minimizer times out too, so the saved file holds a
+  partially-minimized candidate that passes when re-run. Fix is presumably a
+  magnitude bound in
+  `BigFloat.SchemeString` (render an exponent form directly rather than asking
+  `Text` for shortest-round-trip digits), but the writer's contract needs
+  deciding first: what should `write` emit for a value with 10^7 digits?
 
 - [ ] **Delimiter termination for decimal numerals** [Low, S; residual of
   "Reader fixes" decision D1]: `1abc` scans as `1` followed by the symbol `abc`,

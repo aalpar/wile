@@ -335,11 +335,116 @@ Wile provides reader syntax for explicitly constructing arbitrary-precision numb
 
 Both prefixes are case-insensitive (`#Z`, `#M` also work), following R7RS §7.1.1 conventions.
 
-**BigInteger (`#z`)** is decimal only; it does not combine with the radix prefixes `#b` / `#o` / `#d` / `#x` in either order.
+Both are **datum introducers**: each reads one complete number datum and widens
+it. The datum is read by the ordinary number reader, so radix and exactness
+composition is inherited rather than enumerated:
 
-**BigFloat (`#m`)** supports optional sign, decimal point, and an `e` exponent marker. The precision markers `s` / `f` / `d` / `l` accepted on ordinary scientific notation are rejected here.
+```scheme
+#z#x1f      => 31          ; the inner datum carries its own radix prefix
+#z#e#x1f    => 31          ; and its own exactness prefix, in either order
+#z#x#e1f    => 31
+#z#b19      => error       ; because #b19 is an error
+#z#z5       => 5           ; a coercion, not a container: it does not nest
+#m#b101.101 => 5.625
+```
+
+**`#z` combines with a radix prefix in one order only.** `#z#x1f` reads;
+`#x#z1f` does not. A radix prefix selects the digit set *before* scanning, so
+its operand has to be a literal, while `#e` / `#i` are applied to an
+already-read datum and therefore accept anything numeric (`#e#z9` is 9).
+Radix is lexical; exactness is post-hoc.
+
+**`#z` requires an exact integer**, which is what a BigInteger is: `#z1.5`,
+`#z1e3`, `#z#x1.8`, and `#z#i#x1f` are all errors. `#m` is the prefix for the
+inexact side, and requires a real.
+
+**`#m`'s precision is the value's, not the literal's.** `#m1.2345678901234567890123456789`
+keeps every digit, because it is one token the BigFloat reader sees whole.
+`#m#d1.2345678901234567890123456789` goes through the introducer path, so it
+widens an already-rounded `float64`. For arbitrary precision use the unprefixed
+decimal spelling or the `l` marker (see below); `#m` over a prefixed datum is a
+type coercion.
 
 **Note:** R7RS requires implementations to support arbitrarily large exact integers (§6.2.3). Wile satisfies this via automatic overflow promotion from `Integer` (int64) to `BigInteger` — the `#z` prefix is a convenience for explicit construction, not a conformance requirement. Standard R7RS programs never need `#z` or `#m`.
+
+### Exponent Markers Denote Precision
+
+R7RS §6.2.5 makes the exponent markers `s` (short), `f` (single), `d` (double),
+and `l` (long) an **optional** extension, with the escape clause that an
+implementation offering fewer than four internal inexact representations "the
+four size specifications are mapped onto those available". Wile has two, `Float`
+(float64) and `BigFloat` (256-bit), so:
+
+| Marker | Requests | Wile type |
+|--------|----------|-----------|
+| `e` | default precision | `Float` |
+| `s`, `f`, `d` | short / single / double | `Float` |
+| `l` | long | `BigFloat` |
+
+```scheme
+1.5d0  => 1.5      ; a Float
+1.5l0  => 1.5l0    ; a BigFloat
+(exact 1.2345678901234567890123456789l0)  ; keeps all 29 digits
+(exact 1.2345678901234567890123456789d0)  ; rounds to the nearest float64
+```
+
+**This applies on output too.** A `BigFloat` writes with `l`, so `1e1000` reads
+as a BigFloat and writes back as `1l+1000`, and `#m1.5` writes as `1.5l0`.
+Writing `e` would claim default precision, and the value would read back as a
+`Float` — a different type from the one written. Inside a complex number the
+marker is omitted, since a component is not read back as a real.
+
+**Wile is the only Scheme where `l` selects a different representation.** Racket,
+Chez, and MIT all collapse the four markers onto one flonum type, so `1.5l0`
+reads as a plain double everywhere else. Code that relies on the distinction is
+not portable.
+
+**Exponent markers are decimal-only.** `#x1e2` is 482, not 100.0, because `e` is
+a hex digit. R7RS §7.1.1 places `⟨suffix⟩` only inside `⟨decimal 10⟩`, and MIT
+states the same rule ("a numeric representation using a decimal point or an
+exponent marker is not recognized unless radix is 10"). Racket, Chez, and MIT
+nonetheless all accept `#x1s3` = 4096.0, with the exponent base being the
+*radix*; Wile deliberately does not.
+
+### Radix-Prefixed Fractions
+
+R7RS §7.1.1 defines `⟨decimal R⟩` only for R = 10, so a fraction written under a
+radix prefix is outside the standard grammar. Wile accepts it, matching Racket,
+Chez, and MIT:
+
+```scheme
+#x1.8      => 1.5        ; 1 + 8/16
+#o1.4      => 1.5        ; 1 + 4/8
+#b101.101  => 5.625
+#xF.C      => 15.75
+#x.f       => 0.9375
+```
+
+The radix governs the fractional digits too, so `#b1.9` and `#o1.8` are errors.
+As R7RS §6.2.4 requires, a literal written with a decimal point is inexact
+whatever its radix.
+
+A related consequence: **a numeral carrying an explicit radix prefix must end at
+a delimiter.** `#b19` is an error rather than the number 1 followed by the number
+9, and `(#b19)` is an error rather than the list `(1 9)`. A numeral with no
+radix prefix still splits — `1abc` reads as `1` then the symbol `abc` — which is
+a known inconsistency, not a decision.
+
+### Boxes
+
+`#&⟨datum⟩` reads a box, the same syntax `write` already emitted for one. This
+is not part of any Scheme standard, but is near-universal (Racket, Chez, Guile).
+
+```scheme
+#&5        ; a box holding 5
+#&#x1f     ; => #&31 — the datum may carry its own prefixes
+#&#&5      ; a box holding a box: unlike #z, #& nests
+#0=#&#0#   ; a box holding itself
+```
+
+The cyclic form is accepted, following Racket; Chez rejects it. Wile has to
+accept it, because Wile's own writer emits exactly that form for a box reachable
+from itself, and rejecting it would leave the writer's output unreadable.
 
 ### Process-Global Working Directory
 

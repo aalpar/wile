@@ -39,6 +39,16 @@ var fuzzSeeds = []string{
 	"()", "(1 2 3)", "(1 . 2)", "((1 2) 3)", "#(1 2 3)", "#()", "#u8(0 255)",
 	"'(a b)", "`(a ,b ,@c)", "#;9 7", "(a #;b c)", "#!fold-case 1",
 	"#0=(1 . #0#)", "#0=#(1 #0#)", "(#0=(1 2) #0#)",
+	// The # forms added 2026-07-31: boxes (a container introducer, cycles
+	// included), the widening introducers, radix fractions, and the l precision
+	// marker. Phase 5 made boxes round-trippable for the first time and Phase 4
+	// changed what the writer emits for a whole type, so these are exactly the
+	// inputs this target exists to police.
+	"#&5", "#&#&5", "#&(1 2)", "#&#x1f", "#0=#&#0#", "(#0=#&1 #0#)",
+	"#z#x1f", "#z#e#x1f", "#m#b101.101", "#z 5",
+	"#x1.8", "#b101.101", "#x.f", "#b-.1", "1.5l0", "1l1000", "#m1.5",
+	// Malformed members of the same families.
+	"#&", "(#&)", "#b19", "#o789", "#x1.8p3", "#z1.5", "#x#z1f", "#z#m5",
 	// Malformed — must surface a located *ParserError, never a panic or a host crash.
 	"(foo", "#u8(1 2]", "(( . ))", "((1 . ))", "( . 5)", "#0=(1 . )", "#0=(1 2 . )",
 	"#u8(1 2 3", "#0=#1#", strings.Repeat("(", 12000),
@@ -119,10 +129,16 @@ func FuzzReadSyntax(f *testing.F) {
 // (ErrWriteDepthExceeded); that is not a re-readability failure.
 //
 // KNOWN GAP: the numeric tower's external representations are not yet fully
-// round-trip-clean — e.g. #m big floats write without their prefix and 1e+700
-// is rejected on read. Running this target under -fuzz surfaces them; tracked
-// in issue #781. The committed seed/corpus stays green because no seed
-// exercises those numeric forms.
+// round-trip-clean; tracked in issue #781. Both examples this comment used to
+// give are closed as of 2026-07-31 — a BigFloat now writes the `l` precision
+// marker, so #m1.5 renders as "1.5l0" and reads back as a BigFloat, and 1e+700
+// reads and round-trips. Running under -fuzz surfaces whatever remains.
+//
+// It also surfaces one hazard that is not a round-trip failure: rendering a
+// BigFloat whose exponent is around 10^7 spends ~11s inside big.Float.Text and
+// trips the fuzzer's per-input deadline, so a -fuzz run stops there rather than
+// exploring further. Pre-existing and equally reproducible on master — see
+// TODO.md, "BigFloat rendering hangs on a huge exponent".
 func FuzzReadWriteRoundTrip(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add(s)
