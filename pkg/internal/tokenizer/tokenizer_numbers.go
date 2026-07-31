@@ -62,16 +62,16 @@ func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMis
 			onMismatch()
 			return
 		}
-		p.err = NewTokenizerError(mismatchErr)
+		p.fail(mismatchErr)
 		return
 	}
 	if !isDot(p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
+		p.fail(MessageExpectingDecimalFraction)
 		return
 	}
 	p.next()
 	if !isDigit(r, p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
+		p.fail(MessageExpectingDecimalFraction)
 		return
 	}
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
@@ -161,7 +161,7 @@ func (p *Tokenizer) requireDelimiterAfterRadixNumeral(r int) {
 	if r == 0 || p.err != nil || isDelimiterOrMarker(p.curr()) {
 		return
 	}
-	p.err = NewTokenizerError(MessageExpectingDelimiterAfterNumber)
+	p.fail(MessageExpectingDelimiterAfterNumber)
 }
 
 func (p *Tokenizer) readDiv(r int) {
@@ -170,7 +170,7 @@ func (p *Tokenizer) readDiv(r int) {
 		return
 	}
 	if !isDigit(r, p.curr()) { // +10/10
-		p.err = NewTokenizerError(MessageExpectingNumber)
+		p.fail(MessageExpectingNumber)
 		return
 	}
 	p.readDigitsAndHash(r)
@@ -270,7 +270,7 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 	case p.readDotSubsequentSymbol():
 		// Symbol consumed; falls through to no-op digit/exponent reads below
 	default:
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
+		p.fail(MessageExpectingDecimalFraction)
 		return
 	}
 	// read decimal fractional part
@@ -342,7 +342,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 			return
 		}
 		if !isImaginary(p.curr()) {
-			p.err = NewTokenizerError(MessageExpectingImaginary)
+			p.fail(MessageExpectingImaginary)
 			return
 		}
 		p.next()
@@ -458,7 +458,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		p.readIntegerAndFraction(false, r)
 		return
 	default:
-		p.err = NewTokenizerError(MessageExpectingNumber)
+		p.fail(MessageExpectingNumber)
 		return
 	}
 }
@@ -483,7 +483,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		}
 		// Digit before symbol, as in the two readers above.
 		if !isDigit(r, p.curr()) && !p.readDotSubsequentSymbol() {
-			p.err = NewTokenizerError(MessageExpectingDecimalFraction)
+			p.fail(MessageExpectingDecimalFraction)
 			return
 		}
 		p.readDigitsAndHash(r)
@@ -515,7 +515,7 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	}
 	p.next() // consume exponent marker
 	if p.err != nil {
-		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits)
+		p.failWrap(p.err, MessageExpectingExponentDigits)
 		return
 	}
 	// Don't return early on EOF - we need to check for required digits below
@@ -523,14 +523,14 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	// Optional sign
 	p.mayConsumeSign()
 	if p.err != nil {
-		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits)
+		p.failWrap(p.err, MessageExpectingExponentDigits)
 		return
 	}
 
 	// R7RS requires at least one digit after exponent marker (and optional sign)
 	// When p.err is set (including io.EOF), p.curr() returns RuneError which isDigit rejects
 	if !isDigit(r, p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingExponentDigits)
+		p.fail(MessageExpectingExponentDigits)
 		return
 	}
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
@@ -654,7 +654,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 			return
 		}
 	default:
-		p.err = NewTokenizerError(MessageExpectingNumber)
+		p.fail(MessageExpectingNumber)
 		return
 	}
 
@@ -701,11 +701,10 @@ func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {
 	var err error
 	// always attempt to parse s, even on error
 	q, err = strconv.ParseInt(s.String(), r, 64)
-	if err != nil {
-		err = NewTokenizerErrorWithWrap(err, MessageCannotParseNumber)
-	}
-	if p.err == nil {
-		p.err = err
+	// An earlier fault is the more specific one and already carries its stamp;
+	// do not overwrite it with this one.
+	if err != nil && p.err == nil {
+		p.failWrap(err, MessageCannotParseNumber)
 	}
 	return q, n
 }

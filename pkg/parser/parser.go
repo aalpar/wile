@@ -244,7 +244,11 @@ func (p *Parser) locateReaderErr(err error) error {
 		perr.file = p.file
 		return err
 	}
-	wrapped := NewParserErrorWithWrap(err, p.cur, "malformed input")
+	// p.cur is usually nil here: Tokenizer.Next reports a token and the error
+	// that ended it on separate calls, so by the time the error surfaces the
+	// token has been consumed. ParserError.Location recovers the position from
+	// the tokenizer error instead — the message is generic, the cause is not.
+	wrapped := NewParserErrorWithWrap(err, p.cur, messageReadFailed)
 	wrapped.file = p.file
 	return wrapped
 }
@@ -1044,7 +1048,30 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		// delimiter for the caller to inspect.
 		return nil, p.cur, errNoDatum
 	}
-	return q, nil, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "unknown token type: %q", p.cur.String())
+	return q, nil, NewParserErrorWithWrapf(p.unknownTokenCause(), p.cur, "unknown token type: %q", p.cur.String())
+}
+
+// unknownTokenCause builds the cause for a token the dispatch does not
+// recognize, joining ErrUnknownTokenType with the tokenizer's pending lexical
+// error when there is one.
+//
+// A TokenizerStateFailed token means the scanner already diagnosed the fault
+// and stashed it (Tokenizer.Next hands back the token now and the error on the
+// following call, which never comes because the parser stops here). Joining
+// rather than replacing is deliberate: ErrUnknownTokenType is the proxy signal
+// IsIncompleteInput matches on for a truncated token, so dropping it would
+// change REPL continuation behaviour. errors.Is traverses both arms, and
+// ParserError.Error renders the specific arm — see causeText.
+func (p *Parser) unknownTokenCause() error {
+	if p.toks == nil {
+		return ErrUnknownTokenType
+	}
+	terr := p.toks.Err()
+	// io.EOF is a clean terminator, not a diagnosis; it adds nothing here.
+	if terr == nil || errors.Is(terr, io.EOF) {
+		return ErrUnknownTokenType
+	}
+	return errors.Join(ErrUnknownTokenType, terr)
 }
 
 // Close closes the parser and releases resources.

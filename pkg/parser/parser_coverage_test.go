@@ -906,8 +906,10 @@ func TestParserErrorf(t *testing.T) {
 	pe := NewParserErrorf(tok, "got %d items", 5)
 	c.Assert(pe.Error(), qt.Equals, "got 5 items")
 
+	// The sentinel's own text is rendered after the message: the printed chain
+	// must match the Unwrap chain asserted on the next line.
 	pe2 := NewParserErrorWithWrapf(werr.ErrNotAnInteger, tok, "wrap %s", "test")
-	c.Assert(pe2.Error(), qt.Equals, "wrap test")
+	c.Assert(pe2.Error(), qt.Equals, "wrap test: not an integer")
 	c.Assert(pe2.Unwrap(), qt.Equals, werr.ErrNotAnInteger)
 }
 

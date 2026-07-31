@@ -207,6 +207,12 @@ const (
 	// TokenizerStateBoxBegin represents the #& marker; like #;, it introduces a
 	// datum that the parser reads as the next token.
 	TokenizerStateBoxBegin
+
+	// tokenizerStateCount bounds the enum. A new state goes above this line and
+	// needs a matching entry in tokenizerStateNames (tokenizer_state.go), which
+	// is index-parallel to this block and asserted complete by
+	// TestTokenizerStateNamesAreComplete.
+	tokenizerStateCount
 )
 
 // Tokenizer reads Scheme source code and produces a stream of tokens.
@@ -310,6 +316,20 @@ func (p *Tokenizer) Next() (Token, error) {
 // Reader returns the underlying RuneReader.
 func (p *Tokenizer) Reader() io.RuneReader {
 	return p.rdr
+}
+
+// Err returns the scanner's pending error, or nil.
+//
+// It exists because Next reports a token and the error that ended it on
+// separate calls: a token of type TokenizerStateFailed is handed to the parser
+// with its explanation — message, index, character, and lexical state — still
+// stashed here. Without this accessor the parser can only report the token's
+// shape ("unknown token type"), discarding the reason the scanner already knew.
+//
+// io.EOF is a normal terminator on this field, not a fault; callers that treat
+// every non-nil result as a defect will misread a clean end of input.
+func (p *Tokenizer) Err() error {
+	return p.err
 }
 
 // read dispatches token reading based on the current character.
@@ -426,7 +446,7 @@ func (p *Tokenizer) read() {
 		return
 	default:
 		p.term()
-		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingToken)
+		p.failWrap(p.err, MessageExpectingToken)
 		return
 	}
 }
@@ -547,7 +567,7 @@ func (p *Tokenizer) readNextRune() {
 	// source decodes to (RuneError, 3). Only the one-byte form is an error —
 	// conflating them makes a written U+FFFD unreadable.
 	if p.cur == utf8.RuneError && n == 1 {
-		p.err = NewTokenizerError(MessageRuneError)
+		p.fail(MessageRuneError)
 		return
 	}
 	// Line and tab-stop adjustments belong here, not in next(): the constructor

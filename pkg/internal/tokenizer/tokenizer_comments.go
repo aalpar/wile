@@ -70,7 +70,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 	// malformed input, not an acceptable end of it — the comment was silently
 	// accepted before, so an unclosed #| swallowed the rest of the file.
 	if errors.Is(p.err, io.EOF) {
-		p.err = NewTokenizerErrorWithWrap(werr.ErrIncompleteInput, MessageUnterminatedBlockComment)
+		p.failWrap(werr.ErrIncompleteInput, MessageUnterminatedBlockComment)
 	}
 	p.term()
 	return NewSimpleToken(p.state, string(p.text), "", &p.tokenStart, &p.tokenEnd, false, 0)

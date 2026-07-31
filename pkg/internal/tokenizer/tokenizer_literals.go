@@ -49,14 +49,20 @@ var CharMnemonics = map[string]rune{
 	"tab":       '\t',
 }
 
-func validateCodePoint(x int64) error {
+// codePointFault returns the message for an out-of-range hex scalar value, or
+// "" when x is a legal code point.
+//
+// It reports a message rather than an error so the caller raises it through
+// Tokenizer.fail and the fault gets the same position/rune/state stamp as every
+// other lexical error.
+func codePointFault(x int64) string {
 	if x > 0x10FFFF {
-		return NewTokenizerError(MessageCodePointExceedsUnicodeMaximum)
+		return MessageCodePointExceedsUnicodeMaximum
 	}
 	if x >= 0xD800 && x <= 0xDFFF {
-		return NewTokenizerError(MessageCodePointIsSurrogate)
+		return MessageCodePointIsSurrogate
 	}
-	return nil
+	return ""
 }
 
 func (p *Tokenizer) readHexEscapeToken() {
@@ -69,16 +75,16 @@ func (p *Tokenizer) readHexEscapeToken() {
 		return
 	}
 	if n == 0 {
-		p.err = NewTokenizerError(MessageExpectingHexDigit)
+		p.fail(MessageExpectingHexDigit)
 		return
 	}
 	if p.cur != ';' {
-		p.err = NewTokenizerError(MessageExpectingHexSequenceTerminator)
+		p.fail(MessageExpectingHexSequenceTerminator)
 		return
 	}
-	err := validateCodePoint(x)
-	if err != nil {
-		p.err = err
+	mess := codePointFault(x)
+	if mess != "" {
+		p.fail(mess)
 		return
 	}
 	p.next()
@@ -107,7 +113,7 @@ func (p *Tokenizer) readEscapeSequence() {
 		p.next()
 		return
 	}
-	p.err = NewTokenizerError(MessageExpectingEscape)
+	p.fail(MessageExpectingEscape)
 }
 
 // readDelimited reads content enclosed by a terminator rune (e.g. '"' or '|'),
@@ -122,7 +128,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 			p.next()
 			if p.err != nil {
 				if errors.Is(p.err, io.EOF) {
-					p.err = NewTokenizerErrorWithWrap(werr.ErrIncompleteInput, unterminatedMsg)
+					p.failWrap(werr.ErrIncompleteInput, unterminatedMsg)
 				}
 				return false
 			}
@@ -136,7 +142,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 		p.next()
 		if p.err != nil {
 			if errors.Is(p.err, io.EOF) {
-				p.err = NewTokenizerError(unterminatedMsg)
+				p.fail(unterminatedMsg)
 			}
 			return false
 		}
@@ -164,7 +170,7 @@ func (p *Tokenizer) skipLineContinuation() {
 	}
 	// consume line ending
 	if !p.scanLineEnding() {
-		p.err = NewTokenizerError(MessageExpectingLineEnding)
+		p.fail(MessageExpectingLineEnding)
 		return
 	}
 	// scanLineEnding() already advanced past the line ending
@@ -200,12 +206,12 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		p.state = TokenizerStateCharHexEscape
 		x, n := p.readUnsignedBaseNInteger(16, 0) //nolint:errcheck
 		if n == 0 {
-			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape)
+			p.failWrap(p.err, MessageInvalidCharacterHexEscape)
 			return utf8.RuneError
 		}
-		err := validateCodePoint(x)
-		if err != nil {
-			p.err = err
+		mess := codePointFault(x)
+		if mess != "" {
+			p.fail(mess)
 			return utf8.RuneError
 		}
 		// code point validated - x will always be a valid Unicode code point that can be converted to a rune without error
@@ -235,7 +241,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		if ok {
 			return r
 		}
-		p.err = NewTokenizerError(MessageInvalidCharacterMnemonic)
+		p.fail(MessageInvalidCharacterMnemonic)
 		return utf8.RuneError
 
 	case unicode.IsGraphic(p.curr()):
@@ -244,7 +250,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		p.next()
 		return qrune
 	}
-	p.err = NewTokenizerError(MessageExpectingCharacterMnemonicOrHexEscape)
+	p.fail(MessageExpectingCharacterMnemonicOrHexEscape)
 	return utf8.RuneError
 }
 

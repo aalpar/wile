@@ -15,12 +15,21 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/internal/tokenizer"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
+
+// messageReadFailed heads a read error whose specifics come from the layer
+// below (see Parser.locateReaderErr). It names the operation only; the rule
+// that was violated, and the position, character, and tokenizer state it was
+// violated at, are rendered from the cause by ParserError.Error.
+const messageReadFailed = "read failed"
 
 var (
 	// ErrUnknownTokenType is returned when the parser encounters an unrecognized token.
@@ -94,8 +103,87 @@ func (p *ParserError) Is(err error) bool {
 	return p.mess == other.mess
 }
 
+// Error renders the message and, when the failure came from a lower layer, the
+// cause's own text after it.
+//
+// Rendering the cause is not cosmetic. locateReaderErr's fallback message is a
+// fixed generic phrase; the entire diagnostic — which lexical rule was
+// violated, at which index, on which character, in which tokenizer state —
+// lives on the cause. Returning only mess left that reachable through
+// errors.Unwrap but absent from every rendering, which is exactly the
+// text-chain/unwrap-chain divergence REVIEW.md forbids.
+//
+// A cause the message already contains is not repeated: a wrap that only adds a
+// sentinel identity must not render as "x: x".
 func (p *ParserError) Error() string {
-	return p.mess
+	q := p.mess
+	causeStr := p.causeText()
+	// Containment, not equality: the message typically embeds the sentinel's
+	// text plus the offending input, so ErrUnknownTokenType ("unknown token
+	// type") under the message `unknown token type: "abc"` is a restatement
+	// even though the two strings differ.
+	switch {
+	case causeStr == "" || strings.Contains(p.mess, causeStr):
+	case p.mess == "":
+		// An empty message would render as ": cause"; the cause is the whole
+		// diagnostic in that case.
+		q = causeStr
+	default:
+		q = fmt.Sprintf("%s: %s", q, causeStr)
+	}
+	return q + p.contextSuffix()
+}
+
+// contextSuffix renders the offending token's position, text, and type, so a
+// parser-level failure is as locatable as a lexical one.
+//
+// A parser error faults on a token rather than on a rune, so the token is the
+// analogue of the tokenizer's offending character: its start index is where the
+// failure is, its text is what failed, and its type is the state the reader was
+// in. It returns "" when a located tokenizer error is already in the chain,
+// because causeText has then rendered a more precise position — the exact rune,
+// not the token containing it — and repeating a coarser one would only mislead.
+func (p *ParserError) contextSuffix() string {
+	var terr *tokenizer.TokenizerError
+	if errors.As(p.err, &terr) {
+		_, located := terr.At()
+		if located {
+			return ""
+		}
+	}
+	if p.tok == nil {
+		return ""
+	}
+	// Line is 1-based, so 0 means the token carries no position. The tokenizer
+	// seeds line 1 and never emits such a token, so this only fires for a
+	// hand-built one in a test — but rendering "line 0" would read as a real
+	// location, and a diagnostic that invents a position is worse than one that
+	// omits it.
+	start := p.tok.Start()
+	if start.Line() == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (at index %d, line %d, column %d, token %q, tokenizer state %s)",
+		start.Index(), start.Line(), start.Column(), p.tok.String(), p.tok.Type())
+}
+
+// causeText renders the most specific cause in the chain.
+//
+// A located tokenizer error wins over anything wrapped around it: it is the
+// layer that actually detected the fault and the only one that knows the index,
+// character, and lexical state. This mirrors SourcedError's innermost-location
+// rule — the deepest layer that can name the failure is the most useful one.
+// It also keeps the rendering single-line when the cause is an errors.Join,
+// whose own Error() is newline-separated.
+func (p *ParserError) causeText() string {
+	if p.err == nil {
+		return ""
+	}
+	var terr *tokenizer.TokenizerError
+	if errors.As(p.err, &terr) {
+		return terr.Error()
+	}
+	return p.err.Error()
 }
 
 func (p *ParserError) Unwrap() error {
@@ -110,28 +198,49 @@ func (p *ParserError) Unwrap() error {
 // ("1:0" rather than ":1:0"); line is 1-based and column 0-based, as in
 // SourceContext.Location.
 func (p *ParserError) Location() string {
-	if p.tok == nil {
+	start, ok := p.startIndexes()
+	if !ok {
 		return ""
 	}
-	start := p.tok.Start()
 	if p.file == "" {
 		return fmt.Sprintf("%d:%d", start.Line(), start.Column())
 	}
 	return fmt.Sprintf("%s:%d:%d", p.file, start.Line(), start.Column())
 }
 
-func (p *ParserError) SchemeString() string {
-	// A lexical error caught at the very first byte (e.g. invalid UTF-8) has no
-	// located token; render it without a position rather than nil-deref tok.
-	// Append the wrapped cause when present — without a position it is the only
-	// extra signal, and it is intentionally preserved on the error.
-	if p.tok == nil {
-		if p.err != nil {
-			return fmt.Sprintf("ParserError: %s: %s", p.mess, p.err)
-		}
-		return fmt.Sprintf("ParserError: %s", p.mess)
+// startIndexes resolves the error's position, preferring the offending token
+// and falling back to a tokenizer error in the cause chain.
+//
+// The fallback is load-bearing, not defensive. Tokenizer.Next reports a token
+// and the error that ended it on *separate* calls, so a lexical fault surfaces
+// to the parser one advance after the token that provoked it — by which point
+// p.cur is nil and the token-carried position is gone. Before the fallback,
+// every error raised through that path (a bad radix digit, an unterminated
+// construct) reached the user with no file:line:col at all.
+func (p *ParserError) startIndexes() (syntax.SourceIndexes, bool) {
+	if p.tok != nil {
+		return p.tok.Start(), true
 	}
-	return fmt.Sprintf("ParserError at %s: %s", p.tok.String(), p.mess)
+	var terr *tokenizer.TokenizerError
+	if errors.As(p.err, &terr) {
+		return terr.At()
+	}
+	return syntax.SourceIndexes{}, false
+}
+
+// SchemeString renders the error as a Scheme value. It goes through Error() so
+// the cause's diagnostic reaches this surface too — a Scheme program that
+// displays a read error must not see less than a Go caller does.
+//
+// Only the location is added, and only because it is the one fact Error() does
+// not carry: Error() reports index/line/column but not the file name. The
+// offending token is deliberately NOT repeated here — Error() already names it.
+func (p *ParserError) SchemeString() string {
+	loc := p.Location()
+	if loc == "" {
+		return fmt.Sprintf("ParserError: %s", p.Error())
+	}
+	return fmt.Sprintf("ParserError at %s: %s", loc, p.Error())
 }
 
 func (p *ParserError) IsVoid() bool {

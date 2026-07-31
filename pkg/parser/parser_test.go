@@ -1037,10 +1037,12 @@ func TestParserError(t *testing.T) {
 	c.Assert(err1.Error(), qt.Equals, "test error")
 	c.Assert(err1.Unwrap(), qt.IsNil)
 
-	// Test NewTokenizerErrorWithWrap
+	// Test NewTokenizerErrorWithWrap. The cause is rendered, not merely
+	// reachable: a wrap whose text hides its cause makes the rendered chain
+	// disagree with the Unwrap chain (REVIEW.md, Error Chain Losslessness).
 	innerErr := werr.NewForeignErrorf("inner error")
 	err2 := NewParserErrorWithWrap(innerErr, nil, "wrapped error")
-	c.Assert(err2.Error(), qt.Equals, "wrapped error")
+	c.Assert(err2.Error(), qt.Equals, "wrapped error: inner error")
 	c.Assert(err2.Unwrap(), qt.Equals, innerErr)
 
 	// Test Is: parser errors match by message identity, not merely by type.

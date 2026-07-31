@@ -45,11 +45,16 @@ func TestReader_InvalidUTF8IsLocatedError(t *testing.T) {
 	if !errors.As(err, &terr) {
 		t.Errorf("invalid UTF-8 error lost its *tokenizer.TokenizerError cause: %v", err)
 	}
-	// Tokenless render path: must not nil-deref, and must render without a
-	// position (no "at <nil>") via the nil-token branch in SchemeString.
+	// Tokenless render path: must not nil-deref, and must still carry a
+	// position. There is no token to take one from — the tokenizer failed
+	// before completing one — so the position comes from the TokenizerError
+	// asserted above, which stamps it at the throw site.
 	s := perr.SchemeString()
-	if !strings.HasPrefix(s, "ParserError:") {
-		t.Errorf("tokenless render = %q, want a \"ParserError:\" prefix (no position)", s)
+	if !strings.HasPrefix(s, "ParserError at 1:0:") {
+		t.Errorf("tokenless render = %q, want a position recovered from the tokenizer error", s)
+	}
+	if perr.Location() != "1:0" {
+		t.Errorf("tokenless Location() = %q, want 1:0 from the tokenizer error", perr.Location())
 	}
 }
 

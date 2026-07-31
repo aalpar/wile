@@ -122,7 +122,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		return
 
 	default:
-		p.err = NewTokenizerError("invalid character after #")
+		p.fail("invalid character after #")
 		return
 	}
 }
@@ -196,7 +196,7 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 			// R7RS §7.1.1: #u introduces nothing but a #u8( byte vector. Falling
 			// through with neither a state nor an error made `#u9` read as the
 			// PREVIOUS token's type and the input parse as if the #u were absent.
-			p.err = NewTokenizerError(MessageExpectingByteVectorPrefix)
+			p.fail(MessageExpectingByteVectorPrefix)
 			return
 		}
 		p.state = TokenizerStateOpenVectorUnsignedByteMarker
@@ -243,14 +243,14 @@ func (p *Tokenizer) readDirective() {
 	// drop the '!'
 	p.next()
 	if p.err != nil {
-		p.err = NewTokenizerError(MessageExpectingDirective)
+		p.fail(MessageExpectingDirective)
 		return
 	}
 	// traditional identifier - letter followed by letter or number or dash
 	if isUnicodeLetter(p.curr()) {
 		p.next()
 	} else {
-		p.err = NewTokenizerError(MessageExpectingDirective)
+		p.fail(MessageExpectingDirective)
 		return
 	}
 	// read letters, digits, dashes. this applies to directives like "fold-case"
