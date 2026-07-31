@@ -564,8 +564,10 @@ func TestCombinedPrefixTokenSequence(t *testing.T) {
 		c.Check(tok2.(*SimpleToken).src, qt.Equals, "1000ff") // All hex digits included
 	})
 
-	t.Run("decimal_stops_at_hex_letters", func(t *testing.T) {
-		// #d1000abc should stop at non-decimal digits
+	t.Run("prefixed_decimal_rejects_hex_letters", func(t *testing.T) {
+		// #d1000abc used to split into 1000 and the symbol abc. A radix prefix
+		// fixes the digit set, so the numeral must now end at a delimiter —
+		// see requireDelimiterAfterRadixNumeral and TestRadixNumeralRequiresDelimiter.
 		// Note: we use 'a', 'b', 'c' since 'e', 'f', 's', 'd', 'l' are exponent markers per R7RS
 		c := qt.New(t)
 		p := NewTokenizer(strings.NewReader("#d1000abc"), false)
@@ -579,10 +581,26 @@ func TestCombinedPrefixTokenSequence(t *testing.T) {
 		c.Check(tok2.Type(), qt.Equals, TokenizerStateUnsignedInteger)
 		c.Check(tok2.(*SimpleToken).src, qt.Equals, "1000") // Stops at 'a'
 
-		tok3, err3 := p.Next()
-		c.Assert(err3, qt.IsNil)
-		c.Check(tok3.Type(), qt.Equals, TokenizerStateSymbol)
-		c.Check(tok3.(*SimpleToken).src, qt.Equals, "abc") // Remainder is symbol
+		_, err3 := p.Next()
+		c.Check(err3, qt.ErrorMatches, ".*"+MessageExpectingDelimiterAfterNumber+".*")
+	})
+
+	t.Run("unprefixed_decimal_still_stops_at_hex_letters", func(t *testing.T) {
+		// The control for the subtest above: without a radix prefix the split
+		// survives, which is the whole of the D1-a scoping decision. If this ever
+		// becomes an error too, the two subtests should merge.
+		c := qt.New(t)
+		p := NewTokenizer(strings.NewReader("1000abc"), false)
+
+		tok1, err1 := p.Next()
+		c.Assert(err1, qt.IsNil)
+		c.Check(tok1.Type(), qt.Equals, TokenizerStateUnsignedInteger)
+		c.Check(tok1.(*SimpleToken).src, qt.Equals, "1000")
+
+		tok2, err2 := p.Next()
+		c.Assert(err2, qt.IsNil)
+		c.Check(tok2.Type(), qt.Equals, TokenizerStateSymbol)
+		c.Check(tok2.(*SimpleToken).src, qt.Equals, "abc")
 	})
 
 	t.Run("radix_resets_after_number", func(t *testing.T) {

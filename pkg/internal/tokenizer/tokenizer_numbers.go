@@ -144,6 +144,26 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	}
 }
 
+// requireDelimiterAfterRadixNumeral enforces R7RS §7.1.1 implicit termination
+// for a numeral carrying an explicit radix prefix: once #b/#o/#d/#x has fixed
+// the digit set, the numeral has to end at a delimiter.
+//
+// Without it the scanner treats an out-of-radix digit as a token *boundary*
+// rather than a fault, so `#b19` scans as 1 followed by 9 and `(#b19)` is the
+// two-element list (1 9). That also makes the digit set unenforceable from the
+// parser, which never sees the two halves as one numeral.
+//
+// r == 0 (no prefix) is deliberately exempt: `1abc` still scans as 1 then abc.
+// Extending implicit termination to every numeral is a separate change with an
+// unmeasured blast radius — TODO.md, "Delimiter termination for decimal
+// numerals".
+func (p *Tokenizer) requireDelimiterAfterRadixNumeral(r int) {
+	if r == 0 || p.err != nil || isDelimiterOrMarker(p.curr()) {
+		return
+	}
+	p.err = NewTokenizerError(MessageExpectingDelimiterAfterNumber)
+}
+
 func (p *Tokenizer) readDiv(r int) {
 	p.next()
 	if p.err != nil {

@@ -3586,6 +3586,66 @@ func TestInvalidNumbers(t *testing.T) {
 
 // TestKnownBugs documents known tokenizer bugs per CLAUDE.md
 // Note: Some bugs mentioned in CLAUDE.md may have been fixed
+// TestRadixNumeralRequiresDelimiter pins R7RS §7.1.1 implicit termination for
+// radix-prefixed numerals.
+//
+// Before this, an out-of-radix digit was a token *boundary* rather than a
+// fault: #b19 scanned as 1 followed by 9, so (#b19) read as the two-element
+// list (1 9) and the digit set was unenforceable from the parser, which never
+// saw the two halves as one numeral.
+//
+// The restriction is deliberately limited to numerals carrying an explicit
+// #b/#o/#d/#x prefix; the bare-decimal case is the "unchanged" table below.
+func TestRadixNumeralRequiresDelimiter(t *testing.T) {
+	rejected := []struct {
+		input string
+		why   string
+	}{
+		{"#b19", "9 is not a binary digit"},
+		{"#o789", "8 and 9 are not octal digits"},
+		{"#b1.9", "9 is not a binary digit, after the point"},
+		{"#b1.a", "a is not a binary digit, after the point"},
+		{"#x1.8p3", "Go's big.ParseFloat would take p3 as a binary exponent; the reader must not offer it one"},
+		{"#d1000abc", "a radix prefix binds the whole numeral, even in base 10"},
+		{"#x1f#t", "readHashDigits eats the # as an inexact-digit placeholder, leaving t adjacent to the numeral"},
+	}
+	for _, tc := range rejected {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			_, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.ErrorMatches, ".*"+MessageExpectingDelimiterAfterNumber+".*",
+				qt.Commentf("%s", tc.why))
+		})
+	}
+
+	unchanged := []struct {
+		input string
+		texts []string
+	}{
+		{"#x1f", []string{"#x", "1f"}},
+		{"#x1e2", []string{"#x", "1e2"}}, // e is a hex digit, not an exponent marker
+		{"#x1f)", []string{"#x", "1f", ")"}},
+		{"#e#x1f", []string{"#e", "#x", "1f"}},
+		{"#x1+2i", []string{"#x", "1+2i"}},
+		{"#b101 #o7", []string{"#b", "101", "#o", "7"}},
+		{"#x1f;c", []string{"#x", "1f", ";c"}}, // ; is a delimiter: the comment body is its own token
+		// Bare decimals keep splitting. This is the D1-a scope boundary, not an
+		// oversight — see TODO.md "Delimiter termination for decimal numerals".
+		{"1abc", []string{"1", "abc"}},
+		{"1000abc", []string{"1000", "abc"}},
+	}
+	for _, tc := range unchanged {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.Equals, io.EOF)
+			got := make([]string, 0, len(toks))
+			for _, tk := range toks {
+				got = append(got, tk.String())
+			}
+			c.Check(got, qt.DeepEquals, tc.texts)
+		})
+	}
+}
+
 func TestKnownBugs(t *testing.T) {
 	t.Run("signed_integer_with_exponent_now_works", func(t *testing.T) {
 		// Previously documented as bug: +1e10 tokenized as two tokens

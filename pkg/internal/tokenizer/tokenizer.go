@@ -27,6 +27,7 @@ import (
 const (
 	MessageRuneError                             = "rune error"
 	MessageExpectingNumber                       = "expecting number"
+	MessageExpectingDelimiterAfterNumber         = "expecting delimiter after radix-prefixed number"
 	MessageExpectingExponentDigits               = "expecting exponent digits"
 	MessageExpectingImaginary                    = "expecting imaginary"
 	MessageExpectingDecimalFraction              = "expecting decimal fraction"
@@ -402,14 +403,10 @@ func (p *Tokenizer) read() {
 		p.readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() //nolint:errcheck
 		p.term()
 		return
-	case isExplicitSign(p.curr()):
+	case isExplicitSign(p.curr()), isDigit(p.radix, p.curr()):
 		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(p.radix) //nolint:errcheck
-		p.radix = 0                                                                      // Reset radix after parsing number
-		p.term()
-		return
-	case isDigit(p.radix, p.curr()):
-		p.readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber(p.radix) //nolint:errcheck
-		p.radix = 0                                                                      // Reset radix after parsing number
+		p.requireDelimiterAfterRadixNumeral(p.radix)
+		p.radix = 0 // Reset radix after parsing number
 		p.term()
 		return
 	case isInitial(p.curr()): // read symbol

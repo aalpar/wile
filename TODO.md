@@ -1592,5 +1592,17 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
       maps onto `big.Float`'s precision parameter more directly than a
       four-letter code, and complements `l` rather than competing with it.
 
+- [ ] **Delimiter termination for decimal numerals** [Low, S; residual of
+  "Reader fixes" decision D1]: `1abc` scans as `1` followed by the symbol `abc`,
+  because a numeral is only implicitly terminated when it carries an explicit
+  radix prefix (`requireDelimiterAfterRadixNumeral`, `pkg/internal/tokenizer/`).
+  R7RS §7.1.1 reads as though *every* numeral requires a delimiter ("tokens which
+  require implicit termination … may be terminated by any ⟨delimiter⟩"), so the
+  present split is a real semantic difference between decimal and radix numerals,
+  introduced for scoping reasons. Extending the guard to `r == 0` is a one-line
+  change; the work is measuring the blast radius, which reaches the fuzz corpus
+  and every `.scm` under test. Deliberately not bundled with the reader-fixes
+  change, which is a three-item feature and would have conflated the two.
+
 </details>
 
