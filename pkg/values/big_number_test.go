@@ -623,6 +623,17 @@ func TestBigFloat_FromFloat64NaN(t *testing.T) {
 	c.Assert(bf.SchemeString(), qt.Equals, "+nan.0")
 }
 
+// TestBigFloat_SchemeString_DecimalPoint pins both invariants of the written
+// form together, because they interact:
+//
+//   - R7RS §6.2.6: an inexact integer shows a decimal point, so it is not read
+//     back as an exact one.
+//   - R7RS §6.2.5: a BigFloat is Wile's long representation, so it writes the
+//     precision marker l. Writing e would claim default precision and read back
+//     as a Float — see (*BigFloat).SchemeString.
+//
+// The infinities and NaN have no mantissa to mark and keep their spellings,
+// which are shared with Float.
 func TestBigFloat_SchemeString_DecimalPoint(t *testing.T) {
 	c := qt.New(t)
 
@@ -631,11 +642,11 @@ func TestBigFloat_SchemeString_DecimalPoint(t *testing.T) {
 		val  float64
 		want string
 	}{
-		{"integer value", 2.0, "2.0"},
-		{"negative integer", -5.0, "-5.0"},
-		{"zero", 0.0, "0.0"},
-		{"fractional", 1.5, "1.5"},
-		{"large integer", 1000000.0, "1e+06"},
+		{"integer value", 2.0, "2.0l0"},
+		{"negative integer", -5.0, "-5.0l0"},
+		{"zero", 0.0, "0.0l0"},
+		{"fractional", 1.5, "1.5l0"},
+		{"large integer", 1000000.0, "1l+06"},
 		{"positive infinity", math.Inf(1), "+inf.0"},
 		{"negative infinity", math.Inf(-1), "-inf.0"},
 		{"NaN", math.NaN(), "+nan.0"},

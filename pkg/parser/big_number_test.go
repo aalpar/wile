@@ -171,10 +171,10 @@ func TestBigNumberIntroducerComposition(t *testing.T) {
 		input string
 		want  string // SchemeString
 	}{
-		{"#z#z#z5", "5"},   // coercion, not container: applying it thrice is applying it once
-		{"#m#z5", "5.0"},   // #m widens the BigInteger #z produced
-		{"#m#m1.5", "1.5"}, // likewise idempotent
-		{"#e#z9", "9"},     // exactness is post-hoc, so it composes the other way too
+		{"#z#z#z5", "5"},     // coercion, not container: applying it thrice is applying it once
+		{"#m#z5", "5.0l0"},   // #m widens the BigInteger #z produced
+		{"#m#m1.5", "1.5l0"}, // likewise idempotent; the l marker is how a BigFloat writes
+		{"#e#z9", "9"},       // exactness is post-hoc, so it composes the other way too
 		{"#z#e#x1f", "31"},
 		{"#z#x#e1f", "31"},
 	}

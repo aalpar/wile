@@ -683,9 +683,22 @@ func (p *BigComplex) Conjugate() *BigComplex {
 }
 
 // SchemeString returns the Scheme representation of this BigComplex.
+// componentString renders one part of a complex number. A BigFloat part drops
+// the 'l' precision marker its standalone spelling carries; see
+// (*BigFloat).numeralText for why the marker is inert inside a complex literal.
+// Every other part type renders as itself.
+func componentString(n Number) string {
+	bf, ok := n.(*BigFloat)
+	if !ok {
+		return n.SchemeString()
+	}
+	s, _ := bf.numeralText()
+	return s
+}
+
 func (p *BigComplex) SchemeString() string {
-	realStr := p.real.SchemeString()
-	imagStr := p.imag.SchemeString()
+	realStr := componentString(p.real)
+	imagStr := componentString(p.imag)
 	// The separator is driven by the RENDERED sign, not by IsNegative(), matching
 	// (*Complex).SchemeString. Three parts are not negative yet still render with a
 	// leading sign, and IsNegative() misses every one: -0.0 (a negative zero is not

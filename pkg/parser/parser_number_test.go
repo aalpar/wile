@@ -1154,6 +1154,13 @@ func TestParseNumber_DecimalPrefixNegative(t *testing.T) {
 // R7RS exponent markers (s, f, d, l)
 // ---------------------------------------------------------------------------
 
+// TestParseNumber_AlternateExponentMarkers covers the three markers that map
+// onto Float. R7RS §6.2.5 lets an implementation with fewer than four inexact
+// representations fold the four size specifications onto what it has; Wile has
+// two, so s/f/d/e are Float and l alone is BigFloat.
+//
+// The l row used to be here and expected 1500.0 as a Float. It now lives in
+// TestReadSyntaxExponentMarkerPrecision, which pins the whole mapping.
 func TestParseNumber_AlternateExponentMarkers(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -1163,7 +1170,6 @@ func TestParseNumber_AlternateExponentMarkers(t *testing.T) {
 		{name: "short s marker", input: "1.5s3", expected: 1500.0},
 		{name: "float f marker", input: "1.5f3", expected: 1500.0},
 		{name: "double d marker", input: "1.5d3", expected: 1500.0},
-		{name: "long l marker", input: "1.5l3", expected: 1500.0},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

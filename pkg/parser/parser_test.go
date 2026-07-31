@@ -1946,16 +1946,19 @@ func TestParser_ExtendedExponentMarkers(t *testing.T) {
 		input  string
 		expect values.Value
 	}{
-		// All markers produce Float (inexact) per R7RS §7.1.1
+		// Every marker produces an inexact number (R7RS §7.1.1), but not the same
+		// one: §6.2.5 makes the marker a precision request, and l — long — is the
+		// only one of the four that names a representation distinct from the
+		// default. Wile has exactly two, so l is BigFloat and the rest are Float.
 		{"1s10", values.NewFloat(1e10)},
 		{"1f10", values.NewFloat(1e10)},
 		{"1d10", values.NewFloat(1e10)},
-		{"1l10", values.NewFloat(1e10)},
+		{"1l10", values.NewBigFloatFromString("1e10")},
 		// Uppercase
 		{"1S10", values.NewFloat(1e10)},
 		{"1F10", values.NewFloat(1e10)},
 		{"1D10", values.NewFloat(1e10)},
-		{"1L10", values.NewFloat(1e10)},
+		{"1L10", values.NewBigFloatFromString("1e10")},
 		// Signed
 		{"+1s10", values.NewFloat(1e10)},
 		{"-1f10", values.NewFloat(-1e10)},

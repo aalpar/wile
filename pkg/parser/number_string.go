@@ -32,13 +32,30 @@ import (
 // rather than failing. This mirrors the int64 -> BigInteger promotion in
 // parseIntegerWithBase and, crucially, keeps the reader and string->number
 // symmetric with the writer, which renders an out-of-range bigfloat in
-// scientific notation (e.g. (write (* 1.0 (expt 10 1000))) -> "1e+1000").
+// scientific notation (e.g. (write 1e1000) -> "1l+1000").
 // Underflow to zero (float64 rounds a tiny magnitude to 0 without ErrRange) is
 // left as the float64 0.0 it already produces, matching float64-based Schemes.
 // The exponent marker is normalized to 'e' first. Returns a wrapped
 // ErrInvalidFormat sentinel on a malformed string.
 func ParseRealFloatString(s string) (values.Number, error) {
 	normalized := schemeutil.NormalizeExponentMarker(s)
+	// R7RS §6.2.5 makes the exponent marker a precision request, and adds that an
+	// implementation with fewer than four inexact representations maps the four
+	// size specifications onto what it has. Wile has two, so s/f/d/e name Float
+	// and l — long — names BigFloat, the one representation actually distinct
+	// from the default.
+	//
+	// This must happen before the float64 parse, not after it: routing through
+	// float64 and widening the result would satisfy a type assertion while having
+	// already discarded the digits l exists to keep
+	// (TestReadSyntaxLongPrecisionMarkerPreservesDigits).
+	if hasLongPrecisionMarker(s) {
+		bf := values.NewBigFloatFromString(normalized)
+		if bf != nil {
+			return bf, nil
+		}
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid long-precision real number: %s", s)
+	}
 	f, err := strconv.ParseFloat(normalized, 64)
 	if err == nil {
 		return values.NewFloat(f), nil
@@ -52,6 +69,18 @@ func ParseRealFloatString(s string) (values.Number, error) {
 		}
 	}
 	return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid real number: %s", s)
+}
+
+// hasLongPrecisionMarker reports whether s's exponent marker is 'l'/'L', the
+// R7RS §6.2.5 request for long precision. It looks at the first marker only,
+// which is the same one NormalizeExponentMarker folds, so the two cannot
+// disagree about which character is the marker.
+func hasLongPrecisionMarker(s string) bool {
+	i := schemeutil.IndexExponentMarker(s)
+	if i == -1 {
+		return false
+	}
+	return s[i] == 'l' || s[i] == 'L'
 }
 
 // ParseRealFloatStringWithBase parses a real fraction written in an explicit

@@ -17,6 +17,7 @@ package values
 import (
 	"math"
 	"math/big"
+	"strings"
 
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -30,6 +31,12 @@ var (
 
 // DefaultBigFloatPrecision is the default precision for BigFloat values.
 const DefaultBigFloatPrecision = 256
+
+// LongPrecisionMarker is the R7RS §6.2.5 exponent marker for long precision,
+// which is what a BigFloat has. It is the reader's request for this type and
+// the writer's declaration of it — see BigFloat.SchemeString and
+// parser.ParseRealFloatString.
+const LongPrecisionMarker = 'l'
 
 // BigFloat represents an arbitrary-precision floating-point number.
 // Created with the #m prefix in Scheme (e.g., #m3.14159265358979323846).
@@ -417,26 +424,58 @@ func (p *BigFloat) Sign() int {
 
 // SchemeString returns the Scheme representation of this BigFloat.
 //
-// R7RS §6.2.6: Inexact integers must include a decimal point to distinguish
-// them from exact integers. big.Float.Text('g', -1) drops ".0" for integer
-// values, so we append it when neither '.' nor 'e'/'E' is present.
+// Every finite BigFloat carries the exponent marker 'l', so the written form
+// reads back as a BigFloat rather than as a Float. R7RS §6.2.5 makes the marker
+// a precision request — s/f/d/e ask for the default, l asks for long — and
+// BigFloat is Wile's long representation. Writing 'e' would claim default
+// precision, so "1e+1000" would read back as a different type from the value
+// written. That closes the round trip (TestBigFloatWriteReadRoundTrip) at the
+// cost of changing output that already existed: "1e+1000" is now "1l+1000", and
+// "1.5" is now "1.5l0".
+//
+// The infinite and NaN forms have no mantissa to mark. They return early from
+// numeralText, and are spelled the same for Float and BigFloat as they always
+// have been.
 func (p *BigFloat) SchemeString() string {
+	s, finite := p.numeralText()
+	if !finite {
+		return s
+	}
+	e := strings.IndexAny(s, "eE")
+	if e >= 0 {
+		return s[:e] + string(LongPrecisionMarker) + s[e+1:]
+	}
+	return s + string(LongPrecisionMarker) + "0"
+}
+
+// numeralText renders the value with no precision marker, and reports whether it
+// is finite — i.e. whether there is a mantissa a marker could attach to.
+//
+// It is what a BigFloat looks like as a *component* of a larger number, where
+// the marker would be inert at best: a real inside a complex literal is not read
+// back as a real (ParseComplexStringNumber builds float64 parts whatever the
+// components claim), so the marker would declare a precision the reader does not
+// honour, and would render inconsistently besides — "+inf.0+0.0l0i" marks one
+// part and not the other.
+//
+// R7RS §6.2.6: inexact integers must include a decimal point to distinguish them
+// from exact ones. big.Float.Text('g', -1) drops ".0", so a form with neither a
+// point nor an exponent gets one here.
+func (p *BigFloat) numeralText() (string, bool) {
 	if p.nan {
-		return NaNString
+		return NaNString, false
 	}
 	if p.value.IsInf() {
 		if p.value.Sign() < 0 {
-			return NegativeInfinityString
+			return NegativeInfinityString, false
 		}
-		return PositiveInfinityString
+		return PositiveInfinityString, false
 	}
 	s := p.value.Text('g', -1)
-	for i := 0; i < len(s); i++ {
-		if s[i] == '.' || s[i] == 'e' || s[i] == 'E' {
-			return s
-		}
+	if strings.ContainsAny(s, ".eE") {
+		return s, true
 	}
-	return s + ".0"
+	return s + ".0", true
 }
 
 // IsVoid returns true if this BigFloat is nil.
