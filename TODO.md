@@ -1642,5 +1642,21 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
   and every `.scm` under test. Deliberately not bundled with the reader-fixes
   change, which is a three-item feature and would have conflated the two.
 
+  The `#z` / `#m` inline scan is the same family and is **worse**, because it
+  truncates silently instead of splitting into two visible datums. `readBigNum`
+  scans base 10 and stops at the first character it does not recognize, so:
+
+  | Input | Reads as | Leaves |
+  |---|---|---|
+  | `#z1/2` | `1` | `/2` |
+  | `#m1/2` | `1.0` | `/2` |
+  | `#m2+3i` | `2.0` | `+3i` |
+
+  Verified identical on `47ae48dc` and on `feat/reader-hash-dispatch`, so this
+  is not introduced by the introducer rework — the degenerate `#z<digits>` path
+  is unchanged. Arguably these should be errors (a `#z` operand that is not an
+  exact integer is rejected everywhere else: `#z1.5` errors), which makes this a
+  narrower and safer fix than D1-b proper.
+
 </details>
 
