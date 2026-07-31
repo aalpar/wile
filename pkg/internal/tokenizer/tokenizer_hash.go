@@ -30,6 +30,7 @@ import (
 //   - #\ : character
 //   - #( : vector
 //   - #; : datum comment
+//   - #& : box
 //   - #! : directive
 func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() {
 	switch {
@@ -105,6 +106,13 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 	case p.curr() == ';': // datum comment
 		// Emit DatumCommentBegin - parser handles datum boundary detection
 		p.state = TokenizerStateDatumCommentBegin
+		p.next()
+		return
+
+	case p.curr() == '&': // #& box
+		// Introducer, same shape as #;: consume the marker and leave the boxed
+		// datum to the next token, so it may carry its own prefixes (#&#x1f).
+		p.state = TokenizerStateBoxBegin
 		p.next()
 		return
 

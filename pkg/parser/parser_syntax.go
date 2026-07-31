@@ -65,6 +65,10 @@ func (p *Parser) wrapSyntaxDatumComment(v0 string, v1 syntax.SyntaxValue, t toke
 	return syntax.NewSyntaxDatumComment(v0, v1, p.newSourceContext(t))
 }
 
+func (p *Parser) wrapSyntaxBox(v0 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxBox {
+	return syntax.NewSyntaxBox(v0, p.newSourceContext(t))
+}
+
 func (p *Parser) wrapSyntaxDatumLabelAssignment(v0 int, v1 syntax.SyntaxValue, t tokenizer.Token) *syntax.SyntaxDatumLabelAssignment {
 	return syntax.NewSyntaxDatumLabelAssignment(v0, v1, p.newSourceContext(t))
 }

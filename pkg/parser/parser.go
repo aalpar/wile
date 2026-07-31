@@ -403,6 +403,19 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 		if err != nil {
 			return nil, p.cur, err
 		}
+	case tokenizer.TokenizerStateBoxBegin:
+		// A box is a container, so it can hold itself — and the writer emits
+		// exactly that for a cyclic box (writeBox assigns a label), which makes
+		// this the case that keeps Wile's own output readable (design C6). The
+		// placeholder therefore has to be registered before the content is read,
+		// as in the list and vector arms; the default arm below reads the whole
+		// datum first and would report "undefined datum label" for #0=#&#0#.
+		placeholder := p.wrapSyntaxBox(nil, p.cur)
+		p.datumLabels[labelNum] = placeholder
+		v, _, err = p.readBoxInto(placeholder)
+		if err != nil {
+			return nil, p.cur, err
+		}
 	default:
 		// Non-compound datum: read normally and store.
 		v, _, err = p.readSyntax()
@@ -463,6 +476,46 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 	// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
 	q := p.wrapSyntaxDatumComment(beginTok.String(), v, p.cur)
 	return q, p.cur, nil
+}
+
+// readBox handles #&<datum>, the box read syntax.
+//
+// #& is a container introducer, not a coercion: it dispatches once and then
+// reads one complete datum, which may carry its own prefixes (#&#x1f is a box
+// holding 31), and it nests (#&#&5 is a box holding a box). That is the
+// distinction from #z, which widens rather than wraps.
+//
+// This exists because the write side already did: values.PrefixBox and writeBox
+// emit "#&", so before this a box printed in a syntax the reader rejected.
+func (p *Parser) readBox() (syntax.SyntaxValue, tokenizer.Token, error) {
+	return p.readBoxInto(p.wrapSyntaxBox(nil, p.cur))
+}
+
+// readBoxInto fills a box that already exists, which is what makes a
+// self-referential box readable: readLabelAssignment registers the placeholder
+// under its label before the content is read, so a #n# inside resolves to the
+// box itself. Same two entry points as readList / readListInto.
+func (p *Parser) readBoxInto(placeholder *syntax.SyntaxBox) (syntax.SyntaxValue, tokenizer.Token, error) {
+	beginTok := p.curr()
+	err := p.advance()
+	if err != nil {
+		// "#&" with nothing after it needs its datum, so EOF here is malformed
+		// input rather than a clean end of input.
+		return nil, p.cur, wrapMidParseEOF(err, beginTok, "box")
+	}
+	v, tok, err := p.readSyntax()
+	// "(#&)" must be a located error rather than a leaked errNoDatum that the
+	// enclosing list reader silently treats as "no element" — the same guard the
+	// numeric introducers carry.
+	if errors.Is(err, errNoDatum) {
+		return nil, tok, NewParserErrorWithWrap(werr.ErrInvalidSyntax, tok,
+			"box marker requires a datum")
+	}
+	if err != nil {
+		return nil, tok, err
+	}
+	placeholder.Value = v
+	return placeholder, tok, nil
 }
 
 // wrapMidParseEOF converts io.EOF (returned by the tokenizer at end of
@@ -837,6 +890,8 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateDatumCommentBegin:
 		return p.readDatumComment()
+	case tokenizer.TokenizerStateBoxBegin:
+		return p.readBox()
 	case tokenizer.TokenizerStateOpenParen, tokenizer.TokenizerStateOpenBracket:
 		return p.readList(p.cur.Type())
 	case tokenizer.TokenizerStateOpenVector:

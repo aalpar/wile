@@ -503,6 +503,38 @@ func TestTokenizer_SyntaxQuotation(t *testing.T) {
 	}
 }
 
+// TestBoxPrefixTokens pins #& as an introducer rather than a decorated literal:
+// it is one token, and the boxed datum is the next one, free to carry its own
+// prefixes. Before this, '&' fell to the '#' dispatch's default reject
+// ("invalid character after #"), so a box printed in a syntax the reader could
+// not accept back.
+func TestBoxPrefixTokens(t *testing.T) {
+	tcs := []struct {
+		input string
+		texts []string
+	}{
+		{"#&5", []string{"#&", "5"}},
+		{"#&#&5", []string{"#&", "#&", "5"}},
+		{"#&#x1f", []string{"#&", "#x", "1f"}},
+		{`#&"hi"`, []string{"#&", `"hi"`}},
+		{"(#&1 #&2)", []string{"(", "#&", "1", "#&", "2", ")"}},
+		{"#0=#&#0#", []string{"#0=", "#&", "#0#"}},
+	}
+	for _, tc := range tcs {
+		qt.New(t).Run(tc.input, func(c *qt.C) {
+			toks, err := Tokenize(tc.input, false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			got := make([]string, 0, len(toks))
+			for _, tk := range toks {
+				got = append(got, tk.String())
+			}
+			c.Check(got, qt.DeepEquals, tc.texts)
+			c.Check(toks[0].Type() == TokenizerStateBoxBegin ||
+				toks[1].Type() == TokenizerStateBoxBegin, qt.IsTrue)
+		})
+	}
+}
+
 // TestCombinedPrefixTokenSequence tests that combined prefixes produce correct token sequences
 // The tokenizer preserves radix state between marker and number tokens.
 func TestCombinedPrefixTokenSequence(t *testing.T) {

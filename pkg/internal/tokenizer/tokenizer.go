@@ -203,6 +203,10 @@ const (
 	TokenizerStateLabelReference
 	// TokenizerStateLabelAssignment represents #123= (datum label assignment).
 	TokenizerStateLabelAssignment
+
+	// TokenizerStateBoxBegin represents the #& marker; like #;, it introduces a
+	// datum that the parser reads as the next token.
+	TokenizerStateBoxBegin
 )
 
 // Tokenizer reads Scheme source code and produces a stream of tokens.

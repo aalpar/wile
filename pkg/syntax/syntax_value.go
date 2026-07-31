@@ -213,6 +213,21 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		}
 		return vec
 
+	case *SyntaxBox:
+		if v.IsVoid() {
+			return values.Void
+		}
+		// Pre-register the empty box before unwrapping its content, exactly as
+		// the pair spine and the vector do. #0=#&#0# is a box holding itself, and
+		// the writer already emits that form for a cyclic box (writeBox), so the
+		// reader has to terminate on it.
+		bx := values.NewBox(nil)
+		cache[sv] = bx
+		if v.Value != nil {
+			bx.Value = UnwrapAllShared(v.Value, cache)
+		}
+		return bx
+
 	case *SyntaxObject:
 		datum, ok := v.Datum().(SyntaxValue)
 		if ok {
