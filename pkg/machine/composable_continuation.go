@@ -71,14 +71,17 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 	return q
 }
 
+// Cont returns the continuation segment captured by this composable continuation.
 func (p *ComposableContinuation) Cont() *MachineContinuation {
 	return p.cont
 }
 
+// WindingStack returns the winding stack captured by this composable continuation.
 func (p *ComposableContinuation) WindingStack() WindingStack {
 	return p.windingStack
 }
 
+// ThreadID returns the thread ID that captured this composable continuation.
 func (p *ComposableContinuation) ThreadID() uint64 {
 	return p.threadID
 }
@@ -126,14 +129,17 @@ func (*ComposableContinuation) AcceptsArity(int) bool {
 	return true
 }
 
+// SchemeString returns a string representation of this composable continuation.
 func (p *ComposableContinuation) SchemeString() string {
 	return "#<composable-continuation>"
 }
 
+// IsVoid reports whether this composable continuation is void.
 func (p *ComposableContinuation) IsVoid() bool {
 	return p == nil
 }
 
+// EqualTo reports whether this composable continuation is equal to another.
 func (p *ComposableContinuation) EqualTo(o values.Value) bool {
 	v, ok := o.(*ComposableContinuation)
 	if !ok {

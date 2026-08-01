@@ -25,8 +25,14 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
+var (
+	_ values.Value = (*NativeTemplate)(nil)
+)
+
 type LiteralIndex int
 
+// NativeTemplate is the compiled representation of a Scheme procedure.
+// It is a trusted-producer surface: the operations are not validated, see the package doc.
 type NativeTemplate struct {
 	parameterCount int
 	valueCount     int
