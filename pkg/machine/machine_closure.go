@@ -71,6 +71,12 @@ var (
 // an environment. Note the aliasing is unchanged by this: the old
 // NewEnvironmentFrameWithParent did `q.local = *local`, already sharing the
 // compile-time frame's keys map and bindings array.
+//
+// Carrying both fields costs a word: the struct is 24 bytes where it was 16,
+// which measured as +1.3% on call-bound code that never builds a closure. That
+// is accepted, and the candidate for recovering it (move the parent == nil case
+// to its own Closure implementation) is filed under Tier 4 in TODO.md, together
+// with the late-Parent constraint any such split has to preserve.
 type MachineClosure struct {
 	frame    *environment.EnvironmentFrame
 	parent   *environment.EnvironmentFrame
