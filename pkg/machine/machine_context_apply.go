@@ -47,41 +47,34 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// captures mc.env, and (2) concurrent SRFI-18 threads sharing binding
 	// slots when calling the same closure.
 	//
-	// Exception: closures whose env has no parent (e.g., thunks from
-	// compile, top-level wrappers) cannot be copied via InitApplyFrame.
-	// These are safe to reuse directly — they have no local parameter
-	// bindings for concurrent callers to race on.
-	//
-	// Invariant: Parent() == nil implies parameterCount == 0. All closures
-	// with parameters are constructed with NewEnvironmentFrameWithParent,
-	// which guarantees a non-nil parent.
-	var env *environment.EnvironmentFrame
-	var bnds []environment.Binding
-
+	// A nil ApplyParent is not a closure shape, it is a released frame. Every
+	// producer supplies a parent, directly (OpMakeClosure) or through a frame
+	// built by NewEnvironmentFrameWithParent, which panics on a nil parent. The
+	// only way to observe nil here is ResetForPool having zeroed a frame this
+	// closure still points at. Reusing it would install an environment with no
+	// global, namespace or phases and corrupt silently, so fault instead. See
+	// MachineClosure for the enumeration of producers.
 	parent := mcls.ApplyParent()
 	if parent == nil {
-		env = mcls.frame
-		lenv := env.LocalEnvironment()
-		if lenv != nil {
-			bnds = lenv.Bindings()
-		}
-		p.envPooled = false
-	} else {
-		env = p.acquireEnvFrame()
-		mcls.frame.InitApplyFrameWithParent(env, parent)
-		// nil-guarded like the branch above: a zero-parameter closure over a
-		// frame with no local environment copies to an apply frame that has
-		// none either. Every closure reaching here used to have parameters, so
-		// the unguarded form survived; (compile ...) produces the exception.
-		lenv := env.LocalEnvironment()
-		if lenv != nil {
-			bnds = lenv.Bindings()
-		}
-		p.envPooled = true
-		p.counters.EnvsCopied++
-		p.counters.BindingsCopied += uint64(len(bnds))
-		p.counters.KeysShared++
+		return nil, werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
+			"apply: closure environment has no parent; its frame was released while the closure still held it")
 	}
+
+	env := p.acquireEnvFrame()
+	mcls.frame.InitApplyFrameWithParent(env, parent)
+	// A zero-parameter closure over a frame with no local environment copies to
+	// an apply frame that has none either, so LocalEnvironment can be nil here.
+	// Every closure used to have parameters, which is why the unguarded form
+	// survived; (compile ...) produces the exception.
+	var bnds []environment.Binding
+	lenv := env.LocalEnvironment()
+	if lenv != nil {
+		bnds = lenv.Bindings()
+	}
+	p.envPooled = true
+	p.counters.EnvsCopied++
+	p.counters.BindingsCopied += uint64(len(bnds))
+	p.counters.KeysShared++
 
 	bindArgs(bnds, vs, l, tpl.IsVariadic(), nil)
 

@@ -512,3 +512,46 @@ func TestEqualIsReflexive(t *testing.T) {
 		})
 	}
 }
+
+// TestEqualOnProceduresAgreesWithEqv pins R7RS §6.1: equal? must behave as eqv?
+// on procedures. equal? reaches *MachineClosure.EqualTo as its leaf comparison,
+// so a field-wise EqualTo silently makes the two disagree — and member/assoc,
+// which the stdlib defines over equal?, then return the wrong association.
+//
+// The closures below are the hard case: one lambda form, one activation, so
+// they share the compile-time frame, the runtime parent AND the template. Only
+// object identity separates them. A tail loop reaches the same shape.
+func TestEqualOnProceduresAgreesWithEqv(t *testing.T) {
+	const twoClosuresFromOneForm = `
+	  (let ((k #f) (n 0) (acc (list)))
+	    (call/cc (lambda (kk) (set! k kk)))
+	    (set! acc (cons (lambda () 1) acc))
+	    (set! n (+ n 1))
+	    (if (< n 2)
+	        (k #f)
+	        (list (eqv? (car acc) (cadr acc))
+	              (equal? (car acc) (cadr acc))
+	              (if (member (car acc) (list (cadr acc))) #t #f))))`
+
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "eqv?, equal? and member all separate distinct closures",
+			Code:     twoClosuresFromOneForm,
+			Expected: values.List(values.FalseValue, values.FalseValue, values.FalseValue),
+		},
+		{Name: "a procedure is equal? to itself", Code: `(let ((f (lambda () 1))) (equal? f f))`, Expected: values.TrueValue},
+		{Name: "a procedure is eqv? to itself", Code: `(let ((f (lambda () 1))) (eqv? f f))`, Expected: values.TrueValue},
+		{Name: "assoc does not confuse distinct closures", Code: `
+		  (let* ((f (lambda () 1))
+		         (g (lambda () 1))
+		         (al (list (cons g 'g-entry))))
+		    (if (assoc f al) 'wrong 'right))`, Expected: values.NewSymbol("right")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}

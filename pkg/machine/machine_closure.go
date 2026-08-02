@@ -52,16 +52,28 @@ var (
 //	parent != nil  frame is the lambda's COMPILE-TIME frame, a template
 //	               constant shared by every evaluation of this lambda, and it
 //	               contributes only the local parameter shape. Apply builds the
-//	               runtime frame from (frame.local, parent).
-//	parent == nil  frame is a fully materialized runtime environment and Apply
-//	               reads frame.Parent() itself, LATE. Produced by (compile ...)
-//	               and the top-level thunk wrapper.
+//	               runtime frame from (frame.local, parent). This is what
+//	               OpMakeClosure produces, i.e. every closure in a running
+//	               program.
+//	parent == nil  frame is a materialized runtime environment and ApplyParent
+//	               falls back to frame.Parent(). NO PRODUCTION PRODUCER puts a
+//	               closure in this state: all three callers of
+//	               NewClosureWithTemplate (extensions/eval PrimCompile,
+//	               machine/util.go, compilation/compile_syntax_rules.go) pass a
+//	               frame built by NewEnvironmentFrameWithParent, which panics on
+//	               a nil parent. Verified by panicking in that arm and running
+//	               the whole suite green.
 //
-// The late read in the second case is load-bearing, not stylistic. (compile ...)
-// captures mc.EnvironmentFrame(), and that frame's parent is observably non-nil
-// at capture and nil by the time the thunk runs, so a parent snapshotted at
-// construction sends the thunk down the copying branch and it faults on a frame
-// with no locals. Anything that caches frame.Parent() early reintroduces that.
+// So a nil ApplyParent means the frame was RELEASED while this closure still
+// held it — ResetForPool zeroes the parent. Apply treats that as a fault rather
+// than a representation; see machine_context_apply.go.
+//
+// An earlier revision of this comment justified the late frame.Parent() read as
+// load-bearing, because (compile ...) captured a pooled frame whose parent went
+// nil between capture and call. That was the use-after-release bug fixed in this
+// same arc (PrimCompile now captures a stable child of MutableRuntime), so the
+// justification is gone even though the late read is retained as the cheap way
+// to detect the fault.
 //
 // Splitting the pair is what makes closure creation a single allocation.
 // Materializing (frame.local, parent) into an EnvironmentFrame at creation time
@@ -168,19 +180,28 @@ func (p *MachineClosure) Doc() string {
 	return p.template.Doc()
 }
 
+// EqualTo is OBJECT IDENTITY, and must stay that way.
+//
+// R7RS §6.1 requires equal? to agree with eqv? on procedures, and equal?
+// reaches this method as its leaf comparison (values.Equal -> EqualTo), so any
+// field-wise comparison here is an equal?/eqv? divergence at the Scheme level.
+// It also decides member and assoc, which the stdlib defines over equal?.
+//
+// Field-wise comparison is not merely risky, it cannot work: frame is the
+// lambda's compile-time frame, a template constant shared by every evaluation,
+// and parent is the activation. Two closures built by one lambda form in one
+// activation therefore agree on every field while being distinct procedures.
+// That is not hypothetical — it is reachable from a tail loop or a call/cc
+// re-entry, and it made (equal? a b) answer #t where (eqv? a b) answered #f.
+//
+// This read as safe before the shape+parent split only because each closure
+// then carried a freshly allocated runtime frame, which made a field compare
+// accidentally equivalent to identity. The accident is gone; the guarantee is
+// now explicit.
 func (p *MachineClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*MachineClosure)
 	if !ok {
 		return false
 	}
-	if v == nil || p == nil {
-		return p == v
-	}
-	if p.frame != v.frame || p.parent != v.parent {
-		return false
-	}
-	if p.template != v.template {
-		return false
-	}
-	return true
+	return p == v
 }

@@ -71,8 +71,11 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 
 	// Same object
 	qt.Assert(t, cls1.EqualTo(cls3), qt.IsTrue)
-	// Different objects with same env and template
-	qt.Assert(t, cls1.EqualTo(cls2), qt.IsTrue)
+	// Distinct objects are distinct procedures even when every field agrees.
+	// This assertion used to read IsTrue, which is exactly why the suite stayed
+	// green while (equal? a b) diverged from (eqv? a b) at the Scheme level.
+	// R7RS §6.1 requires them to agree; EqualTo is therefore object identity.
+	qt.Assert(t, cls1.EqualTo(cls2), qt.IsFalse)
 
 	// Different template
 	tpl2 := NewNativeTemplate(1, 0, false)
@@ -83,6 +86,14 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 	env2 := environment.NewNamespace().Runtime()
 	cls5 := NewClosureWithTemplate(tpl, env2)
 	qt.Assert(t, cls1.EqualTo(cls5), qt.IsFalse)
+
+	// The pair representation, which no test covered before: two closures from
+	// one lambda form in one activation share frame, parent AND template.
+	shape := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), env)
+	pair1 := NewClosureCapturing(tpl, shape, env)
+	pair2 := NewClosureCapturing(tpl, shape, env)
+	qt.Assert(t, pair1.EqualTo(pair2), qt.IsFalse)
+	qt.Assert(t, pair1.EqualTo(pair1), qt.IsTrue)
 
 	// Nil comparison
 	var nilCls *MachineClosure
@@ -135,9 +146,12 @@ func TestMachineClosureMethodsAdditional(t *testing.T) {
 	qt.Assert(t, closure.SchemeString(), qt.Contains, "closure")
 	qt.Assert(t, closure.Template(), qt.Equals, tpl)
 
-	// Test EqualTo
+	// EqualTo is object identity, so a second closure over the same env and
+	// template is NOT equal. See TestMachineClosure_EqualTo for why: equal? must
+	// agree with eqv? on procedures (R7RS §6.1).
 	closure2 := NewClosureWithTemplate(tpl, env)
-	qt.Assert(t, closure.EqualTo(closure2), qt.IsTrue)
+	qt.Assert(t, closure.EqualTo(closure2), qt.IsFalse)
+	qt.Assert(t, closure.EqualTo(closure), qt.IsTrue)
 
 	var nilClosure *MachineClosure
 	qt.Assert(t, closure.EqualTo(nilClosure), qt.IsFalse)
