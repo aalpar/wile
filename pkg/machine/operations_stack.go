@@ -22,6 +22,7 @@ import (
 
 // --- Push ---
 
+// OperationPush pushes a value onto the eval stack.
 type OperationPush struct {
 	OperationBase
 }
@@ -39,6 +40,8 @@ func (p *OperationPush) EqualTo(o values.Value) bool {
 
 // --- Pop ---
 
+// OperationPop removes the top value from the eval stack into the value
+// register. OperationDrop is the variant that discards it instead.
 type OperationPop struct {
 	OperationBase
 }
@@ -56,6 +59,8 @@ func (p *OperationPop) EqualTo(o values.Value) bool {
 
 // --- Pull ---
 
+// OperationPull removes the BOTTOM value from the eval stack into the value
+// register. The mirror of OperationPop, which takes the top.
 type OperationPull struct {
 	OperationBase
 }
@@ -93,6 +98,11 @@ func (p *OperationDrop) EqualTo(o values.Value) bool {
 
 // --- PeekK ---
 
+// OperationPeekK copies the value at the given depth into the value register
+// and LEAVES THE STACK UNCHANGED. Callers depend on that: dynamic-wind's
+// bytecode reaches its three thunks with PeekK 2/1/0 across the whole extent
+// (CompileValidatedDynamicWind), so a removing PeekK would misalign every
+// subsequent offset.
 type OperationPeekK struct {
 	OperationBase
 	Depth int
