@@ -22,14 +22,16 @@ package threads_test
 // benchmarks pin down reproducibly, instead of via a one-off CLI run.
 //
 // Last measured 2026-08-01, Apple M4 Max (12 P + 4 E), GOMAXPROCS=16,
-// -benchtime=1s. Effective speedup is P / (ns/op(P) / ns/op(1)); ideal is P.
+// -benchtime=2s -count 6. Effective speedup is P / (ns/op(P) / ns/op(1)); ideal
+// is P. "before" is the tree prior to the three allocation cuts recorded below.
 //
-//	P     Compute   Control
-//	1       1.00x     1.00x
-//	2       1.93x     1.58x
-//	4       3.62x     2.24x
-//	8       6.98x     2.30x
-//	16      8.82x     2.43x
+//	         Compute            Control
+//	P     before  after     before  after
+//	1      1.00x  1.00x      1.00x  1.00x
+//	2      1.98x  1.97x      1.62x  1.70x
+//	4      3.87x  3.87x      2.35x  2.70x
+//	8      7.21x  7.28x      2.41x  3.08x
+//	16     8.71x  8.92x      2.65x  3.08x
 //
 // The two-kernel discrimination has fired. Compute holds near-linear scaling
 // through 8 and still gains at 16; Control is flat from 8 on. The older shared
@@ -37,6 +39,18 @@ package threads_test
 // scaling.local.md) now describes Control alone. Not attributed: the 2026-06-10
 // run was different hardware AND predates unsyncFreeList (PR #777), which took
 // the residual atomics out of the per-thread pools.
+//
+// Control still plateaus at 8; the plateau just sits 28% higher, which is what
+// halving the byte volume buys against a ceiling the allocator still owns. In
+// absolute time Control improved at every count, and by MORE as P rose: -20.4%
+// at 1, -30.7% at 4, -37.7% at 8, -31.5% at 16 (p=0.002, n=6).
+//
+// Compute paid for it: +1.25% / +1.56% / +1.17% at P=1/2/4 (p=0.002), and
+// indistinguishable at 8 and 16 where the spread is +-3%. That is the closure
+// pair split's cost on a kernel that never builds a closure in its loop. fib
+// still runs the altered apply path on every recursive call and MachineClosure
+// went from 16 to 24 bytes; ApplyParent and InitApplyFrame both still inline, so
+// it is the wider struct rather than a lost inline. Accepted deliberately.
 //
 // Attribution, profiled 2026-08-01 via the recipe below: Control's plateau is the
 // Go runtime's heap SPAN ALLOCATOR. Not subContextPool, and not the collector.
