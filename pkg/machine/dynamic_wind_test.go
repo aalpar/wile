@@ -90,20 +90,26 @@ func TestWindingStack(t *testing.T) {
 				ws.Push(f1)
 				ws.Push(f2)
 
-				popped := ws.Pop()
-				qt.Assert(t, popped, qt.Equals, f2)
+				// Frames are stored by value and hold a slice, so they are not
+				// Go-comparable; ID is the extent identity FindCommonWindingPrefix
+				// compares, and the only one that means anything here.
+				popped, ok := ws.Pop()
+				qt.Assert(t, ok, qt.IsTrue)
+				qt.Assert(t, popped.ID, qt.Equals, f2.ID)
 				qt.Assert(t, ws.Depth(), qt.Equals, 1)
 
-				popped = ws.Pop()
-				qt.Assert(t, popped, qt.Equals, f1)
+				popped, ok = ws.Pop()
+				qt.Assert(t, ok, qt.IsTrue)
+				qt.Assert(t, popped.ID, qt.Equals, f1.ID)
 				qt.Assert(t, ws.Depth(), qt.Equals, 0)
 			},
 		},
 		{
-			name: "Pop on empty stack returns nil",
+			name: "Pop on empty stack reports false",
 			checkFn: func(t *testing.T) {
 				var ws WindingStack
-				qt.Assert(t, ws.Pop(), qt.IsNil)
+				_, ok := ws.Pop()
+				qt.Assert(t, ok, qt.IsFalse)
 			},
 		},
 		{

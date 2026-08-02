@@ -26,12 +26,13 @@ func (p *MachineContext) SetWindingStack(stack WindingStack) {
 }
 
 // PushWindingFrame adds a frame to the winding stack.
-func (p *MachineContext) PushWindingFrame(frame *DynamicWindFrame) {
+func (p *MachineContext) PushWindingFrame(frame DynamicWindFrame) {
 	p.windingStack.Push(frame)
 }
 
-// PopWindingFrame removes the innermost frame from the winding stack.
-func (p *MachineContext) PopWindingFrame() *DynamicWindFrame {
+// PopWindingFrame removes the innermost frame from the winding stack, reporting
+// false when the stack was already empty.
+func (p *MachineContext) PopWindingFrame() (DynamicWindFrame, bool) {
 	return p.windingStack.Pop()
 }
 

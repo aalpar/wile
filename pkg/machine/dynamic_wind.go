@@ -65,9 +65,9 @@ type DynamicWindFrame struct {
 var nextWindingID atomic.Uint64
 
 // NewDynamicWindFrame creates a new winding frame with a unique ID.
-func NewDynamicWindFrame(before, after Closure) *DynamicWindFrame {
+func NewDynamicWindFrame(before, after Closure) DynamicWindFrame {
 	id := nextWindingID.Add(1)
-	return &DynamicWindFrame{
+	return DynamicWindFrame{
 		Before: before,
 		After:  after,
 		ID:     id,
@@ -76,7 +76,17 @@ func NewDynamicWindFrame(before, after Closure) *DynamicWindFrame {
 
 // WindingStack tracks the current dynamic-wind context.
 // It's a slice of frames from outermost to innermost.
-type WindingStack []*DynamicWindFrame
+//
+// Frames are stored BY VALUE, so a push into retained capacity costs nothing:
+// Pop reslices without dropping capacity, and dynamic-wind at a steady depth
+// therefore allocates a spine once instead of a frame per extent.
+//
+// Two consequences follow, and both are already the model rather than new
+// constraints. Copy deep-copies the frames, so a captured stack and the live
+// stack no longer share frame objects — extent identity is ID, which is what
+// FindCommonWindingPrefix has always compared. And no one may retain &stack[i]
+// across a push: take the element by value, as unwindStackTo and RewindTo do.
+type WindingStack []DynamicWindFrame
 
 // Copy creates a shallow copy of the winding stack.
 func (p WindingStack) Copy() WindingStack {
@@ -89,19 +99,21 @@ func (p WindingStack) Depth() int {
 }
 
 // Push adds a frame to the winding stack.
-func (p *WindingStack) Push(frame *DynamicWindFrame) {
+func (p *WindingStack) Push(frame DynamicWindFrame) {
 	*p = append(*p, frame)
 }
 
-// Pop removes the innermost frame from the winding stack.
-func (p *WindingStack) Pop() *DynamicWindFrame {
+// Pop removes the innermost frame from the winding stack, reporting false when
+// the stack was already empty. The reslice retains capacity, so the next Push
+// at this depth reuses the vacated slot.
+func (p *WindingStack) Pop() (DynamicWindFrame, bool) {
 	if len(*p) == 0 {
-		return nil
+		return DynamicWindFrame{}, false
 	}
 	n := len(*p) - 1
 	frame := (*p)[n]
 	*p = (*p)[:n]
-	return frame
+	return frame, true
 }
 
 // FindCommonWindingPrefix finds the longest common prefix of two winding stacks.
