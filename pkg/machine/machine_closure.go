@@ -135,13 +135,6 @@ func (p *MachineClosure) Env() *environment.EnvironmentFrame {
 	return environment.NewEnvironmentFrameWithParent(p.frame.LocalEnvironment(), p.parent)
 }
 
-// Frame returns the frame the closure captured: the compile-time shape when it
-// holds a pair, the materialized environment otherwise. Unlike Env it never
-// allocates, and unlike Env it is not by itself the closure's environment.
-func (p *MachineClosure) Frame() *environment.EnvironmentFrame {
-	return p.frame
-}
-
 func (p *MachineClosure) Copy() *MachineClosure {
 	return NewClosureWithTemplate(p.template, p.Env().Copy())
 }
