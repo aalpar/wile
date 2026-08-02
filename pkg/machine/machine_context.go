@@ -647,15 +647,11 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				return err
 			}
-			runtimeEnv := environment.NewEnvironmentFrameWithParent(
-				compiletimeEnv.LocalEnvironment(),
-				mc.env,
-			)
-			// The closure now references mc.env through runtimeEnv's parent chain.
-			// Mark it non-poolable so RestoreAndRelease won't recycle it while the
-			// closure still holds a live reference.
+			// The closure references mc.env as its parent. Mark it non-poolable so
+			// RestoreAndRelease won't recycle it while the closure holds a live
+			// reference. See MachineClosure for why no frame is built here.
 			mc.envPooled = false
-			cls := NewClosureWithTemplate(tpl, runtimeEnv)
+			cls := NewClosureCapturing(tpl, compiletimeEnv, mc.env)
 			mc.SetValue(cls)
 			mc.pc++
 

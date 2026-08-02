@@ -315,8 +315,13 @@ func ReleaseTopLevelContext(mc *MachineContext) {
 func acquireMacroContext(ctx context.Context, cls *MachineClosure) *MachineContext {
 	mc := acquireSubContext()
 	mc.ctx = ctx
-	// envPooled: zero value (false) — macro context uses closure's env, not from pool.
-	mc.env = cls.env
+	// env is left nil deliberately. The sole caller applies cls immediately
+	// (macro_evaluator.go), and Apply establishes p.env itself — either the
+	// closure's frame reused in place or a pooled apply frame. Seeding it here
+	// would be dead, and seeding it with the closure's compile-time frame would
+	// be dead AND wrong for anyone who later reads it before the Apply.
+	// envPooled: zero value (false) — Apply sets it to match what it chose.
+	mc.env = nil
 	mc.template = cls.template
 	mc.evals = acquireStack()
 	return mc

@@ -58,8 +58,9 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	var env *environment.EnvironmentFrame
 	var bnds []environment.Binding
 
-	if mcls.env.Parent() == nil {
-		env = mcls.env
+	parent := mcls.ApplyParent()
+	if parent == nil {
+		env = mcls.frame
 		lenv := env.LocalEnvironment()
 		if lenv != nil {
 			bnds = lenv.Bindings()
@@ -67,7 +68,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		p.envPooled = false
 	} else {
 		env = p.acquireEnvFrame()
-		mcls.env.InitApplyFrame(env)
+		mcls.frame.InitApplyFrameWithParent(env, parent)
 		bnds = env.LocalEnvironment().Bindings()
 		p.envPooled = true
 		p.counters.EnvsCopied++

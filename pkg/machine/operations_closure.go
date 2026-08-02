@@ -77,19 +77,20 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	//
 	// See BIBLIOGRAPHY.md "Linked Closure Representation".
 	//
-	// Create runtime environment with compile-time local structure
-	// but RUNTIME parent chain. This is critical for:
+	// Keep the compile-time local structure for parameters and the RUNTIME
+	// parent chain for free variables. This is critical for:
 	// 1. Nested lambdas: inner lambdas need to access outer params via parent chain
 	// 2. Closures: captured variables must have runtime values, not compile-time placeholders
-	runtimeEnv := environment.NewEnvironmentFrameWithParent(
-		compiletimeEnv.LocalEnvironment(), // Keep local structure for parameters
-		mc.env,                            // Capture runtime parent for free variables
-	)
-	// The closure now references mc.env through runtimeEnv's parent chain.
-	// Mark it non-poolable so RestoreAndRelease won't recycle it while the
-	// closure still holds a live reference.
+	//
+	// The two are stored as a pair rather than combined into a frame here; see
+	// MachineClosure. The frame that used to be built at this point was pure
+	// overhead, an 80-byte object per evaluated lambda that Apply immediately
+	// decomposed back into (local, parent).
+	//
+	// The closure now references mc.env as its parent. Mark it non-poolable so
+	// RestoreAndRelease won't recycle it while the closure holds a live reference.
 	mc.envPooled = false
-	cls := NewClosureWithTemplate(tpl, runtimeEnv)
+	cls := NewClosureCapturing(tpl, compiletimeEnv, mc.env)
 	mc.SetValue(cls)
 	mc.pc++
 	return mc, nil

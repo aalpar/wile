@@ -176,7 +176,20 @@ func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 // a new EnvironmentFrame. The caller is responsible for providing dst (e.g.
 // from a pool). This is the pooling-friendly counterpart of NewApplyFrame.
 func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
-	parent := p.parent
+	p.InitApplyFrameWithParent(dst, p.parent)
+}
+
+// InitApplyFrameWithParent is InitApplyFrame with the runtime parent supplied
+// separately, for callers that hold the parameter SHAPE and the parent as two
+// values rather than as one materialized frame. A closure built by
+// OpMakeClosure is exactly that: p is the lambda's compile-time frame (a
+// template constant shared by every evaluation) and parent is the runtime
+// environment captured at closure creation. Splitting them here is what lets
+// MachineClosure skip materializing an intermediate frame per closure.
+//
+// Only p.local is read off p. Everything else (global, phase, namespace) comes
+// from parent, which is why substituting a different parent is sound.
+func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, parent *EnvironmentFrame) {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrNilParentEnvironment,

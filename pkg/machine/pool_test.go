@@ -236,12 +236,14 @@ func TestAcquireMacroContext_InitializesFields(t *testing.T) {
 
 	// Fields set from closure + context.
 	qt.Assert(t, mc.ctx, qt.Equals, ctx)
-	qt.Assert(t, mc.env, qt.Equals, env)
 	qt.Assert(t, mc.template, qt.Equals, tpl)
 	qt.Assert(t, mc.evals, qt.IsNotNil)
 	qt.Assert(t, mc.evals.Len(), qt.Equals, 0)
 
-	// Fields NOT set must be zero.
+	// Fields NOT set must be zero. env is among them by design: the caller
+	// applies cls immediately and Apply establishes the environment, so seeding
+	// it here would be dead and could be stale.
+	qt.Assert(t, mc.env, qt.IsNil)
 	qt.Assert(t, mc.cont, qt.IsNil)
 	qt.Assert(t, mc.parentMC, qt.IsNil)
 	qt.Assert(t, mc.ExpanderContext(), qt.IsNil)
@@ -277,7 +279,9 @@ func TestAcquireMacroContext_Roundtrip(t *testing.T) {
 	mc2 := acquireMacroContext(ctx, cls2)
 	defer ReleaseSubContext(mc2)
 
-	qt.Assert(t, mc2.env, qt.Equals, env2)
+	// nil, not env2 and crucially not the recycled context's previous env:
+	// acquireMacroContext leaves the environment for Apply to establish.
+	qt.Assert(t, mc2.env, qt.IsNil)
 	qt.Assert(t, mc2.template, qt.Equals, tpl2)
 	qt.Assert(t, mc2.ExpanderContext(), qt.IsNil)
 	qt.Assert(t, mc2.singleValue, qt.IsNil)

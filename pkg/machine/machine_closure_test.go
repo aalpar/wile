@@ -39,7 +39,7 @@ func TestMachineClosure_Copy(t *testing.T) {
 	// Verify template is shared (immutable)
 	qt.Assert(t, clsCopy.Template(), qt.Equals, cls.Template())
 	// Verify environment is copied
-	qt.Assert(t, clsCopy.env != cls.env, qt.IsTrue)
+	qt.Assert(t, clsCopy.Env() != cls.Env(), qt.IsTrue)
 }
 
 func TestMachineClosure_IsVoid(t *testing.T) {
