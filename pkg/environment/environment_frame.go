@@ -193,7 +193,7 @@ func (p *EnvironmentFrame) InitApplyFrameWithParent(dst *EnvironmentFrame, paren
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrNilParentEnvironment,
-			"InitApplyFrame called on frame with nil parent - closure environments must have a parent",
+			"InitApplyFrameWithParent: nil parent - a closure's apply frame must hang from a runtime environment",
 		))
 	}
 	dst.parent = parent

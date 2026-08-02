@@ -99,7 +99,17 @@ func NewOperationPopWind() *OperationPopWind {
 }
 
 func (*OperationPopWind) Apply(mc *MachineContext) (*MachineContext, error) {
-	mc.PopWindingFrame()
+	// An empty pop means the PushWind/PopWind pairing the compiler emits has
+	// been broken. That is worth an error rather than a shrug: the winding stack
+	// silently mis-depths, FindCommonWindingPrefix then computes the wrong
+	// common depth, and that number decides which after-thunks run on a
+	// continuation escape. Wrong cleanup, no diagnostic.
+	_, ok := mc.PopWindingFrame()
+	if !ok {
+		err := mc.WrapError(werr.ErrInternal,
+			"pop-wind: winding stack is empty; PushWind/PopWind pairing is broken")
+		return mc, err
+	}
 	mc.pc++
 	return mc, nil
 }

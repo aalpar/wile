@@ -509,7 +509,7 @@ func PrimCompile(mc machine.CallContext) error {
 		syntaxVal = schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 	}
 
-	// Expand and compile in the namespace's runtime frame, as PrimEval does.
+	// Expand and compile against a top level, not the caller's frame.
 	//
 	// NOT mc.EnvironmentFrame(): inside a primitive that is the primitive's own
 	// apply frame, which applyForeign draws from the env-frame pool. Capturing it
@@ -520,7 +520,10 @@ func PrimCompile(mc machine.CallContext) error {
 	// (compile '(define x 5)) emitted a local store and then failed at run time
 	// with "no such local binding 1:0".
 	//
-	// A fresh child of the runtime frame rather than the runtime frame itself:
+	// A fresh child of the runtime frame, and this site is the only one in the
+	// extension that needs one -- PrimEval (:92) and PrimLoad (:137) use the
+	// runtime frame directly because they RUN immediately, while compile returns
+	// a closure that outlives the call. The reason is structural:
 	// the thunk's apply frame takes its globals and namespace from its PARENT,
 	// so capturing the runtime frame directly hands the thunk the sealed base's
 	// globals and a nil namespace.

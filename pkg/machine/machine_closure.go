@@ -17,6 +17,7 @@ package machine
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 //
 //	closure = ⟨λ, E⟩, where:
 //	  λ = template  — compiled bytecode (NativeTemplate)
-//	  E = env       — pointer to enclosing EnvironmentFrame
+//	  E = (frame, parent) — the enclosing environment, kept as a pair
 //
 //	Access cost: O(1) creation (capture pointer), O(depth) free variable
 //	  lookup (traverse parent chain). Flat closures invert this trade-off.
@@ -38,57 +39,41 @@ var (
 //	  Mutations via set! are visible through the closure because the
 //	  closure shares the frame, not a snapshot.
 //	Constrains: OperationMakeClosure (must link E to runtime parent),
-//	  Apply (copies E on every call with a parented env, to prevent aliasing
-//	  and thread races; a parentless E, which by invariant has zero
-//	  parameters, is reused in place).
+//	  Apply (builds a fresh frame from the pair on every call, to prevent
+//	  aliasing across recursive calls and SRFI-18 thread races).
 //	Constrained by: de Bruijn addressing (free vars addressed by
 //	  slot,depth in E's chain), CESK model (E is the environment component).
 //
 // See BIBLIOGRAPHY.md "Linked Closure Representation".
-// The captured environment is stored as a (frame, parent) PAIR rather than as
-// one materialized frame, and which of the two is authoritative is decided by
-// parent:
 //
-//	parent != nil  frame is the lambda's COMPILE-TIME frame, a template
-//	               constant shared by every evaluation of this lambda, and it
-//	               contributes only the local parameter shape. Apply builds the
-//	               runtime frame from (frame.local, parent). This is what
-//	               OpMakeClosure produces, i.e. every closure in a running
-//	               program.
-//	parent == nil  frame is a materialized runtime environment and ApplyParent
-//	               falls back to frame.Parent(). NO PRODUCTION PRODUCER puts a
-//	               closure in this state: all three callers of
-//	               NewClosureWithTemplate (extensions/eval PrimCompile,
-//	               machine/util.go, compilation/compile_syntax_rules.go) pass a
-//	               frame built by NewEnvironmentFrameWithParent, which panics on
-//	               a nil parent. Verified by panicking in that arm and running
-//	               the whole suite green.
+// E is held as a (frame, parent) PAIR, never materialized into one frame.
+// Materializing it cost an extra 80-byte object per evaluated lambda that every
+// consumer then took apart again: InitApplyFrame reads exactly p.local and
+// p.parent and derives global/phase/namespace from the parent. The frame was a
+// carrier, not an environment. Keeping the pair makes closure creation a single
+// allocation, at the cost of one word (24 bytes, was 16) which measured as
+// +1.3% on call-bound code that never builds a closure. Accepted; the candidate
+// for recovering it is filed under Tier 4 in TODO.md.
 //
-// So a nil ApplyParent means the frame was RELEASED while this closure still
-// held it — ResetForPool zeroes the parent. Apply treats that as a fault rather
-// than a representation; see machine_context_apply.go.
+//	frame   the lambda's COMPILE-TIME frame, a template constant shared by
+//	        every evaluation, contributing only the local parameter shape.
+//	parent  the runtime environment captured at closure creation.
 //
-// An earlier revision of this comment justified the late frame.Parent() read as
-// load-bearing, because (compile ...) captured a pooled frame whose parent went
-// nil between capture and call. That was the use-after-release bug fixed in this
-// same arc (PrimCompile now captures a stable child of MutableRuntime), so the
-// justification is gone even though the late read is retained as the cheap way
-// to detect the fault.
+// Apply reads frame.local at APPLY time rather than snapshotting it at
+// creation. Sound because a lambda's compile-time frame is final before any
+// runtime OpMakeClosure for it can execute — compile_closure.go populates the
+// frame's bindings and only then compiles the body that references them. Note
+// this is a real change from the materialized form, which froze the slice
+// header at creation; it is not, as an earlier revision of this comment
+// claimed, the same aliasing.
 //
-// Splitting the pair is what makes closure creation a single allocation.
-// Materializing (frame.local, parent) into an EnvironmentFrame at creation time
-// cost an extra 80-byte object per evaluated lambda, and every consumer then
-// took it apart again: InitApplyFrame reads exactly p.local and p.parent, and
-// derives global/phase/namespace from the parent. The frame was a carrier, not
-// an environment. Note the aliasing is unchanged by this: the old
-// NewEnvironmentFrameWithParent did `q.local = *local`, already sharing the
-// compile-time frame's keys map and bindings array.
-//
-// Carrying both fields costs a word: the struct is 24 bytes where it was 16,
-// which measured as +1.3% on call-bound code that never builds a closure. That
-// is accepted, and the candidate for recovering it (move the parent == nil case
-// to its own Closure implementation) is filed under Tier 4 in TODO.md, together
-// with the late-Parent constraint any such split has to preserve.
+// parent is non-nil for every closure a program can build: OpMakeClosure passes
+// mc.env, and all three NewClosureWithTemplate callers (extensions/eval
+// PrimCompile, machine/util.go, compilation/compile_syntax_rules.go) pass a
+// frame from NewEnvironmentFrameWithParent, which panics on a nil parent. A nil
+// ApplyParent therefore means the frame was RELEASED while this closure still
+// held it, since ResetForPool zeroes the parent. Apply faults on it rather than
+// treating it as a second representation.
 type MachineClosure struct {
 	frame    *environment.EnvironmentFrame
 	parent   *environment.EnvironmentFrame
@@ -99,8 +84,9 @@ func (p *MachineClosure) closureMarker() {
 }
 
 // NewClosureWithTemplate builds a closure over an already-materialized
-// environment, leaving parent nil so Apply reads env.Parent() late. See the
-// type comment: reading it here instead would change behavior.
+// environment, taking its parent as the closure's parent. env must therefore
+// have one, which NewEnvironmentFrameWithParent guarantees for all three
+// callers.
 func NewClosureWithTemplate(tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineClosure {
 	q := &MachineClosure{
 		frame:    env,
@@ -109,8 +95,8 @@ func NewClosureWithTemplate(tpl *NativeTemplate, env *environment.EnvironmentFra
 	return q
 }
 
-// ApplyParent returns the runtime parent the closure's apply frame hangs from,
-// or nil when Apply must reuse the captured frame in place.
+// ApplyParent returns the runtime parent the closure's apply frame hangs from.
+// A nil result is not a shape, it is a released frame; see the type comment.
 func (p *MachineClosure) ApplyParent() *environment.EnvironmentFrame {
 	if p.parent != nil {
 		return p.parent
@@ -121,8 +107,15 @@ func (p *MachineClosure) ApplyParent() *environment.EnvironmentFrame {
 // NewClosureCapturing builds a closure from a lambda's compile-time frame and
 // the runtime environment captured at creation, without materializing the
 // intermediate frame the two would combine into. This is the OpMakeClosure
-// path; parent must be non-nil, which mc.env always is.
+// path. parent must be non-nil: a nil one would silently reclassify the closure
+// into the released-frame state and, worse, make ApplyParent fall back to the
+// COMPILE-TIME parent, whose bindings are placeholders — a wrong answer rather
+// than a crash.
 func NewClosureCapturing(tpl *NativeTemplate, shape, parent *environment.EnvironmentFrame) *MachineClosure {
+	if parent == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
+			"NewClosureCapturing: nil runtime parent; a captured closure must record the environment it closed over"))
+	}
 	q := &MachineClosure{
 		frame:    shape,
 		parent:   parent,

@@ -81,14 +81,28 @@ func NewDynamicWindFrame(before, after Closure) DynamicWindFrame {
 // Pop reslices without dropping capacity, and dynamic-wind at a steady depth
 // therefore allocates a spine once instead of a frame per extent.
 //
-// Two consequences follow, and both are already the model rather than new
-// constraints. Copy deep-copies the frames, so a captured stack and the live
-// stack no longer share frame objects — extent identity is ID, which is what
-// FindCommonWindingPrefix has always compared. And no one may retain &stack[i]
-// across a push: take the element by value, as unwindStackTo and RewindTo do.
+// A WindingStack does NOT own its backing array, and three rules follow from
+// that one property:
+//
+//   - Copy clones the spine, so a captured stack and the live stack no longer
+//     share frame objects. Extent identity is ID, which is what
+//     FindCommonWindingPrefix has always compared, so that is not a semantic
+//     change.
+//   - No one may retain &stack[i] across a push. Take the element by value, as
+//     unwindStackTo and RewindTo do.
+//   - A header handed to another context must be capped or copied. Retained
+//     capacity means len < cap after any completed extent, so a bare header
+//     gives the recipient a writable alias of slots this stack will reuse.
+//     Across a goroutine boundary that is a data race on a 64-byte struct that
+//     cannot be written atomically; see CaptureSubContextParams.
+//
+// The struct is deliberately not ==-comparable (entryMarks is a slice), so
+// reach for ID rather than a map[DynamicWindFrame] or qt.Equals.
 type WindingStack []DynamicWindFrame
 
-// Copy creates a shallow copy of the winding stack.
+// Copy clones the spine. Frames are copied by value; the Closure interfaces and
+// the entryMarks backing array they hold are shared, which is safe only because
+// entryMarks is treated as a read-only snapshot.
 func (p WindingStack) Copy() WindingStack {
 	return slices.Clone(p)
 }

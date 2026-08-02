@@ -61,34 +61,29 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	}
 	// Linked closure (Cardelli 1983). Captures E by pointer, not by copy.
 	//
-	//   closure.env = NewFrame(compiletimeEnv.Local(), mc.env)
+	//   closure = ⟨tpl, compiletimeEnv.local, mc.env⟩
 	//
-	//   where compiletimeEnv.Local() provides the parameter structure
-	//   and mc.env becomes the parent for free variable access.
+	//   where compiletimeEnv supplies the parameter structure and mc.env
+	//   becomes the parent for free variable access. The two are kept as a
+	//   pair; see MachineClosure for why they are not combined into a frame.
 	//
 	//   Invariant: the parent pointer must be the RUNTIME mc.env, not
 	//     the compile-time env. Compile-time frames hold placeholders;
 	//     runtime frames hold actual values.
-	//   Constrains: Apply (always copies this env to prevent aliasing
-	//     across recursive calls and SRFI-18 thread races), envPooled flag
-	//     (this env is not poolable — closure holds a live reference).
+	//   Constrains: Apply (always builds a fresh frame from the pair to
+	//     prevent aliasing across recursive calls and SRFI-18 thread races),
+	//     envPooled flag (mc.env is not poolable — the closure holds it).
 	//   Constrained by: de Bruijn (depth in free-var access counts
 	//     parent hops through this chain), CESK model (E component).
 	//
 	// See BIBLIOGRAPHY.md "Linked Closure Representation".
 	//
-	// Keep the compile-time local structure for parameters and the RUNTIME
-	// parent chain for free variables. This is critical for:
-	// 1. Nested lambdas: inner lambdas need to access outer params via parent chain
-	// 2. Closures: captured variables must have runtime values, not compile-time placeholders
+	// The runtime parent is critical for two things: nested lambdas reach outer
+	// params through it, and captured variables must resolve to runtime values
+	// rather than the compile-time frame's placeholders.
 	//
-	// The two are stored as a pair rather than combined into a frame here; see
-	// MachineClosure. The frame that used to be built at this point was pure
-	// overhead, an 80-byte object per evaluated lambda that Apply immediately
-	// decomposed back into (local, parent).
-	//
-	// The closure now references mc.env as its parent. Mark it non-poolable so
-	// RestoreAndRelease won't recycle it while the closure holds a live reference.
+	// The closure holds mc.env as that parent, so mark it non-poolable —
+	// RestoreAndRelease must not recycle a frame a closure still points at.
 	mc.envPooled = false
 	cls := NewClosureCapturing(tpl, compiletimeEnv, mc.env)
 	mc.SetValue(cls)

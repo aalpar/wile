@@ -18,6 +18,7 @@ import (
 	"slices"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 var _ values.Value = (*boxedValues)(nil)
@@ -109,10 +110,11 @@ func (p *OperationBoxValues) EqualTo(o values.Value) bool {
 // OperationUnboxValues expands a *boxedValues carrier in the value register
 // back into the value register's 0/N values (the inverse of OperationBoxValues).
 // A preceding OpPeekK loads the carrier into the value register; this op replaces
-// it with the boxed values. A register holding anything else is the single-value
-// fast path and passes through untouched.
+// it with the boxed values. A register holding exactly one non-carrier value is
+// the single-value fast path and passes through untouched; anything else is a
+// misaligned eval stack and errors.
 //
-// Pre:  value register = a carrier holding v1 … vN, or the single value itself
+// Pre:  value register = a carrier holding v1 … vN, or exactly one value
 // Post: value register = v1 … vN, pc++
 type OperationUnboxValues struct {
 	OperationBase
@@ -128,11 +130,20 @@ func (*OperationUnboxValues) Apply(mc *MachineContext) (*MachineContext, error) 
 	boxed, ok := mc.GetValue().(*boxedValues)
 	if !ok {
 		// The single-value fast path: OperationBoxValues declined to box, so the
-		// register already holds the thunk's one value. A fallthrough rather than
-		// an error because CompileValidatedDynamicWind is the pair's ONLY emitter
-		// and emits both ops in one function, so this register can hold only a
-		// carrier made by this op's partner or the value that partner left alone.
-		// Nothing else in the tree produces this slot.
+		// register holds the thunk's one value and there is nothing to expand.
+		//
+		// Checked, not assumed. Skipping the carrier cost the type that used to
+		// PROVE this register came from our partner op, so accepting anything at
+		// all here would turn "fast path" and "the eval stack is misaligned and
+		// this is some unrelated value" into the same observable state — and a
+		// misaligned PeekK would then make dynamic-wind return the wrong Scheme
+		// value with no error. Exactly one value is the only shape the fast path
+		// can produce, so anything else is still a fault.
+		if len(mc.GetValues()) != 1 {
+			err := mc.WrapError(werr.ErrInternal,
+				"unbox-values: register holds neither a boxed-values carrier nor a single value")
+			return mc, err
+		}
 		mc.pc++
 		return mc, nil
 	}

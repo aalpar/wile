@@ -351,7 +351,7 @@ re-invocation copy, a second resume would corrupt the shared frames.
 | `ComposableContinuation` | `machine/composable_continuation.go` | Callable delimited continuation segment |
 | `CapturedContinuation` | `machine/captured_continuation.go` | call/cc escape value wrapping a `ComposableContinuation` |
 | `DynamicWindFrame` | `machine/dynamic_wind.go` | Before/after thunks + atomic ID |
-| `WindingStack` | `machine/dynamic_wind.go` | `[]*DynamicWindFrame` slice |
+| `WindingStack` | `machine/dynamic_wind.go` | `[]DynamicWindFrame` slice (frames by value) |
 
 ### Functions
 
