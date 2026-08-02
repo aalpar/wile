@@ -152,7 +152,21 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 		EscapeCont:   p.escapeCont,
 		MaxCallDepth: p.maxCallDepth,
 		MaxStackSize: p.maxStackSize,
-		WindingStack: p.windingStack,
+		// Copy, not the bare header. A header carries the parent's spare
+		// CAPACITY, and WindingStack.Pop deliberately retains capacity, so after
+		// any completed dynamic-wind the parent sits at len < cap and a shared
+		// header hands the child a writable alias of the parent's backing array.
+		// Both then push into the same slot, concurrently, across a goroutine
+		// boundary — reproduced under -race from ordinary Scheme (a dynamic-wind
+		// to seed capacity, then thread-start!, then winding on both sides).
+		//
+		// Capping instead of copying is NOT enough: the child's first push would
+		// reallocate, but until then it still READS indices the parent can pop
+		// and overwrite. Copy is also what all seven continuation-capture sites
+		// already do; this one was the holdout, and it is the only one crossing
+		// a goroutine boundary. A thread spawn is nowhere near hot enough to
+		// care about one clone.
+		WindingStack: p.windingStack.Copy(),
 	}
 }
 
