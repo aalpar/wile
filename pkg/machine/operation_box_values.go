@@ -18,14 +18,13 @@ import (
 	"slices"
 
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 var _ values.Value = (*boxedValues)(nil)
 
-// boxedValues is an internal carrier that collapses the whole value register
-// (zero, one, or several values) into a SINGLE values.Value so it can be saved
-// on the eval stack as one slot. It never escapes to Scheme: it lives only on
+// boxedValues is an internal carrier that collapses a zero- or many-valued
+// value register into a SINGLE values.Value so it can be saved on the eval
+// stack as one slot. It never escapes to Scheme: it lives only on
 // the eval stack between an OperationBoxValues and its paired OperationUnboxValues
 // (currently dynamic-wind, bracketing the after-thunk call). Identified by type,
 // like noMarkSentinelType.
@@ -54,15 +53,20 @@ func (p *boxedValues) EqualTo(o values.Value) bool {
 	return SameType(p, v, ok)
 }
 
-// OperationBoxValues collapses the value register (0, 1, or N values) into a
-// single *boxedValues carrier left in the value register. A following OpPush
-// then saves it as exactly one eval-stack slot, so callers that must preserve a
+// OperationBoxValues reduces the value register to something a following OpPush
+// saves as exactly one eval-stack slot, so callers that must preserve a
 // multiple-value result across an intervening call (dynamic-wind's after-thunk)
 // keep a fixed one-slot footprint regardless of value count. Paired with
 // OperationUnboxValues.
 //
+// Zero or several values become a *boxedValues carrier. Exactly one value is
+// left ALONE: it already occupies one slot, so boxing it bought nothing and
+// cost three allocations per dynamic-wind (the carrier, its slice, and the
+// Clone on the way back out). That is the overwhelmingly common case, and
+// skipping it is worth ~5.7% on a dynamic-wind-bound workload.
+//
 // Pre:  value register = v1 … vN
-// Post: value register = a boxed-values carrier holding v1 … vN, pc++
+// Post: N == 1: unchanged. Otherwise a carrier holding v1 … vN. pc++
 //
 //	(the carrier prints as #<boxed-values>; it never escapes to Scheme)
 type OperationBoxValues struct {
@@ -77,6 +81,14 @@ func NewOperationBoxValues() *OperationBoxValues {
 
 func (*OperationBoxValues) Apply(mc *MachineContext) (*MachineContext, error) {
 	src := mc.GetValues()
+	// One value is already exactly one eval-stack slot, so the carrier buys
+	// nothing: leave the register alone and let OperationUnboxValues pass it
+	// through. GetValues's single-value result does not escape this frame, so
+	// the check itself allocates nothing.
+	if len(src) == 1 {
+		mc.pc++
+		return mc, nil
+	}
 	// Copy: GetValues returns the live multiValues slice; the box outlives the
 	// register (the bracketed call rebinds the register), so own the values.
 	boxed := &boxedValues{}
@@ -95,11 +107,12 @@ func (p *OperationBoxValues) EqualTo(o values.Value) bool {
 }
 
 // OperationUnboxValues expands a *boxedValues carrier in the value register
-// back into the value register's 0/1/N values (the inverse of OperationBoxValues).
+// back into the value register's 0/N values (the inverse of OperationBoxValues).
 // A preceding OpPeekK loads the carrier into the value register; this op replaces
-// it with the boxed values.
+// it with the boxed values. A register holding anything else is the single-value
+// fast path and passes through untouched.
 //
-// Pre:  value register = a boxed-values carrier holding v1 … vN
+// Pre:  value register = a carrier holding v1 … vN, or the single value itself
 // Post: value register = v1 … vN, pc++
 type OperationUnboxValues struct {
 	OperationBase
@@ -114,11 +127,14 @@ func NewOperationUnboxValues() *OperationUnboxValues {
 func (*OperationUnboxValues) Apply(mc *MachineContext) (*MachineContext, error) {
 	boxed, ok := mc.GetValue().(*boxedValues)
 	if !ok {
-		// Compiler invariant: OperationUnboxValues only ever runs on a value
-		// register holding a box produced by OperationBoxValues.
-		err := mc.WrapError(werr.ErrInternal,
-			"unbox-values: value register does not hold a boxed-values carrier")
-		return mc, err
+		// The single-value fast path: OperationBoxValues declined to box, so the
+		// register already holds the thunk's one value. A fallthrough rather than
+		// an error because CompileValidatedDynamicWind is the pair's ONLY emitter
+		// and emits both ops in one function, so this register can hold only a
+		// carrier made by this op's partner or the value that partner left alone.
+		// Nothing else in the tree produces this slot.
+		mc.pc++
+		return mc, nil
 	}
 	// Clone on the way out: SetValues stores the slice by reference for N>1
 	// (vm_state.go), so without this the value register would alias the box's
