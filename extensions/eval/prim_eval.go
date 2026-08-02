@@ -509,8 +509,22 @@ func PrimCompile(mc machine.CallContext) error {
 		syntaxVal = schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 	}
 
-	// Expand and compile to bytecode template.
-	env := mc.EnvironmentFrame()
+	// Expand and compile in the namespace's runtime frame, as PrimEval does.
+	//
+	// NOT mc.EnvironmentFrame(): inside a primitive that is the primitive's own
+	// apply frame, which applyForeign draws from the env-frame pool. Capturing it
+	// in the returned thunk left the closure pointing at a frame that was
+	// released and wiped as soon as the enclosing evaluation finished, and later
+	// handed back out to unrelated calls. It also compiled the expression against
+	// the primitive's parameter frame rather than a top level, which is why
+	// (compile '(define x 5)) emitted a local store and then failed at run time
+	// with "no such local binding 1:0".
+	//
+	// A fresh child of the runtime frame rather than the runtime frame itself:
+	// the thunk's apply frame takes its globals and namespace from its PARENT,
+	// so capturing the runtime frame directly hands the thunk the sealed base's
+	// globals and a nil namespace.
+	env := environment.NewEnvironmentFrameWithParent(nil, mc.EnvironmentFrame().MutableRuntime())
 
 	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, syntaxVal, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 	if err != nil {

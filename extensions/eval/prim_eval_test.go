@@ -314,6 +314,32 @@ func TestCompile(t *testing.T) {
 		evalExpectError(t, engine, `(compile '(let))`)
 	})
 
+	// compile used to capture mc.EnvironmentFrame(), which inside a primitive is
+	// that primitive's own apply frame, drawn from the env-frame pool. It had
+	// two consequences, and only the first is reproducible from Scheme: the
+	// expression was compiled against the primitive's parameter frame rather
+	// than a top level. The second, that the thunk outlived the frame (wiped by
+	// ResetForPool and handed back out), was confirmed by comparing the frame
+	// pointer's parent before and after, but produced no visible symptom because
+	// a compiled thunk resolves globals through template-cached bindings and
+	// never reads its environment. The second test below is therefore a guard
+	// against that changing, not a reproduction: it passes on the broken code.
+	t.Run("compiled define lands in the mutable global", func(t *testing.T) {
+		eval(t, engine, `(define thunk (compile '(define compiled-global 5)))`)
+		eval(t, engine, `(thunk)`)
+		result := eval(t, engine, `(+ compiled-global 1)`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(6))
+	})
+
+	t.Run("thunk survives intervening evaluation", func(t *testing.T) {
+		eval(t, engine, `(define survivor (compile '(+ 20 22)))`)
+		// Churn enough calls to recycle any frame the thunk might have captured.
+		eval(t, engine, `(define (burn n) (if (= n 0) 0 (burn (- n 1))))`)
+		eval(t, engine, `(burn 500)`)
+		result := eval(t, engine, `(survivor)`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(42))
+	})
+
 	t.Run("wrong argument count", func(t *testing.T) {
 		evalExpectError(t, engine, `(compile)`)
 	})

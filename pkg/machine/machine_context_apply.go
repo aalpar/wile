@@ -69,7 +69,14 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	} else {
 		env = p.acquireEnvFrame()
 		mcls.frame.InitApplyFrameWithParent(env, parent)
-		bnds = env.LocalEnvironment().Bindings()
+		// nil-guarded like the branch above: a zero-parameter closure over a
+		// frame with no local environment copies to an apply frame that has
+		// none either. Every closure reaching here used to have parameters, so
+		// the unguarded form survived; (compile ...) produces the exception.
+		lenv := env.LocalEnvironment()
+		if lenv != nil {
+			bnds = lenv.Bindings()
+		}
 		p.envPooled = true
 		p.counters.EnvsCopied++
 		p.counters.BindingsCopied += uint64(len(bnds))
