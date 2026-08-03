@@ -23,25 +23,6 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestMachineClosure_Copy(t *testing.T) {
-	topEnv := environment.NewNamespace().Runtime()
-	lenv := environment.NewLocalEnvironment(2)
-	lenv.Bindings()[0].SetValue(values.NewInteger(42))
-	lenv.Bindings()[1].SetValue(values.NewInteger(100))
-	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
-	tpl := NewNativeTemplate(2, 0, false)
-
-	cls := NewClosureWithTemplate(tpl, env)
-	clsCopy := cls.Copy()
-
-	// Verify copy is a different object
-	qt.Assert(t, clsCopy != cls, qt.IsTrue)
-	// Verify template is shared (immutable)
-	qt.Assert(t, clsCopy.Template(), qt.Equals, cls.Template())
-	// Verify environment is copied
-	qt.Assert(t, clsCopy.Env() != cls.Env(), qt.IsTrue)
-}
-
 func TestMachineClosure_IsVoid(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)

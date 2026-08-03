@@ -615,18 +615,6 @@ func TestEnvironmentFrame_EqualTo(t *testing.T) {
 	qt.Assert(t, env1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 }
 
-func TestEnvironmentFrame_Copy(t *testing.T) {
-	env := NewNamespaceFrame()
-	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-
-	sym := values.NewSymbol("test")
-	env.EnsureLocalBinding(sym, BindingTypeVariable)
-
-	copied := env.Copy()
-	qt.Assert(t, copied, qt.Not(qt.IsNil))
-	qt.Assert(t, copied.LocalEnvironment(), qt.Not(qt.IsNil))
-}
-
 func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
 	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)

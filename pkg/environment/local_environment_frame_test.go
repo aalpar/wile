@@ -127,30 +127,6 @@ func TestLocalEnvironmentFrame_Keys_DefensiveCopy(t *testing.T) {
 	qt.Assert(t, le.GetLocalIndex(bogus), qt.IsNil)
 }
 
-func TestCopyInto_CopiesBindings(t *testing.T) {
-	le := NewLocalEnvironment(2)
-	li0 := &LocalIndex{0, 0}
-	li1 := &LocalIndex{1, 0}
-	le.SetLocalValue(li0, values.NewInteger(10))
-	le.SetLocalValue(li1, values.NewInteger(20))
-
-	var dst LocalEnvironmentFrame
-	le.copyInto(&dst)
-
-	// Bindings are independent copies
-	qt.Assert(t, len(dst.bindings), qt.Equals, 2)
-	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
-	qt.Assert(t, dst.bindings[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
-
-	// Internal keys map is shared (CoW); Keys() returns a defensive copy
-	qt.Assert(t, reflect.ValueOf(dst.keys).Pointer(), qt.Equals, reflect.ValueOf(le.keys).Pointer())
-	qt.Assert(t, dst.keysShared, qt.IsTrue)
-
-	// Mutating dst does not affect source
-	dst.bindings[0].SetValue(values.NewInteger(99))
-	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
-}
-
 func TestCopyForApplyInto_MarksDestinationShared(t *testing.T) {
 	le := NewLocalEnvironment(1)
 	li0 := &LocalIndex{0, 0}

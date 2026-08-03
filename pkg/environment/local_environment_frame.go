@@ -176,15 +176,6 @@ func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) er
 	return nil
 }
 
-// copyInto copies bindings into an existing destination frame.
-// The keys map is shared (copy-on-write). Used by EnvironmentFrame.Copy().
-func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
-	dst.keys = p.keys
-	dst.keysShared = true
-	dst.bindings = make([]Binding, len(p.bindings))
-	copy(dst.bindings, p.bindings)
-}
-
 // copyForApplyInto copies bindings into an existing destination frame,
 // aliasing the source's keys map into the destination (copy-on-write).
 // Used by EnvironmentFrame.NewApplyFrame() and InitApplyFrame().
@@ -205,6 +196,15 @@ func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
 // (the common case for pooled frames after warmup), the slice is resliced
 // instead of allocated. This eliminates the per-call make([]Binding, n)
 // that dominates allocation profiles in recursive workloads.
+//
+// Bindings copy as whole structs, so the destination shares each source
+// binding's *BindingMeta pointer. A local binding's meta is mutated IN PLACE
+// (UpdateMeta) rather than published copy-on-write the way a global's is, so
+// that sharing is safe only because every local UpdateMeta site is compile-time
+// — MaybeCreateLocalBinding's Source backfill, and the stamps in compile_let /
+// expander_body / letrec_semantics / compile_define — and none of them runs on
+// an apply frame. A compile-time writer that reached one would stamp the
+// closure's own compiled frame through the shared pointer.
 func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	dst.keys = p.keys
 	dst.keysShared = true

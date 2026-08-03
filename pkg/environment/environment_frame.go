@@ -1009,22 +1009,6 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 	p.global.mu.Unlock()
 }
 
-// Copy creates a deep copy of the environment frame.
-// The parent, phase registry, and namespace are shared between the original and the copy.
-func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
-	q := &EnvironmentFrame{
-		parent:     p.parent,
-		global:     p.global.Copy(),
-		phaseLevel: p.phaseLevel,
-		phases:     p.phases,
-		namespace:  p.namespace,
-	}
-	if p.hasLocal() {
-		p.local.copyInto(&q.local)
-	}
-	return q
-}
-
 // SchemeString returns a Scheme-level string for this environment frame.
 // EnvironmentFrame reaches the value plumbing because closures capture
 // environments and store them as template literals (see

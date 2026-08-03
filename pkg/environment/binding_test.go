@@ -84,37 +84,6 @@ func TestBinding_UpdateMeta_Scopes(t *testing.T) {
 	qt.Assert(t, b.Scopes()[1], qt.Equals, scope2)
 }
 
-func TestBinding_Copy(t *testing.T) {
-	scope1 := syntax.NewScope()
-	scope2 := syntax.NewScope()
-	scopes := []*syntax.Scope{scope1, scope2}
-
-	b1 := NewBindingWithScopes(values.NewInteger(42), BindingTypeVariable, scopes)
-
-	b2 := b1.Copy()
-
-	// Check that values are equal
-	qt.Assert(t, b2.Value(), valuestest.SchemeEquals, b1.Value())
-	qt.Assert(t, b2.BindingType(), qt.Equals, b1.BindingType())
-	qt.Assert(t, b2.Scopes(), qt.HasLen, 2)
-
-	// Scopes are shared by reference (immutable at runtime), same scope objects
-	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1)
-	qt.Assert(t, b2.Scopes()[1], qt.Equals, scope2)
-
-	// Replacing the original's scopes via UpdateMeta does not touch the copy.
-	b1.UpdateMeta(func(m *BindingMeta) bool {
-		m.Scopes = []*syntax.Scope{syntax.NewScope()}
-		return true
-	})
-	qt.Assert(t, b2.Scopes()[0], qt.Equals, scope1) // Copy unchanged
-
-	// Test copy with nil scopes
-	b3 := NewBinding(values.NewInteger(99), BindingTypePrimitive)
-	b4 := b3.Copy()
-	qt.Assert(t, b4.Scopes(), qt.IsNil)
-}
-
 func TestBinding_NewBindingWithSource(t *testing.T) {
 	scope := syntax.NewScope()
 	scopes := []*syntax.Scope{scope}
@@ -186,22 +155,6 @@ func TestBinding_UpdateMeta_PreservesExistingMeta(t *testing.T) {
 	qt.Assert(t, b.Scopes(), qt.HasLen, 1)
 }
 
-func TestBinding_Copy_WithDoc(t *testing.T) {
-	b1 := NewBinding(values.Void, BindingTypePrimitive)
-	b1.UpdateMeta(func(m *BindingMeta) bool {
-		m.Doc = "Original doc."
-		return true
-	})
-	b2 := b1.Copy()
-	qt.Assert(t, b2.Doc(), qt.Equals, "Original doc.")
-	b2.UpdateMeta(func(m *BindingMeta) bool {
-		m.Doc = "Changed doc."
-		return true
-	})
-	qt.Assert(t, b1.Doc(), qt.Equals, "Original doc.")
-	qt.Assert(t, b2.Doc(), qt.Equals, "Changed doc.")
-}
-
 func TestBinding_UpdateMeta_Imported(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
 	qt.Assert(t, b.IsImported(), qt.IsFalse)
@@ -220,23 +173,6 @@ func TestBinding_UpdateMeta_Stable(t *testing.T) {
 		return true
 	})
 	qt.Assert(t, b.IsStable(), qt.IsTrue)
-}
-
-func TestBinding_Copy_PreservesImportedAndStable(t *testing.T) {
-	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
-	b.UpdateMeta(func(m *BindingMeta) bool {
-		m.Imported = true
-		m.Stable = true
-		return true
-	})
-	cp := b.Copy()
-	qt.Assert(t, cp.IsImported(), qt.IsTrue)
-	qt.Assert(t, cp.IsStable(), qt.IsTrue)
-	cp.UpdateMeta(func(m *BindingMeta) bool {
-		m.Imported = false
-		return true
-	})
-	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
 // TestBinding_StableEvidenceVsConclusion pins that Imported is standing
@@ -297,36 +233,6 @@ func TestBinding_InlineHOFParam(t *testing.T) {
 	qt.Assert(t, b.InlineHOFParam(), qt.Equals, 0)
 }
 
-// TestBinding_Copy_PreservesInlineHOF pins that Copy carries the inline-HOF
-// capability onto the copy (the compile/expansion clone must not drop it). Uses a
-// non-zero param index so the test proves the index itself is copied, not just
-// the gating flag.
-func TestBinding_Copy_PreservesInlineHOF(t *testing.T) {
-	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
-	b.UpdateMeta(func(m *BindingMeta) bool {
-		m.InlineHOF = true
-		m.InlineHOFCallbackParam = 2
-		return true
-	})
-	cp := b.Copy()
-	qt.Assert(t, cp.InlineHOFParam(), qt.Equals, 2)
-}
-
-func TestBinding_Copy_WithSource(t *testing.T) {
-	source := &syntax.SourceContext{
-		File:  "test.scm",
-		Start: syntax.NewSourceIndexes(10, 5, 100),
-	}
-
-	b1 := NewBindingWithSource(values.NewInteger(42), BindingTypeVariable, nil, source)
-
-	b2 := b1.Copy()
-
-	// Check that source is preserved (same reference, source is immutable)
-	qt.Assert(t, b2.Source(), qt.Equals, source)
-	qt.Assert(t, b2.Source().File, qt.Equals, "test.scm")
-}
-
 func bindingWithOrigin(lib, name string) *Binding {
 	b := NewBinding(values.Void, BindingTypeVariable)
 	b.UpdateMeta(func(m *BindingMeta) bool {
@@ -360,17 +266,4 @@ func TestSameBinding(t *testing.T) {
 			qt.Assert(t, SameBinding(tc.a, tc.b), qt.Equals, tc.want)
 		})
 	}
-}
-
-// TestBinding_Copy_PreservesOrigin pins that Copy carries the import-provenance
-// root (the plan's "stable across CloneForMatch" requirement): the copy is a
-// distinct object yet SameBinding still reports it identical to the original.
-func TestBinding_Copy_PreservesOrigin(t *testing.T) {
-	b := bindingWithOrigin("(aa)", "foo")
-
-	cp := b.Copy()
-
-	qt.Assert(t, cp == b, qt.IsFalse)
-	qt.Assert(t, SameBinding(b, cp), qt.IsTrue)
-	qt.Assert(t, *cp.Origin(), qt.Equals, OriginRef{RootLib: "(aa)", RootName: "foo"})
 }

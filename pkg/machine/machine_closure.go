@@ -140,10 +140,6 @@ func (p *MachineClosure) Env() *environment.EnvironmentFrame {
 	return environment.NewEnvironmentFrameWithParent(p.frame.LocalEnvironment(), p.parent)
 }
 
-func (p *MachineClosure) Copy() *MachineClosure {
-	return NewClosureWithTemplate(p.template, p.Env().Copy())
-}
-
 func (p *MachineClosure) IsVoid() bool {
 	return p == nil
 }
