@@ -110,36 +110,6 @@ func BenchmarkGlobalSet(b *testing.B) {
 	}
 }
 
-// BenchmarkLocalFrameCopy measures LocalEnvironmentFrame.Copy() at various frame sizes.
-// This is the Phase 3 CoW target — called on every non-tail function application.
-func BenchmarkLocalFrameCopy(b *testing.B) {
-	for _, n := range []int{1, 5, 10, 25, 50} {
-		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
-			env, _ := setupLocalEnv(n)
-			local := env.LocalEnvironment()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = local.Copy()
-			}
-		})
-	}
-}
-
-// BenchmarkLocalFrameCopyForApply measures LocalEnvironmentFrame.CopyForApply() at various frame sizes.
-// This is the optimized CoW path — shares keys map and scopes slices.
-func BenchmarkLocalFrameCopyForApply(b *testing.B) {
-	for _, n := range []int{1, 5, 10, 25, 50} {
-		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
-			env, _ := setupLocalEnv(n)
-			local := env.LocalEnvironment()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = local.CopyForApply()
-			}
-		})
-	}
-}
-
 // BenchmarkFrameCreation measures NewEnvironmentFrameWithParent — frame allocation.
 func BenchmarkFrameCreation(b *testing.B) {
 	for _, n := range []int{1, 5, 10, 25, 50} {
@@ -150,58 +120,6 @@ func BenchmarkFrameCreation(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_ = NewEnvironmentFrameWithParent(local, parent)
-			}
-		})
-	}
-}
-
-// BenchmarkLocalFrameCopyShared measures Copy() on a frame that was itself produced
-// by Copy(). This exercises the shared-keys path where the keys map is already
-// a reference rather than an owned map.
-func BenchmarkLocalFrameCopyShared(b *testing.B) {
-	for _, n := range []int{1, 5, 10, 25, 50} {
-		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
-			env, _ := setupLocalEnv(n)
-			// First copy: produces a frame with keysShared=true
-			shared := env.LocalEnvironment().Copy()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_ = shared.Copy()
-			}
-		})
-	}
-}
-
-// BenchmarkFrameCopyAndCreate measures Copy + NewEnvironmentFrameWithParent combined.
-// This simulates what happens in Apply for non-tail calls: the closure's environment
-// is copied and a new frame is created with the copy.
-func BenchmarkFrameCopyAndCreate(b *testing.B) {
-	for _, n := range []int{1, 5, 10, 25, 50} {
-		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
-			env, _ := setupLocalEnv(n)
-			local := env.LocalEnvironment()
-			parent := env.Parent()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				copied := local.Copy()
-				_ = NewEnvironmentFrameWithParent(copied, parent)
-			}
-		})
-	}
-}
-
-// BenchmarkFrameCopyForApplyAndCreate measures CopyForApply + NewEnvironmentFrameWithParent combined.
-// This simulates the old Apply path for non-tail calls (two allocations).
-func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
-	for _, n := range []int{1, 5, 10, 25, 50} {
-		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
-			env, _ := setupLocalEnv(n)
-			local := env.LocalEnvironment()
-			parent := env.Parent()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				copied := local.CopyForApply()
-				_ = NewEnvironmentFrameWithParent(copied, parent)
 			}
 		})
 	}

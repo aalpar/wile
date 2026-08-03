@@ -16,6 +16,7 @@ package environment
 
 import (
 	"maps"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -119,7 +120,9 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 // absent on an existing slot.
 //
 // If the keys map is shared (from Copy), it is cloned before mutation (CoW).
-// The three-index slice on append prevents mutating a shared backing array.
+// Cloning the map is not enough: the clone's slot slices alias the original's
+// backing arrays, so slices.Clip forces the append to copy rather than extend
+// one in place and publish a slot to the other frame.
 func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	key *values.Symbol, bt BindingType,
 	scopes []*syntax.Scope, source *syntax.SourceContext,
@@ -127,9 +130,10 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	slots := p.keys[*key]
 	matchAny := scopes == nil
 	for _, i := range slots {
-		if matchAny || scopeSetsEqual(p.bindings[i].Scopes(), scopes) {
-			if p.bindings[i].Source() == nil && source != nil {
-				p.bindings[i].UpdateMeta(func(m *BindingMeta) bool {
+		binding := &p.bindings[i]
+		if matchAny || scopeSetsEqual(binding.Scopes(), scopes) {
+			if binding.Source() == nil && source != nil {
+				binding.UpdateMeta(func(m *BindingMeta) bool {
 					m.Source = source
 					return true
 				})
@@ -142,7 +146,7 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 		p.keysShared = false
 	}
 	i := len(p.bindings)
-	p.keys[*key] = append(slots[:len(slots):len(slots)], i)
+	p.keys[*key] = append(slices.Clip(slots), i)
 	b := Binding{value: values.Void, bindingType: bt}
 	if scopes != nil || source != nil {
 		b.meta = &BindingMeta{Scopes: scopes, Source: source}
@@ -170,47 +174,6 @@ func (p *LocalEnvironmentFrame) GetLocalBinding(li *LocalIndex) *Binding {
 func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 	p.bindings[li[0]].value = v
 	return nil
-}
-
-// Copy creates a copy of this local environment frame. The keys map is shared
-// by reference (copy-on-write) since it is only mutated during compilation.
-// Copy-on-write (CoW): shares the keys map between original and copy until
-// a mutation forces a clone. Most copies are never mutated, so the clone
-// cost is avoided entirely. See BIBLIOGRAPHY.md "Copy-on-Write".
-// Bindings are allocated as a single contiguous block to reduce GC pressure,
-// and each binding's scopes slice is shared (immutable at runtime).
-func (p *LocalEnvironmentFrame) Copy() *LocalEnvironmentFrame {
-	if p == nil {
-		return nil
-	}
-	bindings := make([]Binding, len(p.bindings))
-	copy(bindings, p.bindings)
-	return &LocalEnvironmentFrame{
-		keys:       p.keys,
-		keysShared: true,
-		bindings:   bindings,
-	}
-}
-
-// CopyForApply creates a lightweight copy optimized for the Apply hot path.
-// The keys map is shared between frames and must be treated as immutable at
-// runtime; callers must not mutate the shared keys map or any map returned
-// by Keys(). Bindings are batch-allocated (contiguous array) for cache locality
-// and reduced GC pressure. Scopes and source are shared (immutable at runtime);
-// only binding values are independent between original and copy.
-func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
-	if p == nil {
-		return nil
-	}
-	q := &LocalEnvironmentFrame{
-		keys:       p.keys,
-		keysShared: true,
-	}
-	p.keysShared = true
-
-	q.bindings = make([]Binding, len(p.bindings))
-	copy(q.bindings, p.bindings)
-	return q
 }
 
 // copyInto copies bindings into an existing destination frame.
