@@ -135,7 +135,7 @@ func TestClimbingTower_ThreeStorey(t *testing.T) {
 // state across a phase climb?").
 //
 // The answer is that the footgun is *unconstructible* under shipped Tier 1: the
-// hermetic phase-frame reparent (createPhaseEnv → SealedBaseTarget, master
+// hermetic phase-frame reparent (createPhaseEnv → phaseParent, master
 // fcbf034c) already severs the lexical cross-phase path, so a mutable binding
 // defined in top's transformer body (phase 1) is simply NOT VISIBLE in mid's
 // transformer body (phase 2). Observing it there is a loud compile-time

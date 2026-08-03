@@ -312,25 +312,6 @@ func (p *Namespace) Runtime() *EnvironmentFrame {
 	return p.runtime
 }
 
-// SealedBase returns this Namespace's immutable sealed-base runtime frame (phase 0),
-// the lexical parent of the mutable runtime global. PER-NAMESPACE (NOT root-delegated,
-// unlike immutableLiterals): each Namespace OWNS its sealed base so a profile child's
-// curated apply does not write into the engine root's base. Report namespaces copy the
-// parent's sealed base into their own (see NewSchemeReportNamespace).
-func (p *Namespace) SealedBase() *EnvironmentFrame {
-	return p.sealedBase
-}
-
-// SealedExpandBase returns this Namespace's immutable sealed EXPAND-phase frame (phase 1):
-// bootstrap macros and special-form primitive expanders, lexical parent of the mutable expand
-// child. PER-NAMESPACE (like SealedBase), reached only via the parent chain, never a
-// PhaseRegistry entry. Enumeration sites (,apropos, REPL completion) must collect it explicitly
-// or bootstrap-macro names/docs vanish from introspection. See
-// plans/2026-07-22-free-template-id-hygiene-impl.local.md (D1).
-func (p *Namespace) SealedExpandBase() *EnvironmentFrame {
-	return p.sealedExpandBase
-}
-
 // BoundSymbolNames returns a freshly-consed list of every symbol bound in the
 // namespace's runtime, spanning BOTH the mutable runtime global (user defines) and
 // the sealed base (primitives + sealed stdlib procedures). It is the shared body of
@@ -349,7 +330,11 @@ func (p *Namespace) SealedExpandBase() *EnvironmentFrame {
 func (p *Namespace) BoundSymbolNames() values.Value {
 	seen := values.StringSet{}
 	var result values.Value = values.EmptyList
-	for _, frame := range []*EnvironmentFrame{p.runtime, p.sealedBase} {
+	// Phase 0 only, both frames of it: the mutable runtime and its seal. The
+	// phase-1 seal is deliberately absent — this listing backs the value-oriented
+	// bound-names primitives, not the all-phases walk BoundNamesAcrossPhases does.
+	sealedRuntime, _ := p.SealedAt(PhaseRuntime, SealKindValue)
+	for _, frame := range []*EnvironmentFrame{p.runtime, sealedRuntime} {
 		if frame == nil {
 			continue
 		}
@@ -396,8 +381,9 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 	for _, phase := range p.phases.Phases() {
 		collect(p.phases.Get(phase))
 	}
-	collect(p.sealedBase)
-	collect(p.sealedExpandBase) // phase-1 sealed frame: bootstrap macros/expanders, not a phase entry
+	for _, frame := range p.SealedFrames() {
+		collect(frame)
+	}
 	sort.Strings(names)
 	return names
 }

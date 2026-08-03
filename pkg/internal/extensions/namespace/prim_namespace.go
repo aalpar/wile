@@ -212,8 +212,8 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 	// on the delete side.
 	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym, environment.AmbientScopes())
 	if !deleted {
-		base := ns.SealedBase()
-		if base != nil && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, values.EmptyScopes()) != nil {
+		base, sealed := ns.SealedAt(environment.PhaseRuntime, environment.SealKindValue)
+		if sealed && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, values.EmptyScopes()) != nil {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
 				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",

@@ -263,27 +263,22 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
 // Negative phases (e.g., -1 for for-template) are also supported.
 //
-// Phase 1 is RECEIVER-DEPENDENT: for the sealed-base receiver it resolves to the
-// namespace's sealedExpandBase (the sealed sibling that holds bootstrap macros/expanders);
-// for every other receiver, and for every other phase, it resolves through the shared
-// PhaseRegistry. This is what routes a bootstrap-macro define-syntax (compiled with env ==
-// sealedBase) into the immutable frame while user code (env == the mutable runtime) lands in
-// the mutable expand child.
+// A climb rooted at a SEALED frame stays on the sealed axis wherever the target
+// phase seals handlers; every other receiver, and every phase with no seal,
+// resolves through the shared PhaseRegistry. That is what routes a bootstrap-macro
+// define-syntax (compiled with env == sealedBase, so NextPhase() lands here at
+// phase 1) into sealedExpandBase, while user code (env == the mutable runtime)
+// lands in the mutable expand child. Above phase 1 no seal exists, so a transformer
+// body that defines a macro climbs off the sealed axis.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
 func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
-	// Bootstrap macros compile with env == sealedBase (LoadBootstrapCore routes their load
-	// through runtimeTarget); their define-syntax writes go to p.env.NextPhase() ==
-	// AtPhase(PhaseExpand). Route those — and only those, receiver == the sealed base — into
-	// the sealed expand base, so a bootstrap macro is immutable while a user define-syntax
-	// (compiled with env == the mutable runtime, guard false) shadows in the mutable expand
-	// child. Symmetric with SealedBaseTarget's ns.runtime == p keying. sealedExpandBase is
-	// non-nil whenever sealedBase is (both built together in wireRuntimeFrames), so this does
-	// not guard it — a broken construction invariant should fail loud downstream, not silently
-	// route bootstrap macros into the mutable child.
-	if phase == PhaseExpand && p.namespace != nil && p.namespace.sealedBase == p {
-		return p.namespace.sealedExpandBase
+	if phase > p.phaseLevel && p.namespace != nil && p.namespace.IsSealed(p) {
+		sealed, ok := p.namespace.SealedAt(phase, SealKindHandler)
+		if ok {
+			return sealed
+		}
 	}
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
@@ -929,9 +924,9 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 //
 // The phase-0 (runtime) search reaching the mutable runtime frame's OWN defines
 // is DELIBERATE and load-bearing — it is NOT the accidental parent-chain leak
-// the phase-frame reparent (createPhaseEnv) closed, and must NOT be routed
-// through SealedBaseTarget() to "seal" it. A macro-generating-macro introduces
-// a phase-0 define that a generated inner macro references by scope-aware
+// the phase-frame reparent (createPhaseEnv) closed, and must NOT be routed to
+// the phase-0 seal. A macro-generating-macro introduces a phase-0
+// define that a generated inner macro references by scope-aware
 // identifier; only searching the runtime frame resolves that intro-scoped
 // binding at compile time. Sealing it breaks R7RS §4.3 referential transparency
 // — concretely, the jabberwocky/march-hare case in
@@ -1042,38 +1037,5 @@ func (p *EnvironmentFrame) Namespace() *Namespace {
 	return p.namespace
 }
 
-// SealedBaseTarget returns the frame that should receive sealed (immutable) runtime
-// bindings — primitives and bootstrap procedures — when a registry is applied with this
-// frame as its target. For a namespace-owning runtime frame (this frame == its
-// namespace's Runtime()) that is the namespace's sealed base; for a flat library frame
-// (NewChildRuntime, which shares its parent's namespace and has no sealed-base parent to
-// reach) it is the frame itself. This single predicate keeps the carve decision in one
-// place across the engine-root, profile-child, and library-env apply paths.
-func (p *EnvironmentFrame) SealedBaseTarget() *EnvironmentFrame {
-	ns := p.namespace
-	if ns != nil && ns.runtime == p {
-		return ns.sealedBase
-	}
-	return p
-}
-
-// SealedExpandBaseTarget returns the frame that should receive sealed (immutable) EXPAND-phase
-// bindings — the special-form primitive expanders — when a registry is applied with this frame
-// as its target. For a namespace-owning runtime frame (this frame == its namespace's Runtime())
-// that is the namespace's sealed EXPAND base (phase 1); for a flat library frame
-// (NewChildRuntime, which has no sealed expand base) it is the frame's own expand phase,
-// preserving the pre-carve target (env.Expand()). Parallels SealedBaseTarget (phase 0) for the
-// expand phase. It is direct (no AtPhase dependency), so the expander registration and the
-// bootstrap-macro AtPhase redirect are independent mechanisms into the same frame. Mirrors
-// SealedBaseTarget's ns.runtime == p keying (and, like it, trusts the construction invariant:
-// sealedExpandBase is non-nil whenever runtime is, both built together in wireRuntimeFrames —
-// a broken invariant fails loud at the bootstrap install site, it does not silently degrade
-// the namespace-owning path to the mutable frame). See
-// plans/2026-07-22-free-template-id-hygiene-impl.local.md (D1+D3).
-func (p *EnvironmentFrame) SealedExpandBaseTarget() *EnvironmentFrame {
-	ns := p.namespace
-	if ns != nil && ns.runtime == p {
-		return ns.sealedExpandBase
-	}
-	return p.Expand()
-}
+// The sealed-frame routing seam (SealedTargetAt, SealedAt, IsNamespaceRuntime)
+// lives in sealed_base_frame.go.

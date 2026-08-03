@@ -491,9 +491,10 @@ func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserv
 	// Synthetic extension libraries re-export the profile's primitives and resolve
 	// their exports against their backing env. In strict mode the visible top-level
 	// env is bare (core-only), so resolve them against a full-registry child runtime
-	// instead. NewChildRuntime is a flat env (SealedBaseTarget is the frame itself),
-	// so the full registry lands in its own frame and does NOT pollute the shared
-	// sealed base — the user top level stays bare. Non-strict uses env directly.
+	// instead. NewChildRuntime is a flat env (it owns no seal, so a sealed binding
+	// lands in the frame itself), so the full registry lands in its own frame and
+	// does NOT pollute the shared sealed base — the user top level stays bare.
+	// Non-strict uses env directly.
 	// Only worth building when there are extension libraries to back: with no
 	// snapshots (zero-extension profile, or the pre-built-namespace path where
 	// snapshots is empty) registerExtensionLibraries is a no-op, so the full apply
@@ -1034,10 +1035,8 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 	// re-writes the shared base bindings' Doc meta — redundant with the root-init
 	// application, and a data race when several imports run concurrently from
 	// SRFI-18 threads (all writing the same shared base binding's meta). Mirrors
-	// the identical guard in registerSchemeDocstrings below: a namespace-owning
-	// runtime frame (engine root / profile child) has SealedBaseTarget() != env;
-	// a flat library frame returns env.
-	if env.SealedBaseTarget() != env {
+	// the identical guard in registerSchemeDocstrings below.
+	if env.IsNamespaceRuntime() {
 		reg.ApplyDocs(env)
 	}
 
@@ -1290,8 +1289,8 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 	// the sealed base, not the mutable runtime child (which is empty at bootstrap time).
 	// Read the sealed base so their docs are indexed; reading the mutable child's own
 	// frame (ns.Phases().Get(0)) would silently drop every stdlib procedure doc (G2).
-	base := ns.SealedBase()
-	if base == nil {
+	base, ok := ns.SealedAt(environment.PhaseRuntime, environment.SealKindValue)
+	if !ok {
 		return
 	}
 
@@ -1299,9 +1298,8 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 	// base is the ROOT's sealed base — already indexed at root bootstrap, and
 	// AddDocOnlyPrimitive dedups the re-add anyway. applyBaseEnvironment runs once per
 	// (import ...), so without this guard every import re-parses ~all root docstrings for
-	// nothing (E3). A namespace-owning runtime frame (engine root / profile child) has
-	// SealedBaseTarget() != env (it returns the sealed base); a library frame returns env.
-	if env.SealedBaseTarget() == env {
+	// nothing (E3).
+	if !env.IsNamespaceRuntime() {
 		return
 	}
 

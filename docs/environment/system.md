@@ -315,13 +315,12 @@ These invariants must be maintained:
      phase 2+: compile           → sealedBase          → nil
      ```
 
-   - The carve is **phase-1-only**: `createPhaseEnv` reparents only the expand
-     phase to `sealedExpandBase` (via `phaseParent`), and only for a namespace
-     that owns a sealed base (`base == owner.sealedBase`). A flat
-     `NewChildRuntime` library frame has no sealed base and stays a flat island
-     (library isolation). Phases 2+ parent straight to `sealedBase`, preserving
-     hermeticity and the climbing-tower invariant that higher phases never
-     introduce a phase→phase parent edge.
+   - `createPhaseEnv` parents each phase frame to that phase's seal via
+     `phaseParent`, and only for a namespace that owns one (`IsNamespaceRuntime`).
+     A flat `NewChildRuntime` library frame owns no seal and stays a flat island
+     (library isolation). A phase with no seal parents straight to `sealedBase`,
+     preserving hermeticity and the climbing-tower invariant that higher phases
+     never introduce a phase→phase parent edge.
    - **Why `sealedExpandBase` is distinct from `sealedBase`, not a reuse.** A
      compile-time handler (a bootstrap macro, `BindingTypeSyntax`, or a
      special-form expander, `BindingTypePrimitive`) placed on the phase-0 value
@@ -335,13 +334,22 @@ These invariants must be maintained:
      lands in the mutable expand child (`AtPhase(PhaseExpand)` from the mutable
      runtime), a different frame from the pinned bootstrap `foo` in
      `sealedExpandBase`. Bootstrap macros compile with `env == sealedBase`, so
-     their `define-syntax` writes route into `sealedExpandBase` via the
-     `AtPhase` receiver branch; expanders register there directly via
-     `SealedExpandBaseTarget()`.
-   - **Enumeration must collect both.** Because neither sealed frame is a
+     their `define-syntax` writes climb into `sealedExpandBase` via `AtPhase`;
+     expanders register there directly via
+     `SealedTargetAt(PhaseExpand, SealKindHandler)`.
+   - **The seal is keyed by `(phase, kind)`, and `sealedAxis` is the only place
+     that decides.** Phase 0 seals both kinds; phase 1 seals handlers only, which
+     is why registry expand-phase primitives stay in the mutable expand child
+     while special-form expanders do not. Phase 2 and above have no seal, so a
+     `define-syntax` inside a transformer body climbs off the sealed axis.
+     `SealedAt` reports the pair's seal and whether there is one; a row that
+     declares a seal the namespace never built panics (`mustSeal`) rather than
+     degrading to the mutable frame. The parent link is kind-independent, so
+     `phaseParent` asks `sealedFrameAt`, not `SealedAt`.
+   - **Enumeration must span every seal.** Because no sealed frame is a
      `PhaseRegistry` entry, name/doc walks (`BoundNamesAcrossPhases`, `,apropos`)
-     must `collect(SealedBase())` **and** `collect(SealedExpandBase())` explicitly,
-     or primitive / bootstrap-macro names silently vanish from introspection.
+     iterate `SealedFrames()`, or primitive / bootstrap-macro names silently
+     vanish from introspection.
 
 ---
 

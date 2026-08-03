@@ -25,7 +25,7 @@ import (
 
 func TestSyntaxCompilersRegistry(t *testing.T) {
 	// RegisterSyntaxCompilers binds SyntaxCompiler values into the taproot
-	// (env.SealedBaseTarget()). After registration, LookupSyntaxCompiler should
+	// (the phase-0 seal). After registration, LookupSyntaxCompiler should
 	// find them by symbol with nil scopes — the compile frame reaches the taproot
 	// through its parent chain.
 	env := environment.NewNamespace().Runtime()

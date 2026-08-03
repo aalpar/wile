@@ -75,10 +75,9 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 	{"import", (*ExpanderTimeContinuation).expandImportForm},
 }
 
-// RegisterPrimitiveExpanders binds all primitive expanders in the sealed EXPAND base
-// (env.SealedExpandBaseTarget() — the phase-1 sealed frame; the flat frame's own expand
-// child for a library env). These are looked up by ExpandPrimitiveForm() when the expander
-// encounters a special form.
+// RegisterPrimitiveExpanders binds all primitive expanders at (PhaseExpand, handler) —
+// the sealed expand base, or a flat library frame's own expand child. These are looked up
+// by ExpandPrimitiveForm() when the expander encounters a special form.
 //
 // Each primitive has different expansion behavior:
 //   - quote, define-syntax, define-library, quasiquote: return unchanged (no expansion)
@@ -89,19 +88,18 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 //   - lambda, case-lambda: expand body expressions
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
-	// Install special-form expanders in the phase-1 SEALED EXPAND base (via
-	// SealedExpandBaseTarget), not the mutable expand child. A user (define-syntax let-syntax
-	// …) then creates a distinct binding in the mutable child (a shadow), instead of reusing
-	// and overwriting this slot in place — CreateGlobalBinding dedups by scopeSetsEqual
-	// ignoring BindingType, and SetOwnGlobalValue overwrites the Primitive-typed slot's value,
-	// which every lookup then rejects (let-syntax, having no Tier-1 fallback, dies). Lookup
-	// still finds these via LookupPrimitiveExpander -> env.Expand() walking the parent chain,
-	// which after the phaseParent reparent reaches sealedExpandBase. It must NOT be the phase-0
-	// SealedBaseTarget(): a compile-time handler there is reachable by RUNTIME value resolution
-	// and leaks a dialect-removed form's #<primitive-expander:…> into the value world. For a
-	// flat library frame SealedExpandBaseTarget() falls back to env.Expand(), unchanged.
+	// Sealed, so a user (define-syntax let-syntax …) creates a distinct shadowing binding
+	// in the mutable child instead of overwriting this slot in place — CreateGlobalBinding
+	// dedups by scopeSetsEqual ignoring BindingType, and SetOwnGlobalValue would overwrite
+	// the Primitive-typed slot's value, which every lookup then rejects (let-syntax, having
+	// no Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander walks
+	// env.Expand()'s parent chain, which phaseParent points at the seal.
+	//
+	// The kind is what keeps this off phase 0. Both phases seal handlers, but a handler on
+	// the phase-0 VALUE frame is reachable by runtime value resolution and leaks a
+	// dialect-removed form's #<primitive-expander:…> into the value world.
 	taproot := func() *environment.EnvironmentFrame {
-		return env.SealedExpandBaseTarget()
+		return env.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler)
 	}
 	return RegisterPhaseBindings(env, taproot, primitiveExpanderEntries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {

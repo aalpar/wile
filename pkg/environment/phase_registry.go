@@ -17,6 +17,8 @@ package environment
 import (
 	"fmt"
 	"sync"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // Phase-dependent binding: the same symbol can bind to different values at
@@ -133,15 +135,9 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	global := NewGlobalEnvironmentFrame()
 
 	q := &EnvironmentFrame{
-		// Phase frames parent to the runtime frame's sealed-base TARGET, not the
-		// runtime frame itself. For the layered main namespace SealedBaseTarget()
-		// returns the frozen sealedBase — skipping user defines + phase-0 imports,
-		// which is the hermeticity cut. For a flat NewChildRuntime library frame
-		// it returns the frame itself, leaving library visibility unchanged.
-		// Phase 1 (expand) reparents one level further to the sealed EXPAND base
-		// (phaseParent) so bootstrap macros/expanders are immutable while a user
-		// define-syntax shadows in this mutable child.
-		// See plans/2026-07-10-hermetic-phases-core-impl.local.md and
+		// A phase frame parents to its phase's SEAL, never to the mutable runtime
+		// frame: that skip past user defines and phase-0 imports is the hermeticity
+		// cut. See plans/2026-07-10-hermetic-phases-core-impl.local.md and
 		// plans/2026-07-22-free-template-id-hygiene-impl.local.md.
 		parent:     p.phaseParent(phase),
 		global:     global,
@@ -152,19 +148,37 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	return q
 }
 
-// phaseParent selects a phase frame's lexical parent. Phase 1 (expand) parents to the sealed
-// EXPAND base so bootstrap macros/expanders are immutable while a user define-syntax shadows in
-// the mutable child; every other phase parents straight to the phase-0 sealed-base target,
-// preserving hermeticity and the climbing-tower invariant that higher phases never introduce a
-// phase->phase parent edge. The reparent applies ONLY to a namespace that OWNS a sealed base
-// (base == p.owner.sealedBase): a flat NewChildRuntime library frame's SealedBaseTarget() is the
-// frame itself and it has no sealed expand base, so it stays a flat island (guarding library
-// isolation). base == p.owner.sealedBase already implies sealedExpandBase is non-nil (both built
-// together in wireRuntimeFrames), so it is not guarded here.
+// phaseParent selects a phase frame's lexical parent: the seal for this phase when it has
+// one, else the phase-0 seal. A phase with no seal of its own therefore parents to the base
+// rather than to the phase below it, which is the climbing-tower invariant that the mutable
+// axis introduces no phase->phase parent edge.
+//
+// A flat NewChildRuntime library frame is not its namespace's runtime, so it owns no seal
+// and stays a flat island parented to itself — library isolation.
+//
+// Two constraints keep this off the general routing seam. It runs under the registry's
+// WRITE lock (createPhaseEnv), so it must not call anything that can re-enter GetOrCreate;
+// sealedFrameAt and IsNamespaceRuntime are pure reads, SealedTargetAt is not. And the
+// parent link is ONE link per phase, not one per kind, so it asks sealedFrameAt rather
+// than picking a kind — a seal whose row does not cover the kind guessed here would be
+// parented to by nothing and invisible to every lookup.
 func (p *PhaseRegistry) phaseParent(phase Phase) *EnvironmentFrame {
-	base := p.envs[PhaseRuntime].SealedBaseTarget()
-	if phase == PhaseExpand && p.owner != nil && base == p.owner.sealedBase {
-		return p.owner.sealedExpandBase
+	runtime := p.envs[PhaseRuntime]
+	if p.owner == nil || !runtime.IsNamespaceRuntime() {
+		return runtime
+	}
+	sealed, ok := p.owner.sealedFrameAt(phase)
+	if ok {
+		return sealed
+	}
+	base, ok := p.owner.sealedFrameAt(PhaseRuntime)
+	if !ok {
+		// The phase-0 row is the sealed axis's root. Without it there is no frame to
+		// parent to, and returning nil would quietly make every phase frame a second
+		// root — hermeticity intact, but nothing resolves through it.
+		panic(werr.WrapForeignErrorf(
+			werr.ErrUnexpectedNil, "phaseParent: sealedAxis declares no phase-0 seal",
+		))
 	}
 	return base
 }

@@ -168,8 +168,8 @@ func TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase(t *testing.
 
 // TestSealedExpandBaseConstructionInvariant asserts every namespace-building entry point
 // wires a non-nil sealedExpandBase parented to the sealed base at phase 1. The routing
-// accessors (SealedExpandBaseTarget, AtPhase's phase-1 branch, phaseParent) trust this
-// invariant rather than nil-guarding, so a builder that forgets it must fail HERE — loudly —
+// accessors (SealedAt, SealedTargetAt, AtPhase's climb, phaseParent) route through mustSeal,
+// which panics rather than degrading, so a builder that forgets it must fail HERE — loudly —
 // not silently degrade the expand-phase seal to the mutable frame (the WithStableBasePrimitives
 // profile-child divergence is the cautionary precedent for an unenforced construction step).
 func TestSealedExpandBaseConstructionInvariant(t *testing.T) {
@@ -216,4 +216,119 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 	// frame, so a runtime-only walk would miss them.
 	qt.Assert(t, seen["car"], qt.IsTrue, qt.Commentf("primitive car must appear"))
 	qt.Assert(t, seen["caar"], qt.IsTrue, qt.Commentf("bootstrap caar must appear"))
+}
+
+// TestSealedAxisTable pins the (phase, kind) model that SealedAt states: sealing is a
+// property of the PAIR, not of the phase. The phase-1 row is the one that carries the
+// asymmetry — a handler there is sealed, a value is not, which is why registry
+// expand-phase primitives land in the mutable expand child while special-form expanders
+// land in the sealed one. Change a cell here only alongside a deliberate model change.
+func TestSealedAxisTable(t *testing.T) {
+	ns := environment.NewNamespace()
+	cases := []struct {
+		name   string
+		phase  environment.Phase
+		kind   environment.SealKind
+		want   *environment.EnvironmentFrame
+		sealed bool
+	}{
+		{"runtime value", environment.PhaseRuntime, environment.SealKindValue, ns.SealedBase(), true},
+		{"runtime handler", environment.PhaseRuntime, environment.SealKindHandler, ns.SealedBase(), true},
+		{"expand handler", environment.PhaseExpand, environment.SealKindHandler, ns.SealedExpandBase(), true},
+		{"expand value", environment.PhaseExpand, environment.SealKindValue, nil, false},
+		{"compile value", environment.PhaseCompile, environment.SealKindValue, nil, false},
+		{"compile handler", environment.PhaseCompile, environment.SealKindHandler, nil, false},
+		{"template handler", environment.PhaseTemplate, environment.SealKindHandler, nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			frame, sealed := ns.SealedAt(c.phase, c.kind)
+			qt.Assert(t, sealed, qt.Equals, c.sealed)
+			qt.Assert(t, frame, qt.Equals, c.want)
+		})
+	}
+}
+
+// TestSealedAxisIsEnumerableAndReachable pins the two structural properties the sealed
+// axis has to hold at once, because a seal that fails either is invisible in a way
+// nothing else reports:
+//
+//   - ENUMERABLE. No sealed frame is a PhaseRegistry entry, so a walk over phase frames
+//     misses it. A seal absent from SealedFrames vanishes from ,apropos and REPL
+//     completion rather than failing.
+//   - REACHABLE. A seal nothing parents to resolves nothing. phaseParent must point the
+//     mutable frame at each phase's seal, and that link is kind-independent, so a row
+//     whose kinds do not happen to include the kind a caller guessed must still be wired.
+//
+// The sweep spans well past the phases that have seals today so a new row cannot satisfy
+// one property and quietly miss the other. It does NOT pin non-nil-ness: SealedAt and
+// SealedFrames read the same rows, so a nil frame would make them agree — mustSeal's
+// panic is what makes that loud, and TestSealedExpandBaseConstructionInvariant is what
+// pins it across builders.
+func TestSealedAxisIsEnumerableAndReachable(t *testing.T) {
+	ns := environment.NewNamespace()
+	enumerated := make(map[*environment.EnvironmentFrame]bool)
+	for _, frame := range ns.SealedFrames() {
+		enumerated[frame] = true
+	}
+	kinds := []environment.SealKind{environment.SealKindValue, environment.SealKindHandler}
+	for phase := environment.Phase(-2); phase <= 8; phase++ {
+		for _, kind := range kinds {
+			sealed, ok := ns.SealedAt(phase, kind)
+			if !ok {
+				continue
+			}
+			qt.Assert(t, enumerated[sealed], qt.IsTrue,
+				qt.Commentf("seal at (phase %s, %s) is routable but not enumerated", phase, kind))
+			qt.Assert(t, ns.IsSealed(sealed), qt.IsTrue,
+				qt.Commentf("seal at (phase %s, %s) is not recognized by IsSealed", phase, kind))
+			qt.Assert(t, ns.AtPhase(phase).Parent(), qt.Equals, sealed,
+				qt.Commentf("the mutable frame at phase %s does not parent to its seal", phase))
+		}
+	}
+	qt.Assert(t, ns.IsSealed(nil), qt.IsFalse) // a frame that does not exist is not sealed
+}
+
+// TestSealedClimbStopsAboveExpand pins the depth of the sealed axis: a climb rooted at a
+// sealed frame stays sealed while a seal exists, and leaves it where none does. A
+// bootstrap define-syntax (env == the sealed base) climbs into the sealed expand base, but
+// a define-syntax inside a transformer body (env == the sealed expand base) climbs into
+// the MUTABLE compile frame, because phase 2 has no seal. That is the shipped behavior, not
+// an aspiration: it means the seal is exactly one level deep, and the exit is silent.
+func TestSealedClimbStopsAboveExpand(t *testing.T) {
+	ns := environment.NewNamespace()
+
+	// Phase 0 seal climbing to phase 1: stays sealed.
+	qt.Assert(t, ns.SealedBase().AtPhase(environment.PhaseExpand), qt.Equals, ns.SealedExpandBase())
+
+	// Phase 1 seal climbing to phase 2: leaves the sealed axis.
+	compile := ns.SealedExpandBase().AtPhase(environment.PhaseCompile)
+	qt.Assert(t, ns.IsSealed(compile), qt.IsFalse)
+	qt.Assert(t, compile, qt.Equals, ns.Compile())
+
+	// The redirect is a CLIMB: it never rewrites a lookup at or below the receiver's
+	// own level, so the sealed base still reaches the mutable runtime at phase 0.
+	qt.Assert(t, ns.SealedBase().AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+}
+
+// TestSealedTargetAtFallbacks pins SealedTargetAt's two non-sealed answers, which are the
+// whole compatibility story for library environments. A flat NewChildRuntime frame owns no
+// seal, so every kind falls back to its OWN frame at that phase — phase 0 is the frame
+// itself (not the parent namespace's runtime), phase 1 its own expand child. And on a
+// namespace runtime frame an unsealed (phase, kind) — the expand-phase VALUE cell, where
+// registry expand primitives are registered — reaches the mutable expand child, not the
+// seal that the same phase gives handlers.
+func TestSealedTargetAtFallbacks(t *testing.T) {
+	ns := environment.NewNamespace()
+	lib := ns.NewChildRuntime()
+
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, lib)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindHandler), qt.Equals, lib)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler), qt.Equals, lib.Expand())
+
+	runtime := ns.Runtime()
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, ns.SealedBase())
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler), qt.Equals, ns.SealedExpandBase())
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseExpand, environment.SealKindValue), qt.Equals, ns.Expand())
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseCompile, environment.SealKindHandler), qt.Equals, ns.Compile())
 }

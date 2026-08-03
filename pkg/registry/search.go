@@ -264,15 +264,13 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 	for _, phase := range phaseIndices {
 		collect(phases.Get(phase))
 	}
-	// Post-carve, primitives and bootstrap procedures live in the sealed base — the
-	// parent of the runtime phase frame, which is NOT a phase-registry entry, so the
-	// phase walk above never reaches it. Collect it so ,apropos still surfaces
-	// binding-level docs on sealed entries, mirroring Namespace.BoundSymbolNames.
-	collect(ns.SealedBase())
-	// Likewise the sealed EXPAND base (phase 1): bootstrap macros and special-form
-	// expanders live here post-carve, also off the phase walk (reached only via the
-	// parent chain), so collect it or their names/docs vanish from ,apropos.
-	collect(ns.SealedExpandBase())
+	// No sealed frame is a phase-registry entry — each is reached only through the
+	// parent chain — so the phase walk above never sees one. Enumerate the whole
+	// sealed axis or their names and docs vanish from ,apropos, mirroring
+	// Namespace.BoundNamesAcrossPhases.
+	for _, frame := range ns.SealedFrames() {
+		collect(frame)
+	}
 
 	return q
 }

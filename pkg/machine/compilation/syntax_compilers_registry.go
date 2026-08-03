@@ -50,11 +50,10 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 	{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
 }
 
-// RegisterSyntaxCompilers binds all syntax compilers in the runtime frame's
-// sealed-base target — the frozen taproot for a layered main namespace, or the
-// flat frame itself for a NewChildRuntime library frame (SealedBaseTarget()
-// picks the right one, mirroring how applyBaseEnvironment routes runtime
-// primitives). Because every phase frame now parents to that taproot (see the
+// RegisterSyntaxCompilers binds all syntax compilers at (PhaseRuntime, handler) —
+// the frozen taproot for a layered main namespace, or the flat frame itself for a
+// NewChildRuntime library frame. Unlike the primitive expanders, these WANT the
+// phase-0 seal: because every phase frame parents to that taproot (see the
 // reparent in environment/phase_registry.go createPhaseEnv), a binding placed
 // here is ambient: reachable uniformly from the runtime, expand, and compile
 // phases via the parent chain, instead of being pinned to the phase-2 (compile)
@@ -76,7 +75,7 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 // from syntax transformers (BindingTypeSyntax) and regular variables.
 func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 	taproot := func() *environment.EnvironmentFrame {
-		return env.SealedBaseTarget()
+		return env.SealedTargetAt(environment.PhaseRuntime, environment.SealKindHandler)
 	}
 	return RegisterPhaseBindings(env, taproot, syntaxCompilerEntries,
 		func(name string, fn SyntaxCompilerFunc) values.Value {
