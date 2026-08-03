@@ -590,7 +590,9 @@ work is looked for. All four closed.
   binding) and closes the class uniformly for `and`/`or`/`cond`/`case`/`do`/`define-values`. The
   census is now a mutation-verified ratchet — it flags 21 recursive self-refs without the back-patch
   and 0 with (44 → 23 nil-pins) — and an unpinned expand-bound sibling reference is a **defect**
-  rather than merely unchecked.
+  rather than merely unchecked. **Successor (2026-08-03):** the seal it built is exactly ONE level
+  deep — phase 2 has none, so a transformer body's own `define-syntax` climbs off the sealed axis.
+  Pinned by `TestSealedClimbStopsAboveExpand`; see "Sealed axis keyed by `(phase, kind)`" in Tier 5.
 - [x] **CHANGELOG documents scope-keyed global storage** [Docs, S, Done 2026-07-21]: covers the
   `8afeb66a…4f73936d` arc's user-visible semantics — a macro-generating macro expanded twice now
   gets two binders instead of sharing one, template-introduced library exports are rejected eagerly,
@@ -1189,6 +1191,61 @@ rather than split across tiers.
 ---
 
 ## Tier 5 — Tech Debt
+
+### Sealed axis keyed by `(phase, kind)` — SHIPPED 2026-08-03 (`74c72256`)
+
+- [x] **Sealed-frame routing collapsed into one table** [Tech debt / legibility, M, Done]: the two
+  sealed frames were reachable only through machinery specialized to phases 0 and 1 **by name** —
+  `SealedBaseTarget`/`SealedExpandBaseTarget`, a `phase == PhaseExpand` branch in `AtPhase`,
+  another in `phaseParent`, and a hardcoded frame pair at each enumeration site. Seven sites
+  hand-unrolled one two-row loop and the parallelism was carried by comments. `sealedAxis`
+  (`pkg/environment/sealed_base_frame.go`) is now the single decision site, read by `SealedAt`,
+  `sealedFrameAt`, `SealedFrames`, and `IsSealed`; call sites read as coordinates
+  (`SealedTargetAt(PhaseRuntime, SealKindValue)` for bootstrap procedures,
+  `(PhaseExpand, SealKindHandler)` for primitive expanders). The overloaded
+  `SealedBaseTarget() != env` predicate became `IsNamespaceRuntime()`, the layered-vs-flat
+  question it was actually asking. **No behavior change on any live path** — every guard was
+  traced, not assumed. Three findings came out of the `/crosscheck`, all fixed in the same
+  commit: (1) generalizing the routing seam had silently generalized "there is no seal here" to
+  cover "the seal is missing", inverting two deleted comments that said a broken construction
+  must fail loud — `SealedAt` now returns `(*EnvironmentFrame, bool)` and a declared-but-absent
+  frame panics through `mustSeal`, mutation-verified across all six routing paths; (2)
+  `phaseParent` ran under the `PhaseRegistry` **write lock** and had started calling a seam that
+  can re-enter `GetOrCreate` (reproduced as a real hang, not a panic), and it asked
+  `SealedAt(phase, SealKindHandler)` for a link that is **kind-independent**, so a value-only row
+  would have been parented to by nothing — both fixed by `sealedFrameAt` plus a pure-pointer
+  `IsNamespaceRuntime` guard; (3) `registry.SearchDoc` (`,apropos`) still hand-enumerated both
+  frames, the second enumeration site a new row would have silently missed.
+
+- [ ] **Expand-phase registry primitives are NOT sealed** [Correctness?, S, **unverified — reproduce
+  first**]: `sealedAxis` made the asymmetry legible rather than creating it. `registry.Apply`'s
+  `phaseTargets` binds `PhaseExpand` primitives into `env.Expand()` — the **mutable** expand
+  child — while special-form expanders and bootstrap macros go to `sealedExpandBase`
+  (`apply.go`, the `expandEnv := env.Expand()` row). That is the `(expand, value)` cell in the
+  table, and it is plausibly the same latent gap that motivated `sealedExpandBase` one row up:
+  `CreateGlobalBinding` dedups by `scopeSetsEqual` ignoring `BindingType` and
+  `SetOwnGlobalValue` overwrites in place, which is exactly how a user `define-syntax` used to
+  kill `let-syntax`. **The vector is untested**: does a `begin-for-syntax`/`define-for-syntax`
+  at top level land in the same slot as an expand-phase primitive of that name and overwrite it?
+  Write the repro before sizing any fix — two of seven filed bugs in the 2026-07-21 sweep did not
+  reproduce as filed. If it does reproduce the fix is one cell (`sealsValue|sealsHandler` on the
+  phase-1 row) plus rerouting `phaseTargets`; if it does not, the cell is correct and deserves a
+  comment saying why.
+
+- [ ] **The seal is exactly one level deep, and the exit is silent** [Design, S, deliberate — decide
+  before Tier 2 of the climbing tower]: phases ≥ 2 have no seal, so a `define-syntax` inside a
+  transformer body (env == `sealedExpandBase`, `NextPhase()` → phase 2) climbs off the sealed axis
+  into the **mutable** compile frame. Pinned by `TestSealedClimbStopsAboveExpand`, so it is
+  documented behavior rather than an accident, and latent today because the climb engages only for
+  **procedural** transformers and no bootstrap macro has one. It becomes live if a bootstrap macro
+  ever gets a procedural transformer body that defines a macro: that macro's own compile-time
+  helper would be user-overwritable, the property D3 exists to prevent one phase lower. Adding a
+  phase-2 seal is one `sealedAxis` row plus construction in `wireRuntimeFrames`, but it **forces an
+  unanswered question**: is the new frame's parent `sealedBase` (flat, mirroring the mutable axis's
+  no-phase→phase-edge rule) or `sealedExpandBase` (chained, mirroring the phase tower)? The two
+  coincide today only because phase 0's seal is also the graph root. Supersedes nothing in
+  "No sealed base above phase 0" (Tier 1, RESOLVED 2026-07-22) — that entry closed the phase-1
+  hole; this is the phase-2 successor it did not reach.
 
 ### `predeclareBinding` leaves an unwritten `#!void` twin slot per library-body define (2026-07-19)
 
