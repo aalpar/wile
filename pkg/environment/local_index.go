@@ -53,7 +53,7 @@ func (p *LocalIndex) GetBinding(env *EnvironmentFrame) *Binding {
 
 // String returns a string representation in "slot:depth" format.
 func (p *LocalIndex) String() string {
-	return fmt.Sprintf("%d:%d", p[0], p[1])
+	return fmt.Sprintf("%d:%d", p[indexOver], p[indexUp])
 }
 
 // SchemeString returns a Scheme-style string representation.
@@ -66,5 +66,5 @@ func (p *LocalIndex) EqualTo(i *LocalIndex) bool {
 	if p == nil || i == nil {
 		return p == i
 	}
-	return p[0] == i[0] && p[1] == i[1]
+	return *p == *i
 }
