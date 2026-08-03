@@ -36,8 +36,9 @@ import (
 // PrimCurrentThread, which yields SymbolPrimordial off a Thread:
 // (eq? (current-thread) 'primordial) → #t.
 //
-// The state symbols themselves have no Scheme-level primitive today: nothing
-// exposes StateSymbol, so SRFI-18's thread-state is not reachable from Scheme.
+// StateSymbol backs the thread-state primitive. That primitive is a Wile
+// extension, not SRFI-18: SRFI-18 specifies mutex-state but has no thread-state,
+// so the name and this symbol vocabulary follow Gambit's.
 var (
 	SymbolThreadNew        = NewSymbol("new")
 	SymbolThreadRunnable   = NewSymbol("runnable")
@@ -181,7 +182,7 @@ func (p *Thread) State() ThreadState {
 
 // StateSymbol returns the state as a Scheme symbol. Returns package-level
 // singletons rather than fresh symbols; see the doc comment on SymbolThreadNew.
-// StateSymbol has no Scheme-level primitive today.
+// It backs the thread-state primitive (a Wile extension, not SRFI-18).
 func (p *Thread) StateSymbol() *Symbol {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -437,13 +438,56 @@ func (p *Thread) SchemeString() string {
 	return fmt.Sprintf("#<thread:%s id=%d state=%s>", p.name, p.id, p.state)
 }
 
-// Thread exception types for SRFI-18
+// Thread exception types for SRFI-18.
+//
+// These four objects (JoinTimeoutException, TerminatedThreadException,
+// AbandonedMutexException, UncaughtException) are the conditions SRFI-18 names,
+// and each is BOTH a Go error and a Scheme-visible Value. The dual role is the
+// point: the condition originates deep in this package, where the only channel
+// out is an error return (Mutex.LockContext, Thread.Join), but the spec requires
+// the joining/locking thread to see a discriminable object its handler chain can
+// test with join-timeout-exception? and friends. The threads extension bridges
+// the two by matching the Go error with errors.As and handing the SAME object to
+// machine.RaiseInPlace.
+//
+// Like UncaughtException, each is an opaque control-flow handle rather than a
+// structural container: identity is pointer identity across eq?, eqv?, and
+// equal?, matching the sibling SRFI-18 objects (Thread, Mutex,
+// ConditionVariable). SRFI-18 defines no accessor on any of the three, so
+// structural equality would buy nothing.
+
+var (
+	_ Value = (*JoinTimeoutException)(nil)
+	_ Value = (*TerminatedThreadException)(nil)
+	_ Value = (*AbandonedMutexException)(nil)
+	_ Value = (*UncaughtException)(nil)
+
+	_ error = (*JoinTimeoutException)(nil)
+	_ error = (*TerminatedThreadException)(nil)
+	_ error = (*AbandonedMutexException)(nil)
+)
 
 // JoinTimeoutException is raised when thread-join! times out
 type JoinTimeoutException struct{}
 
 func (p *JoinTimeoutException) Error() string {
 	return "thread-join!: timeout"
+}
+
+// IsVoid reports whether the receiver is nil, per the default Value convention.
+func (p *JoinTimeoutException) IsVoid() bool {
+	return p == nil
+}
+
+// EqualTo compares by pointer identity; see the exception-types doc above.
+func (p *JoinTimeoutException) EqualTo(v Value) bool {
+	other, ok := v.(*JoinTimeoutException)
+	return ok && p == other
+}
+
+// SchemeString renders the condition.
+func (p *JoinTimeoutException) SchemeString() string {
+	return "#<join-timeout-exception>"
 }
 
 // TerminatedThreadException is raised when joining a terminated thread
@@ -456,6 +500,29 @@ func (p *TerminatedThreadException) Error() string {
 		return fmt.Sprintf("thread terminated: %s", p.Thread.name)
 	}
 	return "thread terminated"
+}
+
+// IsVoid reports whether the receiver is nil, per the default Value convention.
+func (p *TerminatedThreadException) IsVoid() bool {
+	return p == nil
+}
+
+// EqualTo compares by pointer identity; see the exception-types doc above.
+func (p *TerminatedThreadException) EqualTo(v Value) bool {
+	other, ok := v.(*TerminatedThreadException)
+	return ok && p == other
+}
+
+// SchemeString renders the condition, naming the thread when one is attached.
+// It reads p.Thread.name directly rather than calling Thread.SchemeString: the
+// sibling renderer reads p.state without holding the lock its own mutators take,
+// and a terminated-thread exception is displayed precisely while the thread it
+// names is being reaped.
+func (p *TerminatedThreadException) SchemeString() string {
+	if p == nil || p.Thread == nil {
+		return "#<terminated-thread-exception>"
+	}
+	return fmt.Sprintf("#<terminated-thread-exception %s>", p.Thread.name)
 }
 
 // UncaughtThreadException wraps an exception that wasn't caught in a thread
@@ -526,4 +593,23 @@ type AbandonedMutexException struct {
 
 func (p *AbandonedMutexException) Error() string {
 	return "mutex abandoned by terminated thread"
+}
+
+// IsVoid reports whether the receiver is nil, per the default Value convention.
+func (p *AbandonedMutexException) IsVoid() bool {
+	return p == nil
+}
+
+// EqualTo compares by pointer identity; see the exception-types doc above.
+func (p *AbandonedMutexException) EqualTo(v Value) bool {
+	other, ok := v.(*AbandonedMutexException)
+	return ok && p == other
+}
+
+// SchemeString renders the condition and the mutex it names.
+func (p *AbandonedMutexException) SchemeString() string {
+	if p == nil || p.Mutex == nil {
+		return "#<abandoned-mutex-exception>"
+	}
+	return fmt.Sprintf("#<abandoned-mutex-exception %s>", p.Mutex.SchemeString())
 }

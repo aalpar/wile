@@ -1446,6 +1446,28 @@ Requires threads extension. Threads map to Go goroutines.
 | `(thread-terminate! t)` | Terminate thread |
 | `(thread-join! t)` | Wait for completion |
 | `(thread-join! t timeout)` | Wait with timeout |
+| `(thread-join! t timeout timeout-val)` | Wait; return `timeout-val` instead of raising on timeout |
+| `(thread-state t)` | State symbol: `new`, `runnable`, `blocked`, `terminated` (**not SRFI-18**; follows Gambit) |
+
+**Thread exceptions**:
+
+`thread-join!` and `mutex-lock!` raise these into the *calling* thread's handler
+chain, so a `guard` around the call discriminates them:
+
+| Procedure | Description |
+|-----------|-------------|
+| `(join-timeout-exception? obj)` | `thread-join!` hit its timeout and no `timeout-val` was given |
+| `(terminated-thread-exception? obj)` | The joined thread died via `thread-terminate!` |
+| `(abandoned-mutex-exception? obj)` | `mutex-lock!` acquired a mutex whose owner terminated holding it — the lock **is** held when this is raised |
+| `(uncaught-exception? obj)` | The joined thread died via an uncaught exception |
+| `(uncaught-exception-reason exc)` | The condition that thread originally raised |
+
+```scheme
+(guard (e ((join-timeout-exception? e)      'timed-out)
+          ((terminated-thread-exception? e) 'killed)
+          ((uncaught-exception? e)          (uncaught-exception-reason e)))
+  (thread-join! t 1.0))
+```
 
 **Mutexes**:
 

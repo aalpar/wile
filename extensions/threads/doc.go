@@ -21,6 +21,7 @@
 //   - thread-start!, thread-yield!, thread-sleep!
 //   - thread-terminate!, thread-join!
 //   - current-thread
+//   - thread-state (not SRFI-18; follows Gambit)
 //
 // # Mutexes
 //
@@ -42,6 +43,8 @@
 //
 // # Exceptions
 //
+//   - join-timeout-exception?, terminated-thread-exception?
+//   - abandoned-mutex-exception?
 //   - uncaught-exception?, uncaught-exception-reason
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.

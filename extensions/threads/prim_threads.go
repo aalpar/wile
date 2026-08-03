@@ -252,39 +252,116 @@ func PrimThreadJoin(mc machine.CallContext) error {
 
 	result, err := thread.Join(timeout)
 	if err != nil {
-		// Check for timeout
-		if errors.Is(err, werr.ErrJoinTimeout) {
-			if timeoutVal != nil {
-				mc.SetValue(timeoutVal)
-				return nil
-			}
-			return &values.JoinTimeoutException{}
-		}
-		// A thread that ended via an uncaught Scheme exception surfaces it here as
-		// an *ErrExceptionEscape carrier (wrapped in *UncaughtThreadException). The
-		// carrier is already-formed control flow, so applyCallableError passes it
-		// through untouched — straight past any guard/with-exception-handler around
-		// the join. SRFI-18: raise an uncaught-exception object (whose
-		// uncaught-exception-reason is the original condition) in THIS (the joining)
-		// thread's dynamic environment via RaiseInPlace, so its %exception-handlers
-		// run and a guard around thread-join! can catch it and recover the original
-		// condition. Other Go errors fall through to applyCallableError, which
-		// already re-raises them.
-		var escErr *machine.ErrExceptionEscape
-		if errors.As(err, &escErr) {
-			realMC, mcErr := machine.RequireMachineContext(mc, "thread-join!")
-			if mcErr != nil {
-				return mcErr
-			}
-			wrapped := values.NewUncaughtException(escErr.Condition)
-			return machine.RaiseInPlace(realMC, wrapped, false)
-		}
-		return err
+		return raiseJoinCondition(mc, err, timeoutVal)
 	}
 
 	mc.SetValue(values.ValueOrVoid(result))
 	return nil
 }
+
+// raiseJoinCondition maps a non-nil Thread.Join error onto the SRFI-18 condition
+// thread-join! raises in the JOINING thread, and raises it there.
+//
+// All three conditions reach Scheme through machine.RaiseInPlace rather than by
+// being returned as Go errors. A returned error becomes a generic error-object,
+// which the SRFI-18 predicates cannot discriminate; RaiseInPlace hands the
+// condition object itself to this thread's %exception-handlers, so a guard around
+// the join can test it with join-timeout-exception? / terminated-thread-exception?
+// / uncaught-exception? and, in the last case, recover the original condition.
+//
+// Ordering is not arbitrary. The terminate check precedes the uncaught-exception
+// check because Thread.setOutcome is write-once with the terminated exception
+// beating the completion path (see its doc comment): when both could describe the
+// outcome, SRFI-18 says the termination is what thread-join! reports.
+func raiseJoinCondition(mc machine.CallContext, err error, timeoutVal values.Value) error {
+	cond := joinConditionFor(err)
+	if cond == nil {
+		// Not an SRFI-18 condition — leave it to applyCallableError, which
+		// already re-raises ordinary Go errors.
+		return err
+	}
+
+	// Timeout with a supplied timeout-val is the one path that is not a raise:
+	// SRFI-18 returns the value instead. Keyed on the mapped condition rather
+	// than re-testing the error, so the timeout is classified in one place.
+	_, isTimeout := cond.(*values.JoinTimeoutException)
+	if isTimeout && timeoutVal != nil {
+		mc.SetValue(timeoutVal)
+		return nil
+	}
+
+	realMC, mcErr := machine.RequireMachineContext(mc, "thread-join!")
+	if mcErr != nil {
+		return mcErr
+	}
+	return machine.RaiseInPlace(realMC, cond, false)
+}
+
+// joinConditionFor projects a Thread.Join error onto the Scheme condition object
+// SRFI-18 names for it, or nil when the error is not one of them.
+//
+// The terminated object is the very one stored in the thread's end-exception
+// field, forwarded rather than rebuilt, so every joiner of that thread receives
+// an eq? condition. The other two are minted per call: a join timeout is a
+// property of this call, not of the thread, and the uncaught-exception wrapper
+// exists to carry the escaping condition that uncaught-exception-reason returns.
+func joinConditionFor(err error) values.Value {
+	if errors.Is(err, werr.ErrJoinTimeout) {
+		return &values.JoinTimeoutException{}
+	}
+
+	var termErr *values.TerminatedThreadException
+	if errors.As(err, &termErr) {
+		return termErr
+	}
+
+	// A thread that ended via an uncaught Scheme exception surfaces it here as an
+	// *ErrExceptionEscape carrier (wrapped in *UncaughtThreadException). The
+	// carrier is already-formed control flow, so applyCallableError would pass it
+	// through untouched — straight past any guard around the join.
+	var escErr *machine.ErrExceptionEscape
+	if errors.As(err, &escErr) {
+		return values.NewUncaughtException(escErr.Condition)
+	}
+
+	return nil
+}
+
+// PrimThreadState returns the thread's state as a symbol: new, runnable,
+// blocked, or terminated. (thread-state thread) -> symbol
+//
+// NOT SRFI-18 — that spec has mutex-state but no thread-state. The name and the
+// symbol vocabulary follow Gambit's thread-state.
+var PrimThreadState = helpers.MakeUnaryAccessor(werr.ErrNotAThread, "thread-state", func(t *values.Thread) values.Value {
+	return t.StateSymbol()
+})
+
+// PrimJoinTimeoutExceptionQ tests whether an object is an SRFI-18
+// join-timeout-exception (the object thread-join! raises when its timeout is
+// reached and no timeout-val was supplied).
+// (join-timeout-exception? obj) -> boolean
+var PrimJoinTimeoutExceptionQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.JoinTimeoutException)
+	return ok
+})
+
+// PrimTerminatedThreadExceptionQ tests whether an object is an SRFI-18
+// terminated-thread-exception (the object thread-join! raises when the joined
+// thread died by thread-terminate!).
+// (terminated-thread-exception? obj) -> boolean
+var PrimTerminatedThreadExceptionQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.TerminatedThreadException)
+	return ok
+})
+
+// PrimAbandonedMutexExceptionQ tests whether an object is an SRFI-18
+// abandoned-mutex-exception (the object mutex-lock! raises when it acquires a
+// mutex whose owner terminated while holding it).
+// (abandoned-mutex-exception? obj) -> boolean
+var PrimAbandonedMutexExceptionQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*values.AbandonedMutexException)
+	return ok
+})
 
 // PrimUncaughtExceptionQ tests whether an object is an SRFI-18 uncaught-exception
 // (the object thread-join! raises when a joined thread died via an uncaught
@@ -398,15 +475,22 @@ func PrimMutexLock(mc machine.CallContext) error {
 
 	acquired, err := mutex.LockContext(mc.Context(), timeout, owner)
 	if err != nil {
-		// Check for abandoned mutex exception
-		_, ok := err.(*values.AbandonedMutexException)
-		if ok {
-			// Still acquired, but signal the exception
+		// SRFI-18: "After changing the state of the mutex, an abandoned mutex
+		// exception is raised if the mutex was abandoned before the state change."
+		// The lock IS held on this path, so the ownership bookkeeping happens
+		// first; only then does the condition escape, as a Scheme-visible object
+		// raised into this thread's handlers (see raiseJoinCondition for why a
+		// returned Go error will not do).
+		var abandoned *values.AbandonedMutexException
+		if errors.As(err, &abandoned) {
 			if owner != nil {
 				owner.TrackMutex(mutex)
 			}
-			mc.SetValue(values.TrueValue)
-			return err
+			realMC, mcErr := machine.RequireMachineContext(mc, "mutex-lock!")
+			if mcErr != nil {
+				return mcErr
+			}
+			return machine.RaiseInPlace(realMC, abandoned, false)
 		}
 		return err
 	}

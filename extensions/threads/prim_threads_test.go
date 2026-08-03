@@ -982,3 +982,202 @@ func TestThreadJoinWrapsUncaughtException(t *testing.T) {
 		})
 	}
 }
+
+// TestSRFI18ExceptionPredicatesDiscriminate pins the property the three
+// predicates exist for: each of SRFI-18's abnormal outcomes reaches a guard
+// around the call as a DISTINCT object, so a handler can tell them apart without
+// matching on an error message.
+//
+// The discrimination is what is under test, not merely catchability. Before the
+// predicates, all three arrived as generic error-objects carrying only a string,
+// so every case below would have fallen through to the catch-all clause. Each
+// case therefore keys its success on the ONE predicate that should fire and
+// additionally asserts the other three do not — a condition raised as the wrong
+// type would otherwise still satisfy a single positive check.
+//
+// Each case self-checks in Scheme and returns #t.
+func TestSRFI18ExceptionPredicatesDiscriminate(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngineWithExceptions(t)
+
+	// classify returns the symbol naming whichever SRFI-18 predicate matched, or
+	// 'other for anything else — so a case asserting (eq? 'join-timeout ...)
+	// fails, rather than silently passing, if the condition arrives as the wrong
+	// type or as a bare error-object.
+	const classify = `
+	  (define (classify thunk)
+	    (guard (e ((join-timeout-exception? e) 'join-timeout)
+	              ((terminated-thread-exception? e) 'terminated)
+	              ((abandoned-mutex-exception? e) 'abandoned)
+	              ((uncaught-exception? e) 'uncaught)
+	              (#t 'other))
+	      (thunk)
+	      'no-raise))
+	  ;; Spin until the child owns the mutex. mutex-state returns the owner
+	  ;; THREAD once locked and a symbol while unlocked, so symbol? is the
+	  ;; "not yet acquired" test.
+	  (define (wait-for-lock m)
+	    (when (symbol? (mutex-state m))
+	      (thread-yield!)
+	      (wait-for-lock m)))`
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		// thread-join! reaching its timeout with no timeout-val raises a
+		// join-timeout-exception, per SRFI-18.
+		{"join timeout raises join-timeout-exception",
+			`(let ((t (make-thread (lambda () (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (let ((got (classify (lambda () (thread-join! t 0.05)))))
+			     (thread-terminate! t)
+			     (eq? 'join-timeout got)))`},
+
+		// A supplied timeout-val suppresses the raise entirely: SRFI-18 returns
+		// the value instead. Guards the branch that must NOT become a raise.
+		{"join timeout with timeout-val returns the value, raises nothing",
+			`(let ((t (make-thread (lambda () (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (let ((got (thread-join! t 0.05 'fallback)))
+			     (thread-terminate! t)
+			     (eq? 'fallback got)))`},
+
+		// Joining a thread killed by thread-terminate! raises a
+		// terminated-thread-exception — NOT an uncaught-exception. The two are
+		// separate SRFI-18 conditions and the joiner must be able to tell which
+		// happened; internally both arrive wrapped in the same Go carrier, so
+		// this pins the ordering in joinConditionFor.
+		{"joining a terminated thread raises terminated-thread-exception",
+			`(let ((t (make-thread (lambda () (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (thread-terminate! t)
+			   (eq? 'terminated (classify (lambda () (thread-join! t)))))`},
+
+		// A thread that dies on an uncaught exception still yields
+		// uncaught-exception, not one of the two new conditions.
+		{"uncaught exception still raises uncaught-exception",
+			`(let ((t (make-thread (lambda () (raise 'boom)))))
+			   (thread-start! t)
+			   (eq? 'uncaught (classify (lambda () (thread-join! t)))))`},
+
+		// mutex-lock! on a mutex whose owner was terminated raises an
+		// abandoned-mutex-exception.
+		{"locking an abandoned mutex raises abandoned-mutex-exception",
+			`(let* ((m (make-mutex))
+			        (t (make-thread (lambda () (mutex-lock! m) (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (wait-for-lock m)
+			   (thread-terminate! t)
+			   (eq? 'abandoned (classify (lambda () (mutex-lock! m)))))`},
+
+		// SRFI-18 changes the mutex state BEFORE raising: the lock is genuinely
+		// held afterwards, so a handler that unlocks is correct and one that
+		// re-locks would deadlock. Distinguishes "raised and acquired" from
+		// "raised instead of acquiring".
+		{"abandoned mutex is acquired before the condition is raised",
+			`(let* ((m (make-mutex))
+			        (t (make-thread (lambda () (mutex-lock! m) (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (wait-for-lock m)
+			   (thread-terminate! t)
+			   (guard (e ((abandoned-mutex-exception? e)
+			              ;; Held means neither still-abandoned nor released. The
+			              ;; owning answer varies ('not-owned when the locker has
+			              ;; no thread object, else the thread itself), so the
+			              ;; assertion excludes the two not-held answers rather
+			              ;; than naming one held answer.
+			              (let ((state (mutex-state m)))
+			                (and (not (eq? 'abandoned state))
+			                     (not (eq? 'unlocked state))))))
+			     (mutex-lock! m)
+			     #f))`},
+
+		// Each predicate rejects the other conditions' objects, so a handler
+		// chain cannot match the wrong clause. Built by catching one real
+		// condition and testing all four predicates against it.
+		{"predicates are mutually exclusive on a real condition",
+			`(let ((t (make-thread (lambda () (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (let ((r (guard (e (#t (list (join-timeout-exception? e)
+			                                (terminated-thread-exception? e)
+			                                (abandoned-mutex-exception? e)
+			                                (uncaught-exception? e))))
+			              (thread-join! t 0.05))))
+			     (thread-terminate! t)
+			     (equal? r '(#t #f #f #f))))`},
+
+		// Non-conditions are rejected by all three new predicates.
+		{"predicates are #f for ordinary objects",
+			`(and (not (join-timeout-exception? 'x))
+			      (not (join-timeout-exception? 5))
+			      (not (terminated-thread-exception? "s"))
+			      (not (terminated-thread-exception? '()))
+			      (not (abandoned-mutex-exception? #f))
+			      (not (abandoned-mutex-exception? (make-mutex))))`},
+	}
+	// Defined once: the engine is shared across subtests and its top level is
+	// immutable, so re-evaluating the prelude per case would fail on redefinition.
+	eval(t, engine, classify)
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+		})
+	}
+}
+
+// TestThreadState pins thread-state, which reports a thread's lifecycle position
+// as a symbol. It is NOT SRFI-18 (that spec has mutex-state and no thread-state);
+// the name and vocabulary follow Gambit.
+func TestThreadState(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngineWithExceptions(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		// A created-but-unstarted thread is 'new.
+		{"unstarted thread is new",
+			`(eq? 'new (thread-state (make-thread (lambda () 1))))`},
+
+		// After a completed join the thread is 'terminated. Joining first is what
+		// makes this deterministic — polling the state of a running thread races
+		// its own transitions.
+		{"joined thread is terminated",
+			`(let ((t (make-thread (lambda () 1))))
+			   (thread-start! t)
+			   (thread-join! t)
+			   (eq? 'terminated (thread-state t)))`},
+
+		// thread-terminate! moves the thread to 'terminated even though it never
+		// ran to completion.
+		{"terminated thread is terminated",
+			`(let ((t (make-thread (lambda () (thread-sleep! 30)))))
+			   (thread-start! t)
+			   (thread-terminate! t)
+			   (eq? 'terminated (thread-state t)))`},
+
+		// A thread observing itself is running, so it must see 'runnable — the
+		// state is not merely a terminal marker.
+		{"a running thread sees itself as runnable",
+			`(let ((t (make-thread (lambda () (thread-state (current-thread))))))
+			   (thread-start! t)
+			   (eq? 'runnable (thread-join! t)))`},
+
+		// Non-thread arguments hit the MakeUnaryAccessor sentinel path and raise
+		// a real error-object. The guard keys on error-object? so an unrelated
+		// failure falls through to #f rather than passing.
+		{"thread-state rejects a non-thread",
+			`(guard (e ((error-object? e) #t) (#t #f))
+			   (thread-state 'not-a-thread)
+			   #f)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+		})
+	}
+}

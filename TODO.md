@@ -618,6 +618,23 @@ Correctness work that lived only inside plan files, invisible to a TODO scan.
   where previously the bare condition was re-raised; reason identity is preserved (`eq?`). Added
   `values.UncaughtException`, `werr.ErrNotAnUncaughtException`, and the two predicates. Guard:
   `TestThreadJoinWrapsUncaughtException` (6 cases including identity and sentinel rejection).
+- [x] **SRFI-18 exception predicates + `thread-state`** [Correctness/conformance, S, Done
+  2026-08-02]: `join-timeout-exception?`, `terminated-thread-exception?`, and
+  `abandoned-mutex-exception?` were the last three procedures missing from SRFI-18's index.
+  The *conditions* already fired; they reached Scheme as generic error-objects carrying only a
+  string, so a joiner could catch them but not tell them apart. `values.JoinTimeoutException`,
+  `TerminatedThreadException`, and `AbandonedMutexException` are now `values.Value` as well as
+  `error` (opaque handles, pointer identity, mirroring `UncaughtException`), and
+  `thread-join!` / `mutex-lock!` hand them to `machine.RaiseInPlace` instead of returning them.
+  Two behavior changes fall out: joining a `thread-terminate!`d thread now raises
+  terminated-thread-exception rather than uncaught-exception (spec: separate conditions), and
+  none of the three is an `error-object?` any more. Also added `thread-state` — **not** SRFI-18
+  (that spec has `mutex-state` only); the name follows Gambit, and the stale
+  `pkg/values/thread.go` comment claiming SRFI-18 specifies it is corrected. Guards:
+  `TestSRFI18ExceptionPredicatesDiscriminate` (8 cases), `TestThreadState` (5 cases).
+  **Residual, not fixed:** `(current-thread)` still returns the symbol `'primordial` on the main
+  goroutine rather than a thread object, so `(thread-state (current-thread))` errors there.
+  Pre-existing, and its own SRFI-18 gap.
 
 > **The load-order plan is dead (archived 2026-07-24).** Part II's motivation is discharged: the C6
 > capture is fixed by the bootstrap reorder (`1af62cd2`) plus the free-template-id-hygiene arc

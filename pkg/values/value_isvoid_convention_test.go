@@ -38,6 +38,7 @@ import (
 // go/parser and fails if any IsVoid method is not represented.
 var allValueExemplars = []Value{
 	// Pointer-receiver types — default convention: nil receiver → true.
+	(*AbandonedMutexException)(nil),
 	(*AtomicBox)(nil),
 	(*AtomicInt64)(nil),
 	(*BigComplex)(nil),
@@ -55,6 +56,7 @@ var allValueExemplars = []Value{
 	(*Float)(nil),
 	(*Hashtable)(nil),
 	(*Integer)(nil),
+	(*JoinTimeoutException)(nil),
 	(*Mutex)(nil),
 	(*NativeError)(nil),
 	(*Once)(nil),
@@ -71,6 +73,7 @@ var allValueExemplars = []Value{
 	(*String)(nil),
 	(*Symbol)(nil),
 	(*SyntaxVector)(nil),
+	(*TerminatedThreadException)(nil),
 	(*Thread)(nil),
 	(*Time)(nil),
 	(*UncaughtException)(nil),

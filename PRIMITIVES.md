@@ -779,6 +779,20 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `thread-sleep!` | Sleep for duration |
 | `thread-terminate!` | Terminate a thread |
 | `thread-join!` | Wait for thread completion |
+| `thread-state` | Thread state symbol — `new`, `runnable`, `blocked`, `terminated` (**not SRFI-18**; follows Gambit) |
+
+## Thread Exceptions (SRFI-18)
+
+Raised into the calling thread's handler chain, so a `guard` around the call can
+discriminate them.
+
+| Primitive | Description |
+|-----------|-------------|
+| `join-timeout-exception?` | `thread-join!` reached its timeout with no default value |
+| `terminated-thread-exception?` | The joined thread died via `thread-terminate!` |
+| `abandoned-mutex-exception?` | `mutex-lock!` acquired a mutex whose owner terminated holding it |
+| `uncaught-exception?` | The joined thread died via an uncaught exception |
+| `uncaught-exception-reason` | The condition that thread originally raised |
 
 ## Mutexes (SRFI-18)
 
