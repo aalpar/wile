@@ -23,10 +23,11 @@
 package wile
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"unicode"
@@ -306,11 +307,11 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 	t.Logf("  eval-error:           %d", byKind["eval-error"])
 	t.Logf("  expected-unparseable: %d", byKind["expected-unparseable"])
 
-	sort.SliceStable(findings, func(i, j int) bool {
-		if findings[i].Kind != findings[j].Kind {
-			return findings[i].Kind < findings[j].Kind
-		}
-		return findings[i].Primitive < findings[j].Primitive
+	slices.SortStableFunc(findings, func(a, b auditFinding) int {
+		return cmp.Or(
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Primitive, b.Primitive),
+		)
 	})
 
 	if len(findings) > 0 {

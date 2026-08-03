@@ -20,7 +20,7 @@ import (
 	"go/token"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -165,7 +165,7 @@ func TestAllValueExemplarsCompleteness(t *testing.T) {
 		}
 	}
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		t.Errorf("types implement IsVoid() but missing from allValueExemplars: %v\n"+
 			"add an entry to value_isvoid_convention_test.go", missing)
 	}
@@ -177,7 +177,7 @@ func TestAllValueExemplarsCompleteness(t *testing.T) {
 		}
 	}
 	if len(extra) > 0 {
-		sort.Strings(extra)
+		slices.Sort(extra)
 		t.Errorf("allValueExemplars has entries for types without IsVoid(): %v\n"+
 			"remove stale entries or implement IsVoid()", extra)
 	}

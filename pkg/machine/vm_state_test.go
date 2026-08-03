@@ -16,7 +16,7 @@ package machine
 
 import (
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -219,7 +219,7 @@ func testVmStateFieldCoverage(t *testing.T) {
 	for i := range typ.NumField() {
 		fieldNames = append(fieldNames, typ.Field(i).Name)
 	}
-	sort.Strings(fieldNames)
+	slices.Sort(fieldNames)
 
 	// Check 1: every field documented in every operation.
 	for opName, handling := range vmStateFieldCoverage {

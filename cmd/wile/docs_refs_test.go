@@ -17,11 +17,12 @@ package main
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -66,11 +67,7 @@ func TestTrackedDocsDoNotReferenceIgnoredPaths(t *testing.T) {
 	if len(refs) == 0 {
 		return
 	}
-	paths := make([]string, 0, len(refs))
-	for p := range refs {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
+	paths := slices.Sorted(maps.Keys(refs))
 
 	// git check-ignore echoes back the subset of its input paths that .gitignore
 	// excludes, and exits 1 when none are — so the output, not the exit status,

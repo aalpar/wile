@@ -21,10 +21,12 @@ package compilation
 // search paths, and cycle detection.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io/fs"
-	"sort"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -246,17 +248,8 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		return
 	}
 
-	exports := make([]string, 0, len(lib.Exports))
-	for name := range lib.Exports {
-		exports = append(exports, name)
-	}
-	sort.Strings(exports)
-
-	imported := make([]string, 0, len(bindings))
-	for name := range bindings {
-		imported = append(imported, name)
-	}
-	sort.Strings(imported)
+	exports := slices.Sorted(maps.Keys(lib.Exports))
+	imported := slices.Sorted(maps.Keys(bindings))
 
 	obs(LibraryImportEvent{
 		Library:    lib.Name,
@@ -292,14 +285,9 @@ func (p *LibraryRegistry) Lookup(name LibraryName) *CompiledLibrary {
 // RLock. Exists so AllNames can reuse it without recursively locking (mu is
 // not reentrant).
 func (p *LibraryRegistry) all() []*CompiledLibrary {
-	libs := make([]*CompiledLibrary, 0, len(p.libraries))
-	for _, lib := range p.libraries {
-		libs = append(libs, lib)
-	}
-	sort.Slice(libs, func(i, j int) bool {
-		return libs[i].Name.Key() < libs[j].Name.Key()
+	return slices.SortedFunc(maps.Values(p.libraries), func(a, b *CompiledLibrary) int {
+		return cmp.Compare(a.Name.Key(), b.Name.Key())
 	})
-	return libs
 }
 
 // All returns all loaded libraries, sorted by name key for determinism.

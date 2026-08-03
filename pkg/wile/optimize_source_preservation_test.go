@@ -17,7 +17,8 @@ package wile
 import (
 	"context"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -75,11 +76,7 @@ func TestOptimize_PreservesCoverageSpans(t *testing.T) {
 		"compose":        "(define (compose f g)\n  (lambda (x)\n    (f (g x))))",
 	}
 
-	names := make([]string, 0, len(forms))
-	for n := range forms {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(forms))
 
 	for _, name := range names {
 		tpl, cerr := compileUnoptimized(ctx, eng, forms[name], name+".scm")

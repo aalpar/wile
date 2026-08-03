@@ -15,8 +15,9 @@
 package values
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -653,8 +654,8 @@ func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable, depth i
 	}
 
 	entries := h.snapshot()
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].key.SchemeString() < entries[j].key.SchemeString()
+	slices.SortFunc(entries, func(a, b hashtableEntry) int {
+		return cmp.Compare(a.key.SchemeString(), b.key.SchemeString())
 	})
 	sb.WriteString("#hash(")
 	for i, e := range entries {

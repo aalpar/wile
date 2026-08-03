@@ -15,7 +15,8 @@
 package machine
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -102,8 +103,8 @@ func (p *EditPlan) Apply() int {
 
 	oldLen := len(p.tpl.code)
 
-	sort.Slice(p.edits, func(i, j int) bool {
-		return p.edits[i].start < p.edits[j].start
+	slices.SortFunc(p.edits, func(a, b edit) int {
+		return cmp.Compare(a.start, b.start)
 	})
 	validateEdits(p.edits, oldLen)
 

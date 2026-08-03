@@ -17,7 +17,8 @@ package compilation
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/match"
@@ -161,13 +162,8 @@ type OperationBindPatternVars struct {
 }
 
 func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBindPatternVars {
-	// Convert to ordered list for consistent indexing
-	vars := make([]string, 0, len(patternVars))
-	for v := range patternVars {
-		vars = append(vars, v)
-	}
-	// Sort for consistent ordering
-	sort.Strings(vars)
+	// Convert to a sorted list for consistent indexing
+	vars := slices.Sorted(maps.Keys(patternVars))
 	return &OperationBindPatternVars{
 		OperationBase: machine.NewOperationBaseWithGoName("operation:bind-pattern-vars", "BindPatternVars"),
 		PatternVars:   vars,

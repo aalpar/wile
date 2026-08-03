@@ -16,8 +16,8 @@ package compilation
 
 import (
 	"context"
+	"maps"
 	"slices"
-	"sort"
 
 	"github.com/aalpar/wile/pkg/machine"
 
@@ -333,12 +333,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 // createPatternVarEnvironment creates a child environment with local bindings
 // for the pattern variables. Uses sorted order for consistent indexing with runtime.
 func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars map[string]struct{}) *environment.EnvironmentFrame {
-	// Sort pattern variables for consistent indexing
-	vars := make([]string, 0, len(patternVars))
-	for v := range patternVars {
-		vars = append(vars, v)
-	}
-	sort.Strings(vars)
+	vars := slices.Sorted(maps.Keys(patternVars))
 
 	localEnv := environment.NewLocalEnvironment(len(patternVars))
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, p.env)

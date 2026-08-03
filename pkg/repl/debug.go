@@ -16,10 +16,10 @@
 package repl
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -196,8 +196,8 @@ func (p *DebugContext) cmdList(_ []string, out io.Writer) {
 	}
 
 	// Sort by ID for consistent output
-	sort.Slice(bps, func(i, j int) bool {
-		return bps[i].ID < bps[j].ID
+	slices.SortFunc(bps, func(a, b wile.BreakpointInfo) int {
+		return cmp.Compare(a.ID, b.ID)
 	})
 
 	fmt.Fprintln(out, "Breakpoints:")

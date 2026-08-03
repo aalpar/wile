@@ -17,7 +17,8 @@ package compilation
 import (
 	"context"
 	"errors"
-	"sort"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -108,12 +109,7 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 	}
 
 	sortedKeys := func(m map[string]string) []string {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		return keys
+		return slices.Sorted(maps.Keys(m))
 	}
 
 	// build constructs an import set on the test library by applying the modifier
@@ -261,9 +257,9 @@ func TestApplyToExports_Modifiers(t *testing.T) {
 			}
 			qt.Assert(t, err, qt.IsNil)
 			got := sortedKeys(result)
-			wantSorted := make([]string, len(tc.wantKeys))
-			copy(wantSorted, tc.wantKeys)
-			sort.Strings(wantSorted)
+			// Built through slices.Sorted like got, so both sides agree on the
+			// empty case: slices.Sorted yields nil, not a zero-length slice.
+			wantSorted := slices.Sorted(slices.Values(tc.wantKeys))
 			qt.Assert(t, got, qt.DeepEquals, wantSorted)
 		})
 	}

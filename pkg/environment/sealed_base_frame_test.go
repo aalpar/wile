@@ -16,7 +16,7 @@ package environment_test
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -202,7 +202,7 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 	names := ns.BoundNamesAcrossPhases()
 
 	qt.Assert(t, len(names) > 0, qt.IsTrue)
-	qt.Assert(t, sort.StringsAreSorted(names), qt.IsTrue,
+	qt.Assert(t, slices.IsSorted(names), qt.IsTrue,
 		qt.Commentf("BoundNamesAcrossPhases must return sorted output"))
 
 	seen := map[string]bool{}

@@ -44,10 +44,11 @@ package wile
 // is the deliberate, opt-in measurement.
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -397,8 +398,8 @@ func runForCounts(ctx context.Context, wrapped string) (machine.VMCounters, erro
 
 // formatFrameReclaimTable renders the per-benchmark rows and the aggregate gate.
 func formatFrameReclaimTable(rows []frameReclaimRow, sumLocal, sumTop, sumNode uint64) string {
-	sort.Slice(rows, func(i, j int) bool {
-		return rows[i].name < rows[j].name
+	slices.SortFunc(rows, func(a, b frameReclaimRow) int {
+		return cmp.Compare(a.name, b.name)
 	})
 
 	var b strings.Builder

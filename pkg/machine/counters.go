@@ -15,9 +15,10 @@
 package machine
 
 import (
+	"cmp"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -203,8 +204,8 @@ func (p VMCounters) OpcodeHistogram() string {
 			})
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].count > entries[j].count
+	slices.SortFunc(entries, func(a, b entry) int {
+		return cmp.Compare(b.count, a.count)
 	})
 
 	var b strings.Builder
@@ -240,8 +241,8 @@ func (p VMCounters) CallHistogram() string {
 		entries = append(entries, entry{name: name, count: count})
 		total += count
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].count > entries[j].count
+	slices.SortFunc(entries, func(a, b entry) int {
+		return cmp.Compare(b.count, a.count)
 	})
 
 	var b strings.Builder

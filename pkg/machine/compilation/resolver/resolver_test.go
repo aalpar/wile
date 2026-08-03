@@ -19,7 +19,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 	"testing/fstest"
 
@@ -753,7 +753,7 @@ func TestFSFileResolverEnumerateFiles(t *testing.T) {
 	files, err := enumerator.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	sort.Strings(files)
+	slices.Sort(files)
 	c.Assert(files, qt.DeepEquals, []string{"chibi/test.scm", "scheme/base.sld", "scheme/write.sld"})
 }
 
@@ -774,7 +774,7 @@ func TestFSFileResolverEnumerateWithSearchPaths(t *testing.T) {
 	files, err := resolver.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	sort.Strings(files)
+	slices.Sort(files)
 	c.Assert(files, qt.DeepEquals, []string{"scheme/base.sld", "scheme/write.sld"})
 }
 
@@ -797,7 +797,7 @@ func TestFSFileResolverEnumerateSldAndScm(t *testing.T) {
 
 	// EnumerateFiles returns BOTH paths with no dedup.
 	c.Assert(len(files), qt.Equals, 2)
-	sort.Strings(files)
+	slices.Sort(files)
 	c.Assert(files, qt.DeepEquals, []string{"scheme/base.scm", "scheme/base.sld"})
 }
 
@@ -849,7 +849,7 @@ func TestOSFileResolverEnumerateFiles(t *testing.T) {
 	files, err := resolver.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	sort.Strings(files)
+	slices.Sort(files)
 	c.Assert(files, qt.DeepEquals, []string{"scheme/base.sld", "scheme/write.sld"})
 }
 
@@ -900,7 +900,7 @@ func TestChainFileResolverEnumerateFiles(t *testing.T) {
 	// Results are concatenated from child resolvers (fs1 first, then fs2).
 	// No dedup — scheme/base.sld appears from both.
 	// Verify all paths from both children are present.
-	sort.Strings(files)
+	slices.Sort(files)
 
 	// fs1 contributes: my/lib.sld, scheme/base.sld
 	// fs2 contributes: scheme/base.sld, scheme/write.sld

@@ -15,7 +15,8 @@
 package values
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -148,8 +149,8 @@ func (p *Hashtable) schemeStringWithVisited(visited map[Value]bool, depth int) s
 	q := &strings.Builder{}
 	q.WriteString("#hash(")
 	entries := p.snapshot()
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].key.SchemeString() < entries[j].key.SchemeString()
+	slices.SortFunc(entries, func(a, b hashtableEntry) int {
+		return cmp.Compare(a.key.SchemeString(), b.key.SchemeString())
 	})
 	for i, e := range entries {
 		if i > 0 {

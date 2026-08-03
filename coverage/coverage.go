@@ -26,8 +26,8 @@
 package coverage
 
 import (
+	"cmp"
 	"slices"
-	"sort"
 	"sync"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -130,25 +130,18 @@ func (p *Collector) Entries() []Entry {
 		q = append(q, entry)
 	}
 
-	sort.Slice(q, func(i, j int) bool {
-		return lessEntry(q[i], q[j])
-	})
+	slices.SortFunc(q, compareEntry)
 	return q
 }
 
-// lessEntry defines the canonical sort order for Entries.
-func lessEntry(a, b Entry) bool {
-	if a.File != b.File {
-		return a.File < b.File
-	}
-	if a.StartLine != b.StartLine {
-		return a.StartLine < b.StartLine
-	}
-	if a.StartCol != b.StartCol {
-		return a.StartCol < b.StartCol
-	}
-	if a.EndLine != b.EndLine {
-		return a.EndLine < b.EndLine
-	}
-	return a.EndCol < b.EndCol
+// compareEntry defines the canonical sort order for Entries: by file, then
+// by start position, then by end position.
+func compareEntry(a, b Entry) int {
+	return cmp.Or(
+		cmp.Compare(a.File, b.File),
+		cmp.Compare(a.StartLine, b.StartLine),
+		cmp.Compare(a.StartCol, b.StartCol),
+		cmp.Compare(a.EndLine, b.EndLine),
+		cmp.Compare(a.EndCol, b.EndCol),
+	)
 }

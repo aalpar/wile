@@ -15,8 +15,9 @@
 package compilation
 
 import (
+	"cmp"
 	"errors"
-	"sort"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 )
@@ -72,8 +73,8 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 		}
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Key() < result[j].Key()
+	slices.SortFunc(result, func(a, b LibraryName) int {
+		return cmp.Compare(a.Key(), b.Key())
 	})
 	return result, errors.Join(pathErrs...)
 }

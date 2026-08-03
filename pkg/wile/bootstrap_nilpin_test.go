@@ -15,8 +15,10 @@
 package wile_test
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -98,11 +100,11 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 
 	pins := collectNilPins(t, env, expandEnv)
 
-	sort.Slice(pins, func(i, j int) bool {
-		if pins[i].macro != pins[j].macro {
-			return pins[i].macro < pins[j].macro
-		}
-		return pins[i].freeID < pins[j].freeID
+	slices.SortFunc(pins, func(a, b nilPin) int {
+		return cmp.Or(
+			cmp.Compare(a.macro, b.macro),
+			cmp.Compare(a.freeID, b.freeID),
+		)
 	})
 
 	// Partition. A nil pin on a name that a later bootstrap define binds in the
@@ -139,11 +141,7 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	for _, p := range unchecked {
 		byName[p.freeID] = append(byName[p.freeID], p.macro)
 	}
-	names := make([]string, 0, len(byName))
-	for n := range byName {
-		names = append(names, n)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(byName))
 	for _, n := range names {
 		t.Logf("  %-28s referenced by %d macro(s): %v", n, len(byName[n]), byName[n])
 	}

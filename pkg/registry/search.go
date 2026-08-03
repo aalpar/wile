@@ -15,8 +15,9 @@
 package registry
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/docparse"
@@ -153,8 +154,8 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libs LibrarySea
 		}
 	}
 
-	sort.Slice(q, func(i, j int) bool {
-		return q[i].Name < q[j].Name
+	slices.SortFunc(q, func(a, b DocSearchResult) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return q
 }

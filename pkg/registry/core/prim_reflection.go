@@ -19,7 +19,7 @@ import (
 	"errors"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -322,7 +322,7 @@ func PrimDocTopics(mc machine.CallContext) error {
 			cats = append(cats, cat)
 		}
 	}
-	sort.Strings(cats)
+	slices.Sort(cats)
 
 	items := make([]values.Value, len(cats))
 	for i, cat := range cats {
@@ -358,7 +358,7 @@ func PrimDocTopic(mc machine.CallContext) error {
 	for i, pr := range prims {
 		names[i] = pr.Spec.Name
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	syms := make([]values.Value, len(names))
 	for i, n := range names {

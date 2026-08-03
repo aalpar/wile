@@ -15,8 +15,10 @@
 package repl
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/docparse"
@@ -183,8 +185,8 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 		}
 
 		// Re-sort after appending library results.
-		sort.Slice(q, func(i, j int) bool {
-			return q[i].Name < q[j].Name
+		slices.SortFunc(q, func(a, b registry.DocSearchResult) int {
+			return cmp.Compare(a.Name, b.Name)
 		})
 	}
 
@@ -215,12 +217,7 @@ func (p *RegistryDocProvider) Categories() []string {
 		}
 	}
 
-	q := make([]string, 0, len(cats))
-	for cat := range cats {
-		q = append(q, cat)
-	}
-	sort.Strings(q)
-	return q
+	return slices.Sorted(maps.Keys(cats))
 }
 
 // ByCategory returns entries in the named category, sorted by name.
@@ -249,8 +246,8 @@ func (p *RegistryDocProvider) ByCategory(category string) []registry.DocSearchRe
 	if len(results) == 0 {
 		return nil
 	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
+	slices.SortFunc(results, func(a, b registry.DocSearchResult) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return results
 }

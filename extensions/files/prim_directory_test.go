@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -104,7 +104,7 @@ func TestDirectoryFiles(t *testing.T) {
 			names = append(names, v.(*values.String).Value)
 			return nil
 		})
-		sort.Strings(names)
+		slices.Sort(names)
 		c.Assert(names, qt.Contains, "a.txt")
 		c.Assert(names, qt.Contains, "b.txt")
 	})

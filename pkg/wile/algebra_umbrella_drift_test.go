@@ -1,10 +1,11 @@
 package wile_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -59,17 +60,13 @@ func TestAlgebraUmbrellaCoversLeafExports(t *testing.T) {
 		return
 	}
 
-	leaves := make([]string, 0, len(missing))
-	for k := range missing {
-		leaves = append(leaves, k)
-	}
-	sort.Strings(leaves)
+	leaves := slices.Sorted(maps.Keys(missing))
 
 	var b strings.Builder
 	b.WriteString("umbrella algebra.sld is missing leaf exports:\n")
 	for _, leaf := range leaves {
 		syms := missing[leaf]
-		sort.Strings(syms)
+		slices.Sort(syms)
 		b.WriteString("  ")
 		b.WriteString(leaf)
 		b.WriteString(": ")

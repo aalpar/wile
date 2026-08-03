@@ -39,7 +39,6 @@ package match
 import (
 	"context"
 	"slices"
-	"sort"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -618,7 +617,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs m
 		}
 		ids = append(ids, id)
 	}
-	sort.Ints(ids)
+	slices.Sort(ids)
 
 	// Try single-ID match first (common case). When multiple IDs each contain
 	// all vars, prefer the one with the highest compilation order (outermost).

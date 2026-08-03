@@ -19,7 +19,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -315,7 +315,7 @@ func validateLibraryExports(lib *CompiledLibrary) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	sort.Strings(missing)
+	slices.Sort(missing)
 	// The gap has three distinct causes that look identical at this layer: a genuine
 	// library bug (a name misspelled in the export list, or never defined/imported);
 	// a name that IS a real primitive the active security profile does not register

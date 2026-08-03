@@ -58,7 +58,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -310,6 +309,6 @@ func findMissing(present []string, known []string) []string {
 			missing = append(missing, k)
 		}
 	}
-	sort.Strings(missing)
+	slices.Sort(missing)
 	return missing
 }

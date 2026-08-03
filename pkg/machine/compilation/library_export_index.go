@@ -16,10 +16,12 @@ package compilation
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"io"
-	"sort"
+	"maps"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 	"github.com/aalpar/wile/pkg/parser"
@@ -62,14 +64,9 @@ func (p *LibraryExportIndex) Entries() []*LibrarySummary {
 	if p == nil {
 		return nil
 	}
-	q := make([]*LibrarySummary, 0, len(p.entries))
-	for _, s := range p.entries {
-		q = append(q, s)
-	}
-	sort.Slice(q, func(i, j int) bool {
-		return q[i].Name.Key() < q[j].Name.Key()
+	return slices.SortedFunc(maps.Values(p.entries), func(a, b *LibrarySummary) int {
+		return cmp.Compare(a.Name.Key(), b.Name.Key())
 	})
-	return q
 }
 
 // ParseLibrarySummary reads a library definition from r and extracts its

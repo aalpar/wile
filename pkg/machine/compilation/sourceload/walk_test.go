@@ -1,7 +1,7 @@
 package sourceload_test
 
 import (
-	"sort"
+	"slices"
 	"testing"
 	"testing/fstest"
 
@@ -31,7 +31,7 @@ func TestWalk_BasicWalk(t *testing.T) {
 	})
 
 	c.Assert(err, qt.IsNil)
-	sort.Strings(got)
+	slices.Sort(got)
 	c.Assert(got, qt.DeepEquals, []string{
 		"scheme/base.sld",
 		"scheme/write.sld",
@@ -70,7 +70,7 @@ func TestWalk_MultipleSearchDirs(t *testing.T) {
 	})
 
 	c.Assert(err, qt.IsNil)
-	sort.Strings(got)
+	slices.Sort(got)
 	c.Assert(got, qt.DeepEquals, []string{"bar.sld", "foo.sld"})
 }
 

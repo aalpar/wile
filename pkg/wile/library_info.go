@@ -17,7 +17,8 @@ package wile
 import (
 	"context"
 	"errors"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/machine/compilation"
@@ -85,8 +86,8 @@ func (p *Engine) LoadedLibraries() ([]*LibraryInfo, error) {
 	for i, lib := range libs {
 		q[i] = compiledLibraryToInfo(lib)
 	}
-	sort.Slice(q, func(i, j int) bool {
-		return q[i].Name < q[j].Name
+	slices.SortFunc(q, func(a, b *LibraryInfo) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 	return q, nil
 }
@@ -105,8 +106,7 @@ func (p *Engine) UnloadedLibraries(ctx context.Context) []*LibraryInfo {
 		if reg != nil && reg.Lookup(summary.Name) != nil {
 			continue
 		}
-		exports := append([]string(nil), summary.Exports...)
-		sort.Strings(exports)
+		exports := slices.Sorted(slices.Values(summary.Exports))
 		q = append(q, &LibraryInfo{
 			Name:        summary.Name.SchemeString(),
 			Description: summary.Description,
@@ -168,11 +168,7 @@ func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExpo
 }
 
 func compiledLibraryToInfo(lib *compilation.CompiledLibrary) *LibraryInfo {
-	exports := make([]string, 0, len(lib.Exports))
-	for name := range lib.Exports {
-		exports = append(exports, name)
-	}
-	sort.Strings(exports)
+	exports := slices.Sorted(maps.Keys(lib.Exports))
 	return &LibraryInfo{
 		Name:        lib.Name.SchemeString(),
 		Description: lib.Description,

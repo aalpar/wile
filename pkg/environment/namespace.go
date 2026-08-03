@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/aalpar/wile/pkg/security"
@@ -384,7 +384,7 @@ func (p *Namespace) BoundNamesAcrossPhases() []string {
 	for _, frame := range p.SealedFrames() {
 		collect(frame)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

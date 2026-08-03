@@ -1,10 +1,11 @@
 package wile
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -127,8 +128,8 @@ func sortMap(m map[string]int) []kv {
 	for k, v := range m {
 		sorted = append(sorted, kv{k, v})
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].count > sorted[j].count
+	slices.SortFunc(sorted, func(a, b kv) int {
+		return cmp.Compare(b.count, a.count)
 	})
 	return sorted
 }

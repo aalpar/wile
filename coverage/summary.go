@@ -15,9 +15,11 @@
 package coverage
 
 import (
+	"cmp"
 	"fmt"
 	"io"
-	"sort"
+	"maps"
+	"slices"
 )
 
 // lineStat aggregates per-line coverage.
@@ -77,15 +79,11 @@ func writeSummary(w io.Writer, c *Collector, includeStdlib bool) error {
 		}
 	}
 
-	keys := make([]key, 0, len(stats))
-	for k := range stats {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].file != keys[j].file {
-			return keys[i].file < keys[j].file
-		}
-		return keys[i].line < keys[j].line
+	keys := slices.SortedFunc(maps.Keys(stats), func(a, b key) int {
+		return cmp.Or(
+			cmp.Compare(a.file, b.file),
+			cmp.Compare(a.line, b.line),
+		)
 	})
 
 	var totalCovered, totalAll int

@@ -18,9 +18,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -177,15 +178,10 @@ func exportedValueTypes(dir string) ([]string, error) {
 			out = append(out, "*values."+name)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, nil
 }
 
 func keysSorted(m map[int]switchInfo) []int {
-	out := make([]int, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Ints(out)
-	return out
+	return slices.Sorted(maps.Keys(m))
 }

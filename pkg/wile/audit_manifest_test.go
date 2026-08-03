@@ -34,12 +34,13 @@
 package wile
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -134,8 +135,8 @@ func buildManifest(t *testing.T) []manifestEntry {
 			SourceLine: line,
 		})
 	}
-	sort.Slice(q, func(i, j int) bool {
-		return q[i].Name < q[j].Name
+	slices.SortFunc(q, func(a, b manifestEntry) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return q
 }
