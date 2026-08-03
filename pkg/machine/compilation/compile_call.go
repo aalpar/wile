@@ -80,10 +80,11 @@ func (p *CompileTimeContinuation) tryEmitSelfTailCall(ctctx CompileTimeCallConte
 	// and "does not resolve at all".
 	self := p.env.GetBinding(ctctx.frameReuse.selfSym.Sym, syntax.ScopesOf(ctctx.frameReuse.selfSym.Scopes()))
 	op := p.env.GetBinding(sym.Symbol.Sym, syntax.ScopesOf(sym.Symbol.Scopes()))
-	if self == nil || op != self || len(v.Body()) != ctctx.frameReuse.arity {
+	args := v.Body()
+	if self == nil || op != self || len(args) != ctctx.frameReuse.arity {
 		return false, nil
 	}
-	for _, arg := range v.Body() {
+	for _, arg := range args {
 		err := p.compileValidated(ctctx.NotInTail(), arg)
 		if err != nil {
 			return false, err
@@ -234,11 +235,12 @@ func (p *CompileTimeContinuation) tryInlineCall(
 	// known at compile time. An arity mismatch is a guaranteed runtime error;
 	// report it now instead of deferring to the VM.
 	params := candidate.lambda.Params()
-	if len(v.Body()) != len(params.Required) {
+	args := v.Body()
+	if len(args) != len(params.Required) {
 		return false, werr.WrapForeignErrorf(
 			werr.ErrWrongNumberOfArguments,
 			"inline call to %s: expected %d argument(s), got %d",
-			sym.Symbol.Sym, len(params.Required), len(v.Body()),
+			sym.Symbol.Sym, len(params.Required), len(args),
 		)
 	}
 
@@ -250,7 +252,7 @@ func (p *CompileTimeContinuation) tryInlineCall(
 	for i, param := range params.Required {
 		syntheticBindings[i] = validate.ValidatedLetBinding{
 			Name:    param,
-			Init:    v.Body()[i],
+			Init:    args[i],
 			Escapes: true,
 		}
 	}
@@ -329,14 +331,19 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 
 	// Arity must match the single-list clause exactly; a multi-list call (more
 	// args) falls through to the real HOF, whose apply-based clause is not inlined.
+	// The second clause constrains the TEMPLATE, not the call: cbIdx comes from the
+	// binding's stamp, so it must index the template's own parameter list. The arity
+	// equality is what carries that bound over to args below.
 	params := template.Params()
-	if len(v.Body()) != len(params.Required) || cbIdx >= len(v.Body()) {
+	args := v.Body()
+	l := len(params.Required)
+	if len(args) != l || cbIdx >= l {
 		return false, nil
 	}
 
 	// The callback must be provably capture-safe; otherwise the inlined reclaiming
 	// loop could release a frame across a capturing call (use-after-release).
-	if !validate.CallbackIsCaptureSafe(v.Body()[cbIdx], p.env) {
+	if !validate.CallbackIsCaptureSafe(args[cbIdx], p.env) {
 		return false, nil
 	}
 
@@ -348,7 +355,7 @@ func (p *CompileTimeContinuation) tryInlineHOFCall(
 	for i, param := range params.Required {
 		syntheticBindings[i] = validate.ValidatedLetBinding{
 			Name:        param,
-			Init:        v.Body()[i],
+			Init:        args[i],
 			Escapes:     true,
 			CaptureSafe: i == cbIdx,
 		}
