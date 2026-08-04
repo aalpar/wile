@@ -64,18 +64,32 @@ func (noMutationDialect) RemovedPrimitives() []string {
 	return mutationPrimitives()
 }
 
-// RewriteBootstrapProcedures swaps the mutating vector-map/string-map fragment for
-// the mutation-free one, satisfying [BootstrapProcedureRewriter]. This is what lets
-// vector-set!/string-set! be removed: without it, the bootstrap's vector-map would
-// fail to compile against the narrowed surface and NewEngine would error.
+// RewriteBootstrapProcedures rewrites the two mutation-dependent bootstrap
+// procedure sources, satisfying [BootstrapProcedureRewriter]. This is what lets
+// the mutation primitives be removed: without it the bootstrap would fail to
+// compile against the narrowed surface and NewEngine would error.
+//
+// The two are handled differently, and the asymmetry is the point:
+//
+//   - vector-map / string-map are SWAPPED for the mutation-free fragment. They
+//     have a mutation-free definition, so the dialect keeps the procedures.
+//   - hashtable-update! is DROPPED. Its body is
+//     (hashtable-set! ht key (proc ...)) and there is no mutation-free variant to
+//     write — the procedure IS a mutation — so a NoMutation engine simply does
+//     not have it. TestNoMutationRemovesEveryDestructivePrimitive cannot see
+//     this, because it iterates Registry().Primitives() and this is a Scheme
+//     define; TestNoMutationHasNoHashtableUpdate is the guard.
 func (noMutationDialect) RewriteBootstrapProcedures(sources []string) []string {
-	q := make([]string, len(sources))
-	for i, src := range sources {
-		if src == core.MutableVectorStringMapSource {
-			q[i] = core.ImmutableVectorStringMapSource
+	q := make([]string, 0, len(sources))
+	for _, src := range sources {
+		switch src {
+		case core.HashtableUpdateSource:
 			continue
+		case core.MutableVectorStringMapSource:
+			q = append(q, core.ImmutableVectorStringMapSource)
+		default:
+			q = append(q, src)
 		}
-		q[i] = src
 	}
 	return q
 }

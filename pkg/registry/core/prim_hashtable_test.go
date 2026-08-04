@@ -344,3 +344,35 @@ func TestHashtableR6RSAccessors(t *testing.T) {
 		})
 	}
 }
+
+func TestHashtableUpdate(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "absent key uses default", Code: `(let ((h (make-equal-hashtable))) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f))`, Expected: values.NewInteger(1)},
+		{Name: "present key ignores default", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 10) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f))`, Expected: values.NewInteger(11)},
+		{Name: "repeated update accumulates", Code: `(let ((h (make-equal-hashtable))) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-update! h 'a (lambda (v) (+ v 1)) 0) (hashtable-ref h 'a #f))`, Expected: values.NewInteger(2)},
+		{Name: "container key", Code: `(let ((h (make-equal-hashtable))) (hashtable-update! h (list 1 2) (lambda (v) (cons 'x v)) '()) (car (hashtable-ref h (list 1 2) #f)))`, Expected: values.NewSymbol("x")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestHashtableUpdateCapturesContinuation is why this is Scheme and not Go. proc
+// runs in a Scheme frame, so a continuation captured inside it is capturable
+// rather than truncated at a sub-context boundary — the exact failure that moved
+// map, for-each, member, and assoc out of Go.
+func TestHashtableUpdateCapturesContinuation(t *testing.T) {
+	result, err := testhelpers.RunSchemeCode(t, `
+		(let ((h (make-equal-hashtable))
+		      (k #f))
+		  (hashtable-update! h 'a
+		    (lambda (v) (+ v (call/cc (lambda (c) (set! k c) 1))))
+		    0)
+		  (if (procedure? k) 'captured 'truncated))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("captured"))
+}

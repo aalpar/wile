@@ -32,21 +32,42 @@ import (
 var BootstrapFS embed.FS
 
 // MutableVectorStringMapSource and ImmutableVectorStringMapSource are the two
-// interchangeable bootstrap fragments defining vector-map and string-map — the one
-// bootstrap procedure that depends on a mutation primitive. The default (Mutable)
-// fills a fresh result in place with vector-set! / string-set! (fastest); the
-// Immutable one builds it functionally (list->vector / list->string over map) and
-// depends on no mutator. addBootstrapSources registers the Mutable one, so every
-// engine is unchanged by default; a no-mutation dialect swaps it for the Immutable
-// one (matching by value in the registry's procedure sources), which lets the
-// mutation primitives be removed entirely. This is the sole seam where a dialect
-// substitutes a mutation-dependent bootstrap procedure.
+// interchangeable bootstrap fragments holding the bootstrap procedures that
+// depend on a mutation primitive. addBootstrapSources registers the Mutable one,
+// so every engine is unchanged by default; a no-mutation dialect swaps it for the
+// Immutable one (matching by value in the registry's procedure sources), which
+// lets the mutation primitives be removed entirely. This is the sole seam where a
+// dialect substitutes mutation-dependent bootstrap procedures.
+//
+// The Mutable fragment fills a fresh result in place with vector-set! /
+// string-set! (fastest, no intermediate list); the Immutable one builds it
+// functionally (list->vector / list->string over map) and depends on no mutator.
+// Both fragments define both procedures, so this seam SWAPS.
+//
+// hashtable-update! is the other mutation-dependent bootstrap procedure and does
+// NOT ride here, because there is nothing to swap it for — see
+// HashtableUpdateSource, which is dropped instead.
 //
 //go:embed bootstrap_maps_mutable.scm
 var MutableVectorStringMapSource string
 
 //go:embed bootstrap_maps_immutable.scm
 var ImmutableVectorStringMapSource string
+
+// HashtableUpdateSource is the bootstrap procedure source defining
+// hashtable-update!, registered as its own slice entry so it can be DROPPED
+// rather than swapped.
+//
+// Two independent consumers need it addressable. NoMutation drops it: its body
+// is (hashtable-set! ht key (proc ...)) and there is no mutation-free variant to
+// substitute, so unlike the vector-map/string-map fragment there is nothing to
+// swap it FOR. And an embedder calling Registry.WithoutCategory("hashtables")
+// must drop it too — WithoutCategory filters primitives and leaves procedure
+// sources alone, so a bootstrap define over a removed category would otherwise
+// fail to compile at NewEngine. See TestWithoutCategory_RemoveHashtables.
+//
+//go:embed bootstrap_hashtable_update.scm
+var HashtableUpdateSource string
 
 // LateBootstrapMacroSource holds the bootstrap macros whose templates reference
 // bootstrap PROCEDURES (unless -> not, guard -> with-exception-handler). It loads
@@ -81,5 +102,6 @@ func addBootstrapSources(r *registry.Registry) error {
 	// the main procedures (it uses map, defined there) and as a distinct slice entry
 	// so a dialect can swap it by value. Default = the mutating fragment.
 	r.AddProcedureSource(MutableVectorStringMapSource)
+	r.AddProcedureSource(HashtableUpdateSource)
 	return nil
 }

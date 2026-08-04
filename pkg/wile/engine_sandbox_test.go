@@ -28,6 +28,7 @@ import (
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/pkg/internal/extensions/envvars"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
 
@@ -231,6 +232,15 @@ func TestWithout_RemovesMutationPrimitives(t *testing.T) {
 
 // TestWithoutCategory_RemoveHashtables verifies that WithoutCategory
 // removes all primitives in a category.
+//
+// WithoutCategory filters PRIMITIVES and leaves bootstrap procedure sources
+// alone, so a category with a bootstrap dependent must have that source dropped
+// too — here hashtable-update!, whose body is (hashtable-set! ...). This is not
+// specific to hashtables: on master, WithoutCategory already fails outright for
+// "vectors", "strings", "pairs" and "lists", whose bootstrap dependents
+// (vector-map, string-map, map, reverse-based procedures) are not separable from
+// the main bootstrap source and so cannot be dropped at all. hashtables stays
+// removable precisely because its one dependent is its own slice entry.
 func TestWithoutCategory_RemoveHashtables(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -239,6 +249,18 @@ func TestWithoutCategory_RemoveHashtables(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	restricted := full.Registry().WithoutCategory("hashtables")
+	sources := restricted.ProcedureSources()
+	kept := make([]string, 0, len(sources))
+	for _, src := range sources {
+		if src == core.HashtableUpdateSource {
+			continue
+		}
+		kept = append(kept, src)
+	}
+	c.Assert(len(kept), qt.Equals, len(sources)-1,
+		qt.Commentf("HashtableUpdateSource must be present and addressable in ProcedureSources"))
+	restricted = restricted.WithProcedureSources(kept)
+
 	engine, err := NewEngine(ctx, WithRegistry(restricted))
 	c.Assert(err, qt.IsNil)
 

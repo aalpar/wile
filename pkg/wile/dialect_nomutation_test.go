@@ -179,3 +179,38 @@ func TestNoMutation_ImportReexposes_DocumentsBoundary(t *testing.T) {
 		qt.Commentf("removal is top-level only; import re-exposes — a dialect is not a sandbox"))
 	c.Assert(got.SchemeString(), qt.Equals, "9")
 }
+
+// TestNoMutationHasNoHashtableUpdate pins the dialect placement of
+// hashtable-update!.
+//
+// It IS a mutation — its body is (hashtable-set! ht key (proc ...)) — so a
+// NoMutation engine must not have it. It lives in the mutable bootstrap
+// fragment, which NoMutation swaps for the immutable one; the immutable fragment
+// omits it entirely rather than defining a mutation-free variant, because there
+// is no such thing.
+//
+// TestNoMutationRemovesEveryDestructivePrimitive structurally CANNOT catch this:
+// that test iterates Registry().Primitives(), and hashtable-update! is a Scheme
+// define, not a registered primitive. This test is the only guard.
+func TestNoMutationHasNoHashtableUpdate(t *testing.T) {
+	e, err := NewEngine(context.Background(),
+		WithProfile(KitchenSink), WithDialect(NoMutation))
+	qt.Assert(t, err, qt.IsNil)
+	defer func() {
+		_ = e.Close()
+	}()
+	_, bound := e.Get("hashtable-update!")
+	qt.Assert(t, bound, qt.IsFalse)
+}
+
+// TestDefaultDialectHasHashtableUpdate is the other half: the guard above must
+// fail because NoMutation removed it, not because it was never defined.
+func TestDefaultDialectHasHashtableUpdate(t *testing.T) {
+	e, err := NewEngine(context.Background(), WithProfile(KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+	defer func() {
+		_ = e.Close()
+	}()
+	_, bound := e.Get("hashtable-update!")
+	qt.Assert(t, bound, qt.IsTrue)
+}
