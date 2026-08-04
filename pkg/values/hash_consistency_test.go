@@ -164,18 +164,15 @@ func TestHashConsistencyHashtableExact(t *testing.T) {
 	ht := values.NewEmptyHashtable()
 	key := values.NewInteger(42)
 	val := values.NewInteger(100)
-	err := ht.Set(key, val)
-	c.Assert(err, qt.IsNil)
+	ht.Set(key, val)
 
 	// Look up with BigInteger.
-	got, ok, err := ht.Get(values.NewBigIntegerFromInt64(42))
-	c.Assert(err, qt.IsNil)
+	got, ok := ht.Get(values.NewBigIntegerFromInt64(42))
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(got, valuestest.SchemeEquals, val)
 
 	// Look up with Rational.
-	got, ok, err = ht.Get(values.NewRational(42, 1))
-	c.Assert(err, qt.IsNil)
+	got, ok = ht.Get(values.NewRational(42, 1))
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(got, valuestest.SchemeEquals, val)
 }
@@ -188,8 +185,7 @@ func TestHashConsistencyHashtableInexact(t *testing.T) {
 	ht := values.NewEmptyHashtable()
 	key := values.NewFloat(3.14)
 	val := values.NewInteger(999)
-	err := ht.Set(key, val)
-	c.Assert(err, qt.IsNil)
+	ht.Set(key, val)
 
 	// A BigFloat does NOT find a Float key. Hashtables are equal?-keyed, and a
 	// float64 3.14 is not equal? to a 256-bit 3.14 — they are distinguishable by
@@ -199,14 +195,12 @@ func TestHashConsistencyHashtableInexact(t *testing.T) {
 	// across representations while eqv? did not. That disagreement is the thing
 	// R7RS 6.1 forbids outright ("equal? returns the same as eqv? ... on numbers"),
 	// and closing it necessarily closed this door too.
-	_, ok, err := ht.Get(values.NewBigFloatFromFloat64(3.14))
-	c.Assert(err, qt.IsNil)
+	_, ok := ht.Get(values.NewBigFloatFromFloat64(3.14))
 	c.Assert(ok, qt.IsFalse,
 		qt.Commentf("a BigFloat key must not find a Float entry: they are not equal?"))
 
 	// An equal Float does find it. The key is the VALUE, not the object.
-	got, ok, err := ht.Get(values.NewFloat(3.14))
-	c.Assert(err, qt.IsNil)
+	got, ok := ht.Get(values.NewFloat(3.14))
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(got, valuestest.SchemeEquals, val)
 }

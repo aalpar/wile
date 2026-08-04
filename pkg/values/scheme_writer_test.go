@@ -427,7 +427,7 @@ func TestWriteSharedValueToString_SharedThroughHashtable(t *testing.T) {
 	// be labeled once (#0=) and back-referenced (#0#) inside the table.
 	shared := values.List(values.NewInteger(1), values.NewInteger(2))
 	h := values.NewEmptyHashtable()
-	qt.Assert(t, h.Set(values.NewSymbol("k"), shared), qt.IsNil)
+	h.Set(values.NewSymbol("k"), shared)
 	outer := values.List(shared, h)
 
 	result := mustRender(t, values.WriteSharedValueToString, outer)
@@ -438,7 +438,7 @@ func TestWriteValueToString_CycleThroughHashtable(t *testing.T) {
 	// A self-cyclic hashtable (its own value slot points back at the table) must
 	// render a datum label, not SchemeString's "..." depth guard.
 	h := values.NewEmptyHashtable()
-	qt.Assert(t, h.Set(values.NewSymbol("k"), h), qt.IsNil)
+	h.Set(values.NewSymbol("k"), h)
 
 	result := mustRender(t, values.WriteValueToString, h)
 	qt.Assert(t, result, qt.Equals, "#0=#hash((k . #0#))")

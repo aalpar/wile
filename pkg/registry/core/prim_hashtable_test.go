@@ -229,16 +229,27 @@ func TestHashtable_TypeErrors(t *testing.T) {
 	}
 }
 
-func TestHashtable_NonComparableKeyError(t *testing.T) {
-	tcs := []testhelpers.SchemeCodeErrorTestCase{
-		{Name: "set with non-comparable key", Code: `(let ((ht (make-hashtable)))
-			   (hashtable-set! ht '(1 2) "val"))`},
-		{Name: "ref with non-comparable key", Code: `(let ((ht (make-hashtable)))
-			   (hashtable-ref ht '(1 2)))`},
+// TestHashtable_ContainerKeyRoundTrips replaces TestHashtable_NonComparableKeyError,
+// which asserted that a pair key RAISES. That was true while the key carried the
+// hash and Set type-asserted Hashable; HashtableKind moved the hash to the table,
+// so every kind now admits every key and the raise is gone.
+//
+// The old test is not merely stale, it was becoming MISLEADING: its second case
+// — (hashtable-ref ht '(1 2)) with no default — still raises, but now because the
+// key is ABSENT rather than because it is inadmissible. Keeping it would have
+// looked like key-admission coverage while asserting something else entirely.
+func TestHashtable_ContainerKeyRoundTrips(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "pair key stores and reads back", Code: `(let ((ht (make-hashtable))) (hashtable-set! ht '(1 2) "val") (hashtable-ref ht '(1 2) #f))`, Expected: values.NewString("val")},
+		{Name: "a distinct but equal? pair is the same key", Code: `(let ((ht (make-hashtable))) (hashtable-set! ht (list 1 2) 'a) (hashtable-set! ht (list 1 2) 'b) (hashtable-size ht))`, Expected: values.NewInteger(1)},
+		{Name: "vector key round-trips", Code: `(let ((ht (make-hashtable))) (hashtable-set! ht (vector 1 2) 'v) (hashtable-ref ht (vector 1 2) #f))`, Expected: values.NewSymbol("v")},
+		{Name: "absent container key returns the default", Code: `(hashtable-ref (make-hashtable) '(1 2) 'missing)`, Expected: values.NewSymbol("missing")},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

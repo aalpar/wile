@@ -144,7 +144,6 @@ var (
 	ErrFFIRegistration          = NewStaticError("FFI registration error")
 	ErrFFICallbackError         = NewStaticError("FFI callback error")
 	ErrCallbackResultConversion = NewStaticError("callback result conversion failed")
-	ErrHashtableInsertionFailed = NewStaticError("hashtable insertion failed")
 
 	// Engine initialization errors
 

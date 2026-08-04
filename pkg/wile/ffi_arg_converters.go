@@ -249,7 +249,7 @@ func makeMapArgConverter(name string, pos int, t reflect.Type, lossyAllowed bool
 			return reflect.Value{}, fmtArgError(name, pos, "hashtable", v)
 		}
 		result := reflect.MakeMap(mapType)
-		walkErr := ht.Entries(func(key values.Hashable, val values.Value) error {
+		walkErr := ht.Entries(func(key values.Value, val values.Value) error {
 			goKey, keyErr := keyConv(mc, key)
 			if keyErr != nil {
 				return keyErr

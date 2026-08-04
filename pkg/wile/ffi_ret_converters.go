@@ -143,16 +143,9 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 		}
 		iter := v.MapRange()
 		for iter.Next() {
-			schemeKey := keyConv(iter.Key())
-			schemeVal := valConv(iter.Value())
-			setErr := ht.Set(schemeKey, schemeVal)
-			if setErr != nil {
-				panic(werr.WrapForeignErrorWithCause(
-					werr.ErrHashtableInsertionFailed, setErr,
-					"RegisterFunc %q: map return conversion failed inserting key %v",
-					name, iter.Key(),
-				))
-			}
+			// Set no longer fails: its error encoded "key is not Hashable", which
+			// HashtableKind made unreachable by moving the hash to the table.
+			ht.Set(keyConv(iter.Key()), valConv(iter.Value()))
 		}
 		return ht
 	}, nil

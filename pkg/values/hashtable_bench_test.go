@@ -36,9 +36,7 @@ func BenchmarkHashtableSet(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					ht := values.NewEmptyHashtable()
 					for _, k := range keys {
-						// The error return disappears in Task 5, when every kind admits
-						// every key and the "key is not hashable" branch is unreachable.
-						_ = ht.Set(k, values.NewInteger(1)) //nolint:errcheck
+						ht.Set(k, values.NewInteger(1))
 					}
 				}
 			})
@@ -53,13 +51,13 @@ func BenchmarkHashtableGet(b *testing.B) {
 				keys := kind.make(n)
 				ht := values.NewEmptyHashtable()
 				for _, k := range keys {
-					_ = ht.Set(k, values.NewInteger(1)) //nolint:errcheck
+					ht.Set(k, values.NewInteger(1))
 				}
 				b.ResetTimer()
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
 					for _, k := range keys {
-						_, _, _ = ht.Get(k) //nolint:errcheck
+						_, _ = ht.Get(k)
 					}
 				}
 			})

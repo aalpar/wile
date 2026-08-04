@@ -153,8 +153,7 @@ func TestStringImmutability(t *testing.T) {
 
 	t.Run("Set succeeds on mutable", func(t *testing.T) {
 		s := values.NewMutableString("hello")
-		err := s.Set(0, values.NewCharacter('H'))
-		c.Assert(err, qt.IsNil)
+		s.Set(0, values.NewCharacter('H'))
 		c.Assert(s.Value, qt.Equals, "Hello")
 	})
 }

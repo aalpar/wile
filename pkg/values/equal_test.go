@@ -24,23 +24,22 @@ import (
 )
 
 // TestNoContainerIsHashable is the invariant guard the iterative equal? design
-// rests on (ADR-D1).
+// rests on (ADR-D1). What it guards CHANGED when HashtableKind moved the hash
+// from the key to the table: it no longer describes which keys are admissible —
+// every kind admits every key now — it is the basis of the equal? GATE.
 //
 // Hashtable.EqualComponents pairs entries by KEY and pushes only the matched
-// VALUES onto Equal's worklist. That pairing calls EqualTo on keys directly —
-// i.e. it recurses on the Go stack — and is sound only because a key cannot be a
-// container: Hashtable.Set type-asserts Hashable and rejects everything else,
-// and no container type implements it.
+// VALUES onto Equal's worklist. That pairing looks each key up eagerly, which it
+// must: the worklist is what would otherwise be deciding the answer. Eager is
+// bounded for pair and vector keys, whose EqualTo delegates to the iterative
+// Equal. It is UNBOUNDED for a hashtable reachable as a key, which recurses one
+// Go frame per nesting level with no bottom on a cycle.
 //
-// Giving *Pair or *Vector a HashCode() (which is exactly what R6RS
-// make-equal-hashtable and SRFI-69 want) would make a cyclic KEY constructible
-// and put unbounded recursion straight back inside EqualComponents — in a shape
-// no other test in the suite catches, because every cycle test goes through
-// values, not keys. If this test fails, do not delete it: make key comparison go
-// through the worklist first.
-//
-// The same fact retired the original design's "make HashCode iterative" task:
-// there is no container HashCode to make iterative.
+// equalGate therefore admits a structural comparison only when every key on both
+// sides is a Hashable leaf, and this test is what makes that one interface
+// assertion sufficient. Giving *Pair, *Vector, *Hashtable or *Box a HashCode()
+// would silently widen the gate to admit the recursing case. If this test fails,
+// do not delete it: push key comparison through the worklist first.
 func TestNoContainerIsHashable(t *testing.T) {
 	vec := values.Vector([]values.Value{values.NewInteger(1)})
 	containers := map[string]values.Value{
@@ -83,12 +82,12 @@ func TestEqual_CyclicRecordTerminates(t *testing.T) {
 // TestEqual_CyclicHashtableTerminates pins the hashtable arm (hashtable.go:62).
 func TestEqual_CyclicHashtableTerminates(t *testing.T) {
 	h := values.NewEmptyHashtable()
-	qt.Assert(t, h.Set(values.NewSymbol("self"), h), qt.IsNil)
+	h.Set(values.NewSymbol("self"), h)
 
 	qt.Assert(t, values.Equal(h, h), qt.IsTrue)
 
 	g := values.NewEmptyHashtable()
-	qt.Assert(t, g.Set(values.NewSymbol("self"), g), qt.IsNil)
+	g.Set(values.NewSymbol("self"), g)
 	qt.Assert(t, values.Equal(h, g), qt.IsTrue)
 }
 
@@ -164,21 +163,21 @@ func TestHashtable_ConcurrentReadWrite(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := range iterations {
-			_ = h.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i)))
+			h.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i)))
 		}
 	}()
 	// Competing writer on an overlapping key range, to exercise in-bucket update.
 	go func() {
 		defer wg.Done()
 		for i := range iterations {
-			_ = h.Set(values.NewInteger(int64(i%50)), values.NewSymbol("x"))
+			h.Set(values.NewInteger(int64(i%50)), values.NewSymbol("x"))
 		}
 	}()
 	// Reader.
 	go func() {
 		defer wg.Done()
 		for i := range iterations {
-			_, _, _ = h.Get(values.NewInteger(int64(i)))
+			_, _ = h.Get(values.NewInteger(int64(i)))
 			_ = h.Size()
 		}
 	}()
@@ -202,8 +201,8 @@ func TestHashtable_ConcurrentEqualAndMutate(t *testing.T) {
 	a := values.NewEmptyHashtable()
 	b := values.NewEmptyHashtable()
 	for i := range 50 {
-		qt.Assert(t, a.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i))), qt.IsNil)
-		qt.Assert(t, b.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i))), qt.IsNil)
+		a.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i)))
+		b.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i)))
 	}
 
 	var wg sync.WaitGroup
@@ -217,7 +216,7 @@ func TestHashtable_ConcurrentEqualAndMutate(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := range 200 {
-			_ = b.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i)))
+			b.Set(values.NewInteger(int64(i)), values.NewInteger(int64(i)))
 		}
 	}()
 	wg.Wait()

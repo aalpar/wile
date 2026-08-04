@@ -20,16 +20,49 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 var _ Value = (*Hashtable)(nil)
 
-// hashtableEntry stores a key-value pair in the hash table.
+// hashtableEntry stores a key-value pair in the hash table. key is a bare Value,
+// not a Hashable: since HashtableKind moved the hash from the key to the table,
+// any object can be any table's key.
 type hashtableEntry struct {
-	key   Hashable
+	key   Value
 	value Value
+}
+
+// HashtableKind selects which (hash, key-equality) pair a table uses. It is the
+// R6RS inversion: the hash belongs to the TABLE, not to the key, so any object can
+// be a key of any table.
+//
+// HashtableEqual is deliberately the ZERO VALUE. A bare &Hashtable{} — which
+// NewEmptyHashtable returns and Copy inherits — must keep the equal?-keyed
+// semantics every existing table in the tree has. Reordering this iota silently
+// reinterprets them. Pinned by TestHashtableZeroValueIsEqualKind.
+type HashtableKind uint8
+
+const (
+	// HashtableEqual hashes with EqualHash and compares with Equal (equal?).
+	HashtableEqual HashtableKind = iota
+	// HashtableEq hashes by object identity and compares with EqIdentity (eq?).
+	HashtableEq
+	// HashtableEqv hashes leaves by content and compares with Eqv (eqv?).
+	HashtableEqv
+)
+
+// String renders the kind as its R6RS-facing name, for error messages and
+// debugging. Nothing in the primitive surface returns it: hashtable-hash-function
+// and hashtable-equivalence-function hand back procedure objects, not kind names.
+func (p HashtableKind) String() string {
+	switch p {
+	case HashtableEq:
+		return "eq"
+	case HashtableEqv:
+		return "eqv"
+	default:
+		return "equal"
+	}
 }
 
 // Hashtable represents a Scheme hash table mapping hashable values to values.
@@ -39,9 +72,10 @@ type hashtableEntry struct {
 // slice). O(1) amortized with a good hash function.
 // See BIBLIOGRAPHY.md "Separate Chaining Hash Table".
 //
-// Keys must implement the Hashable interface (Value + HashCode()).
-// Uses bucket chaining with FNV-1a hashing for O(1) amortized operations
-// and EqualTo() for key comparison within buckets.
+// ANY object can be a key. Which objects count as ONE key is the table's choice,
+// carried by its HashtableKind: an equal table hashes with EqualHash and compares
+// with Equal, an eq table by identity, an eqv table by Eqv. Uses bucket chaining
+// with FNV-1a hashing for O(1) amortized operations.
 //
 // Concurrency: LOCK-FREE, by design. A Hashtable is user-owned data that
 // SRFI-18 threads may share; per the concurrency ownership line, the USER
@@ -67,12 +101,110 @@ type Hashtable struct {
 	// size is the entry count, maintained lock-free. Exact single-threaded;
 	// best-effort under unsynchronized concurrent mutation.
 	size atomic.Int64
+	// kind is WRITE-ONCE at construction and never mutates, so it does not
+	// participate in the copy-on-write dance and the lock-free contract above is
+	// unaffected.
+	kind HashtableKind
 }
 
-// NewEmptyHashtable creates a new empty hash table. The zero sync.Map and
-// atomic.Int64 are ready to use, so no field initialization is needed.
+// NewEmptyHashtable creates a new empty equal?-keyed hash table. The zero
+// sync.Map and atomic.Int64 are ready to use, and HashtableEqual is the zero
+// HashtableKind by deliberate choice, so no field initialization is needed.
 func NewEmptyHashtable() *Hashtable {
 	return &Hashtable{}
+}
+
+// NewHashtable creates an empty hash table using kind's hash and key equality.
+func NewHashtable(kind HashtableKind) *Hashtable {
+	return &Hashtable{kind: kind}
+}
+
+// Kind reports which (hash, key-equality) pair this table uses.
+func (p *Hashtable) Kind() HashtableKind {
+	return p.kind
+}
+
+// hashKey computes the bucket hash for key under this table's kind.
+func (p *Hashtable) hashKey(key Value) uint64 {
+	switch p.kind {
+	case HashtableEq:
+		// Symbols FIRST, and this is load-bearing: EqIdentity compares symbols by
+		// Key (Wile de-interns them), so two eq? symbols are distinct pointers and
+		// an identity hash would file them in different buckets — a lookup that
+		// silently misses. Everything else eq? compares by pointer.
+		sym, ok := key.(*Symbol)
+		if ok {
+			return sym.HashCode()
+		}
+		return identityHash(key)
+	case HashtableEqv:
+		// Any Hashable leaf's HashCode is content-canonical, which is FINER than
+		// eqv? needs for strings (two distinct equal-content strings are not eqv?
+		// but hash alike). That over-collides into one bucket where keyEqual then
+		// separates them — correctness-preserving, since the hash contract is
+		// one-directional. Numbers REQUIRE it: EqvNumber compares exact values
+		// across Integer/BigInteger/Rational, so an identity hash would break them.
+		hk, ok := key.(Hashable)
+		if ok {
+			return hk.HashCode()
+		}
+		return identityHash(key)
+	default:
+		// LEAF FAST PATH, and it is not just an optimization — it is what keeps
+		// this change free for every table that existed before container keys
+		// were legal. EqualHash on a Hashable leaf is exactly
+		// mixHash(fnvOffset, HashCode()), so routing leaves through it bought a
+		// slice header, a type switch and a multiply per lookup for no new
+		// information: measured +76% on Get/symbol/n=10 and +40% on
+		// Get/string/n=1000 against the pre-inversion baseline, at identical
+		// allocations.
+		//
+		// Splitting the hash space by leaf-ness is sound because no Hashable
+		// value is ever equal? to a non-Hashable one. equal? relates values
+		// within a type family: no container implements Hashable
+		// (TestNoContainerIsHashable), a *Record is equal? only to a *Record of
+		// the same RecordType, and everything else falls to identity. So two
+		// equal? keys are either both leaves — where the Hashable contract
+		// already guarantees equal HashCodes — or both non-leaves, where
+		// EqualHash does. They can never land on opposite sides of this branch.
+		hk, ok := key.(Hashable)
+		if ok {
+			return hk.HashCode()
+		}
+		return EqualHash(key)
+	}
+}
+
+// keyEqual reports whether two keys are the same key under this table's kind.
+//
+// ARGUMENT ORDER: every call site passes the STORED key first. The three
+// underlying predicates are all symmetric, so it does not matter today; keeping
+// one order means a future asymmetric kind cannot silently invert at one site.
+func (p *Hashtable) keyEqual(a, b Value) bool {
+	switch p.kind {
+	case HashtableEq:
+		return EqIdentity(a, b)
+	case HashtableEqv:
+		return Eqv(a, b)
+	default:
+		// Equal is the authority on equal?; this is Equal's own leaf path with
+		// its DeepEqualer assertion skipped, not a second definition of the
+		// predicate. A container key still reaches the worklist, because every
+		// container's EqualTo is `return Equal(p, o)`.
+		//
+		// The spelling is the pre-inversion one, and it is worth ~4ns per
+		// in-bucket comparison: routing every lookup through Equal cost a
+		// further +15% on Get/symbol/n=10, where a 10-entry table has nothing
+		// else to amortize two IsVoid calls and a type assertion against.
+		//
+		// The void guard is NOT redundant with Equal's. A Void key was
+		// unreachable before — Void is not Hashable, so admission rejected it —
+		// and is reachable now, so EqualTo would be called on it without this.
+		if IsVoid(a) || IsVoid(b) {
+			return IsVoid(a) == IsVoid(b)
+		}
+		return a.EqualTo(b)
+	}
 }
 
 // IsVoid returns true if this hash table is nil.
@@ -92,10 +224,14 @@ func (p *Hashtable) EqualTo(o Value) bool {
 
 // EqualComponents pairs this table's entries against the other's by key, then
 // pushes the matched VALUES for Equal to compare. Keys are matched here rather
-// than pushed because a key is always a leaf: no container type implements
-// Hashable, so a key cannot carry a cycle. TestNoContainerIsHashable pins that
-// invariant — adding HashCode() to *Pair or *Vector (what R6RS
-// make-equal-hashtable wants) would put recursion back on the Go stack here.
+// than pushed because pairing requires LOOKING A KEY UP, which needs an equality
+// answer now — the worklist is what is still deciding it.
+//
+// That eager lookup is bounded for pair and vector keys, whose EqualTo delegates
+// to the iterative Equal. The unbounded case is a HASHTABLE reachable as a key:
+// Equal -> EqualComponents -> keyEqual -> Equal recurses one Go frame per nesting
+// level, and a cycle of tables-as-keys has no bottom. The structural answer will
+// therefore be gated on every key being a Hashable leaf.
 //
 // Both tables are read through lock-free snapshots, so no lock is held during
 // the comparison and two tables never contend.
@@ -177,9 +313,9 @@ func (p *Hashtable) loadBucket(h uint64) []hashtableEntry {
 }
 
 // get is the internal lookup used by EqualComponents and other methods.
-func (p *Hashtable) get(key Hashable) (Value, bool) {
-	for _, e := range p.loadBucket(key.HashCode()) {
-		if e.key.EqualTo(key) {
+func (p *Hashtable) get(key Value) (Value, bool) {
+	for _, e := range p.loadBucket(p.hashKey(key)) {
+		if p.keyEqual(e.key, key) {
 			return e.value, true
 		}
 	}
@@ -211,73 +347,54 @@ func (p *Hashtable) snapshot() []hashtableEntry {
 	return q
 }
 
-// Get retrieves the value associated with key.
-// Returns the value and whether the key was found.
-// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
-func (p *Hashtable) Get(key Value) (Value, bool, error) {
-	hk, ok := key.(Hashable)
-	if !ok {
-		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
-	}
-	val, found := p.get(hk)
-	return val, found, nil
+// Get retrieves the value associated with key, and whether it was found.
+//
+// There is no error return. It used to encode "key does not implement Hashable",
+// which became unreachable when HashtableKind moved the hash to the table: every
+// kind now admits every key.
+func (p *Hashtable) Get(key Value) (Value, bool) {
+	return p.get(key)
 }
 
 // Set associates key with val in the hash table.
-// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
 //
 // Copy-on-write: the target bucket is copied before it is changed, so a
 // concurrent reader scanning the old bucket is never disturbed. See the type
 // comment for the (non-transactional) concurrency contract.
-func (p *Hashtable) Set(key Value, val Value) error {
-	hk, ok := key.(Hashable)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
-	}
-	h := hk.HashCode()
+func (p *Hashtable) Set(key Value, val Value) {
+	h := p.hashKey(key)
 	old := p.loadBucket(h)
 	for i, e := range old {
-		if e.key.EqualTo(hk) {
+		if p.keyEqual(e.key, key) {
 			nb := make([]hashtableEntry, len(old))
 			copy(nb, old)
-			nb[i] = hashtableEntry{key: hk, value: val}
+			nb[i] = hashtableEntry{key: key, value: val}
 			p.buckets.Store(h, nb)
-			return nil
+			return
 		}
 	}
 	nb := make([]hashtableEntry, len(old), len(old)+1)
 	copy(nb, old)
-	nb = append(nb, hashtableEntry{key: hk, value: val})
+	nb = append(nb, hashtableEntry{key: key, value: val})
 	p.buckets.Store(h, nb)
 	p.size.Add(1)
-	return nil
 }
 
 // HasKey returns whether the key exists in the hash table.
-// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
-func (p *Hashtable) HasKey(key Value) (bool, error) {
-	hk, ok := key.(Hashable)
-	if !ok {
-		return false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
-	}
-	_, found := p.get(hk)
-	return found, nil
+func (p *Hashtable) HasKey(key Value) bool {
+	_, found := p.get(key)
+	return found
 }
 
-// Delete removes the entry for key from the hash table.
-// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
+// Delete removes the entry for key from the hash table. Absent keys are a no-op.
 //
 // Copy-on-write: a shrunk bucket is a fresh slice; the last entry's removal
 // drops the bucket key entirely.
-func (p *Hashtable) Delete(key Value) error {
-	hk, ok := key.(Hashable)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
-	}
-	h := hk.HashCode()
+func (p *Hashtable) Delete(key Value) {
+	h := p.hashKey(key)
 	old := p.loadBucket(h)
 	for i, e := range old {
-		if e.key.EqualTo(hk) {
+		if p.keyEqual(e.key, key) {
 			if len(old) == 1 {
 				p.buckets.Delete(h)
 			} else {
@@ -287,10 +404,9 @@ func (p *Hashtable) Delete(key Value) error {
 				p.buckets.Store(h, nb)
 			}
 			p.size.Add(-1)
-			return nil
+			return
 		}
 	}
-	return nil
 }
 
 // collectEntries walks every bucket and projects each entry to a Value,
@@ -332,7 +448,7 @@ func (p *Hashtable) Size() int {
 // Copy returns a shallow copy of the hash table. Buckets are immutable, so each
 // stored slice can be shared directly with the copy without re-copying.
 func (p *Hashtable) Copy() *Hashtable {
-	q := NewEmptyHashtable()
+	q := NewHashtable(p.kind)
 	p.buckets.Range(func(k, v any) bool {
 		q.buckets.Store(k, v.([]hashtableEntry))
 		return true
@@ -354,7 +470,7 @@ func (p *Hashtable) Clear() {
 // fn runs against a snapshot: it may be Scheme code that reads or mutates this
 // same table (hashtable-walk). The snapshot is the iteration's view; entries
 // added concurrently are not visited.
-func (p *Hashtable) Entries(fn func(key Hashable, value Value) error) error {
+func (p *Hashtable) Entries(fn func(key, value Value) error) error {
 	for _, e := range p.snapshot() {
 		err := fn(e.key, e.value)
 		if err != nil {

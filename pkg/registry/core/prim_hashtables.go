@@ -46,10 +46,7 @@ func PrimHashtableRef(mc machine.CallContext) error {
 	key := mc.Arg(1)
 	rest := mc.Arg(2)
 
-	val, found, err := ht.Get(key)
-	if err != nil {
-		return err
-	}
+	val, found := ht.Get(key)
 	if found {
 		mc.SetValue(val)
 		return nil
@@ -75,10 +72,7 @@ func PrimHashtableSet(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	err = ht.Set(mc.Arg(1), mc.Arg(2))
-	if err != nil {
-		return err
-	}
+	ht.Set(mc.Arg(1), mc.Arg(2))
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -90,10 +84,7 @@ func PrimHashtableDelete(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	err = ht.Delete(mc.Arg(1))
-	if err != nil {
-		return err
-	}
+	ht.Delete(mc.Arg(1))
 	mc.SetValue(values.Void)
 	return nil
 }

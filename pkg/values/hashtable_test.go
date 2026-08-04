@@ -16,6 +16,7 @@ package values_test
 
 import (
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -27,7 +28,7 @@ import (
 func makeHT(kvs ...any) *values.Hashtable {
 	ht := values.NewEmptyHashtable()
 	for i := 0; i < len(kvs); i += 2 {
-		_ = ht.Set(kvs[i].(values.Value), kvs[i+1].(values.Value))
+		ht.Set(kvs[i].(values.Value), kvs[i+1].(values.Value))
 	}
 	return ht
 }
@@ -110,31 +111,25 @@ func TestHashtable_GetSetDelete(t *testing.T) {
 	ht := values.NewEmptyHashtable()
 
 	// Set and Get — uses structural equality, not pointer identity
-	err := ht.Set(values.NewSymbol("key"), values.NewInteger(42))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewSymbol("key"), values.NewInteger(42))
 
-	val, found, err := ht.Get(values.NewSymbol("key"))
-	c.Assert(err, qt.IsNil)
+	val, found := ht.Get(values.NewSymbol("key"))
 	c.Assert(found, qt.IsTrue)
 	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(42))
 
 	// HasKey
-	found, err = ht.HasKey(values.NewSymbol("key"))
-	c.Assert(err, qt.IsNil)
+	found = ht.HasKey(values.NewSymbol("key"))
 	c.Assert(found, qt.IsTrue)
 
-	found, err = ht.HasKey(values.NewSymbol("missing"))
-	c.Assert(err, qt.IsNil)
+	found = ht.HasKey(values.NewSymbol("missing"))
 	c.Assert(found, qt.IsFalse)
 
 	// Get missing
-	_, found, err = ht.Get(values.NewSymbol("missing"))
-	c.Assert(err, qt.IsNil)
+	_, found = ht.Get(values.NewSymbol("missing"))
 	c.Assert(found, qt.IsFalse)
 
 	// Delete
-	err = ht.Delete(values.NewSymbol("key"))
-	c.Assert(err, qt.IsNil)
+	ht.Delete(values.NewSymbol("key"))
 	c.Assert(ht.Size(), qt.Equals, 0)
 }
 
@@ -145,8 +140,7 @@ func TestHashtable_KeysValues(t *testing.T) {
 	c.Assert(ht.Keys(), qt.Equals, values.EmptyList)
 	c.Assert(ht.Values(), qt.Equals, values.EmptyList)
 
-	err := ht.Set(values.NewSymbol("a"), values.NewInteger(1))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewSymbol("a"), values.NewInteger(1))
 
 	keys := ht.Keys()
 	c.Assert(keys.Length(), qt.Equals, 1)
@@ -161,15 +155,13 @@ func TestHashtable_CopyClear(t *testing.T) {
 	c := qt.New(t)
 
 	ht := values.NewEmptyHashtable()
-	err := ht.Set(values.NewSymbol("a"), values.NewInteger(1))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewSymbol("a"), values.NewInteger(1))
 
 	// Copy is independent
 	cp := ht.Copy()
 	c.Assert(cp.Size(), qt.Equals, 1)
 
-	err = ht.Set(values.NewSymbol("b"), values.NewInteger(2))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewSymbol("b"), values.NewInteger(2))
 	c.Assert(ht.Size(), qt.Equals, 2)
 	c.Assert(cp.Size(), qt.Equals, 1)
 
@@ -179,22 +171,32 @@ func TestHashtable_CopyClear(t *testing.T) {
 	c.Assert(cp.Size(), qt.Equals, 1)
 }
 
-func TestHashtable_NonHashableKey(t *testing.T) {
+// TestHashtable_ContainerKeyIsAdmitted is the inverse of the test it replaces.
+//
+// A container key used to be REJECTED — Set type-asserted Hashable and returned
+// an error for anything else, which is what TestHashtable_NonHashableKey
+// asserted. HashtableKind moved the hash to the table, so admission is gone and
+// every kind takes every key; the four error returns went with it. The behaviour
+// under test flipped, so the test flipped rather than being deleted.
+func TestHashtable_ContainerKeyIsAdmitted(t *testing.T) {
 	c := qt.New(t)
 	ht := values.NewEmptyHashtable()
 	key := values.NewCons(values.NewInteger(1), values.NewInteger(2))
 
-	err := ht.Set(key, values.NewInteger(1))
-	c.Assert(err, qt.IsNotNil)
+	ht.Set(key, values.NewInteger(1))
+	c.Assert(ht.Size(), qt.Equals, 1)
 
-	_, _, err = ht.Get(key)
-	c.Assert(err, qt.IsNotNil)
+	// A DISTINCT but equal? pair finds it: the table hashes with EqualHash and
+	// compares with Equal, so structural identity is what makes it one key.
+	lookup := values.NewCons(values.NewInteger(1), values.NewInteger(2))
+	val, found := ht.Get(lookup)
+	c.Assert(found, qt.IsTrue)
+	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(1))
+	c.Assert(ht.HasKey(lookup), qt.IsTrue)
 
-	_, err = ht.HasKey(key)
-	c.Assert(err, qt.IsNotNil)
-
-	err = ht.Delete(key)
-	c.Assert(err, qt.IsNotNil)
+	ht.Delete(lookup)
+	c.Assert(ht.Size(), qt.Equals, 0)
+	c.Assert(ht.HasKey(key), qt.IsFalse)
 }
 
 func TestHashtable_VariousKeyTypes(t *testing.T) {
@@ -202,35 +204,28 @@ func TestHashtable_VariousKeyTypes(t *testing.T) {
 	ht := values.NewEmptyHashtable()
 
 	// Symbol key
-	err := ht.Set(values.NewSymbol("sym"), values.NewInteger(1))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewSymbol("sym"), values.NewInteger(1))
 
 	// Integer key
-	err = ht.Set(values.NewInteger(42), values.NewInteger(2))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewInteger(42), values.NewInteger(2))
 
 	// String key
-	err = ht.Set(values.NewString("str"), values.NewInteger(3))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewString("str"), values.NewInteger(3))
 
 	// Boolean key
-	err = ht.Set(values.TrueValue, values.NewInteger(4))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.TrueValue, values.NewInteger(4))
 
 	// Character key
-	err = ht.Set(values.NewCharacter('x'), values.NewInteger(5))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewCharacter('x'), values.NewInteger(5))
 
 	c.Assert(ht.Size(), qt.Equals, 5)
 
 	// Look up with new pointers — structural equality
-	val, found, err := ht.Get(values.NewInteger(42))
-	c.Assert(err, qt.IsNil)
+	val, found := ht.Get(values.NewInteger(42))
 	c.Assert(found, qt.IsTrue)
 	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(2))
 
-	val, found, err = ht.Get(values.NewSymbol("sym"))
-	c.Assert(err, qt.IsNil)
+	val, found = ht.Get(values.NewSymbol("sym"))
 	c.Assert(found, qt.IsTrue)
 	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(1))
 }
@@ -239,14 +234,11 @@ func TestHashtable_OverwriteKey(t *testing.T) {
 	c := qt.New(t)
 	ht := values.NewEmptyHashtable()
 
-	err := ht.Set(values.NewSymbol("k"), values.NewInteger(1))
-	c.Assert(err, qt.IsNil)
-	err = ht.Set(values.NewSymbol("k"), values.NewInteger(2))
-	c.Assert(err, qt.IsNil)
+	ht.Set(values.NewSymbol("k"), values.NewInteger(1))
+	ht.Set(values.NewSymbol("k"), values.NewInteger(2))
 
 	c.Assert(ht.Size(), qt.Equals, 1)
-	val, found, err := ht.Get(values.NewSymbol("k"))
-	c.Assert(err, qt.IsNil)
+	val, found := ht.Get(values.NewSymbol("k"))
 	c.Assert(found, qt.IsTrue)
 	c.Assert(val, valuestest.SchemeEquals, values.NewInteger(2))
 }
@@ -258,8 +250,7 @@ func TestHashtable_OverwriteKey(t *testing.T) {
 func TestHashtable_SchemeString_CompoundCycleBounded(t *testing.T) {
 	ht := values.NewEmptyHashtable()
 	p := values.NewCons(values.NewSymbol("a"), values.EmptyList)
-	err := ht.Set(values.NewSymbol("k"), p)
-	qt.Assert(t, err, qt.IsNil)
+	ht.Set(values.NewSymbol("k"), p)
 	p.SetCdr(ht) // pair -> hashtable -> pair (value) -> hashtable -> ...
 
 	// Reaching this line at all proves no stack overflow. The cycle through the
@@ -273,10 +264,89 @@ func TestHashtable_SchemeString_CompoundCycleBounded(t *testing.T) {
 func TestHashtable_SchemeString_SharedAcyclic(t *testing.T) {
 	shared := values.List(values.NewInteger(1), values.NewInteger(2))
 	ht := values.NewEmptyHashtable()
-	err := ht.Set(values.NewSymbol("k"), shared)
-	qt.Assert(t, err, qt.IsNil)
+	ht.Set(values.NewSymbol("k"), shared)
 	// The list (shared . ht-with-shared) shares `shared` across two sibling
 	// paths but is acyclic; both occurrences must render in full.
 	dag := values.NewCons(shared, values.NewCons(ht, values.EmptyList))
 	qt.Assert(t, dag.SchemeString(), qt.Equals, "((1 2) #hash((k . (1 2))))")
+}
+
+// TestHashtableKinds pins the R6RS inversion: the hash belongs to the TABLE, so
+// which objects count as one key is the table's choice, not the key's.
+func TestHashtableKinds(t *testing.T) {
+	tcs := []struct {
+		name     string
+		kind     values.HashtableKind
+		k1, k2   values.Value
+		wantSame bool
+	}{
+		{"equal: distinct equal lists are one key", values.HashtableEqual,
+			values.NewCons(values.NewInteger(1), values.EmptyList),
+			values.NewCons(values.NewInteger(1), values.EmptyList), true},
+		{"equal: distinct equal strings are one key", values.HashtableEqual,
+			values.NewString("a"), values.NewMutableString("a"), true},
+		{"equal: distinct vectors are one key", values.HashtableEqual,
+			values.NewVector(values.NewInteger(1)), values.NewVector(values.NewInteger(1)), true},
+		{"eqv: distinct equal lists are two keys", values.HashtableEqv,
+			values.NewCons(values.NewInteger(1), values.EmptyList),
+			values.NewCons(values.NewInteger(1), values.EmptyList), false},
+		{"eqv: exact across representations is one key", values.HashtableEqv,
+			values.NewInteger(5), values.NewBigIntegerFromInt64(5), true},
+		{"eqv: distinct equal strings are two keys", values.HashtableEqv,
+			values.NewString("a"), values.NewMutableString("a"), false},
+		{"eq: same-named symbols are one key", values.HashtableEq,
+			values.NewSymbol("s"), values.NewSymbol("s"), true},
+		{"eq: distinct equal strings are two keys", values.HashtableEq,
+			values.NewString("a"), values.NewMutableString("a"), false},
+		{"eq: distinct equal lists are two keys", values.HashtableEq,
+			values.NewCons(values.NewInteger(1), values.EmptyList),
+			values.NewCons(values.NewInteger(1), values.EmptyList), false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ht := values.NewHashtable(tc.kind)
+			ht.Set(tc.k1, values.NewInteger(1))
+			ht.Set(tc.k2, values.NewInteger(2))
+			want := 1
+			if !tc.wantSame {
+				want = 2
+			}
+			qt.Assert(t, ht.Size(), qt.Equals, want)
+			v, found := ht.Get(tc.k1)
+			qt.Assert(t, found, qt.IsTrue)
+			if tc.wantSame {
+				qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(2))
+			}
+		})
+	}
+}
+
+// TestHashtableZeroValueIsEqualKind pins the zero-value choice. A bare
+// &Hashtable{} — which NewEmptyHashtable returns and Copy inherits — must keep
+// today's equal? semantics, so HashtableEqual is deliberately the zero value.
+// Reordering the iota silently reinterprets every existing table.
+func TestHashtableZeroValueIsEqualKind(t *testing.T) {
+	qt.Assert(t, values.NewEmptyHashtable().Kind(), qt.Equals, values.HashtableEqual)
+	qt.Assert(t, values.HashtableEqual, qt.Equals, values.HashtableKind(0))
+}
+
+// TestHashtableCyclicKeyTerminates is what lifting key admission buys and what it
+// risks. A cyclic pair key is safe because (*Pair).EqualTo delegates to the
+// iterative values.Equal — it is NOT Go recursion, contrary to what
+// hashtable.go's comment claimed before this change.
+func TestHashtableCyclicKeyTerminates(t *testing.T) {
+	cyc := values.NewCons(values.NewInteger(1), values.EmptyList)
+	cyc.SetCdr(cyc)
+	done := make(chan struct{})
+	go func() {
+		ht := values.NewHashtable(values.HashtableEqual)
+		ht.Set(cyc, values.NewInteger(1))
+		_, _ = ht.Get(cyc)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cyclic pair key did not terminate")
+	}
 }
