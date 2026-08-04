@@ -74,6 +74,45 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			src:  `(define-syntax m (syntax-rules () ((_ a) a))) (m 7)`,
 			want: "7",
 		},
+		{
+			name: "let* and letrec",
+			src:  `(let* ((x 1) (y x)) (letrec ((f (lambda (n) n))) (f y)))`,
+			want: "1",
+		},
+		{
+			// Named let is the self-tail-call shape, and it compiles to a jump
+			// rather than a call to anything the registry would have supplied.
+			name: "named let",
+			src:  `(let loop ((i 0)) (if (if i #f #t) i (loop #f)))`,
+			want: "#f",
+		},
+		{
+			// set! on a LOCAL. There is no global to set at this level, so the
+			// floor claim is specifically about the lexical case.
+			name: "set! on a local",
+			src:  `(let ((x 1)) (set! x 2) x)`,
+			want: "2",
+		},
+		{
+			name: "begin, quote, and define",
+			src:  `(begin (define x '(a b)) x)`,
+			want: "(a b)",
+		},
+		{
+			name: "variadic lambda and internal define",
+			src:  `((lambda args (define n args) n) 1 2)`,
+			want: "(1 2)",
+		},
+		{
+			name: "case-lambda",
+			src:  `((case-lambda ((a) a) ((a b) b)) 1 2)`,
+			want: "2",
+		},
+		{
+			name: "cond-expand",
+			src:  `(cond-expand (wile 1) (else 2))`,
+			want: "1",
+		},
 	}
 	for _, tc := range usable {
 		t.Run("usable/"+tc.name, func(t *testing.T) {

@@ -221,7 +221,6 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		}
 	case StrictNoBindings:
 		visibleReg = registry.NewRegistry()
-	case StrictOff:
 	}
 
 	// Run the ordering-sensitive sequence shared with pkg/wile's applyBaseEnvironment.
