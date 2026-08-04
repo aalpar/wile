@@ -191,6 +191,7 @@ Engine behavior can be customized via functional options:
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
 | `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. See "Option ordering" below |
 | `WithStrictNamespace()` | Bind only the core surface at the top level; the profile's extension primitives stay importable but are not pre-bound. See "Strict namespace" below |
+| `WithoutAmbientBindings()` | Bind *nothing* at the top level — one step past `WithStrictNamespace()`. Only the core special forms remain (they are phase handlers, not bindings); everything else, `car` included, must be imported. See "Strict namespace" below |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
@@ -234,12 +235,29 @@ pre-bound at the top level, so `(display x)` and `(+ 1 2)` work with no `import`
 This is the "feels native to Go" scripting ergonomic, mirroring Racket's `racket`
 vs `racket/base`.
 
-`WithStrictNamespace()` opts into an R7RS-strict *visible* surface: only the core
-primitives (and the `define`/`import`/syntax machinery) are bound at the top
-level. The profile's extension primitives stay **registered** — reachable via
-`(import …)` — but are not pre-bound. The visible surface equals a `Tiny`
-engine's, while the full profile registry still backs library loading, so
-libraries layer on top of a core-only baseline:
+Two options narrow that surface, and they form a ladder. Both combine by **max**,
+so applying several in any order always lands on the narrowest — the one direction
+this family must never reverse.
+
+| Level | Visible top level | Option |
+|---|---|---|
+| 0 | the whole registry (default) | none |
+| 1 | core primitives + core bootstrap macros | `WithStrictNamespace()` |
+| 2 | nothing | `WithoutAmbientBindings()` |
+
+What is **registered** is identical at all three, so nothing is withheld
+permanently: a program reaches the whole profile by importing it. These options
+buy *explicitness* — proof that every dependency is declared in source — not
+confinement. The profile and the authorizer are the capability boundary.
+
+#### Level 1 — core-only
+
+`WithStrictNamespace()` binds only the core primitives (and the
+`define`/`import`/syntax machinery) at the top level. The profile's extension
+primitives stay **registered** — reachable via `(import …)` — but are not
+pre-bound. The visible surface equals a `Tiny` engine's, while the full profile
+registry still backs library loading, so libraries layer on top of a core-only
+baseline:
 
 ```go
 eng, _ := wile.NewEngine(ctx,
@@ -251,13 +269,72 @@ eng.EvalMultiple(ctx, "(display 1)")                        // error: no binding
 eng.EvalMultiple(ctx, "(import (scheme r5rs)) (exact->inexact 1/2)") // 0.5 — layered on top
 ```
 
+#### Level 2 — nothing pre-bound
+
+`WithoutAmbientBindings()` binds the visible top level from an **empty** registry.
+Not even `car` survives:
+
+```go
+eng, _ := wile.NewEngine(ctx,
+    wile.WithProfile(wile.Small), wile.WithoutAmbientBindings(),
+    wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths())
+
+eng.EvalMultiple(ctx, "(let ((x 1)) x)")                 // 1 — the floor, see below
+eng.EvalMultiple(ctx, "(car '(1 2))")                    // error: no binding "car"
+eng.EvalMultiple(ctx, "(import (scheme base)) (car '(1 2))") // 1
+```
+
+**The floor is not the empty set, and it is not R7RS-strict.** Core special forms
+are *phase handlers*: registered by the compiler, held in frames that ordinary
+value resolution never consults, and never sourced from a registry — so
+withholding the registry cannot withhold them. The partition is three-way:
+
+| | Members | Why |
+|---|---|---|
+| **Usable** | `lambda` `if` `quote` `define` `begin` `set!` `let` `let*` `letrec` `letrec*` named `let` `define-syntax` `let-syntax` `letrec-syntax` `syntax-rules` `cond-expand` `case-lambda` `define-library` `import` | phase handler whose codegen emits no call |
+| **Resolves, unusable** | `quasiquote` *with* an `unquote` (emits `list`), `unless` (needs `not`), `guard` (needs `call-with-exit`) | phase handler, but its expansion calls a primitive nothing bound |
+| **Unresolved** | `cond` `case` `when` `and` `or` `do` `define-record-type` `let-values` `let*-values` `define-values` `delay` `parameterize`, and every primitive | bootstrap macro or primitive; both come from the registry |
+
+A constant quasiquote template such as `` `(1 2) `` works; add a comma and it
+fails. `when` and `unless` land on **opposite** sides — `when` is a bootstrap
+macro, `unless` is a phase handler that expands through `not`.
+
+So the option is strict for *procedures and derived syntax*. Reaching a usable
+R7RS surface takes one `(import (scheme base))`, which restores the derived syntax
+and the procedures alike.
+
+**Two costs, both real:**
+
+- *Per-import latency.* A library environment is engine-sized, so imports are not
+  cheap: `(import (scheme base))` measures **9.38 ms**, against **3.93 ms /
+  1.20 MB heap** to build a whole `Small` engine — one import is ~2.4× an engine's
+  startup. An eight-library R7RS preamble costs **58.57 ms / 7.93 MB heap**.
+  Per-library spread is narrow (6.0–9.4 ms), so this is per-import overhead, not
+  library size. A level-2 engine is therefore slower to reach a usable state than
+  a `Small` engine is at rest. (In-process, warm, macOS/arm64, 2026-08-04.)
+- *Profile bound.* Usable on `Small` and `KitchenSink` only. `Tiny` cannot import
+  `(scheme base)` (64 of its exports are unregistered there) and
+  `Console`/`ConsoleWithLoad` are denied `code:load` on the stdlib path. Both
+  failures pre-date the option and reproduce without it — but at level 0 or 1
+  those profiles still hand the program an ambient surface, and at level 2 there
+  is none to fall back to.
+
+`WithSandbox()` denies `code:load` for the same reason, so **level 2 plus a
+sandbox is confinement**: the program is left on the phase-handler floor with no
+import route off it. The two options are individually orthogonal — one picks the
+visible surface, the other the authorizer — but do not reach for the pair
+expecting the "explicitness, not confinement" reading above to still hold.
+
+#### Both levels
+
 **Security is unchanged.** The profile (the registered extension set) remains the
-capability boundary — strict mode never widens what is reachable, it only
+capability boundary — a strict level never widens what is reachable, it only
 withholds it from the top level until imported. `WithProfile(Small) +
 WithStrictNamespace()` exposes exactly the `Small` surface, just withheld until
-imported. The option is orthogonal to `WithProfile`/`WithSandbox`/`WithAuthorizer`
-and composes order-independently with them. Off by default (the batteries-included
-top level is preserved for compatibility and the REPL/CLI experience).
+imported. Both options are orthogonal to
+`WithProfile`/`WithSandbox`/`WithAuthorizer` and compose order-independently with
+them. Off by default (the batteries-included top level is preserved for
+compatibility and the REPL/CLI experience).
 
 A narrowed top level is a valid import target: import installs resolved bindings into
 the mutable user-global frame, not the sealed base, so layering libraries on a
@@ -265,12 +342,15 @@ strict engine works exactly as on a non-strict one.
 
 **Scope.** The visible surface is carved when the namespace is built, so strictness
 must be set at namespace-creation time. Like `WithRegistry`/`WithExtension`/
-`WithoutCore`, `WithStrictNamespace` has no effect on the `WithNamespace` path —
+`WithoutCore`, neither option has any effect on the `WithNamespace` path —
 a pre-built namespace is authoritative for its own top level, so bake strictness
-in at `NewNamespace`. It is also incompatible with `WithRegistry`/`WithoutCore`
-(which supply a custom or coreless registry): strict mode derives its visible
-surface from the default core registry, so that combination is rejected at
-construction with `ErrEngineInit`.
+in at `NewNamespace`. Both are also incompatible with `WithRegistry`/`WithoutCore`
+(which supply a custom or coreless registry): the strict levels derive the visible
+surface from the default core registry, not from a caller-supplied one, so that
+combination is rejected at construction with `ErrEngineInit`. `WithoutCore()` is
+the one to keep separate in your head: it empties **both** the visible surface and
+the registry that backs library environments, where `WithoutAmbientBindings()`
+empties only the former.
 
 ## Virtual Filesystem
 

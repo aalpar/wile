@@ -51,6 +51,17 @@
 //	)
 //	// (display 1) errors until imported; (import (scheme r5rs)) layers it on.
 //
+// One step further — nothing pre-bound at all, so every dependency is declared
+// in source. Only the core special forms remain, because they are phase handlers
+// rather than bindings:
+//
+//	engine, err := wile.NewEngine(ctx,
+//	    wile.WithProfile(wile.Small), wile.WithoutAmbientBindings(),
+//	    wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths(),
+//	)
+//	// (car '(1 2)) errors too; (import (scheme base)) restores it.
+//	// Budget ~9.4 ms per import — see WithoutAmbientBindings.
+//
 // Custom primitives:
 //
 //	engine, _ := wile.NewEngine(ctx)
