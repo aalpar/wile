@@ -548,6 +548,56 @@ func WithStrictNamespace() EngineOption {
 	}
 }
 
+// WithoutAmbientBindings narrows the engine's visible top-level surface all the
+// way: NOTHING is pre-bound. It is one step past WithStrictNamespace, which
+// still pre-binds the core surface, and it composes with it by max — applying
+// both in either order yields this level.
+//
+// What survives is not the empty set. Core special forms are PHASE HANDLERS,
+// not bindings: they are registered by the compiler, live in frames sealed
+// SealKindHandler that ordinary value resolution never sees, and never come
+// from a registry — so withholding the registry cannot withhold them. The floor
+// is therefore lambda, if, quote, define, begin, set!, let/let*/letrec,
+// define-syntax, syntax-rules, cond-expand, case-lambda, define-library, and
+// import. This option is strict for PROCEDURES AND DERIVED SYNTAX; do not read
+// it as "R7RS-strict" unqualified.
+//
+// One class sits between the two: a phase handler whose expansion CALLS a
+// primitive resolves and then fails at the call. quasiquote is the one to know
+// — a constant template such as `(1 2) works, but the moment an unquote appears
+// the expansion emits list and dies. unless (needs not) and guard (needs
+// call-with-exit) are the same shape. Everything else the registry supplies —
+// the core primitives and the bootstrap macros cond, case, when, and, or, do,
+// define-record-type, let-values, delay, parameterize — is simply unbound.
+//
+// Nothing is withheld permanently: import is a phase handler, and REGISTERED is
+// untouched, so a program reaches any part of the profile it wants by importing
+// it, starting with (import (scheme base)). What this option buys is that the
+// program must SAY SO — no ambient dependency goes undeclared. It is an
+// explicitness property (a CI or portability-audit property), not confinement;
+// the profile remains the security boundary at every level.
+//
+// Two costs, both real:
+//
+//   - A library environment is engine-sized, so every import is expensive:
+//     (import (scheme base)) alone measures ~9.4 ms, against ~3.9 ms to build a
+//     whole Small engine. A program on this level pays that at least once, and
+//     an eight-library R7RS preamble costs ~59 ms / ~7.9 MB heap.
+//   - It is usable on Small and KitchenSink only. Tiny cannot import
+//     (scheme base) (64 of its exports are unregistered there) and
+//     Console/ConsoleWithLoad are denied code:load on the stdlib path. Both
+//     failures pre-date this option and reproduce without it, but at this level
+//     there is no ambient surface to fall back to.
+//
+// Carries the same constraints as WithStrictNamespace: set it at
+// namespace-creation time (no effect on the WithNamespace path), and it is
+// incompatible with WithRegistry/WithoutCore. Off by default.
+func WithoutAmbientBindings() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.strictLevel = max(cfg.strictLevel, strictLevelNoBindings)
+	}
+}
+
 // WithEnvMap sets the complete virtual environment variable map.
 // Replaces any previously set virtual env vars.
 //

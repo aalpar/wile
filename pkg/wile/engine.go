@@ -187,16 +187,25 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 		ns.SetImmutableTopLevel(true)
 	}
 
-	// In strict-namespace mode the visible top level binds only the core surface;
-	// the profile's extension primitives stay registered on the namespace (reg) and
-	// reachable via (import …), but are not pre-bound here. Non-strict keeps the full
-	// registry, so topLevelReg == reg and the path is byte-for-byte unchanged.
+	// Strictness picks the registry the VISIBLE top level is bound from; the
+	// profile's full registry (reg) stays on the namespace and backs library
+	// environments at every level, so what strictness withholds is always
+	// reachable via (import …) and never unreachable. Level 0 keeps the full
+	// registry, so topLevelReg == reg and that path is byte-for-byte unchanged.
+	//
+	// The level-2 arm is an EMPTY registry, not a coreless engine: an empty
+	// registry supplies no primitives and no bootstrap macros, so the visible
+	// frame ends up holding only the phase handlers, which never came from a
+	// registry at all (see WithoutAmbientBindings).
 	topLevelReg := reg
-	if cfg.strictLevel > strictLevelOff {
+	switch cfg.strictLevel {
+	case strictLevelCore:
 		topLevelReg, err = coreOnlyRegistry()
 		if err != nil {
 			return nil, nil, nil, err
 		}
+	case strictLevelNoBindings:
+		topLevelReg = registry.NewRegistry()
 	}
 
 	// A dialect may cross the forms-only ceiling by also implementing
