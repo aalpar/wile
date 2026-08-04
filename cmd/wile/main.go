@@ -48,6 +48,7 @@ type Options struct {
 	LibraryPath  string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
 	Version      bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet        bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
+	Strict       string   `long:"strict" description:"Narrow the visible top level: 'core' binds only the core surface, 'no-bindings' binds nothing (everything, car included, must be imported). Bare --strict means core" optional:"true" optional-value:"core" choice:"core" choice:"no-bindings"`
 	MCP          bool     `long:"mcp" description:"Start as MCP server on stdio"`
 	MCPTimeout   float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no timeout)" default:"30"`
 	CPUProfile   string   `long:"cpuprofile" description:"Write CPU profile to file"`
@@ -304,6 +305,17 @@ func main() {
 	}
 	if coverageCollector != nil {
 		engineOpts = append(engineOpts, wile.WithCoverage(coverageCollector))
+	}
+
+	// --strict narrows the VISIBLE top level; the KitchenSink registry above is
+	// untouched, so everything withheld is still one (import …) away. go-flags
+	// validates the value against the choice tags, so the default arm is
+	// unreachable for anything but the empty string.
+	switch opts.Strict {
+	case "core":
+		engineOpts = append(engineOpts, wile.WithStrictNamespace())
+	case "no-bindings":
+		engineOpts = append(engineOpts, wile.WithoutAmbientBindings())
 	}
 
 	// An interactive session (the REPL, or -i after loading files/-e) uses a MUTABLE

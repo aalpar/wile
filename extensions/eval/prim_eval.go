@@ -32,12 +32,17 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// ProfileFactory is the callback used by (environment '(wile <name>)) to
-// construct a namespace for a named Wile profile. It is set by
-// internal/bootstrap at init time (bootstrap cannot be imported here because
-// bootstrap already imports this package). When nil, (wile <name>) specs
-// return ErrWileProfilesNotRegistered.
-var ProfileFactory func(ctx context.Context, callerNS *environment.Namespace, profileName string) (*environment.Namespace, error)
+// ProfileFactory is the callback used by (environment '(wile <name>)) and
+// (environment '(wile <name> <strictness>)) to construct a namespace for a named
+// Wile profile. It is set by internal/bootstrap at init time (bootstrap cannot be
+// imported here because bootstrap already imports this package). When nil,
+// (wile <name>) specs return ErrWileProfilesNotRegistered.
+//
+// Both names cross as raw spellings and are validated on the far side: this
+// package cannot name bootstrap's profile or strictness types, and splitting the
+// validation would put half the vocabulary in each package. strictName is "" when
+// the spec omitted it.
+var ProfileFactory func(ctx context.Context, callerNS *environment.Namespace, profileName, strictName string) (*environment.Namespace, error)
 
 // ErrWileProfilesNotRegistered is returned when tryWileProfile dispatches on
 // a (wile <name>) spec but no ProfileFactory has been registered.
@@ -288,11 +293,21 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 }
 
 // tryWileProfile checks whether argsVal is a single-element list whose only
-// element is (wile <name>). If so, it dispatches to bootstrap to construct a
-// fresh namespace for that profile. Returns (ns, true, nil) on match,
-// (nil, false, nil) if the spec is not a profile constructor (caller falls
-// through to standard import-spec handling), or (nil, true, err) if the
-// match succeeded but construction failed.
+// element is (wile <name>) or (wile <name> <strictness>). If so, it dispatches to
+// bootstrap to construct a fresh namespace for that profile. Returns (ns, true,
+// nil) on match, (nil, false, nil) if the spec is not a profile constructor
+// (caller falls through to standard import-spec handling), or (nil, true, err) if
+// the match succeeded but construction failed.
+//
+// The optional third element narrows the new environment's VISIBLE top level:
+// 'core binds only the core surface, 'no-bindings binds nothing. It is a separate
+// element rather than part of the profile name because strictness is orthogonal to
+// the profile — the profile decides what is registered and remains the capability
+// boundary, the level only decides how much of it is pre-bound.
+//
+//	(environment '(wile small))                ; the Small surface, pre-bound
+//	(environment '(wile small core))           ; core only; import the rest
+//	(environment '(wile small no-bindings))    ; nothing; import everything
 func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.Namespace, bool, error) {
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
@@ -317,9 +332,21 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 	if err != nil {
 		return nil, true, err
 	}
+	// The strictness element is optional, so its absence is the empty list rather
+	// than an error. "" is the absent case all the way down: ParseStrictLevel maps
+	// it to StrictOff, so no caller special-cases it.
+	strictName := ""
 	if !values.IsEmptyList(restAfterName) {
-		return nil, true, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
-			"environment: (wile %s ...) takes exactly one profile name", nameSym.Key)
+		strictSym, restAfterStrict, strictErr := values.UnconsTyped[*values.Symbol](
+			restAfterName, werr.ErrNotASymbol, "environment", "strictness after profile name")
+		if strictErr != nil {
+			return nil, true, strictErr
+		}
+		if !values.IsEmptyList(restAfterStrict) {
+			return nil, true, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
+				"environment: (wile %s ...) takes a profile name and an optional strictness", nameSym.Key)
+		}
+		strictName = strictSym.Key
 	}
 
 	if ProfileFactory == nil {
@@ -328,7 +355,7 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 	}
 
 	callerNS := mc.EnvironmentFrame().Namespace()
-	ns, err := ProfileFactory(mc.Context(), callerNS, nameSym.Key)
+	ns, err := ProfileFactory(mc.Context(), callerNS, nameSym.Key, strictName)
 	if err != nil {
 		return nil, true, werr.WrapForeignErrorf(err,
 			"environment: failed to create wile profile %q", nameSym.Key)

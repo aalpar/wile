@@ -23,6 +23,7 @@ import (
 
 	exteval "github.com/aalpar/wile/extensions/eval"
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
 	"github.com/aalpar/wile/pkg/wile"
@@ -715,5 +716,76 @@ func TestEnvironment_WileProfiles(t *testing.T) {
 
 	t.Run("unknown profile errors", func(t *testing.T) {
 		evalExpectError(t, engine, `(environment '(wile unknown))`)
+	})
+}
+
+// TestEnvironment_WileProfileStrictness exercises the optional third element,
+// which narrows the constructed environment's VISIBLE top level. Strictness is
+// orthogonal to the profile: (wile small core) and (wile small no-bindings) both
+// REGISTER the Small set and differ only in how much of it is pre-bound.
+func TestEnvironment_WileProfileStrictness(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	evalIn := func(spec, expr string) string {
+		t.Helper()
+		return eval(t, engine, fmt.Sprintf("(eval %s (environment '%s))", expr, spec)).SchemeString()
+	}
+
+	// Level 1 keeps core, drops the profile's extension primitives.
+	t.Run("core keeps core arithmetic", func(t *testing.T) {
+		c.Assert(evalIn("(wile small core)", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("core drops the extension surface", func(t *testing.T) {
+		evalExpectError(t, engine, `(eval '(procedure? display) (environment '(wile small core)))`)
+	})
+
+	// Level 2 drops core too; only the phase handlers are left.
+	t.Run("no-bindings keeps the phase-handler floor", func(t *testing.T) {
+		c.Assert(evalIn("(wile small no-bindings)", "'(let ((x 1)) x)"), qt.Equals, "1")
+	})
+
+	t.Run("no-bindings drops core arithmetic", func(t *testing.T) {
+		evalExpectError(t, engine, `(eval '(+ 1 2) (environment '(wile small no-bindings)))`)
+	})
+
+	// The profile is still REGISTERED at every level, so the environment can
+	// import its way back. Without this the level would be confinement rather
+	// than explicitness.
+	//
+	// Needs its own engine: newEngine above omits WithLibraryPaths, so (import …)
+	// fails there for want of a library registry, at every strictness level and on
+	// master. The profile environment inherits the library registry from its
+	// caller, which is why enabling it on the OUTER engine is enough.
+	t.Run("no-bindings can import its way back", func(t *testing.T) {
+		ctx := context.Background()
+		libEngine, err := wile.NewEngine(ctx,
+			wile.WithProfile(wile.Small),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithLibraryPaths(),
+		)
+		c.Assert(err, qt.IsNil)
+
+		got, err := libEngine.EvalMultiple(ctx,
+			`(eval '(begin (import (scheme base)) (car '(1 2))) (environment '(wile small no-bindings)))`)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.SchemeString(), qt.Equals, "1")
+	})
+
+	t.Run("omitting strictness is unchanged", func(t *testing.T) {
+		c.Assert(evalIn("(wile small)", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("unknown strictness errors", func(t *testing.T) {
+		evalExpectError(t, engine, `(environment '(wile small bare))`)
+	})
+
+	t.Run("non-symbol strictness errors", func(t *testing.T) {
+		evalExpectError(t, engine, `(environment '(wile small 7))`)
+	})
+
+	t.Run("a fourth element still errors", func(t *testing.T) {
+		evalExpectError(t, engine, `(environment '(wile small core extra))`)
 	})
 }

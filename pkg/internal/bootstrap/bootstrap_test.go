@@ -59,7 +59,7 @@ func TestSelectiveExtensionLoading(t *testing.T) {
 	env := topLevel.Runtime()
 
 	// Load only the math extension
-	reg, err := initializeEnvironmentWithRegistry(ctx, env, []registry.Extension{math.Extension})
+	reg, err := initializeEnvironmentWithRegistry(ctx, env, []registry.Extension{math.Extension}, StrictOff)
 	c.Assert(err, qt.IsNil)
 
 	// Core primitives should still be present
@@ -154,7 +154,7 @@ func TestNewProfileEnvironment(t *testing.T) {
 	// Build a profile with just the math extension to verify the extension
 	// set is honored (sin should be present, display should not).
 	exts := []registry.Extension{math.Extension}
-	childNS, err := NewProfileEnvironment(ctx, parent, exts)
+	childNS, err := NewProfileEnvironment(ctx, parent, exts, StrictOff)
 	c.Assert(err, qt.IsNil)
 	c.Assert(childNS, qt.IsNotNil)
 	c.Assert(childNS, qt.Not(qt.Equals), parent)
@@ -184,7 +184,7 @@ func TestNewProfileEnvironment_Empty(t *testing.T) {
 	ctx := context.Background()
 
 	parent := environment.NewNamespace()
-	childNS, err := NewProfileEnvironment(ctx, parent, nil)
+	childNS, err := NewProfileEnvironment(ctx, parent, nil, StrictOff)
 	c.Assert(err, qt.IsNil)
 	c.Assert(childNS, qt.IsNotNil)
 
@@ -211,17 +211,83 @@ func TestProfileFactoryCallback(t *testing.T) {
 	parent := environment.NewNamespace()
 
 	t.Run("known profile constructs namespace", func(t *testing.T) {
-		ns, err := eval.ProfileFactory(ctx, parent, "tiny")
+		ns, err := eval.ProfileFactory(ctx, parent, "tiny", "")
 		c.Assert(err, qt.IsNil)
 		c.Assert(ns, qt.IsNotNil)
 	})
 
 	t.Run("unknown profile wraps ErrUnknownProfile", func(t *testing.T) {
-		ns, err := eval.ProfileFactory(ctx, parent, "no-such-profile")
+		ns, err := eval.ProfileFactory(ctx, parent, "no-such-profile", "")
 		c.Assert(ns, qt.IsNil)
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(errors.Is(err, ErrUnknownProfile), qt.IsTrue)
 	})
+
+	// Strictness is validated on this side of the ProfileFactory boundary (eval
+	// forwards the raw spelling), so a bad level must reach ErrUnknownStrictLevel
+	// here rather than constructing a silently-unnarrowed namespace.
+	for _, level := range []string{"core", "no-bindings"} {
+		t.Run("strict level "+level+" constructs namespace", func(t *testing.T) {
+			ns, err := eval.ProfileFactory(ctx, parent, "small", level)
+			c.Assert(err, qt.IsNil)
+			c.Assert(ns, qt.IsNotNil)
+		})
+	}
+
+	t.Run("unknown strict level wraps ErrUnknownStrictLevel", func(t *testing.T) {
+		ns, err := eval.ProfileFactory(ctx, parent, "small", "bare")
+		c.Assert(ns, qt.IsNil)
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, ErrUnknownStrictLevel), qt.IsTrue)
+	})
+}
+
+// TestParseStrictLevel pins the level vocabulary shared by cmd/wile's --strict,
+// pkg/wile's two options, and (environment '(wile <name> <strictness>)). The empty
+// string is the ABSENT case, not an error: tryWileProfile forwards "" when the
+// spec omits the element, so mapping it to StrictOff is what keeps that caller
+// free of a special case.
+func TestParseStrictLevel(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name    string
+		want    StrictLevel
+		wantErr bool
+	}{
+		{
+			name: "",
+			want: StrictOff,
+		},
+		{
+			name: "core",
+			want: StrictCore,
+		},
+		{
+			name: "no-bindings",
+			want: StrictNoBindings,
+		},
+		{
+			name:    "bare",
+			wantErr: true,
+		},
+		{
+			name:    "Core",
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run("level "+tc.name, func(t *testing.T) {
+			got, err := ParseStrictLevel(tc.name)
+			if tc.wantErr {
+				c.Assert(errors.Is(err, ErrUnknownStrictLevel), qt.IsTrue,
+					qt.Commentf("want ErrUnknownStrictLevel, got: %v", err))
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
 }
 
 // TestCharsetsInProfileExtensions verifies that the charsets extension is included

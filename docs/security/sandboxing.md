@@ -122,6 +122,8 @@ When the eval extension is present, Scheme code can construct a namespace for an
 
 `PrimEnvironment` routes a sole `(wile <name>)` spec through `tryWileProfile` to `bootstrap.NewProfileEnvironment`, which builds a child namespace registered with that profile's full extension set. The name is not checked against the engine's own profile, and the constructor itself is not gated, so `(environment '(wile kitchen-sink))` materializes primitives the engine never registered, including `threads`, `gointerop`, and `namespace`, none of which have an authorizer gate.
 
+An optional third element narrows the constructed namespace's *visible* top level — `(environment '(wile small core))` pre-binds only the core surface, `(environment '(wile small no-bindings))` pre-binds nothing. It is not a security control and does not narrow this widening: the profile still decides what is *registered*, and the constructed environment can import its way back to all of it. See [Strict namespace](../embedding/api-design.md#strict-namespace).
+
 What the child namespace does inherit is the authorizer: `Namespace.NewChildNamespace` copies it, so gated operations (`file`, `code`, `env`, `process`) stay under the same policy no matter which profile named them. The registry layer is therefore not an authority boundary against Scheme code that holds `environment`; the authorization layer is. If you rely on an extension's *absence* for safety, do not also grant the eval extension, or install an authorizer that covers the operations you care about.
 
 ### Virtual environment variables

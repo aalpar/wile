@@ -128,13 +128,63 @@ func ProfileExtensions(name string) ([]registry.Extension, error) {
 // the known set (tiny, console, console-with-load, small, kitchen-sink).
 var ErrUnknownProfile = werr.NewStaticError("unknown profile")
 
+// ErrUnknownStrictLevel is returned by ParseStrictLevel when given a name
+// outside the known set (core, no-bindings).
+var ErrUnknownStrictLevel = werr.NewStaticError("unknown strict level")
+
+// StrictLevel narrows how much of the registry a profile environment binds at its
+// visible top level. It is ORTHOGONAL to the profile: the profile picks what is
+// registered (and is the capability boundary), the level picks how much of that is
+// pre-bound versus reachable only through (import …). That is why it is threaded
+// as a second argument rather than folded into the profile name — there is no
+// "small-no-bindings" profile, there is a Small profile viewed strictly.
+//
+// This mirrors pkg/wile's engine-side ladder; the two are separate because the two
+// bootstrap sequences are separate (see bootstrap_core.go). Keep them in step.
+type StrictLevel int
+
+const (
+	// StrictOff binds the whole registry at the visible top level. Default.
+	StrictOff StrictLevel = iota
+	// StrictCore binds only the core primitives and core bootstrap macros.
+	StrictCore
+	// StrictNoBindings binds nothing; only the phase handlers (lambda, if,
+	// define, import, …) remain, since those never come from a registry.
+	StrictNoBindings
+)
+
+// ParseStrictLevel maps a Scheme-level level name to a StrictLevel. The empty
+// string means "no level given" and yields StrictOff, so a caller can forward an
+// absent argument without special-casing it.
+//
+// Valid names: "core", "no-bindings". They match the cmd/wile --strict values and
+// the pkg/wile option names (WithStrictNamespace, WithoutAmbientBindings), so one
+// vocabulary covers the CLI, the embedding API, and (environment '(wile … )).
+func ParseStrictLevel(name string) (StrictLevel, error) {
+	switch name {
+	case "":
+		return StrictOff, nil
+	case "core":
+		return StrictCore, nil
+	case "no-bindings":
+		return StrictNoBindings, nil
+	default:
+		return StrictOff, werr.WrapForeignErrorf(ErrUnknownStrictLevel,
+			"ParseStrictLevel: unknown strict level %q (want \"core\" or \"no-bindings\")", name)
+	}
+}
+
 // initializeEnvironmentWithRegistry is the shared initialization sequence for environment creation.
 // It creates a registry, adds the specified extensions, applies primitives, registers
 // compilers/expanders, loads bootstrap macros, and returns the populated registry.
 // The caller must pass the exact extension set to load; a nil slice registers no
 // extensions beyond core primitives (this is deliberate — the public Engine
 // path now drives extension selection through Profile).
-func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension) (*registry.Registry, error) {
+//
+// level narrows what the VISIBLE top level is bound from. The returned registry
+// and the one stored on the namespace are always the full one, so a narrowed
+// environment can still import everything the profile registers.
+func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension, level StrictLevel) (*registry.Registry, error) {
 	// Create registry with core primitives
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
@@ -156,8 +206,26 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	// equivalent when it builds the Namespace.
 	env.Namespace().SetRegistry(reg)
 
+	// The visible top level is bound from visibleReg; the namespace keeps the full
+	// reg above, so what a level withholds stays importable. This is the same seam
+	// pkg/wile carves at bootstrapNamespace (topLevelReg vs reg) — narrowing here
+	// and there must agree, or (environment '(wile small no-bindings)) and an
+	// engine built with WithoutAmbientBindings would disagree about the same words.
+	visibleReg := reg
+	switch level {
+	case StrictCore:
+		visibleReg = registry.NewRegistry()
+		err = core.AddToRegistry(visibleReg)
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err, "error building core-only registry")
+		}
+	case StrictNoBindings:
+		visibleReg = registry.NewRegistry()
+	case StrictOff:
+	}
+
 	// Run the ordering-sensitive sequence shared with pkg/wile's applyBaseEnvironment.
-	_, err = LoadBootstrapCore(ctx, env, reg)
+	_, err = LoadBootstrapCore(ctx, env, visibleReg)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "initializeEnvironmentWithRegistry: load bootstrap core")
 	}
@@ -178,7 +246,7 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 // It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
 // and loads bootstrap macros.
 func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFrame) error {
-	_, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions)
+	_, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions, StrictOff)
 	return err
 }
 
@@ -219,7 +287,7 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 	env := topLevel.Runtime()
 
 	// Initialize with shared sequence, keeping the registry
-	reg, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions)
+	reg, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions, StrictOff)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -231,10 +299,14 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 // given extension set. It shares symbol interning with callerNS but has its own
 // bindings so the caller's top-level definitions do not leak in. Intended for
 // Scheme-level (environment '(wile <profile>)) construction.
-func NewProfileEnvironment(ctx context.Context, callerNS *environment.Namespace, exts []registry.Extension) (*environment.Namespace, error) {
+//
+// level narrows the new namespace's visible top level; exts still decides what is
+// registered, so the two arguments are independent and a narrowed environment can
+// import its way back to the whole profile.
+func NewProfileEnvironment(ctx context.Context, callerNS *environment.Namespace, exts []registry.Extension, level StrictLevel) (*environment.Namespace, error) {
 	newNS := callerNS.NewChildNamespace()
 	env := newNS.Runtime()
-	_, err := initializeEnvironmentWithRegistry(ctx, env, exts)
+	_, err := initializeEnvironmentWithRegistry(ctx, env, exts, level)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "NewProfileEnvironment: initialization failed")
 	}
@@ -245,14 +317,23 @@ func NewProfileEnvironment(ctx context.Context, callerNS *environment.Namespace,
 // (environment '(wile <name>)) can construct a namespace for a named profile.
 // This indirection exists because bootstrap imports eval (for allExtensions)
 // and eval cannot reciprocally import bootstrap without an import cycle.
+//
+// strictName crosses that boundary as the raw spelling rather than a StrictLevel,
+// for the same reason profileName does: eval cannot name a bootstrap type. eval
+// forwards what the program wrote and this side validates it, so both vocabularies
+// are checked in one package.
 func init() {
-	eval.ProfileFactory = func(ctx context.Context, callerNS *environment.Namespace, profileName string) (*environment.Namespace, error) {
+	eval.ProfileFactory = func(ctx context.Context, callerNS *environment.Namespace, profileName, strictName string) (*environment.Namespace, error) {
 		exts, err := ProfileExtensions(profileName)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err,
 				"ProfileFactory: unknown wile profile %q", profileName)
 		}
-		return NewProfileEnvironment(ctx, callerNS, exts)
+		level, err := ParseStrictLevel(strictName)
+		if err != nil {
+			return nil, err
+		}
+		return NewProfileEnvironment(ctx, callerNS, exts, level)
 	}
 }
 

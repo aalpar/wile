@@ -340,6 +340,21 @@ A narrowed top level is a valid import target: import installs resolved bindings
 the mutable user-global frame, not the sealed base, so layering libraries on a
 strict engine works exactly as on a non-strict one.
 
+#### Outside the embedding API
+
+One vocabulary, three entry points — `core` and `no-bindings` mean the same thing
+in each:
+
+| Where | Form |
+|---|---|
+| Embedding | `WithStrictNamespace()` / `WithoutAmbientBindings()` |
+| CLI | `wile --strict=core` / `wile --strict=no-bindings` (bare `--strict` means `core`) |
+| Scheme | `(environment '(wile <profile> core))` / `(environment '(wile <profile> no-bindings))` |
+
+The Scheme form's strictness element is optional and orthogonal to the profile
+name: the profile decides what is registered, the level decides how much of it is
+pre-bound.
+
 **Scope.** The visible surface is carved when the namespace is built, so strictness
 must be set at namespace-creation time. Like `WithRegistry`/`WithExtension`/
 `WithoutCore`, neither option has any effect on the `WithNamespace` path —
