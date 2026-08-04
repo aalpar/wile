@@ -318,3 +318,29 @@ func TestHashtableImmutabilityErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestHashtableR6RSAccessors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "contains? finds a key", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 1) (hashtable-contains? h 'a))`, Expected: values.TrueValue},
+		{Name: "contains? misses", Code: `(hashtable-contains? (make-equal-hashtable) 'a)`, Expected: values.FalseValue},
+		{Name: "entries returns two values", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 1) (call-with-values (lambda () (hashtable-entries h)) (lambda (ks vs) (and (vector? ks) (vector? vs)))))`, Expected: values.TrueValue},
+		{Name: "entries pairs by position", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 7) (call-with-values (lambda () (hashtable-entries h)) (lambda (ks vs) (and (eq? (vector-ref ks 0) 'a) (= (vector-ref vs 0) 7)))))`, Expected: values.TrueValue},
+		{Name: "entries on empty table", Code: `(call-with-values (lambda () (hashtable-entries (make-equal-hashtable))) (lambda (ks vs) (+ (vector-length ks) (vector-length vs))))`, Expected: values.NewInteger(0)},
+		{Name: "equivalence-function of equal table", Code: `(eq? (hashtable-equivalence-function (make-equal-hashtable)) equal?)`, Expected: values.TrueValue},
+		{Name: "equivalence-function of eq table", Code: `(eq? (hashtable-equivalence-function (make-eq-hashtable)) eq?)`, Expected: values.TrueValue},
+		{Name: "equivalence-function of eqv table", Code: `(eq? (hashtable-equivalence-function (make-eqv-hashtable)) eqv?)`, Expected: values.TrueValue},
+		{Name: "hash-function of equal table", Code: `(eq? (hashtable-hash-function (make-equal-hashtable)) equal-hash)`, Expected: values.TrueValue},
+		// R6RS returns #f from hashtable-hash-function for eq and eqv tables;
+		// that is the spec, not a shortcut.
+		{Name: "hash-function of eq table is #f", Code: `(hashtable-hash-function (make-eq-hashtable))`, Expected: values.FalseValue},
+		{Name: "hash-function of eqv table is #f", Code: `(hashtable-hash-function (make-eqv-hashtable))`, Expected: values.FalseValue},
+		{Name: "clear! accepts and ignores k", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h 'a 1) (hashtable-clear! h 32) (hashtable-size h))`, Expected: values.NewInteger(0)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}

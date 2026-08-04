@@ -524,6 +524,24 @@ func (p *Hashtable) Values() Tuple {
 	})
 }
 
+// EntriesVectors returns the keys and values as two vectors, index-aligned, for
+// R6RS hashtable-entries.
+//
+// ONE snapshot feeds both. Two calls to snapshot() would be two independent
+// lock-free reads of a table another thread may be writing, and the alignment
+// R6RS promises ("the ith element of keys is the key of the ith element of vals")
+// would be a coincidence rather than a guarantee.
+func (p *Hashtable) EntriesVectors() (*Vector, *Vector) {
+	entries := p.snapshot()
+	ks := make([]Value, len(entries))
+	vs := make([]Value, len(entries))
+	for i, e := range entries {
+		ks[i] = e.key
+		vs[i] = e.value
+	}
+	return NewVector(ks...), NewVector(vs...)
+}
+
 // Size returns the number of entries in the hash table. Exact single-threaded;
 // best-effort under unsynchronized concurrent mutation, and never negative even
 // when the counter has drifted below zero.

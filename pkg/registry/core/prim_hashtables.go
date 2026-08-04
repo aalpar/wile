@@ -15,6 +15,7 @@
 package core
 
 import (
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -182,4 +183,103 @@ func PrimHashtableClear(mc machine.CallContext) error {
 	}
 	mc.SetValue(values.Void)
 	return nil
+}
+
+// PrimHashtableContainsQ implements R6RS hashtable-contains?. It wraps HasKey,
+// which had no caller at all before this surface existed.
+func PrimHashtableContainsQ(mc machine.CallContext) error {
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-contains?")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.BoolToBoolean(ht.HasKey(mc.Arg(1))))
+	return nil
+}
+
+// PrimHashtableEntries implements R6RS hashtable-entries, which returns TWO
+// values: a vector of keys and an index-aligned vector of values.
+func PrimHashtableEntries(mc machine.CallContext) error {
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-entries")
+	if err != nil {
+		return err
+	}
+	ks, vs := ht.EntriesVectors()
+	mc.SetValues(ks, vs)
+	return nil
+}
+
+// equivNames maps a table's kind to the primitive whose procedure object
+// hashtable-equivalence-function must hand back. Indexed by HashtableKind, so a
+// new kind that forgets a row is an out-of-range panic at the first call rather
+// than a silently wrong answer.
+var equivNames = [...]string{
+	values.HashtableEqual: "equal?",
+	values.HashtableEq:    "eq?",
+	values.HashtableEqv:   "eqv?",
+}
+
+// PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function.
+// The returned procedure is THIS namespace's registered closure, so
+// (eq? (hashtable-equivalence-function h) equal?) holds — the same identity
+// relation make-hashtable recognizes on the way in. The two directions must stay
+// in agreement.
+func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-equivalence-function")
+	if err != nil {
+		return err
+	}
+	return setSealedPrimitive(mc, equivNames[ht.Kind()], "hashtable-equivalence-function")
+}
+
+// PrimHashtableHashFunction implements R6RS hashtable-hash-function, which returns
+// #f — not a procedure — for eq and eqv tables. Those hash by identity, and R6RS
+// does not expose that as a procedure. Chibi reaches the same two answers through
+// the same discriminant (lib/srfi/69/interface.scm).
+func PrimHashtableHashFunction(mc machine.CallContext) error {
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-hash-function")
+	if err != nil {
+		return err
+	}
+	if ht.Kind() != values.HashtableEqual {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	return setSealedPrimitive(mc, "equal-hash", "hashtable-hash-function")
+}
+
+// setSealedPrimitive sets name's registered closure as the result, or raises if this
+// namespace has no such binding. Raising rather than returning #f or nil is the point:
+// a profile that ships these accessors without equal-hash is misconfigured, and a
+// silent #f would be indistinguishable from the legitimate eq/eqv answer above.
+func setSealedPrimitive(mc machine.CallContext, name, site string) error {
+	q := sealedPrimitive(mc.EnvironmentFrame().Namespace(), name)
+	if q == nil {
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
+			"%s: %s is not registered in this namespace", site, name)
+	}
+	mc.SetValue(q)
+	return nil
+}
+
+// sealedPrimitive returns the closure the registry defined for name in ns's sealed
+// base, or nil if the name is unbound there. nil means NONE — the caller refuses
+// rather than falling back, so a namespace built without the primitive raises
+// instead of silently accepting whatever the caller passed.
+//
+// Empty scopes resolve the ambient (unscoped) registration, the same query
+// registerPhasePrimitive uses to address the binding it just wrote. syntax.ScopeSet
+// is a type alias for values.ScopeSet, so no conversion is needed.
+func sealedPrimitive(ns *environment.Namespace, name string) values.Value {
+	if ns == nil {
+		return nil
+	}
+	base := ns.SealedBase()
+	if base == nil {
+		return nil
+	}
+	binding := base.GetBinding(values.NewSymbol(name), values.EmptyScopes())
+	if binding == nil {
+		return nil
+	}
+	return binding.Value()
 }
