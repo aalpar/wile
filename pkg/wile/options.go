@@ -587,7 +587,10 @@ func WithStrictNamespace() EngineOption {
 //     (scheme base) (64 of its exports are unregistered there) and
 //     Console/ConsoleWithLoad are denied code:load on the stdlib path. Both
 //     failures pre-date this option and reproduce without it, but at this level
-//     there is no ambient surface to fall back to.
+//     there is no ambient surface to fall back to. WithSandbox denies code:load
+//     for the same reason: combined with this option it leaves a program on the
+//     phase-handler floor with no route off it, which IS confinement — a real
+//     configuration, but not the one the paragraph above describes.
 //
 // Carries the same constraints as WithStrictNamespace: set it at
 // namespace-creation time (no effect on the WithNamespace path), and it is

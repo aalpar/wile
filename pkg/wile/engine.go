@@ -131,15 +131,20 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 // (NewEngine uses snapshots for extension library registration and closers for
 // Engine.Close).
 func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Namespace, []extSnapshot, []registry.Closeable, error) {
-	// Strict mode derives its bare top-level surface from the default core registry
-	// (coreOnlyRegistry below). A caller-supplied registry (WithRegistry/WithoutCore,
-	// both of which set cfg.registry) may omit or replace core, so minting fresh core
-	// would bind primitives the caller excluded — silently widening the top level past
-	// the configured registry and breaking the option's "never widens" invariant.
-	// Reject the combination rather than widen; use WithProfile to bound capability.
+	// Both strict levels derive the visible surface from a registry this package
+	// mints (coreOnlyRegistry, or an empty one, below), not from cfg.registry. A
+	// caller-supplied registry (WithRegistry/WithoutCore, both of which set
+	// cfg.registry) may omit or replace core, so minting fresh core would bind
+	// primitives the caller excluded — silently widening the top level past the
+	// configured registry and breaking the family's "never widens" invariant.
+	// Level 2's visible surface is empty and so cannot widen anything, but
+	// WithoutCore empties BOTH the visible surface and the registry backing
+	// library environments, where level 2 empties only the former; accepting the
+	// pair would quietly answer a question the caller asked two ways. Reject at
+	// construction; use WithProfile to bound capability.
 	if cfg.strictLevel > strictLevelOff && cfg.registry != nil {
 		return nil, nil, nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
-			"WithStrictNamespace is incompatible with WithRegistry/WithoutCore: strict mode derives its bare surface from the default core registry; use WithProfile to bound capability")
+			"WithStrictNamespace/WithoutAmbientBindings is incompatible with WithRegistry/WithoutCore: the strict levels derive the visible surface from the default core registry, not from a caller-supplied one; use WithProfile to bound capability")
 	}
 
 	reg, snapshots, closers, err := buildRegistry(cfg)
