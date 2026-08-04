@@ -19,9 +19,38 @@ Eleven known differences exist:
 6. Importing one identifier from two libraries with **different** bindings **raises an error** (`ErrDuplicateBinding`) rather than silently letting the last import win. R7RS §5.6 makes this "an error" (undefined) but does not require signalling; Wile signals it, matching Chez/Racket. Re-export diamonds and repeated imports stay legal.
 7. Invoking a continuation with a number of values other than one **splices** those values into the capture position rather than raising an arity error. R7RS §6.10 leaves this **unspecified** for continuations not made by `call-with-values`, so this is a choice within unspecified territory (Racket instead raises an arity error); both conform.
 8. `current-second` returns POSIX/Unix time, not TAI. R7RS §6.13.2 specifies TAI (International Atomic Time); Wile returns seconds since the Unix epoch (leap seconds excluded), which trails TAI by a fixed offset (37 s as of 2017). A portable leap-second table is maintenance overhead with little practical benefit, so the deviation is documented rather than corrected.
-9. `equal?` is **structural** on records, hashtables, and boxes, where Chez and Racket answer `#f` for distinct objects. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here.
+9. `equal?` is **structural** on records, hashtables, and boxes, where Chez and Racket answer `#f` for distinct objects. R7RS §6.1 permits either — records fall under "in all other cases, `equal?` may return either `#t` or `#f`" — so this is a deliberate choice, not a deviation from the spec. It is a deviation from most other Schemes, which is why it is listed here. **Item 14 narrows this for hashtables specifically.**
 10. Procedure calls evaluate **strictly left to right**, operator before operands, and `let` evaluates its inits in written order. R7RS §4.1.3 leaves that order **unspecified**, so the guarantee is stricter than the standard requires: a program that relies on it does not port to an implementation that evaluates right to left.
 11. `(eqv? +nan.0 +nan.0)` returns `#t`. R7RS §6.1 makes this **explicitly unspecified** ("As an exception, the behavior of `eqv?` is unspecified when both `obj1` and `obj2` are NaN"), so this is a choice within unspecified territory, matching Chez and Racket. Numeric `=` keeps IEEE-754 semantics: `(= +nan.0 +nan.0)` is still `#f`.
+12. `(rnrs hashtables)` is provided, with one gap: `make-hashtable` accepts only
+    the built-in `(equal-hash, equal?)` pair, recognized by **pointer identity**
+    against the sealed base (Chibi's `(eq? hash-fn hash)`). A user-supplied hash
+    or equivalence procedure raises `ErrUnsupportedHashtableKind`. R6RS's
+    condition system is not implemented, so every R6RS "raises `&assertion`"
+    here raises a Wile sentinel instead (`ErrImmutableHashtable`,
+    `ErrUnsupportedHashtableKind`) — matchable with `errors.Is` from Go and by
+    the standard exception machinery from Scheme.
+13. `make-equal-hashtable` is a non-standard constructor, matching Chez,
+    Larceny, Vicare, and Ypsilon. R6RS spells it
+    `(make-hashtable equal-hash equal?)`, which Wile also accepts. Prefer
+    `make-eq-hashtable` when the keys are objects whose `equal?` **is** identity
+    (a record type, a port, a procedure): those all hash to one bucket under
+    `equal-hash` and scan linearly, where an eq table hashes them by identity.
+14. `equal?` on two hashtables is structural only when both use the **same key
+    equivalence** and **every key is a non-container**. Otherwise it is
+    identity. Item 9 above states the structural choice; the restriction exists
+    because pairing entries across two tables requires an eager key lookup,
+    which recurses on the host stack once per hashtable reachable as a key and
+    does not terminate on a cycle of them.
+15. The `(rnrs hashtables)` library deviates from R6RS in two further ways.
+    Its name is **versionless**: R6RS spells it `(rnrs hashtables (6))`, and
+    Wile's import-set resolver rejects a list as a library-name part, so the
+    versioned spelling does not resolve. And it does **not export**
+    `equal-hash`, `string-hash`, `string-ci-hash` or `symbol-hash`, which R6RS
+    lists in it — those four are bound in the sealed base and remain callable
+    after the import, but exporting them would rebind the names to import-copied
+    objects that `make-hashtable`'s pointer recognition no longer accepts, so
+    importing the R6RS library would break the R6RS spelling.
 
 ---
 

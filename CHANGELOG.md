@@ -18,6 +18,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **R6RS `(rnrs hashtables)`.** The hash moves from the KEY to the TABLE, so
+  **any object can be a hashtable key** — lists, vectors, records, nested tables.
+  Which objects count as one key is now the constructor's choice.
+
+  New: `make-eq-hashtable`, `make-eqv-hashtable`, `make-equal-hashtable`,
+  `hashtable-contains?`, `hashtable-entries`, `hashtable-update!`,
+  `hashtable-mutable?`, `hashtable-equivalence-function`,
+  `hashtable-hash-function`, and the hash procedures `equal-hash`,
+  `string-hash`, `string-ci-hash`, `symbol-hash`. `equal-hash` hashes a bounded
+  prefix of a value's *unfolding*, so it terminates on cycles as R6RS requires
+  and agrees with `equal?` even on bisimilar cycles of different node counts.
+
+  `(rnrs hashtables)` is the first `(rnrs ...)` library in the tree. It is
+  registered VERSIONLESS — R6RS's `(rnrs hashtables (6))` does not resolve,
+  since versioned library names are unimplemented — and it deliberately does not
+  re-export the four hash procedures; see `docs/reference/r7rs-differences.md`
+  items 12-15.
+
+  This retires `graph.scm`'s atomic-node-identifier restriction entirely: a
+  graph keyed on lists or vectors now interns *and* reaches the Go counting
+  kernel, where before it raised from the SCC side queries and was denied the
+  fast path.
+
+### Changed
+
+- **BREAKING — hashtables.** `(make-hashtable)` is gone; use
+  `(make-equal-hashtable)` or the R6RS `(make-hashtable equal-hash equal?)`.
+  `hashtable-ref`'s `default` is now **required** and an absent key never
+  errors. `hashtable-keys` returns a **vector**. `hashtable-values` is
+  **removed** — `hashtable-entries` subsumes it and is the only way to get keys
+  and values paired reliably. `(hashtable-copy ht)` with no second argument now
+  returns an **immutable** table, per R6RS; pass `#t` to copy-and-mutate. This
+  last one is silent — it changes behaviour rather than failing to compile.
+
+  `equal?` on two hashtables is structural only when both use the same key
+  equivalence and every key is a non-container; otherwise it is identity. No
+  table that was constructible before changes its answer.
+
 - **`wile --check` compiles a program without running it.** Parses, expands, and
   compiles every input, reports the first error as `file:line:col: ...` and exits 1,
   or exits 0 in silence — the `go build` of a Scheme program. It reaches code a test

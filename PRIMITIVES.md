@@ -675,16 +675,28 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
-| `make-hashtable` | Create a new empty hash table |
+| `make-eq-hashtable` | New table, keys compared with `eq?`; optional size hint ignored |
+| `make-eqv-hashtable` | New table, keys compared with `eqv?` |
+| `make-equal-hashtable` | New table, keys compared with `equal?` (**not R6RS** — Chez/Larceny/Vicare/Ypsilon extension). Prefer `make-eq-hashtable` for keys whose `equal?` is identity (record types, ports, procedures), which otherwise share one bucket |
+| `make-hashtable` | R6RS `(make-hashtable hash equiv [k])`; only the built-in `(equal-hash, equal?)` pair is accepted, anything else raises |
 | `hashtable?` | Test for hash table |
-| `hashtable-ref` | Look up key; `(hashtable-ref ht key)` errors if missing, `(hashtable-ref ht key default)` returns default |
+| `hashtable-ref` | `(hashtable-ref ht key default)` — `default` is **required**; an absent key returns it and never errors |
 | `hashtable-set!` | Associate key with value |
 | `hashtable-delete!` | Remove key from hash table |
-| `hashtable-keys` | Return list of all keys |
-| `hashtable-values` | Return list of all values |
+| `hashtable-contains?` | Test whether a key is present |
+| `hashtable-update!` | Set `key` to `(proc current-or-default)` |
+| `hashtable-keys` | Return a **vector** of all keys |
+| `hashtable-entries` | Return two values: a keys vector and an index-aligned values vector (replaces `hashtable-values`) |
 | `hashtable-size` | Return number of entries |
-| `hashtable-copy` | Return shallow copy |
-| `hashtable-clear!` | Remove all entries |
+| `hashtable-copy` | `(hashtable-copy ht [mutable])` — **immutable unless `mutable` is true**, per R6RS |
+| `hashtable-clear!` | Remove all entries; optional size hint ignored |
+| `hashtable-mutable?` | Test whether the table accepts mutation |
+| `hashtable-equivalence-function` | Return `eq?`, `eqv?` or `equal?` |
+| `hashtable-hash-function` | Return `equal-hash`, or `#f` for eq/eqv tables |
+| `equal-hash` | Structural hash consistent with `equal?`; terminates on cycles |
+| `string-hash` | Hash consistent with `string=?` (unary, unbounded) |
+| `string-ci-hash` | Hash consistent with `string-ci=?` (full Unicode folding) |
+| `symbol-hash` | Hash consistent with `symbol=?` |
 
 ## Evaluation
 

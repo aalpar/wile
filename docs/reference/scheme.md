@@ -1078,19 +1078,46 @@ All compositions of `car` and `cdr` up to 4 levels deep: `caar`, `cadr`, `cdar`,
 
 ### Hashtables
 
+R6RS `(rnrs hashtables)`. **Any object can be a key** — the hash belongs to the
+TABLE, not to the key, so which objects count as one key is the constructor's
+choice.
+
+**Choosing a constructor.** `make-equal-hashtable` is the right default for
+*content*-keyed tables (lists, vectors, strings). It is the wrong one for a key
+whose `equal?` **is** identity — a record type, a port, a procedure: those all
+hash to a single bucket and scan linearly. Reach for `make-eq-hashtable` there,
+which hashes them by identity.
+
 | Procedure | Description |
 |-----------|-------------|
-| `(make-hashtable)` | New empty hash table |
+| `(make-eq-hashtable [k])` | New table, keys compared with `eq?` |
+| `(make-eqv-hashtable [k])` | New table, keys compared with `eqv?` |
+| `(make-equal-hashtable [k])` | New table, keys compared with `equal?` (**not R6RS**; Chez/Larceny/Vicare/Ypsilon extension) |
+| `(make-hashtable hash equiv [k])` | R6RS spelling; only `(make-hashtable equal-hash equal?)` is accepted |
 | `(hashtable? x)` | Is a hash table |
-| `(hashtable-ref ht key)` | Lookup (error if missing) |
-| `(hashtable-ref ht key default)` | Lookup with default |
+| `(hashtable-ref ht key default)` | Lookup; `default` is **required** |
 | `(hashtable-set! ht key value)` | Set entry |
 | `(hashtable-delete! ht key)` | Remove entry |
-| `(hashtable-keys ht)` | List of keys |
-| `(hashtable-values ht)` | List of values |
+| `(hashtable-contains? ht key)` | Is `key` present |
+| `(hashtable-update! ht key proc default)` | Set `key` to `(proc current-or-default)` |
+| `(hashtable-keys ht)` | **Vector** of keys |
+| `(hashtable-entries ht)` | Two values: keys vector and index-aligned values vector |
 | `(hashtable-size ht)` | Entry count |
-| `(hashtable-copy ht)` | Shallow copy |
-| `(hashtable-clear! ht)` | Remove all entries |
+| `(hashtable-copy ht [mutable])` | Shallow copy; **immutable unless `mutable` is true** |
+| `(hashtable-clear! ht [k])` | Remove all entries; `k` accepted and ignored |
+| `(hashtable-mutable? ht)` | Does `ht` accept mutation |
+| `(hashtable-equivalence-function ht)` | `eq?`, `eqv?` or `equal?` |
+| `(hashtable-hash-function ht)` | `equal-hash`, or `#f` for eq/eqv tables |
+
+The optional `k` is R6RS's size hint; Wile ignores it. Hash procedures:
+`equal-hash`, `string-hash`, `string-ci-hash`, `symbol-hash`, each returning an
+exact non-negative integer. `equal-hash` terminates on cyclic input.
+
+**Two behaviours worth knowing.** `(hashtable-copy ht)` with no second argument
+returns an **immutable** table, reversing Wile's pre-R6RS behaviour — pass `#t`
+to copy-and-mutate. And there is no `hashtable-values`: `hashtable-entries`
+subsumes it, and is the only way to get keys and values paired reliably, since
+two independent reads of a lock-free table need not agree.
 
 ### Control Flow
 
@@ -1728,7 +1755,9 @@ RWMutexes, Once, Atomic values — backed by Go's `sync` package (RWMutex acquis
 
 ### Hashtables
 
-`make-hashtable`, `hashtable-ref`, `hashtable-set!`, etc. — hash tables with any hashable key type.
+`make-eq-hashtable`, `make-eqv-hashtable`, `make-equal-hashtable`,
+`hashtable-ref`, `hashtable-set!`, etc. — the R6RS `(rnrs hashtables)` surface.
+Any object can be a key; the constructor chooses the key equivalence.
 
 ---
 
