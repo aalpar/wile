@@ -187,7 +187,7 @@ func TestHashtable_ConcurrentReadWrite(t *testing.T) {
 		for range iterations {
 			_ = h.Keys()
 			_ = h.Values()
-			_ = h.Copy()
+			_ = h.Copy(true)
 		}
 	}()
 

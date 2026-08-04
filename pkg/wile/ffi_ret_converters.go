@@ -143,9 +143,15 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 		}
 		iter := v.MapRange()
 		for iter.Next() {
-			// Set no longer fails: its error encoded "key is not Hashable", which
-			// HashtableKind made unreachable by moving the hash to the table.
-			ht.Set(keyConv(iter.Key()), valConv(iter.Value()))
+			// Set's error is structurally unreachable here, so it is dropped
+			// rather than handled. Its old meaning — "key is not Hashable" —
+			// disappeared when HashtableKind moved the hash to the table; its
+			// only meaning now is "table is immutable", and ht was constructed
+			// by NewEmptyHashtable three lines up, which returns a MUTABLE
+			// table. Nothing in between can flip the flag: mutable is
+			// write-once at construction and only hashtable-copy ever sets it
+			// false.
+			_ = ht.Set(keyConv(iter.Key()), valConv(iter.Value())) //nolint:errcheck
 		}
 		return ht
 	}, nil

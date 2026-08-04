@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -22,6 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestHashtable_MakeAndPredicate(t *testing.T) {
@@ -279,6 +281,40 @@ func TestHashtableConstructors(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+func TestHashtableImmutability(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "fresh table is mutable", Code: `(hashtable-mutable? (make-equal-hashtable))`, Expected: values.TrueValue},
+		{Name: "copy without flag is immutable", Code: `(hashtable-mutable? (hashtable-copy (make-equal-hashtable)))`, Expected: values.FalseValue},
+		{Name: "copy with #f is immutable", Code: `(hashtable-mutable? (hashtable-copy (make-equal-hashtable) #f))`, Expected: values.FalseValue},
+		{Name: "copy with #t is mutable", Code: `(hashtable-mutable? (hashtable-copy (make-equal-hashtable) #t))`, Expected: values.TrueValue},
+		{Name: "immutable copy keeps contents", Code: `(let* ((h (make-equal-hashtable)) (_ (hashtable-set! h 'a 1))) (hashtable-ref (hashtable-copy h) 'a #f))`, Expected: values.NewInteger(1)},
+		{Name: "mutable copy keeps kind", Code: `(let ((h (hashtable-copy (make-eq-hashtable) #t))) (hashtable-set! h (list 1) 1) (hashtable-set! h (list 1) 2) (hashtable-size h))`, Expected: values.NewInteger(2)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+func TestHashtableImmutabilityErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "set! on immutable", Code: `(hashtable-set! (hashtable-copy (make-equal-hashtable)) 'a 1)`},
+		{Name: "delete! on immutable", Code: `(hashtable-delete! (hashtable-copy (make-equal-hashtable)) 'a)`},
+		{Name: "clear! on immutable", Code: `(hashtable-clear! (hashtable-copy (make-equal-hashtable)))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrImmutableHashtable), qt.IsTrue,
+				qt.Commentf("must match the sentinel with errors.Is, got %v", err))
 		})
 	}
 }

@@ -95,7 +95,10 @@ func PrimHashtableSet(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	ht.Set(mc.Arg(1), mc.Arg(2))
+	err = ht.Set(mc.Arg(1), mc.Arg(2))
+	if err != nil {
+		return err
+	}
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -107,7 +110,10 @@ func PrimHashtableDelete(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	ht.Delete(mc.Arg(1))
+	err = ht.Delete(mc.Arg(1))
+	if err != nil {
+		return err
+	}
 	mc.SetValue(values.Void)
 	return nil
 }
@@ -130,14 +136,50 @@ var PrimHashtableSize = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashta
 	return values.NewInteger(int64(ht.Size()))
 })
 
-// PrimHashtableCopy implements the hashtable-copy primitive.
-// Returns a shallow copy of the hash table.
-var PrimHashtableCopy = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-copy", func(ht *values.Hashtable) values.Value {
-	return ht.Copy()
+// PrimHashtableCopy implements R6RS (hashtable-copy ht [mutable]).
+//
+// THE SILENT SEMANTIC TRAP OF THIS MIGRATION: with the second argument ABSENT
+// the copy is IMMUTABLE, per R6RS. Wile's previous one-argument hashtable-copy
+// returned a mutable table, so existing code that copies and then mutates must
+// pass #t.
+//
+// It no longer fits MakeUnaryAccessor, which has no optional-argument slot.
+func PrimHashtableCopy(mc machine.CallContext) error {
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-copy")
+	if err != nil {
+		return err
+	}
+	flag, ok, err := helpers.ParseOptionalArg(mc.Arg(1), "hashtable-copy")
+	if err != nil {
+		return err
+	}
+	// Scheme truthiness: everything but #f. FalseValue is a singleton, so the
+	// interface compare is the house idiom (prim_syntax.go, prim_prompt.go).
+	mutable := false
+	if ok {
+		mutable = flag != values.FalseValue
+	}
+	mc.SetValue(ht.Copy(mutable))
+	return nil
+}
+
+// PrimHashtableMutableQ implements R6RS hashtable-mutable?.
+var PrimHashtableMutableQ = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-mutable?", func(ht *values.Hashtable) values.Value {
+	return values.BoolToBoolean(ht.Mutable())
 })
 
 // PrimHashtableClear implements the hashtable-clear! primitive.
-// Removes all entries from the hash table.
-var PrimHashtableClear = helpers.MakeUnarySideEffect(werr.ErrNotAHashtable, "hashtable-clear!", func(ht *values.Hashtable) {
-	ht.Clear()
-})
+//
+// No longer a MakeUnarySideEffect: it has to propagate checkMutable's error.
+func PrimHashtableClear(mc machine.CallContext) error {
+	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-clear!")
+	if err != nil {
+		return err
+	}
+	err = ht.Clear()
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.Void)
+	return nil
+}

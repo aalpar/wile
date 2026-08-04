@@ -174,13 +174,20 @@ var (
 
 	// Syntax errors
 
-	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")
-	ErrNoMatchingClause        = NewStaticError("no matching clause")
-	ErrUnsupportedTransformer  = NewStaticError("unsupported transformer")
-	ErrLibraryConfiguration    = NewStaticError("library configuration error")
-	ErrLibraryFormMalformed    = NewStaticError("malformed library form")
-	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")
-	ErrHashtableKeyNotFound    = NewStaticError("hashtable key not found")
+	ErrCannotDoubleSyntaxWrap = NewStaticError("cannot wrap syntax value in SyntaxObject")
+	ErrNoMatchingClause       = NewStaticError("no matching clause")
+	ErrUnsupportedTransformer = NewStaticError("unsupported transformer")
+	ErrLibraryConfiguration   = NewStaticError("library configuration error")
+	ErrLibraryFormMalformed   = NewStaticError("malformed library form")
+	ErrLibraryNameMismatch    = NewStaticError("library name mismatch")
+	ErrHashtableKeyNotFound   = NewStaticError("hashtable key not found")
+	// ErrImmutableHashtable is raised by hashtable-set!, hashtable-delete! and
+	// hashtable-clear! on a table that hashtable-copy produced without a true
+	// mutable argument. R6RS raises &assertion here; Wile has no R6RS condition
+	// system, so this sentinel is the mapping — same trigger, Wile's error model,
+	// matchable with errors.Is from Go and by the standard exception machinery
+	// from Scheme.
+	ErrImmutableHashtable      = NewStaticError("hashtable is immutable")
 	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
 	ErrNonContinuableException = NewStaticError("non-continuable exception")
 

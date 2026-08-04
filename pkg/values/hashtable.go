@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 var _ Value = (*Hashtable)(nil)
@@ -105,18 +107,38 @@ type Hashtable struct {
 	// participate in the copy-on-write dance and the lock-free contract above is
 	// unaffected.
 	kind HashtableKind
+	// mutable is likewise WRITE-ONCE at construction. Only hashtable-copy
+	// without a true second argument produces a false one.
+	mutable bool
 }
 
-// NewEmptyHashtable creates a new empty equal?-keyed hash table. The zero
-// sync.Map and atomic.Int64 are ready to use, and HashtableEqual is the zero
-// HashtableKind by deliberate choice, so no field initialization is needed.
+// NewEmptyHashtable creates a new empty MUTABLE equal?-keyed hash table. The
+// zero sync.Map and atomic.Int64 are ready to use, and HashtableEqual is the
+// zero HashtableKind by deliberate choice.
 func NewEmptyHashtable() *Hashtable {
-	return &Hashtable{}
+	return NewHashtable(HashtableEqual)
 }
 
-// NewHashtable creates an empty hash table using kind's hash and key equality.
+// NewHashtable creates an empty MUTABLE hash table using kind's hash and key
+// equality. Immutable tables come only from hashtable-copy without a true
+// second argument, so mutable is set explicitly here rather than relying on a
+// zero value — unlike kind, whose zero value is deliberately the common case.
 func NewHashtable(kind HashtableKind) *Hashtable {
-	return &Hashtable{kind: kind}
+	return &Hashtable{kind: kind, mutable: true}
+}
+
+// Mutable reports whether this table accepts Set, Delete, and Clear.
+func (p *Hashtable) Mutable() bool {
+	return p.mutable
+}
+
+// checkMutable is the guard every destructive method opens with.
+func (p *Hashtable) checkMutable(op string) error {
+	if p.mutable {
+		return nil
+	}
+	return werr.WrapForeignErrorf(werr.ErrImmutableHashtable,
+		"%s: table was created by hashtable-copy without a true mutable argument", op)
 }
 
 // Kind reports which (hash, key-equality) pair this table uses.
@@ -415,7 +437,11 @@ func (p *Hashtable) Get(key Value) (Value, bool) {
 // Copy-on-write: the target bucket is copied before it is changed, so a
 // concurrent reader scanning the old bucket is never disturbed. See the type
 // comment for the (non-transactional) concurrency contract.
-func (p *Hashtable) Set(key Value, val Value) {
+func (p *Hashtable) Set(key Value, val Value) error {
+	err := p.checkMutable("hashtable-set!")
+	if err != nil {
+		return err
+	}
 	h := p.hashKey(key)
 	old := p.loadBucket(h)
 	for i, e := range old {
@@ -424,7 +450,7 @@ func (p *Hashtable) Set(key Value, val Value) {
 			copy(nb, old)
 			nb[i] = hashtableEntry{key: key, value: val}
 			p.buckets.Store(h, nb)
-			return
+			return nil
 		}
 	}
 	nb := make([]hashtableEntry, len(old), len(old)+1)
@@ -432,6 +458,7 @@ func (p *Hashtable) Set(key Value, val Value) {
 	nb = append(nb, hashtableEntry{key: key, value: val})
 	p.buckets.Store(h, nb)
 	p.size.Add(1)
+	return nil
 }
 
 // HasKey returns whether the key exists in the hash table.
@@ -444,7 +471,11 @@ func (p *Hashtable) HasKey(key Value) bool {
 //
 // Copy-on-write: a shrunk bucket is a fresh slice; the last entry's removal
 // drops the bucket key entirely.
-func (p *Hashtable) Delete(key Value) {
+func (p *Hashtable) Delete(key Value) error {
+	err := p.checkMutable("hashtable-delete!")
+	if err != nil {
+		return err
+	}
 	h := p.hashKey(key)
 	old := p.loadBucket(h)
 	for i, e := range old {
@@ -458,9 +489,10 @@ func (p *Hashtable) Delete(key Value) {
 				p.buckets.Store(h, nb)
 			}
 			p.size.Add(-1)
-			return
+			return nil
 		}
 	}
+	return nil
 }
 
 // collectEntries walks every bucket and projects each entry to a Value,
@@ -501,8 +533,8 @@ func (p *Hashtable) Size() int {
 
 // Copy returns a shallow copy of the hash table. Buckets are immutable, so each
 // stored slice can be shared directly with the copy without re-copying.
-func (p *Hashtable) Copy() *Hashtable {
-	q := NewHashtable(p.kind)
+func (p *Hashtable) Copy(mutable bool) *Hashtable {
+	q := &Hashtable{kind: p.kind, mutable: mutable}
 	p.buckets.Range(func(k, v any) bool {
 		q.buckets.Store(k, v.([]hashtableEntry))
 		return true
@@ -512,9 +544,14 @@ func (p *Hashtable) Copy() *Hashtable {
 }
 
 // Clear removes all entries from the hash table.
-func (p *Hashtable) Clear() {
+func (p *Hashtable) Clear() error {
+	err := p.checkMutable("hashtable-clear!")
+	if err != nil {
+		return err
+	}
 	p.buckets.Clear()
 	p.size.Store(0)
+	return nil
 }
 
 // Entries iterates over all entries in the hash table, calling fn for each

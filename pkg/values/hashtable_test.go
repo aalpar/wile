@@ -158,7 +158,10 @@ func TestHashtable_CopyClear(t *testing.T) {
 	ht.Set(values.NewSymbol("a"), values.NewInteger(1))
 
 	// Copy is independent
-	cp := ht.Copy()
+	// mutable=true: this test then mutates the ORIGINAL and asserts the copy is
+	// unaffected, so the copy only has to exist; true keeps it a like-for-like
+	// table rather than exercising the immutability path, which has its own test.
+	cp := ht.Copy(true)
 	c.Assert(cp.Size(), qt.Equals, 1)
 
 	ht.Set(values.NewSymbol("b"), values.NewInteger(2))
