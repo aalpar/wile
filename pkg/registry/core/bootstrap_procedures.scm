@@ -128,8 +128,10 @@
 ;;
 ;; The other tail form, a set-cdr! tail pointer, allocates n+1 cells against this
 ;; form's 2n and is nonetheless MUCH slower — measured, interleaved A/B, min-of-5:
-;; mapbench +34.6% and deriv +16.2% against the old non-tail map, versus +8.2% and
-;; +8.9% for this form. Two reasons, both structural rather than incidental. Per
+;; mapbench +34.6% and deriv +16.2% against the old non-tail SCHEME map, versus
+;; +8.2% and +8.9% for this form. All three arms are Scheme; the Go PrimMap this
+;; file replaced is NOT the baseline and was never benchmarked against any of
+;; them. Two reasons, both structural rather than incidental. Per
 ;; element it runs set-cdr! and an extra cdr on top of the same f and cons this
 ;; form runs, while reverse links n cells in ONE primitive call through a single
 ;; PairBlock. And its set-cdr! never reaches the promoted OpSetCdr opcode: the
