@@ -95,3 +95,25 @@ func hashNaN() uint64 {
 // nanCanonicalBits is an arbitrary fixed stand-in for "some NaN". Its value does
 // not matter; that it is CONSTANT does.
 const nanCanonicalBits uint64 = 0x7ff8000000000000
+
+// StringHash is R6RS string-hash: unbounded, deterministic, and equal for
+// string=? arguments. Distinct from SRFI-13's two-argument bounded form, which
+// stays a Scheme procedure in (srfi 13) and shadows this one on import.
+//
+// There is deliberately no StringCIHash beside it. R6RS string-ci-hash must
+// agree with string-ci=?, which folds case with golang.org/x/text/cases.Fold
+// (FULL folding: "ß" and "SS" fold alike). x/text is confined to internal
+// packages by go.mod and pkg/values takes no imports beyond pkg/werr and the
+// standard library, so a strings.ToLower stand-in here would silently disagree
+// with string-ci=? on exactly that input. The primitive therefore lives beside
+// string-ci=? in pkg/internal/extensions/all and shares its fold function, which
+// makes the two agree by construction rather than by coincidence.
+func StringHash(s string) uint64 {
+	return hashString(0x3, s)
+}
+
+// SymbolHash is R6RS symbol-hash. Wile de-interns symbols, so symbol identity is
+// the key's spelling and this is exactly (*Symbol).HashCode.
+func SymbolHash(sym *Symbol) uint64 {
+	return sym.HashCode()
+}
