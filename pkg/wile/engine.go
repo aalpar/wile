@@ -137,7 +137,7 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// would bind primitives the caller excluded — silently widening the top level past
 	// the configured registry and breaking the option's "never widens" invariant.
 	// Reject the combination rather than widen; use WithProfile to bound capability.
-	if cfg.strictNamespace && cfg.registry != nil {
+	if cfg.strictLevel > strictLevelOff && cfg.registry != nil {
 		return nil, nil, nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
 			"WithStrictNamespace is incompatible with WithRegistry/WithoutCore: strict mode derives its bare surface from the default core registry; use WithProfile to bound capability")
 	}
@@ -192,7 +192,7 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	// reachable via (import …), but are not pre-bound here. Non-strict keeps the full
 	// registry, so topLevelReg == reg and the path is byte-for-byte unchanged.
 	topLevelReg := reg
-	if cfg.strictNamespace {
+	if cfg.strictLevel > strictLevelOff {
 		topLevelReg, err = coreOnlyRegistry()
 		if err != nil {
 			return nil, nil, nil, err
@@ -397,7 +397,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg), cfg.strictNamespace)
+		err := setupLibrarySystem(ctx, cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg), cfg.strictLevel)
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +465,7 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 // import observer, extension libraries, and the library environment factory.
 // applyOpts propagates registry.Apply toggles (e.g., contract enforcement)
 // into child library environments so they mirror the parent's configuration.
-func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption, strictNamespace bool) error {
+func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption, level strictLevel) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -500,7 +500,7 @@ func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserv
 	// snapshots is empty) registerExtensionLibraries is a no-op, so the full apply
 	// would be wasted.
 	synthEnv := env
-	if strictNamespace && len(snapshots) > 0 {
+	if level > strictLevelOff && len(snapshots) > 0 {
 		synthEnv = ns.NewChildRuntime()
 		applyErr := applyBaseEnvironment(ctx, synthEnv, reg, applyOpts...)
 		if applyErr != nil {

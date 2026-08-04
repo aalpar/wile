@@ -21,14 +21,14 @@ import (
 )
 
 // TestWithStrictNamespaceSetsFlag is a white-box unit test confirming the option
-// flips engineConfig.strictNamespace and that the default is off. Behavior
-// driven by the flag is exercised in the external strict-namespace suite.
+// raises engineConfig.strictLevel to strictLevelCore and that the default is off.
+// Behavior driven by the level is exercised in the external strict-namespace suite.
 func TestWithStrictNamespaceSetsFlag(t *testing.T) {
 	c := qt.New(t)
 
 	cfg := newEngineConfig()
-	c.Assert(cfg.strictNamespace, qt.IsFalse, qt.Commentf("default must be non-strict"))
+	c.Assert(cfg.strictLevel, qt.Equals, strictLevelOff, qt.Commentf("default must be non-strict"))
 
 	WithStrictNamespace()(cfg)
-	c.Assert(cfg.strictNamespace, qt.IsTrue, qt.Commentf("WithStrictNamespace must set the flag"))
+	c.Assert(cfg.strictLevel, qt.Equals, strictLevelCore, qt.Commentf("WithStrictNamespace must select the core level"))
 }

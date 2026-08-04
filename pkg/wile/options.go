@@ -30,6 +30,24 @@ import (
 // See compilation.LibraryImportEvent for field documentation.
 type LibraryImportEvent = compilation.LibraryImportEvent
 
+// strictLevel is the monotone narrowing ladder for the engine's VISIBLE
+// top-level surface. Higher means narrower, and every option in the family
+// combines by max, so ordering options can never un-narrow a surface.
+//
+// The type is unexported because no caller outside this package names a level:
+// each level has its own option constructor, and the CLI selects between those.
+type strictLevel int
+
+const (
+	// strictLevelOff binds the whole registry at the top level. Default.
+	strictLevelOff strictLevel = iota
+	// strictLevelCore binds only the core primitives and core bootstrap macros.
+	// Selected by WithStrictNamespace.
+	strictLevelCore
+	// strictLevelNoBindings binds nothing. Selected by WithoutAmbientBindings.
+	strictLevelNoBindings
+)
+
 // Phase is a typed enum identifying a stage of compilation/evaluation.
 // Re-exported from environment for embedder convenience; use the
 // PhaseRuntime/PhaseExpand/PhaseCompile/PhaseTemplate constants below.
@@ -106,14 +124,21 @@ type engineConfig struct {
 	// propagated to the Namespace in NewEngine/NewNamespace.
 	immutableTopLevel bool
 
-	// strictNamespace, when true, binds only the core primitive surface at the
-	// top level; the profile's extension primitives stay registered (importable
-	// via (import …)) but are not pre-bound. The visible surface then equals a
-	// Tiny engine's, while the full profile registry is still used for library
-	// environments — so (import (scheme r5rs)) works over a core-only baseline.
-	// Set by WithStrictNamespace; off by default. Security is unchanged: the
-	// profile still bounds what is reachable at all.
-	strictNamespace bool
+	// strictLevel selects how much of the registry the VISIBLE top-level surface
+	// is bound from. The profile's registry (REGISTERED) is unchanged at every
+	// level and remains the security boundary; strictness only decides how much
+	// of it is pre-bound versus reachable via (import …).
+	//
+	//	strictLevelOff        VISIBLE = REGISTERED (default)
+	//	strictLevelCore       core primitives + core bootstrap macros, so the
+	//	                      visible surface equals a Tiny engine's and
+	//	                      (import (scheme r5rs)) layers over a core baseline
+	//	strictLevelNoBindings nothing bound; only phase handlers remain reachable
+	//	                      (lambda/let/if/define/import — see WithoutAmbientBindings)
+	//
+	// Set by WithStrictNamespace and WithoutAmbientBindings, which combine by
+	// MAX so narrowing stays commutative and monotone.
+	strictLevel strictLevel
 
 	// dialect, when non-nil, customizes the per-engine forms registry at engine
 	// origin (bootstrapNamespace): the engine forks the R7RS-default clone and
@@ -519,7 +544,7 @@ func WithMutableTopLevel() EngineOption {
 // core registry, so the combination is rejected at construction.
 func WithStrictNamespace() EngineOption {
 	return func(cfg *engineConfig) {
-		cfg.strictNamespace = true
+		cfg.strictLevel = max(cfg.strictLevel, strictLevelCore)
 	}
 }
 
