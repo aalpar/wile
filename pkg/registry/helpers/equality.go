@@ -33,27 +33,12 @@ import "github.com/aalpar/wile/pkg/values"
 // EqualTo accepted — so eqv? and equal? gave different answers on the same two
 // numbers, which §6.1 forbids outright. Routing both through EqvNumber makes them
 // agree by construction rather than by two implementations happening to concur.
+//
+// The composition itself moved to values.Eqv so Hashtable can dispatch an
+// eqv-kind table through it; this is a thin re-export retained for API stability,
+// matching EqIdentity below.
 func Eqv(a, b values.Value) bool {
-	if values.EqIdentity(a, b) {
-		return true
-	}
-	na, ok := a.(values.Number)
-	if ok {
-		nb, ok := b.(values.Number)
-		if !ok {
-			return false
-		}
-		return values.EqvNumber(na, nb)
-	}
-	ca, ok := a.(*values.Character)
-	if ok {
-		cb, ok := b.(*values.Character)
-		if !ok {
-			return false
-		}
-		return ca.Value == cb.Value
-	}
-	return false
+	return values.Eqv(a, b)
 }
 
 // EqIdentity implements eq? semantics: pointer identity for all types except

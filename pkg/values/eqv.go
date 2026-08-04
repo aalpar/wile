@@ -191,6 +191,39 @@ func numEqual(a, b Number) bool {
 	return !a.LessThan(b) && !b.LessThan(a)
 }
 
+// Eqv implements eqv? per R7RS §6.1. It is the single authority, and it composes
+// three rules rather than restating any of them:
+//
+//	identity  -> EqIdentity
+//	numbers   -> EqvNumber   (also what equal? uses, via each numeric EqualTo)
+//	chars     -> char= on the code point
+//
+// It lives here rather than in registry/helpers because Hashtable dispatches an
+// eqv-kind table's key comparison through it, and pkg/values sits below
+// registry. registry/helpers.Eqv re-exports it for API stability.
+func Eqv(a, b Value) bool {
+	if EqIdentity(a, b) {
+		return true
+	}
+	na, ok := a.(Number)
+	if ok {
+		nb, ok := b.(Number)
+		if !ok {
+			return false
+		}
+		return EqvNumber(na, nb)
+	}
+	ca, ok := a.(*Character)
+	if ok {
+		cb, ok := b.(*Character)
+		if !ok {
+			return false
+		}
+		return ca.Value == cb.Value
+	}
+	return false
+}
+
 // eqvNumberValue is the Value-typed adapter every numeric EqualTo delegates to.
 // It exists so that "equal? agrees with eqv? on numbers" (R7RS §6.1) is a
 // property of the type system rather than of seven methods remembering to agree.
