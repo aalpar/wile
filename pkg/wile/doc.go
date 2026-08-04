@@ -43,7 +43,7 @@
 //	    wile.WithExtension(system.Extension),
 //	)
 //
-// Strict namespace (bare top level; layer R7RS libraries on top):
+// Strict namespace (core-only top level; layer R7RS libraries on top):
 //
 //	engine, err := wile.NewEngine(ctx,
 //	    wile.WithProfile(wile.Small), wile.WithStrictNamespace(),

@@ -237,9 +237,9 @@ vs `racket/base`.
 `WithStrictNamespace()` opts into an R7RS-strict *visible* surface: only the core
 primitives (and the `define`/`import`/syntax machinery) are bound at the top
 level. The profile's extension primitives stay **registered** — reachable via
-`(import …)` — but are not pre-bound. The bare surface equals a `Tiny` engine's,
-while the full profile registry still backs library loading, so libraries layer
-on top of a bare baseline:
+`(import …)` — but are not pre-bound. The visible surface equals a `Tiny`
+engine's, while the full profile registry still backs library loading, so
+libraries layer on top of a core-only baseline:
 
 ```go
 eng, _ := wile.NewEngine(ctx,
@@ -254,21 +254,21 @@ eng.EvalMultiple(ctx, "(import (scheme r5rs)) (exact->inexact 1/2)") // 0.5 — 
 **Security is unchanged.** The profile (the registered extension set) remains the
 capability boundary — strict mode never widens what is reachable, it only
 withholds it from the top level until imported. `WithProfile(Small) +
-WithStrictNamespace()` exposes exactly the `Small` surface, just bare until
+WithStrictNamespace()` exposes exactly the `Small` surface, just withheld until
 imported. The option is orthogonal to `WithProfile`/`WithSandbox`/`WithAuthorizer`
 and composes order-independently with them. Off by default (the batteries-included
 top level is preserved for compatibility and the REPL/CLI experience).
 
-A bare top level is a valid import target: import installs resolved bindings into
+A narrowed top level is a valid import target: import installs resolved bindings into
 the mutable user-global frame, not the sealed base, so layering libraries on a
 strict engine works exactly as on a non-strict one.
 
-**Scope.** The bare surface is carved when the namespace is built, so strictness
+**Scope.** The visible surface is carved when the namespace is built, so strictness
 must be set at namespace-creation time. Like `WithRegistry`/`WithExtension`/
 `WithoutCore`, `WithStrictNamespace` has no effect on the `WithNamespace` path —
 a pre-built namespace is authoritative for its own top level, so bake strictness
 in at `NewNamespace`. It is also incompatible with `WithRegistry`/`WithoutCore`
-(which supply a custom or coreless registry): strict mode derives its bare
+(which supply a custom or coreless registry): strict mode derives its visible
 surface from the default core registry, so that combination is rejected at
 construction with `ErrEngineInit`.
 

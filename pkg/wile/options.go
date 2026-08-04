@@ -108,11 +108,11 @@ type engineConfig struct {
 
 	// strictNamespace, when true, binds only the core primitive surface at the
 	// top level; the profile's extension primitives stay registered (importable
-	// via (import …)) but are not pre-bound. The bare top level then equals a
-	// Tiny engine's visible surface, while the full profile registry is still
-	// used for library environments — so (import (scheme r5rs)) works over a
-	// bare baseline. Set by WithStrictNamespace; off by default. Security is
-	// unchanged: the profile still bounds what is reachable at all.
+	// via (import …)) but are not pre-bound. The visible surface then equals a
+	// Tiny engine's, while the full profile registry is still used for library
+	// environments — so (import (scheme r5rs)) works over a core-only baseline.
+	// Set by WithStrictNamespace; off by default. Security is unchanged: the
+	// profile still bounds what is reachable at all.
 	strictNamespace bool
 
 	// dialect, when non-nil, customizes the per-engine forms registry at engine
@@ -497,24 +497,25 @@ func WithMutableTopLevel() EngineOption {
 	}
 }
 
-// WithStrictNamespace makes the engine's top level start BARE: the profile's
-// extension primitives are REGISTERED (so libraries can import them) but are NOT
-// pre-bound at the top level. Reach them with (import …). Core primitives and
-// core syntax remain visible, so the bare surface matches a Tiny engine's; the
-// full profile registry is still used for library environments, so a layered
-// import such as (import (scheme r5rs)) resolves over the bare baseline.
+// WithStrictNamespace narrows the engine's visible top-level surface to CORE
+// ONLY: the profile's extension primitives are REGISTERED (so libraries can
+// import them) but are NOT pre-bound at the top level. Reach them with
+// (import …). Core primitives and core syntax remain visible, so the visible
+// surface matches a Tiny engine's; the full profile registry is still used for
+// library environments, so a layered import such as (import (scheme r5rs))
+// resolves over the core-only baseline.
 //
 // Orthogonal to WithProfile/WithSandbox/WithAuthorizer; composes commutatively.
 // The profile (or explicit WithExtension set) remains the security boundary —
 // strict mode never widens what is reachable, it only withholds it from the top
 // level until imported. Off by default.
 //
-// The bare surface is carved when the namespace is built, so strictness must be
-// set at namespace-creation time. Like WithRegistry/WithExtension/WithoutCore,
+// The visible surface is carved when the namespace is built, so strictness must
+// be set at namespace-creation time. Like WithRegistry/WithExtension/WithoutCore,
 // this option has no effect on the WithNamespace path (a pre-built namespace is
 // authoritative for its own top level) — bake strictness in at NewNamespace.
 // It is incompatible with WithRegistry/WithoutCore (which supply a custom or
-// coreless registry): strict mode derives its bare surface from the default
+// coreless registry): strict mode derives its visible surface from the default
 // core registry, so the combination is rejected at construction.
 func WithStrictNamespace() EngineOption {
 	return func(cfg *engineConfig) {
