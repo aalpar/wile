@@ -55,6 +55,7 @@ var Builder = registry.NewRegistryBuilder(
 	addPrompts,
 	addBoxes,
 	addOpaque,
+	addHashes,
 	addHashtables,
 	addExceptions,
 	addContMarks,

@@ -46,6 +46,25 @@ func getCaseFolded(s string) string {
 	return caseFolder.String(s)
 }
 
+// PrimStringCIHash implements R6RS string-ci-hash: an exact non-negative integer
+// hash consistent with string-ci=?.
+//
+// It lives HERE rather than beside equal-hash and string-hash in
+// pkg/registry/core because the contract is "string-ci=? implies equal hashes",
+// and the only way to hold that by construction rather than by coincidence is to
+// call the same fold string-ci=? calls. That fold is x/text's FULL Unicode
+// folding, under which "ß" and "SS" agree; strings.ToLower does not, and
+// pkg/values (where a StringCIHash would naturally sit) may not import x/text —
+// go.mod confines it to internal packages and pkg/values takes nothing beyond
+// pkg/werr and the standard library.
+//
+// The >> 1 keeps the result non-negative, which R6RS requires of every hash
+// procedure; int64(uint64) of a hash with the high bit set is negative.
+var PrimStringCIHash = helpers.MakeUnaryAccessor(werr.ErrNotAString, "string-ci-hash",
+	func(s *values.String) values.Value {
+		return values.NewInteger(int64(values.StringHash(getCaseFolded(s.Value)) >> 1))
+	})
+
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
 func PrimStringCopyTo(mc machine.CallContext) error {

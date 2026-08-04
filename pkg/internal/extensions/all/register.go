@@ -174,6 +174,18 @@ func addMoreStrings(r *registry.Registry) error {
 		}
 	}
 	r.AddPrimitives(stringCiPrims, registry.PhaseSetRuntime)
+
+	// string-ci-hash sits with the string-ci comparisons, not with equal-hash and
+	// string-hash in registry/core, because it must fold case exactly as
+	// string-ci=? does — see PrimStringCIHash.
+	r.AddPrimitives([]registry.PrimitiveSpec{
+		{Name: "string-ci-hash", ParamCount: 1, Impl: PrimStringCIHash,
+			Doc:        "Returns an exact non-negative integer hash of STRING, consistent with string-ci=?: if (string-ci=? a b) then (= (string-ci-hash a) (string-ci-hash b)). Uses full Unicode case folding, so \"ß\" and \"SS\" hash alike.\n\nExamples:\n  (= (string-ci-hash \"ABC\") (string-ci-hash \"abc\"))  => #t",
+			ParamNames: []string{"string"}, Category: "strings",
+			ParamTypes: []values.TypeConstraint{values.TypeString},
+			ReturnType: values.TypeInteger,
+			Keywords:   []string{"hash", "case-insensitive", "R6RS"}},
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
