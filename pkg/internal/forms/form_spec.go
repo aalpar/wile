@@ -81,29 +81,40 @@ func (r *FormRegistry) Register(spec *FormSpec) {
 	r.specs[spec.Name] = spec
 }
 
-// RegisterValidator sets the validator for a form. Copy-on-write: a fresh
-// FormSpec is assigned rather than mutating in place, so an override on a clone
-// cannot corrupt the default (or a clone sharing the pointer). Preserves any
-// previously-registered Compile so validator and compiler co-locate on one spec.
-func (r *FormRegistry) RegisterValidator(name string, fn ValidatorFunc) {
+// update applies mutate to a fresh copy of the form's spec and stores the
+// result. Copy-on-write: a fresh FormSpec is assigned rather than mutated in
+// place, so an override on a clone cannot corrupt the default (or a clone
+// sharing the pointer — see Clone).
+//
+// Every per-field registrar routes through here, so each one states only the
+// field it sets: the whole prior spec is carried forward by the struct copy,
+// and a new FormSpec field does not add a preservation line to each registrar.
+func (r *FormRegistry) update(name string, mutate func(spec *FormSpec)) {
+	spec := &FormSpec{}
 	prev := r.specs[name]
-	spec := &FormSpec{Name: name, Validate: fn}
 	if prev != nil {
-		spec.Compile = prev.Compile
+		*spec = *prev
 	}
+	spec.Name = name
+	mutate(spec)
 	r.specs[name] = spec
 }
 
-// RegisterCompiler sets the compiler for a form. Copy-on-write, symmetric with
-// RegisterValidator: preserves any previously-registered Validate. compile is
-// [any]-typed (a machine/compilation.CompilerFunc) to break the import cycle.
+// RegisterValidator sets the validator for a form, preserving every other field
+// already registered so validator and compiler co-locate on one spec.
+func (r *FormRegistry) RegisterValidator(name string, fn ValidatorFunc) {
+	r.update(name, func(spec *FormSpec) {
+		spec.Validate = fn
+	})
+}
+
+// RegisterCompiler sets the compiler for a form, symmetric with
+// RegisterValidator. compile is [any]-typed (a machine/compilation.CompilerFunc)
+// to break the import cycle.
 func (r *FormRegistry) RegisterCompiler(name string, compile any) {
-	prev := r.specs[name]
-	spec := &FormSpec{Name: name, Compile: compile}
-	if prev != nil {
-		spec.Validate = prev.Validate
-	}
-	r.specs[name] = spec
+	r.update(name, func(spec *FormSpec) {
+		spec.Compile = compile
+	})
 }
 
 // Lookup returns the FormSpec for a keyword, or nil if not found.
@@ -152,8 +163,9 @@ func (r *FormRegistry) Verify() error {
 		"form registration inconsistencies:%s", b.String())
 }
 
-// Clone returns a shallow copy. Safe because RegisterValidator is copy-on-write, so
-// an override on a clone assigns a fresh FormSpec rather than mutating a shared one.
+// Clone returns a shallow copy. Safe because every registrar goes through update,
+// which is copy-on-write, so an override on a clone assigns a fresh FormSpec
+// rather than mutating the one it shares with the registry it forked from.
 func (r *FormRegistry) Clone() *FormRegistry {
 	return &FormRegistry{
 		specs: maps.Clone(r.specs),
