@@ -22,10 +22,45 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// PrimMakeHashtable implements the make-hashtable primitive.
-// Creates a new empty hash table.
+// PrimMakeHashtable implements R6RS (make-hashtable hash equiv [k]).
+//
+// Only the (equal-hash, equal?) pair is recognized; everything else raises. That
+// is the documented gap while user-supplied hash/equivalence procedures are
+// deferred — see docs/reference/r7rs-differences.md.
+//
+// The pair is recognized by POINTER IDENTITY against this namespace's own
+// closures, which is Chibi's (eq? hash-fn hash). registerPhasePrimitive
+// constructs exactly one *ForeignClosure per spec per namespace and defines that
+// pointer, so every reference to equal-hash inside a namespace yields the same
+// object and a pointer compare IS eq?. The reference is read from the SEALED
+// BASE, not the runtime frame, so a user (define (equal-hash x) ...) shadowing in
+// the mutable layer cannot change what is recognized — matching Chibi, where the
+// comparison is against the library's lexical binding rather than the call site's.
+//
+// A registered-NAME compare was the earlier design and is NOT used: SetName is
+// called by whoever registers a primitive, so an embedder or extension shipping
+// its own equal-hash would match by string and have its procedure silently
+// discarded. That fails open. This fails closed.
+//
+// This is NOT a Binding Identity violation, though it reads like one. That
+// invariant forbids deciding two IDENTIFIERS denote the same variable by comparing
+// SPELLINGS. Nothing is resolved by spelling here: two already-evaluated
+// first-class procedure objects are compared by identity.
 func PrimMakeHashtable(mc machine.CallContext) error {
-	mc.SetValue(values.NewEmptyHashtable())
+	ns := mc.EnvironmentFrame().Namespace()
+	hashRef := sealedPrimitive(ns, "equal-hash")
+	equivRef := sealedPrimitive(ns, "equal?")
+	// The interface compares are exactly the pointer identity wanted here, and are
+	// safe only because every closure is pointer-shaped — which is why values.Value
+	// carries the Go-comparability contract. Keep the comparison on the CLOSURES
+	// and never on keys: a non-comparable Value would panic rather than return
+	// false.
+	if hashRef == nil || equivRef == nil || mc.Arg(0) != hashRef || mc.Arg(1) != equivRef {
+		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
+			"make-hashtable: only (make-hashtable equal-hash equal?) is supported; "+
+				"use make-eq-hashtable, make-eqv-hashtable or make-equal-hashtable")
+	}
+	mc.SetValue(values.NewHashtable(values.HashtableEqual))
 	return nil
 }
 
@@ -59,34 +94,22 @@ var PrimHashtableQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	return ok
 })
 
-// PrimHashtableRef implements the hashtable-ref primitive.
-// (hashtable-ref ht key) — errors if key is missing.
-// (hashtable-ref ht key default) — returns default if key is missing.
+// PrimHashtableRef implements R6RS (hashtable-ref ht key default).
+//
+// DEFAULT IS REQUIRED. R6RS has no two-argument form, so the missing-key raise
+// and werr.ErrHashtableKeyNotFound with it are gone: an absent key now returns
+// default, always.
 func PrimHashtableRef(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-ref")
 	if err != nil {
 		return err
 	}
-	key := mc.Arg(1)
-	rest := mc.Arg(2)
-
-	val, found := ht.Get(key)
-	if found {
-		mc.SetValue(val)
-		return nil
+	val, found := ht.Get(mc.Arg(1))
+	if !found {
+		val = mc.Arg(2)
 	}
-
-	// Check for optional default value
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable-ref: improper argument list")
-		}
-		mc.SetValue(tuple.Car())
-		return nil
-	}
-
-	return werr.WrapForeignErrorf(werr.ErrHashtableKeyNotFound, "hashtable-ref: key not found: %s", key.SchemeString())
+	mc.SetValue(val)
+	return nil
 }
 
 // PrimHashtableSet implements the hashtable-set! primitive.
@@ -119,16 +142,14 @@ func PrimHashtableDelete(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimHashtableKeys implements the hashtable-keys primitive.
-// Returns a list of all keys in the hash table.
+// PrimHashtableKeys implements R6RS hashtable-keys, which returns a VECTOR.
+// Wile previously returned a list.
+//
+// hashtable-values is gone: hashtable-entries subsumes it, returning keys and
+// values together and index-aligned, which is the only way to pair them
+// reliably.
 var PrimHashtableKeys = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-keys", func(ht *values.Hashtable) values.Value {
-	return ht.Keys()
-})
-
-// PrimHashtableValues implements the hashtable-values primitive.
-// Returns a list of all values in the hash table.
-var PrimHashtableValues = helpers.MakeUnaryAccessor(werr.ErrNotAHashtable, "hashtable-values", func(ht *values.Hashtable) values.Value {
-	return ht.Values()
+	return ht.KeysVector()
 })
 
 // PrimHashtableSize implements the hashtable-size primitive.

@@ -450,7 +450,7 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
       ;; silent hang into a remedy-pointing error. Mirrors graph.scm's worklist
       ;; cap, but per-block so the error can name the offending widening point.
       (define max-revisits 100000)
-      (define visits (make-hashtable))
+      (define visits (make-equal-hashtable))
       (let loop ((wl (worklist-insert-all '() seed-idxs)))
         (if (null? wl)
             states

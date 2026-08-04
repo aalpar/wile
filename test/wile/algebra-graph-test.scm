@@ -210,25 +210,26 @@
     (test 2 (graph-query ga "A" "D"))     ; cached
     (test 1 (graph-query ga "A" "B"))))
 
-(test-group "fast path — non-atomic adjacency keys suppress attachment"
-  ;; The fast path's name interning uses a hashtable, which Wile restricts
-  ;; to atomic keys. Adjacency with a pair-keyed node falls back to the
-  ;; slow path transparently — the carrier opt stays advisory.
+(test-group "fast path — non-atomic adjacency keys are supported"
+  ;; This group asserted the OPPOSITE until the R6RS hashtable work: the fast
+  ;; path's name interning used a `make-hashtable' that admitted only atomic
+  ;; Hashable keys, so a pair-keyed adjacency suppressed fast-path attachment
+  ;; and fell back to the slow path. The hash moved from the KEY to the TABLE,
+  ;; the interning table is now `make-equal-hashtable', and the suppression
+  ;; gate is gone. The Go kernel never sees a name — it consumes indices.
   (let ((ga (make-graph-analysis (bigint-counting-semiring)
                                  '(((1 2) . (((3 4) . 1))) ((3 4) . ()))
                                  #f)))
-    (test #f (graph-analysis-fast-path? ga))
-    ;; Slow path still works on the same input — value verifies
-    ;; semantic equivalence under fall-back.
+    (test #t (graph-analysis-fast-path? ga))
+    ;; And the answer is the same one the slow path gave before.
     (test 1 (graph-query ga '(1 2) '(3 4))))
-  ;; Adjacency mixing atomic and non-atomic keys: presence of either
-  ;; non-atomic key disables the fast path. (Edge target #(0) is a
-  ;; vector — also non-Hashable.)
+  ;; Vector node identifiers likewise, mixed with atomic ones.
   (let ((ga (make-graph-analysis (bigint-counting-semiring)
                                  (list (cons "A" (list (cons #(0) 1)))
                                        (cons #(0) '()))
                                  #f)))
-    (test #f (graph-analysis-fast-path? ga))))
+    (test #t (graph-analysis-fast-path? ga))
+    (test 1 (graph-query ga "A" #(0)))))
 
 (test-group "fast path — source not in adjacency returns semiring-zero"
   ;; The fast path used to error on missing source; slow path returns
@@ -555,20 +556,23 @@
     ;; but the dispatch must take the short-circuit path, not the fallback).
     (test '() (graph-query-all cyc-ga "ZZZ"))))
 
-(test-group "graph-analysis-sccs raises on non-atomic node identifiers"
-  ;; Wile's make-hashtable restricts keys to atomic Hashable values.
-  ;; The kernel's name-interning step relies on this; on non-atomic node IDs
-  ;; (pairs, vectors, lists) %ensure-graph-scc! must surface a clear error,
-  ;; not let hashtable-set! fail mid-walk with an opaque message.
+(test-group "graph-analysis-sccs works on non-atomic node identifiers"
+  ;; This group asserted `test-error' on all three side queries until the R6RS
+  ;; hashtable work: `%ensure-interning!' raised outright because its interning
+  ;; table admitted only atomic Hashable keys. That restriction is gone —
+  ;; `hashtable-set!' now accepts any object — so the raise was deleted and the
+  ;; whole SCC side-query API works on list- and vector-valued node identifiers.
+  ;; This is the regression test for that removal.
   (let* ((adj '(((compound key 1) . (((other compound key) . #f)))
                 ((other compound key) . ())))
          (ga  (make-graph-analysis (boolean-semiring) adj #f)))
-    ;; Slow-path API still works on non-atomic keys (uses equal?-comparable).
+    ;; Slow-path API, unchanged.
     (test #t (graph-query ga '(compound key 1) '(other compound key)))
-    ;; SCC side-query API raises with a clear message.
-    (test-error (graph-analysis-sccs ga))
-    (test-error (graph-cyclic-nodes ga))
-    (test-error (graph-node-in-cycle? ga '(compound key 1)))))
+    ;; SCC side-query API: no longer raises, and interning actually ran.
+    ;; graph-analysis-sccs returns a <graph-scc> record, not a list.
+    (test #t (not (eq? #f (graph-analysis-sccs ga))))
+    (test '() (graph-cyclic-nodes ga))
+    (test #f (graph-node-in-cycle? ga '(compound key 1)))))
 
 (test-group "SCC structure stable across kernel calls with different sources"
   ;; The cyclic-counting adapter discards the per-call SCC vector returned

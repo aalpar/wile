@@ -133,22 +133,30 @@ func TestHashtable_GetSetDelete(t *testing.T) {
 	c.Assert(ht.Size(), qt.Equals, 0)
 }
 
+// TestHashtable_KeysValues covers the R6RS shapes that replaced the list-valued
+// Keys()/Values(): KeysVector returns a vector, and the value half is served by
+// EntriesVectors, which is the only way to get keys and values PAIRED — two
+// independent snapshots of a lock-free table need not agree.
 func TestHashtable_KeysValues(t *testing.T) {
 	c := qt.New(t)
 
 	ht := values.NewEmptyHashtable()
-	c.Assert(ht.Keys(), qt.Equals, values.EmptyList)
-	c.Assert(ht.Values(), qt.Equals, values.EmptyList)
+	c.Assert(len(*ht.KeysVector()), qt.Equals, 0)
+	emptyKs, emptyVs := ht.EntriesVectors()
+	c.Assert(len(*emptyKs), qt.Equals, 0)
+	c.Assert(len(*emptyVs), qt.Equals, 0)
 
 	ht.Set(values.NewSymbol("a"), values.NewInteger(1))
 
-	keys := ht.Keys()
-	c.Assert(keys.Length(), qt.Equals, 1)
-	c.Assert(keys.Car(), valuestest.SchemeEquals, values.NewSymbol("a"))
+	keys := ht.KeysVector()
+	c.Assert(len(*keys), qt.Equals, 1)
+	c.Assert((*keys)[0], valuestest.SchemeEquals, values.NewSymbol("a"))
 
-	vals := ht.Values()
-	c.Assert(vals.Length(), qt.Equals, 1)
-	c.Assert(vals.Car(), valuestest.SchemeEquals, values.NewInteger(1))
+	ks, vs := ht.EntriesVectors()
+	c.Assert(len(*ks), qt.Equals, 1)
+	c.Assert(len(*vs), qt.Equals, 1)
+	c.Assert((*ks)[0], valuestest.SchemeEquals, values.NewSymbol("a"))
+	c.Assert((*vs)[0], valuestest.SchemeEquals, values.NewInteger(1))
 }
 
 func TestHashtable_CopyClear(t *testing.T) {

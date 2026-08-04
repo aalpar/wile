@@ -372,31 +372,32 @@ func TestRoundTrip_BoxOperations(t *testing.T) {
 
 func TestRoundTrip_Hashtables(t *testing.T) {
 	runRoundTrips(t, []roundTripCase{
-		{"ref", `(let ((ht (make-hashtable))) (hashtable-set! ht 'key 42) (hashtable-ref ht 'key #f))`, values.NewInteger(42)},
-		{"size", `(let ((ht (make-hashtable))) (hashtable-set! ht 'a 1) (hashtable-set! ht 'b 2) (hashtable-size ht))`, values.NewInteger(2)},
-		{"ref-default", `(hashtable-ref (make-hashtable) 'missing 99)`, values.NewInteger(99)},
+		{"ref", `(let ((ht (make-equal-hashtable))) (hashtable-set! ht 'key 42) (hashtable-ref ht 'key #f))`, values.NewInteger(42)},
+		{"size", `(let ((ht (make-equal-hashtable))) (hashtable-set! ht 'a 1) (hashtable-set! ht 'b 2) (hashtable-size ht))`, values.NewInteger(2)},
+		{"ref-default", `(hashtable-ref (make-equal-hashtable) 'missing 99)`, values.NewInteger(99)},
 	})
 }
 
 func TestRoundTrip_HashtableOperations(t *testing.T) {
 	runRoundTripsBool(t, []struct{ name, code string }{
-		{"pred", `(hashtable? (make-hashtable))`},
+		{"pred", `(hashtable? (make-equal-hashtable))`},
 		{"not-ht", `(not (hashtable? 42))`},
-		{"delete", `(let ((ht (make-hashtable)))
+		{"delete", `(let ((ht (make-equal-hashtable)))
 			(hashtable-set! ht 'k 1)
 			(hashtable-delete! ht 'k)
 			(= (hashtable-size ht) 0))`},
-		{"keys", `(let ((ht (make-hashtable)))
+		{"keys", `(let ((ht (make-equal-hashtable)))
 			(hashtable-set! ht 'a 1)
-			(= (length (hashtable-keys ht)) 1))`},
-		{"values", `(let ((ht (make-hashtable)))
+			(= (vector-length (hashtable-keys ht)) 1))`},
+		{"entries", `(let ((ht (make-equal-hashtable)))
 			(hashtable-set! ht 'a 42)
-			(= (car (hashtable-values ht)) 42))`},
-		{"copy", `(let* ((ht (make-hashtable))
+			(call-with-values (lambda () (hashtable-entries ht))
+			  (lambda (ks vs) (= (vector-ref vs 0) 42))))`},
+		{"copy", `(let* ((ht (make-equal-hashtable))
 			(_ (hashtable-set! ht 'x 10))
 			(ht2 (hashtable-copy ht)))
 			(= (hashtable-ref ht2 'x #f) 10))`},
-		{"clear", `(let ((ht (make-hashtable)))
+		{"clear", `(let ((ht (make-equal-hashtable)))
 			(hashtable-set! ht 'a 1)
 			(hashtable-clear! ht)
 			(= (hashtable-size ht) 0))`},

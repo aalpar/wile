@@ -487,7 +487,7 @@ func TestEqualIsReflexive(t *testing.T) {
 		{Name: "nan found by memv across payloads", Code: `(if (memv +nan.0 (list 1 (/ 0.0 0.0))) #t #f)`, Expected: values.TrueValue},
 		{Name: "case nan arm fires", Code: `(case (/ 0.0 0.0) ((+nan.0) 'hit) (else 'miss))`, Expected: values.NewSymbol("hit")},
 		{Name: "nan hashtable key across payloads",
-			Code: `(let ((h (make-hashtable)))
+			Code: `(let ((h (make-equal-hashtable)))
 			         (hashtable-set! h (/ 0.0 0.0) 'found)
 			         (hashtable-ref h +nan.0 'missing))`,
 			Expected: values.NewSymbol("found")},

@@ -146,7 +146,7 @@ var equivCases = []equivCase{
 		// The Hashable contract in action: equal? implies equal hashes, so a table
 		// keyed on one NaN payload must be found by another.
 		name: "hashtable/nan-key-across-payloads",
-		expr: `(let ((h (make-hashtable)))
+		expr: `(let ((h (make-equal-hashtable)))
 		         (hashtable-set! h (/ 0.0 0.0) 'found)
 		         (hashtable-ref h +nan.0 'missing))`,
 		want: "found",
@@ -240,7 +240,7 @@ var equivCases = []equivCase{
 	{name: "equal?/box-structural", expr: `(equal? (box 1) (box 1))`, want: "#t"},
 	{
 		name: "equal?/hashtable-structural",
-		expr: `(let ((a (make-hashtable)) (b (make-hashtable)))
+		expr: `(let ((a (make-equal-hashtable)) (b (make-equal-hashtable)))
 		         (hashtable-set! a 'k 1)
 		         (hashtable-set! b 'k 1)
 		         (equal? a b))`,

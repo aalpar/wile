@@ -96,8 +96,8 @@
   "Build an FCA context from objects, attributes, and an incidence function.\nINCIDENCE is (lambda (obj attr) -> boolean). Lookup tables are hash\ntables for O(1) access in intent/extent.\n\nParameters:\n  objects : list\n  attributes : list\n  incidence : procedure\nReturns: fca-context\nCategory: algebra"
   (let* ((objs (sort-strings objects))
          (attrs (sort-strings attributes))
-         (obj->attrs (make-hashtable))
-         (attr->objs (make-hashtable)))
+         (obj->attrs (make-equal-hashtable))
+         (attr->objs (make-equal-hashtable)))
     (for-each
       (lambda (o)
         (hashtable-set! obj->attrs o
@@ -130,8 +130,8 @@
   ;; duplicate object key, and the attribute set is the union over ALL
   ;; entries (a duplicate object's later attributes still join the attribute
   ;; universe even though they are not incident to that object).
-  (let ((obj->attrs (make-hashtable))
-        (attr->objs (make-hashtable))
+  (let ((obj->attrs (make-equal-hashtable))
+        (attr->objs (make-equal-hashtable))
         (obj-acc '())
         (attr-acc '()))
     (for-each

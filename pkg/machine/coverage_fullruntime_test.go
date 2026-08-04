@@ -2114,7 +2114,7 @@ func TestCoverageHashtableOperations(t *testing.T) {
 	env := testhelpers.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
-		"(define ht (make-hashtable))",
+		"(define ht (make-equal-hashtable))",
 		"(hashtable-set! ht 'a 1)",
 		"(hashtable-set! ht 'b 2)",
 		"(hashtable-ref ht 'a #f)",

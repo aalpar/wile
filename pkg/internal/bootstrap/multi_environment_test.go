@@ -667,8 +667,8 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 		{"boxes/box?", `(box? (box 1))`, values.TrueValue},
 
 		// addHashtables
-		{"hashtables/make", `(hashtable? (make-hashtable))`, values.TrueValue},
-		{"hashtables/set-ref", `(let ((ht (make-hashtable))) (hashtable-set! ht 'k 99) (hashtable-ref ht 'k #f))`, values.NewInteger(99)},
+		{"hashtables/make", `(hashtable? (make-equal-hashtable))`, values.TrueValue},
+		{"hashtables/set-ref", `(let ((ht (make-equal-hashtable))) (hashtable-set! ht 'k 99) (hashtable-ref ht 'k #f))`, values.NewInteger(99)},
 	}
 
 	// Extension categories (extensions/*)
@@ -770,7 +770,7 @@ func TestMultiEnv_NestedLibraryPrimitiveAvailability(t *testing.T) {
 		{"core/vectors", `(vector-ref (vector 1) 0)`},
 		{"core/bytevectors", `(bytevector-length (bytevector 1 2 3))`},
 		{"core/boxes", `(unbox (box 42))`},
-		{"core/hashtables", `(hashtable? (make-hashtable))`},
+		{"core/hashtables", `(hashtable? (make-equal-hashtable))`},
 		{"core/apply", `(apply + '(1 2))`},
 		{"core/parameters", `(parameter? (make-parameter 1))`},
 		{"core/prompts", `(continuation-prompt-tag? (make-continuation-prompt-tag))`},

@@ -21,10 +21,11 @@ import (
 
 func addHashtables(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "make-hashtable", Impl: PrimMakeHashtable,
-			Doc: "Returns a new empty hashtable. Keys are compared with equal?, but must be atomic (symbols, numbers, characters, strings, booleans): pairs and vectors are not hashable and raise an error.\n\nExamples:\n  (hashtable-size (make-hashtable))  => 0", Category: "hashtables",
+		{Name: "make-hashtable", ParamCount: 3, IsVariadic: true, Impl: PrimMakeHashtable,
+			Doc: "Returns a new empty mutable hashtable using HASH and EQUIV. Only the built-in pair (equal-hash, equal?) is supported; any other pair, including user-written procedures, raises. The optional size hint K is accepted and ignored.\n\nFor the other two R6RS key equivalences use make-eq-hashtable or make-eqv-hashtable; make-equal-hashtable is the shorter spelling of this one.\n\nExamples:\n  (hashtable-size (make-hashtable equal-hash equal?))  => 0", ParamNames: []string{"hash", "equiv", "k"}, Category: "hashtables",
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeProcedure, values.TypeAny},
 			ReturnType: values.TypeHashtable,
-			Keywords:   []string{"hash map", "dictionary", "map", "associative array", "hash table"}},
+			Keywords:   []string{"hash map", "dictionary", "map", "associative array", "hash table", "R6RS"}},
 		// The three fixed-kind constructors. ParamCount 1 + IsVariadic is "0
 		// required plus a rest slot" per AcceptsArity's n >= paramCount-1;
 		// ParamCount 0 with IsVariadic panics, so 1 is the minimum.
@@ -46,8 +47,8 @@ func addHashtables(r *registry.Registry) error {
 		{Name: "hashtable?", ParamCount: 1, Impl: PrimHashtableQ,
 			Doc: "Returns #t if OBJ is a hashtable.\n\nExamples:\n  (hashtable? (make-hashtable))  => #t\n  (hashtable? '())               => #f", ParamNames: []string{"obj"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
-		{Name: "hashtable-ref", ParamCount: 3, IsVariadic: true, Impl: PrimHashtableRef,
-			Doc: "Returns the value associated with KEY in HT. If KEY is not found, returns DEFAULT (or raises an error if no default given).\n\nExamples:\n  (let ((ht (make-hashtable))) (hashtable-set! ht 'a 1) (hashtable-ref ht 'a #f))  => 1\n  (hashtable-ref (make-hashtable) 'x 42)  => 42", ParamNames: []string{"ht", "key", "default"}, Category: "hashtables",
+		{Name: "hashtable-ref", ParamCount: 3, Impl: PrimHashtableRef,
+			Doc: "Returns the value associated with KEY in HT, or DEFAULT if KEY is absent. DEFAULT is REQUIRED — R6RS has no two-argument form, and there is no missing-key error.\n\nExamples:\n  (let ((ht (make-equal-hashtable))) (hashtable-set! ht 'a 1) (hashtable-ref ht 'a #f))  => 1\n  (hashtable-ref (make-equal-hashtable) 'x 42)  => 42", ParamNames: []string{"ht", "key", "default"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable, values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny,
 			Keywords: []string{"lookup", "get", "retrieve", "dictionary lookup"}},
 		{Name: "hashtable-set!", ParamCount: 3, Impl: PrimHashtableSet,
@@ -59,11 +60,8 @@ func addHashtables(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable, values.TypeAny}, ReturnType: values.TypeVoid,
 			Keywords: []string{"remove", "erase", "dictionary remove"}},
 		{Name: "hashtable-keys", ParamCount: 1, Impl: PrimHashtableKeys,
-			Doc: "Returns a list of all keys in HT. The order is unspecified.\n\nExamples:\n  (let ((ht (make-hashtable))) (hashtable-set! ht 'a 1) (hashtable-keys ht))  => (a)", ParamNames: []string{"ht"}, Category: "hashtables",
-			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeList},
-		{Name: "hashtable-values", ParamCount: 1, Impl: PrimHashtableValues,
-			Doc: "Returns a list of all values in HT. The order corresponds to hashtable-keys.\n\nExamples:\n  (let ((ht (make-hashtable))) (hashtable-set! ht 'a 1) (hashtable-values ht))  => (1)", ParamNames: []string{"ht"}, Category: "hashtables",
-			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeList},
+			Doc: "Returns a VECTOR of all keys in HT. The order is unspecified. Wile previously returned a list.\n\nUse hashtable-entries to get keys and values together and index-aligned; there is no hashtable-values.\n\nExamples:\n  (let ((ht (make-equal-hashtable))) (hashtable-set! ht 'a 1) (vector-length (hashtable-keys ht)))  => 1", ParamNames: []string{"ht"}, Category: "hashtables",
+			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeVector},
 		{Name: "hashtable-size", ParamCount: 1, Impl: PrimHashtableSize,
 			Doc: "Returns the number of key-value pairs in HT.\n\nExamples:\n  (hashtable-size (make-hashtable))  => 0", ParamNames: []string{"ht"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeInteger},

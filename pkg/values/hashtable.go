@@ -495,33 +495,19 @@ func (p *Hashtable) Delete(key Value) error {
 	return nil
 }
 
-// collectEntries walks every bucket and projects each entry to a Value,
-// returning the projections as a proper list. Keys and Values differ only
-// in which entry field they read.
-func (p *Hashtable) collectEntries(project func(e hashtableEntry) Value) Tuple {
+// KeysVector returns a vector of all keys in the hash table, for R6RS
+// hashtable-keys. The order is unspecified.
+//
+// This replaced a list-returning Keys() and a sibling Values(); the value half
+// is served by EntriesVectors, which is the only way to get keys and values
+// paired reliably, since two independent snapshots need not agree.
+func (p *Hashtable) KeysVector() *Vector {
 	entries := p.snapshot()
-	if len(entries) == 0 {
-		return EmptyList
+	ks := make([]Value, len(entries))
+	for i, e := range entries {
+		ks[i] = e.key
 	}
-	out := make([]Value, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, project(e))
-	}
-	return List(out...)
-}
-
-// Keys returns a list of all keys in the hash table.
-func (p *Hashtable) Keys() Tuple {
-	return p.collectEntries(func(e hashtableEntry) Value {
-		return e.key
-	})
-}
-
-// Values returns a list of all values in the hash table.
-func (p *Hashtable) Values() Tuple {
-	return p.collectEntries(func(e hashtableEntry) Value {
-		return e.value
-	})
+	return NewVector(ks...)
 }
 
 // EntriesVectors returns the keys and values as two vectors, index-aligned, for

@@ -270,7 +270,7 @@ func TestWithoutCategory_RemoveHashtables(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 
 	// Hashtable primitives should be gone.
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(make-hashtable)"))
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(make-equal-hashtable)"))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue,
 		qt.Commentf("expected CompilationError for make-hashtable, got %T: %v", err, err))

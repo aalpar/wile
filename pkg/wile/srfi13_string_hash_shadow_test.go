@@ -56,3 +56,42 @@ func TestStringHashSRFI13StillShadows(t *testing.T) {
 		})
 	}
 }
+
+// TestMakeHashtableRecognitionAcrossNamespaces pins how (make-hashtable
+// equal-hash equal?) behaves inside a FRESHLY CONSTRUCTED namespace.
+//
+// make-hashtable recognizes its argument pair by POINTER IDENTITY against the
+// namespace's sealed base. SealedBase is per-namespace, so whether recognition
+// survives (environment '(wile small)) depends on whether that construction
+// SHARES the parent's closure pointers or REBUILDS them. Both outcomes are
+// fail-closed — a rebuild would raise ErrUnsupportedHashtableKind rather than
+// silently mis-key a table — so neither blocks the feature.
+//
+// Measured at HEAD: pointers are SHARED, and recognition holds. This test exists
+// because the diagnostic would otherwise be baffling: a later sealed-base change
+// that starts rebuilding closures would turn a working (make-hashtable
+// equal-hash equal?) into "unsupported hash/equivalence pair" with nothing in the
+// user's program having changed. It must fail HERE instead of surprising them.
+func TestMakeHashtableRecognitionAcrossNamespaces(t *testing.T) {
+	c := qt.New(t)
+	eng := newSRFITestEngine(t)
+
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{"ambient namespace recognizes the pair",
+			`(hashtable? (make-hashtable equal-hash equal?))`, `#t`},
+		{"a constructed (wile small) namespace still recognizes it",
+			`(eval '(hashtable? (make-hashtable equal-hash equal?)) (environment '(wile small)))`, `#t`},
+		{"and the table it builds is equal?-keyed, not merely a hashtable",
+			`(eval '(let ((h (make-hashtable equal-hash equal?))) (hashtable-set! h (list 1) 'a) (hashtable-ref h (list 1) #f)) (environment '(wile small)))`, `a`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := evalSRFI(c, eng, tc.expr)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}

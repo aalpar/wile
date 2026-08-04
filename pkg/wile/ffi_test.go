@@ -776,7 +776,7 @@ func TestRegisterFuncMaps(t *testing.T) {
 
 	// Helper: build a hashtable in Scheme using set!
 	mkht := func(sets string) string {
-		return `(let ((ht (make-hashtable))) ` + sets + ` ht)`
+		return `(let ((ht (make-equal-hashtable))) ` + sets + ` ht)`
 	}
 
 	tcs := []struct {
@@ -785,7 +785,7 @@ func TestRegisterFuncMaps(t *testing.T) {
 		want string
 	}{
 		{"map size 3", `(map-size ` + mkht(`(hashtable-set! ht "x" 1) (hashtable-set! ht "y" 2) (hashtable-set! ht "z" 3)`) + `)`, "3"},
-		{"map size empty", `(map-size (make-hashtable))`, "0"},
+		{"map size empty", `(map-size (make-equal-hashtable))`, "0"},
 		{"map get", `(map-get ` + mkht(`(hashtable-set! ht "hello" "world")`) + ` "hello")`, `"world"`},
 		{"return map size", `(hashtable-size (make-map))`, "2"},
 		{"return nil map size", `(hashtable-size (empty-map))`, "0"},
@@ -817,7 +817,7 @@ func TestRegisterFuncMapNested(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	code := `(let ((ht (make-hashtable)))
+	code := `(let ((ht (make-equal-hashtable)))
 		(hashtable-set! ht "a" '(1 2 3))
 		(hashtable-set! ht "b" '(4 5))
 		(nested-sum ht))`

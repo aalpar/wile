@@ -136,29 +136,17 @@
   (else
    (define %fast-path-available? #f)))
 
-;; The fast path interns node identifiers into a hashtable, which Wile's
-;; `make-hashtable' restricts to atomic Hashable values (symbol, string,
-;; number, char, boolean). The slow path accepts any `equal?'-comparable
-;; value, including pairs, vectors, and lists. To keep the carrier opt
-;; advisory (per `stdlib/lib/wile/algebra/CLAUDE.md' "Consumer libraries...
-;; never error on unrecognised carrier"), we walk the adjacency at
-;; construction time and suppress fast-path attachment if any node
-;; identifier is non-atomic — the analysis falls back to the slow path
-;; transparently.
-(define (%atomic-node-id? v)
-  (or (symbol? v) (string? v) (number? v) (char? v) (boolean? v)))
-
-(define (%adjacency-keys-all-atomic? adj)
-  (let outer ((entries adj))
-    (cond
-      ((null? entries) #t)
-      ((not (%atomic-node-id? (caar entries))) #f)
-      (else
-       (let inner ((es (cdar entries)))
-         (cond
-           ((null? es) (outer (cdr entries)))
-           ((not (%atomic-node-id? (caar es))) #f)
-           (else (inner (cdr es)))))))))
+;; The fast path interns node identifiers into a hashtable. That interning is
+;; pure Scheme over `make-equal-hashtable' and the Go kernel receives integer
+;; INDICES, never the names — so any `equal?'-comparable node identifier works,
+;; including pairs, vectors, and lists.
+;;
+;; This used to be gated. `make-hashtable' admitted only atomic Hashable keys
+;; (symbol, string, number, char, boolean), so `%adjacency-keys-all-atomic?'
+;; walked the adjacency at construction time and suppressed fast-path
+;; attachment, and `%ensure-interning!' raised outright. The R6RS hashtable work
+;; moved the hash from the KEY to the TABLE, so that restriction is gone and
+;; both gates went with it.
 
 ;; --- Constructor ---
 
@@ -168,8 +156,7 @@
          (fast-kind (cond
                       ((and %fast-path-available?
                             (eq? carrier 'big-int)
-                            (not weight-fn)
-                            (%adjacency-keys-all-atomic? adjacency))
+                            (not weight-fn))
                        'bigint-counting)
                       (else #f)))
          (wfn (or weight-fn (lambda (_) (semiring-one semiring)))))
@@ -312,7 +299,7 @@
 ;; alist version was O(V*E) for setup and dominated the kernel's actual
 ;; arithmetic cost on graphs >100 nodes.
 (define (%intern-adjacency-for-kernel adj)
-  (let ((name->idx (make-hashtable))
+  (let ((name->idx (make-equal-hashtable))
         (idx->name (make-vector 16))
         (next-idx  0))
     ;; Intern: return existing idx for name, or assign next available.
@@ -362,39 +349,20 @@
 ;; Safe to call when the extension isn't loaded; the kernel-call sites
 ;; that depend on the extension perform their own cond-expand checks.
 ;;
-;; Raises if the adjacency has non-atomic node identifiers — Wile's
-;; make-hashtable requires atomic keys (symbol, string, number, char,
-;; boolean). Reachable from compute-via-count-paths-in-dag (which is
-;; only dispatched when fast-path-kind = 'bigint-counting, which itself
-;; is only set when adjacency is all-atomic, so this is a defensive
-;; check that should never fire on the DAG path) and from
-;; %ensure-graph-scc! (which IS reachable from the public side-query
-;; API on any-carrier analyses, so the check is load-bearing there).
+;; Accepts ANY `equal?'-comparable node identifier. It used to raise on
+;; non-atomic ones because the interning table was a `make-hashtable' that
+;; admitted only atomic Hashable keys; the R6RS hashtable work moved the hash
+;; from the key to the table, so the raise is gone. The Go kernel never sees a
+;; name — it consumes the integer indices this builds.
 (define (%ensure-interning! ga)
   (or (ga-interning ga)
-      (cond
-        ((not (%adjacency-keys-all-atomic? (ga-adjacency ga)))
-         (error
-          (string-append
-           "%ensure-interning!: cannot intern adjacency with non-atomic "
-           "node identifiers. The Go kernel's name-interning hashtable "
-           "requires atomic keys (symbol, string, number, char, "
-           "boolean); pairs, vectors, and lists are rejected. Reachable "
-           "from the bigint-counting dispatch and from the SCC side-"
-           "query API (graph-analysis-sccs, graph-node-in-cycle?, "
-           "graph-cyclic-nodes).")
-          (list 'fix
-                "use atomic node identifiers, or stay within the slow-"
-                "path API (graph-query / graph-query-all) which accepts "
-                "any equal?-comparable values.")))
-        (else
-         (call-with-values
-           (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
-           (lambda (name->idx idx->name num-nodes edges)
-             (let ((rec (make-graph-interning* name->idx idx->name
-                                               num-nodes edges)))
-               (set-ga-interning! ga rec)
-               rec)))))))
+      (call-with-values
+        (lambda () (%intern-adjacency-for-kernel (ga-adjacency ga)))
+        (lambda (name->idx idx->name num-nodes edges)
+          (let ((rec (make-graph-interning* name->idx idx->name
+                                            num-nodes edges)))
+            (set-ga-interning! ga rec)
+            rec)))))
 
 ;; Shared projection helper: walk node indices [0, num-nodes), look each
 ;; one up in `counts-vec' (length num-nodes), and emit

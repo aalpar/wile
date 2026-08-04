@@ -275,7 +275,7 @@
 ;; fast path) makes the same trade-off; preserving it keeps the two
 ;; libraries' fast-path semantics in lockstep.
 (define (%compute-reverse-hashed adj vs)
-  (let ((preds (make-hashtable)))
+  (let ((preds (make-equal-hashtable)))
     ;; Walk forward adjacency once, prepending (u . d) onto v's
     ;; predecessor list. O(1) per edge. After the walk, each list is in
     ;; reverse-discovery order; one final per-vertex `reverse' restores

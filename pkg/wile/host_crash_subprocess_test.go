@@ -126,7 +126,7 @@ func TestHostCrash_CyclicHashtableEqual(t *testing.T) {
 		return
 	}
 	err := evalInFreshEngine(t, `
-		(define h (make-hashtable))
+		(define h (make-equal-hashtable))
 		(hashtable-set! h 'self h)
 		(display (equal? h h))
 	`)
