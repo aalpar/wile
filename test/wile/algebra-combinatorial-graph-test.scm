@@ -973,9 +973,11 @@
     (test '(1 2 3) (map cdr pred))))
 
 (test-group "graph-reverse: non-atomic vertex keys still work (setoid path)"
-  ;; Pair-valued vertex IDs are not make-hashtable-compatible, so
-  ;; %compute-reverse falls back to the O(V*E) setoid loop. The
-  ;; behavioral contract must match the hashed path.
+  ;; Pair-valued vertex IDs route %compute-reverse to the O(V*E) setoid loop.
+  ;; NOT because hashtables reject them — they no longer do — but because
+  ;; %equal-safe-vertex? admits only vertices on which equal? bucketing is
+  ;; known to agree with the setoid. The behavioral contract must match the
+  ;; hashed path.
   (let* ((G   (make-graph `(((x . 1) . (((y . 2) . a)))
                             ((y . 2) . ())
                             ((z . 3) . (((y . 2) . b))))

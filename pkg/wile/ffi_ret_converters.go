@@ -151,7 +151,7 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 			// table. Nothing in between can flip the flag: mutable is
 			// write-once at construction and only hashtable-copy ever sets it
 			// false.
-			_ = ht.Set(keyConv(iter.Key()), valConv(iter.Value())) //nolint:errcheck
+			_ = ht.Set(keyConv(iter.Key()), valConv(iter.Value()))
 		}
 		return ht
 	}, nil

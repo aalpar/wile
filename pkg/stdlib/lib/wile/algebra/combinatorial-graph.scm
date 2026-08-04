@@ -226,24 +226,35 @@
              (set-graph-reverse-cached! G rev)
              rev))))))
 
-;; Hashable values for Wile's make-hashtable (mirrors
-;; %atomic-node-id? / %adjacency-keys-all-atomic? in (wile algebra graph)).
-;; Local copy rather than a shared helper because the two graph libraries
-;; have no other shared private surface; promote (drop the % and export)
-;; if a third caller appears.
-(define (%hashable-vertex? v)
+;; Vertices on which `equal?' bucketing is known to agree with `default-setoid'.
+;;
+;; This predicate USED to mean "hashable", mirroring %atomic-node-id? /
+;; %adjacency-keys-all-atomic? in (wile algebra graph), because Wile's
+;; hashtables admitted only atomic keys. The R6RS hashtable work moved the hash
+;; from the KEY to the TABLE, so every vertex is hashable now and those two
+;; symbols are gone — but this gate MUST NOT go with them. It is what still
+;; selects between the two reverse-adjacency algorithms, and container vertices
+;; are the only case that reaches the setoid path at all: dropping the gate would
+;; make %compute-reverse-setoid dead code and silently stop honouring a
+;; non-default setoid entirely.
+;;
+;; So the name changed and the meaning narrowed to what it was always really
+;; deciding: is `equal?' an acceptable stand-in for this graph's setoid?
+;; Whether atomicity is the right proxy for THAT question is a separate one,
+;; filed in TODO.md.
+(define (%equal-safe-vertex? v)
   (or (symbol? v) (string? v) (number? v) (char? v) (boolean? v)))
 
-(define (%adj-vertices-all-hashable? adj)
+(define (%adj-vertices-all-equal-safe? adj)
   (let outer ((entries adj))
     (cond
       ((null? entries) #t)
-      ((not (%hashable-vertex? (caar entries))) #f)
+      ((not (%equal-safe-vertex? (caar entries))) #f)
       (else
        (let inner ((es (cdar entries)))
          (cond
            ((null? es) (outer (cdr entries)))
-           ((not (%hashable-vertex? (caar es))) #f)
+           ((not (%equal-safe-vertex? (caar es))) #f)
            (else (inner (cdr es)))))))))
 
 (define (%compute-reverse G)
@@ -251,7 +262,7 @@
          (vs  (%adj-vertices adj))
          (rev-adj
            (cond
-             ((%adj-vertices-all-hashable? adj)
+             ((%adj-vertices-all-equal-safe? adj)
               (%compute-reverse-hashed adj vs))
              (else
               (%compute-reverse-setoid (graph-setoid G) adj vs)))))
@@ -266,14 +277,16 @@
                 (cons 'setoid      (graph-setoid G)))))
 
 ;; Fast path: O(V+E) via single-pass hashtable accumulation.
-;; Wile's make-hashtable uses equal?, which agrees with default-setoid
-;; on atomic keys. A non-default setoid that identifies two distinct
-;; atomic values (e.g. numeric-setoid with 1 and 1.0) gets equal? bucketing
-;; here, which can produce a different — but equally well-defined —
-;; reverse adjacency than the setoid path below. The existing convention
-;; in (wile algebra graph) (%adjacency-keys-all-atomic? gating the bigint
-;; fast path) makes the same trade-off; preserving it keeps the two
-;; libraries' fast-path semantics in lockstep.
+;; The table is equal?-keyed, which agrees with default-setoid on atomic keys.
+;; A non-default setoid that identifies two distinct atomic values (e.g.
+;; numeric-setoid with 1 and 1.0) gets equal? bucketing here, which can produce
+;; a different — but equally well-defined — reverse adjacency than the setoid
+;; path below. %equal-safe-vertex? is what bounds that trade-off.
+;;
+;; (wile algebra graph) used to gate its bigint fast path the same way and no
+;; longer does — its gate was purely about key admission, which no longer
+;; restricts anything. This one is NOT the same gate despite the shared
+;; ancestry, so the two libraries are deliberately no longer in lockstep.
 (define (%compute-reverse-hashed adj vs)
   (let ((preds (make-equal-hashtable)))
     ;; Walk forward adjacency once, prepending (u . d) onto v's

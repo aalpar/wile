@@ -60,6 +60,12 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 			"make-hashtable: only (make-hashtable equal-hash equal?) is supported; "+
 				"use make-eq-hashtable, make-eqv-hashtable or make-equal-hashtable")
 	}
+	// R6RS caps make-hashtable at three arguments; the third is the ignored size
+	// hint. ParamCount+IsVariadic alone would accept any number beyond it.
+	_, _, err := helpers.ParseOptionalArg(mc.Arg(2), "make-hashtable")
+	if err != nil {
+		return err
+	}
 	mc.SetValue(values.NewHashtable(values.HashtableEqual))
 	return nil
 }
@@ -68,24 +74,31 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 // constructor. All three accept an optional size hint k, which Wile ignores: the
 // backing sync.Map has no capacity knob, and R6RS calls k a hint implementations
 // are free to ignore.
-func makeHashtableConstructor(kind values.HashtableKind) machine.ForeignFunction {
+func makeHashtableConstructor(kind values.HashtableKind, name string) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
+		// k is optional, not unlimited: ParseOptionalArg rejects a second extra
+		// argument. Without it ParamCount+IsVariadic means ">= 0" and every
+		// surplus argument was swallowed in silence.
+		_, _, err := helpers.ParseOptionalArg(mc.Arg(0), name)
+		if err != nil {
+			return err
+		}
 		mc.SetValue(values.NewHashtable(kind))
 		return nil
 	}
 }
 
 // PrimMakeEqHashtable implements (make-eq-hashtable [k]).
-var PrimMakeEqHashtable = makeHashtableConstructor(values.HashtableEq)
+var PrimMakeEqHashtable = makeHashtableConstructor(values.HashtableEq, "make-eq-hashtable")
 
 // PrimMakeEqvHashtable implements (make-eqv-hashtable [k]).
-var PrimMakeEqvHashtable = makeHashtableConstructor(values.HashtableEqv)
+var PrimMakeEqvHashtable = makeHashtableConstructor(values.HashtableEqv, "make-eqv-hashtable")
 
 // PrimMakeEqualHashtable implements (make-equal-hashtable [k]). NOT R6RS — it is
 // the Chez / Larceny / Vicare / Ypsilon extension, kept because it is what
 // portable-ish Scheme writes for the common case and because the R6RS spelling
 // (make-hashtable equal-hash equal?) is four tokens longer at 15 call sites.
-var PrimMakeEqualHashtable = makeHashtableConstructor(values.HashtableEqual)
+var PrimMakeEqualHashtable = makeHashtableConstructor(values.HashtableEqual, "make-equal-hashtable")
 
 // PrimHashtableQ implements the hashtable? predicate.
 // Returns #t if the argument is a hash table, #f otherwise.
@@ -198,6 +211,10 @@ func PrimHashtableClear(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	_, _, err = helpers.ParseOptionalArg(mc.Arg(1), "hashtable-clear!")
+	if err != nil {
+		return err
+	}
 	err = ht.Clear()
 	if err != nil {
 		return err
@@ -229,14 +246,28 @@ func PrimHashtableEntries(mc machine.CallContext) error {
 	return nil
 }
 
-// equivNames maps a table's kind to the primitive whose procedure object
-// hashtable-equivalence-function must hand back. Indexed by HashtableKind, so a
-// new kind that forgets a row is an out-of-range panic at the first call rather
-// than a silently wrong answer.
-var equivNames = [...]string{
-	values.HashtableEqual: "equal?",
-	values.HashtableEq:    "eq?",
-	values.HashtableEqv:   "eqv?",
+// equivName maps a table's kind to the primitive whose procedure object
+// hashtable-equivalence-function must hand back.
+//
+// A switch rather than an array indexed by HashtableKind. The array read
+// `equivNames[ht.Kind()]` PANICS on an out-of-range kind, and values.NewHashtable
+// is exported and validates nothing, so values.NewHashtable(HashtableKind(7))
+// reached it. Recovering at the VM boundary turned that into an opaque
+// ErrPanicRecovery. Worse, the panic was inconsistent: hashKey, keyEqual and
+// HashtableKind.String all treat an unknown kind as equal via their own default
+// arms, so the array was the one site claiming a policy the type did not have.
+// Refusing explicitly is the policy that can actually be relied on.
+func equivName(kind values.HashtableKind) (string, bool) {
+	switch kind {
+	case values.HashtableEqual:
+		return "equal?", true
+	case values.HashtableEq:
+		return "eq?", true
+	case values.HashtableEqv:
+		return "eqv?", true
+	default:
+		return "", false
+	}
 }
 
 // PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function.
@@ -249,7 +280,12 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	return setSealedPrimitive(mc, equivNames[ht.Kind()], "hashtable-equivalence-function")
+	name, ok := equivName(ht.Kind())
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
+			"hashtable-equivalence-function: table has unknown kind %d", uint8(ht.Kind()))
+	}
+	return setSealedPrimitive(mc, name, "hashtable-equivalence-function")
 }
 
 // PrimHashtableHashFunction implements R6RS hashtable-hash-function, which returns

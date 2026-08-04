@@ -102,6 +102,8 @@ func addBootstrapSources(r *registry.Registry) error {
 	// the main procedures (it uses map, defined there) and as a distinct slice entry
 	// so a dialect can swap it by value. Default = the mutating fragment.
 	r.AddProcedureSource(MutableVectorStringMapSource)
-	r.AddProcedureSource(HashtableUpdateSource)
+	// Declared against "hashtables": its body is (hashtable-set! …), so
+	// WithoutCategory("hashtables") must take the source with the primitives.
+	r.AddProcedureSource(HashtableUpdateSource, "hashtables")
 	return nil
 }

@@ -15,6 +15,7 @@
 package registry
 
 import (
+	"maps"
 	"slices"
 	"sync"
 
@@ -138,7 +139,16 @@ type Registry struct {
 	// into the sealed-base frame, separate from macroSources (define-syntax forms)
 	// which load into the mutable expand frame. The file boundary is the phase boundary.
 	procedureSources []string
-	globalValues     []GlobalValue
+	// procedureSourceCategories records, per procedure source, the primitive
+	// CATEGORIES that source's Scheme body calls. WithoutCategory consults it so
+	// that removing a category also removes the bootstrap procedures written
+	// against it — otherwise the source survives the filter and fails to compile
+	// at NewEngine, naming a binding the caller deliberately removed.
+	//
+	// Keyed by the source text itself rather than by index, so WithProcedureSources
+	// may reorder or replace the slice without desynchronizing.
+	procedureSourceCategories map[string][]string
+	globalValues              []GlobalValue
 	// namespaceInits are per-engine initializers run by Apply once per engine,
 	// with that engine's runtime environment frame. Extensions use them to build
 	// per-Namespace state (e.g. I/O port parameters + caches) that must not be
@@ -149,14 +159,15 @@ type Registry struct {
 // NewRegistry creates a new empty registry.
 func NewRegistry() *Registry {
 	q := &Registry{
-		primitives:       make([]PrimitiveRegistration, 0, 128),
-		bindingSpecs:     make([]BindingSpec, 0, 48),
-		docPrimitives:    make([]PrimitiveSpec, 0, 16),
-		initFuncs:        make([]InitFunc, 0, 8),
-		macroSources:     make([]string, 0, 4),
-		procedureSources: make([]string, 0, 4),
-		globalValues:     make([]GlobalValue, 0, 4),
-		namespaceInits:   make([]NamespaceInit, 0, 4),
+		primitives:                make([]PrimitiveRegistration, 0, 128),
+		bindingSpecs:              make([]BindingSpec, 0, 48),
+		docPrimitives:             make([]PrimitiveSpec, 0, 16),
+		initFuncs:                 make([]InitFunc, 0, 8),
+		macroSources:              make([]string, 0, 4),
+		procedureSources:          make([]string, 0, 4),
+		procedureSourceCategories: make(map[string][]string),
+		globalValues:              make([]GlobalValue, 0, 4),
+		namespaceInits:            make([]NamespaceInit, 0, 4),
 	}
 	return q
 }
@@ -305,10 +316,25 @@ func (p *Registry) AddMacroSource(source string) {
 // AddProcedureSource registers a runtime-procedure source (define forms) to be
 // loaded into the sealed-base frame, separate from macro sources (define-syntax
 // forms) which load into the mutable expand frame.
-func (p *Registry) AddProcedureSource(source string) {
+//
+// dependsOn names the primitive CATEGORIES this source's body calls.
+// WithoutCategory uses it to drop the source alongside the category, because a
+// bootstrap procedure written against primitives the caller removed cannot
+// compile — it fails inside NewEngine with a "no such binding" naming a name the
+// caller deliberately deleted, which is a confusing way to learn that a
+// documented filter has an undocumented dependency.
+//
+// Omitting it is the historical behaviour and stays legal: most bootstrap
+// sources depend on categories no one removes (pairs, lists), and declaring
+// those buys nothing. Declare it for a source over a category a sandbox might
+// plausibly strip.
+func (p *Registry) AddProcedureSource(source string, dependsOn ...string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.procedureSources = append(p.procedureSources, source)
+	if len(dependsOn) > 0 {
+		p.procedureSourceCategories[source] = slices.Clone(dependsOn)
+	}
 }
 
 // AddGlobalValue registers a named value to be bound as a global variable.
@@ -565,14 +591,15 @@ func (p *Registry) deepCopy() *Registry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := &Registry{
-		primitives:       make([]PrimitiveRegistration, len(p.primitives)),
-		bindingSpecs:     make([]BindingSpec, len(p.bindingSpecs)),
-		docPrimitives:    make([]PrimitiveSpec, len(p.docPrimitives)),
-		initFuncs:        make([]InitFunc, len(p.initFuncs)),
-		macroSources:     make([]string, len(p.macroSources)),
-		procedureSources: make([]string, len(p.procedureSources)),
-		globalValues:     make([]GlobalValue, len(p.globalValues)),
-		namespaceInits:   make([]NamespaceInit, len(p.namespaceInits)),
+		primitives:                make([]PrimitiveRegistration, len(p.primitives)),
+		bindingSpecs:              make([]BindingSpec, len(p.bindingSpecs)),
+		docPrimitives:             make([]PrimitiveSpec, len(p.docPrimitives)),
+		initFuncs:                 make([]InitFunc, len(p.initFuncs)),
+		macroSources:              make([]string, len(p.macroSources)),
+		procedureSources:          make([]string, len(p.procedureSources)),
+		procedureSourceCategories: maps.Clone(p.procedureSourceCategories),
+		globalValues:              make([]GlobalValue, len(p.globalValues)),
+		namespaceInits:            make([]NamespaceInit, len(p.namespaceInits)),
 	}
 	copy(q.primitives, p.primitives)
 	copy(q.bindingSpecs, p.bindingSpecs)
@@ -684,9 +711,26 @@ func (p *Registry) Without(names ...string) *Registry {
 // named categories removed. Categories are matched against PrimitiveSpec.Category.
 // All non-primitive fields are copied unchanged via deepCopy.
 func (p *Registry) WithoutCategory(categories ...string) *Registry {
-	return p.filterPrimitives(categories, func(reg PrimitiveRegistration) string {
+	q := p.filterPrimitives(categories, func(reg PrimitiveRegistration) string {
 		return reg.Spec.Category
 	})
+	// Also drop every bootstrap procedure source declared against a removed
+	// category. Without this the primitives go and the Scheme written over them
+	// stays, so NewEngine fails to compile the orphaned source.
+	drop := make(values.StringSet, len(categories))
+	for _, c := range categories {
+		drop[c] = struct{}{}
+	}
+	q.procedureSources = slices.DeleteFunc(q.procedureSources, func(src string) bool {
+		for _, need := range q.procedureSourceCategories[src] {
+			_, gone := drop[need]
+			if gone {
+				return true
+			}
+		}
+		return false
+	})
+	return q
 }
 
 // filterPrimitives returns a new Registry with primitives excluded when

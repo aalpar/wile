@@ -114,30 +114,42 @@ var (
 	// /wuns/: the letter rule would give "an once", but the consonant /w/
 	// sound calls for "a". The "a "-prefix pass-through in NewTypeSentinel
 	// preserves it.
-	ErrNotAOnce                = NewTypeSentinel("a once")
-	ErrNotAnAtomic             = NewTypeSentinel("atomic")
-	ErrPortClosed              = NewStaticError("port is closed")
-	ErrNotAHashtable           = NewTypeSentinel("hashtable")
-	ErrNoCaptureContext        = NewStaticError("no capture context for expansion")
-	ErrExactnessConversion     = NewStaticError("exactness conversion failed")
-	ErrLossyConversion         = NewStaticError("lossy conversion")
-	ErrNumericRegistry         = NewStaticError("numeric registry violation")
-	ErrInvalidFormat           = NewStaticError("invalid number format")
-	ErrUnknownOpCode           = NewStaticError("unknown op code")
-	ErrNotAMatch               = NewTypeSentinel("match")
-	ErrNotAPromptTag           = NewTypeSentinel("prompt tag")
-	ErrNotAContinuationMarkSet = NewTypeSentinel("continuation mark set")
-	ErrNotAContinuation        = NewTypeSentinel("continuation")
-	ErrNotAnErrorContext       = NewTypeSentinel("error context")
-	ErrTypeConversion          = NewStaticError("type conversion failed")
-	ErrCodepointOutOfRange     = NewStaticError("codepoint out of range")
-	ErrIndexOutOfRange         = NewStaticError("index out of range")
-	ErrImmutableString         = NewStaticError("cannot mutate immutable string")
-	ErrImmutablePair           = NewStaticError("cannot mutate immutable pair")
-	ErrImmutableVector         = NewStaticError("cannot mutate immutable vector")
-	ErrImmutableBytevector     = NewStaticError("cannot mutate immutable bytevector")
-	ErrImmutableBinding        = NewStaticError("cannot mutate immutable binding")
-	ErrInvariantViolation      = NewStaticError("invariant violation")
+	ErrNotAOnce      = NewTypeSentinel("a once")
+	ErrNotAnAtomic   = NewTypeSentinel("atomic")
+	ErrPortClosed    = NewStaticError("port is closed")
+	ErrNotAHashtable = NewTypeSentinel("hashtable")
+	// ErrImmutableHashtable is raised by hashtable-set!, hashtable-delete! and
+	// hashtable-clear! on a table that hashtable-copy produced without a true
+	// mutable argument. R6RS raises &assertion here; Wile has no R6RS condition
+	// system, so this sentinel is the mapping — same trigger, Wile's error model,
+	// matchable with errors.Is from Go and by the standard exception machinery
+	// from Scheme.
+	ErrImmutableHashtable = NewStaticError("hashtable is immutable")
+	// ErrUnsupportedHashtableKind is raised by make-hashtable for any
+	// hash/equivalence pair other than the built-in (equal-hash, equal?).
+	// User-supplied procedures are the deferred phase of the R6RS hashtable
+	// work; see docs/reference/r7rs-differences.md.
+	ErrUnsupportedHashtableKind = NewStaticError("unsupported hashtable hash/equivalence pair")
+	ErrNoCaptureContext         = NewStaticError("no capture context for expansion")
+	ErrExactnessConversion      = NewStaticError("exactness conversion failed")
+	ErrLossyConversion          = NewStaticError("lossy conversion")
+	ErrNumericRegistry          = NewStaticError("numeric registry violation")
+	ErrInvalidFormat            = NewStaticError("invalid number format")
+	ErrUnknownOpCode            = NewStaticError("unknown op code")
+	ErrNotAMatch                = NewTypeSentinel("match")
+	ErrNotAPromptTag            = NewTypeSentinel("prompt tag")
+	ErrNotAContinuationMarkSet  = NewTypeSentinel("continuation mark set")
+	ErrNotAContinuation         = NewTypeSentinel("continuation")
+	ErrNotAnErrorContext        = NewTypeSentinel("error context")
+	ErrTypeConversion           = NewStaticError("type conversion failed")
+	ErrCodepointOutOfRange      = NewStaticError("codepoint out of range")
+	ErrIndexOutOfRange          = NewStaticError("index out of range")
+	ErrImmutableString          = NewStaticError("cannot mutate immutable string")
+	ErrImmutablePair            = NewStaticError("cannot mutate immutable pair")
+	ErrImmutableVector          = NewStaticError("cannot mutate immutable vector")
+	ErrImmutableBytevector      = NewStaticError("cannot mutate immutable bytevector")
+	ErrImmutableBinding         = NewStaticError("cannot mutate immutable binding")
+	ErrInvariantViolation       = NewStaticError("invariant violation")
 
 	// FFI errors
 
@@ -174,26 +186,14 @@ var (
 
 	// Syntax errors
 
-	ErrCannotDoubleSyntaxWrap = NewStaticError("cannot wrap syntax value in SyntaxObject")
-	ErrNoMatchingClause       = NewStaticError("no matching clause")
-	ErrUnsupportedTransformer = NewStaticError("unsupported transformer")
-	ErrLibraryConfiguration   = NewStaticError("library configuration error")
-	ErrLibraryFormMalformed   = NewStaticError("malformed library form")
-	ErrLibraryNameMismatch    = NewStaticError("library name mismatch")
-	// ErrImmutableHashtable is raised by hashtable-set!, hashtable-delete! and
-	// hashtable-clear! on a table that hashtable-copy produced without a true
-	// mutable argument. R6RS raises &assertion here; Wile has no R6RS condition
-	// system, so this sentinel is the mapping — same trigger, Wile's error model,
-	// matchable with errors.Is from Go and by the standard exception machinery
-	// from Scheme.
-	ErrImmutableHashtable = NewStaticError("hashtable is immutable")
-	// ErrUnsupportedHashtableKind is raised by make-hashtable for any
-	// hash/equivalence pair other than the built-in (equal-hash, equal?).
-	// User-supplied procedures are the deferred phase of the R6RS hashtable
-	// work; see docs/reference/r7rs-differences.md.
-	ErrUnsupportedHashtableKind = NewStaticError("unsupported hashtable hash/equivalence pair")
-	ErrAllocationLimitExceeded  = NewStaticError("allocation limit exceeded")
-	ErrNonContinuableException  = NewStaticError("non-continuable exception")
+	ErrCannotDoubleSyntaxWrap  = NewStaticError("cannot wrap syntax value in SyntaxObject")
+	ErrNoMatchingClause        = NewStaticError("no matching clause")
+	ErrUnsupportedTransformer  = NewStaticError("unsupported transformer")
+	ErrLibraryConfiguration    = NewStaticError("library configuration error")
+	ErrLibraryFormMalformed    = NewStaticError("malformed library form")
+	ErrLibraryNameMismatch     = NewStaticError("library name mismatch")
+	ErrAllocationLimitExceeded = NewStaticError("allocation limit exceeded")
+	ErrNonContinuableException = NewStaticError("non-continuable exception")
 
 	// Recursion depth
 

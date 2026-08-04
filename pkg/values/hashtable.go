@@ -38,10 +38,16 @@ type hashtableEntry struct {
 // R6RS inversion: the hash belongs to the TABLE, not to the key, so any object can
 // be a key of any table.
 //
-// HashtableEqual is deliberately the ZERO VALUE. A bare &Hashtable{} — which
-// NewEmptyHashtable returns and Copy inherits — must keep the equal?-keyed
-// semantics every existing table in the tree has. Reordering this iota silently
-// reinterprets them. Pinned by TestHashtableZeroValueIsEqualKind.
+// HashtableEqual is deliberately the ZERO VALUE, so that a table whose kind was
+// never set keeps the equal?-keyed semantics every table in the tree had before
+// kinds existed. Reordering this iota silently reinterprets them. Pinned by
+// TestHashtableZeroValueIsEqualKind.
+//
+// Do NOT read that as "a bare &Hashtable{} is a usable table". It is not, and an
+// earlier version of this comment said it was: the mutable field's zero value is
+// false, so a zero Hashtable is an IMMUTABLE equal table that rejects every
+// write. Construct through NewHashtable or NewEmptyHashtable, which is what
+// every site in the tree does.
 type HashtableKind uint8
 
 const (
@@ -56,14 +62,27 @@ const (
 // String renders the kind as its R6RS-facing name, for error messages and
 // debugging. Nothing in the primitive surface returns it: hashtable-hash-function
 // and hashtable-equivalence-function hand back procedure objects, not kind names.
+// HashtableKindCount is the number of defined kinds. It exists as a ratchet:
+// TestHashtableKindsAreExhaustive fails when a kind is added without giving it a
+// row in hashKey, keyEqual, String and equivName. Those four all used to reach
+// an unlisted kind through a `default:` arm that answered EQUAL — so a new kind
+// would silently have inherited equal? key identity, which is the wrong-key-
+// collapse form of data corruption rather than a loud failure.
+const HashtableKindCount = 3
+
+// String renders the kind as its R6RS-facing name, for error messages and
+// debugging. Nothing in the primitive surface returns it: hashtable-hash-function
+// and hashtable-equivalence-function hand back procedure objects, not kind names.
 func (p HashtableKind) String() string {
 	switch p {
+	case HashtableEqual:
+		return "equal"
 	case HashtableEq:
 		return "eq"
 	case HashtableEqv:
 		return "eqv"
 	default:
-		return "equal"
+		return "unknown"
 	}
 }
 
@@ -149,7 +168,7 @@ func (p *Hashtable) Kind() HashtableKind {
 // hashKey computes the bucket hash for key under this table's kind.
 func (p *Hashtable) hashKey(key Value) uint64 {
 	switch p.kind {
-	case HashtableEq:
+	case HashtableEq: //nolint:exhaustive // default is HashtableEqual; see HashtableKindCount
 		// Symbols FIRST, and this is load-bearing: EqIdentity compares symbols by
 		// Key (Wile de-interns them), so two eq? symbols are distinct pointers and
 		// an identity hash would file them in different buckets — a lookup that
@@ -204,7 +223,7 @@ func (p *Hashtable) hashKey(key Value) uint64 {
 // one order means a future asymmetric kind cannot silently invert at one site.
 func (p *Hashtable) keyEqual(a, b Value) bool {
 	switch p.kind {
-	case HashtableEq:
+	case HashtableEq: //nolint:exhaustive // default is HashtableEqual; see HashtableKindCount
 		return EqIdentity(a, b)
 	case HashtableEqv:
 		return Eqv(a, b)
@@ -265,14 +284,14 @@ func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 	if p == nil || v == nil {
 		return p == v
 	}
-	if !p.equalGate(v) {
+	entries := p.snapshot()
+	if !p.equalGate(v, entries) {
 		// Identity, decided here. Returning false is correct rather than merely
-		// conservative: each leaf's own EqualTo already answered the a == b case
-		// before any EqualComponents ran, so the only pairs that arrive here are
-		// distinct objects.
+		// conservative: equalWorklist.step's `a == b` shortcut (equal.go) already
+		// answered the reflexive case before any EqualComponents ran, so the only
+		// pairs that arrive here are distinct objects.
 		return false
 	}
-	entries := p.snapshot()
 	if len(entries) != v.Size() {
 		return false
 	}
@@ -296,41 +315,45 @@ func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 //
 //   - EVERY KEY IS A Hashable LEAF. The lookup is eager — it cannot be deferred to
 //     Equal's worklist, because pairing entries across two tables requires an
-//     equality answer and the worklist is what would be deciding it. Eager is
-//     bounded for pair and vector keys (their EqualTo delegates to the iterative
-//     Equal) but NOT for a hashtable reachable as a key, which recurses one Go
-//     frame per level with no bottom on a cycle. No container implements Hashable
-//     — TestNoContainerIsHashable pins that — so the leaf test is one interface
-//     assertion per key and admits exactly the tables that were constructible
-//     before container keys became legal.
+//     equality answer and the worklist is what would be deciding it. Eager
+//     recursion is unbounded whenever a hashtable is TRANSITIVELY REACHABLE from
+//     a key, which is the requirement — not merely "the key is not itself a
+//     hashtable". A pair key (list ht) reaches it too: Equal -> step ->
+//     Hashtable.EqualComponents -> keyEqual -> Equal, one Go frame per level,
+//     with no bottom on a cycle. So do NOT relax this to a *Hashtable type test;
+//     it would be unsound for exactly the case that motivated the gate.
+//     Hashable-ness is the cheap conservative stand-in for unreachability: no
+//     container implements Hashable — TestNoContainerIsHashable pins that — so
+//     one interface assertion per key admits exactly the tables that were
+//     constructible before container keys became legal.
 //
 // The cost is that (equal? ht1 ht2) now answers by key TYPE: two equal-content
 // tables keyed on lists are #f where the same tables keyed on symbols are #t. That
 // is the price of keeping the deliberate structural-equal? deviation
 // (docs/reference/r7rs-differences.md item 9) rather than dropping it as part of an
 // unrelated migration. Chez and Racket answer identity for all four cases.
-func (p *Hashtable) equalGate(other *Hashtable) bool {
+// entries is p's OWN snapshot, passed in rather than re-read. The gate and the
+// comparison that follows it must see one view: two independent lock-free reads
+// let the gate pass on a leaf-only view while the comparison then runs against
+// an entry holding a hashtable key, which is the recursion the gate exists to
+// prevent. Pinned by TestHashtableEqualGateUsesOneSnapshot.
+func (p *Hashtable) equalGate(other *Hashtable, entries []hashtableEntry) bool {
 	if p.kind != other.kind {
 		return false
 	}
-	return p.keysAreLeaves() && other.keysAreLeaves()
+	return keysAreLeaves(entries) && keysAreLeaves(other.snapshot())
 }
 
-// keysAreLeaves reports whether every key is Hashable, i.e. cannot carry a
-// hashtable and so cannot recurse the eager key lookup.
-func (p *Hashtable) keysAreLeaves() bool {
-	q := true
-	p.buckets.Range(func(_, v any) bool {
-		for _, e := range v.([]hashtableEntry) {
-			_, ok := e.key.(Hashable)
-			if !ok {
-				q = false
-				return false
-			}
+// keysAreLeaves reports whether every key in the snapshot is Hashable, i.e.
+// cannot carry a hashtable and so cannot recurse the eager key lookup.
+func keysAreLeaves(entries []hashtableEntry) bool {
+	for _, e := range entries {
+		_, ok := e.key.(Hashable)
+		if !ok {
+			return false
 		}
-		return true
-	})
-	return q
+	}
+	return true
 }
 
 // SchemeString returns the Scheme representation of this hash table.

@@ -55,11 +55,14 @@
 
 ;;; -- §5.4 finite-group enumeration / subgroup closure --------------------
 ;;;
-;;; Membership uses alist lookup keyed by the group's <setoid>. We do not
-;;; use Wile hashtables because make-hashtable only supports atomic keys
-;;; (not *Pair, *Vector, or ()) — see stdlib/lib/wile/algebra/incidence.scm
-;;; for the same workaround in that library. Complexity is O(n²) in the
-;;; closure order; acceptable for the §5.4 v1 target of small orbits and
+;;; Membership uses alist lookup keyed by the group's <setoid>. The original
+;;; reason was that make-hashtable admitted only atomic keys; that is retired —
+;;; the R6RS hashtable work moved the hash from the KEY to the TABLE, so
+;;; make-equal-hashtable takes pairs and vectors. The surviving reason is the
+;;; SETOID: membership must use the group's own equivalence, and an
+;;; equal?-keyed table would bucket by structure instead, which is a different
+;;; question for any group whose setoid is not equal?. Complexity is O(n²) in
+;;; the closure order; acceptable for the §5.4 v1 target of small orbits and
 ;;; subgroups.
 
 (define (%symmetrize-generators gens inverse S)

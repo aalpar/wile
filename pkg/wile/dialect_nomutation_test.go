@@ -184,10 +184,12 @@ func TestNoMutation_ImportReexposes_DocumentsBoundary(t *testing.T) {
 // hashtable-update!.
 //
 // It IS a mutation — its body is (hashtable-set! ht key (proc ...)) — so a
-// NoMutation engine must not have it. It lives in the mutable bootstrap
-// fragment, which NoMutation swaps for the immutable one; the immutable fragment
-// omits it entirely rather than defining a mutation-free variant, because there
-// is no such thing.
+// NoMutation engine must not have it. It is its OWN bootstrap procedure source
+// (core.HashtableUpdateSource), and RewriteBootstrapProcedures DROPS that source
+// rather than swapping it. The distinction matters: the vector-map/string-map
+// fragment beside it is swapped, because those two have a mutation-free
+// definition. hashtable-update! has none — the procedure IS a mutation — so
+// there is nothing to swap it for.
 //
 // TestNoMutationRemovesEveryDestructivePrimitive structurally CANNOT catch this:
 // that test iterates Registry().Primitives(), and hashtable-update! is a Scheme

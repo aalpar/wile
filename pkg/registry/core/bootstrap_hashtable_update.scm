@@ -23,5 +23,5 @@
 ;; spec text, not a reimplementation.
 
 (define (hashtable-update! ht key proc default)
-  "Sets HT's value for KEY to (PROC v), where v is the current value for KEY, or\nDEFAULT if KEY is absent.\n\nParameters:\n  ht : hashtable\n  key : any\n  proc : procedure\n  default : any\nReturns: void\nCategory: hashtables\n\nSee also: `hashtable-set!', `hashtable-ref'."
+  "Sets HT's value for KEY to (PROC v), where v is the current value for KEY, or\nDEFAULT if KEY is absent.\n\nParameters:\n  ht : hashtable\n  key : any\n  proc : procedure\n  default : any\nReturns: void\nCategory: hashtables\n\nOn an immutable HT the failure is LATE: PROC has already been called and its side effects have already happened, because R6RS defines this procedure as exactly (hashtable-set! ht key (proc ...)).\n\nSee also: `hashtable-set!', `hashtable-ref'."
   (hashtable-set! ht key (proc (hashtable-ref ht key default))))

@@ -418,3 +418,50 @@ func TestHashtableNestedKeyTerminates(t *testing.T) {
 		t.Fatal("equal? on tables with table keys did not terminate")
 	}
 }
+
+// TestHashtableKindsAreExhaustive is the site-count ratchet for HashtableKind.
+//
+// hashKey, keyEqual and String all used to route an unlisted kind through a
+// `default:` arm that answered EQUAL, and prim_hashtables.go indexed a
+// 3-element array that PANICKED. So adding a fourth kind compiled clean and the
+// new kind silently inherited equal? key identity — wrong-key collapse, which is
+// data corruption rather than a loud failure.
+//
+// This test fails when the count changes, which is the prompt to give the new
+// kind a row in all four. It cannot check the arms directly (they are
+// unexported), so it checks the two things it can see: the count, and that every
+// kind in range renders a distinct name rather than falling to "unknown".
+func TestHashtableKindsAreExhaustive(t *testing.T) {
+	qt.Assert(t, values.HashtableKindCount, qt.Equals, 3,
+		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String and equivName"))
+
+	seen := make(map[string]bool, values.HashtableKindCount)
+	for i := range values.HashtableKindCount {
+		name := values.HashtableKind(i).String()
+		qt.Assert(t, name, qt.Not(qt.Equals), "unknown",
+			qt.Commentf("HashtableKind(%d) has no String row", i))
+		qt.Assert(t, seen[name], qt.IsFalse,
+			qt.Commentf("two kinds render as %q", name))
+		seen[name] = true
+	}
+	// Out of range must be identifiable rather than silently equal.
+	qt.Assert(t, values.HashtableKind(values.HashtableKindCount).String(), qt.Equals, "unknown")
+}
+
+// TestHashtableEqualGateUsesOneSnapshot pins that the leaf gate and the
+// entry-by-entry comparison read the SAME view of the table.
+//
+// They used to be two reads: keysAreLeaves walked buckets.Range and
+// EqualComponents then called snapshot(). Under concurrent mutation the gate
+// could pass on a leaf-only view and the comparison then run against an entry
+// holding a hashtable key — the unbounded-recursion case the gate exists to
+// prevent. The window is narrow and the type puts synchronization on the user,
+// but closing it costs nothing.
+func TestHashtableEqualGateUsesOneSnapshot(t *testing.T) {
+	container := func() *values.Hashtable {
+		ht := values.NewHashtable(values.HashtableEqual)
+		ht.Set(values.NewCons(values.NewInteger(1), values.EmptyList), values.NewInteger(1))
+		return ht
+	}
+	qt.Assert(t, values.Equal(container(), container()), qt.IsFalse)
+}

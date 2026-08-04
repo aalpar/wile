@@ -22,11 +22,13 @@
 ;; split across files, the split boundary must preserve this ordering or
 ;; introduce an explicit ensure-registered! guard in each dispatcher.
 ;;
-;; Rationale for an alist rather than a hashtable: Wile's make-hashtable
-;; rejects list keys ("key is not hashable"), but dispatch keys are
-;; naturally lists like (add dense sparse). At ≤20 entries for Path D's
-;; scope, assoc's linear scan is negligible next to any realistic matrix
-;; operation. Keys stay readable; semantics stay as designed.
+;; Rationale for an alist rather than a hashtable. The original one — that
+;; make-hashtable rejected list keys ("key is not hashable") — is RETIRED: the
+;; R6RS hashtable work moved the hash from the KEY to the TABLE, and
+;; make-equal-hashtable takes a list key like (add dense sparse) directly. What
+;; survives is a sizing argument: at ≤20 entries for Path D's scope, assoc's
+;; linear scan is negligible next to any realistic matrix operation, and keys
+;; stay readable. Revisit if the dispatch table grows.
 ;;
 ;; Divergence from sibling algebra libraries: `semiring.scm` etc. handle
 ;; polymorphism by closing operation procedures inside the record itself

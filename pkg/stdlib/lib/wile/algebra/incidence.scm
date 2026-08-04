@@ -59,10 +59,12 @@
   (ring     incidence-algebra-ring)
   ;; mu-cache is an alist: ((x . y) . μ(x,y)) entries.
   ;; Mutable field so compute-mu can cons on a hit.
-  ;; Alist chosen over hashtable because Wile hashtables require
-  ;; atomic keys (Hashable interface not implemented for *Pair /
-  ;; *Vector / '()), while (assoc (cons x y) ...) uses equal? and
-  ;; works with any element type the user's poset uses.
+  ;; Alist chosen over hashtable because Wile hashtables required atomic keys.
+  ;; That constraint is RETIRED — make-equal-hashtable now takes a (cons x y)
+  ;; key directly and compares it with the same equal? this assoc uses, so it
+  ;; would be a drop-in with O(1) lookup instead of O(n). Left as an alist here
+  ;; only because nothing has measured the cache at a size where it matters;
+  ;; see TODO.md.
   (mu-cache incidence-algebra-mu-cache
             set-incidence-algebra-mu-cache!))
 
@@ -92,10 +94,10 @@
   (lambda (x y) (compute-mu IA x y)))
 
 (define (compute-mu IA x y)
-  ;; Alist-based memoization, keyed on (cons x y). `assoc` uses equal?
-  ;; so any R7RS-structural element type works — numbers, strings,
-  ;; symbols, lists, vectors, nested pairs — without requiring elements
-  ;; to implement the Hashable interface.
+  ;; Alist-based memoization, keyed on (cons x y). `assoc` uses equal? so any
+  ;; R7RS-structural element type works — numbers, strings, symbols, lists,
+  ;; vectors, nested pairs. An equal?-keyed hashtable would accept exactly the
+  ;; same keys now (it did not when this was written) and lookup in O(1).
   ;;
   ;; Recursive calls from compute-mu-uncached must come back through
   ;; *this* wrapper (not compute-mu-uncached directly) or memoization

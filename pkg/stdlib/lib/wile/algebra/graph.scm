@@ -520,10 +520,10 @@
   (or (ga-scc ga)
       (cond-expand
         ((library (wile algebragraph))
-         ;; %ensure-interning! handles the non-atomic-key check and raises
-         ;; a clear error if the adjacency can't be interned. After this
-         ;; call, the interning record is guaranteed populated and the
-         ;; integer-indexed kernel inputs are ready.
+         ;; %ensure-interning! interns unconditionally. It used to check for
+         ;; non-atomic keys and raise; that check went with the hashtable key
+         ;; restriction. After this call the interning record is guaranteed
+         ;; populated and the integer-indexed kernel inputs are ready.
          (let* ((interning (%ensure-interning! ga))
                 (num-nodes (%graph-interning-num-nodes interning))
                 (edges     (%graph-interning-edges interning)))

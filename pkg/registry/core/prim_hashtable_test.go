@@ -220,6 +220,28 @@ func TestHashtable_EqualQ(t *testing.T) {
 	c.Assert(result, valuestest.SchemeEquals, values.FalseValue)
 }
 
+// TestHashtable_EqualQGate is the Scheme-level pin on r7rs-differences item 14.
+// The Go-level gate is covered by TestHashtableEqualGate; this is the assertion
+// a user reading the documented deviation would go looking for.
+func TestHashtable_EqualQGate(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "same kind, leaf keys, equal contents", Code: `(let ((a (make-equal-hashtable)) (b (make-equal-hashtable))) (hashtable-set! a 'x 1) (hashtable-set! b 'x 1) (equal? a b))`, Expected: values.TrueValue},
+		// Different key equivalences are not comparable entry-by-entry at all.
+		{Name: "different kinds are never equal?", Code: `(equal? (make-eq-hashtable) (make-equal-hashtable))`, Expected: values.FalseValue},
+		// CONTAINER keys degrade to identity — the documented cost of keeping
+		// the structural-equal? deviation.
+		{Name: "container keys degrade to identity", Code: `(let ((a (make-equal-hashtable)) (b (make-equal-hashtable))) (hashtable-set! a (list 1) 1) (hashtable-set! b (list 1) 1) (equal? a b))`, Expected: values.FalseValue},
+		{Name: "a container-keyed table is still equal? to itself", Code: `(let ((a (make-equal-hashtable))) (hashtable-set! a (list 1) 1) (equal? a a))`, Expected: values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 func TestHashtable_TypeErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "hashtable-ref on non-hashtable", Code: `(hashtable-ref 42 'key)`},
@@ -315,6 +337,12 @@ func TestHashtableImmutabilityErrors(t *testing.T) {
 		{Name: "set! on immutable", Code: `(hashtable-set! (hashtable-copy (make-equal-hashtable)) 'a 1)`},
 		{Name: "delete! on immutable", Code: `(hashtable-delete! (hashtable-copy (make-equal-hashtable)) 'a)`},
 		{Name: "clear! on immutable", Code: `(hashtable-clear! (hashtable-copy (make-equal-hashtable)))`},
+		// update! is the surface's main mutation entry point and, unlike the
+		// other three, is a SCHEME bootstrap define whose error crosses a
+		// compiled-procedure boundary before surfacing. A change to how
+		// bootstrap-procedure errors are wrapped could swallow the sentinel
+		// without this row noticing.
+		{Name: "update! on immutable", Code: `(hashtable-update! (hashtable-copy (make-equal-hashtable)) 'a (lambda (v) v) 0)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -417,6 +445,10 @@ func TestMakeHashtableR6RSArityErrors(t *testing.T) {
 		{Name: "a rebound equal? is refused", Code: `(let ((equal? (lambda (a b) #t))) (make-hashtable equal-hash equal?))`},
 		{Name: "hashtable-ref default is required", Code: `(hashtable-ref (make-equal-hashtable) 'a)`},
 		{Name: "hashtable-values is gone", Code: `(hashtable-values (make-equal-hashtable))`},
+		// R6RS caps make-hashtable at three arguments. ParamCount 3 + IsVariadic
+		// means ">= 2", so a fourth used to be swallowed silently — in a table
+		// named for arity refusal that tested only the under-arity side.
+		{Name: "over-arity is refused", Code: `(make-hashtable equal-hash equal? 1 2)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

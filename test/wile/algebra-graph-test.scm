@@ -574,6 +574,24 @@
     (test '() (graph-cyclic-nodes ga))
     (test #f (graph-node-in-cycle? ga '(compound key 1)))))
 
+(test-group "SCC side queries find a real cycle through container keys"
+  ;; The acyclic group above asserts mostly EMPTY answers, which an interning
+  ;; step that silently produced a wrong index map would also return. This one
+  ;; is the non-degenerate half: a genuine 2-cycle over list-valued node
+  ;; identifiers, whose members must be found BY VALUE.
+  (let* ((adj '(((a 1) . (((b 2) . #f)))
+                ((b 2) . (((a 1) . #f)))
+                ((c 3) . ())))
+         (ga  (make-graph-analysis (boolean-semiring) adj #f))
+         (cyc (graph-cyclic-nodes ga)))
+    (test 2 (length cyc))
+    (test #t (and (member '(a 1) cyc) #t))
+    (test #t (and (member '(b 2) cyc) #t))
+    (test #f (and (member '(c 3) cyc) #t))
+    (test #t (graph-node-in-cycle? ga '(a 1)))
+    (test #t (graph-node-in-cycle? ga '(b 2)))
+    (test #f (graph-node-in-cycle? ga '(c 3)))))
+
 (test-group "SCC structure stable across kernel calls with different sources"
   ;; The cyclic-counting adapter discards the per-call SCC vector returned
   ;; by count-paths-cyclic and uses the cached one. This pins the

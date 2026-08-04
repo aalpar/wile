@@ -16,6 +16,7 @@ package values_test
 
 import (
 	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -162,6 +163,11 @@ func TestEqualHash_DistinguishesShape(t *testing.T) {
 	}{
 		{"order matters", values.NewCons(one, two), values.NewCons(two, one)},
 		{"list vs vector", values.NewCons(one, values.EmptyList), values.NewVector(one)},
+		// *ByteVector's equal? is CONTENT-based, but it implements neither
+		// Hashable nor EqualComponents, so without its own arm it fell to the
+		// opaque type-name bucket and EVERY bytevector hashed alike.
+		{"bytevector contents", values.NewByteVectorFromBytes(1, 2), values.NewByteVectorFromBytes(3, 4)},
+		{"bytevector length", values.NewByteVectorFromBytes(1, 2), values.NewByteVectorFromBytes(1, 2, 3)},
 		{"symbol vs string", values.NewSymbol("a"), values.NewString("a")},
 		{"nesting depth", values.NewCons(values.NewCons(one, two), values.EmptyList),
 			values.NewCons(one, values.NewCons(two, values.EmptyList))},
@@ -178,4 +184,74 @@ func TestEqualHash_DistinguishesShape(t *testing.T) {
 			qt.Assert(t, values.EqualHash(tc.a), qt.Not(qt.Equals), values.EqualHash(tc.b))
 		})
 	}
+}
+
+// TestEqualHash_WideValueIsBudgetBounded pins that the node budget bounds WORK,
+// not merely nodes mixed.
+//
+// Every container arm used to push all of its children before the pop loop
+// re-checked the budget, so a wide value was fully materialized on the stack and
+// then discarded: a 2^20-element vector measured 22.8ms and 89MB per call, which
+// an equal-kind table pays on EVERY lookup with such a key — newly reachable,
+// because container keys only became legal with this work.
+//
+// Allocation is the assertion rather than time: it is the quantity that was
+// proportional to the input, and it is stable across machines.
+func TestEqualHash_WideValueIsBudgetBounded(t *testing.T) {
+	wide := func(n int) values.Value {
+		vs := make([]values.Value, n)
+		for i := range vs {
+			vs[i] = values.NewInteger(int64(i))
+		}
+		return values.NewVector(vs...)
+	}
+	// Built OUTSIDE the measured closure: AllocsPerRun counts everything the
+	// function does, and constructing the vector would swamp the walk.
+	narrow := wide(1 << 10)
+	broad := wide(1 << 20)
+	small := testing.AllocsPerRun(20, func() {
+		_ = values.EqualHash(narrow)
+	})
+	large := testing.AllocsPerRun(20, func() {
+		_ = values.EqualHash(broad)
+	})
+	// A 1024x wider input must not cost meaningfully more. Compared with slack
+	// rather than for equality: the walk allocates a little as the stack grows to
+	// the budget, and that is what is being bounded.
+	qt.Assert(t, large <= small*2, qt.IsTrue,
+		qt.Commentf("EqualHash allocations scale with input width: 2^10 => %v, 2^20 => %v", small, large))
+}
+
+// TestEqualHash_WideValuesAgreePastTheBudget guards the truncation against being
+// made asymmetric later. Two equal? values must still hash alike when they are
+// far wider than the budget, and when they differ only beyond it they may
+// legitimately collide — that is the one-directional contract, not a defect.
+func TestEqualHash_WideValuesAgreePastTheBudget(t *testing.T) {
+	wide := func(n int, tail int64) values.Value {
+		vs := make([]values.Value, n)
+		for i := range vs {
+			vs[i] = values.NewInteger(int64(i))
+		}
+		vs[n-1] = values.NewInteger(tail)
+		return values.NewVector(vs...)
+	}
+	a := wide(1<<20, 1)
+	b := wide(1<<20, 1)
+	qt.Assert(t, values.Equal(a, b), qt.IsTrue)
+	qt.Assert(t, values.EqualHash(a), qt.Equals, values.EqualHash(b))
+
+	// Records take the same truncation path.
+	fields := make([]*values.Symbol, 1000)
+	vals := make([]values.Value, 1000)
+	for i := range fields {
+		fields[i] = values.NewSymbol("f" + strconv.Itoa(i))
+		vals[i] = values.NewInteger(int64(i))
+	}
+	rt := values.NewRecordType(values.NewSymbol("wide"), fields)
+	r1, err := values.NewRecord(rt, vals)
+	qt.Assert(t, err, qt.IsNil)
+	r2, err := values.NewRecord(rt, append([]values.Value(nil), vals...))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, values.Equal(r1, r2), qt.IsTrue)
+	qt.Assert(t, values.EqualHash(r1), qt.Equals, values.EqualHash(r2))
 }

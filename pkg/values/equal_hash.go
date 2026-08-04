@@ -23,19 +23,28 @@ import "reflect"
 // 256 is chosen to cover the structures actually used as keys in this tree
 // (e-graph e-node vectors, adjacency-list pairs, tuples of symbols) without a
 // per-lookup cost proportional to a large value's whole spine.
+//
+// It bounds WORK, not merely nodes mixed, and the difference is not academic.
+// The budget originally capped only the pop loop while every arm pushed all of
+// its children first, so a wide container was fully materialized on the stack
+// and then thrown away: a 2^20-element vector key measured 22.8ms and 89MB per
+// EqualHash call, which an equal-kind table pays on EVERY lookup. Each arm now
+// pushes at most the remaining budget. Pinned by
+// TestEqualHash_WideValueIsBudgetBounded.
 const equalHashNodeBudget = 256
 
 // Type seeds for the structural walk. Distinct from the leaf seeds in hash.go
 // (0x1 symbol, 0x2 exact numeric, 0x3 string, 0x5 inexact) so a container never
 // collides with a leaf by construction.
 const (
-	seedVoid      byte = 0x10
-	seedPair      byte = 0x11
-	seedVector    byte = 0x12
-	seedBox       byte = 0x13
-	seedHashtable byte = 0x14
-	seedOpaque    byte = 0x15
-	seedRecord    byte = 0x16
+	seedVoid       byte = 0x10
+	seedPair       byte = 0x11
+	seedVector     byte = 0x12
+	seedBox        byte = 0x13
+	seedHashtable  byte = 0x14
+	seedOpaque     byte = 0x15
+	seedRecord     byte = 0x16
+	seedByteVector byte = 0x17
 )
 
 // EqualHash returns a hash consistent with Equal: Equal(a, b) implies
@@ -63,14 +72,22 @@ func EqualHash(v Value) uint64 {
 		n := len(stack) - 1
 		cur := stack[n]
 		stack = stack[:n]
-		h, stack = equalHashStep(cur, h, stack)
+		h, stack = equalHashStep(cur, h, stack, budget)
 	}
 	return h
 }
 
 // equalHashStep mixes one node into h and pushes its children so they pop in
 // structural order (a stack pops last-in-first, so children go on in reverse).
-func equalHashStep(v Value, h uint64, stack []Value) (uint64, []Value) {
+//
+// budget is what remains of the walk. An arm with an unbounded number of
+// children pushes at most that many, keeping the FIRST budget of them, because
+// children pop in index order and the rest could never be reached. This
+// preserves Equal(a,b) => EqualHash(a)==EqualHash(b): the walk order is fixed
+// by structure, so two equal? values arrive at each step with the same budget
+// and truncate at the same index. The container's LENGTH is mixed before the
+// truncation, so shape discrimination is unaffected.
+func equalHashStep(v Value, h uint64, stack []Value, budget int) (uint64, []Value) {
 	if IsVoid(v) {
 		return mixHash(h, hashUint64(seedVoid, 0)), stack
 	}
@@ -79,7 +96,20 @@ func equalHashStep(v Value, h uint64, stack []Value) (uint64, []Value) {
 		return mixHash(h, hashUint64(seedPair, 0)), append(stack, t.Cdr(), t.Car())
 	case *Vector:
 		h = mixHash(h, hashUint64(seedVector, uint64(len(*t))))
-		for i := len(*t) - 1; i >= 0; i-- {
+		for i := min(len(*t), budget) - 1; i >= 0; i-- {
+			stack = append(stack, (*t)[i])
+		}
+		return h, stack
+	case *ByteVector:
+		// *ByteVector needs its own arm for the same reason *Record does: its
+		// equal? is CONTENT-based (R7RS §6.9) but it implements neither Hashable
+		// nor EqualComponents, so it fell to the opaque type-name bucket below
+		// and EVERY bytevector hashed alike — measured, a constant. A bytevector
+		// is a plausible key (binary ids, digests), so that was a linear scan on
+		// content compares, strictly worse than the identity-equal? types the
+		// default arm is meant for.
+		h = mixHash(h, hashUint64(seedByteVector, uint64(len(*t))))
+		for i := min(len(*t), budget) - 1; i >= 0; i-- {
 			stack = append(stack, (*t)[i])
 		}
 		return h, stack
@@ -103,16 +133,19 @@ func equalHashStep(v Value, h uint64, stack []Value) (uint64, []Value) {
 		if rt != nil && rt.Name() != nil {
 			h = mixHash(h, rt.Name().HashCode())
 		}
-		for i := len(t.fields) - 1; i >= 0; i-- {
+		for i := min(len(t.fields), budget) - 1; i >= 0; i-- {
 			stack = append(stack, t.fields[i])
 		}
 		return h, stack
 	case *Hashtable:
 		// Size and kind only, no descent. sync.Map.Range has no defined order, so
 		// walking the entries would make the hash depend on iteration order and
-		// break determinism outright. Size is order-free and equal tables agree on
-		// it. Coarse by construction, which the one-directional contract permits.
-		return mixHash(h, hashUint64(seedHashtable, uint64(t.Size()))), stack
+		// break determinism outright. Both are order-free, and equalGate requires
+		// two equal? tables to agree on kind, so mixing it is contract-preserving
+		// rather than merely harmless. Coarse by construction, which the
+		// one-directional contract permits.
+		h = mixHash(h, hashUint64(seedHashtable, uint64(t.Size())))
+		return mixHash(h, hashUint64(seedHashtable, uint64(t.kind))), stack
 	case Hashable:
 		// Every leaf whose equal? is content-based already carries a
 		// content-canonical HashCode: hashNaN canonicalizes NaN payloads,
@@ -143,13 +176,16 @@ const identityHashFallback uint64 = 0x9e3779b97f4a7c15
 
 // identityHash returns a stable per-object hash for eq? and eqv? tables.
 //
-// Value is contractually pointer-shaped — see DeepEqualer's doc in equal.go and
-// EqIdentity in utils.go, which compares interfaces with == and would fault on
-// anything else — so reflect.Pointer covers every type in this tree. A
-// non-pointer dynamic kind, which only an embedder can introduce, falls back to a
-// constant. That is a correctness-preserving collision, not a wrong answer: the
-// contract is one-directional (eq? a b implies equal hashes), so a shared bucket
-// costs a scan. Pinned by TestIdentityHash_NonPointerFallsBackNotFails.
+// Most Values are pointer-shaped, so reflect.Pointer is the common case. It is
+// NOT universal even in this tree: emptyListType and voidType are empty structs,
+// so '() and the void value take the fallback in every eq and eqv table. That is
+// correct rather than merely tolerable — the fallback is a constant, EqIdentity
+// on two empty structs is true, and so hash and equality still agree — but the
+// fallback is a live path, not the embedder-only escape an earlier comment here
+// claimed. An embedder's non-pointer Value lands in the same bucket for the same
+// reason: a correctness-preserving collision that costs a scan, since the
+// contract is one-directional. Pinned by
+// TestIdentityHash_NonPointerFallsBackNotFails.
 func identityHash(v Value) uint64 {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer {
