@@ -208,10 +208,14 @@ prerelease suffix like `-alpha` is preserved).
 pull requests must **not** modify `VERSION` — it stays frozen between releases. The
 bump happens only during the release ceremony.
 
+**A release bumps the patch component by default.** `bump-minor` and `bump-major` are
+deliberate calls, reserved for a release whose contents actually warrant them under
+SemVer; they are not the routine choice.
+
 Release flow (maintainers):
 
 ```bash
-make bump-patch        # or bump-minor / bump-major; also reconciles CHANGELOG link refs
+make bump-patch        # the default; also reconciles CHANGELOG link refs
 git commit -am "release: $(cat VERSION)"   # version-bump commits land directly on master
 make tag               # cuts an annotated git tag matching VERSION
 make release           # goreleaser builds/publishes from the tag
