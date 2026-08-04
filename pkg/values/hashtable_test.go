@@ -350,3 +350,60 @@ func TestHashtableCyclicKeyTerminates(t *testing.T) {
 		t.Fatal("cyclic pair key did not terminate")
 	}
 }
+
+// TestHashtableEqualGate pins Q4's leaf-gate. Structural equality survives for
+// every table shape that existed before container keys were legal — which is every
+// table in the tree — and degrades to identity exactly where the eager key lookup
+// would recurse on the Go stack.
+func TestHashtableEqualGate(t *testing.T) {
+	leaf := func(kind values.HashtableKind) *values.Hashtable {
+		ht := values.NewHashtable(kind)
+		ht.Set(values.NewSymbol("a"), values.NewInteger(1))
+		return ht
+	}
+	container := func() *values.Hashtable {
+		ht := values.NewHashtable(values.HashtableEqual)
+		ht.Set(values.NewCons(values.NewInteger(1), values.EmptyList), values.NewInteger(1))
+		return ht
+	}
+	tcs := []struct {
+		name string
+		a, b *values.Hashtable
+		want bool
+	}{
+		{"leaf keys, same kind, same contents", leaf(values.HashtableEqual), leaf(values.HashtableEqual), true},
+		{"leaf keys, different kinds", leaf(values.HashtableEqual), leaf(values.HashtableEq), false},
+		{"container keys, distinct objects", container(), container(), false},
+		{"empty tables, same kind", values.NewHashtable(values.HashtableEqual), values.NewHashtable(values.HashtableEqual), true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, values.Equal(tc.a, tc.b), qt.Equals, tc.want)
+		})
+	}
+	t.Run("container-keyed table is equal to itself", func(t *testing.T) {
+		ht := container()
+		qt.Assert(t, values.Equal(ht, ht), qt.IsTrue,
+			qt.Commentf("reflexivity comes from each leaf's own EqualTo, before the gate"))
+	})
+}
+
+// TestHashtableNestedKeyTerminates is what the gate exists for: a table used as
+// another table's key, cyclically. Without the gate this overflows the host stack.
+func TestHashtableNestedKeyTerminates(t *testing.T) {
+	outer := values.NewHashtable(values.HashtableEqual)
+	inner := values.NewHashtable(values.HashtableEqual)
+	inner.Set(outer, values.NewInteger(1))
+	outer.Set(inner, values.NewInteger(1))
+	other := values.NewHashtable(values.HashtableEqual)
+	other.Set(inner, values.NewInteger(1))
+	done := make(chan bool, 1)
+	go func() {
+		done <- values.Equal(outer, other)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("equal? on tables with table keys did not terminate")
+	}
+}

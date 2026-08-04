@@ -243,6 +243,13 @@ func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 	if p == nil || v == nil {
 		return p == v
 	}
+	if !p.equalGate(v) {
+		// Identity, decided here. Returning false is correct rather than merely
+		// conservative: each leaf's own EqualTo already answered the a == b case
+		// before any EqualComponents ran, so the only pairs that arrive here are
+		// distinct objects.
+		return false
+	}
 	entries := p.snapshot()
 	if len(entries) != v.Size() {
 		return false
@@ -255,6 +262,53 @@ func (p *Hashtable) EqualComponents(o Value, push func(a, b Value)) bool {
 		push(entry.value, vval)
 	}
 	return true
+}
+
+// equalGate reports whether these two tables may be compared entry-by-entry.
+//
+// Two conditions, and both are load-bearing:
+//
+//   - SAME KIND. Two tables whose key-identity rules differ are not comparable
+//     entry-by-entry at all: EqualComponents looks each of p's keys up in v, and
+//     "is this the same key" has two different answers.
+//
+//   - EVERY KEY IS A Hashable LEAF. The lookup is eager — it cannot be deferred to
+//     Equal's worklist, because pairing entries across two tables requires an
+//     equality answer and the worklist is what would be deciding it. Eager is
+//     bounded for pair and vector keys (their EqualTo delegates to the iterative
+//     Equal) but NOT for a hashtable reachable as a key, which recurses one Go
+//     frame per level with no bottom on a cycle. No container implements Hashable
+//     — TestNoContainerIsHashable pins that — so the leaf test is one interface
+//     assertion per key and admits exactly the tables that were constructible
+//     before container keys became legal.
+//
+// The cost is that (equal? ht1 ht2) now answers by key TYPE: two equal-content
+// tables keyed on lists are #f where the same tables keyed on symbols are #t. That
+// is the price of keeping the deliberate structural-equal? deviation
+// (docs/reference/r7rs-differences.md item 9) rather than dropping it as part of an
+// unrelated migration. Chez and Racket answer identity for all four cases.
+func (p *Hashtable) equalGate(other *Hashtable) bool {
+	if p.kind != other.kind {
+		return false
+	}
+	return p.keysAreLeaves() && other.keysAreLeaves()
+}
+
+// keysAreLeaves reports whether every key is Hashable, i.e. cannot carry a
+// hashtable and so cannot recurse the eager key lookup.
+func (p *Hashtable) keysAreLeaves() bool {
+	q := true
+	p.buckets.Range(func(_, v any) bool {
+		for _, e := range v.([]hashtableEntry) {
+			_, ok := e.key.(Hashable)
+			if !ok {
+				q = false
+				return false
+			}
+		}
+		return true
+	})
+	return q
 }
 
 // SchemeString returns the Scheme representation of this hash table.
