@@ -28,6 +28,29 @@ func PrimMakeHashtable(mc machine.CallContext) error {
 	return nil
 }
 
+// makeHashtableConstructor returns the primitive for a fixed-kind R6RS
+// constructor. All three accept an optional size hint k, which Wile ignores: the
+// backing sync.Map has no capacity knob, and R6RS calls k a hint implementations
+// are free to ignore.
+func makeHashtableConstructor(kind values.HashtableKind) machine.ForeignFunction {
+	return func(mc machine.CallContext) error {
+		mc.SetValue(values.NewHashtable(kind))
+		return nil
+	}
+}
+
+// PrimMakeEqHashtable implements (make-eq-hashtable [k]).
+var PrimMakeEqHashtable = makeHashtableConstructor(values.HashtableEq)
+
+// PrimMakeEqvHashtable implements (make-eqv-hashtable [k]).
+var PrimMakeEqvHashtable = makeHashtableConstructor(values.HashtableEqv)
+
+// PrimMakeEqualHashtable implements (make-equal-hashtable [k]). NOT R6RS — it is
+// the Chez / Larceny / Vicare / Ypsilon extension, kept because it is what
+// portable-ish Scheme writes for the common case and because the R6RS spelling
+// (make-hashtable equal-hash equal?) is four tokens longer at 15 call sites.
+var PrimMakeEqualHashtable = makeHashtableConstructor(values.HashtableEqual)
+
 // PrimHashtableQ implements the hashtable? predicate.
 // Returns #t if the argument is a hash table, #f otherwise.
 var PrimHashtableQ = helpers.MakeTypePredicate(func(o values.Value) bool {

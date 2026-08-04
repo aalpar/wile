@@ -253,3 +253,32 @@ func TestHashtable_ContainerKeyRoundTrips(t *testing.T) {
 		})
 	}
 }
+
+// TestHashtableConstructors pins the three fixed-kind R6RS constructors: which
+// objects count as ONE key is now the TABLE's choice, not the key's.
+func TestHashtableConstructors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "eq: same-named symbols collapse", Code: `(let ((h (make-eq-hashtable))) (hashtable-set! h 'a 1) (hashtable-set! h 'a 2) (hashtable-size h))`, Expected: values.NewInteger(1)},
+		{Name: "eq: equal lists stay distinct", Code: `(let ((h (make-eq-hashtable))) (hashtable-set! h (list 1) 1) (hashtable-set! h (list 1) 2) (hashtable-size h))`, Expected: values.NewInteger(2)},
+		{Name: "eqv: exact representations collapse", Code: `(let ((h (make-eqv-hashtable))) (hashtable-set! h 5 1) (hashtable-set! h 5 2) (hashtable-size h))`, Expected: values.NewInteger(1)},
+		{Name: "eqv: equal lists stay distinct", Code: `(let ((h (make-eqv-hashtable))) (hashtable-set! h (list 1) 1) (hashtable-set! h (list 1) 2) (hashtable-size h))`, Expected: values.NewInteger(2)},
+		{Name: "equal: equal lists collapse", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h (list 1) 1) (hashtable-set! h (list 1) 2) (hashtable-size h))`, Expected: values.NewInteger(1)},
+		{Name: "equal: vector key round-trips", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h (vector 1 2) 'v) (hashtable-ref h (vector 1 2) #f))`, Expected: values.NewSymbol("v")},
+		{Name: "equal: pair key round-trips", Code: `(let ((h (make-equal-hashtable))) (hashtable-set! h '(a . b) 'p) (hashtable-ref h (cons 'a 'b) #f))`, Expected: values.NewSymbol("p")},
+		// R6RS: "k ... is a hint ... implementations are free to ignore it."
+		// Wile ignores it — the backing sync.Map has no capacity knob.
+		{Name: "constructors accept a size hint", Code: `(hashtable-size (make-eq-hashtable 64))`, Expected: values.NewInteger(0)},
+		{Name: "eqv accepts a size hint", Code: `(hashtable-size (make-eqv-hashtable 64))`, Expected: values.NewInteger(0)},
+		{Name: "equal accepts a size hint", Code: `(hashtable-size (make-equal-hashtable 64))`, Expected: values.NewInteger(0)},
+		// Copy must carry the kind, or a copied eq table would silently start
+		// collapsing structurally-equal keys.
+		{Name: "copy preserves the eq kind", Code: `(let ((h (hashtable-copy (make-eq-hashtable)))) (hashtable? h))`, Expected: values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
