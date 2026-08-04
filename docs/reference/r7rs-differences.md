@@ -23,13 +23,32 @@ Eleven known differences exist:
 10. Procedure calls evaluate **strictly left to right**, operator before operands, and `let` evaluates its inits in written order. R7RS §4.1.3 leaves that order **unspecified**, so the guarantee is stricter than the standard requires: a program that relies on it does not port to an implementation that evaluates right to left.
 11. `(eqv? +nan.0 +nan.0)` returns `#t`. R7RS §6.1 makes this **explicitly unspecified** ("As an exception, the behavior of `eqv?` is unspecified when both `obj1` and `obj2` are NaN"), so this is a choice within unspecified territory, matching Chez and Racket. Numeric `=` keeps IEEE-754 semantics: `(= +nan.0 +nan.0)` is still `#f`.
 12. `(rnrs hashtables)` is provided, with one gap: `make-hashtable` accepts only
-    the built-in `(equal-hash, equal?)` pair, recognized by **pointer identity**
-    against the sealed base (Chibi's `(eq? hash-fn hash)`). A user-supplied hash
-    or equivalence procedure raises `ErrUnsupportedHashtableKind`. R6RS's
-    condition system is not implemented, so every R6RS "raises `&assertion`"
-    here raises a Wile sentinel instead (`ErrImmutableHashtable`,
-    `ErrUnsupportedHashtableKind`) — matchable with `errors.Is` from Go and by
-    the standard exception machinery from Scheme.
+    the built-in `(equal-hash, equal?)` pair, recognized by **primitive
+    identity** — each argument must be a closure the registry built from the
+    `equal-hash` / `equal?` spec, whichever environment minted it
+    (`machine.PrimitiveIdentity`). A user-supplied hash or equivalence
+    procedure, including an embedder's own primitive registered under the same
+    name, raises `ErrUnsupportedHashtableKind`. R6RS's condition system is not
+    implemented, so every R6RS "raises `&assertion`" here raises a Wile sentinel
+    instead (`ErrImmutableHashtable`, `ErrUnsupportedHashtableKind`) —
+    matchable with `errors.Is` from Go and by the standard exception machinery
+    from Scheme.
+
+    A **closure-pointer** compare was the first design and did not survive
+    contact with `import`. A library environment is a flat island
+    (`Namespace.NewChildRuntime` gives it `parent: nil`), so the library env
+    factory re-applies the whole registry into it and mints a second closure per
+    primitive; `(scheme base)` exports `equal?`, so after the import every
+    conforming R7RS program opens with, the program's `equal?` was the library's
+    copy while the sealed base still held the engine's, and the pair was
+    refused. The identity token is shared by every copy, so it answers "is this
+    the registered `equal-hash`?" rather than "is this the sealed base's copy of
+    it?" — a question that also stops being answerable once
+    `WithStrictNamespace` or a dialect's `PrimitiveRemover` narrows the sealed
+    base. `hashtable-hash-function` and `hashtable-equivalence-function` hand
+    back the copy visible at the namespace's mutable top level, falling back to
+    the sealed base, so the pair a program reads off a table is `eq?` to the
+    pair it can write.
 13. `make-equal-hashtable` is a non-standard constructor, matching Chez,
     Larceny, Vicare, and Ypsilon. R6RS spells it
     `(make-hashtable equal-hash equal?)`, which Wile also accepts. Prefer
@@ -42,15 +61,24 @@ Eleven known differences exist:
     because pairing entries across two tables requires an eager key lookup,
     which recurses on the host stack once per hashtable reachable as a key and
     does not terminate on a cycle of them.
-15. The `(rnrs hashtables)` library deviates from R6RS in two further ways.
-    Its name is **versionless**: R6RS spells it `(rnrs hashtables (6))`, and
-    Wile's import-set resolver rejects a list as a library-name part, so the
-    versioned spelling does not resolve. And it does **not export**
+15. R6RS **version references are parsed and ignored**. A library name's final
+    element may be a list — `(rnrs hashtables (6))`, or a reference such as
+    `(srfi :1 (and (>= 1) (< 2)))` — and it is dropped, so the name denotes
+    `(rnrs hashtables)`. R7RS name parts are only identifiers and exact
+    non-negative integers, so a list in that position is unambiguously R6RS and
+    cannot collide with a real part; a list anywhere else is still an error.
+    Nothing is matched against, because Wile carries no library version
+    metadata: every version reference is vacuously satisfied, and the contents
+    are unvalidated for the same reason.
+16. The `(rnrs hashtables)` library does **not export**
     `equal-hash`, `string-hash`, `string-ci-hash` or `symbol-hash`, which R6RS
     lists in it — those four are bound in the sealed base and remain callable
-    after the import, but exporting them would rebind the names to import-copied
-    objects that `make-hashtable`'s pointer recognition no longer accepts, so
-    importing the R6RS library would break the R6RS spelling.
+    after the import, so this is a completeness gap, not a reachability one. It
+    was formerly load-bearing (exporting them broke `make-hashtable`, see item
+    12); under identity recognition it no longer is. The one consequence left to
+    weigh before closing it is that `(srfi 13)` exports a different, bounded
+    `string-hash`, so a program importing both libraries would meet the R7RS
+    §5.6 conflict — correctly, but newly.
 
 ---
 

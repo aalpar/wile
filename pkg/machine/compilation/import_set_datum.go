@@ -38,7 +38,17 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 	}
 
 	var parts []string
-	err := values.ForEachProperList(ctx, tuple, "library name", func(_ context.Context, _ int, _ bool, partExpr values.Value) error {
+	err := values.ForEachProperList(ctx, tuple, "library name", func(_ context.Context, _ int, hasNext bool, partExpr values.Value) error {
+		// An R6RS version (or version reference) is a LIST in the final position:
+		// (rnrs hashtables (6)), (srfi :1 (and (>= 1) (< 2))). R7RS name parts are
+		// only identifiers and exact non-negative integers, so a list here is
+		// unambiguously R6RS and can never collide with a real name part. Wile
+		// carries no version metadata, so the reference is dropped, not matched:
+		// every version reference is vacuously satisfied. Contents are unvalidated
+		// for the same reason — there is nothing to check them against.
+		if !hasNext && isVersionReference(partExpr) {
+			return nil
+		}
 		var part string
 		switch v := partExpr.(type) {
 		case *values.Symbol:
@@ -69,6 +79,18 @@ func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryN
 		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "library name cannot be empty")
 	}
 	return NewLibraryName(parts...), nil
+}
+
+// isVersionReference reports whether v has the SHAPE of an R6RS version or
+// version reference: a list, empty or not. The empty list counts — R6RS () is the
+// reference that matches any version — which is why this cannot be folded into a
+// plain values.Tuple assertion.
+func isVersionReference(v values.Value) bool {
+	if values.IsEmptyList(v) {
+		return true
+	}
+	_, ok := v.(values.Tuple)
+	return ok
 }
 
 // ParseImportSetFromDatum parses an import set from datum values.

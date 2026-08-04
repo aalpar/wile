@@ -10,18 +10,21 @@
 ;; it is not portable to a strict R6RS implementation. The portable spelling is
 ;; (make-hashtable equal-hash equal?).
 ;;
-;; DELIBERATELY NOT EXPORTED: equal-hash, string-hash, string-ci-hash and
-;; symbol-hash, which R6RS does list in this library. They are already bound in
-;; Wile's sealed base, so a program importing this library can still call them —
-;; and exporting them here would BREAK the library's own headline feature.
+;; NOT EXPORTED: equal-hash, string-hash, string-ci-hash and symbol-hash, which
+;; R6RS does list in this library. They are bound in Wile's sealed base, so a
+;; program importing this library can still call them, and the export list is
+;; therefore a completeness gap rather than a reachability one.
 ;;
-;; make-hashtable recognizes its (hash, equiv) pair by POINTER IDENTITY against
-;; the sealed base. An import COPIES the exported binding into the importing
-;; environment as a distinct object, so re-exporting equal-hash rebinds the name
-;; to something make-hashtable no longer recognizes: measured, (import (rnrs
-;; hashtables)) followed by (make-hashtable equal-hash equal?) raised
-;; "unsupported hash/equivalence pair". Importing the R6RS library must not break
-;; the R6RS spelling. Pinned by TestRnrsHashtablesDoesNotShadowTheRecognizedPair.
+;; It used to be load-bearing. make-hashtable recognized its (hash, equiv) pair by
+;; CLOSURE POINTER against the sealed base, and an import installs the exporting
+;; library's own copy of a primitive — a library environment is a flat island that
+;; mints its own — so exporting equal-hash rebound the name to an object
+;; recognition no longer matched. That is fixed: recognition is by primitive
+;; IDENTITY (machine.PrimitiveIdentity), which every copy of a primitive shares.
+;; Exporting these four is now safe, and the one thing to weigh before doing it is
+;; that (srfi 13) exports a DIFFERENT, bounded string-hash — so a program importing
+;; both would hit the R7RS §5.6 conflict, correctly but newly. Pinned by
+;; TestRnrsHashtablesRecognitionIsIndependentOfTheExportList.
 ;;
 ;; Not provided: make-hashtable with a USER-SUPPLIED hash/equivalence pair, which
 ;; raises, and the R6RS condition system — every R6RS "raises &assertion" here

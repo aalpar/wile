@@ -73,6 +73,7 @@ type ForeignClosure struct {
 	fn         ForeignFunction
 	validate   ForeignFunction // nil = no validation; set via SetValidator
 	env        *environment.EnvironmentFrame
+	identity   *PrimitiveIdentity // nil = none; set via SetIdentity
 	paramCount int
 	isVariadic bool
 	name       string
@@ -108,6 +109,20 @@ func (p *ForeignClosure) SetName(name string) {
 
 func (p *ForeignClosure) Doc() string {
 	return p.doc
+}
+
+// Identity returns the registered primitive this closure was built from, or nil
+// if its spec declared none. See PrimitiveIdentity for why a pointer compare on
+// the closure itself is not the same question.
+func (p *ForeignClosure) Identity() *PrimitiveIdentity {
+	return p.identity
+}
+
+// SetIdentity records the registered primitive this closure was built from. It is
+// called by the registry at registration; every closure the registry mints for one
+// spec — in the sealed base and in each library environment — gets the same token.
+func (p *ForeignClosure) SetIdentity(identity *PrimitiveIdentity) {
+	p.identity = identity
 }
 
 func (p *ForeignClosure) SetDoc(doc string) {

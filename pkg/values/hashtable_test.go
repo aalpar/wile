@@ -433,7 +433,7 @@ func TestHashtableNestedKeyTerminates(t *testing.T) {
 // kind in range renders a distinct name rather than falling to "unknown".
 func TestHashtableKindsAreExhaustive(t *testing.T) {
 	qt.Assert(t, values.HashtableKindCount, qt.Equals, 3,
-		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String and equivName"))
+		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String and equivIdentity"))
 
 	seen := make(map[string]bool, values.HashtableKindCount)
 	for i := range values.HashtableKindCount {

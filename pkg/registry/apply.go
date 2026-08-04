@@ -233,6 +233,11 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
+	// Every environment that applies this registry — the engine's sealed base and
+	// each flat library env — mints its own closure here. The identity is what ties
+	// those copies together, so a recognizer sees one primitive rather than one
+	// object per environment.
+	closure.SetIdentity(spec.Identity)
 	if cfg.contractEnforcement {
 		closure.SetValidator(BuildValidator(spec))
 	}

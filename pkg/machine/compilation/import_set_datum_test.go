@@ -77,6 +77,54 @@ func TestParseLibraryNameAllowsLegitimate(t *testing.T) {
 	}
 }
 
+// TestParseLibraryNameDropsVersionReference covers the R6RS version reference in
+// a library name's final position. It is dropped, so the name it produces is the
+// versionless one and both spellings key the same library.
+//
+// The parser does not look INSIDE the reference. R6RS allows a bare version
+// ((6 1 2)) at a definition site and a reference language ((and (>= 6) (< 7))) at
+// an import site, and this one function serves both; validating against version
+// metadata Wile does not carry would only invent a distinction it cannot honour.
+//
+// Non-final lists stay errors: that is what keeps this unambiguous. R7RS name
+// parts are identifiers and exact non-negative integers only, so a final list can
+// never be a real part, but an interior one would have to be guessed at.
+func TestParseLibraryNameDropsVersionReference(t *testing.T) {
+	version := values.List(values.NewInteger(6))
+	reference := values.List(values.NewSymbol("and"),
+		values.List(values.NewSymbol(">="), values.NewInteger(1)))
+
+	cases := []struct {
+		name  string
+		datum values.Value
+		key   string
+	}{
+		{"plain version", values.List(values.NewSymbol("rnrs"), values.NewSymbol("hashtables"), version), "rnrs/hashtables"},
+		{"version reference", values.List(values.NewSymbol("rnrs"), values.NewSymbol("hashtables"), reference), "rnrs/hashtables"},
+		{"empty version matches any", values.List(values.NewSymbol("rnrs"), values.EmptyList), "rnrs"},
+		{"integer part is not a version", values.List(values.NewSymbol("srfi"), values.NewInteger(13)), "srfi/13"},
+		{"single-part name with a version", values.List(values.NewSymbol("rnrs"), version), "rnrs"},
+	}
+	for _, tc := range cases {
+		result, err := ParseLibraryNameFromDatum(context.Background(), tc.datum)
+		qt.Assert(t, err, qt.IsNil, qt.Commentf("%s", tc.name))
+		qt.Assert(t, result.Key(), qt.Equals, tc.key, qt.Commentf("%s", tc.name))
+	}
+
+	rejected := []struct {
+		name  string
+		datum values.Value
+	}{
+		{"list in a non-final position", values.List(version, values.NewSymbol("rnrs"))},
+		{"list in the middle", values.List(values.NewSymbol("rnrs"), version, values.NewSymbol("hashtables"))},
+		{"nothing but a version", values.List(version)},
+	}
+	for _, tc := range rejected {
+		_, err := ParseLibraryNameFromDatum(context.Background(), tc.datum)
+		qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("%s", tc.name))
+	}
+}
+
 func TestParseLibraryNameFromDatum_WithNumbers(t *testing.T) {
 	// (srfi 1)
 	libName := values.NewCons(

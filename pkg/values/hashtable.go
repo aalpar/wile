@@ -64,7 +64,7 @@ const (
 // and hashtable-equivalence-function hand back procedure objects, not kind names.
 // HashtableKindCount is the number of defined kinds. It exists as a ratchet:
 // TestHashtableKindsAreExhaustive fails when a kind is added without giving it a
-// row in hashKey, keyEqual, String and equivName. Those four all used to reach
+// row in hashKey, keyEqual, String and equivIdentity. Those four all used to reach
 // an unlisted kind through a `default:` arm that answered EQUAL — so a new kind
 // would silently have inherited equal? key identity, which is the wrong-key-
 // collapse form of data corruption rather than a loud failure.

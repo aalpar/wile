@@ -59,6 +59,14 @@ type PrimitiveSpec struct {
 	// It flows to BindingMeta.CaptureSafe at registration; the classifier reads the
 	// binding flag because pkg/internal/validate must not import pkg/registry.
 	InvokesProcedure bool
+	// Identity, when non-nil, is stamped onto every ForeignClosure Apply builds
+	// from this spec, so Go code can ask "is this value the registered X?" of a
+	// procedure it was handed. Declare one only for a primitive some other
+	// primitive must RECOGNIZE — make-hashtable's (equal-hash, equal?) pair is the
+	// only such case today. Mint it once at package scope with
+	// machine.NewPrimitiveIdentity; see that type for why the closure pointer
+	// cannot answer the question.
+	Identity *machine.PrimitiveIdentity
 }
 
 // PrimitiveRegistration holds a primitive and its phases.

@@ -28,34 +28,33 @@ import (
 // is the documented gap while user-supplied hash/equivalence procedures are
 // deferred — see docs/reference/r7rs-differences.md.
 //
-// The pair is recognized by POINTER IDENTITY against this namespace's own
-// closures, which is Chibi's (eq? hash-fn hash). registerPhasePrimitive
-// constructs exactly one *ForeignClosure per spec per namespace and defines that
-// pointer, so every reference to equal-hash inside a namespace yields the same
-// object and a pointer compare IS eq?. The reference is read from the SEALED
-// BASE, not the runtime frame, so a user (define (equal-hash x) ...) shadowing in
-// the mutable layer cannot change what is recognized — matching Chibi, where the
-// comparison is against the library's lexical binding rather than the call site's.
+// The pair is recognized by PRIMITIVE IDENTITY: each argument must be a closure
+// the registry built from the equal-hash / equal? spec, whichever environment
+// minted it. That is the question worth asking, and a CLOSURE POINTER compare —
+// the earlier design — asked a narrower one that happened to coincide only while
+// nothing had been imported. A library environment is a flat island, so the
+// library env factory mints a second closure per primitive there; (scheme base)
+// exports equal?, and after that import the caller held the library's copy while
+// the sealed base still held the engine's. Recognition refused the pair, so every
+// conforming R7RS program — which opens with that import — could not write
+// (make-hashtable equal-hash equal?). See machine.PrimitiveIdentity.
 //
-// A registered-NAME compare was the earlier design and is NOT used: SetName is
-// called by whoever registers a primitive, so an embedder or extension shipping
-// its own equal-hash would match by string and have its procedure silently
-// discarded. That fails open. This fails closed.
+// A registered-NAME compare was the original alternative and is still NOT used:
+// SetName is called by whoever registers a primitive, so an embedder shipping its
+// own equal-hash would match by string and have its procedure silently discarded.
+// The identity token keeps that failing closed — it is minted once at package
+// scope in core, cannot be constructed from Scheme, and a second token of the same
+// name is a different primitive.
 //
 // This is NOT a Binding Identity violation, though it reads like one. That
 // invariant forbids deciding two IDENTIFIERS denote the same variable by comparing
 // SPELLINGS. Nothing is resolved by spelling here: two already-evaluated
 // first-class procedure objects are compared by identity.
 func PrimMakeHashtable(mc machine.CallContext) error {
-	ns := mc.EnvironmentFrame().Namespace()
-	hashRef := sealedPrimitive(ns, "equal-hash")
-	equivRef := sealedPrimitive(ns, "equal?")
-	// The interface compares are exactly the pointer identity wanted here, and are
-	// safe only because every closure is pointer-shaped — which is why values.Value
-	// carries the Go-comparability contract. Keep the comparison on the CLOSURES
-	// and never on keys: a non-comparable Value would panic rather than return
-	// false.
-	if hashRef == nil || equivRef == nil || mc.Arg(0) != hashRef || mc.Arg(1) != equivRef {
+	// machine.IdentityOf answers nil for a Scheme procedure, a primitive with no
+	// declared identity, and a non-procedure alike, so comparing against a non-nil
+	// package-scope token refuses all three without a separate type check.
+	if machine.IdentityOf(mc.Arg(0)) != identityEqualHash || machine.IdentityOf(mc.Arg(1)) != identityEqualQ {
 		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
 			"make-hashtable: only (make-hashtable equal-hash equal?) is supported; "+
 				"use make-eq-hashtable, make-eqv-hashtable or make-equal-hashtable")
@@ -246,8 +245,9 @@ func PrimHashtableEntries(mc machine.CallContext) error {
 	return nil
 }
 
-// equivName maps a table's kind to the primitive whose procedure object
-// hashtable-equivalence-function must hand back.
+// equivIdentity maps a table's kind to the equivalence primitive
+// hashtable-equivalence-function must hand back: its identity token, and the name
+// under which the caller's own binding of it is looked for.
 //
 // A switch rather than an array indexed by HashtableKind. The array read
 // `equivNames[ht.Kind()]` PANICS on an out-of-range kind, and values.NewHashtable
@@ -257,35 +257,35 @@ func PrimHashtableEntries(mc machine.CallContext) error {
 // HashtableKind.String all treat an unknown kind as equal via their own default
 // arms, so the array was the one site claiming a policy the type did not have.
 // Refusing explicitly is the policy that can actually be relied on.
-func equivName(kind values.HashtableKind) (string, bool) {
+func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, string, bool) {
 	switch kind {
 	case values.HashtableEqual:
-		return "equal?", true
+		return identityEqualQ, "equal?", true
 	case values.HashtableEq:
-		return "eq?", true
+		return identityEqQ, "eq?", true
 	case values.HashtableEqv:
-		return "eqv?", true
+		return identityEqvQ, "eqv?", true
 	default:
-		return "", false
+		return nil, "", false
 	}
 }
 
 // PrimHashtableEquivalenceFunction implements R6RS hashtable-equivalence-function.
-// The returned procedure is THIS namespace's registered closure, so
-// (eq? (hashtable-equivalence-function h) equal?) holds — the same identity
-// relation make-hashtable recognizes on the way in. The two directions must stay
-// in agreement.
+// The returned procedure is whichever copy of the equivalence primitive the CALLER
+// holds, so (eq? (hashtable-equivalence-function h) equal?) holds on both sides of
+// an import — the same identity relation make-hashtable recognizes on the way in.
+// The two directions must stay in agreement.
 func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-equivalence-function")
 	if err != nil {
 		return err
 	}
-	name, ok := equivName(ht.Kind())
+	identity, name, ok := equivIdentity(ht.Kind())
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
 			"hashtable-equivalence-function: table has unknown kind %d", uint8(ht.Kind()))
 	}
-	return setSealedPrimitive(mc, name, "hashtable-equivalence-function")
+	return setRecognizedPrimitive(mc, identity, name, "hashtable-equivalence-function")
 }
 
 // PrimHashtableHashFunction implements R6RS hashtable-hash-function, which returns
@@ -301,15 +301,53 @@ func PrimHashtableHashFunction(mc machine.CallContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-	return setSealedPrimitive(mc, "equal-hash", "hashtable-hash-function")
+	return setRecognizedPrimitive(mc, identityEqualHash, "equal-hash", "hashtable-hash-function")
 }
 
-// setSealedPrimitive sets name's registered closure as the result, or raises if this
-// namespace has no such binding. Raising rather than returning #f or nil is the point:
-// a profile that ships these accessors without equal-hash is misconfigured, and a
+// setRecognizedPrimitive sets the primitive bearing identity as the result,
+// preferring the copy visible at the namespace's MUTABLE TOP LEVEL over the
+// sealed base's, or raises if neither is that primitive.
+//
+// The top level, not the calling frame. mc.EnvironmentFrame() is parented at the
+// frame that MINTED this closure, which for a primitive reached through an import
+// is the exporting library's flat island — so consulting it would answer with that
+// library's private copy, not with anything the program can name. MutableRuntime
+// resolves through the namespace instead, which every island shares, and is where
+// a top-level (import (scheme base)) installs its bindings. That is what makes the
+// answer round-trip through eq?: after that import the program's equal? IS the
+// (scheme base) copy, and the sealed base's would be an object it cannot recognize
+// as the thing it just wrote.
+//
+// The sealed-base fallback then covers the un-imported (ambient) case, and keeps
+// working where the mutable layer holds something else entirely.
+//
+// name only LOCATES a candidate; identity DECIDES. So a user (define (equal? a b)
+// #t) shadowing in the mutable layer is found, fails the token check, and is
+// discarded in favour of the sealed base — the same fail-closed direction
+// make-hashtable takes, and the reason this is not a Binding Identity violation:
+// nothing is concluded from the spelling.
+//
+// Raising when neither candidate matches rather than returning #f is the point: a
+// profile that ships these accessors without equal-hash is misconfigured, and a
 // silent #f would be indistinguishable from the legitimate eq/eqv answer above.
-func setSealedPrimitive(mc machine.CallContext, name, site string) error {
-	q := sealedPrimitive(mc.EnvironmentFrame().Namespace(), name)
+func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveIdentity, name, site string) error {
+	sym := values.NewSymbol(name)
+	// One namespace resolution, two frames off it — MutableRuntimeOrNil walks the
+	// lexical chain for the namespace, so deriving the sealed base from its result
+	// keeps both probes talking about the same namespace. Reading the sealed base
+	// off the calling frame instead would answer nil on a frame the walk could
+	// still have resolved.
+	runtime := mc.EnvironmentFrame().MutableRuntimeOrNil()
+	// The mutable runtime PARENTS the sealed base, so this one lookup already
+	// covers the un-imported case: with no (import (scheme base)) to shadow it,
+	// GetBinding walks through to the sealed base's copy.
+	q := recognizedBinding(runtime, sym, identity)
+	if q == nil && runtime != nil {
+		// Reached only when the mutable layer holds something that is NOT this
+		// primitive — a user shadow. Address the sealed base directly so the
+		// shadow cannot suppress the real answer.
+		q = recognizedBinding(runtime.Namespace().SealedBase(), sym, identity)
+	}
 	if q == nil {
 		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
 			"%s: %s is not registered in this namespace", site, name)
@@ -318,25 +356,25 @@ func setSealedPrimitive(mc machine.CallContext, name, site string) error {
 	return nil
 }
 
-// sealedPrimitive returns the closure the registry defined for name in ns's sealed
-// base, or nil if the name is unbound there. nil means NONE — the caller refuses
-// rather than falling back, so a namespace built without the primitive raises
-// instead of silently accepting whatever the caller passed.
+// recognizedBinding resolves sym in env and returns its value only if that value
+// IS the primitive identity names. nil means NONE: unbound, no such frame, or
+// bound to something else — all three are "this environment cannot supply it", and
+// the caller falls back or refuses.
 //
 // Empty scopes resolve the ambient (unscoped) registration, the same query
 // registerPhasePrimitive uses to address the binding it just wrote. syntax.ScopeSet
 // is a type alias for values.ScopeSet, so no conversion is needed.
-func sealedPrimitive(ns *environment.Namespace, name string) values.Value {
-	if ns == nil {
+func recognizedBinding(env *environment.EnvironmentFrame, sym *values.Symbol, identity *machine.PrimitiveIdentity) values.Value {
+	if env == nil {
 		return nil
 	}
-	base := ns.SealedBase()
-	if base == nil {
-		return nil
-	}
-	binding := base.GetBinding(values.NewSymbol(name), values.EmptyScopes())
+	binding := env.GetBinding(sym, values.EmptyScopes())
 	if binding == nil {
 		return nil
 	}
-	return binding.Value()
+	q := binding.Value()
+	if machine.IdentityOf(q) != identity {
+		return nil
+	}
+	return q
 }
