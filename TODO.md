@@ -439,35 +439,56 @@ Items that block production embedded use or prevent silent state corruption.
   (`:415`), which has three callers (`:305`, `:362`, `:397`) and checks nothing. That helper is
   the natural chokepoint for options 2 and 3 alike.
 
-  **The fork — do not pick one without measuring:**
+  **The fork is really one question: WHERE does the authority live?** "Is this name a variable or
+  a compile-time handler?" has three possible homes, and Wile currently encodes it in all three
+  while making none authoritative — which is the defect. Two other implementations each pick one
+  and stick to it, and both work, so this is a choice about which to commit to, not about which
+  is correct. Do not pick without measuring.
 
-  1. **Give phase 0 separate value and handler cells.** Makes `SealKind` discriminate everywhere,
-     so the table stops having an inert column. Costs a second phase-0 frame per owner (now *per
-     library env* too, see the per-import figures in the phase-isolation entry) and forces a
-     decision about where that cell sits in the parent chain. An earlier revision of this entry
-     called that placement the crux, on the grounds that the cell must be ambient for
-     `LookupSyntaxCompiler` yet off the runtime value walk. **That constraint is weaker than
-     stated:** `LookupSyntaxCompiler` has NO production caller — it is test-only — so the phase-0
-     syntax-compiler bindings serve exactly one consumer today, `findLibraryBinding`. Establish
-     what that consumer actually needs before assuming the placement is over-constrained.
-  2. **Extend the `compileTimeHandler` refusal to ordinary symbol resolution** (i.e. into
-     `emitCachedBindingLoad`). Small and local, turns the leak into `no such binding`, matches
-     R7RS. But it is a check at every global load rather than a structural guarantee, so it is the
-     same shape of fix this codebase rejected for name-vs-identity bugs: tightening a predicate
-     rather than fixing the site that holds the authority. Measure the emit-path cost.
-  3. **Record the meaning on the BINDING — the Racket-shaped fix.** Either a fourth `BindingType`
-     for compile-time handlers, or a `BindingMeta` flag, set at `RegisterPhaseBindings`. Then
-     resolution refuses a handler wherever it lives, and the property stops depending on frame
-     topology *or* on the Go type of the value — which is what makes options 1 and 2 feel like
-     they are patching the wrong layer. Costs: `BindingType` is consulted in dispatch and
-     validation paths that assume three cases, so this is the widest blast radius of the three
-     and needs an exhaustive-switch audit (`cmd/typeswitchlint`) before it is costed. It is also
-     the only option that would let the value/handler split be stated once instead of
-     re-derived per lookup site.
+  1. **Authority in the FRAME — repair the current model.** Give phase 0 separate value and
+     handler cells so `SealKind` discriminates everywhere and the table stops having an inert
+     column. Costs a second phase-0 frame per owner (now *per library env* too, see the
+     per-import figures in the phase-isolation entry) and forces a decision about where that cell
+     sits in the parent chain. An earlier revision of this entry called that placement the crux,
+     on the grounds that the cell must be ambient for `LookupSyntaxCompiler` yet off the runtime
+     value walk. **That constraint is weaker than stated:** `LookupSyntaxCompiler` has NO
+     production caller — it is test-only — so the phase-0 syntax-compiler bindings serve exactly
+     one consumer today, `findLibraryBinding`. Establish what that consumer needs before assuming
+     the placement is over-constrained. Note that no other implementation surveyed puts the
+     authority here; frames answer "where does the value live", not "what does the name mean".
 
-  **Cross-reference.** `SealKind` would remain meaningful under option 3 — it still routes
-  registrations, and (1, handler) vs (1, value) is still a real distinction — but it would stop
-  being asked to carry a reachability guarantee it cannot provide.
+  2. **Authority in the VALUE — the Chibi-shaped fix, and the smallest.** Chibi has NO phases at
+     all: `struct env { parent, lambda, bindings, [renames] }` carries no level field, macros and
+     variables share one `bindings` table, and a macro is distinguished solely by the value's tag
+     (`sexp_macrop` → `SEXP_MACRO`). `analyze_define_syntax` even evaluates the transformer RHS in
+     the same environment as runtime code (`analyze_bind_syntax(tmp, ctx, ctx, 0)`); hygiene comes
+     from explicit renaming, not phase separation. That is a working proof that "meaning on the
+     value" scales — and it is what Wile ALREADY has in `compileTimeHandler`. The fix is to make
+     that encoding authoritative rather than incidental: one asking site
+     (`emitCachedBindingLoad`), `tryResolvedBinding`'s open-coded check folded into it, and
+     `BindingType` and frame placement explicitly relieved of answering the question. The EDIT is
+     the same as the old "extend the refusal" option; the difference is the stated invariant, and
+     that difference is the whole point — an unstated patch is what left three encodings competing
+     in the first place. Measure the emit-path cost.
+
+  3. **Authority in the BINDING — the Racket-shaped fix.** Racket's binding table maps symbol +
+     scope set to a meaning ("a variable, a syntactic form, or a transformer"), so the question is
+     answered once at resolution, wherever the value lives. In Wile: a fourth `BindingType`, or a
+     `BindingMeta` flag, set at `RegisterPhaseBindings`. Widest blast radius of the three —
+     `BindingType` is consulted by dispatch and validation paths that assume three cases, so it
+     needs an exhaustive-switch audit (`cmd/typeswitchlint`) before it is costed. Buys the most:
+     the split is stated in the type system rather than re-derived per lookup site, and it
+     composes with the scope-set model Wile already shares with Racket.
+
+  **Cross-reference.** `SealKind` survives under all three — it still routes registrations, and
+  (1, handler) vs (1, value) is a real distinction — but under any of them it stops being asked to
+  carry a reachability guarantee it cannot provide.
+
+  **Evidence for the comparisons above** was read from source, not recalled: Racket's
+  `syntax-model.html` / `eval-model.html`, and Chibi's `include/chibi/sexp.h` + `eval.c`
+  (`ashinn/chibi-scheme@master`, read 2026-08-05). Wile already ships Chibi's ER interface
+  (`pkg/stdlib/lib/chibi/optional.sld`, `wile/er-macro-test.scm`, green under `TestERMacro_*`), so
+  option 2 is not a foreign model — both hygiene styles already coexist here.
 
   **Not urgent, but not cosmetic.** No known miscompile. The reason it is Tier 1 is that the
   model currently *claims* a property it does not have, and a future dialect or sandbox feature
