@@ -426,6 +426,13 @@ Items that block production embedded use or prevent silent state corruption.
   **Do not "fix" this by adding a (1, value) caller to justify the axis.** The question is whether
   anything needs the distinction, and today the answer is measured: no.
 
+  **Flat-model note.** Under "The flat-model endpoint" filed in the leak entry below, the whole
+  sealed axis becomes two coordinates in one ranked matching rule (phase exactness, mutability)
+  plus the per-binding meaning attribute — i.e. the endpoint deletes the kind's *routing* role by
+  construction and keeps its *meaning* role on the binding. That is the same conclusion as the
+  fork coupling above (options 2/3 orphan the kind; option 1 wires it), reached from the other
+  direction.
+
 ### Syntax compilers are readable as runtime values (2026-08-05)
 
 - [ ] **Decide how a phase-0 handler is kept off the value-resolution path** [High, M, filed
@@ -478,19 +485,44 @@ Items that block production embedded use or prevent silent state corruption.
   kinds do not discriminate" understates it. Racket's binding table maps symbol + scope set to
   *a meaning* — "a variable, a syntactic form, or a transformer" — so referencing a syntactic
   form as a variable is an error **by construction**, independent of where the binding lives.
-  Wile has the same field, `BindingType`, and does not use it this way: syntax compilers are
-  registered `BindingTypePrimitive` (`phase_registry.go:47`, via `RegisterPhaseBindings`), the
-  *same* value a Go primitive gets. Handler-ness is instead encoded in the Go type of the bound
-  VALUE (`compileTimeHandler`, `named_handler_base.go`), which exactly one site consults. So the
-  defect is that **Wile records the meaning on the value rather than on the binding, and then
-  asks frame topology to make up the difference** — which frames cannot do, because a frame holds
-  both kinds.
+  Wile has the same field, `BindingType`, and the compile path does not consult it.
+
+  **CORRECTION (2026-08-05, measured after this paragraph was first written).** An earlier
+  revision said syntax compilers are registered `BindingTypePrimitive`, "the *same* value a Go
+  primitive gets." That is false, and it was the premise for costing option 3 below. Go primitive
+  *procedures* are `BindingTypeVariable` (`registry/apply.go:245`, `:306`). `BindingTypePrimitive`
+  has exactly **two** production creation sites in the tree, and both are compile-time handlers:
+  `phase_registry.go:47` (syntax compilers, via `RegisterPhaseBindings`) and `apply.go:213`
+  (`registerCompileTimeBinding`, into `compileEnv`). Verified by
+  `grep -rn BindingTypePrimitive --include=*.go pkg/` minus tests: the remaining hits are the two
+  constant declarations, one `repl/meta.go:552` display arm rendering it "special form", one
+  assertion at `phase_registry.go:69`, and one comment. **So the binding tag already discriminates
+  handler from variable.** The defect is not that the meaning is absent from the binding; it is
+  that Wile records it in BOTH places, consults the value's Go type
+  (`compileTimeHandler`, `named_handler_base.go`) on the compile path, consults the binding tag on
+  the expander path, and then asks frame topology to make up the difference — which frames cannot
+  do, because a frame holds both kinds.
+
+  **The binding-tag mechanism is already in the tree, on the expander side.** `lookupMacroBinding`'s
+  D2 pin arm (`expander_time_continuation.go:396`) filters with
+  `pinned.BindingType() == environment.BindingTypeSyntax`, and its comment states the reason:
+  primitive expanders and syntax compilers are `BindingTypePrimitive`, so a pin resolving to one
+  falls through. `tryResolvedBinding` (`compile_time_continuation.go:443`) asks the same question
+  of the same class of binding and answers it with a Go type assertion instead. Same question,
+  two encodings, and the leaking path is the outlier.
 
   **The exact asymmetry, for whoever fixes it.** `tryResolvedBinding`
   (`compile_time_continuation.go:433`) open-codes its own cached-binding load *with* the
   `compileTimeHandler` check. The ordinary global arm goes through `emitCachedBindingLoad`
   (`:415`), which has three callers (`:305`, `:362`, `:397`) and checks nothing. That helper is
   the natural chokepoint for options 2 and 3 alike.
+
+  **The check there must REFUSE, not fall through.** `tryResolvedBinding` returns `false` on a
+  handler because it is a fallback and the caller has an ordinary path to try; at
+  `emitCachedBindingLoad` the ordinary path is what is already resolving to the handler binding, so
+  falling through re-emits the leak. The chokepoint has to raise (the R7RS §4.1.1 / §4.3.1
+  "syntactic keyword used as a variable" error), which also means it needs an error return the
+  three call sites do not currently thread.
 
   **The fork is really one question: WHERE does the authority live?** "Is this name a variable or
   a compile-time handler?" has three possible homes, and Wile currently encodes it in all three
@@ -510,7 +542,8 @@ Items that block production embedded use or prevent silent state corruption.
      the placement is over-constrained. Note that no other implementation surveyed puts the
      authority here; frames answer "where does the value live", not "what does the name mean".
 
-  2. **Authority in the VALUE — the Chibi-shaped fix, and the smallest.** Chibi has NO phases at
+  2. **Authority in the VALUE — the Chibi-shaped fix.** (An earlier revision called this "and the
+     smallest." It is not: see the correction under option 3.) Chibi has NO phases at
      all: `struct env { parent, lambda, bindings, [renames] }` carries no level field, macros and
      variables share one `bindings` table, and a macro is distinguished solely by the value's tag
      (`sexp_macrop` → `SEXP_MACRO`). `analyze_define_syntax` even evaluates the transformer RHS in
@@ -526,12 +559,21 @@ Items that block production embedded use or prevent silent state corruption.
 
   3. **Authority in the BINDING — the Racket-shaped fix.** Racket's binding table maps symbol +
      scope set to a meaning ("a variable, a syntactic form, or a transformer"), so the question is
-     answered once at resolution, wherever the value lives. In Wile: a fourth `BindingType`, or a
-     `BindingMeta` flag, set at `RegisterPhaseBindings`. Widest blast radius of the three —
-     `BindingType` is consulted by dispatch and validation paths that assume three cases, so it
-     needs an exhaustive-switch audit (`cmd/typeswitchlint`) before it is costed. Buys the most:
-     the split is stated in the type system rather than re-derived per lookup site, and it
-     composes with the scope-set model Wile already shares with Racket.
+     answered once at resolution, wherever the value lives.
+
+     **REVISED COST (2026-08-05).** An earlier revision proposed a fourth `BindingType` (or a
+     `BindingMeta` flag) set at `RegisterPhaseBindings`, and called this the widest blast radius of
+     the three, needing an exhaustive-switch audit (`cmd/typeswitchlint`) before it could be
+     costed. Both halves fall with the correction above: **no new constant is needed**, because
+     `BindingTypePrimitive` already means "compile-time handler" and nothing else (two creation
+     sites, both compile-time). With no new enum case there is no exhaustive-switch obligation, and
+     the edit is a check on an existing field at `emitCachedBindingLoad`, the same one site option
+     2 touches. On cost and on internal consistency this option now **dominates** option 2: both
+     are a tag check at the same chokepoint, but this one reads a field the tree already maintains
+     and already trusts at `expander_time_continuation.go:396`, while option 2 keeps a Go type
+     assertion as the load-bearing tag and leaves the two paths disagreeing about where the answer
+     lives. Still buys the most: the split is stated in the type system rather than re-derived per
+     lookup site, and it composes with the scope-set model Wile already shares with Racket.
 
      **This option is a FIELD CHANGE, not Racket's architecture. Do not conflate them.** What
      makes Racket's model flat is not where the meaning is recorded but that *resolution is a
@@ -557,7 +599,20 @@ Items that block production embedded use or prevent silent state corruption.
      Racket shape therefore means rewriting `GetBinding` plus every site keyed on frame identity
      (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s receiver logic, `compile_define`'s
      `ns.Runtime() == p.env || ns.SealedBase() == p.env`). That is an architecture change of a
-     different order from this option, and it is NOT what option 3 proposes or costs.
+     different order from this option, and it is NOT what option 3 proposes or costs. The full
+     inventory of that bigger move — what it takes, what is irreducible, what this branch already
+     prepared — is filed below as "The flat-model endpoint."
+
+  **What no tag buys, on either 2 or 3.** Racket's leak is impossible *by construction* because
+  the binding table holds descriptors and the transformer's value lives in a separate compile-time
+  store, so the variable-reference path has nothing to read. In Wile the handler IS the value in
+  the cell the emit path caches (`AppendCachedBinding(bd)`, and the VM loads `bd.Value()`). A tag,
+  on the value or on the binding, is therefore a **check every reaching site must remember to
+  perform**, not a structural impossibility. Options 2 and 3 have identical defensive strength on
+  that axis; they differ only in cost and consistency. The by-construction property comes from
+  splitting the store, which is option 1's direction (and the full Racket architecture warned
+  about above), not from any field. Choose 3 for cheapness and consistency, and do not claim it
+  makes the leak unreachable.
 
   **Cross-reference.** `SealKind` survives under all three — it still routes registrations, and
   (1, handler) vs (1, value) is a real distinction — but under any of them it stops being asked to
@@ -568,6 +623,144 @@ Items that block production embedded use or prevent silent state corruption.
   (`ashinn/chibi-scheme@master`, read 2026-08-05). Wile already ships Chibi's ER interface
   (`pkg/stdlib/lib/chibi/optional.sld`, `wile/er-macro-test.scm`, green under `TestERMacro_*`), so
   option 2 is not a foreign model — both hygiene styles already coexist here.
+
+  ---
+
+  **The flat-model endpoint (2026-08-05).** The architecture the option-3 warning fences off was
+  then costed in discussion; the inventory is filed here so the fork is read against its actual
+  horizon. The questions were: can phase fold into the binding key (or the scopes), removing the
+  store topology; and is anything then needed beyond one flat keyspace and one flat binding
+  space, locals excepted? Answer: **semantically, nothing.** Every job the topology still does
+  compresses into a key coordinate, a per-binding attribute, or a rank in the matching rule. The
+  conservation law is that deleted topology reappears as resolution *rules*, not that it
+  disappears. None of this is scheduled work; it is the measured shape of the endpoint, filed so
+  the fork options (and the SealKind deletion above) are chosen with it in view.
+
+  **Ground facts, verified 2026-08-05.** Phase appears in NO key today: `Scope` =
+  {id, IsRebinding, Label} (`pkg/values/scope.go:30`), and `Binding`/`BindingMeta` carry no
+  phase field (`pkg/environment/binding.go:145`, `:49`). Phase lives only on the frame
+  (`phaseLevel`) and in `PhaseRegistry.envs`. So resolution today is "phase selects the store;
+  (symbol, scope set) is the key within it" — phase is answered *before* resolution starts, by
+  which frame the walker holds, and never appears in the question again. Racket phases the QUERY
+  (multi-scopes with per-phase representative scopes, selected by `resolve`'s phase argument) and
+  the ANSWER (`module-binding` carries `phase`); Wile phases the ADDRESS. The two hand-wired
+  cross-phase iterators (`GetGlobalIndexAcrossPhases`, `findLibraryBinding`, both hard-coded to
+  {0,1,2} and therefore tower-truncating) are the cost of the address model made visible.
+
+  **Encoding choice: phase as an explicit key coordinate, not phase-as-scope.**
+  `resolve(sym, scopes, phase)` against one store. Scope sets are phase-invariant today and the
+  resolver already takes phase implicitly as the frame in hand; making it an argument is the
+  honest version of the existing contract. Racket's multi-scope encoding (scope sets become
+  phase-dependent) buys a phase-free lookup rule at the price of deep `pkg/syntax` surgery, for
+  generality Wile does not use. Import/`eval-when` shifts stay registration-time (bind at N+k),
+  as now. The keyspace already contains one wildcarded coordinate (`AllScopes`), so a phase
+  wildcard follows an existing discipline — and per [nil means NONE], the wildcard is an explicit
+  named value (`PhaseAny`-shaped), never nil.
+
+  **The conservation table** — where each mechanism goes:
+
+  | today (graph) | flat home |
+  |---|---|
+  | per-phase frames (`PhaseRegistry.envs`) | phase coordinate in the key |
+  | `sealedBase` ambient across all phases | entries at phase = ANY (explicit wildcard value) |
+  | mutable child shadows its seal | rank: (exact phase, mutable) > (exact phase, sealed) > (ANY, sealed) — `sealedAxis` read as ranks instead of edges |
+  | `SealKind` handler/value routing | `BindingType` attribute at reference sites (= option 3) |
+  | hermeticity via `phaseParent` wiring | key disjointness, free |
+  | library lateral isolation | library scope in the key (already minted: `scope.go:40`'s `library:(…)` labels) |
+  | cross-phase carve-outs hard-wired {0,1,2} | one declared alternate matching mode |
+  | immutability enforcement | already per-binding (`Stable`/`Imported` — see the sealing decomposition below) |
+
+  **The flat space already exists in miniature.** `GlobalEnvironmentFrame` IS
+  (symbol, scope set) → slot list with subset-filter, maximal-cardinality ranking, and the
+  ambiguity third outcome. The frame graph multiplies that inner relation by
+  (owner × phase × sealedness); the whole proposal is folding those three outer dimensions into
+  key + attribute + rank. Hermeticity gets *stronger*: today it depends on parent edges being
+  wired right — the bug this branch removed (library phase frames parenting to the library's
+  phase-0 frame, the last phase→phase edge in the tree) is what wiring-dependent hermeticity
+  costs — whereas a phase-1 key cannot collide with a phase-0 binding by construction.
+
+  **Irreducible: exactly two things, neither of them resolution topology.**
+
+  1. **Locals.** Per-activation frames, compiled to (slot, depth)
+     (`NewOperationLoadLocalByLocalIndexImmediate`). Activation records, not a name table.
+     `GetBinding`'s locals-then-globals shape survives; only the globals half changes from
+     parent-walk to keyed fallback.
+  2. **Owner identity — which store you are in.** Namespaces and first-class environments have
+     *lifecycle* semantics a key carries badly: `NewSchemeReportNamespace` is a snapshot copy,
+     capability state is captured-not-delegated, a dropped environment frees wholesale. The
+     decisive verified fact: **no binding resolution crosses an owner boundary today.** A child
+     namespace's seal starts EMPTY, a library env's graph roots at its own base, scheme-report
+     copies — every cross-owner flow is an explicit copy (registry apply, import, snapshot),
+     never a parent walk. So keeping owners as separate stores adds zero resolution structure.
+     End state: **one flat keyspace per owner, connected only by copies, with no resolution
+     topology anywhere.** Per-phase/per-library enumeration (import/export, REPL) keeps an
+     *index*; an index without parent semantics is derived data, not topology.
+
+  **Floor honesty.** Ambience makes the lookup a RANKED PROBE — exact phase, then ANY — on one
+  store. That is one keyspace with two probes, not two stores. Reaching a single exact-match
+  probe would require per-phase registration/instantiation of the ambient set (Racket's
+  import-per-phase model), which is a different *product* decision; Wile's ambience — primitives
+  visible at a phase-47 frame minted by a tower climb, without anyone importing them there — is
+  deliberate.
+
+  **Sealing decomposes losslessly — measured at the gates, 2026-08-05.** "Sealed = shadowable
+  but not mutable" is emergent from two per-binding properties plus one placement rule; the
+  frame is not the enforcer (a8087e5d: sealed = destination + topology, not enforcement).
+  The `set!` gate refuses on `IsImported()` then `IsStable()`
+  (`compile_validated.go:341`, `:362`); the redefine guard refuses on the `Stable` field only
+  (`compile_define.go:104-113`), because an imported binding is deliberately supersedable by
+  `define` (R7RS §5.3.1) — and that supersede is IN PLACE, same `*Binding`, provenance dropped:
+  **not a shadow**. Three states, not two: frozen (Stable), supersedable-but-not-settable
+  (Imported), free. Shadowing itself comes from placement alone — `define` targets the own
+  mutable frame (`GetOwnGlobalBinding`, no parent walk), so a sealed name gets a NEW binding
+  there while `set!` parent-walks to the sealed one and hits its stamp. `Stable` is
+  optimizer-soundness-load-bearing (the frame-reclaim anchor: mutation would be unsound, not
+  rude), which any redesign must preserve. Under the flat model, placement's one contribution
+  (which layer a define targets, hence shadow-vs-supersede) becomes the mutability rank
+  coordinate; sealing then needs zero topology, and **arbitrary-binding sealing is the existing
+  bits generalized** — the `StableInUnit` user-define stamp already exists, off by default
+  (`compile_define.go:133`). A user-facing `seal!` would be new API surface, not new mechanism.
+  Scope of the guarantee, for any security framing: it protects everything already compiled
+  (cached `*Binding` pins keep identity) and every hermetic viewer (phase frames, library envs);
+  it does not protect future resolutions in the mutable layer (R7RS requires the shadow), value
+  interiors (`set-car!` still mutates), or anything from the Go API — language-level integrity,
+  not memory protection. Real sandboxing stays the Authorizer/profile layer.
+
+  **Preserved invariants.** The compiled artifact is untouched: emit still ends at cached
+  `*Binding` pointers, shadow = new entry, so pins and `Stable` anchors keep exactly their
+  current meaning; steady-state load cost is identical. Per-phase VALUE separation falls out of
+  the key for free because Wile's binding IS the holder — (sym, scopes, 0) and (sym, scopes, 1)
+  are different `*Binding`s, different cells. (Racket needs separate per-phase module instances
+  precisely because its table holds descriptors; the fusion that enables this entry's leak pays
+  for the flat table.) And **kind does not come along**: a phase key does not stop a phase-0
+  variable query from matching a phase-0 handler binding, so this entry's fork must be resolved
+  under ANY store shape — the flat model neither fixes nor obviates it.
+
+  **Optional second step, not entailed.** If library envs joined the engine's flat store via
+  their scopes instead of being separate owners, imports could ALIAS bindings rather than copy —
+  deleting the primitive-islands cost (~7ms/1.7MB per library env, `eq?` broken across imports,
+  the reason `PrimitiveIdentity` exists). That changes import from copy to alias semantics
+  (Racket's choice) and is a separate decision. Precisely: today ambient sets are REGENERATED
+  from the registry per owner, not propagated (`registry.Apply` re-runs into each library env's
+  and profile env's sealed base; only `NewSchemeReportNamespace` copies; a bare
+  `NewChildNamespace` gets nothing), and the re-mint is forced, not chosen: the profile apply IS
+  the capability filter, and `registerPhasePrimitive` (`registry/apply.go`) has each closure
+  capture its owner's mutable runtime as its lexical env, so a shared closure would resolve
+  identifier/eval-ish primitives against the wrong runtime. **The closureEnv capture is the
+  concrete blocker for aliasing** — in Racket terms Wile has re-instantiation but not
+  `namespace-attach-module`, and attach requires closures that stop assuming their captured
+  runtime is the borrower's.
+
+  **Blast radius** (unchanged from the option-3 warning): `GetBinding`, `PhaseRegistry`, the
+  `sealedAxis`/`newSealedAxisFrames`/`phaseParent` machinery, every frame-identity site
+  (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s receiver logic, `compile_define`'s
+  frame comparisons), plus the enumeration paths. The one mitigating fact: this branch's
+  sealed-axis regularization (one builder, one router, per-owner full axis) is exactly the
+  preparation that makes the fold mechanical — `sealedAxis` is already the key-indexed truth,
+  and `newSealedAxisFrames` compiles it into topology; the flat model interprets the table at
+  lookup instead.
+
+  ---
 
   **Not urgent, but not cosmetic.** No known miscompile. The reason it is Tier 1 is that the
   model currently *claims* a property it does not have, and a future dialect or sandbox feature
