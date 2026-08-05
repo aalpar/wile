@@ -1037,7 +1037,7 @@ func (m *mockCloseableExtension) Name() string {
 	return m.name
 }
 
-func (m *mockCloseableExtension) AddToRegistry(_ *registry.Registry) error {
+func (m *mockCloseableExtension) AddToRegistry(_ *registry.PrimitiveRegistry) error {
 	return nil
 }
 

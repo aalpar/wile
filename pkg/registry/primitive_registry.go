@@ -103,17 +103,17 @@ type BindingSpec struct {
 	DocOnly bool
 }
 
-// Registry is the central registry for primitives.
+// PrimitiveRegistry is the central registry for primitives.
 //
 // ADDING A NEW REGISTRY CATEGORY requires updates in these locations:
 //
-//  1. Registry struct (this file)       — add the slice field
+//  1. PrimitiveRegistry struct (this file)       — add the slice field
 //  2. NewRegistry (this file)            — initialize the slice with a reasonable capacity
 //  3. Registry.deepCopy (this file)      — extend the make + copy block to include the new slice
 //  4. Add<Category> / Add<Category>s     — registration entry points (mutex-locked appender +
 //     optional singular forwarder)
 //  5. <Category>Count / <Category>s      — accessor pair returning a count and a defensive copy
-//  6. Registry.Apply (registry/apply.go) — materialize the new category into the environment
+//  6. PrimitiveRegistry.Apply (registry/apply.go) — materialize the new category into the environment
 //     at the appropriate lifecycle step
 //
 // All eight categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
@@ -126,7 +126,7 @@ type BindingSpec struct {
 // simple AddDocumentation entries now share bindingSpecs (DocOnly=true);
 // rich AddDocOnlyPrimitive entries moved to the dedicated docPrimitives
 // slice (preserves full PrimitiveSpec metadata).
-type Registry struct {
+type PrimitiveRegistry struct {
 	mu sync.RWMutex
 	// primitives: real Scheme primitives backed by ForeignFunction impls.
 	primitives []PrimitiveRegistration
@@ -165,8 +165,8 @@ type Registry struct {
 }
 
 // NewRegistry creates a new empty registry.
-func NewRegistry() *Registry {
-	q := &Registry{
+func NewRegistry() *PrimitiveRegistry {
+	q := &PrimitiveRegistry{
 		primitives:                make([]PrimitiveRegistration, 0, 128),
 		bindingSpecs:              make([]BindingSpec, 0, 48),
 		docPrimitives:             make([]PrimitiveSpec, 0, 16),
@@ -183,7 +183,7 @@ func NewRegistry() *Registry {
 // AddPrimitive registers a primitive with the given phases. Singular
 // forwarder to AddPrimitives; the plural form is the single source of
 // truth for validation + mutex lifecycle.
-func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
+func (p *PrimitiveRegistry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
 	p.AddPrimitives([]PrimitiveSpec{spec}, phases)
 }
 
@@ -194,15 +194,15 @@ func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
 // for the contract.
 //
 // Registering a name already registered at the same phase is permitted and
-// silent, and the first registration wins: it is what [Registry.FindPrimitive]
-// returns and what [Registry.Apply] binds. A later duplicate is inert — it is
+// silent, and the first registration wins: it is what [PrimitiveRegistry.FindPrimitive]
+// returns and what [PrimitiveRegistry.Apply] binds. A later duplicate is inert — it is
 // retained in the registration list (Primitives reports it) but never becomes the
 // binding, so it cannot be used to override or patch an earlier primitive. Build
 // the surface you want with Without / WithoutCategory instead.
 //
 // Precedence is per phase: the same name registered at runtime by one spec and at
 // expand by another is two distinct bindings, not a duplicate.
-func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
+func (p *PrimitiveRegistry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 	for _, spec := range specs {
 		err := spec.Validate()
 		if err != nil {
@@ -226,7 +226,7 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 // internal inconsistency. A nil Impl passes registration but panics on the first
 // call that dispatches to it, the exact host crash Validate exists to let an
 // embedder pre-empt. A compile-time-only binding with no runtime value belongs on
-// the [Registry.AddDocOnlyPrimitive] / [Registry.AddBinding] paths, which do not
+// the [PrimitiveRegistry.AddDocOnlyPrimitive] / [Registry.AddBinding] paths, which do not
 // run this check.
 //
 // A variadic spec must have ParamCount >= 1: the rest parameter occupies
@@ -235,7 +235,7 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 // For ParamTypes (when non-empty): non-variadic requires len == ParamCount;
 // variadic requires len in [1, ParamCount].
 //
-// [Registry.AddPrimitive] and [Registry.AddPrimitives] panic on a spec that
+// [Registry.AddPrimitive] and [PrimitiveRegistry.AddPrimitives] panic on a spec that
 // fails this check, on the contract that specs are source literals whose shape
 // is fixed at compile time (the regexp.MustCompile idiom). An embedder that
 // assembles a spec dynamically — from config, a plugin manifest, reflection —
@@ -277,14 +277,14 @@ func (p PrimitiveSpec) Validate() error {
 
 // AddBinding registers a compile-time only binding (no runtime value).
 // Singular forwarder to AddBindings.
-func (p *Registry) AddBinding(name string) {
+func (p *PrimitiveRegistry) AddBinding(name string) {
 	p.AddBindings([]string{name})
 }
 
 // AddBindings registers multiple compile-time only bindings. Forwarder
 // to AddBindingSpecs; the spec-typed form is the single source of truth
 // for mutex lifecycle.
-func (p *Registry) AddBindings(names []string) {
+func (p *PrimitiveRegistry) AddBindings(names []string) {
 	specs := make([]BindingSpec, len(names))
 	for i, name := range names {
 		specs[i] = BindingSpec{Name: name}
@@ -293,7 +293,7 @@ func (p *Registry) AddBindings(names []string) {
 }
 
 // AddBindingSpecs registers multiple compile-time bindings with optional documentation.
-func (p *Registry) AddBindingSpecs(specs []BindingSpec) {
+func (p *PrimitiveRegistry) AddBindingSpecs(specs []BindingSpec) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.bindingSpecs = append(p.bindingSpecs, specs...)
@@ -303,19 +303,19 @@ func (p *Registry) AddBindingSpecs(specs []BindingSpec) {
 // The documentation is applied to existing bindings during ApplyDocs.
 // Forwarder to AddBindingSpecs with DocOnly=true — the doc-only entry
 // lives in the bindingSpecs slice but Apply skips installing a binding for it.
-func (p *Registry) AddDocumentation(name, doc string) {
+func (p *PrimitiveRegistry) AddDocumentation(name, doc string) {
 	p.AddBindingSpecs([]BindingSpec{{Name: name, Doc: doc, DocOnly: true}})
 }
 
 // AddInitFunc registers an initialization function.
-func (p *Registry) AddInitFunc(f InitFunc) {
+func (p *PrimitiveRegistry) AddInitFunc(f InitFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.initFuncs = append(p.initFuncs, f)
 }
 
 // AddMacroSource adds Scheme source code for bootstrap macros.
-func (p *Registry) AddMacroSource(source string) {
+func (p *PrimitiveRegistry) AddMacroSource(source string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.macroSources = append(p.macroSources, source)
@@ -336,7 +336,7 @@ func (p *Registry) AddMacroSource(source string) {
 // sources depend on categories no one removes (pairs, lists), and declaring
 // those buys nothing. Declare it for a source over a category a sandbox might
 // plausibly strip.
-func (p *Registry) AddProcedureSource(source string, dependsOn ...string) {
+func (p *PrimitiveRegistry) AddProcedureSource(source string, dependsOn ...string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.procedureSources = append(p.procedureSources, source)
@@ -347,7 +347,7 @@ func (p *Registry) AddProcedureSource(source string, dependsOn ...string) {
 
 // AddGlobalValue registers a named value to be bound as a global variable.
 // Unlike AddPrimitive, this takes an arbitrary Value rather than a ForeignFunction.
-func (p *Registry) AddGlobalValue(name string, value values.Value) {
+func (p *PrimitiveRegistry) AddGlobalValue(name string, value values.Value) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.globalValues = append(p.globalValues, GlobalValue{
@@ -360,7 +360,7 @@ func (p *Registry) AddGlobalValue(name string, value values.Value) {
 // engine, with that engine's runtime environment frame. Extensions use it to
 // build per-Namespace state (e.g. I/O port parameters + caches) that must not
 // be shared across engines.
-func (p *Registry) AddNamespaceInit(fn NamespaceInit) {
+func (p *PrimitiveRegistry) AddNamespaceInit(fn NamespaceInit) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.namespaceInits = append(p.namespaceInits, fn)
@@ -368,7 +368,7 @@ func (p *Registry) AddNamespaceInit(fn NamespaceInit) {
 
 // NamespaceInits returns a defensive copy of the registered per-engine
 // namespace initializers.
-func (p *Registry) NamespaceInits() []NamespaceInit {
+func (p *PrimitiveRegistry) NamespaceInits() []NamespaceInit {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]NamespaceInit, len(p.namespaceInits))
@@ -388,7 +388,7 @@ func (p *Registry) NamespaceInits() []NamespaceInit {
 // Surfaced by SearchDoc / ,doc / ,apropos / PrimitivesByCategory; not
 // visible via Primitives() or FindPrimitive (those return real
 // primitives only).
-func (p *Registry) AddDocOnlyPrimitive(spec PrimitiveSpec) {
+func (p *PrimitiveRegistry) AddDocOnlyPrimitive(spec PrimitiveSpec) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -406,7 +406,7 @@ func (p *Registry) AddDocOnlyPrimitive(spec PrimitiveSpec) {
 }
 
 // PrimitiveCount returns the number of registered primitives.
-func (p *Registry) PrimitiveCount() int {
+func (p *PrimitiveRegistry) PrimitiveCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.primitives)
@@ -417,15 +417,15 @@ func (p *Registry) PrimitiveCount() int {
 // primitives whose Phases overlap with phase are considered.
 //
 // First-match is the registry's duplicate-name precedence, not an accident of
-// iteration order: [Registry.Apply] binds the same first registration, so what this
+// iteration order: [PrimitiveRegistry.Apply] binds the same first registration, so what this
 // reports (and what ,doc renders from it) is what a caller actually invokes. See
-// [Registry.AddPrimitives].
+// [PrimitiveRegistry.AddPrimitives].
 //
 // When phase is zero, doc-only primitives (registered via AddDocOnlyPrimitive,
 // stored in docPrimitives with Phases=0) are returned as a fallback after
 // the real-primitives search. When phase is non-zero, doc-only primitives
 // are never returned — they have Phases=0 which cannot overlap.
-func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistration, bool) {
+func (p *PrimitiveRegistry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	for _, reg := range p.primitives {
@@ -450,20 +450,20 @@ func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistra
 // HasPrimitive reports whether a primitive with the given name is registered.
 // If phase is the empty PhaseSet (zero), any phase matches; otherwise only
 // primitives whose Phases overlap with phase are considered.
-func (p *Registry) HasPrimitive(name string, phase PhaseSet) bool {
+func (p *PrimitiveRegistry) HasPrimitive(name string, phase PhaseSet) bool {
 	_, ok := p.FindPrimitive(name, phase)
 	return ok
 }
 
 // BindingCount returns the number of compile-time bindings.
-func (p *Registry) BindingCount() int {
+func (p *PrimitiveRegistry) BindingCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.bindingSpecs)
 }
 
 // MacroSources returns copies of macro source strings.
-func (p *Registry) MacroSources() []string {
+func (p *PrimitiveRegistry) MacroSources() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]string, len(p.macroSources))
@@ -472,7 +472,7 @@ func (p *Registry) MacroSources() []string {
 }
 
 // ProcedureSources returns copies of procedure source strings.
-func (p *Registry) ProcedureSources() []string {
+func (p *PrimitiveRegistry) ProcedureSources() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]string, len(p.procedureSources))
@@ -480,19 +480,19 @@ func (p *Registry) ProcedureSources() []string {
 	return q
 }
 
-// WithProcedureSources returns a new Registry whose bootstrap procedure sources
+// WithProcedureSources returns a new PrimitiveRegistry whose bootstrap procedure sources
 // are replaced by the given slice; all other fields are copied unchanged via
 // deepCopy. Used by a dialect to substitute a bootstrap fragment (e.g. swap the
 // mutating vector-map/string-map for a mutation-free one) without mutating the
 // shared registry. The receiver is never modified.
-func (p *Registry) WithProcedureSources(sources []string) *Registry {
+func (p *PrimitiveRegistry) WithProcedureSources(sources []string) *PrimitiveRegistry {
 	q := p.deepCopy()
 	q.procedureSources = slices.Clone(sources)
 	return q
 }
 
 // Primitives returns a copy of the primitive registrations.
-func (p *Registry) Primitives() []PrimitiveRegistration {
+func (p *PrimitiveRegistry) Primitives() []PrimitiveRegistration {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]PrimitiveRegistration, len(p.primitives))
@@ -503,7 +503,7 @@ func (p *Registry) Primitives() []PrimitiveRegistration {
 // Bindings returns the names of real compile-time bindings (DocOnly=false).
 // DocOnly entries are excluded — use Docs() for those. BindingSpecs() returns
 // the unfiltered slice if both are needed.
-func (p *Registry) Bindings() []string {
+func (p *PrimitiveRegistry) Bindings() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	var q []string
@@ -517,7 +517,7 @@ func (p *Registry) Bindings() []string {
 }
 
 // BindingSpecs returns a defensive copy of the compile-time binding specs.
-func (p *Registry) BindingSpecs() []BindingSpec {
+func (p *PrimitiveRegistry) BindingSpecs() []BindingSpec {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]BindingSpec, len(p.bindingSpecs))
@@ -533,7 +533,7 @@ func (p *Registry) BindingSpecs() []BindingSpec {
 //
 // Doc-only *primitives* with full metadata (registered via
 // AddDocOnlyPrimitive) live in DocPrimitives, not here.
-func (p *Registry) Docs() []BindingSpec {
+func (p *PrimitiveRegistry) Docs() []BindingSpec {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	var q []BindingSpec
@@ -550,7 +550,7 @@ func (p *Registry) Docs() []BindingSpec {
 // PrimitiveSpec metadata (Category, ParamNames, ParamTypes, ReturnType,
 // Keywords) but no Impl and no environment binding — used to surface
 // Scheme-defined procedures via ,doc / ,apropos / SearchDoc.
-func (p *Registry) DocPrimitives() []PrimitiveSpec {
+func (p *PrimitiveRegistry) DocPrimitives() []PrimitiveSpec {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]PrimitiveSpec, len(p.docPrimitives))
@@ -559,7 +559,7 @@ func (p *Registry) DocPrimitives() []PrimitiveSpec {
 }
 
 // InitFuncs returns a copy of the initialization functions.
-func (p *Registry) InitFuncs() []InitFunc {
+func (p *PrimitiveRegistry) InitFuncs() []InitFunc {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]InitFunc, len(p.initFuncs))
@@ -568,7 +568,7 @@ func (p *Registry) InitFuncs() []InitFunc {
 }
 
 // GlobalValues returns a copy of the global value registrations.
-func (p *Registry) GlobalValues() []GlobalValue {
+func (p *PrimitiveRegistry) GlobalValues() []GlobalValue {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	q := make([]GlobalValue, len(p.globalValues))
@@ -577,17 +577,17 @@ func (p *Registry) GlobalValues() []GlobalValue {
 }
 
 // Clone creates a copy of the registry.
-func (p *Registry) Clone() *Registry {
+func (p *PrimitiveRegistry) Clone() *PrimitiveRegistry {
 	return p.deepCopy()
 }
 
-// deepCopy returns a Registry whose 8 category slices are independent
+// deepCopy returns a PrimitiveRegistry whose 8 category slices are independent
 // copies of p's. Element types are not transitively cloned — the copy is
 // one level deep (slice header + backing array). Callers may overwrite
-// individual slices on the returned Registry to express filter-style
+// individual slices on the returned PrimitiveRegistry to express filter-style
 // transformations; mutating q never affects p.
 //
-// TestDeepCopyTouchesEverySliceField (registry_test.go) is the drift-guard:
+// TestDeepCopyTouchesEverySliceField (primitive_registry_test.go) is the drift-guard:
 // it fails if a new slice field is added without extending the make+copy
 // block below (fail-closed) or if a field is ever shared by reference
 // (fail-open aliasing).
@@ -595,10 +595,10 @@ func (p *Registry) Clone() *Registry {
 // Locking is internal: deepCopy acquires p.mu.RLock for the duration of
 // the copy and releases it before returning. Callers MUST NOT hold p.mu
 // when invoking this method.
-func (p *Registry) deepCopy() *Registry {
+func (p *PrimitiveRegistry) deepCopy() *PrimitiveRegistry {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := &Registry{
+	q := &PrimitiveRegistry{
 		primitives:                make([]PrimitiveRegistration, len(p.primitives)),
 		bindingSpecs:              make([]BindingSpec, len(p.bindingSpecs)),
 		docPrimitives:             make([]PrimitiveSpec, len(p.docPrimitives)),
@@ -623,7 +623,7 @@ func (p *Registry) deepCopy() *Registry {
 // RuntimePrimitiveNamesSince returns the names of primitives registered
 // at index >= startIndex that have PhaseSetRuntime. If startIndex is negative
 // it is treated as 0. If startIndex exceeds the primitive count, nil is returned.
-func (p *Registry) RuntimePrimitiveNamesSince(startIndex int) []string {
+func (p *PrimitiveRegistry) RuntimePrimitiveNamesSince(startIndex int) []string {
 	return p.RuntimePrimitiveNamesRange(startIndex, -1)
 }
 
@@ -631,7 +631,7 @@ func (p *Registry) RuntimePrimitiveNamesSince(startIndex int) []string {
 // in the index range [startIndex, endIndex). If endIndex is negative, all
 // primitives from startIndex onward are included. Negative startIndex is
 // treated as 0.
-func (p *Registry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string {
+func (p *PrimitiveRegistry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -658,7 +658,7 @@ func (p *Registry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string
 // PrimitiveByName returns the registration for the named primitive, if any.
 // Real primitives take precedence; doc-only primitives (Phases=0) are
 // returned as a fallback when no real primitive with that name exists.
-func (p *Registry) PrimitiveByName(name string) (PrimitiveRegistration, bool) {
+func (p *PrimitiveRegistry) PrimitiveByName(name string) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	for _, reg := range p.primitives {
@@ -675,7 +675,7 @@ func (p *Registry) PrimitiveByName(name string) (PrimitiveRegistration, bool) {
 }
 
 // PrimitiveNames returns the names of all registered primitives in registration order.
-func (p *Registry) PrimitiveNames() []string {
+func (p *PrimitiveRegistry) PrimitiveNames() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	names := make([]string, len(p.primitives))
@@ -690,7 +690,7 @@ func (p *Registry) PrimitiveNames() []string {
 // Includes both real primitives and doc-only primitives (the latter
 // surface under their declared Category for ,doc / ,topics presentation).
 // Doc-only entries appear with Phases=0 in the result.
-func (p *Registry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
+func (p *PrimitiveRegistry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	result := make(map[string][]PrimitiveRegistration)
@@ -706,19 +706,19 @@ func (p *Registry) PrimitivesByCategory() map[string][]PrimitiveRegistration {
 	return result
 }
 
-// Without returns a new Registry with the named primitives removed.
+// Without returns a new PrimitiveRegistry with the named primitives removed.
 // Names that don't match any registered primitive are silently ignored.
 // All non-primitive fields are copied unchanged via deepCopy.
-func (p *Registry) Without(names ...string) *Registry {
+func (p *PrimitiveRegistry) Without(names ...string) *PrimitiveRegistry {
 	return p.filterPrimitives(names, func(reg PrimitiveRegistration) string {
 		return reg.Spec.Name
 	})
 }
 
-// WithoutCategory returns a new Registry with all primitives in the
+// WithoutCategory returns a new PrimitiveRegistry with all primitives in the
 // named categories removed. Categories are matched against PrimitiveSpec.Category.
 // All non-primitive fields are copied unchanged via deepCopy.
-func (p *Registry) WithoutCategory(categories ...string) *Registry {
+func (p *PrimitiveRegistry) WithoutCategory(categories ...string) *PrimitiveRegistry {
 	q := p.filterPrimitives(categories, func(reg PrimitiveRegistration) string {
 		return reg.Spec.Category
 	})
@@ -741,9 +741,9 @@ func (p *Registry) WithoutCategory(categories ...string) *Registry {
 	return q
 }
 
-// filterPrimitives returns a new Registry with primitives excluded when
+// filterPrimitives returns a new PrimitiveRegistry with primitives excluded when
 // keyFn(reg) matches any value in exclude. Non-primitive fields are copied unchanged.
-func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *Registry {
+func (p *PrimitiveRegistry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegistration) string) *PrimitiveRegistry {
 	set := make(values.StringSet, len(exclude))
 	for _, v := range exclude {
 		set[v] = struct{}{}
@@ -757,7 +757,7 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 	return q
 }
 
-// WithoutBindings returns a new Registry with the named compile-time
+// WithoutBindings returns a new PrimitiveRegistry with the named compile-time
 // bindings removed. Use after Without to fully erase a name that exists
 // as both a primitive and a compile-time binding (e.g., set!).
 // All other fields are copied unchanged via deepCopy.
@@ -767,7 +767,7 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 // for names that may live elsewhere (Scheme-defined procedures, library
 // exports). Removing them would silently strip docs that the embedder
 // likely wants kept.
-func (p *Registry) WithoutBindings(names ...string) *Registry {
+func (p *PrimitiveRegistry) WithoutBindings(names ...string) *PrimitiveRegistry {
 	exclude := make(values.StringSet, len(names))
 	for _, name := range names {
 		exclude[name] = struct{}{}

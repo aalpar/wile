@@ -25,6 +25,8 @@ import (
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // TestNewEnvironmentTiny tests that the top-level environment can be created successfully.
@@ -159,7 +161,7 @@ func TestNewProfileEnvironment(t *testing.T) {
 	c.Assert(childNS, qt.IsNotNil)
 	c.Assert(childNS, qt.Not(qt.Equals), parent)
 
-	reg, ok := childNS.Registry().(*registry.Registry)
+	reg, ok := childNS.Registry().(*registry.PrimitiveRegistry)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(reg, qt.IsNotNil)
 
@@ -188,7 +190,7 @@ func TestNewProfileEnvironment_Empty(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(childNS, qt.IsNotNil)
 
-	reg, ok := childNS.Registry().(*registry.Registry)
+	reg, ok := childNS.Registry().(*registry.PrimitiveRegistry)
 	c.Assert(ok, qt.IsTrue)
 	// Core primitives still present even with no extensions.
 	_, found := reg.FindPrimitive("+", 0)
@@ -197,6 +199,57 @@ func TestNewProfileEnvironment_Empty(t *testing.T) {
 	// No extension primitives.
 	_, found = reg.FindPrimitive("sin", 0)
 	c.Assert(found, qt.IsFalse)
+}
+
+// TestNewProfileEnvironment_RecordsEffectiveRegistry pins the recording half of the
+// strict-level seam. The namespace keeps the FULL registry so what a level withholds
+// stays importable; EffectiveRegistry is the separate, honest report of what the
+// visible top level was actually bound from. It must be recorded even when the two
+// coincide, because pkg/wile reads an absent record as "nothing was narrowed" and
+// falls back to the full registry — a read that fails OPEN.
+func TestNewProfileEnvironment_RecordsEffectiveRegistry(t *testing.T) {
+	ctx := context.Background()
+
+	cases := []struct {
+		name string
+		// level narrows the visible top level.
+		level StrictLevel
+		// wantCore is whether a core primitive is part of the visible surface.
+		wantCore bool
+	}{
+		{"off binds the whole registry", StrictOff, true},
+		{"core binds only the core surface", StrictCore, true},
+		{"no-bindings binds nothing", StrictNoBindings, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			parent := environment.NewNamespace()
+			childNS, err := NewProfileEnvironment(ctx, parent, []registry.Extension{math.Extension}, tc.level)
+			c.Assert(err, qt.IsNil)
+
+			// The full registry is level-independent: sin stays importable at every level.
+			full, ok := childNS.Registry().(*registry.PrimitiveRegistry)
+			c.Assert(ok, qt.IsTrue)
+			_, found := full.FindPrimitive("sin", 0)
+			c.Assert(found, qt.IsTrue)
+
+			eff, ok := childNS.EffectiveRegistry().(*registry.PrimitiveRegistry)
+			c.Assert(ok, qt.IsTrue,
+				qt.Commentf("no effective registry recorded: the narrowing is invisible and reads as unnarrowed"))
+			c.Assert(eff, qt.IsNotNil)
+
+			_, found = eff.FindPrimitive("car", 0)
+			c.Assert(found, qt.Equals, tc.wantCore)
+
+			// sin is extension-only, so it survives into the visible surface at
+			// StrictOff alone — StrictCore withholds it just as StrictNoBindings does.
+			_, found = eff.FindPrimitive("sin", 0)
+			c.Assert(found, qt.Equals, tc.level == StrictOff)
+		})
+	}
 }
 
 // TestProfileFactoryCallback exercises the init() side effect that wires
@@ -225,12 +278,34 @@ func TestProfileFactoryCallback(t *testing.T) {
 
 	// Strictness is validated on this side of the ProfileFactory boundary (eval
 	// forwards the raw spelling), so a bad level must reach ErrUnknownStrictLevel
-	// here rather than constructing a silently-unnarrowed namespace.
-	for _, level := range []string{"core", "no-bindings"} {
-		t.Run("strict level "+level+" constructs namespace", func(t *testing.T) {
-			ns, err := eval.ProfileFactory(ctx, parent, "small", level)
+	// here rather than constructing a silently-unnarrowed namespace. Constructing a
+	// namespace is not evidence the level survived the trip, so each row probes the
+	// visible top level. Two probes, because neither alone separates all three
+	// levels: car (core) distinguishes no-bindings, sin (math, an extension of the
+	// small profile) distinguishes core.
+	levels := []struct {
+		level    string
+		wantCore bool
+		wantExt  bool
+	}{
+		{"", true, true},
+		{"core", true, false},
+		{"no-bindings", false, false},
+	}
+	for _, tc := range levels {
+		t.Run("strict level "+tc.level+" constructs namespace", func(t *testing.T) {
+			c := qt.New(t)
+			ns, err := eval.ProfileFactory(ctx, parent, "small", tc.level)
 			c.Assert(err, qt.IsNil)
 			c.Assert(ns, qt.IsNotNil)
+
+			carBinding := ns.Runtime().GetBinding(values.NewSymbol("car"), syntax.AllScopes())
+			c.Assert(carBinding != nil, qt.Equals, tc.wantCore,
+				qt.Commentf("level %q: car bound = %v, want %v", tc.level, carBinding != nil, tc.wantCore))
+
+			sinBinding := ns.Runtime().GetBinding(values.NewSymbol("sin"), syntax.AllScopes())
+			c.Assert(sinBinding != nil, qt.Equals, tc.wantExt,
+				qt.Commentf("level %q: sin bound = %v, want %v", tc.level, sinBinding != nil, tc.wantExt))
 		})
 	}
 

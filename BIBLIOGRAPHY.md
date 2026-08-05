@@ -571,7 +571,7 @@ Formalizes the object-capability model and the principle of least authority (POL
 
 - **Paper**: Mark S. Miller, "Robust Composition: Towards a Unified Approach to Access Control and Concurrency Control", PhD Dissertation, Johns Hopkins University, 2006
 - **URL**: http://www.erights.org/talks/thesis/
-- **Location**: `pkg/registry/registry.go` (Without, WithoutCategory, WithoutBindings)
+- **Location**: `pkg/registry/primitive_registry.go` (Without, WithoutCategory, WithoutBindings)
 
 ### Miller et al., "Caja: Safe active content in sanitized JavaScript" (2008)
 

@@ -275,7 +275,7 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 		}
 	}
 
-	reg, ok := eng.Environment().Namespace().Registry().(*registry.Registry)
+	reg, ok := eng.Environment().Namespace().Registry().(*registry.PrimitiveRegistry)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrEngineInit,
 			"namespace registry is %T, expected *registry.Registry",

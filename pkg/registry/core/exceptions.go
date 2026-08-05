@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addExceptions(r *registry.Registry) error {
+func addExceptions(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// with-exception-handler is defined in Scheme (bootstrap_procedures.scm) as
 		// (parameterize ((%exception-handlers (cons handler (%exception-handlers)))) (thunk)),

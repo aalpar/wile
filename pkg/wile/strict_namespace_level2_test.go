@@ -28,15 +28,65 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// TestNoAmbientBindingsFloor pins level 2's visible surface. The partition is
-// three-way, not two-way: a form can be a phase handler and still be unusable,
-// because its expansion calls a primitive the empty registry never bound. Each
-// column fails differently and both dead columns pin their error TEXT, so a
-// future change that moves a form between columns fails loudly rather than
-// silently swapping one unbound name for another.
+// level2BoundNames is the exact visible surface at level 2 — every name
+// Engine.BoundNames() reports when the top level is bound from an empty
+// registry. 38 are phase handlers (registered by the compiler into frames
+// sealed SealKindHandler, never sourced from a registry). The other three,
+// unless/guard/guard-aux, are syntax-rules definitions in
+// core.LateBootstrapMacroSource, which LoadBootstrapCore loads UNCONDITIONALLY
+// rather than through Registry.MacroSources() — the one place a registry-borne
+// macro reaches an empty visible surface today, and the reason when and unless
+// land on opposite sides of the floor below.
+var level2BoundNames = []string{
+	"begin", "begin-for-syntax", "case-lambda", "cond-expand", "define",
+	"define-for-syntax", "define-library", "define-syntax",
+	"er-macro-transformer", "eval-when", "export", "guard", "guard-aux", "if",
+	"import", "include", "include-ci", "lambda", "let", "let*", "let-syntax",
+	"letrec", "letrec*", "letrec-syntax", "library", "meta", "quasiquote",
+	"quasisyntax", "quote", "set!", "syntax", "syntax-case", "syntax-error",
+	"unless", "unquote", "unquote-splicing", "unsyntax", "unsyntax-splicing",
+	"with-binding-scope", "with-continuation-mark", "with-syntax",
+}
+
+// TestNoAmbientBindingsBoundSet is the ratchet. TestNoAmbientBindingsFloor
+// below is a behavioral table: it explains WHY each form behaves as it does,
+// but it can only fail when a form LEAVES the floor. The failure this option
+// exists to prevent is the opposite one — a binding LEAKING INTO a surface
+// meant to be empty (a new bootstrap macro loaded outside
+// Registry.MacroSources(), a future step in applyBaseEnvironment) — and that
+// passes a behavioral table silently. Asserting the whole set is what catches
+// it.
 //
-//	usable            phase handler whose codegen emits no call
-//	resolves-unusable phase handler expanding through an unbound primitive
+// The set is profile-independent: level 2 binds from an empty registry, so
+// Small, Tiny and KitchenSink all land here.
+func TestNoAmbientBindingsBoundSet(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.Small),
+		wile.WithoutAmbientBindings(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(eng.BoundNames(), qt.DeepEquals, level2BoundNames,
+		qt.Commentf("a name added here leaked past the empty registry; a name removed left the floor"))
+}
+
+// TestNoAmbientBindingsFloor explains the surface TestNoAmbientBindingsBoundSet
+// pins. BOUND and USABLE are different partitions and they cross in both
+// directions: syntax-rules is usable and is NOT in level2BoundNames
+// (define-syntax recognizes it inline rather than resolving it), while guard is
+// bound and unusable. Each column fails differently and both dead columns pin
+// their error TEXT, so a future change that moves a form between columns fails
+// loudly rather than silently swapping one unbound name for another.
+//
+// The rows are representative, not exhaustive; docs/embedding/api-design.md
+// partitions all 41 names.
+//
+//	usable            codegen emits no call
+//	resolves-unusable expansion calls a primitive the empty registry never bound
 //	unresolved        bootstrap macro or primitive; both come from the registry
 func TestNoAmbientBindingsFloor(t *testing.T) {
 	c := qt.New(t)
@@ -113,6 +163,25 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			src:  `(cond-expand (wile 1) (else 2))`,
 			want: "1",
 		},
+		{
+			// The whole expand-phase family is bound and usable, which the
+			// floor's prose omitted for as long as it read as exhaustive. A
+			// syntax-case transformer whose template is a bare identifier
+			// emits no call; with-syntax, which does, is in the dead table.
+			name: "syntax-case transformer",
+			src:  `(define-syntax m (lambda (s) (syntax-case s () ((_ a) (syntax a))))) (m 7)`,
+			want: "7",
+		},
+		{
+			name: "begin-for-syntax and meta",
+			src:  `(begin-for-syntax (define x 1)) (meta (define y 2)) 3`,
+			want: "3",
+		},
+		{
+			name: "with-continuation-mark",
+			src:  `(with-continuation-mark 'k 'v 1)`,
+			want: "1",
+		},
 	}
 	for _, tc := range usable {
 		t.Run("usable/"+tc.name, func(t *testing.T) {
@@ -137,6 +206,9 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			errsub: `no such local or global binding "list"`,
 		},
 		{
+			// unless and guard are late bootstrap macros, not phase handlers
+			// (see level2BoundNames); they resolve because that file loads
+			// unconditionally, and then die on the primitive they expand into.
 			name:   "resolves-unusable/unless needs not",
 			src:    `(unless #f 1)`,
 			errsub: `no such binding "not" with compatible scopes`,
@@ -147,6 +219,13 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			errsub: `no such binding "call-with-exit" with compatible scopes`,
 		},
 		{
+			// with-syntax is the expand-phase twin of quasiquote-with-unquote:
+			// a phase handler that resolves and then emits list.
+			name:   "resolves-unusable/with-syntax needs list",
+			src:    `(with-syntax ((a 1)) (syntax a))`,
+			errsub: `no such local or global binding "list"`,
+		},
+		{
 			// cond is a bootstrap macro, carried by Registry.MacroSources(); an
 			// empty registry supplies none.
 			name:   "unresolved/cond is a bootstrap macro",
@@ -154,9 +233,12 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			errsub: `no such local or global binding "cond"`,
 		},
 		{
-			// when and unless land on OPPOSITE sides: when is a bootstrap macro,
-			// unless is a phase handler that expands through not. The asymmetry
-			// is pre-existing and out of scope; the two rows keep a future
+			// when and unless land on OPPOSITE sides, and the reason is which
+			// FILE defines them, not what kind of form they are: when is in
+			// bootstrap_macros.scm (carried by Registry.MacroSources(), so an
+			// empty registry drops it), unless is in bootstrap_macros_late.scm
+			// (loaded unconditionally, so it survives). The asymmetry is
+			// pre-existing and out of scope; the two rows keep a future
 			// grouping of them from asserting the wrong error for one.
 			name:   "unresolved/when is a bootstrap macro",
 			src:    `(when #t 1)`,
@@ -373,6 +455,62 @@ func TestNoAmbientBindingsSandboxIsConfinement(t *testing.T) {
 	_, err = eng.EvalMultiple(ctx, `(import (scheme base))`)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
 		qt.Commentf("want code:load denied, got: %v", err))
+}
+
+// TestNoAmbientBindingsWithoutLibrarySystemIsConfinement records the second, and
+// far more reachable, combination where the "explicitness, not confinement"
+// framing stops holding — the sibling of TestNoAmbientBindingsSandboxIsConfinement
+// and the same class of claim-bounding.
+//
+// The framing rests on import being a route back to the whole profile. There is
+// no library system unless WithLibraryPaths was called, and it is off by default,
+// so the shortest spelling of level 2 (a profile plus the option, which is all the
+// docs' ladder table states as a requirement) constructs WITHOUT error and then
+// denies every import. Unlike the sandbox case, nothing exotic was asked for.
+//
+// It is deliberately not rejected at construction: Engine.Define and
+// Engine.RegisterPrimitive make "empty top level, no library system, host injects
+// every binding from Go" a legitimate DSL host, so rejecting the pair would break
+// a supported configuration. The defect is documentary, and this test is what
+// keeps the documentation honest.
+func TestNoAmbientBindingsWithoutLibrarySystemIsConfinement(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("import denied when the library system was never enabled", func(t *testing.T) {
+		c := qt.New(t)
+
+		eng, err := wile.NewEngine(ctx,
+			wile.WithProfile(wile.Small),
+			wile.WithoutAmbientBindings(),
+		)
+		c.Assert(err, qt.IsNil, qt.Commentf("the combination must construct; rejecting it would break the DSL-host case"))
+
+		// The floor is still there…
+		v, err := eng.EvalMultiple(ctx, `(let ((x 1)) x)`)
+		c.Assert(err, qt.IsNil)
+		c.Assert(v.SchemeString(), qt.Equals, "1")
+
+		// …and it is all there is: there is no registry to import from.
+		_, err = eng.EvalMultiple(ctx, `(import (scheme base))`)
+		c.Assert(errors.Is(err, werr.ErrLibraryConfiguration), qt.IsTrue,
+			qt.Commentf("want ErrLibraryConfiguration, got: %v", err))
+	})
+
+	t.Run("control: WithLibraryPaths restores the route", func(t *testing.T) {
+		c := qt.New(t)
+
+		eng, err := wile.NewEngine(ctx,
+			wile.WithProfile(wile.Small),
+			wile.WithoutAmbientBindings(),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithLibraryPaths(),
+		)
+		c.Assert(err, qt.IsNil)
+
+		v, err := eng.EvalMultiple(ctx, `(import (scheme base)) (car '(1 2))`)
+		c.Assert(err, qt.IsNil)
+		c.Assert(v.SchemeString(), qt.Equals, "1")
+	})
 }
 
 // TestNoAmbientBindingsNoEscalation pins the security invariant one level down

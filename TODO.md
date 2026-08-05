@@ -72,7 +72,7 @@ Sections below hold the detail; this table is the map.
 | `2026-07-29-name-keyed-identity-residuals.local.md` | Finding report; all 4 repros re-verified on `ba93c936` 2026-07-29 |
 | `2026-07-29-name-keyed-identity-residuals-design.local.md` | Design **resolved**; 2 of the report's conclusions corrected |
 | `2026-07-29-name-keyed-identity-residuals-impl.local.md` | Branch A (Finding 2) **DONE** `bff525a8`; Branch B (Finding 1) not started |
-| `2026-08-04-strict-namespace-levels-design.local.md`<br>`2026-08-04-strict-namespace-levels-impl.local.md` | **ALL 7 PHASES SHIPPED** on `feat/strict-namespace-levels` 2026-08-04. `WithoutAmbientBindings()` binds the visible top level from an EMPTY registry, so only the phase handlers survive; `engineConfig.strictNamespace` became a `strictLevel` ladder combining by MAX, so no option order can un-narrow a surface. Impl §0 carried three measured corrections to the design and all three held on the real implementation: the floor has **three** columns, not two (`quasiquote` resolves but its `unquote` expansion needs `list`, so it is unusable — same class as `unless`/`not` and `guard`/`call-with-exit`); level 2 is usable on **`Small` and `KitchenSink` only**; and the stdlib export sweep did **not** blow up (17/18 restored, the miss is `assert`, now filed under Standard Library along with the `setRecognizedPrimitive` residual). **One finding neither document predicted:** `WithSandbox` denies `code:load`, so level 2 + sandbox leaves a program on the phase-handler floor with no import route off it — the two options are individually orthogonal but together they ARE confinement, the same shape §0.2 recorded for `Console`. Pinned by `TestNoAmbientBindingsSandboxIsConfinement` and bounded in the option's doc comment. Costs re-measured in-process: engine init 3.93 ms/1.20 MB heap, `(import (scheme base))` **9.38 ms**, eight-library preamble 58.57 ms/7.93 MB heap — one import ≈ 2.4× a whole engine's startup, accepted per Q1. Design §9's unverified "the optimizer does not degrade" now **verified**: `StrictLevelOpt{Fib,MapSum}_Level{0,2}`, benchstat over count=8, no significant time delta (p=0.798/p=0.225) and IDENTICAL B/op and allocs/op — the allocation identity is the evidence, since a lost Stable stamp changes the emitted shape. Phase 7 gives the ladder one vocabulary across three entry points: `--strict=core`/`--strict=no-bindings` (bare `--strict` = core), the two Go options, and `(environment '(wile <profile> <strictness>))` — strictness is a separate optional element, NOT a `small-no-bindings` profile-name variant, because it is orthogonal to the profile |
+| `2026-08-04-strict-namespace-levels-design.local.md`<br>`2026-08-04-strict-namespace-levels-impl.local.md` | **ALL 7 PHASES SHIPPED** on `feat/strict-namespace-levels` 2026-08-04. `WithoutAmbientBindings()` binds the visible top level from an EMPTY registry, so only the phase handlers survive; `engineConfig.strictNamespace` became a `strictLevel` ladder combining by MAX, so no option order can un-narrow a surface. Impl §0 carried three measured corrections to the design and all three held on the real implementation: the floor has **three** columns, not two (`quasiquote` resolves but its `unquote` expansion needs `list`, so it is unusable — same symptom class as `unless`/`not` and `guard`/`call-with-exit`); level 2 is usable on **`Small` and `KitchenSink` only**; and the stdlib export sweep did **not** blow up (17/18 restored, the miss is `assert`, now filed under Standard Library along with the `setRecognizedPrimitive` residual). **One finding neither document predicted:** `WithSandbox` denies `code:load`, so level 2 + sandbox leaves a program on the phase-handler floor with no import route off it — the two options are individually orthogonal but together they ARE confinement, the same shape §0.2 recorded for `Console`. Pinned by `TestNoAmbientBindingsSandboxIsConfinement` and bounded in the option's doc comment. Costs re-measured in-process: engine init 3.93 ms/1.20 MB heap, `(import (scheme base))` **9.38 ms**, eight-library preamble 58.57 ms/7.93 MB heap — one import ≈ 2.4× a whole engine's startup, accepted per Q1. Design §9's unverified "the optimizer does not degrade" now **verified**: `StrictLevelOpt{Fib,MapSum}_Level{0,2}`, benchstat over n=8 **interleaved** (the blocked `-count=8` form puts every level-0 sample before every level-2 one and reported a spurious +2.67%/+11.64%), no significant time delta (p=0.505/p=0.574) and IDENTICAL allocs/op — 81 and 71, all samples equal on both arms — the allocation identity is the evidence, since a lost Stable stamp changes the emitted shape. B/op is NOT sample-identical: it matches on map-sum but jitters within a single arm on fib (10693–10711), so it carries no weight. Pinned deterministically by `TestStrictLevelOptSameShape`, which asserts the level-0 and level-2 disassembly of `fib`/`map-sum` are byte-identical AND still contain the promoted ops (equality between two DEOPTIMIZED arms would pass vacuously); it also recorded that the `map-sum` arm never reached the inline-HOF stamp it was written to probe — `stampImportedInlineHOF` covers only the import-gated HOFs (`fold`/`fold-right`), so imported `map` is un-inlined at BOTH levels. Phase 7 gives the ladder one vocabulary across three entry points: `--strict core`/`--strict=no-bindings` (value required — a valueless form would make `--strict no-bindings script.scm` silently select core and eat the value as a positional), the two Go options, and `(environment '(wile <profile> <strictness>))` — strictness is a separate optional element, NOT a `small-no-bindings` profile-name variant, because it is orthogonal to the profile. **Mechanism correction, found by the post-implementation crosscheck and NOT by the plan:** the surviving forms are not all phase handlers. `unless`, `guard` and `guard-aux` are ordinary `syntax-rules` bootstrap macros living in `bootstrap_macros_late.scm`, which `LoadBootstrapCore` loads **unconditionally** rather than through `Registry.MacroSources()` — so they survive an empty registry by a different route entirely. `when` dies only because its channel IS `MacroSources()` (`bootstrap_macros.scm`). The discriminator is the load channel, not phase-handler-ness; the symptom partition the plan documented is right, the mechanism it gave for it was wrong, and the same wrong explanation reached the option doc, `api-design.md`, a test comment and commit `7b306a2b`'s message. Three bindings were therefore sitting in a surface documented as phase-handlers-only. Now pinned by `TestNoAmbientBindingsBoundSet`, an exact 41-name assertion — the behavioural table could only ever catch a form LEAVING the floor, never one leaking in |
 
 ### Design-only — approved or drafted, no code
 
@@ -208,6 +208,62 @@ Items that block production embedded use or prevent silent state corruption.
   primitive becoming reachable, not on an authorizer denial.
   Documented as a known limitation in `docs/security/sandboxing.md` ("does NOT cover" table) as of
   the 2026-07-29 docs refresh; that row comes back out when this ships.
+
+### `WithNamespace` silently discards every namespace-consumed option, including `WithSandbox` (2026-08-04)
+
+- [ ] **Decide the contract for options `NewEngine` cannot apply** [High, S-M, filed 2026-08-04 from
+  the strict-namespace-levels crosscheck]: `NewEngine(WithNamespace(ns), WithSandbox())` returns a
+  working engine **with no sandbox and no error**. Measured, same profile and same source in both
+  arms:
+
+  ```
+  A  NewEngine(WithProfile(Small), WithSandbox())   -> write file "…": access denied
+  B  NewEngine(WithNamespace(ns), WithSandbox())    -> nil; the file is on disk
+  ```
+
+  **Mechanism, not an oversight in the mechanism.** The authorizer is *namespace* state, and the
+  only site that installs it is inside `bootstrapNamespace` (`pkg/wile/engine.go`, the
+  `ns.SetAuthorizer(cfg.resolveAuthorizer())` / `SetEnvMap` / `SetImmutableTopLevel` trio). The
+  `WithNamespace` branch of `NewEngine` assigns `ns = cfg.namespace` and jumps straight to reading
+  the registry off it, so `resolveAuthorizer()` is never called and `cfg.sandboxAuthorizer` is
+  never read. (The other `SetAuthorizer` in the file is the library-env factory copying a parent's
+  authorizer to a child — consistent with "the authorizer travels with the namespace".)
+  `NewNamespace(ctx, WithProfile(Small), WithSandbox())` honors it correctly; the option is on the
+  wrong constructor, and nothing says so.
+
+  **Scope: seven options, one exception.** `WithNamespace`'s own doc comment already enumerates
+  the set — `WithAuthorizer`, `WithSandbox`, a profile's built-in authorizer, `WithEnv`,
+  `WithEnvMap`, `WithImmutableTopLevel`/`WithMutableTopLevel` — and names `WithDialect` as "the one
+  such option NewEngine rejects outright instead of dropping". The two strict-namespace options
+  join the dropped set as of 2026-08-04. So silent-drop is the documented norm and the rejection is
+  the outlier, which is why the fix must be decided for the **family**, not for one member: singling
+  out a member would make the tree look more consistent while leaving the security-relevant one
+  silent.
+
+  **The fork.** Aaron leans toward returning an error, with stated uncertainty (2026-08-04).
+
+  1. **Reject the family at the `WithNamespace` branch.** Matches `WithDialect`, fails loud.
+     **The cost is real and is why this is not obvious:** `NewNamespace`'s doc comment explicitly
+     invites sharing one option slice across both constructors ("Options are shared with NewEngine…
+     Engine-specific options are accepted but ignored"). Symmetric ignoring is the *documented*
+     story — each constructor drops what it cannot use — and the shared-slice caller is already
+     correct today, because `NewNamespace` applied the sandbox and `NewEngine`'s duplicate is
+     harmless. A blanket rejection breaks exactly that caller to catch a different one.
+  2. **Apply them post-hoc** on the pre-built namespace. Wrong: it would let a second engine mutate
+     a namespace other engines share, which is the thing `WithNamespace` exists to enable.
+  3. **Reject only when the option would CHANGE something** — the narrow reading, and the one that
+     separates the two callers above. The dangerous case is not "the option appears twice", it is
+     "the option appears *only* at `NewEngine`", i.e. the namespace has no authorizer and the engine
+     config would produce one. **Trap:** this cannot be written as "the authorizers differ".
+     `security.AuthorizerFunc` is a func type and `security.All` returns a composite over them, so
+     `==` on two `security.Authorizer` interface values holding func types is a run-time panic, not
+     a false answer. Nil-ness is comparable and is the whole signal available; `Namespace.Authorizer()`
+     (`pkg/environment/namespace.go:649`) is the getter. Verify before building on it.
+
+  **Not from the strict-namespace work** — surfaced by checking that plan's premise. Three review
+  lenses argued the strict options should join `WithDialect` in the rejected set; the premise did
+  not survive, and this is the finding underneath it. Documented as a known limitation in
+  `WithNamespace`'s doc comment today, which is where the "security-relevant" wording comes from.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 

@@ -23,7 +23,7 @@ import (
 // absent: it must agree with string-ci=?, which folds case with x/text's full
 // Unicode fold, so it is registered beside that procedure in
 // pkg/internal/extensions/all rather than restating the fold here.
-func addHashes(r *registry.Registry) error {
+func addHashes(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "equal-hash", ParamCount: 1, Impl: PrimEqualHash,
 			Doc:        "Returns an exact non-negative integer hash of OBJ, consistent with equal?: if (equal? a b) then (= (equal-hash a) (equal-hash b)). The converse does not hold. Terminates on cyclic input.\n\nHashes a BOUNDED PREFIX: values agreeing on their first 256 nodes hash alike, so two long lists differing only near the end collide. That is permitted by the one-directional contract and is what makes the hash terminate and cost O(1) on wide keys.\n\nExamples:\n  (= (equal-hash '(1 2)) (equal-hash (list 1 2)))  => #t",

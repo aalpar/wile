@@ -28,15 +28,15 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// RegistryDocProvider adapts a registry.Registry to the DocProvider interface.
+// RegistryDocProvider adapts a registry.PrimitiveRegistry to the DocProvider interface.
 type RegistryDocProvider struct {
-	reg *registry.Registry
+	reg *registry.PrimitiveRegistry
 	eng *wile.Engine
 }
 
 // NewRegistryDocProvider creates a DocProvider backed by the given registry.
 // eng may be nil; when non-nil, Search includes loaded and unloaded libraries.
-func NewRegistryDocProvider(reg *registry.Registry, eng *wile.Engine) *RegistryDocProvider {
+func NewRegistryDocProvider(reg *registry.PrimitiveRegistry, eng *wile.Engine) *RegistryDocProvider {
 	return &RegistryDocProvider{
 		reg: reg,
 		eng: eng,

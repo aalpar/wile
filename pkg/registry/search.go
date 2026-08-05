@@ -66,10 +66,10 @@ type LibraryExportSearcher interface {
 // substring matches on name, doc text, category, or keywords.
 //
 // Sources searched in order:
-//  1. Registry primitives — real primitives AND doc-only primitives
+//  1. PrimitiveRegistry primitives — real primitives AND doc-only primitives
 //     (the latter carry full PrimitiveSpec metadata; both take precedence
 //     over non-primitive sources below).
-//  2. Registry binding specs — includes real bindings AND simple DocOnly
+//  2. PrimitiveRegistry binding specs — includes real bindings AND simple DocOnly
 //     entries registered via AddDocumentation (post-Phase-1 unification).
 //  3. Environment bindings (if env is non-nil)
 //  4. Loaded libraries (if libs is non-nil)
@@ -77,7 +77,7 @@ type LibraryExportSearcher interface {
 //
 // Primitives take precedence over non-primitives with the same name.
 // Results are sorted by name. env, libs, and exports may be nil.
-func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libs LibrarySearcher, exports LibraryExportSearcher, pattern string) []DocSearchResult {
+func SearchDoc(reg *PrimitiveRegistry, env *environment.EnvironmentFrame, libs LibrarySearcher, exports LibraryExportSearcher, pattern string) []DocSearchResult {
 	lowerPattern := strings.ToLower(pattern)
 	var q []DocSearchResult
 
@@ -168,7 +168,7 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libs LibrarySea
 // Post-Phase-1: single walk. Pre-Phase-1 this walked BindingSpecs + Docs
 // as two separate sources; they were unified into bindingSpecs (with DocOnly
 // distinguishing them).
-func NonPrimitiveDocs(reg *Registry) []DocSearchResult {
+func NonPrimitiveDocs(reg *PrimitiveRegistry) []DocSearchResult {
 	var q []DocSearchResult
 	for _, bs := range reg.BindingSpecs() {
 		if bs.Doc == "" {

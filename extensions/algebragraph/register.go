@@ -38,7 +38,7 @@ var graphPrimParamTypes = []values.TypeConstraint{
 	values.TypeInteger,
 }
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{
 			Name:       "count-paths-in-dag",

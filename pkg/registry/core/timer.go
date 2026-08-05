@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addTimer(r *registry.Registry) error { //nolint:govet
+func addTimer(r *registry.PrimitiveRegistry) error { //nolint:govet
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "with-timeout", InvokesProcedure: true, ParamCount: 3, Impl: PrimWithTimeout,
 			Doc: "Runs THUNK with a wall-clock timeout of MS milliseconds. " +

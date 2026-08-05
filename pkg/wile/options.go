@@ -74,7 +74,7 @@ func newEngineConfig() *engineConfig {
 }
 
 type engineConfig struct {
-	registry           *registry.Registry
+	registry           *registry.PrimitiveRegistry
 	extensions         []registry.Extension
 	maxCallDepth       int
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
@@ -156,7 +156,7 @@ type EngineOption func(*engineConfig)
 
 // WithRegistry uses a custom registry instead of the default.
 // When set, core primitives are NOT automatically added.
-func WithRegistry(r *registry.Registry) EngineOption {
+func WithRegistry(r *registry.PrimitiveRegistry) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.registry = r
 	}
@@ -525,7 +525,11 @@ func WithMutableTopLevel() EngineOption {
 // WithStrictNamespace narrows the engine's visible top-level surface to CORE
 // ONLY: the profile's extension primitives are REGISTERED (so libraries can
 // import them) but are NOT pre-bound at the top level. Reach them with
-// (import …). Core primitives and core syntax remain visible, so the visible
+// (import …), which needs WithLibraryPaths — off by default, and without it
+// every import fails with werr.ErrLibraryConfiguration. The precondition is
+// identical at both levels; it bites harder at level 2, where there is no
+// ambient surface to fall back to (see WithoutAmbientBindings' first cost).
+// Core primitives and core syntax remain visible, so the visible
 // surface matches a Tiny engine's; the full profile registry is still used for
 // library environments, so a layered import such as (import (scheme r5rs))
 // resolves over the core-only baseline.
@@ -553,22 +557,43 @@ func WithStrictNamespace() EngineOption {
 // still pre-binds the core surface, and it composes with it by max — applying
 // both in either order yields this level.
 //
-// What survives is not the empty set. Core special forms are PHASE HANDLERS,
-// not bindings: they are registered by the compiler, live in frames sealed
-// SealKindHandler that ordinary value resolution never sees, and never come
-// from a registry — so withholding the registry cannot withhold them. The floor
-// is therefore lambda, if, quote, define, begin, set!, let/let*/letrec,
-// define-syntax, syntax-rules, cond-expand, case-lambda, define-library, and
-// import. This option is strict for PROCEDURES AND DERIVED SYNTAX; do not read
-// it as "R7RS-strict" unqualified.
+// What survives is not the empty set: exactly 41 names, whatever the profile,
+// pinned name-by-name by TestNoAmbientBindingsBoundSet. Two mechanisms put them
+// there. 38 are PHASE HANDLERS, not bindings: registered by the compiler, living
+// in frames sealed SealKindHandler that ordinary value resolution never sees, and
+// never sourced from a registry — so withholding the registry cannot withhold
+// them. The other three (unless, guard, guard-aux) are syntax-rules definitions
+// in core.LateBootstrapMacroSource, which LoadBootstrapCore loads
+// unconditionally rather than through Registry.MacroSources(); that, and not any
+// phase-handler property, is why when and unless land on opposite sides of this
+// floor.
 //
-// One class sits between the two: a phase handler whose expansion CALLS a
-// primitive resolves and then fails at the call. quasiquote is the one to know
-// — a constant template such as `(1 2) works, but the moment an unquote appears
-// the expansion emits list and dies. unless (needs not) and guard (needs
-// call-with-exit) are the same shape. Everything else the registry supplies —
-// the core primitives and the bootstrap macros cond, case, when, and, or, do,
-// define-record-type, let-values, delay, parameterize — is simply unbound.
+// BOUND and USABLE are different partitions, and they cross in both directions:
+// syntax-rules is usable and is NOT one of the 41 (define-syntax recognizes it
+// inline), while guard is one of the 41 and is unusable. The usability
+// partition, by shape here and name-by-name in docs/embedding/api-design.md:
+//
+//   - Usable: the value forms (lambda, if, quote, define, begin, set!, the
+//     let and define-syntax families, cond-expand, case-lambda), the library
+//     forms (define-library, library, import), the expand-phase family (syntax,
+//     syntax-case, er-macro-transformer, begin-for-syntax, define-for-syntax,
+//     eval-when, meta), plus syntax-error and with-continuation-mark. A CONSTANT
+//     quasiquote or quasisyntax template belongs here too.
+//   - Resolves, unusable: a form whose expansion CALLS a primitive resolves and
+//     then fails at the call. quasiquote is the one to know — `(1 2) works, but
+//     the moment an unquote appears the expansion emits list and dies.
+//     quasisyntax with an unsyntax (needs datum->syntax), with-syntax (list),
+//     unless (not) and guard (call-with-exit) are the same shape.
+//   - Auxiliary keywords, bound so the expander recognizes them positionally and
+//     an error standalone: unquote, unsyntax, their -splicing forms, export,
+//     guard-aux, with-binding-scope.
+//   - include and include-ci resolve, and want a FileResolver rather than a
+//     registry — a different axis from this option.
+//
+// Everything else the registry supplies — the core primitives and the bootstrap
+// macros cond, case, when, and, or, do, define-record-type, let-values, delay,
+// parameterize — is simply unbound. This option is strict for PROCEDURES AND
+// DERIVED SYNTAX; do not read it as "R7RS-strict" unqualified.
 //
 // Nothing is withheld permanently: import is a phase handler, and REGISTERED is
 // untouched, so a program reaches any part of the profile it wants by importing
@@ -577,8 +602,19 @@ func WithStrictNamespace() EngineOption {
 // explicitness property (a CI or portability-audit property), not confinement;
 // the profile remains the security boundary at every level.
 //
-// Two costs, both real:
+// Three costs, all real:
 //
+//   - The import route exists only if WithLibraryPaths was called. It is off by
+//     default, so WithProfile(Small) plus this option alone — the shortest
+//     spelling of level 2, and the one the ladder table shows — constructs
+//     without error and then fails every (import …) with
+//     werr.ErrLibraryConfiguration. That is confinement, reached by the most
+//     likely invocation rather than by the two exotic ones below, and the
+//     configuration is silent even though the failure is loud. Reaching the
+//     stdlib further needs a resolver that serves it (WithSourceFS(stdlib.FS)).
+//     The pair is deliberately not rejected at construction: Engine.Define and
+//     Engine.RegisterPrimitive make "empty top level, no library system, host
+//     supplies every binding from Go" a legitimate DSL host.
 //   - A library environment is engine-sized, so every import is expensive:
 //     (import (scheme base)) alone measures ~9.4 ms, against ~3.9 ms to build a
 //     whole Small engine. A program on this level pays that at least once, and

@@ -74,7 +74,7 @@ var SafeExtension = registry.NewDescribedExtension("all-safe",
 	"Safe subset: records, promises, strings, characters (no filesystem, eval, or system).",
 	SafeBuilder.AddToRegistry)
 
-func addRecords(r *registry.Registry) error {
+func addRecords(r *registry.PrimitiveRegistry) error {
 	// TODO(contracts): *values.Record and *values.RecordType have no
 	// ValueType enum entries, so record-* primitives fall back to TypeAny
 	// for those positions. Impl-level RequireArg still rejects mismatches.
@@ -116,7 +116,7 @@ func addRecords(r *registry.Registry) error {
 	return nil
 }
 
-func addPromises(r *registry.Registry) error {
+func addPromises(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "promise?", ParamCount: 1, Impl: PrimPromiseQ,
 			Doc: "Returns #t if OBJ is a promise (created by delay, delay-force, or make-promise).\n\nExamples:\n  (promise? (delay 42))      => #t\n  (promise? (make-promise 1)) => #t\n  (promise? 42)              => #f", ParamNames: []string{"obj"}, Category: "promises",
@@ -137,7 +137,7 @@ func addPromises(r *registry.Registry) error {
 	return nil
 }
 
-func addMoreStrings(r *registry.Registry) error {
+func addMoreStrings(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-copy!", ParamCount: 4, IsVariadic: true, Impl: PrimStringCopyTo,
 			Doc: "Copies characters from the from string into TO starting at position AT.\n\nExamples:\n  (let ((s (string-copy \"abcde\"))) (string-copy! s 1 \"xy\") s)  => \"axyde\"", ParamNames: []string{"to", "at", "from", "start"}, Category: "strings",
@@ -189,7 +189,7 @@ func addMoreStrings(r *registry.Registry) error {
 	return nil
 }
 
-func addMoreChars(r *registry.Registry) error {
+func addMoreChars(r *registry.PrimitiveRegistry) error {
 	// Case-insensitive character comparisons (generated from charCiCompareSpecs table)
 	charCiPrims := make([]registry.PrimitiveSpec, len(charCiCompareSpecs))
 	for i, spec := range charCiCompareSpecs {

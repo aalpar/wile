@@ -246,9 +246,13 @@ this family must never reverse.
 | 2 | nothing | `WithoutAmbientBindings()` |
 
 What is **registered** is identical at all three, so nothing is withheld
-permanently: a program reaches the whole profile by importing it. These options
-buy *explicitness* — proof that every dependency is declared in source — not
-confinement. The profile and the authorizer are the capability boundary.
+permanently: a program reaches the whole profile by importing it. That route is
+itself opt-in at both levels — `WithLibraryPaths()` enables the library system
+and is off by default, so until it is called every `(import …)` fails with
+`werr.ErrLibraryConfiguration` (see *The import route is opt-in* under level 2,
+where the omission bites hardest). Given it, these options buy *explicitness* —
+proof that every dependency is declared in source — not confinement. The profile
+and the authorizer are the capability boundary.
 
 #### Level 1 — core-only
 
@@ -284,27 +288,62 @@ eng.EvalMultiple(ctx, "(car '(1 2))")                    // error: no binding "c
 eng.EvalMultiple(ctx, "(import (scheme base)) (car '(1 2))") // 1
 ```
 
-**The floor is not the empty set, and it is not R7RS-strict.** Core special forms
-are *phase handlers*: registered by the compiler, held in frames that ordinary
-value resolution never consults, and never sourced from a registry — so
-withholding the registry cannot withhold them. The partition is three-way:
+The last two options are not decoration. Drop `WithLibraryPaths()` and the third
+line fails instead of returning `1`; see *The import route is opt-in* below.
+
+**The floor is not the empty set, and it is not R7RS-strict.** `Engine.BoundNames()`
+reports exactly **41** names at level 2 — the same 41 on every profile, since the
+visible surface is bound from an empty registry either way. That set is the
+complete inventory of what is *bound*, and `TestNoAmbientBindingsBoundSet` pins
+it name by name.
+
+Two mechanisms put them there. 38 are *phase handlers*: registered by the
+compiler, held in frames that ordinary value resolution never consults, never
+sourced from a registry — so withholding the registry cannot withhold them. The
+other three, `unless` `guard` `guard-aux`, are `syntax-rules` definitions in
+`core.LateBootstrapMacroSource`, which `LoadBootstrapCore` loads
+**unconditionally** instead of through `Registry.MacroSources()`. They are the
+only registry-borne macros that reach an empty visible surface today.
+
+**Bound and usable are different partitions, and they cross both ways.**
+`syntax-rules` is usable and is *not* one of the 41: `define-syntax` recognizes it
+inline rather than resolving it, so it never appears in `BoundNames()`. `guard` is
+one of the 41 and is unusable. Sorting the 41 (plus `syntax-rules`) by usability:
 
 | | Members | Why |
 |---|---|---|
-| **Usable** | `lambda` `if` `quote` `define` `begin` `set!` `let` `let*` `letrec` `letrec*` named `let` `define-syntax` `let-syntax` `letrec-syntax` `syntax-rules` `cond-expand` `case-lambda` `define-library` `import` | phase handler whose codegen emits no call |
-| **Resolves, unusable** | `quasiquote` *with* an `unquote` (emits `list`), `unless` (needs `not`), `guard` (needs `call-with-exit`) | phase handler, but its expansion calls a primitive nothing bound |
+| **Usable** | `lambda` `if` `quote` `define` `begin` `set!` `let` `let*` `letrec` `letrec*` named `let` `define-syntax` `let-syntax` `letrec-syntax` `syntax-rules` `cond-expand` `case-lambda` `define-library` `library` `import` `syntax` `syntax-case` (inside a `lambda` transformer) `er-macro-transformer` `begin-for-syntax` `define-for-syntax` `eval-when` `meta` `syntax-error` `with-continuation-mark`, and `quasiquote`/`quasisyntax` over a **constant** template | codegen emits no call |
+| **Resolves, unusable** | `quasiquote` *with* an `unquote` (emits `list`), `quasisyntax` *with* an `unsyntax` (needs `datum->syntax`), `with-syntax` (needs `list`), `unless` (needs `not`), `guard` (needs `call-with-exit`) | expansion calls a primitive nothing bound |
+| **Resolves, wants a resolver** | `include` `include-ci` | reads a file; what it needs is a `FileResolver`, not the registry — a different axis from this option |
+| **Auxiliary keywords** | `unquote` `unquote-splicing` `unsyntax` `unsyntax-splicing` `export` `guard-aux` `with-binding-scope` | bound so the expander recognizes them positionally inside another form; an error standalone |
 | **Unresolved** | `cond` `case` `when` `and` `or` `do` `define-record-type` `let-values` `let*-values` `define-values` `delay` `parameterize`, and every primitive | bootstrap macro or primitive; both come from the registry |
 
-A constant quasiquote template such as `` `(1 2) `` works; add a comma and it
-fails. `when` and `unless` land on **opposite** sides — `when` is a bootstrap
-macro, `unless` is a phase handler that expands through `not`.
+`when` and `unless` land on **opposite** sides, and the discriminator is
+which *file* defines them, not what kind of form they are: `when` lives in
+`bootstrap_macros.scm` (carried by `Registry.MacroSources()`, so an empty registry
+drops it), `unless` in `bootstrap_macros_late.scm` (loaded unconditionally, so it
+survives).
 
 So the option is strict for *procedures and derived syntax*. Reaching a usable
 R7RS surface takes one `(import (scheme base))`, which restores the derived syntax
 and the procedures alike.
 
-**Two costs, both real:**
+**Three costs, all real:**
 
+- *The import route is opt-in.* `WithLibraryPaths()` is what enables the library
+  system at all; it is off by default. So `WithProfile(Small) +
+  WithoutAmbientBindings()` — the shortest spelling of level 2, and exactly what
+  the ladder table above shows — builds an engine with **no error**, and then
+  fails every `(import …)` with `werr.ErrLibraryConfiguration` ("no library
+  registry configured"). That is confinement, arrived at by the likeliest
+  invocation rather than by the two edge cases below; the failure is loud but the
+  configuration is silent, and a reader who believed "nothing is withheld
+  permanently" will not reach for an import at all. Reaching the *stdlib*
+  additionally needs a resolver that serves it (`WithSourceFS(stdlib.FS)`) — both
+  options appear in the example above, and both are load-bearing. The
+  combination is deliberately **not** rejected at construction: `Engine.Define`
+  and `Engine.RegisterPrimitive` make "empty top level, no library system, host
+  injects every binding from Go" a legitimate DSL-host configuration.
 - *Per-import latency.* A library environment is engine-sized, so imports are not
   cheap: `(import (scheme base))` measures **9.38 ms**, against **3.93 ms /
   1.20 MB heap** to build a whole `Small` engine — one import is ~2.4× an engine's
@@ -348,7 +387,7 @@ in each:
 | Where | Form |
 |---|---|
 | Embedding | `WithStrictNamespace()` / `WithoutAmbientBindings()` |
-| CLI | `wile --strict=core` / `wile --strict=no-bindings` (bare `--strict` means `core`) |
+| CLI | `wile --strict core` / `wile --strict=no-bindings` (the value is required) |
 | Scheme | `(environment '(wile <profile> core))` / `(environment '(wile <profile> no-bindings))` |
 
 The Scheme form's strictness element is optional and orthogonal to the profile

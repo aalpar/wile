@@ -288,9 +288,9 @@ func PrimProcedureDocumentation(mc machine.CallContext) error {
 	return nil
 }
 
-// registryFromContext extracts the *registry.Registry from the MachineContext's
+// registryFromContext extracts the *registry.PrimitiveRegistry from the MachineContext's
 // namespace. Returns nil if unavailable.
-func registryFromContext(mc machine.CallContext) *registry.Registry {
+func registryFromContext(mc machine.CallContext) *registry.PrimitiveRegistry {
 	ns := mc.EnvironmentFrame().Namespace()
 	if ns == nil {
 		return nil
@@ -299,7 +299,7 @@ func registryFromContext(mc machine.CallContext) *registry.Registry {
 	if regAny == nil {
 		return nil
 	}
-	reg, ok := regAny.(*registry.Registry)
+	reg, ok := regAny.(*registry.PrimitiveRegistry)
 	if !ok {
 		return nil
 	}

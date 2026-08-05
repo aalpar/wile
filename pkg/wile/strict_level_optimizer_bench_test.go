@@ -27,7 +27,10 @@ import (
 // treats Imported as standing evidence ("imported primitives are already
 // immutable") and stampImportedInlineHOF covers the inline-HOF path — so level 2
 // shifts the evidence SOURCE from ambient registration to import rather than
-// losing it. That claim was unverified when written; these arms verify it.
+// losing it. That claim was unverified when written; these arms verify its
+// Imported⇒IsStable half. They do NOT verify the stampImportedInlineHOF half —
+// see the mapSum paragraph, which found that half is not reached from here and
+// does not hold for the sealed-base HOFs.
 //
 // Both arms run identical code over identically-spelled bindings. They differ only
 // in where +, -, <= and map came from:
@@ -35,26 +38,63 @@ import (
 //	Level0  ambient, stamped Stable at registration
 //	Level2  imported by (import (scheme base)), stamped Stable at import
 //
-// fib is the arithmetic/self-call arm; mapSum adds the inline-HOF path, which
-// travels by a different stamp (stampImportedInlineHOF) and would degrade
-// independently of the arithmetic one.
+// fib is the arithmetic/self-call arm: its <=, - and + become promoted ops
+// (NumLe, Sub, AddTail) only while their bindings are stamped Stable, so a lost
+// stamp moves it back onto the generic apply path.
+//
+// mapSum was written to add the inline-HOF path on the theory that it travels by
+// a different stamp (stampImportedInlineHOF). Measurement says it does not reach
+// that path at all: stampImportedInlineHOF stamps only the IMPORT-GATED HOFs
+// (fold, fold-right), while map is a sealed-base HOF stamped by StampInlineHOFs,
+// and the preamble import rebinds map to a fresh imported binding that neither
+// seam stamps. So map's loop is left un-inlined in BOTH arms — verified by
+// disassembly, which shows PushCachedBinding + PullApply rather than the inlined
+// null?/car/cdr loop. What this arm actually measures is that the generic apply
+// path and the resolution of + and map are unchanged; the inline-HOF stamp is
+// NOT under test here, and reaching it would need fold or fold-right from
+// (srfi 1). Kept because it is a real second shape, not because it probes what
+// its name suggests.
 //
 // Steady-state execution only: the preamble import runs during setup, so the
 // ~9.4 ms per-import tax is deliberately NOT in the measured region. That tax is
 // real and documented on WithoutAmbientBindings; it is a startup cost, and mixing
 // it in here would swamp the per-op signal these arms exist to read.
 //
-//	go test ./pkg/wile/ -run '^$' -bench 'StrictLevelOpt' -benchmem -count=8
+// Collect the two arms INTERLEAVED, not as two blocks of eight. Go runs a -count=8
+// benchmark as eight consecutive repeats of each function, so every Level0 sample
+// predates every Level2 sample and any drift in machine load lands entirely on the
+// level-2 arm. Measured both ways below: the blocked form reported a spurious
+// +2.67%/+11.64%, the interleaved form on the same binary and the same machine
+// reported no difference. Build the comparison by alternating single runs:
 //
-// Measured 2026-08-04, macOS/arm64 (M4 Max), count=8, benchstat: no significant
-// time difference on either arm (fib 2.718m → 2.712m, p=0.798; map-sum 4.900µ →
-// 4.944µ, p=0.225; geomean +0.35%), and B/op and allocs/op are IDENTICAL —
-// 10.44Ki/81 and 6.520Ki/71, all samples equal. The allocation identity is the
-// load-bearing half: losing a Stable stamp would move the shape (PullApply in
-// place of a promoted op, a non-inlined HOF), which shows up in allocs/op and
-// does not hide inside timing noise. The ns/op deltas alone would not settle it —
-// per memory/interleaved-ab-required-for-vm-microdeltas.md a same-binary
-// sequential comparison cannot resolve sub-1.5% VM deltas.
+//	go test -c -o /tmp/wile.test ./pkg/wile/
+//	for i in $(seq 8); do /tmp/wile.test -test.run '^$' \
+//	    -test.bench StrictLevelOpt -test.benchmem -test.count=1; done
+//
+// Measured 2026-08-04, macOS/arm64 (M4 Max), n=8 interleaved, benchstat:
+//
+//   - sec/op: no significant difference on either arm (fib 2.769m → 2.762m,
+//     p=0.505; map-sum 5.220µ → 5.387µ, p=0.574; geomean +1.46%). Inconclusive by
+//     construction, not merely by p-value: per
+//     memory/interleaved-ab-required-for-vm-microdeltas.md a same-binary
+//     comparison cannot resolve sub-1.5% VM deltas, and this geomean is inside
+//     that band.
+//   - allocs/op: EXACTLY equal in every sample of both arms, 81 on fib and 71 on
+//     map-sum (benchstat footnotes both rows "all samples are equal").
+//   - B/op: equal on map-sum in every sample (6.520Ki). On fib it is equal only
+//     after benchstat's rounding to 10.44Ki; the raw samples jitter WITHIN a
+//     single arm, 10693–10711 B/op, and which arm jitters varies between runs.
+//     So fib's B/op agreement is not sample-level identity and carries no weight.
+//
+// allocs/op is therefore the load-bearing metric, and it is the right one: losing
+// a Stable stamp changes the emitted shape (PullApply in place of a promoted op),
+// which shows up as a whole-number change in allocation COUNT and does not hide
+// inside timing noise, whereas B/op is perturbed by allocation SIZE effects that
+// vary run to run at 81 allocs held constant.
+//
+// TestStrictLevelOptSameShape (strict_level_optimizer_test.go) asserts the same
+// property directly off the disassembly, which is what CI actually runs; these
+// benchmarks additionally show that equal shape costs equal time.
 
 const benchOptFib = `(define (fib n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))`
 
@@ -66,8 +106,11 @@ const benchOptMapSum = `(define (map-sum xs) (apply + (map (lambda (x) (* x 2)) 
 // arms differ ONLY in whether the ambient copy was there first. Skipping the
 // import on the level-0 arm would leave the two running against different binding
 // objects for reasons unrelated to the stamp under test.
-func newStrictLevelEngine(b *testing.B, noAmbient bool, setup string) (*Engine, context.Context) {
-	b.Helper()
+// It takes testing.TB so the shape test in strict_level_optimizer_test.go builds
+// its arms through this exact function: a test that constructed its engines
+// separately would not be pinning the claim these benchmarks make.
+func newStrictLevelEngine(tb testing.TB, noAmbient bool, setup string) (*Engine, context.Context) {
+	tb.Helper()
 	ctx := context.Background()
 	opts := []EngineOption{WithProfile(Small), WithSourceFS(stdlib.FS), WithLibraryPaths()}
 	if noAmbient {
@@ -75,11 +118,11 @@ func newStrictLevelEngine(b *testing.B, noAmbient bool, setup string) (*Engine, 
 	}
 	eng, err := NewEngine(ctx, opts...)
 	if err != nil {
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
 	_, err = eng.EvalMultiple(ctx, "(import (scheme base))\n"+setup)
 	if err != nil {
-		b.Fatal(err)
+		tb.Fatal(err)
 	}
 	return eng, ctx
 }

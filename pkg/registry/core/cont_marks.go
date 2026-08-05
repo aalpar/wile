@@ -20,7 +20,7 @@ import (
 )
 
 //nolint:govet
-func addContMarks(r *registry.Registry) error {
+func addContMarks(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// Continuation-mark values are opaque; there is no ValueType enum for
 		// mark sets or prompt tags, so ReturnType is TypeAny.

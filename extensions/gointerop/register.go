@@ -31,7 +31,7 @@ var Builder = registry.NewRegistryBuilder(addRWMutex, addOnce, addAtomic)
 // AddToRegistry registers all Go interop primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addRWMutex(r *registry.Registry) error {
+func addRWMutex(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-rw-mutex", ParamCount: 1, IsVariadic: true, Impl: PrimMakeRWMutex,
 			Doc: "Creates a new read-write mutex. Optional NAME for debugging.", ParamNames: []string{"name"}, Category: "rwmutex",
@@ -68,7 +68,7 @@ func addRWMutex(r *registry.Registry) error {
 	return nil
 }
 
-func addOnce(r *registry.Registry) error {
+func addOnce(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-once", Impl: PrimMakeOnce,
 			Doc: "Creates a new once object for one-time initialization.", Category: "once",
@@ -89,7 +89,7 @@ func addOnce(r *registry.Registry) error {
 	return nil
 }
 
-func addAtomic(r *registry.Registry) error {
+func addAtomic(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-atomic", ParamCount: 1, Impl: PrimMakeAtomic,
 			Doc: "Creates a new atomic value box initialized with VALUE. Provides lock-free concurrent access.", ParamNames: []string{"value"}, Category: "atomic",

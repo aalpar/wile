@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addVectors(r *registry.Registry) error {
+func addVectors(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-vector", ParamCount: 2, IsVariadic: true, Impl: PrimMakeVector,
 			Doc: "Returns a vector of length K. If FILL is given, each element is FILL; otherwise unspecified.\n\nExamples:\n  (make-vector 3 0)    => #(0 0 0)\n  (make-vector 3 'a)   => #(a a a)", ParamNames: []string{"k", "fill"}, Category: "vectors",

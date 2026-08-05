@@ -30,7 +30,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all envvars primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "get-environment-variable", ParamCount: 1, Impl: PrimGetEnvironmentVariable,
 			Doc: "Returns the value of the named environment variable as a string, or #f if not set.", ParamNames: []string{"name"}, Category: "envvars",

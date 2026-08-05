@@ -333,8 +333,9 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 		return nil, true, err
 	}
 	// The strictness element is optional, so its absence is the empty list rather
-	// than an error. "" is the absent case all the way down: ParseStrictLevel maps
-	// it to StrictOff, so no caller special-cases it.
+	// than an error, and "" is how that absence travels downstream: ParseStrictLevel
+	// maps it to StrictOff, so no caller special-cases it. That in-band encoding is
+	// only safe because the present-but-empty spelling is refused below.
 	strictName := ""
 	if !values.IsEmptyList(restAfterName) {
 		strictSym, restAfterStrict, strictErr := values.UnconsTyped[*values.Symbol](
@@ -345,6 +346,15 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 		if !values.IsEmptyList(restAfterStrict) {
 			return nil, true, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 				"environment: (wile %s ...) takes a profile name and an optional strictness", nameSym.Key)
+		}
+		// || is a legal zero-length symbol, so a PRESENT element can carry the
+		// absent-marker. Refuse it while presence is still known, rather than let it
+		// reach ParseStrictLevel as an absent argument: these levels only ever
+		// narrow, so an unrecognized spelling must fail rather than silently select
+		// the widest surface.
+		if strictSym.Key == "" {
+			return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"environment: (wile %s ...) strictness must be a level name (want \"core\" or \"no-bindings\"), not the empty symbol", nameSym.Key)
 		}
 		strictName = strictSym.Key
 	}

@@ -23,7 +23,7 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// ApplyOption configures the behavior of Registry.Apply. Options are applied
+// ApplyOption configures the behavior of PrimitiveRegistry.Apply. Options are applied
 // in order; later options override earlier ones.
 type ApplyOption func(*applyConfig)
 
@@ -51,7 +51,7 @@ func WithContractEnforcement() ApplyOption {
 // it is bound ambiently, so the frame-reclaim classifier may trust calls to it as
 // non-rebindable without an explicit (import (scheme base)). Imported primitives
 // are already immutable; this closes the ambient-registration path, where
-// Registry.Apply binds primitives directly into the base namespace without an
+// PrimitiveRegistry.Apply binds primitives directly into the base namespace without an
 // Imported flag (Phase 2 finding #1).
 //
 // Scope is the capture-safe set, which must match CaptureSafe (stamped above from
@@ -87,7 +87,7 @@ func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 // Apply materializes registry contents into an environment, in order: compile-time
 // bindings, runtime/expand-time primitives, global values, per-engine namespace
 // initializers, then init functions.
-func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
+func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
 	var cfg applyConfig
 	for _, opt := range opts {
 		opt(&cfg)
@@ -320,7 +320,7 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 // Doc and DocOnly entries land here). The earlier two-source merge — `docs` slice
 // + bindingSpecs casted via DocEntry(spec) — collapsed when DocEntry was unified
 // into BindingSpec.
-func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
+func (p *PrimitiveRegistry) ApplyDocs(env *environment.EnvironmentFrame) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 

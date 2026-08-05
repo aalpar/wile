@@ -20,7 +20,7 @@
 //
 // # Key Types
 //
-//   - [Registry]: central store for primitive registrations
+//   - [PrimitiveRegistry]: central store for primitive registrations
 //   - [PrimitiveSpec]: defines a single primitive (name, params, implementation)
 //   - [Phase]: bit flags controlling environment placement (Runtime, Expand, Compile)
 //   - [Extension]: interface for modular primitive packages

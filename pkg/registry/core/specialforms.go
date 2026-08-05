@@ -461,7 +461,7 @@ var macroDocs = []nameDoc{
 			"Category: definitions"},
 }
 
-func addSpecialForms(r *registry.Registry) error {
+func addSpecialForms(r *registry.PrimitiveRegistry) error {
 	specs := make([]registry.BindingSpec, len(compileTimeBindingSpecs))
 	for i, b := range compileTimeBindingSpecs {
 		specs[i] = registry.BindingSpec{Name: b.Name, Doc: b.Doc}

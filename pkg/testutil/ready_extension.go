@@ -32,7 +32,7 @@ import (
 func ReadyExtension() (registry.Extension, <-chan struct{}) {
 	ready := make(chan struct{})
 	var once sync.Once
-	ext := registry.NewExtension("test-ready", func(r *registry.Registry) error {
+	ext := registry.NewExtension("test-ready", func(r *registry.PrimitiveRegistry) error {
 		r.AddPrimitive(registry.PrimitiveSpec{
 			Name:       "test-ready!",
 			ParamCount: 0,

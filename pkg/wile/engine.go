@@ -63,7 +63,7 @@ const DefaultMaxCallDepth int = 10000
 type Engine struct {
 	namespace               *environment.Namespace
 	env                     *environment.EnvironmentFrame
-	registry                *registry.Registry
+	registry                *registry.PrimitiveRegistry
 	debugger                *Debugger
 	lastCounters            machine.VMCounters
 	closers                 []registry.Closeable
@@ -256,7 +256,7 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 // Tiny engine produces, so a strict top level equals the Tiny visible surface. The
 // engine's full (profile) registry is still used for library environments and synthetic
 // library registration, so (import …) reaches the profile's extensions.
-func coreOnlyRegistry() (*registry.Registry, error) {
+func coreOnlyRegistry() (*registry.PrimitiveRegistry, error) {
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
 	if err != nil {
@@ -349,7 +349,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	var ns *environment.Namespace
-	var reg *registry.Registry
+	var reg *registry.PrimitiveRegistry
 	var snapshots []extSnapshot
 	var closers []registry.Closeable
 
@@ -372,7 +372,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 				"WithNamespace: namespace has no registry — use wile.NewNamespace() or SetRegistry()")
 		}
 		var ok bool
-		reg, ok = regAny.(*registry.Registry)
+		reg, ok = regAny.(*registry.PrimitiveRegistry)
 		if !ok {
 			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
 				"WithNamespace: namespace registry is %T, expected *registry.Registry", regAny)
@@ -383,7 +383,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		if err != nil {
 			return nil, err
 		}
-		reg = ns.Registry().(*registry.Registry)
+		reg = ns.Registry().(*registry.PrimitiveRegistry)
 	}
 
 	env := ns.Runtime()
@@ -437,7 +437,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 // buildRegistry creates and populates the registry from engine configuration.
 // It registers extensions (tracking primitive index ranges for library creation)
 // and collects closeable extensions for Engine.Close().
-func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []registry.Closeable, error) {
+func buildRegistry(cfg *engineConfig) (*registry.PrimitiveRegistry, []extSnapshot, []registry.Closeable, error) {
 	reg := cfg.registry
 	if reg == nil {
 		reg = registry.NewRegistry()
@@ -479,7 +479,7 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 // import observer, extension libraries, and the library environment factory.
 // applyOpts propagates registry.Apply toggles (e.g., contract enforcement)
 // into child library environments so they mirror the parent's configuration.
-func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption, level strictLevel) error {
+func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.PrimitiveRegistry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption, level strictLevel) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -893,7 +893,7 @@ func (p *Engine) SetDebugger(d *Debugger) {
 // WithStrictNamespace and a dialect's PrimitiveRemover both narrow the visible top
 // level below it, and this clone still lists what they removed. For the surface
 // this engine actually has, use [Engine.EffectiveRegistry] and [Engine.Forms].
-func (p *Engine) Registry() *registry.Registry {
+func (p *Engine) Registry() *registry.PrimitiveRegistry {
 	return p.registry.Clone()
 }
 
@@ -910,9 +910,9 @@ func (p *Engine) Registry() *registry.Registry {
 // The full registry still backs library environments and imports, so a narrowed
 // primitive may remain reachable through (import …) — this reports the flat top
 // level, not total reachability.
-func (p *Engine) EffectiveRegistry() *registry.Registry {
+func (p *Engine) EffectiveRegistry() *registry.PrimitiveRegistry {
 	regAny := p.namespace.EffectiveRegistry()
-	reg, ok := regAny.(*registry.Registry)
+	reg, ok := regAny.(*registry.PrimitiveRegistry)
 	if !ok {
 		// No narrowing was recorded (a WithNamespace caller built the namespace
 		// without one, or nothing narrowed): the base is the effective surface.
@@ -970,7 +970,7 @@ func (p *Engine) AvailableLibraries(ctx context.Context) ([]LibraryName, error) 
 
 // registerExtensionLibraries registers each extension as a synthetic R7RS library
 // so Scheme code can selectively import extension primitives via (import (wile math)) etc.
-func registerExtensionLibraries(reg *registry.Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, snapshots []extSnapshot) error {
+func registerExtensionLibraries(reg *registry.PrimitiveRegistry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, snapshots []extSnapshot) error {
 	for _, snap := range snapshots {
 		names := reg.RuntimePrimitiveNamesRange(snap.startIndex, snap.endIndex)
 		if len(names) == 0 {
@@ -1014,7 +1014,7 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // (into macro bindings and as doc-only entries for Scheme-defined procedures).
 // Steps that can fail wrap errors with ErrEngineInit. Additional registry.ApplyOption
 // values are forwarded to the registry Apply call.
-func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, opts ...registry.ApplyOption) error {
+func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.PrimitiveRegistry, opts ...registry.ApplyOption) error {
 	// Run the ordering-sensitive sequence shared with internal/bootstrap: apply the
 	// registry, register phase handlers, then load bootstrap macros -> procedures ->
 	// late macros. It returns the runtime target frame (sealed base for a
@@ -1239,7 +1239,7 @@ func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
 // registers them as doc-only entries in the primitive registry. This makes
 // Scheme-defined procedures from imported libraries visible to ,topic,
 // ,apropos, and ,doc without requiring a full environment rescan.
-func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *registry.Registry) func(compilation.LibraryImportEvent) {
+func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *registry.PrimitiveRegistry) func(compilation.LibraryImportEvent) {
 	return func(evt compilation.LibraryImportEvent) {
 		lib := libReg.Lookup(evt.Library)
 		if lib == nil {
@@ -1293,7 +1293,7 @@ func docOnlySpec(name string, parsed docparse.DocInfo) registry.PrimitiveSpec {
 
 // registerSchemeDocstrings walks runtime bindings and registers documentation-only
 // entries in the registry for Scheme-defined procedures with structured docstrings.
-func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.Registry) {
+func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.PrimitiveRegistry) {
 	ns := env.Namespace()
 	if ns == nil {
 		return

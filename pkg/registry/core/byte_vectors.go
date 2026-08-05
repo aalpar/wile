@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addBytevectors(r *registry.Registry) error {
+func addBytevectors(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-bytevector", ParamCount: 2, IsVariadic: true, Impl: PrimMakeBytevector,
 			Doc: "Returns a bytevector of length K. If BYTE is given, each element is BYTE (0-255); otherwise 0.\n\nExamples:\n  (make-bytevector 3 0)    => #u8(0 0 0)\n  (make-bytevector 3 255)  => #u8(255 255 255)", ParamNames: []string{"k", "byte"}, Category: "bytevectors",

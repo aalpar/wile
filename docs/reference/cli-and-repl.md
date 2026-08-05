@@ -26,6 +26,7 @@ as `--file -`.
 | `-L`  | `--library-path` | string     | Library search paths (colon-separated) |
 |       | `--check`        | bool       | Parse and compile without executing; report errors and exit |
 | `-q`  | `--quiet`        | bool       | Suppress informational messages |
+|       | `--strict`       | string     | Narrow the visible top level: `core` binds only the core surface, `no-bindings` binds nothing (everything, `car` included, must be imported). See [Strict namespace](../embedding/api-design.md#strict-namespace) |
 | `-V`  | `--version`      | bool       | Print version and exit |
 |       | `--mcp`          | bool       | Start as MCP server on stdio |
 |       | `--mcp-timeout`  | float      | Default eval timeout in seconds for MCP mode (default: 30) |

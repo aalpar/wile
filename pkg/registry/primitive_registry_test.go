@@ -245,11 +245,11 @@ func TestRegistryBuilder_AddToRegistry(t *testing.T) {
 	c := qt.New(t)
 
 	builder := NewRegistryBuilder(
-		func(r *Registry) error {
+		func(r *PrimitiveRegistry) error {
 			r.AddPrimitive(PrimitiveSpec{Name: "prim1", Impl: noopImpl}, PhaseSetRuntime)
 			return nil
 		},
-		func(r *Registry) error {
+		func(r *PrimitiveRegistry) error {
 			r.AddPrimitive(PrimitiveSpec{Name: "prim2", Impl: noopImpl}, PhaseSetExpand)
 			return nil
 		},
@@ -265,7 +265,7 @@ func TestRegistryBuilder_Build(t *testing.T) {
 	c := qt.New(t)
 
 	builder := NewRegistryBuilder(
-		func(r *Registry) error {
+		func(r *PrimitiveRegistry) error {
 			r.AddBinding("test")
 			return nil
 		},
@@ -643,7 +643,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 	// working transparently.
 	tcs := []struct {
 		name           string
-		setup          func(r *Registry)
+		setup          func(r *PrimitiveRegistry)
 		queryName      string
 		wantInDocPrims bool     // expect to find via DocPrimitives()
 		wantFound      bool     // expect FindPrimitive / PrimitiveByName to succeed
@@ -653,7 +653,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 	}{
 		{
 			name: "doc-only entry lands in DocPrimitives with full metadata",
-			setup: func(r *Registry) {
+			setup: func(r *PrimitiveRegistry) {
 				r.AddDocOnlyPrimitive(PrimitiveSpec{
 					Name:     "map",
 					Doc:      "Apply proc to each element.",
@@ -669,7 +669,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 		},
 		{
 			name: "Go primitive takes precedence; doc-only entry is skipped at registration",
-			setup: func(r *Registry) {
+			setup: func(r *PrimitiveRegistry) {
 				r.AddPrimitive(PrimitiveSpec{
 					Name: "car",
 					Doc:  "Go car.",
@@ -688,7 +688,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 		},
 		{
 			name: "doc-only entry has zero phases (fallback lookup)",
-			setup: func(r *Registry) {
+			setup: func(r *PrimitiveRegistry) {
 				r.AddDocOnlyPrimitive(PrimitiveSpec{
 					Name:       "for-each",
 					Doc:        "Apply proc for side effects.",
@@ -735,7 +735,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 func TestExtension(t *testing.T) {
 	c := qt.New(t)
 
-	ext := NewExtension("test-ext", func(r *Registry) error {
+	ext := NewExtension("test-ext", func(r *PrimitiveRegistry) error {
 		r.AddPrimitive(PrimitiveSpec{Name: "ext-prim", Impl: noopImpl}, PhaseSetRuntime)
 		return nil
 	})
@@ -749,7 +749,7 @@ func TestExtension(t *testing.T) {
 }
 
 func TestExtensionOptions(t *testing.T) {
-	noop := func(*Registry) error {
+	noop := func(*PrimitiveRegistry) error {
 		return nil
 	}
 
@@ -825,7 +825,7 @@ func TestExtensionWithCloseInvokesFn(t *testing.T) {
 	c := qt.New(t)
 
 	var called int
-	ext := NewExtension("t", func(*Registry) error {
+	ext := NewExtension("t", func(*PrimitiveRegistry) error {
 		return nil
 	}, WithClose(func() error {
 		called++
@@ -843,7 +843,7 @@ func TestExtensionWithCloseInvokesFn(t *testing.T) {
 func TestNewDescribedExtensionForwardsToOptions(t *testing.T) {
 	c := qt.New(t)
 
-	ext := NewDescribedExtension("t", "desc", func(*Registry) error {
+	ext := NewDescribedExtension("t", "desc", func(*PrimitiveRegistry) error {
 		return nil
 	})
 
@@ -852,13 +852,13 @@ func TestNewDescribedExtensionForwardsToOptions(t *testing.T) {
 }
 
 // TestDeepCopyTouchesEverySliceField is the drift-guard for the "ADD A NEW
-// REGISTRY CATEGORY" ritual documented on the Registry type. deepCopy builds an
+// REGISTRY CATEGORY" ritual documented on the PrimitiveRegistry type. deepCopy builds an
 // explicit struct literal, so a forgotten field fails closed (nil on the copy →
 // silent data loss through Clone/Without*), while a future switch to a
 // struct-copy idiom would fail open (shared backing array → cross-engine
 // aliasing). This test catches both, generically over every slice field:
 //
-//   - completeness: every []T field on Registry must be populated below, so a
+//   - completeness: every []T field on PrimitiveRegistry must be populated below, so a
 //     newly added category forces this test (hence deepCopy) to be updated in
 //     lockstep — the ritual is no longer self-enforcing by memory alone (the
 //     doc comment count had already drifted 7→8 before this guard existed);

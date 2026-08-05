@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addLists(r *registry.Registry) error {
+func addLists(r *registry.PrimitiveRegistry) error {
 	// List construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "list", ParamCount: 1, IsVariadic: true, Impl: PrimList,

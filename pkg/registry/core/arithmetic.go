@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addArithmetic(r *registry.Registry) error {
+func addArithmetic(r *registry.PrimitiveRegistry) error {
 	// Basic arithmetic
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "+", ParamCount: 1, IsVariadic: true, Impl: PrimAdd,

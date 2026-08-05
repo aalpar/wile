@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addPairs(r *registry.Registry) error {
+func addPairs(r *registry.PrimitiveRegistry) error {
 	// Basic pair operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "cons", ParamCount: 2, Impl: PrimCons,

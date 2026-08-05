@@ -103,7 +103,7 @@ func TestExtensionAsLibrary_NoRuntimePrimitives(t *testing.T) {
 	ctx := context.Background()
 
 	// Extension that registers no runtime primitives (compile-time only binding).
-	compileOnly := registry.NewExtension("compileonly", func(r *registry.Registry) error {
+	compileOnly := registry.NewExtension("compileonly", func(r *registry.PrimitiveRegistry) error {
 		r.AddBinding("my-special-form")
 		return nil
 	})
@@ -128,7 +128,7 @@ func (m *mockLibraryNamerExtension) Name() string {
 	return "custom"
 }
 
-func (m *mockLibraryNamerExtension) AddToRegistry(r *registry.Registry) error {
+func (m *mockLibraryNamerExtension) AddToRegistry(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "custom-fn",
 		ParamCount: 1,

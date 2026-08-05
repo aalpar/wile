@@ -30,7 +30,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all process primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *values.Process has no ValueType enum entry, so
 		// process-* primitives use TypeAny for the process argument; the

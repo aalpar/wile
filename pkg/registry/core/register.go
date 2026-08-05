@@ -34,7 +34,7 @@ var Extension = registry.NewExtension("core", AddToRegistry)
 //
 // If the primitive invokes a Scheme procedure (its Impl reaches ApplyCallable or
 // runs a sub-context), it MUST set InvokesProcedure:true on its PrimitiveSpec —
-// see the field doc in registry/registry.go. TestInvokesProcedureStaticGuard
+// see the field doc in registry/primitive_registry.go. TestInvokesProcedureStaticGuard
 // (pkg/wile) fails CI if the annotation is missing.
 var Builder = registry.NewRegistryBuilder(
 	addSpecialForms,

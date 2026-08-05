@@ -110,7 +110,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all iotest primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{
 			Name: "make-failing-unread-port", ParamCount: 1, Impl: PrimMakeFailingUnreadPort,

@@ -30,7 +30,7 @@ var Builder = registry.NewRegistryBuilder(addThreads, addMutexes, addConditionVa
 // AddToRegistry registers all threading primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addThreads(r *registry.Registry) error {
+func addThreads(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *values.Thread, *values.Mutex, *values.ConditionVariable,
 		// and *values.Time have no ValueType enum entries. Those argument
@@ -99,7 +99,7 @@ func addThreads(r *registry.Registry) error {
 	return nil
 }
 
-func addMutexes(r *registry.Registry) error {
+func addMutexes(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "mutex?", ParamCount: 1, Impl: PrimMutexQ,
 			Doc: "Returns #t if OBJ is a SRFI-18 mutex.", ParamNames: []string{"obj"}, Category: "mutexes",
@@ -134,7 +134,7 @@ func addMutexes(r *registry.Registry) error {
 	return nil
 }
 
-func addConditionVariables(r *registry.Registry) error {
+func addConditionVariables(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "condition-variable?", ParamCount: 1, Impl: PrimConditionVariableQ,
 			Doc: "Returns #t if OBJ is a condition variable.", ParamNames: []string{"obj"}, Category: "condvars",
@@ -165,7 +165,7 @@ func addConditionVariables(r *registry.Registry) error {
 	return nil
 }
 
-func addTime(r *registry.Registry) error {
+func addTime(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "current-time", Impl: PrimCurrentTime,
 			Doc: "Returns the current time as a time object.", Category: "time",

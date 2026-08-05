@@ -83,7 +83,7 @@ var LateBootstrapMacroSource string
 // is the phase boundary: macros load into the mutable expand frame, procedures into the
 // immutable sealed base. Macros MUST load before procedures (procedures use let/and from
 // the macros file) — the loader enforces order, this only registers the sources.
-func addBootstrapSources(r *registry.Registry) error {
+func addBootstrapSources(r *registry.PrimitiveRegistry) error {
 	macros, err := fs.ReadFile(BootstrapFS, "bootstrap_macros.scm")
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(

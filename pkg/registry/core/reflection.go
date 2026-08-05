@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addReflection(r *registry.Registry) error {
+func addReflection(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// procedure-arity returns an integer for fixed-arity procedures, a pair
 		// (min . #f) for variadic ones, a list of such descriptors for

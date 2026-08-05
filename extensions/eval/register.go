@@ -30,7 +30,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all eval primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): syntax objects have no ValueType enum; syntax-local-*
 		// primitives use TypeAny for syntax arguments. Environment args likewise

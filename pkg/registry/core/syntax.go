@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addSyntax(r *registry.Registry) error {
+func addSyntax(r *registry.PrimitiveRegistry) error {
 	// Syntax objects (R6RS syntax-case support)
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "identifier?", ParamCount: 1, Impl: PrimIdentifierQ,

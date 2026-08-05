@@ -374,7 +374,7 @@ func TestLoadBootstrapMacros_MultipleSources(t *testing.T) {
 type brokenExtension struct{}
 
 func (p brokenExtension) Name() string { return "broken" }
-func (p brokenExtension) AddToRegistry(_ *registry.Registry) error {
+func (p brokenExtension) AddToRegistry(_ *registry.PrimitiveRegistry) error {
 	return fmt.Errorf("intentional failure")
 }
 

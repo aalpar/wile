@@ -32,7 +32,7 @@ func noopImpl(mc machine.CallContext) error {
 	return nil
 }
 
-func buildTestRegistry() *registry.Registry {
+func buildTestRegistry() *registry.PrimitiveRegistry {
 	reg := registry.NewRegistry()
 	reg.AddPrimitives([]registry.PrimitiveSpec{
 		{
@@ -65,7 +65,7 @@ func buildTestRegistry() *registry.Registry {
 
 // buildTestRegistryWithDocs creates a registry with primitives, binding specs,
 // and doc entries to test unified category/search behavior.
-func buildTestRegistryWithDocs() *registry.Registry {
+func buildTestRegistryWithDocs() *registry.PrimitiveRegistry {
 	reg := buildTestRegistry()
 
 	// Add an "apply" primitive so we can test primitive-over-binding-spec precedence.

@@ -17,22 +17,22 @@ package registry
 // RegistryBuilder collects functions that add primitives to a registry.
 //
 //nolint:revive // The name "RegistryBuilder" is intentionally explicit
-type RegistryBuilder []func(*Registry) error
+type RegistryBuilder []func(*PrimitiveRegistry) error
 
 // NewRegistryBuilder creates a builder with the given registration functions.
-func NewRegistryBuilder(funcs ...func(*Registry) error) RegistryBuilder {
+func NewRegistryBuilder(funcs ...func(*PrimitiveRegistry) error) RegistryBuilder {
 	var q RegistryBuilder
 	q.Register(funcs...)
 	return q
 }
 
 // Register adds registration functions to the builder.
-func (p *RegistryBuilder) Register(funcs ...func(*Registry) error) {
+func (p *RegistryBuilder) Register(funcs ...func(*PrimitiveRegistry) error) {
 	*p = append(*p, funcs...)
 }
 
 // AddToRegistry applies all registration functions to the registry.
-func (p RegistryBuilder) AddToRegistry(r *Registry) error {
+func (p RegistryBuilder) AddToRegistry(r *PrimitiveRegistry) error {
 	for _, f := range p {
 		err := f(r)
 		if err != nil {
@@ -43,7 +43,7 @@ func (p RegistryBuilder) AddToRegistry(r *Registry) error {
 }
 
 // Build creates a new registry and applies all registration functions.
-func (p RegistryBuilder) Build() (*Registry, error) {
+func (p RegistryBuilder) Build() (*PrimitiveRegistry, error) {
 	r := NewRegistry()
 	err := p.AddToRegistry(r)
 	if err != nil {

@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addHashtables(r *registry.Registry) error {
+func addHashtables(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-hashtable", ParamCount: 3, IsVariadic: true, Impl: PrimMakeHashtable,
 			Doc: "Returns a new empty mutable hashtable using HASH and EQUIV. Only the built-in pair (equal-hash, equal?) is supported; any other pair, including user-written procedures, raises. The optional size hint K is accepted and ignored.\n\nFor the other two R6RS key equivalences use make-eq-hashtable or make-eqv-hashtable; make-equal-hashtable is the shorter spelling of this one.\n\nExamples:\n  (hashtable-size (make-hashtable equal-hash equal?))  => 0", ParamNames: []string{"hash", "equiv", "k"}, Category: "hashtables",

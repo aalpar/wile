@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addOpaque(r *registry.Registry) error {
+func addOpaque(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "opaque?", ParamCount: 1, Impl: PrimOpaqueQ,
 			Doc: "Returns #t if OBJ is an opaque value wrapping a Go object.\n\nExamples:\n  (opaque? 42)           => #f", ParamNames: []string{"obj"}, Category: "opaque",

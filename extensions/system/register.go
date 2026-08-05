@@ -31,7 +31,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all system primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "command-line", Impl: PrimCommandLine,
 			Doc: "Returns the command-line arguments as a list of strings, including the program name.", Category: "system",

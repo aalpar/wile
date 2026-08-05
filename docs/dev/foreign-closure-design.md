@@ -264,7 +264,7 @@ growth.
 **Arity gotcha, both paths.** A variadic closure binds its rest list into slot
 `ParamCount-1`, so `ParamCount: 0` with `IsVariadic: true` makes `bindArgs`
 index `bnds[:-1]` and panic. `PrimitiveSpec.Validate`
-(`pkg/registry/registry.go`) rejects that combination, and `AddPrimitive`
+(`../../pkg/registry/primitive_registry.go`) rejects that combination, and `AddPrimitive`
 panics on a spec that fails it, so a registered primitive fails loudly at
 startup rather than on first call. A direct `NewForeignClosure(env, 0, true,
 fn)` bypasses the check and still panics on first call. A no-fixed-argument

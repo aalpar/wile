@@ -41,7 +41,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives, addMacros)
 // AddToRegistry registers all file primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "open-input-file", ParamCount: 1, Impl: PrimOpenInputFile,
 			Doc: "Opens FILENAME for textual input and returns a character input port.", ParamNames: []string{"filename"}, Category: "files",
@@ -105,7 +105,7 @@ func addPrimitives(r *registry.Registry) error {
 	return nil
 }
 
-func addMacros(r *registry.Registry) error {
+func addMacros(r *registry.PrimitiveRegistry) error {
 	r.AddMacroSource(withFileMacroSource)
 	r.AddDocumentation("with-input-from-file",
 		"Open FILENAME for input and call THUNK with current-input-port\nbound to the opened port. Closes the port when THUNK returns.\n\nCategory: files")

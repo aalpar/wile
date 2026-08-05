@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addPredicates(r *registry.Registry) error {
+func addPredicates(r *registry.PrimitiveRegistry) error {
 	// Type predicates available at both runtime and expand time
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "void?", ParamCount: 1, Impl: PrimVoidQ,

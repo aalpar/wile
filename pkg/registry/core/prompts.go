@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addPrompts(r *registry.Registry) error {
+func addPrompts(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// Prompt tags are opaque values without a dedicated ValueType enum —
 		// annotate as TypeAny.

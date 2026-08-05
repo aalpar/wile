@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addBoxes(r *registry.Registry) error {
+func addBoxes(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// box/unbox use TypeAny for both param and return since there is no
 		// TypeBox enum entry. The impl checks the concrete Box type.

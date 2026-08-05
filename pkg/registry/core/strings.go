@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addStrings(r *registry.Registry) error {
+func addStrings(r *registry.PrimitiveRegistry) error {
 	// String construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string", ParamCount: 1, IsVariadic: true, Impl: PrimString,

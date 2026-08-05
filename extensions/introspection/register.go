@@ -31,7 +31,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all introspection primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "interaction-environment", Impl: PrimInteractionEnvironment,
 			Doc: "Returns the current top-level interaction environment as an environment object.", Category: "introspection",

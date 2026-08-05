@@ -31,7 +31,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all namespace primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// TODO(contracts): *environment.Namespace has no ValueType enum
 		// entry, so namespace-* primitives fall back to TypeAny for the

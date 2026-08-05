@@ -49,7 +49,7 @@ var Builder = registry.NewRegistryBuilder(
 // AddToRegistry registers all I/O primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addReadWrite(r *registry.Registry) error {
+func addReadWrite(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		// Textual reads return a datum, character, string, or eof-object —
 		// the union can't be expressed as a single ValueType, so ReturnType
@@ -155,7 +155,7 @@ func addReadWrite(r *registry.Registry) error {
 	return nil
 }
 
-func addPorts(r *registry.Registry) error {
+func addPorts(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "port?", ParamCount: 1, Impl: PrimPortQ,
 			Doc: "Returns #t if OBJ is any kind of port (input, output, textual, or binary).\n\nExamples:\n  (port? (current-input-port))   => #t\n  (port? 42)                     => #f", ParamNames: []string{"obj"}, Category: "ports",
@@ -245,7 +245,7 @@ func addPorts(r *registry.Registry) error {
 	return nil
 }
 
-func addPortState(r *registry.Registry) error {
+func addPortState(r *registry.PrimitiveRegistry) error {
 	r.AddDocumentation("current-input-port",
 		"Parameter holding the default input port.\nParameterize to redirect standard input within a dynamic extent.\n\nCategory: ports")
 	r.AddDocumentation("current-output-port",
@@ -303,7 +303,7 @@ func registerPortParam(env *environment.EnvironmentFrame, name string, param *ma
 	return nil
 }
 
-func addPortProcs(r *registry.Registry) error {
+func addPortProcs(r *registry.PrimitiveRegistry) error {
 	r.AddMacroSource(portProcSource)
 	return nil
 }

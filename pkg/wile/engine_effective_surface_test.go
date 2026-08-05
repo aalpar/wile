@@ -25,7 +25,7 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-func hasPrimitive(reg *registry.Registry, name string) bool {
+func hasPrimitive(reg *registry.PrimitiveRegistry, name string) bool {
 	_, ok := reg.FindPrimitive(name, 0)
 	return ok
 }

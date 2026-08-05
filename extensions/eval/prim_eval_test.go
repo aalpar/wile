@@ -16,6 +16,7 @@ package eval_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -53,12 +55,21 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 // evalExpectError runs Scheme code and expects an error.
 func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
+	evalExpectErrorValue(t, engine, code)
+}
+
+// evalExpectErrorValue is evalExpectError for callers that go on to pin the
+// cause, so sibling negative cases cannot collapse into one undifferentiated
+// "it errored".
+func evalExpectErrorValue(t *testing.T, engine *wile.Engine, code string) error {
+	t.Helper()
 	expr, err := engine.Parse(context.Background(), code)
 	if err != nil {
-		return // parse error counts as expected error
+		return err // parse error counts as expected error
 	}
 	_, err = engine.Eval(context.Background(), expr)
 	qt.Assert(t, err, qt.IsNotNil)
+	return err
 }
 
 // writeTestFile creates a file with the given contents in the temp directory.
@@ -777,15 +788,41 @@ func TestEnvironment_WileProfileStrictness(t *testing.T) {
 		c.Assert(evalIn("(wile small)", "'(+ 1 2)"), qt.Equals, "3")
 	})
 
+	// The four rejections below fail for four different reasons, so each pins the
+	// reason: a shared "it errored" assertion would still pass if three of them
+	// started failing for the fourth's cause.
+
+	// Text rather than errors.Is because this one's sentinel is
+	// bootstrap.ErrUnknownStrictLevel, and pkg/internal/bootstrap is outside the
+	// internal boundary that extensions/ can import.
 	t.Run("unknown strictness errors", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment '(wile small bare))`)
+		c := qt.New(t)
+		err := evalExpectErrorValue(t, engine, `(environment '(wile small bare))`)
+		c.Assert(err.Error(), qt.Contains, "unknown strict level")
 	})
 
 	t.Run("non-symbol strictness errors", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment '(wile small 7))`)
+		c := qt.New(t)
+		err := evalExpectErrorValue(t, engine, `(environment '(wile small 7))`)
+		c.Assert(errors.Is(err, werr.ErrNotASymbol), qt.IsTrue,
+			qt.Commentf("want ErrNotASymbol, got: %v", err))
+	})
+
+	// || is a legal zero-length symbol, and "" is the wire encoding of "strictness
+	// omitted". Without a present-but-empty check it reaches ParseStrictLevel as an
+	// absent argument and selects StrictOff — the WIDEST level — where every other
+	// unrecognized spelling is refused.
+	t.Run("empty strictness symbol errors", func(t *testing.T) {
+		c := qt.New(t)
+		err := evalExpectErrorValue(t, engine, `(environment '(wile small ||))`)
+		c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+			qt.Commentf("want ErrInvalidArgument, got: %v", err))
 	})
 
 	t.Run("a fourth element still errors", func(t *testing.T) {
-		evalExpectError(t, engine, `(environment '(wile small core extra))`)
+		c := qt.New(t)
+		err := evalExpectErrorValue(t, engine, `(environment '(wile small core extra))`)
+		c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue,
+			qt.Commentf("want ErrWrongNumberOfArguments, got: %v", err))
 	})
 }

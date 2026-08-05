@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addControl(r *registry.Registry) error {
+func addControl(r *registry.PrimitiveRegistry) error {
 	// Higher-order functions
 	// Note: map and for-each are implemented in Scheme (see bootstrap.go)
 	// so their iteration becomes capturable Scheme frames for call/cc.

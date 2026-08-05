@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addCharacters(r *registry.Registry) error {
+func addCharacters(r *registry.PrimitiveRegistry) error {
 	// Character conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char->integer", ParamCount: 1, Impl: PrimCharToInteger,

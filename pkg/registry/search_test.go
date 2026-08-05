@@ -56,7 +56,7 @@ func (p stubExportSearcher) AllLibraryExports() []registry.LibraryExportDoc {
 	return p.exports
 }
 
-func buildSearchTestRegistry() *registry.Registry {
+func buildSearchTestRegistry() *registry.PrimitiveRegistry {
 	reg := registry.NewRegistry()
 	reg.AddPrimitives([]registry.PrimitiveSpec{
 		{
@@ -228,7 +228,7 @@ func TestSearchDoc_EnvironmentBindings(t *testing.T) {
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
-	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	reg, ok := env.Namespace().Registry().(*registry.PrimitiveRegistry)
 	c.Assert(ok, qt.IsTrue)
 
 	// Search for "car" — should find it via environment bindings even though
@@ -247,7 +247,7 @@ func TestSearchDoc_CoreKeywordsDiscovery(t *testing.T) {
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
-	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	reg, ok := env.Namespace().Registry().(*registry.PrimitiveRegistry)
 	c.Assert(ok, qt.IsTrue)
 
 	// Verify that common-name keywords on core primitives are discoverable
@@ -319,7 +319,7 @@ func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
 	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
-	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	reg, ok := env.Namespace().Registry().(*registry.PrimitiveRegistry)
 	c.Assert(ok, qt.IsTrue)
 
 	// Create a ForeignClosure with a docstring containing Keywords.

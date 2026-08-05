@@ -25,7 +25,7 @@
 // ParamTypes slot format:
 //   - One string per fixed parameter slot, containing the TypeConstraint.Name().
 //   - For variadic primitives, the last slot is prefixed "..." to mark it as
-//     the per-element type of the rest list (convention per registry.go:34 and
+//     the per-element type of the rest list (convention per primitive_registry.go:34 and
 //     memory/2026-04-20-paramtypes-audit-design.md §7.1).
 //   - nil TypeConstraint emitted as "" (unspecified slot, analogous to the
 //     return-type convention).
@@ -148,7 +148,7 @@ func buildManifest(t *testing.T) []manifestEntry {
 //     TypeConstraint (unspecified slot).
 //   - When isVariadic is true, the last slot is prefixed "..." to mark it as
 //     the per-element type of the rest list (not the rest list itself).
-//     See registry/registry.go:34 and memory/2026-04-20-paramtypes-audit-design.md §7.1.
+//     See registry/primitive_registry.go:34 and memory/2026-04-20-paramtypes-audit-design.md §7.1.
 //   - An empty input returns nil; formatManifest renders it as "()".
 //
 // Survey (2026-04-20) of the 484-primitive registry found zero short variadic

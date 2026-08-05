@@ -19,7 +19,7 @@ type Extension interface {
 	// Name returns the extension name for logging/debugging.
 	Name() string
 	// AddToRegistry registers primitives with the registry.
-	AddToRegistry(r *Registry) error
+	AddToRegistry(r *PrimitiveRegistry) error
 }
 
 // LibraryNamer is an optional interface that extensions can implement
@@ -56,7 +56,7 @@ type Closeable interface {
 // the zero value."
 type ExtensionFunc struct {
 	name          string
-	addToRegistry func(*Registry) error
+	addToRegistry func(*PrimitiveRegistry) error
 	description   string
 	libraryName   []string
 	closeFn       func() error
@@ -90,7 +90,7 @@ func WithClose(fn func() error) ExtensionOption {
 
 // NewExtension creates an Extension from a name, a registration function,
 // and zero or more capability options.
-func NewExtension(name string, fn func(*Registry) error, opts ...ExtensionOption) Extension {
+func NewExtension(name string, fn func(*PrimitiveRegistry) error, opts ...ExtensionOption) Extension {
 	q := &ExtensionFunc{
 		name:          name,
 		addToRegistry: fn,
@@ -106,7 +106,7 @@ func NewExtension(name string, fn func(*Registry) error, opts ...ExtensionOption
 // simple extensions and is used by every shipped extension. It is shorthand for
 // NewExtension(name, fn, WithDescription(description)); reach for the option form
 // directly only when composing additional options.
-func NewDescribedExtension(name, description string, fn func(*Registry) error) Extension {
+func NewDescribedExtension(name, description string, fn func(*PrimitiveRegistry) error) Extension {
 	return NewExtension(name, fn, WithDescription(description))
 }
 
@@ -136,6 +136,6 @@ func (p *ExtensionFunc) Close() error {
 }
 
 // AddToRegistry registers primitives with the registry.
-func (p *ExtensionFunc) AddToRegistry(r *Registry) error {
+func (p *ExtensionFunc) AddToRegistry(r *PrimitiveRegistry) error {
 	return p.addToRegistry(r)
 }

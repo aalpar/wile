@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addSyntaxLoc(r *registry.Registry) error {
+func addSyntaxLoc(r *registry.PrimitiveRegistry) error {
 	// Every accessor below returns a concrete value (string, integer, or list)
 	// OR #f when location information is unavailable. The union is not
 	// representable by a single ValueType, so ReturnType is TypeAny.

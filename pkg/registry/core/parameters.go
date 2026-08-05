@@ -19,7 +19,7 @@ import (
 	"github.com/aalpar/wile/pkg/values"
 )
 
-func addParameters(r *registry.Registry) error {
+func addParameters(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-parameter", InvokesProcedure: true, ParamCount: 2, IsVariadic: true, Impl: PrimMakeParameter,
 			Doc: "Creates a new parameter object with INIT as its initial value. If CONVERTER is given, it is applied to INIT and all future values.\n\nExamples:\n  (let ((p (make-parameter 10))) (p))  => 10\n  (let ((p (make-parameter 10))) (parameterize ((p 20)) (p)))  => 20", ParamNames: []string{"init", "converter"}, Category: "parameters",

@@ -31,7 +31,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry registers all math primitives.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
 	// Transcendental functions — all accept any Number (complex or real).
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "exp", ParamCount: 1, Impl: PrimExp,

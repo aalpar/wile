@@ -184,7 +184,7 @@ func ParseStrictLevel(name string) (StrictLevel, error) {
 // level narrows what the VISIBLE top level is bound from. The returned registry
 // and the one stored on the namespace are always the full one, so a narrowed
 // environment can still import everything the profile registers.
-func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension, level StrictLevel) (*registry.Registry, error) {
+func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension, level StrictLevel) (*registry.PrimitiveRegistry, error) {
 	// Create registry with core primitives
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
@@ -222,6 +222,13 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	case StrictNoBindings:
 		visibleReg = registry.NewRegistry()
 	}
+
+	// Record what the visible top level was actually bound from, before
+	// LoadBootstrapCore consumes it. Without this the only registry an embedder can
+	// reach is the full reg set above, which still advertises everything the level
+	// withheld — a read that fails OPEN, since Engine.EffectiveRegistry reads a nil
+	// here as "nothing was narrowed". pkg/wile does the same at bootstrapNamespace.
+	env.Namespace().SetEffectiveRegistry(visibleReg)
 
 	// Run the ordering-sensitive sequence shared with pkg/wile's applyBaseEnvironment.
 	_, err = LoadBootstrapCore(ctx, env, visibleReg)
@@ -280,7 +287,7 @@ func NewNamespaceFrame(ctx context.Context) (*environment.EnvironmentFrame, erro
 // constructor directly (test helpers, internal tooling) therefore get a mutable
 // top level, which is the right default for redefine-heavy test code. Embedders use
 // the public Engine and get the immutable default.
-func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame, *registry.Registry, error) {
+func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame, *registry.PrimitiveRegistry, error) {
 	// Create Namespace (per-instance symbol interning)
 	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()

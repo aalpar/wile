@@ -55,7 +55,7 @@ import (
 // builds loop templates, and injects documentation). Errors are wrapped with terse
 // context here and re-wrapped by each caller in its own idiom, so pkg/wile keeps its
 // ErrEngineInit contract and this package keeps its plainer one.
-func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, opts ...registry.ApplyOption) (*environment.EnvironmentFrame, error) {
+func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.PrimitiveRegistry, opts ...registry.ApplyOption) (*environment.EnvironmentFrame, error) {
 	// Runtime primitives and bootstrap procedures are phase-0 VALUES, so they route to
 	// the phase-0 seal for a namespace-owning runtime env (engine root / profile child)
 	// and to the frame itself for a flat library env. WithRuntimeTarget(self) is a
