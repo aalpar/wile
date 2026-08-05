@@ -75,7 +75,7 @@ var Builder = registry.NewRegistryBuilder(addPrimitives)
 // AddToRegistry is the combined registration function.
 var AddToRegistry = Builder.AddToRegistry
 
-func addPrimitives(r *registry.Registry) error {
+func addPrimitives(r *registry.PrimitiveRegistry) error {
     r.AddPrimitives([]registry.PrimitiveSpec{
         {
             Name:       "double",
@@ -143,7 +143,7 @@ For simple extensions, `registry.NewDescribedExtension` wraps a function:
 ```go
 var Extension = registry.NewDescribedExtension("myext",
     "Brief description of this extension.",
-    func(r *registry.Registry) error {
+    func(r *registry.PrimitiveRegistry) error {
         r.AddPrimitive(spec, registry.PhaseSetRuntime)
         return nil
     })
@@ -180,7 +180,7 @@ replaces with the default.
 
 ## Registry API
 
-The `registry.Registry` is the central store for all registration data.
+The `registry.PrimitiveRegistry` is the central store for all registration data.
 Extensions interact with it during the registration phase.
 
 ### Registering Primitives

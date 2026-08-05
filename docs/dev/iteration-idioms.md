@@ -71,7 +71,7 @@ demands it. Mirrors `slices.All` / `maps.All` / `slices.Values`.
 Used by concurrent accessors:
 `environment.GlobalEnvironmentFrame.Bindings`,
 `environment.GlobalEnvironmentFrame.Keys`,
-`coverage.Collector.Entries`, `registry.Registry.Bindings`.
+`coverage.Collector.Entries`, `registry.PrimitiveRegistry.Bindings`.
 
 ```go
 func (p *T) Foo() []ElemT {

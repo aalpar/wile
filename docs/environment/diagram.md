@@ -13,7 +13,7 @@ See [system.md](system.md) for detailed API documentation.
 │                       Engine (pkg/wile/engine.go)                             │
 │  namespace ──→ *environment.Namespace                                         │
 │  env ────────→ runtime EnvironmentFrame (phase 0, mutable user global)        │
-│  registry ───→ *registry.Registry (Go-side primitive registration)            │
+│  registry ───→ *registry.PrimitiveRegistry (Go-side primitive registration)   │
 └───────────────────────────────────────────────────────────────────────────────┘
                     │
                     │ owns

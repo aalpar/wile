@@ -159,7 +159,7 @@ naming:
 
 ```go
 var Extension = registry.NewExtension("utils",
-    func(r *registry.Registry) error {
+    func(r *registry.PrimitiveRegistry) error {
         r.AddPrimitive(registry.PrimitiveSpec{
             Name: "helper", ParamCount: 0, Impl: primHelper,
         }, registry.PhaseSetRuntime)
