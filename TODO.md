@@ -373,6 +373,73 @@ Items that block production embedded use or prevent silent state corruption.
   described the *behavior* correctly but assigned it to the `phaseParent` edge; corrected on this
   branch, along with three Go comments calling a library env a flat island.
 
+### Syntax compilers are readable as runtime values (2026-08-05)
+
+- [ ] **Decide how a phase-0 handler is kept off the value-resolution path** [High, M, filed
+  2026-08-05 while correcting the `SealKind` doc claim during the library-phase-isolation branch]:
+  all 20 syntax compilers resolve as ordinary top-level variables and escape into data.
+
+  ```
+  $ wile -e '(display define-syntax)'
+  #<syntax-compiler:define-syntax>
+  $ wile -e '(display (list import export))'
+  (#<syntax-compiler:import> #<syntax-compiler:export>)
+  ```
+
+  **Scope, bisected.** Exactly the phase-0 handler population leaks: every name in
+  `syntaxCompilerEntries` (`machine/compilation/syntax_compilers_registry.go`) — `syntax`,
+  `syntax-case`, `meta`, `include`, `include-ci`, `define-syntax`, `define-library`, `library`,
+  `import`, `export`, `unquote`, `unquote-splicing`, `quasisyntax`, `unsyntax`,
+  `unsyntax-splicing`, `with-syntax`, `cond-expand`, `define-for-syntax`, `begin-for-syntax`,
+  `eval-when`. Phase-1 **primitive expanders are correctly unreachable** — `if`, `lambda`,
+  `quote`, `begin`, `let-syntax` each give `no such local or global binding`. The value is inert
+  (`(procedure? import)` is `#f`) and operator position still dispatches the form, so this is a
+  reachability and conformance defect, not a miscompile.
+
+  **Mechanism.** `sealedAt(phase, kind)` checks that the row covers the kind and then returns
+  `sealAt(phase)`, which **ignores the kind**. Phase 0's `sealedAxis` row is
+  `sealsValue | sealsHandler`, so both kinds resolve to the *same frame* — the one the mutable
+  runtime parents to. `SealKind` therefore discriminates in exactly one cell, (1, handler) vs
+  (1, value), and passing `SealKindHandler` at phase 0 states intent while routing nowhere
+  different. `RegisterSyntaxCompilers` wants phase 0 deliberately (ambient reach from every
+  phase via the parent chain), so it is not a mis-registration — the model has no phase-0 cell
+  that is ambient *and* off the value path.
+
+  **What was believed instead.** `SealKindHandler`'s doc comment claimed sealing keeps a handler
+  off the value-resolution path; it does not, at phase 0. Corrected 2026-08-05 (`0935b349`), along
+  with `primitive_expanders_registry.go`, which credited the kind rather than the phase for
+  keeping expanders out of the value world. The comments in `docs/environment/system.md`
+  invariant 6, `Namespace.sealedExpandBase`, and `compile_time_continuation.go` are accurate —
+  each argues specifically about a *phase-1* expander placed on the phase-0 frame.
+
+  **Existing partial defense.** `tryResolvedBinding` (`compile_time_continuation.go`) refuses to
+  emit a runtime load when a resolved pin's value is a `compileTimeHandler`, which both
+  `SyntaxCompiler` and `PrimitiveExpander` satisfy. That covers the **pinned/cached-binding**
+  path — the dialect-removed-form case it was written for — and not a plain top-level reference,
+  which is why the display above still prints.
+
+  **R7RS.** A syntactic keyword referenced as a variable is an error (§4.1.1, §4.3.1); yielding an
+  opaque value instead is a divergence, and it is not in `docs/reference/r7rs-differences.md`.
+
+  **The fork — do not pick one without measuring:**
+
+  1. **Give phase 0 separate value and handler cells.** Makes `SealKind` discriminate everywhere,
+     so the table stops having an inert column and the invariant becomes statable without a
+     phase-0 exception. Costs a second phase-0 frame per owner (now *per library env* too, see
+     the per-import figures in the phase-isolation entry) and forces a decision about where that
+     cell sits in the parent chain — it must be ambient for `LookupSyntaxCompiler` (which enters
+     through `env.Compile()`) yet off the runtime value walk, and those two pull opposite ways.
+     That tension is the crux; it may not be satisfiable with one parent link.
+  2. **Extend the `compileTimeHandler` refusal to ordinary symbol resolution.** Small and local,
+     turns the leak into `no such binding`, and matches R7RS. But it is a check at every global
+     load rather than a structural guarantee, so it is the same shape of fix as the one this
+     codebase rejected for name-vs-identity bugs: tightening a predicate rather than fixing the
+     site that holds the authority. Measure the emit-path cost before assuming it is free.
+
+  **Not urgent, but not cosmetic.** No known miscompile. The reason it is Tier 1 is that the
+  model currently *claims* a property it does not have, and a future dialect or sandbox feature
+  that leans on "handlers are off the value path" would be building on it.
+
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
 - [x] **Fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21, approach 1a per
