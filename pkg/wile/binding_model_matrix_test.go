@@ -48,8 +48,13 @@ import (
 //     re-resolves car at call time instead of a value captured once.
 //   - car exists twice: the sealed phase-0 binding and the registry's
 //     (1, mutable) expand copy. Phase-0 mutation must not touch the copy —
-//     pinned by "define-for-syntax supersedes expand copy, phase 1 sees new
-//     value" alongside "...phase 0 intact".
+//     pinned by "expand copy survives phase-0 set!" (mutable table). The
+//     converse direction — phase-1 mutation must not touch the phase-0
+//     binding, and actually SUPERSEDES the copy in place rather than
+//     shadowing it — is pinned by "define-for-syntax supersedes expand
+//     copy, phase 0 intact" and "...in place, not a shadow"; "...value
+//     visible at phase 1, by name" pins only the by-name view, which reads
+//     the same under either supersede or shadow.
 //
 // See plans/2026-08-05-flat-binding-model-{design,impl}.local.md.
 
@@ -181,28 +186,26 @@ func TestBindingModelMatrix(t *testing.T) {
 			wantErr: werr.ErrImmutableBinding},
 		// P4: define supersedes an import IN PLACE and drops the import
 		// provenance, so a same-unit set! is then permitted (R7RS §5.3.1).
-		// Same-unit requires the begin-wrap for the reason given above
-		// ([Engine.EvalProgram] does the equivalent begin-splice structurally
-		// for a whole program; this row open-codes it for one row): bare
-		// "(define g 9) (set! g 10)" are two separate compile units, and the
-		// define unit alone stamps Stable before the set! unit ever runs. Uses
-		// g (lib-shadow's export, see "set! imported refused" below) rather
+		// Same-unit requires the begin-wrap for the reason given at "set! own
+		// define same unit ok" above. Uses g (lib-shadow's export) rather
 		// than map: map is ALSO a Stable stdlib anchor in this profile with NO
-		// import at all (see the control row below "set! imported refused"),
-		// so asserting "10" against map is produced by
+		// import at all (see "set! imported refused" and its two control
+		// rows below), so asserting "10" against map would be produced by
 		// define-over-a-sealed-primitive-plus-same-unit-set! (already covered
-		// by "set! own define same unit ok" above) and pins nothing about
-		// import supersession specifically. Measured against matrixEngine's
-		// config.
+		// by "set! own define same unit ok" above) and would pin nothing
+		// about import supersession specifically. The (g) call between the
+		// import and the begin-wrap fails directly (ErrNoSuchBinding) if the
+		// import ever stops binding g, so this row doesn't depend solely on
+		// the sibling control rows to mean what it claims. Measured against
+		// matrixEngine's config.
 		{name: "define supersedes import then set!",
-			units: []string{`(import (lib-shadow))`, `(begin (define g 9) (set! g 10) g)`},
+			units: []string{`(import (lib-shadow))`, `(g)`, `(begin (define g 9) (set! g 10) g)`},
 			want:  "10"},
-		// P2: set! on an imported binding refused (R7RS §5.2). Uses g
-		// (lib-shadow's export) rather than map: map is a Stable stdlib anchor
-		// in KitchenSink even with no import at all (see the control row
-		// immediately below), so "(set! map 1)" fails with ErrImmutableBinding
-		// either way and does not discriminate import provenance. Measured
-		// against matrixEngine's config.
+		// P2: set! on an imported binding refused (R7RS §5.2). Uses g rather
+		// than map for the reason given at "define supersedes import then
+		// set!" above (map is Stable in this profile with no import at all —
+		// see the two control rows below). Measured against matrixEngine's
+		// config.
 		{name: "set! imported refused",
 			units:   []string{`(import (lib-shadow))`, `(set! g 1)`},
 			wantErr: werr.ErrImmutableBinding},
@@ -213,6 +216,14 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "set! g without import is unbound, not immutable",
 			units:   []string{`(set! g 1)`},
 			wantErr: werr.ErrNoSuchBinding},
+		// Companion control: map (unlike g) refuses set! even with NO import
+		// in play at all — it's a Stable stdlib anchor in this profile
+		// regardless. This is the premise the map-vs-g rationale above
+		// depends on, previously only asserted in comments; now
+		// machine-checked. Measured against matrixEngine's config.
+		{name: "set! map without import refused (stdlib anchor)",
+			units:   []string{`(set! map 1)`},
+			wantErr: werr.ErrImmutableBinding},
 		// A bootstrap macro NAME is free at phase 0: define binds the value,
 		// the phase-1 transformer keeps expanding.
 		{name: "define over bootstrap macro name",
@@ -262,21 +273,48 @@ func TestBindingModelMatrix(t *testing.T) {
 			wantErr: werr.ErrNoSuchBinding},
 		// M7: define-for-syntax over the expand-phase registry copy of car
 		// SUPERSEDES it (scope-set-equal slot reuse) — and phase 0's car is a
-		// different binding, untouched.
+		// different binding, untouched. Three rows pin this end to end: this
+		// one observes phase 0 untouched; the next observes the new value BY
+		// NAME (which alone can't distinguish supersede from shadow); the
+		// third observes supersede specifically, through a reference resolved
+		// before the mutation.
 		{name: "define-for-syntax supersedes expand copy, phase 0 intact",
 			units: []string{`(define-for-syntax car 42) (car '(9 8))`},
 			want:  "9"},
-		// M7 continued: the same define-for-syntax also supersedes the
-		// (1, mutable) expand copy itself — nothing above observes that value,
-		// only that phase 0 is untouched. reveal-car reads it back through a
-		// phase-1 er-macro-transformer. Measured against matrixEngine's
-		// config.
-		{name: "define-for-syntax supersedes expand copy, phase 1 sees new value",
+		// By-name view only: reveal-car reads car back through a phase-1
+		// er-macro-transformer, confirming define-for-syntax's value is
+		// visible at phase 1. This does NOT by itself distinguish supersede
+		// from shadow — name resolution finds the newest compatible binding
+		// either way, so "42" is produced under both readings. (Round-1
+		// review of this row was satisfied by this alone under the name
+		// "...supersedes expand copy..."; the row is renamed and its claim
+		// narrowed to what it actually observes. The row below pins which
+		// reading is true.) Measured against matrixEngine's config.
+		{name: "define-for-syntax value visible at phase 1, by name",
 			units: []string{
 				`(define-for-syntax car 42)`,
 				`(define-syntax reveal-car (er-macro-transformer (lambda (form rename compare) car))) (reveal-car)`,
 			},
 			want: "42"},
+		// The actual supersede-vs-shadow discriminator: use-car is a phase-1
+		// closure compiled BEFORE the define-for-syntax mutation (same
+		// technique as the get-fv row above and the h/car pair in
+		// TestBindingModelMatrixMutableTopLevel), so its reference to car
+		// resolves at COMPILE time to the ORIGINAL (1, mutable) binding.
+		// Under supersede-in-place, that same binding now holds 42, so
+		// applying it through use-car fails; under a fresh phase-1 shadow,
+		// use-car's already-resolved reference is untouched and the call
+		// still succeeds with 1. Measured against matrixEngine's config:
+		// applying 42 fails with ErrNotAProcedure — SUPERSEDE, confirming
+		// plan §0 M7's design, now actually observed rather than asserted by
+		// a by-name row alone.
+		{name: "define-for-syntax supersedes expand copy in place, not a shadow",
+			units: []string{
+				`(define-for-syntax use-car (lambda (l) (car l)))`,
+				`(define-for-syntax car 42)`,
+				`(define-syntax reveal (er-macro-transformer (lambda (form rename compare) (use-car (list 1 2))))) (reveal)`,
+			},
+			wantErr: werr.ErrNotAProcedure},
 		// R2: a library body keeps cross-form define/set! mutable.
 		{name: "library body set! own define",
 			units: []string{`(import (lib-r2)) (f)`},
