@@ -133,3 +133,23 @@ func TestLibraryPhaseOneReachesPrimitives(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "yes")
 }
+
+// The arm is phase-RELATIVE, not phase-0-pinned: a library's phase-1 code must
+// still resolve the library's own phase-1 defines. Without this the fix would
+// have traded the upward leak for a phase-1 blackout.
+func TestLibraryPhaseOneSeesItsOwnPhaseOneDefines(t *testing.T) {
+	ctx := context.Background()
+	eng := phaseIsolationEngine(t, fstest.MapFS{
+		"ct.scm": &fstest.MapFile{Data: []byte(`(define-library (ct)
+  (export ok)
+  (import (scheme base))
+  (begin
+    (begin-for-syntax (define ctbase 7))
+    (begin-for-syntax (define ctderived (+ ctbase 1)))
+    (define ok 'yes)))
+`)},
+	})
+	v, err := eng.EvalMultiple(ctx, `(import (ct)) ok`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "yes")
+}
