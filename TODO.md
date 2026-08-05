@@ -421,20 +421,53 @@ Items that block production embedded use or prevent silent state corruption.
   **R7RS.** A syntactic keyword referenced as a variable is an error (§4.1.1, §4.3.1); yielding an
   opaque value instead is a divergence, and it is not in `docs/reference/r7rs-differences.md`.
 
+  **Sharper diagnosis (2026-08-05, after reading Racket's model).** Framing this as "phase 0's
+  kinds do not discriminate" understates it. Racket's binding table maps symbol + scope set to
+  *a meaning* — "a variable, a syntactic form, or a transformer" — so referencing a syntactic
+  form as a variable is an error **by construction**, independent of where the binding lives.
+  Wile has the same field, `BindingType`, and does not use it this way: syntax compilers are
+  registered `BindingTypePrimitive` (`phase_registry.go:47`, via `RegisterPhaseBindings`), the
+  *same* value a Go primitive gets. Handler-ness is instead encoded in the Go type of the bound
+  VALUE (`compileTimeHandler`, `named_handler_base.go`), which exactly one site consults. So the
+  defect is that **Wile records the meaning on the value rather than on the binding, and then
+  asks frame topology to make up the difference** — which frames cannot do, because a frame holds
+  both kinds.
+
+  **The exact asymmetry, for whoever fixes it.** `tryResolvedBinding`
+  (`compile_time_continuation.go:433`) open-codes its own cached-binding load *with* the
+  `compileTimeHandler` check. The ordinary global arm goes through `emitCachedBindingLoad`
+  (`:415`), which has three callers (`:305`, `:362`, `:397`) and checks nothing. That helper is
+  the natural chokepoint for options 2 and 3 alike.
+
   **The fork — do not pick one without measuring:**
 
   1. **Give phase 0 separate value and handler cells.** Makes `SealKind` discriminate everywhere,
-     so the table stops having an inert column and the invariant becomes statable without a
-     phase-0 exception. Costs a second phase-0 frame per owner (now *per library env* too, see
-     the per-import figures in the phase-isolation entry) and forces a decision about where that
-     cell sits in the parent chain — it must be ambient for `LookupSyntaxCompiler` (which enters
-     through `env.Compile()`) yet off the runtime value walk, and those two pull opposite ways.
-     That tension is the crux; it may not be satisfiable with one parent link.
-  2. **Extend the `compileTimeHandler` refusal to ordinary symbol resolution.** Small and local,
-     turns the leak into `no such binding`, and matches R7RS. But it is a check at every global
-     load rather than a structural guarantee, so it is the same shape of fix as the one this
-     codebase rejected for name-vs-identity bugs: tightening a predicate rather than fixing the
-     site that holds the authority. Measure the emit-path cost before assuming it is free.
+     so the table stops having an inert column. Costs a second phase-0 frame per owner (now *per
+     library env* too, see the per-import figures in the phase-isolation entry) and forces a
+     decision about where that cell sits in the parent chain. An earlier revision of this entry
+     called that placement the crux, on the grounds that the cell must be ambient for
+     `LookupSyntaxCompiler` yet off the runtime value walk. **That constraint is weaker than
+     stated:** `LookupSyntaxCompiler` has NO production caller — it is test-only — so the phase-0
+     syntax-compiler bindings serve exactly one consumer today, `findLibraryBinding`. Establish
+     what that consumer actually needs before assuming the placement is over-constrained.
+  2. **Extend the `compileTimeHandler` refusal to ordinary symbol resolution** (i.e. into
+     `emitCachedBindingLoad`). Small and local, turns the leak into `no such binding`, matches
+     R7RS. But it is a check at every global load rather than a structural guarantee, so it is the
+     same shape of fix this codebase rejected for name-vs-identity bugs: tightening a predicate
+     rather than fixing the site that holds the authority. Measure the emit-path cost.
+  3. **Record the meaning on the BINDING — the Racket-shaped fix.** Either a fourth `BindingType`
+     for compile-time handlers, or a `BindingMeta` flag, set at `RegisterPhaseBindings`. Then
+     resolution refuses a handler wherever it lives, and the property stops depending on frame
+     topology *or* on the Go type of the value — which is what makes options 1 and 2 feel like
+     they are patching the wrong layer. Costs: `BindingType` is consulted in dispatch and
+     validation paths that assume three cases, so this is the widest blast radius of the three
+     and needs an exhaustive-switch audit (`cmd/typeswitchlint`) before it is costed. It is also
+     the only option that would let the value/handler split be stated once instead of
+     re-derived per lookup site.
+
+  **Cross-reference.** `SealKind` would remain meaningful under option 3 — it still routes
+  registrations, and (1, handler) vs (1, value) is still a real distinction — but it would stop
+  being asked to carry a reachability guarantee it cannot provide.
 
   **Not urgent, but not cosmetic.** No known miscompile. The reason it is Tier 1 is that the
   model currently *claims* a property it does not have, and a future dialect or sandbox feature
