@@ -370,10 +370,11 @@ Bindings are **shared single objects** across phases, not re-instantiated per
 phase (Tier 1). Phase frames remain hermetic siblings of the frozen sealed base
 (the climb adds *higher* siblings; it never reintroduces a phase→phase parent
 edge — `TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
-Hermeticity holds for a namespace that owns a seal; a `NewChildRuntime` library
-environment owns none, so its phase frames parent to the library's own phase-0
-frame (`phaseParent`) and phase 1 there does see phase 0. See
-[environment/system.md](../environment/system.md#invariants) invariant 6.
+Hermeticity holds for every owner of a sealed axis, and a `NewChildRuntime`
+library environment is one: it has the same two-level stack a namespace has, so
+its phase frames parent to its own seals and phase 1 there does **not** see
+phase 0. See [environment/system.md](../environment/system.md#invariants)
+invariant 6.
 The bounded `int8` phase index caps a runaway self-referential macro with a
 wrapped error rather than wrapping to −128.
 
@@ -388,7 +389,20 @@ compile-time values. It cannot: the hermetic phase-frame reparent already severs
 the lexical cross-phase path, so a mutable binding defined at phase N is **not
 visible** at phase N+1 — observing it there is a loud compile-time
 `no such binding`, not a silent share
-(`TestClimbingTower_CrossPhaseMutationIsHermetic`). The only surviving cross-phase
+(`TestClimbingTower_CrossPhaseMutationIsHermetic`).
+
+This argument was sound at the top level and **false inside a `define-library`
+body** until 2026-08-05: there, `GetGlobalIndexFromLibraryScopes` searched the
+library env's phases `{0, 1, 2}` regardless of the referring phase, so a
+phase-1 body resolved a phase-0 define — silently, as the `#!void` of a
+predeclared-but-unwritten slot — and a phase-0 body resolved a
+`begin-for-syntax` define, silently, as a wrong value. That arm is now
+phase-relative and the library env owns a sealed base, so the argument is sound
+in both places. Pinned by `TestLibraryPhaseIsolation{Downward,Upward}`
+(`pkg/wile/library_phase_isolation_test.go`), each of which asserts the library
+answer *against its top-level control* rather than on its own.
+
+The only surviving cross-phase
 reach, `GetGlobalIndexAcrossPhases`, resolves a free template identifier to a
 single binding location *per reference scope set* (the R7RS §4.3 carve-out). The
 name alone does not name a location: since globals became scope-keyed, two

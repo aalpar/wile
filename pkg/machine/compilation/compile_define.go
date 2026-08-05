@@ -72,9 +72,10 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// (the per-Engine user top-level) AND in its sealed base (immutable primitives +
 	// bootstrap procedures — the optimizer's Stable anchors; capture-safe procedures like
 	// zero?/not must stay Stable here or the frame-reclaim classifier stops trusting them).
-	// EXEMPT user-loaded libraries: a library body compiles against a flat NewChildRuntime
-	// frame that shares its parent's namespace (so it is neither ns.Runtime() nor
-	// ns.SealedBase()), keeping a library's cross-form (define x)/(set! x) mutable (R2).
+	// EXEMPT user-loaded libraries: a library body compiles against a NewChildRuntime
+	// frame that shares its parent's namespace but owns its own seal (so it is neither
+	// ns.Runtime() nor ns.SealedBase()), keeping a library's cross-form
+	// (define x)/(set! x) mutable (R2).
 	ns := p.env.Namespace()
 	immTop := ns != nil && ns.ImmutableTopLevel() &&
 		(ns.Runtime() == p.env || ns.SealedBase() == p.env)

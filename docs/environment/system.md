@@ -412,22 +412,44 @@ These invariants must be maintained:
      `phaseParent`. A phase with no seal of its own parents straight to
      `sealedBase`, preserving hermeticity and the climbing-tower invariant that
      higher phases never introduce a phase→phase parent edge.
-   - **Hermeticity is a property of a namespace-runtime frame, not of every
-     frame.** `phaseParent` routes to a seal only when the registry's phase-0
-     entry is its namespace's own runtime (`IsNamespaceRuntime`). A flat
-     `NewChildRuntime` library frame is not, so its phase frames parent to the
-     *library's own phase-0 frame* — the one phase→phase edge in the tree. Inside
-     a library environment a phase-1 lookup therefore **does** see the library's
-     phase-0 bindings:
+   - **Hermeticity is a property of every owner of a sealed axis, library
+     environments included.** `phaseParent` routes to the seal whenever the
+     *registry* has one, and every registry that has an axis has all of it
+     (`newSealedAxisFrames`). A `NewChildRuntime` library env is the same
+     two-level stack a namespace is — its own sealed base holding the registry
+     apply, a mutable child holding the library's defines — so its phase frames
+     parent to its base and its phase separation matches the top level's:
 
      ```
-     library env:  libExpand (phase 1) → libRuntime (phase 0) → nil
-                   libCompile (phase 2) → libRuntime (phase 0) → nil
+     library env:  libRuntime (phase 0) → libSealedBase        → nil
+                   libExpand  (phase 1) → libSealedExpandBase  → libSealedBase → nil
+                   libCompile (phase 2) → libSealedBase        → nil
      ```
 
-     That is library isolation (nothing reaches the engine's frames at any phase),
-     not hermeticity. Quote the hermeticity guarantee for engine and profile
-     namespaces only.
+     A library env therefore gets library isolation (its graph roots at its own
+     base, so nothing reaches the engine's frames at any phase) **and**
+     hermeticity. Quote the hermeticity guarantee unqualified.
+
+     Until 2026-08-05 a library frame was flat: `phaseParent` keyed on
+     `IsNamespaceRuntime`, a library frame answered false, and its phase frames
+     parented to its own phase-0 frame — the one phase→phase edge in the tree.
+     `ownsSealedAxis` is now the routing discriminator and answers true for a
+     library env; `IsNamespaceRuntime` survives for the narrower "is this the
+     namespace's own runtime?" question.
+   - **The flat shape was not the mechanism of the library phase leak.** A
+     library body's phase separation used to fail in both directions — phase-0
+     code resolved a `begin-for-syntax` define, and phase-1 code read a phase-0
+     define as `#!void` — but cutting the `phaseParent` edge to nil closed
+     neither. The cause was a single resolution arm:
+     `GetGlobalIndexFromLibraryScopes` searched the library env's phases
+     `{0, 1, 2}` without reference to the referring code's phase, and every
+     identifier written in a library body carries that library's scope, so the
+     arm fired on every library-body reference. The top level has no library
+     scope, never takes the arm, and so always refused. The arm is now
+     phase-relative (it searches `libEnv.AtPhase(p.phaseLevel)`), which is only
+     safe because the library owns a sealed base: before that, the arm's phase-0
+     reach was the sole route by which a library `begin-for-syntax` body reached
+     `car` and `list`.
    - **Why `sealedExpandBase` is distinct from `sealedBase`, not a reuse.** A
      compile-time handler (a bootstrap macro, `BindingTypeSyntax`, or a
      special-form expander, `BindingTypePrimitive`) placed on the phase-0 value
@@ -450,11 +472,12 @@ These invariants must be maintained:
      while special-form expanders do not. Phase 2 and above have no seal, so a
      `define-syntax` inside a transformer body climbs off the sealed axis.
      `SealedAt` reports the pair's seal and whether there is one; a row that
-     declares a seal the namespace never built panics (`mustSeal`) rather than
-     degrading to the mutable frame. The parent link is kind-independent, so
-     `phaseParent` asks `sealedFrameAt`, not `SealedAt`.
+     declares a seal an owner never built panics at CONSTRUCTION
+     (`newPhaseRegistry`) rather than degrading to the mutable frame, because an
+     owner does not choose a subset of the axis. The parent link is
+     kind-independent, so `phaseParent` asks `sealAt`, not `sealedAt`.
    - **Enumeration must span every seal.** Because no sealed frame is a
-     `PhaseRegistry` entry, name/doc walks (`BoundNamesAcrossPhases`, `,apropos`)
+     `PhaseRegistry.envs` entry (they live in the separate `seals` map), name/doc walks (`BoundNamesAcrossPhases`, `,apropos`)
      iterate `SealedFrames()`, or primitive / bootstrap-macro names silently
      vanish from introspection.
 

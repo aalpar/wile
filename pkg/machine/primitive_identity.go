@@ -22,8 +22,9 @@ import (
 // every ForeignClosure built from that primitive's spec.
 //
 // It exists because a primitive has no single closure object. A library
-// environment is a flat island (environment.Namespace.NewChildRuntime gives it
-// parent nil), so the library env factory re-applies the whole registry into it
+// environment is an island (environment.Namespace.NewChildRuntime roots it at a
+// sealed base of its OWN, so nothing in it reaches the engine's frames at any
+// phase), so the library env factory re-applies the whole registry into it
 // and mints a SECOND closure for every primitive; a program that imports
 // (scheme base) then holds that copy while the engine's sealed base still holds
 // the first. Both are the same primitive and behave identically, and a pointer

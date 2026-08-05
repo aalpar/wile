@@ -70,9 +70,9 @@ sealedBase          (phase 0, parent nil)  ← Go primitives, sealed stdlib,
 
 The tree is open-ended, not five fixed frames. `PhaseRegistry.GetOrCreate` mints a frame for any `int8` phase on first access, and `EnvironmentFrame.NextPhase()` climbs one rung per nested compile-time form, so a doubly-nested `begin-for-syntax` or a transformer body that itself defines macros reaches phase 2, 3, and beyond. Above phase 1 there is no seal (`sealedAxis`), so those frames parent straight to `sealedBase` and the climb never introduces a phase→phase edge (`TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
 
-**The exception is a library environment.** `phaseParent` routes to a seal only when the registry's phase-0 entry is its namespace's own runtime (`IsNamespaceRuntime`); a `NewChildRuntime` frame is not, so its phase frames parent to *it*. See [Library Environments](#library-environments).
+**A library environment has the same shape.** `phaseParent` routes to a seal whenever the *registry* has one, and every registry that has an axis has all of it, so a `NewChildRuntime` env is a two-level stack too — with seals of its own, not the namespace's. See [Library Environments](#library-environments).
 
-`sealedBase` and `sealedExpandBase` are **not** `PhaseRegistry` entries; they are reached only through the parent chain. Every numbered phase frame is a registry entry, created lazily.
+The seals are **not** `PhaseRegistry.envs` entries; they live in a separate `seals` map and are reached only through the parent chain. Every numbered phase frame is an `envs` entry, created lazily.
 
 All phase environments share:
 - The same `*PhaseRegistry` (back-pointer)
@@ -108,13 +108,13 @@ Child frames inherit `global`, `phases`, and `namespace` from the parent. Only `
 Created by `Namespace.NewChildRuntime()`. Shares syntax interning but has isolated bindings and phases.
 
 ```
-Root Namespace                          Library environment
+Root Namespace                          Library environment (mutable child)
 ┌───────────────────────┐               ┌──────────────────────┐
 │  syntaxInterns: {...} │◄──────────────┤  namespace: ─────────┤ (same pointer!)
 │  phases: rootPhases   │  shared NS    │  global: OWN         │ (isolated bindings)
-│  runtime: rootEnv     │               │  phases: ownPhases   │ (isolated phases)
-│  sealedBase: rootBase │               │  parent: nil         │ (flat island: no
-└───────────────────────┘               │  phaseLevel: 0       │  sealed base)
+│  runtime: rootEnv     │               │  phases: ownPhases   │ (isolated phases
+│  sealedBase: rootBase │               │  parent: libBase     │  AND its own seals)
+└───────────────────────┘               │  phaseLevel: 0       │
       │                                 └──────────────────────┘
       │ rootPhases                              │ ownPhases
       ▼                                         ▼
@@ -125,17 +125,27 @@ Root Namespace                          Library environment
 └───────────┘                             └───────────┘
 ```
 
-A library's phase frames parent to `libRT`, not to a seal — the library owns none,
-and `phaseParent` falls back to the registry's phase-0 entry:
+A library's phase frames parent to the library's OWN seals, exactly as a
+namespace's do:
 
 ```
-libExp  (phase 1) ──→ libRT (phase 0) ──→ nil
-libCmp  (phase 2) ──→ libRT (phase 0) ──→ nil
+libRT   (phase 0) ──→ libBase       (phase-0 seal) ──→ nil
+libExp  (phase 1) ──→ libExpandBase (phase-1 seal) ──→ libBase ──→ nil
+libCmp  (phase 2) ──→ libBase       (phase-0 seal) ──→ nil
 ```
 
-So the isolation a library env provides is *lateral* (nothing reaches the engine's
-frames at any phase), not *vertical*: inside a library, phase 1 sees phase 0. This
-is the only phase→phase parent edge in the tree.
+So the isolation a library env provides is both *lateral* (its graph roots at its
+own base, so nothing reaches the engine's frames at any phase) and *vertical*
+(inside a library, phase 1 does not see phase 0). The registry apply — primitives,
+bootstrap procedures, syntax compilers — lands in `libBase`, and the library's own
+`define`s land in the mutable child; that split is what lets a `begin-for-syntax`
+body reach `car` while missing the library's runtime defines.
+
+Until 2026-08-05 a library env was a single flat frame with `parent: nil`, and
+`libExp`/`libCmp` parented to `libRT` — the only phase→phase parent edge in the
+tree. It is gone. That edge was **not**, however, the mechanism of the observable
+phase leak; see `docs/environment/system.md` on
+`GetGlobalIndexFromLibraryScopes`.
 
 ---
 

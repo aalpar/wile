@@ -79,6 +79,7 @@ Sections below hold the detail; this table is the map.
 | Plan | Status |
 |---|---|
 | `2026-04-17-mcp-server-sota-design.local.md` | Proposed, 5 phases |
+| `2026-08-04-library-phase-isolation-design.local.md`<br>`2026-08-04-library-phase-isolation-impl.local.md` | **SHIPPED** 2026-08-05, 7 tasks, on `feat/library-phase-isolation` (`cadf219f`, `01fdf6b1`, `95cdb2b6`, `5d54b0ab`). Design option A1: the sealed axis moved onto `PhaseRegistry` so a library env owns one while sharing its parent's `Namespace`, then the library-scope resolution arm became phase-relative. Root cause was a *single* arm (`GetGlobalIndexFromLibraryScopes`, searching `{0,1,2}` regardless of the referring phase), **not** the `phaseParent` edge — four experiments, all reverted. See the closed Tier-1 entry below for the three findings the design did not predict, the measured cost, and the two residuals (Q3's `predeclareBinding` twin slot; Q2's `{0,1,2}` export ceiling). |
 | `2026-04-21-type-constraint-extension-design.local.md` | Design draft; impl deferred to follow-ups |
 | `2026-06-04-srfi-204-match-design.local.md` | Design draft; `-impl` to follow |
 | `2026-06-05-mcp-llm-support-design.local.md` | Phase 1 implementation-ready |
@@ -267,10 +268,12 @@ Items that block production embedded use or prevent silent state corruption.
 
 ### Phase hermeticity does not hold inside a library body (2026-08-04)
 
-- [ ] **Decide whether a library environment owns a seal** [High, M, filed 2026-08-04 from the
-  namespace/phase documentation audit]: the hermetic phase cut is a property of a **namespace
-  runtime frame**, not of every frame, and a library environment is not one. The same program
-  is rejected at the top level and silently mis-evaluated in a library:
+- [x] **A library environment now owns a seal, and the arm is phase-relative** [High, M, filed
+  2026-08-04, **DONE 2026-08-05** on `feat/library-phase-isolation`: `cadf219f` (downward arm),
+  `01fdf6b1` (sealed axis onto `PhaseRegistry`; library phase-0 seal), `95cdb2b6` (phase-relative
+  arm), `5d54b0ab` (Q2 ratchet)]: the hermetic phase cut was a property of a **namespace runtime
+  frame**, not of every frame, and a library environment was not one. The same program was
+  rejected at the top level and silently mis-evaluated in a library:
 
   ```scheme
   ;; top level — correct, loud
@@ -286,50 +289,89 @@ Items that block production embedded use or prevent silent state corruption.
   yet written at expansion time) and computes with void. That is precisely the silent-wrong-value
   outcome the hermetic reparent was built to make impossible.
 
-  **Mechanism, for the upward direction — confirmed.** `phaseParent`
-  (`pkg/environment/phase_registry.go`) routes a phase frame to a seal only when the registry's
-  phase-0 entry `IsNamespaceRuntime()`. A `NewChildRuntime` library frame is not its namespace's
-  runtime, so the fallback returns that frame itself and the library's phase-1 and phase-2 frames
-  parent to the library's **phase-0** frame. Probed directly off the package:
+  **Mechanism — ONE arm causes both directions, and it is not the parent edge.** Corrected
+  2026-08-04 by the investigation in
+  `plans/2026-08-04-library-phase-isolation-design.local.md` §2, which supersedes the
+  `phaseParent` attribution this entry carried when filed. `CompileSymbol` consults the
+  library-scope arm (`compile_time_continuation.go:380`) before the ordinary scoped-global
+  lookup, and that arm resolves through
+  `GetGlobalIndexFromLibraryScopes` → `GetGlobalIndexAcrossPhases`, which searches the library
+  env's phases **{0, 1, 2} without reference to the phase of the referring code**. Every
+  identifier in a library body carries the library's scope, so every library-body reference
+  takes it; the top level has no library scope, the arm never fires, and the reference fails.
+  That is the whole asymmetry.
 
-  ```
-  library phase-1 resolves a phase-0 define: true
-  engine  phase-1 resolves a phase-0 define: false
-  ```
+  Four experiments, each reverted:
 
-  This is the only phase→phase parent edge in the tree, and
-  `TestPhaseRegistry_PhaseEnvParentsToSealedBase` does not cover it — it asserts the *namespace*
-  case at phase 3+.
+  - The define lands at phase **1 only** and a phase-0 `GetBinding` off `lib.Env` does **not**
+    resolve it — so the frame graph is innocent and the leak is in compile-time resolution.
+  - Restricting the arm to phase 0 closes the downward leak and is **green** across
+    `go test ./...` *and* `TestR7RSConformance`; the jabberwocky carve-out reaches
+    `GetGlobalIndexAcrossPhases` through a different caller (`compile_syntax_rules.go:421`).
+  - Cutting the `phaseParent` edge to nil does **not** close the upward leak.
+  - With that edge cut, library phase-1 code still reaches `display` — through the same arm.
 
-  **The downward direction is a second finding and its mechanism is NOT verified.** In a library
-  body, `(begin-for-syntax (define ctonly 99))` followed by `(define (go) ctonly)` returns `99`;
-  at the top level both spellings are refused (`no such binding "ctonly" with compatible scopes`),
-  and a probe confirms a top-level for-syntax define lands at phase 1 alone with phase 0 blind to
-  it. **The parent edge above cannot explain this** — it points phase-1 → phase-0, so a phase-0
-  lookup should not reach phase 1. Either the library body path deposits the define at phase 0, or
-  some cross-phase resolution is involved. Establish which **before** designing a fix; a fix aimed
-  only at the parent edge may leave this half standing.
+  The last two are the crux: the arm's phase-0 reach is simultaneously the upward leak and the
+  only route by which phase-1 library code reaches the library's primitives, so the arm cannot
+  be made phase-relative on its own. **The real defect is structural** — a namespace splits
+  phase 0 into a sealed base (primitives) and a mutable runtime (user defines) and parents phase
+  frames to the seal; `NewChildRuntime` builds one flat frame holding both, so there is no frame
+  to reach that has the first without the second.
 
   **Consequence beyond conformance.** `docs/compiler/macro-system.md` Q4 argues no
   `ErrCrossPhaseMutation` check is needed because "the hermetic rejection *is* the loud failure, at
   no cost and with no false positive on the carve-out." That argument is sound at the top level and
   does not hold in a library body, which is where most real macro code lives.
 
-  **The fork.**
+  **What shipped** (the design's option A1, `plans/2026-08-04-library-phase-isolation-{design,impl}.local.md`).
+  The sealed axis moved off `Namespace` onto `PhaseRegistry`, so a library env can own one while
+  still sharing its parent's `Namespace`. `newSealedAxisFrames` is now the ONE builder for every
+  owner, and **an owner does not pick a subset of the axis** — a per-owner subset would mean
+  `sealedAxis` no longer described the system, and "is this (phase, kind) sealed?" would need a
+  "for whom?". `ownsSealedAxis` replaces `IsNamespaceRuntime` as the sealed-routing discriminator.
+  `mustSeal`'s read-time guard became a construction-time panic in `newPhaseRegistry`, since an
+  incomplete map is now a builder bug and nothing else. "Parent the library's phase frames to nil",
+  which an earlier revision of this entry listed as the smallest fix, is **refuted** — E3 showed it
+  closes neither leak.
 
-  1. **Give a library frame a seal**, so `phaseParent` has somewhere to route. Most faithful to the
-     model; the cost is that `NewChildRuntime` is deliberately flat (`parent: nil`) and that
-     flatness is load-bearing for library isolation — see the `(rnrs hashtables)` primitive-identity
-     note in `docs/reference/r7rs-differences.md`, which turns on it.
-  2. **Parent library phase frames to nil** instead of to the library's phase-0 frame. Smallest
-     change, restores rejection, and needs an answer for what a library's phase-1 code is then
-     allowed to see at all — today it reaches the library's own imports through that same edge.
-  3. **Accept and document it** as a deliberate divergence. Cheapest, but it leaves two different
-     phase semantics in one implementation and keeps the silent `#!void`.
+  **Three findings the design did not predict**, each of which changed the work:
+
+  1. **The plumbing to FILL a library seal already existed.** `LoadBootstrapCore` already routes
+     the registry apply through `SealedTargetAt(PhaseRuntime, SealKindValue)` and expanders through
+     `SealedTargetAt(PhaseExpand, SealKindHandler)`, and `registry.Apply`'s `WithRuntimeTarget`
+     seats the binding in the target while the `ForeignClosure` still captures the mutable frame.
+     So A1 needed **no new call site** — only a new routing predicate.
+  2. **`IsNamespaceRuntime` had to survive.** `pkg/wile/engine.go` uses it for the narrower "is this
+     the namespace's own runtime, not a library env?" doc-registration guard; widening it would
+     re-run `ApplyDocs` on every import — wasted work, and a documented race under concurrent
+     SRFI-18 imports.
+  3. **Q1 measured at zero.** No file under `pkg/stdlib/lib/` uses `begin-for-syntax`,
+     `define-for-syntax`, or `eval-when`; only `chibi/optional.sld` and `wile/er-macro-test.scm`
+     use a procedural transformer at all. The design called Q1 "the question most likely to turn a
+     clean fix into a sweep"; it is not one.
+
+  **Cost.** +52 allocs/op on `BenchmarkEngineStartupWithImport` (~230k), identical on both
+  profiles — the per-library-env seal frames, globals, and map. Engine construction is unchanged
+  on all four profiles; the import path is +1.37% sec/op (p < 0.01). A double registry apply would
+  have been ~150 000 allocations, three orders of magnitude away.
+
+  **Residuals, both from the design's §5:**
+
+  - **Q3 — a predeclared-but-unwritten slot reads as `#!void` rather than raising.** The upward
+    fix removes this symptom for the cross-phase case without touching `predeclareBinding`, so the
+    two are at least **separable**. The `predeclareBinding` twin-slot entry already in this file
+    stays open. This does not establish that they are different bugs — only that closing one did
+    not require the other.
+  - **Q2's structural half.** `findLibraryBinding` is the last consumer of the hard-wired
+    `{0, 1, 2}` walk, so a name a library binds at phase 3 or above is still not exportable. Its
+    correctness rests on probe order (runtime before expand), which is now pinned by
+    `TestFindLibraryBindingPrefersRuntimeOverExpand` and verified discriminating — reversing the
+    probe list fails it. The ceiling itself is unchanged.
 
   Documented as a known divergence in `docs/environment/system.md` invariant 6,
-  `docs/environment/diagram.md`, and `docs/compiler/macro-system.md` as of `3faf43c2`; those say
-  what happens, not that it is intended.
+  `docs/environment/diagram.md`, and `docs/compiler/macro-system.md` as of `3faf43c2`. Those
+  described the *behavior* correctly but assigned it to the `phaseParent` edge; corrected on this
+  branch, along with three Go comments calling a library env a flat island.
 
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 

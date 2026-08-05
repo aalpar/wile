@@ -51,8 +51,9 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 }
 
 // RegisterSyntaxCompilers binds all syntax compilers at (PhaseRuntime, handler) —
-// the frozen taproot for a layered main namespace, or the flat frame itself for a
-// NewChildRuntime library frame. Unlike the primitive expanders, these WANT the
+// the frozen taproot, which every owner of a sealed axis has: the main namespace's
+// sealed base, or a NewChildRuntime library env's own. Unlike the primitive
+// expanders, these WANT the
 // phase-0 seal: because every phase frame parents to that taproot (see the
 // reparent in environment/phase_registry.go createPhaseEnv), a binding placed
 // here is ambient: reachable uniformly from the runtime, expand, and compile
@@ -62,9 +63,9 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 //  1. Library export/import: findLibraryBinding in library_bindings.go searches
 //     a library's own runtime/expand/compile frames to locate syntax compilers
 //     when exporting or importing forms like syntax-case, define-syntax, etc.
-//     A NewChildRuntime library frame is a flat island (parent nil), so it does
-//     not reach the engine root's taproot — special forms stay ambient-only,
-//     unchanged by this relocation.
+//     A NewChildRuntime library env is an island — its frame graph roots at its
+//     OWN sealed base, so it does not reach the engine root's taproot at any
+//     phase — and special forms stay ambient-only, unchanged by this relocation.
 //  2. Scope-aware lookup via LookupSyntaxCompiler for hygiene resolution.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
