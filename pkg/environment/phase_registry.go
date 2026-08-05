@@ -104,34 +104,19 @@ type PhaseRegistry struct {
 	// Every owner that has a sealed axis has ALL of it. Owners differ in what gets
 	// APPLIED into their seals, never in which phases they seal — a per-owner
 	// subset would mean sealedAxis no longer describes the system, and "is this
-	// (phase, kind) sealed?" would need a "for whom?".
+	// phase sealed?" would need a "for whom?".
 	seals map[Phase]*EnvironmentFrame
 }
 
 // sealAt returns this registry's seal for a phase and whether the phase has one.
-// STRUCTURAL questions use this — a phase frame's lexical parent is one link, not
-// one per kind, so asking sealedAt with an arbitrary kind would orphan a seal whose
-// row happens not to cover that kind. Routing questions, which must not send a value
-// to a handler-only seal, use sealedAt.
+// The structural and the routing question are now the same question: a phase
+// either has a seal or it does not.
 //
 // False means the phase has no sealedAxis row (phase 2 and up), never "this owner
 // skipped a row": newSealedAxisFrames builds every row for every owner.
 func (p *PhaseRegistry) sealAt(phase Phase) (*EnvironmentFrame, bool) {
 	frame, ok := p.seals[phase]
 	return frame, ok
-}
-
-// sealedAt returns the immutable frame owning bindings of this (phase, kind), and
-// whether the pair is sealed. False means the mutable frame for the phase is the
-// target — a modeled absence, not a failure.
-func (p *PhaseRegistry) sealedAt(phase Phase, kind SealKind) (*EnvironmentFrame, bool) {
-	for _, row := range sealedAxis {
-		if row.phase != phase || !row.kinds.has(kind) {
-			continue
-		}
-		return p.sealAt(phase)
-	}
-	return nil, false
 }
 
 // isSeal reports whether frame is one of this registry's sealed frames.
@@ -218,12 +203,9 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 // seal this returned the library's phase-0 frame — the one phase->phase edge in the tree,
 // and the shape that made a library body's phase separation unenforceable.
 //
-// Two constraints keep this off the general routing seam. It runs under the registry's
+// One constraint keeps this off the general routing seam: it runs under the registry's
 // WRITE lock (createPhaseEnv), so it must not call anything that can re-enter GetOrCreate;
-// p.runtime and p.seals are both immutable-after-construction reads. And the parent link
-// is ONE link per phase, not one per kind, so it asks sealAt rather than picking a kind —
-// a seal whose row does not cover the kind guessed here would be parented to by nothing
-// and invisible to every lookup.
+// p.runtime and p.seals are both immutable-after-construction reads.
 func (p *PhaseRegistry) phaseParent(phase Phase) *EnvironmentFrame {
 	if !p.hasSeals() {
 		return p.runtime

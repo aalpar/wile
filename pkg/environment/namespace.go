@@ -333,7 +333,7 @@ func (p *Namespace) BoundSymbolNames() values.Value {
 	// Phase 0 only, both frames of it: the mutable runtime and its seal. The
 	// phase-1 seal is deliberately absent — this listing backs the value-oriented
 	// bound-names primitives, not the all-phases walk BoundNamesAcrossPhases does.
-	sealedRuntime, _ := p.SealedAt(PhaseRuntime, SealKindValue)
+	sealedRuntime, _ := p.phases.sealAt(PhaseRuntime)
 	for _, frame := range []*EnvironmentFrame{p.runtime, sealedRuntime} {
 		if frame == nil {
 			continue
@@ -1025,8 +1025,8 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 // it. It fixes no known bug; it means sealedAxis describes every owner.
 //
 // Nothing else has to change to FILL either seal: LoadBootstrapCore already routes
-// the registry apply through env.SealedTargetAt(PhaseRuntime, SealKindValue) and the
-// expanders through SealedTargetAt(PhaseExpand, SealKindHandler), and
+// the registry apply through env.SealedTargetAt(PhaseRuntime) and the
+// expanders through SealedTargetAt(PhaseExpand), and
 // registry.Apply's WithRuntimeTarget seats the binding in the target while the
 // ForeignClosure still captures the mutable frame, so a primitive resolves user code
 // against the library's own defines. Bootstrap macros reach the phase-1 seal by the
@@ -1099,7 +1099,7 @@ func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame
 // nil); every later row hangs off it.
 //
 // That link stitches ONE ambient set together — the startup bindings, indexed by
-// (phase, kind) — and is NOT a phase inheriting from a phase. Nothing here makes
+// phase — and is NOT a phase inheriting from a phase. Nothing here makes
 // phase N+1 resolve into phase N; phase environments are isolated, and the only
 // environment any of them inherits is this ambient set.
 //
@@ -1108,7 +1108,7 @@ func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame
 // SealedExpandBase keep working) and a library env (NewChildRuntime). They differ in
 // what gets APPLIED into the seals, never in which phases they seal. A per-owner
 // subset would leave sealedAxis describing only some owners, so that "is this
-// (phase, kind) sealed?" needed a "for whom?" — the drift mustSeal existed to prevent,
+// phase sealed?" needed a "for whom?" — the drift mustSeal existed to prevent,
 // one level up.
 //
 // sealedGlobal is the phase-0 seal's global, supplied by the caller because
@@ -1117,7 +1117,7 @@ func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame
 func newSealedAxisFrames(ns *Namespace, sealedGlobal *GlobalEnvironmentFrame) map[Phase]*EnvironmentFrame {
 	q := make(map[Phase]*EnvironmentFrame, len(sealedAxis))
 	var base *EnvironmentFrame
-	for _, row := range sealedAxis {
+	for _, phase := range sealedAxis {
 		global := sealedGlobal
 		if base != nil {
 			global = newGlobalEnvironmentFrameForNamespace(ns)
@@ -1125,13 +1125,13 @@ func newSealedAxisFrames(ns *Namespace, sealedGlobal *GlobalEnvironmentFrame) ma
 		frame := &EnvironmentFrame{
 			parent:     base,
 			global:     global,
-			phaseLevel: row.phase,
+			phaseLevel: phase,
 			namespace:  ns,
 		}
 		if base == nil {
 			base = frame
 		}
-		q[row.phase] = frame
+		q[phase] = frame
 	}
 	return q
 }
@@ -1159,12 +1159,12 @@ func newPhaseRegistry(owner *Namespace, runtime *EnvironmentFrame, seals map[Pha
 		runtime: runtime,
 		seals:   seals,
 	}
-	for _, row := range sealedAxis {
-		frame, ok := seals[row.phase]
+	for _, phase := range sealedAxis {
+		frame, ok := seals[phase]
 		if !ok || frame == nil {
 			panic(werr.WrapForeignErrorf(
 				werr.ErrUnexpectedNil,
-				"newPhaseRegistry: sealedAxis declares phase %s but this owner has no frame for it", row.phase,
+				"newPhaseRegistry: sealedAxis declares phase %s but this owner has no frame for it", phase,
 			))
 		}
 		frame.phases = q

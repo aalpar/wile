@@ -95,14 +95,12 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	// no Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander walks
 	// env.Expand()'s parent chain, which phaseParent points at the seal.
 	//
-	// The PHASE is what keeps this out of the value world, not the kind. Phase 0's
-	// sealedAxis row covers both kinds and sealedAt ignores the kind once the row
-	// matches, so a phase-0 registration lands in the same frame either way — and that
-	// frame is on the runtime value-resolution path, which would leak a dialect-removed
-	// form's #<primitive-expander:…> into the value world. Registering at phase 1 is what
-	// avoids it; the kind then picks the seal over the mutable expand child.
+	// The PHASE is what keeps this out of the value world. A phase-0 registration
+	// would land on the runtime value-resolution path, leaking a dialect-removed
+	// form's #<primitive-expander:…> into the value world; registering at phase 1
+	// instead puts it behind the expand-phase seal, off that path entirely.
 	taproot := func() *environment.EnvironmentFrame {
-		return env.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler)
+		return env.SealedTargetAt(environment.PhaseExpand)
 	}
 	return RegisterPhaseBindings(env, taproot, primitiveExpanderEntries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {

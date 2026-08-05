@@ -76,7 +76,7 @@ func TestChildRuntimePhaseFramesParentToItsSealedAxis(t *testing.T) {
 
 // A library env declares the WHOLE sealed axis, not a subset of it. An owner
 // choosing which rows to build would make sealedAxis describe only some owners, so
-// that "is this (phase, kind) sealed?" needed a "for whom?". The routing answers
+// that "is this phase sealed?" needed a "for whom?". The routing answers
 // below are therefore structurally identical to a namespace's, differing only in
 // WHICH frames they name — which is the assertion the loop makes directly.
 func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
@@ -84,12 +84,12 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	ns := NewNamespace()
 	lib := ns.NewChildRuntime()
 
-	for _, row := range sealedAxis {
-		libSeal, libOK := lib.phases.sealAt(row.phase)
-		nsSeal, nsOK := ns.phases.sealAt(row.phase)
-		c.Assert(libOK, qt.Equals, nsOK, qt.Commentf("phase %s", row.phase))
-		c.Assert(libOK, qt.IsTrue, qt.Commentf("phase %s", row.phase))
-		c.Assert(libSeal, qt.Not(qt.Equals), nsSeal, qt.Commentf("phase %s", row.phase))
+	for _, phase := range sealedAxis {
+		libSeal, libOK := lib.phases.sealAt(phase)
+		nsSeal, nsOK := ns.phases.sealAt(phase)
+		c.Assert(libOK, qt.Equals, nsOK, qt.Commentf("phase %s", phase))
+		c.Assert(libOK, qt.IsTrue, qt.Commentf("phase %s", phase))
+		c.Assert(libSeal, qt.Not(qt.Equals), nsSeal, qt.Commentf("phase %s", phase))
 	}
 
 	base, _ := lib.phases.sealAt(PhaseRuntime)
@@ -97,13 +97,12 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	c.Assert(base, qt.Equals, lib.Parent())
 	c.Assert(expandBase.Parent(), qt.Equals, base)
 
-	c.Assert(lib.SealedTargetAt(PhaseRuntime, SealKindValue), qt.Equals, base)
-	c.Assert(lib.SealedTargetAt(PhaseRuntime, SealKindHandler), qt.Equals, base)
-	c.Assert(lib.SealedTargetAt(PhaseExpand, SealKindHandler), qt.Equals, expandBase)
-	// Phase 1 seals HANDLERS only, for a library exactly as for a namespace: a
-	// registry expand-phase primitive is a value and stays in the mutable child.
-	c.Assert(lib.SealedTargetAt(PhaseExpand, SealKindValue), qt.Equals, lib.Expand())
-	c.Assert(lib.SealedTargetAt(PhaseCompile, SealKindHandler), qt.Equals, lib.Compile())
+	c.Assert(lib.SealedTargetAt(PhaseRuntime), qt.Equals, base)
+	c.Assert(lib.SealedTargetAt(PhaseExpand), qt.Equals, expandBase)
+	// Whether an expand-phase primitive lands in the seal or the mutable expand
+	// child is no longer askable here — that placement is registry.Apply's
+	// phaseTargets (apply.go), not the sealed axis.
+	c.Assert(lib.SealedTargetAt(PhaseCompile), qt.Equals, lib.Compile())
 }
 
 // A bootstrap macro compiled against a library's phase-0 seal must land in that
@@ -139,5 +138,5 @@ func TestOwnsSealedAxisDiscriminates(t *testing.T) {
 
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
 	c.Assert(inner.ownsSealedAxis(), qt.IsFalse)
-	c.Assert(inner.SealedTargetAt(PhaseRuntime, SealKindValue), qt.Equals, inner)
+	c.Assert(inner.SealedTargetAt(PhaseRuntime), qt.Equals, inner)
 }

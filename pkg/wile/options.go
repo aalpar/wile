@@ -560,7 +560,7 @@ func WithStrictNamespace() EngineOption {
 // What survives is not the empty set: exactly 41 names, whatever the profile,
 // pinned name-by-name by TestNoAmbientBindingsBoundSet. Two mechanisms put them
 // there. 38 are PHASE HANDLERS, not bindings: registered by the compiler, living
-// in frames sealed SealKindHandler that ordinary value resolution never sees, and
+// in sealed frames that ordinary value resolution never sees, and
 // never sourced from a registry — so withholding the registry cannot withhold
 // them. The other three (unless, guard, guard-aux) are syntax-rules definitions
 // in core.LateBootstrapMacroSource, which LoadBootstrapCore loads

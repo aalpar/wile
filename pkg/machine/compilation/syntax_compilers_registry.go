@@ -76,7 +76,7 @@ var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
 // from syntax transformers (BindingTypeSyntax) and regular variables.
 func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
 	taproot := func() *environment.EnvironmentFrame {
-		return env.SealedTargetAt(environment.PhaseRuntime, environment.SealKindHandler)
+		return env.SealedTargetAt(environment.PhaseRuntime)
 	}
 	return RegisterPhaseBindings(env, taproot, syntaxCompilerEntries,
 		func(name string, fn SyntaxCompilerFunc) values.Value {

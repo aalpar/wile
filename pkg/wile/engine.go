@@ -1303,7 +1303,7 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// the sealed base, not the mutable runtime child (which is empty at bootstrap time).
 	// Read the sealed base so their docs are indexed; reading the mutable child's own
 	// frame (ns.Phases().Get(0)) would silently drop every stdlib procedure doc (G2).
-	base, ok := ns.SealedAt(environment.PhaseRuntime, environment.SealKindValue)
+	base, ok := ns.SealedAt(environment.PhaseRuntime)
 	if !ok {
 		return
 	}

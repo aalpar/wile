@@ -218,31 +218,27 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 	qt.Assert(t, seen["caar"], qt.IsTrue, qt.Commentf("bootstrap caar must appear"))
 }
 
-// TestSealedAxisTable pins the (phase, kind) model that SealedAt states: sealing is a
-// property of the PAIR, not of the phase. The phase-1 row is the one that carries the
-// asymmetry — a handler there is sealed, a value is not, which is why registry
-// expand-phase primitives land in the mutable expand child while special-form expanders
-// land in the sealed one. Change a cell here only alongside a deliberate model change.
+// TestSealedAxisTable pins the phase model that SealedAt states: sealing is a
+// property of the phase alone. Whether an expand-phase primitive lands in the
+// seal or the mutable expand child is no longer a question this table can ask —
+// that placement is registry.Apply's phaseTargets (apply.go), not the sealed
+// axis. Change a cell here only alongside a deliberate model change.
 func TestSealedAxisTable(t *testing.T) {
 	ns := environment.NewNamespace()
 	cases := []struct {
 		name   string
 		phase  environment.Phase
-		kind   environment.SealKind
 		want   *environment.EnvironmentFrame
 		sealed bool
 	}{
-		{"runtime value", environment.PhaseRuntime, environment.SealKindValue, ns.SealedBase(), true},
-		{"runtime handler", environment.PhaseRuntime, environment.SealKindHandler, ns.SealedBase(), true},
-		{"expand handler", environment.PhaseExpand, environment.SealKindHandler, ns.SealedExpandBase(), true},
-		{"expand value", environment.PhaseExpand, environment.SealKindValue, nil, false},
-		{"compile value", environment.PhaseCompile, environment.SealKindValue, nil, false},
-		{"compile handler", environment.PhaseCompile, environment.SealKindHandler, nil, false},
-		{"template handler", environment.PhaseTemplate, environment.SealKindHandler, nil, false},
+		{"runtime", environment.PhaseRuntime, ns.SealedBase(), true},
+		{"expand", environment.PhaseExpand, ns.SealedExpandBase(), true},
+		{"compile", environment.PhaseCompile, nil, false},
+		{"template", environment.PhaseTemplate, nil, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			frame, sealed := ns.SealedAt(c.phase, c.kind)
+			frame, sealed := ns.SealedAt(c.phase)
 			qt.Assert(t, sealed, qt.Equals, c.sealed)
 			qt.Assert(t, frame, qt.Equals, c.want)
 		})
@@ -257,8 +253,7 @@ func TestSealedAxisTable(t *testing.T) {
 //     misses it. A seal absent from SealedFrames vanishes from ,apropos and REPL
 //     completion rather than failing.
 //   - REACHABLE. A seal nothing parents to resolves nothing. phaseParent must point the
-//     mutable frame at each phase's seal, and that link is kind-independent, so a row
-//     whose kinds do not happen to include the kind a caller guessed must still be wired.
+//     mutable frame at each phase's seal.
 //
 // The sweep spans well past the phases that have seals today so a new row cannot satisfy
 // one property and quietly miss the other. It does NOT pin non-nil-ness: SealedAt and
@@ -271,20 +266,17 @@ func TestSealedAxisIsEnumerableAndReachable(t *testing.T) {
 	for _, frame := range ns.SealedFrames() {
 		enumerated[frame] = true
 	}
-	kinds := []environment.SealKind{environment.SealKindValue, environment.SealKindHandler}
 	for phase := environment.Phase(-2); phase <= 8; phase++ {
-		for _, kind := range kinds {
-			sealed, ok := ns.SealedAt(phase, kind)
-			if !ok {
-				continue
-			}
-			qt.Assert(t, enumerated[sealed], qt.IsTrue,
-				qt.Commentf("seal at (phase %s, %s) is routable but not enumerated", phase, kind))
-			qt.Assert(t, ns.IsSealed(sealed), qt.IsTrue,
-				qt.Commentf("seal at (phase %s, %s) is not recognized by IsSealed", phase, kind))
-			qt.Assert(t, ns.AtPhase(phase).Parent(), qt.Equals, sealed,
-				qt.Commentf("the mutable frame at phase %s does not parent to its seal", phase))
+		sealed, ok := ns.SealedAt(phase)
+		if !ok {
+			continue
 		}
+		qt.Assert(t, enumerated[sealed], qt.IsTrue,
+			qt.Commentf("seal at phase %s is routable but not enumerated", phase))
+		qt.Assert(t, ns.IsSealed(sealed), qt.IsTrue,
+			qt.Commentf("seal at phase %s is not recognized by IsSealed", phase))
+		qt.Assert(t, ns.AtPhase(phase).Parent(), qt.Equals, sealed,
+			qt.Commentf("the mutable frame at phase %s does not parent to its seal", phase))
 	}
 	qt.Assert(t, ns.IsSealed(nil), qt.IsFalse) // a frame that does not exist is not sealed
 }
@@ -312,11 +304,12 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 }
 
 // TestSealedTargetAtFallbacks pins SealedTargetAt's answers for the two shapes that
-// own a sealed axis, and for the (phase, kind) pairs the axis leaves unsealed. Both
-// shapes answer the same way — a library env routes to its OWN seals, never the
-// namespace's — because an owner does not pick a subset of the axis. The expand-phase
-// VALUE cell, where registry expand primitives are registered, reaches the mutable
-// expand child on both, since phase 1 seals handlers only.
+// own a sealed axis, and for the phases the axis leaves unsealed (phase 2 and up).
+// Both shapes answer the same way — a library env routes to its OWN seals, never
+// the namespace's — because an owner does not pick a subset of the axis. Whether an
+// expand-phase primitive lands in the seal or the mutable expand child is not this
+// call's question any more: that placement is registry.Apply's phaseTargets
+// (apply.go), not the sealed axis.
 //
 // The library assertions live here in the EXTERNAL test package on purpose: they use
 // nothing but exported API, so they would catch a subset creeping back in even if the
@@ -330,15 +323,12 @@ func TestSealedTargetAtFallbacks(t *testing.T) {
 	qt.Assert(t, libBase, qt.Not(qt.Equals), ns.SealedBase())
 	qt.Assert(t, libExpandBase, qt.Not(qt.Equals), ns.SealedExpandBase())
 	qt.Assert(t, libExpandBase.Parent(), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindHandler), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler), qt.Equals, libExpandBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand, environment.SealKindValue), qt.Equals, lib.Expand())
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseCompile, environment.SealKindHandler), qt.Equals, lib.Compile())
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime), qt.Equals, libBase)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand), qt.Equals, libExpandBase)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseCompile), qt.Equals, lib.Compile())
 
 	runtime := ns.Runtime()
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, ns.SealedBase())
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler), qt.Equals, ns.SealedExpandBase())
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseExpand, environment.SealKindValue), qt.Equals, ns.Expand())
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseCompile, environment.SealKindHandler), qt.Equals, ns.Compile())
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseRuntime), qt.Equals, ns.SealedBase())
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseExpand), qt.Equals, ns.SealedExpandBase())
+	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseCompile), qt.Equals, ns.Compile())
 }

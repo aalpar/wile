@@ -30,8 +30,8 @@ import (
 
 // level2BoundNames is the exact visible surface at level 2 — every name
 // Engine.BoundNames() reports when the top level is bound from an empty
-// registry. 38 are phase handlers (registered by the compiler into frames
-// sealed SealKindHandler, never sourced from a registry). The other three,
+// registry. 38 are phase handlers (registered by the compiler into sealed
+// frames, never sourced from a registry). The other three,
 // unless/guard/guard-aux, are syntax-rules definitions in
 // core.LateBootstrapMacroSource, which LoadBootstrapCore loads UNCONDITIONALLY
 // rather than through Registry.MacroSources() — the one place a registry-borne

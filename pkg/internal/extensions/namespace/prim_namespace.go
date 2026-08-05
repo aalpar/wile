@@ -212,7 +212,7 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 	// on the delete side.
 	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym, environment.AmbientScopes())
 	if !deleted {
-		base, sealed := ns.SealedAt(environment.PhaseRuntime, environment.SealKindValue)
+		base, sealed := ns.SealedAt(environment.PhaseRuntime)
 		if sealed && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, values.EmptyScopes()) != nil {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,

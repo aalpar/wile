@@ -56,12 +56,12 @@ import (
 // context here and re-wrapped by each caller in its own idiom, so pkg/wile keeps its
 // ErrEngineInit contract and this package keeps its plainer one.
 func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.PrimitiveRegistry, opts ...registry.ApplyOption) (*environment.EnvironmentFrame, error) {
-	// Runtime primitives and bootstrap procedures are phase-0 VALUES, so they route to
-	// the phase-0 seal — the ambient set. Every owner of one gets this: a namespace
-	// (engine root / profile child) and a library env alike, each into its OWN seal,
-	// so runtimeTarget is never env itself here. A fresh slice avoids racing the
-	// shared opts backing array across concurrent library-env creation.
-	runtimeTarget := env.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue)
+	// Runtime primitives and bootstrap procedures route to the phase-0 seal — the
+	// ambient set. Every owner gets this: a namespace (engine root / profile child)
+	// and a library env alike, each into its OWN seal, so runtimeTarget is never env
+	// itself here. A fresh slice avoids racing the shared opts backing array across
+	// concurrent library-env creation.
+	runtimeTarget := env.SealedTargetAt(environment.PhaseRuntime)
 	applyOpts := make([]registry.ApplyOption, 0, len(opts)+1)
 	applyOpts = append(applyOpts, opts...)
 	applyOpts = append(applyOpts, registry.WithRuntimeTarget(runtimeTarget))

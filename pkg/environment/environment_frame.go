@@ -279,7 +279,7 @@ func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
 	// base consulting the shared namespace's map would climb into the engine's
 	// sealedExpandBase and hand a library's bootstrap macros to the whole engine.
 	if phase > p.phaseLevel && p.phases != nil && p.phases.isSeal(p) {
-		sealed, ok := p.phases.sealedAt(phase, SealKindHandler)
+		sealed, ok := p.phases.sealAt(phase)
 		if ok {
 			return sealed
 		}
