@@ -37,9 +37,28 @@ const (
 
 	// SealKindHandler is a binding consulted by the compiler or expander rather
 	// than evaluated: a syntax compiler, a primitive expander, or a bootstrap
-	// macro's transformer. Sealing these matters beyond immutability — a handler
-	// on a phase-0 value frame is reachable by runtime value resolution, which
-	// leaks a dialect-removed form's #<primitive-expander:…> into the value world.
+	// macro's transformer.
+	//
+	// The kind records which resolution path OUGHT to reach a binding, but it
+	// currently DISCRIMINATES in exactly one cell. sealedAt asks whether the row
+	// covers the kind and then returns sealAt(phase), which ignores the kind — and
+	// the phase-0 row covers both. So the only pair where the argument changes the
+	// answer is phase 1: handler lands in the phase-1 seal, value falls through to
+	// the mutable expand child, which is what keeps a registry expand-phase
+	// primitive out of the seal and lets a user define-syntax shadow a bootstrap
+	// macro rather than share its frame.
+	//
+	// At phase 0 both kinds are the same frame, so a phase-0 handler IS reachable by
+	// runtime value resolution: `(display define-syntax)` prints
+	// #<syntax-compiler:define-syntax>. Passing SealKindHandler at phase 0 therefore
+	// states intent and routes nowhere different.
+	//
+	// So do not read the kind as a reachability guarantee. Two other things carry
+	// that: registering a primitive expander at phase 1 (where the expand chain is
+	// off the phase-0 value path), and compilation's compileTimeHandler refusal,
+	// which stops a resolved pin from emitting a runtime load of a handler. The
+	// second covers the pinned path, not a plain top-level reference — which is why
+	// the display above still prints.
 	SealKindHandler
 )
 

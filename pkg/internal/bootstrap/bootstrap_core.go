@@ -57,10 +57,10 @@ import (
 // ErrEngineInit contract and this package keeps its plainer one.
 func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.PrimitiveRegistry, opts ...registry.ApplyOption) (*environment.EnvironmentFrame, error) {
 	// Runtime primitives and bootstrap procedures are phase-0 VALUES, so they route to
-	// the phase-0 seal for a namespace-owning runtime env (engine root / profile child)
-	// and to the frame itself for a flat library env. WithRuntimeTarget(self) is a
-	// no-op, so the library path is unchanged. A fresh slice avoids racing the shared
-	// opts backing array across concurrent library-env creation.
+	// the phase-0 seal — the ambient set. Every owner of one gets this: a namespace
+	// (engine root / profile child) and a library env alike, each into its OWN seal,
+	// so runtimeTarget is never env itself here. A fresh slice avoids racing the
+	// shared opts backing array across concurrent library-env creation.
 	runtimeTarget := env.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue)
 	applyOpts := make([]registry.ApplyOption, 0, len(opts)+1)
 	applyOpts = append(applyOpts, opts...)
@@ -77,13 +77,12 @@ func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, r
 	}
 
 	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-	// Bootstrap macros load against runtimeTarget (= the sealed base for a namespace-owning
-	// env, the flat frame itself for a library env), symmetric with loadBootstrapProcedures
-	// below. Compiling a define-syntax with env == sealedBase makes its NextPhase() write
-	// land in sealedExpandBase (via the AtPhase receiver branch), so a bootstrap macro is
-	// immutable and a later user (define-syntax foo …) shadows in the mutable expand child
-	// instead of overwriting it in place. For a library env runtimeTarget == env, so this is
-	// unchanged there.
+	// Bootstrap macros load against runtimeTarget (the owner's phase-0 seal), symmetric
+	// with loadBootstrapProcedures below. Compiling a define-syntax with env == that seal
+	// makes its NextPhase() write land in the owner's phase-1 seal (via the AtPhase
+	// receiver branch), so a bootstrap macro is immutable and a later user
+	// (define-syntax foo …) shadows in the mutable expand child instead of overwriting it
+	// in place. A library env takes the same path into its own pair of seals.
 	err = loadBootstrapMacros(ctx, runtimeTarget, reg.MacroSources(), bootstrapResolver)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "LoadBootstrapCore: load bootstrap macros")
