@@ -306,7 +306,24 @@ over `environment.Phase` values, and its bits compose with `|`.
 
 Most extension primitives use `PhaseSetRuntime` only. Primitives needed during
 `syntax-rules` expansion use `PhaseSetRuntime | PhaseSetExpand`. Compile-time
-bindings (auxiliary syntax keywords) use `PhaseSetCompile` or `AddBinding`.
+bindings (auxiliary syntax keywords such as `else` and `=>`) use `PhaseSetCompile`
+or `AddBinding`.
+
+Three limits on this axis, all deliberate:
+
+- **`PhaseSet` is narrower than `Phase`.** It is a `uint8` covering phase indices
+  0..7 (`phaseSetBits`, `registry/phase.go`). `PhaseTemplate` (-1) and every macro
+  tower phase ≥ 8 are unrepresentable: `With` panics on them, `Has` returns false.
+  Registration is a compile-time-constant API, so a programmer error there fails
+  loudly rather than silently shifting past the bitset width.
+- **Only phases 0 and 1 receive values.** `Apply` iterates a two-row
+  `phaseTargets` table (`registry/apply.go`); there is no registration path that
+  installs a `ForeignClosure` at phase 2 or above. A primitive an expander needs
+  at a tower phase has to reach it some other way.
+- **`PhaseSetCompile` is inert alongside `PhaseSetRuntime`.** The compile-only
+  pass is guarded by `Has(PhaseCompile) && !Has(PhaseRuntime)`, so
+  `PhaseSetRuntime|PhaseSetCompile` registers exactly what `PhaseSetRuntime`
+  alone does. Use `PhaseSetCompile` on its own, or not at all.
 
 Under the default immutable top level, `PhaseSetRuntime` primitives are bound in
 the sealed base frame rather than the mutable runtime frame, while the closure

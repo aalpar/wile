@@ -50,11 +50,56 @@ The environment system has four key types organized in a hierarchy:
 
 ## Namespace
 
-The `Namespace` is the root of the environment hierarchy. Each Wile VM instance has exactly one Namespace which owns:
+The `Namespace` is the root of the environment hierarchy. An engine has exactly one
+*root* Namespace, and every first-class environment a program constructs is another
+one: `(environment …)`, `(null-environment)`, `(make-namespace)`,
+`(scheme-report-environment)`, and `(environment '(wile <profile>))` each mint a
+child. A Namespace owns:
 
 - **Syntax interning table**: Caches syntax objects for consistent identity across macro expansion
 - **Phase registry**: O(1) access to any phase environment
-- **Library registry**: Tracks loaded R7RS libraries
+- **Two sealed frames**: `sealedBase` (phase 0) and `sealedExpandBase` (phase 1)
+- **Library registry**, **module-instance cache**, **primitive registry**, **authorizer**
+
+### Namespace Kinds
+
+Four constructors, and the differences between them are not cosmetic:
+
+| Constructor | Sealed base | Runtime frame | Scheme surface |
+|---|---|---|---|
+| `NewNamespace()` | own, empty until bootstrap applies the registry | own | the engine root |
+| `NewChildNamespace()` | own, **stays empty** | own, empty | `(environment …)`, `(null-environment)`, `(make-namespace)`, `namespace-derive` |
+| `NewSchemeReportNamespace()` | own, a **copy** of the parent's | own, a copy of the parent's runtime | `(scheme-report-environment)` |
+| `NewChildRuntime()` | none (flat frame, `parent == nil`) | is itself | not first-class — library loading only |
+
+The empty sealed base under `NewChildNamespace` is what splits the two
+`(environment …)` forms apart. An import-spec environment copies the imported
+bindings into the child's **mutable runtime**, so they are ordinary user bindings;
+a profile environment routes a curated registry apply into the child's **sealed
+base** (`NewProfileEnvironment`, `pkg/internal/bootstrap/bootstrap.go`), so the
+same names are immutable there:
+
+```scheme
+(namespace-undefine! (environment '(scheme base)) 'car)  ; succeeds
+(namespace-undefine! (environment '(wile console)) 'car)
+;; => namespace-undefine!: cannot undefine sealed binding "car"
+```
+
+### What a Child Inherits
+
+`Namespace` documents a five-way field policy (see the type's doc comment, which
+is the authority — new fields must pick one):
+
+| Policy | Fields | Effect on a child |
+|---|---|---|
+| Per-VM | `Name`, `parent`, `phases`, `runtime`, `moduleInstances`, `syntaxInterns` | child gets its own; `syntaxInterns` is nil and `InternSyntax` delegates to the parent |
+| Captured at construction | `libraryRegistry`, `libraryEnvFactory`, `registry`, `authorizer`, `envMap` | child copies the parent's pointer at fork time; a later `parent.SetRegistry(other)` does **not** reach it, but mutation *through* the shared pointer does |
+| Delegated to root | `fileResolver`, `loadPathStack`, `scopeRegistry`, `immutableLiterals`, `immutableTopLevel` | child stores nothing; reads walk the parent chain |
+| Pointer-shared (`*EngineServices`) | `ioState`, `formRegistry`, `inlineThreshold`, `maxExpandDepth`, `exportIndex` | one struct for the whole namespace tree |
+| Owned outright | `sealedBase`, `sealedExpandBase`, `inlineHOFTemplates`, `effectiveRegistry`, `extensionState` | child builds its own; unrelated to the parent's |
+
+Capture, not delegation, is the policy for capability state: a reassignment on the
+parent must not silently widen an existing child.
 
 ### Creating a Namespace
 
@@ -84,30 +129,78 @@ interned := ns.InternSyntax(key, syntaxValue)
 
 ## Phase Hierarchy
 
-Wile supports multiple phases for macro expansion:
+`Phase` is an `int8`, and `PhaseRegistry.GetOrCreate` mints a frame for **any**
+value in `[-128, 127]` on first access. The four named constants are the phases
+that have names; they are not the set of phases that exist.
 
-| Phase | Constant | Purpose |
-|-------|----------|---------|
-| -1 | `PhaseTemplate` | Template phase (for-template, future) |
-| 0 | `PhaseRuntime` | Normal program execution |
-| 1 | `PhaseExpand` | Macro expansion (for-syntax) |
-| 2 | `PhaseCompile` | Compile-time (for-meta 2) |
+| Phase | Constant | What actually lands there |
+|-------|----------|---------------------------|
+| -1 | `PhaseTemplate` | `(import (for-template …))` / `(for-meta -1 …)` bindings. Nothing in Wile *reads* phase -1, so these bindings are installed and inert |
+| 0 | `PhaseRuntime` | Normal program execution; user `define`s; runtime primitives |
+| 1 | `PhaseExpand` | `define-syntax` transformers, `begin-for-syntax` / `define-for-syntax` bodies, `(import (for-syntax …))` |
+| 2 | `PhaseCompile` | Registry compile-time bindings (`AddBinding`, `PhaseSetCompile`); `(for-meta 2 …)` |
+| 3 … 127 | *(none)* | Created on demand by the macro tower: a transformer body or a nested `begin-for-syntax` at phase *N* runs its own compile-time code at *N+1* |
+
+Phases 3 and up are not hypothetical, and the tower is observable from Scheme.
+Under `--strict=no-bindings` (nothing ambient, so every name must be imported at
+a stated phase):
+
+```scheme
+;; program A
+(import (for-meta 2 (scheme base)))                  ; car bound at phase 2
+(begin-for-syntax (begin-for-syntax (car '(1 2))))   ; body runs at phase 2 => ok
+
+;; program B, a separate file: the imports do not accumulate
+(import (for-syntax (scheme base)))                  ; car bound at phase 1
+(begin-for-syntax (begin-for-syntax (car '(1 2))))   ; body runs at phase 2
+;; => no such local or global binding "car"
+```
+
+The second failure is the hermeticity property, not a missing feature: phase
+frames parent to the sealed base, never to the phase below, so a binding
+installed at phase *N* is invisible at *N+1* (and at *N-1*). Phase shifts compose
+additively, so `(for-syntax (for-syntax lib))` is the same as `(for-meta 2 lib)`,
+and a shift that leaves `int8` is rejected (`for-meta: phase 200 out of range
+[-128, 127]`).
+
+Two lookups are still hard-wired to `{0, 1, 2}` and do not follow the tower:
+
+- `GetGlobalIndexAcrossPhases` (`environment/environment_frame.go`), the R7RS
+  §4.3 macro-generating-macro carve-out for free template identifiers.
+- `findLibraryBinding` (`machine/compilation/library_bindings.go`), which decides
+  what a library can export. A name a library binds at phase 3 or above is
+  therefore not exportable.
+
+Everything else that walks phases is driven by `PhaseRegistry.Phases()` (the
+instantiated set) and does follow the tower: `BoundNamesAcrossPhases`, and
+`,apropos` through it.
+
+`registry.PhaseSet`, the *registration* vocabulary, is narrower still: a `uint8`
+bitset covering phases 0..7 only. `PhaseTemplate` and any tower phase ≥ 8 are
+unrepresentable in it by construction (`With` panics, `Has` returns false). See
+[extensions/architecture.md](../extensions/architecture.md#phases).
 
 ### Accessing Phase Environments
 
 ```go
 env := environment.NewNamespaceFrame()
 
-// Direct phase access
-runtime := env.AtPhase(0)   // Same as env.Runtime()
-expand := env.AtPhase(1)    // Same as env.Expand()
-compile := env.AtPhase(2)   // Same as env.Compile()
+// Absolute phase access (creates the frame on first call)
+runtime := env.AtPhase(environment.PhaseRuntime)   // same as env.Runtime()
+expand  := env.AtPhase(environment.PhaseExpand)    // same as env.Expand()
+compile := env.AtPhase(environment.PhaseCompile)   // same as env.Compile()
+tower   := env.AtPhase(7)                          // legal; created on demand
 
-// Convenience methods
-env.Runtime()   // Phase 0
-env.Expand()    // Phase 1
-env.Compile()   // Phase 2
+// Relative phase access: what the macro tower is built on. Climbing sites
+// must use these, not Expand(), or every phase collapses into phase 1.
+next := env.NextPhase()                   // frame at env.PhaseLevel()+1
+next, err := env.NextPhaseChecked(base)   // same, int8 ceiling as an error
 ```
+
+`NextPhase()` at `phaseLevel 0` equals `Expand()`, which is why top-level
+expansion is byte-for-byte unchanged by the tower (the *level-0 identity*). The
+climbing sites are enumerated in
+[compiler/macro-system.md](../compiler/macro-system.md#phase-tower-relative-phase-accessors).
 
 Each phase has its own `GlobalEnvironmentFrame` for bindings but shares the `Namespace` for interning.
 
@@ -316,11 +409,25 @@ These invariants must be maintained:
      ```
 
    - `createPhaseEnv` parents each phase frame to that phase's seal via
-     `phaseParent`, and only for a namespace that owns one (`IsNamespaceRuntime`).
-     A flat `NewChildRuntime` library frame owns no seal and stays a flat island
-     (library isolation). A phase with no seal parents straight to `sealedBase`,
-     preserving hermeticity and the climbing-tower invariant that higher phases
-     never introduce a phase→phase parent edge.
+     `phaseParent`. A phase with no seal of its own parents straight to
+     `sealedBase`, preserving hermeticity and the climbing-tower invariant that
+     higher phases never introduce a phase→phase parent edge.
+   - **Hermeticity is a property of a namespace-runtime frame, not of every
+     frame.** `phaseParent` routes to a seal only when the registry's phase-0
+     entry is its namespace's own runtime (`IsNamespaceRuntime`). A flat
+     `NewChildRuntime` library frame is not, so its phase frames parent to the
+     *library's own phase-0 frame* — the one phase→phase edge in the tree. Inside
+     a library environment a phase-1 lookup therefore **does** see the library's
+     phase-0 bindings:
+
+     ```
+     library env:  libExpand (phase 1) → libRuntime (phase 0) → nil
+                   libCompile (phase 2) → libRuntime (phase 0) → nil
+     ```
+
+     That is library isolation (nothing reaches the engine's frames at any phase),
+     not hermeticity. Quote the hermeticity guarantee for engine and profile
+     namespaces only.
    - **Why `sealedExpandBase` is distinct from `sealedBase`, not a reuse.** A
      compile-time handler (a bootstrap macro, `BindingTypeSyntax`, or a
      special-form expander, `BindingTypePrimitive`) placed on the phase-0 value

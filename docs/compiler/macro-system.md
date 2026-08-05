@@ -315,32 +315,65 @@ The expander checks for local variable bindings before macro lookup (`hasLocalVa
 A `define-syntax` at phase *N* binds a macro usable in phase-*N* code, and its
 transformer *expression* is compiled and run at phase *N+1*. When that transformer
 body itself defines and uses macros, those climb to *N+1*, *N+2*, … The climb is
-realized by making four macro-resolution sites *relative* to the expanding frame's
-own `phaseLevel` via `EnvironmentFrame.NextPhase()` (`environment/environment_frame.go`),
-rather than the absolute `Expand()`:
+realized by making six call sites, in four roles, *relative* to the expanding
+frame's own `phaseLevel` via `EnvironmentFrame.NextPhase()`
+(`environment/environment_frame.go`), rather than the absolute `Expand()`:
 
 - transformer-body compilation (`compile_transformer.go`);
 - `define-syntax` storage — both the top-level path (`compile_define_syntax.go`)
   and the internal-body path (`compileDefineSyntaxFromSyntax`, `expander_body.go`);
-- macro lookup during expansion (`expander_time_continuation.go`, two sites);
-- `begin-for-syntax`/`define-for-syntax` body execution and `(import (for-syntax …))`
-  placement (composed with the current `phaseLevel` via `composePhaseShift`).
+- macro lookup during expansion — arm 2 of `lookupMacroBinding`
+  (`expander_time_continuation.go`); arm 1 reads the current phase and arm 3 the
+  library env, so neither climbs;
+- `begin-for-syntax` (`compile_helpers.go`) and `define-for-syntax`
+  (`compile_define_for_syntax.go`) body execution. `(import (for-syntax …))`
+  placement is relative by a different route: `ResolveAndInstallImportSet`
+  composes the importing frame's `env.PhaseLevel()` with the import set's shift
+  via `composePhaseShift` (`library_bindings.go`).
+
+Two compile-time readers deliberately stay absolute — `LookupSyntaxCompiler`
+(`env.Compile()`) and `LookupPrimitiveExpander` (`env.Expand()`) — because syntax
+compilers and primitive expanders are registry fixtures on the sealed axis, not
+user macros. Two more are absolute without being fixtures: `CompileMeta` and the
+definition-site env `er-macro-transformer` stores (`compile_er_macro.go`) both
+read `env.Expand()`, so they pin phase 1 even when the defining frame is higher.
 
 At `phaseLevel 0` (top level) `NextPhase() == Expand()`, so top-level macro
 expansion is byte-for-byte unchanged (the *level-0 identity* safety property);
-the climb only fires inside transformer bodies. This distinguishes two macro
-shapes: a **declarative** macro places its inner `define-syntax` in its expansion
-*output* (the same phase as its use, always consistent — the tower does not fire),
-while a **procedural** macro whose *transformer body* defines and uses macros
-genuinely climbs. The pinning case is a name reused at two phases
+the climb fires only inside a nested compile-time form: a transformer body, or a
+`begin-for-syntax` / `define-for-syntax` / `eval-when` inside one. This
+distinguishes two macro shapes: a **declarative** macro places its inner
+`define-syntax` in its expansion *output* (the same phase as its use, always
+consistent, so the tower does not fire), while a **procedural** macro whose
+*transformer body* defines and uses macros genuinely climbs. The pinning case is
+a name reused at two phases
 (`TestClimbingTower_CrossPhaseCollision`): pre-tower it collapsed into the single
 expand frame and the higher definition clobbered the lower; the tower keeps them
 separate.
+
+The tower is observable from Scheme, not just from Go. Running under
+`--strict=no-bindings` (nothing ambient, so every name must be imported at a
+stated phase) makes the rung a program lands on visible:
+
+```scheme
+;; program A
+(import (for-meta 2 (scheme base)))                  ; car bound at phase 2
+(begin-for-syntax (begin-for-syntax (car '(1 2))))   ; body runs at phase 2 => ok
+
+;; program B, a separate file: the imports do not accumulate
+(import (for-syntax (scheme base)))                  ; car bound at phase 1
+(begin-for-syntax (begin-for-syntax (car '(1 2))))   ; body runs at phase 2
+;; => no such local or global binding "car"
+```
 
 Bindings are **shared single objects** across phases, not re-instantiated per
 phase (Tier 1). Phase frames remain hermetic siblings of the frozen sealed base
 (the climb adds *higher* siblings; it never reintroduces a phase→phase parent
 edge — `TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
+Hermeticity holds for a namespace that owns a seal; a `NewChildRuntime` library
+environment owns none, so its phase frames parent to the library's own phase-0
+frame (`phaseParent`) and phase 1 there does see phase 0. See
+[environment/system.md](../environment/system.md#invariants) invariant 6.
 The bounded `int8` phase index caps a runaway self-referential macro with a
 wrapped error rather than wrapping to −128.
 

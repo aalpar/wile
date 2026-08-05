@@ -252,6 +252,15 @@ accumulates across evaluations. Mutation and introspection are `namespace?`,
 `namespace-require` is the dynamic import, Racket's `namespace-require`: it pulls
 a library's bindings into an existing namespace after the fact.
 
+The two constructor shapes are not interchangeable. An import-spec form,
+`(environment '(scheme base))`, copies the imported bindings into the new
+namespace's *mutable* frame, so they behave like user definitions and
+`namespace-undefine!` can remove them. A profile form,
+`(environment '(wile <profile> [<strictness>]))`, applies a curated primitive
+registry into the new namespace's own *sealed* base, so the same names are
+immutable there. `(environment)` with no specs is Racket's
+`make-empty-namespace`: genuinely empty, not "kernel only".
+
 Two pieces are absent. There is no `current-namespace` parameter: the target is
 always an explicit argument, never ambient. And there are no namespace anchors,
 because Wile has no module-embedded evaluation context to capture. Module
@@ -259,11 +268,25 @@ instances are cached per namespace and `Namespace.AttachModule` is
 `namespace-attach-module` at the Go level, but nothing exposes attachment to
 Scheme.
 
-Sandboxing does not run through namespaces. Wile controls which *extensions* are
-loaded (`WithProfile()`, `WithExtension()`) and which *operations* are authorized
-(`security.Authorizer`). The effect is similar, untrusted code can't call
-`delete-file`, but the mechanism sits at the Go embedding layer rather than the
-Scheme namespace layer.
+Sandboxing does run through namespaces, on the mechanism the `racket/sandbox`
+sketch above turns on: a namespace built for a narrow profile simply does not bind
+the operations outside it. The same profiles are reachable from Go
+(`WithProfile()`, `WithExtension()`), but the Scheme-level constructor is not a
+second-class version of them.
+
+```scheme
+(namespace-bound? (environment '(wile tiny)) 'delete-file)          ; => #f
+(namespace-bound? (environment '(wile kitchen-sink)) 'delete-file)  ; => #t
+```
+
+The strictness element narrows further, down to a namespace with no ambient
+bindings at all — `(environment '(wile small no-bindings))`, where even `car` has
+to be imported. Orthogonally, a `security.Authorizer` gates privileged operations
+at runtime; it is namespace state, captured by a child at construction, so it
+travels with a namespace the way Racket's module registry does. The custodian half
+has no counterpart: resource limits exist (`WithMaxCallDepth`, `WithMaxStackSize`,
+`WithMaxExpandDepth`) but are engine options, so they cannot be varied per
+evaluated program.
 
 See [racket-primitives.md](../continuations/racket-primitives.md) §3 for the
 full primitive reference and Wile feasibility assessment.

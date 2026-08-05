@@ -573,8 +573,19 @@ Evaluates `body` with `value` marked under `key` on the current continuation fra
 ```scheme
 (define-for-syntax <variable> <expression>)  ; macro-expansion-time binding
 (begin-for-syntax <expression> ...)          ; macro-expansion-time evaluation
-(eval-when (<phase> ...) <body> ...)         ; control evaluation timing
+(eval-when (<situation> ...) <body> ...)     ; control evaluation timing
 ```
+
+`eval-when` situations follow Chez Scheme (Dybvig, TSPL §12.10). `expand` and
+`compile` run the body at compile time; `run`, `load`, and `eval` compile it for
+runtime execution; `visit` is accepted and does nothing. Naming both kinds, as in
+`(eval-when (expand run) ...)`, does both. Any other symbol is a compile error.
+
+`define-for-syntax` and `begin-for-syntax` bodies run one phase above the form's
+own phase, so they nest: at the top level a `begin-for-syntax` body runs at phase
+1, and a `begin-for-syntax` inside one runs at phase 2. Each phase is hermetic,
+so a name a body needs must be imported at that body's phase (see the `for-meta`
+import modifiers under [Libraries](#libraries)).
 
 ### `syntax-error`
 
@@ -1628,6 +1639,20 @@ Import modifiers — `only`, `except`, `prefix`, `rename` — work on all librar
 (import (prefix (wile system) sys:))
 (import (rename (wile math) (sqrt square-root)))
 ```
+
+Phase-shifting modifiers place a library's bindings at a phase other than 0:
+
+```scheme
+(import (for-syntax (scheme base)))    ; phase 1: visible to macro transformers
+(import (for-template (scheme base)))  ; phase -1
+(import (for-meta 2 (scheme base)))    ; phase 2: visible to a nested begin-for-syntax
+```
+
+Shifts compose additively and relative to the importing form's own phase, so
+`(for-syntax (for-syntax lib))` equals `(for-meta 2 lib)`, and `(for-meta 0 lib)`
+equals a plain import. A shift outside the `int8` phase range is an error
+(`for-meta: phase 200 out of range [-128, 127]`). Nothing in Wile evaluates at
+phase -1, so `for-template` bindings are installed but never consulted.
 
 ### Wile Scheme Libraries
 

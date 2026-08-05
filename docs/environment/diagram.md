@@ -42,11 +42,11 @@ See [system.md](system.md) for detailed API documentation.
 │    1 → expand EnvFrame      │    │  syntaxInterns ── nil (delegates up)     │
 │    2 → compile EnvFrame     │    │  phases ────── own PhaseRegistry         │
 │   -1 → template EnvFrame    │    │  runtime ───── own EnvironmentFrame      │
-│   ...                       │    │  sealedBase ── own (fresh, never shared) │
-│                             │    │  libraryReg ── captured (shared ptr)     │
-│  owner → Namespace          │    └──────────────────────────────────────────┘
-│                             │
-└─────────────────────────────┘
+│   ...                       │    │  sealedBase ── own, EMPTY (never shared) │
+│                             │    │  captured ──── libraryReg, registry,     │
+│  owner → Namespace          │    │                authorizer, envMap        │
+│                             │    │  services ──── shared *EngineServices    │
+└─────────────────────────────┘    └──────────────────────────────────────────┘
 ```
 
 ---
@@ -62,12 +62,17 @@ sealedBase          (phase 0, parent nil)  ← Go primitives, sealed stdlib,
 ├── sealedExpandBase (phase 1)              ← bootstrap macros, special-form expanders
 │   └── expand       (phase 1)              ← user define-syntax lands here
 ├── compile          (phase 2)
-└── template         (phase -1)
+├── phase 3 … 127                           ← macro tower; created on demand
+└── template         (phase -1)             ← (for-template …) target; unread
 ```
 
-**Key:** phases parent to the sealed base, never to each other and never to the mutable runtime. That cut is the hermeticity property: a phase-1 or phase-2 lookup cannot see phase-0 user defines or imports, but still reaches the shared frozen base. Phase 1 reparents one level further, onto `sealedExpandBase`, so a top-level `define-syntax` shadows a bootstrap macro in the mutable child rather than overwriting it in place.
+**Key:** in a namespace that owns a seal, phases parent to the sealed base, never to each other and never to the mutable runtime. That cut is the hermeticity property: a phase-1 or phase-2 lookup cannot see phase-0 user defines or imports, but still reaches the shared frozen base. Phase 1 reparents one level further, onto `sealedExpandBase`, so a top-level `define-syntax` shadows a bootstrap macro in the mutable child rather than overwriting it in place.
 
-`sealedBase` and `sealedExpandBase` are **not** `PhaseRegistry` entries; they are reached only through the parent chain. `runtime`, `expand`, `compile`, and `template` are the registry entries, created lazily.
+The tree is open-ended, not five fixed frames. `PhaseRegistry.GetOrCreate` mints a frame for any `int8` phase on first access, and `EnvironmentFrame.NextPhase()` climbs one rung per nested compile-time form, so a doubly-nested `begin-for-syntax` or a transformer body that itself defines macros reaches phase 2, 3, and beyond. Above phase 1 there is no seal (`sealedAxis`), so those frames parent straight to `sealedBase` and the climb never introduces a phase→phase edge (`TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
+
+**The exception is a library environment.** `phaseParent` routes to a seal only when the registry's phase-0 entry is its namespace's own runtime (`IsNamespaceRuntime`); a `NewChildRuntime` frame is not, so its phase frames parent to *it*. See [Library Environments](#library-environments).
+
+`sealedBase` and `sealedExpandBase` are **not** `PhaseRegistry` entries; they are reached only through the parent chain. Every numbered phase frame is a registry entry, created lazily.
 
 All phase environments share:
 - The same `*PhaseRegistry` (back-pointer)
@@ -120,6 +125,18 @@ Root Namespace                          Library environment
 └───────────┘                             └───────────┘
 ```
 
+A library's phase frames parent to `libRT`, not to a seal — the library owns none,
+and `phaseParent` falls back to the registry's phase-0 entry:
+
+```
+libExp  (phase 1) ──→ libRT (phase 0) ──→ nil
+libCmp  (phase 2) ──→ libRT (phase 0) ──→ nil
+```
+
+So the isolation a library env provides is *lateral* (nothing reaches the engine's
+frames at any phase), not *vertical*: inside a library, phase 1 sees phase 0. This
+is the only phase→phase parent edge in the tree.
+
 ---
 
 ## NewChildRuntime vs NewChildNamespace
@@ -162,28 +179,44 @@ How environments flow through the pipeline stages.
 
 ```
 CompileTimeContinuation          ExpanderTimeContinuation
-┌───────────────────────┐       ┌────────────────────────┐
-│ env: EnvironmentFrame │       │ env: EnvironmentFrame  │
-│      (phase 0)        │       │      (phase 0)         │
-│                       │       │                        │
-│ Uses:                 │       │ Uses:                  │
-│  env ─── runtime vars │       │  env ──── runtime vars │
-│  env.Expand() ── P1   │       │  env.Expand() ─── P1   │
-│  env.Compile() ─ P2   │       │                        │
-└───────────────────────┘       └────────────────────────┘
-          │                               │
-          │ define-syntax                  │ let-syntax / letrec-syntax
-          │ compiles transformer           │ creates local expand scope
-          ▼                                ▼
+┌────────────────────────┐       ┌────────────────────────┐
+│ env: EnvironmentFrame  │       │ env: EnvironmentFrame  │
+│   phase N (0 at top)   │       │   phase N (0 at top)   │
+│                        │       │                        │
+│ Uses:                  │       │ Uses:                  │
+│  env ──── runtime vars │       │  env ───── arm 1 macro │
+│  env.Compile() ─── P2  │       │  env.NextPhase() arm 2 │
+│  env.Expand() ──── P1  │       │  libEnv.Expand() arm 3 │
+│  env.NextPhase() P N+1 │       │                        │
+└────────────────────────┘       └────────────────────────┘
+          │                                  │
+          │ define-syntax                    │ let-syntax / letrec-syntax
+          │ compiles transformer             │ creates local expand scope
+          ▼                                  ▼
 ┌────────────────────────┐     ┌───────────────────────────────┐
-│ env.Expand()           │     │ NewEnvironmentFrameWithParent │
-│ (phase 1 EnvFrame)     │     │ (localExpandEnv, p.env)       │
+│ env.NextPhase()        │     │ NewEnvironmentFrameWithParent │
+│ (phase N+1 EnvFrame)   │     │ (localExpandEnv, p.env)       │
 │                        │     │                               │
 │ Stores macro bindings: │     │ parent: enclosing env         │
 │  BindingTypeSyntax     │     │ local: macro bindings         │
 │  with hygiene scopes   │     │ (NOT p.env.Expand()!)         │
 └────────────────────────┘     └───────────────────────────────┘
 ```
+
+**`NextPhase()`, not `Expand()`, on the climbing paths.** `define-syntax` storage
+and the expander's arm-2 macro lookup are both relative to the expanding frame's
+own `phaseLevel`, so a macro defined inside a transformer body lands and resolves
+at its climbed phase. At `phaseLevel 0` `NextPhase() == Expand()`, which is why
+top-level behavior is unchanged. The remaining absolute readers fall in two groups:
+
+- **Registry fixtures, absolute by design.** `LookupSyntaxCompiler` reads
+  `env.Compile()` and `LookupPrimitiveExpander` reads `env.Expand()`; both resolve
+  through the sealed axis, and neither names a user macro that could climb.
+- **Two sites that pin phase 1 regardless of the defining frame's level.**
+  `CompileMeta` (the `meta` form) compiles its body against `p.env.Expand()`, and
+  `er-macro-transformer` stores `env.Expand()` as the transformer's definition-site
+  env (`compile_er_macro.go`). Both are correct at the top level and collapse to
+  phase 1 inside a transformer body.
 
 **Note:** `let-syntax` environments chain through the enclosing expander's env (`p.env`), not through `env.Expand()`. This preserves nested lexical scoping of macros — inner macros can reference outer macros through the parent chain.
 
@@ -217,12 +250,16 @@ MachineContext
 | Environment | Created by | Bindings | Interning | Phases | Use |
 |---|---|---|---|---|---|
 | Root Namespace | `NewNamespace()` | Own | Own tables | Own registry | VM instance |
-| Child Namespace | `NewChildNamespace()` | Own | Delegates to parent | Own registry | `(environment)`, `(null-environment)` |
+| Child Namespace | `NewChildNamespace()` | Own, both frames start **empty** | Delegates to parent | Own registry | `(environment …)`, `(null-environment)`, `(make-namespace)`, `namespace-derive` |
+| Profile Namespace | `bootstrap.NewProfileEnvironment()` | Own; a curated registry apply fills the child's sealed base | Delegates to parent | Own registry | `(environment '(wile <profile> [<strictness>]))` |
+| Report Namespace | `NewSchemeReportNamespace()` | Own, **copied** from the parent's sealed base + runtime | Delegates to parent | Own registry | `(scheme-report-environment)` |
 | Runtime frame | `ns.Runtime()` | Phase 0 global (mutable) | Via Namespace | Shared | Normal execution |
 | Sealed base | `ns.SealedBase()` | Phase 0 global (immutable) | Via Namespace | Shared | Primitives, sealed stdlib; parent of every phase frame |
 | Sealed expand base | `ns.SealedExpandBase()` | Phase 1 global (immutable) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
 | Expand frame | `env.Expand()` / `AtPhase(1)` | Phase 1 global | Via Namespace | Shared | Macro bindings |
-| Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via Namespace | Shared | Syntax compilers |
+| Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via Namespace | Shared | Special-form names as valueless bindings; `(for-meta 2 …)` imports |
+| Tower frame | `env.NextPhase()` / `AtPhase(n)` | Phase *n* global | Via Namespace | Shared | Nested compile-time forms at phase ≥ 3 |
+| Template frame | `AtPhase(-1)` | Phase -1 global | Via Namespace | Shared | `(for-template …)` import target; no reader |
 | Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via Namespace | Shared | `lambda`, `let`, `letrec` |
 | Library env | `ns.NewChildRuntime()` | Own global + phases | Via shared Namespace | Own registry | `(import ...)` |
 | let-syntax env | `NewEnvironmentFrameWithParent(local, p.env)` | Own local macros | Via Namespace | Shared | `let-syntax`, `letrec-syntax` |
