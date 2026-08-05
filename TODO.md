@@ -480,6 +480,32 @@ Items that block production embedded use or prevent silent state corruption.
      the split is stated in the type system rather than re-derived per lookup site, and it
      composes with the scope-set model Wile already shares with Racket.
 
+     **This option is a FIELD CHANGE, not Racket's architecture. Do not conflate them.** What
+     makes Racket's model flat is not where the meaning is recorded but that *resolution is a
+     separate uniform layer over a stratified store*. Measured at
+     `racket/src/expander/syntax/binding.rkt` (read 2026-08-05): one resolution rule covers every
+     binding kind — "an identifier refers to a particular binding when the reference's symbol and
+     the identifier's symbol are the same, and when the reference's scope set is a superset of the
+     binding's scope set" — and a `let-values` participates by extending its body with a fresh
+     scope, not by a separate lexical chain. Storage is then stratified UNDER that one rule, and
+     the table's values are **descriptors, never values**: a `module-binding` carries
+     `sym`/`phase`/`module`/`nominal-*`, enough to name a location in a per-phase instance,
+     while a `local-binding` carries only `key` + `free=id` — an identity the compiler maps to a
+     slot. Local transformer values live in a third place again, the local binding context, which
+     "also stores the compile-time value associated with the transformer" for
+     `syntax-local-value`. (The table is also sharded per scope rather than being one global map;
+     that is an indexing detail, not a semantic one.)
+
+     Wile already HAS the storage stratification — `EnvironmentFrame` carries both `local` and
+     `global`, and `GetBinding` is a two-phase lookup, locals then globals. What it lacks is the
+     uniform resolution layer above that split: resolution walks a frame chain and consults two
+     different stores at each level, so "what does this name mean" ends up depending on which
+     frame the walk landed in — which is this defect, stated generally. Adopting the actual
+     Racket shape therefore means rewriting `GetBinding` plus every site keyed on frame identity
+     (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s receiver logic, `compile_define`'s
+     `ns.Runtime() == p.env || ns.SealedBase() == p.env`). That is an architecture change of a
+     different order from this option, and it is NOT what option 3 proposes or costs.
+
   **Cross-reference.** `SealKind` survives under all three — it still routes registrations, and
   (1, handler) vs (1, value) is a real distinction — but under any of them it stops being asked to
   carry a reachability guarantee it cannot provide.
