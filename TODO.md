@@ -373,6 +373,59 @@ Items that block production embedded use or prevent silent state corruption.
   described the *behavior* correctly but assigned it to the `phaseParent` edge; corrected on this
   branch, along with three Go comments calling a library env a flat island.
 
+### The `SealKind` dimension is inert — every production answer is fixed by phase alone (2026-08-05)
+
+- [ ] **Delete the kind axis, or give it a consumer** [Medium, S, filed 2026-08-05 from measuring
+  the fork options on the syntax-compiler leak below]: `SealKind` splits the sealed axis into
+  value and handler cells, but **no production call is ever answered differently because of it**.
+
+  **Measured.** `sealedAt(phase, kind)` checks `row.kinds.has(kind)` and then returns
+  `sealAt(phase)`, which ignores the kind entirely. The six production requests are:
+
+  | site | pair | resolves to |
+  |---|---|---|
+  | `bootstrap/bootstrap_core.go:64` | (0, value) | phase-0 seal |
+  | `extensions/namespace/prim_namespace.go:215` | (0, value) | phase-0 seal |
+  | `wile/engine.go:1306` | (0, value) | phase-0 seal |
+  | `environment/namespace.go:336` | (0, value) | phase-0 seal |
+  | `compilation/syntax_compilers_registry.go:79` | (0, **handler**) | phase-0 seal — *same frame* |
+  | `compilation/primitive_expanders_registry.go:105` | (1, handler) | phase-1 seal |
+
+  Phase 0's `sealedAxis` row covers both kinds, so its two cells are one frame; phase 1 is
+  requested only as `handler`. **The one cell where the kind could discriminate, (1, value), has
+  zero production callers** — every reference to it is in a test
+  (`library_seal_test.go:105`, `sealed_base_frame_test.go:238,239,336,342`). `registry.Apply`
+  reaches phase-1 primitives through `expandEnv := env.Expand()` (`registry/apply.go:141`), never
+  through `SealedTargetAt`. So the axis is *tested* on a distinction nothing *uses*.
+
+  **What deletion buys.** `SealKind`, its two constants and `String()`; `sealKindSet`,
+  `sealsValue`, `sealsHandler`, and `has()`; the `kinds` field on `sealedAxis` and both row
+  literals' second element (`sealed_base_frame.go:28-100` — 73 lines, 22 of them code);
+  `PhaseRegistry.sealedAt` collapsing into `sealAt` (11 lines); and the second argument at six
+  production sites plus every test. `SealedAt` and `SealedTargetAt` keep their names and lose a
+  parameter. Nothing else changes: the two-level frame split that makes a redefine *shadow*
+  rather than overwrite is orthogonal and stays.
+
+  **Behavior delta: none, unless something starts asking for (1, value).** After deletion that
+  pair resolves to the phase-1 seal instead of falling through to the mutable expand child. No
+  production caller asks, and the tests asserting the fallthrough are asserting the inert cell.
+
+  **The catch, and why this is a decision rather than a cleanup.** The kind records *intent* at
+  registration even though it routes nothing — `syntax_compilers_registry.go` passing `handler` at
+  phase 0 says something true about the binding that the code no longer acts on. Deleting it also
+  **forecloses fork option 1** on the leak entry below (authority in the frame, via separate
+  phase-0 value/handler cells), which would need the kind back. So the two entries are coupled:
+
+  - Pick fork option 1 → the kind becomes load-bearing; **do not delete it**, wire it up instead.
+  - Pick fork option 2 or 3 → authority moves to the value or the binding, the kind never acquires
+    a consumer, and this deletion is free.
+
+  Sequence accordingly: **resolve the leak's fork first, then delete or wire this.** Deleting it
+  now and then choosing option 1 is the worst order.
+
+  **Do not "fix" this by adding a (1, value) caller to justify the axis.** The question is whether
+  anything needs the distinction, and today the answer is measured: no.
+
 ### Syntax compilers are readable as runtime values (2026-08-05)
 
 - [ ] **Decide how a phase-0 handler is kept off the value-resolution path** [High, M, filed
