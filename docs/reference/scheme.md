@@ -1776,7 +1776,7 @@ RWMutexes, Once, Atomic values — backed by Go's `sync` package (RWMutex acquis
 
 ### Boxes
 
-`box`, `unbox`, `set-box!`, `box?` — mutable single-value containers. A box writes as `#&<value>`; there is no `#&` read syntax, so boxes are constructed by calling `box`.
+`box`, `unbox`, `set-box!`, `box?` — mutable single-value containers. A box both writes and reads as `#&<datum>`, so `write` output round-trips. `#&` is a container introducer: it nests (`#&#&5` is a box holding a box) and its datum may carry its own prefixes (`#&#x1f` is a box holding 31). See [`r7rs-differences.md`](r7rs-differences.md#boxes) for the reader rules.
 
 ### Hashtables
 
