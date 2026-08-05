@@ -81,14 +81,19 @@ func (p sealKindSet) has(kind SealKind) bool {
 // above 2 have no seal: a define-syntax inside a transformer body climbs off the
 // sealed axis and into the mutable compile frame.
 //
+// The rows are ONE ambient set indexed by (phase, kind), not a hierarchy of
+// phases. A later row's frame parents to the phase-0 seal because that is how the
+// set is stitched together, not because phase N+1 inherits from phase N — no phase
+// frame ever resolves into the phase below it, which is the whole point of the
+// mutable axis's no-phase->phase-edge invariant.
+//
 // ADDING A SEALED PHASE: add a row here. newSealedAxisFrames builds it for every
-// owner, so there is no second place to register it and no per-owner opt-in. The
-// row's frame parents to the phase-0 seal, which is the sealed axis's one
-// phase->phase edge (the mutable axis is forbidden any); a row needing a different
-// parent is a change to that builder, and to this comment.
+// owner, so there is no second place to register it and no per-owner opt-in. A row
+// needing a different lexical parent is a change to that builder, and to this
+// comment.
 //
 // The FIRST row must be PhaseRuntime: it is the graph root (parent nil) and every
-// later row parents to it.
+// later row hangs off it.
 var sealedAxis = [...]struct {
 	phase Phase
 	kinds sealKindSet

@@ -1096,8 +1096,12 @@ func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame
 
 // newSealedAxisFrames builds one immutable frame per sealedAxis row and returns them
 // keyed by phase. The first row is PhaseRuntime and becomes the graph root (parent
-// nil); every later row parents to it, which is the sealed axis's single phase->phase
-// edge — the one the mutable axis is forbidden.
+// nil); every later row hangs off it.
+//
+// That link stitches ONE ambient set together — the startup bindings, indexed by
+// (phase, kind) — and is NOT a phase inheriting from a phase. Nothing here makes
+// phase N+1 resolve into phase N; phase environments are isolated, and the only
+// environment any of them inherits is this ambient set.
 //
 // BOTH owners of a sealed axis go through here: a Namespace (wireRuntimeFrames, which
 // then also stashes the two frames in its named fields so SealedBase and

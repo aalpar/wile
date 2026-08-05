@@ -393,11 +393,15 @@ These invariants must be maintained:
 
 6. **Sealed base (phase 0) and sealed expand base (phase 1) are per-namespace
    immutable frames, reached only via the parent chain**
-   - Each `Namespace` owns two sealed frames that are **not** `PhaseRegistry`
-     entries: `sealedBase` (phase 0: Go primitives + sealed stdlib procedures +
-     optimizer `Stable` anchors) and `sealedExpandBase` (phase 1: bootstrap
-     macros + special-form primitive expanders). The mutable phase frames parent
-     to them:
+   - **Phase environments are isolated; the one environment they inherit is the
+     ambient set built at VM startup.** That set is a single thing indexed by
+     `(phase, kind)` — it is not a hierarchy of phases, and no phase frame ever
+     resolves into the phase below it. `sealedBase` is its `(0, *)` cell (Go
+     primitives + sealed stdlib procedures + optimizer `Stable` anchors) and
+     `sealedExpandBase` its `(1, handler)` cell (bootstrap macros + special-form
+     primitive expanders); the link between them stitches the set together and is
+     not phase 1 inheriting from phase 0. Neither is a `PhaseRegistry.envs` entry.
+     The mutable phase frames parent into the set like this:
 
      ```
      phase 0:  runtime          → sealedBase          → nil
