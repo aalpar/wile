@@ -265,6 +265,72 @@ Items that block production embedded use or prevent silent state corruption.
   not survive, and this is the finding underneath it. Documented as a known limitation in
   `WithNamespace`'s doc comment today, which is where the "security-relevant" wording comes from.
 
+### Phase hermeticity does not hold inside a library body (2026-08-04)
+
+- [ ] **Decide whether a library environment owns a seal** [High, M, filed 2026-08-04 from the
+  namespace/phase documentation audit]: the hermetic phase cut is a property of a **namespace
+  runtime frame**, not of every frame, and a library environment is not one. The same program
+  is rejected at the top level and silently mis-evaluated in a library:
+
+  ```scheme
+  ;; top level — correct, loud
+  (define counter 41)
+  (begin-for-syntax (display counter))
+  ;; => no such local or global binding "counter"
+
+  ;; identical shape inside (define-library … (begin …)) — resolves
+  ;; => phase1 sees phase-0 counter: #!void
+  ```
+
+  **`#!void`, not 41, and no error.** The phase-1 body finds the phase-0 slot (predeclared, not
+  yet written at expansion time) and computes with void. That is precisely the silent-wrong-value
+  outcome the hermetic reparent was built to make impossible.
+
+  **Mechanism, for the upward direction — confirmed.** `phaseParent`
+  (`pkg/environment/phase_registry.go`) routes a phase frame to a seal only when the registry's
+  phase-0 entry `IsNamespaceRuntime()`. A `NewChildRuntime` library frame is not its namespace's
+  runtime, so the fallback returns that frame itself and the library's phase-1 and phase-2 frames
+  parent to the library's **phase-0** frame. Probed directly off the package:
+
+  ```
+  library phase-1 resolves a phase-0 define: true
+  engine  phase-1 resolves a phase-0 define: false
+  ```
+
+  This is the only phase→phase parent edge in the tree, and
+  `TestPhaseRegistry_PhaseEnvParentsToSealedBase` does not cover it — it asserts the *namespace*
+  case at phase 3+.
+
+  **The downward direction is a second finding and its mechanism is NOT verified.** In a library
+  body, `(begin-for-syntax (define ctonly 99))` followed by `(define (go) ctonly)` returns `99`;
+  at the top level both spellings are refused (`no such binding "ctonly" with compatible scopes`),
+  and a probe confirms a top-level for-syntax define lands at phase 1 alone with phase 0 blind to
+  it. **The parent edge above cannot explain this** — it points phase-1 → phase-0, so a phase-0
+  lookup should not reach phase 1. Either the library body path deposits the define at phase 0, or
+  some cross-phase resolution is involved. Establish which **before** designing a fix; a fix aimed
+  only at the parent edge may leave this half standing.
+
+  **Consequence beyond conformance.** `docs/compiler/macro-system.md` Q4 argues no
+  `ErrCrossPhaseMutation` check is needed because "the hermetic rejection *is* the loud failure, at
+  no cost and with no false positive on the carve-out." That argument is sound at the top level and
+  does not hold in a library body, which is where most real macro code lives.
+
+  **The fork.**
+
+  1. **Give a library frame a seal**, so `phaseParent` has somewhere to route. Most faithful to the
+     model; the cost is that `NewChildRuntime` is deliberately flat (`parent: nil`) and that
+     flatness is load-bearing for library isolation — see the `(rnrs hashtables)` primitive-identity
+     note in `docs/reference/r7rs-differences.md`, which turns on it.
+  2. **Parent library phase frames to nil** instead of to the library's phase-0 frame. Smallest
+     change, restores rejection, and needs an answer for what a library's phase-1 code is then
+     allowed to see at all — today it reaches the library's own imports through that same edge.
+  3. **Accept and document it** as a deliberate divergence. Cheapest, but it leaves two different
+     phase semantics in one implementation and keeps the silent `#!void`.
+
+  Documented as a known divergence in `docs/environment/system.md` invariant 6,
+  `docs/environment/diagram.md`, and `docs/compiler/macro-system.md` as of `3faf43c2`; those say
+  what happens, not that it is intended.
+
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
 - [x] **Fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21, approach 1a per
