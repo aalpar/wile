@@ -160,3 +160,31 @@ func TestLibraryBindingsPhaseShift(t *testing.T) {
 		})
 	}
 }
+
+// findLibraryBinding probes {runtime, expand, compile} IN THAT ORDER and returns the
+// first hit, so a name bound at BOTH phase 0 and phase 1 exports as phase 0. That is
+// the correct answer, but it is delivered by probe order rather than by asking the
+// phases apart — the same "search every phase" assumption that let a library body
+// resolve across phases (plans/2026-08-04-library-phase-isolation-impl.local.md, Q2).
+//
+// The other consumer of that assumption is now phase-relative. This pins the ordering
+// this one still relies on, so reordering the probe list fails here instead of
+// silently re-exporting a phase-1 binding at phase 0.
+func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
+	c := qt.New(t)
+
+	ns := environment.NewNamespace()
+	libEnv := ns.NewChildRuntime()
+	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("q2"), libEnv)
+
+	sym := values.NewSymbol("both-phases")
+	err := libEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(1))
+	c.Assert(err, qt.IsNil)
+	err = libEnv.Expand().DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(2))
+	c.Assert(err, qt.IsNil)
+
+	binding, phase, found := compilation.FindLibraryBindingForTest(lib, "both-phases")
+	c.Assert(found, qt.IsTrue)
+	c.Assert(phase, qt.Equals, environment.PhaseRuntime)
+	c.Assert(binding.Value().SchemeString(), qt.Equals, "1")
+}
