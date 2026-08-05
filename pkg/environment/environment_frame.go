@@ -965,8 +965,23 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 
 // GetGlobalIndexFromLibraryScopes searches for a binding by checking each
 // scope against the root Namespace's scope registry. For each scope that maps to a
-// library env, performs a cross-phase lookup in that library's env.
+// library env, it searches that library's PHASE-0 frame.
 // Returns the first match, or nil if no library binding is found.
+//
+// Phase 0 only, not every phase. Every identifier written in a library body
+// carries that library's scope, so this arm fires for every library-body
+// reference; searching phases {0,1,2} let phase-0 runtime code resolve a
+// phase-1 define, which the top level refuses. That produced a wrong VALUE
+// silently — see plans/2026-08-04-library-phase-isolation-design.local.md §1.
+//
+// This is not the phase-RELATIVE form yet: phase-1 library code still reaches
+// phase-0 bindings here, which is both the remaining upward leak and, until the
+// library env owns a sealed base, the only route by which a begin-for-syntax
+// body reaches the library's primitives (design E4).
+//
+// The other GetGlobalIndexAcrossPhases caller (compile_syntax_rules.go) is
+// untouched: it carries the R7RS §4.3 free-template-identifier carve-out, and
+// the jabberwocky/march-hare case reaches it through that caller, not this one.
 func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
 	if p.namespace == nil || len(scopes) == 0 {
 		return nil
@@ -976,7 +991,7 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 		if libEnv == nil {
 			continue
 		}
-		gi := libEnv.GetGlobalIndexAcrossPhases(key, scopes)
+		gi := libEnv.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
 		if gi != nil {
 			return gi
 		}
