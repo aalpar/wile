@@ -274,8 +274,12 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
 func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
-	if phase > p.phaseLevel && p.namespace != nil && p.namespace.IsSealed(p) {
-		sealed, ok := p.namespace.SealedAt(phase, SealKindHandler)
+	// A sealed frame's climb stays on the sealed axis, and it asks its OWN registry.
+	// The rows are the same for every owner; the FRAMES are not, so a library env's
+	// base consulting the shared namespace's map would climb into the engine's
+	// sealedExpandBase and hand a library's bootstrap macros to the whole engine.
+	if phase > p.phaseLevel && p.phases != nil && p.phases.isSeal(p) {
+		sealed, ok := p.phases.sealedAt(phase, SealKindHandler)
 		if ok {
 			return sealed
 		}

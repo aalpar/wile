@@ -267,7 +267,10 @@ func TestConstructorEquivalence(t *testing.T) {
 	c.Assert(childRuntime.Namespace(), qt.Equals, parent)
 	c.Assert(childRuntime.PhaseLevel(), qt.Equals, PhaseRuntime)
 	c.Assert(childRuntime.GlobalEnvironment(), qt.IsNotNil)
-	c.Assert(childRuntime.IsTopLevel(), qt.IsTrue)
+	// The mutable child is no longer the structural root — its own sealed base is.
+	// See TestChildRuntimeOwnsItsOwnSealedAxis in library_seal_test.go.
+	c.Assert(childRuntime.IsTopLevel(), qt.IsFalse)
+	c.Assert(childRuntime.Parent().IsTopLevel(), qt.IsTrue)
 
 	expand := childRuntime.Expand()
 	c.Assert(expand, qt.IsNotNil)

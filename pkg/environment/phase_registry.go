@@ -17,8 +17,6 @@ package environment
 import (
 	"fmt"
 	"sync"
-
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // Phase-dependent binding: the same symbol can bind to different values at
@@ -91,6 +89,69 @@ type PhaseRegistry struct {
 	envs map[Phase]*EnvironmentFrame
 	// owner is the owning Namespace
 	owner *Namespace
+	// runtime is envs[PhaseRuntime], hoisted out of the map so lock-free readers
+	// (ownsSealedAxis, phaseParent) never race GetOrCreate's map write.
+	// Immutable after construction.
+	runtime *EnvironmentFrame
+	// seals is this registry's sealed axis: one immutable frame per sealedAxis row.
+	// Written once by the constructor and never mutated, which is what lets
+	// phaseParent read it while holding the write lock.
+	//
+	// It moved here from Namespace because a library env deliberately SHARES its
+	// parent's namespace while needing a seal of its own; the PhaseRegistry is the
+	// thing each owner already has exactly one of.
+	//
+	// Every owner that has a sealed axis has ALL of it. Owners differ in what gets
+	// APPLIED into their seals, never in which phases they seal — a per-owner
+	// subset would mean sealedAxis no longer describes the system, and "is this
+	// (phase, kind) sealed?" would need a "for whom?".
+	seals map[Phase]*EnvironmentFrame
+}
+
+// sealAt returns this registry's seal for a phase and whether the phase has one.
+// STRUCTURAL questions use this — a phase frame's lexical parent is one link, not
+// one per kind, so asking sealedAt with an arbitrary kind would orphan a seal whose
+// row happens not to cover that kind. Routing questions, which must not send a value
+// to a handler-only seal, use sealedAt.
+//
+// False means the phase has no sealedAxis row (phase 2 and up), never "this owner
+// skipped a row": newSealedAxisFrames builds every row for every owner.
+func (p *PhaseRegistry) sealAt(phase Phase) (*EnvironmentFrame, bool) {
+	frame, ok := p.seals[phase]
+	return frame, ok
+}
+
+// sealedAt returns the immutable frame owning bindings of this (phase, kind), and
+// whether the pair is sealed. False means the mutable frame for the phase is the
+// target — a modeled absence, not a failure.
+func (p *PhaseRegistry) sealedAt(phase Phase, kind SealKind) (*EnvironmentFrame, bool) {
+	for _, row := range sealedAxis {
+		if row.phase != phase || !row.kinds.has(kind) {
+			continue
+		}
+		return p.sealAt(phase)
+	}
+	return nil, false
+}
+
+// isSeal reports whether frame is one of this registry's sealed frames.
+func (p *PhaseRegistry) isSeal(frame *EnvironmentFrame) bool {
+	if frame == nil {
+		return false
+	}
+	for _, sealed := range p.seals {
+		if sealed == frame {
+			return true
+		}
+	}
+	return false
+}
+
+// hasSeals reports whether this registry owns a sealed axis at all. A registry
+// built without one (test scaffolding) keeps the pre-carve behavior: phase frames
+// parent to the phase-0 frame.
+func (p *PhaseRegistry) hasSeals() bool {
+	return len(p.seals) > 0
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
@@ -148,38 +209,33 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	return q
 }
 
-// phaseParent selects a phase frame's lexical parent: the seal for this phase when it has
-// one, else the phase-0 seal. A phase with no seal of its own therefore parents to the base
-// rather than to the phase below it, which is the climbing-tower invariant that the mutable
-// axis introduces no phase->phase parent edge.
+// phaseParent selects a phase frame's lexical parent: the seal for this phase when this
+// registry has one, else the registry's phase-0 seal. A phase with no seal of its own
+// therefore parents to the base rather than to the phase below it, which is the
+// climbing-tower invariant that the mutable axis introduces no phase->phase parent edge.
 //
-// A flat NewChildRuntime library frame is not its namespace's runtime, so it owns no seal
-// and stays a flat island parented to itself — library isolation.
+// This holds uniformly for a namespace and for a library env. Before the library gained a
+// seal this returned the library's phase-0 frame — the one phase->phase edge in the tree,
+// and the shape that made a library body's phase separation unenforceable.
 //
 // Two constraints keep this off the general routing seam. It runs under the registry's
 // WRITE lock (createPhaseEnv), so it must not call anything that can re-enter GetOrCreate;
-// sealedFrameAt and IsNamespaceRuntime are pure reads, SealedTargetAt is not. And the
-// parent link is ONE link per phase, not one per kind, so it asks sealedFrameAt rather
-// than picking a kind — a seal whose row does not cover the kind guessed here would be
-// parented to by nothing and invisible to every lookup.
+// p.runtime and p.seals are both immutable-after-construction reads. And the parent link
+// is ONE link per phase, not one per kind, so it asks sealAt rather than picking a kind —
+// a seal whose row does not cover the kind guessed here would be parented to by nothing
+// and invisible to every lookup.
 func (p *PhaseRegistry) phaseParent(phase Phase) *EnvironmentFrame {
-	runtime := p.envs[PhaseRuntime]
-	if p.owner == nil || !runtime.IsNamespaceRuntime() {
-		return runtime
+	if !p.hasSeals() {
+		return p.runtime
 	}
-	sealed, ok := p.owner.sealedFrameAt(phase)
+	sealed, ok := p.sealAt(phase)
 	if ok {
 		return sealed
 	}
-	base, ok := p.owner.sealedFrameAt(PhaseRuntime)
-	if !ok {
-		// The phase-0 row is the sealed axis's root. Without it there is no frame to
-		// parent to, and returning nil would quietly make every phase frame a second
-		// root — hermeticity intact, but nothing resolves through it.
-		panic(werr.WrapForeignErrorf(
-			werr.ErrUnexpectedNil, "phaseParent: sealedAxis declares no phase-0 seal",
-		))
-	}
+	// The phase-0 row is the axis's root and every axis has it — newPhaseRegistry
+	// refuses one that does not, which is where the old read-time mustSeal check
+	// went. So this is a lookup, not a fallback that can fail.
+	base, _ := p.sealAt(PhaseRuntime)
 	return base
 }
 

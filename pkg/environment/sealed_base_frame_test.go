@@ -167,10 +167,10 @@ func TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase(t *testing.
 }
 
 // TestSealedExpandBaseConstructionInvariant asserts every namespace-building entry point
-// wires a non-nil sealedExpandBase parented to the sealed base at phase 1. The routing
-// accessors (SealedAt, SealedTargetAt, AtPhase's climb, phaseParent) route through mustSeal,
-// which panics rather than degrading, so a builder that forgets it must fail HERE — loudly —
-// not silently degrade the expand-phase seal to the mutable frame (the WithStableBasePrimitives
+// wires a non-nil sealedExpandBase parented to the sealed base at phase 1. newPhaseRegistry
+// panics rather than degrading when a declared row has no frame, so a builder that forgets
+// it must fail HERE — loudly — not silently degrade the expand-phase seal to the mutable
+// frame (the WithStableBasePrimitives
 // profile-child divergence is the cautionary precedent for an unenforced construction step).
 func TestSealedExpandBaseConstructionInvariant(t *testing.T) {
 	root := environment.NewNamespace()
@@ -262,9 +262,9 @@ func TestSealedAxisTable(t *testing.T) {
 //
 // The sweep spans well past the phases that have seals today so a new row cannot satisfy
 // one property and quietly miss the other. It does NOT pin non-nil-ness: SealedAt and
-// SealedFrames read the same rows, so a nil frame would make them agree — mustSeal's
-// panic is what makes that loud, and TestSealedExpandBaseConstructionInvariant is what
-// pins it across builders.
+// SealedFrames read the same rows, so a nil frame would make them agree —
+// newPhaseRegistry's construction-time panic is what makes that loud, and
+// TestSealedExpandBaseConstructionInvariant is what pins it across builders.
 func TestSealedAxisIsEnumerableAndReachable(t *testing.T) {
 	ns := environment.NewNamespace()
 	enumerated := make(map[*environment.EnvironmentFrame]bool)
@@ -311,20 +311,30 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	qt.Assert(t, ns.SealedBase().AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
 }
 
-// TestSealedTargetAtFallbacks pins SealedTargetAt's two non-sealed answers, which are the
-// whole compatibility story for library environments. A flat NewChildRuntime frame owns no
-// seal, so every kind falls back to its OWN frame at that phase — phase 0 is the frame
-// itself (not the parent namespace's runtime), phase 1 its own expand child. And on a
-// namespace runtime frame an unsealed (phase, kind) — the expand-phase VALUE cell, where
-// registry expand primitives are registered — reaches the mutable expand child, not the
-// seal that the same phase gives handlers.
+// TestSealedTargetAtFallbacks pins SealedTargetAt's answers for the two shapes that
+// own a sealed axis, and for the (phase, kind) pairs the axis leaves unsealed. Both
+// shapes answer the same way — a library env routes to its OWN seals, never the
+// namespace's — because an owner does not pick a subset of the axis. The expand-phase
+// VALUE cell, where registry expand primitives are registered, reaches the mutable
+// expand child on both, since phase 1 seals handlers only.
+//
+// The library assertions live here in the EXTERNAL test package on purpose: they use
+// nothing but exported API, so they would catch a subset creeping back in even if the
+// internal shape tests were deleted.
 func TestSealedTargetAtFallbacks(t *testing.T) {
 	ns := environment.NewNamespace()
 	lib := ns.NewChildRuntime()
+	libBase := lib.Parent()
+	libExpandBase := lib.Expand().Parent()
 
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, lib)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindHandler), qt.Equals, lib)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler), qt.Equals, lib.Expand())
+	qt.Assert(t, libBase, qt.Not(qt.Equals), ns.SealedBase())
+	qt.Assert(t, libExpandBase, qt.Not(qt.Equals), ns.SealedExpandBase())
+	qt.Assert(t, libExpandBase.Parent(), qt.Equals, libBase)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, libBase)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime, environment.SealKindHandler), qt.Equals, libBase)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand, environment.SealKindHandler), qt.Equals, libExpandBase)
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand, environment.SealKindValue), qt.Equals, lib.Expand())
+	qt.Assert(t, lib.SealedTargetAt(environment.PhaseCompile, environment.SealKindHandler), qt.Equals, lib.Compile())
 
 	runtime := ns.Runtime()
 	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseRuntime, environment.SealKindValue), qt.Equals, ns.SealedBase())

@@ -999,24 +999,53 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 	return q
 }
 
-// NewChildRuntime creates a new runtime environment frame that shares this
-// Namespace for syntax interning, but has its own
-// GlobalEnvironmentFrame and PhaseRegistry for isolated bindings.
+// NewChildRuntime creates a new library environment that shares this Namespace for
+// syntax interning, but has its own GlobalEnvironmentFrame and PhaseRegistry for
+// isolated bindings.
 //
-// This is used for library environments that need to:
-//   - Share syntax interning
-//   - Have isolated bindings (library definitions don't leak)
-//   - Have their own phase hierarchy
+// The result has the SAME shape a namespace has: the full sealed axis
+// (newSealedAxisFrames) plus a mutable phase-0 child parented to its phase-0 seal.
+// The base holds the registry apply — primitives, bootstrap procedures, syntax
+// compilers — and the mutable child holds the library's own defines. The returned
+// frame is the mutable child.
+//
+// The phase-0 split is what this plan needed. A library's phase frames parent to the
+// base (phaseParent), so phase-1 library code reaches primitives and does NOT reach
+// the library's phase-0 defines — the hermeticity cut, matching the top level. A flat
+// frame could not express that: it held primitives and user defines together, so
+// there was no frame to reach that had the first without the second, and a for-syntax
+// body that lost the defines lost car and list with them. See
+// plans/2026-08-04-library-phase-isolation-{design,impl}.local.md.
+//
+// The phase-1 seal comes along because the axis is not a menu. A library's bootstrap
+// macros and primitive expanders now land in its own sealedExpandBase rather than in
+// its mutable expand child, which is reachable by the same parent walk that already
+// makes the namespace case work (LookupPhaseBinding -> GetBinding), and which makes a
+// library-body define-syntax of a bootstrap name shadow rather than share a frame with
+// it. It fixes no known bug; it means sealedAxis describes every owner.
+//
+// Nothing else has to change to FILL either seal: LoadBootstrapCore already routes
+// the registry apply through env.SealedTargetAt(PhaseRuntime, SealKindValue) and the
+// expanders through SealedTargetAt(PhaseExpand, SealKindHandler), and
+// registry.Apply's WithRuntimeTarget seats the binding in the target while the
+// ForeignClosure still captures the mutable frame, so a primitive resolves user code
+// against the library's own defines. Bootstrap macros reach the phase-1 seal by the
+// same route they do for a namespace: they compile with env == the phase-0 seal, and
+// AtPhase's sealed climb sends NextPhase() to the phase-1 seal.
 func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
-	global := newGlobalEnvironmentFrameForNamespace(p)
-	runtime := &EnvironmentFrame{
-		parent:     nil,
-		global:     global,
+	seals := newSealedAxisFrames(p, newGlobalEnvironmentFrameForNamespace(p))
+	q := &EnvironmentFrame{
+		parent:     seals[PhaseRuntime],
+		global:     newGlobalEnvironmentFrameForNamespace(p),
 		phaseLevel: PhaseRuntime,
 		namespace:  p,
 	}
-	runtime.phases = newPhaseRegistryForChild(p, runtime)
-	return runtime
+	// newPhaseRegistryForChild wires phases on q and on every seal. That wiring is
+	// load-bearing here: AtPhase enters through TopLevel(), which is now the library's
+	// base rather than the mutable child, so a seal pointing at the shared root's
+	// registry would collapse the isolation this constructor exists to provide.
+	newPhaseRegistryForChild(p, q, seals)
+	return q
 }
 
 // SyntaxInternCount returns the number of interned syntax objects.
@@ -1065,14 +1094,85 @@ func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame
 	return q
 }
 
-// newPhaseRegistryForNamespace creates a new PhaseRegistry owned by the given Namespace.
-func newPhaseRegistryForNamespace(ns *Namespace) *PhaseRegistry {
-	q := &PhaseRegistry{
-		envs:  make(map[Phase]*EnvironmentFrame),
-		owner: ns,
+// newSealedAxisFrames builds one immutable frame per sealedAxis row and returns them
+// keyed by phase. The first row is PhaseRuntime and becomes the graph root (parent
+// nil); every later row parents to it, which is the sealed axis's single phase->phase
+// edge — the one the mutable axis is forbidden.
+//
+// BOTH owners of a sealed axis go through here: a Namespace (wireRuntimeFrames, which
+// then also stashes the two frames in its named fields so SealedBase and
+// SealedExpandBase keep working) and a library env (NewChildRuntime). They differ in
+// what gets APPLIED into the seals, never in which phases they seal. A per-owner
+// subset would leave sealedAxis describing only some owners, so that "is this
+// (phase, kind) sealed?" needed a "for whom?" — the drift mustSeal existed to prevent,
+// one level up.
+//
+// sealedGlobal is the phase-0 seal's global, supplied by the caller because
+// NewSchemeReportNamespace hands over a COPY of its parent's rather than a fresh one.
+// Later rows always get a fresh global.
+func newSealedAxisFrames(ns *Namespace, sealedGlobal *GlobalEnvironmentFrame) map[Phase]*EnvironmentFrame {
+	q := make(map[Phase]*EnvironmentFrame, len(sealedAxis))
+	var base *EnvironmentFrame
+	for _, row := range sealedAxis {
+		global := sealedGlobal
+		if base != nil {
+			global = newGlobalEnvironmentFrameForNamespace(ns)
+		}
+		frame := &EnvironmentFrame{
+			parent:     base,
+			global:     global,
+			phaseLevel: row.phase,
+			namespace:  ns,
+		}
+		if base == nil {
+			base = frame
+		}
+		q[row.phase] = frame
 	}
-	q.envs[PhaseRuntime] = ns.runtime
 	return q
+}
+
+// newPhaseRegistry builds a registry whose phase-0 entry is runtime and whose sealed
+// axis is seals. Both are immutable after construction, which is what lets phaseParent
+// read them under the write lock and ownsSealedAxis read them with no lock at all.
+//
+// It also wires each seal's phases field to this registry. That is not bookkeeping:
+// AtPhase enters through TopLevel(), which for every owner is now its phase-0 seal, so
+// a seal pointing at the wrong registry would resolve a library's phases against the
+// SHARED root's and collapse the isolation NewChildRuntime exists to provide.
+//
+// A nil frame under a declared phase panics HERE, which is where mustSeal's invariant
+// went when the axis moved off Namespace. "This phase has no seal" and "this phase
+// declares a seal that does not exist" must never be the same answer: read as merely
+// unsealed, every routing caller takes its mutable-frame fallback and lands a bootstrap
+// macro or a special-form expander somewhere a user can overwrite in place, surfacing
+// arbitrarily far away as a dead let-syntax with nothing naming the construction bug.
+// Absence is a missing KEY, and only phases with no sealedAxis row have one.
+func newPhaseRegistry(owner *Namespace, runtime *EnvironmentFrame, seals map[Phase]*EnvironmentFrame) *PhaseRegistry {
+	q := &PhaseRegistry{
+		envs:    map[Phase]*EnvironmentFrame{PhaseRuntime: runtime},
+		owner:   owner,
+		runtime: runtime,
+		seals:   seals,
+	}
+	for _, row := range sealedAxis {
+		frame, ok := seals[row.phase]
+		if !ok || frame == nil {
+			panic(werr.WrapForeignErrorf(
+				werr.ErrUnexpectedNil,
+				"newPhaseRegistry: sealedAxis declares phase %s but this owner has no frame for it", row.phase,
+			))
+		}
+		frame.phases = q
+	}
+	runtime.phases = q
+	return q
+}
+
+// newPhaseRegistryForNamespace creates a new PhaseRegistry owned by the given
+// Namespace, over the sealed frames wireRuntimeFrames already built.
+func newPhaseRegistryForNamespace(ns *Namespace, seals map[Phase]*EnvironmentFrame) *PhaseRegistry {
+	return newPhaseRegistry(ns, ns.runtime, seals)
 }
 
 // initRuntimeFrame builds the per-Engine runtime layer for a freshly-constructed
@@ -1091,51 +1191,32 @@ func initRuntimeFrame(ns *Namespace, mutableGlobal *GlobalEnvironmentFrame) {
 // ONLY in whether the two globals are fresh (engine construction) or copied from a parent
 // (the frozen scheme-report snapshot).
 //
-// Order matters: newPhaseRegistryForNamespace reads ns.runtime for envs[PhaseRuntime], so
-// the runtime frame is set before it is called. The sealed base shares the same
-// PhaseRegistry (ns.phases) so AtPhase/Expand/Compile resolve identically whether reached
-// from the mutable child or the sealed base — the sealed base is reached only via the
-// parent walk during global resolution.
+// Order matters: newSealedAxisFrames runs first because ns.runtime parents to the phase-0
+// seal, and newPhaseRegistryForNamespace runs last because it reads ns.runtime. Every seal
+// shares the same PhaseRegistry (ns.phases) so AtPhase/Expand/Compile resolve identically
+// whether reached from the mutable child or a seal — a seal is reached only via the parent
+// walk during global resolution.
 func wireRuntimeFrames(ns *Namespace, sealedGlobal, mutableGlobal *GlobalEnvironmentFrame) {
-	ns.sealedBase = &EnvironmentFrame{
-		parent:     nil,
-		global:     sealedGlobal,
-		phaseLevel: PhaseRuntime,
-		namespace:  ns,
-	}
-	// sealedExpandBase is the phase-1 sibling of sealedBase: the immutable home of bootstrap
-	// macros and special-form primitive expanders. Parent = sealedBase; a fresh, empty global
-	// (bootstrap fills it for a live engine, or it stays empty for a report namespace, which
-	// carries no bootstrap macros). Built unconditionally here — the single wireRuntimeFrames
-	// funnel — so every namespace-builder (NewNamespace, NewChildNamespace/profile,
-	// NewSchemeReportNamespace) gets it; the WithStableBasePrimitives opt-in-skip is the
-	// cautionary precedent for NOT gating this behind an option.
-	ns.sealedExpandBase = &EnvironmentFrame{
-		parent:     ns.sealedBase,
-		global:     newGlobalEnvironmentFrameForNamespace(ns),
-		phaseLevel: PhaseExpand,
-		namespace:  ns,
-	}
+	// One builder, every owner, every row. The named fields below are a CONVENIENCE
+	// for SealedBase/SealedExpandBase and the accessors that read them; the axis
+	// itself is the map, and the registry is what routing consults.
+	seals := newSealedAxisFrames(ns, sealedGlobal)
+	ns.sealedBase = seals[PhaseRuntime]
+	ns.sealedExpandBase = seals[PhaseExpand]
 	ns.runtime = &EnvironmentFrame{
 		parent:     ns.sealedBase,
 		global:     mutableGlobal,
 		phaseLevel: PhaseRuntime,
 		namespace:  ns,
 	}
-	ns.phases = newPhaseRegistryForNamespace(ns) // envs[PhaseRuntime] = ns.runtime
-	ns.runtime.phases = ns.phases
-	ns.sealedBase.phases = ns.phases
-	ns.sealedExpandBase.phases = ns.phases
+	// newPhaseRegistry wires phases on the runtime frame and on every seal.
+	ns.phases = newPhaseRegistryForNamespace(ns, seals)
 }
 
-// newPhaseRegistryForChild creates a PhaseRegistry for a child environment
-// that shares a Namespace. Unlike newPhaseRegistryForNamespace,
-// it does NOT read ns.runtime (which belongs to the parent).
-func newPhaseRegistryForChild(ns *Namespace, runtime *EnvironmentFrame) *PhaseRegistry {
-	q := &PhaseRegistry{
-		envs:  make(map[Phase]*EnvironmentFrame),
-		owner: ns,
-	}
-	q.envs[PhaseRuntime] = runtime
-	return q
+// newPhaseRegistryForChild creates a PhaseRegistry for a library env, which shares a
+// Namespace. Unlike newPhaseRegistryForNamespace it does NOT read ns.runtime, which
+// belongs to the parent. The axis it declares is the same one — see
+// newSealedAxisFrames.
+func newPhaseRegistryForChild(ns *Namespace, runtime *EnvironmentFrame, seals map[Phase]*EnvironmentFrame) *PhaseRegistry {
+	return newPhaseRegistry(ns, runtime, seals)
 }

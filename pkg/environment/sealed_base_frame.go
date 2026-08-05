@@ -16,8 +16,6 @@ package environment
 
 import (
 	"fmt"
-
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // The sealed axis: the immutable frames that run parallel to the phase frames.
@@ -69,10 +67,13 @@ func (p sealKindSet) has(kind SealKind) bool {
 	return p&(sealKindSet(1)<<kind) != 0
 }
 
-// sealedAxis is the whole sealed model, as data: one row per phase that has a
-// seal, naming which kinds that phase seals and which frame owns them. SealedAt
-// and SealedFrames both read it, so a sealed phase cannot be reachable by
-// routing yet invisible to enumeration.
+// sealedAxis is the sealed model, as data: one row per sealed phase, naming which
+// kinds that phase seals. Every owner of a sealed axis builds EVERY row
+// (newSealedAxisFrames), so this table describes a namespace and a library env
+// alike; the frames themselves live per owner on its PhaseRegistry, because a
+// library env deliberately shares its parent's Namespace and so cannot hang a seal
+// there. Owners differ in what gets applied into their seals, never in which phases
+// they seal — a per-owner subset would mean this table described only some of them.
 //
 // Phase 0 seals both kinds because its seal is also the graph root, so every
 // frame reaches it through the parent chain; phase 1 seals handlers only, which
@@ -80,16 +81,20 @@ func (p sealKindSet) has(kind SealKind) bool {
 // above 2 have no seal: a define-syntax inside a transformer body climbs off the
 // sealed axis and into the mutable compile frame.
 //
-// ADDING A SEALED PHASE: add a row here, build the frame in wireRuntimeFrames,
-// and decide the frame's lexical parent (the mutable axis forbids phase->phase
-// parent edges; the sealed axis has one already, sealedExpandBase -> sealedBase).
+// ADDING A SEALED PHASE: add a row here. newSealedAxisFrames builds it for every
+// owner, so there is no second place to register it and no per-owner opt-in. The
+// row's frame parents to the phase-0 seal, which is the sealed axis's one
+// phase->phase edge (the mutable axis is forbidden any); a row needing a different
+// parent is a change to that builder, and to this comment.
+//
+// The FIRST row must be PhaseRuntime: it is the graph root (parent nil) and every
+// later row parents to it.
 var sealedAxis = [...]struct {
 	phase Phase
 	kinds sealKindSet
-	frame func(*Namespace) *EnvironmentFrame
 }{
-	{PhaseRuntime, sealsValue | sealsHandler, (*Namespace).SealedBase},
-	{PhaseExpand, sealsHandler, (*Namespace).SealedExpandBase},
+	{PhaseRuntime, sealsValue | sealsHandler},
+	{PhaseExpand, sealsHandler},
 }
 
 // SealedBase returns this Namespace's immutable phase-0 frame: Go primitives and sealed
@@ -111,52 +116,13 @@ func (p *Namespace) SealedExpandBase() *EnvironmentFrame {
 	return p.sealedExpandBase
 }
 
-// mustSeal asserts that a seal the model DECLARES actually exists. Returning nil here
-// instead would be indistinguishable from "this pair has no seal", and every routing
-// caller reads that as license to use the mutable frame — which silently lands a
-// bootstrap macro or special-form expander somewhere a user can overwrite in place,
-// surfacing far away as a dead let-syntax. A namespace built without wireRuntimeFrames
-// must fail here, loudly, the way it did before the seals were table-driven.
-func mustSeal(frame *EnvironmentFrame, phase Phase) *EnvironmentFrame {
-	if frame == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrUnexpectedNil,
-			"sealedAxis: a seal is declared at phase %s but the namespace's frame is nil", phase,
-		))
-	}
-	return frame
-}
-
-// SealedAt returns the immutable frame owning bindings of this (phase, kind), and
-// whether the pair is sealed at all. False means the mutable frame for the phase is
-// the target — a modeled absence, not a failure. Callers that want the fallback
-// applied for them use EnvironmentFrame.SealedTargetAt.
-//
-// Panics if the model declares a seal here and the namespace has no frame for it;
-// see mustSeal.
+// SealedAt returns the immutable frame owning bindings of this (phase, kind) in this
+// NAMESPACE's registry, and whether the pair is sealed at all. False means the mutable
+// frame for the phase is the target — a modeled absence, not a failure. Callers that
+// want the fallback applied for them use EnvironmentFrame.SealedTargetAt, which asks
+// the FRAME's own registry and so answers correctly for a library env too.
 func (p *Namespace) SealedAt(phase Phase, kind SealKind) (*EnvironmentFrame, bool) {
-	for _, row := range sealedAxis {
-		if row.phase != phase || !row.kinds.has(kind) {
-			continue
-		}
-		return mustSeal(row.frame(p), phase), true
-	}
-	return nil, false
-}
-
-// sealedFrameAt returns the seal for a phase regardless of kind, and whether the phase
-// has one. STRUCTURAL questions use this: a phase frame's lexical parent is one link,
-// not one per kind, so asking SealedAt with an arbitrary kind would orphan a seal whose
-// row happens not to cover that kind. Routing questions, which must not send a value to
-// a handler-only seal, use SealedAt.
-func (p *Namespace) sealedFrameAt(phase Phase) (*EnvironmentFrame, bool) {
-	for _, row := range sealedAxis {
-		if row.phase != phase {
-			continue
-		}
-		return mustSeal(row.frame(p), phase), true
-	}
-	return nil, false
+	return p.phases.sealedAt(phase, kind)
 }
 
 // SealedFrames returns every distinct sealed frame this namespace owns, in phase
@@ -166,52 +132,66 @@ func (p *Namespace) sealedFrameAt(phase Phase) (*EnvironmentFrame, bool) {
 func (p *Namespace) SealedFrames() []*EnvironmentFrame {
 	q := make([]*EnvironmentFrame, 0, len(sealedAxis))
 	for _, row := range sealedAxis {
-		q = append(q, mustSeal(row.frame(p), row.phase))
+		frame, ok := p.phases.sealAt(row.phase)
+		if !ok {
+			continue
+		}
+		q = append(q, frame)
 	}
 	return q
 }
 
 // IsSealed reports whether frame is one of this namespace's sealed frames. A nil frame
-// is never sealed — without the guard it would match a nil row frame, answering "yes,
-// that is one of mine" about a frame that does not exist.
+// is never sealed. Note the receiver: this asks about the NAMESPACE's axis, so a
+// library env's own seal answers false here and true on its own registry.
 func (p *Namespace) IsSealed(frame *EnvironmentFrame) bool {
-	if frame == nil {
-		return false
-	}
-	for _, row := range sealedAxis {
-		if row.frame(p) == frame {
-			return true
-		}
-	}
-	return false
+	return p.phases.isSeal(frame)
 }
 
 // IsNamespaceRuntime reports whether this frame is its namespace's own runtime
-// frame — the engine root or a profile child, as opposed to a flat library frame
-// from NewChildRuntime (which shares the root namespace and owns no seal) or any
-// inner lexical frame. It is the layered-vs-flat discriminator: only a namespace
-// runtime frame routes sealed bindings away from itself.
+// frame — the engine root or a profile child, as opposed to a library env's runtime
+// frame from NewChildRuntime (which shares the root namespace) or any inner lexical
+// frame.
+//
+// It is NOT the sealed-routing discriminator — ownsSealedAxis is, and it answers
+// true for a library runtime frame, which owns its own seal. Use this one only for
+// the narrower "is this the namespace's own runtime?" question.
 func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 	return p.namespace != nil && p.namespace.runtime == p
 }
 
 // SealedTargetAt returns the frame that should RECEIVE a sealed binding of this
-// (phase, kind) when this frame is the registration target. A namespace runtime
-// frame routes to the seal; a flat library frame, and any (phase, kind) with no
-// seal, fall back to this frame's own frame at that phase — which is what leaves
-// library environments and expand-phase primitives exactly where they were.
+// (phase, kind) when this frame is the registration target. A frame that owns its
+// registry's sealed axis routes to the seal; any (phase, kind) with no seal in that
+// registry falls back to this frame's own frame at that phase — which is what leaves
+// expand-phase primitives, and a library's primitive expanders, exactly where they were.
 //
 // The receiver is a registration target, so in practice a phase-0 frame; the
 // fallback resolves through the PhaseRegistry for any other phase and must not be
 // called while holding the registry's lock.
 func (p *EnvironmentFrame) SealedTargetAt(phase Phase, kind SealKind) *EnvironmentFrame {
-	if p.IsNamespaceRuntime() {
-		sealed, ok := p.namespace.SealedAt(phase, kind)
+	if p.ownsSealedAxis() {
+		sealed, ok := p.phases.sealedAt(phase, kind)
 		if ok {
 			return sealed
 		}
 	}
 	return p.unsealedTargetAt(phase)
+}
+
+// ownsSealedAxis reports whether this frame is the phase-0 entry of its own phase
+// registry — the frame a sealed binding is routed AWAY from. True for a namespace's
+// mutable runtime and for a library env's mutable runtime (each owns a registry whose
+// phase-0 entry is itself); false for an inner lexical frame, which shares its parent's
+// registry, and false for a seal, whose registry's phase-0 entry is the mutable child.
+//
+// This is the sealed-routing discriminator, replacing IsNamespaceRuntime. That method
+// stays: pkg/wile asks the narrower "is this the namespace's own runtime, as opposed to
+// a library env?" question when deciding whether to re-register docs per import, and
+// widening it there would re-run ApplyDocs on every import — wasted work, and a data
+// race under concurrent SRFI-18 imports.
+func (p *EnvironmentFrame) ownsSealedAxis() bool {
+	return p.phases != nil && p.phases.runtime == p
 }
 
 // unsealedTargetAt returns this frame's own frame at phase: itself when phase is

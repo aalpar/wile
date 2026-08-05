@@ -505,9 +505,9 @@ func setupLibrarySystem(ctx context.Context, libraryPaths []string, importObserv
 	// Synthetic extension libraries re-export the profile's primitives and resolve
 	// their exports against their backing env. In strict mode the visible top-level
 	// env is bare (core-only), so resolve them against a full-registry child runtime
-	// instead. NewChildRuntime is a flat env (it owns no seal, so a sealed binding
-	// lands in the frame itself), so the full registry lands in its own frame and
-	// does NOT pollute the shared sealed base — the user top level stays bare.
+	// instead. NewChildRuntime owns its OWN sealed base, so the full registry lands
+	// there and does NOT pollute the shared namespace's sealed base — the user top
+	// level stays bare.
 	// Non-strict uses env directly.
 	// Only worth building when there are extension libraries to back: with no
 	// snapshots (zero-extension profile, or the pre-built-namespace path where
