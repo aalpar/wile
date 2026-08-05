@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -86,5 +87,54 @@ func TestEngineFootprintBaseline(t *testing.T) {
 	for _, p := range benchProfiles {
 		bytesPerEngine := engineFootprint(t, p.opts, n)
 		t.Logf("footprint %-13s = %7d bytes/engine (n=%d)", p.name, bytesPerEngine, n)
+	}
+}
+
+// BenchmarkEngineStartupWithImport measures engine construction PLUS one
+// (import (scheme base)). Subtracting BenchmarkEngineStartup at the same profile
+// gives the per-import cost — the library env factory's NewChildRuntime, its full
+// registry apply, and binding installation.
+//
+// It exists as a gate on the library sealed-base split
+// (plans/2026-08-04-library-phase-isolation-impl.local.md Task 3), which adds two
+// frames per library env and relocates where that apply lands. Neither should
+// change the apply's SIZE, so allocs/op is the assertion that matters and ns/op
+// is the corroboration.
+//
+// A source FS is required: without it (import (scheme base)) fails with
+// ErrLibraryConfiguration, so the benchmark would time an error path.
+func BenchmarkEngineStartupWithImport(b *testing.B) {
+	ctx := context.Background()
+	importProfiles := []struct {
+		name string
+		opts []wile.EngineOption
+	}{
+		{"small", []wile.EngineOption{
+			wile.WithProfile(wile.Small),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithLibraryPaths("."),
+		}},
+		{"kitchen-sink", []wile.EngineOption{
+			wile.WithProfile(wile.KitchenSink),
+			wile.WithSourceFS(stdlib.FS),
+			wile.WithLibraryPaths("."),
+		}},
+	}
+	for _, p := range importProfiles {
+		b.Run(p.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				eng, err := wile.NewEngine(ctx, p.opts...)
+				if err != nil {
+					b.Fatalf("NewEngine(%s): %v", p.name, err)
+				}
+				_, evalErr := eng.EvalMultiple(ctx, `(import (scheme base))`)
+				if evalErr != nil {
+					b.Fatalf("import (%s): %v", p.name, evalErr)
+				}
+				runtime.KeepAlive(eng)
+				_ = eng.Close()
+			}
+		})
 	}
 }
