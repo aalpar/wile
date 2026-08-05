@@ -22,3 +22,15 @@ import "github.com/aalpar/wile/pkg/environment"
 func FindLibraryBindingForTest(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase, bool) {
 	return findLibraryBinding(lib, internalName)
 }
+
+// SyntaxCompilerNamesForTest exposes the syntaxCompilerEntries names to the
+// external test package, so the value-position refusal ratchet cannot drift
+// from the registration table: a 21st entry fails the ratchet until it gets a
+// refusal row for free.
+func SyntaxCompilerNamesForTest() []string {
+	q := make([]string, 0, len(syntaxCompilerEntries))
+	for _, entry := range syntaxCompilerEntries {
+		q = append(q, entry.Name)
+	}
+	return q
+}

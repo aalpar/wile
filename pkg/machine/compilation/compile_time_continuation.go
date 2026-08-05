@@ -302,8 +302,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 
 		bd := p.env.GetGlobalBinding(gi)
 		if bd != nil {
-			p.emitCachedBindingLoad(bd)
-			return nil
+			return p.emitCachedBindingLoad(sym, bd)
 		}
 		// Binding not yet defined at compile time — fall back to runtime resolution
 		i := p.template.MaybeAppendLiteral(gi)
@@ -359,8 +358,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	if coGI != nil && coGI.Env != nil {
 		coBD := coGI.Env.GetOwnGlobalBinding(coGI)
 		if coIntroducedByExpansion(coBD) {
-			p.emitCachedBindingLoad(coBD)
-			return nil
+			return p.emitCachedBindingLoad(sym, coBD)
 		}
 	}
 
@@ -394,8 +392,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// It must be a global binding (since local lookup failed).
 		// globalBinding was found by GetBinding — use it directly
 		// as a cached binding to skip runtime map/lock overhead.
-		p.emitCachedBindingLoad(globalBinding)
-		return nil
+		return p.emitCachedBindingLoad(sym, globalBinding)
 	}
 
 	// No binding found that matches the scopes
@@ -408,15 +405,36 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 // through here; there are three, and the two that predate the co-introduced-binder
 // arm each carried the same two statements inline.
 //
+// It REFUSES a binding whose type is not BindingTypeVariable: a syntax compiler
+// or primitive expander (BindingTypePrimitive) or a macro transformer
+// (BindingTypeSyntax) is a compile-time meaning, and emitting a load would leak
+// it into the value world (R7RS §4.1.1/§4.3.1 — a syntactic keyword is not a
+// variable). BindingType is the authority; the frame the walk landed in is not.
+// The refusal RAISES here because at this point the ordinary path IS what
+// resolved to the handler; its twin in tryResolvedBinding FALLS THROUGH instead,
+// because there the caller still has ordinary resolution to try. Globals only
+// ever carry Variable, Primitive, or Syntax (Unknown is local-slot scaffolding),
+// so the negative form refuses exactly the two handler tags.
+//
+// No runtime-side twin is needed: handlers are seated exclusively at owner
+// construction, which precedes every user compilation against that owner, so a
+// name that is unbound at compile time cannot become handler-bound later and a
+// deferred index can never resolve to one.
+//
 // Callers must have established that bd is a GLOBAL binding. A local resolves by
 // slot (LoadLocalByLocalIndex) and caching its *Binding would be wrong twice over:
 // the wrong opcode, and a pointer into a []Binding that EnsureLocalBinding can
 // reallocate.
-func (p *CompileTimeContinuation) emitCachedBindingLoad(bd *environment.Binding) {
+func (p *CompileTimeContinuation) emitCachedBindingLoad(sym *values.Symbol, bd *environment.Binding) error {
+	if bd.BindingType() != environment.BindingTypeVariable {
+		return werr.WrapForeignErrorf(werr.ErrSyntacticKeywordAsVariable,
+			"compile: syntactic keyword %q used as a variable", sym.Key)
+	}
 	idx := p.template.AppendCachedBinding(bd)
 	p.AppendOperations(
 		machine.NewOperationLoadCachedBinding(idx),
 	)
+	return nil
 }
 
 // tryResolvedBinding emits a load for the symbol's pre-resolved global binding,
@@ -440,17 +458,17 @@ func (p *CompileTimeContinuation) tryResolvedBinding(expr *syntax.SyntaxSymbol) 
 	}
 	bd := gi.Env.GetOwnGlobalBinding(gi)
 	if bd != nil {
-		// A pin resolving to a compile-time-only handler is a phase confusion:
-		// the value is an expand/compile-phase internal, not a runtime value.
-		// It arises when a dialect removes a *form* (fr.Remove) whose expand-phase
-		// PrimitiveExpander survives and a macro template names the removed
-		// keyword: the compiler no longer sees it as a form, so the keyword
-		// reaches here as an operator carrying its definition-site pin. Refuse the
-		// load so the caller falls through to ErrNoSuchBinding — the documented
-		// removed-form contract (dialect.go) — instead of leaking the internal
-		// handler (e.g. #<primitive-expander:set!>) into the value world.
-		_, isHandler := bd.Value().(compileTimeHandler)
-		if isHandler {
+		// A pin resolving to a compile-time meaning is a phase confusion: refuse
+		// the load so the caller falls through to ordinary resolution — for a
+		// dialect-removed form that chain ends at ErrNoSuchBinding (a phase-1
+		// primitive expander is not a phase-0 candidate), the documented
+		// removed-form contract (dialect.go). The predicate is the TAG, same
+		// authority as emitCachedBindingLoad and lookupMacroBinding's pin arm;
+		// the old compileTimeHandler type assertion missed a pinned macro
+		// TRANSFORMER (a plain machine closure), which leaked by this path.
+		// Falling through is right here and raising is right there: this is a
+		// fallback with an ordinary path left to try.
+		if bd.BindingType() != environment.BindingTypeVariable {
 			return false
 		}
 		idx := p.template.AppendCachedBinding(bd)

@@ -48,17 +48,18 @@ const (
 	// primitive out of the seal and lets a user define-syntax shadow a bootstrap
 	// macro rather than share its frame.
 	//
-	// At phase 0 both kinds are the same frame, so a phase-0 handler IS reachable by
-	// runtime value resolution: `(display define-syntax)` prints
-	// #<syntax-compiler:define-syntax>. Passing SealKindHandler at phase 0 therefore
-	// states intent and routes nowhere different.
+	// At phase 0 both kinds are the same frame, so a phase-0 handler IS reachable at
+	// the frame-graph level by ordinary value resolution — GetBinding still finds
+	// it. Passing SealKindHandler at phase 0 therefore states intent and routes
+	// nowhere different.
 	//
 	// So do not read the kind as a reachability guarantee. Two other things carry
 	// that: registering a primitive expander at phase 1 (where the expand chain is
-	// off the phase-0 value path), and compilation's compileTimeHandler refusal,
-	// which stops a resolved pin from emitting a runtime load of a handler. The
-	// second covers the pinned path, not a plain top-level reference — which is why
-	// the display above still prints.
+	// off the phase-0 value path), and compilation's BindingType refusal —
+	// emitCachedBindingLoad and tryResolvedBinding's pin arm both refuse any
+	// non-Variable binding — which is why `(display define-syntax)` is a compile
+	// error (ErrSyntacticKeywordAsVariable) rather than printing
+	// #<syntax-compiler:define-syntax>.
 	SealKindHandler
 )
 
