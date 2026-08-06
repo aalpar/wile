@@ -1223,5 +1223,5 @@ func (p *EnvironmentFrame) Namespace() *Namespace {
 	return p.namespace
 }
 
-// The sealed-write-view routing seam (SealedWriteViewAt, SealedAt, IsNamespaceRuntime)
-// lives in sealed_write_view.go.
+// The sealed-write-view routing seam (SealedWriteViewAt, unsealedTargetAt,
+// IsNamespaceRuntime) lives in sealed_write_view.go.
