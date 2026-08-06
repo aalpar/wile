@@ -66,7 +66,7 @@ func (p *Namespace) SealedExpandBase() *EnvironmentFrame {
 // SealedAt returns this NAMESPACE's seal for the phase, and whether the phase
 // has one. False means the mutable frame for the phase is the target — a modeled
 // absence, not a failure. Callers that want the fallback applied for them use
-// EnvironmentFrame.SealedTargetAt, which asks the FRAME's own registry and so
+// EnvironmentFrame.SealedWriteViewAt, which asks the FRAME's own registry and so
 // answers correctly for a library env too.
 func (p *Namespace) SealedAt(phase Phase) (*EnvironmentFrame, bool) {
 	return p.phases.sealAt(phase)
@@ -107,16 +107,17 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 	return p.namespace != nil && p.namespace.runtime == p
 }
 
-// SealedTargetAt returns the frame that should RECEIVE a sealed binding of this
-// phase when this frame is the registration target. A frame that owns its
-// registry's sealed axis routes to the seal; any phase with no seal in that
-// registry falls back to this frame's own frame at that phase — which is what leaves
-// expand-phase primitives, and a library's primitive expanders, exactly where they were.
+// SealedWriteViewAt returns the view sealed registrations write through at this
+// phase, when the receiver is a registration target that owns a sealed axis:
+// the owner's seal for the phase today, and after the store fold a sealed-write
+// view over the owner's one store. A phase with no seal falls back to the
+// receiver's own frame at that phase, which is what leaves a library's
+// primitive expanders exactly where they were.
 //
 // The receiver is a registration target, so in practice a phase-0 frame; the
 // fallback resolves through the PhaseRegistry for any other phase and must not be
 // called while holding the registry's lock.
-func (p *EnvironmentFrame) SealedTargetAt(phase Phase) *EnvironmentFrame {
+func (p *EnvironmentFrame) SealedWriteViewAt(phase Phase) *EnvironmentFrame {
 	if p.ownsSealedAxis() {
 		sealed, ok := p.phases.sealAt(phase)
 		if ok {

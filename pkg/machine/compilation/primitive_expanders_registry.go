@@ -100,7 +100,7 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	// form's #<primitive-expander:…> into the value world; registering at phase 1
 	// instead puts it behind the expand-phase seal, off that path entirely.
 	taproot := func() *environment.EnvironmentFrame {
-		return env.SealedTargetAt(environment.PhaseExpand)
+		return env.SealedWriteViewAt(environment.PhaseExpand)
 	}
 	return RegisterPhaseBindings(env, taproot, primitiveExpanderEntries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {

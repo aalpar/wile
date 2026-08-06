@@ -303,18 +303,18 @@ func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	qt.Assert(t, ns.SealedBase().AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
 }
 
-// TestSealedTargetAtFallbacks pins SealedTargetAt's answers for the two shapes that
-// own a sealed axis, and for the phases the axis leaves unsealed (phase 2 and up).
-// Both shapes answer the same way — a library env routes to its OWN seals, never
-// the namespace's — because an owner does not pick a subset of the axis. Whether an
-// expand-phase primitive lands in the seal or the mutable expand child is not this
-// call's question any more: that placement is registry.Apply's phaseTargets
+// TestSealedWriteViewAtFallbacks pins SealedWriteViewAt's answers for the two shapes
+// that own a sealed axis, and for the phases the axis leaves unsealed (phase 2 and
+// up). Both shapes answer the same way — a library env routes to its OWN seals,
+// never the namespace's — because an owner does not pick a subset of the axis.
+// Whether an expand-phase primitive lands in the seal or the mutable expand child is
+// not this call's question any more: that placement is registry.Apply's phaseTargets
 // (apply.go), not the sealed axis.
 //
 // The library assertions live here in the EXTERNAL test package on purpose: they use
 // nothing but exported API, so they would catch a subset creeping back in even if the
 // internal shape tests were deleted.
-func TestSealedTargetAtFallbacks(t *testing.T) {
+func TestSealedWriteViewAtFallbacks(t *testing.T) {
 	ns := environment.NewNamespace()
 	lib := ns.NewChildRuntime()
 	libBase := lib.Parent()
@@ -323,12 +323,12 @@ func TestSealedTargetAtFallbacks(t *testing.T) {
 	qt.Assert(t, libBase, qt.Not(qt.Equals), ns.SealedBase())
 	qt.Assert(t, libExpandBase, qt.Not(qt.Equals), ns.SealedExpandBase())
 	qt.Assert(t, libExpandBase.Parent(), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseRuntime), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseExpand), qt.Equals, libExpandBase)
-	qt.Assert(t, lib.SealedTargetAt(environment.PhaseCompile), qt.Equals, lib.Compile())
+	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseRuntime), qt.Equals, libBase)
+	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseExpand), qt.Equals, libExpandBase)
+	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseCompile), qt.Equals, lib.Compile())
 
 	runtime := ns.Runtime()
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseRuntime), qt.Equals, ns.SealedBase())
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseExpand), qt.Equals, ns.SealedExpandBase())
-	qt.Assert(t, runtime.SealedTargetAt(environment.PhaseCompile), qt.Equals, ns.Compile())
+	qt.Assert(t, runtime.SealedWriteViewAt(environment.PhaseRuntime), qt.Equals, ns.SealedBase())
+	qt.Assert(t, runtime.SealedWriteViewAt(environment.PhaseExpand), qt.Equals, ns.SealedExpandBase())
+	qt.Assert(t, runtime.SealedWriteViewAt(environment.PhaseCompile), qt.Equals, ns.Compile())
 }

@@ -1025,8 +1025,8 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 // it. It fixes no known bug; it means sealedAxis describes every owner.
 //
 // Nothing else has to change to FILL either seal: LoadBootstrapCore already routes
-// the registry apply through env.SealedTargetAt(PhaseRuntime) and the
-// expanders through SealedTargetAt(PhaseExpand), and
+// the registry apply through env.SealedWriteViewAt(PhaseRuntime) and the
+// expanders through SealedWriteViewAt(PhaseExpand), and
 // registry.Apply's WithRuntimeTarget seats the binding in the target while the
 // ForeignClosure still captures the mutable frame, so a primitive resolves user code
 // against the library's own defines. Bootstrap macros reach the phase-1 seal by the
@@ -1131,6 +1131,7 @@ func newSealedAxisFrames(ns *Namespace, sealedGlobal *GlobalEnvironmentFrame) ma
 			global:     global,
 			phaseLevel: phase,
 			namespace:  ns,
+			rank:       writeRankSealed,
 		}
 		if base == nil {
 			base = frame

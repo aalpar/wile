@@ -74,10 +74,11 @@ func WithStableBasePrimitives() ApplyOption {
 }
 
 // WithRuntimeTarget routes PhaseRuntime primitive registration and global values
-// into the given frame instead of env. Used by bootstrap to seat primitives in the
-// immutable sealed base while expand-phase prims stay in env.Expand() and compile-time
-// bindings stay in env.Compile(). Defaults to env (backward compatible — a flat library
-// env passes its own frame, the engine root passes its sealed base).
+// into the given frame instead of env. frame is the sealed-write root view — used
+// by bootstrap to seat primitives in the immutable sealed base while expand-phase
+// prims stay in env.Expand() and compile-time bindings stay in env.Compile().
+// Defaults to env (backward compatible — a flat library env passes its own frame,
+// the engine root passes its sealed base).
 func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 	return func(c *applyConfig) {
 		c.runtimeTarget = frame

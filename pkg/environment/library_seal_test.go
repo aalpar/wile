@@ -97,17 +97,17 @@ func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	c.Assert(base, qt.Equals, lib.Parent())
 	c.Assert(expandBase.Parent(), qt.Equals, base)
 
-	c.Assert(lib.SealedTargetAt(PhaseRuntime), qt.Equals, base)
-	c.Assert(lib.SealedTargetAt(PhaseExpand), qt.Equals, expandBase)
+	c.Assert(lib.SealedWriteViewAt(PhaseRuntime), qt.Equals, base)
+	c.Assert(lib.SealedWriteViewAt(PhaseExpand), qt.Equals, expandBase)
 	// Whether an expand-phase primitive lands in the seal or the mutable expand
 	// child is no longer askable here — that placement is registry.Apply's
 	// phaseTargets (apply.go), not the sealed axis.
-	c.Assert(lib.SealedTargetAt(PhaseCompile), qt.Equals, lib.Compile())
+	c.Assert(lib.SealedWriteViewAt(PhaseCompile), qt.Equals, lib.Compile())
 }
 
 // A bootstrap macro compiled against a library's phase-0 seal must land in that
 // library's phase-1 seal, by the same AtPhase climb a namespace uses. This is the
-// path loadBootstrapMacros takes (LoadBootstrapCore hands it the SealedTargetAt
+// path loadBootstrapMacros takes (LoadBootstrapCore hands it the SealedWriteViewAt
 // result as its target), so getting it wrong puts a library's bootstrap macros in a
 // frame that a library-body define-syntax shares rather than shadows.
 func TestChildRuntimeSealedClimbReachesItsExpandSeal(t *testing.T) {
@@ -138,5 +138,5 @@ func TestOwnsSealedAxisDiscriminates(t *testing.T) {
 
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
 	c.Assert(inner.ownsSealedAxis(), qt.IsFalse)
-	c.Assert(inner.SealedTargetAt(PhaseRuntime), qt.Equals, inner)
+	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, inner)
 }

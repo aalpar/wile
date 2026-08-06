@@ -104,11 +104,31 @@ type EnvironmentFrame struct {
 	// phaseLevel indicates which phase this frame represents
 	// (PhaseTemplate=-1, PhaseRuntime=0, PhaseExpand=1, PhaseCompile=2)
 	phaseLevel Phase
+	// rank says which tier a write through this frame lands in. Every seal frame
+	// (newSealedAxisFrames) carries writeRankSealed; every other frame is the zero
+	// value writeRankMutable. Placed next to phaseLevel: both are single bytes that
+	// share the padding already required before the next pointer field, so this
+	// costs nothing in EnvironmentFrame's size (see layout_size_test.go).
+	rank writeRank
 	// phases is the shared phase registry, owned by Namespace
 	phases *PhaseRegistry
 	// namespace is the owning Namespace
 	namespace *Namespace
 }
+
+// writeRank says which tier a write through this frame lands in. The zero value
+// is mutable — every ordinary frame; the sealed rank is carried by the seal
+// frames (and, after the store fold, by the transient sealed-write views owner
+// construction uses). It is a property of the VIEW, not an argument, because
+// LoadBootstrapCore COMPILES stdlib Scheme whose defines must land sealed, and
+// the compiler cannot thread a sealing parameter through define compilation
+// (design Q2, decided by force majeure).
+type writeRank uint8
+
+const (
+	writeRankMutable writeRank = iota
+	writeRankSealed
+)
 
 // NewNamespaceFrame creates a new root environment frame via NewNamespace.
 //
@@ -274,11 +294,12 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
 func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
-	// A sealed frame's climb stays on the sealed axis, and it asks its OWN registry.
-	// The rows are the same for every owner; the FRAMES are not, so a library env's
-	// base consulting the shared namespace's map would climb into the engine's
-	// sealedExpandBase and hand a library's bootstrap macros to the whole engine.
-	if phase > p.phaseLevel && p.phases != nil && p.phases.isSeal(p) {
+	// A sealed-write view's climb yields the sealed-write view for the target
+	// phase — the design §4.5 inheritance rule, which is exactly what routed a
+	// bootstrap macro's NextPhase() into the phase-1 seal, re-expressed as a
+	// write mode instead of topology. It asks the frame's OWN registry: the rows
+	// are the same for every owner, the frames are not.
+	if phase > p.phaseLevel && p.rank == writeRankSealed && p.phases != nil {
 		sealed, ok := p.phases.sealAt(phase)
 		if ok {
 			return sealed
@@ -1063,5 +1084,5 @@ func (p *EnvironmentFrame) Namespace() *Namespace {
 	return p.namespace
 }
 
-// The sealed-frame routing seam (SealedTargetAt, SealedAt, IsNamespaceRuntime)
+// The sealed-frame routing seam (SealedWriteViewAt, SealedAt, IsNamespaceRuntime)
 // lives in sealed_base_frame.go.

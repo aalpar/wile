@@ -61,7 +61,7 @@ func LoadBootstrapCore(ctx context.Context, env *environment.EnvironmentFrame, r
 	// and a library env alike, each into its OWN seal, so runtimeTarget is never env
 	// itself here. A fresh slice avoids racing the shared opts backing array across
 	// concurrent library-env creation.
-	runtimeTarget := env.SealedTargetAt(environment.PhaseRuntime)
+	runtimeTarget := env.SealedWriteViewAt(environment.PhaseRuntime)
 	applyOpts := make([]registry.ApplyOption, 0, len(opts)+1)
 	applyOpts = append(applyOpts, opts...)
 	applyOpts = append(applyOpts, registry.WithRuntimeTarget(runtimeTarget))
