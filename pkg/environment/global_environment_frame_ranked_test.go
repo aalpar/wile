@@ -234,8 +234,14 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		_, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsFalse)
+		// The slot value on the walk-exhausted return, not the len(slots)==0
+		// short-circuit: this frame HAS a slot for the name, the wildcard loop
+		// runs and rejects it, and bestSlot must still be the zero the caller
+		// is told to ignore. Decoupling bestSlot from bestTier would show up
+		// only here.
+		qt.Assert(t, slot, qt.Equals, 0)
 	})
 
 	t.Run("nil'd slot is skipped", func(t *testing.T) {
@@ -248,8 +254,9 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		_, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsFalse)
+		qt.Assert(t, slot, qt.Equals, 0)
 	})
 
 	t.Run("no candidate at all", func(t *testing.T) {
