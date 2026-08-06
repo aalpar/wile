@@ -16,6 +16,7 @@ package environment
 
 import (
 	"math"
+	"slices"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -1064,15 +1065,19 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // compilation/machine/wile suites but fails the integration R7RS conformance
 // suite here. Investigated as a possible "second hermeticity hole"; it is not.)
 func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	phases := p.phases
-	if phases == nil {
+	if p.phases == nil {
 		// No phase registry — try runtime only
 		return p.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
 	}
 
-	// Search runtime (phase 0) first, then expand (1), then compile (2)
-	for _, phase := range [3]Phase{PhaseRuntime, PhaseExpand, PhaseCompile} {
-		phaseEnv := phases.Get(phase)
+	// Non-negative phases present, ascending. Ascending is what makes the first
+	// hit the LOWEST phase, preserving today's runtime-first precedence; the
+	// {0,1,2} literal truncated the tower (a phase-3 library binding was not
+	// exportable). PhaseTemplate (-1) stays excluded DELIBERATELY: including it
+	// would rank for-template bindings ahead of runtime ones, a precedence
+	// change this commit does not make — it lifts a ceiling only.
+	for _, phase := range p.PresentPhases() {
+		phaseEnv := p.phases.Get(phase)
 		if phaseEnv == nil {
 			continue
 		}
@@ -1082,6 +1087,32 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 		}
 	}
 	return nil
+}
+
+// PresentPhases returns the non-negative phases actually instantiated for this
+// frame's owner (the engine's Namespace, or a library env's own store —
+// EnvironmentFrame.phases is shared by every view over one owner, per "One
+// Store Per Owner" in the package doc), ascending. It is the shared basis for
+// every cross-phase search that must reach the whole macro tower rather than a
+// fixed {0,1,2} guess: GetGlobalIndexAcrossPhases above, and
+// machine/compilation's findLibraryBinding (export resolution), which cannot
+// reach p.phases directly since it lives outside this package.
+//
+// PhaseTemplate (-1) is excluded: callers here rank a reference by RUNTIME-first
+// precedence, and a for-template binding is a different axis, not a lower rung
+// of this one. p.phases.Phases() takes the registry's read lock; called once
+// here rather than per phase.
+func (p *EnvironmentFrame) PresentPhases() []Phase {
+	if p.phases == nil {
+		return nil
+	}
+	phaseList := p.phases.Phases()
+	slices.Sort(phaseList)
+	i := 0
+	for i < len(phaseList) && phaseList[i] < PhaseRuntime {
+		i++
+	}
+	return phaseList[i:]
 }
 
 // GetGlobalIndexFromLibraryScopes searches for a binding by checking each scope

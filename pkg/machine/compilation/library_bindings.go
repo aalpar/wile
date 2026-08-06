@@ -444,13 +444,21 @@ func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Bin
 	return binding, found
 }
 
-// findLibraryBinding searches the library's runtime, expand, and compile
-// environments for a binding with the given internal name. The boolean
-// reports whether a binding was found; when false, the binding pointer is
-// nil and the phase value is meaningless. Callers must check the boolean
-// (or the binding pointer) before relying on the returned phase — the
-// phase return cannot carry a sentinel "not found" value because every
-// non-negative Phase is a valid result.
+// findLibraryBinding searches every phase the library's OWN registry has
+// actually instantiated — not just runtime, expand, and compile — for a
+// binding with the given internal name. The boolean reports whether a binding
+// was found; when false, the binding pointer is nil and the phase value is
+// meaningless. Callers must check the boolean (or the binding pointer) before
+// relying on the returned phase — the phase return cannot carry a sentinel
+// "not found" value because every non-negative Phase is a valid result.
+//
+// The phase list comes from lib.Env.PresentPhases(), ascending, so a name a
+// library binds via nested begin-for-syntax at phase 3 or above is reachable
+// too; the old {runtime, expand, compile} literal truncated the tower (design
+// Phase D, closing plans/2026-08-04-library-phase-isolation-impl.local.md's Q2
+// residual). Ascending order is what makes the first hit the LOWEST phase,
+// preserving runtime-first precedence when a name is bound at more than one —
+// pinned by TestFindLibraryBindingPrefersRuntimeOverExpand.
 //
 // Resolution is HYGIENIC, keyed on the library's own scope (CompiledLibrary.Scope),
 // not by bare name. Three cases, all decided by maximal subset resolution rather
@@ -471,15 +479,6 @@ func (p *CompiledLibrary) ExportedBinding(internalName string) (*environment.Bin
 // accessors, any (mk name v) form) carries {libScope} like a hand-written
 // binder, so those stay exportable.
 func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase, bool) {
-	sourceEnvs := []struct {
-		env   *environment.EnvironmentFrame
-		phase environment.Phase
-	}{
-		{lib.Env, environment.PhaseRuntime},
-		{lib.Env.Expand(), environment.PhaseExpand},
-		{lib.Env.Compile(), environment.PhaseCompile},
-	}
-
 	// exportScopes stays a concrete slice: nil and empty are the same query under
 	// ScopeSet (values.ScopesOf), so this is the ambient (empty) set, never the
 	// wildcard.
@@ -489,13 +488,14 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 	}
 
 	libSym := values.NewSymbol(internalName)
-	for _, src := range sourceEnvs {
-		if src.env == nil {
+	for _, phase := range lib.Env.PresentPhases() {
+		env := lib.Env.AtPhase(phase)
+		if env == nil {
 			continue
 		}
-		binding := src.env.GetBinding(libSym, syntax.ScopesOf(exportScopes))
+		binding := env.GetBinding(libSym, syntax.ScopesOf(exportScopes))
 		if binding != nil {
-			return binding, src.phase, true
+			return binding, phase, true
 		}
 	}
 	return nil, environment.PhaseRuntime, false

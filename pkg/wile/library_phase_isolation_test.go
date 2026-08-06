@@ -153,3 +153,37 @@ func TestLibraryPhaseOneSeesItsOwnPhaseOneDefines(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, v.Internal().SchemeString(), qt.Equals, "yes")
 }
+
+// A name a library binds three begin-for-syntax deep — phase 3 — must be
+// exportable: the cross-phase carve-out (GetGlobalIndexAcrossPhases) and the
+// export search (findLibraryBinding) used to hard-wire {0,1,2}, so a phase-3+
+// binding was invisible to both. Design Phase D (closes phase-isolation Q2).
+//
+// The use-site check nests begin-for-syntax three times to land at phase 3
+// too, and raises if the resolved value is wrong — the only way to observe a
+// phase-3-only value from Scheme without smuggling it through a chain of
+// macro relays that would exercise machinery this test isn't about.
+func TestLibraryExportsPhaseThreeBinding(t *testing.T) {
+	ctx := context.Background()
+	eng := phaseIsolationEngine(t, fstest.MapFS{
+		"deep.scm": &fstest.MapFile{Data: []byte(`(define-library (deep)
+  (export deep)
+  (import (scheme base))
+  (begin
+    (begin-for-syntax
+      (begin-for-syntax
+        (begin-for-syntax
+          (define deep 42))))))
+`)},
+	})
+	_, err := eng.EvalMultiple(ctx, `(import (deep))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	_, err = eng.EvalMultiple(ctx, `
+		(begin-for-syntax
+		  (begin-for-syntax
+		    (begin-for-syntax
+		      (if (= deep 42) #t (error "phase-3 export mismatch" deep)))))
+	`)
+	qt.Assert(t, err, qt.IsNil)
+}

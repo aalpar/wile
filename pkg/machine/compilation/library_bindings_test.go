@@ -15,6 +15,7 @@
 package compilation_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -161,30 +162,69 @@ func TestLibraryBindingsPhaseShift(t *testing.T) {
 	}
 }
 
-// findLibraryBinding probes {runtime, expand, compile} IN THAT ORDER and returns the
-// first hit, so a name bound at BOTH phase 0 and phase 1 exports as phase 0. That is
-// the correct answer, but it is delivered by probe order rather than by asking the
-// phases apart — the same "search every phase" assumption that let a library body
-// resolve across phases (plans/2026-08-04-library-phase-isolation-impl.local.md, Q2).
+// findLibraryBinding probes the phases the library's OWN registry has actually
+// instantiated, ASCENDING, and returns the first hit — so a name bound at
+// several phases exports as its LOWEST phase. That is the correct answer, but
+// it is delivered by probe order rather than by asking the phases apart — the
+// same "search every phase" assumption that let a library body resolve across
+// phases (plans/2026-08-04-library-phase-isolation-impl.local.md, Q2).
 //
-// The other consumer of that assumption is now phase-relative. This pins the ordering
-// this one still relies on, so reordering the probe list fails here instead of
-// silently re-exporting a phase-1 binding at phase 0.
+// Before design Phase D the probed set was a hard-wired {runtime, expand,
+// compile} literal; this pins ascending order as the tie-breaker generally,
+// across every present phase, including phase 3 and up (nested
+// begin-for-syntax), not just the three that used to be the whole ceiling.
 func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
-	c := qt.New(t)
+	tcs := []struct {
+		name          string              // subtest label
+		definedPhases []environment.Phase // phases (ascending) that get a binding of the same name
+		wantPhase     environment.Phase   // the phase findLibraryBinding must report
+	}{
+		{
+			name:          "runtime wins over expand and compile",
+			definedPhases: []environment.Phase{environment.PhaseRuntime, environment.PhaseExpand, environment.PhaseCompile},
+			wantPhase:     environment.PhaseRuntime,
+		},
+		{
+			name:          "expand wins over compile and phase 3",
+			definedPhases: []environment.Phase{environment.PhaseExpand, environment.PhaseCompile, 3},
+			wantPhase:     environment.PhaseExpand,
+		},
+		{
+			name:          "compile wins over phase 3 and phase 4 — the old ceiling's top phase is no longer special",
+			definedPhases: []environment.Phase{environment.PhaseCompile, 3, 4},
+			wantPhase:     environment.PhaseCompile,
+		},
+		{
+			name:          "phase 3 wins when it is the lowest present — beyond the old {0,1,2} ceiling",
+			definedPhases: []environment.Phase{3, 4},
+			wantPhase:     3,
+		},
+		{
+			name:          "phase 4 alone still resolves",
+			definedPhases: []environment.Phase{4},
+			wantPhase:     4,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
 
-	ns := environment.NewNamespace()
-	libEnv := ns.NewChildRuntime()
-	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("q2"), libEnv)
+			ns := environment.NewNamespace()
+			libEnv := ns.NewChildRuntime()
+			lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("q2"), libEnv)
 
-	sym := values.NewSymbol("both-phases")
-	err := libEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(1))
-	c.Assert(err, qt.IsNil)
-	err = libEnv.Expand().DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(2))
-	c.Assert(err, qt.IsNil)
+			sym := values.NewSymbol("multi-phase")
+			for i, phase := range tc.definedPhases {
+				err := libEnv.AtPhase(phase).DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(int64(i)))
+				c.Assert(err, qt.IsNil)
+			}
 
-	binding, phase, found := compilation.FindLibraryBindingForTest(lib, "both-phases")
-	c.Assert(found, qt.IsTrue)
-	c.Assert(phase, qt.Equals, environment.PhaseRuntime)
-	c.Assert(binding.Value().SchemeString(), qt.Equals, "1")
+			binding, phase, found := compilation.FindLibraryBindingForTest(lib, "multi-phase")
+			c.Assert(found, qt.IsTrue)
+			c.Assert(phase, qt.Equals, tc.wantPhase)
+
+			wantIndex := slices.Index(tc.definedPhases, tc.wantPhase)
+			c.Assert(binding.Value().SchemeString(), qt.Equals, values.NewInteger(int64(wantIndex)).SchemeString())
+		})
+	}
 }
