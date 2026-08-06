@@ -15,11 +15,13 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -337,6 +339,70 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 	c.Assert(ge.GetOwnGlobalBinding(gi), qt.IsNotNil)
 	c.Assert(ge.SetOwnGlobalValue(gi, values.NewInteger(7)), qt.IsNil)
 	c.Assert(ge.GetOwnGlobalBinding(gi).Value(), valuestest.SchemeEquals, values.NewInteger(7))
+}
+
+// TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot is the CRITICAL fix from
+// fold C3's review round 1: SetOwnGlobalValue's stale-pin self-heal (the
+// bestSlotLocked fallback under pinnedSlotLocked, exercised above by
+// TestGlobalFrame_PinnedIndexSurvivesDelete) must never re-heal a WRITE onto a
+// SEALED slot.
+//
+// The shape mirrors namespace-undefine! followed by a compiled set!: `car`
+// exists both sealed (the primitive) and, after a user shadow, at (0, mutable).
+// A pin taken against the mutable shadow (the same store-level operation
+// set!'s compile-time re-resolve performs) survives the shadow's deletion —
+// pinnedSlotLocked sees the nil'd slot and falls through to the self-heal.
+// Before the fix, bestSlotLocked was coordinate-blind: with the mutable
+// candidate gone, the sealed slot was the only one left, so the self-heal
+// silently mutated the SEALED primitive in place — corrupting a Stable anchor
+// the frame-reclaim classifier and the optimizer have already reasoned about,
+// and destroying exactly the binding namespace-undefine!'s own sealed refusal
+// exists to protect. After the fix, the sealed slot is filtered out of the
+// fallback, so the write finds no candidate and is refused, matching the
+// pre-fold behavior (a name-resolved write through the frame-local mutable
+// store found nothing and reported ErrNoSuchBinding).
+func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	store := ns.Store()
+	sym := values.NewSymbol("car")
+
+	// The startup set: a sealed primitive, exactly as bootstrap installs one —
+	// through the sealed-write ROOT VIEW, so it lands at (ANY, sealed) the same
+	// way a real (car ...) primitive does.
+	sealedVal := values.NewInteger(-1)
+	c.Assert(ns.sealedWriteRoot.DefineOwnGlobal(sym, BindingTypePrimitive, nil, sealedVal), qt.IsNil)
+
+	// The user shadow: `(define car 1)` through the mutable runtime root — a
+	// new (0, mutable) slot, never the sealed one (define never lands sealed).
+	c.Assert(ns.runtime.DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(1)), qt.IsNil)
+
+	// Pin an index at the mutable slot, the way a compiled set!'s
+	// EnvironmentFrame.GetGlobalIndexWithScopes re-resolve does: tier-aware
+	// (resolveGlobal's ranked probe), so it lands on T1 (mutable), not T3
+	// (ambient sealed), even though both slots share the empty scope set.
+	gi := ns.runtime.GetGlobalIndexWithScopes(sym, values.EmptyScopes())
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Env, qt.Equals, store)
+	c.Assert(gi.Env.GetOwnGlobalBinding(gi).Value(), valuestest.SchemeEquals, values.NewInteger(1))
+
+	// namespace-undefine!'s own mechanism: delete through the runtime view,
+	// which derives (0, mutable) coordinates — the sealed slot is unreachable
+	// to this delete by construction.
+	c.Assert(ns.runtime.DeleteOwnGlobal(sym, AmbientScopes()), qt.IsTrue)
+
+	// The pin is now stale: pinnedSlotLocked sees a nil'd slot. BEFORE the fix,
+	// the self-heal fell through to the sealed slot and mutated it in place.
+	// AFTER: no mutable candidate remains, so the write is refused — the
+	// pre-fold behavior, mirrored at the store's own error surface.
+	err := store.SetOwnGlobalValue(gi, values.NewInteger(2))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue)
+
+	// And the sealed binding itself is untouched — the write never reached it.
+	sealedRead := store.SealedBindingAt(sym, values.EmptyScopes(), PhaseRuntime)
+	c.Assert(sealedRead, qt.IsNotNil)
+	c.Assert(sealedRead.Value(), valuestest.SchemeEquals, sealedVal)
 }
 
 // TestGlobalFrame_WildcardSkipsDeletedSlot covers the matchAny branch, which had

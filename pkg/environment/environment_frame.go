@@ -902,14 +902,32 @@ func (p *EnvironmentFrame) DeleteOwnGlobal(sym *values.Symbol, scopes []*syntax.
 // compile-time-unbound define/set! fallback. It resolves in the MUTABLE tier at
 // this frame's phase and nowhere else.
 //
-// The restriction is G13 preserved, not new caution. Before the fold this wrote
-// through the executing frame's OWN global, which held exactly the mutable
-// layer, so a name-resolved write could never land on a sealed slot. The merged
-// store holds the sealed tiers that walk could not reach, and a ranked resolve
-// here would let set! of an unshadowed primitive name mutate the sealed entry in
-// place under WithMutableTopLevel — where nothing is Stable to refuse it — a
-// behavior change and a P1 breach. A PINNED index is a different question and
-// keeps its reach (machine_context.go's other branch).
+// The restriction is G13 preserved, not new caution — but "before the fold this
+// wrote through the executing frame's OWN global, which held exactly the
+// mutable layer" is true only for USER code, not in general. A bootstrap
+// closure's captured frame IS the sealed base (parent nil), and pre-fold that
+// frame's OWN .global was the sealed base's OWN store — the sealed layer, not
+// the mutable one — so a deferred write executing there would have landed
+// sealed, the opposite of the claim. The merged store holds the sealed tiers a
+// user-frame walk could never reach, and a ranked resolve here would let set!
+// of an unshadowed primitive name mutate the sealed entry in place under
+// WithMutableTopLevel — where nothing is Stable to refuse it — a behavior
+// change and a P1 breach; restricting to the mutable tier closes that for
+// BOTH frame kinds, which is why this is not narrowed to "user frames only".
+// A PINNED index is a different question and keeps its reach
+// (machine_context.go's other branch).
+//
+// Whether the sealed-rank case this guards against has a live trigger at all is
+// a separate question from whether the guard is correct: this round's review
+// measurement (task-6 report, "Fix round 1") found no compiler path that
+// constructs a deferred (Env == nil) GlobalIndex for a STORE instruction —
+// emitDefineStore and CompileValidatedSetBang, the only two literal-producing
+// sites for OpStoreGlobal, both resolve through OwnGlobalIndex /
+// GetGlobalIndexWithScopes, which pin whenever they succeed and raise a compile
+// error otherwise. That is evidence of no KNOWN live trigger, not a proof of
+// unreachability (a hand-built literal, or a future compiler path, could still
+// reach this branch), so the restriction stays as the fail-closed answer either
+// way.
 func (p *EnvironmentFrame) SetDeferredGlobalValue(gi *GlobalIndex, v values.Value) error {
 	return p.global.setValueAtCoords(gi.Index, gi.query, ExactPhase(p.phaseLevel), false, v)
 }
@@ -1081,11 +1099,19 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 // case and a #!void from a predeclared-unwritten slot in the second. See
 // plans/2026-08-04-library-phase-isolation-design.local.md §1.
 //
-// Reaching the library's PRIMITIVES from phase 1 is not this search's job. A library
-// env's phase frames parent to its own sealed base (NewChildRuntime), so the parent
-// walk inside GetGlobalIndexWithScopes finds them. Before that split existed this
-// arm's phase-0 reach was the ONLY such route, which is why narrowing it alone would
-// have stranded every begin-for-syntax body in every library (design E4).
+// Reaching the library's PRIMITIVES from phase 1 is not this search's job — it
+// falls out of GetGlobalIndexWithScopes's own reach, not a mechanism this
+// function adds. A library env (NewChildRuntime) shares its store across every
+// phase view, and GetGlobalIndexWithScopes's ranked probe (resolveGlobal →
+// resolveRankedLocked) already includes tiers T2/T3 (sealed, at the referring
+// phase and ambient) at every call — there is no parent walk post-fold, one
+// store answers for all of a library's phase views. Before the store fold this
+// same reach came from the phase frame's PARENT LINK to the library's own
+// sealed base; the fold changed the mechanism (link → tier) without changing
+// which primitives a phase-1 body can see. Before library envs owned their own
+// sealed axis at all, this arm's phase-0 reach was the ONLY such route, which is
+// why narrowing it alone would have stranded every begin-for-syntax body in
+// every library (design E4).
 //
 // The other GetGlobalIndexAcrossPhases caller (compile_syntax_rules.go) is untouched:
 // it carries the R7RS §4.3 free-template-identifier carve-out, and the

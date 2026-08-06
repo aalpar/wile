@@ -1313,6 +1313,18 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// filter is the whole query; enumerating the mutable tier too would index
 	// nothing extra at bootstrap and would drift into indexing user defines later
 	// (G2).
+	//
+	// SealedSlots() is now every sealed slot at EVERY phase (the fold merged the
+	// per-phase seal frames into one store), where the pre-fold walk visited only
+	// the phase-0 seal's own slots. A name sealed at BOTH phase 0 and phase 1
+	// (e.g. car's phase-1 expand copy — see the binding-model matrix header) is
+	// now visited twice here, where the walk this replaced visited it once. This
+	// is cost, not correctness. The BindingTypeVariable filter below excludes the
+	// phase-1 bootstrap MACRO additions (BindingTypeSyntax) but not a phase-1
+	// registry PRIMITIVE copy like car's (also BindingTypeVariable) — that one is
+	// genuinely visited twice, and AddDocOnlyPrimitive's per-name dedup is what
+	// keeps the double visit from becoming a double registration. Not
+	// restructured to a phase-0-only query here.
 	for _, slot := range ns.Store().SealedSlots() {
 		sym := slot.Name
 		bnd := slot.Binding

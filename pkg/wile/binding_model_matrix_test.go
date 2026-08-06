@@ -22,6 +22,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
@@ -410,6 +411,29 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 		{name: "set! own define later unit ok",
 			units: []string{`(define z 1)`, `(set! z 2) z`},
 			want:  "2"},
+		// CRITICAL fix, fold C3 review round 1: SetOwnGlobalValue's stale-pin
+		// self-heal must not re-heal onto a SEALED slot. square (a bootstrap
+		// SCHEME procedure, sealed at (ANY, sealed) with no phase-1/2
+		// companion registration — unlike car, which also owns a phase-2
+		// compile-time entry and so would confound this row with the
+		// separately-documented phase-blind residual) is shadowed at
+		// (0, mutable); f's set! compiles to a PINNED index at that mutable
+		// slot (the same pinned-reach mechanism the h/car pair above
+		// exercises); namespace-undefine! deletes the mutable shadow; calling
+		// f re-triggers the now-stale pin. Before the fix the self-heal
+		// fallback was coordinate-blind and fell through to the SEALED
+		// square, silently mutating the primitive in place; after the fix,
+		// no mutable candidate remains and the write is refused —
+		// machine.ErrBindingNotFound, the same sentinel a name-resolved
+		// write through the pre-fold frame-local store reported.
+		{name: "stale pin self-heal refuses sealed slot after undefine",
+			units: []string{
+				`(define square 1)`,
+				`(define (f) (set! square 2))`,
+				`(namespace-undefine! (interaction-environment) 'square)`,
+				`(f)`,
+			},
+			wantErr: machine.ErrBindingNotFound},
 	}
 	runMatrix(t, rows, wile.WithMutableTopLevel())
 }
