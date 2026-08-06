@@ -178,14 +178,22 @@ func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 // Phases returns all currently instantiated phase levels.
 // Useful for debugging and introspection.
 func (p *PhaseRegistry) Phases() []Phase {
+	return p.appendPhases(nil)
+}
+
+// appendPhases appends the instantiated phase levels to dst. EnvironmentFrame's
+// PresentPhases merges these with the store's own phases, and taking an exactly
+// sized slice from Phases() only to append to it costs a second allocation on
+// the macro-compilation path.
+// Thread-safe: uses RLock for read-only access.
+func (p *PhaseRegistry) appendPhases(dst []Phase) []Phase {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	result := make([]Phase, 0, len(p.envs))
 	for phase := range p.envs {
-		result = append(result, phase)
+		dst = append(dst, phase)
 	}
-	return result
+	return dst
 }
 
 // TopLevelFrame returns the runtime (phase 0) environment frame.

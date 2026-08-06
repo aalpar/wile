@@ -61,7 +61,11 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0.Index.EqualTo(values.NewSymbol("testVar0")), qt.IsTrue)
 
-	// Set the initial value of the new binding
+	// Set the initial value of the new binding. A create returns a DEFERRED
+	// index and SetOwnGlobalValue is the pinned write, so address the slot
+	// through the owning view's own coordinates.
+	gi0 = owner.OwnGlobalIndex(sym0, syntax.EmptyScopes())
+	qt.Assert(t, gi0, qt.IsNotNil)
 	err := env.SetOwnGlobalValue(gi0, value0)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -71,6 +75,8 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi1.Index.EqualTo(values.NewSymbol("testVar1")), qt.IsTrue)
 
 	// Set the initial value of the new binding
+	gi1 = owner.OwnGlobalIndex(sym1, syntax.EmptyScopes())
+	qt.Assert(t, gi1, qt.IsNotNil)
 	err = env.SetOwnGlobalValue(gi1, value1)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -188,8 +194,8 @@ func TestGlobalFrame_VacuousScopesAreSingleSlot(t *testing.T) {
 	// An owning Namespace, not a bare store: GlobalEnvironmentFrame's own
 	// GetGlobalIndex/GetGlobalIndexWithScopes are gone (production-dead after the
 	// store fold, C4), so the wildcard/scoped resolution below goes through the
-	// owning frame's ranked probe — single-tier here, so it agrees with what the
-	// store-level bestSlotLocked used to answer directly.
+	// owning frame's ranked probe — single-tier here, so it agrees with what a
+	// store-level scope-only best-of used to answer directly.
 	ns := NewNamespace()
 	ge := ns.Store()
 	owner := ns.Runtime()
@@ -346,16 +352,18 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 
 // TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot is the CRITICAL fix from
 // fold C3's review round 1: SetOwnGlobalValue's stale-pin self-heal (the
-// bestSlotLocked fallback under pinnedSlotLocked, exercised above by
+// healWriteLocked fallback under pinnedSlotLocked, exercised above by
 // TestGlobalFrame_PinnedIndexSurvivesDelete) must never re-heal a WRITE onto a
-// SEALED slot.
+// SEALED slot. It is now coordinate-exact, which subsumes the sealed/mutable
+// filter it originally used; TestStalePinHealsUseTheirCoordinates pins the
+// phase half of the same rule.
 //
 // The shape mirrors namespace-undefine! followed by a compiled set!: `car`
 // exists both sealed (the primitive) and, after a user shadow, at (0, mutable).
 // A pin taken against the mutable shadow (the same store-level operation
 // set!'s compile-time re-resolve performs) survives the shadow's deletion —
 // pinnedSlotLocked sees the nil'd slot and falls through to the self-heal.
-// Before the fix, bestSlotLocked was coordinate-blind: with the mutable
+// Before the fix, the heal resolved by name alone: with the mutable
 // candidate gone, the sealed slot was the only one left, so the self-heal
 // silently mutated the SEALED primitive in place — corrupting the sealed
 // startup-set binding namespace-undefine!'s own sealed refusal exists to
@@ -632,5 +640,155 @@ func TestGlobalFrame_AmbientKeysExcludesMacroIntroducedBinders(t *testing.T) {
 	_, ok = names["macro-only"]
 	c.Assert(ok, qt.IsFalse)
 	_, ok = names["deleted"]
+	c.Assert(ok, qt.IsFalse)
+}
+
+// Copy must survive a DELETED slot. DeleteBindingAt nils the slot in place
+// rather than compacting — every surviving index still addresses what it
+// addressed — so a store that has ever served a namespace-undefine! holds nil
+// entries, and Copy dereferenced them for b.Value(). Copy is now the whole of
+// NewSchemeReportNamespace, so (namespace-undefine! …) followed by
+// (scheme-report-environment 7) panicked in the VM.
+//
+// The copy must keep the dead slot's POSITION, not compact it: the cloned key
+// lists carry absolute slot indices, and shifting later slots down would
+// silently re-point every one of them.
+func TestGlobalEnvironmentFrameCopyKeepsDeletedSlotPosition(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	runtime := ns.Runtime()
+	store := ns.Store()
+
+	gone := values.NewSymbol("gone")
+	kept := values.NewSymbol("kept")
+	c.Assert(runtime.DefineOwnGlobal(gone, BindingTypeVariable, AmbientScopes(), values.NewInteger(1)), qt.IsNil)
+	c.Assert(runtime.DefineOwnGlobal(kept, BindingTypeVariable, AmbientScopes(), values.NewInteger(2)), qt.IsNil)
+
+	keptSlot := runtime.OwnGlobalIndex(kept, syntax.EmptyScopes()).Slot
+	c.Assert(runtime.DeleteOwnGlobal(gone, AmbientScopes()), qt.IsTrue)
+
+	copied := store.Copy()
+	c.Assert(copied, qt.IsNotNil)
+	c.Assert(len(copied.Bindings()), qt.Equals, len(store.Bindings()))
+	c.Assert(copied.bindings[keptSlot], qt.IsNotNil)
+	c.Assert(copied.bindings[keptSlot].Value(), valuestest.SchemeEquals, values.NewInteger(2))
+	// The deleted name is gone from the copy's keys as well, since delete drops
+	// it from the source before the clone.
+	_, present := copied.keys[*gone]
+	c.Assert(present, qt.IsFalse)
+}
+
+// PresentPhases is the basis of every cross-phase search, and it must report a
+// phase the STORE holds slots at even when this owner's registry has never
+// instantiated a view there. Copy() carries slots without carrying views —
+// NewSchemeReportNamespace is exactly that — so a copied namespace's phase-2
+// bindings were visible to LiveSlots and invisible to GetGlobalIndexAcrossPhases.
+func TestPresentPhasesIncludesStoreOnlyPhases(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("meta-only")
+	c.Assert(ns.AtPhase(PhaseCompile).DefineOwnGlobal(
+		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(7)), qt.IsNil)
+
+	report := ns.NewSchemeReportNamespace()
+	// The copy holds the slot...
+	found := false
+	for _, ns := range report.Store().LiveSlots() {
+		if ns.Name.Key == "meta-only" {
+			found = true
+		}
+	}
+	c.Assert(found, qt.IsTrue)
+	// ...its registry has no phase-2 view (only the phase-0 root and the sealed
+	// axis rows are minted at construction)...
+	c.Assert(report.phases.Get(PhaseCompile), qt.IsNil)
+	// ...and the search basis reports the phase anyway.
+	c.Assert(report.Runtime().PresentPhases(), qt.Contains, PhaseCompile)
+	c.Assert(report.Runtime().GetGlobalIndexAcrossPhases(sym, AmbientScopes()), qt.IsNotNil)
+}
+
+// The stale-pin heals, at the store level. A pin records the coordinates it
+// resolved at, and the two heals use them with OPPOSITE polarity: a write
+// re-resolves at exactly those coordinates, a read re-runs the ranked probe at
+// the pin's phase.
+//
+// The write side is the one with teeth. Before the coordinates existed it
+// re-resolved by name with a sealed/mutable filter and no phase argument at all,
+// so a pin emptied at (0, mutable) relocated onto the same name's (1, mutable)
+// slot and wrote there — a variable the reference never named.
+func TestStalePinHealsUseTheirCoordinates(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	runtime := ns.Runtime()
+	store := ns.Store()
+	sym := values.NewSymbol("dual")
+
+	// The same name at three coordinates, as a dual-phase primitive has them.
+	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime).DefineOwnGlobal(
+		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1)), qt.IsNil)
+	c.Assert(ns.AtPhase(PhaseExpand).DefineOwnGlobal(
+		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(2)), qt.IsNil)
+	c.Assert(runtime.DefineOwnGlobal(
+		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(3)), qt.IsNil)
+
+	pin := runtime.OwnGlobalIndex(sym, syntax.EmptyScopes())
+	c.Assert(pin, qt.IsNotNil)
+	c.Assert(store.GetOwnGlobalBinding(pin).Value(), valuestest.SchemeEquals, values.NewInteger(3))
+
+	c.Assert(runtime.DeleteOwnGlobal(sym, AmbientScopes()), qt.IsTrue)
+
+	// WRITE: refused. Neither the (ANY, sealed) entry nor the (1, mutable) one is
+	// at the pin's coordinates, and both are reachable by name.
+	err := store.SetOwnGlobalValue(pin, values.NewInteger(99))
+	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue)
+	c.Assert(ns.AtPhase(PhaseExpand).GetBinding(sym, syntax.EmptyScopes()).Value(),
+		valuestest.SchemeEquals, values.NewInteger(2))
+
+	// READ: the sealed entry the deleted shadow was covering, which is what
+	// ordinary resolution at phase 0 now answers. NOT the phase-1 entry.
+	c.Assert(store.GetOwnGlobalBinding(pin).Value(), valuestest.SchemeEquals, values.NewInteger(1))
+
+	// A redefine at the pin's own coordinates re-heals the write.
+	c.Assert(runtime.DefineOwnGlobal(
+		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(4)), qt.IsNil)
+	c.Assert(store.SetOwnGlobalValue(pin, values.NewInteger(5)), qt.IsNil)
+	c.Assert(runtime.GetBinding(sym, syntax.EmptyScopes()).Value(),
+		valuestest.SchemeEquals, values.NewInteger(5))
+}
+
+// SealedSlots is LiveSlots with the rank filter, and the filter is the whole of
+// the difference. Its one consumer indexes structured docstrings out of the
+// sealed tier; without the filter it would also index whatever the user has
+// defined at (0, mutable), which at bootstrap time is nothing — so the filter's
+// removal is invisible to every end-to-end path and has to be pinned here.
+func TestSealedSlotsFiltersByRank(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sealedName := values.NewSymbol("sealed-one")
+	mutableName := values.NewSymbol("mutable-one")
+
+	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime).DefineOwnGlobal(
+		sealedName, BindingTypeVariable, AmbientScopes(), values.NewInteger(1)), qt.IsNil)
+	c.Assert(ns.Runtime().DefineOwnGlobal(
+		mutableName, BindingTypeVariable, AmbientScopes(), values.NewInteger(2)), qt.IsNil)
+
+	names := func(slots []NamedSlot) map[string]struct{} {
+		q := map[string]struct{}{}
+		for _, s := range slots {
+			q[s.Name.Key] = struct{}{}
+		}
+		return q
+	}
+
+	live := names(ns.Store().LiveSlots())
+	_, ok := live["sealed-one"]
+	c.Assert(ok, qt.IsTrue)
+	_, ok = live["mutable-one"]
+	c.Assert(ok, qt.IsTrue)
+
+	sealed := names(ns.Store().SealedSlots())
+	_, ok = sealed["sealed-one"]
+	c.Assert(ok, qt.IsTrue)
+	_, ok = sealed["mutable-one"]
 	c.Assert(ok, qt.IsFalse)
 }

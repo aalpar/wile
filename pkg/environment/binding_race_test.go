@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -22,11 +23,19 @@ import (
 // Pre-fix this fails the `-race` job. Post-fix (value published through an
 // atomicCell) the read is a lock-free atomic load and the test is clean.
 func TestBindingConcurrentGlobalReadWrite_D2(t *testing.T) {
-	env := NewNamespaceFrame().GlobalEnvironment()
+	frame := NewNamespaceFrame()
+	env := frame.GlobalEnvironment()
 	sym := values.NewSymbol("x")
-	gi, created := env.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
+	_, created := env.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
 	if !created {
 		t.Fatal("expected a fresh global binding")
+	}
+
+	// Re-resolve at the creating view's own coordinates: the index a create
+	// returns is DEFERRED, and the store answers only a pinned one.
+	gi := frame.OwnGlobalIndex(sym, syntax.EmptyScopes())
+	if gi == nil {
+		t.Fatal("global index not found")
 	}
 
 	// The stable *Binding pointer the compile-time cache would capture and then

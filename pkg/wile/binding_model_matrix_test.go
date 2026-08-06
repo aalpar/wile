@@ -362,6 +362,25 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "null-environment refuses derived syntax (control)",
 			units:   []string{`(eval '(cond (#t 7)) (null-environment 5))`},
 			wantErr: werr.ErrNoSuchBinding},
+		// The stale-pin self-heal, on the SHIPPED DEFAULT. Its twin in the
+		// mutable matrix reads as a WithMutableTopLevel-only concern, and that
+		// is what every earlier review pass took it for; it is not.
+		//
+		// The shadow and the set! must share ONE unit. Split across units the
+		// immutable default refuses the set! outright — a top-level define
+		// stamps its binding Stable, so a LATER unit's set! is a mutation of a
+		// Stable binding. Within one unit the body defines are predeclared and
+		// the set! compiles against a binding not yet stamped, so it pins the
+		// (0, mutable) shadow and the sequence proceeds exactly as it does with
+		// the flag on. A census of a bootstrapped KitchenSink namespace puts
+		// 146 names at (1, mutable) — this is not a car special case.
+		{name: "stale pin self-heal refused under the immutable default",
+			units: []string{
+				`(begin (define car 1) (define (f) (set! car 2)))`,
+				`(namespace-undefine! (interaction-environment) 'car)`,
+				`(f)`,
+			},
+			wantErr: machine.ErrBindingNotFound},
 	}
 	runMatrix(t, rows)
 }
@@ -429,19 +448,18 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 			want:  "2"},
 		// CRITICAL fix, fold C3 review round 1: SetOwnGlobalValue's stale-pin
 		// self-heal must not re-heal onto a SEALED slot. square (a bootstrap
-		// SCHEME procedure, sealed at (ANY, sealed) with no phase-1
-		// companion registration — unlike car, which also owns a phase-1
-		// expand-copy entry and so would confound this row with the
-		// separately-documented phase-blind residual below) is shadowed at
-		// (0, mutable); f's set! compiles to a PINNED index at that mutable
-		// slot (the same pinned-reach mechanism the h/car pair above
-		// exercises); namespace-undefine! deletes the mutable shadow; calling
-		// f re-triggers the now-stale pin. Before the fix the self-heal
-		// fallback was coordinate-blind and fell through to the SEALED
-		// square, silently mutating the primitive in place; after the fix,
-		// no mutable candidate remains and the write is refused —
-		// machine.ErrBindingNotFound, the same sentinel a name-resolved
-		// write through the pre-fold frame-local store reported.
+		// SCHEME procedure, sealed at (ANY, sealed) with no phase-1 companion
+		// registration) is shadowed at (0, mutable); f's set! compiles to a
+		// PINNED index at that mutable slot (the same pinned-reach mechanism
+		// the h/car pair above exercises); namespace-undefine! deletes the
+		// mutable shadow; calling f re-triggers the now-stale pin. Before the
+		// fix the self-heal fallback was coordinate-blind and fell through to
+		// the SEALED square, silently mutating the primitive in place; after
+		// it, the heal asks for (0, mutable) and finds nothing, so the write
+		// is refused — machine.ErrBindingNotFound, the same sentinel a
+		// name-resolved write through the pre-fold frame-local store reported.
+		// The next row is the phase twin: same shape for a name that DOES own
+		// a phase-1 companion.
 		{name: "stale pin self-heal refuses sealed slot after undefine",
 			units: []string{
 				`(define square 1)`,
@@ -450,37 +468,39 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 				`(f)`,
 			},
 			wantErr: machine.ErrBindingNotFound},
-		// RESIDUAL, measured and pinned as CURRENT BEHAVIOR (round 2 review),
-		// NOT fixed: for a name that owns a phase-1 companion — car here, and
-		// with it the ~28 dual-phase registration blocks in
-		// pkg/registry/core (pairs, lists, strings, arithmetic, vectors,
-		// predicates, characters, equality, hashes, syntax) — the rejectSealed
-		// filter does not eliminate the stale-pin self-heal hazard the row
-		// above closes, it RELOCATES it. car's slots are [(ANY, sealed),
-		// (1, mutable) expand copy, (0, mutable) shadow]; namespace-undefine!
-		// removes only the shadow, so after rejectSealed filters out the
-		// sealed slot the (1, mutable) expand copy is the ONLY remaining
-		// candidate — the self-heal succeeds silently instead of being
-		// refused. (f) returns without error, and a phase-1 reference to car
-		// (captured via begin-for-syntax + an er-macro-transformer, since a
-		// bare top-level read cannot observe phase 1) now reads back 2: the
-		// write landed on the sealed startup set's phase-1 primitive, not on
-		// the (0, mutable) slot it originally pinned. This is exactly the
-		// PHASE-blind residual SetOwnGlobalValue's own doc comment names as
-		// accepted, not this row's discovery — it is measured here rather
-		// than only asserted in prose, pending a human decision on whether to
-		// close it (which would mean widening GlobalIndex to carry a phase
-		// for a coordinate-exact self-heal — a design change, not a fix
-		// scoped to this round).
-		{name: "stale pin self-heal relocates onto phase-1 mutable slot (residual)",
+		// The PHASE axis of the same hazard, for a name that owns a phase-1
+		// companion — car here, and with it the ~28 dual-phase registration
+		// blocks in pkg/registry/core (pairs, lists, strings, arithmetic,
+		// vectors, predicates, characters, equality, hashes, syntax). car's
+		// slots are [(ANY, sealed), (1, mutable) expand copy, (0, mutable)
+		// shadow]; namespace-undefine! removes only the shadow. A self-heal
+		// that filtered on sealed/mutable ALONE did not eliminate this hazard,
+		// it relocated it: the (1, mutable) expand copy was the only remaining
+		// candidate, so the write succeeded silently and landed on the startup
+		// set's phase-1 primitive — this row measured "2" for as long as the
+		// filter was phase-blind. The pin now carries its coordinates, so the
+		// heal asks for (0, mutable) and finds nothing: same refusal as the
+		// square row above, which is the point — a dual-phase name and a
+		// single-phase one now behave the same.
+		{name: "stale pin self-heal refuses phase-1 slot after undefine",
 			units: []string{
 				`(define car 1)`,
 				`(define (f) (set! car 2))`,
 				`(namespace-undefine! (interaction-environment) 'car)`,
 				`(f)`,
-				`(begin-for-syntax (define probe car)) (define-syntax reveal-probe (er-macro-transformer (lambda (form rename compare) probe))) (reveal-probe)`,
 			},
-			want: "2"},
+			wantErr: machine.ErrBindingNotFound},
+		// ...and the phase-1 copy is untouched by the refused write. Read back
+		// through a phase-1 er-macro-transformer, since a top-level read
+		// cannot observe phase 1: car there is still the primitive, not 2.
+		{name: "refused self-heal leaves the phase-1 copy intact",
+			units: []string{
+				`(define car 1)`,
+				`(define (f) (set! car 2))`,
+				`(namespace-undefine! (interaction-environment) 'car)`,
+				`(begin-for-syntax (define probe (car (list 7 8)))) (define-syntax reveal-probe (er-macro-transformer (lambda (form rename compare) probe))) (reveal-probe)`,
+			},
+			want: "7"},
 	}
 	runMatrix(t, rows, wile.WithMutableTopLevel())
 }

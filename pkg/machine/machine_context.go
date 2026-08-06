@@ -545,8 +545,16 @@ func (p *MachineContext) Run() error {
 				err = mc.env.SetDeferredGlobalValue(gi, val)
 			}
 			if err != nil {
-				return mc.WrapError(ErrBindingNotFound,
-					fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+				// Carry the store's own error as the CAUSE, not just the
+				// sentinel. "No such binding" is the coarsest of several
+				// distinct facts the store can report — the name is absent
+				// entirely, or it exists at coordinates this write cannot
+				// reach — and the store's message is the only place that
+				// distinction survives. errors.Is still matches
+				// ErrBindingNotFound, through ForeignError's two-chain Is.
+				return mc.WrapError(
+					werr.WrapForeignErrorWithCause(ErrBindingNotFound, err, "OpStoreGlobal"),
+					fmt.Sprintf("cannot store to global binding %s", gi.SchemeString()))
 			}
 			mc.pc++
 

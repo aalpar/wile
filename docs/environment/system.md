@@ -183,10 +183,17 @@ and a shift that leaves `int8` is rejected (`for-meta: phase 200 out of range
 macro-generating-macro carve-out for free template identifiers) and
 `findLibraryBinding` (`machine/compilation/library_bindings.go`, which decides
 what a library can export) both derive their probe set from
-`EnvironmentFrame.PresentPhases()`: the non-negative phases the owner's OWN
-registry has actually instantiated, ascending, `PhaseTemplate` excluded.
-Neither is hard-wired to `{0, 1, 2}` — a name a library binds at phase 3 or
-above is exportable.
+`EnvironmentFrame.PresentPhases()`, ascending, `PhaseTemplate` excluded. Neither
+is hard-wired to `{0, 1, 2}` — a name a library binds at phase 3 or above is
+exportable.
+
+`PresentPhases` is the UNION of the phases the owner's registry has instantiated
+a VIEW for and the phases its STORE holds slots at. The two come apart:
+`GlobalEnvironmentFrame.Copy()` carries slots without carrying views, which is
+exactly what `NewSchemeReportNamespace` does, so a copied namespace's phase-2
+bindings appear in `LiveSlots()` while its registry has no phase-2 view at all.
+Consulting the views alone made those bindings unreachable to every cross-phase
+search.
 
 Everything else that walks phases is driven by `Store().LiveSlots()` (every
 live slot at every phase and rank, in one map walk over the owner's store):

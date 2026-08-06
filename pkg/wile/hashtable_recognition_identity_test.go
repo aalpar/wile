@@ -139,3 +139,35 @@ func TestHashtableAccessorsRoundTripAfterImport(t *testing.T) {
 		})
 	}
 }
+
+// TestHashtableAccessorsSurviveAUserShadow pins the SEALED-tier fallback, which
+// is the branch reached only when the mutable tier holds something that is not
+// this primitive.
+//
+// name only LOCATES a candidate; identity DECIDES. A user (define equal-hash …)
+// wins the ranked probe from the runtime view and then fails the identity check,
+// and the accessor must ask the sealed tiers directly rather than conclude the
+// primitive is unregistered. Nothing else exercises that branch: without a
+// shadow the mutable tier is either empty (so the probe falls through to the
+// sealed slot on its own) or holds the real primitive after an import.
+func TestHashtableAccessorsSurviveAUserShadow(t *testing.T) {
+	c := qt.New(t)
+
+	cases := []struct {
+		name string
+		expr string
+	}{
+		{"shadowed equal-hash",
+			`(begin (define equal-hash 42)
+				(procedure? (hashtable-hash-function (make-equal-hashtable))))`},
+		{"shadowed equal?",
+			`(begin (define equal? 42)
+				(procedure? (hashtable-equivalence-function (make-equal-hashtable))))`},
+	}
+	for _, tc := range cases {
+		c.Run(tc.name, func(c *qt.C) {
+			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			c.Assert(got, qt.Equals, `#t`)
+		})
+	}
+}

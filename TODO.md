@@ -79,7 +79,7 @@ Sections below hold the detail; this table is the map.
 | Plan | Status |
 |---|---|
 | `2026-04-17-mcp-server-sota-design.local.md` | Proposed, 5 phases |
-| `2026-08-04-library-phase-isolation-design.local.md`<br>`2026-08-04-library-phase-isolation-impl.local.md` | **SHIPPED** 2026-08-05, 7 tasks, on `feat/library-phase-isolation` (`cadf219f`, `01fdf6b1`, `95cdb2b6`, `5d54b0ab`). Design option A1: the sealed axis moved onto `PhaseRegistry` so a library env owns one while sharing its parent's `Namespace`, then the library-scope resolution arm became phase-relative. Root cause was a *single* arm (`GetGlobalIndexFromLibraryScopes`, searching `{0,1,2}` regardless of the referring phase), **not** the `phaseParent` edge — four experiments, all reverted. See the closed Tier-1 entry below for the three findings the design did not predict, the measured cost, and the two residuals (Q3's `predeclareBinding` twin slot; Q2's `{0,1,2}` export ceiling). |
+| `2026-08-04-library-phase-isolation-design.local.md`<br>`2026-08-04-library-phase-isolation-impl.local.md` | **SHIPPED** 2026-08-05, 7 tasks, on `feat/library-phase-isolation` (`cadf219f`, `01fdf6b1`, `95cdb2b6`, `5d54b0ab`). Design option A1: the sealed axis moved onto `PhaseRegistry` so a library env owns one while sharing its parent's `Namespace`, then the library-scope resolution arm became phase-relative. Root cause was a *single* arm (`GetGlobalIndexFromLibraryScopes`, searching `{0,1,2}` regardless of the referring phase), **not** the `phaseParent` edge — four experiments, all reverted. See the closed Tier-1 entry below for the three findings the design did not predict, the measured cost, and the two residuals (Q3's `predeclareBinding` twin slot; Q2's `{0,1,2}` export ceiling — **CLOSED** 2026-08-05 on `feat/flat-binding-model`, design Phase D). |
 | `2026-04-21-type-constraint-extension-design.local.md` | Design draft; impl deferred to follow-ups |
 | `2026-06-04-srfi-204-match-design.local.md` | Design draft; `-impl` to follow |
 | `2026-06-05-mcp-llm-support-design.local.md` | Phase 1 implementation-ready |
@@ -337,8 +337,8 @@ Items that block production embedded use or prevent silent state corruption.
   **Three findings the design did not predict**, each of which changed the work:
 
   1. **The plumbing to FILL a library seal already existed.** `LoadBootstrapCore` already routes
-     the registry apply through `SealedTargetAt(PhaseRuntime, SealKindValue)` and expanders through
-     `SealedTargetAt(PhaseExpand, SealKindHandler)`, and `registry.Apply`'s `WithRuntimeTarget`
+     the registry apply through `SealedTargetAt(PhaseRuntime, SealKindValue)` (now `SealedWriteViewAt`) and expanders through
+     `SealedTargetAt(PhaseExpand, SealKindHandler)` (now `SealedWriteViewAt`), and `registry.Apply`'s `WithRuntimeTarget`
      seats the binding in the target while the `ForeignClosure` still captures the mutable frame.
      So A1 needed **no new call site** — only a new routing predicate.
   2. **`IsNamespaceRuntime` had to survive.** `pkg/wile/engine.go` uses it for the narrower "is this
@@ -362,11 +362,19 @@ Items that block production embedded use or prevent silent state corruption.
     two are at least **separable**. The `predeclareBinding` twin-slot entry already in this file
     stays open. This does not establish that they are different bugs — only that closing one did
     not require the other.
-  - **Q2's structural half.** `findLibraryBinding` is the last consumer of the hard-wired
-    `{0, 1, 2}` walk, so a name a library binds at phase 3 or above is still not exportable. Its
-    correctness rests on probe order (runtime before expand), which is now pinned by
-    `TestFindLibraryBindingPrefersRuntimeOverExpand` and verified discriminating — reversing the
-    probe list fails it. The ceiling itself is unchanged.
+  - **Q2's structural half — CLOSED, design Phase D (2026-08-05).** `findLibraryBinding` was the
+    last consumer of the hard-wired `{0, 1, 2}` walk; it and `GetGlobalIndexAcrossPhases` (the
+    R7RS §4.3 free-template-identifier carve-out, `pkg/environment/environment_frame.go`) now
+    derive their probe set from the new `EnvironmentFrame.PresentPhases()` — the non-negative
+    phases the owner's OWN registry has actually instantiated, ascending — so a name a library
+    binds via nested `begin-for-syntax` at phase 3 or above is exportable. Ascending order still
+    decides ties (runtime before expand before compile before higher), pinned by
+    `TestFindLibraryBindingPrefersRuntimeOverExpand`, now generalized across every present phase
+    instead of just the old hard-wired three. Fixture: `(begin-for-syntax (begin-for-syntax
+    (begin-for-syntax (define deep 42))))` plus `(export deep)`, imported and read back at phase 3
+    (`TestLibraryExportsPhaseThreeBinding`, `pkg/wile/library_phase_isolation_test.go`).
+    `PhaseTemplate` (-1) stays excluded deliberately — this lifts a ceiling, it does not re-rank
+    for-template bindings ahead of runtime ones.
 
   Documented as a known divergence in `docs/environment/system.md` invariant 6,
   `docs/environment/diagram.md`, and `docs/compiler/macro-system.md` as of `3faf43c2`. Those
@@ -375,9 +383,14 @@ Items that block production embedded use or prevent silent state corruption.
 
 ### The `SealKind` dimension is inert — every production answer is fixed by phase alone (2026-08-05)
 
-- [ ] **Delete the kind axis, or give it a consumer** [Medium, S, filed 2026-08-05 from measuring
-  the fork options on the syntax-compiler leak below]: `SealKind` splits the sealed axis into
+- [x] **Delete the kind axis, or give it a consumer** [Medium, S, filed 2026-08-05 from measuring
+  the fork options on the syntax-compiler leak below, **DONE 2026-08-05 on `feat/flat-binding-model`
+  (design Phase B)**]: `SealKind` splits the sealed axis into
   value and handler cells, but **no production call is ever answered differently because of it**.
+  Deleted per "What deletion buys" below — `SealKind`, its constants, `sealKindSet`,
+  `sealsValue`/`sealsHandler`/`has()`, and the `kinds` field on `sealedAxis` are gone from the
+  tree (`grep -rn SealKind pkg/` — zero hits). `SealedTargetAt` was renamed `SealedWriteViewAt` and
+  lost its kind parameter as part of the same store-fold arc (Phase C).
 
   **Measured.** `sealedAt(phase, kind)` checks `row.kinds.has(kind)` and then returns
   `sealAt(phase)`, which ignores the kind entirely. The six production requests are:
@@ -396,13 +409,13 @@ Items that block production embedded use or prevent silent state corruption.
   zero production callers** — every reference to it is in a test
   (`library_seal_test.go:105`, `sealed_base_frame_test.go:238,239,336,342`). `registry.Apply`
   reaches phase-1 primitives through `expandEnv := env.Expand()` (`registry/apply.go:141`), never
-  through `SealedTargetAt`. So the axis is *tested* on a distinction nothing *uses*.
+  through `SealedTargetAt` (now `SealedWriteViewAt`). So the axis is *tested* on a distinction nothing *uses*.
 
   **What deletion buys.** `SealKind`, its two constants and `String()`; `sealKindSet`,
   `sealsValue`, `sealsHandler`, and `has()`; the `kinds` field on `sealedAxis` and both row
   literals' second element (`sealed_base_frame.go:28-100` — 73 lines, 22 of them code);
   `PhaseRegistry.sealedAt` collapsing into `sealAt` (11 lines); and the second argument at six
-  production sites plus every test. `SealedAt` and `SealedTargetAt` keep their names and lose a
+  production sites plus every test. `SealedAt` and `SealedTargetAt` (now `SealedWriteViewAt`) keep their names and lose a
   parameter. Nothing else changes: the two-level frame split that makes a redefine *shadow*
   rather than overwrite is orthogonal and stays.
 
@@ -435,9 +448,16 @@ Items that block production embedded use or prevent silent state corruption.
 
 ### Syntax compilers are readable as runtime values (2026-08-05)
 
-- [ ] **Decide how a phase-0 handler is kept off the value-resolution path** [High, M, filed
-  2026-08-05 while correcting the `SealKind` doc claim during the library-phase-isolation branch]:
-  all 20 syntax compilers resolve as ordinary top-level variables and escape into data.
+- [x] **Decide how a phase-0 handler is kept off the value-resolution path** [High, M, filed
+  2026-08-05 while correcting the `SealKind` doc claim during the library-phase-isolation branch,
+  **DONE 2026-08-05 on `feat/flat-binding-model` (design Phase A) — fork resolved as option 3**]:
+  all 20 syntax compilers used to resolve as ordinary top-level variables and escape into data.
+  Verified fixed: `wile -e '(display define-syntax)'` now raises `syntactic keyword "define-syntax"
+  used as a variable` (`werr.ErrSyntacticKeywordAsVariable`), not a printed `#<syntax-compiler:…>`.
+  Shipped as option 3 below — authority in the BINDING, no new `BindingType` needed —
+  `emitCachedBindingLoad` (`pkg/machine/compilation/compile_time_continuation.go`) refuses any
+  `bd.BindingType() != environment.BindingTypeVariable`, the single chokepoint every resolved-global
+  arm of `CompileSymbol` funnels through.
 
   ```
   $ wile -e '(display define-syntax)'
@@ -597,7 +617,7 @@ Items that block production embedded use or prevent silent state corruption.
      different stores at each level, so "what does this name mean" ends up depending on which
      frame the walk landed in — which is this defect, stated generally. Adopting the actual
      Racket shape therefore means rewriting `GetBinding` plus every site keyed on frame identity
-     (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s receiver logic, `compile_define`'s
+     (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s (now `SealedWriteViewAt`) receiver logic, `compile_define`'s
      `ns.Runtime() == p.env || ns.SealedBase() == p.env`). That is an architecture change of a
      different order from this option, and it is NOT what option 3 proposes or costs. The full
      inventory of that bigger move — what it takes, what is irreducible, what this branch already
@@ -626,15 +646,48 @@ Items that block production embedded use or prevent silent state corruption.
 
   ---
 
-  **The flat-model endpoint (2026-08-05).** The architecture the option-3 warning fences off was
-  then costed in discussion; the inventory is filed here so the fork is read against its actual
-  horizon. The questions were: can phase fold into the binding key (or the scopes), removing the
-  store topology; and is anything then needed beyond one flat keyspace and one flat binding
-  space, locals excepted? Answer: **semantically, nothing.** Every job the topology still does
+  **The flat-model endpoint — IMPLEMENTED (2026-08-05, branch `feat/flat-binding-model`).** The
+  architecture the option-3 warning fences off was then costed in discussion; the inventory below
+  is filed so the fork was read against its actual horizon, and all four phases the design plan
+  split it into are now shipped: **A** (fork option 3, `emitCachedBindingLoad` authority-in-the-
+  binding), **B** (`SealKind` deletion), **C** (the store fold — one scope-keyed
+  `GlobalEnvironmentFrame` per owner, `resolveRankedLocked`'s T1/T2/T3 tiers replacing the frame
+  graph; see `pkg/environment/CLAUDE.local.md` "One Store Per Owner, Slot Coordinates"), and **D**
+  (lifting the `{0,1,2}` ceiling on `GetGlobalIndexAcrossPhases` and `findLibraryBinding` via
+  `EnvironmentFrame.PresentPhases()` — closes the Q2 residual above).
+
+  **Crosscheck fix round (2026-08-06).** A five-lens crosscheck over the whole branch converged
+  from three independent directions on one root cause: `GlobalIndex` was under-determined over a
+  coordinate-keyed store. It carried `(name, query, Slot)` but not `(phase, sealed)`, and `Slot`
+  is exactly the field a delete invalidates — so both stale-pin self-heals re-resolved by name and
+  were phase-blind. The write side relocated onto another phase's slot of the same name (measured
+  for `car`, and for the ~146 names a bootstrapped KitchenSink namespace holds at `(1, mutable)`);
+  the read side re-healed across phases too. **It reproduced on the shipped immutable default**, not
+  only under `WithMutableTopLevel` as the accepted-residual note claimed — the shadow and the `set!`
+  merely have to share one compilation unit, since a later unit's `set!` is refused by the Stable
+  stamp before it ever reaches the heal. The pin now records its winning `slotRef`'s coordinates;
+  `healWriteLocked` re-resolves at exactly those (subsuming the old sealed/mutable filter and
+  closing the phase axis it had no argument for), `healReadLocked` re-runs the ranked probe at the
+  pin's phase (so a deleted shadow still reveals the sealed primitive under it), and
+  `bestSlotLocked` is gone. Also in the round: `GlobalEnvironmentFrame.Copy()` nil-dereferenced a
+  deleted slot, which three lines of Scheme reached through `scheme-report-environment`;
+  `PresentPhases()` consulted the registry's VIEWS only, so a copied namespace's phase-2 bindings
+  were enumerable but not searchable; `OpStoreGlobal` discarded the store's error and reported the
+  coarsest of several distinct facts; `SealedWriteViewAt` had dropped its owner-root precondition,
+  letting any lexical child hand out a sealed writer; `PhaseKey`'s exported fields made a
+  denormalized `{Phase:3, Any:true}` constructible under `==`. Three mutants that survived the
+  branch's own suite now have tests (`SealedSlots`' rank filter, `setRecognizedPrimitive`'s sealed
+  fallback, `tryResolvedBinding`'s tag check — the last leaked `#<machine-closure>` into the value
+  world when removed). Interleaved A/B: runtime allocations byte-identical, startup allocations at
+  baseline, `sec/op` within the documented ±1% same-binary drift band.
+
+  The questions were: can phase
+  fold into the binding key (or the scopes), removing the store topology; and is anything then
+  needed beyond one flat keyspace and one flat binding space, locals excepted? Answer:
+  **semantically, nothing** — confirmed by the fold: every job the topology used to do now
   compresses into a key coordinate, a per-binding attribute, or a rank in the matching rule. The
   conservation law is that deleted topology reappears as resolution *rules*, not that it
-  disappears. None of this is scheduled work; it is the measured shape of the endpoint, filed so
-  the fork options (and the SealKind deletion above) are chosen with it in view.
+  disappears. Design plan: `plans/2026-08-05-flat-binding-model-design.local.md`.
 
   **Ground facts, verified 2026-08-05.** Phase appears in NO key today: `Scope` =
   {id, IsRebinding, Label} (`pkg/values/scope.go:30`), and `Binding`/`BindingMeta` carry no
@@ -753,7 +806,7 @@ Items that block production embedded use or prevent silent state corruption.
 
   **Blast radius** (unchanged from the option-3 warning): `GetBinding`, `PhaseRegistry`, the
   `sealedAxis`/`newSealedAxisFrames`/`phaseParent` machinery, every frame-identity site
-  (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s receiver logic, `compile_define`'s
+  (`ownsSealedAxis`, `IsNamespaceRuntime`, `SealedTargetAt`'s (now `SealedWriteViewAt`) receiver logic, `compile_define`'s
   frame comparisons), plus the enumeration paths. The one mitigating fact: this branch's
   sealed-axis regularization (one builder, one router, per-owner full axis) is exactly the
   preparation that makes the fold mechanical — `sealedAxis` is already the key-indexed truth,
@@ -865,7 +918,7 @@ was proven reachable and fixed, and the self-tail family (Finding 1) landed on
   owns, so `(namespace-undefine! ns 'x)` destroyed a macro-introduced `x` that `(namespace-ref ns
   'x)` reports as unbound — you could destroy a binding you cannot read. Pre-existing; before the
   read side became scope-exact the whole surface was uniformly coarse, so the diff promoted this
-  from coarseness to a hole. Now `DeleteBinding(sym, scopes)` resolves through `bestSlotLocked` —
+  from coarseness to a hole. Now `DeleteBinding(sym, scopes)` resolves through `bestSlotLocked` (deleted 2026-08-06; the coordinate-exact `resolveAtCoordsLocked` is its successor) —
   the literal call the read makes, so delete cannot drift from ref — nils that one slot, prunes its
   index, and drops the map entry when the name owns no more (leaving dead indices would strand the
   two consumers that treat `slots[0]` as the name's representative). `matchAny` is hardcoded false,
@@ -911,7 +964,8 @@ was proven reachable and fixed, and the self-tail family (Finding 1) landed on
   reading a nil scope set as MATCH ANY. Nil is indistinguishable from an uninitialized value, so a
   caller that merely forgot to thread its scopes silently got a *wider* resolution with nothing in
   the signature to flag it. **What the wider resolution returns is the defect**: `bestSlotLocked`
-  with `matchAny` does not return a union, it returns `slots[0]`, the first live slot, and slot
+  (deleted 2026-08-06; the ranked probe's wildcard branch is its successor) with `matchAny` did not
+  return a union, it returned `slots[0]`, the first live slot, and slot
   order is an expansion-order artifact — `AmbientScopes`' own doc says so. So the harm is an
   arbitrary binding, not a granted permission. **Corrected 2026-07-20**: this entry previously
   called the behavior "fail-open" and a "security posture question"; both were overstated and are
@@ -1737,11 +1791,11 @@ rather than split across tiers.
 
   **Gate:** only worth doing if (a) a 16B prototype actually recovers the 1.3% under benchstat, and (b) it does not put dynamic dispatch on the apply path — this codebase has a measured preference for switch over table dispatch, and `applyClosure` is the hot path the change is trying to speed up. If (b) eats the gain, close this as WONTFIX and leave the note.
 
-- [ ] **`resolveGlobal` re-locks one frame once per lexical depth** [Performance + structure, S for the guard / L for the carve, 2026-07-19]: `NewEnvironmentFrameWithParent` (`pkg/environment/environment_frame.go:152`) sets `global: parent.global`, so every lexically-nested frame shares one `*GlobalEnvironmentFrame`. But `resolveGlobal` (`environment_frame.go:498`) walks the **EnvironmentFrame** chain, taking `ge.global.mu.RLock()` and running `bestSlotLocked` at *every* hop. A 12-deep closure nest therefore does 12 RLocks and 12 map lookups to answer a question with at most 2 distinct answers — only a hop where `ge.global` actually changes can differ. **Inferred from those two lines; UNMEASURED.** Measure before acting (per `memory/`: profile end-to-end, micro-benchmarks mislead here).
+- [x] **`resolveGlobal` re-locks one frame once per lexical depth** [Performance + structure, OBSOLETE 2026-08-05 by the store fold, filed 2026-07-19]: the premise was that `resolveGlobal` walked the **EnvironmentFrame** chain, taking `ge.global.mu.RLock()` and a name lookup at *every* hop, so a 12-deep closure nest did 12 RLocks to answer a question with at most 2 distinct answers. There is no walk left: `resolveGlobal` takes ONE read lock and runs ONE ranked probe against the owner's single store (`resolveRankedLocked`), because every frame of an owner shares that store and phase separation is key disjointness inside it rather than a chain of frames. Never measured; nothing to measure now.
 
   **Cheap lever:** track the previous `*GlobalEnvironmentFrame` in the walk and skip a hop whose global pointer is unchanged. No structural or semantic change.
 
-  **Structural lever (the real fix, deferred):** give `GlobalEnvironmentFrame` its own parent so the global chain is walked directly and the EnvironmentFrame walk for globals disappears. Today `EnvironmentFrame` owns the local chain *and*, transitively, the global chain; splitting them is a separation of concerns, not a duplicated chain. **This is a migration, not a field addition:** the parent relation is *computed*, not static — `phaseParent` derives it via `SealedTargetAt`/`SealedAt`, which routes to the frozen sealed base for the layered main namespace (the hermeticity cut) but to the frame itself for a flat `NewChildRuntime` library frame (`namespace.go:976`). Moving that decision into global-frame construction goes through the hermetic-phases work. Distinct globals in a chain today: `wireRuntimeFrames` builds `sealedBase(sealedGlobal) ← runtime(mutableGlobal)` (`namespace.go:1063-1073`), and each phase frame owns one parented via `phaseParent`.
+  **Structural lever (the real fix, deferred):** give `GlobalEnvironmentFrame` its own parent so the global chain is walked directly and the EnvironmentFrame walk for globals disappears. Today `EnvironmentFrame` owns the local chain *and*, transitively, the global chain; splitting them is a separation of concerns, not a duplicated chain. **This is a migration, not a field addition:** the parent relation is *computed*, not static — `phaseParent` derives it via `SealedTargetAt`/`SealedAt` (now `SealedWriteViewAt`), which routes to the frozen sealed base for the layered main namespace (the hermeticity cut) but to the frame itself for a flat `NewChildRuntime` library frame (`namespace.go:976`). Moving that decision into global-frame construction goes through the hermetic-phases work. Distinct globals in a chain today: `wireRuntimeFrames` builds `sealedBase(sealedGlobal) ← runtime(mutableGlobal)` (`namespace.go:1063-1073`), and each phase frame owns one parented via `phaseParent`.
 
   **Rejected alternative:** make `GlobalEnvironmentFrame` satisfy an `EnvironmentFrame` interface with `Parent()` always nil. There is no such interface — `EnvironmentFrame` is a struct (`environment_frame.go:95`) — so this means introducing one and putting dynamic dispatch on the VM's hottest path, against this codebase's measured preference for switch over table dispatch. It is also false to the structure: there are genuinely ≥2 ordered global frames, and a permanently-nil parent erases the sealed-base shadowing the layered carve exists to provide. Neighborhood is flagged in `memory/` (cross-engine sealed-base sharing SHELVED at D4).
 
@@ -1770,7 +1824,7 @@ rather than split across tiers.
   hand-unrolled one two-row loop and the parallelism was carried by comments. `sealedAxis`
   (`pkg/environment/sealed_base_frame.go`) is now the single decision site, read by `SealedAt`,
   `sealedFrameAt`, `SealedFrames`, and `IsSealed`; call sites read as coordinates
-  (`SealedTargetAt(PhaseRuntime, SealKindValue)` for bootstrap procedures,
+  (`SealedTargetAt(PhaseRuntime, SealKindValue)` (now `SealedWriteViewAt`) for bootstrap procedures,
   `(PhaseExpand, SealKindHandler)` for primitive expanders). The overloaded
   `SealedBaseTarget() != env` predicate became `IsNamespaceRuntime()`, the layered-vs-flat
   question it was actually asking. **No behavior change on any live path** — every guard was

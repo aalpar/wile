@@ -101,14 +101,14 @@ func TestResolveRankedTiers(t *testing.T) {
 				// subtest — resolveRankedLocked's own doc requires defer release
 				// (it can panic mid-hold), but stacking that defer across loop
 				// iterations would hold the lock across every later probe too.
-				slot, ok := func() (int, bool) {
+				ref, ok := func() (slotRef, bool) {
 					g.mu.RLock()
 					defer g.mu.RUnlock()
 					return g.resolveRankedLocked(*sym, syntax.EmptyScopes(), pr.phase)
 				}()
 				qt.Assert(t, ok, qt.Equals, pr.wantOK, qt.Commentf("phase %d", pr.phase))
 				if pr.wantOK {
-					qt.Assert(t, slot, qt.Equals, pr.wantSlot, qt.Commentf("phase %d", pr.phase))
+					qt.Assert(t, ref.slot, qt.Equals, pr.wantSlot, qt.Commentf("phase %d", pr.phase))
 				}
 			}
 		})
@@ -148,9 +148,9 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	slot, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{sc1, sc2}), 0)
+	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{sc1, sc2}), 0)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, slot, qt.Equals, 2)
+	qt.Assert(t, ref.slot, qt.Equals, 2)
 
 	// With the T1 winner gone, the T2 tie is the winning tier and must panic.
 	g2 := NewGlobalEnvironmentFrame()
@@ -201,8 +201,8 @@ func TestCopyPreservesCoordinates(t *testing.T) {
 	qt.Assert(t, c.keys[*sym][1].sealed, qt.IsFalse)
 }
 
-// The q.IsAll() wildcard branch is bespoke relative to bestSlotLocked's
-// wildcard path (a plain first-live-slot loop with no tier concept): it tracks
+// The q.IsAll() wildcard branch is bespoke relative to the pre-fold wildcard
+// path (a plain first-live-slot loop with no tier concept): it tracks
 // tier across the whole slot list, applies the same phase filter the scoped
 // branch does, and returns the highest tier's first live slot. Every existing
 // wildcard caller that the fold moved onto the probe — resolveGlobal, and
@@ -219,9 +219,9 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		ref, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, slot, qt.Equals, 2)
+		qt.Assert(t, ref.slot, qt.Equals, 2)
 	})
 
 	t.Run("other exact phase is not a candidate", func(t *testing.T) {
@@ -230,29 +230,29 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		ref, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsFalse)
 		// The slot value on the walk-exhausted return, not the len(slots)==0
 		// short-circuit: this frame HAS a slot for the name, the wildcard loop
 		// runs and rejects it, and bestSlot must still be the zero the caller
 		// is told to ignore. Decoupling bestSlot from bestTier would show up
 		// only here.
-		qt.Assert(t, slot, qt.Equals, 0)
+		qt.Assert(t, ref.slot, qt.Equals, 0)
 	})
 
 	t.Run("nil'd slot is skipped", func(t *testing.T) {
 		g := NewGlobalEnvironmentFrame()
 		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
-		// A live key pointing at a nil binding — bestSlotLocked's own wildcard
-		// branch guards exactly this state (a slot DeleteBinding emptied); the
-		// ranked probe's wildcard branch must guard it identically.
+		// A live key pointing at a nil binding — the pre-fold wildcard path
+		// guarded exactly this state (a slot DeleteBinding emptied); the ranked
+		// probe's wildcard branch must guard it identically.
 		g.bindings[0] = nil
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		ref, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsFalse)
-		qt.Assert(t, slot, qt.Equals, 0)
+		qt.Assert(t, ref.slot, qt.Equals, 0)
 	})
 
 	t.Run("no candidate at all", func(t *testing.T) {
@@ -260,16 +260,16 @@ func TestResolveRankedWildcard(t *testing.T) {
 
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		ref, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
 		qt.Assert(t, ok, qt.IsFalse)
-		qt.Assert(t, slot, qt.Equals, 0)
+		qt.Assert(t, ref.slot, qt.Equals, 0)
 	})
 }
 
 // A wider (larger-cardinality) scope set beats a narrower one INSIDE one tier.
 // TestResolveRankedTiers only ever passes nil scopes, so it pins the tier gate
 // but never the ranking scopedBestOf performs within the winning tier — the
-// mechanism is shared with bestSlotLocked, but nothing pinned it here.
+// mechanism is shared with resolveAtCoordsLocked, but nothing pinned it here.
 func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 	sym := values.NewSymbol("v")
 	scA := syntax.NewScope()
@@ -281,7 +281,7 @@ func TestResolveRankedCardinalityWithinTier(t *testing.T) {
 
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	slot, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{scA, scB}), 0)
+	ref, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{scA, scB}), 0)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, slot, qt.Equals, 1) // the wider {scA, scB} slot wins
+	qt.Assert(t, ref.slot, qt.Equals, 1) // the wider {scA, scB} slot wins
 }

@@ -57,18 +57,20 @@ import (
 //	          ▼                                    ▼
 //	┌───────────────────────────┐    ┌────────────────────────────────────────┐
 //	│  LocalEnvironmentFrame    │    │      GlobalEnvironmentFrame            │
-//	│  (Single scope bindings)  │    │  (Phase-wide global bindings)          │
+//	│  (Single scope bindings)  │    │  (The owner's whole binding store)     │
 //	│                           │    │                                        │
-//	│  keys ── map[Symbol][]int │    │  keys ────── map[Symbol][]int          │
-//	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
+//	│  keys ── map[Symbol][]int │    │  keys ────── map[Symbol][]slotRef      │
+//	│  bindings ── []Binding    │    │  bindings ──── []*Binding              │
 //	└───────────────────────────┘    └────────────────────────────────────────┘
 //
 // # Ownership and Sharing
 //
 //   - Namespace: Root owner. One per Wile VM instance.
 //   - EnvironmentFrame: Many per VM. Share namespace and phases references.
-//   - GlobalEnvironmentFrame: One per phase. Owned by EnvironmentFrame; no
-//     direct Namespace back-reference (reach Namespace via the owning frame).
+//   - GlobalEnvironmentFrame: One per OWNER, not one per phase. Every phase view
+//     and every sealed-write view is a thin frame over the SAME store, differing
+//     only in the (phase, rank) coordinates its reads probe and its writes stamp.
+//     No direct Namespace back-reference (reach Namespace via the owning frame).
 //   - LocalEnvironmentFrame: One per lexical scope. No external references.
 //
 // # Lexical Hierarchy (parent chain)
@@ -87,8 +89,10 @@ import (
 //	    ├── [2] Compile EnvironmentFrame (syntax compilers, for-meta 2)
 //	    └── [-1] Template EnvironmentFrame (for-template, future)
 //
-// Each phase has its own GlobalEnvironmentFrame but shares the same
-// Namespace for syntax interning.
+// These are VIEWS, not owners: every entry shares the one GlobalEnvironmentFrame
+// and the one Namespace. Phase separation is key disjointness in that store — a
+// phase-N read is a candidate only against slots at exactly phase N or the
+// ambient coordinate — not a per-phase store and not a parent link.
 //
 // # Binding Lookup
 //
@@ -573,16 +577,16 @@ func (p *EnvironmentFrame) resolveLocal(
 func (p *EnvironmentFrame) resolveGlobal(
 	key values.Symbol,
 	q syntax.ScopeSet,
-	visitor func(frame *GlobalEnvironmentFrame, slot int) any,
+	visitor func(frame *GlobalEnvironmentFrame, ref slotRef) any,
 ) any {
 	p.global.mu.RLock()
 	defer p.global.mu.RUnlock()
 
-	i, ok := p.global.resolveRankedLocked(key, q, p.phaseLevel)
+	ref, ok := p.global.resolveRankedLocked(key, q, p.phaseLevel)
 	if !ok {
 		return nil
 	}
-	return visitor(p.global, i)
+	return visitor(p.global, ref)
 }
 
 // GetBinding returns the binding for the given symbol that matches the
@@ -635,10 +639,10 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, q syntax.ScopeSet) *Bi
 		}
 	}
 
-	// The scope filter now lives in bestSlotLocked, which both selects the
-	// maximal match and rejects incompatible candidates.
-	gResult := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, i int) any {
-		binding := g.bindings[i]
+	// The scope filter lives in the ranked probe, which both selects the maximal
+	// match within the winning tier and rejects incompatible candidates.
+	gResult := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, ref slotRef) any {
+		binding := g.bindings[ref.slot]
 		if binding != nil {
 			return binding
 		}
@@ -890,7 +894,7 @@ func (p *EnvironmentFrame) OwnGlobalIndex(key *values.Symbol, q syntax.ScopeSet)
 	if !ok {
 		return nil
 	}
-	return newScopeKeyedGlobalIndex(key, p.global, i, q)
+	return newScopeKeyedGlobalIndex(key, p.global, slotRef{slot: i, phase: phase, sealed: sealed}, q)
 }
 
 // DeleteOwnGlobal removes the binding of sym that a scoped read at THIS view's
@@ -994,8 +998,8 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 // This is the WILDCARD form — see GlobalEnvironmentFrame.GetGlobalIndex.
 // Compiler callers want GetGlobalIndexWithScopes.
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
-	result := p.resolveGlobal(*key, syntax.AllScopes(), func(g *GlobalEnvironmentFrame, i int) any {
-		return newResolvedGlobalIndex(key, g, i)
+	result := p.resolveGlobal(*key, syntax.AllScopes(), func(g *GlobalEnvironmentFrame, ref slotRef) any {
+		return newResolvedGlobalIndex(key, g, ref)
 	})
 	if result != nil {
 		return result.(*GlobalIndex)
@@ -1008,8 +1012,8 @@ func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 // (EmptyScopes) resolves under the empty scope set, not "any" — pass AllScopes
 // for wildcard resolution.
 func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
-	result := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, i int) any {
-		return newScopeKeyedGlobalIndex(key, g, i, q)
+	result := p.resolveGlobal(*key, q, func(g *GlobalEnvironmentFrame, ref slotRef) any {
+		return newScopeKeyedGlobalIndex(key, g, ref, q)
 	})
 	if result != nil {
 		return result.(*GlobalIndex)
@@ -1022,8 +1026,8 @@ func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax
 // A deferred index (Env == nil) carries the reference's scope set, so this
 // execution-time walk resolves hygienically rather than by bare name.
 func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
-	result := p.resolveGlobal(*key.Index, key.query, func(g *GlobalEnvironmentFrame, i int) any {
-		return g.bindings[i]
+	result := p.resolveGlobal(*key.Index, key.query, func(g *GlobalEnvironmentFrame, ref slotRef) any {
+		return g.bindings[ref.slot]
 	})
 	if result != nil {
 		return result.(*Binding)
@@ -1080,12 +1084,16 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 	// exportable). PhaseTemplate (-1) stays excluded DELIBERATELY: including it
 	// would rank for-template bindings ahead of runtime ones, a precedence
 	// change this commit does not make — it lifts a ceiling only.
+	//
+	// The probe runs against the store at each phase rather than through
+	// p.phases.Get(phase), which answers nil for a phase the registry has never
+	// instantiated — the very phases PresentPhases now adds by consulting the
+	// store. Every phase view is a view over this one store differing only in
+	// which phase it probes at, so this is the same resolution without minting a
+	// view as a side effect of a search.
+	q := syntax.ScopesOf(scopes)
 	for _, phase := range p.PresentPhases() {
-		phaseEnv := p.phases.Get(phase)
-		if phaseEnv == nil {
-			continue
-		}
-		gi := phaseEnv.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
+		gi := p.globalIndexAtPhase(key, q, phase)
 		if gi != nil {
 			return gi
 		}
@@ -1093,25 +1101,60 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol, scopes
 	return nil
 }
 
-// PresentPhases returns the non-negative phases actually instantiated for this
-// frame's owner (the engine's Namespace, or a library env's own store —
-// EnvironmentFrame.phases is shared by every view over one owner, per "One
-// Store Per Owner" in the package doc), ascending. It is the shared basis for
-// every cross-phase search that must reach the whole macro tower rather than a
-// fixed {0,1,2} guess: GetGlobalIndexAcrossPhases above, and
-// machine/compilation's findLibraryBinding (export resolution), which cannot
-// reach p.phases directly since it lives outside this package.
+// globalIndexAtPhase is GetGlobalIndexWithScopes with the probe phase supplied
+// rather than taken from the receiver's own level.
+func (p *EnvironmentFrame) globalIndexAtPhase(key *values.Symbol, q syntax.ScopeSet, phase Phase) *GlobalIndex {
+	p.global.mu.RLock()
+	defer p.global.mu.RUnlock()
+
+	ref, ok := p.global.resolveRankedLocked(*key, q, phase)
+	if !ok {
+		return nil
+	}
+	return newScopeKeyedGlobalIndex(key, p.global, ref, q)
+}
+
+// PresentPhases returns the non-negative phases worth searching for this frame's
+// owner (the engine's Namespace, or a library env's own store —
+// EnvironmentFrame.phases is shared by every view over one owner, per "One Store
+// Per Owner" in the package doc), ascending. It is the shared basis for every
+// cross-phase search that must reach the whole macro tower rather than a fixed
+// {0,1,2} guess: GetGlobalIndexAcrossPhases above, and machine/compilation's
+// findLibraryBinding (export resolution), which cannot reach p.phases directly
+// since it lives outside this package.
+//
+// It is the UNION of two sets, because neither alone is the question. The
+// registry's instantiated VIEWS are phases something has looked at; the store's
+// exact slot coordinates are phases something is BOUND at, and the two come
+// apart in both directions. GlobalEnvironmentFrame.Copy carries a store's slots
+// without carrying the source's views — NewSchemeReportNamespace is exactly
+// that — so a copied namespace's phase-2 bindings are present in every
+// enumeration (LiveSlots) and were invisible to every cross-phase SEARCH while
+// this consulted the views alone.
 //
 // PhaseTemplate (-1) is excluded: callers here rank a reference by RUNTIME-first
 // precedence, and a for-template binding is a different axis, not a lower rung
-// of this one. p.phases.Phases() takes the registry's read lock; called once
-// here rather than per phase.
+// of this one.
+// presentPhasesHint sizes the union so the ordinary case does not regrow: the
+// four named phases from the registry plus the same phases from the store, with
+// room for a couple of tower rungs. Overshooting costs one small slice; the
+// duplicates are removed after the sort.
+const presentPhasesHint = 12
+
 func (p *EnvironmentFrame) PresentPhases() []Phase {
-	if p.phases == nil {
-		return nil
+	// One allocation for the union. Both sources append into it: taking the
+	// registry's own exactly-sized slice and then appending the store's phases to
+	// it forces a second, and this sits on the macro-compilation path.
+	phaseList := make([]Phase, 0, presentPhasesHint)
+	if p.phases != nil {
+		// Takes the registry's read lock; called once here rather than per phase.
+		phaseList = p.phases.appendPhases(phaseList)
 	}
-	phaseList := p.phases.Phases()
+	if p.global != nil {
+		phaseList = p.global.appendExactPhases(phaseList)
+	}
 	slices.Sort(phaseList)
+	phaseList = slices.Compact(phaseList)
 	i := 0
 	for i < len(phaseList) && phaseList[i] < PhaseRuntime {
 		i++
@@ -1172,7 +1215,24 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // It returns an error if the binding does not exist.
+//
+// A PINNED index carries its own coordinates and goes straight to the store. A
+// DEFERRED one (Env == nil — what a create hands back) carries a symbol and a
+// hygiene key and nothing else, so THIS VIEW supplies the coordinates, the same
+// way DefineOwnGlobal does after creating. The store cannot do that for itself:
+// it holds every phase and every rank at once and has no view to ask. Before the
+// coordinates existed this fell through to a name lookup that took the first live
+// slot of the name at ANY coordinates — for a bare (set! car …) shape, the sealed
+// primitive.
+//
+// This is not SetDeferredGlobalValue, whose reach is narrower on purpose (mutable
+// tier only, G13): that one serves the VM's deferred OpStoreGlobal, where the
+// executing frame is whatever a closure captured. Here the caller chose the view.
 func (p *EnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
+	if gi != nil && gi.Env == nil {
+		phase, sealed := p.writeCoordinates()
+		return p.global.setValueAtCoords(gi.Index, gi.query, phase, sealed, v)
+	}
 	// Delegate to GlobalEnvironmentFrame's thread-safe method
 	return p.global.SetOwnGlobalValue(gi, v)
 }

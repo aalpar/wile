@@ -16,6 +16,7 @@ package environment
 
 import (
 	"fmt"
+	"math/bits"
 	"slices"
 	"sync"
 
@@ -55,11 +56,24 @@ import (
 // reach. This one ScopeSet subsumes what a nil Scopes slice plus a scopeKeyed
 // bool once encoded: a nil slice could not distinguish "matched the empty set"
 // from "no key at all", and those demand opposite re-resolution.
+//
+// phase and sealed are the pinned slot's RESOLUTION COORDINATES, set with Env
+// and Slot and meaningful only alongside them. While the slot lives they are
+// redundant — a slot is named by exactly one slotRef, so (Env, Slot) already
+// determines them — which is why they take no part in EqualTo. They exist for
+// the moment the slot STOPS living: a delete nils it, the pin falls through to
+// re-resolution, and the query alone says which hygiene boundary to stay inside
+// but nothing about which phase or tier. Without them re-resolution is
+// phase-blind, and a pin addressing (0, mutable) re-heals onto a (1, mutable)
+// slot of the same name — the phase-1 registry copy of a primitive, in the case
+// that motivated recording them.
 type GlobalIndex struct {
-	Index *values.Symbol
-	Env   *GlobalEnvironmentFrame
-	Slot  int
-	query syntax.ScopeSet
+	Index  *values.Symbol
+	Env    *GlobalEnvironmentFrame
+	Slot   int
+	query  syntax.ScopeSet
+	phase  PhaseKey
+	sealed bool
 }
 
 // NewGlobalIndex creates a new deferred GlobalIndex for the given symbol.
@@ -77,11 +91,11 @@ func NewDeferredGlobalIndex(key *values.Symbol, scopes []*syntax.Scope) *GlobalI
 	return &GlobalIndex{Index: key, query: syntax.ScopesOf(scopes)}
 }
 
-// newResolvedGlobalIndex creates a GlobalIndex pinned to the frame and slot that
-// resolution landed on. Its query is the wildcard (AllScopes): a wildcard
-// resolution re-resolves by bare name if its slot dies.
-func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int) *GlobalIndex {
-	return &GlobalIndex{Index: key, Env: env, Slot: slot, query: syntax.AllScopes()}
+// newResolvedGlobalIndex creates a GlobalIndex pinned to the frame and to the
+// slot resolution landed on, coordinates included. Its query is the wildcard
+// (AllScopes): a wildcard resolution re-resolves by bare name if its slot dies.
+func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
+	return newScopeKeyedGlobalIndex(key, env, ref, syntax.AllScopes())
 }
 
 // newScopeKeyedGlobalIndex is newResolvedGlobalIndex for a resolution that
@@ -90,8 +104,12 @@ func newResolvedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slo
 // index indistinguishable from a wildcard one the moment its slot dies. Callers
 // reach it through GetGlobalIndexWithScopes, whose query is never the wildcard,
 // so re-resolution stays inside the hygiene key even when the set is empty.
-func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, slot int, q syntax.ScopeSet) *GlobalIndex {
-	return &GlobalIndex{Index: key, Env: env, Slot: slot, query: q}
+//
+// It takes the whole slotRef rather than a bare slot so a pin cannot be minted
+// without its coordinates: the two heals below both need them, and a caller that
+// had only the index would have to guess.
+func newScopeKeyedGlobalIndex(key *values.Symbol, env *GlobalEnvironmentFrame, ref slotRef, q syntax.ScopeSet) *GlobalIndex {
+	return &GlobalIndex{Index: key, Env: env, Slot: ref.slot, query: q, phase: ref.phase, sealed: ref.sealed}
 }
 
 // SchemeString returns a string representation of this global index.
@@ -144,20 +162,36 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 // domain (GetOrCreate mints any value; the tower climbs to 127), so there is no
 // free in-band value to steal, and per [nil means NONE] the wildcard is a named
 // value, never a sentinel.
+//
+// The fields are unexported and the two constructors are the only way to build
+// one. PhaseKey is compared with ==, so an exported level alongside an exported
+// wildcard would make {level: 3, wildcard: true} constructible — a key that
+// AnyPhase() would never equal, and that every == in this file would therefore
+// read as a phase-3 exact key while tierOf classified it as ambient. Keeping the
+// denormalized state unrepresentable is cheaper than checking for it.
 type PhaseKey struct {
-	Phase Phase
-	Any   bool
+	level    Phase
+	wildcard bool
 }
 
 // ExactPhase returns the key for an exact phase.
 func ExactPhase(phase Phase) PhaseKey {
-	return PhaseKey{Phase: phase}
+	return PhaseKey{level: phase}
 }
 
 // AnyPhase returns the ambient wildcard key: visible from every phase. Only
 // sealed entries may carry it — see CreateGlobalBindingAt.
 func AnyPhase() PhaseKey {
-	return PhaseKey{Any: true}
+	return PhaseKey{wildcard: true}
+}
+
+// String renders the key for diagnostics. Errors that name a coordinate print
+// this, so the ambient key must not read as phase 0.
+func (p PhaseKey) String() string {
+	if p.wildcard {
+		return "ANY"
+	}
+	return fmt.Sprintf("%d", p.level)
 }
 
 // slotRef locates one binding of a name and carries its resolution coordinates
@@ -198,6 +232,23 @@ type GlobalEnvironmentFrame struct {
 	// a sealed primitive and the user define that shadows it.
 	keys     map[values.Symbol][]slotRef
 	bindings []*Binding
+	// exactPhases is the set of NON-NEGATIVE exact phases this store has ever held
+	// a slot at, one bit per phase. It answers "which phases are worth searching?"
+	// for the cross-phase searches (EnvironmentFrame.PresentPhases) without a scan
+	// of keys, which is O(names) and sits on the macro-compilation path.
+	//
+	// A bitset rather than a map because Phase is an int8 and the whole
+	// non-negative domain is 128 bits: two inline words, no allocation, and every
+	// owner store pays for one — a startup with hundreds of library envs would
+	// otherwise pay a map header each.
+	//
+	// It GROWS ONLY: a delete does not retract a phase. Over-approximating is
+	// harmless — a search of a phase with no slots misses — while
+	// under-approximating is the defect this closes, so the cheap direction is
+	// also the safe one. AnyPhase adds nothing: an ambient slot is a candidate at
+	// whatever phase is already being searched. Negative phases are not tracked
+	// because PresentPhases excludes them by contract.
+	exactPhases [2]uint64
 }
 
 // NewGlobalEnvironmentFrame creates a new, empty owner store.
@@ -207,6 +258,34 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 		keys:     map[values.Symbol][]slotRef{},
 	}
 	return q
+}
+
+// noteExactPhaseLocked records that this store holds a slot at phase.
+// Caller MUST hold the write lock on p.mu.
+func (p *GlobalEnvironmentFrame) noteExactPhaseLocked(phase Phase) {
+	if phase < 0 {
+		return
+	}
+	p.exactPhases[phase>>6] |= 1 << (uint(phase) & 63)
+}
+
+// appendExactPhases appends the phases this store holds slots at to dst, in
+// ascending order. Appending rather than returning a fresh slice keeps
+// PresentPhases — which merges this with the registry's phases on the
+// macro-compilation path — allocation-free past dst's own growth.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) appendExactPhases(dst []Phase) []Phase {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	for i, word := range p.exactPhases {
+		for word != 0 {
+			bit := bits.TrailingZeros64(word)
+			dst = append(dst, Phase(i*64+bit))
+			word &= word - 1
+		}
+	}
+	return dst
 }
 
 // Copy creates a deep copy of the global environment frame.
@@ -228,6 +307,15 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	allBindings := make([]Binding, len(p.bindings))
 	q.bindings = make([]*Binding, len(p.bindings))
 	for i, b := range p.bindings {
+		// A DELETED slot stays nil and keeps its position. DeleteBindingAt nils
+		// the slot without compacting, precisely so every surviving index still
+		// addresses the binding it addressed before; compacting here would shift
+		// every later slot out from under the cloned key lists. Nothing points at
+		// a nil slot — delete prunes the slotRef too — so the wasted allBindings
+		// entry is the whole cost.
+		if b == nil {
+			continue
+		}
 		// Each copied global binding gets its own atomicCell snapshotting the
 		// source value (read via Value so it works whether or not the source
 		// already uses a cell).
@@ -250,6 +338,11 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 			q.keys[k] = slices.Clone(slots)
 		}
 	}
+	// The copy holds slots at every phase the source did, so it must report them.
+	// Rebuilding this from the source's keys instead would be the same set at
+	// higher cost; leaving it empty was the defect that made a copied namespace's
+	// phase-2 bindings unreachable to every cross-phase search.
+	q.exactPhases = p.exactPhases
 	return q
 }
 
@@ -296,8 +389,8 @@ func AmbientScopes() []*syntax.Scope {
 // same.)
 //
 // Cost: O(names × slots-per-name) — a full ranked probe (resolveRankedLocked)
-// per name — where the pre-fold AmbientKeys this generalizes ran the cheaper
-// bestSlotLocked per name (no tier walk, since a frame's own store held only
+// per name — where the pre-fold AmbientKeys this generalizes ran a cheaper
+// scope-only best-of per name (no tier walk, since a frame's own store held only
 // one layer). Same asymptotic shape, larger constant per name. The only
 // consumer, BoundSymbolNames, is a REPL-completion path, not a hot one; not
 // restructured here.
@@ -379,77 +472,64 @@ func scopeSetsEqual(a, b []*syntax.Scope) bool {
 	return syntax.ScopesMatch(a, b) && syntax.ScopesMatch(b, a)
 }
 
-// bestSlotLocked returns the slot whose binding best matches the given
-// scope-set query, per Flatt's maximal resolution: a candidate's scope set must
-// be a subset of the reference's, and among the candidates the largest set wins.
-// A wildcard query (q.IsAll) takes the first slot regardless of scopes, for
-// introspection callers that mean "any binding of this name" rather than "the
-// empty scope set".
+// healReadLocked re-resolves a PINNED index whose slot a delete has emptied, for
+// a READ: the ranked probe at the pin's own phase, the same question ordinary
+// name resolution asks there.
 //
-// rejectSealed skips every sealed-coordinate slot. SetOwnGlobalValue's
-// stale-pin self-heal is the one caller that passes true: DeleteBindingAt never
-// removes a sealed slot (its only caller, DeleteOwnGlobal, derives coordinates
-// from the writing view, and namespace-undefine! writes through the mutable
-// runtime view), so a pin can never be stale-BY-DELETE for a sealed slot —
-// refusing the sealed tier here closes the one path left by which a
-// name-resolved WRITE could otherwise reach one, without forgoing any
-// legitimate re-heal. GetOwnGlobalBinding's read-side fallback passes false: it
-// wants the opposite polarity — revealing the sealed primitive a deleted shadow
-// uncovers is the point, not hiding it.
+// The polarity is deliberately the opposite of healWriteLocked's. Revealing the
+// sealed primitive a deleted user shadow uncovers is exactly what a read should
+// do — after (namespace-undefine! … 'car) the name denotes the primitive again —
+// so the probe keeps its full tier order rather than being pinned to the tier the
+// dead slot sat in.
 //
-// Caller MUST hold at least a read lock on p.mu.
+// A pin at the AMBIENT coordinate is the one case the ranked probe cannot answer:
+// (ANY, sealed) is visible from every phase and names none, so there is no phase
+// to probe at, and probing at 0 would let a phase-0 user shadow answer for it.
+// That case re-resolves at its own coordinate instead.
 //
-// It PANICS with a wrapped werr.ErrAmbiguousBinding on an incomparable
-// equal-cardinality tie, but only via the scoped branch below — the wildcard
-// branch (q.IsAll()) returns before reaching it. Both callers release p.mu via
-// defer, so the panic never leaks the lock: GetOwnGlobalBinding's stale-pin
-// fallback and SetOwnGlobalValue's stale-pin fallback.
-func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.ScopeSet, rejectSealed bool) (int, bool) {
-	slots := p.keys[key]
-	if len(slots) == 0 {
+// Returns false for a DEFERRED index (Env == nil, or another owner's store):
+// there are no coordinates to re-resolve at, and "resolve against whatever
+// environment is live" is EnvironmentFrame.GetGlobalBinding's job, not this
+// store's.
+//
+// Caller MUST hold at least a read lock on p.mu, via defer: the probe can panic
+// mid-hold on an ambiguous tie (P8).
+func (p *GlobalEnvironmentFrame) healReadLocked(gi *GlobalIndex) (int, bool) {
+	if gi.Env != p {
 		return 0, false
 	}
-	if q.IsAll() {
-		// Skip nil'd slots for the same reason the scoped branch does: a live key
-		// may point at a slot DeleteBindingAt emptied. Returning slots[0] blindly
-		// would hand back a nil binding for callers to dereference.
-		for _, s := range slots {
-			if rejectSealed && s.sealed {
-				continue
-			}
-			if s.slot < len(p.bindings) && p.bindings[s.slot] != nil {
-				return s.slot, true
-			}
-		}
+	if gi.phase.wildcard {
+		return p.resolveAtCoordsLocked(*gi.Index, gi.query, gi.phase, gi.sealed)
+	}
+	ref, _, ok := p.probeRankedLocked(*gi.Index, gi.query, gi.phase.level, tierExactMutable)
+	return ref.slot, ok
+}
+
+// healWriteLocked re-resolves a PINNED index whose slot a delete has emptied, for
+// a WRITE: at EXACTLY the coordinates the pin addressed, never the ranked order.
+//
+// This is what makes the self-heal a re-heal rather than a relocation. The pin
+// named one variable, at one (phase, tier); a delete-then-redefine at those same
+// coordinates re-creates that variable and the write should find it. Anything
+// else with the same name is a DIFFERENT variable — the sealed primitive
+// underneath a deleted shadow, or the phase-1 registry copy — and a write that
+// reached one would be an escalation no other path permits. Coordinate equality
+// subsumes the sealed/mutable filter this replaces AND closes the phase axis that
+// filter had no argument for.
+//
+// Returns false for a DEFERRED index, for healReadLocked's reason;
+// EnvironmentFrame.SetDeferredGlobalValue is that index's write path.
+//
+// Caller MUST hold the write lock on p.mu, via defer: resolveAtCoordsLocked can
+// panic mid-hold on an ambiguous tie (P8). Before that was fixed (round 2
+// review), a bare Unlock before each return left the lock held across the panic —
+// the VM-boundary recover catches it and the process survives, so the store's
+// write mutex stayed held forever, wedging every subsequent global read and write.
+func (p *GlobalEnvironmentFrame) healWriteLocked(gi *GlobalIndex) (int, bool) {
+	if gi.Env != p {
 		return 0, false
 	}
-	scopes := q.Scopes()
-	var best scopedBestOf[int]
-	for _, s := range slots {
-		if rejectSealed && s.sealed {
-			continue
-		}
-		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
-			continue
-		}
-		bindingScopes := p.bindings[s.slot].Scopes()
-		if !syntax.ScopesCompatible(bindingScopes, scopes) {
-			continue
-		}
-		record, done := best.shouldRecord(bindingScopes, len(scopes))
-		if record {
-			best.record(s.slot, bindingScopes)
-		}
-		if done {
-			break
-		}
-	}
-	if best.Ambiguous() {
-		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
-			"bestSlotLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
-			key.Key))
-	}
-	return best.Result()
+	return p.resolveAtCoordsLocked(*gi.Index, gi.query, gi.phase, gi.sealed)
 }
 
 // resolveRankedLocked is the flat model's one resolution rule (design §4.3):
@@ -475,9 +555,9 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 // nothing WITHIN a tier either: two slots sharing one tier necessarily carry
 // distinct scope sets, because CreateGlobalBindingAt refuses a second slot
 // with an equal scope set at identical coordinates.
-func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (int, bool) {
-	slot, _, ok := p.probeRankedLocked(key, q, phase, tierExactMutable)
-	return slot, ok
+func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (slotRef, bool) {
+	ref, _, ok := p.probeRankedLocked(key, q, phase, tierExactMutable)
+	return ref, ok
 }
 
 // The probe's tiers, highest-ranked FIRST (lowest number wins). They are the
@@ -516,12 +596,15 @@ const (
 // rather than a bare RUnlock: this can panic mid-hold, on an incomparable
 // equal-cardinality tie IN THE WINNING TIER, wrapped as werr.ErrAmbiguousBinding
 // (P8).
-func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (slot int, tier int, ok bool) {
+// It returns the winning slotRef, not a bare slot: a pin records the
+// coordinates it resolved at (GlobalIndex.phase/sealed), and recovering them
+// from the slot afterwards would mean a second scan of the name's slot list.
+func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase, minTier int) (ref slotRef, tier int, ok bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
-		return 0, tierNone, false
+		return slotRef{}, tierNone, false
 	}
-	// tierOf classifies s.phase.Any as T3 unconditionally, without consulting
+	// tierOf classifies s.phase.wildcard as T3 unconditionally, without consulting
 	// s.sealed: (ANY, mutable) is unreachable here by construction, not by a
 	// check in this function. CreateGlobalBindingAt is the ONE enforcement
 	// point — it panics on (ANY, mutable) at write time — so every ANY slot
@@ -529,9 +612,9 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 	// nothing can produce; this runs on the hot resolution path.
 	tierOf := func(s slotRef) int {
 		switch {
-		case s.phase.Any:
+		case s.phase.wildcard:
 			return tierAmbientSealed
-		case s.phase.Phase != phase:
+		case s.phase.level != phase:
 			return tierNone
 		case s.sealed:
 			return tierExactSealed
@@ -539,7 +622,7 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 			return tierExactMutable
 		}
 	}
-	bestSlot := 0
+	bestRef := slotRef{}
 	bestTier := tierNone
 	if q.IsAll() {
 		// Wildcard: the highest tier's first live slot, matching the old walk's
@@ -554,10 +637,10 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 			}
 			if bestTier < 0 || t < bestTier {
 				bestTier = t
-				bestSlot = s.slot
+				bestRef = s
 			}
 		}
-		return bestSlot, bestTier, bestTier >= 0
+		return bestRef, bestTier, bestTier >= 0
 	}
 	scopes := q.Scopes()
 	var bestScopes []*syntax.Scope
@@ -575,7 +658,7 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 			continue
 		}
 		if bestTier < 0 || t < bestTier || (t == bestTier && len(bindingScopes) > len(bestScopes)) {
-			bestSlot = s.slot
+			bestRef = s
 			bestTier = t
 			bestScopes = bindingScopes
 			ambiguous = false
@@ -603,7 +686,7 @@ func (p *GlobalEnvironmentFrame) probeRankedLocked(key values.Symbol, q syntax.S
 			"resolveRankedLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
 			key.Key))
 	}
-	return bestSlot, bestTier, bestTier >= 0
+	return bestRef, bestTier, bestTier >= 0
 }
 
 // resolveAtCoordsLocked resolves at EXACTLY the given coordinates — the write
@@ -684,11 +767,11 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	slot, _, ok := p.probeRankedLocked(*key, q, phase, tierExactSealed)
+	ref, _, ok := p.probeRankedLocked(*key, q, phase, tierExactSealed)
 	if !ok {
 		return nil
 	}
-	return p.bindings[slot]
+	return p.bindings[ref.slot]
 }
 
 // IsSealedBindingAt reports whether a read of key under q at phase resolves to a
@@ -725,7 +808,7 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // C2b note below: define-syntax writes through this index wildcard and
 // lookupMacroBinding reads it back wildcard.
 func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
-	if phase.Any && !sealed {
+	if phase.wildcard && !sealed {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"CreateGlobalBindingAt: (ANY, mutable) is not a modeled coordinate for %q", key.Key))
 	}
@@ -747,6 +830,9 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 	}
 	i := len(p.bindings)
 	p.keys[*key] = append(p.keys[*key], slotRef{slot: i, phase: phase, sealed: sealed})
+	if !phase.wildcard {
+		p.noteExactPhaseLocked(phase.level)
+	}
 	// append the new binding at index i. Global bindings carry an atomicCell so
 	// they can be read lock-free from other threads (see binding.go atomicCell).
 	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt, scopes))
@@ -756,42 +842,42 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 
 // NOTE (2026-07-19): returning a scope-keyed index pinned to (p, i) here — which
 // is task C2b, and which both branches have the information to do — was tried and
-// REVERTED. It is correct in isolation and it breaks the tree, because today's
-// macro path depends on two errors cancelling: define-syntax writes the
+// REVERTED. It is correct in isolation and it broke the tree, because the macro
+// path then depended on two errors cancelling: define-syntax wrote the
 // transformer through this deferred index (wildcard, landing on the name's FIRST
-// slot rather than the one just created) and lookupMacroBinding reads it back
-// wildcard, finding the same wrong slot. Fixing only the write makes the read
-// miss: `(chibi diff)` fails to load with `no such binding "let*-to-let" with
+// slot rather than the one just created) and lookupMacroBinding read it back
+// wildcard, finding the same wrong slot. Fixing only the write made the read
+// miss: `(chibi diff)` failed to load with `no such binding "let*-to-let" with
 // compatible scopes`.
 //
-// So C2b cannot land without the macro read path moving in the same commit —
-// the reverse of the plan's sequencing, which lists C2b as a prerequisite OF the
-// read-path work. Do not re-attempt it standalone.
+// The two call sites that produced that coupling have since moved: both
+// compile_define_syntax and expander_body now pair the create with an explicit
+// OwnGlobalIndex re-resolve at the writing view's coordinates, so neither writes
+// through the index this returns. Whether C2b is therefore now safe standalone is
+// untested — the reverted experiment predates the store fold and has not been
+// re-run — so this stays a warning, not a clearance.
 
-// GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.
-// Unlike EnvironmentFrame.GetGlobalBinding, this does NOT traverse the parent chain.
-// Returns nil if the binding does not exist in this frame.
-//
-// The stale-pin fallback deliberately does NOT reject the sealed tier (unlike
-// SetOwnGlobalValue's write-side fallback): a deleted user shadow should re-heal
-// a READ onto the sealed primitive underneath it, the same as ordinary name
-// resolution would. Only a WRITE reaching a sealed slot is the hazard.
+// GetOwnGlobalBinding returns the binding for the given GlobalIndex from this
+// store only. Unlike EnvironmentFrame.GetGlobalBinding it resolves nothing
+// against the live environment: a PINNED index addresses its slot, and a stale
+// pin re-heals through healReadLocked. A DEFERRED index (Env == nil) has no
+// pinned slot and no coordinates, so it misses here — every production caller
+// passes an index from OwnGlobalIndex or GetGlobalIndexWithScopes, and the VM
+// routes a deferred one to EnvironmentFrame.GetGlobalBinding instead
+// (machine_context.go, resolveGlobalBinding).
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
-	ge := p
-	key := gi.Index
-
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	i, ok := ge.pinnedSlotLocked(gi)
+	i, ok := p.pinnedSlotLocked(gi)
 	if !ok {
-		i, ok = ge.bestSlotLocked(*key, gi.query, false)
+		i, ok = p.healReadLocked(gi)
 	}
 	if !ok {
 		return nil
 	}
-	return ge.bindings[i]
+	return p.bindings[i]
 }
 
 // pinnedSlotLocked resolves a GlobalIndex through its pinned (Env, Slot) pair,
@@ -800,8 +886,8 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 // The emptiness check is load-bearing, not defensive. DeleteBindingAt nils a slot
 // but leaves it in range, so a bounds check alone would hand back a nil binding
 // where the name-keyed lookup this replaced would have missed and reported "no
-// such binding". Falling through to bestSlotLocked on a nil slot also restores
-// the self-healing the name lookup gave for free: an index pinned before a
+// such binding". Falling through to a heal on a nil slot also restores the
+// self-healing the name lookup gave for free: an index pinned before a
 // delete-then-redefine finds the re-created binding instead of addressing the
 // emptied slot forever.
 //
@@ -825,57 +911,36 @@ func (p *GlobalEnvironmentFrame) pinnedSlotLocked(gi *GlobalIndex) (int, bool) {
 // name-resolved write is a different entry point with a different reach:
 // EnvironmentFrame.SetDeferredGlobalValue, restricted to the mutable tier (G13).
 //
-// The bestSlotLocked fallback below is therefore NOT the non-pinned write path;
+// The healWriteLocked fallback below is therefore NOT the non-pinned write path;
 // it is the STALE-pin self-heal that pinnedSlotLocked documents — reached only
-// when the pinned slot has been nil'd by a delete. rejectSealed=true closes the
-// one hole that self-heal would otherwise open over the merged store: without
-// it, a pin emptied by namespace-undefine! could re-heal onto a SEALED slot of
-// the same name and SetValue it in place — a write reaching a sealed slot by NO
-// other path, and the pre-fold frame-local lookup could not reach it either
-// (ErrNoSuchBinding). The filter cannot lose a legitimate re-heal: DeleteBindingAt
-// never removes a sealed slot (DeleteOwnGlobal derives coordinates from the
-// writing view, and namespace-undefine! writes through the mutable runtime
-// view), so a pin can never be stale-BY-DELETE for a sealed coordinate — every
-// candidate the filter removes here was never a delete-then-redefine target to
-// begin with.
+// when the pinned slot has been nil'd by a delete. It re-resolves at the pin's
+// own coordinates, which is what keeps a re-heal from becoming an escalation: a
+// pin emptied by namespace-undefine! can reach neither the SEALED slot of the
+// same name underneath it nor that name's copy at another phase, both of which a
+// coordinate-blind lookup could reach and no other write path can.
 //
-// The residual: this is still PHASE-blind. A pin addressing (0, mutable) can
-// re-heal onto a (1, mutable) slot of the same name if both exist and the
-// mutable phase-0 slot is deleted — bestSlotLocked has no phase argument, only
-// a sealed/mutable one. Closing that would mean widening GlobalIndex (or this
-// fallback) to carry a phase, not extending this filter; left as a named,
-// accepted residual, not fixed here. Measured for `car` (round 2 review): the
-// write SUCCEEDS and lands on the phase-1 mutable expand copy rather than the
-// (0, mutable) slot the pin originally addressed — see
-// TestBindingModelMatrixMutableTopLevel's "stale pin self-heal relocates onto
-// phase-1 mutable slot" row.
-//
-// bestSlotLocked can panic mid-hold on an ambiguous tie (P8); the Lock is
-// released via defer so that path cannot leak the mutex. Before this was
-// fixed (round 2 review), a bare Unlock before each return left the lock held
-// across the panic — the VM-boundary recover catches the panic and the
-// process survives, so the store's write mutex stayed held forever, wedging
-// every subsequent global read and write.
+// The error is ErrNoSuchBinding whether the name is absent entirely or merely
+// absent at the pin's coordinates. Those are different facts; the message names
+// the coordinates so the distinction survives to the reader.
 //
 // Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
-	ge := p
-
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	i, ok := ge.pinnedSlotLocked(gi)
+	i, ok := p.pinnedSlotLocked(gi)
 	if !ok {
-		i, ok = ge.bestSlotLocked(*gi.Index, gi.query, true)
+		i, ok = p.healWriteLocked(gi)
 	}
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"SetOwnGlobalValue: no such global binding %q", gi.Index.Key)
+			"SetOwnGlobalValue: no global binding %q at phase %v, sealed=%t",
+			gi.Index.Key, gi.phase, gi.sealed)
 	}
 	// Publish atomically through the binding's cell so the lock-free
 	// cachedBindings reader (Binding.Value with no frame mutex) never tears the
 	// two-word interface. The frame Lock still serializes writers.
-	ge.bindings[i].SetValue(v)
+	p.bindings[i].SetValue(v)
 
 	return nil
 }
@@ -911,15 +976,13 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // top-level REPL/eval bindings, not for bindings referenced by compiled
 // bytecode.
 //
-// SetOwnGlobalValue's rejectSealed self-heal filter is sound only because this
-// method never actually removes a sealed slot in practice — its one production
-// caller, DeleteOwnGlobal, always derives coordinates from the writing view,
-// and namespace-undefine! always writes through the mutable runtime view. That
-// is an AUDITED invariant of today's callers, not one this function enforces:
-// nothing here refuses a sealed coordinate, so a second caller that did pass
-// (ANY, sealed) or an exact sealed phase would delete a sealed slot without
-// this method objecting, silently reopening the write-side self-heal onto it
-// with no test failing.
+// It does not refuse a sealed coordinate, and nothing downstream depends on its
+// declining to reach one. The write-side self-heal re-resolves at the PIN's own
+// coordinates (healWriteLocked), so the worst a sealed delete can do is re-heal
+// a sealed pin onto a sealed slot — the coordinate it already addressed. An
+// earlier form of this note recorded the opposite, because SetOwnGlobalValue
+// then re-resolved by name and leaned on an audited "no caller passes a sealed
+// coordinate" premise to stay off the sealed tier. That filter is gone.
 //
 // Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*syntax.Scope, phase PhaseKey, sealed bool) bool {
@@ -940,7 +1003,7 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*s
 	// opcodes; see TODO.md "namespace-undefine! does not stop compiled code".
 	p.bindings[i] = nil
 	// Prune the dead index rather than leaving it in place: every walker over
-	// p.keys (bestSlotLocked, CreateGlobalBindingAt's dedup, LiveSlots/SealedSlots)
+	// p.keys (probeRankedLocked, CreateGlobalBindingAt's dedup, LiveSlots/SealedSlots)
 	// already skips a nil'd slot defensively, so leaving one in place would not
 	// corrupt a lookup — but an unpruned list grows without bound across repeated
 	// delete/redefine cycles, and every one of those walkers rescans the whole

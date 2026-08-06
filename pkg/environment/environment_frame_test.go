@@ -113,8 +113,10 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0, valuestest.SchemeEquals, NewGlobalIndex(tv0))
 
-	// Set the initial value of the new binding
-	err := env.SetOwnGlobalValue(gi0, value0)
+	// Set the initial value of the new binding. The create-returned index is
+	// deferred; SetOwnGlobalValue takes a pinned one, so re-resolve at this
+	// view's own coordinates first.
+	err := env.SetOwnGlobalValue(env.OwnGlobalIndex(tv0, syntax.EmptyScopes()), value0)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Re-adding the same binding should not change the index
@@ -130,7 +132,7 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	qt.Assert(t, gi1.Index, valuestest.SchemeEquals, tv1)
 
 	// Set the initial value of the new binding
-	err = env.SetOwnGlobalValue(gi1, value1)
+	err = env.SetOwnGlobalValue(env.OwnGlobalIndex(tv1, syntax.EmptyScopes()), value1)
 	qt.Assert(t, err, qt.IsNil)
 
 	bd := env.GetGlobalBinding(gi0)

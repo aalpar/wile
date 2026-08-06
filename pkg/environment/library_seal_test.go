@@ -154,14 +154,12 @@ func TestChildRuntimeSealedClimbReachesItsExpandView(t *testing.T) {
 	c.Assert(expandBase.AtPhase(PhaseCompile), qt.Equals, lib.Compile())
 }
 
-// SealedWriteViewAt asks the receiver's REGISTRY, so every frame of an owner —
-// including an inner lexical frame that shares the registry — is answered with
-// that owner's sealed-write view. The pre-fold form additionally required the
-// receiver to BE the registry's phase-0 entry and otherwise returned the receiver
-// itself; that guard existed to keep a registration off a seal frame, and with
-// rank carried by the view there is no frame identity left to protect. Every
-// production caller passes an owner root either way.
-func TestSealedWriteViewAtAsksTheRegistry(t *testing.T) {
+// SealedWriteViewAt answers only an OWNER ROOT — the phase-0 entry of its own
+// registry. A namespace's runtime and a library env's each own one; an inner
+// lexical frame merely inherits the `phases` pointer and must NOT be able to
+// obtain a sealed writer through it. Testing `phases != nil` alone made every
+// lambda body a route to the sealed tier.
+func TestSealedWriteViewAtRequiresAnOwnerRoot(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	sealedRoot, _ := ns.phases.sealedViewAt(PhaseRuntime)
@@ -169,8 +167,17 @@ func TestSealedWriteViewAtAsksTheRegistry(t *testing.T) {
 	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
 	c.Assert(ns.NewChildRuntime().SealedWriteViewAt(PhaseRuntime).rank, qt.Equals, writeRankSealed)
 
+	// A lexical child shares the registry and is answered with ITSELF: its own
+	// view at phase 0, mutable, not the owner's sealed writer.
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
-	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
+	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, inner)
+	c.Assert(inner.SealedWriteViewAt(PhaseRuntime).rank, qt.Equals, writeRankMutable)
+
+	// The reach a sealed-write view has by climbing is unaffected: AtPhase from a
+	// sealed view stays sealed wherever the axis has a row, so the guard costs
+	// this path nothing.
+	sealedExpand, _ := ns.phases.sealedViewAt(PhaseExpand)
+	c.Assert(sealedRoot.SealedWriteViewAt(PhaseExpand), qt.Equals, sealedExpand)
 
 	// A frame with no registry at all has nothing to ask, so it falls back to its
 	// own view at that phase.

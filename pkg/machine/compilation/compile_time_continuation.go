@@ -233,8 +233,8 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 //
 // THIS PREDICATE IS WHAT SEPARATES THE FIX FROM A NAIVE REORDER, at both sites that
 // place a scope-precise arm ahead of a pin: CompileSymbol's co-introduced-global arm
-// and ExpanderTimeContinuation.lookupMacroBinding's arm 1. The walk (bestSlotLocked /
-// scopedBestOf) has already filtered candidates on bindingScopes ⊆ symbolScopes, so a
+// and ExpanderTimeContinuation.lookupMacroBinding's arm 1. The resolution
+// (probeRankedLocked / scopedBestOf) has already filtered candidates on bindingScopes ⊆ symbolScopes, so a
 // NON-EMPTY match shares at least one scope object with the reference; scopes are
 // minted per expansion, so sharing one means shared provenance, which is the R7RS §4.3
 // renaming the arm implements. An ambient ∅-scoped binding shares nothing yet passes

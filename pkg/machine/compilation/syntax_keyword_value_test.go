@@ -110,3 +110,40 @@ func TestPhaseZeroCrossPhaseNamesStayUnbound(t *testing.T) {
 		})
 	}
 }
+
+// The same refusal on the PINNED path. A free identifier in a macro template
+// carries its definition-time *GlobalIndex (cross-library hygiene), and
+// tryResolvedBinding consumes that pin BEFORE ordinary resolution — so the tag
+// check at the ordinary site above never sees these. Its own tag check is what
+// refuses them, and it falls through rather than raising, because there the
+// caller still has ordinary resolution to try: for a phase-1 meaning named at
+// phase 0 that chain ends at ErrNoSuchBinding, the dialect removed-form
+// contract.
+//
+// Without that check the pin is emitted as a cached load and the value world
+// gets the transformer closure or the expander itself — exactly the leak the
+// predecessor predicate (a compileTimeHandler type assertion) missed for a
+// pinned macro TRANSFORMER, which is a plain machine closure and matched
+// nothing.
+func TestPinnedTemplateIdentifierRefusesCompileTimeMeaning(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"bootstrap macro in template", `(begin (define-syntax m3 (syntax-rules () ((_) (display when))))
+			(m3))`},
+		{"primitive expander in template", `(begin (define-syntax m4 (syntax-rules () ((_) (display if))))
+			(m4))`},
+		{"user transformer in template", `(begin (define-syntax inner (syntax-rules () ((_) 1)))
+			(define-syntax m5 (syntax-rules () ((_) (display inner))))
+			(m5))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
+				qt.Commentf("got: %v", err))
+		})
+	}
+}

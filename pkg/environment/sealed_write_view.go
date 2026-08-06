@@ -62,17 +62,38 @@ func (p *EnvironmentFrame) IsNamespaceRuntime() bool {
 // receiver's own view at that phase, which is what leaves a library's primitive
 // expanders exactly where they were.
 //
-// The receiver is a registration target, so in practice an owner root view; the
-// fallback resolves through the PhaseRegistry for any other phase and must not be
-// called while holding the registry's lock.
+// The receiver must OWN a sealed axis — be the phase-0 entry of its own phase
+// registry. Any other frame gets its own view at that phase instead. The
+// precondition is what makes this a registration API rather than a way to obtain
+// a sealed writer: `phases` is inherited by every lexical child
+// (NewEnvironmentFrameWithParent), so testing it alone would let a lambda body
+// hand out the owner's sealed-write view and write past the mutable tier. Rank
+// living on the view rather than in the topology removed the frame identity this
+// guard once protected; it did not remove the capability it gates.
+//
+// Restoring it costs no reach. A sealed-write view asking for a HIGHER phase
+// falls through to unsealedTargetAt → AtPhase, whose climb from a sealed view
+// stays sealed, so it lands on the same frame either way.
+//
+// The fallback resolves through the PhaseRegistry for any phase but the
+// receiver's own and must not be called while holding the registry's lock.
 func (p *EnvironmentFrame) SealedWriteViewAt(phase Phase) *EnvironmentFrame {
-	if p.phases != nil {
+	if p.ownsSealedAxis() {
 		sealed, ok := p.phases.sealedViewAt(phase)
 		if ok {
 			return sealed
 		}
 	}
 	return p.unsealedTargetAt(phase)
+}
+
+// ownsSealedAxis reports whether this frame is the phase-0 entry of its OWN phase
+// registry — an owner root. True for a namespace's mutable runtime and for a
+// library env's (each owns a registry whose phase-0 entry is itself); false for an
+// inner lexical frame, which merely shares its parent's registry, and false for a
+// sealed-write view, whose registry's phase-0 entry is the mutable root.
+func (p *EnvironmentFrame) ownsSealedAxis() bool {
+	return p.phases != nil && p.phases.runtime == p
 }
 
 // unsealedTargetAt returns this frame's own view at phase: itself when phase is
