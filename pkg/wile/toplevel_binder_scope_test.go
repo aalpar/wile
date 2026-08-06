@@ -358,3 +358,42 @@ func TestInternalMacroSyntaxBinder_DoesNotLeakToUser(t *testing.T) {
 		  (helper))`)
 	c.Assert(err, qt.IsNotNil)
 }
+
+// A syntax-rules template's free identifier, resolved at PHASE 0 (the
+// GetGlobalIndexAcrossPhases call site in compile_syntax_rules.go:421 — the
+// R7RS §4.3 free-template-identifier carve-out), must be able to name a
+// binding that exists ONLY at phase 3 (three nested begin-for-syntax deep).
+// Design Phase D lifted GetGlobalIndexAcrossPhases's search from a hard-wired
+// {0,1,2} to every phase PresentPhases() reports, ascending; this is the
+// regression guard for that call site specifically — the sibling fixture in
+// library_phase_isolation_test.go (TestLibraryExportsPhaseThreeBinding) drives
+// findLibraryBinding, a DIFFERENT lookup body that shares only PresentPhases's
+// ordering helper.
+//
+// The definition phase (0) and deep's phase (3) must differ for this to prove
+// anything: if get-deep's own define-syntax also lived at phase 3, ordinary
+// phase-hermetic resolution at the (get-deep) use site would find deep
+// anyway, since deep's binder carries the empty/ambient scope set (a trivial
+// subset of any reference's scopes) — the ordinary fallback would paper over
+// a broken pin and this would pass under the old {0,1,2} ceiling too. Pinning
+// deep's definition to phase 3 while get-deep is defined and used at phase 0
+// forces the answer through the cross-phase carve-out: phase-0 code cannot
+// see a phase-3 define by ordinary (hermetic) resolution at all — see
+// TestLibraryPhaseIsolationDownward — so only GetGlobalIndexAcrossPhases's
+// ascending walk reaching phase 3 at macro-DEFINITION time can resolve it.
+// Verified as a real regression guard by temporarily re-capping
+// EnvironmentFrame.PresentPhases to {0,1,2}: this fails with "no such
+// binding \"deep\" with compatible scopes" against that recap and passes
+// against the shipped ascending walk (task-8-report.md, Fix round 1).
+func TestFreeTemplateIdentifierAtPhaseZeroResolvesPhaseThreeBinding(t *testing.T) {
+	c := qt.New(t)
+	got, err := evalTopLevel(t, `
+		(begin-for-syntax
+		  (begin-for-syntax
+		    (begin-for-syntax
+		      (define deep 42))))
+		(define-syntax get-deep (syntax-rules () ((_) deep)))
+		(get-deep)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, "42")
+}

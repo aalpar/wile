@@ -1257,6 +1257,32 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	c.Assert(runtimeGi, qt.IsNil)
 }
 
+// PresentPhases is the one shared primitive both GetGlobalIndexAcrossPhases
+// (above) and machine/compilation's findLibraryBinding rest on — pin it
+// directly rather than only through those two callers' tables, so a future
+// change to either caller's test suite cannot silently stop covering it.
+//
+// Phases are instantiated out of ascending order and PhaseTemplate (-1) is
+// instantiated too, to prove both properties PresentPhases documents: it
+// SORTS ascending regardless of PhaseRegistry.Phases()'s map-iteration order,
+// and it EXCLUDES negative phases — PhaseTemplate ranks for-template bindings
+// on a different axis, not a lower rung of the runtime-first search.
+func TestPresentPhases(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewNamespace()
+	env := tle.Runtime()
+
+	// Instantiate out of order: 4, then -1 (PhaseTemplate), then 2. Phase 0
+	// (PhaseRuntime) already exists — it is env itself.
+	env.AtPhase(Phase(4))
+	env.AtPhase(PhaseTemplate)
+	env.AtPhase(Phase(2))
+
+	got := env.PresentPhases()
+	c.Assert(got, qt.DeepEquals, []Phase{PhaseRuntime, Phase(2), Phase(4)})
+}
+
 func TestGetLocalIndex_MaximalBinding(t *testing.T) {
 	c := qt.New(t)
 
