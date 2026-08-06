@@ -354,13 +354,17 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 // pinnedSlotLocked sees the nil'd slot and falls through to the self-heal.
 // Before the fix, bestSlotLocked was coordinate-blind: with the mutable
 // candidate gone, the sealed slot was the only one left, so the self-heal
-// silently mutated the SEALED primitive in place — corrupting a Stable anchor
-// the frame-reclaim classifier and the optimizer have already reasoned about,
-// and destroying exactly the binding namespace-undefine!'s own sealed refusal
-// exists to protect. After the fix, the sealed slot is filtered out of the
-// fallback, so the write finds no candidate and is refused, matching the
-// pre-fold behavior (a name-resolved write through the frame-local mutable
-// store found nothing and reported ErrNoSuchBinding).
+// silently mutated the SEALED primitive in place — corrupting the sealed
+// startup-set binding namespace-undefine!'s own sealed refusal exists to
+// protect. (Not framed as "corrupting a Stable anchor": this test builds its
+// sealed binding directly via DefineOwnGlobal, bypassing registry.Apply and
+// WithStableBasePrimitives entirely, so nothing here ever carries the Stable
+// stamp — the hazard is the sealed COORDINATE, independent of whether the
+// optimizer has stamped anything Stable on top of it.) After the fix, the
+// sealed slot is filtered out of the fallback, so the write finds no
+// candidate and is refused, matching the pre-fold behavior (a name-resolved
+// write through the frame-local mutable store found nothing and reported
+// ErrNoSuchBinding).
 func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()

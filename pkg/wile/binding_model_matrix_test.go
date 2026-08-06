@@ -413,10 +413,10 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 			want:  "2"},
 		// CRITICAL fix, fold C3 review round 1: SetOwnGlobalValue's stale-pin
 		// self-heal must not re-heal onto a SEALED slot. square (a bootstrap
-		// SCHEME procedure, sealed at (ANY, sealed) with no phase-1/2
-		// companion registration — unlike car, which also owns a phase-2
-		// compile-time entry and so would confound this row with the
-		// separately-documented phase-blind residual) is shadowed at
+		// SCHEME procedure, sealed at (ANY, sealed) with no phase-1
+		// companion registration — unlike car, which also owns a phase-1
+		// expand-copy entry and so would confound this row with the
+		// separately-documented phase-blind residual below) is shadowed at
 		// (0, mutable); f's set! compiles to a PINNED index at that mutable
 		// slot (the same pinned-reach mechanism the h/car pair above
 		// exercises); namespace-undefine! deletes the mutable shadow; calling
@@ -434,6 +434,37 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 				`(f)`,
 			},
 			wantErr: machine.ErrBindingNotFound},
+		// RESIDUAL, measured and pinned as CURRENT BEHAVIOR (round 2 review),
+		// NOT fixed: for a name that owns a phase-1 companion — car here, and
+		// with it the ~28 dual-phase registration blocks in
+		// pkg/registry/core (pairs, lists, strings, arithmetic, vectors,
+		// predicates, characters, equality, hashes, syntax) — the rejectSealed
+		// filter does not eliminate the stale-pin self-heal hazard the row
+		// above closes, it RELOCATES it. car's slots are [(ANY, sealed),
+		// (1, mutable) expand copy, (0, mutable) shadow]; namespace-undefine!
+		// removes only the shadow, so after rejectSealed filters out the
+		// sealed slot the (1, mutable) expand copy is the ONLY remaining
+		// candidate — the self-heal succeeds silently instead of being
+		// refused. (f) returns without error, and a phase-1 reference to car
+		// (captured via begin-for-syntax + an er-macro-transformer, since a
+		// bare top-level read cannot observe phase 1) now reads back 2: the
+		// write landed on the sealed startup set's phase-1 primitive, not on
+		// the (0, mutable) slot it originally pinned. This is exactly the
+		// PHASE-blind residual SetOwnGlobalValue's own doc comment names as
+		// accepted, not this row's discovery — it is measured here rather
+		// than only asserted in prose, pending a human decision on whether to
+		// close it (which would mean widening GlobalIndex to carry a phase
+		// for a coordinate-exact self-heal — a design change, not a fix
+		// scoped to this round).
+		{name: "stale pin self-heal relocates onto phase-1 mutable slot (residual)",
+			units: []string{
+				`(define car 1)`,
+				`(define (f) (set! car 2))`,
+				`(namespace-undefine! (interaction-environment) 'car)`,
+				`(f)`,
+				`(begin-for-syntax (define probe car)) (define-syntax reveal-probe (er-macro-transformer (lambda (form rename compare) probe))) (reveal-probe)`,
+			},
+			want: "2"},
 	}
 	runMatrix(t, rows, wile.WithMutableTopLevel())
 }

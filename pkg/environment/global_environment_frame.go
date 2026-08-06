@@ -429,9 +429,12 @@ func scopeSetsEqual(a, b []*syntax.Scope) bool {
 // Caller MUST hold at least a read lock on p.mu.
 //
 // It PANICS with a wrapped werr.ErrAmbiguousBinding on an incomparable
-// equal-cardinality tie. SetOwnGlobalValue, the one caller that still unlocks
-// without defer, leaks p.mu on that path (resolveGlobal's own probe moved to a
-// deferred release; this note no longer applies there).
+// equal-cardinality tie, but only via the scoped branch below — the wildcard
+// branch (q.IsAll()) returns before reaching it. Every one of the four callers
+// releases p.mu via defer, so the panic never leaks the lock: GetGlobalIndex
+// (wildcard-only, so this panic is unreachable from it, but deferred anyway for
+// uniformity), GetGlobalIndexWithScopes, GetOwnGlobalBinding's stale-pin
+// fallback, and SetOwnGlobalValue's stale-pin fallback.
 func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.ScopeSet, rejectSealed bool) (int, bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
@@ -807,8 +810,8 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 	ge := p
 
 	p.mu.RLock()
+	defer p.mu.RUnlock()
 	_, ok := ge.bestSlotLocked(*key, syntax.AllScopes(), false)
-	p.mu.RUnlock()
 
 	if !ok {
 		return nil
@@ -825,8 +828,8 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
 	p.mu.RLock()
+	defer p.mu.RUnlock()
 	i, ok := p.bestSlotLocked(*key, q, false)
-	p.mu.RUnlock()
 
 	if !ok {
 		return nil
@@ -910,19 +913,31 @@ func (p *GlobalEnvironmentFrame) pinnedSlotLocked(gi *GlobalIndex) (int, bool) {
 // mutable phase-0 slot is deleted — bestSlotLocked has no phase argument, only
 // a sealed/mutable one. Closing that would mean widening GlobalIndex (or this
 // fallback) to carry a phase, not extending this filter; left as a named,
-// accepted residual, not fixed here.
+// accepted residual, not fixed here. Measured for `car` (round 2 review): the
+// write SUCCEEDS and lands on the phase-1 mutable expand copy rather than the
+// (0, mutable) slot the pin originally addressed — see
+// TestBindingModelMatrixMutableTopLevel's "stale pin self-heal relocates onto
+// phase-1 mutable slot" row.
+//
+// bestSlotLocked can panic mid-hold on an ambiguous tie (P8); the Lock is
+// released via defer so that path cannot leak the mutex. Before this was
+// fixed (round 2 review), a bare Unlock before each return left the lock held
+// across the panic — the VM-boundary recover catches the panic and the
+// process survives, so the store's write mutex stayed held forever, wedging
+// every subsequent global read and write.
 //
 // Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {
 	ge := p
 
 	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	i, ok := ge.pinnedSlotLocked(gi)
 	if !ok {
 		i, ok = ge.bestSlotLocked(*gi.Index, gi.query, true)
 	}
 	if !ok {
-		p.mu.Unlock()
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
 			"SetOwnGlobalValue: no such global binding %q", gi.Index.Key)
 	}
@@ -930,7 +945,6 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	// cachedBindings reader (Binding.Value with no frame mutex) never tears the
 	// two-word interface. The frame Lock still serializes writers.
 	ge.bindings[i].SetValue(v)
-	p.mu.Unlock()
 
 	return nil
 }
@@ -965,6 +979,16 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 // references from compiled code would be stale. This is only safe for
 // top-level REPL/eval bindings, not for bindings referenced by compiled
 // bytecode.
+//
+// SetOwnGlobalValue's rejectSealed self-heal filter is sound only because this
+// method never actually removes a sealed slot in practice — its one production
+// caller, DeleteOwnGlobal, always derives coordinates from the writing view,
+// and namespace-undefine! always writes through the mutable runtime view. That
+// is an AUDITED invariant of today's callers, not one this function enforces:
+// nothing here refuses a sealed coordinate, so a second caller that did pass
+// (ANY, sealed) or an exact sealed phase would delete a sealed slot without
+// this method objecting, silently reopening the write-side self-heal onto it
+// with no test failing.
 //
 // Thread-safe: uses full Lock for write access.
 func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*syntax.Scope, phase PhaseKey, sealed bool) bool {
