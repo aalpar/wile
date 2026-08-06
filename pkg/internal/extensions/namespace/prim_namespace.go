@@ -202,18 +202,21 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 	// a name owned only by a macro-introduced binder is a no-op rather than a
 	// destruction the caller could not have read (issue #805).
 	//
-	// The sealed-base probe is scope-exact for the same reason the delete is, not
-	// because a scope-carrying sealed binding exists today: the sealed base holds
-	// primitives and bootstrap procedures, all ambient, so there is no reachable
-	// case to test. A wildcard probe answers a different question than the one
-	// asked: "is SOME binding of this name sealed" rather than "is the binding I
-	// just failed to delete sealed". It would raise ErrImmutableBinding for a name
-	// the ambient read calls unbound, which is the same class of drift #805 closed
-	// on the delete side.
-	deleted := ns.Runtime().GlobalEnvironment().DeleteBinding(sym, environment.AmbientScopes())
+	// The sealed probe is scope-exact for the same reason the delete is, not because
+	// a scope-carrying sealed binding exists today: the sealed tier holds primitives
+	// and bootstrap procedures, all ambient, so there is no reachable case to test.
+	// A wildcard probe answers a different question than the one asked: "is SOME
+	// binding of this name sealed" rather than "is the binding I just failed to
+	// delete sealed". It would raise ErrImmutableBinding for a name the ambient read
+	// calls unbound, which is the same class of drift #805 closed on the delete side.
+	//
+	// The delete goes through the runtime VIEW, so it targets that view's own
+	// coordinates — the mutable tier at phase 0. A ranked delete over the merged
+	// store would reach the sealed primitive itself whenever no user shadow existed,
+	// destroying exactly the binding the refusal below exists to protect.
+	deleted := ns.Runtime().DeleteOwnGlobal(sym, environment.AmbientScopes())
 	if !deleted {
-		base, sealed := ns.SealedAt(environment.PhaseRuntime)
-		if sealed && base.GlobalEnvironment().GetGlobalIndexWithScopes(sym, values.EmptyScopes()) != nil {
+		if ns.Store().IsSealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime) {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
 				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",

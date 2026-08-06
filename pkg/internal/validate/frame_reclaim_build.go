@@ -321,8 +321,9 @@ func classifyCallee(
 // same-name nodes with equal-cardinality but mutually-incomparable scope sets, both
 // subset-matching the reference — is refused (returns nil ⇒ unresolved ⇒ unsafe),
 // NOT resolved by map-iteration order. GetBinding breaks that tie deterministically
-// by binding creation order (global_environment_frame.go bestSlotLocked over a
-// creation-ordered []int); this map cannot cheaply replicate that order, so it
+// by binding creation order (global_environment_frame.go resolveRankedLocked, over
+// a creation-ordered slot list within one tier); this map cannot cheaply replicate
+// that order, so it
 // declines to guess rather than grant a reclaim verdict on a coin-flip — the sound
 // direction (frame_reclaim.go: a false positive would corrupt). The refusal costs
 // reclamation only on a genuinely ambiguous binder, which a sound analysis would not

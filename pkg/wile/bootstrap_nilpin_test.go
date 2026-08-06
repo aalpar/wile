@@ -93,10 +93,11 @@ func TestBootstrapMacrosPinLateBoundReferents(t *testing.T) {
 	}()
 
 	env := eng.Environment()
-	// D1 (2026-07-22): bootstrap macros now live in the sealed EXPAND base (phase 1),
-	// not the mutable expand child (env.Expand()), which holds only user define-syntax.
-	// Walk the sealed expand base so the census still sees the bootstrap macros.
-	expandEnv := env.Namespace().SealedExpandBase()
+	// D1 (2026-07-22): bootstrap macros live in the SEALED tier at phase 1, not the
+	// mutable one (which holds only user define-syntax). The census enumerates that
+	// tier off the owner store; expandEnv is the phase-1 view the discriminator
+	// lookups read through.
+	expandEnv := env.AtPhase(environment.PhaseExpand)
 
 	pins := collectNilPins(t, env, expandEnv)
 
@@ -160,14 +161,12 @@ func collectNilPins(t *testing.T, env, expandEnv *environment.EnvironmentFrame) 
 	}
 
 	macroCount := 0
-	for sym := range ge.Keys() {
-		key := sym
-		gi := ge.GetGlobalIndex(&key)
-		if gi == nil {
-			continue
-		}
-		bnd := ge.GetOwnGlobalBinding(gi)
-		if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
+	// The SEALED tier is where bootstrap macros land; a user define-syntax lands in
+	// the mutable one and is not part of this census.
+	for _, slot := range ge.SealedSlots() {
+		key := slot.Name
+		bnd := slot.Binding
+		if bnd.BindingType() != environment.BindingTypeSyntax {
 			continue
 		}
 		clauses := compilation.ClausesFromClosure(bnd.Value())

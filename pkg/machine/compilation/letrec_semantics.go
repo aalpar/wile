@@ -85,14 +85,13 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	// set for us, which is why nothing below writes m.Scopes.
 	_, _ = env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
 
-	// Address the placeholder in THIS frame, under the binder's own scope set.
-	// The index MaybeCreateOwnGlobalBinding returns is deferred (no frame, no
-	// scopes), and GetGlobalBinding resolves a deferred index by wildcard: it
-	// walks the parent chain and takes the name's first live slot. Once a name
-	// has more than one slot, that slot can belong to another expansion, and the
-	// source stamp below would land on that expansion's variable.
+	// Address the placeholder at THIS view's own coordinates, under the binder's
+	// own scope set. The index MaybeCreateOwnGlobalBinding returns is deferred (no
+	// frame, no scopes), and a deferred read resolves wildcard: once a name has
+	// more than one slot, that slot can belong to another expansion — or to the
+	// sealed startup set — and the source stamp below would land on it.
 	own := env.GlobalEnvironment()
-	ownIndex := own.GetGlobalIndexWithScopes(name, syntax.ScopesOf(scopes))
+	ownIndex := env.OwnGlobalIndex(name, syntax.ScopesOf(scopes))
 	if ownIndex == nil {
 		return
 	}

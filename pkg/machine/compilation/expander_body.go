@@ -166,18 +166,18 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// The scope set is the CREATION key, not a post-stamp: creating under nil
 	// keys the binder on the empty set, which dedupes a macro-introduced keyword
 	// onto any pre-existing same-named binding and then re-stamps it. Address the
-	// write with a scope-resolved index for the same reason — the index the
-	// create returns is name-only, so a following read can land on a different
+	// write at the writing view's OWN coordinates for the same reason — the index
+	// the create returns is name-only, so a following read can land on a different
 	// slot. Same shape as the top-level site in compile_define_syntax.go.
 	expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
-	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, syntax.ScopesOf(symbolScopes))
+	globalIndex := expandEnv.OwnGlobalIndex(keyword, syntax.ScopesOf(symbolScopes))
 	if globalIndex == nil {
 		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrUnexpectedNil,
 			"define-syntax: failed to create or find binding for %s", keyword.Key,
 		))
 	}
-	binding := expandEnv.GetGlobalBinding(globalIndex)
+	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
 			changed := false

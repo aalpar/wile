@@ -86,8 +86,7 @@ var _ values.Value = (*Namespace)(nil)
 //
 //	Per-namespace, owned outright (never inherited; each namespace builds
 //	its own, and a child's is unrelated to its parent's):
-//	  sealedBase, sealedExpandBase, inlineHOFTemplates, effectiveRegistry,
-//	  extensionState
+//	  sealedWriteRoot, inlineHOFTemplates, effectiveRegistry, extensionState
 //
 // Adding a new field: choose a policy above, document it in this block,
 // then:
@@ -211,27 +210,15 @@ type Namespace struct {
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
 
-	// sealedBase is the per-NAMESPACE immutable runtime frame (phase 0): Go primitives
-	// + sealed stdlib runtime procedures, parent nil. It is the lexical parent of
-	// `runtime` (the mutable user global). Holds the optimizer's Stable anchors.
-	// PER-NAMESPACE, NOT root-delegated: a profile child (NewProfileEnvironment) carves
-	// its OWN sealed base populated by its own curated registry apply, so delegating to
-	// root would corrupt the engine root's base. Every namespace OWNS its sealed base;
-	// a report namespace copies the parent's into its own (see NewSchemeReportNamespace).
-	sealedBase *EnvironmentFrame
-
-	// sealedExpandBase is the per-NAMESPACE immutable EXPAND frame (phase 1): bootstrap
-	// macros + special-form primitive expanders, parent = sealedBase. It is the lexical
-	// parent of the mutable expand child (envs[PhaseExpand]); it is NOT a PhaseRegistry
-	// entry, reached only via the parent chain, mirroring sealedBase at phase 0. It makes a
-	// top-level (define-syntax foo …) shadow in the mutable child rather than overwrite the
-	// pinned bootstrap macro/expander in place, AND keeps compile-time handlers off the
-	// phase-0 value frame (a handler there is reachable by runtime value resolution and leaks
-	// a dialect-removed form's #<primitive-expander:…> into the value world). Fresh (empty)
-	// per namespace; a report namespace gets a fresh one too, matching that
-	// scheme-report-environment carries no bootstrap macros. See
-	// plans/2026-07-22-free-template-id-hygiene-impl.local.md (D1+D3).
-	sealedExpandBase *EnvironmentFrame
+	// sealedWriteRoot is this namespace's phase-0 SEALED-WRITE view: the same store
+	// as runtime, at the same phase, with writeRankSealed, so a write through it
+	// lands at the ambient (ANY, sealed) coordinate that every phase reaches. It is
+	// what bootstrap and registry application register through, and — with runtime —
+	// what IsOwnerRoot recognizes, so the immutable-top-level define gate fires for
+	// bootstrap compilation and stamps the optimizer's Stable anchors.
+	//
+	// A named alias into phases.sealedViews[PhaseRuntime], which is the authority.
+	sealedWriteRoot *EnvironmentFrame
 
 	// envMap is an optional virtual environment variable map.
 	// When non-nil, envvars primitives read from this map instead of
@@ -267,7 +254,7 @@ func NewNamespace() *Namespace {
 		immutableLiterals: &ImmutableLiterals{},
 		services:          &EngineServices{},
 	}
-	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
+	initOwner(q, NewGlobalEnvironmentFrame())
 	return q
 }
 
@@ -306,21 +293,32 @@ func (p *Namespace) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.Sy
 	return v
 }
 
-// Runtime returns the runtime phase environment (phase 0).
-// This is the main environment where top-level bindings live.
+// Runtime returns the runtime phase environment (phase 0) — this namespace's
+// ROOT VIEW, where top-level bindings live.
 func (p *Namespace) Runtime() *EnvironmentFrame {
 	return p.runtime
 }
 
-// BoundSymbolNames returns a freshly-consed list of every symbol bound in the
-// namespace's runtime, spanning BOTH the mutable runtime global (user defines) and
-// the sealed base (primitives + sealed stdlib procedures). It is the shared body of
-// the environment-bound-names and namespace-bound-names primitives. Post-carve the
-// sealed base must be included or primitives like `car` vanish from the result (the
-// key map carries no parent walk). Iteration order is unspecified; a name shadowed in
-// both frames appears once (deduped via the seen set).
+// Store returns this namespace's one binding store: every global binding it
+// holds, at every phase and every registration rank. The phase environments are
+// views over it, so reaching a binding "in another phase" is a coordinate on the
+// query rather than a different object.
 //
-// AmbientKeys, not Keys: the listing reports only names resolvable under the
+// The type is still GlobalEnvironmentFrame — the accessor is named for what the
+// object now IS; renaming the type is deferred (design Q3).
+func (p *Namespace) Store() *GlobalEnvironmentFrame {
+	return p.runtime.global
+}
+
+// BoundSymbolNames returns a freshly-consed list of every symbol bound at phase 0
+// in this namespace, spanning BOTH the mutable tier (user defines) and the sealed
+// one (primitives + sealed stdlib procedures) — the probe merges them, so a name
+// shadowed in both appears once. It is the shared body of the
+// environment-bound-names and namespace-bound-names primitives. The sealed tier
+// must be included or primitives like `car` vanish from the result. Iteration order
+// is unspecified.
+//
+// AmbientKeysAt, not Keys: the listing reports only names resolvable under the
 // ambient (empty) scope set, which is what both read families this listing serves
 // look up — environment-ref/environment-bound? and namespace-ref/namespace-bound?
 // all pass AmbientScopes. Listing a macro-introduced binder would break the
@@ -328,61 +326,37 @@ func (p *Namespace) Runtime() *EnvironmentFrame {
 // added. Moving any of those reads back to a wildcard silently re-opens that gap,
 // since nothing here can detect it.
 func (p *Namespace) BoundSymbolNames() values.Value {
-	seen := values.StringSet{}
 	var result values.Value = values.EmptyList
-	// Phase 0 only, both frames of it: the mutable runtime and its seal. The
-	// phase-1 seal is deliberately absent — this listing backs the value-oriented
-	// bound-names primitives, not the all-phases walk BoundNamesAcrossPhases does.
-	sealedRuntime, _ := p.phases.sealAt(PhaseRuntime)
-	for _, frame := range []*EnvironmentFrame{p.runtime, sealedRuntime} {
-		if frame == nil {
-			continue
-		}
-		for _, key := range frame.GlobalEnvironment().AmbientKeys() {
-			_, dup := seen[key.Key]
-			if dup {
-				continue
-			}
-			seen[key.Key] = struct{}{}
-			result = values.NewCons(values.NewSymbol(key.Key), result)
-		}
+	// Phase 0 only: this listing backs the value-oriented bound-names primitives,
+	// not the all-phases walk BoundNamesAcrossPhases does. The probe merges the
+	// tiers the pre-fold version had to visit as two frames (the mutable runtime
+	// and its seal) and dedupes them by construction — one name resolves to one
+	// binding — so there is no seen set here any more.
+	for _, key := range p.Store().AmbientKeysAt(PhaseRuntime) {
+		result = values.NewCons(values.NewSymbol(key.Key), result)
 	}
 	return result
 }
 
-// BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding
-// name visible across all instantiated phases (runtime, expand, compile) plus
-// the sealed base. Unlike BoundSymbolNames — which spans only the runtime
-// global and the sealed base, returning a Scheme list for the bound-names
-// primitives — this also walks the expand and compile phases, so macro and
+// BoundNamesAcrossPhases returns a sorted, deduplicated list of every binding name
+// this namespace holds anywhere: every phase, every rank. Unlike BoundSymbolNames —
+// which spans phase 0 only, returning a Scheme list for the bound-names primitives —
+// this also reports names bound at the expand and compile phases, so macro and
 // special-form keywords appear. It is the set a REPL wants for tab completion.
-// Iteration order across phases does not change the result set (only names are
-// collected); the output is sorted for determinism.
+// The output is sorted for determinism.
 func (p *Namespace) BoundNamesAcrossPhases() []string {
 	seen := values.StringSet{}
 	var names []string
-	collect := func(frame *EnvironmentFrame) {
-		if frame == nil {
-			return
+	// One pass over the owner store, filtered to live slots at any phase and any
+	// rank — the set the pre-fold union over every phase frame plus every sealed
+	// frame produced, now that all of those are views over this one store.
+	for _, s := range p.Store().LiveSlots() {
+		_, dup := seen[s.Name.Key]
+		if dup {
+			continue
 		}
-		global := frame.GlobalEnvironment()
-		if global == nil {
-			return
-		}
-		for key := range global.Keys() {
-			_, dup := seen[key.Key]
-			if dup {
-				continue
-			}
-			seen[key.Key] = struct{}{}
-			names = append(names, key.Key)
-		}
-	}
-	for _, phase := range p.phases.Phases() {
-		collect(p.phases.Get(phase))
-	}
-	for _, frame := range p.SealedFrames() {
-		collect(frame)
+		seen[s.Name.Key] = struct{}{}
+		names = append(names, s.Name.Key)
 	}
 	slices.Sort(names)
 	return names
@@ -812,9 +786,10 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //
 // The child is a fully independent Namespace with its own:
 //
-//   - EnvironmentFrame (runtime, phase 0) — the mutable user scope, lexical
-//     child of the child's own sealed base (wireRuntimeFrames), not a root
-//   - GlobalEnvironmentFrame — isolated global bindings (define, set!, etc.)
+//   - EnvironmentFrame (runtime, phase 0) — the child's ROOT VIEW (parent nil),
+//     the mutable user scope
+//   - GlobalEnvironmentFrame — its own store: isolated global bindings at every
+//     phase and rank (define, set!, a profile's sealed apply)
 //   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
 //
 // The child's runtime EnvironmentFrame.namespace points to the child (not the
@@ -867,12 +842,12 @@ func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
 //	                                  | bindings: []            |
 //	                                  +-------------------------+
 //
-//	                         envC.parent ──► the child's OWN sealed base
-//	                         +-------------------------------+
-//	                         | EnvironmentFrame (sealedBaseC)|
-//	                         | parent: nil (structural root) |
-//	                         | global: sealed *GlobalEnvFrame|
-//	                         +-------------------------------+
+//	                         envC has NO parent: it is a VIEW, and its store's
+//	                         sealed tier starts empty. A profile apply through
+//	                         envC.SealedWriteViewAt(0) is what fills it — which
+//	                         is why (environment '(wile console)) refuses
+//	                         namespace-undefine! on car and (environment
+//	                         '(scheme base)) allows it.
 //
 // # Interning delegation
 //
@@ -965,7 +940,11 @@ func (p *Namespace) NewChildNamespace(opts ...NamespaceOption) *Namespace {
 	if cfg.authorizerSet {
 		q.authorizer = cfg.authorizer
 	}
-	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
+	// One fresh, EMPTY store. Its sealed tier stays empty unless a profile apply
+	// fills it — the capability model verbatim, which is why (environment '(wile
+	// console)) refuses namespace-undefine! on car and (environment '(scheme base))
+	// allows it.
+	initOwner(q, NewGlobalEnvironmentFrame())
 	return q
 }
 
@@ -988,63 +967,60 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		parent:            p,
 	}
 
-	// R7RS scheme-report-environment is a frozen, INDEPENDENT snapshot (pre-carve it
-	// deep-copied the whole merged global). Copy BOTH the parent's sealed base (standard
-	// bindings: prims + sealed stdlib) and the parent's runtime (user defines made
-	// before this call) into q's OWN two-level stack via the shared wireRuntimeFrames
-	// topology. Pre-call user defines are visible, post-call ones are not, prims resolve
-	// for eval — and q aliases nothing (a set! inside the report env touches only its own
-	// copy). Syntax interning delegates through q → p via the Namespace.parent chain.
-	wireRuntimeFrames(q, p.sealedBase.global.Copy(), p.runtime.global.Copy())
+	// R7RS scheme-report-environment is a frozen, INDEPENDENT snapshot: one copy of
+	// the parent's whole store, coordinates and all. Standard bindings (prims +
+	// sealed stdlib) and pre-call user defines are visible, post-call ones are not,
+	// and q aliases nothing — a set! inside the report env touches only its own
+	// copy. Stable anchors ride the copy, so set! on one still refuses while a
+	// define-shadow stays legal. Syntax interning delegates through q → p via the
+	// Namespace.parent chain.
+	initOwner(q, p.Store().Copy())
 	return q
 }
 
 // NewChildRuntime creates a new library environment that shares this Namespace for
-// syntax interning, but has its own GlobalEnvironmentFrame and PhaseRegistry for
-// isolated bindings.
+// syntax interning, but is a full OWNER of its own: its own store and its own
+// PhaseRegistry, hence its own views. It returns the library's ROOT VIEW.
 //
-// The result has the SAME shape a namespace has: the full sealed axis
-// (newSealedAxisFrames) plus a mutable phase-0 child parented to its phase-0 seal.
-// The base holds the registry apply — primitives, bootstrap procedures, syntax
-// compilers — and the mutable child holds the library's own defines. The returned
-// frame is the mutable child.
+// The result has the SAME shape a namespace has, because it is built by the same
+// constructor. Its store's SEALED tier holds the registry apply — primitives,
+// bootstrap procedures, syntax compilers — and its mutable tier holds the library's
+// own defines, at whatever phase each was written.
 //
-// The phase-0 split is what this plan needed. A library's phase frames parent to the
-// base (phaseParent), so phase-1 library code reaches primitives and does NOT reach
-// the library's phase-0 defines — the hermeticity cut, matching the top level. A flat
-// frame could not express that: it held primitives and user defines together, so
-// there was no frame to reach that had the first without the second, and a for-syntax
-// body that lost the defines lost car and list with them. See
+// Phase separation is key disjointness in that store: a phase-1 read admits only
+// phase-1 and ambient slots, so library phase-1 code reaches primitives and does NOT
+// reach the library's phase-0 defines — the hermeticity cut, matching the top level.
+// A flat frame could not express that: it held primitives and user defines together,
+// so there was no way to see the first without the second, and a for-syntax body that
+// lost the defines lost car and list with them. See
 // plans/2026-08-04-library-phase-isolation-{design,impl}.local.md.
 //
-// The phase-1 seal comes along because the axis is not a menu. A library's bootstrap
-// macros and primitive expanders now land in its own sealedExpandBase rather than in
-// its mutable expand child, which is reachable by the same parent walk that already
-// makes the namespace case work (LookupPhaseBinding -> GetBinding), and which makes a
-// library-body define-syntax of a bootstrap name shadow rather than share a frame with
-// it. It fixes no known bug; it means sealedAxis describes every owner.
-//
-// Nothing else has to change to FILL either seal: LoadBootstrapCore already routes
-// the registry apply through env.SealedWriteViewAt(PhaseRuntime) and the
-// expanders through SealedWriteViewAt(PhaseExpand), and
-// registry.Apply's WithRuntimeTarget seats the binding in the target while the
-// ForeignClosure still captures the mutable frame, so a primitive resolves user code
-// against the library's own defines. Bootstrap macros reach the phase-1 seal by the
-// same route they do for a namespace: they compile with env == the phase-0 seal, and
-// AtPhase's sealed climb sends NextPhase() to the phase-1 seal.
+// Nothing else has to change to FILL the sealed tier: LoadBootstrapCore already
+// routes the registry apply through env.SealedWriteViewAt(PhaseRuntime) and the
+// expanders through SealedWriteViewAt(PhaseExpand), and registry.Apply's
+// WithRuntimeTarget seats the binding through the sealed-write view while the
+// ForeignClosure still captures the ordinary root view, so a primitive resolves user
+// code against the library's own defines. Bootstrap macros reach (1, sealed) by the
+// same route they do for a namespace: they compile with env == the sealed-write
+// root, and AtPhase's sealed climb sends NextPhase() to the phase-1 sealed-write
+// view.
 func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
-	seals := newSealedAxisFrames(p, newGlobalEnvironmentFrameForNamespaceAt(p, AnyPhase(), true))
 	q := &EnvironmentFrame{
-		parent:     seals[PhaseRuntime],
-		global:     newGlobalEnvironmentFrameForNamespace(p),
+		global:     NewGlobalEnvironmentFrame(),
 		phaseLevel: PhaseRuntime,
 		namespace:  p,
 	}
-	// newPhaseRegistryForChild wires phases on q and on every seal. That wiring is
-	// load-bearing here: AtPhase enters through TopLevel(), which is now the library's
-	// base rather than the mutable child, so a seal pointing at the shared root's
-	// registry would collapse the isolation this constructor exists to provide.
-	newPhaseRegistryForChild(p, q, seals)
+	// newPhaseRegistry wires phases on q and mints its sealed-write views over the
+	// same store. That wiring is load-bearing: AtPhase enters through TopLevel(), so
+	// a view pointing at the shared root's registry would collapse the isolation
+	// this constructor exists to provide.
+	//
+	// Note the owner argument: the library env SHARES p as its Namespace (that is
+	// what keeps syntax interning consistent), so p.runtime and p.sealedWriteRoot
+	// remain the ENGINE's views, not this library's. IsOwnerRoot therefore answers
+	// false here, which is what keeps a library body's cross-form define/set!
+	// mutable (R2).
+	newPhaseRegistry(p, q)
 	return q
 }
 
@@ -1081,151 +1057,55 @@ func (p *Namespace) SchemeString() string {
 	return "#<environment>"
 }
 
-// newGlobalEnvironmentFrameForNamespace creates a new GlobalEnvironmentFrame
-// for use within the given Namespace. The Namespace argument is retained
-// for symmetry with the other Namespace-scoped helpers; the
-// GlobalEnvironmentFrame itself does not store a back-reference (ownership
-// flows through EnvironmentFrame). Its coordinates are the default (exact
-// runtime, mutable) — see newGlobalEnvironmentFrameForNamespaceAt for the
-// sealed-axis mint sites, whose coordinates differ from that default.
-func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame {
-	return NewGlobalEnvironmentFrame()
-}
-
-// newGlobalEnvironmentFrameForNamespaceAt is newGlobalEnvironmentFrameForNamespace
-// with explicit coordinates, for the sealed-axis mint sites.
-func newGlobalEnvironmentFrameForNamespaceAt(_ *Namespace, phase PhaseKey, sealed bool) *GlobalEnvironmentFrame {
-	return NewGlobalEnvironmentFrameAt(phase, sealed)
-}
-
-// newSealedAxisFrames builds one immutable frame per sealedAxis row and returns them
-// keyed by phase. The first row is PhaseRuntime and becomes the graph root (parent
-// nil); every later row hangs off it.
+// newPhaseRegistry builds an owner's registry over its ROOT view: the phase-0
+// entry is that view, and the sealed-write views are minted here, one per
+// sealedAxis row, sharing the root view's store.
 //
-// That link stitches ONE ambient set together — the startup bindings, indexed by
-// phase — and is NOT a phase inheriting from a phase. Nothing here makes
-// phase N+1 resolve into phase N; phase environments are isolated, and the only
-// environment any of them inherits is this ambient set.
+// Both maps are immutable after construction (envs gains entries only through
+// GetOrCreate, under the lock), which is what lets sealedViewAt read with no lock
+// at all and createPhaseEnv read p.runtime's store while holding the write lock.
 //
-// BOTH owners of a sealed axis go through here: a Namespace (wireRuntimeFrames, which
-// then also stashes the two frames in its named fields so SealedBase and
-// SealedExpandBase keep working) and a library env (NewChildRuntime). They differ in
-// what gets APPLIED into the seals, never in which phases they seal. A per-owner
-// subset would leave sealedAxis describing only some owners, so that "is this
-// phase sealed?" needed a "for whom?" — the drift mustSeal existed to prevent,
-// one level up.
-//
-// sealedGlobal is the phase-0 seal's global, supplied by the caller because
-// NewSchemeReportNamespace hands over a COPY of its parent's rather than a fresh one.
-// Later rows always get a fresh global.
-func newSealedAxisFrames(ns *Namespace, sealedGlobal *GlobalEnvironmentFrame) map[Phase]*EnvironmentFrame {
-	q := make(map[Phase]*EnvironmentFrame, len(sealedAxis))
-	var base *EnvironmentFrame
+// It wires the phases field on every view it touches. That is not bookkeeping:
+// AtPhase enters through TopLevel(), so a view pointing at the wrong registry
+// would resolve a library's phases against the SHARED root's and collapse the
+// isolation NewChildRuntime exists to provide.
+func newPhaseRegistry(owner *Namespace, runtime *EnvironmentFrame) *PhaseRegistry {
+	q := &PhaseRegistry{
+		envs:        map[Phase]*EnvironmentFrame{PhaseRuntime: runtime},
+		owner:       owner,
+		runtime:     runtime,
+		sealedViews: make(map[Phase]*EnvironmentFrame, len(sealedAxis)),
+	}
 	for _, phase := range sealedAxis {
-		global := sealedGlobal
-		if base != nil {
-			global = newGlobalEnvironmentFrameForNamespaceAt(ns, ExactPhase(phase), true)
-		}
-		frame := &EnvironmentFrame{
-			parent:     base,
-			global:     global,
+		q.sealedViews[phase] = &EnvironmentFrame{
+			global:     runtime.global,
 			phaseLevel: phase,
-			namespace:  ns,
+			phases:     q,
+			namespace:  owner,
 			rank:       writeRankSealed,
 		}
-		if base == nil {
-			base = frame
-		}
-		q[phase] = frame
-	}
-	return q
-}
-
-// newPhaseRegistry builds a registry whose phase-0 entry is runtime and whose sealed
-// axis is seals. Both are immutable after construction, which is what lets phaseParent
-// read them under the write lock and ownsSealedAxis read them with no lock at all.
-//
-// It also wires each seal's phases field to this registry. That is not bookkeeping:
-// AtPhase enters through TopLevel(), which for every owner is now its phase-0 seal, so
-// a seal pointing at the wrong registry would resolve a library's phases against the
-// SHARED root's and collapse the isolation NewChildRuntime exists to provide.
-//
-// A nil frame under a declared phase panics HERE, which is where mustSeal's invariant
-// went when the axis moved off Namespace. "This phase has no seal" and "this phase
-// declares a seal that does not exist" must never be the same answer: read as merely
-// unsealed, every routing caller takes its mutable-frame fallback and lands a bootstrap
-// macro or a special-form expander somewhere a user can overwrite in place, surfacing
-// arbitrarily far away as a dead let-syntax with nothing naming the construction bug.
-// Absence is a missing KEY, and only phases with no sealedAxis row have one.
-func newPhaseRegistry(owner *Namespace, runtime *EnvironmentFrame, seals map[Phase]*EnvironmentFrame) *PhaseRegistry {
-	q := &PhaseRegistry{
-		envs:    map[Phase]*EnvironmentFrame{PhaseRuntime: runtime},
-		owner:   owner,
-		runtime: runtime,
-		seals:   seals,
-	}
-	for _, phase := range sealedAxis {
-		frame, ok := seals[phase]
-		if !ok || frame == nil {
-			panic(werr.WrapForeignErrorf(
-				werr.ErrUnexpectedNil,
-				"newPhaseRegistry: sealedAxis declares phase %s but this owner has no frame for it", phase,
-			))
-		}
-		frame.phases = q
 	}
 	runtime.phases = q
 	return q
 }
 
-// newPhaseRegistryForNamespace creates a new PhaseRegistry owned by the given
-// Namespace, over the sealed frames wireRuntimeFrames already built.
-func newPhaseRegistryForNamespace(ns *Namespace, seals map[Phase]*EnvironmentFrame) *PhaseRegistry {
-	return newPhaseRegistry(ns, ns.runtime, seals)
-}
-
-// initRuntimeFrame builds the per-Engine runtime layer for a freshly-constructed
-// namespace: a fresh sealed-base global (primitives + sealed stdlib are applied into it
-// later) and the caller-supplied mutableGlobal for the user runtime. Runtime() returns
-// the mutable child; SealedBase() returns the parent. The two-frame topology and phase
-// wiring live in wireRuntimeFrames.
-func initRuntimeFrame(ns *Namespace, mutableGlobal *GlobalEnvironmentFrame) {
-	wireRuntimeFrames(ns, newGlobalEnvironmentFrameForNamespaceAt(ns, AnyPhase(), true), mutableGlobal)
-}
-
-// wireRuntimeFrames builds the two-level phase-0 stack and its shared PhaseRegistry: an
-// immutable sealed-base frame (parent nil, sealedGlobal) parented by a mutable runtime
-// frame (mutableGlobal). It is the single source of truth for the sealed-base/mutable-
-// runtime topology and phase wiring; initRuntimeFrame and NewSchemeReportNamespace differ
-// ONLY in whether the two globals are fresh (engine construction) or copied from a parent
-// (the frozen scheme-report snapshot).
+// initOwner wires a freshly-constructed Namespace around ONE store: the root view
+// (mutable, phase 0) that Runtime() returns, its rank-sealed twin that bootstrap
+// and registry application write through, and the registry that caches every
+// other view over the same store.
 //
-// Order matters: newSealedAxisFrames runs first because ns.runtime parents to the phase-0
-// seal, and newPhaseRegistryForNamespace runs last because it reads ns.runtime. Every seal
-// shares the same PhaseRegistry (ns.phases) so AtPhase/Expand/Compile resolve identically
-// whether reached from the mutable child or a seal — a seal is reached only via the parent
-// walk during global resolution.
-func wireRuntimeFrames(ns *Namespace, sealedGlobal, mutableGlobal *GlobalEnvironmentFrame) {
-	// One builder, every owner, every row. The named fields below are a CONVENIENCE
-	// for SealedBase/SealedExpandBase and the accessors that read them; the axis
-	// itself is the map, and the registry is what routing consults.
-	seals := newSealedAxisFrames(ns, sealedGlobal)
-	ns.sealedBase = seals[PhaseRuntime]
-	ns.sealedExpandBase = seals[PhaseExpand]
+// Every constructor differs only in where the store comes from — fresh for an
+// engine or a child namespace, a copy of the parent's for the frozen
+// scheme-report snapshot.
+func initOwner(ns *Namespace, store *GlobalEnvironmentFrame) {
 	ns.runtime = &EnvironmentFrame{
-		parent:     ns.sealedBase,
-		global:     mutableGlobal,
+		global:     store,
 		phaseLevel: PhaseRuntime,
 		namespace:  ns,
 	}
-	// newPhaseRegistry wires phases on the runtime frame and on every seal.
-	ns.phases = newPhaseRegistryForNamespace(ns, seals)
-}
-
-// newPhaseRegistryForChild creates a PhaseRegistry for a library env, which shares a
-// Namespace. Unlike newPhaseRegistryForNamespace it does NOT read ns.runtime, which
-// belongs to the parent. The axis it declares is the same one — see
-// newSealedAxisFrames.
-func newPhaseRegistryForChild(ns *Namespace, runtime *EnvironmentFrame, seals map[Phase]*EnvironmentFrame) *PhaseRegistry {
-	return newPhaseRegistry(ns, runtime, seals)
+	ns.phases = newPhaseRegistry(ns, ns.runtime)
+	// A named alias into the registry's view cache, for IsOwnerRoot. The registry
+	// is the authority; this field only spares that predicate a map lookup on the
+	// compile path.
+	ns.sealedWriteRoot = ns.phases.sealedViews[PhaseRuntime]
 }

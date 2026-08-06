@@ -191,86 +191,56 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 	if ns == nil {
 		return nil
 	}
-	phases := ns.Phases()
-	phaseIndices := phases.Phases()
 
 	seen := make(map[string]bool)
 	var q []DocSearchResult
 
-	collect := func(frame *environment.EnvironmentFrame) {
-		if frame == nil {
-			return
+	// One pass over the owner store, every live slot at every phase and rank.
+	// Before the fold this was a walk over each phase frame plus each sealed frame,
+	// which are all views over this one store now — repeating the same enumeration
+	// once per view and deduping the result. LiveSlots states the filter instead of
+	// reconstructing it from a frame list.
+	//
+	// Search is name-oriented and dedupes by name: a name owning several slots
+	// (bindings distinguished by hygiene scope set, or by phase) is reported once,
+	// by whichever slot the enumeration reaches first, since they share a docstring
+	// audience.
+	for _, slot := range ns.Store().LiveSlots() {
+		name := slot.Name.Key
+		if seen[name] {
+			continue
 		}
-		global := frame.GlobalEnvironment()
-		if global == nil {
-			return
-		}
-		// Keys() and Bindings() are separate locked snapshots. A concurrent
-		// define could add a key whose index exceeds the bindings snapshot
-		// length. The idx < len(bindings) guard below prevents a panic;
-		// the skipped entry is acceptable for a best-effort search.
-		keys := global.Keys()
-		bindings := global.Bindings()
-		for sym, slots := range keys {
-			name := sym.Key
-			if seen[name] || len(slots) == 0 {
-				continue
-			}
-			seen[name] = true
+		seen[name] = true
 
-			// Search is name-oriented and already dedupes by name, so the first
-			// slot represents the name. A name can now own several slots (bindings
-			// distinguished by hygiene scope set), but they share a docstring
-			// audience.
-			idx := slots[0]
-
-			doc := ""
-			if idx < len(bindings) {
-				bnd := bindings[idx]
-				if bnd == nil {
-					continue
-				}
-				doc = bnd.Doc()
-				if doc == "" && bnd.BindingType() == environment.BindingTypeVariable {
-					dc, ok := bnd.Value().(interface{ Doc() string })
-					if ok {
-						doc = dc.Doc()
-					}
-				}
-			}
-
-			category := ""
-			var keywords []string
-			displayDoc := doc
-			if doc != "" {
-				parsed := docparse.ParseDocstring(doc)
-				if parsed.HasStructuredMetadata() {
-					category = parsed.Category
-					keywords = parsed.Keywords
-					displayDoc = parsed.Doc
-				}
-			}
-
-			if matchesDoc(name, doc, category, keywords, lowerPattern) {
-				q = append(q, DocSearchResult{
-					Name:     name,
-					Doc:      displayDoc,
-					Category: category,
-					Keywords: keywords,
-				})
+		bnd := slot.Binding
+		doc := bnd.Doc()
+		if doc == "" && bnd.BindingType() == environment.BindingTypeVariable {
+			dc, ok := bnd.Value().(interface{ Doc() string })
+			if ok {
+				doc = dc.Doc()
 			}
 		}
-	}
 
-	for _, phase := range phaseIndices {
-		collect(phases.Get(phase))
-	}
-	// No sealed frame is a phase-registry entry — each is reached only through the
-	// parent chain — so the phase walk above never sees one. Enumerate the whole
-	// sealed axis or their names and docs vanish from ,apropos, mirroring
-	// Namespace.BoundNamesAcrossPhases.
-	for _, frame := range ns.SealedFrames() {
-		collect(frame)
+		category := ""
+		var keywords []string
+		displayDoc := doc
+		if doc != "" {
+			parsed := docparse.ParseDocstring(doc)
+			if parsed.HasStructuredMetadata() {
+				category = parsed.Category
+				keywords = parsed.Keywords
+				displayDoc = parsed.Doc
+			}
+		}
+
+		if matchesDoc(name, doc, category, keywords, lowerPattern) {
+			q = append(q, DocSearchResult{
+				Name:     name,
+				Doc:      displayDoc,
+				Category: category,
+				Keywords: keywords,
+			})
+		}
 	}
 
 	return q

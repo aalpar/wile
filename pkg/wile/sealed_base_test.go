@@ -22,6 +22,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
 	valuestest "github.com/aalpar/wile/pkg/values/valuestest"
 	"github.com/aalpar/wile/pkg/werr"
@@ -73,13 +74,11 @@ func TestSealedBase_CaptureSafeAnchorsAreStable(t *testing.T) {
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	qt.Assert(t, err, qt.IsNil)
 	defer func() { qt.Assert(t, eng.Close(), qt.IsNil) }()
-	base := eng.Environment().Namespace().SealedBase()
+	store := eng.Environment().Namespace().Store()
 	for _, name := range []string{"car", "+", "zero?", "not", "null?", "pair?"} {
 		t.Run(name, func(t *testing.T) {
-			gi := base.GlobalEnvironment().GetGlobalIndex(values.NewSymbol(name))
-			qt.Assert(t, gi, qt.IsNotNil) // owned by the sealed base
-			bnd := base.GetGlobalBinding(gi)
-			qt.Assert(t, bnd, qt.IsNotNil)
+			bnd := store.SealedBindingAt(values.NewSymbol(name), values.EmptyScopes(), environment.PhaseRuntime)
+			qt.Assert(t, bnd, qt.IsNotNil)          // owned by the sealed tier
 			qt.Assert(t, bnd.IsStable(), qt.IsTrue) // trusted anchor for the reclaim classifier
 		})
 	}

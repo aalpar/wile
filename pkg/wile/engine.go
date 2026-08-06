@@ -1299,17 +1299,8 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 		return
 	}
 
-	// Post-carve, Scheme-defined bootstrap procedures with structured docstrings live in
-	// the sealed base, not the mutable runtime child (which is empty at bootstrap time).
-	// Read the sealed base so their docs are indexed; reading the mutable child's own
-	// frame (ns.Phases().Get(0)) would silently drop every stdlib procedure doc (G2).
-	base, ok := ns.SealedAt(environment.PhaseRuntime)
-	if !ok {
-		return
-	}
-
-	// Skip flat library frames (NewChildRuntime): they share the root namespace, so this
-	// base is the ROOT's sealed base — already indexed at root bootstrap, and
+	// Skip library env frames (NewChildRuntime): they share the root namespace, so
+	// ns.Store() here is the ROOT's store — already indexed at root bootstrap, and
 	// AddDocOnlyPrimitive dedups the re-add anyway. applyBaseEnvironment runs once per
 	// (import ...), so without this guard every import re-parses ~all root docstrings for
 	// nothing (E3).
@@ -1317,18 +1308,15 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 		return
 	}
 
-	global := base.GlobalEnvironment()
-	keys := global.Keys()
-	bindings := global.Bindings()
-
-	for sym, slots := range keys {
-		// Doc registration is name-oriented; a name can now own several slots
-		// (bindings distinguished by hygiene scope set), so take the first.
-		if len(slots) == 0 || slots[0] >= len(bindings) {
-			continue
-		}
-		bnd := bindings[slots[0]]
-		if bnd == nil || bnd.BindingType() != environment.BindingTypeVariable {
+	// Scheme-defined bootstrap procedures with structured docstrings live in the
+	// SEALED tier, not the mutable one (which is empty at bootstrap time). The rank
+	// filter is the whole query; enumerating the mutable tier too would index
+	// nothing extra at bootstrap and would drift into indexing user defines later
+	// (G2).
+	for _, slot := range ns.Store().SealedSlots() {
+		sym := slot.Name
+		bnd := slot.Binding
+		if bnd.BindingType() != environment.BindingTypeVariable {
 			continue
 		}
 

@@ -92,46 +92,47 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 	qt.Assert(t, phases, qt.DeepEquals, []Phase{PhaseTemplate, PhaseRuntime, PhaseExpand, PhaseCompile})
 }
 
-func TestPhaseRegistry_PhaseEnvParentsToSealedBase(t *testing.T) {
-	topLevel := NewNamespaceFrame() // ns.runtime
-	sealedBase := topLevel.Namespace().SealedBase()
-	sealedExpandBase := topLevel.Namespace().SealedExpandBase()
+func TestPhaseRegistry_PhaseEnvIsAParentlessView(t *testing.T) {
+	topLevel := NewNamespaceFrame() // ns.runtime — the owner root view
+	store := topLevel.Namespace().Store()
 
 	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
 	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
-
-	// Phase 1 (expand) parents to the sealed EXPAND base (D1), which in turn parents to
-	// the phase-0 sealed base — the new middle frame. Bootstrap macros/expanders live in
-	// sealedExpandBase, immutable, while a user define-syntax shadows in this mutable
-	// child. Every other phase parents straight to the phase-0 sealed base (hermetic),
-	// NOT the mutable runtime frame — confirming the carve is phase-1-only.
-	qt.Assert(t, phase1.Parent(), qt.Equals, sealedExpandBase)     // was: sealedBase
-	qt.Assert(t, sealedExpandBase.Parent(), qt.Equals, sealedBase) // NEW middle frame
-	qt.Assert(t, phase2.Parent(), qt.Equals, sealedBase)           // unchanged (phase-1-only radius)
-	qt.Assert(t, phase1.Parent(), qt.Not(qt.Equals), topLevel)
-
-	// Climbing-tower hermeticity: higher phases created on demand (the climb adds
-	// HIGHER siblings) must ALSO parent to the frozen sealed base, never to a lower
-	// phase frame — the climb must never reintroduce a phase->phase parent edge. Only
-	// phase 1 carves; phases 2/3/5 stay on the phase-0 sealed base.
+	// Higher phases created on demand by the climbing tower.
 	phase3 := topLevel.phases.GetOrCreate(3)
 	phase5 := topLevel.phases.GetOrCreate(5)
-	qt.Assert(t, phase3.Parent(), qt.Equals, sealedBase)
-	qt.Assert(t, phase5.Parent(), qt.Equals, sealedBase)
-	qt.Assert(t, phase3.Parent(), qt.Not(qt.Equals), phase2)
-	qt.Assert(t, phase5.Parent(), qt.Not(qt.Equals), phase3)
+
+	// Every phase is a VIEW over the one owner store, with no lexical parent: the
+	// layer edges a phase frame used to climb (its seal, then the phase-0 seal) are
+	// gone, and with them any chance of the climb reintroducing a phase->phase edge.
+	// Hermeticity is now key disjointness in the store, asserted behaviorally by
+	// TestPhaseRegistry_ExpandPhaseIsHermetic below.
+	for _, view := range []*EnvironmentFrame{phase1, phase2, phase3, phase5} {
+		qt.Assert(t, view.Parent(), qt.IsNil)
+		qt.Assert(t, view.GlobalEnvironment(), qt.Equals, store)
+		qt.Assert(t, view.IsTopLevel(), qt.IsTrue)
+	}
+	qt.Assert(t, topLevel.GlobalEnvironment(), qt.Equals, store)
 }
 
-func TestPhaseRegistry_PhaseEnvHasOwnGlobal(t *testing.T) {
+// The sealed-write views are the same store at the same phase, with the rank that
+// sends a write into the sealed tier. They are distinct frames from the ordinary
+// views, which is what lets AtPhase's climb keep a bootstrap define-syntax sealed.
+func TestPhaseRegistry_SealedViewsShareTheStore(t *testing.T) {
 	topLevel := NewNamespaceFrame()
+	store := topLevel.Namespace().Store()
 
-	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
-	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
+	for _, phase := range sealedAxis {
+		view, ok := topLevel.phases.sealedViewAt(phase)
+		qt.Assert(t, ok, qt.IsTrue, qt.Commentf("phase %s", phase))
+		qt.Assert(t, view.GlobalEnvironment(), qt.Equals, store, qt.Commentf("phase %s", phase))
+		qt.Assert(t, view.PhaseLevel(), qt.Equals, phase, qt.Commentf("phase %s", phase))
+		qt.Assert(t, view.rank, qt.Equals, writeRankSealed, qt.Commentf("phase %s", phase))
+		qt.Assert(t, view, qt.Not(qt.Equals), topLevel.AtPhase(phase), qt.Commentf("phase %s", phase))
+	}
 
-	// Each phase has its own GlobalEnvironmentFrame
-	qt.Assert(t, phase1.GlobalEnvironment(), qt.Not(qt.Equals), topLevel.GlobalEnvironment())
-	qt.Assert(t, phase2.GlobalEnvironment(), qt.Not(qt.Equals), topLevel.GlobalEnvironment())
-	qt.Assert(t, phase2.GlobalEnvironment(), qt.Not(qt.Equals), phase1.GlobalEnvironment())
+	_, ok := topLevel.phases.sealedViewAt(PhaseCompile)
+	qt.Assert(t, ok, qt.IsFalse)
 }
 
 func TestPhaseRegistry_Concurrent(t *testing.T) {
@@ -203,9 +204,10 @@ func TestPhaseRegistry_ExpandPhaseIsHermetic(t *testing.T) {
 	userSym := values.NewSymbol("user-x")
 	ns.Runtime().MaybeCreateOwnGlobalBinding(userSym, BindingTypeVariable, nil)
 
-	// A base binding lands in the frozen sealed base (the taproot).
+	// A startup binding lands in the ambient (sealed) tier, written through the
+	// sealed-write root view.
 	baseSym := values.NewSymbol("base-y")
-	ns.SealedBase().MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
+	ns.Runtime().SealedWriteViewAt(PhaseRuntime).MaybeCreateOwnGlobalBinding(baseSym, BindingTypeVariable, nil)
 
 	// Hermeticity: phase 1 must NOT see the phase-0 user define...
 	qt.Assert(t, expand.GetBinding(userSym, values.AllScopes()), qt.IsNil)

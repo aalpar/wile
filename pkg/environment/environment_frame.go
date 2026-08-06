@@ -266,11 +266,15 @@ func (p *EnvironmentFrame) IsTopLevel() bool {
 	return p.parent == nil
 }
 
-// TopLevel returns the top-level environment frame in the hierarchy.
+// TopLevel returns the frame the lexical parent chain terminates at: the PHASE
+// VIEW this frame's scope chain hangs from. Views have no parent — the store
+// fold removed the layer edges the chain used to climb — so this is a purely
+// structural "which top level am I under" walk.
 //
-// After the layered-environment carve this is the namespace's immutable SEALED
-// BASE, not the user global. Use MutableRuntime() for the frame where user
-// defines land.
+// It answers "the owner's view at MY phase", not "where user defines land":
+// under a phase-1 lexical chain it is the phase-1 view, and under a bootstrap
+// closure it is the sealed-write root. Use MutableRuntime() when the question is
+// the namespace's user global.
 func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 	frame := p
 	for frame.parent != nil {
@@ -283,13 +287,14 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
 // Negative phases (e.g., -1 for for-template) are also supported.
 //
-// A climb rooted at a SEALED frame stays on the sealed axis wherever the target
-// phase seals handlers; every other receiver, and every phase with no seal,
-// resolves through the shared PhaseRegistry. That is what routes a bootstrap-macro
-// define-syntax (compiled with env == sealedBase, so NextPhase() lands here at
-// phase 1) into sealedExpandBase, while user code (env == the mutable runtime)
-// lands in the mutable expand child. Above phase 1 no seal exists, so a transformer
-// body that defines a macro climbs off the sealed axis.
+// A climb rooted at a SEALED-WRITE view stays sealed wherever the target phase has
+// a sealed-write view of its own; every other receiver, and every phase without
+// one, resolves through the shared PhaseRegistry. That is what routes a
+// bootstrap-macro define-syntax (compiled with env == the sealed-write root, so
+// NextPhase() lands here at phase 1) into the phase-1 sealed-write view, while user
+// code (env == the ordinary root view) writes the mutable tier. Above phase 1 there
+// is no sealed-write view, so a transformer body that defines a macro climbs off
+// the sealed axis.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
@@ -300,7 +305,7 @@ func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
 	// write mode instead of topology. It asks the frame's OWN registry: the rows
 	// are the same for every owner, the frames are not.
 	if phase > p.phaseLevel && p.rank == writeRankSealed && p.phases != nil {
-		sealed, ok := p.phases.sealAt(phase)
+		sealed, ok := p.phases.sealedViewAt(phase)
 		if ok {
 			return sealed
 		}
@@ -321,21 +326,21 @@ func (p *EnvironmentFrame) PhaseLevel() Phase {
 }
 
 // Runtime returns the runtime phase environment (phase 0).
-// This is the mutable user top level where normal bindings live; it is the
-// lexical child of the namespace's sealed base.
+// This is the mutable user top level where normal bindings live: the owner's ROOT
+// VIEW, whose writes land in the mutable tier at phase 0.
 func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
 	return p.AtPhase(PhaseRuntime)
 }
 
-// MutableRuntime returns the per-Engine MUTABLE runtime global of this frame's
+// MutableRuntime returns the per-Engine MUTABLE runtime view of this frame's
 // namespace — the user top level where user defines land and where eval/load and
-// SRFI-18 threads store top-level state. It is the lexical CHILD of the immutable
-// sealed base; resolution from it reaches sealed primitives via the parent walk.
+// SRFI-18 threads store top-level state. Its writes land in the mutable tier at
+// phase 0; a read through it still reaches sealed primitives, by tier order.
 //
 // Use this, NOT TopLevel(), when a primitive needs the frame for user-visible
-// top-level mutations: after the layered-environment carve TopLevel() returns the
-// immutable sealed-base root (home of the optimizer's Stable anchors), so storing a
-// user define or thread state through TopLevel() would target the frozen base. This
+// top-level mutations: TopLevel() answers "whichever view this lexical chain hangs
+// from", which under a phase-1 chain or a bootstrap closure is not the user global
+// at all, so storing a user define or thread state through it would miss. This
 // names the recurring intent that was previously spelled `.Namespace().Runtime()` at
 // every call site. (It resolves the namespace's runtime, which for a flat library
 // frame is the engine's mutable global rather than the library's own transient frame —
@@ -542,44 +547,36 @@ func (p *EnvironmentFrame) resolveLocal(
 	return nil
 }
 
-// resolveGlobal walks global bindings up the parent chain.
-// The visitor receives the frame and slot index for each matching key.
-// Returns the first non-nil visitor result.
-// Thread-safe: uses RLock for each frame's global keys/bindings access.
-// Within a frame the best scope-set match wins (Flatt's maximal resolution);
-// across frames the first frame yielding any match wins, which is what preserves
-// shadowing of a sealed-base binding by a user redefinition.
+// resolveGlobal resolves a global binding visible from this frame and hands the
+// store and slot to the visitor.
+//
+// One ranked probe replaces the parent-chain walk this used to be: every frame
+// of an owner shares the one store, so the layers the walk visited are now tiers
+// in it, and the walk's ordering (first frame wins, maximal cardinality within
+// one) is the probe's (rank-major, cardinality-minor). Incidentally this stops
+// re-hashing the same map once per lexical depth — consecutive frames always
+// shared the .global pointer.
 //
 // A wildcard query (q.IsAll) selects any binding of the name regardless of
-// scopes. It is NOT the same as the empty-set query: a reference written outside
-// any macro expansion must not reach a binder introduced inside one.
+// scopes, taking the highest tier's first live slot. It is NOT the same as the
+// empty-set query: a reference written outside any macro expansion must not
+// reach a binder introduced inside one.
+//
+// The RLock is released by defer because the probe can panic mid-hold on an
+// ambiguous binding (P8).
 func (p *EnvironmentFrame) resolveGlobal(
 	key values.Symbol,
 	q syntax.ScopeSet,
 	visitor func(frame *GlobalEnvironmentFrame, slot int) any,
 ) any {
-	ge := p
-	for {
-		// Lock this frame's global environment for reading
-		ge.global.mu.RLock()
-		i, ok := ge.global.bestSlotLocked(key, q)
-		if ok {
-			// Call visitor while holding lock - visitor may access bindings[i]
-			result := visitor(ge.global, i)
-			ge.global.mu.RUnlock()
-			if result != nil {
-				return result
-			}
-		} else {
-			ge.global.mu.RUnlock()
-		}
+	p.global.mu.RLock()
+	defer p.global.mu.RUnlock()
 
-		if ge.IsTopLevel() {
-			break
-		}
-		ge = ge.parent
+	i, ok := p.global.resolveRankedLocked(key, q, p.phaseLevel)
+	if !ok {
+		return nil
 	}
-	return nil
+	return visitor(p.global, i)
 }
 
 // GetBinding returns the binding for the given symbol that matches the
@@ -838,17 +835,100 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 	return nil
 }
 
-// MaybeCreateOwnGlobalBinding creates a new global binding in the current
-// global environment if it does not already exist.
-// Delegates to GlobalEnvironmentFrame.CreateGlobalBinding.
+// writeCoordinates derives the store coordinates a write through this view lands
+// at: a sealed write at phase 0 is the ambient set — (ANY, sealed), the startup
+// bindings every phase reaches — and every other write is exact-phase at the
+// view's rank.
+//
+// This is where the pre-fold topology went. The phase-0 seal's global was minted
+// ambient and the phase-1 seal's exact, because a phase frame's parent chain ran
+// through the phase-0 seal and no further; the same fact is now one branch here.
+func (p *EnvironmentFrame) writeCoordinates() (PhaseKey, bool) {
+	sealed := p.rank == writeRankSealed
+	if sealed && p.phaseLevel == PhaseRuntime {
+		return AnyPhase(), true
+	}
+	return ExactPhase(p.phaseLevel), sealed
+}
+
+// MaybeCreateOwnGlobalBinding creates a new global binding in the owner store at
+// THIS view's coordinates if it does not already exist there.
 // It returns the GlobalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
 //
-// scopes become part of the binding's identity in the frame; a nil set is the
-// ordinary user-written top-level define.
+// scopes become part of the binding's identity; a nil set is the ordinary
+// user-written top-level define. Coordinates are the other half of that identity
+// (see CreateGlobalBindingAt): a phase-0 define of a sealed name is a new slot,
+// a define-for-syntax over the expand-phase registry copy is the same slot.
 func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
-	// Delegate to GlobalEnvironmentFrame's thread-safe method
-	return p.global.CreateGlobalBinding(key, bt, scopes)
+	phase, sealed := p.writeCoordinates()
+	return p.global.CreateGlobalBindingAt(key, bt, scopes, phase, sealed)
+}
+
+// OwnGlobalIndex returns a PINNED GlobalIndex for the binding of key that
+// resolves under q at THIS view's own write coordinates, or nil if there is
+// none.
+//
+// This is the write path's re-resolve — "the binding I just created here" — and
+// it is deliberately NOT the ranked read. Over one merged store a scoped read of
+// a name that exists both sealed and mutable is answered by tier order; a
+// coordinate-blind scoped lookup instead takes the first-seen of two equally
+// unscoped candidates, so a top-level (define car …) would stamp the SEALED
+// car's metadata and then refuse itself as a redefine of a Stable anchor.
+func (p *EnvironmentFrame) OwnGlobalIndex(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
+	phase, sealed := p.writeCoordinates()
+	p.global.mu.RLock()
+	defer p.global.mu.RUnlock()
+
+	i, ok := p.global.resolveAtCoordsLocked(*key, q, phase, sealed)
+	if !ok {
+		return nil
+	}
+	return newScopeKeyedGlobalIndex(key, p.global, i, q)
+}
+
+// DeleteOwnGlobal removes the binding of sym that a scoped read at THIS view's
+// own coordinates resolves to, returning whether one was removed.
+//
+// Coordinates rather than tier order, for the reason DeleteBindingAt gives: a
+// ranked delete through the mutable runtime view would reach the sealed
+// primitive whenever no user shadow existed.
+func (p *EnvironmentFrame) DeleteOwnGlobal(sym *values.Symbol, scopes []*syntax.Scope) bool {
+	phase, sealed := p.writeCoordinates()
+	return p.global.DeleteBindingAt(sym, scopes, phase, sealed)
+}
+
+// SetDeferredGlobalValue writes through a DEFERRED index (Env == nil): the
+// compile-time-unbound define/set! fallback. It resolves in the MUTABLE tier at
+// this frame's phase and nowhere else.
+//
+// The restriction is G13 preserved, not new caution. Before the fold this wrote
+// through the executing frame's OWN global, which held exactly the mutable
+// layer, so a name-resolved write could never land on a sealed slot. The merged
+// store holds the sealed tiers that walk could not reach, and a ranked resolve
+// here would let set! of an unshadowed primitive name mutate the sealed entry in
+// place under WithMutableTopLevel — where nothing is Stable to refuse it — a
+// behavior change and a P1 breach. A PINNED index is a different question and
+// keeps its reach (machine_context.go's other branch).
+func (p *EnvironmentFrame) SetDeferredGlobalValue(gi *GlobalIndex, v values.Value) error {
+	return p.global.setValueAtCoords(gi.Index, gi.query, ExactPhase(p.phaseLevel), false, v)
+}
+
+// IsOwnerRoot reports whether this frame is one of its NAMESPACE's own root
+// views — the mutable root or the sealed-write root.
+//
+// This is the honest form of the old (ns.Runtime() == p.env || ns.SealedBase()
+// == p.env) comparison: the immutable-top-level define gate must fire for user
+// top-level compilation AND for bootstrap compilation through the sealed-write
+// view (that path is what stamps Stable onto bootstrap procedures — the
+// optimizer's anchors), and must NOT fire for a library env's root views, which
+// share the namespace pointer but are different frames (a library body keeps
+// cross-form define/set! mutable, R2).
+func (p *EnvironmentFrame) IsOwnerRoot() bool {
+	if p.namespace == nil {
+		return false
+	}
+	return p == p.namespace.runtime || p == p.namespace.sealedWriteRoot
 }
 
 // DefineOwnGlobal creates (or reuses) the binding for key under scopes in this
@@ -868,15 +948,12 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) error {
 	p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
 
-	// Re-resolve under the creation key. CreateGlobalBinding hands back a
-	// DEFERRED index carrying neither frame nor scopes, which the write path
-	// would resolve wildcard.
-	gi := p.global.GetGlobalIndexWithScopes(key, syntax.ScopesOf(scopes))
-	if gi == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"DefineOwnGlobal: binding %q not found after creation", key.Key)
-	}
-	err := p.global.SetOwnGlobalValue(gi, v)
+	// Re-resolve under the creation key AND at the creation coordinates.
+	// CreateGlobalBindingAt hands back a DEFERRED index carrying neither frame
+	// nor scopes, which the write path would resolve wildcard; and over one
+	// merged store even a scoped resolve must be told which tier it wrote into.
+	phase, sealed := p.writeCoordinates()
+	err := p.global.setValueAtCoords(key, syntax.ScopesOf(scopes), phase, sealed, v)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "DefineOwnGlobal: write to %q failed after creation", key.Key)
 	}

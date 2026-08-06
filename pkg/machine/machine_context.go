@@ -542,7 +542,7 @@ func (p *MachineContext) Run() error {
 			if gi.Env != nil {
 				err = gi.Env.SetOwnGlobalValue(gi, val)
 			} else {
-				err = mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
+				err = mc.env.SetDeferredGlobalValue(gi, val)
 			}
 			if err != nil {
 				return mc.WrapError(ErrBindingNotFound,

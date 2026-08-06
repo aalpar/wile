@@ -83,19 +83,21 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// The scope set is the CREATION key, not a post-stamp. Creation dedupes with
 	// scopeSetsEqual, so creating under nil compares against the EMPTY set and a
 	// macro-introduced {intro} keyword reuses — then re-stamps — a pre-existing
-	// empty-scoped binding. Address the write with a scope-resolved index for the
-	// same reason: the index creation returns is name-only, so a following read
-	// re-resolves to the first live slot of that name, which need not be the slot
-	// just created.
+	// empty-scoped binding. Address the write at the writing view's OWN coordinates
+	// for the same reason: the index creation returns is name-only, so a following
+	// read re-resolves to the first live slot of that name, which need not be the
+	// slot just created — and a RANKED read would prefer a same-named mutable entry
+	// when this view is the sealed-write one (a bootstrap macro), writing the
+	// transformer into a slot a user can overwrite in place.
 	symbolScopes := keywordSym.Scopes()
 	expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
-	globalIndex := expandEnv.GetGlobalIndexWithScopes(keyword, syntax.ScopesOf(symbolScopes))
+	globalIndex := expandEnv.OwnGlobalIndex(keyword, syntax.ScopesOf(symbolScopes))
 	if globalIndex == nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: failed to create or find binding for %s", keyword.Key))
 	}
 
 	// Docstring only — the scope set is now the creation key, not a post-stamp.
-	binding := expandEnv.GetGlobalBinding(globalIndex)
+	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
 	if binding != nil && docstring != "" {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {
 			m.Doc = docstring

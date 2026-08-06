@@ -338,15 +338,16 @@ func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveI
 	// off the calling frame instead would answer nil on a frame the walk could
 	// still have resolved.
 	runtime := mc.EnvironmentFrame().MutableRuntimeOrNil()
-	// The mutable runtime PARENTS the sealed base, so this one lookup already
-	// covers the un-imported case: with no (import (scheme base)) to shadow it,
-	// GetBinding walks through to the sealed base's copy.
+	// The ranked probe from the runtime view already covers the un-imported case:
+	// with no (import (scheme base)) to shadow it, the read falls through the empty
+	// mutable tier to the sealed one.
 	q := recognizedBinding(runtime, sym, identity)
 	if q == nil && runtime != nil {
-		// Reached only when the mutable layer holds something that is NOT this
-		// primitive — a user shadow. Address the sealed base directly so the
-		// shadow cannot suppress the real answer.
-		q = recognizedBinding(runtime.Namespace().SealedBase(), sym, identity)
+		// Reached only when the mutable tier holds something that is NOT this
+		// primitive — a user shadow. Ask the SEALED tiers directly so the shadow
+		// cannot suppress the real answer.
+		sealed := runtime.Namespace().Store().SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
+		q = recognizedValue(sealed, identity)
 	}
 	if q == nil {
 		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
@@ -368,7 +369,14 @@ func recognizedBinding(env *environment.EnvironmentFrame, sym *values.Symbol, id
 	if env == nil {
 		return nil
 	}
-	binding := env.GetBinding(sym, values.EmptyScopes())
+	return recognizedValue(env.GetBinding(sym, values.EmptyScopes()), identity)
+}
+
+// recognizedValue is recognizedBinding's decision half, split out for the
+// sealed-tier fallback, which addresses a binding by store query rather than by
+// resolving in a frame. Same rule: nil means NONE — no binding, or one holding
+// something other than this primitive.
+func recognizedValue(binding *environment.Binding, identity *machine.PrimitiveIdentity) values.Value {
 	if binding == nil {
 		return nil
 	}

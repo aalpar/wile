@@ -20,123 +20,160 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// A library env is a TWO-LEVEL phase-0 stack, the same shape a namespace has:
-// an immutable base (registry apply) parented by a mutable child (the library's
-// own defines). The split is what lets a library phase frame reach primitives
-// without reaching phase-0 user defines.
+// A library env is a full OWNER: its own store, its own registry, its own views.
+// It shares the caller's Namespace (that is what keeps syntax interning
+// consistent) and nothing else, which is what gives a library body its own
+// bindings while still reaching primitives.
 //
-// See plans/2026-08-04-library-phase-isolation-impl.local.md Task 3.
-func TestChildRuntimeOwnsItsOwnSealedAxis(t *testing.T) {
+// See plans/2026-08-04-library-phase-isolation-impl.local.md Task 3 and
+// plans/2026-08-05-flat-binding-model-design.local.md §4.6.
+func TestChildRuntimeOwnsItsOwnStore(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	lib := ns.NewChildRuntime()
 
-	// The mutable child is no longer the structural root; its base is.
-	c.Assert(lib.IsTopLevel(), qt.IsFalse)
-	c.Assert(lib.Parent(), qt.IsNotNil)
-	c.Assert(lib.Parent().IsTopLevel(), qt.IsTrue)
-	c.Assert(lib.Parent().PhaseLevel(), qt.Equals, PhaseRuntime)
+	// A view, so a structural root: no lexical parent to walk.
+	c.Assert(lib.IsTopLevel(), qt.IsTrue)
+	c.Assert(lib.Parent(), qt.IsNil)
+	c.Assert(lib.PhaseLevel(), qt.Equals, PhaseRuntime)
 
-	// The base is the LIBRARY's, not the shared namespace's.
-	c.Assert(lib.Parent(), qt.Not(qt.Equals), ns.SealedBase())
+	// The store is the LIBRARY's, not the shared namespace's.
+	c.Assert(lib.GlobalEnvironment(), qt.Not(qt.Equals), ns.Store())
 	c.Assert(lib.Namespace(), qt.Equals, ns)
 
-	// The base shares the library's phase registry, so AtPhase — which enters
-	// through TopLevel(), now the base — resolves to the LIBRARY's phases and
-	// not the shared root's.
-	c.Assert(lib.Parent().phases, qt.Equals, lib.phases)
+	// It is not one of the namespace's root views, which is what keeps a library
+	// body's cross-form define/set! mutable (R2).
+	c.Assert(lib.IsOwnerRoot(), qt.IsFalse)
+	c.Assert(ns.Runtime().IsOwnerRoot(), qt.IsTrue)
+
+	// Its own phase registry, so AtPhase resolves to the LIBRARY's views.
 	c.Assert(lib.AtPhase(PhaseExpand), qt.Not(qt.Equals), ns.AtPhase(PhaseExpand))
+	c.Assert(lib.AtPhase(PhaseExpand).phases, qt.Equals, lib.phases)
 }
 
-// Every library phase frame parents onto the library's SEALED axis — never onto the
-// mutable frame below it. That is the hermeticity cut; before it, a library's phase-1
-// frame parented to its own phase-0 frame, which is why a for-syntax body could see
-// the library's runtime defines.
-//
-// A phase with a seal of its own parents to that seal; a phase without one parents to
-// the phase-0 seal rather than to the phase below it, which is the climbing-tower
-// invariant that the mutable axis introduces no phase->phase edge. Both rules are the
-// namespace's, unchanged — that is the point.
-func TestChildRuntimePhaseFramesParentToItsSealedAxis(t *testing.T) {
+// Every library phase view shares the library's ONE store, exactly as a
+// namespace's do. Hermeticity is key disjointness in that store — a phase-N read
+// admits only phase-N and ambient slots — not a parent link that skips the
+// mutable frame, so there is no per-phase global to diverge from the namespace's
+// shape.
+func TestChildRuntimePhaseViewsShareItsStore(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	lib := ns.NewChildRuntime()
-	base, _ := lib.phases.sealAt(PhaseRuntime)
-	expandBase, _ := lib.phases.sealAt(PhaseExpand)
+	store := lib.GlobalEnvironment()
 
-	c.Assert(lib.AtPhase(PhaseExpand).Parent(), qt.Equals, expandBase)
-	c.Assert(lib.AtPhase(PhaseCompile).Parent(), qt.Equals, base)
-	c.Assert(lib.AtPhase(Phase(3)).Parent(), qt.Equals, base)
+	for _, phase := range []Phase{PhaseExpand, PhaseCompile, Phase(3)} {
+		view := lib.AtPhase(phase)
+		c.Assert(view.GlobalEnvironment(), qt.Equals, store, qt.Commentf("phase %s", phase))
+		c.Assert(view.Parent(), qt.IsNil, qt.Commentf("phase %s", phase))
+		c.Assert(view.PhaseLevel(), qt.Equals, phase, qt.Commentf("phase %s", phase))
+	}
 
-	// Same shape on the namespace side, so a divergence shows up here rather than as
-	// a library-only behaviour difference nobody thought to test for.
-	c.Assert(ns.AtPhase(PhaseExpand).Parent(), qt.Equals, ns.SealedExpandBase())
-	c.Assert(ns.AtPhase(PhaseCompile).Parent(), qt.Equals, ns.SealedBase())
+	// Same shape on the namespace side, so a divergence shows up here rather than
+	// as a library-only behaviour difference nobody thought to test for.
+	c.Assert(ns.AtPhase(PhaseExpand).GlobalEnvironment(), qt.Equals, ns.Store())
+	c.Assert(ns.AtPhase(PhaseCompile).GlobalEnvironment(), qt.Equals, ns.Store())
 }
 
-// A library env declares the WHOLE sealed axis, not a subset of it. An owner
-// choosing which rows to build would make sealedAxis describe only some owners, so
-// that "is this phase sealed?" needed a "for whom?". The routing answers
-// below are therefore structurally identical to a namespace's, differing only in
-// WHICH frames they name — which is the assertion the loop makes directly.
+// A library env mints the WHOLE sealed axis of sealed-write views, not a subset.
+// An owner choosing which rows to build would make sealedAxis describe only some
+// owners, so that "does this phase have a sealed-write view?" needed a "for
+// whom?". The answers below are structurally identical to a namespace's,
+// differing only in WHICH views they name.
 func TestChildRuntimeMirrorsTheWholeSealedAxis(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	lib := ns.NewChildRuntime()
 
 	for _, phase := range sealedAxis {
-		libSeal, libOK := lib.phases.sealAt(phase)
-		nsSeal, nsOK := ns.phases.sealAt(phase)
+		libView, libOK := lib.phases.sealedViewAt(phase)
+		nsView, nsOK := ns.phases.sealedViewAt(phase)
 		c.Assert(libOK, qt.Equals, nsOK, qt.Commentf("phase %s", phase))
 		c.Assert(libOK, qt.IsTrue, qt.Commentf("phase %s", phase))
-		c.Assert(libSeal, qt.Not(qt.Equals), nsSeal, qt.Commentf("phase %s", phase))
+		c.Assert(libView, qt.Not(qt.Equals), nsView, qt.Commentf("phase %s", phase))
+		// A sealed-write view is the same store at the same phase, differing only
+		// in the rank its writes stamp.
+		c.Assert(libView.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment(), qt.Commentf("phase %s", phase))
+		c.Assert(libView.rank, qt.Equals, writeRankSealed, qt.Commentf("phase %s", phase))
 	}
 
-	base, _ := lib.phases.sealAt(PhaseRuntime)
-	expandBase, _ := lib.phases.sealAt(PhaseExpand)
-	c.Assert(base, qt.Equals, lib.Parent())
-	c.Assert(expandBase.Parent(), qt.Equals, base)
-
+	base, _ := lib.phases.sealedViewAt(PhaseRuntime)
+	expandBase, _ := lib.phases.sealedViewAt(PhaseExpand)
 	c.Assert(lib.SealedWriteViewAt(PhaseRuntime), qt.Equals, base)
 	c.Assert(lib.SealedWriteViewAt(PhaseExpand), qt.Equals, expandBase)
-	// Whether an expand-phase primitive lands in the seal or the mutable expand
-	// child is no longer askable here — that placement is registry.Apply's
-	// phaseTargets (apply.go), not the sealed axis.
+	// Whether an expand-phase primitive lands sealed or mutable is not askable
+	// here — that placement is registry.Apply's phaseTargets (apply.go), which
+	// writes through the ordinary expand view.
 	c.Assert(lib.SealedWriteViewAt(PhaseCompile), qt.Equals, lib.Compile())
 }
 
-// A bootstrap macro compiled against a library's phase-0 seal must land in that
-// library's phase-1 seal, by the same AtPhase climb a namespace uses. This is the
-// path loadBootstrapMacros takes (LoadBootstrapCore hands it the SealedWriteViewAt
-// result as its target), so getting it wrong puts a library's bootstrap macros in a
-// frame that a library-body define-syntax shares rather than shadows.
-func TestChildRuntimeSealedClimbReachesItsExpandSeal(t *testing.T) {
+// A sealed write at phase 0 lands at the AMBIENT coordinate — visible from every
+// phase — while every other sealed write is exact-phase. That single branch in
+// writeCoordinates is where the pre-fold topology went: the phase-0 seal's global
+// was ambient because every phase frame's parent chain ran through it, and the
+// phase-1 seal's was exact because none ran through that one.
+func TestSealedWriteCoordinates(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+
+	phase, sealed := ns.Runtime().writeCoordinates()
+	c.Assert(sealed, qt.IsFalse)
+	c.Assert(phase, qt.Equals, ExactPhase(PhaseRuntime))
+
+	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseRuntime).writeCoordinates()
+	c.Assert(sealed, qt.IsTrue)
+	c.Assert(phase, qt.Equals, AnyPhase())
+
+	phase, sealed = ns.Runtime().SealedWriteViewAt(PhaseExpand).writeCoordinates()
+	c.Assert(sealed, qt.IsTrue)
+	c.Assert(phase, qt.Equals, ExactPhase(PhaseExpand))
+
+	phase, sealed = ns.AtPhase(PhaseExpand).writeCoordinates()
+	c.Assert(sealed, qt.IsFalse)
+	c.Assert(phase, qt.Equals, ExactPhase(PhaseExpand))
+}
+
+// A bootstrap macro compiled against a library's phase-0 sealed-write view must
+// land in that library's phase-1 sealed-write view, by the same AtPhase climb a
+// namespace uses. This is the path loadBootstrapMacros takes (LoadBootstrapCore
+// hands it the SealedWriteViewAt result as its target), so getting it wrong puts
+// a library's bootstrap macros where a library-body define-syntax shares a slot
+// with them rather than shadowing.
+func TestChildRuntimeSealedClimbReachesItsExpandView(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	lib := ns.NewChildRuntime()
-	base, _ := lib.phases.sealAt(PhaseRuntime)
-	expandBase, _ := lib.phases.sealAt(PhaseExpand)
+	base, _ := lib.phases.sealedViewAt(PhaseRuntime)
+	expandBase, _ := lib.phases.sealedViewAt(PhaseExpand)
 
 	c.Assert(base.NextPhase(), qt.Equals, expandBase)
 	// The climb never rewrites a lookup at or below the receiver's own level.
 	c.Assert(base.AtPhase(PhaseRuntime), qt.Equals, lib)
-	// Above the axis there is no seal, so it falls through to the mutable frame.
+	// Above the axis there is no sealed-write view, so it falls through to the
+	// ordinary phase view.
 	c.Assert(expandBase.AtPhase(PhaseCompile), qt.Equals, lib.Compile())
 }
 
-// The sealed-routing discriminator is "does this frame own its registry's phase-0
-// slot", not "is it its namespace's runtime". An inner lexical frame shares its
-// parent's registry and must NOT route, or a binding registered against a lambda
-// body would land in the seal.
-func TestOwnsSealedAxisDiscriminates(t *testing.T) {
+// SealedWriteViewAt asks the receiver's REGISTRY, so every frame of an owner —
+// including an inner lexical frame that shares the registry — is answered with
+// that owner's sealed-write view. The pre-fold form additionally required the
+// receiver to BE the registry's phase-0 entry and otherwise returned the receiver
+// itself; that guard existed to keep a registration off a seal frame, and with
+// rank carried by the view there is no frame identity left to protect. Every
+// production caller passes an owner root either way.
+func TestSealedWriteViewAtAsksTheRegistry(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
+	sealedRoot, _ := ns.phases.sealedViewAt(PhaseRuntime)
 
-	c.Assert(ns.Runtime().ownsSealedAxis(), qt.IsTrue)
-	c.Assert(ns.NewChildRuntime().ownsSealedAxis(), qt.IsTrue)
-	c.Assert(ns.SealedBase().ownsSealedAxis(), qt.IsFalse)
+	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
+	c.Assert(ns.NewChildRuntime().SealedWriteViewAt(PhaseRuntime).rank, qt.Equals, writeRankSealed)
 
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(1), ns.Runtime())
-	c.Assert(inner.ownsSealedAxis(), qt.IsFalse)
-	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, inner)
+	c.Assert(inner.SealedWriteViewAt(PhaseRuntime), qt.Equals, sealedRoot)
+
+	// A frame with no registry at all has nothing to ask, so it falls back to its
+	// own view at that phase.
+	detached := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+	c.Assert(detached.SealedWriteViewAt(PhaseRuntime), qt.Equals, detached)
 }

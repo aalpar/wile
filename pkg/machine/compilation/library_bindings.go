@@ -604,7 +604,7 @@ func installImportedBinding(
 	_, created := env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
 
 	own := env.GlobalEnvironment()
-	idx := own.GetGlobalIndexWithScopes(localSym, syntax.EmptyScopes())
+	idx := env.OwnGlobalIndex(localSym, syntax.EmptyScopes())
 	if idx == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
 			"import: binding %q vanished immediately after creation%s", localSym.Key, phaseContext)

@@ -100,12 +100,12 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		return err
 	}
 
-	// Store the result in the expand phase environment with BindingTypeVariable
-	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable, nil)
-	if globalIndex == nil {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: failed to create binding for %s", nameSym.Key))
-	}
-	err = expandEnv.SetOwnGlobalValue(globalIndex, result)
+	// Store the result in the expand phase environment with BindingTypeVariable.
+	// DefineOwnGlobal, not create-then-write-through-the-returned-index: that index
+	// is deferred and wildcard, so over the merged store it would resolve to the
+	// name's first live slot at ANY coordinates — for a name the registry also
+	// installs at phase 0 (car), the SEALED one.
+	err = expandEnv.DefineOwnGlobal(nameSym, environment.BindingTypeVariable, nil, result)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key))
 	}

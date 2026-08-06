@@ -244,11 +244,10 @@ func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
 	qt.Assert(t, env.Compile(), qt.Not(qt.Equals), env.Expand())
 }
 
-// TestEnvironmentFrame_MutableRuntime pins the MutableRuntime() contract: it returns the
-// namespace's mutable runtime global (the user top level) — equal to Namespace().Runtime(),
-// the chain it replaced — and is DISTINCT from TopLevel(), which post-carve returns the
-// immutable sealed-base root. This is the named alternative to the .Namespace().Runtime()
-// band-aid; calling TopLevel() where MutableRuntime() is meant would target the frozen base.
+// TestEnvironmentFrame_MutableRuntime pins the MutableRuntime() contract: it returns
+// the namespace's ROOT VIEW (the user top level) from any frame of the namespace,
+// including a phase view and the sealed-write root, whose own TopLevel() is itself.
+// This is the named alternative to the .Namespace().Runtime() band-aid.
 func TestEnvironmentFrame_MutableRuntime(t *testing.T) {
 	ns := NewNamespace()
 	runtime := ns.Runtime()
@@ -256,12 +255,17 @@ func TestEnvironmentFrame_MutableRuntime(t *testing.T) {
 	qt.Assert(t, runtime.MutableRuntime(), qt.Equals, ns.Runtime())
 	qt.Assert(t, runtime.MutableRuntime(), qt.Equals, runtime.Namespace().Runtime())
 
-	// Distinct from the sealed-base root that TopLevel() returns after the carve.
-	qt.Assert(t, runtime.MutableRuntime() != runtime.TopLevel(), qt.IsTrue)
-	qt.Assert(t, runtime.TopLevel(), qt.Equals, ns.SealedBase())
+	// Views have no lexical parent, so TopLevel() from the root view is the root view.
+	qt.Assert(t, runtime.TopLevel(), qt.Equals, runtime)
 
-	// Reached from the sealed base too, it still resolves to the one mutable child.
-	qt.Assert(t, ns.SealedBase().MutableRuntime(), qt.Equals, ns.Runtime())
+	// Reached from a phase view or the sealed-write root, it still resolves to the one
+	// root view — those views' own TopLevel() answers are themselves.
+	expand := ns.Expand()
+	qt.Assert(t, expand.MutableRuntime(), qt.Equals, ns.Runtime())
+	qt.Assert(t, expand.TopLevel(), qt.Equals, expand)
+	sealedRoot := runtime.SealedWriteViewAt(PhaseRuntime)
+	qt.Assert(t, sealedRoot.MutableRuntime(), qt.Equals, ns.Runtime())
+	qt.Assert(t, sealedRoot != runtime, qt.IsTrue)
 }
 
 // TestEnvironmentFrame_MutableRuntimeOrNil covers the nil-returning counterpart to
@@ -312,31 +316,26 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, compile, qt.IsNotNil)
 	qt.Assert(t, compile.PhaseLevel(), qt.Equals, PhaseCompile)
 
-	// Each phase should have its own environment
+	// Each phase is a distinct VIEW...
 	qt.Assert(t, runtime, qt.Not(qt.Equals), expand)
 	qt.Assert(t, runtime, qt.Not(qt.Equals), compile)
 	qt.Assert(t, expand, qt.Not(qt.Equals), compile)
 
-	// Expand and Compile have their own GlobalEnvironmentFrame
-	qt.Assert(t, expand.GlobalEnvironment(), qt.Not(qt.Equals), runtime.GlobalEnvironment())
-	qt.Assert(t, compile.GlobalEnvironment(), qt.Not(qt.Equals), expand.GlobalEnvironment())
+	// ...over the ONE owner store. Phase separation is key disjointness in that
+	// store, not a separate map per phase.
+	qt.Assert(t, expand.GlobalEnvironment(), qt.Equals, topLevel.Namespace().Store())
+	qt.Assert(t, compile.GlobalEnvironment(), qt.Equals, topLevel.Namespace().Store())
+	qt.Assert(t, runtime.GlobalEnvironment(), qt.Equals, topLevel.Namespace().Store())
 
-	// Phase environments parent to the frozen sealed base (hermetic), skipping the
-	// mutable runtime frame: a phase-1/2 lookup cannot see phase-0 user defines. Phase 1
-	// (expand) parents one level further, to the sealed EXPAND base (D1), which parents to
-	// the phase-0 sealed base; phase 2 (compile) parents straight to the sealed base.
-	qt.Assert(t, expand.Parent(), qt.Equals, topLevel.Namespace().SealedExpandBase())
-	qt.Assert(t, expand.Parent().Parent(), qt.Equals, topLevel.Namespace().SealedBase())
-	qt.Assert(t, compile.Parent(), qt.Equals, topLevel.Namespace().SealedBase())
-
-	// After the sealed-base carve, TopLevel() returns the structural root — the
-	// immutable sealed base that parents the mutable runtime — from any frame.
-	sealedBase := topLevel.Namespace().SealedBase()
-	qt.Assert(t, sealedBase, qt.IsNotNil)
-	qt.Assert(t, sealedBase.IsTopLevel(), qt.IsTrue)
-	qt.Assert(t, runtime.TopLevel(), qt.Equals, sealedBase)
-	qt.Assert(t, expand.TopLevel(), qt.Equals, sealedBase)
-	qt.Assert(t, compile.TopLevel(), qt.Equals, sealedBase)
+	// Views have no lexical parent — the layer edges the fold removed — so each is
+	// its own structural root.
+	qt.Assert(t, runtime.Parent(), qt.IsNil)
+	qt.Assert(t, expand.Parent(), qt.IsNil)
+	qt.Assert(t, compile.Parent(), qt.IsNil)
+	qt.Assert(t, runtime.IsTopLevel(), qt.IsTrue)
+	qt.Assert(t, runtime.TopLevel(), qt.Equals, runtime)
+	qt.Assert(t, expand.TopLevel(), qt.Equals, expand)
+	qt.Assert(t, compile.TopLevel(), qt.Equals, compile)
 
 	// Phase accessors should be cached (same instance returned)
 	qt.Assert(t, topLevel.Runtime(), qt.Equals, runtime)

@@ -1524,10 +1524,9 @@ func TestRunDispatch_OpPopEnv_TopLevel(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendInstruction(Instruction{Op: OpPopEnv})
 
-	// The sealed base is the true parent-nil root post-carve; the mutable runtime now
-	// parents to it, so OpPopEnv on the runtime would succeed. Pop the sealed base to
-	// exercise the nil-parent error path.
-	env := environment.NewNamespace().SealedBase()
+	// Every owner VIEW is parent-nil post-fold, so popping the root view exercises
+	// the nil-parent error path directly.
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 

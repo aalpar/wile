@@ -68,10 +68,10 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 }
 
 func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
-	// Table-off-axis invariant: syntax compilers register into the taproot
-	// (sealed base), NOT the phase-2 compile frame, so they are reachable
-	// uniformly from every phase. Pre-relocation they lived only in Compile(),
-	// so the expand phase could not see them and the phase-2 own frame held them.
+	// Table-off-axis invariant: syntax compilers register into the AMBIENT tier,
+	// NOT at phase 2, so they are reachable uniformly from every phase.
+	// Pre-relocation they lived only in Compile(), so the expand phase could not see
+	// them and only the phase-2 frame held them.
 	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
@@ -79,14 +79,15 @@ func TestSyntaxCompilersAmbientAcrossPhases(t *testing.T) {
 	ns := env.Namespace()
 	sym := values.NewSymbol("syntax-case")
 
-	// The compiler binding lives in the frozen taproot's own frame.
-	qt.Assert(t, ns.SealedBase().GlobalEnvironment().GetGlobalIndex(sym), qt.IsNotNil)
+	// The compiler binding sits at the ambient (sealed) coordinate.
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	qt.Assert(t, sealedRoot.OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNotNil)
 
-	// It is NOT stored in the phase-2 (compile) frame's own global — the leak the
-	// relocation closes.
-	qt.Assert(t, ns.Compile().GlobalEnvironment().GetGlobalIndex(sym), qt.IsNil)
+	// It is NOT at (2, mutable) — the leak the relocation closes.
+	qt.Assert(t, ns.Compile().OwnGlobalIndex(sym, values.EmptyScopes()), qt.IsNil)
 
-	// Ambient: reachable via the parent chain from runtime, expand, and compile.
+	// Ambient: reachable by a read at every phase, which is what the ANY coordinate
+	// means.
 	qt.Assert(t, ns.Runtime().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
 	qt.Assert(t, ns.Expand().GetBinding(sym, values.AllScopes()), qt.IsNotNil)
 	qt.Assert(t, ns.Compile().GetBinding(sym, values.AllScopes()), qt.IsNotNil)

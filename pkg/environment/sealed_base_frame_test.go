@@ -90,89 +90,100 @@ func TestCharacterization_UserDefineShadowsPrimitive(t *testing.T) {
 	}
 }
 
-// TestCharacterization_RuntimeFrameTopology pins the post-carve topology: Runtime()
-// is the mutable child; SealedBase() is the structural root (parent nil). This is the
-// inversion of the pre-carve assertion (Runtime() was the root) — the carve is a
-// visible, deliberate topology change.
-func TestCharacterization_RuntimeFrameTopology(t *testing.T) {
+// TestCharacterization_OwnerViewTopology pins the post-fold topology: Runtime() is
+// the owner's ROOT VIEW, a structural root with no lexical parent, and the
+// sealed-write root is a DISTINCT view over the SAME store. This is the second
+// inversion of this assertion — pre-carve Runtime() was the root, post-carve the
+// sealed base was, and post-fold there is one store with two roles over it.
+func TestCharacterization_OwnerViewTopology(t *testing.T) {
 	ns := environment.NewNamespace()
-	qt.Assert(t, ns.Runtime().IsTopLevel(), qt.IsFalse)      // parent is the sealed base now
-	qt.Assert(t, ns.SealedBase().IsTopLevel(), qt.IsTrue)    // sealed base is the true root
-	qt.Assert(t, ns.Runtime() != ns.SealedBase(), qt.IsTrue) // distinct frames
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+
+	qt.Assert(t, ns.Runtime().IsTopLevel(), qt.IsTrue)
+	qt.Assert(t, ns.Runtime().Parent(), qt.IsNil)
+	qt.Assert(t, sealedRoot.IsTopLevel(), qt.IsTrue)
+	qt.Assert(t, ns.Runtime() != sealedRoot, qt.IsTrue)
+	qt.Assert(t, sealedRoot.GlobalEnvironment(), qt.Equals, ns.Store())
+	qt.Assert(t, ns.Runtime().GlobalEnvironment(), qt.Equals, ns.Store())
+
+	// Both are the namespace's own root views, which is the predicate the
+	// immutable-top-level define gate keys on.
+	qt.Assert(t, ns.Runtime().IsOwnerRoot(), qt.IsTrue)
+	qt.Assert(t, sealedRoot.IsOwnerRoot(), qt.IsTrue)
+	qt.Assert(t, ns.Expand().IsOwnerRoot(), qt.IsFalse)
 }
 
-// TestSealedBase_PrimitivesLiveInSealedBase verifies a core Go primitive binding is
-// OWNED by the sealed base (present in its OWN global frame) and ABSENT from the mutable
-// runtime's OWN frame — so a user (define car ...) shadows via created=true. Uses the
-// non-walking, non-mutating GlobalEnvironmentFrame.GetGlobalIndex own-frame probe.
-func TestSealedBase_PrimitivesLiveInSealedBase(t *testing.T) {
+// TestSealedTier_PrimitivesAreSealedNotMutable verifies a core Go primitive binding
+// is owned by the SEALED tier and absent from the mutable tier at phase 0 — so a
+// user (define car ...) creates a new slot (created=true) that shadows it rather
+// than rebinding it in place. OwnGlobalIndex is the coordinate-exact probe: it asks
+// each view for a binding at that view's OWN coordinates, with no tier ranking.
+func TestSealedTier_PrimitivesAreSealedNotMutable(t *testing.T) {
 	ns := testhelpers.NewBootstrappedNamespace(t)
 	carSym := values.NewSymbol("car")
 
-	inRuntime := ns.Runtime().GlobalEnvironment().GetGlobalIndex(carSym)
-	inSealed := ns.SealedBase().GlobalEnvironment().GetGlobalIndex(carSym)
+	inMutable := ns.Runtime().OwnGlobalIndex(carSym, values.EmptyScopes())
+	sealed := ns.Store().IsSealedBindingAt(carSym, values.EmptyScopes(), environment.PhaseRuntime)
 
-	qt.Assert(t, inRuntime, qt.IsNil)   // absent from the mutable runtime's own frame → a define here shadows
-	qt.Assert(t, inSealed, qt.IsNotNil) // present in the sealed base's own frame
+	qt.Assert(t, inMutable, qt.IsNil) // nothing at (0, mutable) → a define here shadows
+	qt.Assert(t, sealed, qt.IsTrue)   // an ambient read at phase 0 lands on a sealed slot
 }
 
-// TestSealedBase_BootstrapProcedureInSealedBase verifies a Scheme-defined bootstrap
-// procedure (caar) lands in the sealed base, not the mutable runtime — so a later
+// TestSealedTier_BootstrapProcedureIsSealed verifies a Scheme-defined bootstrap
+// procedure (caar) lands in the sealed tier, not the mutable one — so a later
 // (import (scheme cxr)) re-export or user redefine is a shadow, not a Stable rebind.
-func TestSealedBase_BootstrapProcedureInSealedBase(t *testing.T) {
+func TestSealedTier_BootstrapProcedureIsSealed(t *testing.T) {
 	ns := testhelpers.NewBootstrappedNamespace(t)
 	caarSym := values.NewSymbol("caar")
 
-	inRuntime := ns.Runtime().GlobalEnvironment().GetGlobalIndex(caarSym)
-	inSealed := ns.SealedBase().GlobalEnvironment().GetGlobalIndex(caarSym)
+	inMutable := ns.Runtime().OwnGlobalIndex(caarSym, values.EmptyScopes())
+	sealed := ns.Store().IsSealedBindingAt(caarSym, values.EmptyScopes(), environment.PhaseRuntime)
 
-	qt.Assert(t, inRuntime, qt.IsNil)   // shadowable (absent from mutable runtime's own frame)
-	qt.Assert(t, inSealed, qt.IsNotNil) // owned by the sealed base
+	qt.Assert(t, inMutable, qt.IsNil)
+	qt.Assert(t, sealed, qt.IsTrue)
 }
 
-// TestSealedExpandBase_BootstrapMacroLivesInSealedExpandBase verifies a Scheme-defined
-// bootstrap macro (cond) lands in the sealed EXPAND base (phase 1), not the mutable expand
-// child — the phase-1 analogue of TestSealedBase_BootstrapProcedureInSealedBase (D1). A
-// later top-level (define-syntax cond …) is thus a shadow in the mutable child, not an
-// in-place overwrite of the pinned bootstrap macro (closes the #1 stability leg).
-func TestSealedExpandBase_BootstrapMacroLivesInSealedExpandBase(t *testing.T) {
+// TestSealedTier_BootstrapMacroIsSealedAtPhaseOne verifies a Scheme-defined bootstrap
+// macro (cond) lands at (1, sealed), not (1, mutable) — the phase-1 analogue of
+// TestSealedTier_BootstrapProcedureIsSealed (D1). A later top-level (define-syntax
+// cond …) is thus a new slot in the mutable tier, not an in-place overwrite of the
+// pinned bootstrap macro (closes the #1 stability leg).
+func TestSealedTier_BootstrapMacroIsSealedAtPhaseOne(t *testing.T) {
 	ns := testhelpers.NewBootstrappedNamespace(t)
 	condSym := values.NewSymbol("cond")
 
-	// Own-frame probe (no parent walk): the mutable expand child vs. the sealed expand base.
-	inMutableExpand := ns.Runtime().Expand().GlobalEnvironment().GetGlobalIndex(condSym)
-	inSealedExpand := ns.SealedExpandBase().GlobalEnvironment().GetGlobalIndex(condSym)
+	mutableExpand := ns.Runtime().Expand()
+	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
 
-	qt.Assert(t, inMutableExpand, qt.IsNil)   // shadowable (absent from the mutable expand child's own frame)
-	qt.Assert(t, inSealedExpand, qt.IsNotNil) // owned by the sealed expand base
+	qt.Assert(t, mutableExpand.OwnGlobalIndex(condSym, values.EmptyScopes()), qt.IsNil)
+	qt.Assert(t, sealedExpand.OwnGlobalIndex(condSym, values.EmptyScopes()), qt.IsNotNil)
 }
 
-// TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase verifies a special-form
-// primitive expander (let-syntax) lands in the sealed EXPAND base after the D3 retarget, not
-// the mutable expand child. This is what makes a user (define-syntax let-syntax …) a clean
-// shadow instead of an in-place corruption of the installed expander (closes #3), while
-// keeping the expander — a compile-time handler — off the phase-0 value frame (so it cannot
-// leak into runtime value resolution).
-func TestSealedExpandBase_SpecialFormExpanderLivesInSealedExpandBase(t *testing.T) {
+// TestSealedTier_SpecialFormExpanderIsSealedAtPhaseOne verifies a special-form
+// primitive expander (let-syntax) lands at (1, sealed) after the D3 retarget. That is
+// what makes a user (define-syntax let-syntax …) a clean shadow instead of an in-place
+// corruption of the installed expander (closes #3), while keeping the expander — a
+// compile-time handler — out of the AMBIENT tier, where runtime value resolution would
+// reach it.
+func TestSealedTier_SpecialFormExpanderIsSealedAtPhaseOne(t *testing.T) {
 	ns := testhelpers.NewBootstrappedNamespace(t)
 	letSyntaxSym := values.NewSymbol("let-syntax")
 
-	inMutableExpand := ns.Runtime().Expand().GlobalEnvironment().GetGlobalIndex(letSyntaxSym)
-	inSealedExpand := ns.SealedExpandBase().GlobalEnvironment().GetGlobalIndex(letSyntaxSym)
-	inSealedBase := ns.SealedBase().GlobalEnvironment().GetGlobalIndex(letSyntaxSym)
+	mutableExpand := ns.Runtime().Expand()
+	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
 
-	qt.Assert(t, inMutableExpand, qt.IsNil)   // shadowable (absent from the mutable expand child)
-	qt.Assert(t, inSealedExpand, qt.IsNotNil) // owned by the sealed expand base (phase 1)
-	qt.Assert(t, inSealedBase, qt.IsNil)      // NOT on the phase-0 value frame (no runtime-value leak)
+	qt.Assert(t, mutableExpand.OwnGlobalIndex(letSyntaxSym, values.EmptyScopes()), qt.IsNil)
+	qt.Assert(t, sealedExpand.OwnGlobalIndex(letSyntaxSym, values.EmptyScopes()), qt.IsNotNil)
+	qt.Assert(t, sealedRoot.OwnGlobalIndex(letSyntaxSym, values.EmptyScopes()), qt.IsNil)
 }
 
-// TestSealedExpandBaseConstructionInvariant asserts every namespace-building entry point
-// wires a non-nil sealedExpandBase parented to the sealed base at phase 1. newPhaseRegistry
-// panics rather than degrading when a declared row has no frame, so a builder that forgets
-// it must fail HERE — loudly — not silently degrade the expand-phase seal to the mutable
-// frame (the WithStableBasePrimitives
-// profile-child divergence is the cautionary precedent for an unenforced construction step).
-func TestSealedExpandBaseConstructionInvariant(t *testing.T) {
+// TestSealedWriteViewConstructionInvariant asserts every namespace-building entry
+// point mints the phase-1 sealed-write view over its own store. A builder that
+// forgot it would silently degrade the expand-phase seal to the mutable tier (the
+// WithStableBasePrimitives profile-child divergence is the cautionary precedent for
+// an unenforced construction step).
+func TestSealedWriteViewConstructionInvariant(t *testing.T) {
 	root := environment.NewNamespace()
 	builders := []struct {
 		name string
@@ -184,19 +195,20 @@ func TestSealedExpandBaseConstructionInvariant(t *testing.T) {
 	}
 	for _, b := range builders {
 		t.Run(b.name, func(t *testing.T) {
-			seb := b.ns.SealedExpandBase()
-			qt.Assert(t, seb, qt.IsNotNil)
-			qt.Assert(t, seb.Parent(), qt.Equals, b.ns.SealedBase())
-			qt.Assert(t, seb.PhaseLevel(), qt.Equals, environment.PhaseExpand)
+			view := b.ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
+			qt.Assert(t, view, qt.IsNotNil)
+			qt.Assert(t, view.GlobalEnvironment(), qt.Equals, b.ns.Store())
+			qt.Assert(t, view.PhaseLevel(), qt.Equals, environment.PhaseExpand)
+			qt.Assert(t, view, qt.Not(qt.Equals), b.ns.Expand())
 		})
 	}
 }
 
 // TestBoundNamesAcrossPhases verifies the all-phases name walk that backs
-// Engine.BoundNames and REPL completion: it must span the sealed base (so
-// primitives like car and bootstrap procedures like caar appear, not just the
-// mutable runtime's own frame), return sorted output, and deduplicate names that
-// occur in more than one frame.
+// Engine.BoundNames and REPL completion: it must span the sealed tier (so
+// primitives like car and bootstrap procedures like caar appear, not just user
+// defines), return sorted output, and deduplicate names that occur at more than one
+// coordinate.
 func TestBoundNamesAcrossPhases(t *testing.T) {
 	ns := testhelpers.NewBootstrappedNamespace(t)
 	names := ns.BoundNamesAcrossPhases()
@@ -211,124 +223,60 @@ func TestBoundNamesAcrossPhases(t *testing.T) {
 		seen[n] = true
 	}
 
-	// Sealed-base coverage: car is a Go primitive, caar a Scheme bootstrap
-	// procedure — both live in the sealed base, not the mutable runtime's own
-	// frame, so a runtime-only walk would miss them.
+	// Sealed-tier coverage: car is a Go primitive, caar a Scheme bootstrap
+	// procedure — both live in the sealed tier, so a mutable-only walk would miss
+	// them.
 	qt.Assert(t, seen["car"], qt.IsTrue, qt.Commentf("primitive car must appear"))
 	qt.Assert(t, seen["caar"], qt.IsTrue, qt.Commentf("bootstrap caar must appear"))
 }
 
-// TestSealedAxisTable pins the phase model that SealedAt states: sealing is a
-// property of the phase alone. Whether an expand-phase primitive lands in the
-// seal or the mutable expand child is no longer a question this table can ask —
-// that placement is registry.Apply's phaseTargets (apply.go), not the sealed
-// axis. Change a cell here only alongside a deliberate model change.
-func TestSealedAxisTable(t *testing.T) {
-	ns := environment.NewNamespace()
-	cases := []struct {
-		name   string
-		phase  environment.Phase
-		want   *environment.EnvironmentFrame
-		sealed bool
-	}{
-		{"runtime", environment.PhaseRuntime, ns.SealedBase(), true},
-		{"expand", environment.PhaseExpand, ns.SealedExpandBase(), true},
-		{"compile", environment.PhaseCompile, nil, false},
-		{"template", environment.PhaseTemplate, nil, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			frame, sealed := ns.SealedAt(c.phase)
-			qt.Assert(t, sealed, qt.Equals, c.sealed)
-			qt.Assert(t, frame, qt.Equals, c.want)
-		})
-	}
-}
-
-// TestSealedAxisIsEnumerableAndReachable pins the two structural properties the sealed
-// axis has to hold at once, because a seal that fails either is invisible in a way
-// nothing else reports:
-//
-//   - ENUMERABLE. No sealed frame is a PhaseRegistry entry, so a walk over phase frames
-//     misses it. A seal absent from SealedFrames vanishes from ,apropos and REPL
-//     completion rather than failing.
-//   - REACHABLE. A seal nothing parents to resolves nothing. phaseParent must point the
-//     mutable frame at each phase's seal.
-//
-// The sweep spans well past the phases that have seals today so a new row cannot satisfy
-// one property and quietly miss the other. It does NOT pin non-nil-ness: SealedAt and
-// SealedFrames read the same rows, so a nil frame would make them agree —
-// newPhaseRegistry's construction-time panic is what makes that loud, and
-// TestSealedExpandBaseConstructionInvariant is what pins it across builders.
-func TestSealedAxisIsEnumerableAndReachable(t *testing.T) {
-	ns := environment.NewNamespace()
-	enumerated := make(map[*environment.EnvironmentFrame]bool)
-	for _, frame := range ns.SealedFrames() {
-		enumerated[frame] = true
-	}
-	for phase := environment.Phase(-2); phase <= 8; phase++ {
-		sealed, ok := ns.SealedAt(phase)
-		if !ok {
-			continue
-		}
-		qt.Assert(t, enumerated[sealed], qt.IsTrue,
-			qt.Commentf("seal at phase %s is routable but not enumerated", phase))
-		qt.Assert(t, ns.IsSealed(sealed), qt.IsTrue,
-			qt.Commentf("seal at phase %s is not recognized by IsSealed", phase))
-		qt.Assert(t, ns.AtPhase(phase).Parent(), qt.Equals, sealed,
-			qt.Commentf("the mutable frame at phase %s does not parent to its seal", phase))
-	}
-	qt.Assert(t, ns.IsSealed(nil), qt.IsFalse) // a frame that does not exist is not sealed
-}
-
-// TestSealedClimbStopsAboveExpand pins the depth of the sealed axis: a climb rooted at a
-// sealed frame stays sealed while a seal exists, and leaves it where none does. A
-// bootstrap define-syntax (env == the sealed base) climbs into the sealed expand base, but
-// a define-syntax inside a transformer body (env == the sealed expand base) climbs into
-// the MUTABLE compile frame, because phase 2 has no seal. That is the shipped behavior, not
-// an aspiration: it means the seal is exactly one level deep, and the exit is silent.
+// TestSealedClimbStopsAboveExpand pins the depth of the sealed axis: a climb rooted
+// at a sealed-write view stays sealed while a sealed-write view exists for the target
+// phase, and leaves it where none does. A bootstrap define-syntax (env == the
+// sealed-write root) climbs into the phase-1 sealed-write view, but a define-syntax
+// inside a transformer body (env == that phase-1 view) climbs into the MUTABLE
+// phase-2 view, because phase 2 has no row. That is the shipped behavior, not an
+// aspiration: the seal is exactly one level deep, and the exit is silent.
 func TestSealedClimbStopsAboveExpand(t *testing.T) {
 	ns := environment.NewNamespace()
+	sealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	sealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
 
-	// Phase 0 seal climbing to phase 1: stays sealed.
-	qt.Assert(t, ns.SealedBase().AtPhase(environment.PhaseExpand), qt.Equals, ns.SealedExpandBase())
+	// Phase 0 sealed-write view climbing to phase 1: stays sealed.
+	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseExpand), qt.Equals, sealedExpand)
 
-	// Phase 1 seal climbing to phase 2: leaves the sealed axis.
-	compile := ns.SealedExpandBase().AtPhase(environment.PhaseCompile)
-	qt.Assert(t, ns.IsSealed(compile), qt.IsFalse)
-	qt.Assert(t, compile, qt.Equals, ns.Compile())
+	// Phase 1 sealed-write view climbing to phase 2: leaves the sealed axis.
+	qt.Assert(t, sealedExpand.AtPhase(environment.PhaseCompile), qt.Equals, ns.Compile())
 
 	// The redirect is a CLIMB: it never rewrites a lookup at or below the receiver's
-	// own level, so the sealed base still reaches the mutable runtime at phase 0.
-	qt.Assert(t, ns.SealedBase().AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
+	// own level, so the sealed-write root still reaches the ordinary view at phase 0.
+	qt.Assert(t, sealedRoot.AtPhase(environment.PhaseRuntime), qt.Equals, ns.Runtime())
 }
 
 // TestSealedWriteViewAtFallbacks pins SealedWriteViewAt's answers for the two shapes
-// that own a sealed axis, and for the phases the axis leaves unsealed (phase 2 and
-// up). Both shapes answer the same way — a library env routes to its OWN seals,
-// never the namespace's — because an owner does not pick a subset of the axis.
-// Whether an expand-phase primitive lands in the seal or the mutable expand child is
-// not this call's question any more: that placement is registry.Apply's phaseTargets
-// (apply.go), not the sealed axis.
+// that own a store, and for the phases the axis leaves unsealed (phase 2 and up).
+// Both shapes answer the same way — a library env routes to its OWN views, never the
+// namespace's — because an owner does not pick a subset of the axis. Whether an
+// expand-phase primitive lands sealed or mutable is not this call's question any
+// more: that placement is registry.Apply's phaseTargets (apply.go).
 //
-// The library assertions live here in the EXTERNAL test package on purpose: they use
-// nothing but exported API, so they would catch a subset creeping back in even if the
-// internal shape tests were deleted.
+// These live in the EXTERNAL test package on purpose: they use nothing but exported
+// API, so they would catch a subset creeping back in even if the internal shape tests
+// were deleted.
 func TestSealedWriteViewAtFallbacks(t *testing.T) {
 	ns := environment.NewNamespace()
 	lib := ns.NewChildRuntime()
-	libBase := lib.Parent()
-	libExpandBase := lib.Expand().Parent()
+	libSealedRoot := lib.SealedWriteViewAt(environment.PhaseRuntime)
+	libSealedExpand := lib.SealedWriteViewAt(environment.PhaseExpand)
+	nsSealedRoot := ns.Runtime().SealedWriteViewAt(environment.PhaseRuntime)
+	nsSealedExpand := ns.Runtime().SealedWriteViewAt(environment.PhaseExpand)
 
-	qt.Assert(t, libBase, qt.Not(qt.Equals), ns.SealedBase())
-	qt.Assert(t, libExpandBase, qt.Not(qt.Equals), ns.SealedExpandBase())
-	qt.Assert(t, libExpandBase.Parent(), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseRuntime), qt.Equals, libBase)
-	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseExpand), qt.Equals, libExpandBase)
+	qt.Assert(t, libSealedRoot, qt.Not(qt.Equals), nsSealedRoot)
+	qt.Assert(t, libSealedExpand, qt.Not(qt.Equals), nsSealedExpand)
+	qt.Assert(t, libSealedRoot.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment())
+	qt.Assert(t, libSealedExpand.GlobalEnvironment(), qt.Equals, lib.GlobalEnvironment())
 	qt.Assert(t, lib.SealedWriteViewAt(environment.PhaseCompile), qt.Equals, lib.Compile())
 
-	runtime := ns.Runtime()
-	qt.Assert(t, runtime.SealedWriteViewAt(environment.PhaseRuntime), qt.Equals, ns.SealedBase())
-	qt.Assert(t, runtime.SealedWriteViewAt(environment.PhaseExpand), qt.Equals, ns.SealedExpandBase())
-	qt.Assert(t, runtime.SealedWriteViewAt(environment.PhaseCompile), qt.Equals, ns.Compile())
+	qt.Assert(t, nsSealedRoot.GlobalEnvironment(), qt.Equals, ns.Store())
+	qt.Assert(t, ns.Runtime().SealedWriteViewAt(environment.PhaseCompile), qt.Equals, ns.Compile())
 }

@@ -267,10 +267,10 @@ func TestConstructorEquivalence(t *testing.T) {
 	c.Assert(childRuntime.Namespace(), qt.Equals, parent)
 	c.Assert(childRuntime.PhaseLevel(), qt.Equals, PhaseRuntime)
 	c.Assert(childRuntime.GlobalEnvironment(), qt.IsNotNil)
-	// The mutable child is no longer the structural root — its own sealed base is.
-	// See TestChildRuntimeOwnsItsOwnSealedAxis in library_seal_test.go.
-	c.Assert(childRuntime.IsTopLevel(), qt.IsFalse)
-	c.Assert(childRuntime.Parent().IsTopLevel(), qt.IsTrue)
+	// A library env's root VIEW has no lexical parent, like every other view.
+	// See TestChildRuntimeOwnsItsOwnStore in library_seal_test.go.
+	c.Assert(childRuntime.IsTopLevel(), qt.IsTrue)
+	c.Assert(childRuntime.Parent(), qt.IsNil)
 
 	expand := childRuntime.Expand()
 	c.Assert(expand, qt.IsNotNil)

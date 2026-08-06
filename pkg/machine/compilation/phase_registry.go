@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // PhaseEntry represents a named item to register in a phase environment.
@@ -44,8 +45,15 @@ func RegisterPhaseBindings[F any](
 	for _, entry := range entries {
 		sym := values.NewSymbol(entry.Name)
 		val := wrapper(entry.Name, entry.Fn)
-		idx, _ := targetEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive, nil)
-		targetEnv.SetOwnGlobalValue(idx, val) //nolint:errcheck
+		// DefineOwnGlobal creates and writes under one key at the target view's own
+		// coordinates. Pairing a create with a write through the returned index
+		// would write through a deferred, wildcard index, which over the merged
+		// store resolves to the name's first live slot at ANY coordinates.
+		err := targetEnv.DefineOwnGlobal(sym, environment.BindingTypePrimitive, nil, val)
+		if err != nil {
+			return werr.WrapForeignErrorf(err,
+				"RegisterPhaseBindings: failed to bind %s", entry.Name)
+		}
 	}
 	return nil
 }

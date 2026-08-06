@@ -68,28 +68,28 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// later redefine of an already-stable binding is rejected. When disabled,
 	// behavior is identical to before (the fast path below still fires).
 	//
-	// Q3 (layered-environment): enforce in the namespace's own user runtime global
-	// (the per-Engine user top-level) AND in its sealed base (immutable primitives +
-	// bootstrap procedures — the optimizer's Stable anchors; capture-safe procedures like
-	// zero?/not must stay Stable here or the frame-reclaim classifier stops trusting them).
-	// EXEMPT user-loaded libraries: a library body compiles against a NewChildRuntime
-	// frame that shares its parent's namespace but owns its own seal (so it is neither
-	// ns.Runtime() nor ns.SealedBase()), keeping a library's cross-form
-	// (define x)/(set! x) mutable (R2).
+	// Q3 (layered-environment): enforce through the namespace's own ROOT VIEWS — the
+	// mutable one (the per-Engine user top-level) and its sealed-write twin, through
+	// which bootstrap registers immutable primitives and procedures (the optimizer's
+	// Stable anchors; capture-safe procedures like zero?/not must stay Stable or the
+	// frame-reclaim classifier stops trusting them). EXEMPT user-loaded libraries: a
+	// library body compiles against a NewChildRuntime view that shares its parent's
+	// namespace but is neither of that namespace's root views, keeping a library's
+	// cross-form (define x)/(set! x) mutable (R2).
 	ns := p.env.Namespace()
-	immTop := ns != nil && ns.ImmutableTopLevel() &&
-		(ns.Runtime() == p.env || ns.SealedBase() == p.env)
+	immTop := ns != nil && ns.ImmutableTopLevel() && p.env.IsOwnerRoot()
 
 	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
 		return sym, nil
 	}
-	// Address the binding just created, not a parent-chain walk. GetGlobalBinding
-	// resolves a creation-returned (deferred, scope-less) index wildcard, i.e. to
-	// the name's FIRST slot in this frame — for a macro-introduced binder that is
-	// the user's variable, whose meta this would then overwrite. Mirror of
-	// emitDefineStore's re-resolve.
+	// Address the binding just created, at THIS view's own coordinates. A ranked
+	// read would answer a different question, and a coordinate-blind scoped one
+	// takes the first-seen of two equally unscoped candidates — for (define car …)
+	// that is the SEALED car, whose Stable stamp would then refuse the shadow. The
+	// creation-returned index is deferred and scope-less, so it cannot be used
+	// either. Mirror of emitDefineStore's re-resolve.
 	own := p.env.GlobalEnvironment()
-	ownIndex := own.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
+	ownIndex := p.env.OwnGlobalIndex(sym, syntax.ScopesOf(symbolScopes))
 	if ownIndex == nil {
 		return sym, nil
 	}
@@ -207,12 +207,15 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 		// Global indices are stored in the literals pool since they're runtime values.
 		// The operation loads the index from literals and stores the value there.
 		// Mirror of the local branch above: the binding was declared scope-aware,
-		// so address it scope-aware too. CreateGlobalBinding hands back a DEFERRED
-		// index (no frame, no scopes), which OpStoreGlobal would resolve wildcard
-		// to the name's first slot — the user's binding, not the macro's. Re-resolve
-		// to get the pinned (frame, slot) pair for the binding just declared.
+		// so address it scope-aware too — and at THIS view's own coordinates, the
+		// same question the meta stamp above asks. CreateGlobalBindingAt hands back
+		// a DEFERRED index (no frame, no scopes), which OpStoreGlobal would resolve
+		// wildcard to the name's first slot — the user's binding, not the macro's.
+		// Re-resolve to get the pinned (store, slot) pair for the binding just
+		// declared; a ranked read would answer "what does a reference here see",
+		// which for a define through the sealed-write view is a different slot.
 		p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, scopes)
-		gi := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(scopes))
+		gi := p.env.OwnGlobalIndex(sym, syntax.ScopesOf(scopes))
 		if gi == nil {
 			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 				"compile define: binding %q not found in global environment", sym.Key)

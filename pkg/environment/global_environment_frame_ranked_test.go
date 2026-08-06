@@ -180,38 +180,34 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 	qt.Assert(t, created, qt.IsFalse)
 }
 
-// Copy's coordinate carry-forward is production-live TODAY, not just probe
-// scaffolding: NewSchemeReportNamespace builds its sealed base by copying the
-// parent's rather than minting fresh (namespace.go, wireRuntimeFrames(q,
-// p.sealedBase.global.Copy(), p.runtime.global.Copy())). Silently dropping the
-// stamps would turn a scheme-report namespace's sealed base from (AnyPhase,
-// sealed) — ambient at every phase — into the zero value (ExactPhase(0),
-// mutable), which starts colliding with real phase-0 user defines instead of
-// staying invisible to them.
+// Copy's per-slot coordinate carry-forward is production-live: it is the whole
+// of NewSchemeReportNamespace, which builds its store by copying the parent's
+// rather than minting fresh. Silently dropping the stamps would turn every
+// sealed entry in a scheme-report namespace from (AnyPhase, sealed) — ambient at
+// every phase — into the zero value (ExactPhase(0), mutable), which starts
+// colliding with real phase-0 user defines instead of being shadowed by them.
 func TestCopyPreservesCoordinates(t *testing.T) {
 	sym := values.NewSymbol("v")
-	g := NewGlobalEnvironmentFrameAt(AnyPhase(), true)
-	g.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+	g := NewGlobalEnvironmentFrame()
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), true)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
 
 	c := g.Copy()
-	qt.Assert(t, c.writePhase, qt.Equals, AnyPhase())
-	qt.Assert(t, c.writeSealed, qt.IsTrue)
 
-	// The other half of what keeps CreateGlobalBindingAt's reuse check inert on
-	// a copied frame: the cloned SLOTS carry their own coordinates too, not
-	// just the frame's instance-level constants.
-	qt.Assert(t, len(c.keys[*sym]), qt.Equals, 1)
+	qt.Assert(t, len(c.keys[*sym]), qt.Equals, 2)
 	qt.Assert(t, c.keys[*sym][0].phase, qt.Equals, AnyPhase())
 	qt.Assert(t, c.keys[*sym][0].sealed, qt.IsTrue)
+	qt.Assert(t, c.keys[*sym][1].phase, qt.Equals, ExactPhase(PhaseRuntime))
+	qt.Assert(t, c.keys[*sym][1].sealed, qt.IsFalse)
 }
 
 // The q.IsAll() wildcard branch is bespoke relative to bestSlotLocked's
 // wildcard path (a plain first-live-slot loop with no tier concept): it tracks
 // tier across the whole slot list, applies the same phase filter the scoped
 // branch does, and returns the highest tier's first live slot. Every existing
-// wildcard caller of bestSlotLocked (GetGlobalIndex, DeleteBinding,
-// AmbientKeys) inherits this ranked behavior the moment the fold swaps
-// bestSlotLocked out from under them, so pin it here.
+// wildcard caller that the fold moved onto the probe — resolveGlobal, and
+// through it EnvironmentFrame.GetGlobalIndex — inherits this ranked behavior, so
+// pin it here.
 func TestResolveRankedWildcard(t *testing.T) {
 	sym := values.NewSymbol("v")
 

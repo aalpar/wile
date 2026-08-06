@@ -89,54 +89,32 @@ type PhaseRegistry struct {
 	envs map[Phase]*EnvironmentFrame
 	// owner is the owning Namespace
 	owner *Namespace
-	// runtime is envs[PhaseRuntime], hoisted out of the map so lock-free readers
-	// (ownsSealedAxis, phaseParent) never race GetOrCreate's map write.
+	// runtime is envs[PhaseRuntime], the owner's ROOT view. Hoisted out of the map
+	// so lock-free readers never race GetOrCreate's map write, and because
+	// createPhaseEnv reads its store while holding the write lock.
 	// Immutable after construction.
 	runtime *EnvironmentFrame
-	// seals is this registry's sealed axis: one immutable frame per sealedAxis row.
-	// Written once by the constructor and never mutated, which is what lets
-	// phaseParent read it while holding the write lock.
+	// sealedViews caches this owner's SEALED-WRITE views, one per sealedAxis row:
+	// the same store as envs, at the same phase, with writeRankSealed. They are
+	// what AtPhase's climb hands a sealed-write view (design §4.5), and what
+	// SealedWriteViewAt returns to a registration target.
 	//
-	// It moved here from Namespace because a library env deliberately SHARES its
-	// parent's namespace while needing a seal of its own; the PhaseRegistry is the
-	// thing each owner already has exactly one of.
-	//
-	// Every owner that has a sealed axis has ALL of it. Owners differ in what gets
-	// APPLIED into their seals, never in which phases they seal — a per-owner
-	// subset would mean sealedAxis no longer describes the system, and "is this
-	// phase sealed?" would need a "for whom?".
-	seals map[Phase]*EnvironmentFrame
+	// Written once by the constructor and never mutated, so it is read without the
+	// registry lock. It lives here rather than on Namespace because a library env
+	// deliberately SHARES its parent's namespace while needing its own store and
+	// its own sealed-write views; the PhaseRegistry is the thing each owner has
+	// exactly one of.
+	sealedViews map[Phase]*EnvironmentFrame
 }
 
-// sealAt returns this registry's seal for a phase and whether the phase has one.
-// The structural and the routing question are now the same question: a phase
-// either has a seal or it does not.
+// sealedViewAt returns this owner's sealed-write view for a phase and whether the
+// phase has one.
 //
 // False means the phase has no sealedAxis row (phase 2 and up), never "this owner
-// skipped a row": newSealedAxisFrames builds every row for every owner.
-func (p *PhaseRegistry) sealAt(phase Phase) (*EnvironmentFrame, bool) {
-	frame, ok := p.seals[phase]
+// skipped a row": every owner's registry is built with every row.
+func (p *PhaseRegistry) sealedViewAt(phase Phase) (*EnvironmentFrame, bool) {
+	frame, ok := p.sealedViews[phase]
 	return frame, ok
-}
-
-// isSeal reports whether frame is one of this registry's sealed frames.
-func (p *PhaseRegistry) isSeal(frame *EnvironmentFrame) bool {
-	if frame == nil {
-		return false
-	}
-	for _, sealed := range p.seals {
-		if sealed == frame {
-			return true
-		}
-	}
-	return false
-}
-
-// hasSeals reports whether this registry owns a sealed axis at all. A registry
-// built without one (test scaffolding) keeps the pre-carve behavior: phase frames
-// parent to the phase-0 frame.
-func (p *PhaseRegistry) hasSeals() bool {
-	return len(p.seals) > 0
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
@@ -147,8 +125,10 @@ func (p *PhaseRegistry) Get(phase Phase) *EnvironmentFrame {
 }
 
 // GetOrCreate returns the environment for the given phase, creating it if needed.
-// Phase 0 always returns the runtime environment.
-// Other phases are lazily created with their own GlobalEnvironmentFrame.
+// Phase 0 always returns the owner's root view. Other phases are lazily minted as
+// views over the SAME store — the map is a view cache, and AtPhase must keep
+// returning a stable pointer per (owner, phase) because local expand envs chain
+// off these frames and code compares frames by pointer.
 func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
 	// Fast path: check with read lock
 	p.mu.RLock()
@@ -174,51 +154,25 @@ func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
 	return env
 }
 
-// createPhaseEnv creates a new environment frame for the given phase.
-// Must be called with write lock held.
+// createPhaseEnv mints the owner's ordinary VIEW at the given phase: the one
+// owner store, at that phase, mutable rank, no lexical parent.
+//
+// Hermeticity is no longer a parent link that skips the mutable runtime — it is
+// key disjointness in the store. A phase-N read is a candidate only for slots at
+// exactly phase N or at the ambient (startup) coordinate, so phase-N code cannot
+// see phase-M defines for any M != N, and still reaches primitives.
+//
+// Must be called with the write lock held; p.runtime is an
+// immutable-after-construction read, so taking the store off it here cannot
+// re-enter GetOrCreate.
 func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
-	// Create a new GlobalEnvironmentFrame for this phase.
-	global := NewGlobalEnvironmentFrameAt(ExactPhase(phase), false)
-
 	q := &EnvironmentFrame{
-		// A phase frame parents to its phase's SEAL, never to the mutable runtime
-		// frame: that skip past user defines and phase-0 imports is the hermeticity
-		// cut. See plans/2026-07-10-hermetic-phases-core-impl.local.md and
-		// plans/2026-07-22-free-template-id-hygiene-impl.local.md.
-		parent:     p.phaseParent(phase),
-		global:     global,
+		global:     p.runtime.global,
 		phaseLevel: phase,
 		phases:     p,
 		namespace:  p.owner,
 	}
 	return q
-}
-
-// phaseParent selects a phase frame's lexical parent: the seal for this phase when this
-// registry has one, else the registry's phase-0 seal. A phase with no seal of its own
-// therefore parents to the base rather than to the phase below it, which is the
-// climbing-tower invariant that the mutable axis introduces no phase->phase parent edge.
-//
-// This holds uniformly for a namespace and for a library env. Before the library gained a
-// seal this returned the library's phase-0 frame — the one phase->phase edge in the tree,
-// and the shape that made a library body's phase separation unenforceable.
-//
-// One constraint keeps this off the general routing seam: it runs under the registry's
-// WRITE lock (createPhaseEnv), so it must not call anything that can re-enter GetOrCreate;
-// p.runtime and p.seals are both immutable-after-construction reads.
-func (p *PhaseRegistry) phaseParent(phase Phase) *EnvironmentFrame {
-	if !p.hasSeals() {
-		return p.runtime
-	}
-	sealed, ok := p.sealAt(phase)
-	if ok {
-		return sealed
-	}
-	// The phase-0 row is the axis's root and every axis has it — newPhaseRegistry
-	// refuses one that does not, which is where the old read-time mustSeal check
-	// went. So this is a lookup, not a fallback that can fail.
-	base, _ := p.sealAt(PhaseRuntime)
-	return base
 }
 
 // Phases returns all currently instantiated phase levels.
