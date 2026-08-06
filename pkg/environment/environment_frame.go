@@ -104,11 +104,12 @@ type EnvironmentFrame struct {
 	// phaseLevel indicates which phase this frame represents
 	// (PhaseTemplate=-1, PhaseRuntime=0, PhaseExpand=1, PhaseCompile=2)
 	phaseLevel Phase
-	// rank says which tier a write through this frame lands in. Every seal frame
-	// (newSealedAxisFrames) carries writeRankSealed; every other frame is the zero
-	// value writeRankMutable. Placed next to phaseLevel: both are single bytes that
-	// share the padding already required before the next pointer field, so this
-	// costs nothing in EnvironmentFrame's size (see layout_size_test.go).
+	// rank says which tier a write through this frame lands in. Every sealed-write
+	// view (newPhaseRegistry mints one per sealedAxis row) carries writeRankSealed;
+	// every other frame is the zero value writeRankMutable. Placed next to
+	// phaseLevel: both are single bytes that share the padding already required
+	// before the next pointer field, so this costs nothing in EnvironmentFrame's
+	// size (see layout_size_test.go).
 	rank writeRank
 	// phases is the shared phase registry, owned by Namespace
 	phases *PhaseRegistry

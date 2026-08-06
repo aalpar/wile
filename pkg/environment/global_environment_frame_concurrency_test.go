@@ -52,10 +52,13 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		wg.Wait()
 
 		// Verify all bindings were created
-		c.Assert(len(env.global.Keys()), qt.Equals, numGoroutines)
+		c.Assert(len(env.global.keys), qt.Equals, numGoroutines)
 	})
 
-	// Test 2: Concurrent GetGlobalIndex (lookup pattern)
+	// Test 2: Concurrent GetGlobalIndex (lookup pattern). GlobalEnvironmentFrame's
+	// own GetGlobalIndex is gone (production-dead after the store fold, C4): every
+	// caller reads through the owning EnvironmentFrame's ranked probe now, so this
+	// races that entry point instead.
 	t.Run("concurrent GetGlobalIndex", func(t *testing.T) {
 		topLevel := NewNamespace()
 		env := topLevel.Runtime()
@@ -71,7 +74,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				sym := values.NewSymbol("var" + string(rune('A'+(idx%10))))
-				gi := env.global.GetGlobalIndex(sym)
+				gi := env.GetGlobalIndex(sym)
 				c.Assert(gi, qt.Not(qt.IsNil))
 			}(i)
 		}
@@ -96,7 +99,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				gi := env.global.GetGlobalIndex(symbols[idx%10])
+				gi := env.GetGlobalIndex(symbols[idx%10])
 				err := env.global.SetOwnGlobalValue(gi, values.NewInteger(int64(idx)))
 				c.Assert(err, qt.IsNil)
 			}(i)
@@ -105,7 +108,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 		// Verify all bindings have values
 		for i := range 10 {
-			gi := env.global.GetGlobalIndex(symbols[i])
+			gi := env.GetGlobalIndex(symbols[i])
 			bd := env.global.GetOwnGlobalBinding(gi)
 			c.Assert(bd, qt.Not(qt.IsNil))
 			c.Assert(bd.Value(), qt.Not(qt.IsNil))
@@ -139,13 +142,13 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 					env.global.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(PhaseRuntime), false)
 				case 1:
 					// Lookup operation
-					gi := env.global.GetGlobalIndex(symbols[idx%10])
+					gi := env.GetGlobalIndex(symbols[idx%10])
 					if gi != nil {
 						_ = env.global.GetOwnGlobalBinding(gi)
 					}
 				case 2:
 					// Update operation
-					gi := env.global.GetGlobalIndex(symbols[idx%10])
+					gi := env.GetGlobalIndex(symbols[idx%10])
 					if gi != nil {
 						_ = env.global.SetOwnGlobalValue(gi, values.NewInteger(int64(idx)))
 					}
@@ -173,7 +176,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 				defer wg.Done()
 				copied := env.global.Copy()
 				c.Assert(copied, qt.Not(qt.IsNil))
-				c.Assert(len(copied.Keys()), qt.Equals, 10)
+				c.Assert(len(copied.keys), qt.Equals, 10)
 			}()
 		}
 		wg.Wait()

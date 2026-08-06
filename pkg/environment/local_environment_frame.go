@@ -52,11 +52,6 @@ func (p *LocalEnvironmentFrame) Bindings() []Binding {
 	return p.bindings
 }
 
-// SetBindings replaces the bindings slice in this local environment.
-func (p *LocalEnvironmentFrame) SetBindings(v []Binding) {
-	p.bindings = v
-}
-
 // Keys returns a copy of the symbol-to-index mapping for this local environment.
 // Each key maps to a slice of slot indices (common case: one element). Multiple
 // slots per key occur when hygienic expansion creates same-name bindings with

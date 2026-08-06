@@ -367,13 +367,15 @@ stated phase) makes the rung a program lands on visible:
 ```
 
 Bindings are **shared single objects** across phases, not re-instantiated per
-phase (Tier 1). Phase frames remain hermetic siblings of the frozen sealed base
-(the climb adds *higher* siblings; it never reintroduces a phase→phase parent
-edge — `TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
-Hermeticity holds for every owner of a sealed axis, and a `NewChildRuntime`
-library environment is one: it has the same two-level stack a namespace has, so
-its phase frames parent to its own seals and phase 1 there does **not** see
-phase 0. See [environment/system.md](../environment/system.md#invariants)
+phase (Tier 1). Phase views stay hermetic as the climb reaches higher phases:
+a read at phase *N* is a candidate only against slots at exactly phase *N* or
+the ambient coordinate, never any other exact phase, so the climb never makes
+a higher phase see a lower one's bindings — key disjointness in the one store,
+not a missing parent link (`TestPhaseRegistry_ExpandPhaseIsHermetic` guards
+this). Hermeticity holds for every owner of a store, and a `NewChildRuntime`
+library environment is one: it has its own store and its own sealed-write
+views over the same `sealedAxis` rows a namespace has, so phase 1 there does
+**not** see phase 0. See [environment/system.md](../environment/system.md#invariants)
 invariant 6.
 The bounded `int8` phase index caps a runaway self-referential macro with a
 wrapped error rather than wrapping to −128.
@@ -385,9 +387,9 @@ resolution: `jabberwocky`/`march-hare`) is unaffected by the climb — it resolv
 **Q4 — mutable state across a phase climb (resolved: hermetic by rejection).**
 Tier 1 shares bindings as single objects, so the question arose whether a
 `set!`-mutated binding could be *silently shared* across a climb, computing wrong
-compile-time values. It cannot: the hermetic phase-frame reparent already severs
-the lexical cross-phase path, so a mutable binding defined at phase N is **not
-visible** at phase N+1 — observing it there is a loud compile-time
+compile-time values. It cannot: hermeticity as key disjointness in the store
+already severs the cross-phase path, so a mutable binding defined at phase N is
+**not visible** at phase N+1 — observing it there is a loud compile-time
 `no such binding`, not a silent share
 (`TestClimbingTower_CrossPhaseMutationIsHermetic`).
 
@@ -397,8 +399,9 @@ library env's phases `{0, 1, 2}` regardless of the referring phase, so a
 phase-1 body resolved a phase-0 define — silently, as the `#!void` of a
 predeclared-but-unwritten slot — and a phase-0 body resolved a
 `begin-for-syntax` define, silently, as a wrong value. That arm is now
-phase-relative and the library env owns a sealed base, so the argument is sound
-in both places. Pinned by `TestLibraryPhaseIsolation{Downward,Upward}`
+phase-relative and the library env owns its own store with its own sealed
+coordinates, so the argument is sound in both places. Pinned by
+`TestLibraryPhaseIsolation{Downward,Upward}`
 (`pkg/wile/library_phase_isolation_test.go`), each of which asserts the library
 answer *against its top-level control* rather than on its own.
 

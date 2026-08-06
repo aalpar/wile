@@ -92,8 +92,8 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	// in the mutable child instead of overwriting this slot in place — CreateGlobalBinding
 	// dedups by scopeSetsEqual ignoring BindingType, and SetOwnGlobalValue would overwrite
 	// the Primitive-typed slot's value, which every lookup then rejects (let-syntax, having
-	// no Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander walks
-	// env.Expand()'s parent chain, which phaseParent points at the seal.
+	// no Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
+	// env.Expand() through the ranked probe, whose T3 tier is exactly this ambient sealed set.
 	//
 	// The PHASE is what keeps this out of the value world. A phase-0 registration
 	// would land on the runtime value-resolution path, leaking a dialect-removed

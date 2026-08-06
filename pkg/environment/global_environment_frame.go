@@ -261,33 +261,6 @@ func (p *GlobalEnvironmentFrame) Bindings() []*Binding {
 	return slices.Clone(p.bindings)
 }
 
-// SetBindings replaces the bindings slice in this global environment.
-// Thread-safe: uses full Lock for write access.
-func (p *GlobalEnvironmentFrame) SetBindings(vs []*Binding) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.bindings = vs
-}
-
-// Keys returns a copy of the symbol-to-slots mapping. A symbol may map to more
-// than one slot: same-named bindings with different scope sets are different
-// variables. Callers that only want names can range over the keys and ignore the
-// slot lists.
-// Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol][]int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	result := make(map[values.Symbol][]int, len(p.keys))
-	for k, slots := range p.keys {
-		ss := make([]int, len(slots))
-		for i, s := range slots {
-			ss[i] = s.slot
-		}
-		result[k] = ss
-	}
-	return result
-}
-
 // AmbientScopes returns the ambient scope set: the empty, NON-NIL set that a
 // reference written outside any macro expansion carries.
 //
@@ -420,21 +393,17 @@ func scopeSetsEqual(a, b []*syntax.Scope) bool {
 // runtime view), so a pin can never be stale-BY-DELETE for a sealed slot —
 // refusing the sealed tier here closes the one path left by which a
 // name-resolved WRITE could otherwise reach one, without forgoing any
-// legitimate re-heal. Every other caller passes false: GetOwnGlobalBinding's
-// read-side fallback wants the opposite polarity — revealing the sealed
-// primitive a deleted shadow uncovers is the point, not hiding it — and
-// GetGlobalIndex/GetGlobalIndexWithScopes are ordinary reads with no coordinate
-// question to ask.
+// legitimate re-heal. GetOwnGlobalBinding's read-side fallback passes false: it
+// wants the opposite polarity — revealing the sealed primitive a deleted shadow
+// uncovers is the point, not hiding it.
 //
 // Caller MUST hold at least a read lock on p.mu.
 //
 // It PANICS with a wrapped werr.ErrAmbiguousBinding on an incomparable
 // equal-cardinality tie, but only via the scoped branch below — the wildcard
-// branch (q.IsAll()) returns before reaching it. Every one of the four callers
-// releases p.mu via defer, so the panic never leaks the lock: GetGlobalIndex
-// (wildcard-only, so this panic is unreachable from it, but deferred anyway for
-// uniformity), GetGlobalIndexWithScopes, GetOwnGlobalBinding's stale-pin
-// fallback, and SetOwnGlobalValue's stale-pin fallback.
+// branch (q.IsAll()) returns before reaching it. Both callers release p.mu via
+// defer, so the panic never leaks the lock: GetOwnGlobalBinding's stale-pin
+// fallback and SetOwnGlobalValue's stale-pin fallback.
 func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.ScopeSet, rejectSealed bool) (int, bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
@@ -753,8 +722,8 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // modeling it would give the wildcard a mutable row that outranked nothing.
 //
 // The returned index is DEFERRED (no frame, no slot) — load-bearing, see the
-// C2b note above GetGlobalIndex: define-syntax writes through this index
-// wildcard and lookupMacroBinding reads it back wildcard.
+// C2b note below: define-syntax writes through this index wildcard and
+// lookupMacroBinding reads it back wildcard.
 func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
 	if phase.Any && !sealed {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
@@ -798,44 +767,6 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 // So C2b cannot land without the macro read path moving in the same commit —
 // the reverse of the plan's sequencing, which lists C2b as a prerequisite OF the
 // read-path work. Do not re-attempt it standalone.
-
-// GetGlobalIndex returns the GlobalIndex for the given symbol.
-// Returns nil if the symbol is not bound in this global environment.
-// Thread-safe: uses RLock for read-only access.
-// This is the WILDCARD form: it matches any binding of the name regardless of
-// scopes, which is what introspection and REPL completion mean. Compiler callers
-// must use GetGlobalIndexWithScopes so a bare reference cannot reach a
-// macro-introduced binder.
-func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
-	ge := p
-
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	_, ok := ge.bestSlotLocked(*key, syntax.AllScopes(), false)
-
-	if !ok {
-		return nil
-	}
-	q := NewGlobalIndex(key)
-	return q
-}
-
-// GetGlobalIndexWithScopes returns the GlobalIndex for the binding of key whose
-// scope set maximally matches scopes. A nil scopes slice means the EMPTY scope
-// set, not "any scope set" — that distinction is the whole point of the split
-// from GetGlobalIndex, since a reference written outside any macro expansion must
-// not resolve to a binder introduced inside one.
-// Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) *GlobalIndex {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	i, ok := p.bestSlotLocked(*key, q, false)
-
-	if !ok {
-		return nil
-	}
-	return newScopeKeyedGlobalIndex(key, p, i, q)
-}
 
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this frame only.
 // Unlike EnvironmentFrame.GetGlobalBinding, this does NOT traverse the parent chain.

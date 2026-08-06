@@ -128,7 +128,7 @@ func TestOperation(t *testing.T) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 				sym := values.NewSymbol("bindSymbolWithScopes")
-				gi := mc.env.GlobalEnvironment().GetGlobalIndex(sym)
+				gi := mc.env.GetGlobalIndex(sym)
 				v := mc.env.GlobalEnvironment().GetOwnGlobalBinding(gi).Value()
 				qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(10))
 			},

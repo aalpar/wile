@@ -19,62 +19,109 @@ See [system.md](system.md) for detailed API documentation.
                     │ owns
                     ▼
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│                     Namespace (root, one per VM)                              │
+│                         Namespace (root, one per VM)                          │
 │                                                                               │
 │  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance          │
 │  loadPathStack ─── PathTracker           ← interface; impl *LoadStack         │
 │  libraryRegistry ─ LibrarySearcher       ← *compilation.LibraryRegistry       │
-│  phases ────────── *PhaseRegistry        ← owns phase→env mapping             │
-│  runtime ───────── *EnvironmentFrame     ← mutable phase 0 (user defines)     │
-│  sealedBase ────── *EnvironmentFrame     ← immutable; parent of runtime       │
-│  sealedExpandBase  *EnvironmentFrame     ← immutable phase 1 (macros)         │
+│  phases ────────── *PhaseRegistry        ← phase views + sealed-write views   │
+│  runtime ───────── *EnvironmentFrame     ← the ROOT VIEW (mutable phase 0)    │
+│  sealedWriteRoot ─ *EnvironmentFrame     ← phase-0 SEALED-WRITE view, same    │
+│                                            store as runtime                   │
 │  parent ────────── nil (root)                                                 │
 └───────────────────────────────────────────────────────────────────────────────┘
-         │                                      │
-         │ phases registry                      │ NewChildNamespace()
-         │ (entries lazily created)             │ (for R7RS (environment),
-         ▼                                      │  (null-environment))
-┌─────────────────────────────┐                 ▼
-│     PhaseRegistry           │    ┌──────────────────────────────────────────┐
-│                             │    │   Child Namespace                        │
-│  envs:                      │    │                                          │
-│    0 → runtime EnvFrame ────┼──→ │  parent ──→ root Namespace               │
-│    1 → expand EnvFrame      │    │  syntaxInterns ── nil (delegates up)     │
-│    2 → compile EnvFrame     │    │  phases ────── own PhaseRegistry         │
-│   -1 → template EnvFrame    │    │  runtime ───── own EnvironmentFrame      │
-│   ...                       │    │  sealedBase ── own, EMPTY (never shared) │
-│                             │    │  captured ──── libraryReg, registry,     │
-│  owner → Namespace          │    │                authorizer, envMap        │
-│                             │    │  services ──── shared *EngineServices    │
-└─────────────────────────────┘    └──────────────────────────────────────────┘
+                    │
+                    │ owns
+                    ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│     PhaseRegistry (one per owner: a Namespace, or a NewChildRuntime env)      │
+│                                                                               │
+│  ONE store per owner: runtime.global == every view's global below.            │
+│                                                                               │
+│  envs (mutable-rank views,        sealedViews (sealed-rank views, one per     │
+│  any int8 phase, lazy):           sealedAxis row):                            │
+│    0 → runtime   (T1 writes)        0 → sealed-write root                     │
+│    1 → expand    (T1 writes)          (writes land AMBIENT (ANY,sealed))      │
+│    2 → compile   (T1 writes)        1 → sealed-write expand                   │
+│   -1 → template                        (writes land (exact 1, sealed))        │
+│    N → tower phase, on demand                                                 │
+│                                                                               │
+│  sealedAxis = {PhaseRuntime, PhaseExpand} — every owner mints both rows;      │
+│  owners differ only in what gets applied THROUGH them.                        │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
+
+A `NewChildNamespace()` child mints the same pair — its own store, its own
+`PhaseRegistry` with its own `sealedViews` — never the parent's. Differences from
+the root are ownership-policy, not shape:
+
+| Field | Child Namespace |
+|---|---|
+| `parent` | root Namespace (interning delegation) |
+| `syntaxInterns` | nil (`InternSyntax` delegates up) |
+| `phases` | own `PhaseRegistry`, own store, sealed tier starts **empty** |
+| `runtime` | own `EnvironmentFrame`, empty |
+| captured | `libraryRegistry`, `registry`, `authorizer`, `envMap` — parent's pointer at fork time |
+| `services` | shared `*EngineServices` (same pointer as parent) |
 
 ---
 
 ## Phase Environments
 
-Each phase has its own `GlobalEnvironmentFrame` (isolated bindings) but shares the `PhaseRegistry` and `Namespace`. Phase frames parent to the **sealed base**, not to the mutable runtime frame (`createPhaseEnv` / `phaseParent` in `pkg/environment/phase_registry.go`).
+Every phase VIEW — `runtime`, `expand`, `compile`, a tower phase, and each
+sealed-write view — shares the SAME `*GlobalEnvironmentFrame` (`global`); they
+differ only in which `(PhaseKey, sealed)` coordinates their reads probe and
+their writes stamp (`pkg/environment/global_environment_frame.go`,
+`environment_frame.go`). There is no parent chain to a "sealed base" any more.
 
 ```
-sealedBase          (phase 0, parent nil)  ← Go primitives, sealed stdlib,
-│                                            optimizer Stable anchors
-├── runtime          (phase 0)              ← mutable user global; Namespace.Runtime()
-├── sealedExpandBase (phase 1)              ← bootstrap macros, special-form expanders
-│   └── expand       (phase 1)              ← user define-syntax lands here
-├── compile          (phase 2)
-├── phase 3 … 127                           ← macro tower; created on demand
-└── template         (phase -1)             ← (for-template …) target; unread
+┌──────────────────────────────────────────────────────────────────────────┐
+│  ONE store: every phase's bindings, every rank, in one scope-keyed map.  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key: phase environments are isolated.** No phase frame resolves into another — not the phase below it, not the phase above. The only environment any of them inherits is the **ambient set** created at VM startup, and that set is one thing indexed by `(phase, kind)`, not a stack of phases: `sealedExpandBase` is the `(1, handler)` cell of it and `sealedBase` the `(0, *)` cell, so a phase-1 lookup reaching the former is reaching *into the ambient set*, not down a phase chain. A phase-1 or phase-2 lookup therefore cannot see phase-0 user defines or imports (hermeticity) while still reaching the ambient bindings. The split is also what makes a top-level `define-syntax` shadow a bootstrap macro in the mutable child rather than overwrite it in place.
+| View | Coordinate | Read tier | Write lands at |
+|---|---|---|---|
+| `runtime` (`Runtime()`) | (0, mutable) | T1 | (0, mutable) |
+| `expand` (`Expand()`) | (1, mutable) | T1 | (1, mutable) |
+| `compile` (`Compile()`) | (2, mutable) | T1 | (2, mutable) |
+| sealed-write root | (0, sealed) at construction | T2 at phase 0 | **(ANY, sealed)** — ambient |
+| sealed-write expand | (1, sealed) at construction | T2 at phase 1 | (1, sealed) — exact |
 
-The tree is open-ended, not five fixed frames. `PhaseRegistry.GetOrCreate` mints a frame for any `int8` phase on first access, and `EnvironmentFrame.NextPhase()` climbs one rung per nested compile-time form, so a doubly-nested `begin-for-syntax` or a transformer body that itself defines macros reaches phase 2, 3, and beyond. Above phase 1 there is no seal (`sealedAxis`), so those frames parent straight to `sealedBase` and the climb never introduces a phase→phase edge (`TestPhaseRegistry_PhaseEnvParentsToSealedBase` guards this at phase 3+).
+Every read also considers the ambient `(ANY, sealed)` tier (T3) regardless of
+which exact phase it targets — that row is what makes primitives and sealed
+stdlib procedures visible from every phase.
 
-**A library environment has the same shape.** `phaseParent` routes to a seal whenever the *registry* has one, and every registry that has an axis has all of it, so a `NewChildRuntime` env is a two-level stack too — with seals of its own, not the namespace's. See [Library Environments](#library-environments).
+A phase-*N* read is a candidate only for slots at exactly phase *N* (tier T1
+mutable, T2 sealed) or the ambient `(ANY, sealed)` coordinate (tier T3) — never
+any OTHER exact phase. That disjointness IS hermeticity: a phase-1 read cannot
+see a phase-0 user define, and vice versa, while both still reach the ambient
+startup set. The split into two sealed tiers (T2 exact, T3 ambient) is what
+makes a top-level `define-syntax` shadow a bootstrap macro in the mutable
+expand view rather than overwrite it in place — they are different SLOTS at
+different coordinates in the same map.
 
-The seals are **not** `PhaseRegistry.envs` entries; they live in a separate `seals` map and are reached only through the parent chain. Every numbered phase frame is an `envs` entry, created lazily.
+The set of views is open-ended, not five fixed ones. `PhaseRegistry.GetOrCreate`
+mints an ordinary view for any `int8` phase on first access, and
+`EnvironmentFrame.NextPhase()` climbs one rung per nested compile-time form, so
+a doubly-nested `begin-for-syntax` or a transformer body that itself defines
+macros reaches phase 2, 3, and beyond. Above phase 1 there is no sealed-write
+view (`sealedAxis = {PhaseRuntime, PhaseExpand}`), so the climb from a
+sealed-write view lands on the ordinary mutable view at that phase — never a
+phase→phase parent edge, because there is no parent edge at all
+(`TestPhaseRegistry_ExpandPhaseIsHermetic` guards the disjointness).
 
-All phase environments share:
+**A library environment has the same shape.** A `NewChildRuntime` env is a full
+OWNER — its own store, its own `PhaseRegistry`, its own `sealedViews` over every
+`sealedAxis` row — never the namespace's. See [Library
+Environments](#library-environments).
+
+The sealed-write views are **not** `PhaseRegistry.envs` entries; they live in
+the registry's separate `sealedViews` map. Every ordinary numbered phase view
+IS an `envs` entry, created lazily.
+
+All phase views share:
+- The same `*GlobalEnvironmentFrame` (the one store)
 - The same `*PhaseRegistry` (back-pointer)
 - The same `*Namespace` (for interning)
 
@@ -89,7 +136,7 @@ Created by `lambda`, `let`, `letrec`, etc. via `NewEnvironmentFrameWithParent`.
 │ Runtime (phase 0) │◄───│ Lambda body       │◄───│ Inner let         │
 │ EnvFrame          │    │ EnvFrame          │    │ EnvFrame          │
 │                   │    │                   │    │                   │
-│ parent: sealedBase│    │ parent: ──────────┘    │ parent: ──────────┘
+│ parent: nil       │    │ parent: ──────────┘    │ parent: ──────────┘
 │ local: nil        │    │ local: params     │    │ local: let-vars   │
 │ global: ──────┐   │    │ global: ──────┐   │    │ global: ──────┐   │
 └───────────────┼───┘    └───────────────┼───┘    └───────────────┼───┘
@@ -105,47 +152,55 @@ Child frames inherit `global`, `phases`, and `namespace` from the parent. Only `
 
 ## Library Environments
 
-Created by `Namespace.NewChildRuntime()`. Shares syntax interning but has isolated bindings and phases.
+Created by `Namespace.NewChildRuntime()`. A library env is a full OWNER — its
+own store, its own `PhaseRegistry` — sharing only the caller's `Namespace`
+pointer, for syntax interning identity.
 
 ```
-Root Namespace                          Library environment (mutable child)
-┌───────────────────────┐               ┌──────────────────────┐
-│  syntaxInterns: {...} │◄──────────────┤  namespace: ─────────┤ (same pointer!)
-│  phases: rootPhases   │  shared NS    │  global: OWN         │ (isolated bindings)
-│  runtime: rootEnv     │               │  phases: ownPhases   │ (isolated phases
-│  sealedBase: rootBase │               │  parent: libBase     │  AND its own seals)
-└───────────────────────┘               │  phaseLevel: 0       │
-      │                                 └──────────────────────┘
-      │ rootPhases                              │ ownPhases
-      ▼                                         ▼
-┌───────────┐                             ┌───────────┐
-│ 0:runtime │                             │ 0:libRT   │  ← library's own runtime
-│ 1:expand  │                             │ 1:libExp  │  ← library's own expand
-│ 2:compile │                             │ 2:libCmp  │  ← library's own compile
-└───────────┘                             └───────────┘
+┌──────────────────────────────────────────────────────────┐
+│                      Root Namespace                      │
+│                                                          │
+│  syntaxInterns: {...}                                    │
+│  phases: rootPhases  → owns the ROOT store               │
+│  runtime: rootEnv                                        │
+└──────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────┐
+│      Library env (rootNamespace.NewChildRuntime())       │
+│                                                          │
+│  namespace: ─────► SAME pointer as root (interning)      │
+│  global: OWN store  → isolated bindings                  │
+│  phases: ownPhases  → owns its OWN store, own            │
+│                       sealedViews (not the root's)       │
+│  parent: nil        → structural root, phaseLevel 0      │
+└──────────────────────────────────────────────────────────┘
 ```
 
-A library's phase frames parent to the library's OWN seals, exactly as a
-namespace's do:
+Inside the library's own store, phase separation is the same ranked probe as a
+namespace's — over the library's OWN coordinates, never the root's:
 
-```
-libRT   (phase 0) ──→ libBase       (phase-0 seal) ──→ nil
-libExp  (phase 1) ──→ libExpandBase (phase-1 seal) ──→ libBase ──→ nil
-libCmp  (phase 2) ──→ libBase       (phase-0 seal) ──→ nil
-```
+| View | Coordinate | Read tier |
+|---|---|---|
+| `libRT` (`Runtime()`) | (0, mutable) | T1 |
+| `libExp` (`Expand()`) | (1, mutable) | T1 |
+| `libCmp` (`Compile()`) | (2, mutable) | T1 |
+| library sealed-write root | writes (ANY, sealed) | T3 at any phase |
+| library sealed-write expand | writes (1, sealed) | T2 at phase 1 |
 
-So the isolation a library env provides is both *lateral* (its graph roots at its
-own base, so nothing reaches the engine's frames at any phase) and *vertical*
-(inside a library, phase 1 does not see phase 0). The registry apply — primitives,
-bootstrap procedures, syntax compilers — lands in `libBase`, and the library's own
-`define`s land in the mutable child; that split is what lets a `begin-for-syntax`
-body reach `car` while missing the library's runtime defines.
+So the isolation a library env provides is both *lateral* (its store is not the
+engine's, so nothing reaches the engine's bindings at any phase) and *vertical*
+(inside a library, phase 1 does not see phase 0). The registry apply —
+primitives, bootstrap procedures, syntax compilers — writes through the
+library's sealed-write views, and the library's own `define`s land in its
+`(0, mutable)` tier; that split is what lets a `begin-for-syntax` body reach
+`car` while missing the library's runtime defines.
 
 Until 2026-08-05 a library env was a single flat frame with `parent: nil`, and
-`libExp`/`libCmp` parented to `libRT` — the only phase→phase parent edge in the
-tree. It is gone. That edge was **not**, however, the mechanism of the observable
-phase leak; see `docs/environment/system.md` on
-`GetGlobalIndexFromLibraryScopes`.
+its phase-1/phase-2 frames parented to its own phase-0 frame — the one
+phase→phase parent edge in the tree, from back when hermeticity was topology
+rather than key disjointness. Neither shape, flat or fold, was ever the
+mechanism of an observable phase leak that existed independently; see
+`docs/environment/system.md` on `GetGlobalIndexFromLibraryScopes`.
 
 ---
 
@@ -259,14 +314,14 @@ MachineContext
 
 | Environment | Created by | Bindings | Interning | Phases | Use |
 |---|---|---|---|---|---|
-| Root Namespace | `NewNamespace()` | Own | Own tables | Own registry | VM instance |
-| Child Namespace | `NewChildNamespace()` | Own, both frames start **empty** | Delegates to parent | Own registry | `(environment …)`, `(null-environment)`, `(make-namespace)`, `namespace-derive` |
-| Profile Namespace | `bootstrap.NewProfileEnvironment()` | Own; a curated registry apply fills the child's sealed base | Delegates to parent | Own registry | `(environment '(wile <profile> [<strictness>]))` |
-| Report Namespace | `NewSchemeReportNamespace()` | Own, **copied** from the parent's sealed base + runtime | Delegates to parent | Own registry | `(scheme-report-environment)` |
-| Runtime frame | `ns.Runtime()` | Phase 0 global (mutable) | Via Namespace | Shared | Normal execution |
-| Sealed base | `ns.SealedBase()` | Phase 0 global (immutable) | Via Namespace | Shared | Primitives, sealed stdlib; parent of every phase frame |
-| Sealed expand base | `ns.SealedExpandBase()` | Phase 1 global (immutable) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
-| Expand frame | `env.Expand()` / `AtPhase(1)` | Phase 1 global | Via Namespace | Shared | Macro bindings |
+| Root Namespace | `NewNamespace()` | Own store | Own tables | Own registry | VM instance |
+| Child Namespace | `NewChildNamespace()` | Own store, sealed tier starts **empty** | Delegates to parent | Own registry | `(environment …)`, `(null-environment)`, `(make-namespace)`, `namespace-derive` |
+| Profile Namespace | `bootstrap.NewProfileEnvironment()` | Own store; a curated registry apply fills the child's sealed tier | Delegates to parent | Own registry | `(environment '(wile <profile> [<strictness>]))` |
+| Report Namespace | `NewSchemeReportNamespace()` | Own store, **copied** from the parent's | Delegates to parent | Own registry | `(scheme-report-environment)` |
+| Runtime frame | `ns.Runtime()` | (0, mutable) tier of the store — the ROOT VIEW | Via Namespace | Shared | Normal execution |
+| Sealed-write root view | `ns.Runtime().SealedWriteViewAt(PhaseRuntime)` | writes land (ANY, sealed) — the ambient tier | Via Namespace | Shared | Primitives, sealed stdlib, `Stable` anchors |
+| Sealed-write expand view | `ns.Runtime().SealedWriteViewAt(PhaseExpand)` | writes land (1, sealed) | Via Namespace | Shared | Bootstrap macros, special-form expanders |
+| Expand frame | `env.Expand()` / `AtPhase(1)` | (1, mutable) tier | Via Namespace | Shared | Macro bindings |
 | Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via Namespace | Shared | Special-form names as valueless bindings; `(for-meta 2 …)` imports |
 | Tower frame | `env.NextPhase()` / `AtPhase(n)` | Phase *n* global | Via Namespace | Shared | Nested compile-time forms at phase ≥ 3 |
 | Template frame | `AtPhase(-1)` | Phase -1 global | Via Namespace | Shared | `(for-template …)` import target; no reader |

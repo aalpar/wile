@@ -563,7 +563,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	// set! now returns void with the LoadVoid operation at the end
 	qt.Assert(t, mc.GetValue(), qt.Equals, values.Void)
 	qt.Assert(t, *mc.Evals(), qt.HasLen, 0)
-	gi := mc.EnvironmentFrame().GlobalEnvironment().GetGlobalIndex(values.NewSymbol("x"))
+	gi := mc.EnvironmentFrame().GetGlobalIndex(values.NewSymbol("x"))
 	qt.Assert(t, gi, qt.IsNotNil)
 	v := mc.EnvironmentFrame().GlobalEnvironment().GetOwnGlobalBinding(gi)
 	qt.Assert(t, v.BindingType(), qt.Equals, environment.BindingTypeVariable)

@@ -134,12 +134,14 @@ func TestClimbingTower_ThreeStorey(t *testing.T) {
 // executable resolution of design §10 Q4 ("silently share mutable compile-time
 // state across a phase climb?").
 //
-// The answer is that the footgun is *unconstructible* under shipped Tier 1: the
-// hermetic phase-frame reparent (createPhaseEnv → phaseParent, master
-// fcbf034c) already severs the lexical cross-phase path, so a mutable binding
-// defined in top's transformer body (phase 1) is simply NOT VISIBLE in mid's
-// transformer body (phase 2). Observing it there is a loud compile-time
-// "no such binding", not a silent share of diverging state.
+// The answer is that the footgun is *unconstructible* under shipped Tier 1:
+// hermeticity — originally a phase-frame reparent (master fcbf034c), now key
+// disjointness in the flat store (a phase-N read is a candidate only at exactly
+// phase N or the ambient coordinate; createPhaseEnv) — already severs the
+// lexical cross-phase path, so a mutable binding defined in top's transformer
+// body (phase 1) is simply NOT VISIBLE in mid's transformer body (phase 2).
+// Observing it there is a loud compile-time "no such binding", not a silent
+// share of diverging state.
 //
 // This means Q4 needs no ErrCrossPhaseMutation reject (option b): the hermetic
 // error already delivers the loud failure option (b) wanted, at zero cost and

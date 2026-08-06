@@ -84,22 +84,6 @@ func TestLocalEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, bindings, qt.HasLen, 1)
 }
 
-func TestLocalEnvironmentFrame_SetBindings(t *testing.T) {
-	le := NewLocalEnvironment(0)
-
-	sym := values.NewSymbol("test")
-	le.EnsureLocalBinding(sym, BindingTypeVariable)
-
-	// Create new bindings
-	newBindings := []Binding{
-		{value: values.NewInteger(1), bindingType: BindingTypeVariable},
-		{value: values.NewInteger(2), bindingType: BindingTypeVariable},
-	}
-
-	le.SetBindings(newBindings)
-	qt.Assert(t, le.Bindings(), qt.HasLen, 2)
-}
-
 func TestLocalEnvironmentFrame_Keys(t *testing.T) {
 	le := NewLocalEnvironment(0)
 
