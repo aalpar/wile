@@ -15,12 +15,14 @@
 package environment
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // The ranked probe over a hand-built mixed store (design §4.3): tier T1
@@ -94,9 +96,16 @@ func TestResolveRankedTiers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := mk(tc.entries)
 			for _, pr := range tc.probes {
-				g.mu.RLock()
-				slot, ok := g.resolveRankedLocked(*sym, syntax.EmptyScopes(), pr.phase)
-				g.mu.RUnlock()
+				// Anonymous function per iteration so the RUnlock fires at the end
+				// of THIS probe, not accumulated via defer to the end of the
+				// subtest — resolveRankedLocked's own doc requires defer release
+				// (it can panic mid-hold), but stacking that defer across loop
+				// iterations would hold the lock across every later probe too.
+				slot, ok := func() (int, bool) {
+					g.mu.RLock()
+					defer g.mu.RUnlock()
+					return g.resolveRankedLocked(*sym, syntax.EmptyScopes(), pr.phase)
+				}()
 				qt.Assert(t, ok, qt.Equals, pr.wantOK, qt.Commentf("phase %d", pr.phase))
 				if pr.wantOK {
 					qt.Assert(t, slot, qt.Equals, pr.wantSlot, qt.Commentf("phase %d", pr.phase))
@@ -107,13 +116,21 @@ func TestResolveRankedTiers(t *testing.T) {
 }
 
 // (ANY, mutable) is forbidden: no population produces it, so the write API
-// refuses it rather than modeling a row nothing means (design §4.1).
+// refuses it rather than modeling a row nothing means (design §4.1). Pinned via
+// errors.Is on the sentinel, not the panic text: a message-only assertion would
+// keep passing even if the sentinel choice changed underneath it, which is
+// exactly the identity the house error-handling rule protects.
 func TestCreateGlobalBindingAtRefusesAnyMutable(t *testing.T) {
 	g := NewGlobalEnvironmentFrame()
 	sym := values.NewSymbol("v")
-	qt.Assert(t, func() {
+
+	r := capturePanic(func() {
 		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), false)
-	}, qt.PanicMatches, ".*ANY, mutable.*")
+	})
+	qt.Assert(t, r, qt.IsNotNil)
+	err, ok := r.(error)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
 // A tie in a LOSING tier must not panic: rank decides first, ambiguity is only
@@ -130,8 +147,8 @@ func TestResolveRankedAmbiguityScopedToWinningTier(t *testing.T) {
 	g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
 
 	g.mu.RLock()
+	defer g.mu.RUnlock()
 	slot, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{sc1, sc2}), 0)
-	g.mu.RUnlock()
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, slot, qt.Equals, 2)
 
@@ -161,4 +178,107 @@ func TestCreateMatchesCoordinatesAndScopes(t *testing.T) {
 	// Same scopes, same coordinates: reuse.
 	_, created = g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
 	qt.Assert(t, created, qt.IsFalse)
+}
+
+// Copy's coordinate carry-forward is production-live TODAY, not just probe
+// scaffolding: NewSchemeReportNamespace builds its sealed base by copying the
+// parent's rather than minting fresh (namespace.go, wireRuntimeFrames(q,
+// p.sealedBase.global.Copy(), p.runtime.global.Copy())). Silently dropping the
+// stamps would turn a scheme-report namespace's sealed base from (AnyPhase,
+// sealed) — ambient at every phase — into the zero value (ExactPhase(0),
+// mutable), which starts colliding with real phase-0 user defines instead of
+// staying invisible to them.
+func TestCopyPreservesCoordinates(t *testing.T) {
+	sym := values.NewSymbol("v")
+	g := NewGlobalEnvironmentFrameAt(AnyPhase(), true)
+	g.CreateGlobalBinding(sym, BindingTypeVariable, nil)
+
+	c := g.Copy()
+	qt.Assert(t, c.writePhase, qt.Equals, AnyPhase())
+	qt.Assert(t, c.writeSealed, qt.IsTrue)
+
+	// The other half of what keeps CreateGlobalBindingAt's reuse check inert on
+	// a copied frame: the cloned SLOTS carry their own coordinates too, not
+	// just the frame's instance-level constants.
+	qt.Assert(t, len(c.keys[*sym]), qt.Equals, 1)
+	qt.Assert(t, c.keys[*sym][0].phase, qt.Equals, AnyPhase())
+	qt.Assert(t, c.keys[*sym][0].sealed, qt.IsTrue)
+}
+
+// The q.IsAll() wildcard branch is bespoke relative to bestSlotLocked's
+// wildcard path (a plain first-live-slot loop with no tier concept): it tracks
+// tier across the whole slot list, applies the same phase filter the scoped
+// branch does, and returns the highest tier's first live slot. Every existing
+// wildcard caller of bestSlotLocked (GetGlobalIndex, DeleteBinding,
+// AmbientKeys) inherits this ranked behavior the moment the fold swaps
+// bestSlotLocked out from under them, so pin it here.
+func TestResolveRankedWildcard(t *testing.T) {
+	sym := values.NewSymbol("v")
+
+	t.Run("tier order", func(t *testing.T) {
+		g := NewGlobalEnvironmentFrame()
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, AnyPhase(), true)     // slot 0: T3
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), true)  // slot 1: T2
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false) // slot 2: T1
+
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		qt.Assert(t, ok, qt.IsTrue)
+		qt.Assert(t, slot, qt.Equals, 2)
+	})
+
+	t.Run("other exact phase is not a candidate", func(t *testing.T) {
+		g := NewGlobalEnvironmentFrame()
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(1), false)
+
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		_, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		qt.Assert(t, ok, qt.IsFalse)
+	})
+
+	t.Run("nil'd slot is skipped", func(t *testing.T) {
+		g := NewGlobalEnvironmentFrame()
+		g.CreateGlobalBindingAt(sym, BindingTypeVariable, nil, ExactPhase(0), false)
+		// A live key pointing at a nil binding — bestSlotLocked's own wildcard
+		// branch guards exactly this state (a slot DeleteBinding emptied); the
+		// ranked probe's wildcard branch must guard it identically.
+		g.bindings[0] = nil
+
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		_, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		qt.Assert(t, ok, qt.IsFalse)
+	})
+
+	t.Run("no candidate at all", func(t *testing.T) {
+		g := NewGlobalEnvironmentFrame()
+
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		slot, ok := g.resolveRankedLocked(*sym, syntax.AllScopes(), 0)
+		qt.Assert(t, ok, qt.IsFalse)
+		qt.Assert(t, slot, qt.Equals, 0)
+	})
+}
+
+// A wider (larger-cardinality) scope set beats a narrower one INSIDE one tier.
+// TestResolveRankedTiers only ever passes nil scopes, so it pins the tier gate
+// but never the ranking scopedBestOf performs within the winning tier — the
+// mechanism is shared with bestSlotLocked, but nothing pinned it here.
+func TestResolveRankedCardinalityWithinTier(t *testing.T) {
+	sym := values.NewSymbol("v")
+	scA := syntax.NewScope()
+	scB := syntax.NewScope()
+	g := NewGlobalEnvironmentFrame()
+	// Both T1 (exact phase 0, mutable); {scA} subset {scA, scB}.
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA}, ExactPhase(0), false)
+	g.CreateGlobalBindingAt(sym, BindingTypeVariable, []*syntax.Scope{scA, scB}, ExactPhase(0), false)
+
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	slot, ok := g.resolveRankedLocked(*sym, syntax.ScopesOf([]*syntax.Scope{scA, scB}), 0)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, slot, qt.Equals, 1) // the wider {scA, scB} slot wins
 }

@@ -197,6 +197,13 @@ type GlobalEnvironmentFrame struct {
 	// on every slot it creates. TRANSITIONAL (C1–C2): while each (layer × phase)
 	// is its own instance, the instance knows its coordinates; C3 threads the
 	// writer's coordinates through instead and deletes these.
+	//
+	// Written once, before the frame is published — NewGlobalEnvironmentFrameAt
+	// sets them on a local before returning it, Copy sets them in the new
+	// frame's struct literal — and never mutated afterward; there is no setter.
+	// That write-once-before-publication property is what lets
+	// CreateGlobalBinding read them without p.mu: nothing can observe the frame
+	// until after the write already happened, so there is no reader to race.
 	writePhase  PhaseKey
 	writeSealed bool
 }
@@ -432,16 +439,32 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 // A wildcard query (q.IsAll) takes the first live candidate slot in tier order,
 // matching the old walk's layer-major first-live behavior.
 //
-// Caller MUST hold at least a read lock on p.mu, via defer: an incomparable
-// equal-cardinality tie IN THE WINNING TIER panics with wrapped
-// werr.ErrAmbiguousBinding (P8; a tie in a losing tier is dead and must not).
+// Caller MUST hold at least a read lock on p.mu, and MUST release it via defer
+// rather than a bare RUnlock: this function can panic mid-hold, on an
+// incomparable equal-cardinality tie IN THE WINNING TIER, wrapped as
+// werr.ErrAmbiguousBinding (P8; a tie in a losing tier is dead and must not
+// panic).
+//
 // There is no perfect-match early exit — a perfect match in one tier says
-// nothing about a higher tier later in the slot list.
+// nothing about a higher tier later in the slot list. Dropping it costs
+// nothing WITHIN a tier either: two slots sharing one tier necessarily carry
+// distinct scope sets, because CreateGlobalBindingAt refuses a second slot
+// with an equal scope set at identical coordinates, so a second shouldRecord
+// call in the same tier can never re-see the exact scope set just recorded.
+// "Last-wins" describes a case that cannot occur today — only a future change
+// to the reuse rule could make it occur, and that change is exactly what this
+// comment is here to warn.
 func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (int, bool) {
 	slots := p.keys[key]
 	if len(slots) == 0 {
 		return 0, false
 	}
+	// tierOf classifies s.phase.Any as T3 unconditionally, without consulting
+	// s.sealed: (ANY, mutable) is unreachable here by construction, not by a
+	// check in this function. CreateGlobalBindingAt is the ONE enforcement
+	// point — it panics on (ANY, mutable) at write time — so every ANY slot
+	// this ever sees is sealed. Do not add a defensive branch for a state
+	// nothing can produce; this runs on the hot resolution path post-fold.
 	tierOf := func(s slotRef) int {
 		switch {
 		case s.phase.Any:
@@ -517,18 +540,19 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt Bind
 }
 
 // CreateGlobalBindingAt is CreateGlobalBinding with explicit coordinates.
-// Reuse requires scope-set equality AND coordinate equality: two entries of one
-// name at different (phase, sealed) are different variables — that is what makes
-// a phase-0 define a SHADOW of a sealed entry (new slot) while a
-// define-for-syntax over the (1, mutable) registry copy stays a SUPERSEDE
-// (same slot). Scope equality alone was sufficient only while coordinates were
-// frame identity.
+// Reuse requires EXACT scope-set equality — see scopeSetsEqual for why
+// compatibility (the subset predicate resolution uses) would be a hygiene hole
+// here — AND coordinate equality: two entries of one name at different (phase,
+// sealed) are different variables — that is what makes a phase-0 define a
+// SHADOW of a sealed entry (new slot) while a define-for-syntax over the
+// (1, mutable) registry copy stays a SUPERSEDE (same slot). Scope equality
+// alone was sufficient only while coordinates were frame identity.
 //
 // (ANY, mutable) is refused: no population produces it (design §4.1), and
 // modeling it would give the wildcard a mutable row that outranked nothing.
 //
 // The returned index is DEFERRED (no frame, no slot) — load-bearing, see the
-// C2b note below GetGlobalIndex: define-syntax writes through this index
+// C2b note above GetGlobalIndex: define-syntax writes through this index
 // wildcard and lookupMacroBinding reads it back wildcard.
 func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
 	if phase.Any && !sealed {

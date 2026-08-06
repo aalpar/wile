@@ -1089,11 +1089,7 @@ func (p *Namespace) SchemeString() string {
 // runtime, mutable) — see newGlobalEnvironmentFrameForNamespaceAt for the
 // sealed-axis mint sites, whose coordinates differ from that default.
 func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame {
-	q := &GlobalEnvironmentFrame{
-		bindings: []*Binding{},
-		keys:     map[values.Symbol][]slotRef{},
-	}
-	return q
+	return NewGlobalEnvironmentFrame()
 }
 
 // newGlobalEnvironmentFrameForNamespaceAt is newGlobalEnvironmentFrameForNamespace
