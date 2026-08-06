@@ -178,7 +178,7 @@ func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
 // Must be called with write lock held.
 func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
-	global := NewGlobalEnvironmentFrame()
+	global := NewGlobalEnvironmentFrameAt(ExactPhase(phase), false)
 
 	q := &EnvironmentFrame{
 		// A phase frame parents to its phase's SEAL, never to the mutable runtime

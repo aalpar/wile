@@ -1033,7 +1033,7 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 // same route they do for a namespace: they compile with env == the phase-0 seal, and
 // AtPhase's sealed climb sends NextPhase() to the phase-1 seal.
 func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
-	seals := newSealedAxisFrames(p, newGlobalEnvironmentFrameForNamespace(p))
+	seals := newSealedAxisFrames(p, newGlobalEnvironmentFrameForNamespaceAt(p, AnyPhase(), true))
 	q := &EnvironmentFrame{
 		parent:     seals[PhaseRuntime],
 		global:     newGlobalEnvironmentFrameForNamespace(p),
@@ -1085,13 +1085,21 @@ func (p *Namespace) SchemeString() string {
 // for use within the given Namespace. The Namespace argument is retained
 // for symmetry with the other Namespace-scoped helpers; the
 // GlobalEnvironmentFrame itself does not store a back-reference (ownership
-// flows through EnvironmentFrame).
+// flows through EnvironmentFrame). Its coordinates are the default (exact
+// runtime, mutable) — see newGlobalEnvironmentFrameForNamespaceAt for the
+// sealed-axis mint sites, whose coordinates differ from that default.
 func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
-		keys:     map[values.Symbol][]int{},
+		keys:     map[values.Symbol][]slotRef{},
 	}
 	return q
+}
+
+// newGlobalEnvironmentFrameForNamespaceAt is newGlobalEnvironmentFrameForNamespace
+// with explicit coordinates, for the sealed-axis mint sites.
+func newGlobalEnvironmentFrameForNamespaceAt(_ *Namespace, phase PhaseKey, sealed bool) *GlobalEnvironmentFrame {
+	return NewGlobalEnvironmentFrameAt(phase, sealed)
 }
 
 // newSealedAxisFrames builds one immutable frame per sealedAxis row and returns them
@@ -1120,7 +1128,7 @@ func newSealedAxisFrames(ns *Namespace, sealedGlobal *GlobalEnvironmentFrame) ma
 	for _, phase := range sealedAxis {
 		global := sealedGlobal
 		if base != nil {
-			global = newGlobalEnvironmentFrameForNamespace(ns)
+			global = newGlobalEnvironmentFrameForNamespaceAt(ns, ExactPhase(phase), true)
 		}
 		frame := &EnvironmentFrame{
 			parent:     base,
@@ -1185,7 +1193,7 @@ func newPhaseRegistryForNamespace(ns *Namespace, seals map[Phase]*EnvironmentFra
 // the mutable child; SealedBase() returns the parent. The two-frame topology and phase
 // wiring live in wireRuntimeFrames.
 func initRuntimeFrame(ns *Namespace, mutableGlobal *GlobalEnvironmentFrame) {
-	wireRuntimeFrames(ns, newGlobalEnvironmentFrameForNamespace(ns), mutableGlobal)
+	wireRuntimeFrames(ns, newGlobalEnvironmentFrameForNamespaceAt(ns, AnyPhase(), true), mutableGlobal)
 }
 
 // wireRuntimeFrames builds the two-level phase-0 stack and its shared PhaseRegistry: an

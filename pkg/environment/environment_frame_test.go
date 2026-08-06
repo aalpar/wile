@@ -562,7 +562,7 @@ func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
 	newBinding := NewBinding(values.NewInteger(99), BindingTypeVariable)
 
 	// Get the index from the global environment's keys map
-	idx := env.global.keys[*gi.Index][0]
+	idx := env.global.keys[*gi.Index][0].slot
 	env.SetGlobalBindingByIndex(idx, newBinding)
 
 	binding := env.GetGlobalBinding(gi)

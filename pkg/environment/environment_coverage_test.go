@@ -32,7 +32,7 @@ func TestNewEnvironmentFrame_Isolated(t *testing.T) {
 	local := NewLocalEnvironment(2)
 	global := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
-		keys:     map[values.Symbol][]int{},
+		keys:     map[values.Symbol][]slotRef{},
 	}
 	env := newEnvironmentFrame(local, global)
 	c.Assert(env, qt.IsNotNil)

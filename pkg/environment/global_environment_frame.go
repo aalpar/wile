@@ -140,6 +140,36 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 	return v.Index.EqualTo(p.Index)
 }
 
+// PhaseKey is a Phase plus an explicit ANY wildcard. Phase is a full int8
+// domain (GetOrCreate mints any value; the tower climbs to 127), so there is no
+// free in-band value to steal, and per [nil means NONE] the wildcard is a named
+// value, never a sentinel.
+type PhaseKey struct {
+	Phase Phase
+	Any   bool
+}
+
+// ExactPhase returns the key for an exact phase.
+func ExactPhase(phase Phase) PhaseKey {
+	return PhaseKey{Phase: phase}
+}
+
+// AnyPhase returns the ambient wildcard key: visible from every phase. Only
+// sealed entries may carry it — see CreateGlobalBindingAt.
+func AnyPhase() PhaseKey {
+	return PhaseKey{Any: true}
+}
+
+// slotRef locates one binding of a name and carries its resolution coordinates
+// (design §4.1). slot indexes bindings, as the bare int did; phase and sealed
+// are resolution coordinates — nothing after resolution needs them, which is
+// why they live here and not on BindingMeta (design Q1).
+type slotRef struct {
+	slot   int
+	phase  PhaseKey
+	sealed bool
+}
+
 // GlobalEnvironmentFrame represents global bindings for a single phase.
 //
 // Design: GlobalEnvironmentFrame has no hierarchy of its own. The environment
@@ -161,16 +191,33 @@ type GlobalEnvironmentFrame struct {
 	// global bindings are keyed by scope set as well as by name (Flatt's sets of
 	// scopes): a macro-introduced top-level binder and a user-written one share a
 	// name but are different variables. Mirrors LocalEnvironmentFrame.keys.
-	keys     map[values.Symbol][]int
+	keys     map[values.Symbol][]slotRef
 	bindings []*Binding
+	// writePhase/writeSealed are the constant coordinates this instance stamps
+	// on every slot it creates. TRANSITIONAL (C1–C2): while each (layer × phase)
+	// is its own instance, the instance knows its coordinates; C3 threads the
+	// writer's coordinates through instead and deletes these.
+	writePhase  PhaseKey
+	writeSealed bool
 }
 
-// NewGlobalEnvironmentFrame creates a new global environment frame.
+// NewGlobalEnvironmentFrame creates a new global environment frame. Its
+// coordinates are the zero value, (ExactPhase(PhaseRuntime), mutable) — the
+// pre-C1 default every frame stamped implicitly.
 func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
 		bindings: []*Binding{},
-		keys:     map[values.Symbol][]int{},
+		keys:     map[values.Symbol][]slotRef{},
 	}
+	return q
+}
+
+// NewGlobalEnvironmentFrameAt creates a frame whose slots carry the given
+// coordinates. NewGlobalEnvironmentFrame() remains the (exact 0, mutable) form.
+func NewGlobalEnvironmentFrameAt(phase PhaseKey, sealed bool) *GlobalEnvironmentFrame {
+	q := NewGlobalEnvironmentFrame()
+	q.writePhase = phase
+	q.writeSealed = sealed
 	return q
 }
 
@@ -186,7 +233,10 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	q := &GlobalEnvironmentFrame{}
+	q := &GlobalEnvironmentFrame{
+		writePhase:  p.writePhase,
+		writeSealed: p.writeSealed,
+	}
 
 	// Batch allocation: allocate all Bindings contiguously (1 allocation)
 	// instead of N separate heap objects.
@@ -210,7 +260,7 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 		// Each slot list must be cloned, not shared: maps.Copy would alias the
 		// slices, so a later append in either frame could be observed by the other
 		// (or silently reallocate in only one).
-		q.keys = make(map[values.Symbol][]int, len(p.keys))
+		q.keys = make(map[values.Symbol][]slotRef, len(p.keys))
 		for k, slots := range p.keys {
 			q.keys[k] = slices.Clone(slots)
 		}
@@ -244,7 +294,11 @@ func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol][]int {
 	defer p.mu.RUnlock()
 	result := make(map[values.Symbol][]int, len(p.keys))
 	for k, slots := range p.keys {
-		result[k] = slices.Clone(slots)
+		ss := make([]int, len(slots))
+		for i, s := range slots {
+			ss[i] = s.slot
+		}
+		result[k] = ss
 	}
 	return result
 }
@@ -333,26 +387,26 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 		// Skip nil'd slots for the same reason the scoped branch does: a live key
 		// may point at a slot DeleteBinding emptied. Returning slots[0] blindly
 		// would hand back a nil binding for callers to dereference.
-		for _, i := range slots {
-			if i < len(p.bindings) && p.bindings[i] != nil {
-				return i, true
+		for _, s := range slots {
+			if s.slot < len(p.bindings) && p.bindings[s.slot] != nil {
+				return s.slot, true
 			}
 		}
 		return 0, false
 	}
 	scopes := q.Scopes()
 	var best scopedBestOf[int]
-	for _, i := range slots {
-		if i >= len(p.bindings) || p.bindings[i] == nil {
+	for _, s := range slots {
+		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 			continue
 		}
-		bindingScopes := p.bindings[i].Scopes()
+		bindingScopes := p.bindings[s.slot].Scopes()
 		if !syntax.ScopesCompatible(bindingScopes, scopes) {
 			continue
 		}
 		record, done := best.shouldRecord(bindingScopes, len(scopes))
 		if record {
-			best.record(i, bindingScopes)
+			best.record(s.slot, bindingScopes)
 		}
 		if done {
 			break
@@ -366,30 +420,139 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 	return best.Result()
 }
 
-// CreateGlobalBinding creates a new global binding with the given key and type.
-// Returns the GlobalIndex and whether a new binding was created (false if the
-// binding already existed).
-// Thread-safe: uses full Lock to prevent TOCTOU races.
-// Reuse requires EXACT scope-set equality — see scopeSetsEqual for why
-// compatibility would be a hygiene hole here.
-func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
-	r := p
+// resolveRankedLocked is the flat model's one resolution rule (design §4.3):
+// a slot is a candidate iff its scopes are compatible AND its coordinates admit
+// the query phase — tier T1 (exact phase, mutable), T2 (exact phase, sealed),
+// T3 (ANY, sealed); any OTHER exact phase is not a candidate at all, which is
+// phase hermeticity as key disjointness (P5). The highest non-empty tier wins;
+// maximal scope cardinality ranks within it (rank-major, cardinality-minor —
+// the ordering the frame walk this replaces already had: first-frame-wins
+// across layers, maximal-cardinality within one).
+//
+// A wildcard query (q.IsAll) takes the first live candidate slot in tier order,
+// matching the old walk's layer-major first-live behavior.
+//
+// Caller MUST hold at least a read lock on p.mu, via defer: an incomparable
+// equal-cardinality tie IN THE WINNING TIER panics with wrapped
+// werr.ErrAmbiguousBinding (P8; a tie in a losing tier is dead and must not).
+// There is no perfect-match early exit — a perfect match in one tier says
+// nothing about a higher tier later in the slot list.
+func (p *GlobalEnvironmentFrame) resolveRankedLocked(key values.Symbol, q syntax.ScopeSet, phase Phase) (int, bool) {
+	slots := p.keys[key]
+	if len(slots) == 0 {
+		return 0, false
+	}
+	tierOf := func(s slotRef) int {
+		switch {
+		case s.phase.Any:
+			return 2
+		case s.phase.Phase != phase:
+			return -1
+		case s.sealed:
+			return 1
+		default:
+			return 0
+		}
+	}
+	if q.IsAll() {
+		bestTier := -1
+		bestSlot := 0
+		for _, s := range slots {
+			if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
+				continue
+			}
+			tier := tierOf(s)
+			if tier < 0 {
+				continue
+			}
+			if bestTier < 0 || tier < bestTier {
+				bestTier = tier
+				bestSlot = s.slot
+			}
+		}
+		return bestSlot, bestTier >= 0
+	}
+	scopes := q.Scopes()
+	var tiers [3]scopedBestOf[int]
+	for _, s := range slots {
+		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
+			continue
+		}
+		tier := tierOf(s)
+		if tier < 0 {
+			continue
+		}
+		bindingScopes := p.bindings[s.slot].Scopes()
+		if !syntax.ScopesCompatible(bindingScopes, scopes) {
+			continue
+		}
+		record, _ := tiers[tier].shouldRecord(bindingScopes, len(scopes))
+		if record {
+			tiers[tier].record(s.slot, bindingScopes)
+		}
+	}
+	for tier := range tiers {
+		if tiers[tier].Ambiguous() {
+			panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+				"resolveRankedLocked: identifier %q resolves ambiguously among incomparable hygienic scope sets",
+				key.Key))
+		}
+		slot, ok := tiers[tier].Result()
+		if ok {
+			return slot, true
+		}
+	}
+	return 0, false
+}
 
+// CreateGlobalBinding creates a new global binding with the given key and type,
+// stamped with this frame's (writePhase, writeSealed) coordinates. Returns the
+// GlobalIndex and whether a new binding was created (false if the binding
+// already existed at those coordinates). See CreateGlobalBindingAt for the
+// reuse rule.
+// Thread-safe: delegates to CreateGlobalBindingAt, which takes the full Lock
+// to prevent TOCTOU races.
+func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType, scopes []*syntax.Scope) (*GlobalIndex, bool) {
+	return p.CreateGlobalBindingAt(key, bt, scopes, p.writePhase, p.writeSealed)
+}
+
+// CreateGlobalBindingAt is CreateGlobalBinding with explicit coordinates.
+// Reuse requires scope-set equality AND coordinate equality: two entries of one
+// name at different (phase, sealed) are different variables — that is what makes
+// a phase-0 define a SHADOW of a sealed entry (new slot) while a
+// define-for-syntax over the (1, mutable) registry copy stays a SUPERSEDE
+// (same slot). Scope equality alone was sufficient only while coordinates were
+// frame identity.
+//
+// (ANY, mutable) is refused: no population produces it (design §4.1), and
+// modeling it would give the wildcard a mutable row that outranked nothing.
+//
+// The returned index is DEFERRED (no frame, no slot) — load-bearing, see the
+// C2b note below GetGlobalIndex: define-syntax writes through this index
+// wildcard and lookupMacroBinding reads it back wildcard.
+func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
+	if phase.Any && !sealed {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"CreateGlobalBindingAt: (ANY, mutable) is not a modeled coordinate for %q", key.Key))
+	}
 	// Use full Lock (not RLock) for check-then-write pattern to prevent TOCTOU
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for _, i := range r.keys[*key] {
-		if i >= len(p.bindings) || p.bindings[i] == nil {
+	for _, s := range p.keys[*key] {
+		if s.slot >= len(p.bindings) || p.bindings[s.slot] == nil {
 			continue
 		}
-		if scopeSetsEqual(p.bindings[i].Scopes(), scopes) {
+		if s.phase != phase || s.sealed != sealed {
+			continue
+		}
+		if scopeSetsEqual(p.bindings[s.slot].Scopes(), scopes) {
 			q := NewGlobalIndex(key)
 			return q, false
 		}
 	}
 	i := len(p.bindings)
-	p.keys[*key] = append(p.keys[*key], i)
+	p.keys[*key] = append(p.keys[*key], slotRef{slot: i, phase: phase, sealed: sealed})
 	// append the new binding at index i. Global bindings carry an atomicCell so
 	// they can be read lock-free from other threads (see binding.go atomicCell).
 	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt, scopes))
@@ -562,7 +725,7 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol, scopes []*syn
 	// them drop a name whose remaining slots are still live.
 	slots := p.keys[*sym]
 	for j, s := range slots {
-		if s != i {
+		if s.slot != i {
 			continue
 		}
 		p.keys[*sym] = append(slots[:j], slots[j+1:]...)
