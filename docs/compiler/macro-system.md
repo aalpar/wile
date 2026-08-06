@@ -382,7 +382,9 @@ wrapped error rather than wrapping to −128.
 
 The `GetGlobalIndexAcrossPhases` phase-0 carve-out (R7RS §4.3 macro-generating-macro
 resolution: `jabberwocky`/`march-hare`) is unaffected by the climb — it resolves
-*unmutated* cross-phase references and continues to search `[0,1,2]`.
+*unmutated* cross-phase references and continues to search every phase the
+owner's registry has actually instantiated (`PresentPhases()`), not a fixed
+`[0,1,2]`.
 
 **Q4 — mutable state across a phase climb (resolved: hermetic by rejection).**
 Tier 1 shares bindings as single objects, so the question arose whether a

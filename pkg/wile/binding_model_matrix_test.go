@@ -346,6 +346,22 @@ func TestBindingModelMatrix(t *testing.T) {
 			units: []string{`(define r (scheme-report-environment 7))
 				(eval '(define car 5) r) (eval 'car r)`},
 			want: "5"},
+		// Whole-branch review round 1, B3: the report env's snapshot spans EVERY
+		// phase and rank (namespace.go's Store().Copy()), not just the phase-0
+		// tiers a pre-fold seal frame held — so derived syntax (cond, defined via
+		// the (1, sealed) bootstrap macros) is reachable through
+		// scheme-report-environment, which the pre-fold fresh-phase-1-seal
+		// contract refused. Accepted as intended: see NewSchemeReportNamespace.
+		{name: "report env reaches derived syntax (cond)",
+			units: []string{`(eval '(cond (#t 7)) (scheme-report-environment 7))`},
+			want:  "7"},
+		// Control for the row above: null-environment's store starts EMPTY (no
+		// Copy()), so cond stays unbound there. Without this row, "cond resolves"
+		// could mean either "the copy carried derived syntax" or "cond resolves
+		// ambiently everywhere" — this discriminates the two.
+		{name: "null-environment refuses derived syntax (control)",
+			units:   []string{`(eval '(cond (#t 7)) (null-environment 5))`},
+			wantErr: werr.ErrNoSuchBinding},
 	}
 	runMatrix(t, rows)
 }

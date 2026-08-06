@@ -119,12 +119,13 @@ type EnvironmentFrame struct {
 }
 
 // writeRank says which tier a write through this frame lands in. The zero value
-// is mutable — every ordinary frame; the sealed rank is carried by the seal
-// frames (and, after the store fold, by the transient sealed-write views owner
-// construction uses). It is a property of the VIEW, not an argument, because
-// LoadBootstrapCore COMPILES stdlib Scheme whose defines must land sealed, and
-// the compiler cannot thread a sealing parameter through define compilation
-// (design Q2, decided by force majeure).
+// is mutable — every ordinary frame; the sealed rank is carried only by the
+// sealed-write views — permanent entries in PhaseRegistry.sealedViews, one per
+// sealedAxis row, that every registration writes through (there are no seal
+// frames; that topology is gone). It is a property of the VIEW, not an
+// argument, because LoadBootstrapCore COMPILES stdlib Scheme whose defines
+// must land sealed, and the compiler cannot thread a sealing parameter through
+// define compilation (design Q2, decided by force majeure).
 type writeRank uint8
 
 const (
@@ -160,7 +161,10 @@ func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 // NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent environment frame.
 // The global environment frame is inherited from the parent.
 // This is used for creating child frames within a phase (e.g., lambda bodies, let-syntax).
-// The phase level, registry, and namespace are inherited from the parent.
+// The phase level, registry, and namespace are inherited from the parent. rank is
+// NOT inherited — the new frame is always writeRankMutable (the zero value),
+// because a lexical child (a lambda body) is never a registration target, only a
+// sealed-write view is.
 // Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
@@ -1219,5 +1223,5 @@ func (p *EnvironmentFrame) Namespace() *Namespace {
 	return p.namespace
 }
 
-// The sealed-frame routing seam (SealedWriteViewAt, SealedAt, IsNamespaceRuntime)
-// lives in sealed_base_frame.go.
+// The sealed-write-view routing seam (SealedWriteViewAt, SealedAt, IsNamespaceRuntime)
+// lives in sealed_write_view.go.

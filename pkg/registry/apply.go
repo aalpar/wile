@@ -75,10 +75,12 @@ func WithStableBasePrimitives() ApplyOption {
 
 // WithRuntimeTarget routes PhaseRuntime primitive registration and global values
 // into the given frame instead of env. frame is the sealed-write root view — used
-// by bootstrap to seat primitives in the immutable sealed base while expand-phase
-// prims stay in env.Expand() and compile-time bindings stay in env.Compile().
-// Defaults to env (backward compatible — a flat library env passes its own frame,
-// the engine root passes its sealed base).
+// by bootstrap to seat primitives in the immutable sealed-write view while
+// expand-phase prims stay in env.Expand() and compile-time bindings stay in
+// env.Compile(). Defaults to env when unset, but LoadBootstrapCore always sets
+// it, for the engine root and every library env alike — each into its OWN
+// phase-0 sealed-write view (SealedWriteViewAt(PhaseRuntime)); there is no
+// shared "sealed base" and no library env skips the carve.
 func WithRuntimeTarget(frame *environment.EnvironmentFrame) ApplyOption {
 	return func(c *applyConfig) {
 		c.runtimeTarget = frame
@@ -125,16 +127,17 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	// Register runtime and expand primitives. Both create a ForeignClosure; the phase
 	// axis is iterated as data instead of replicating the loop body. Two frames matter
 	// per phase:
-	//   - bindingEnv: where the binding lives. PhaseRuntime → the sealed base when
-	//     WithRuntimeTarget is set (immutable), else env. PhaseExpand → env.Expand().
+	//   - bindingEnv: where the binding lives. PhaseRuntime → the owner's sealed-write
+	//     view when WithRuntimeTarget is set (immutable; LoadBootstrapCore always sets
+	//     it, for the engine root and every library env alike), else env. PhaseExpand →
+	//     env.Expand().
 	//   - closureEnv: what the ForeignClosure captures as its lexical env — the frame a
 	//     foreign fn resolves user code against via mc.EnvironmentFrame(). This MUST be a
-	//     frame that reaches user defines: the MUTABLE runtime (env), NOT the sealed base.
-	//     Primitives like compile/expand/free-identifier=? resolve user-level names
-	//     through this env; capturing the sealed base would hide every user define. Only
-	//     the binding location is sealed for immutability — resolution stays merged.
-	// For a flat library env (no carve) bindingEnv == closureEnv == env, so behavior is
-	// unchanged. Compile-time bindings stay on env.Compile() (the carve is phase-0-only).
+	//     frame that reaches user defines: the MUTABLE runtime (env), NOT the sealed-write
+	//     view. Primitives like compile/expand/free-identifier=? resolve user-level names
+	//     through this env; capturing the sealed-write view would hide every user define.
+	//     Only the binding location is sealed for immutability — resolution stays merged.
+	// Compile-time bindings stay on env.Compile() (the carve is phase-0-only).
 	runtimeEnv := env
 	if cfg.runtimeTarget != nil {
 		runtimeEnv = cfg.runtimeTarget
@@ -234,10 +237,10 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
-	// Every environment that applies this registry — the engine's sealed base and
-	// each flat library env — mints its own closure here. The identity is what ties
-	// those copies together, so a recognizer sees one primitive rather than one
-	// object per environment.
+	// Every owner that applies this registry — the engine root and each library
+	// env — mints its own closure here, into its own sealed-write view. The
+	// identity is what ties those copies together, so a recognizer sees one
+	// primitive rather than one object per environment.
 	closure.SetIdentity(spec.Identity)
 	if cfg.contractEnforcement {
 		closure.SetValidator(BuildValidator(spec))

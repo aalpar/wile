@@ -89,10 +89,12 @@ var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 	// Sealed, so a user (define-syntax let-syntax …) creates a distinct shadowing binding
-	// in the mutable child instead of overwriting this slot in place — CreateGlobalBinding
-	// dedups by scopeSetsEqual ignoring BindingType, and SetOwnGlobalValue would overwrite
-	// the Primitive-typed slot's value, which every lookup then rejects (let-syntax, having
-	// no Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
+	// in the mutable child instead of overwriting this slot in place — CreateGlobalBindingAt
+	// dedups by scopeSetsEqual AND coordinate equality (phase, sealed), ignoring BindingType;
+	// a mutable-tier shadow sits at different coordinates, so it is always a new slot, which
+	// is the point of the rename. SetOwnGlobalValue would instead overwrite the
+	// Primitive-typed slot's value, which every lookup then rejects (let-syntax, having no
+	// Tier-1 fallback, dies). Lookup still reaches these: LookupPrimitiveExpander resolves
 	// env.Expand() through the ranked probe, whose T3 tier is exactly this ambient sealed set.
 	//
 	// The PHASE is what keeps this out of the value world. A phase-0 registration

@@ -1314,17 +1314,16 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// nothing extra at bootstrap and would drift into indexing user defines later
 	// (G2).
 	//
-	// SealedSlots() is now every sealed slot at EVERY phase (the fold merged the
+	// SealedSlots() is every sealed slot at EVERY phase (the fold merged the
 	// per-phase seal frames into one store), where the pre-fold walk visited only
-	// the phase-0 seal's own slots. A name sealed at BOTH phase 0 and phase 1
-	// (e.g. car's phase-1 expand copy — see the binding-model matrix header) is
-	// now visited twice here, where the walk this replaced visited it once. This
-	// is cost, not correctness. The BindingTypeVariable filter below excludes the
-	// phase-1 bootstrap MACRO additions (BindingTypeSyntax) but not a phase-1
-	// registry PRIMITIVE copy like car's (also BindingTypeVariable) — that one is
-	// genuinely visited twice, and AddDocOnlyPrimitive's per-name dedup is what
-	// keeps the double visit from becoming a double registration. Not
-	// restructured to a phase-0-only query here.
+	// the phase-0 seal's own slots. A phase-1 sealed slot is always
+	// BindingTypeSyntax (a bootstrap macro) or BindingTypePrimitive (a
+	// compile-only binding), never BindingTypeVariable: car's phase-1 expand
+	// copy — see the binding-model matrix header — is BindingTypeVariable, but
+	// registry.Apply's phaseTargets writes it through env.Expand(), an ordinary
+	// MUTABLE view, so it lives at (1, mutable) and SealedSlots() (which filters
+	// on rank) never returns it. The BindingTypeVariable filter below is what
+	// excludes the phase-1 sealed entries; it does not also cause a double visit.
 	for _, slot := range ns.Store().SealedSlots() {
 		sym := slot.Name
 		bnd := slot.Binding

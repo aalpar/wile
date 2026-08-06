@@ -191,12 +191,14 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 		return err
 	}
 
-	// DeleteBinding removes only from the mutable runtime's own frame. Post-carve,
-	// primitives and bootstrap procedures live in the immutable, engine-shared sealed
-	// base (a parent), which this must NOT mutate. If nothing was removed here and the
-	// name is owned by the sealed base, the undefine cannot be honored — reject it rather
-	// than silently returning success while the binding stays bound. A user-level shadow
-	// is still removable (DeleteBinding returns true); a name bound nowhere is a no-op.
+	// DeleteOwnGlobal removes only from the mutable runtime's own coordinates
+	// (phase 0, mutable). Primitives and bootstrap procedures live at the sealed
+	// coordinate over that SAME store — not a separate parent frame — which this
+	// must NOT mutate. If nothing was removed here and the name is owned by the
+	// sealed tier, the undefine cannot be honored — reject it rather than
+	// silently returning success while the binding stays bound. A user-level
+	// shadow is still removable (DeleteOwnGlobal returns true); a name bound
+	// nowhere is a no-op.
 	//
 	// Both halves resolve under the ambient scope set, matching namespace-ref, so
 	// a name owned only by a macro-introduced binder is a no-op rather than a

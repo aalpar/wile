@@ -179,17 +179,18 @@ additively, so `(for-syntax (for-syntax lib))` is the same as `(for-meta 2 lib)`
 and a shift that leaves `int8` is rejected (`for-meta: phase 200 out of range
 [-128, 127]`).
 
-Two lookups are still hard-wired to `{0, 1, 2}` and do not follow the tower:
+`GetGlobalIndexAcrossPhases` (`environment/environment_frame.go`, the R7RS §4.3
+macro-generating-macro carve-out for free template identifiers) and
+`findLibraryBinding` (`machine/compilation/library_bindings.go`, which decides
+what a library can export) both derive their probe set from
+`EnvironmentFrame.PresentPhases()`: the non-negative phases the owner's OWN
+registry has actually instantiated, ascending, `PhaseTemplate` excluded.
+Neither is hard-wired to `{0, 1, 2}` — a name a library binds at phase 3 or
+above is exportable.
 
-- `GetGlobalIndexAcrossPhases` (`environment/environment_frame.go`), the R7RS
-  §4.3 macro-generating-macro carve-out for free template identifiers.
-- `findLibraryBinding` (`machine/compilation/library_bindings.go`), which decides
-  what a library can export. A name a library binds at phase 3 or above is
-  therefore not exportable.
-
-Everything else that walks phases is driven by `PhaseRegistry.Phases()` (the
-instantiated set) and does follow the tower: `BoundNamesAcrossPhases`, and
-`,apropos` through it.
+Everything else that walks phases is driven by `Store().LiveSlots()` (every
+live slot at every phase and rank, in one map walk over the owner's store):
+`BoundNamesAcrossPhases`, and `,apropos` through it.
 
 `registry.PhaseSet`, the *registration* vocabulary, is narrower still: a `uint8`
 bitset covering phases 0..7 only. `PhaseTemplate` and any tower phase ≥ 8 are
@@ -446,7 +447,7 @@ These invariants must be maintained:
      view and the phase-1 one differ in REACH even though both carry
      `rank == writeRankSealed`: only the phase-0 one's writes are ambient.
    - **`sealedAxis` names which phases own a sealed-write view at all**
-     (`sealed_base_frame.go`): `{PhaseRuntime, PhaseExpand}`, in construction
+     (`sealed_write_view.go`): `{PhaseRuntime, PhaseExpand}`, in construction
      order. Every owner's `PhaseRegistry` mints every row (`newPhaseRegistry`);
      owners differ only in what gets applied *through* those views, never in
      which phases have one. Phase 2 and above have no sealed-write view at all,

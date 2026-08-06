@@ -49,7 +49,7 @@ import (
 // A wildcard query (AllScopes) re-resolves by bare name; a specific or empty
 // query re-resolves under its scope set even when that set is empty, or a stale
 // pinned index would silently cross a hygiene boundary after a
-// delete-then-recreate: DeleteBinding nils the slots and drops the name, so once
+// delete-then-recreate: DeleteBindingAt nils the slots and drops the name, so once
 // anything re-creates it a wildcard fallback would land on whatever binding now
 // holds the name — including one whose scope set the reference could never
 // reach. This one ScopeSet subsumes what a nil Scopes slice plus a scopeKeyed
@@ -411,7 +411,7 @@ func (p *GlobalEnvironmentFrame) bestSlotLocked(key values.Symbol, q syntax.Scop
 	}
 	if q.IsAll() {
 		// Skip nil'd slots for the same reason the scoped branch does: a live key
-		// may point at a slot DeleteBinding emptied. Returning slots[0] blindly
+		// may point at a slot DeleteBindingAt emptied. Returning slots[0] blindly
 		// would hand back a nil binding for callers to dereference.
 		for _, s := range slots {
 			if rejectSealed && s.sealed {
@@ -797,7 +797,7 @@ func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 // pinnedSlotLocked resolves a GlobalIndex through its pinned (Env, Slot) pair,
 // which addresses the binding directly with no re-hash of the symbol.
 //
-// The emptiness check is load-bearing, not defensive. DeleteBinding nils a slot
+// The emptiness check is load-bearing, not defensive. DeleteBindingAt nils a slot
 // but leaves it in range, so a bounds check alone would hand back a nil binding
 // where the name-keyed lookup this replaced would have missed and reported "no
 // such binding". Falling through to bestSlotLocked on a nil slot also restores
@@ -939,9 +939,12 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*s
 	// Making cached reads observe deletion needs a per-read check in those hot
 	// opcodes; see TODO.md "namespace-undefine! does not stop compiled code".
 	p.bindings[i] = nil
-	// Prune the dead index rather than leaving it in place: Keys' consumers
-	// treat slots[0] as the name's representative, so a dead slot 0 would make
-	// them drop a name whose remaining slots are still live.
+	// Prune the dead index rather than leaving it in place: every walker over
+	// p.keys (bestSlotLocked, CreateGlobalBindingAt's dedup, LiveSlots/SealedSlots)
+	// already skips a nil'd slot defensively, so leaving one in place would not
+	// corrupt a lookup — but an unpruned list grows without bound across repeated
+	// delete/redefine cycles, and every one of those walkers rescans the whole
+	// list. Pruning keeps it sized to the name's LIVE slots.
 	slots := p.keys[*sym]
 	for j, s := range slots {
 		if s.slot != i {
@@ -950,7 +953,8 @@ func (p *GlobalEnvironmentFrame) DeleteBindingAt(sym *values.Symbol, scopes []*s
 		p.keys[*sym] = append(slots[:j], slots[j+1:]...)
 		break
 	}
-	// Drop the name once it owns no slots, so Keys stops reporting it at all.
+	// Drop the name once it owns no slots, so a future lookup on it is a plain
+	// map miss and AmbientKeysAt / LiveSlots / SealedSlots stop enumerating it.
 	if len(p.keys[*sym]) == 0 {
 		delete(p.keys, *sym)
 	}

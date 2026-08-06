@@ -974,6 +974,21 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 	// copy. Stable anchors ride the copy, so set! on one still refuses while a
 	// define-shadow stays legal. Syntax interning delegates through q → p via the
 	// Namespace.parent chain.
+	//
+	// The copy spans every phase and rank, which is a deliberate widening from the
+	// pre-fold contract: back when phase-1 lived in its own seal frame, this
+	// constructor copied only the phase-0 tiers and gave phase 1 a FRESH, empty
+	// seal, so no define-syntax-defined macro (bootstrap or user) was reachable —
+	// only special forms handled by the primitive expanders. Post-fold there is one
+	// store, and Copy() has no way to copy part of it, so a report env also inherits
+	// the (1, sealed) bootstrap macros and (1, mutable)/(2, mutable) registry and
+	// compile-time bindings. That means derived syntax (cond, when, case, do, …) is
+	// reachable through scheme-report-environment where it previously was not — an
+	// accepted widening, not a bug: R5RS §6.5 specifies that the report environment
+	// supplies the report's bindings, and cond/when/case/do are R5RS derived
+	// expressions. Pinned in binding_model_matrix_test.go ("report env reaches
+	// derived syntax (cond)"), with a null-environment control proving the reach
+	// comes from the copy, not from ambient resolution everywhere.
 	initOwner(q, p.Store().Copy())
 	return q
 }
