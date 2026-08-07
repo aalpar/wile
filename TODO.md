@@ -148,13 +148,26 @@ BOTH already SHIPPED (their design notes in `plans/` read "not started," but the
 `memory/` impl twins are COMPLETE), leaving unboxed arithmetic as the sole real
 perf lever.
 
-- [ ] **`make planlint` — flag plan headers whose Status is stale vs reality.**
-  Check each `plans/*.md` Status line against merged PRs / archived `memory/`
-  twins. Motivating failure: three consecutive triage hits (escape-gated,
-  layered-env, frame-reclaim) had the *impl* plan archived to `memory/` as
-  COMPLETE while the *design note* left in `plans/` still read "not started," so
-  the plans index inherited a false "open" verdict. Companion to the existing
-  `make doclint` item (Tier 3, citation-range check). [Small]
+- [x] **`make planlint` — flag plan headers whose Status is stale vs reality.**
+  SHIPPED 2026-08-07 (`tools/sh/planlint.sh`, `make planlint`). A status keyword
+  alone is never a finding — plenty of plans are legitimately unstarted — so an
+  open-sounding Status line must coincide with a signal that the work landed:
+  an `-impl` twin archived to `memory/`, a TODO.md row reporting it shipped, or
+  a merged PR cited **on that Status line**. Motivating failure: three
+  consecutive triage hits (escape-gated, layered-env, frame-reclaim) had the
+  *impl* plan archived to `memory/` as COMPLETE while the *design note* left in
+  `plans/` still read "not started," so the plans index inherited a false "open"
+  verdict. Not wired into `make ci` — `plans/` and `memory/` are gitignored, so
+  the check only has inputs on a maintainer's checkout. First run: 3 findings
+  over 62 plans, including the documented `layered-environment` case and
+  `library-phase-isolation-design` ("proposed, not started" against a TODO.md
+  row reading **SHIPPED** with four commits). Companion to the still-open
+  `make doclint` item (Tier 3, citation-range check).
+  *Deviation from the spec below, measured:* the cheap "extract any cited
+  `PR #N`" form was implemented first and every one of its 8 hits was a
+  reference to a *neighbouring* plan's PR — plans cite each other constantly.
+  Restricting the PR scan to the Status line drops the recall the other two
+  signals cover anyway and takes that false-positive class to zero.
 - [ ] **Unboxed scalar/float arithmetic — kill per-op `*values.Float` heap alloc.**
   The `sumfp` loop spends ~85% CPU in GC, not compute. Verified open against
   source: the eval stack is still a boxed `values.Vector` (`pkg/machine/stack.go:25`);
@@ -1775,7 +1788,7 @@ rather than split across tiers.
 - [x] **Scheme-side line coverage** [Tooling, M, Done]: Shipped and merged to master — `WithCoverage(*coverage.Collector)` engine option (`options.go:443`), `pkg/coverage/` package, `--cover PATH` + `--cover-stdlib` CLI flags (`cmd/wile/main.go:56-57`), Go cover v1 output consumable by `go tool cover -html`, end-to-end `cmd/wile/cover_integration_test.go`. Docs: `docs/coverage/scheme-coverage.md`. `memory/2026-04-18-scheme-line-coverage.local.md`
 - [ ] **Source file tracking in Syntax Objects** [Tooling]: Utilities for finding source locations and providing source lines.
 - [ ] **`make doclint` target** [Tooling, S]: Extract `foo.go:N` citations from `docs/**/*.md` and `plans/**/*.md`; assert each file exists and `N` is within `wc -l file`. Cheap version catches the bulk of drift. Existing `check-readme-links.sh` only validates markdown link targets, not prose citations. Past multi-commit doc sweeps (PRs #707, #710, #711, #712, #713) are evidence the check would pay for itself. Stronger form would `go/ast`-parse the cited line and verify the enclosing decl name matches a nearby identifier in the doc.
-- [ ] **`make planlint` target** [Tooling, S]: Flag plan files whose header status is stale. A plan's status lives in two places — its own `**Status:**`/`status =` header and the central `plans/CLAUDE.local.md` index — and only the central one is on the post-merge checklist, so per-file headers rot. Cheap version: for each `plans/*.md` whose header matches `not started|design only|design draft|ready to implement|pending`, extract any cited `PR #N` / `#N` and assert it is *not* merged (`gh pr view N`); a merged PR under a "not started" header is the drift signal. Evidence the check pays for itself: a 2026-06-05 audit found **10** plan headers claiming not-done for work merged on master (interval-dataflow-widening, sat-solver, numeric-registry, values-SR, approximate-counting-semirings, bignum-allocation-reduction, algebra-docs). Stronger form: cross-check each header against its `plans/CLAUDE.local.md` row and flag mismatches. Companion to `make doclint` above. `1` lone candidate left unresolved by that audit: `2026-04-20-axis-b-annotation-bugs` (cleanup-shipped claim unverifiable from git).
+- [x] **`make planlint` target** [Tooling, S]: SHIPPED 2026-08-07 — see the Top Priority entry for what was built and where the implementation departs from the sketch below. Note the sketch names `plans/CLAUDE.local.md` as the central index; that file now says the index is TODO.md itself ("Where the index lives"), and the shipped check cross-references TODO.md. Flag plan files whose header status is stale. A plan's status lives in two places — its own `**Status:**`/`status =` header and the central `plans/CLAUDE.local.md` index — and only the central one is on the post-merge checklist, so per-file headers rot. Cheap version: for each `plans/*.md` whose header matches `not started|design only|design draft|ready to implement|pending`, extract any cited `PR #N` / `#N` and assert it is *not* merged (`gh pr view N`); a merged PR under a "not started" header is the drift signal. Evidence the check pays for itself: a 2026-06-05 audit found **10** plan headers claiming not-done for work merged on master (interval-dataflow-widening, sat-solver, numeric-registry, values-SR, approximate-counting-semirings, bignum-allocation-reduction, algebra-docs). Stronger form: cross-check each header against its `plans/CLAUDE.local.md` row and flag mismatches. Companion to `make doclint` above. `1` lone candidate left unresolved by that audit: `2026-04-20-axis-b-annotation-bugs` (cleanup-shipped claim unverifiable from git).
 - [ ] **POSIX API / SRFI-170 remaining phases** [Standard library, 9 phases]: Phases 2-10 not started. Phase 1 (directory ops + process extension) completed in PR #565.
 - [ ] **REPL tab completion still offers macro-introduced binders** [Tooling + hygiene, S, 2026-07-19]: `Namespace.BoundSymbolNames` (`pkg/environment/namespace.go:315`) now lists only names resolvable under the ambient scope set, via `GlobalEnvironmentFrame.AmbientKeys` (`global_environment_frame.go:267`). The completion path was deliberately left on the unfiltered walk — `Completer.collectBindingNames` (`pkg/repl/completer.go:83`) → `Engine.BoundNames` (`pkg/wile/engine.go:842`) → `Namespace.BoundNamesAcrossPhases` (`namespace.go:342`), which ranges `global.Keys()` at `:353`. The two listings now disagree, and completion can still offer a name that resolves to nothing. **Why it was not filtered alongside:** `BoundNamesAcrossPhases` also walks the expand and compile phase frames, where `define-syntax` keywords live (`compile_define_syntax.go:91`), so an ambient filter would drop any keyword whose binder carries a non-empty scope set. `ee918fd1`'s message states a top-level user binder carries the empty set, which suggests keywords survive — but that is read off a commit message, not measured, and library-defined + imported macros are unchecked. **Measure first:** apply the filter, diff the completion list before/after on a KitchenSink engine; missing macro keywords (`when`, `unless`, stdlib forms) is the disqualifying signal. Not at risk: `let-syntax`/`letrec-syntax` keywords are local bindings (`expander_let_syntax.go:137`), never in `Keys()`. Same read-path family as A1 above, which fixed the sealed-base half of this walk.
 
