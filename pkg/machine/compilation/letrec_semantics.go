@@ -83,19 +83,12 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 	// then made it report a set it was never keyed under, so the next predeclare
 	// of the same name mis-deduplicated against it. newGlobalBinding records the
 	// set for us, which is why nothing below writes m.Scopes.
-	_, _ = env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
-
-	// Address the placeholder at THIS view's own coordinates, under the binder's
-	// own scope set. The index MaybeCreateOwnGlobalBinding returns is deferred (no
-	// frame, no scopes), and a deferred read resolves wildcard: once a name has
-	// more than one slot, that slot can belong to another expansion — or to the
-	// sealed startup set — and the source stamp below would land on it.
-	own := env.GlobalEnvironment()
-	ownIndex := env.OwnGlobalIndex(name, syntax.ScopesOf(scopes))
-	if ownIndex == nil {
-		return
-	}
-	binding := own.GetOwnGlobalBinding(ownIndex)
+	//
+	// The returned index is PINNED to the slot this call landed on, at THIS view's
+	// own coordinates, so the source stamp below cannot land on another slot of the
+	// same name — one belonging to another expansion, or to the sealed startup set.
+	ownIndex, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable, scopes)
+	binding := env.GlobalEnvironment().GetOwnGlobalBinding(ownIndex)
 	if binding == nil || source == nil {
 		return
 	}

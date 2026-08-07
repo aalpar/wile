@@ -965,23 +965,23 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 // It exists because create and write disagree about what a nil scope set means:
 // creation treats nil as the EXACT empty set (so a macro-introduced binder gets
 // its own slot), while a GlobalIndex built from a bare symbol resolves MATCH ANY
-// (the name's first live slot, whatever its hygiene). Pairing the two by hand
-// therefore creates one binding and writes a different one as soon as any macro
-// has introduced the same name — the host's value lands on the macro's variable
-// and the host's own binding stays void.
+// (the name's first live slot, whatever its hygiene). A caller that creates under
+// scopes and then hand-builds a bare-symbol index therefore creates one binding
+// and writes a different one as soon as any macro has introduced the same name —
+// the host's value lands on the macro's variable and the host's own binding stays
+// void.
 //
 // Callers that create a global and immediately give it a value should use this
-// instead of pairing MaybeCreateOwnGlobalBinding with SetOwnGlobalValue, so the
-// nil question cannot be asked wrongly at the call site.
+// rather than reaching for an index of their own, so the nil question cannot be
+// asked wrongly at the call site.
 func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) error {
-	p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
+	// The create's index is PINNED to the slot it landed on, at this view's own
+	// write coordinates, so the write addresses that slot rather than re-deriving
+	// it from the name — which over one merged store would also have to be told
+	// which tier the create wrote into.
+	gi, _ := p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
 
-	// Re-resolve under the creation key AND at the creation coordinates.
-	// CreateGlobalBindingAt hands back a DEFERRED index carrying neither frame
-	// nor scopes, which the write path would resolve wildcard; and over one
-	// merged store even a scoped resolve must be told which tier it wrote into.
-	phase, sealed := p.writeCoordinates()
-	err := p.global.setValueAtCoords(key, syntax.ScopesOf(scopes), phase, sealed, v)
+	err := p.global.SetOwnGlobalValue(gi, v)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "DefineOwnGlobal: write to %q failed after creation", key.Key)
 	}
