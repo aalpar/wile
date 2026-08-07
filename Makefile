@@ -639,6 +639,15 @@ check-readme-links:
 check-docs-orphans:
 	@$(SH_TOOLS_DIR)/check-docs-orphans.sh docs
 
+# Flag plan files whose Status header claims the work has not landed while an
+# archived -impl twin, TODO.md's index row, or a merged PR on that same Status
+# line says otherwise. Deliberately NOT part of `make ci`: plans/ and memory/
+# are gitignored, so the check only has inputs on a maintainer's checkout.
+#   make planlint
+.PHONY: planlint
+planlint:
+	@$(SH_TOOLS_DIR)/planlint.sh plans memory TODO.md
+
 # Build the Docker image containing the Go toolchain and compiled binary.
 # Delegates to tools/sh/docker-build.sh.
 #   make docker-build
