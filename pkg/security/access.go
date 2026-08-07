@@ -38,6 +38,12 @@ const (
 	ResourceCode    = "code"
 	ResourceEnv     = "env"
 	ResourceProcess = "process"
+	// ResourceNamespace covers constructing a first-class environment whose
+	// capability surface is not already the engine's. It is deliberately not
+	// ResourceCode: "may run new code" and "may acquire primitives this engine
+	// never registered" are different questions, and an authorizer that permits
+	// eval under a confined root would otherwise also hand over gointerop.
+	ResourceNamespace = "namespace"
 )
 
 // Well-known action constants. Extensions may define additional
@@ -52,4 +58,5 @@ const (
 	ActionExit      = "exit"
 	ActionExec      = "exec"       // structured process execution (process-spawn)
 	ActionExecShell = "exec-shell" // shell command execution (system)
+	ActionCreate    = "create"     // construct a capability-bearing object (namespace)
 )

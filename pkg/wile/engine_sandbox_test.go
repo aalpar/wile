@@ -902,11 +902,13 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 // with the file-exists? row, and current-directory is uncovered. A new gate action
 // should add a row here.
 //
-// The sweep deliberately does NOT assert that (environment '(wile kitchen-sink))
-// is rejected: that constructor is ungated today and the constructed namespace
-// inherits the caller's denying authorizer, so its primitives stay gated and
-// there is no escalation to reject. Whether to add a defense-in-depth gate there
-// is a separate design question.
+// The sweep deliberately does NOT cover (environment '(wile kitchen-sink)).
+// That constructor is now gated, but on containment rather than on a per-action
+// denial, so it does not belong in an action sweep: the question it answers is
+// "does this profile widen the engine's surface?", and the hazard it closes is
+// an extension with no gate sites at all (threads, gointerop), which no row here
+// could ever have caught. See TestProfileEnvironmentCannotWidenSandboxedEngine
+// below, and checkProfileWidening in pkg/internal/bootstrap.
 func TestAuthorizer_DenyAllSweep(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -940,4 +942,54 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 				qt.Commentf("expected ErrAccessDenied for %s, got: %v", tc.code, err))
 		})
 	}
+}
+
+// TestProfileEnvironmentCannotWidenSandboxedEngine is the end-to-end form of the
+// containment rule: through a real Engine, from Scheme, a sandboxed engine
+// cannot acquire an ungated extension by naming a richer profile.
+//
+// The hazard is specific and is why an authorizer alone was not enough.
+// (environment '(wile kitchen-sink)) builds the child via NewChildNamespace,
+// which copies the authorizer, so every GATED resource stays under the engine's
+// policy. But threads, gointerop and namespace declare no security.Check sites,
+// so their primitives were reachable from an engine that never registered them,
+// and no policy was ever consulted — an authorizer cannot refuse what it is not
+// asked about.
+//
+// Each arm states which half of the policy it pins, so a future edit that
+// collapses them is visibly changing the contract rather than tidying tests.
+func TestProfileEnvironmentCannotWidenSandboxedEngine(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("sandboxed engine is refused a widening profile", func(t *testing.T) {
+		c := qt.New(t)
+		engine, err := NewEngine(ctx, WithProfile(ConsoleWithLoad))
+		c.Assert(err, qt.IsNil)
+		defer engine.Close()
+
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, `(environment '(wile kitchen-sink))`))
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+			qt.Commentf("expected the widening to be refused, got: %v", err))
+	})
+
+	t.Run("sandboxed engine may still construct its own profile", func(t *testing.T) {
+		c := qt.New(t)
+		engine, err := NewEngine(ctx, WithProfile(ConsoleWithLoad))
+		c.Assert(err, qt.IsNil)
+		defer engine.Close()
+
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, `(environment '(wile console-with-load))`))
+		c.Assert(err, qt.IsNil, qt.Commentf("a contained profile must not be newly denied"))
+	})
+
+	t.Run("engine without an authorizer keeps the documented widening path", func(t *testing.T) {
+		c := qt.New(t)
+		engine, err := NewEngine(ctx, WithProfile(KitchenSink))
+		c.Assert(err, qt.IsNil)
+		defer engine.Close()
+
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, `(environment '(wile kitchen-sink))`))
+		c.Assert(err, qt.IsNil)
+	})
 }
