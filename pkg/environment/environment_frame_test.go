@@ -111,12 +111,14 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	// Test adding a binding
 	gi0, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable, nil)
 	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, gi0, valuestest.SchemeEquals, NewGlobalIndex(tv0))
+	// The create-returned index is PINNED: it carries the store and the slot the
+	// create just landed on, so it addresses that binding with no re-resolve.
+	qt.Assert(t, gi0.Index, valuestest.SchemeEquals, tv0)
+	qt.Assert(t, gi0.Env, qt.Equals, env.GlobalEnvironment())
+	qt.Assert(t, env.GlobalEnvironment().GetOwnGlobalBinding(gi0), qt.IsNotNil)
 
-	// Set the initial value of the new binding. The create-returned index is
-	// deferred; SetOwnGlobalValue takes a pinned one, so re-resolve at this
-	// view's own coordinates first.
-	err := env.SetOwnGlobalValue(env.OwnGlobalIndex(tv0, syntax.EmptyScopes()), value0)
+	// Set the initial value of the new binding, through the pin the create returned.
+	err := env.SetOwnGlobalValue(gi0, value0)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Re-adding the same binding should not change the index
@@ -131,8 +133,8 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi1.Index, valuestest.SchemeEquals, tv1)
 
-	// Set the initial value of the new binding
-	err = env.SetOwnGlobalValue(env.OwnGlobalIndex(tv1, syntax.EmptyScopes()), value1)
+	// Set the initial value of the new binding, likewise through the create's pin.
+	err = env.SetOwnGlobalValue(gi1, value1)
 	qt.Assert(t, err, qt.IsNil)
 
 	bd := env.GetGlobalBinding(gi0)

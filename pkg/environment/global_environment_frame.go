@@ -804,9 +804,11 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // (ANY, mutable) is refused: no population produces it (design §4.1), and
 // modeling it would give the wildcard a mutable row that outranked nothing.
 //
-// The returned index is DEFERRED (no frame, no slot) — load-bearing, see the
-// C2b note below: define-syntax writes through this index wildcard and
-// lookupMacroBinding reads it back wildcard.
+// The returned index is PINNED to the slot this call landed on, created or
+// reused, carrying the creation scope set as its re-resolution query. Callers
+// may write through it directly: it needs no paired re-resolve, and unlike a
+// bare-name index it cannot drift onto a different slot of the same name. See
+// the history note below for why it was deferred until 2026-08-06.
 func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, phase PhaseKey, sealed bool) (*GlobalIndex, bool) {
 	if phase.wildcard && !sealed {
 		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
@@ -824,38 +826,42 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 			continue
 		}
 		if scopeSetsEqual(p.bindings[s.slot].Scopes(), scopes) {
-			q := NewGlobalIndex(key)
+			q := newScopeKeyedGlobalIndex(key, p, s, syntax.ScopesOf(scopes))
 			return q, false
 		}
 	}
 	i := len(p.bindings)
-	p.keys[*key] = append(p.keys[*key], slotRef{slot: i, phase: phase, sealed: sealed})
+	ref := slotRef{slot: i, phase: phase, sealed: sealed}
+	p.keys[*key] = append(p.keys[*key], ref)
 	if !phase.wildcard {
 		p.noteExactPhaseLocked(phase.level)
 	}
 	// append the new binding at index i. Global bindings carry an atomicCell so
 	// they can be read lock-free from other threads (see binding.go atomicCell).
 	p.bindings = append(p.bindings, newGlobalBinding(values.Void, bt, scopes))
-	q := NewGlobalIndex(key)
+	q := newScopeKeyedGlobalIndex(key, p, ref, syntax.ScopesOf(scopes))
 	return q, true
 }
 
-// NOTE (2026-07-19): returning a scope-keyed index pinned to (p, i) here — which
-// is task C2b, and which both branches have the information to do — was tried and
-// REVERTED. It is correct in isolation and it broke the tree, because the macro
-// path then depended on two errors cancelling: define-syntax wrote the
-// transformer through this deferred index (wildcard, landing on the name's FIRST
-// slot rather than the one just created) and lookupMacroBinding read it back
-// wildcard, finding the same wrong slot. Fixing only the write made the read
-// miss: `(chibi diff)` failed to load with `no such binding "let*-to-let" with
-// compatible scopes`.
+// HISTORY (2026-07-19, resolved 2026-08-06): returning the pin above is task
+// C2b. It was tried once and REVERTED, because the macro path then depended on
+// two errors cancelling: define-syntax wrote the transformer through the
+// DEFERRED index this used to return (wildcard, landing on the name's FIRST slot
+// rather than the one just created) and lookupMacroBinding read it back
+// wildcard, finding the same wrong slot. Pinning fixed the write alone, so the
+// read went looking in the right place and found nothing — `(chibi diff)` failed
+// to load with `no such binding "let*-to-let" with compatible scopes`.
 //
-// The two call sites that produced that coupling have since moved: both
-// compile_define_syntax and expander_body now pair the create with an explicit
-// OwnGlobalIndex re-resolve at the writing view's coordinates, so neither writes
-// through the index this returns. Whether C2b is therefore now safe standalone is
-// untested — the reverted experiment predates the store fold and has not been
-// re-run — so this stays a warning, not a clearance.
+// Both halves of that coupling were closed independently afterwards.
+// compile_define_syntax and expander_body pair the create with an explicit
+// OwnGlobalIndex re-resolve at the writing view's coordinates; lookupMacroBinding
+// arm 1 resolves under the reference's own scope set instead of nil. With neither
+// side wildcard the pin lands cleanly. Re-measured on the whole tree, green
+// including TestChibi{Optional,Diff}Loads — the tests that caught the original
+// break, and still the cheapest sensor for it.
+//
+// The paired re-resolves at those two sites are now redundant rather than
+// load-bearing, and can be collapsed onto this return; that is a separate change.
 
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this
 // store only. Unlike EnvironmentFrame.GetGlobalBinding it resolves nothing
