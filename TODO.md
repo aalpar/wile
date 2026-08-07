@@ -169,13 +169,39 @@ perf lever.
   Restricting the PR scan to the Status line drops the recall the other two
   signals cover anyway and takes that false-positive class to zero.
 - [ ] **Unboxed scalar/float arithmetic — kill per-op `*values.Float` heap alloc.**
-  The `sumfp` loop spends ~85% CPU in GC, not compute. Verified open against
-  source: the eval stack is still a boxed `values.Vector` (`pkg/machine/stack.go:25`);
-  no unboxed register/cell path, no `floatVal` in vmState/`Binding`. Two designs
-  in `plans/2026-06-24-unboxed-scalar-arithmetic-design.md` (Design A `[]cell`
-  stack vs Design B fixed register bank); `memory/UNBOXED-FLOAT-PIPELINE.local.md`
-  is the older 3-layer framing (superseded, archived) — pick one before starting. Sole remaining perf
-  lever after escape-gated + layered-env verified shipped. [Large]
+  **Phase 0 SHIPPED 2026-08-07** (`pkg/environment/cell.go` — `Cell`/`Box`/`Unbox`,
+  plus the probe benchmarks the plan's acceptance section cited but which had
+  never been written, `pkg/values/numeric_alloc_bench_test.go`). Phases 1 and 4
+  are **on hold pending a go/no-go**, because Phase 0's measurement invalidated
+  the premise:
+
+  > **The "~85% CPU in GC" figure is wrong and must not be re-quoted.** Profiled
+  > on master 2026-08-07 (`09e4aeca`, darwin/arm64 M4 Max — the SAME machine as
+  > the original claim): `runtime.mallocgc` is **16.4%** of samples, not 85%, and
+  > `gcBgMarkWorker` does not appear at all. The source of the 85% is
+  > `memory/UNBOXED-FLOAT-PIPELINE.local.md:30`, whose table attributes 49% to
+  > "GC coordination (`kevent`, `pthread_cond_wait`)" — those are parked-thread
+  > symbols, so that profile was counting idle runtime threads as collection.
+  > (Today those two symbols total 4.5%.) The number 85 most likely came from the
+  > `MachineContext.Run` cumulative row, which reads 85.07% and just means "the
+  > program".
+
+  Corrected ceiling: `(*Float).Add` is 19.4% cumulative on `sumfp`, of which
+  16.4% is `mallocgc`. **Removing every float box buys ~16%, plausibly ~20% with
+  heap-growth churn — on the most float-heavy benchmark in the suite.** The
+  per-op probes agree the headroom is smaller than assumed: the design doc's
+  control gap is 18.21 → 4.25 ns (4.3×) on linux/amd64, but measured here it is
+  6.95 → 3.78 ns (**1.84×**, a 3.2 ns delta rather than 14 ns).
+
+  Still verified open against source: the eval stack is a boxed `values.Vector`
+  (`pkg/machine/stack.go:25`); no unboxed register lane in `vmState`, no scalar
+  lane on `Binding`. Design is settled — **Design A is REJECTED**
+  (`plans/2026-06-24-unboxed-scalar-arithmetic-design.md`, "Decision note
+  2026-07-11"); the live plan is Design B + Phase 4 binding-slot unboxing.
+  Remaining work is Phase 1 (single register lane + fusion pass + no-loss gate)
+  and Phase 4 (proven self-tail loop slots), both Large, for the ~16–20% above.
+  `memory/UNBOXED-FLOAT-PIPELINE.local.md` is the older 3-layer framing
+  (superseded, archived) and is also the source of the bad profile. [Large]
 
 ---
 
