@@ -61,7 +61,13 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// user-written top-level binder carries an empty set, a macro-introduced one
 	// carries the expansion's intro scope, so they land in different slots and
 	// neither can capture the other. No renaming required.
-	_, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
+	// The returned index is PINNED to the slot this call landed on, at THIS view's
+	// own coordinates, so the stamps below cannot drift onto another slot of the
+	// same name. That matters here specifically: a ranked read would answer "what
+	// does a reference see", and a coordinate-blind scoped one takes the first-seen
+	// of two equally unscoped candidates — for (define car …) the SEALED car, whose
+	// Stable stamp would then refuse the shadow as a redefine.
+	ownIndex, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, symbolScopes)
 
 	// Top-level immutability (WithImmutableTopLevel, the engine default): when enabled, a
 	// defined-once, never-set!-in-unit top-level define is rebind-stable, and a
@@ -82,18 +88,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if created && len(symbolScopes) == 0 && symbolSource == nil && !immTop {
 		return sym, nil
 	}
-	// Address the binding just created, at THIS view's own coordinates. A ranked
-	// read would answer a different question, and a coordinate-blind scoped one
-	// takes the first-seen of two equally unscoped candidates — for (define car …)
-	// that is the SEALED car, whose Stable stamp would then refuse the shadow. The
-	// creation-returned index is deferred and scope-less, so it cannot be used
-	// either. Mirror of emitDefineStore's re-resolve.
-	own := p.env.GlobalEnvironment()
-	ownIndex := p.env.OwnGlobalIndex(sym, syntax.ScopesOf(symbolScopes))
-	if ownIndex == nil {
-		return sym, nil
-	}
-	binding := own.GetOwnGlobalBinding(ownIndex)
+	binding := p.env.GlobalEnvironment().GetOwnGlobalBinding(ownIndex)
 	if binding == nil {
 		return sym, nil
 	}
@@ -208,18 +203,14 @@ func (p *CompileTimeContinuation) emitDefineStore(sym *values.Symbol, scopes []*
 		// The operation loads the index from literals and stores the value there.
 		// Mirror of the local branch above: the binding was declared scope-aware,
 		// so address it scope-aware too — and at THIS view's own coordinates, the
-		// same question the meta stamp above asks. CreateGlobalBindingAt hands back
-		// a DEFERRED index (no frame, no scopes), which OpStoreGlobal would resolve
-		// wildcard to the name's first slot — the user's binding, not the macro's.
-		// Re-resolve to get the pinned (store, slot) pair for the binding just
-		// declared; a ranked read would answer "what does a reference here see",
-		// which for a define through the sealed-write view is a different slot.
-		p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, scopes)
-		gi := p.env.OwnGlobalIndex(sym, syntax.ScopesOf(scopes))
-		if gi == nil {
-			return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
-				"compile define: binding %q not found in global environment", sym.Key)
-		}
+		// same question the meta stamp above asks. The index the create returns is
+		// PINNED to the slot it landed on at those coordinates, so OpStoreGlobal
+		// takes gi.Env's direct path (machine_context.go) rather than resolving the
+		// bare name wildcard to its first slot — the user's binding, not the
+		// macro's. Unlike the other create sites this pin outlives compilation: it
+		// rides the literal pool into the template, and a delete that nils its slot
+		// is re-healed at the pin's own recorded coordinates by healWriteLocked.
+		gi, _ := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable, scopes)
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(machine.NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(liti))
 	}

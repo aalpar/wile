@@ -107,7 +107,7 @@ func PrimNamespaceDefine(mc machine.CallContext) error {
 	val := mc.Arg(2)
 
 	env := ns.Runtime()
-	setErr := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, val)
+	_, setErr := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, val)
 	if setErr != nil {
 		return setErr
 	}

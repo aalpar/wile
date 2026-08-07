@@ -105,8 +105,8 @@ func TestOperation(t *testing.T) {
 				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBindingAt(sym, environment.BindingTypeVariable, nil, environment.ExactPhase(environment.PhaseRuntime), false)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
-				// Through the FRAME, not the store: gi is deferred (a create returns
-				// no coordinates) and only a view can supply them.
+				// gi is the create's PIN, so either entry point resolves it; going
+				// through the FRAME keeps this the same call the VM makes.
 				err := mc.env.SetOwnGlobalValue(gi, values.NewInteger(10))
 				qt.Assert(t, err, qt.IsNil)
 			},

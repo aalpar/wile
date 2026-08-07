@@ -860,8 +860,20 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBindingAt(key *values.Symbol, bt Bi
 // including TestChibi{Optional,Diff}Loads — the tests that caught the original
 // break, and still the cheapest sensor for it.
 //
-// The paired re-resolves at those two sites are now redundant rather than
-// load-bearing, and can be collapsed onto this return; that is a separate change.
+// The paired re-resolves those two sites carried were redundant rather than
+// load-bearing once the pin landed, and were collapsed onto this return in a
+// follow-up. NO production caller now pairs a create with a second lookup: the
+// remaining OwnGlobalIndex calls all ask about a slot they did not just write.
+//
+// Pairing them asks the same question twice, and the second answer cannot
+// differ: this call's postcondition is a slot whose scopes are EXACTLY the
+// creation set at those coordinates, and every candidate the re-resolve's subset
+// predicate admits has cardinality at most that, so the created slot is the
+// unique maximum and scopedBestOf's early exit reaches it. What it does add is a
+// window in which a concurrently compiling thread can append or delete a slot of
+// that name, plus a lock acquisition. DefineOwnGlobal returns this pin for the
+// same reason — a caller that wants to stamp what it just defined takes it from
+// there rather than resolving the name again.
 
 // GetOwnGlobalBinding returns the binding for the given GlobalIndex from this
 // store only. Unlike EnvironmentFrame.GetGlobalBinding it resolves nothing

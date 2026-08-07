@@ -198,9 +198,9 @@ func TestGetBinding_GlobalPhase_Coverage(t *testing.T) {
 	env := topLevel.Runtime()
 
 	sym := values.NewSymbol("global-var")
-	// DefineOwnGlobal, not create-then-SetOwnGlobalValue: the index a create
-	// returns is deferred, and SetOwnGlobalValue is the PINNED write.
-	err := env.DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(42))
+	// DefineOwnGlobal, not create-then-SetOwnGlobalValue: it creates and writes
+	// under one key, and hands back the pin it wrote through.
+	_, err := env.DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(42))
 	c.Assert(err, qt.IsNil)
 
 	binding := env.GetBinding(sym, values.AllScopes())

@@ -61,11 +61,9 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, gi0.Index.EqualTo(values.NewSymbol("testVar0")), qt.IsTrue)
 
-	// Set the initial value of the new binding. A create returns a DEFERRED
-	// index and SetOwnGlobalValue is the pinned write, so address the slot
-	// through the owning view's own coordinates.
-	gi0 = owner.OwnGlobalIndex(sym0, syntax.EmptyScopes())
-	qt.Assert(t, gi0, qt.IsNotNil)
+	// Set the initial value of the new binding through the create's own PIN:
+	// SetOwnGlobalValue is the pinned write, and the create already landed on
+	// the slot at these coordinates.
 	err := env.SetOwnGlobalValue(gi0, value0)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -75,8 +73,6 @@ func TestGlobalEnvironment(t *testing.T) {
 	qt.Assert(t, gi1.Index.EqualTo(values.NewSymbol("testVar1")), qt.IsTrue)
 
 	// Set the initial value of the new binding
-	gi1 = owner.OwnGlobalIndex(sym1, syntax.EmptyScopes())
-	qt.Assert(t, gi1, qt.IsNotNil)
 	err = env.SetOwnGlobalValue(gi1, value1)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -376,6 +372,25 @@ func TestGlobalFrame_PinnedIndexSurvivesDelete(t *testing.T) {
 // candidate and is refused, matching the pre-fold behavior (a name-resolved
 // write through the frame-local mutable store found nothing and reported
 // ErrNoSuchBinding).
+// mustDefine defines key through env and fails the test if the write errors,
+// returning the create's PIN. Tests that go on to address the slot they just
+// wrote take the index from here rather than re-resolving the name: over the
+// merged store a bare re-resolve answers a weaker question, which is exactly
+// what several of these tests exist to distinguish.
+func mustDefine(
+	c *qt.C,
+	env *EnvironmentFrame,
+	key *values.Symbol,
+	bt BindingType,
+	scopes []*syntax.Scope,
+	v values.Value,
+) *GlobalIndex {
+	c.Helper()
+	gi, err := env.DefineOwnGlobal(key, bt, scopes, v)
+	c.Assert(err, qt.IsNil)
+	return gi
+}
+
 func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
@@ -386,11 +401,11 @@ func TestGlobalFrame_StalePinDoesNotHealOntoSealedSlot(t *testing.T) {
 	// through the sealed-write ROOT VIEW, so it lands at (ANY, sealed) the same
 	// way a real (car ...) primitive does.
 	sealedVal := values.NewInteger(-1)
-	c.Assert(ns.sealedWriteRoot.DefineOwnGlobal(sym, BindingTypePrimitive, nil, sealedVal), qt.IsNil)
+	mustDefine(c, ns.sealedWriteRoot, sym, BindingTypePrimitive, nil, sealedVal)
 
 	// The user shadow: `(define car 1)` through the mutable runtime root — a
 	// new (0, mutable) slot, never the sealed one (define never lands sealed).
-	c.Assert(ns.runtime.DefineOwnGlobal(sym, BindingTypeVariable, nil, values.NewInteger(1)), qt.IsNil)
+	mustDefine(c, ns.runtime, sym, BindingTypeVariable, nil, values.NewInteger(1))
 
 	// Pin an index at the mutable slot, the way a compiled set!'s
 	// EnvironmentFrame.GetGlobalIndexWithScopes re-resolve does: tier-aware
@@ -661,10 +676,10 @@ func TestGlobalEnvironmentFrameCopyKeepsDeletedSlotPosition(t *testing.T) {
 
 	gone := values.NewSymbol("gone")
 	kept := values.NewSymbol("kept")
-	c.Assert(runtime.DefineOwnGlobal(gone, BindingTypeVariable, AmbientScopes(), values.NewInteger(1)), qt.IsNil)
-	c.Assert(runtime.DefineOwnGlobal(kept, BindingTypeVariable, AmbientScopes(), values.NewInteger(2)), qt.IsNil)
+	mustDefine(c, runtime, gone, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
+	keptPin := mustDefine(c, runtime, kept, BindingTypeVariable, AmbientScopes(), values.NewInteger(2))
 
-	keptSlot := runtime.OwnGlobalIndex(kept, syntax.EmptyScopes()).Slot
+	keptSlot := keptPin.Slot
 	c.Assert(runtime.DeleteOwnGlobal(gone, AmbientScopes()), qt.IsTrue)
 
 	copied := store.Copy()
@@ -687,8 +702,7 @@ func TestPresentPhasesIncludesStoreOnlyPhases(t *testing.T) {
 	c := qt.New(t)
 	ns := NewNamespace()
 	sym := values.NewSymbol("meta-only")
-	c.Assert(ns.AtPhase(PhaseCompile).DefineOwnGlobal(
-		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(7)), qt.IsNil)
+	mustDefine(c, ns.AtPhase(PhaseCompile), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(7))
 
 	report := ns.NewSchemeReportNamespace()
 	// The copy holds the slot...
@@ -724,15 +738,9 @@ func TestStalePinHealsUseTheirCoordinates(t *testing.T) {
 	sym := values.NewSymbol("dual")
 
 	// The same name at three coordinates, as a dual-phase primitive has them.
-	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime).DefineOwnGlobal(
-		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1)), qt.IsNil)
-	c.Assert(ns.AtPhase(PhaseExpand).DefineOwnGlobal(
-		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(2)), qt.IsNil)
-	c.Assert(runtime.DefineOwnGlobal(
-		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(3)), qt.IsNil)
-
-	pin := runtime.OwnGlobalIndex(sym, syntax.EmptyScopes())
-	c.Assert(pin, qt.IsNotNil)
+	mustDefine(c, ns.Runtime().SealedWriteViewAt(PhaseRuntime), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
+	mustDefine(c, ns.AtPhase(PhaseExpand), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(2))
+	pin := mustDefine(c, runtime, sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(3))
 	c.Assert(store.GetOwnGlobalBinding(pin).Value(), valuestest.SchemeEquals, values.NewInteger(3))
 
 	c.Assert(runtime.DeleteOwnGlobal(sym, AmbientScopes()), qt.IsTrue)
@@ -749,8 +757,7 @@ func TestStalePinHealsUseTheirCoordinates(t *testing.T) {
 	c.Assert(store.GetOwnGlobalBinding(pin).Value(), valuestest.SchemeEquals, values.NewInteger(1))
 
 	// A redefine at the pin's own coordinates re-heals the write.
-	c.Assert(runtime.DefineOwnGlobal(
-		sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(4)), qt.IsNil)
+	mustDefine(c, runtime, sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(4))
 	c.Assert(store.SetOwnGlobalValue(pin, values.NewInteger(5)), qt.IsNil)
 	c.Assert(runtime.GetBinding(sym, syntax.EmptyScopes()).Value(),
 		valuestest.SchemeEquals, values.NewInteger(5))
@@ -767,10 +774,8 @@ func TestSealedSlotsFiltersByRank(t *testing.T) {
 	sealedName := values.NewSymbol("sealed-one")
 	mutableName := values.NewSymbol("mutable-one")
 
-	c.Assert(ns.Runtime().SealedWriteViewAt(PhaseRuntime).DefineOwnGlobal(
-		sealedName, BindingTypeVariable, AmbientScopes(), values.NewInteger(1)), qt.IsNil)
-	c.Assert(ns.Runtime().DefineOwnGlobal(
-		mutableName, BindingTypeVariable, AmbientScopes(), values.NewInteger(2)), qt.IsNil)
+	mustDefine(c, ns.Runtime().SealedWriteViewAt(PhaseRuntime), sealedName, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
+	mustDefine(c, ns.Runtime(), mutableName, BindingTypeVariable, AmbientScopes(), values.NewInteger(2))
 
 	names := func(slots []NamedSlot) map[string]struct{} {
 		q := map[string]struct{}{}

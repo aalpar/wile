@@ -31,8 +31,9 @@ func TestBindingConcurrentGlobalReadWrite_D2(t *testing.T) {
 		t.Fatal("expected a fresh global binding")
 	}
 
-	// Re-resolve at the creating view's own coordinates: the index a create
-	// returns is DEFERRED, and the store answers only a pinned one.
+	// Address the slot through the creating view's own coordinates. The create's
+	// own pin would do — this reaches for it by name to exercise the read path
+	// the compile-time cache uses, which is what this test is about.
 	gi := frame.OwnGlobalIndex(sym, syntax.EmptyScopes())
 	if gi == nil {
 		t.Fatal("global index not found")

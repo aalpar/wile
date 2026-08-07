@@ -692,7 +692,8 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 // Define binds a value to a name in the top-level environment.
 func (p *Engine) Define(name string, value Value) error {
 	sym := values.NewSymbol(name)
-	return p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, unwrapValue(value))
+	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, unwrapValue(value))
+	return err
 }
 
 // Get retrieves a value by name from the environment.
@@ -746,7 +747,8 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 
-	return p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	return err
 }
 
 // Call invokes a Scheme procedure with arguments.

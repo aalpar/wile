@@ -246,24 +246,16 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 		closure.SetValidator(BuildValidator(spec))
 	}
 
-	err := bindingEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	// The index is the one the write itself used — the slot the create PINNED at
+	// this view's coordinates — so the stamps below address the binding just
+	// written, not the name's first slot and not whatever a ranked read would
+	// answer. Both of those go wrong here: a bare-symbol index resolves MATCH ANY
+	// and would stamp a hygiene-distinct binding of the same name if one existed,
+	// and a ranked read from the sealed-write view would prefer a same-named
+	// MUTABLE entry.
+	gi, err := bindingEnv.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
-	}
-
-	// Address the binding just written, not the name's first slot and not whatever
-	// a ranked read would answer. A GlobalIndex built from the bare symbol resolves
-	// MATCH ANY, so the stamps below would land on a hygiene-distinct binding of
-	// the same name if one existed; and over the merged store a ranked read from
-	// the sealed-write view would prefer a same-named MUTABLE entry. OwnGlobalIndex
-	// asks at the coordinates the write just used.
-	gi := bindingEnv.OwnGlobalIndex(sym, values.EmptyScopes())
-	if gi == nil {
-		return werr.WrapForeignErrorf(
-			werr.ErrNoSuchBinding,
-			"registerPhasePrimitive: binding for %s vanished after registration at phase %s",
-			spec.Name, phase,
-		)
 	}
 
 	// A nil binding here is an invariant violation — DefineOwnGlobal just
@@ -308,7 +300,7 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 
 func registerGlobalValue(env *environment.EnvironmentFrame, name string, value values.Value) error {
 	sym := values.NewSymbol(name)
-	err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, value)
+	_, err := env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering global value %s", name)
 	}

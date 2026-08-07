@@ -585,11 +585,12 @@ func sameImportedBinding(a, b values.Value) bool {
 // prefers it by maximal resolution (see findLibraryBinding).
 //
 // Creation, the conflict check, the value write, and the provenance stamp all
-// address ONE slot, resolved once under that ambient key. They used to be four
-// separate lookups, three of them wildcard by bare name, which agree only while a
-// name has a single slot per frame: a wildcard answer can be a hygienically
-// distinct binding of the same name, or a parent frame's binding while `created`
-// reports on this frame, putting the guard and the write on different variables.
+// address ONE slot — the one the create PINNED, under that ambient key. They used
+// to be four separate lookups, three of them wildcard by bare name, which agree
+// only while a name has a single slot per frame: a wildcard answer can be a
+// hygienically distinct binding of the same name, or a parent frame's binding
+// while `created` reports on this frame, putting the guard and the write on
+// different variables.
 func installImportedBinding(
 	env *environment.EnvironmentFrame,
 	localSym *values.Symbol,
@@ -601,14 +602,9 @@ func installImportedBinding(
 	phaseContext string,
 ) error {
 	ambient := []*syntax.Scope{}
-	_, created := env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
+	idx, created := env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
 
 	own := env.GlobalEnvironment()
-	idx := env.OwnGlobalIndex(localSym, syntax.EmptyScopes())
-	if idx == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"import: binding %q vanished immediately after creation%s", localSym.Key, phaseContext)
-	}
 	target := own.GetOwnGlobalBinding(idx)
 
 	// A previously-imported binding of this local name that resolves to a

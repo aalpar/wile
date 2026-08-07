@@ -101,11 +101,11 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// Store the result in the expand phase environment with BindingTypeVariable.
-	// DefineOwnGlobal, not create-then-write-through-the-returned-index: that index
-	// is deferred and wildcard, so over the merged store it would resolve to the
-	// name's first live slot at ANY coordinates — for a name the registry also
-	// installs at phase 0 (car), the SEALED one.
-	err = expandEnv.DefineOwnGlobal(nameSym, environment.BindingTypeVariable, nil, result)
+	// DefineOwnGlobal, not a hand-built index: a bare-symbol one resolves wildcard,
+	// so over the merged store it would land on the name's first live slot at ANY
+	// coordinates — for a name the registry also installs at phase 0 (car), the
+	// SEALED one. Nothing here needs the pin it returns.
+	_, err = expandEnv.DefineOwnGlobal(nameSym, environment.BindingTypeVariable, nil, result)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key))
 	}

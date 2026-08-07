@@ -974,7 +974,13 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 // Callers that create a global and immediately give it a value should use this
 // rather than reaching for an index of their own, so the nil question cannot be
 // asked wrongly at the call site.
-func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) error {
+//
+// The returned index is the create's own PIN, non-nil whenever err is nil. A
+// caller that also wants to stamp the binding it just defined takes it from here
+// rather than re-resolving the name: a second lookup asks the same question with
+// a weaker predicate, and leaves a window in which another compiling thread can
+// append or delete a slot of that name.
+func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) (*GlobalIndex, error) {
 	// The create's index is PINNED to the slot it landed on, at this view's own
 	// write coordinates, so the write addresses that slot rather than re-deriving
 	// it from the name — which over one merged store would also have to be told
@@ -983,9 +989,9 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 
 	err := p.global.SetOwnGlobalValue(gi, v)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "DefineOwnGlobal: write to %q failed after creation", key.Key)
+		return nil, werr.WrapForeignErrorf(err, "DefineOwnGlobal: write to %q failed after creation", key.Key)
 	}
-	return nil
+	return gi, nil
 }
 
 // GetGlobalIndex returns the GlobalIndex of the binding for the given symbol,
@@ -1216,10 +1222,11 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // It returns an error if the binding does not exist.
 //
-// A PINNED index carries its own coordinates and goes straight to the store. A
-// DEFERRED one (Env == nil — what a create hands back) carries a symbol and a
-// hygiene key and nothing else, so THIS VIEW supplies the coordinates, the same
-// way DefineOwnGlobal does after creating. The store cannot do that for itself:
+// A PINNED index carries its own coordinates and goes straight to the store —
+// what a create hands back, and what DefineOwnGlobal writes through. A DEFERRED
+// one (Env == nil — the compile-time-unbound define/set! fallback, and the VM's
+// own OpStoreGlobal path) carries a symbol and a hygiene key and nothing else,
+// so THIS VIEW supplies the coordinates. The store cannot do that for itself:
 // it holds every phase and every rank at once and has no view to ask. Before the
 // coordinates existed this fell through to a name lookup that took the first live
 // slot of the name at ANY coordinates — for a bare (set! car …) shape, the sealed

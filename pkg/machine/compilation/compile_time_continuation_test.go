@@ -548,9 +548,9 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	qt.Assert(t, cont.Template().Literals()[0], valuestest.SchemeEquals, values.NewString("true"))
 
 	// compileSetBang emits env.GetGlobalIndex(sym), which pins Env to the frame
-	// resolution found. Build the expectation the same way: a GlobalIndex minted by
-	// MaybeCreateOwnGlobalBinding carries Env==nil and denotes a deferred lookup,
-	// not this pinned store.
+	// resolution found. Build the expectation the same way rather than reusing the
+	// create's pin above: the two agree on the slot, but this asserts the literal
+	// the compiler actually emitted, resolved the way the compiler resolves it.
 	storeGI := env.GetGlobalIndex(symX)
 	qt.Assert(t, storeGI.Env, qt.IsNotNil)
 	qt.Assert(t, cont.Template().Literals()[1], valuestest.SchemeEquals, storeGI)

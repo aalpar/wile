@@ -215,7 +215,7 @@ func TestFindLibraryBindingPrefersRuntimeOverExpand(t *testing.T) {
 
 			sym := values.NewSymbol("multi-phase")
 			for i, phase := range tc.definedPhases {
-				err := libEnv.AtPhase(phase).DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(int64(i)))
+				_, err := libEnv.AtPhase(phase).DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, values.NewInteger(int64(i)))
 				c.Assert(err, qt.IsNil)
 			}
 

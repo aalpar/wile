@@ -46,10 +46,10 @@ func RegisterPhaseBindings[F any](
 		sym := values.NewSymbol(entry.Name)
 		val := wrapper(entry.Name, entry.Fn)
 		// DefineOwnGlobal creates and writes under one key at the target view's own
-		// coordinates. Pairing a create with a write through the returned index
-		// would write through a deferred, wildcard index, which over the merged
-		// store resolves to the name's first live slot at ANY coordinates.
-		err := targetEnv.DefineOwnGlobal(sym, environment.BindingTypePrimitive, nil, val)
+		// coordinates. Hand-building an index instead would build a bare-symbol one,
+		// which over the merged store resolves wildcard to the name's first live slot
+		// at ANY coordinates. Nothing here needs the pin it returns.
+		_, err := targetEnv.DefineOwnGlobal(sym, environment.BindingTypePrimitive, nil, val)
 		if err != nil {
 			return werr.WrapForeignErrorf(err,
 				"RegisterPhaseBindings: failed to bind %s", entry.Name)
