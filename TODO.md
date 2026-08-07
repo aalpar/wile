@@ -211,6 +211,39 @@ Items that block production embedded use or prevent silent state corruption.
 
 ### `(environment '(wile <profile>))` is ungated and crosses profile boundaries (2026-07-29)
 
+- [x] **Gate the profile-environment constructor** — SHIPPED 2026-08-07
+  (`pkg/internal/bootstrap/profile_containment.go`, `checkProfileWidening`,
+  called from the `ProfileFactory` closure). Answers to the three open questions
+  below, in their order:
+  1. **Vocabulary** — a new `security.ResourceNamespace` + `ActionCreate`, not
+     `code:eval`. The conflation named below is real: an authorizer permitting
+     eval under a confined root would otherwise also hand over `gointerop`.
+  2. **Policy** — containment, not just a gate. A profile may only construct a
+     namespace whose primitive surface is contained in the engine's own. The
+     containment order is over **primitive names**, not extension identities —
+     that turned out to be load-bearing rather than a refinement, because
+     `Console` carries `all.SafeExtension` while `kitchen-sink`'s
+     `allExtensions` carries `all.Extension` and not the Safe one, so
+     identity-inclusion reports `Console ⊄ KitchenSink` and the order is broken
+     before it starts. Incomparable profiles are refused (they are not
+     contained), but the refusal is a question put to the authorizer, so a
+     custom policy can opt in.
+  3. **Compatibility** — permit-by-default, enforced only when an authorizer is
+     installed. An engine with no authorizer keeps the documented widening path
+     unchanged, so no existing embedder breaks; a sandboxed engine cannot widen
+     itself. A contained request never reaches the authorizer at all, so today's
+     sandboxed embedders are not newly denied either.
+  The **test-coverage trap** below was the main hazard and is addressed
+  head-on: `TestProfileFactoryRefusesUngatedExtensionReach` has a permit arm
+  proving `make-thread` really does become reachable from a Console engine that
+  asks for kitchen-sink (so the refuse arm is not vacuous), plus
+  `TestProfileEnvironmentCannotWidenSandboxedEngine` end-to-end through a real
+  Engine. `TestAuthorizer_DenyAllSweep`'s conceding comment is replaced.
+  `docs/security/sandboxing.md`'s "does NOT cover" row is updated rather than
+  removed — the no-authorizer case is deliberately still uncovered.
+
+  <details><summary>Original filing (2026-07-29)</summary>
+
 - [ ] **Gate the profile-environment constructor** [High, M, filed from the `docs/` refresh]:
   `(environment '(wile kitchen-sink))` evaluated from a `Small` or `ConsoleWithLoad` engine
   returns a namespace carrying the *named* profile's extensions, not the engine's. The path is
@@ -248,6 +281,8 @@ Items that block production embedded use or prevent silent state corruption.
   primitive becoming reachable, not on an authorizer denial.
   Documented as a known limitation in `docs/security/sandboxing.md` ("does NOT cover" table) as of
   the 2026-07-29 docs refresh; that row comes back out when this ships.
+
+  </details>
 
 ### `WithNamespace` silently discards every namespace-consumed option, including `WithSandbox` (2026-08-04)
 

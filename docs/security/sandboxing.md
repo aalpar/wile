@@ -120,7 +120,19 @@ When the eval extension is present, Scheme code can construct a namespace for an
 (eval '(+ 1 2) (environment '(wile tiny)))
 ```
 
-`PrimEnvironment` routes a sole `(wile <name>)` spec through `tryWileProfile` to `bootstrap.NewProfileEnvironment`, which builds a child namespace registered with that profile's full extension set. The name is not checked against the engine's own profile, and the constructor itself is not gated, so `(environment '(wile kitchen-sink))` materializes primitives the engine never registered, including `threads`, `gointerop`, and `namespace`, none of which have an authorizer gate.
+`PrimEnvironment` routes a sole `(wile <name>)` spec through `tryWileProfile` to `bootstrap.NewProfileEnvironment`, which builds a child namespace registered with that profile's full extension set.
+
+**Widening is refused when an authorizer is installed.** `bootstrap.checkProfileWidening` compares the requested profile's primitive names against the engine's own registry, and decides in three cases:
+
+| Engine | Request | Outcome |
+|--------|---------|---------|
+| No authorizer | anything | Allowed. Widening is the documented way to get a richer namespace from Scheme, and an embedder that installed no policy has not asked to be protected from it. |
+| Authorizer installed | profile ⊆ the engine's own surface | Allowed, without consulting the authorizer. Acquiring nothing new is not a capability question. |
+| Authorizer installed | profile ⊄ the engine's own surface | Refused, unless the authorizer permits `namespace:create` with the profile name as target. The built-in authorizers deny unknown resources, so `Console`/`ConsoleWithLoad` refuse; a custom authorizer can opt in. |
+
+Containment is over *primitive names*, not extension identities: `Console` carries `all.SafeExtension` while `KitchenSink` carries `all.Extension` and not the Safe one, so set-inclusion over extension values would report `Console ⊄ KitchenSink`. Names are what a program can actually call.
+
+This closes the specific hole an authorizer could not: `threads`, `gointerop`, and `namespace` declare no gate sites at all, so their primitives became reachable from an engine that never registered them and no policy was ever consulted — an authorizer cannot refuse what it is not asked about.
 
 An optional third element narrows the constructed namespace's *visible* top level — `(environment '(wile small core))` pre-binds only the core surface, `(environment '(wile small no-bindings))` pre-binds nothing. It is not a security control and does not narrow this widening: the profile still decides what is *registered*, and the constructed environment can import its way back to all of it. See [Strict namespace](../embedding/api-design.md#strict-namespace).
 
@@ -217,7 +229,7 @@ Scheme provides no built-in mechanism to:
 - Bypass access controls via a metaobject protocol
 - Load arbitrary code without an explicit `eval` binding
 
-Wile's `introspection` extension (`environment-bound-names`, `environment-ref`) is opt-in and read-only: it observes an environment object, it cannot add a binding to one. It is not, however, a reachability bound. `environment-ref` yields the *value* of a binding, so it hands out whatever capability the environment it is given already holds, and the eval extension's `(environment '(wile <profile>))` can supply an environment holding a wider set than the engine registered (see [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface)). The authorization layer, not the extension list, is what bounds authority once `environment` is in scope.
+Wile's `introspection` extension (`environment-bound-names`, `environment-ref`) is opt-in and read-only: it observes an environment object, it cannot add a binding to one. It is not, however, a reachability bound. `environment-ref` yields the *value* of a binding, so it hands out whatever capability the environment it is given already holds. The eval extension's `(environment '(wile <profile>))` can still supply such an environment, but only one contained in the engine's own surface once an authorizer is installed (see [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface)). The authorization layer, not the extension list, is what bounds authority once `environment` is in scope.
 
 This is a sharp contrast with languages like Python (where `__builtins__` and `getattr` provide universal introspection), Java (where reflection can bypass `private` access), or JavaScript (where property enumeration and `Proxy` provide deep metaprogramming). In those languages, sandboxing must anticipate every reflective path to authority. In Scheme, there are no reflective paths unless you create them.
 
@@ -261,9 +273,9 @@ The result is that the registry layer costs nothing at runtime and fails at comp
 | CPU time | Not covered | Use `context.WithTimeout` on the `ctx` passed to `Eval`. |
 | Memory / allocation | Not covered | Use OS-level limits (cgroups, ulimits). |
 | Stack depth | Partially covered | `WithMaxCallDepth(n)` limits continuation stack depth. |
-| Goroutine exhaustion | Not covered (if threads or gointerop extension loaded) | Don't load threads or gointerop extensions for untrusted code. Note that omitting them is not sufficient when the eval extension is present: `(environment '(wile kitchen-sink))` re-registers them, and neither has an authorizer gate. |
+| Goroutine exhaustion | Not covered (if threads or gointerop extension loaded) | Don't load threads or gointerop extensions for untrusted code. Omitting them is now sufficient against `(environment '(wile kitchen-sink))` *provided an authorizer is installed* — see [Extension-set escalation](#profile-namespaces-widen-the-surface) below. |
 | Information flow | Not covered | A privileged library can pass capabilities (e.g., an open file handle) to unprivileged code via exported values. Preventing this requires an object-capability model. |
-| Extension-set escalation | Not covered by the registry layer | `(environment '(wile <profile>))` is ungated and builds a namespace holding the *named* profile's extensions, not the engine's. Gated resources stay under the inherited authorizer; ungated extensions (threads, gointerop, namespace) do not. |
+| Extension-set escalation | Covered when an authorizer is installed | `(environment '(wile <profile>))` may only construct a namespace contained in the engine's own primitive surface; widening is refused unless the authorizer permits `namespace:create`. An engine with **no** authorizer keeps the unrestricted widening path by design. See [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface). |
 | `include` | Covered by authorizer | `include` is a compile-time form that reads files. It is NOT gated by the files extension — it's part of the compiler. However, it is gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so an authorizer can restrict it. Without an authorizer, it is unrestricted. `include-ci` is the same code path (`compileIncludeImpl` with case folding on) and is gated identically. |
 
 ### The `include` note

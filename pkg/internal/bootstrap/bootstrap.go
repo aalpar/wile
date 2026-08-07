@@ -339,6 +339,13 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
+		// The capability gate sits here, not in eval's tryWileProfile, because
+		// this is the only side that can see both the profile's extension set
+		// and the registry vocabulary needed to compare it against the caller's.
+		err = checkProfileWidening(callerNS, profileName, exts)
+		if err != nil {
+			return nil, err
+		}
 		return NewProfileEnvironment(ctx, callerNS, exts, level)
 	}
 }
