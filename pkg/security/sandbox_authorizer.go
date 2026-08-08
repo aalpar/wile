@@ -20,6 +20,11 @@ import "strings"
 // access, env reads with a prefix filter, and denies code loading
 // and process execution.
 //
+// The host's standard streams are allowed: this is the env-map modifier
+// WithSandbox() installs on top of a profile, and taking away the profile's
+// stdio is not what it is for. Compose with DenyAll (or a custom authorizer)
+// via All() to refuse the streams.
+//
 // Intended as a restrictive modifier that can be composed with a
 // profile's built-in authorizer via All() to produce an intersection
 // (most-restrictive-wins).
@@ -36,6 +41,8 @@ func SandboxAuthorizer(envPrefix string) Authorizer {
 				return nil
 			}
 			return ErrAccessDenied
+		case ResourceStream:
+			return nil
 		default:
 			return ErrAccessDenied
 		}

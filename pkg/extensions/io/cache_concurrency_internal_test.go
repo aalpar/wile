@@ -35,7 +35,7 @@ import (
 // discipline the primitives use.
 func TestConcurrentMapAccess_T1(t *testing.T) {
 	c := qt.New(t)
-	st := NewState()
+	st := NewState(nil)
 
 	numPorts := 10
 	ports := make([]*values.PortObject, numPorts)
@@ -129,7 +129,7 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 // now holds a per-port lock across the whole ReadSyntax call, serialising reads
 // on one port. Run under -race; must stay green.
 func TestConcurrentReadSyntaxSamePort_T1_1(t *testing.T) {
-	st := NewState()
+	st := NewState(nil)
 	// Datum labels force the lazy p.datumLabels map allocation on every read,
 	// widening the concurrent-map-write window the finding hinges on.
 	src := strings.Repeat("#0=(a b c) #0# ", 8192)

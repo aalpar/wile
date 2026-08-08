@@ -39,12 +39,12 @@ func PrimMakeParameter(cc machine.CallContext) error {
 
 	// No converter: build the parameter directly.
 	if values.IsEmptyList(rest) {
-		mc.SetValue(machine.NewParameter(init, nil))
+		mc.SetValue(machine.NewParameter(init, nil, machine.MutableBase))
 		return nil
 	}
 	pr, ok := rest.(values.Tuple)
 	if !ok || pr.IsEmptyList() {
-		mc.SetValue(machine.NewParameter(init, nil))
+		mc.SetValue(machine.NewParameter(init, nil, machine.MutableBase))
 		return nil
 	}
 	converterCls, ok := pr.Car().(machine.Closure)
@@ -67,7 +67,7 @@ func PrimMakeParameter(cc machine.CallContext) error {
 		if err != nil {
 			return err
 		}
-		finMC.SetValue(machine.NewParameter(finMC.Arg(0), converterCls))
+		finMC.SetValue(machine.NewParameter(finMC.Arg(0), converterCls, machine.MutableBase))
 		return nil
 	})
 	_, err = mc.RunBodyUnderConsumer(converterCls, finalizer, init)

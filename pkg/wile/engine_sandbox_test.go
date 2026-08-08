@@ -902,6 +902,12 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 // with the file-exists? row, and current-directory is uncovered. A new gate action
 // should add a row here.
 //
+// The sweep also does NOT cover stream:{read,write}. That gate runs once per
+// engine, when io.NewState builds the port parameters, so a denial surfaces as a
+// closed current-{input,output,error}-port rather than as an ErrAccessDenied
+// from a primitive — the shape every row here asserts. TestHostStdioIsGated
+// covers it in the shape it actually has.
+//
 // The sweep deliberately does NOT cover (environment '(wile kitchen-sink)).
 // That constructor is now gated, but on containment rather than on a per-action
 // denial, so it does not belong in an action sweep: the question it answers is

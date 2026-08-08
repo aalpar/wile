@@ -44,6 +44,24 @@ const (
 	// never registered" are different questions, and an authorizer that permits
 	// eval under a confined root would otherwise also hand over gointerop.
 	ResourceNamespace = "namespace"
+	// ResourceStream covers the host process's standard streams, which the io
+	// extension pre-opens as current-{input,output,error}-port. It is deliberately
+	// not ResourceFile: the streams are handed to the engine at construction
+	// rather than named by the program, so there is no path to confine, and an
+	// authorizer that permits reads under a filesystem root is not thereby saying
+	// the program may drain the host's stdin. Target is one of StreamStdin,
+	// StreamStdout, StreamStderr; Action is ActionRead or ActionWrite. The gate
+	// runs once per engine, when io.NewState builds the port parameters -- a
+	// refusal means the port is never opened, not that each write is checked.
+	ResourceStream = "stream"
+)
+
+// Well-known ResourceStream targets: the three host streams the io extension
+// binds to current-{input,output,error}-port.
+const (
+	StreamStdin  = "stdin"
+	StreamStdout = "stdout"
+	StreamStderr = "stderr"
 )
 
 // Well-known action constants. Extensions may define additional

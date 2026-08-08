@@ -32,7 +32,7 @@ import (
 
 func TestParameter_ValueAndSetValue(t *testing.T) {
 	c := qt.New(t)
-	p := machine.NewParameter(values.NewInteger(42), nil)
+	p := machine.NewParameter(values.NewInteger(42), nil, machine.MutableBase)
 	c.Assert(p.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	p.SetValue(values.NewString("hello"))
@@ -42,7 +42,7 @@ func TestParameter_ValueAndSetValue(t *testing.T) {
 func TestParameter_Converter(t *testing.T) {
 	c := qt.New(t)
 
-	p := machine.NewParameter(values.NewInteger(1), nil)
+	p := machine.NewParameter(values.NewInteger(1), nil, machine.MutableBase)
 	c.Assert(p.HasConverter(), qt.IsFalse)
 	c.Assert(p.Converter(), qt.IsNil)
 
@@ -51,19 +51,19 @@ func TestParameter_Converter(t *testing.T) {
 		mc.SetValue(values.Void)
 		return nil
 	})
-	p2 := machine.NewParameter(values.NewInteger(1), conv)
+	p2 := machine.NewParameter(values.NewInteger(1), conv, machine.MutableBase)
 	c.Assert(p2.HasConverter(), qt.IsTrue)
 	c.Assert(p2.Converter(), qt.Equals, conv)
 }
 
 func TestParameter_SchemeString(t *testing.T) {
-	p := machine.NewParameter(values.NewInteger(1), nil)
+	p := machine.NewParameter(values.NewInteger(1), nil, machine.MutableBase)
 	qt.Assert(t, p.SchemeString(), qt.Equals, "#<parameter>")
 }
 
 func TestParameter_IsVoid(t *testing.T) {
 	c := qt.New(t)
-	p := machine.NewParameter(values.NewInteger(1), nil)
+	p := machine.NewParameter(values.NewInteger(1), nil, machine.MutableBase)
 	c.Assert(p.IsVoid(), qt.IsFalse)
 
 	var nilParam *machine.Parameter
@@ -72,8 +72,8 @@ func TestParameter_IsVoid(t *testing.T) {
 
 func TestParameter_EqualTo(t *testing.T) {
 	c := qt.New(t)
-	p1 := machine.NewParameter(values.NewInteger(1), nil)
-	p2 := machine.NewParameter(values.NewInteger(1), nil)
+	p1 := machine.NewParameter(values.NewInteger(1), nil, machine.MutableBase)
+	p2 := machine.NewParameter(values.NewInteger(1), nil, machine.MutableBase)
 
 	c.Assert(p1.EqualTo(p1), qt.IsTrue)
 	c.Assert(p1.EqualTo(p2), qt.IsFalse) // identity, not structural

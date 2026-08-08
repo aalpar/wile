@@ -15,13 +15,16 @@
 package io
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -72,17 +75,66 @@ type tokenizerEntry struct {
 	mk        func() *tokenizer.Tokenizer // constructor; nil once built
 }
 
-// NewState builds a fresh per-engine State: three port parameters defaulting to
-// the process std streams, and empty caches. Fully constructed here — there is
-// no lazy initialization, unlike the former package-global InitState.
-func NewState() *State {
+// NewState builds a fresh per-engine State: three port parameters over the
+// process std streams, and empty caches. Fully constructed here — there is no
+// lazy initialization, unlike the former package-global InitState.
+//
+// auth gates each host stream. This is the only gate the three pre-opened ports
+// have: they are capability objects the engine hands to Scheme at construction,
+// so the question "may this engine touch the host's stdin?" is answered once,
+// here, rather than on every read. A nil authorizer allows, per the open-by-
+// default convention in security.CheckWithAuthorizer. Before this gate existed a
+// WithProfile(Console) engine under WithAuthorizer(DenyAll()) still read the
+// host's stdin and wrote its stdout, with the authorizer recording no requests
+// at all (reviews/2026-08-07/REVIEW.md 2.1.1).
+func NewState(auth security.Authorizer) *State {
 	return &State{
-		inPort:     machine.NewParameter(values.NewCharacterInputPortFromReader(os.Stdin), nil),
-		outPort:    machine.NewParameter(values.NewCharacterOutputPortFromWriter(os.Stdout), nil),
-		errPort:    machine.NewParameter(values.NewCharacterOutputPortFromWriter(os.Stderr), nil),
+		inPort:     machine.NewParameter(gatedInputPort(auth, security.StreamStdin, os.Stdin), nil, machine.MutableBase),
+		outPort:    machine.NewParameter(gatedOutputPort(auth, security.StreamStdout, os.Stdout), nil, machine.MutableBase),
+		errPort:    machine.NewParameter(gatedOutputPort(auth, security.StreamStderr, os.Stderr), nil, machine.MutableBase),
 		tokenizers: map[values.Value]*tokenizerEntry{},
 		parsers:    map[values.Value]*parserEntry{},
 	}
+}
+
+// gatedInputPort returns a textual input port over stream when auth permits
+// stream:read on it, and a refused port otherwise.
+func gatedInputPort(auth security.Authorizer, target string, stream *os.File) *values.PortObject {
+	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceStream,
+		Action:   security.ActionRead,
+		Target:   target,
+	})
+	if err != nil {
+		return refusedPort(values.NewCharacterInputPortFromReader(strings.NewReader("")))
+	}
+	return values.NewCharacterInputPortFromReader(stream)
+}
+
+// gatedOutputPort returns a textual output port over stream when auth permits
+// stream:write on it, and a refused port otherwise.
+func gatedOutputPort(auth security.Authorizer, target string, stream *os.File) *values.PortObject {
+	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceStream,
+		Action:   security.ActionWrite,
+		Target:   target,
+	})
+	if err != nil {
+		return refusedPort(values.NewCharacterOutputPortFromWriter(&bytes.Buffer{}))
+	}
+	return values.NewCharacterOutputPortFromWriter(stream)
+}
+
+// refusedPort marks a port closed, which is how a stream denial surfaces to
+// Scheme: every operation raises ErrPortClosed at once, and
+// (output-port-open? (current-output-port)) reports #f, so the refusal is
+// observable rather than silent. The port is built over an empty in-memory
+// buffer, never the host stream, so no descriptor is behind it even if some
+// future path bypasses the closed guard. Neither backing type is an io.Closer,
+// so Close() closes nothing real.
+func refusedPort(port *values.PortObject) *values.PortObject {
+	_ = port.Close()
+	return port
 }
 
 // SetInputPort sets this engine's base input port. Used by tests and by
@@ -99,6 +151,14 @@ func (p *State) SetOutputPort(port *values.PortObject) {
 	p.outPort.SetValue(port)
 }
 
+// SetErrorPort sets this engine's base error port. Not validated here (see
+// SetInputPort); a non-textual port errors at resolve time. Its absence is what
+// made current-error-port undetachable from os.Stderr by any route, exported or
+// otherwise (reviews/2026-08-07/REVIEW.md 2.1.1).
+func (p *State) SetErrorPort(port *values.PortObject) {
+	p.errPort.SetValue(port)
+}
+
 // GetInputPort returns this engine's base input port, or a wrapped sentinel if
 // the parameter does not hold a textual input port. It serves non-VM callers
 // (tests, embedders) that read the base value directly, without going through
@@ -111,6 +171,12 @@ func (p *State) GetInputPort() (*values.PortObject, error) {
 // the parameter does not hold a textual output port.
 func (p *State) GetOutputPort() (*values.PortObject, error) {
 	return currentTextualOutputPort("current-output-port", p.outPort.Value())
+}
+
+// GetErrorPort returns this engine's base error port, or a wrapped sentinel if
+// the parameter does not hold a textual output port.
+func (p *State) GetErrorPort() (*values.PortObject, error) {
+	return currentTextualOutputPort("current-error-port", p.errPort.Value())
 }
 
 // stateFrom pulls the per-engine State off the CallContext's namespace, or

@@ -357,6 +357,17 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 		return p.returnImmediate(), nil
 
 	case 1:
+		// An immutable-base parameter is a shared object whose isolation argument
+		// rests on the base never changing (exceptionHandlerParam is shared across
+		// every Engine in the process). Refusing here is the whole enforcement: Go
+		// reaches SetValue only through *Parameter, and the accessors that hand such
+		// a parameter to Scheme narrow the type to values.Value.
+		if param.HasImmutableBase() {
+			err := p.WrapError(werr.ErrImmutableParameterBase,
+				"parameter: base value is immutable")
+			return p, err
+		}
+
 		newVal := args[0]
 
 		if param.HasConverter() {

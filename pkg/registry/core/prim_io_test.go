@@ -435,7 +435,7 @@ func TestWriteWithSymbol(t *testing.T) {
 
 func TestGetCurrentInputPortInitialization(t *testing.T) {
 	// A fresh State defaults its input port to stdin (non-nil, textual).
-	st := ioext.NewState()
+	st := ioext.NewState(nil)
 	port, err := st.GetInputPort()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port, qt.IsNotNil)
@@ -443,7 +443,7 @@ func TestGetCurrentInputPortInitialization(t *testing.T) {
 
 func TestGetCurrentOutputPortInitialization(t *testing.T) {
 	// A fresh State defaults its output port to stdout (non-nil, textual).
-	st := ioext.NewState()
+	st := ioext.NewState(nil)
 	port, err := st.GetOutputPort()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, port, qt.IsNotNil)

@@ -318,7 +318,6 @@ ChainFileResolver (in WithSource* call order)
     2. LibraryRegistry search paths, each + path
     3. SCHEME_INCLUDE_PATH dirs, each + path
     4. CWD + path
-    5. filesystem root + path (last resort)
 
 Bootstrap: always from core.BootstrapFS via EmbedFileResolver (separate)
 ```

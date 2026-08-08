@@ -150,7 +150,10 @@ var (
 	ErrImmutableVector          = NewStaticError("cannot mutate immutable vector")
 	ErrImmutableBytevector      = NewStaticError("cannot mutate immutable bytevector")
 	ErrImmutableBinding         = NewStaticError("cannot mutate immutable binding")
-	ErrInvariantViolation       = NewStaticError("invariant violation")
+	// ErrImmutableParameterBase is raised when a parameter object whose base
+	// value is shared beyond one Engine is applied to one argument.
+	ErrImmutableParameterBase = NewStaticError("cannot mutate immutable parameter base")
+	ErrInvariantViolation     = NewStaticError("invariant violation")
 
 	// FFI errors
 
