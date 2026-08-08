@@ -115,12 +115,22 @@ env-map restriction.
 privileged operations at runtime. Each gated operation issues an
 `AccessRequest{Resource, Action, Target}`:
 
-- **Resources:** `file`, `code`, `env`, `process`
+- **Resources:** `file`, `code`, `env`, `process`, `namespace`, `stream`
 - **Actions:** `read`, `write`, `delete`, `stat`, `load`, `eval`, `exit`,
-  `exec`, `exec-shell`
+  `exec`, `exec-shell`, `create`
 - **Target:** operation-specific — a file path, env-var name, or library name.
   For `code:eval` the target is the literal `<eval>` or `<compile>`: there is no
   path to inspect, so a custom Authorizer must decide on the action alone.
+
+`stream` gates the host's standard streams, which the `io` extension pre-opens
+as `current-{input,output,error}-port`. Unlike the other resources it is checked
+**once per engine**, when the port parameters are built, because the ports are
+capability objects handed to Scheme at construction rather than named by the
+running program. A refusal binds a closed in-memory port, so
+`(display …)` raises and `(output-port-open? (current-output-port))` is `#f`.
+`ConsoleAuthorizer`, `ConsoleWithLoadAuthorizer`, `ReadOnly*` and
+`SandboxAuthorizer` all allow the streams; `DenyAll()` and custom authorizers
+can refuse them.
 
 `code:load` (run code from a resolved file path) and `code:eval` (compile and
 run an in-memory datum, i.e. `eval`/`compile`) are **separate** actions. An

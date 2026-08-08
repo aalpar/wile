@@ -15,7 +15,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | Category | Extensions | Package | Risk |
 |----------|-----------|---------|------|
 | **Safe** | core | `registry/core` | None. Pure computation. |
-| **Safe** | io | `pkg/extensions/io` | None. In-memory and caller-provided ports only. No filesystem access. |
+| **Safe** | io | `pkg/extensions/io` | Host stdio, gated. `current-{input,output,error}-port` are opened over the process's `stdin`/`stdout`/`stderr` at engine construction, each gated by `stream:{read,write}`; a refusal binds a closed in-memory port instead. Everything else is in-memory or caller-provided ports. No filesystem access. |
 | **Safe** | math | `extensions/math` | None. `sqrt`, `sin`, `cos`, transcendental functions. |
 | **Safe** | introspection | `extensions/introspection` | None on its own. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`. Read-only: it observes an environment, it cannot add bindings to one. Note `environment-ref` returns the *value* of a binding, so any environment object handed to it yields the capabilities that environment holds. |
 | **Safe** | charsets | `extensions/charsets` | None. SRFI-14 character sets. |
@@ -67,6 +67,8 @@ An `AccessRequest` is a resource, an action, and an operation-specific target (`
 | `code` | `load` (run a resolved file), `eval` (compile+run an in-memory datum) | the resolved path, or `<eval>`/`<compile>` |
 | `env` | `read` | the variable name, or `*` for a whole-map read |
 | `process` | `read` (argv), `exit`, `exec`, `exec-shell` | the command, or empty |
+| `namespace` | `create` | the profile name |
+| `stream` | `read` (stdin), `write` (stdout, stderr) | `stdin`, `stdout`, or `stderr` |
 
 Both sets are open: an extension may define additional resources and actions without changing `pkg/security`.
 
@@ -82,6 +84,7 @@ Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `securi
 | `extensions/process`: `PrimSystem`, `PrimProcessSpawn` (`PrimProcessWait`/`PrimProcessKill` are ungated: they act on a process handle already obtained through a gated spawn) | `process:exec-shell`, `process:exec` |
 | `pkg/internal/extensions/envvars`: `PrimGetEnvironmentVariable`, `PrimGetEnvironmentVariables` | `env:read` |
 | Source loading (`include`, `include-ci`, `load`, library `import`): `resolver.openAuthorized`, `isAuthorized`, `openUnconfined`, `FSFileResolver.ResolveAndOpen`, `OSFileResolver.ResolveAndOpen` | `code:load` on the resolved path |
+| `pkg/extensions/io`: `NewState`, once per engine when the port parameters are built | `stream:read` on `stdin`, `stream:write` on `stdout` and `stderr` |
 
 `EmbedFileResolver` performs no check: it serves the compiled-in bootstrap sources, which are not attacker-controlled.
 

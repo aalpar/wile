@@ -268,7 +268,11 @@ func addPortState(r *registry.PrimitiveRegistry) error {
 		ns := env.Namespace()
 		st, ok := ns.IOState().(*State)
 		if !ok || st == nil {
-			st = NewState()
+			// The namespace's authorizer is installed before applyBaseEnvironment
+			// runs this hook (pkg/wile/engine.go), so the stream gate in NewState
+			// sees the engine's real policy on the first Apply — the only Apply
+			// that mints a State.
+			st = NewState(ns.Authorizer())
 			ns.SetIOState(st)
 		}
 		binds := []struct {

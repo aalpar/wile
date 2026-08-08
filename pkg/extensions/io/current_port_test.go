@@ -34,14 +34,14 @@ import (
 // guard-catchable Scheme condition.)
 func TestGetCurrentPortReturnsErrorOnNonPort(t *testing.T) {
 	t.Run("input", func(t *testing.T) {
-		st := NewState()
+		st := NewState(nil)
 		st.inPort.SetValue(values.NewInteger(42))
 		_, err := st.GetInputPort()
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAnInputPort)
 	})
 
 	t.Run("output", func(t *testing.T) {
-		st := NewState()
+		st := NewState(nil)
 		st.outPort.SetValue(values.NewInteger(42))
 		_, err := st.GetOutputPort()
 		qt.Assert(t, err, qt.ErrorIs, werr.ErrNotAnOutputPort)

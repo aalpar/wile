@@ -24,8 +24,15 @@ package security
 // ReadOnly applies NO path confinement — it allows reads of any path the host
 // process can reach. Compose it with FilesystemRoot via All(...) to bound which
 // paths may be read.
+//
+// ResourceStream is exempt from the action test: read-only is a statement about
+// the host's state, and a program's own stdout is its result channel, not state
+// it mutates. Compose with DenyAll via All(...) to refuse the streams too.
 func ReadOnly() Authorizer {
 	return AuthorizerFunc(func(req AccessRequest) error {
+		if req.Resource == ResourceStream {
+			return nil
+		}
 		switch req.Action {
 		case ActionRead, ActionStat:
 			return nil
@@ -42,6 +49,9 @@ func ReadOnly() Authorizer {
 // via All(...) to bound which paths may be read or loaded.
 func ReadOnlyWithLoad() Authorizer {
 	return AuthorizerFunc(func(req AccessRequest) error {
+		if req.Resource == ResourceStream {
+			return nil
+		}
 		switch req.Action {
 		case ActionRead, ActionStat, ActionLoad:
 			return nil

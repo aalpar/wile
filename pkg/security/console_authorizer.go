@@ -24,7 +24,9 @@ const consoleRoot = "/tmp"
 // ConsoleAuthorizer returns an Authorizer for the Console profile.
 // File operations are restricted to /tmp. Environment variable reads
 // are allowed (the envvars primitive handles virtual-vs-OS routing).
-// Code loading and process execution are denied.
+// The host's standard streams are allowed — "stdin/stdout/stderr available" is
+// what the Console profile is for (see wile.Console). Code loading and process
+// execution are denied.
 //
 // Containment is symlink-resolved (see containedInRoot), so a symlink staged
 // inside /tmp that points outside /tmp does not escape the sandbox. The
@@ -51,6 +53,11 @@ func (consoleAuthorizer) Authorize(req AccessRequest) error {
 			return nil
 		}
 		return ErrAccessDenied
+	case ResourceStream:
+		// The console IS the host's stdio; a profile that denied it would be a
+		// different profile. Compose with DenyAll or a custom authorizer via
+		// All(...) to take the streams away.
+		return nil
 	default:
 		return ErrAccessDenied
 	}
