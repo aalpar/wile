@@ -64,7 +64,15 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 // The search list is built as:
 //  1. Current load directory from the load path stack (stack-relative, highest priority)
 //  2. Configured OS search dirs (library registry, SCHEME_INCLUDE_PATH, CWD)
-//  3. The filesystem root, matching sourceload.Finder's "." fallback
+//
+// The searched set is exactly what the not-found diagnostic reports. There is
+// deliberately no filesystem-root last resort: it was justified as matching
+// sourceload.Finder's "." fallback, but Finder's "." is the root of the virtual
+// FS it searches, whose OS analogue is the CWD — already in the list. Joining a
+// relative path onto "/" instead reinterprets it as an absolute host path, so
+// from a CWD with no tmp/ an (include "tmp/x/oracle.scm") loaded and ran
+// /tmp/x/oracle.scm, and (include "etc/passwd") read /etc/passwd, under the
+// CLI's default unauthorized profile. See reviews/2026-08-07/REVIEW.md 2.1.5.
 //
 // A candidate is located with os.Stat — a probe that hands out no descriptor —
 // and only an authorized candidate is ever opened. Doing the search here rather
@@ -74,13 +82,7 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 	auth := p.env.Namespace().Authorizer()
 	searchDirs := p.osAbsSearchDirs(ctx)
 
-	// The filesystem root is the last resort, matching sourceload.Finder's "."
-	// fallback. It is not part of the searched list reported on failure.
-	candidates := make([]string, 0, len(searchDirs)+1)
-	candidates = append(candidates, searchDirs...)
-	candidates = append(candidates, string(filepath.Separator))
-
-	for _, dir := range candidates {
+	for _, dir := range searchDirs {
 		candidate := filepath.Join(dir, path)
 		fi, statErr := os.Stat(candidate)
 		if statErr != nil || fi.IsDir() {
@@ -119,6 +121,11 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 // osAbsSearchDirs returns the ordered, absolute search directories:
 // load-path-stack current dir first (if set), then the configured OS search
 // dirs. Paths that fail filepath.Abs are dropped.
+//
+// Duplicates are dropped after absolutization, keeping the first occurrence.
+// The library registry's default "." and the CWD entry absolutize to the same
+// directory, so without this the CWD was stat'd twice and named twice in the
+// not-found diagnostic ("searched: /home/x/, /home/x/").
 func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 	var dirs []string
 
@@ -132,12 +139,18 @@ func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 
 	dirs = append(dirs, osSearchDirs(p.env)...)
 
+	seen := make(map[string]struct{}, len(dirs))
 	q := make([]string, 0, len(dirs))
 	for _, d := range dirs {
 		abs, err := filepath.Abs(d)
 		if err != nil {
 			continue
 		}
+		_, dup := seen[abs]
+		if dup {
+			continue
+		}
+		seen[abs] = struct{}{}
 		q = append(q, abs)
 	}
 	return q

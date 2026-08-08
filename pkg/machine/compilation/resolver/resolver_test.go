@@ -183,6 +183,30 @@ func TestOSFileResolver_RelativeNotFound(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
 }
 
+// TestOSFileResolver_RelativeNeverReachesFilesystemRoot pins the removal of the
+// "/" last-resort candidate (reviews/2026-08-07/REVIEW.md 2.1.5). A relative
+// path whose first component happens to name a root-level directory must not be
+// reinterpreted as an absolute host path.
+func TestOSFileResolver_RelativeNeverReachesFilesystemRoot(t *testing.T) {
+	fi, statErr := os.Stat("/etc/hosts")
+	if statErr != nil || fi.IsDir() {
+		t.Skip("no /etc/hosts on this platform")
+	}
+
+	t.Setenv(SchemeIncludePathEnv, "")
+	// A CWD with no etc/ subdirectory, so "etc/hosts" is unresolvable unless
+	// the resolver joins it onto the filesystem root.
+	t.Chdir(t.TempDir())
+
+	env := environment.NewNamespace().Runtime()
+	r := NewOSFileResolver(env)
+
+	_, resolved, err := r.ResolveAndOpen(context.Background(), "etc/hosts")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	qt.Assert(t, resolved, qt.Equals, "")
+}
+
 func TestOSFileResolver_ReturnedPathIsAbsolute(t *testing.T) {
 	dir := realDir(t, t.TempDir())
 	err := os.WriteFile(filepath.Join(dir, "check.scm"), []byte("x"), 0o644)

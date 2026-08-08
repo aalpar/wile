@@ -217,10 +217,13 @@ Library name     →  Path probed
 
 Within `OSFileResolver`, the directories tried for each probe are, in order: the
 current load directory from the load-path stack, the library registry's search
-paths (user-supplied first, then the default `"."`), `$SCHEME_INCLUDE_PATH`, the
-working directory, and the filesystem root as a last resort. Each candidate is
-located with `os.Stat` and opened only after the authorizer permits
-`code:load` on it.
+paths (user-supplied first, then the default `"."`), `$SCHEME_INCLUDE_PATH`, and
+the working directory. Each candidate is located with `os.Stat` and opened only
+after the authorizer permits `code:load` on it.
+
+There is no filesystem-root last resort. A relative path never names an absolute
+host path: joining `"tmp/x.scm"` onto `/` would make a missing relative include
+load `/tmp/x.scm`, and `/tmp` is world-writable.
 
 ## Combining Extensions, Libraries, and RegisterFunc
 
