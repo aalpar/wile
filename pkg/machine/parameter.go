@@ -21,6 +21,20 @@ var (
 	_ values.Callable = (*Parameter)(nil)
 )
 
+// ParameterBase says whether a parameter's base value may be rewritten by
+// applying it to one argument. Parameterize is unaffected either way: it binds a
+// continuation mark, never the base.
+type ParameterBase bool
+
+const (
+	// MutableBase is the ordinary R7RS parameter: (param val) rewrites the base.
+	MutableBase ParameterBase = false
+	// ImmutableBase refuses (param val). Required of any parameter object shared
+	// across Engines, whose safety argument rests on the base never changing --
+	// exceptionHandlerParam is the one such singleton.
+	ImmutableBase ParameterBase = true
+)
+
 // Parameter represents an R7RS parameter object.
 // Parameters are dynamically-scoped variables that can be temporarily
 // rebound using parameterize. They act as procedures:
@@ -28,19 +42,30 @@ var (
 //   - (param val) sets the parameter's BASE value (after applying converter if
 //     present); it does not affect an active parameterize binding, which is
 //     carried as a continuation mark and read first by (param)
+//
+// A parameter constructed with ImmutableBase refuses the one-argument form; see
+// ParameterBase.
 type Parameter struct {
-	value     values.Value // current value
-	converter Closure      // optional converter procedure (Closure), or nil
+	value     values.Value  // current value
+	converter Closure       // optional converter procedure (Closure), or nil
+	base      ParameterBase // whether (param val) may rewrite value
 }
 
 // NewParameter creates a new parameter with the given initial value and optional converter.
 // The converter should be a procedure that takes one argument and returns the converted value.
-// Pass nil for converter if no conversion is needed.
-func NewParameter(init values.Value, converter Closure) *Parameter {
+// Pass nil for converter if no conversion is needed. Pass MutableBase unless the
+// object is shared beyond one Engine (see ParameterBase).
+func NewParameter(init values.Value, converter Closure, base ParameterBase) *Parameter {
 	return &Parameter{
 		value:     init,
 		converter: converter,
+		base:      base,
 	}
+}
+
+// HasImmutableBase reports whether this parameter refuses base-value rewrites.
+func (p *Parameter) HasImmutableBase() bool {
+	return bool(p.base)
 }
 
 // Value returns the current value of the parameter.

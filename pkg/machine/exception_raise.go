@@ -27,7 +27,12 @@ import (
 // pointer identity). The actual handler stacks live in per-MachineContext marks,
 // so sharing one key object across Engines is safe: each Engine's handlers ride
 // its own continuation chain and resolve only within it. The base value (empty
-// list) is immutable. This mirrors the process-wide DefaultPromptTag.
+// list) is immutable -- ImmutableBase is what enforces that, and the whole
+// cross-Engine safety argument rests on it. Before that flag existed, Scheme in
+// any Engine could apply the object to one argument (it is bound to the global
+// %exception-handlers) and rewrite the shared base, so a Tiny engine could
+// harvest conditions that escaped another Engine's handler stack and race its
+// writes. This mirrors the process-wide DefaultPromptTag.
 //
 // Scheme reaches it through the global %exception-handlers binding (bound to this
 // object by the core registry's %exception-handler-parameter primitive); Go
@@ -35,7 +40,7 @@ import (
 // …), which sets a continuation mark keyed by this object — so call/cc copies the
 // handler with the continuation, and re-entry restores it. That is the whole fix:
 // the handler rides the captured continuation instead of an off-chain Go field.
-var exceptionHandlerParam = NewParameter(values.EmptyList, nil)
+var exceptionHandlerParam = NewParameter(values.EmptyList, nil, ImmutableBase)
 
 // ExceptionHandlerParam returns the canonical exception-handler parameter so the core
 // registry can bind it to the Scheme global %exception-handlers. The return type is

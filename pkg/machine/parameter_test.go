@@ -9,7 +9,7 @@ import (
 )
 
 func TestParameter_AcceptsArity(t *testing.T) {
-	p := NewParameter(values.NewInteger(42), nil)
+	p := NewParameter(values.NewInteger(42), nil, MutableBase)
 
 	tcs := []struct {
 		name string
@@ -29,7 +29,7 @@ func TestParameter_AcceptsArity(t *testing.T) {
 }
 
 func TestParameter_ImplementsCallable(t *testing.T) {
-	p := NewParameter(values.NewInteger(0), nil)
+	p := NewParameter(values.NewInteger(0), nil, MutableBase)
 	var c values.Callable = p
 	qt.Assert(t, c, qt.IsNotNil)
 }

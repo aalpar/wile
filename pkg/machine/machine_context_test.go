@@ -895,7 +895,7 @@ func TestApplyCallable_Parameter(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			param := NewParameter(tc.initVal, nil)
+			param := NewParameter(tc.initVal, nil, MutableBase)
 			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 			// Sub-context: cont == nil
@@ -918,7 +918,7 @@ func TestApplyCallable_Parameter_WrongArgCount(t *testing.T) {
 	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
-	param := NewParameter(values.NewInteger(0), nil)
+	param := NewParameter(values.NewInteger(0), nil, MutableBase)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	sub := mc.NewSubContext()
@@ -934,7 +934,7 @@ func TestApplyCallable_Parameter_WithContinuation(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 
-	param := NewParameter(values.NewInteger(42), nil)
+	param := NewParameter(values.NewInteger(42), nil, MutableBase)
 
 	// With a continuation (bytecode path): should restore continuation
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
@@ -1182,7 +1182,7 @@ func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
 	mc.SetMaxCallDepth(99)
 
 	params := mc.CaptureSubContextParams()
-	thunk := NewParameter(nil, nil)
+	thunk := NewParameter(nil, nil, MutableBase)
 	thread := values.NewThread(thunk, "test-thread")
 	sub := NewThreadSubContext(params, thread)
 	if sub.MaxCallDepth() != 99 {
@@ -1209,7 +1209,7 @@ func TestNewThreadSubContext_InheritsMaxStackSize(t *testing.T) {
 	mc.SetMaxStackSize(750)
 
 	params := mc.CaptureSubContextParams()
-	thunk := NewParameter(nil, nil)
+	thunk := NewParameter(nil, nil, MutableBase)
 	thread := values.NewThread(thunk, "test-thread")
 	sub := NewThreadSubContext(params, thread)
 	if sub.MaxStackSize() != 750 {
