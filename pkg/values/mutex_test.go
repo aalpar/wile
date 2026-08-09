@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"sync"
@@ -346,5 +347,101 @@ func TestUnlockCVNoLostWakeup(t *testing.T) {
 			t.Fatalf("iteration %d: consumer never woke — the signal was lost "+
 				"because the waiter was not enqueued before the mutex was released", i)
 		}
+	}
+}
+
+// lockContextResult is one waiter's return from LockContext, moved off the
+// waiter goroutine so the driver can put a watchdog on it.
+type lockContextResult struct {
+	acquired bool
+	err      error
+}
+
+// runLockContextWaiter launches one waiter on the already-held m under the
+// supplied ctx and timeout, and reports whether that waiter returned within the
+// watchdog. Reporting rather than failing keeps both arms of the lost-wakeup
+// driver on one mechanism.
+func runLockContextWaiter(ctx context.Context, m *values.Mutex, timeout *time.Duration, watchdog time.Duration) (lockContextResult, bool) {
+	res := make(chan lockContextResult, 1)
+	go func() {
+		acquired, err := m.LockContext(ctx, timeout, nil)
+		res <- lockContextResult{acquired: acquired, err: err}
+	}()
+
+	timer := time.NewTimer(watchdog)
+	defer timer.Stop()
+	select {
+	case r := <-res:
+		return r, true
+	case <-timer.C:
+		return lockContextResult{}, false
+	}
+}
+
+// TestMutexLockContextNoLostWakeup drives both of LockContext's wait mechanisms
+// under one driver: the TIMED path, whose wakeup comes from a timer goroutine
+// launched next to cond.Wait, and the untimed CANCELLED path, whose wakeup comes
+// from waitOnCondCtx. Every trial must resolve.
+//
+// The timed arm is the defect: its timer goroutine's Broadcast is lost whenever
+// it lands between the `go` statement and cond.Wait's notifyListAdd, and the
+// waiter then parks with nothing left to wake it. The cancelled arm is the
+// control — same shape, same trials, same durations, but its Broadcast is taken
+// under cond.L, so it must lose zero wakeups. Without the control the driver is
+// not shown to discriminate between the two mechanisms.
+//
+// The bound was re-measured on this base rather than inherited: at 1 ms, the
+// duration the review's driver reproduced at, 12 000 trials pass. The window
+// being raced is the gap between the `go` statement and notifyListAdd, so
+// shortening the timer is what widens it — 3 µs reproduces (trial 10596 of
+// 12 000, unfixed), and the table keeps the review's longer durations as the
+// slower-machine arms.
+func TestMutexLockContextNoLostWakeup(t *testing.T) {
+	const trials = 12000
+	// Generous: the assertion is "returned at all", not "returned promptly".
+	const watchdog = 5 * time.Second
+
+	timeouts := []time.Duration{
+		3 * time.Microsecond,
+		20 * time.Microsecond,
+		100 * time.Microsecond,
+	}
+
+	for _, timeout := range timeouts {
+		t.Run("timed/"+timeout.String(), func(t *testing.T) {
+			for i := range trials {
+				m := values.NewMutex("timed")
+				m.Lock(nil, nil) // held for the whole trial: the waiter can only time out
+
+				d := timeout
+				r, returned := runLockContextWaiter(context.Background(), m, &d, watchdog)
+				if !returned {
+					t.Fatalf("trial %d: waiter never returned from a %v timed acquire — the "+
+						"timer goroutine broadcast before cond.Wait enqueued on the notify list", i, timeout)
+				}
+				qt.Assert(t, r.acquired, qt.IsFalse)
+				qt.Assert(t, r.err, qt.IsNil)
+
+				m.Unlock(nil, nil)
+			}
+		})
+
+		t.Run("cancelled/"+timeout.String(), func(t *testing.T) {
+			for i := range trials {
+				m := values.NewMutex("cancelled")
+				m.Lock(nil, nil)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				r, returned := runLockContextWaiter(ctx, m, nil, watchdog)
+				cancel()
+				if !returned {
+					t.Fatalf("trial %d: waiter never returned from a %v cancelled untimed acquire", i, timeout)
+				}
+				qt.Assert(t, r.acquired, qt.IsFalse)
+				qt.Assert(t, r.err, qt.IsNil)
+
+				m.Unlock(nil, nil)
+			}
+		})
 	}
 }

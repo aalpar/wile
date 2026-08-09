@@ -228,11 +228,26 @@ func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *
 
 			// sync.Cond doesn't support deadlines natively, so we
 			// arrange a wakeup via Broadcast from a side goroutine.
+			//
+			// The goroutine takes p.mu (which IS cond.L) before it
+			// Broadcasts, exactly as waitOnCondCtx's ctx goroutine does.
+			// Without it the Broadcast can land in the gap between the go
+			// statement and cond.Wait's enqueue on the notify list, and the
+			// waiter then parks with nothing left to wake it — measured as a
+			// stuck waiter within 12 000 trials at 3 µs and at 20 µs. Taking
+			// the lock blocks the timer until Wait has released cond.L and
+			// therefore enqueued. The goroutine may outlive this iteration
+			// while blocked on that lock, but it cannot leak: the caller
+			// releases cond.L at the next Wait or at the deferred unlock, and
+			// a Broadcast arriving after close(done) is a spurious wakeup the
+			// predicate loop already tolerates.
 			done := make(chan struct{})
 			go func() {
 				select {
 				case <-time.After(remaining):
+					p.mu.Lock()
 					p.cond.Broadcast()
+					p.mu.Unlock()
 				case <-done:
 				}
 			}()
