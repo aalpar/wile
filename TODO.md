@@ -2432,6 +2432,14 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
   and every `.scm` under test. Deliberately not bundled with the reader-fixes
   change, which is a three-item feature and would have conflated the two.
 
+  **Scope narrowed 2026-08-09** (W5 cluster A): the ⟨infnan⟩ keywords and the
+  unit imaginaries `+i`/`-i` now terminate implicitly too, so `+i2` and
+  `+inf.0x` are single identifiers rather than a number plus a second datum.
+  That rule lives in the sign-initial arms of `tokenizer_numbers.go`, **not** in
+  `requireDelimiterAfterRadixNumeral` — extending the guard to `r == 0` as this
+  item proposes would make `+i2` a read *error*, which is equally nonconformant.
+  What remains open is only the unprefixed numeral: `1abc` still splits.
+
   The `#z` / `#m` inline scan is the same family and is **worse**, because it
   truncates silently instead of splitting into two visible datums. `readBigNum`
   scans base 10 and stops at the first character it does not recognize, so:
