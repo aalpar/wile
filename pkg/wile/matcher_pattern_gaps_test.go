@@ -405,6 +405,74 @@ func TestFreeTemplateIdInsideSyntaxCaseClauseResolvesAtDefinitionSite(t *testing
 	}
 }
 
+// 2.2.12 — a syntax-case pattern literal ignored use-site bindings.
+// SyntaxCaseClause carried no LiteralSyntax at all and the match passed no
+// binding checker, so match.go's hygiene block was gated off with BOTH
+// conjuncts nil on this path.
+//
+// The correct behaviour is a 2x2 over {syntax-rules, syntax-case} x {let-bound
+// shadow, global shadow}. The plumbing in this change closes the syntax-case x
+// let-bound cell; the two global-shadow cells need wave 1 §6's two-sided
+// checker semantics and are recorded here as the current state so the matrix is
+// visible rather than half-written.
+func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
+	const rulesMacro = `(define-syntax m
+                          (syntax-rules (else)
+                            ((_ else x) (list 'ELSE x))
+                            ((_ y x) (list 'OTHER y x))))`
+	const caseMacro = `(define-syntax m
+                         (lambda (stx)
+                           (syntax-case stx (else)
+                             ((_ else x) #'(list 'ELSE x))
+                             ((_ y x) #'(list 'OTHER y x)))))`
+
+	cases := []struct {
+		name string
+		src  string
+		want string
+		// closedBy names the change that makes want correct; "wave1-6" cells
+		// record today's WRONG answer deliberately, so this test does not
+		// silently start passing for the wrong reason.
+		closedBy string
+	}{
+		{
+			// CONTROL: already correct at the base.
+			name:     "syntax-rules, let-bound shadow",
+			src:      "(begin " + rulesMacro + " (let ((else 5)) (m else 1)))",
+			want:     "(OTHER 5 1)",
+			closedBy: "already-correct",
+		},
+		{
+			// The defect. (ELSE 1) at the base.
+			name:     "syntax-case, let-bound shadow",
+			src:      "(begin " + caseMacro + " (let ((else 5)) (m else 1)))",
+			want:     "(OTHER 5 1)",
+			closedBy: "wave5-9B",
+		},
+		{
+			name:     "syntax-rules, global shadow",
+			src:      "(begin " + rulesMacro + " (define else 5) (m else 1))",
+			want:     "(ELSE 1)",
+			closedBy: "wave1-6",
+		},
+		{
+			name:     "syntax-case, global shadow",
+			src:      "(begin " + caseMacro + " (define else 5) (m else 1))",
+			want:     "(ELSE 1)",
+			closedBy: "wave1-6",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustEvalScheme(t, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s (cell closed by %s)", got, tc.want, tc.closedBy)
+			}
+		})
+	}
+}
+
 // The dotted-tail traversal must not turn a proper-list pattern into one that
 // accepts improper input: `(_ a ...)` requires a list, so the unconsumed tail
 // is a mismatch and the second clause takes it.

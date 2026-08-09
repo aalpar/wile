@@ -207,7 +207,7 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 	// Handle box elements (#&<pattern>)
 	box, ok := element.(*syntax.SyntaxBox)
 	if ok {
-		return compileBoxElement(vis, stack, box, element, elementStart)
+		return compileBoxElement(vis, stack, box, elementStart)
 	}
 
 	// Handle symbol elements
@@ -304,7 +304,7 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 // pattern fell through to the literal CompareCar below, which compares the
 // box's CONTENT by value — so `((_ #&y) y)` never matched `(p #&7)`.
 func compileBoxElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
-	box *syntax.SyntaxBox, element syntax.SyntaxValue, elementStart int,
+	box *syntax.SyntaxBox, elementStart int,
 ) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
 

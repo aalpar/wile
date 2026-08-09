@@ -284,13 +284,7 @@ func TestLiteralScopesMatchWithChecker(t *testing.T) {
 			inputSym := syntax.NewSyntaxSymbol("=>", tt.inputSrcCtx)
 			patternSym := syntax.NewSyntaxSymbol("=>", tt.patternSrcCtx)
 
-			literalSyntax := map[string]*syntax.SyntaxSymbol{
-				"=>": patternSym,
-			}
-			matcher := NewSyntaxMatcher(nil, nil, &SyntaxMatcherOpts{EllipsisID: "...", LiteralSyntax: literalSyntax})
-			matcher.bindingChecker = tt.bindingChecker
-
-			result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
+			result := literalScopesMatchWithChecker(tt.bindingChecker, inputSym, patternSym)
 			c.Assert(result, qt.Equals, tt.expected)
 		})
 	}
