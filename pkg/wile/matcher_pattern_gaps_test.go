@@ -373,6 +373,38 @@ func TestBoxInMacroTemplateAndPattern(t *testing.T) {
 	}
 }
 
+// 2.2.14 — a syntax-rules macro defined INSIDE a syntax-case clause body, whose
+// template freely references the enclosing clause's pattern variable, resolved
+// that reference at the USE site.
+//
+// The reference reaches applyHygieneToSymbol's empty-LocalScopes local-binding
+// arm because a syntax-case pattern variable is bound scope-less on the
+// pattern-variable frame. That arm returned srcCtx — which UseSiteCtx has
+// already replaced with the invoking code's context — so `a` in the inner
+// template picked up the lambda's `a` (99) instead of the pattern variable
+// (42). Racket gives 42, and the sibling local-binding arm gives 42 for the
+// identical shape.
+//
+// This test HAS to be Scheme-level: the arm's only other driver is a mock
+// (pkg/internal/match/literal_match_test.go TestApplyHygieneToSymbol/"free
+// identifier with hasLocalBinding true"), and with its nil UseSiteCtx
+// templateCtx == srcCtx, so it passes either way. It is a control, not a gate.
+func TestFreeTemplateIdInsideSyntaxCaseClauseResolvesAtDefinitionSite(t *testing.T) {
+	src := `(begin
+              (define-syntax outer
+                (lambda (stx)
+                  (syntax-case stx ()
+                    ((_ a)
+                     (let-syntax ((inner (syntax-rules () ((_) a))))
+                       ((lambda (a) (inner)) #'99))))))
+              (outer 42))`
+	got := mustEvalScheme(t, src)
+	want := "42"
+	if got != want {
+		t.Errorf("got %s, want %s (99 means the free template id resolved at the use site)", got, want)
+	}
+}
+
 // The dotted-tail traversal must not turn a proper-list pattern into one that
 // accepts improper input: `(_ a ...)` requires a list, so the unconsumed tail
 // is a mismatch and the second clause takes it.

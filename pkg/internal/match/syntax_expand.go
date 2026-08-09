@@ -434,8 +434,19 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		return newSym.WithResolvedBinding(globalBinding)
 	}
 
+	// Local binding whose binder carries NO scopes — a pattern variable in a
+	// syntax-case clause body's frame is bound that way. There is no scope set
+	// to substitute, so this arm keeps the template symbol scope-less; what it
+	// must not do is hand it srcCtx, which UseSiteCtx has already replaced with
+	// the INVOKING code's context. That let a syntax-rules macro defined inside
+	// a syntax-case clause body resolve a free template reference to the use
+	// site's binding: 99 where hygiene requires 42 (Racket gives 42), and the
+	// sibling local-binding arm above gives 42 for the identical shape.
+	//
+	// templateCtx differs from srcCtx only in its scope set (definition-site
+	// rather than use-site); position and origin are the same object.
 	if resolution.GetHasLocalBinding() {
-		return syntax.NewSyntaxSymbol(key, srcCtx)
+		return syntax.NewSyntaxSymbol(key, templateCtx)
 	}
 
 	// Resolution non-nil but all methods returned zero — binding was unresolvable
