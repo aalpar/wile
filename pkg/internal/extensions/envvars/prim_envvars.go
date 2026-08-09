@@ -15,6 +15,7 @@
 package envvars
 
 import (
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -86,9 +87,16 @@ func PrimGetEnvironmentVariable(mc machine.CallContext) error {
 func PrimGetEnvironmentVariables(mc machine.CallContext) error {
 	envMap := namespaceEnvMap(mc)
 	if envMap != nil {
+		// Sorted, because ranging a Go map is randomized per iteration: this
+		// branch returned a different order on every call within one engine
+		// (8 keys, 4 distinct orders in 6 calls), while the os.Environ branch
+		// below walks a slice and is stable by construction. One primitive must
+		// not have two stability stories. Walking backwards over the sorted keys
+		// leaves the result in ascending order, matching that branch's shape.
+		keys := slices.Sorted(maps.Keys(envMap))
 		list := values.EmptyList
-		for k, v := range envMap {
-			pair := values.NewCons(values.NewString(k), values.NewString(v))
+		for i := range slices.Backward(keys) {
+			pair := values.NewCons(values.NewString(keys[i]), values.NewString(envMap[keys[i]]))
 			list = values.NewCons(pair, list)
 		}
 		mc.SetValue(list)
