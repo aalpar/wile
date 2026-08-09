@@ -204,6 +204,12 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 		return compileVectorElement(vis, stack, vec, element, elementStart)
 	}
 
+	// Handle box elements (#&<pattern>)
+	box, ok := element.(*syntax.SyntaxBox)
+	if ok {
+		return compileBoxElement(vis, stack, box, element, elementStart)
+	}
+
 	// Handle symbol elements
 	sym, ok := element.(*syntax.SyntaxSymbol)
 	if ok {
@@ -288,6 +294,51 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 		variables: map[string]struct{}{},
 	})
 	return stack, true
+}
+
+// compileBoxElement handles when the current element is a box pattern.
+//
+// A box holds exactly one datum, so `#&<pattern>` is compiled as a one-element
+// sub-list `(<pattern>)`: the descent op converts the input box the same way,
+// and every existing pair opcode then applies unchanged. Without this a box
+// pattern fell through to the literal CompareCar below, which compares the
+// box's CONTENT by value — so `((_ #&y) y)` never matched `(p #&7)`.
+func compileBoxElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
+	box *syntax.SyntaxBox, element syntax.SyntaxValue, elementStart int,
+) ([]syntaxCompilerStackEntry, bool) {
+	l := len(stack)
+
+	// Capture an improper `. rest` tail before the descent op, same rationale as
+	// compilePairElement.
+	emitImproperTailIfPresent(vis, &stack[l-1])
+
+	vis.codes = append(vis.codes, ByteCodeVisitCarAsBox{})
+	chain := boxContentToPairChain(box)
+
+	// Analyze the converted chain so pointer-based analysis works for ellipsis
+	// detection inside box patterns (as compileVectorElement does).
+	localAnalysis := AnalyzePattern(chain, vis.variables)
+	vis.analysis.Merge(localAnalysis)
+
+	stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
+	stack[l-1].lastElement = chain
+	stack[l-1].lastElementStart = elementStart
+
+	stack = append(stack, syntaxCompilerStackEntry{
+		pr:        chain,
+		variables: map[string]struct{}{},
+	})
+	return stack, true
+}
+
+// boxContentToPairChain wraps a SyntaxBox's content in a one-element pair chain
+// so pair-based compilation handles it.
+func boxContentToPairChain(box *syntax.SyntaxBox) *syntax.SyntaxPair {
+	var content syntax.SyntaxValue = syntax.SyntaxEmptyList
+	if box.Value != nil {
+		content = box.Value
+	}
+	return syntax.NewSyntaxCons(content, syntax.SyntaxEmptyList, box.SourceContext())
 }
 
 // vectorElementsToPairChain converts a SyntaxVector's elements to a SyntaxPair

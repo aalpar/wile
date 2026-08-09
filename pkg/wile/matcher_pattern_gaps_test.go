@@ -289,6 +289,90 @@ func TestTrailingWildcardAfterSublist(t *testing.T) {
 	}
 }
 
+// 2.2.13 — a `#&` box in a template was emitted verbatim, and a box in a
+// pattern never matched. pkg/syntax/syntax_box.go states the contract the
+// expander broke: "a box in a macro template propagates scopes to what it
+// holds". The vector analogue is the control — it already worked, which is what
+// made the expander's self-evaluating default arm the gap.
+//
+// No test asserts "the box's identifier resolves to some unrelated binding":
+// there is no compiler case for *SyntaxBox at all, so a box is self-evaluating
+// data and the failure is always a wrong DATUM, never a capture.
+func TestBoxInMacroTemplateAndPattern(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			// #&x at the base.
+			name: "template box substitutes its content",
+			src: `(begin
+                    (define-syntax b (syntax-rules () ((_ x) #&x)))
+                    (b 5))`,
+			want: "#&5",
+		},
+		{
+			// #&(x ...) at the base — the whole boxed subtree was verbatim,
+			// ellipses included.
+			name: "template box repeats an ellipsis inside it",
+			src: `(begin
+                    (define-syntax b (syntax-rules () ((_ x ...) #&(x ...))))
+                    (b 5 6))`,
+			want: "#&(5 6)",
+		},
+		{
+			// CONTROL: the vector analogue already worked.
+			name: "control: template vector substitutes",
+			src: `(begin
+                    (define-syntax v (syntax-rules () ((_ x) #(x x))))
+                    (v 5))`,
+			want: "#(5 5)",
+		},
+		{
+			// "no matching clause" at the base.
+			name: "pattern box binds its content",
+			src: `(begin
+                    (define-syntax p (syntax-rules () ((_ #&y) y)))
+                    (p #&7))`,
+			want: "7",
+		},
+		{
+			name: "pattern box discriminates against a non-box",
+			src: `(begin
+                    (define-syntax p
+                      (syntax-rules ()
+                        ((_ #&y) (list 'boxed y))
+                        ((_ y) (list 'bare y))))
+                    (list (p #&7) (p 7)))`,
+			want: "((boxed 7) (bare 7))",
+		},
+		{
+			name: "pattern box holding a sublist",
+			src: `(begin
+                    (define-syntax p (syntax-rules () ((_ #&(a b)) (list b a))))
+                    (p #&(1 2)))`,
+			want: "(2 1)",
+		},
+		{
+			name: "round trip: box pattern into box template",
+			src: `(begin
+                    (define-syntax p (syntax-rules () ((_ #&y) #&y)))
+                    (p #&7))`,
+			want: "#&7",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustEvalScheme(t, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
 // The dotted-tail traversal must not turn a proper-list pattern into one that
 // accepts improper input: `(_ a ...)` requires a list, so the unconsumed tail
 // is a mismatch and the second clause takes it.

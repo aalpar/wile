@@ -45,6 +45,16 @@ func (ByteCodeVisitCarAsVector) String() string {
 	return "VisitCarAsVector"
 }
 
+// ByteCodeVisitCarAsBox checks that the car of the current pair is a SyntaxBox,
+// wraps its content in a one-element SyntaxPair chain, and pushes the chain onto
+// the syntax stack. A box holds exactly one datum, so `#&<pattern>` matches as
+// the one-element sub-list `(<pattern>)` and every pair opcode applies unchanged.
+type ByteCodeVisitCarAsBox struct{}
+
+func (ByteCodeVisitCarAsBox) String() string {
+	return "VisitCarAsBox"
+}
+
 // ByteCodeRequireCarEmptyVector verifies that the car at the current position is an
 // empty SyntaxVector. Used for empty vector patterns #().
 type ByteCodeRequireCarEmptyVector struct{}

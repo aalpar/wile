@@ -583,6 +583,19 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			chain := vectorToSyntaxPairChain(vec)
 			p.syntaxStack = append(p.syntaxStack, syntaxPathEntry{pr: chain})
 			lvs = len(p.syntaxStack)
+		case ByteCodeVisitCarAsBox:
+			// Box pattern `#&<pattern>` — car must be a SyntaxBox. Wrap its
+			// content in a one-element chain, mirroring the compiler.
+			if syntax.IsSyntaxEmptyList(p.syntaxStack[lvs-1].pr) {
+				return ErrNotAMatch
+			}
+			car := p.syntaxStack[lvs-1].pr.SyntaxCar()
+			box, ok := car.(*syntax.SyntaxBox)
+			if !ok {
+				return ErrNotAMatch
+			}
+			p.syntaxStack = append(p.syntaxStack, syntaxPathEntry{pr: boxContentToPairChain(box)})
+			lvs = len(p.syntaxStack)
 		default:
 			return ErrUnknownOpCode
 		}

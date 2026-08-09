@@ -470,6 +470,13 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			collectFreeIdentifiersWithEllipsis(env, elem, patternVars, freeIds, ellipsis, libraryScope)
 		}
 
+	case *syntax.SyntaxBox:
+		// A box is a container, so its content is template text like a vector's
+		// elements are.
+		if t.Value != nil {
+			collectFreeIdentifiersWithEllipsis(env, t.Value, patternVars, freeIds, ellipsis, libraryScope)
+		}
+
 	case *syntax.SyntaxObject:
 		// Self-evaluating literals don't contain identifiers
 		// Do nothing
@@ -544,6 +551,15 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 		// R7RS §4.3.2: #(<pattern> ...) — recurse into vector elements
 		for _, elem := range p.Values {
 			err := collectPatternVariablesWithEllipsis(elem, literalSyntax, false, variables, varSyntax, ellipsis)
+			if err != nil {
+				return err
+			}
+		}
+
+	case *syntax.SyntaxBox:
+		// `#&<pattern>` — the boxed datum is a sub-pattern.
+		if p.Value != nil {
+			err := collectPatternVariablesWithEllipsis(p.Value, literalSyntax, false, variables, varSyntax, ellipsis)
 			if err != nil {
 				return err
 			}
@@ -660,6 +676,13 @@ func computePatternVarDepths(pattern syntax.SyntaxValue, variables map[string]st
 			i += k
 		}
 
+	case *syntax.SyntaxBox:
+		// A box holds one datum, so no ellipsis can follow it inside the box:
+		// its content is governed at the current depth.
+		if p.Value != nil {
+			computePatternVarDepths(p.Value, variables, ellipsis, depth, out)
+		}
+
 	case *syntax.SyntaxObject:
 		// Self-evaluating literals are not pattern variables — no depth to record.
 	}
@@ -696,6 +719,11 @@ func collectTemplatePatternVars(tmpl syntax.SyntaxValue, variables map[string]st
 	case *syntax.SyntaxVector:
 		for _, elem := range t.Values {
 			collectTemplatePatternVars(elem, variables, ellipsis, out)
+		}
+
+	case *syntax.SyntaxBox:
+		if t.Value != nil {
+			collectTemplatePatternVars(t.Value, variables, ellipsis, out)
 		}
 
 	case *syntax.SyntaxObject:
