@@ -109,6 +109,12 @@ func (p *MachineContext) NewSubContextWithWinding(windingStack WindingStack) *Ma
 //
 // The template and env override NewSubContext's defaults (nil template, the
 // parent's mutable runtime global). pc starts at 0 (pool zero-value).
+//
+// The debugger is propagated here and NOT in NewSubContext. These two callers
+// (eval and load) are the only ones that run freshly compiled code on a child
+// context, so they are the only ones where a breakpoint could go unnoticed;
+// map, for-each, apply, dynamic-wind bodies and call-with-values consumers all
+// run their closure on the parent context and already break correctly.
 func (p *MachineContext) NewSubContextWithTemplate(
 	tpl *NativeTemplate,
 	env *environment.EnvironmentFrame,
@@ -116,6 +122,7 @@ func (p *MachineContext) NewSubContextWithTemplate(
 	mc := p.NewSubContext()
 	mc.template = tpl
 	mc.env = env
+	mc.debugger = p.debugger
 	return mc
 }
 
