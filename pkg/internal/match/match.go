@@ -47,6 +47,18 @@ import (
 // syntaxPathEntry tracks position in the input syntax tree during matching.
 type syntaxPathEntry struct {
 	pr syntax.SyntaxTuple
+	// tail is the dotted tail an advance stopped on. A position is EXHAUSTED
+	// when pr is the empty list; tail discriminates the two ways a list can end,
+	// and only the Cdr-consuming opcodes (CaptureCdr, CompareCdr, DiscardCdr)
+	// read it. Exhausted with tail == nil means the input list ended properly
+	// and the rest of it is (); exhausted with tail != nil means the input ended
+	// in `. tail`, and a pattern's `. rest` must bind that value rather than ().
+	//
+	// Encoding an improper end as "exhausted" rather than as its own state is
+	// what keeps the fix local: every car-consuming opcode already refuses an
+	// exhausted position, and SkipIfEmpty/Jump already exit an ellipsis loop on
+	// one, so the loop halts after the last capture instead of before it.
+	tail syntax.SyntaxValue
 }
 
 // DefaultEllipsis is the standard R7RS ellipsis identifier.
@@ -179,6 +191,15 @@ func (p *Matcher) clone() *Matcher {
 //   - Updated syntax stack length
 //   - Error if pattern doesn't match (ErrNotAMatch)
 func (p *Matcher) handleByteCodeDone(i int, lvs int) (int, error) {
+	// An advance stopped on a dotted input tail that no pattern element
+	// consumed: the pattern is a proper list `(P1 ... Pn)`, which R7RS §4.3.2
+	// requires the input to be too. The three Cdr-consuming opcodes clear the
+	// tail when they bind, compare or discard it, so a tail still set here is
+	// by definition unmatched.
+	if p.syntaxStack[lvs-1].tail != nil {
+		return 0, ErrNotAMatch
+	}
+
 	// Before popping, check that the cdr of current pair is empty.
 	// This ensures the pattern consumed all elements at this level.
 	// If the position is already at the empty list singleton, all elements
@@ -347,7 +368,17 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			// Compare the CDR with a literal value (for improper list patterns with literal tail)
 			vsv := p.syntaxStack[lvs-1].pr
 			if syntax.IsSyntaxEmptyList(vsv) {
-				return ErrNotAMatch
+				// Exhausted: the rest of the input is the carried dotted tail,
+				// or () when the input list ended properly.
+				rest := p.syntaxStack[lvs-1].tail
+				if rest == nil {
+					rest = syntax.SyntaxEmptyList
+				}
+				if !syntaxValuesEqualForMatch(cd.Value, rest) {
+					return ErrNotAMatch
+				}
+				p.syntaxStack[lvs-1].tail = nil
+				break
 			}
 			if !syntaxValuesEqualForMatch(cd.Value, vsv.SyntaxCdr()) {
 				return ErrNotAMatch
@@ -370,18 +401,23 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			vsv := p.syntaxStack[lvs-1].pr
 			if syntax.IsSyntaxEmptyList(vsv) {
 				// The `. rest` tail follows a preceding ellipsis that already
-				// consumed every element of a PROPER list (e.g. (a ... . rest)
-				// matching (1 2 3)). The rest of an exhausted proper list is the
-				// empty list, so bind `rest` to () rather than failing.
+				// consumed every element (e.g. (a ... . rest) matching (1 2 3)
+				// or (1 2 . 3)). The rest of an exhausted list is the dotted
+				// tail the advance stopped on, or () when the list ended
+				// properly.
 				// (CaptureCar guards the empty-input case for the leading
 				// element, so reaching here with an empty position can only mean
 				// an exhausted-list tail, never a missing required element.)
-				captured := syntax.SyntaxEmptyList
+				var captured syntax.SyntaxValue = syntax.SyntaxEmptyList
+				if p.syntaxStack[lvs-1].tail != nil {
+					captured = p.syntaxStack[lvs-1].tail
+				}
 				bv, ok := p.captureStack[lcs-1].bindings[cd.Binding]
 				if ok && !syntaxValuesEqualForMatch(captured, bv) {
 					return ErrNotAMatch
 				}
 				p.captureStack[lcs-1].bindings[cd.Binding] = captured
+				p.syntaxStack[lvs-1].tail = nil
 				break
 			}
 			capturedSyntax := vsv.SyntaxCdr()
@@ -398,6 +434,7 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			// (R7RS §4.3.2). An exhausted position already has nothing to consume.
 			vsv := p.syntaxStack[lvs-1].pr
 			if syntax.IsSyntaxEmptyList(vsv) {
+				p.syntaxStack[lvs-1].tail = nil
 				break
 			}
 			p.syntaxStack[lvs-1].pr = syntax.NewSyntaxCons(vsv.SyntaxCar(), syntax.SyntaxEmptyList, vsv.SourceContext())
@@ -455,16 +492,21 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			}
 			cdr := p.syntaxStack[lvs-1].pr.SyntaxCdr()
 			pr, ok := cdr.(*syntax.SyntaxPair)
-			if !ok {
+			switch {
+			case ok:
+				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: pr}
+			case syntax.IsSyntaxEmptyList(cdr):
 				// In ellipsis loops, reaching end-of-list via VisitCdr is normal —
 				// SkipIfEmpty at the loop head will exit. Set position to empty list.
-				if syntax.IsSyntaxEmptyList(cdr) {
-					p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
-				} else {
-					return ErrNotAMatch
-				}
-			} else {
-				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: pr}
+				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
+			default:
+				// A dotted input tail (R7RS §4.3.2 `(P1 ... Pn . Pn+1)`). The
+				// list has no further ELEMENT, so the position is exhausted;
+				// carrying the tail lets a pattern's `. rest` bind it. Refusing
+				// here instead — which is what this did — killed every improper
+				// input, both inside an ellipsis loop and at the pre-loop
+				// advance past the macro keyword.
+				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList, tail: cdr}
 			}
 			lvs = len(p.syntaxStack)
 		case ByteCodeSkipIfEmpty:

@@ -129,3 +129,103 @@ func TestEllipsisOverVariableFreeSubpatternStillDiscriminates(t *testing.T) {
 		t.Errorf("got %s, want %s", got, want)
 	}
 }
+
+// 2.3.4 — `(a ... . r)` against an improper input list. Every case here gave
+// "no matching clause" at the base, in BOTH syntax-rules and syntax-case.
+//
+// The values matter, not just the match: the ellipsis loop has to halt with the
+// position on the LAST pair, so `(1 2 . 3)` yields a=(1 2) r=3 (Racket's
+// ((1 2) 3)). An exit test at the loop head would yield a=(1) r=3 and satisfy a
+// bare "it matches" assertion.
+func TestEllipsisFollowedByDottedTail(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "syntax-rules, two elements then a dotted tail",
+			src: `(begin
+                    (define-syntax m (syntax-rules () ((_ a ... . r) (list (list a ...) r))))
+                    (m 1 2 . 3))`,
+			want: "((1 2) 3)",
+		},
+		{
+			name: "syntax-rules, one element then a dotted tail",
+			src: `(begin
+                    (define-syntax m (syntax-rules () ((_ a ... . r) (list (list a ...) r))))
+                    (m 1 . 2))`,
+			want: "((1) 2)",
+		},
+		{
+			// Zero repetitions: this one dies at the PRE-LOOP advance past the
+			// macro keyword, before SkipIfEmpty is ever reached.
+			name: "syntax-rules, zero elements then a dotted tail",
+			src: `(begin
+                    (define-syntax m (syntax-rules () ((_ a ... . r) (list (list a ...) r))))
+                    (m . 3))`,
+			want: "(() 3)",
+		},
+		{
+			name: "syntax-case, two elements then a dotted tail",
+			src: `(begin
+                    (define-syntax m
+                      (lambda (stx)
+                        (syntax-case stx ()
+                          ((_ a ... . r) #'(list (list a ...) r)))))
+                    (m 1 2 . 3))`,
+			want: "((1 2) 3)",
+		},
+		{
+			name: "fixed element before the ellipsis and the dotted tail",
+			src: `(begin
+                    (define-syntax m (syntax-rules () ((_ z a ... . r) (list z (list a ...) r))))
+                    (m 0 1 2 . 3))`,
+			want: "(0 (1 2) 3)",
+		},
+		{
+			// CONTROL: a proper-list input still binds r to (). This passed at
+			// the base and must keep passing.
+			name: "control: proper input still binds the tail to the empty list",
+			src: `(begin
+                    (define-syntax m (syntax-rules () ((_ a ... . r) (list (list a ...) r))))
+                    (m 1 2))`,
+			want: "((1 2) ())",
+		},
+		{
+			// CONTROL: a fixed element before the tail, no ellipsis. Passed at
+			// the base.
+			name: "control: fixed element before a dotted tail",
+			src: `(begin
+                    (define-syntax m (syntax-rules () ((_ z . r) (list z 'r))))
+                    (m 1 2 . 3))`,
+			want: "(1 (2 . 3))",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustEvalScheme(t, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// The dotted-tail traversal must not turn a proper-list pattern into one that
+// accepts improper input: `(_ a ...)` requires a list, so the unconsumed tail
+// is a mismatch and the second clause takes it.
+func TestProperListPatternStillRejectsDottedInput(t *testing.T) {
+	src := `(begin
+              (define-syntax m
+                (syntax-rules ()
+                  ((_ a ...) 'proper)
+                  ((_ a ... . r) 'improper)))
+              (list (m 1 2) (m 1 . 2) (m 1 2 . 3)))`
+	got := mustEvalScheme(t, src)
+	want := "(proper improper improper)"
+	if got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
