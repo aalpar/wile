@@ -1037,23 +1037,26 @@ func TestAddPrimitives_PanicsOnInvalidSpec(t *testing.T) {
 // FindPrimitive reports (the source of ,doc metadata) and what Apply actually
 // binds. Before this, Apply ended in SetOwnGlobalValue and was last-wins while
 // FindPrimitive was first-match, so doc and runtime described different procedures.
+//
+// The two specs share one Impl: a duplicate that carries a *different*
+// implementation is fatal (TestDuplicateRegistration_ConflictingImplIsFatal),
+// so first-wins is only observable across the metadata a same-implementation
+// duplicate may still differ in.
 func TestDuplicateRegistration_FirstWins(t *testing.T) {
 	c := qt.New(t)
 
 	reg := NewRegistry()
+	sharedImpl := func(mc machine.CallContext) error {
+		mc.SetValue(testValue("shared"))
+		return nil
+	}
 	first := PrimitiveSpec{
 		Name: "dup", ParamCount: 0, Doc: "the first one",
-		Impl: func(mc machine.CallContext) error {
-			mc.SetValue(testValue("first"))
-			return nil
-		},
+		Impl: sharedImpl,
 	}
 	second := PrimitiveSpec{
 		Name: "dup", ParamCount: 0, Doc: "the second one",
-		Impl: func(mc machine.CallContext) error {
-			mc.SetValue(testValue("second"))
-			return nil
-		},
+		Impl: sharedImpl,
 	}
 	reg.AddPrimitive(first, PhaseSetRuntime)
 	reg.AddPrimitive(second, PhaseSetRuntime)
@@ -1118,4 +1121,101 @@ func TestDuplicateRegistration_PhasesAreIndependent(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(expandClosure.Doc(), qt.Equals, "expand flavour",
 		qt.Commentf("per-phase precedence collapsed: the expand registration was suppressed"))
+}
+
+// TestDuplicateRegistration_ConflictingImplIsFatal is the loud half of the
+// duplicate contract: Without / WithoutCategory are attenuation only, so a
+// second registration of a name at an overlapping phase that carries a
+// *different* implementation is a build-time conflict between two extensions,
+// not an override. It must not be silently discarded.
+func TestDuplicateRegistration_ConflictingImplIsFatal(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	reg.AddPrimitive(PrimitiveSpec{
+		Name: "clash", ParamCount: 0, Doc: "the incumbent",
+		Impl: func(mc machine.CallContext) error {
+			mc.SetValue(testValue("incumbent"))
+			return nil
+		},
+	}, PhaseSetRuntime)
+
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		reg.AddPrimitive(PrimitiveSpec{
+			Name: "clash", ParamCount: 0, Doc: "the challenger",
+			Impl: func(mc machine.CallContext) error {
+				mc.SetValue(testValue("challenger"))
+				return nil
+			},
+		}, PhaseSetRuntime)
+	}()
+	c.Assert(recovered, qt.IsNotNil,
+		qt.Commentf("a conflicting duplicate registration was accepted silently"))
+
+	err, ok := recovered.(error)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("panic value %T is not an error", recovered))
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
+	c.Assert(err.Error(), qt.Contains, "AddPrimitives")
+	c.Assert(err.Error(), qt.Contains, "clash")
+
+	// The incumbent is untouched and the loser left nothing behind.
+	c.Assert(reg.PrimitiveCount(), qt.Equals, 1)
+	found, ok := reg.FindPrimitive("clash", PhaseSetRuntime)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(found.Spec.Doc, qt.Equals, "the incumbent")
+}
+
+// TestDuplicateRegistration_SameImplIsIdempotent is the quiet half: applying the
+// same extension twice registers the same Impl twice, which stays silent.
+// Go func values are not comparable, so identity is the implementation's code
+// pointer — reflect.ValueOf(spec.Impl).Pointer().
+func TestDuplicateRegistration_SameImplIsIdempotent(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	spec := PrimitiveSpec{
+		Name: "twice", ParamCount: 0, Doc: "registered twice",
+		Impl: func(mc machine.CallContext) error {
+			mc.SetValue(testValue("twice"))
+			return nil
+		},
+	}
+	reg.AddPrimitive(spec, PhaseSetRuntime)
+	reg.AddPrimitive(spec, PhaseSetRuntime)
+
+	c.Assert(reg.PrimitiveCount(), qt.Equals, 2)
+	found, ok := reg.FindPrimitive("twice", PhaseSetRuntime)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(found.Spec.Doc, qt.Equals, "registered twice")
+}
+
+// TestDuplicateRegistration_ConflictDetectedWithinOneBatch guards the batch
+// case: AddPrimitives must compare each spec against the ones it has already
+// appended in this same call, not only against prior registrations.
+func TestDuplicateRegistration_ConflictDetectedWithinOneBatch(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	var recovered any
+	func() {
+		defer func() {
+			recovered = recover()
+		}()
+		reg.AddPrimitives([]PrimitiveSpec{
+			{Name: "batch-clash", ParamCount: 0, Impl: func(_ machine.CallContext) error {
+				return nil
+			}},
+			{Name: "batch-clash", ParamCount: 0, Impl: func(_ machine.CallContext) error {
+				return nil
+			}},
+		}, PhaseSetRuntime)
+	}()
+	c.Assert(recovered, qt.IsNotNil)
+	err, ok := recovered.(error)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }

@@ -16,6 +16,7 @@ package registry
 
 import (
 	"maps"
+	"reflect"
 	"slices"
 	"sync"
 
@@ -193,12 +194,24 @@ func (p *PrimitiveRegistry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
 // from anything other than source literals must Validate first — see that method
 // for the contract.
 //
-// Registering a name already registered at the same phase is permitted and
-// silent, and the first registration wins: it is what [PrimitiveRegistry.FindPrimitive]
-// returns and what [PrimitiveRegistry.Apply] binds. A later duplicate is inert — it is
-// retained in the registration list (Primitives reports it) but never becomes the
-// binding, so it cannot be used to override or patch an earlier primitive. Build
-// the surface you want with Without / WithoutCategory instead.
+// Registering a name already registered at an overlapping phase is permitted and
+// silent only when both registrations carry the same implementation — the shape
+// produced by applying one extension twice. It is then the first registration
+// that wins: it is what [PrimitiveRegistry.FindPrimitive] returns and what
+// [PrimitiveRegistry.Apply] binds. A later same-implementation duplicate is
+// inert — it is retained in the registration list (Primitives reports it) but
+// never becomes the binding.
+//
+// A duplicate carrying a *different* implementation is a conflict between two
+// extensions rather than an override, and panics. Precedent:
+// runtime.Scheme.AddKnownTypeWithName in k8s.io/apimachinery, where the same
+// name with the same type is idempotent and the same name with a different type
+// is fatal at init. Go func values are not comparable, so implementation
+// identity here is the code pointer, reflect.ValueOf(spec.Impl).Pointer().
+//
+// Without / WithoutCategory are attenuation only: they narrow the surface and do
+// not license re-adding a same-named replacement. There is no supported way to
+// override or patch an earlier primitive — remove-then-re-add is not one.
 //
 // Precedence is per phase: the same name registered at runtime by one spec and at
 // expand by another is two distinct bindings, not a duplicate.
@@ -213,11 +226,45 @@ func (p *PrimitiveRegistry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, spec := range specs {
+		err := p.conflictingRegistration(spec, phases)
+		if err != nil {
+			panic(err)
+		}
 		p.primitives = append(p.primitives, PrimitiveRegistration{
 			Spec:   spec,
 			Phases: phases,
 		})
 	}
+}
+
+// conflictingRegistration reports an already-registered primitive that shares
+// spec's name and at least one phase but carries a different implementation.
+// Callers must hold p.mu.
+//
+// Identity is the Impl code pointer, so two closures minted by one factory
+// compare equal even though they are distinct func values. That direction fails
+// open — a genuine conflict between two closures over the same factory goes
+// unreported — which is the direction that cannot break a working registration.
+// The equality that matters is the common one: an extension applied twice
+// rebuilds its specs and yields the same code pointer each time.
+func (p *PrimitiveRegistry) conflictingRegistration(spec PrimitiveSpec, phases PhaseSet) error {
+	implPtr := reflect.ValueOf(spec.Impl).Pointer()
+	for _, reg := range p.primitives {
+		if reg.Spec.Name != spec.Name {
+			continue
+		}
+		if reg.Phases&phases == 0 {
+			continue
+		}
+		if reflect.ValueOf(reg.Spec.Impl).Pointer() == implPtr {
+			continue
+		}
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"AddPrimitives: %q is already registered at an overlapping phase with a different implementation; "+
+				"Without / WithoutCategory attenuate the surface, they do not license a replacement",
+			spec.Name)
+	}
+	return nil
 }
 
 // Validate reports the first internal inconsistency in the spec, or nil.
