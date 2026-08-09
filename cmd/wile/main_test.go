@@ -595,6 +595,42 @@ func TestShebang(t *testing.T) {
 		c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
 	})
 
+	// The two arms below cover the silent-load branch, which a positional file
+	// reaches only when -i or -e is also present. That branch used to do a bare
+	// io.ReadAll while runFile and checkFile both peek-and-skip, so the shebang
+	// survived into the reader and the '/' failed to parse.
+	//
+	// Observed at 003b3353, both arms:
+	//   parse error: expecting directive (character '/' (U+002F))
+	t.Run("shebang skipped for positional arg with -e", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(define from-file 7)")
+		result := runCLI(t, "-q", path, "-e", "(display from-file)")
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, "7")
+	})
+
+	t.Run("shebang skipped for positional arg with -i", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(display \"loaded\")(newline)")
+		// Empty stdin makes the REPL read EOF and exit immediately.
+		result := runCLIStdin(t, "", "-q", "-i", path)
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(strings.Contains(result.stdout, "loaded"), qt.IsTrue,
+			qt.Commentf("stdout: %s", result.stdout))
+	})
+
+	// The -f counterpart of the same branch must keep failing: -f is documented
+	// as pure Scheme source (docs/reference/cli-and-repl.md:111) and not skipping
+	// #! there is deliberate. This pins that the fix threads positionalFile
+	// rather than peek-and-skipping unconditionally in the shared branch.
+	t.Run("shebang still not skipped for -f flag with -i", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "#!/usr/bin/env scheme\n(+ 1 2)")
+		result := runCLIStdin(t, "", "-q", "-i", "-f", path)
+		c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+	})
+
 	t.Run("file without shebang still works as positional arg", func(t *testing.T) {
 		c := qt.New(t)
 		path := writeTempScheme(t, "(+ 10 20)")

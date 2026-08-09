@@ -389,7 +389,12 @@ func main() {
 					// - interactive mode (all files loaded before REPL)
 					// - not the last file (earlier files are always silent)
 					// - -e expressions present (files are setup, -e is the main program)
-					content, readErr := io.ReadAll(bufio.NewReader(fd))
+					//
+					// This branch is shared with -f, so the shebang decision is
+					// positionalFile's, exactly as it is for runFile below.
+					silent := bufio.NewReader(fd)
+					skipShebang(silent, positionalFile)
+					content, readErr := io.ReadAll(silent)
 					if readErr != nil {
 						Failf(readErr, "Cannot read file %s", fn)
 					}
@@ -533,19 +538,32 @@ func displayName(filename string) string {
 	return filename
 }
 
+// skipShebang consumes a leading #! line when shebang is true and one is
+// present. Only files executed as programs (a positional argument) get the
+// skip; files loaded via -f are pure Scheme source and keep the #! so it fails
+// to parse, which is deliberate and documented.
+//
+// Every path that reads a script source must go through this, including the
+// silent-load branch: that branch is shared between positional files and -f,
+// so the caller decides via shebang rather than the branch peeking
+// unconditionally.
+func skipShebang(fin *bufio.Reader, shebang bool) {
+	if !shebang {
+		return
+	}
+	peek, err := fin.Peek(2)
+	if err != nil || peek[0] != '#' || peek[1] != '!' {
+		return
+	}
+	_, _ = fin.ReadString('\n')
+}
+
 // runFile processes a Scheme file, exiting on errors.
 // All top-level expressions are wrapped in a single (begin ...) form to enable
 // proper R7RS continuation semantics across expression boundaries.
 // When shebang is true, a leading #! line is skipped if present.
 func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename string, shebang bool) {
-	// Skip shebang line: only for files executed as programs (positional arg),
-	// not for files loaded via -f which should be pure Scheme source.
-	if shebang {
-		peek, err := fin.Peek(2)
-		if err == nil && peek[0] == '#' && peek[1] == '!' {
-			_, _ = fin.ReadString('\n')
-		}
-	}
+	skipShebang(fin, shebang)
 
 	content, readErr := io.ReadAll(fin)
 	if readErr != nil {
@@ -622,12 +640,7 @@ func runCheck(ctx context.Context, eng *wile.Engine, files []string, evals []str
 // on the load path because include resolves at compile time and so is reached by
 // checking.
 func checkFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename string, shebang bool) {
-	if shebang {
-		peek, peekErr := fin.Peek(2)
-		if peekErr == nil && peek[0] == '#' && peek[1] == '!' {
-			_, _ = fin.ReadString('\n')
-		}
-	}
+	skipShebang(fin, shebang)
 
 	content, readErr := io.ReadAll(fin)
 	if readErr != nil {
