@@ -129,7 +129,7 @@ When the eval extension is present, Scheme code can construct a namespace for an
 
 | Engine | Request | Outcome |
 |--------|---------|---------|
-| No authorizer | anything | Allowed. This arm is an escalation path and is kept as one — a `Small` engine reaches `make-thread` and the system interface through `(environment '(wile kitchen-sink))`. The ground is not that no such path exists, but that an embedder who installed no policy has accepted whatever Scheme can reach. |
+| No authorizer | anything | Allowed. This arm is an escalation path and is kept as one — a `Small` engine reaches `make-thread`, and `system` (the `/bin/sh -c` primitive, registered by the `process` extension `Small` excludes), through `(environment '(wile kitchen-sink))`. The ground is not that no such path exists, but that an embedder who installed no policy has accepted whatever Scheme can reach. |
 | Authorizer installed | profile ⊆ the engine's own surface | Allowed, without consulting the authorizer. Acquiring nothing new is not a capability question. |
 | Authorizer installed | profile ⊄ the engine's own surface | Refused, unless the authorizer permits `namespace:create` with the profile name as target. The built-in authorizers deny unknown resources, so `Console`/`ConsoleWithLoad` refuse; a custom authorizer can opt in. |
 

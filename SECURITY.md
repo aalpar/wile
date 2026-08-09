@@ -115,7 +115,8 @@ The profile-widening check has nothing to ask, so it allows: from an engine
 with no authorizer, `(environment '(wile kitchen-sink))` constructs a
 namespace registered with the *full* kitchen-sink extension set regardless of
 the profile the engine itself was built with. A `Small` engine reaches
-`make-thread` and the system interface that way. This is deliberate — an
+`make-thread` and `system` (the `/bin/sh -c` primitive, which belongs to the
+`process` extension `Small` excludes) that way. This is deliberate — an
 embedder who installed no policy has accepted whatever Scheme can reach — and
 it is why the memory-safety scope above names an installed authorizer as well
 as the threads capability. See

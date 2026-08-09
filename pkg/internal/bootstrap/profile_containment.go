@@ -41,8 +41,10 @@ var ErrProfileWidensEngine = werr.NewStaticError("profile widens the engine's ca
 // The rule, in the order the three cases are decided:
 //
 //  1. No authorizer installed — allow. This arm IS an escalation path, and is
-//     kept as one: a Small engine reaches make-thread and the system interface
-//     through (environment '(wile kitchen-sink)), measured 2026-08-07. The
+//     kept as one: a Small engine reaches make-thread, and `system` (the
+//     /bin/sh -c primitive, which the process extension registers and Small
+//     excludes), through (environment '(wile kitchen-sink)). Measured
+//     2026-08-07 — the probe ran a shell command that wrote a file. The
 //     ground for keeping it is NOT that no such path exists — the 2026-06-04
 //     acceptance rested on exactly that sentence and it is refuted — but that
 //     an embedder who installed no policy has accepted whatever Scheme can
