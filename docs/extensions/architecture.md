@@ -388,7 +388,8 @@ func primAdd(mc machine.CallContext) error {
     if !ok {
         return werr.WrapForeignErrorf(werr.ErrNotANumber, "add: second argument")
     }
-    // Number.Add panics on unknown types; the VM recovers panics
+    // The two checks above are load-bearing: Number.Add PANICS on an unexpected
+    // type, and nothing on the call path recovers it into a Scheme condition.
     mc.SetValue(a.Add(b))
     return nil
 }
@@ -433,6 +434,10 @@ return werr.WrapForeignErrorf(werr.ErrTypeConversion,
 return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
     "my-fn: expected 2 arguments, got %d", n)
 ```
+
+**Return the error; do not panic.** What the Scheme program and the embedding
+host each get to see is specified in [The Error Contract](#the-error-contract)
+below, and the two answers are different.
 
 ### Recursive Value Types MUST Implement `DeepEqualer`
 
@@ -556,6 +561,154 @@ engine.RegisterFunc("fetch", func(ctx context.Context, url string) (string, erro
 ```scheme
 (fetch "https://example.com")  ; 1 Scheme argument, not 2
 ```
+
+---
+
+## The Error Contract
+
+**Every failure a primitive *returns* becomes a Scheme condition the program can
+`guard`, carrying its message, its kind and its source location. Nothing reaches
+the embedding host as a bare Go error except a genuinely host-fatal condition.**
+
+That is one sentence with a narrow subject, and the narrowness is the whole
+point of this section. Three words in it are doing work:
+
+- **returns.** A primitive that *panics* is not covered. See
+  [Panics are contained, not converted](#panics-are-contained-not-converted).
+- **primitive.** The subject is a failure raised inside a primitive's Go body,
+  or by the VM on its own behalf while executing one. Failures raised while
+  *analysing* a program are a different contract that does not exist yet; see
+  [What this contract does not reach](#what-this-contract-does-not-reach).
+- **condition the program can guard.** Catchable is not the same as delivered.
+  See [Catchable is not delivered](#catchable-is-not-delivered).
+
+### What an embedder actually observes
+
+```go
+// The bridge, for orientation:
+//   primitive returns err
+//     → machine.applyCallableError   (pkg/machine/foreign_closure.go)
+//         control signal?  → pass through untouched
+//         otherwise        → goErrorToCondition, then RaiseInPlace
+//     → the Scheme handler chain (guard / with-exception-handler)
+//   nothing caught it
+//     → *wile.RuntimeError at the Engine boundary, IsSchemeException() == true
+```
+
+`applyCallableError` passes four error types through as control flow rather than
+converting them: a prompt abort, the uncaught-exception carrier, a timer
+interrupt, and a continuation resume. An extension will not normally construct
+any of them; a primitive that calls back into Scheme can *observe* one, and must
+return it unchanged rather than swallowing it.
+
+`goErrorToCondition` reads the error's kind off the chain with `errors.As`, so
+wrapping is safe: a `*werr.ForeignFileError` anywhere in the chain makes
+`(file-error? e)` true, and a `*werr.ForeignReadError` makes `(read-error? e)`
+true. Any other error is a generic condition.
+
+### Two known gaps, both real today
+
+Both are measured, not predicted, and both are open work rather than intended
+behaviour. They are listed here because a contract that omits its own
+counter-examples is worse than no contract.
+
+| You do this | What Scheme sees today |
+|---|---|
+| return a `*values.NativeError` built with `values.NewErrorObjectWithCause` / `NewFileError` / `NewReadError`, carrying irritants | message survives; **the irritants are dropped**, and for the two kinded constructors the kind is dropped too — returning `values.NewFileError("boom", n)` yields `(error-object-irritants e)` = `()` and `(file-error? e)` = `#f` |
+| register the same panicking Go function twice, once with `RegisterPrimitive` and once with `RegisterFunc` | the `RegisterPrimitive` one escapes `guard`; the `RegisterFunc` one is caught by it |
+
+The first gap is why a primitive that wants irritants should raise them
+Scheme-side rather than return a `*values.NativeError`. The second is the
+`RegisterFunc` wrapper's own `defer recover()`, which lives *inside* the
+generated `ForeignFunction` and therefore fires wherever that function is
+called; `RegisterPrimitive` installs no such thing. Do not rely on either
+answer: whichever way the asymmetry is closed, one of the two changes.
+
+### Panics are contained, not converted
+
+A panic out of a primitive is a Go-level bug, and Wile deliberately refuses to
+make it a Scheme condition — a Scheme programmer must not be able to `guard` an
+impossible state (`CODING_STYLE.md`). It is contained rather than converted: the
+host gets a `*wile.RuntimeError` whose `IsSchemeException()` is `false`, and the
+Scheme program gets nothing.
+
+Containment is **one** recover, at one place, plus one unavoidable second:
+
+| Site | Role |
+|---|---|
+| `pkg/machine/machine_context.go`, `MachineContext.RunResumable` | the boundary. Wraps any panic as an uncatchable `*machine.SchemeError`, attaching the VM source location and continuation-chain stack trace, and chaining the original so `errors.Is` still resolves. A panic unwinds the whole goroutine stack, so this one site also catches panics tripped inside nested sub-context `Run()` calls. |
+| `pkg/values/thread.go` | the root of an SRFI-18 thread's goroutine. No ancestor frame can recover it, so this is a necessity rather than a policy. |
+
+That table is grep-checkable rather than asserted:
+`grep -rn 'recover()' --include='*.go' pkg/machine/ pkg/values/ | grep -v _test.go`
+returns those two plus `pkg/values/big_float.go` (a local guard around
+`big.Float` parsing, not a VM boundary). An earlier revision of this
+documentation described a third, per-call recovery inside a bytecode
+`OperationForeignFunctionCall`; that operation was measured to have no
+production references and was deleted in 2026-08.
+
+The practical consequence for an extension author is the one already stated
+under [Error Handling](#error-handling): the type-coercion helpers in
+`pkg/values/promotion.go` and `pkg/values/numeric_tower.go`, and
+`emptyList.Car`/`Cdr`, panic on unexpected input. Type-check before calling
+them. Nothing downstream will turn that panic into something the Scheme program
+can handle.
+
+### An authorizer denial is not an error
+
+**Authorizer errors stay in the authorizer domain.** A denial is a message to
+the party that installed the authorizer — the host — not to the program the
+authorizer constrains, and it must not impersonate an R7RS condition. Where
+R7RS gives a procedure a non-error way to report, that is the right answer:
+`file-exists?` returning `#f` on a denied path is the procedure reporting what
+it is permitted to report, not an error in disguise.
+
+This is the governing principle, and the sites do not all implement it yet:
+today a denial inside a file primitive still surfaces as a catchable condition
+whose `(file-error? e)` is `#f`. Treat the current behaviour as unspecified and
+do not build on it. In particular, do not write an authorizer whose denial is
+meant to be caught by the sandboxed program.
+
+### What this contract does not reach
+
+Three carve-outs. Each is somebody's open work, not a decision to leave things
+as they are.
+
+1. **Anything raised before execution.** A denial or failure during macro
+   expansion, `include`, or library import reaches the embedder as a
+   `*wile.CompilationError`, not as a Scheme condition — so
+   `(guard (e (#t …)) (import (x)))` and `(guard (e (#t …)) (include "x"))`
+   behave differently from `(guard (e (#t …)) (load "x"))`. Giving the contract
+   a compile-time half — one error representation across analysis and
+   execution, so `CompilationError` stops being a separate kind — is a
+   separate and substantially larger piece of work. It is scheduled, not
+   settled; until it lands, treat an analysis-time failure as a host-facing
+   Go error and nothing else.
+2. **The VM's own cancellation poll.** When the engine's `context.Context` is
+   cancelled or its deadline expires, `MachineContext.Run` returns
+   `mc.ctx.Err()` directly. The host receives a `*wile.RuntimeError` for which
+   `errors.Is(err, context.Canceled)` is true, and the Scheme program's `guard`
+   never sees it. Deliberate for now, and separately owned; see
+   [Blocking synchronization primitives and VM cancellation](../concurrency/cancellation.md)
+   for what the surrounding machinery does and does not promise.
+3. **Panics**, per the section above — contained, not converted, by design.
+
+### Catchable is not delivered
+
+Making a condition catchable does not guarantee a handler observes it. A handler
+that invokes a continuation anywhere in its dynamic extent can currently swallow
+the mandatory secondary exception, so a condition this contract makes catchable
+may still be discarded without diagnostic:
+
+```scheme
+(with-exception-handler (lambda (e) (call/cc (lambda (k) (k 1))) 42)
+                        (lambda () (car 5)))
+;; returns 42 — the handler returned from a non-continuable raise and
+;; the secondary exception was not raised
+```
+
+Until that counter is path-precise, "the program can catch it" is the strongest
+claim this contract makes. It is not "the program will be told."
 
 ---
 
