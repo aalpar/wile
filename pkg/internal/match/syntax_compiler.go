@@ -568,17 +568,24 @@ func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []Syntax
 	}
 }
 
-// isPairPattern checks if bytecode represents a descend pattern (VisitCar...Done
-// or VisitCarAsVector...Done). These auto-advance via handleByteCodeDone, so they
-// don't need an explicit VisitCdr in ellipsis loops.
+// isPairPattern checks if bytecode represents a descend pattern (VisitCar...Done,
+// VisitCarAsVector...Done or VisitCarAsBox...Done). These auto-advance via
+// handleByteCodeDone, so they don't need an explicit VisitCdr in ellipsis loops —
+// adding one skips every other element.
 func isPairPattern(codes []SyntaxCommand) bool {
 	if len(codes) < 2 {
 		return false
 	}
-	_, startsWithVisitCar := codes[0].(ByteCodeVisitCar)
-	_, startsWithVisitVector := codes[0].(ByteCodeVisitCarAsVector)
 	_, endsWithDone := codes[len(codes)-1].(ByteCodeDone)
-	return (startsWithVisitCar || startsWithVisitVector) && endsWithDone
+	if !endsWithDone {
+		return false
+	}
+	switch codes[0].(type) {
+	case ByteCodeVisitCar, ByteCodeVisitCarAsVector, ByteCodeVisitCarAsBox:
+		return true
+	default:
+		return false
+	}
 }
 
 // advanceToNextElement handles CDR advancement after processing an element.
