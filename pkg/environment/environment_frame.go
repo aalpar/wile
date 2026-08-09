@@ -959,6 +959,52 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 	return p == p.namespace.runtime || p == p.namespace.sealedWriteRoot
 }
 
+// WritesOwnerRootCoordinates reports whether a global define through THIS view
+// lands on the same slot an owner-root define would.
+//
+// It is IsOwnerRoot's question asked the way the WRITE asks it. IsOwnerRoot is a
+// frame-IDENTITY test, while the write is a COORDINATE operation
+// (writeCoordinates), and the two diverge on a lexical child: a lambda body or a
+// compile sub-frame inherits global/phase/namespace from its parent but is not
+// the root object, so it writes the root's slot while failing the root's identity
+// test. That divergence is the whole of finding 34a — compiling
+// (define (f n) 'NEW) into a thunk and invoking it silently REBOUND an already-
+// stable top-level f, where the same program through eval or load correctly
+// refused.
+//
+// Two conjuncts, and both are load-bearing:
+//
+//   - the same STORE. A library body compiles against NewChildRuntime, which
+//     SHARES the namespace (so the namespace pointer proves nothing) but mints
+//     its own GlobalEnvironmentFrame. Coordinates alone would therefore match the
+//     engine root's and arm the immutability gate inside every library body,
+//     breaking R2 (a library keeps its cross-form define/set! mutable).
+//   - the same COORDINATES. This is what a lexical child passes and what makes
+//     the predicate wider than IsOwnerRoot at all.
+//
+// Note that the fix is deliberately NOT to change `rank` on a lexical child.
+// rank is left at writeRankMutable on purpose (see NewEnvironmentFrameWithParent),
+// and that is exactly what makes writeCoordinates resolve to
+// (ExactPhase(0), mutable) and the write land on the runtime root's slot.
+// Setting it to writeRankSealed would redirect the write to (ANY, sealed) — a
+// strictly worse outcome, and it would break the write this guard is protecting.
+func (p *EnvironmentFrame) WritesOwnerRootCoordinates() bool {
+	if p.namespace == nil {
+		return false
+	}
+	phase, sealed := p.writeCoordinates()
+	for _, root := range [...]*EnvironmentFrame{p.namespace.runtime, p.namespace.sealedWriteRoot} {
+		if root == nil || root.global != p.global {
+			continue
+		}
+		rootPhase, rootSealed := root.writeCoordinates()
+		if rootPhase == phase && rootSealed == sealed {
+			return true
+		}
+	}
+	return false
+}
+
 // DefineOwnGlobal creates (or reuses) the binding for key under scopes in this
 // frame's own global environment, then writes v to that binding.
 //
@@ -980,12 +1026,51 @@ func (p *EnvironmentFrame) IsOwnerRoot() bool {
 // rather than re-resolving the name: a second lookup asks the same question with
 // a weaker predicate, and leaves a window in which another compiling thread can
 // append or delete a slot of that name.
+//
+// # It REFUSES a rebind of a Stable binding, and that is what makes Stable true
+//
+// BindingMeta.Stable is a compiler PROOF that a binding will not be rebound, and
+// two consumers act on it irreversibly: the OpSelfTailCall emit gate, and
+// compile_call_arity.go's compile-time arity refusal — which produces no program
+// at all, so no runtime re-check can rescue it. The proof was enforced only
+// inside the compiler, and this function was one of three doors around it:
+// Engine.Define, Engine.RegisterPrimitive and namespace-define! (Scheme-reachable
+// at runtime, because (interaction-environment) IS the engine's root namespace)
+// all reached a Stable slot and rewrote it. Measured before this guard:
+// (define (f n) 'OLD) then Engine.Define("f", 42) left f == 42 with every
+// compiled pin still holding the old proof.
+//
+// So Stable is stamped only where the writer set is closed, and this is the
+// refusal that closes it here. Keyed on the Stable FIELD, not IsStable(), for
+// the same reason compile_define.go's redefine guard is: IsStable() ORs in
+// Imported, and superseding an import must stay legal (R7RS §5.3.1).
+//
+// `created` is the whole test. A fresh binding cannot carry a proof, so a first
+// define of any name is unaffected, as is every define at coordinates that
+// already differ — which, since the import relocation, includes defining a name
+// the embedder also imported.
+//
+// Refusal, not panic: all three callers return an error to a caller who can act
+// on it, and the shadowing route (a define at different coordinates) is a
+// legitimate way to get the effect.
 func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, v values.Value) (*GlobalIndex, error) {
 	// The create's index is PINNED to the slot it landed on, at this view's own
 	// write coordinates, so the write addresses that slot rather than re-deriving
 	// it from the name — which over one merged store would also have to be told
 	// which tier the create wrote into.
-	gi, _ := p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
+	gi, created := p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
+
+	if !created {
+		existing := p.global.GetOwnGlobalBinding(gi)
+		m := existing.Meta()
+		if m != nil && m.Stable {
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrImmutableBinding,
+				"DefineOwnGlobal: cannot rebind stable top-level binding %q",
+				key.Key,
+			)
+		}
+	}
 
 	err := p.global.SetOwnGlobalValue(gi, v)
 	if err != nil {

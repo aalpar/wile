@@ -216,6 +216,50 @@ perf lever.
 
 Items that block production embedded use or prevent silent state corruption.
 
+### `Imported` is unsound evidence for `IsStable()` at phase 1 (2026-08-09)
+
+Opened by the wave-1 §5 / Phase 5 work, and it is the **named owner** for the
+residual that work deliberately left standing. `Binding.IsStable()` returns
+`m.Imported || m.Stable` (`pkg/environment/binding.go`), on the premise that a
+define can no longer reach an import's slot. The T2 relocation makes that premise
+true **at phase 0 only**.
+
+- [ ] **`define-syntax` over an imported macro still supersedes in place, and
+      leaves `imported=true`.** Measured: `(import (scheme base))` then
+      `(define-syntax when …)` reuses the `(1, mutable)` imported slot and writes
+      the user's transformer (`compile_define_syntax.go`). `compile_define.go`
+      clears `m.Imported` on supersede for the *variable* case, so the variable
+      path is provenance-clean; `define-syntax` has no such clear. `Imported` then
+      claims a rebind-stability that was just falsified, and it feeds
+      `IsStable()`, which feeds `compile_call_arity.go:62`. Two candidate fixes:
+      clear `m.Imported` on a `define-syntax` supersede (cheap, symmetric with
+      the variable case), or relocate the phase-1 installs — which needs its own
+      answer to the hazard below first.
+
+- [ ] **The phase-1 import installs cannot simply take the T2 tier.** This is the
+      scope the relocation explicitly refused, recorded so nobody "finishes the
+      job" by flipping a constant. `(ExactPhase(1), sealed)` is occupied by
+      bootstrap macros and primitive expanders, so an imported macro would land on
+      a bootstrap macro's exact coordinates under the same ambient scope set:
+      `CreateGlobalBindingAt` reuses the slot, `importConflicts` returns false (a
+      bootstrap macro is not `IsImported()`), and `SetOwnGlobalValue` overwrites
+      the sealed transformer **in place, engine-wide**. Relocating phase 1 needs a
+      way to keep imports off the startup set's coordinates — a distinct rank, or a
+      non-ambient scope set — not a different argument.
+      `TestImportDoesNotOverwriteSealedBootstrapMacro` (`pkg/wile/import_tier_seal_test.go`)
+      is the gate; the whole rest of the suite is blind to this, measured.
+
+- [ ] **The phase-1 registry copy is stamped `Stable` over an open writer set.**
+      `registerPhasePrimitive` stamps `Stable` at every phase it registers into,
+      and `define-for-syntax` legitimately supersedes the `(1, mutable)` copy —
+      documented, and pinned by three rows of `TestBindingModelMatrix`. So Q3's
+      "Stable is stamped only where the writer set is closed" does not hold at
+      phase 1. `compile_define_for_syntax.go` therefore writes around
+      `DefineOwnGlobal`'s refusal, with the reasoning at the call site. Either the
+      phase-1 copy should not be stamped `Stable`, or the supersede should be
+      refused; both are Q3-scale decisions. Bounded to phase-1 code, and predates
+      the refusal.
+
 ### `(environment '(wile <profile>))` is ungated and crosses profile boundaries (2026-07-29)
 
 - [x] **Gate the profile-environment constructor** — SHIPPED 2026-08-07
@@ -843,22 +887,33 @@ Items that block production embedded use or prevent silent state corruption.
   The `set!` gate refuses on `IsImported()` then `IsStable()`
   (`compile_validated.go:341`, `:362`); the redefine guard refuses on the `Stable` field only
   (`compile_define.go:104-113`), because an imported binding is deliberately supersedable by
-  `define` (R7RS §5.3.1) — and that supersede is IN PLACE, same `*Binding`, provenance dropped:
-  **not a shadow**. Three states, not two: frozen (Stable), supersedable-but-not-settable
-  (Imported), free. Shadowing itself comes from placement alone — `define` targets the own
+  `define` (R7RS §5.3.1). **That supersede used to be IN PLACE — same `*Binding`, provenance
+  dropped — and as of 2026-08-09 it is a SHADOW**: imports install at `(ExactPhase(0), sealed)`
+  (T2), a define writes T1, and T1 outranks T2. The observable is unchanged; what changed is
+  that an import arriving AFTER a define no longer overwrites it. Three states, not two:
+  frozen (Stable), supersedable-but-not-settable (Imported), free. Shadowing itself comes from placement alone — `define` targets the own
   mutable frame (`GetOwnGlobalBinding`, no parent walk), so a sealed name gets a NEW binding
   there while `set!` parent-walks to the sealed one and hits its stamp. `Stable` is
-  optimizer-soundness-load-bearing (the frame-reclaim anchor: mutation would be unsound, not
-  rude), which any redesign must preserve. Under the flat model, placement's one contribution
+  optimizer-soundness-load-bearing and has **two** consumers, not one: the `OpSelfTailCall`
+  emit gate, and `compile_call_arity.go:62`'s compile-time arity refusal — whose output is the
+  ABSENCE of a program, so no runtime re-check can rescue a falsified proof. Any redesign must
+  preserve both. Under the flat model, placement's one contribution
   (which layer a define targets, hence shadow-vs-supersede) becomes the mutability rank
   coordinate; sealing then needs zero topology, and **arbitrary-binding sealing is the existing
   bits generalized** — the `StableInUnit` user-define stamp already exists, off by default
   (`compile_define.go:133`). A user-facing `seal!` would be new API surface, not new mechanism.
   Scope of the guarantee, for any security framing: it protects everything already compiled
   (cached `*Binding` pins keep identity) and every hermetic viewer (phase frames, library envs);
-  it does not protect future resolutions in the mutable layer (R7RS requires the shadow), value
-  interiors (`set-car!` still mutates), or anything from the Go API — language-level integrity,
-  not memory protection. Real sandboxing stays the Authorizer/profile layer.
+  it does not protect future resolutions in the mutable layer (R7RS requires the shadow) or value
+  interiors (`set-car!` still mutates) — language-level integrity, not memory protection. Real
+  sandboxing stays the Authorizer/profile layer. **The scope note used to end "or anything from
+  the Go API", and that was wrong twice over**: `namespace-define!` reaches the same write from
+  SCHEME at runtime, since `(interaction-environment)` *is* the engine root; and as of the
+  2026-08-09 Q3 change the Go API does not get a pass either — `DefineOwnGlobal` refuses a
+  rebind of a Stable binding at matching coordinates, closing `Engine.Define`,
+  `Engine.RegisterPrimitive` and `namespace-define!` together. A host-owned name (never defined
+  from Scheme) carries no proof and stays freely rebindable, and a define over an IMPORT is a
+  shadow at different coordinates, so neither is refused.
 
   **Preserved invariants.** The compiled artifact is untouched: emit still ends at cached
   `*Binding` pointers, shadow = new entry, so pins and `Stable` anchors keep exactly their

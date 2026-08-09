@@ -690,6 +690,23 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 }
 
 // Define binds a value to a name in the top-level environment.
+//
+// It REFUSES (werr.ErrImmutableBinding) to rebind a name that Scheme code
+// already defined at the top level, because under the default immutable top
+// level such a binding is proven rebind-stable and the compiler acts on that
+// proof irreversibly: it pins the value into self-tail-call sites and it refuses
+// a program at compile time on an arity mismatch against a stable callee. There
+// is no run at which to re-check the second one, so Define cannot be permitted
+// and merely deoptimized — it would turn a program that runs correctly into a
+// compile error.
+//
+// What still works, and is the intended shape: a name the host owns end to end.
+// A name never defined from Scheme carries no proof, so Define creates it and
+// may rebind it as often as it likes. A name the embedder also IMPORTED is also
+// rebindable — a define shadows an import rather than assigning through it.
+//
+// Use WithMutableTopLevel to opt the whole engine out; nothing is stamped stable
+// there, at the cost of the frame-reclaim win on user recursion.
 func (p *Engine) Define(name string, value Value) error {
 	sym := values.NewSymbol(name)
 	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, unwrapValue(value))
@@ -732,6 +749,10 @@ func (p *Engine) Get(name string) (Value, bool) {
 }
 
 // RegisterPrimitive adds a Go function as a Scheme primitive.
+//
+// It shares [Engine.Define]'s refusal: a name Scheme code already defined at the
+// top level is rebind-stable under the default immutable top level and cannot be
+// replaced. Register before running Scheme that defines the same name.
 func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 	sym := values.NewSymbol(spec.Name)
 

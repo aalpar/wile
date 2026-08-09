@@ -67,8 +67,14 @@ func ExampleEngine_Compile() {
 	}
 
 	// Define a variable, then compile an expression that uses it.
+	//
+	// The variable is created by Define, NOT by evaluating "(define x 0)". Under
+	// the default immutable top level a Scheme define is rebind-stable, and
+	// Define refuses to rebind one — the loop below would fail on its first
+	// iteration. A name the host owns end to end stays rebindable. (An engine
+	// built WithMutableTopLevel accepts either.)
 	ctx := context.Background()
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(define x 0)"))
+	err = engine.Define("x", wile.NewInteger(0))
 	if err != nil {
 		log.Fatal(err)
 	}

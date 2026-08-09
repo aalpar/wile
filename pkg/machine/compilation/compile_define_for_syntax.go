@@ -101,11 +101,28 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	}
 
 	// Store the result in the expand phase environment with BindingTypeVariable.
-	// DefineOwnGlobal, not a hand-built index: a bare-symbol one resolves wildcard,
-	// so over the merged store it would land on the name's first live slot at ANY
-	// coordinates — for a name the registry also installs at phase 0 (car), the
-	// SEALED one. Nothing here needs the pin it returns.
-	_, err = expandEnv.DefineOwnGlobal(nameSym, environment.BindingTypeVariable, nil, result)
+	// Create-then-write through the create's own PIN, never a hand-built index: a
+	// bare-symbol one resolves wildcard, so over the merged store it would land on
+	// the name's first live slot at ANY coordinates — for a name the registry also
+	// installs at phase 0 (car), the SEALED one.
+	//
+	// NOT DefineOwnGlobal, and the difference is the point. That helper now REFUSES
+	// a rebind of a Stable binding at matching coordinates, which is what closes the
+	// three reflective doors around the compiler's own immutability gate
+	// (Engine.Define, Engine.RegisterPrimitive, namespace-define!). This site is
+	// INSIDE the compiler, and superseding the registry's (1, mutable) phase-1 copy
+	// is intended, documented behaviour — pinned by three rows of
+	// TestBindingModelMatrix ("define-for-syntax supersedes expand copy ...").
+	// registerPhasePrimitive stamps that copy Stable, so routing through the guard
+	// would refuse (define-for-syntax car ...) outright.
+	//
+	// KNOWN RESIDUAL, recorded rather than fixed here: that Stable stamp therefore
+	// does NOT sit over a closed writer set, which is the premise Q3 rests on. Either
+	// the phase-1 copy should not be stamped Stable, or this supersede should be
+	// refused; both are decisions above this call site's pay grade. The exposure is
+	// bounded to phase-1 code, and it predates this change.
+	gi, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable, nil)
+	err = expandEnv.GlobalEnvironment().SetOwnGlobalValue(gi, result)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key))
 	}
