@@ -24,7 +24,10 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-var _ Value = (*Hashtable)(nil)
+var (
+	_ Value     = (*Hashtable)(nil)
+	_ Immutable = (*Hashtable)(nil)
+)
 
 // hashtableEntry stores a key-value pair in the hash table. key is a bare Value,
 // not a Hashable: since HashtableKind moved the hash from the key to the table,
@@ -149,6 +152,15 @@ func NewHashtable(kind HashtableKind) *Hashtable {
 // Mutable reports whether this table accepts Set, Delete, and Clear.
 func (p *Hashtable) Mutable() bool {
 	return p.mutable
+}
+
+// IsImmutable reports whether in-place mutation of this table is forbidden.
+// Note the negation: the field is `mutable` (WRITE-ONCE at construction, see the
+// type comment), while Immutable asks the opposite question. There is
+// deliberately no setter — `mutable` is write-once by design, and that is
+// load-bearing for the lock-free store contract.
+func (p *Hashtable) IsImmutable() bool {
+	return !p.mutable
 }
 
 // checkMutable is the guard every destructive method opens with.

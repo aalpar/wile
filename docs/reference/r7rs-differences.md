@@ -503,6 +503,14 @@ The cyclic form is accepted, following Racket; Chez rejects it. Wile has to
 accept it, because Wile's own writer emits exactly that form for a box reachable
 from itself, and rejecting it would leave the writer's output unreadable.
 
+**A box in a quoted literal is mutable, by decision** — `(set-box! (car '(#&1)) 2)`
+succeeds, where the enclosing list's pairs and any nested vector would refuse.
+Boxes are not R7RS, so this is extension semantics rather than a deviation from
+the spec: `Box` carries no immutability flag and the literal walk never reaches
+one, so there is nothing to consult. Programs that must forbid it can disable
+`set-box!` outright — it is already a member of the no-mutation dialect
+(`pkg/wile/dialect_nomutation.go`).
+
 ### Process-Global Working Directory
 
 **Primitive:** `set-current-directory!`
