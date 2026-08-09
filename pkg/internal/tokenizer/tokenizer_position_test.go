@@ -205,6 +205,37 @@ func TestPositionTrackingAcrossLineEndings(t *testing.T) {
 	}
 }
 
+// TestLineEndingPairingCountsCRLFOnce pins the CR/LF pairing that separates a
+// CRLF from two adjacent line endings. Recognising '\r' as a line ending is
+// only correct if the '\n' that may follow it is not counted a second time,
+// and the run must still land the next line at column 0.
+func TestLineEndingPairingCountsCRLFOnce(t *testing.T) {
+	tcs := []struct {
+		name  string
+		endin string
+		line  int
+	}{
+		{name: "lf", endin: "\n", line: 2},
+		{name: "cr", endin: "\r", line: 2},
+		{name: "crlf", endin: "\r\n", line: 2},
+		{name: "cr then crlf", endin: "\r\r\n", line: 3},
+		{name: "lf then cr", endin: "\n\r", line: 3},
+		{name: "lfcr, not a pair", endin: "\n\r\n", line: 3},
+		{name: "two crlf", endin: "\r\n\r\n", line: 3},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tokens, err := Tokenize("a"+tc.endin+"b", false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			c.Assert(len(tokens), qt.Equals, 2)
+			c.Check(tokens[1].Start().Line(), qt.Equals, tc.line)
+			c.Check(tokens[1].Start().Column(), qt.Equals, 0)
+			c.Check(tokens[1].Start().Index(), qt.Equals, 1+len(tc.endin))
+		})
+	}
+}
+
 // TestLeadingNewlineAdvancesLine pins line tracking for a source that opens with
 // a newline: the constructor reads the first rune, so a line adjustment done only
 // in next() skipped it entirely.
