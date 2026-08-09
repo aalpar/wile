@@ -71,6 +71,9 @@ func TestReader_CircularVectorResolvesSelfReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadSyntax error: %v", err)
 	}
+	// A CYCLIC labeled datum keeps its assignment wrapper: it is the fence that
+	// stops the expander walking a self-referential structure. An acyclic one is
+	// returned unwrapped (TestCoverage_DatumLabel*).
 	asg, ok := q.(*syntax.SyntaxDatumLabelAssignment)
 	if !ok {
 		t.Fatalf("got %T, want *SyntaxDatumLabelAssignment", q)
@@ -99,6 +102,7 @@ func TestReader_CircularListResolvesSelfReference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadSyntax error: %v", err)
 	}
+	// Cyclic, so the assignment wrapper is retained — see the vector case above.
 	asg, ok := q.(*syntax.SyntaxDatumLabelAssignment)
 	if !ok {
 		t.Fatalf("got %T, want *SyntaxDatumLabelAssignment", q)

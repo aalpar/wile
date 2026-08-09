@@ -58,8 +58,13 @@ type Parser struct {
 	foldCase    bool                       // R7RS §2.1: #!fold-case mode for identifiers
 	file        string                     // source file name for error reporting
 	datumLabels map[int]syntax.SyntaxValue // R7RS §2.4 datum labels (#n= and #n#)
-	depth       int                        // current structural nesting depth
-	maxDepth    int                        // max nesting depth; 0 = unlimited
+	// labelBackrefs counts how many times each label has been resolved by a #n#.
+	// readLabelAssignment brackets its datum's read with the count to decide
+	// whether that datum refers to itself — a shared datum is referenced only
+	// AFTER its assignment returns, a cyclic one during. Scoped with datumLabels.
+	labelBackrefs map[int]int
+	depth         int // current structural nesting depth
+	maxDepth      int // max nesting depth; 0 = unlimited
 }
 
 // NewParser creates a new parser for the given reader and environment.
@@ -171,6 +176,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	// the table across calls let a #n# in one top-level form resolve to a #n=
 	// defined in an earlier one.
 	p.datumLabels = nil
+	p.labelBackrefs = nil
 	var (
 		q   syntax.SyntaxValue
 		err error
@@ -377,6 +383,12 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 	if p.datumLabels == nil {
 		p.datumLabels = make(map[int]syntax.SyntaxValue)
 	}
+	if p.labelBackrefs == nil {
+		p.labelBackrefs = make(map[int]int)
+	}
+	// Snapshot before the datum is read: any #n# that resolves to THIS label
+	// while its own datum is still being read makes the result cyclic.
+	backrefsBefore := p.labelBackrefs[labelNum]
 	assignTok := p.cur
 	err = p.advance()
 	if err != nil {
@@ -434,8 +446,27 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 		}
 		p.datumLabels[labelNum] = v
 	}
-	q := p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok)
-	return q, p.cur, nil
+	// An ACYCLIC labeled datum is returned as itself, not as a wrapper. Every arm
+	// above has already entered v into p.datumLabels, so a #n# back-reference
+	// resolves without the wrapper; it carried nothing the reader needed and
+	// everything downstream needed not to see — it reached the compiler as an
+	// opaque literal, which is why "#0=(+ 1 2)" evaluated to the list rather than
+	// to 3, "#0=x" to the symbol x, and "(#0=+ 1 2)" to "expected a procedure".
+	//
+	// A CYCLIC one keeps its wrapper, and that is not a leftover: the wrapper is
+	// the fence that stops the EXPANDER walking a self-referential spine. Wile
+	// already refuses a circular datum label as code (validateQuotedLiteral), but
+	// that check runs in the compiler, one stage after the expander's argument
+	// walk — so "(car #0=(a . #0#))" without the fence is an unbounded expansion,
+	// not a diagnostic. Reading circular data still works either way: the label
+	// table holds the real datum, and quote/read reach it through Unwrap. The
+	// writer emits "#0=" for cyclic structure, so this round-trip is load-bearing
+	// (design C6), which is why refusing cyclic labels at READ time is not an
+	// option.
+	if p.labelBackrefs[labelNum] > backrefsBefore {
+		return p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok), p.cur, nil
+	}
+	return v, p.cur, nil
 }
 
 // readLabelReference handles #n# — referencing a previously defined datum label.
@@ -450,6 +481,11 @@ func (p *Parser) readLabelReference() (syntax.SyntaxValue, tokenizer.Token, erro
 	if p.datumLabels != nil {
 		labeled, ok := p.datumLabels[labelNum]
 		if ok {
+			// Count the resolution so readLabelAssignment can tell a datum that
+			// refers to ITSELF from one that is merely shared. Only the former
+			// makes the structure cyclic, and only the former has to keep its
+			// wrapper.
+			p.labelBackrefs[labelNum]++
 			// Return the actual datum, not a label reference
 			return labeled, p.cur, nil
 		}
