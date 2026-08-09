@@ -524,7 +524,8 @@ func TestContagionOverflowsToInfinity(t *testing.T) {
 //
 // The guard's justification (that BigFloat/BigComplex could not hold Inf/NaN) went stale
 // when they were made IEEE-capable. Rounding an operand is the one thing comparison must
-// never do; it is why comparisonTable exists at all.
+// never do; it is now CompareNumbers' stated contract (compare.go), where it used to be
+// a body comment inside a dispatch generator whose table did the opposite.
 func TestComparisonNeverRoundsAnOperand(t *testing.T) {
 	c := qt.New(t)
 

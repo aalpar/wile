@@ -396,27 +396,25 @@ func initPromoters() {
 // non-nil promoter function. This is a startup assertion — if it fails, a
 // numeric type was added without completing its promotion entries. Panics at
 // program init, never at runtime.
+// It used to walk a map of two tables, promotion and comparison. Comparison no
+// longer promotes, so there is one table and the loop over the map went with the
+// second entry.
 func validatePromotionTable() {
-	tables := map[string]*[numKinds][numKinds]NumericKind{
-		"promotion": &promotionTable,
-	}
-	for name, table := range tables {
-		for src := range numKinds {
-			for dst := range numKinds {
-				if src == dst {
-					continue
-				}
-				lub := table[src][dst]
-				if promoter[src][lub] == nil {
-					panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-						"incomplete %s table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
-						name, src, lub, src, dst, lub))
-				}
-				if promoter[dst][lub] == nil {
-					panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
-						"incomplete %s table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
-						name, dst, lub, src, dst, lub))
-				}
+	for src := range numKinds {
+		for dst := range numKinds {
+			if src == dst {
+				continue
+			}
+			lub := promotionTable[src][dst]
+			if promoter[src][lub] == nil {
+				panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
+					src, lub, src, dst, lub))
+			}
+			if promoter[dst][lub] == nil {
+				panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
+					dst, lub, src, dst, lub))
 			}
 		}
 	}
