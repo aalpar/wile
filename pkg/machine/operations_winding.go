@@ -63,11 +63,11 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// diagnostic does not already come from ApplyCallable. Bridge it: this is an
 	// argument-domain fault (R7RS §6.10 requires a procedure), so it belongs to
 	// the Scheme program and must be reachable by guard / with-exception-handler.
-	// The bridge goes HERE and not at Run()'s OpComplex arm, which dispatches all
-	// nine side-table operations: blanket-bridging there would also make
-	// OperationPopWind's werr.ErrInternal (below) guard-able, which
-	// CODING_STYLE.md forbids for impossible states. Pinned by
-	// TestPopWindInternalErrorStaysUncatchable.
+	// The bridge goes HERE and not at Run()'s OpComplex arm, which dispatches
+	// every side-table operation (op_kind.go's OpKind()==OpComplex set):
+	// blanket-bridging there would also make OperationPopWind's werr.ErrInternal
+	// (below) guard-able, which CODING_STYLE.md forbids for impossible states.
+	// Pinned by TestPopWindInternalErrorStaysUncatchable.
 	after, ok := mc.evals.PeekK(0).(values.Callable)
 	if !ok {
 		err := mc.WrapError(werr.ErrNotAProcedure, "dynamic-wind: after must be a procedure")

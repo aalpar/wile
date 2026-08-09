@@ -30,8 +30,9 @@ import (
 //
 // Item 3's fix bridges the `after`-operand check inside OperationPushWind.Apply.
 // The tempting alternative — bridge once, at Run()'s OpComplex arm — is wrong,
-// and nothing else in the suite can see why: OpComplex dispatches all nine
-// side-table operations, so a blanket bridge would also route
+// and nothing else in the suite can see why: OpComplex dispatches every
+// side-table operation (op_kind.go's OpKind()==OpComplex set), so a blanket
+// bridge would also route
 // OperationPopWind's werr.ErrInternal ("winding stack is empty; PushWind/PopWind
 // pairing is broken") through applyCallableError and make an impossible VM state
 // `guard`-able. CODING_STYLE.md forbids exactly that: "Internal invariant
