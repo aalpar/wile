@@ -314,7 +314,12 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	if sym.Key() == "_" {
 		_, isLiteral := vis.literals[sym.Key()]
 		if !isLiteral {
-			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
+			// Wildcard - matches an element without binding it. It has to emit
+			// SOMETHING: an element that produces no bytecode is invisible to
+			// ByteCodeDone's one-instruction lookahead, which is what made a
+			// trailing `_` after a sublist both reject valid input and accept
+			// input one element short.
+			vis.codes = append(vis.codes, ByteCodeDiscardCar{})
 			return false
 		}
 		// _ is in literals list, fall through to treat as literal

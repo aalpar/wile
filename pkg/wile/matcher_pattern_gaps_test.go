@@ -213,6 +213,82 @@ func TestEllipsisFollowedByDottedTail(t *testing.T) {
 	}
 }
 
+// §3 discovery 1 — a trailing `_` after a sublist element. R7RS §4.3.2
+// explicitly permits multiple underscores, and Racket accepts every form here.
+//
+// The gap has BOTH polarities and one root cause: `_` emitted no bytecode at
+// all, so ByteCodeDone's one-instruction lookahead could not distinguish "the
+// pattern ends here" from "the next pattern element is a wildcard".
+func TestTrailingWildcardAfterSublist(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			// "no matching clause" at the base.
+			name: "list sublist then a trailing wildcard",
+			src: `(begin
+                    (define-syntax k (syntax-rules () ((k (y) _) 'ok)))
+                    (k (1) 9))`,
+			want: "ok",
+		},
+		{
+			name: "ellipsis sublist then a trailing wildcard",
+			src: `(begin
+                    (define-syntax k (syntax-rules () ((k (y ...) _) 'ok)))
+                    (k (1) 9))`,
+			want: "ok",
+		},
+		{
+			name: "wildcard ellipsis sublist then a trailing wildcard",
+			src: `(begin
+                    (define-syntax k (syntax-rules () ((k (_ ...) _) 'ok)))
+                    (k (1) 9))`,
+			want: "ok",
+		},
+		{
+			// It is sublist DESCENT generally, not lists: the vector form fails
+			// identically at the base.
+			name: "vector sublist then a trailing wildcard",
+			src: `(begin
+                    (define-syntax k (syntax-rules () ((k #(y) _) 'ok)))
+                    (k #(1) 9))`,
+			want: "ok",
+		},
+		{
+			// The FALSE ACCEPT polarity: two underscores need three input
+			// elements. At the base this returned ok on a two-element input.
+			name: "two trailing wildcards reject a two-element input",
+			src: `(begin
+                    (define-syntax k
+                      (syntax-rules ()
+                        ((k (y) _ _) 'three)
+                        ((k (y) _) 'two)))
+                    (list (k (1) 9) (k (1) 9 8)))`,
+			want: "(two three)",
+		},
+		{
+			// The pattern variable still binds the right element — a wildcard
+			// that consumed nothing would shift everything left.
+			name: "wildcard before a pattern variable inside a sublist",
+			src: `(begin
+                    (define-syntax k (syntax-rules () ((k (_ y)) y)))
+                    (k (1 2)))`,
+			want: "2",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustEvalScheme(t, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
 // The dotted-tail traversal must not turn a proper-list pattern into one that
 // accepts improper input: `(_ a ...)` requires a list, so the unconsumed tail
 // is a mismatch and the second clause takes it.

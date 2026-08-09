@@ -604,3 +604,38 @@ func TestCompileDottedWildcardTail(t *testing.T) {
 		})
 	}
 }
+
+// A `_` in ELEMENT position compiles to DiscardCar, not to nothing. An element
+// that emits no bytecode is invisible to ByteCodeDone's one-instruction
+// lookahead, which is what made a trailing `_` after a sublist reject valid
+// input (`((k (y) _) …)` vs `(d (1) 9)`) and accept input one element short
+// (`((k (y) _ _) …)` vs the same two-element input).
+func TestCompileWildcardElementEmitsDiscardCar(t *testing.T) {
+	c := qt.New(t)
+
+	// Pattern: (k (y) _)
+	pattern := testSyntaxList(
+		testSyntaxSym("k"),
+		testSyntaxList(testSyntaxSym("y")),
+		testSyntaxSym("_"),
+	)
+	variables := map[string]struct{}{"y": {}}
+
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fmt.Sprintf("%v", compiled.Codes), qt.Contains, "DiscardCar")
+
+	c.Run("matches a three-element input", func(c *qt.C) {
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+		input := testSyntaxList(testSyntaxSym("d"), testSyntaxList(testSyntaxInt(1)), testSyntaxInt(9))
+		c.Assert(sm.Match(context.Background(), input), qt.IsNil)
+		_, bound := sm.GetBindings()["_"]
+		c.Assert(bound, qt.IsFalse, qt.Commentf("wildcard `_` must not bind"))
+	})
+
+	c.Run("rejects a two-element input", func(c *qt.C) {
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+		input := testSyntaxList(testSyntaxSym("d"), testSyntaxList(testSyntaxInt(1)))
+		c.Assert(sm.Match(context.Background(), input), qt.ErrorIs, ErrNotAMatch)
+	})
+}

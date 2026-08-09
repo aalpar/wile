@@ -41,6 +41,24 @@ func (p ByteCodeCaptureCdr) String() string {
 	return fmt.Sprintf("CaptureCdr(%s)", p.Binding)
 }
 
+// ByteCodeDiscardCar asserts that the current position holds an element and
+// matches it without binding.
+//
+// R7RS §4.3.2: `_` matches any input and never binds. Emitting NOTHING for it
+// was not equivalent to matching it: the element stays visible to Done, whose
+// one-instruction lookahead then reads the following pattern element's bytecode
+// and cannot tell "the pattern ends here" from "the next pattern element is a
+// wildcard". So `((k (y) _) …)` rejected `(d (1) 9)` and, in the other
+// direction, `((k (y) _ _) …)` accepted a two-element input.
+//
+// The presence assertion is the whole instruction; advancement is the emitted
+// VisitCdr's job, exactly as for a pattern variable's CaptureCar.
+type ByteCodeDiscardCar struct{}
+
+func (ByteCodeDiscardCar) String() string {
+	return "DiscardCar"
+}
+
 // ByteCodeDiscardCdr consumes the current cdr without binding it.
 //
 // R7RS §4.3.2: `_` is a wildcard that matches any input but never binds. In a
