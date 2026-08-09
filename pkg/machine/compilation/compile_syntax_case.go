@@ -299,6 +299,25 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling body"))
 	}
 
+	// Restore the parent environment on the MATCHED path. There are three exit
+	// edges out of a clause, not two, and each needs its own accounting:
+	//
+	//  1. pattern mismatch — branches from failBranchIdx, which precedes the
+	//     BindPatternVars push entirely, so it is already balanced. Do NOT add a
+	//     pop there.
+	//  2. fender false — popped by the cleanup block below.
+	//  3. match succeeded and the body ran — this pop. Without it the
+	//     pattern-variable frame stays current for everything after the form, so
+	//     trailing code doing a depth-relative LOCAL access reads through a frame
+	//     one level too deep: `(begin (syntax-case stx () ((_ a) 1)) y)` returned
+	//     the pattern variable instead of y, and three trailing locals indexed
+	//     off the end of the pattern-variable frame.
+	//
+	// A clause body ending in a tail CALL never reaches this instruction, which
+	// is harmless: a tail call does not return to this frame, and its
+	// continuation restores the environment on its own.
+	p.AppendOperations(machine.NewOperationPopEnv())
+
 	// Jump to end on success
 	successJumpIdx := p.template.CodeLen()
 	p.AppendOperations(machine.NewOperationBranchOffsetImmediate(0)) // Offset patched later
