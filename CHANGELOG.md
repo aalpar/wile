@@ -89,6 +89,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   compiles. Write such a call through `apply` to keep the argument count hidden until
   run time.
 
+### Removed
+
+- **BREAKING — the `rw-mutex-*` and `once-*` primitive families, and the exported
+  `values.RWMutex` / `values.Once` Go types.** Twelve primitives (`make-rw-mutex`,
+  `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`,
+  `rw-mutex-write-lock!`, `rw-mutex-write-unlock!`, `rw-mutex-try-read-lock!`,
+  `rw-mutex-try-write-lock!`, `make-once`, `once?`, `once-do!`, `once-done?`) and
+  their two backing value types are gone, along with the `werr.ErrNotARWMutex` and
+  `werr.ErrNotAOnce` sentinels. `(wile gointerop)` now exports the six `atomic`
+  primitives only.
+
+  This is a modeling decision, not a cleanup. Wile's standing orientation is that
+  the unit of concurrency is the causal chain with one owner applying ordered
+  transitions, not many threads sharing state behind a lock; `gointerop` was
+  publishing the opposite model by lifting Go's lock and one-shot-init primitives
+  verbatim into Scheme. No standard mandates either family, neither had a consumer
+  anywhere in the tree, and between them they carried the largest
+  machinery-to-value ratio in it. They come back when a causal-chain tool needs
+  them, which is a different question from whether Scheme programs should be
+  handed a lock.
+
+  `values.RWMutex` and `values.Once` were exported from `pkg/values`, so this is a
+  public API removal; taken under the zero-consumer rule. **Kept, untouched:** the
+  SRFI-18 `mutex-*` and `condition-variable-*` families (named-standard
+  conformance is a separate question from the modeling one) and `atomic`.
+
+  Two things went with the families. `finishBlockingSync` had exactly two callers
+  and is deleted with them, taking its `ErrTimerExpired` carve-out — which existed
+  only because rw-mutex locks returned `Void` on success and so had no value
+  channel for "did not acquire". `werr.ErrOperationCancelled` survives but now has
+  no producer: every remaining blocking primitive reports a cancelled wait as an
+  error-free `#f`, which is what lets a wrapping `with-timeout` handler run.
+  `callForeignCached`'s eager recheck is unchanged.
+
 ## [1.19.1] - 2026-07-29
 
 A compiler release: environment-frame elimination for `or`, frame release for

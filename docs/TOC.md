@@ -19,7 +19,7 @@ Every document in `docs/`, organized by topic.
 
 ## Concurrency
 
-- [cancellation.md](concurrency/cancellation.md) -- How blocking locks (`rw-mutex-*-lock!`, `mutex-lock!`) couple to VM cancellation (`with-timeout`, `thread-terminate!`, embedder deadline) so a parked acquire is unparked instead of leaking its goroutine
+- [cancellation.md](concurrency/cancellation.md) -- How blocking locks (`mutex-lock!`, the cv wait) couple to VM cancellation (`with-timeout`, `thread-terminate!`, embedder deadline) so a parked acquire is unparked instead of leaking its goroutine
 
 ## Continuations
 

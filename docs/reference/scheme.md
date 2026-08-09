@@ -1550,28 +1550,6 @@ chain, so a `guard` around the call discriminates them:
 
 Requires gointerop extension.
 
-**RWMutex** — read-write lock:
-
-| Procedure | Description |
-|-----------|-------------|
-| `(make-rw-mutex)` | Create RWMutex |
-| `(rw-mutex? x)` | Is RWMutex |
-| `(rw-mutex-read-lock! m)` | Acquire read lock |
-| `(rw-mutex-read-unlock! m)` | Release read lock |
-| `(rw-mutex-write-lock! m)` | Acquire write lock |
-| `(rw-mutex-write-unlock! m)` | Release write lock |
-| `(rw-mutex-try-read-lock! m)` | Try read lock |
-| `(rw-mutex-try-write-lock! m)` | Try write lock |
-
-**Once** — exactly-once execution:
-
-| Procedure | Description |
-|-----------|-------------|
-| `(make-once)` | Create Once |
-| `(once? x)` | Is Once |
-| `(once-do! o thunk)` | Run thunk exactly once |
-| `(once-done? o)` | Has executed |
-
 **Atomic** — thread-safe mutable value:
 
 | Procedure | Description |
@@ -1623,7 +1601,7 @@ Extension primitives are also importable as R7RS libraries when `WithLibraryPath
 | `(wile files)` | File and directory I/O |
 | `(wile process)` | Process execution, subprocess management |
 | `(wile threads)` | SRFI-18 threading |
-| `(wile gointerop)` | Go concurrency: RWMutex, Once, Atomic |
+| `(wile gointerop)` | Go concurrency: Atomic |
 | `(wile introspection)` | Environment introspection, `features`, `available-libraries`, `disassemble` |
 | `(wile eval)` | `eval`, `environment`, `load`, `expand`, `compile`, load-path accessors |
 | `(wile namespace)` | Namespace introspection and management |
@@ -1764,7 +1742,7 @@ Racket-style `call-with-continuation-prompt`, `abort-current-continuation`, and 
 
 ### Go Concurrency Primitives
 
-RWMutexes, Once, Atomic values — backed by Go's `sync` package (RWMutex acquisition is a Wile-owned, cancellation-aware state machine). Available via `(wile gointerop)`.
+Atomic values — backed by Go's `sync/atomic`. Available via `(wile gointerop)`.
 
 ### Phase Control
 
