@@ -25,7 +25,7 @@ func TestKitchenSink_EngineCreation(t *testing.T) {
 		"procedure-arity",  // introspection
 		"eval",             // eval
 		"make-thread",      // threads
-		"make-rw-mutex",    // gointerop
+		"make-atomic",      // gointerop
 		"make-record-type", // all
 		"command-line",     // system
 	} {

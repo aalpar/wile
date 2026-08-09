@@ -70,9 +70,9 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 		"call-with-composable-continuation", "with-timeout",
 		// eval extension: run / transform arbitrary code
 		"eval", "load", "expand", "compile",
-		// promises / threads / files / gointerop
+		// promises / threads / files
 		"force", "make-thread", "thread-start!",
-		"call-with-input-file", "call-with-output-file", "once-do!",
+		"call-with-input-file", "call-with-output-file",
 		// %parameter-convert applies the parameter's user converter via ApplyCallable
 		// (the converter may call/cc) — the crosscheck-found omission this list now pins.
 		"%parameter-convert",

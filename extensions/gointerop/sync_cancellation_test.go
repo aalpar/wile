@@ -13,12 +13,12 @@
 // limitations under the License.
 
 // Scheme-level guards for thread-terminate! unparking a thread blocked ACQUIRING
-// a lock (rw-mutex, SRFI-18 mutex). Before values.RWMutex/Mutex acquisition went
-// through the cond-based waitOnCondCtx bridge, these ops parked on Go sync
-// primitives with no ctx-aware form: a terminated thread's goroutine stayed
-// parked, done never closed, and thread-join! raised JoinTimeoutException.
-// Reaching the terminated-thread exception proves the goroutine exited on ctx
-// cancellation.
+// a lock (the SRFI-18 mutex) or waiting on a condition variable. Before
+// values.Mutex acquisition went through the cond-based waitOnCondCtx bridge,
+// these ops parked on Go sync primitives with no ctx-aware form: a terminated
+// thread's goroutine stayed parked, done never closed, and thread-join! raised
+// JoinTimeoutException. Reaching the terminated-thread exception proves the
+// goroutine exited on ctx cancellation.
 //
 // A thread that HOLDS a lock is deliberately NOT covered: the held side is never
 // force-released, so these tests park threads that are still WAITING to acquire.
@@ -31,13 +31,11 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	extgointerop "github.com/aalpar/wile/extensions/gointerop"
 	extthreads "github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
-	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -75,18 +73,6 @@ func TestTerminateUnparksBlockedSyncPrimitive(t *testing.T) {
 		setup string // runs on the main thread before the worker parks
 		park  string // the blocking op in the worker's tail position
 	}{
-		{
-			name:  "rw-mutex-write-lock! held by main",
-			ctor:  `(make-rw-mutex)`,
-			setup: `(rw-mutex-write-lock! sync)`,
-			park:  `(rw-mutex-write-lock! sync)`,
-		},
-		{
-			name:  "rw-mutex-read-lock! blocked by held write lock",
-			ctor:  `(make-rw-mutex)`,
-			setup: `(rw-mutex-write-lock! sync)`,
-			park:  `(rw-mutex-read-lock! sync)`,
-		},
 		{
 			name:  "mutex-lock! held by main (SRFI-18 untimed path)",
 			ctor:  `(make-mutex)`,
@@ -128,38 +114,32 @@ func TestTerminateUnparksBlockedSyncPrimitive(t *testing.T) {
 	}
 }
 
-// TestEmbedderDeadlineRWMutexRaisesCancelled is the wait-side guard for the source
-// with no other protection: a rw-mutex-write-lock! parked under an embedder
-// deadline raises the distinct ErrOperationCancelled. The single thread takes the
-// write lock, then blocks re-taking it until the deadline cancels ctx.
-func TestEmbedderDeadlineRWMutexRaisesCancelled(t *testing.T) {
-	engine := newThreadedEngine(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	expr, err := engine.Parse(ctx,
-		"(begin (define m (make-rw-mutex)) (rw-mutex-write-lock! m) (rw-mutex-write-lock! m) )")
-	qt.Assert(t, err, qt.IsNil)
-
-	_, err = engine.Eval(ctx, expr)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
-		qt.Commentf("want the distinct cancellation sentinel; got %v", err))
-}
-
-// TestWithTimeoutInterruptsParkedRWMutex guards the ErrTimerExpired carve-out for
-// the lock family: a rw-mutex-write-lock! parked inside a with-timeout runs the
-// handler (returns its value) rather than the ErrOperationCancelled escaping.
-func TestWithTimeoutInterruptsParkedRWMutex(t *testing.T) {
+// TestWithTimeoutInterruptsParkedMutexLock is the Scheme-level COMPOSITION guard
+// for cancellation: a blocking primitive parked inside a with-timeout must run the
+// handler, not return its own value or escape an error. The mechanism is non-local
+// — callForeignCached's eager ErrTimerExpired recheck fires only on the ERROR-FREE
+// foreign return, and mutex-lock! reports a cancelled acquire as an error-free #f
+// precisely so that it does — so no Go-level test of either half proves the
+// composition. Narrow the recheck, or make a cancelled acquire raise, and this is
+// the test that fails.
+//
+// Ported from TestWithTimeoutInterruptsParkedRWMutex when the rw-mutex family was
+// removed; that version guarded finishBlockingSync's ErrTimerExpired carve-out,
+// which existed only because rw-mutex locks returned Void and had no value channel
+// for "did not acquire". mutex-lock! needs no carve-out, so what survives here is
+// the composition, not the carve-out.
+//
+// The main thread holds m, so the inner acquire cannot succeed and parks until the
+// timer cancels ctx.
+func TestWithTimeoutInterruptsParkedMutexLock(t *testing.T) {
 	engine := newThreadedEngine(t)
 
 	result := eval(t, engine, `
-(define m (make-rw-mutex))
-(rw-mutex-write-lock! m)
+(define m (make-mutex))
+(mutex-lock! m)
 (with-timeout 50
   (lambda (k) 'timed-out)
-  (lambda () (rw-mutex-write-lock! m)))
+  (lambda () (mutex-lock! m)))
 `)
 
 	qt.Assert(t, result.Internal(), valuestest.SchemeEquals, values.NewSymbol("timed-out"))

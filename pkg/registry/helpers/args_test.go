@@ -118,7 +118,11 @@ func TestRequireType_ErrorMessageContainsTypeName(t *testing.T) {
 		{"namespace", werr.ErrNotANamespace, "expected a namespace"},
 		{"list", werr.ErrNotAList, "expected a list"},
 		{"symbol", werr.ErrNotASymbol, "expected a symbol"},
-		{"once (pass-through article)", werr.ErrNotAOnce, "expected a once"},
+		// Constructed here rather than taken from the sentinel table: no
+		// production sentinel uses the pass-through article form since
+		// ErrNotAOnce was removed with the once primitives, but the
+		// pass-through path through typeNameFromSentinel still needs a row.
+		{"pass-through article", werr.NewTypeSentinel("a user"), "expected a user"},
 		{"opaque value (vowel)", werr.ErrNotAnOpaqueValue, "expected an opaque value"},
 	}
 	for _, tc := range tcs {

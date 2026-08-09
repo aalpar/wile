@@ -700,8 +700,6 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 
 		// extensions/gointerop
 		{"ext-gointerop/atomic?", `(atomic? (make-atomic 0))`, values.TrueValue},
-		{"ext-gointerop/rw-mutex?", `(rw-mutex? (make-rw-mutex))`, values.TrueValue},
-		{"ext-gointerop/once?", `(once? (make-once))`, values.TrueValue},
 
 		// extensions/all (records, promises)
 		{"ext-all/promise?", `(promise? (delay 1))`, values.TrueValue},
@@ -779,7 +777,7 @@ func TestMultiEnv_NestedLibraryPrimitiveAvailability(t *testing.T) {
 		{"ext/math", `(expt 2 3)`},
 		{"ext/exceptions", `(error-object? 42)`},
 		{"ext/threads", `(mutex? (make-mutex))`},
-		{"ext/gointerop", `(rw-mutex? (make-rw-mutex))`},
+		{"ext/gointerop", `(atomic? (make-atomic 0))`},
 		{"ext/promises", `(promise? (delay 1))`},
 		{"ext/system", `(list? (features))`},
 		// Bootstrap macros
