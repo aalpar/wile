@@ -306,6 +306,15 @@ func (p *Thread) setOutcomeLocked(o *threadOutcome) {
 // own joiner then timed out. The joinee's termination was always observable —
 // that closes p.done — which is why the reading matters.
 func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error) {
+	// A terminated joinee outranks the other two arms. With more than one channel
+	// ready select picks at random, which would report a thread that has already
+	// finished as a cancelled or timed-out join. The outcome exists; report it.
+	select {
+	case <-p.done:
+		return p.terminalResult()
+	default:
+	}
+
 	var deadline <-chan time.Time
 	if timeout != nil {
 		timer := time.NewTimer(*timeout)
@@ -323,6 +332,12 @@ func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error
 			"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
 	}
 
+	return p.terminalResult()
+}
+
+// terminalResult reads the outcome of a thread whose done channel has closed.
+// Only reachable after that close, which is what makes p.outcome non-nil.
+func (p *Thread) terminalResult() (Value, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
