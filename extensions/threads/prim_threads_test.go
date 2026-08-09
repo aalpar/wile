@@ -1218,6 +1218,107 @@ func TestThreadState(t *testing.T) {
 	}
 }
 
+// TestTerminateUnparksUntimedThreadJoin covers the cancellation edge on an
+// untimed thread-join!, and it has two arms that must not be confused with each
+// other. Which thread gets terminated is the whole content of the test.
+//
+//   - "joining-thread" is the GATE. It terminates the thread that is PARKED IN
+//     the join, and asserts that its own untimed thread-join! unparks. Terminate
+//     on a started thread cancels its ctx but does NOT close its done channel
+//     (ownsDone is true only for a never-started thread), so before the fix the
+//     joiner stayed parked in a bare <-victim.done, which has no ctx arm, and its
+//     termination never took effect. Measured before the fix: no arm of this
+//     program ever returns and the watchdog fires.
+//
+//   - "joinee" is a CONTROL, and it CANNOT FAIL. It terminates the thread being
+//     joined, which already worked: Terminate cancels the joinee's ctx, its
+//     goroutine unwinds and closes done, and since 2026-08-02 the joiner unparks
+//     by raising terminated-thread-exception. Measured before the fix: green, in
+//     well under a second. It is here because it is the natural misreading of
+//     "park a thread in an untimed thread-join!, terminate it, assert the join
+//     returns" — the gate as originally filed, which passed without the fix. Keep
+//     it labelled, or the weaker form gets restored as the gate.
+//
+// Both arms run under a watchdog because the gate's failure mode is a hang, and a
+// hanging test does not report.
+func TestTerminateUnparksUntimedThreadJoin(t *testing.T) {
+	// The rendezvous is a mutex, not a plain cell: the flag is read on the main
+	// thread and written on the joiner's, and only the mutex gives that a
+	// happens-before edge. Main holds m until the joiner hands it back
+	// immediately before parking.
+	const joiningThread = `
+(define m (make-mutex))
+(mutex-lock! m)
+(define victim (make-thread (lambda () (thread-sleep! 3600))))
+(define joiner (make-thread (lambda ()
+  (mutex-unlock! m)
+  (thread-join! victim))))
+(thread-start! victim)
+(thread-start! joiner)
+(mutex-lock! m)
+(thread-terminate! joiner)
+(define outcome
+  (guard (e ((terminated-thread-exception? e) 'terminated)
+            ((join-timeout-exception? e) 'join-timed-out)
+            (#t 'other))
+    (thread-join! joiner 5)
+    'returned-normally))
+(thread-terminate! victim)
+outcome`
+
+	const joinee = `
+(define victim (make-thread (lambda () (thread-sleep! 3600))))
+(thread-start! victim)
+(thread-terminate! victim)
+(guard (e ((terminated-thread-exception? e) 'terminated)
+          ((join-timeout-exception? e) 'join-timed-out)
+          (#t 'other))
+  (thread-join! victim)
+  'returned-normally)`
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"joining-thread", joiningThread},
+		{"joinee", joinee},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			result, err := evalWithWatchdog(t, engine, tc.code, 12*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Internal().SchemeString(), qt.Equals, "terminated")
+		})
+	}
+}
+
+// TestWithTimeoutInterruptsParkedThreadJoin is defect 35's second shape and the
+// composition analogue of TestWithTimeoutInterruptsParkedMutexLock: an untimed
+// thread-join! parked inside a with-timeout must run the handler. victim never
+// terminates, so the only thing that can end the join is the timer.
+//
+// Measured before the fix: Eval never returns, and the watchdog fires.
+func TestWithTimeoutInterruptsParkedThreadJoin(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	result, err := evalWithWatchdog(t, engine, `
+(define victim (make-thread (lambda () (thread-sleep! 3600))))
+(thread-start! victim)
+(define outcome
+  (with-timeout 500
+    (lambda (k) 'timed-out)
+    (lambda () (thread-join! victim))))
+(thread-terminate! victim)
+outcome`, 12*time.Second)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Internal().SchemeString(), qt.Equals, "timed-out")
+}
+
 // TestWithTimeoutInterruptsParkedThreadSleep is defect 38's COMPOSITION arm: the
 // Scheme-level proof that a thread-sleep! parked inside a with-timeout runs the
 // handler rather than escaping an error to the host.

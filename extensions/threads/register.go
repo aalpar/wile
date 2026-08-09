@@ -75,7 +75,7 @@ func addThreads(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "thread-join!", ParamCount: 2, IsVariadic: true, Impl: PrimThreadJoin,
-			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value. Raises a join-timeout-exception if TIMEOUT is reached and no default was supplied, a terminated-thread-exception if THREAD died via thread-terminate!, or an uncaught-exception (whose uncaught-exception-reason is the original condition) if it died via an uncaught exception.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
+			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value. Raises a join-timeout-exception if TIMEOUT is reached and no default was supplied, a terminated-thread-exception if THREAD died via thread-terminate!, or an uncaught-exception (whose uncaught-exception-reason is the original condition) if it died via an uncaught exception. The wait is cancellable: if the JOINING thread is itself terminated, or the engine context is cancelled, the join raises an ordinary error object rather than parking forever; inside a with-timeout it runs the handler.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "thread-state", ParamCount: 1, Impl: PrimThreadState,
 			Doc: "Returns THREAD's state as a symbol: new, runnable, blocked, or terminated. Not SRFI-18; follows Gambit.", ParamNames: []string{"thread"}, Category: "threads",

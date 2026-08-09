@@ -286,18 +286,41 @@ func (p *Thread) setOutcomeLocked(o *threadOutcome) {
 	p.outcome = o
 }
 
-// Join waits for the thread to terminate with optional timeout
-// Returns the thread's result or an error
-func (p *Thread) Join(timeout *time.Duration) (Value, error) {
-	if timeout == nil {
-		<-p.done
-	} else {
-		select {
-		case <-p.done:
-			// Thread completed
-		case <-time.After(*timeout):
-			return nil, werr.ErrJoinTimeout
-		}
+// Join waits for the thread to terminate, with an optional timeout, and reports
+// the thread's result.
+//
+// ctx belongs to the JOINING thread, not to p. Three things can end the wait and
+// they are not interchangeable:
+//
+//   - p terminates: done closes and p's outcome is read.
+//   - the timeout elapses: ErrJoinTimeout. A nil timeout channel blocks forever,
+//     which is what makes the untimed form fall out of the same select.
+//   - the joiner itself is cancelled — thread-terminate! on the JOINER, an
+//     embedder deadline, a with-timeout: ErrOperationCancelled carrying the ctx
+//     cause.
+//
+// The third arm is the one that was missing. Terminate on a started thread
+// cancels its ctx but does not close its done channel (ownsDone is true only for
+// a never-started thread), so a joiner parked in a bare <-p.done had no way to
+// observe its own termination: it stayed parked, its done never closed, and its
+// own joiner then timed out. The joinee's termination was always observable —
+// that closes p.done — which is why the reading matters.
+func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error) {
+	var deadline <-chan time.Time
+	if timeout != nil {
+		timer := time.NewTimer(*timeout)
+		defer timer.Stop()
+		deadline = timer.C
+	}
+
+	select {
+	case <-p.done:
+		// Thread completed
+	case <-deadline:
+		return nil, werr.ErrJoinTimeout
+	case <-ctx.Done():
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, context.Cause(ctx),
+			"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
 	}
 
 	p.mu.Lock()
