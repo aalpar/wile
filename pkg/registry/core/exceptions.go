@@ -37,7 +37,15 @@ func addExceptions(r *registry.PrimitiveRegistry) error {
 		{Name: "raise-continuable", InvokesProcedure: true, ParamCount: 1, Impl: PrimRaiseContinuable,
 			Doc: "Raises OBJ as a continuable exception. The handler's return value becomes the result of the raise expression.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"note\")))  => 42", ParamNames: []string{"obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "error", ParamCount: 2, IsVariadic: true, Impl: PrimError,
+		// InvokesProcedure: `error` reaches machine.RaiseInPlace, which runs the
+		// installed handler on the LIVE chain. Without the stamp the binding is
+		// CaptureSafe and Stable, so a self-recursive loop calling `error` arms
+		// OpSelfTailCall — whose in-place slot rebind then corrupts a continuation
+		// captured over that activation's parameter frame (see
+		// pkg/wile/error_selftail_capture_gate_test.go). The stamp affects capture
+		// safety and Stable stamping only (registry/apply.go), never dispatch or
+		// catchability.
+		{Name: "error", InvokesProcedure: true, ParamCount: 2, IsVariadic: true, Impl: PrimError,
 			Doc: "Creates an error object from MESSAGE and optional irritants, then raises it as a non-continuable exception.\n\nExamples:\n  (guard (e (#t (error-object-message e))) (error \"bad value\" 42))  => \"bad value\"", ParamNames: []string{"message", "irritant"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "error-object?", ParamCount: 1, Impl: PrimErrorObjectQ,

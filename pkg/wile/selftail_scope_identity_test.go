@@ -237,6 +237,33 @@ func TestSelfTailArmingCountRatchet(t *testing.T) {
 		      (tak (- x 1) y z)))
 	`
 
+	// The raise family. All three are procedure-invokers, so a loop calling any of
+	// them must DEOPT to PullApply: OpSelfTailCall rebinds the parameter slots in
+	// place, and a handler that captures the live activation would then see the
+	// rebind on replay (pkg/wile/error_selftail_capture_gate_test.go pins the
+	// observable). `error` reached this set late — it carried no InvokesProcedure
+	// stamp and armed 1 site, which is review-wave-1 item 5.
+	//
+	// The three rows are a DISCRIMINATOR, not three copies of one assertion: they
+	// are the same loop shape and differ only in which primitive is called, so a
+	// change that armed everything or deopted everything fails a row here rather
+	// than passing silently. `loope` sitting at 0 beside `sum-to` at 1 is what
+	// says the deopt is attributable to the callee.
+	const loopError = `
+		(define (loope n)
+		  (if (= n 0) 'done (begin (error "tick" n) (loope (- n 1)))))
+	`
+
+	const loopRaise = `
+		(define (loopr n)
+		  (if (= n 0) 'done (begin (raise n) (loopr (- n 1)))))
+	`
+
+	const loopRaiseContinuable = `
+		(define (loopc n)
+		  (if (= n 0) 'done (begin (raise-continuable n) (loopc (- n 1)))))
+	`
+
 	tests := []struct {
 		name  string
 		src   string
@@ -267,6 +294,9 @@ func TestSelfTailArmingCountRatchet(t *testing.T) {
 			opts:  []wile.EngineOption{wile.WithMutableTopLevel()},
 			sites: 0,
 		},
+		{name: "error loop deopts", src: loopError, proc: "loope", sites: 0},
+		{name: "raise loop deopts", src: loopRaise, proc: "loopr", sites: 0},
+		{name: "raise-continuable loop deopts", src: loopRaiseContinuable, proc: "loopc", sites: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

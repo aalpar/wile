@@ -70,9 +70,18 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 		"call-with-composable-continuation", "with-timeout",
 		// eval extension: run / transform arbitrary code
 		"eval", "load", "expand", "compile",
+		// `error` raises through machine.RaiseInPlace exactly as raise does. It was
+		// absent from this list and unannotated for as long as both existed — the
+		// static guard could not see RaiseInPlace as a sink, and this list is
+		// hand-curated. Review-wave-1 item 5.
+		"error",
 		// promises / threads / files / gointerop
 		"force", "make-thread", "thread-start!",
 		"call-with-input-file", "call-with-output-file", "once-do!",
+		// thread-join!/mutex-lock! signal their SRFI-18 conditions through
+		// RaiseInPlace. Annotated rather than carved out: a carve-out list is the
+		// same exception mechanism that let `error` hide.
+		"thread-join!", "mutex-lock!",
 		// %parameter-convert applies the parameter's user converter via ApplyCallable
 		// (the converter may call/cc) — the crosscheck-found omission this list now pins.
 		"%parameter-convert",
