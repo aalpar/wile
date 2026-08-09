@@ -480,7 +480,7 @@ Semirings where addition forms an abelian group.
 
 ### Validation
 
-- `(validate-ring R samples)` -- spot-check identity, inverse, and distributivity; returns `#t` or a list of violations
+- `(validate-ring R samples)` -- spot-check every ring axiom: the additive group laws (identity, inverse, associativity) via `ring->additive-group`, then additive commutativity, multiplicative identity, annihilation and both distributive laws via `ring->semiring`, then multiplicative associativity, which neither projection covers. Returns `#t` or a list of violations, with additive-group findings prefixed `additive-` so `additive-associativity` and `multiplicative-associativity` stay distinct
 
 ### Destructuring
 

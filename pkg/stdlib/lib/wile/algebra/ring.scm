@@ -73,31 +73,45 @@
 
 ;; ─── Ring validation ─────────────────────────
 
+(define (%replay-violations! fail! prefix result)
+  "Feed the violations in RESULT into FAIL!, prefixing each violation type with
+PREFIX.\nRESULT is a validator return value: #t for success, or a list of
+(type arg ...) entries. PREFIX is a string, \"\" to keep the type unchanged.\nUsed to fold a delegated validator's findings into a caller's own reporter.\n\nExamples:\n  (let ((fail! (make-violation-reporter)))\n    (%replay-violations! fail! \"additive-\" '((associativity 1 2 3)))\n    (fail!))\n  => ((additive-associativity 1 2 3))\n\nParameters:\n  fail! : procedure\n  prefix : string\n  result : any\nReturns: unspecified\nCategory: algebra\nKeywords: validation, law checking, violation, delegate, merge"
+  (unless (eq? result #t)
+    (for-each
+      (lambda (entry)
+        (apply fail!
+               (string->symbol
+                 (string-append prefix (symbol->string (car entry))))
+               (cdr entry)))
+      result)))
+
 (define (validate-ring R samples)
-  "Spot-check that R satisfies the ring laws on SAMPLES.\nTests additive identity, multiplicative identity, additive\ninverse, and left distributivity for all elements and triples\nin SAMPLES. Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-ring (integer-ring) '(0 1 2 3))  => #t\n\nParameters:\n  R : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributivity, inverse, identity, law checking, validation\n\nSee also: `make-ring', `validate-semiring', `validate-field'."
-  (let ((fail! (make-violation-reporter))
-        (z (ring-zero R))
-        (o (ring-one R)))
+  "Spot-check that R satisfies the ring laws on SAMPLES.\nTests every ring axiom: the additive group laws (identity, inverse and\nassociativity, via `ring->additive-group'), additive commutativity,\nmultiplicative identity, zero annihilation and both distributive laws (via\n`ring->semiring'), plus multiplicative associativity, which neither\nprojection covers. Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nAdditive-group findings are prefixed `additive-', so `additive-associativity'\nand `multiplicative-associativity' stay distinguishable. A law both\nprojections check can be reported twice.\n\nExamples:\n  (validate-ring (integer-ring) '(0 1 2 3))  => #t\n\nParameters:\n  R : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributivity, associativity, inverse, identity, law checking, validation\n\nSee also: `make-ring', `validate-semiring', `validate-group', `validate-field'."
+  (let ((fail! (make-violation-reporter)))
+    ;; Additive laws — identity, inverse and associativity — from the additive
+    ;; group projection.
+    (%replay-violations! fail! "additive-"
+                         (validate-group (ring->additive-group R) samples))
+    ;; Identity, annihilation, additive commutativity and BOTH distributive
+    ;; laws from the semiring projection. The old hand-rolled body checked left
+    ;; distributivity only, which is why a structure failing right
+    ;; distributivity validated clean.
+    (%replay-violations! fail! ""
+                         (validate-semiring (ring->semiring R) samples))
+    ;; Multiplicative associativity: (a·b)·c = a·(b·c). Neither projection
+    ;; covers it — validate-semiring checks no associativity of either
+    ;; operation, and the additive group only covers the additive side — so it
+    ;; is checked here directly.
     (for-each
       (lambda (a)
-        ;; Additive identity
-        (unless (equal? (ring-plus R z a) a)
-          (fail! 'additive-left-identity a))
-        ;; Multiplicative identity
-        (unless (equal? (ring-times R o a) a)
-          (fail! 'multiplicative-left-identity a))
-        ;; Additive inverse
-        (unless (equal? (ring-plus R a (ring-negate R a)) z)
-          (fail! 'additive-inverse a))
-        ;; Distributivity
         (for-each
           (lambda (b)
             (for-each
               (lambda (c)
-                (unless (equal? (ring-times R a (ring-plus R b c))
-                                (ring-plus R (ring-times R a b)
-                                             (ring-times R a c)))
-                  (fail! 'left-distributivity a b c)))
+                (unless (equal? (ring-times R (ring-times R a b) c)
+                                (ring-times R a (ring-times R b c)))
+                  (fail! 'multiplicative-associativity a b c)))
               samples))
           samples))
       samples)
