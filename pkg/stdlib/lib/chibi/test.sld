@@ -111,16 +111,37 @@
     ;; Uses relative difference like the original chibi test library.
     ;; Handles special cases: infinities and NaN
     (define (%approx-equal? a b epsilon)
-      "Return true if A and B are approximately equal within EPSILON.\nHandles infinities, NaN, zero, complex numbers, pairs, and vectors.\n\nExamples:\n  (%approx-equal? 1.0 1.001 0.01)  => #t\n  (%approx-equal? 1.0 2.0 0.01)    => #f\n  (%approx-equal? +inf.0 +inf.0 0.01)  => #t\n\nParameters:\n  a : any\n  b : any\n  epsilon : real\nReturns: boolean\nCategory: testing"
+      "Return true if the expected value A matches the actual value B within EPSILON.\nThe arguments are ORDERED: approximation applies only when A is inexact and B is\nreal, so an exact expectation compares precisely. Handles infinities, NaN, zero,\ncomplex numbers, pairs, and vectors.\n\nExamples:\n  (%approx-equal? 1.0 1.001 0.01)  => #t\n  (%approx-equal? 1.0 2.0 0.01)    => #f\n  (%approx-equal? 1.0 1 0.01)      => #t\n  (%approx-equal? 1 1.0 0.01)      => #f\n  (%approx-equal? +inf.0 +inf.0 0.01)  => #t\n\nParameters:\n  a : any\n  b : any\n  epsilon : real\nReturns: boolean\nCategory: testing"
       (cond
        ((and (number? a) (number? b))
         (cond
-         ;; Both exact: compare precisely. Approximate (relative-epsilon)
-         ;; comparison is for inexact results; two close-but-distinct exact
-         ;; numbers (e.g. 1000000 vs 1000001) must NOT be treated as equal,
-         ;; including when they appear nested inside a list or vector.
-         ((and (exact? a) (exact? b))
-          (= a b))
+         ;; Complex expected value: compare componentwise, each component
+         ;; under this same gate, matching upstream's real-part/imag-part
+         ;; recursion in test-equal?.
+         ((not (real? a))
+          (and (complex? b)
+               (%approx-equal? (real-part a) (real-part b) epsilon)
+               (%approx-equal? (imag-part a) (imag-part b) epsilon)))
+         ;; UPSTREAM'S GATE. Approximate (relative-epsilon) comparison is
+         ;; offered only when the EXPECTED value is inexact and the actual is
+         ;; real; everything else compares precisely. Chibi's test-equal? gates
+         ;; on exactly (and (inexact? expect) (real? res)).
+         ;;
+         ;; Without it an exact expectation silently accepted an inexact
+         ;; actual, so (test 7 7.0), (test 1 1.0), (test 1/2 0.5) and
+         ;; (test 100 100.00000001) all recorded as passes. The exact-vs-exact
+         ;; case was already precise -- two close-but-distinct exact numbers
+         ;; (1000000 vs 1000001) were never treated as equal -- and this
+         ;; extends the same discipline to exact-expected-vs-inexact-actual.
+         ;;
+         ;; The converse direction stays approximate on purpose: an inexact
+         ;; expectation accepts an equivalent exact actual, which is upstream's
+         ;; documented allowance.
+         ;;
+         ;; eqv? rather than = because it is exactness-sensitive: (= 7 7.0) is
+         ;; #t and would reopen the defect.
+         ((not (and (inexact? a) (real? b)))
+          (eqv? a b))
          ;; Both infinite with same sign
          ((and (infinite? a) (infinite? b))
           (eqv? a b))
