@@ -1033,10 +1033,11 @@ func (p *EnvironmentFrame) WritesOwnerRootCoordinates() bool {
 // two consumers act on it irreversibly: the OpSelfTailCall emit gate, and
 // compile_call_arity.go's compile-time arity refusal — which produces no program
 // at all, so no runtime re-check can rescue it. The proof was enforced only
-// inside the compiler, and this function was one of three doors around it:
-// Engine.Define, Engine.RegisterPrimitive and namespace-define! (Scheme-reachable
-// at runtime, because (interaction-environment) IS the engine's root namespace)
-// all reached a Stable slot and rewrote it. Measured before this guard:
+// inside the compiler, and this function is the one choke point under all three
+// doors around it: Engine.Define, Engine.RegisterPrimitive and namespace-define!
+// (Scheme-reachable at runtime, because (interaction-environment) IS the engine's
+// root namespace) all reached a Stable slot and rewrote it. Measured before this
+// guard:
 // (define (f n) 'OLD) then Engine.Define("f", 42) left f == 42 with every
 // compiled pin still holding the old proof.
 //
@@ -1061,8 +1062,14 @@ func (p *EnvironmentFrame) DefineOwnGlobal(key *values.Symbol, bt BindingType, s
 	gi, created := p.MaybeCreateOwnGlobalBinding(key, bt, scopes)
 
 	if !created {
+		// existing is non-nil whenever created is false — the slot was just
+		// resolved. Guarded anyway because Meta() dereferences the receiver, and a
+		// nil binding carries no proof, which is the same answer as no metadata.
 		existing := p.global.GetOwnGlobalBinding(gi)
-		m := existing.Meta()
+		var m *BindingMeta
+		if existing != nil {
+			m = existing.Meta()
+		}
 		if m != nil && m.Stable {
 			return nil, werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
