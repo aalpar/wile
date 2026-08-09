@@ -20,29 +20,24 @@ package values
 // PromotionResultKind returns the result kind when operands of kindA and kindB are
 // combined in an ARITHMETIC operation: the least upper bound in the promotion lattice.
 //
-// PromotionResultKind and ComparisonResultKind used to be exported from promotion.go.
-// They had zero production callers — every internal site indexes the tables directly —
-// and existed solely so the external values_test package could read them. That made them
-// public API with two problems and no benefit:
+// This used to be exported from promotion.go, alongside a ComparisonResultKind that
+// read a second table. Both had zero production callers — every internal site indexes
+// the table directly — and existed solely so the external values_test package could
+// read them. That made them public API with two problems and no benefit:
 //
 //   - A raw index panic. NumericKind is an exported uint8 and numKinds is not, so a
 //     caller could not even bounds-check its argument; PromotionResultKind(200, ...) died
 //     with "index out of range [200] with length 7", an unwrapped runtime panic in an
 //     embedder's process. That violates CLAUDE.md's imperative against raw panics.
-//   - A footgun with no type-level guard. Both return NumericKind, nothing distinguishes
-//     "kind for arithmetic" from "kind for comparison", and picking the wrong one
-//     silently ROUNDS an operand. The answer is merely wrong, not loud.
+//   - A footgun with no type-level guard. Both returned NumericKind, nothing
+//     distinguished "kind for arithmetic" from "kind for comparison", and picking the
+//     wrong one silently ROUNDED an operand. The answer was merely wrong, not loud.
+//
+// ComparisonResultKind is gone entirely: comparison no longer promotes, so there is no
+// second table and no kind to name. See values.CompareNumbers.
 //
 // An export_test.go is where a test-only accessor belongs. The bounds concern evaporates
 // with it: the only callers are in-tree tests passing real kinds.
 func PromotionResultKind(kindA, kindB NumericKind) NumericKind {
 	return promotionTable[kindA][kindB]
-}
-
-// ComparisonResultKind returns the kind two operands are promoted to in order to be
-// COMPARED, which is not in general the kind their arithmetic would produce. (+ 2 1.5) is
-// a Float, but comparing 2 against 1.5 goes through BigFloat so that neither operand is
-// rounded. See comparisonTable.
-func ComparisonResultKind(kindA, kindB NumericKind) NumericKind {
-	return comparisonTable[kindA][kindB]
 }

@@ -87,30 +87,6 @@ import (
 // already declaring itself inexact. See docs/numeric/tower.md.
 var promotionTable [numKinds][numKinds]NumericKind
 
-// comparisonTable maps (kindA, kindB) → the kind both operands are promoted to
-// in order to COMPARE them (=, <, >, <=, >=). It is symmetric, like
-// promotionTable, and it is deliberately a DIFFERENT table.
-//
-// Contagion is a property of arithmetic, not of comparison. Arithmetic on an
-// exact and an inexact operand yields an inexact RESULT, so rounding the exact
-// operand into the inexact one's representation costs nothing that was not
-// already being given up (promotionTable, Zone 2). A comparison yields a BOOLEAN.
-// Nothing about it is inexact, so rounding an operand to reach a common domain
-// throws away information the answer depends on:
-//
-//	(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))
-//
-// Both operands round to the SAME float64, so a lossy comparison answers #t. The
-// true answer is #f — they are different numbers — and it is what Chez gives.
-// Likewise (< (- (expt 2 100) 1) (exact->inexact (expt 2 100))) is #t, and a
-// float64 comparison cannot see it.
-//
-// So comparison promotes UP to a domain that can represent both operands exactly:
-// exact × Float → BigFloat, exact × Complex → BigComplex. That is the lossless
-// lattice, which is what promotionTable itself used to be before contagion was
-// separated out of it.
-var comparisonTable [numKinds][numKinds]NumericKind
-
 // promoter maps (srcKind, resultKind) → conversion function.
 // promoter[src][dst](n) converts a Number of kind src to a Number of kind dst.
 // Only entries reachable via promotionTable are populated; others are nil.
@@ -123,13 +99,13 @@ var promoter [numKinds][numKinds]func(Number) Number
 
 var promotionOnce sync.Once
 
-// ensurePromotionInit lazily initializes the promotion tables. Called
-// by the dispatch generators (makeArithmeticDispatch, makeLessThanDispatch)
-// which may run from type-file init() functions before promotion.go's own
-// init().
-// Startup cost: populates two 7×7 kind tables (promotion + comparison, 98
-// entries) and the 7×7 promoter-function table. The 245 dispatch-table entries
-// are built separately, by each numeric type's init().
+// ensurePromotionInit lazily initializes the promotion tables. Called by the
+// arithmetic dispatch generators (makeArithmeticDispatch and friends), which may
+// run from type-file init() functions before promotion.go's own init().
+// makeLessThanDispatch does NOT need it: comparison no longer promotes.
+// Startup cost: populates one 7×7 kind table (49 entries) and the 7×7
+// promoter-function table. The 245 dispatch-table entries are built separately,
+// by each numeric type's init().
 func ensurePromotionInit() {
 	promotionOnce.Do(func() {
 		initPromotionTable()
@@ -257,59 +233,6 @@ func initPromotionTable() {
 	// BigFloat + BigComplex → BigComplex.
 	set(BF, BC, BC)
 	// Complex × Complex, Complex × BigComplex, BigComplex × BigComplex.
-	set(C, C, C)
-	set(C, BC, BC)
-	set(BC, BC, BC)
-
-	initComparisonTable()
-}
-
-// initComparisonTable populates the LOSSLESS 7×7 matrix used to bring two
-// operands into a common domain for comparison. See comparisonTable's doc
-// comment for why this is not the same table as promotionTable.
-//
-// It is exactly promotionTable minus the contagion: every entry is identical
-// except that an exact kind meeting Float promotes to BigFloat (not Float) and
-// meeting Complex promotes to BigComplex (not Complex), so that no operand is
-// rounded on the way to a boolean answer.
-func initComparisonTable() {
-	I := KindInteger
-	BI := KindBigInteger
-	F := KindFloat
-	BF := KindBigFloat
-	R := KindRational
-	C := KindComplex
-	BC := KindBigComplex
-
-	set := func(a, b, result NumericKind) {
-		comparisonTable[a][b] = result
-		comparisonTable[b][a] = result
-	}
-
-	// Exact × Exact: stays exact, same as arithmetic.
-	set(I, I, I)
-	set(I, BI, BI)
-	set(I, R, R)
-	set(BI, BI, BI)
-	set(BI, R, R)
-	set(R, R, R)
-
-	// Exact × Inexact: promote UP, so neither operand is rounded.
-	for _, exact := range []NumericKind{I, BI, R} {
-		set(exact, F, BF)
-		set(exact, BF, BF)
-		set(exact, C, BC)
-		set(exact, BC, BC)
-	}
-
-	// Inexact × Inexact: identical to arithmetic — no exact operand to protect.
-	set(F, F, F)
-	set(F, BF, BF)
-	set(BF, BF, BF)
-	set(F, C, C)
-	set(F, BC, BC)
-	set(BF, C, BC)
-	set(BF, BC, BC)
 	set(C, C, C)
 	set(C, BC, BC)
 	set(BC, BC, BC)
@@ -475,8 +398,7 @@ func initPromoters() {
 // program init, never at runtime.
 func validatePromotionTable() {
 	tables := map[string]*[numKinds][numKinds]NumericKind{
-		"promotion":  &promotionTable,
-		"comparison": &comparisonTable,
+		"promotion": &promotionTable,
 	}
 	for name, table := range tables {
 		for src := range numKinds {
@@ -773,46 +695,36 @@ func makeDivideDispatch[T Number](
 }
 
 // makeLessThanDispatch generates a dispatch table for the LessThan operation.
-// Cross-type entries promote both operands to the LUB type and compare via
-// the LUB type's LessThan method.
+// The same-kind entry is the type's own hand-written comparison; every
+// cross-kind entry defers to CompareNumbers (compare.go).
 //
-// IEEE 754 guard: when Float has Inf/NaN and the LUB is BigFloat/BigComplex,
-// falls back to float64 comparison.
+// This USED to promote both operands to a lossless-lattice LUB drawn from a
+// comparisonTable and call that kind's LessThan. The lattice was not lossless:
+// exact × Float landed on BigFloat, whose DefaultBigFloatPrecision is 256, so an
+// exact operand needing 301 significant bits was rounded on the way in and
+// trichotomy failed --
+//
+//	(let ((f (expt 2.0 300)) (a (+ (expt 2 300) 1)))
+//	  (list (< f a) (> f a) (= f a)))   =>  (#f #f #f)
+//
+// -- with <= and >= both #t at the same time. The kernel reaches a common domain
+// by lifting the INEXACT operand to its exact rational instead, which is a
+// direction that always exists, so there is no LUB to get wrong and no table to
+// keep honest.
 func makeLessThanDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeLT func(T, Number) bool,
 ) [numKinds]func(T, Number) bool {
-	ensurePromotionInit()
 	var table [numKinds]func(T, Number) bool
 	table[srcKind] = sameTypeLT
+	crossKind := func(p T, o Number) bool {
+		return crossKindLessThan(p, o)
+	}
 	for dstKind := range numKinds {
 		if dstKind == srcKind {
 			continue
 		}
-		lubKind := comparisonTable[srcKind][dstKind]
-		promSrc := promoter[srcKind][lubKind]
-		promDst := promoter[dstKind][lubKind]
-
-		// NO IEEE special-value guard here, unlike the ARITHMETIC dispatchers.
-		//
-		// There used to be one: when a Float operand held Inf/NaN and the LUB was
-		// BigFloat/BigComplex, it short-circuited BOTH operands through NumberToFloat64.
-		// That rounds the OTHER operand, and rounding is exactly what comparison must
-		// never do — it is the entire reason comparisonTable exists. An exact operand too
-		// large for float64 became ±Inf and compared EQUAL to the infinity it was being
-		// compared against, which broke trichotomy outright:
-		//
-		//	(<  (expt 10 400) +inf.0)   =>  #f      and
-		//	(>= (expt 10 400) +inf.0)   =>  #t      -- both, simultaneously
-		//
-		// The guard's stated justification was that BigFloat/BigComplex could not hold
-		// Inf/NaN. That stopped being true when they were made IEEE-capable (#362):
-		// BigFloat carries an explicit nan flag and handles big.Float's Inf, and
-		// BigFloat(10^400).LessThan(+inf.0) is true without any help. So promoting is
-		// not merely safe here, it is the only thing that gives the right answer.
-		table[dstKind] = func(p T, o Number) bool {
-			return promSrc(p).LessThan(promDst(o))
-		}
+		table[dstKind] = crossKind
 	}
 	return table
 }
