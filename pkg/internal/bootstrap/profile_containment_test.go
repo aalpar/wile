@@ -109,7 +109,6 @@ func TestExtensionPrimitiveNamesCountsCore(t *testing.T) {
 	names, err := extensionPrimitiveNames(nil)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(names), qt.Equals, coreRegistryPrimitiveCount)
-	c.Assert(names, qt.Not(qt.HasLen), 0)
 
 	// A sample of names an embedder would recognise, so a future registry
 	// churn that changes the count says which direction it moved.

@@ -35,6 +35,7 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -134,7 +135,7 @@ func TestPin3bRestrictiveProfilesResolveAnAuthorizer(t *testing.T) {
 	qt.Assert(t, err, qt.Not(qt.IsNil),
 		qt.Commentf("a ConsoleWithLoad engine widened to kitchen-sink; its authorizer "+
 			"was either nil or never consulted"))
-	qt.Assert(t, strings.Contains(err.Error(), "profile"), qt.IsTrue,
+	qt.Assert(t, errors.Is(err, bootstrap.ErrProfileWidensEngine), qt.IsTrue,
 		qt.Commentf("refusal did not come from the profile-widening gate: %v", err))
 }
 
