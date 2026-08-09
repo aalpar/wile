@@ -186,7 +186,7 @@ func isDotSubsequent(r rune) bool {
 // isNumberLiteral checks if name could be misread as a number literal.
 // This catches +i, -i, +inf.0, -inf.0, +nan.0, -nan.0, and number-like identifiers.
 // Also catches identifiers starting with +/-  followed by digits, dots, or
-// the special prefixes inf/nan (which the tokenizer recognizes case-insensitively).
+// the special prefixes inf./nan. (which the tokenizer recognizes case-insensitively).
 func isNumberLiteral(name string) bool {
 	if len(name) < 2 || (name[0] != '+' && name[0] != '-') {
 		return false
@@ -205,9 +205,13 @@ func isNumberLiteral(name string) bool {
 	if c == '.' && len(name) >= 3 && name[2] >= '0' && name[2] <= '9' {
 		return true
 	}
-	// +inf... or +nan... (case-insensitive prefix check)
+	// +inf.… or +nan.… — the dot is required, and it is what makes this an
+	// over-approximation of the numeric forms (+inf.0, +inf.0i, +inf.0+2i)
+	// rather than of every name starting with the keyword. A bare `+inf` or
+	// `+nan` is a peculiar identifier: <infnan> only terminates at a delimiter,
+	// so `+inf` reads back as this symbol and needs no bars.
 	rest := lower[1:]
-	if strings.HasPrefix(rest, "inf") || strings.HasPrefix(rest, "nan") {
+	if strings.HasPrefix(rest, "inf.") || strings.HasPrefix(rest, "nan.") {
 		return true
 	}
 	return false
