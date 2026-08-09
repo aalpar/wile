@@ -17,6 +17,7 @@ package bootstrap
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -93,14 +94,28 @@ func checkProfileWidening(callerNS *environment.Namespace, profileName string, e
 	return nil
 }
 
-// extensionPrimitiveNames returns the set of primitive names a set of
-// extensions registers, by applying them to a scratch registry. Nothing is
-// bound into an environment — Apply is never called — so this costs the
-// registration walk only.
+// extensionPrimitiveNames returns the set of primitive names a PROFILE
+// registers — the core registry plus the profile's extensions — by applying
+// them to a scratch registry. Nothing is bound into an environment: Apply is
+// never called, so this costs the registration walk only.
+//
+// Core is part of the answer, not a background assumption. This mirrors
+// initializeEnvironmentWithRegistry, the function that actually populates a
+// profile namespace, and the asymmetry with it was the whole of a fail-open:
+// enginePrimitiveNames reads the engine's FULL registry, which does contain
+// core, while this walked only the extension list. namesNotIn could therefore
+// never see a core acquisition, and a WithoutCore() engine asking for tiny —
+// an empty extension slice, and so an apparently empty request — acquired the
+// core surface with no capability question put to the policy.
 func extensionPrimitiveNames(exts []registry.Extension) (map[string]struct{}, error) {
 	reg := registry.NewRegistry()
+	err := core.AddToRegistry(reg)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err,
+			"extensionPrimitiveNames: core failed to register")
+	}
 	for _, ext := range exts {
-		err := ext.AddToRegistry(reg)
+		err = ext.AddToRegistry(reg)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err,
 				"extensionPrimitiveNames: extension %q failed to register", ext.Name())
