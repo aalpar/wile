@@ -499,29 +499,6 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 				return ErrNotAMatch
 			}
 			// remaining > Count: continue loop to match more ellipsis iterations
-		case ByteCodeRequireCarEmpty:
-			// Verify that the car at the current position is an empty list.
-			// This is generated for patterns like () that must match empty input.
-			entryPr := p.syntaxStack[lvs-1].pr
-			if syntax.IsSyntaxEmptyList(entryPr) {
-				return ErrNotAMatch
-			}
-			car := entryPr.SyntaxCar()
-			if !syntax.IsSyntaxEmptyList(car) {
-				// Car is not an empty list - pattern doesn't match
-				return ErrNotAMatch
-			}
-			// Move to next element in the list
-			cdr := entryPr.SyntaxCdr()
-			cdrPair, ok := cdr.(*syntax.SyntaxPair)
-			switch {
-			case ok:
-				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: cdrPair}
-			case syntax.IsSyntaxEmptyList(cdr) || cdr == nil:
-				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
-			default:
-				return ErrNotAMatch
-			}
 		case ByteCodeRequireCarEmptyVector:
 			// R7RS §4.3.2: Empty vector pattern #() — car must be an empty vector.
 			entryPr := p.syntaxStack[lvs-1].pr

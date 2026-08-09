@@ -52,16 +52,3 @@ type ByteCodeRequireCarEmptyVector struct{}
 func (ByteCodeRequireCarEmptyVector) String() string {
 	return "RequireCarEmptyVector"
 }
-
-// ByteCodeRequireCarEmpty verifies that the car at the current position is an empty list.
-//
-// Problem: Pattern () should only match input (). Without this check,
-// VisitCar + Done would match any list, because Done only checks that CDR is empty.
-//
-// Solution: Generate this instruction instead of VisitCar when the pattern
-// element is (). It verifies the input car is also empty before proceeding.
-type ByteCodeRequireCarEmpty struct{}
-
-func (p ByteCodeRequireCarEmpty) String() string {
-	return "RequireCarEmpty"
-}
