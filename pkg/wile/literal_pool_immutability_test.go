@@ -185,3 +185,23 @@ func TestLiteralPoolAggregatesAreImmutable(t *testing.T) {
 		})
 	}
 }
+
+// TestEvalOfRuntimeVectorReturnsMutableCopy is the pre-check that licensed
+// marking at CompileSelfEvaluating. That appender now freezes every aggregate it
+// pools, and eval routes a caller's runtime vector through it — so if eval
+// returned the SAME object, marking there would freeze an object the Go or
+// Scheme caller still owns. It returns a copy, and the original stays mutable.
+func TestEvalOfRuntimeVectorReturnsMutableCopy(t *testing.T) {
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+
+	same, err := eng.EvalMultiple(ctx,
+		`(define v (vector 1 2 3)) (eq? v (eval v (interaction-environment)))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, same.Internal(), qt.Equals, values.Value(values.FalseValue))
+
+	elem, err := eng.EvalMultiple(ctx, `(vector-set! v 0 9) (vector-ref v 0)`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, elem.SchemeString(), qt.Equals, "9")
+}
