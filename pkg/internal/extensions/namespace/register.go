@@ -55,7 +55,9 @@ func addPrimitives(r *registry.PrimitiveRegistry) error {
 			ReturnType: values.TypeVoid},
 		{Name: "namespace-ref", ParamCount: 2, IsVariadic: true, Impl: PrimNamespaceRef,
 			Doc: "Returns the value bound to SYM in NS. With a third argument, returns it as default if SYM is unbound.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-define! ns 'x 10) (namespace-ref ns 'x))      => 10\n  (let ((ns (make-namespace))) (namespace-ref ns 'missing 'default))  => default", ParamNames: []string{"ns", "sym"}, Category: "namespace",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol}, ReturnType: values.TypeAny},
+			// The rest is (sym [default]): a symbol followed by a value of any
+			// type, so no single constraint describes it.
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "namespace-bound?", ParamCount: 2, Impl: PrimNamespaceBound,
 			Doc: "Returns #t if SYM has a binding in NS.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-define! ns 'x 1) (namespace-bound? ns 'x))  => #t", ParamNames: []string{"ns", "sym"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
