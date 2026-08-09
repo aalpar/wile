@@ -59,11 +59,19 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	}
 
 	// `after`, by contrast, is checked here and not applied until phase 6, so
-	// this is the only boundary it crosses.
+	// this is the only boundary it crosses — and the only operand position whose
+	// diagnostic does not already come from ApplyCallable. Bridge it: this is an
+	// argument-domain fault (R7RS §6.10 requires a procedure), so it belongs to
+	// the Scheme program and must be reachable by guard / with-exception-handler.
+	// The bridge goes HERE and not at Run()'s OpComplex arm, which dispatches all
+	// nine side-table operations: blanket-bridging there would also make
+	// OperationPopWind's werr.ErrInternal (below) guard-able, which
+	// CODING_STYLE.md forbids for impossible states. Pinned by
+	// TestPopWindInternalErrorStaysUncatchable.
 	after, ok := mc.evals.PeekK(0).(values.Callable)
 	if !ok {
 		err := mc.WrapError(werr.ErrNotAProcedure, "dynamic-wind: after must be a procedure")
-		return mc, err
+		return bridgeForeignError(mc, err)
 	}
 
 	// Create and push the winding frame, snapshotting the reachable marks at the
