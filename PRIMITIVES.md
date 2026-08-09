@@ -63,7 +63,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Type | Description |
 |------|-------------|
 | Error Object | Exception with message and irritants |
-| EOF Object | End-of-file marker `#!eof` |
+| EOF Object | End-of-file marker, written `#<eof>` |
 
 ### Threading Types (SRFI-18)
 
@@ -89,7 +89,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Syntax Object | Datum with lexical context information |
 | Environment | First-class evaluation environment |
 | Compile-Time Value | Value available during macro expansion |
-| Void | Absence of a meaningful value `#!void` |
+| Void | Absence of a meaningful value, written `#<void>` |
 
 ## Special Forms (Compile-Time)
 

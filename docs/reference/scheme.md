@@ -197,7 +197,11 @@ Vertical-bar syntax allows arbitrary characters in symbol names:
 Every `#!<name>` token is read as a directive and discarded, so an unrecognized
 one contributes no datum rather than raising. There is no `#!void` or `#!eof`
 read syntax: the void value comes from `(if #f #f)` and the end-of-file object
-from `(eof-object)`.
+from `(eof-object)`. Both *write* as `#<void>` and `#<eof>` — the unreadable-object
+bracket the reader rejects, not a directive it would discard. Rendering them as
+`#!void` / `#!eof` let the writer manufacture input the reader silently deletes:
+`(write (vector 1 (if #f #f) 2))` produced `#(1 #!void 2)`, which read back as a
+two-element vector.
 
 ### Datum Labels
 
