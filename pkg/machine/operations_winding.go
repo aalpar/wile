@@ -53,8 +53,9 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 	// still fails, one phase earlier, with ApplyCallable's own diagnostic.
 	before, ok := mc.evals.PeekK(2).(values.Callable)
 	if !ok {
-		return mc, mc.WrapError(werr.ErrInternal,
+		err := mc.WrapError(werr.ErrInternal,
 			"push-wind: before survived OpApply but is not callable")
+		return mc, err
 	}
 
 	// `after`, by contrast, is checked here and not applied until phase 6, so

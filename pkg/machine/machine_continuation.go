@@ -35,11 +35,11 @@ const inlineEvalsCap = 2
 
 type MachineContinuation struct {
 	vmState
-	parent        *MachineContinuation
+	parent *MachineContinuation
 	// promptHandler is values.Callable, not Closure: it is only ever applied,
 	// via ApplyCallable, which dispatches six types where Closure has two.
 	promptHandler values.Callable // Handler invoked on abort to this prompt
-	shared        bool    // true if this frame is part of a captured continuation chain
+	shared        bool            // true if this frame is part of a captured continuation chain
 	// Inline eval storage: when the eval stack at save time has ≤ inlineEvalsCap
 	// items, values are stored here and evals is set to nil (sentinel).
 	//
