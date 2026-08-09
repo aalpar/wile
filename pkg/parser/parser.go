@@ -472,9 +472,19 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 	// Read the syntax value being commented
 	var v syntax.SyntaxValue
 	v, _, err = p.readSyntax()
-	// errNoDatum (a #; immediately before a close delimiter) leaves v nil,
-	// preserving the prior literal-nil behavior; a real error propagates.
-	if err != nil && !errors.Is(err, errNoDatum) {
+	// "#;)" must be a located error rather than a node whose Value is nil:
+	// SchemeString and EqualTo both dereference Value, so such a node panics on
+	// any use, and at top level nothing stops it escaping ReadSyntax. Same guard
+	// readBoxInto and the numeric introducers carry.
+	//
+	// This arm is the comment-*preserving* mode (skipComment false), where a
+	// datum comment with no datum has nothing to preserve. It is not the
+	// leniency ReadSyntax's skip loop keeps for "(1 #;)".
+	if errors.Is(err, errNoDatum) {
+		return nil, p.cur, NewParserErrorWithWrap(werr.ErrInvalidSyntax, p.cur,
+			"datum comment requires a datum")
+	}
+	if err != nil {
 		return nil, p.cur, err
 	}
 	// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
