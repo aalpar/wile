@@ -103,7 +103,7 @@ type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                          // Custom ellipsis identifier (default "...")
 	literalSyntax  map[string]*syntax.SyntaxSymbol // Pattern literals with their scopes for hygiene
-	bindingChecker BindingChecker                  // Construction-time R7RS binding lookup; nil when supplied per match
+	bindingChecker BindingChecker                  // Construction-time R7RS binding lookup; nil when the caller supplies one per match instead
 }
 
 // SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
@@ -204,9 +204,9 @@ func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) err
 // matching only (less strict).
 //
 // The checker is CLOSED OVER rather than stored on the receiver. It used to be
-// assigned to p.bindingChecker and cleared by a defer, which made a field that
-// reads as configuration into per-call state — the only reason CloneForMatch
-// had to exist for a single-threaded caller.
+// assigned to p.bindingChecker and cleared by a defer, which turned a field
+// that reads as configuration into per-call state on a value shared across
+// expansions.
 func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input syntax.SyntaxValue, checker BindingChecker) error {
 	if checker == nil {
 		checker = p.bindingChecker

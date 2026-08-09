@@ -48,11 +48,14 @@ import (
 type syntaxPathEntry struct {
 	pr syntax.SyntaxTuple
 	// tail is the dotted tail an advance stopped on. A position is EXHAUSTED
-	// when pr is the empty list; tail discriminates the two ways a list can end,
-	// and only the Cdr-consuming opcodes (CaptureCdr, CompareCdr, DiscardCdr)
-	// read it. Exhausted with tail == nil means the input list ended properly
-	// and the rest of it is (); exhausted with tail != nil means the input ended
-	// in `. tail`, and a pattern's `. rest` must bind that value rather than ().
+	// when pr is the empty list; tail discriminates the two ways a list can end.
+	// Exhausted with tail == nil means the input list ended properly and the
+	// rest of it is (); exhausted with tail != nil means the input ended in
+	// `. tail`, and a pattern's `. rest` must bind that value rather than ().
+	//
+	// Four opcodes touch it: CaptureCdr, CompareCdr and DiscardCdr consume it
+	// and clear it, and Done refuses a tail still set — that leftover is exactly
+	// "the input was improper and the pattern was not".
 	//
 	// Encoding an improper end as "exhausted" rather than as its own state is
 	// what keeps the fix local: every car-consuming opcode already refuses an
