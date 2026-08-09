@@ -54,6 +54,7 @@ type Parser struct {
 	toks        *tokenizer.Tokenizer
 	cur         tokenizer.Token
 	err         error // ReadSyntax's cross-call EOF lookahead cache; written only there (see advance)
+	dead        error // terminal state: nil means alive, non-nil is what every further read returns
 	skipComment bool
 	foldCase    bool                       // R7RS §2.1: #!fold-case mode for identifiers
 	file        string                     // source file name for error reporting
@@ -160,6 +161,15 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	if cerr != nil {
 		return nil, cerr
 	}
+	// A closed or failed parser stays that way. This has to be consulted before
+	// the rebuild below, because "no tokenizer" is the state both Close and a
+	// read error leave behind — rebuilding resurrects the parser straight off
+	// the underlying reader, which is how Close then ReadSyntax kept reading and
+	// how "(1 2] (3 4)" reported the mismatched delimiter once and then handed
+	// back (3 4).
+	if p.dead != nil {
+		return nil, p.dead
+	}
 	if p.toks == nil {
 		p.toks = tokenizer.NewTokenizer(p.rdr, false)
 		p.err = p.advance()
@@ -181,16 +191,10 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		// R7RS: an unexpected close delimiter at top level is a read error.
 		// errNoDatum uniquely means readSyntax stopped on a closer (p.cur is it).
 		if errors.Is(err, errNoDatum) {
-			p.toks = nil
-			// Route through locateReaderErr so the file name is stamped for
-			// location reporting, exactly as for errors escaping readSyntax.
-			p.err = p.locateReaderErr(NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type())))
-			return nil, p.err
+			return nil, p.die(NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type())))
 		}
 		if err != nil {
-			p.toks = nil
-			p.err = p.locateReaderErr(err)
-			return nil, p.err
+			return nil, p.die(err)
 		}
 		// Advance to the next token for the next ReadSyntax() call. This is the
 		// one advance whose error is intentionally retained: a trailing io.EOF
@@ -199,8 +203,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		p.err = p.advance()
 		// EOF is fine - it means there's nothing more to read
 		if p.err != nil && !errors.Is(p.err, io.EOF) {
-			p.toks = nil
-			return nil, p.locateReaderErr(p.err)
+			return nil, p.die(p.err)
 		}
 		if !p.skipComment {
 			return q, nil
@@ -253,16 +256,31 @@ func (p *Parser) locateReaderErr(err error) error {
 	return wrapped
 }
 
+// die puts the parser in its terminal state and returns the located error every
+// later ReadSyntax will return. Death is permanent: the tokenizer is abandoned
+// mid-token and its bytes are already consumed, so resuming would silently
+// accept the remainder of an input the reader has already diagnosed as
+// malformed — "(1 2] (3 4) (5 6)" reported the mismatched delimiter once and
+// then returned (3 4) and (5 6).
+//
+// The flag is what carries that state, not the nil tokenizer and not p.err.
+// Dropping the tokenizer is only the release; ReadSyntax rebuilds one on demand.
+func (p *Parser) die(err error) error {
+	p.toks = nil
+	p.dead = p.locateReaderErr(err)
+	return p.dead
+}
+
 // advance reads the next token into p.cur and returns any tokenizer error.
 //
 // It deliberately does NOT write p.err. Every compound reader (readList,
 // readLabeledList, readVector, readByteVector, the number parsers) advances
 // through this chokepoint and propagates the error via its own return value,
-// so a transient read error never lands in the sticky field. p.err is reserved
-// for ReadSyntax's cross-call EOF lookahead — the one error the parser must
-// remember between calls — and is written only there (as p.err = p.advance()).
-// Keeping that the field's sole role is what makes the "once set, the parser is
-// dead" invariant true by construction rather than by convention.
+// so a transient read error never lands in the cross-call field. p.err holds
+// ReadSyntax's cross-call EOF lookahead — the trailing io.EOF the parser must
+// remember between calls so the next call reports it immediately. It is NOT the
+// "parser is dead" flag: that is p.dead, set only by die, and it is what makes
+// the invariant true by construction rather than by convention.
 func (p *Parser) advance() error {
 	var err error
 	p.cur, err = p.toks.Next()
@@ -1095,10 +1113,16 @@ func (p *Parser) unknownTokenCause() error {
 	return errors.Join(ErrUnknownTokenType, terr)
 }
 
-// Close closes the parser and releases resources.
-// It returns ErrAlreadyClosed if the parser is already closed or was never read
-// from (the tokenizer is created lazily on the first ReadSyntax).
+// Close closes the parser and releases resources. Every later ReadSyntax
+// returns an error wrapping ErrAlreadyClosed, including on a parser that was
+// never read from: releasing the tokenizer alone did not close anything, since
+// ReadSyntax rebuilds one from the underlying reader whenever there is none.
+//
+// Close's own return is unchanged: ErrAlreadyClosed if the parser is already
+// closed or was never read from (the tokenizer is created lazily on the first
+// ReadSyntax), otherwise the tokenizer's Close error.
 func (p *Parser) Close() error {
+	p.dead = NewParserErrorWithWrapf(ErrAlreadyClosed, nil, "parser is closed")
 	if p.toks == nil {
 		return NewParserErrorWithWrapf(ErrAlreadyClosed, nil, "parser already closed")
 	}
