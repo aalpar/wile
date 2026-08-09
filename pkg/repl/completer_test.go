@@ -141,3 +141,56 @@ func TestCompleter_SchemeBindingNilEngine(t *testing.T) {
 	c.Assert(length, qt.Equals, 2)
 	c.Assert(len(newLines), qt.Equals, 0)
 }
+
+// TestCompleter_DoReturnsRuneOffset pins the *units* of Do's second return value.
+//
+// readline indexes a []rune buffer by that value (ergochat/readline runebuf.go,
+// RuneSlice) and the AutoCompleter.Do contract documents it as a rune length. Both
+// return sites used to hand back len(prefix) in BYTES, so a non-ASCII prefix made
+// readline slice a rune buffer by a byte count and panic with
+// "slice bounds out of range" once the excess exceeded the runes preceding the
+// symbol on the line.
+//
+// The assertion has to be on the offset, not on "does not panic": Do returns
+// (matches, len(prefix)) and returns cleanly no matter what, so a no-panic test
+// passes even with the byte-length bug and is a blind guard by construction.
+//
+// Gate NOT covered here: the readline-side panic itself. Reproducing it needs a
+// pty driving EnterCompleteMode with two or more candidates that share no common
+// suffix prefix, which is out of scope for a unit test.
+func TestCompleter_DoReturnsRuneOffset(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		pos  int
+		want int
+	}{{
+		// Scheme-binding context. "éé" is 2 runes / 4 bytes; observed 4 before the fix.
+		name: "scheme binding prefix counted in runes",
+		line: "éé",
+		pos:  2,
+		want: 2,
+	}, {
+		// Filename context. "日本語日本語" is 6 runes / 18 bytes; observed 18 before the fix.
+		name: "filename prefix counted in runes",
+		line: ",edit 日本語日本語",
+		pos:  12,
+		want: 6,
+	}, {
+		// Meta-command context, ASCII: bytes and runes agree, so this arm pins that
+		// the fix does not move the common case.
+		name: "ascii meta command unchanged",
+		line: ",he",
+		pos:  3,
+		want: 2,
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			sc := repl.NewCompleter(nil, []string{"help", "doc", "edit"})
+			_, length := sc.Do([]rune(tt.line), tt.pos)
+			c.Assert(length, qt.Equals, tt.want)
+		})
+	}
+}
