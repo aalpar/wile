@@ -47,9 +47,9 @@ func PrimMakeParameter(cc machine.CallContext) error {
 		mc.SetValue(machine.NewParameter(init, nil, machine.MutableBase))
 		return nil
 	}
-	converterCls, ok := pr.Car().(machine.Closure)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "make-parameter: converter must be a procedure")
+	converterCls, err := helpers.RequireCallable(pr.Car(), "make-parameter: converter")
+	if err != nil {
+		return err
 	}
 
 	// Converter present: apply it to init on the LIVE chain (not a sub-context) so a
