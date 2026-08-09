@@ -202,10 +202,38 @@ func PrimThreadSleep(mc machine.CallContext) error {
 	select {
 	case <-time.After(d):
 	case <-mc.Context().Done():
-		return mc.Context().Err()
+		return sleepInterrupted(mc)
 	}
 	mc.SetValue(values.Void)
 	return nil
+}
+
+// sleepInterrupted reports a thread-sleep! whose context was cancelled before the
+// duration elapsed. Which of the two outcomes applies is decided by the
+// cancellation SOURCE, because thread-sleep! returns Void and so — unlike
+// mutex-lock!, whose #f already means "did not acquire" — has no value channel in
+// which to encode cancellation.
+//
+//   - Timer expiry (with-timeout). Return error-free. callForeignCached's eager
+//     ErrTimerExpired recheck runs only on the error-free foreign return, and it
+//     is what raises the ErrTimerInterrupt that dispatches the with-timeout
+//     handler. Returning an error here instead routes through
+//     applyCallableError, which turns it into an ordinary Scheme condition: with
+//     no guard the whole evaluation aborts and the handler never runs, which was
+//     the defect. The Void is never observed — the interrupt discards it.
+//   - Anything else (the embedder cancelled the engine context, thread-terminate!
+//     cancelled this thread). Report ErrOperationCancelled, with the raw ctx cause
+//     retained so a host can still tell context.Canceled from
+//     context.DeadlineExceeded. Returning ctx.Err() raw, as this site used to,
+//     handed the embedder an error carrying no sentinel to match on.
+func sleepInterrupted(mc machine.CallContext) error {
+	cause := context.Cause(mc.Context())
+	if errors.Is(cause, machine.ErrTimerExpired) {
+		mc.SetValue(values.Void)
+		return nil
+	}
+	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, cause,
+		"thread-sleep!: cancelled before the sleep elapsed")
 }
 
 // PrimThreadTerminate forcefully terminates a thread
