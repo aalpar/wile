@@ -43,6 +43,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **An import no longer overwrites a definition of the same name.** Imported
+  bindings used to be installed at the very coordinates a top-level `define`
+  writes, so the two shared one slot and whichever ran second won *by
+  assignment*. `(define map 1)` followed by `(import (scheme base))` therefore
+  left `map` bound to the library's procedure, with the user's value gone and
+  the binding stamped as imported. Imports now install one tier below, so a
+  definition **shadows** an import in either order and the import stays visible
+  when no definition exists.
+
+  Two consequences worth knowing. `set!` on an import is still refused (R7RS
+  §5.2) and `namespace-undefine!` still removes an import — it recognises one by
+  provenance rather than by tier, so removing the definition reveals the import
+  underneath instead of leaving the name unbound. And a `define` after an import
+  no longer *drops* the import provenance, because it no longer touches the
+  import's binding at all; the name simply resolves to the definition.
+
+  Macro imports (the phase-1 half) deliberately keep the old placement: the
+  coordinate the relocation targets is occupied at phase 1 by bootstrap macros,
+  and moving them there would let an imported macro overwrite a bootstrap
+  transformer engine-wide. So `define-syntax` over an imported macro still
+  supersedes in place.
+
+- **`error` is now capture-safe-annotated.** It runs the installed exception
+  handler on the live chain, like `raise`, but was not marked as doing so — so a
+  self-recursive procedure calling `error` was compiled with an in-place
+  parameter rebind that corrupted any continuation captured inside the handler.
+  Replaying such a continuation twice now continues the loop identically. The
+  same annotation lands on `thread-join!` and `mutex-lock!`, which signal their
+  SRFI-18 conditions the same way. Each costs a small optimization at those call
+  sites.
+
 - **BREAKING — hashtables.** `(make-hashtable)` is gone; use
   `(make-equal-hashtable)` or the R6RS `(make-hashtable equal-hash equal?)`.
   `hashtable-ref`'s `default` is now **required** and an absent key never

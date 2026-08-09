@@ -1316,6 +1316,15 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// nothing extra at bootstrap and would drift into indexing user defines later
 	// (G2).
 	//
+	// The sealed tier is no longer only the startup set: imports install at
+	// (ExactPhase(0), sealed) so a user define shadows them rather than assigning
+	// through them (compilation.installImportedBinding). SealedSlots() therefore
+	// yields imported bindings too, and since this runs once per applyBaseEnvironment
+	// an imported Scheme procedure's structured docstring now gets a doc-only entry.
+	// That is wanted, not incidental — the alternative is documented procedures
+	// going missing from ,doc the moment they arrive by import — and G2 still holds
+	// because a user DEFINE is on the mutable tier and remains excluded.
+	//
 	// SealedSlots() is every sealed slot at EVERY phase (the fold merged the
 	// per-phase seal frames into one store), where the pre-fold walk visited only
 	// the phase-0 seal's own slots. A phase-1 sealed slot is always

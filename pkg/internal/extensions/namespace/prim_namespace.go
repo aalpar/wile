@@ -217,8 +217,31 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 	// store would reach the sealed primitive itself whenever no user shadow existed,
 	// destroying exactly the binding the refusal below exists to protect.
 	deleted := ns.Runtime().DeleteOwnGlobal(sym, environment.AmbientScopes())
-	if !deleted {
-		if ns.Store().IsSealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime) {
+	if !deleted && ns.Store().IsSealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime) {
+		// An IMPORT is sealed-tier but is not the startup set, and it is deletable.
+		//
+		// Imports used to live at (phase 0, mutable) and the DeleteOwnGlobal above
+		// removed them directly. They now install at (ExactPhase(0), sealed) so that
+		// a user top-level define SHADOWS an import instead of assigning through it
+		// (library_bindings.go installImportedBinding). That tier move is about the
+		// define/import interaction and must not quietly withdraw a documented
+		// capability: (namespace-undefine! (environment '(scheme base)) 'car) is the
+		// worked example in docs/environment/system.md and the flat-binding design's
+		// property P7, and building a restricted namespace by importing a library and
+		// removing names from it is the reason the primitive is embedder-facing.
+		//
+		// So the refusal is narrowed to what it was always FOR — the startup set,
+		// which nothing user-level put there — and an import is deleted at its own
+		// coordinates. IsImported() is the discriminator: it is provenance the
+		// importer wrote, and a primitive or bootstrap procedure never carries it.
+		// Without this branch the refusal below would also fire on an import, with a
+		// message ("a primitive or bootstrap procedure") that is simply untrue of one.
+		sealed := ns.Store().SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
+		if sealed != nil && sealed.IsImported() {
+			deleted = ns.Store().DeleteBindingAt(
+				sym, environment.AmbientScopes(), environment.ExactPhase(environment.PhaseRuntime), true)
+		}
+		if !deleted {
 			return werr.WrapForeignErrorf(
 				werr.ErrImmutableBinding,
 				"namespace-undefine!: cannot undefine sealed binding %q (a primitive or bootstrap procedure)",
