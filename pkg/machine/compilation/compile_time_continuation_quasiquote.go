@@ -61,7 +61,9 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 		if err != nil {
 			return err
 		}
-		li := p.template.MaybeAppendLiteral(val)
+		// No unquote anywhere: the quasiquote is a constant and gets the same
+		// R7RS §4.1.2 treatment (and the same pre-append mark) as a quote.
+		li := p.appendConstantLiteral(val)
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(li))
 		return nil
 	}

@@ -96,6 +96,153 @@ func TestImmutableLiteral_StructureSharingProbe(t *testing.T) {
 		qt.Commentf("set-cdr! through a shared literal must raise ErrImmutablePair, got %v", err))
 }
 
+// TestImmutableLiteral_EveryConstantAppenderMarks covers the three compile-time
+// constant appenders, not just the quoted one. CompileSelfEvaluating and
+// compileQuasiquoteDatum's constant fast path used to append without marking, so
+// only the two 'quoted rows below refused.
+//
+// Observed at 003b3353, each form run as (let ((v <literal>)) (mutate v) v):
+//
+//	#(1 2 3)     => #(9 2 3)     ' #(1 2 3)   => RAISED
+//	`#(1 2 3)    => #(9 2 3)     '#u8(1 2 3)  => RAISED
+//	#u8(1 2 3)   => #u8(9 2 3)   `#u8(1 2 3)  => #u8(9 2 3)
+//
+// The two quoted rows are negative controls: they were the only appender that
+// marked, and they must keep refusing.
+func TestImmutableLiteral_EveryConstantAppenderMarks(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want error
+	}{
+		{"self-evaluating vector", `(let ((v #(1 2 3))) (vector-set! v 0 9))`, werr.ErrImmutableVector},
+		{"quoted vector", `(let ((v '#(1 2 3))) (vector-set! v 0 9))`, werr.ErrImmutableVector},
+		{"quasiquoted constant vector", "(let ((v `#(1 2 3))) (vector-set! v 0 9))", werr.ErrImmutableVector},
+		{"self-evaluating bytevector", `(let ((v #u8(1 2 3))) (bytevector-u8-set! v 0 9))`, werr.ErrImmutableBytevector},
+		{"quoted bytevector", `(let ((v '#u8(1 2 3))) (bytevector-u8-set! v 0 9))`, werr.ErrImmutableBytevector},
+		{"quasiquoted constant bytevector", "(let ((v `#u8(1 2 3))) (bytevector-u8-set! v 0 9))", werr.ErrImmutableBytevector},
+		{"nested vector inside a quasiquoted list", "(let ((v `(1 #(2 3)))) (vector-set! (cadr v) 0 9))", werr.ErrImmutableVector},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue,
+				qt.Commentf("want %v, got %v", tc.want, err))
+		})
+	}
+}
+
+// TestImmutableLiteral_OrderIndependence is the strongest of the gates and the
+// one nothing in the tree covered. Two structurally equal aggregates in ONE
+// compilation unit dedup to a single pooled object; membership in
+// ImmutableLiterals is pointer identity. While only the quote path marked, the
+// mark landed on whichever copy dedup DISCARDED whenever an unmarked twin was
+// appended first — so a quoted literal's immutability depended on declaration
+// order.
+//
+// Every "unquoted first" row below is the red one: at 003b3353 mutating the
+// QUOTED name succeeded and returned #(9 2 3) / #u8(9 2 3). The "quoted first"
+// rows already refused, and must keep refusing — after the fix they refuse on
+// their own mark rather than by deduping onto a marked twin.
+func TestImmutableLiteral_OrderIndependence(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want error
+	}{
+		{"vector, unquoted first (red at 003b3353)", `(begin
+			(define v1 #(1 2 3))
+			(define v2 '#(1 2 3))
+			(vector-set! v2 0 9))`, werr.ErrImmutableVector},
+		{"vector, quoted first", `(begin
+			(define v2 '#(1 2 3))
+			(define v1 #(1 2 3))
+			(vector-set! v2 0 9))`, werr.ErrImmutableVector},
+		{"vector, quasiquoted first (red at 003b3353)", "(begin\n" +
+			"(define v1 `#(1 2 3))\n" +
+			"(define v2 '#(1 2 3))\n" +
+			"(vector-set! v2 0 9))", werr.ErrImmutableVector},
+		{"vector, quoted before quasiquoted", "(begin\n" +
+			"(define v2 '#(1 2 3))\n" +
+			"(define v1 `#(1 2 3))\n" +
+			"(vector-set! v2 0 9))", werr.ErrImmutableVector},
+		{"bytevector, unquoted first (red at 003b3353)", `(begin
+			(define b1 #u8(1 2 3))
+			(define b2 '#u8(1 2 3))
+			(bytevector-u8-set! b2 0 9))`, werr.ErrImmutableBytevector},
+		{"bytevector, quoted first", `(begin
+			(define b2 '#u8(1 2 3))
+			(define b1 #u8(1 2 3))
+			(bytevector-u8-set! b2 0 9))`, werr.ErrImmutableBytevector},
+		{"pair, quasiquoted first (red at 003b3353)", "(begin\n" +
+			"(define x `(1 2 3))\n" +
+			"(define y '(1 2 3))\n" +
+			"(set-car! y 9))", werr.ErrImmutablePair},
+		{"pair, quoted first", "(begin\n" +
+			"(define y '(1 2 3))\n" +
+			"(define x `(1 2 3))\n" +
+			"(set-car! y 9))", werr.ErrImmutablePair},
+		{"nested vector, quasiquoted first (red at 003b3353)", "(begin\n" +
+			"(define a `(1 #(2 3)))\n" +
+			"(define b '(1 #(2 3)))\n" +
+			"(vector-set! (cadr b) 0 9))", werr.ErrImmutableVector},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, tc.want), qt.IsTrue,
+				qt.Commentf("want %v, got %v", tc.want, err))
+		})
+	}
+}
+
+// TestImmutableLiteral_PooledSharingIsIntended pins the other half of the
+// order-independence answer: per-template dedup is deliberate (Wave 1 §8 Q1),
+// so the two names stay eq? in BOTH orders. Freezing the survivor is the fix;
+// splitting the pool is not. A future dedup key must not be gated on this
+// program returning #f.
+func TestImmutableLiteral_PooledSharingIsIntended(t *testing.T) {
+	tcs := []string{
+		"(begin (define x `(1 2 3)) (define y '(1 2 3)) (eq? x y))",
+		"(begin (define y '(1 2 3)) (define x `(1 2 3)) (eq? x y))",
+		"(begin (define v1 #(1 2 3)) (define v2 '#(1 2 3)) (eq? v1 v2))",
+		"(begin (define v2 '#(1 2 3)) (define v1 #(1 2 3)) (eq? v1 v2))",
+	}
+	for _, code := range tcs {
+		t.Run(code, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
+		})
+	}
+}
+
+// TestImmutableLiteral_RuntimeAggregatesUnaffected is the verifier's pre-check,
+// kept as an assertion: marking at CompileSelfEvaluating must not be able to
+// freeze a caller's runtime aggregate. (vector 1 2) is a call, never pools, and
+// eval returns a non-eq? copy of any vector handed to it.
+func TestImmutableLiteral_RuntimeAggregatesUnaffected(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "vector call result is mutable",
+			Code: `(let ((v (vector 1 2 3))) (vector-set! v 0 9) (vector-ref v 0))`, Expected: values.NewInteger(9)},
+		{Name: "vector-copy of a literal is mutable",
+			Code: `(let ((v (vector-copy #(1 2 3)))) (vector-set! v 0 9) (vector-ref v 0))`, Expected: values.NewInteger(9)},
+		{Name: "bytevector call result is mutable",
+			Code: `(let ((b (bytevector 1 2 3))) (bytevector-u8-set! b 0 9) (bytevector-u8-ref b 0))`, Expected: values.NewInteger(9)},
+		{Name: "list call result is mutable",
+			Code: `(let ((p (list 1 2 3))) (set-car! p 9) (car p))`, Expected: values.NewInteger(9)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 // TestImmutableLiteral_StringParityPreserved confirms literal strings remain
 // immutable — the new pair/vector behavior is consistent with strings and did
 // not regress them.
