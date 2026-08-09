@@ -900,6 +900,66 @@ Items that block production embedded use or prevent silent state corruption.
   model currently *claims* a property it does not have, and a future dialect or sandbox feature
   that leans on "handlers are off the value path" would be building on it.
 
+### `syntax-case` residuals from wave 1 §1, filed not fixed (2026-08-09)
+
+Both surfaced while implementing the §1 state relocation
+(`fix/w1-syntax-case-relocation`). Neither is closed by it, and neither is a
+regression from it — both reproduce at `003b3353`.
+
+- [ ] **N2 — `syntax-case` refuses every non-pair whole-clause pattern** [Medium, S].
+  `CompileSyntaxPattern` gates on `pattern.(*syntax.SyntaxPair)`
+  (`pkg/internal/match/syntax_adapter.go:255-258`), so a whole-clause pattern of
+  `()`, a bare identifier (`x`), or a vector (`#(a)`) is refused with
+  **`CompileSyntaxPattern: pattern must be a list: not a list`**, though R7RS
+  §4.3.2 / R6RS §12.4 admit all three. A `()` **sub**pattern is fine — measured,
+  `((_ ()) 'EMPTY)` matches — so this is the whole-clause position only, at any
+  clause index, not a nesting-depth rule. The `syntax-rules` comparison does not
+  apply: a `syntax-rules` rule pattern is always `(keyword . rest)` and can never
+  be a bare `()`.
+  **Independent of the §1 work**: the gate is a compile-time refusal inside the
+  pattern compiler, it touches neither `syntaxCaseState` nor any env frame, and
+  `pkg/internal/match` does not import `pkg/machine/compilation`. The fix is a
+  two-line generalization of that type switch.
+  **Why it matters**: `()` is the base case of every syntax-list walk. Together
+  with N1 (now fixed) it is why the canonical shape — `let loop` with an inner
+  `syntax-case` and a `()` base clause, which SRFI-197's reference implementation
+  uses six times — does not run in Wile. With N1 closed, N2 is the only thing
+  still blocking that shape; it is the end-to-end acceptance probe for this row.
+  **One interaction, already recorded in the tree**: fixing N2 admits `()` as the
+  first clause shape with **zero** pattern variables. `compile_syntax_case.go`
+  emits `BindPatternVars` unconditionally and must keep doing so — under the
+  relocation the pattern-variable frame carries the form's state, so it is
+  load-bearing regardless of pattern-variable count. A "skip the frame when
+  `patternVars` is empty" shortcut would be a silent-corruption regression. The
+  comment forbidding it is at the emit site.
+
+- [ ] **N4 — a nested compile scope in a clause body loses the clause's pattern
+  variables** [Medium, S]. Inside a `syntax-case` clause body, wrapping an
+  ellipsis template in a `let` breaks substitution:
+
+  ```scheme
+  (define (f stx)
+    (syntax-case stx ()
+      ((_ a ...) (let ((inner 7)) (list inner (syntax (a ...)))))))
+  (f #'(m 1 2))     ;; => (7 #'(#'a #'a))   want (7 #'(#'1 #'2))
+  ```
+
+  The element **count** is right (the ellipsis capture has two items) and the
+  **values** are wrong: `a` is substituted by itself. Without the `let` the same
+  body gives `#'(#'1 #'2)`, and the non-ellipsis `(syntax a)` is correct under a
+  `let` because it compiles to a local load rather than a runtime expansion.
+  **Suspected cause, unverified**: `patternVars` / `patternVarSyntax` /
+  `libraryScope` are fields on `CompileTimeContinuation` that
+  `compileSyntaxCaseClause` sets on the clause's `bodyCompiler`. A nested
+  compiler minted for the `let` body does not inherit them, so
+  `CompileSyntax` sees `p.patternVars == nil` and
+  `collectFreeIdentifiersWithEllipsis` classifies `a` as a FREE template
+  identifier resolved at the definition site instead of as a pattern variable.
+  Verify before fixing; the fix is presumably propagation at the mint site, the
+  same way `bodyCompiler.libraryScope = p.libraryScope` is already propagated.
+  **This is a wrong answer with no diagnostic**, so it belongs in the same class
+  as the wave-1 items even though the review did not file it.
+
 ### Ambiguous binding references resolve silently instead of erroring (2026-07-18)
 
 - [x] **Fixed at the cause, not by erroring** [Medium, S, Done 2026-07-21, approach 1a per

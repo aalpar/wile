@@ -38,9 +38,6 @@ import (
 //     dynamic extent (it read a single per-MachineContext slot that the
 //     epilogue nils). Pattern variables are one lexical binding, R6RS §12.4.
 //
-// This commit closes 15a and N1. The 15b and N3 rows arrive with the state
-// relocation in the next commit.
-//
 // Every case here is a single (begin ...) form on purpose. The 15b leak is
 // bounded to one MachineContext and REPL top-level forms do not share one, so
 // two separate Eval calls cannot see it.
@@ -96,6 +93,67 @@ func TestSyntaxCaseDoesNotCorruptTheEnclosingFrame(t *testing.T) {
                              (syntax a))))))
                     (m 99))`,
 			want: "99",
+		},
+		{
+			// N3 E1. Observed at 003b3353: "syntax-case: no state on
+			// MachineContext (no expansion in flight)" — ClearSyntaxCaseInput
+			// nils the slot at the end of the DYNAMIC extent, so the escaping
+			// closure has nothing to expand against.
+			name: "escaping closure over an ellipsis template, non-tail body",
+			src: `(begin
+                    (define esc #f)
+                    (define (f stx)
+                      (syntax-case stx ()
+                        ((_ a ...) (begin (set! esc (lambda () (syntax (a ...)))) 'done))))
+                    (f #'(m 1 2))
+                    (esc))`,
+			want: "#'(#'1 #'2)",
+		},
+		{
+			// 15b, re-specified. Identical to the E1 case except that the clause
+			// body's tail form is a CALL, so control never reaches the epilogue.
+			// Observed at 003b3353 this returned #'(#'1 #'2) by reading LEAKED
+			// state while its non-tail twin above raised: the two disagreed. The
+			// gate is that they agree, and agree on the right answer.
+			//
+			// The design's original assertion 4 here cannot fail and was
+			// replaced by this pair: a bare (syntax (q)) outside any form
+			// returns #'(#'q) identically with a tail body, a non-tail body, and
+			// with no syntax-case in the file at all.
+			name: "escaping closure over an ellipsis template, tail-call body",
+			src: `(begin
+                    (define esc #f)
+                    (define (f stx)
+                      (syntax-case stx ()
+                        ((_ a ...) (list (set! esc (lambda () (syntax (a ...)))) 'done))))
+                    (f #'(m 1 2))
+                    (esc))`,
+			want: "#'(#'1 #'2)",
+		},
+		{
+			// Reentrancy, the ellipsis half of N1: an inner syntax-case runs to
+			// completion inside the outer clause body, and the outer form's
+			// ellipsis template still expands against the OUTER match. Under the
+			// single per-MachineContext slot the inner form's
+			// ClearSyntaxCaseInput destroyed the outer state.
+			// No intervening `let`: a nested compile scope inside a clause body
+			// does not carry the enclosing clause's pattern variables into
+			// CompileSyntax, an INDEPENDENT defect filed as N4. Wile evaluates
+			// arguments left to right, so the inner form still runs to
+			// completion before the outer template expands.
+			//
+			// Observed at 003b3353: "syntax-case: no state on MachineContext
+			// (no expansion in flight)" — the inner form's epilogue nilled the
+			// one slot the outer form was still using.
+			name: "nested syntax-case does not destroy the outer ellipsis state",
+			src: `(begin
+                    (define (f stx)
+                      (syntax-case stx ()
+                        ((_ a ...)
+                         (list (syntax-case #'(7 8) () ((x y) (syntax x)))
+                               (syntax (a ...))))))
+                    (f #'(m 1 2)))`,
+			want: "(#'7 #'(#'1 #'2))",
 		},
 		{
 			// N3 E2, the working half of the asymmetry, asserted UNCHANGED. The
@@ -158,5 +216,28 @@ func TestSyntaxCaseDoesNotCorruptTheEnclosingFrame(t *testing.T) {
 				t.Errorf("got %s, want %s", got.SchemeString(), tc.want)
 			}
 		})
+	}
+}
+
+// A (syntax (a ...)) outside any syntax-case has no pattern-variable frame in
+// scope and must raise rather than expand against whatever state a previous
+// form left behind. This is 15b's visible symptom: at 003b3353 this SUCCEEDED,
+// because the clause body's tail call skipped the epilogue that would have
+// cleared the matcher.
+func TestSyntaxEllipsisOutsideSyntaxCaseRaises(t *testing.T) {
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := `(begin
+              (define (f stx)
+                (syntax-case stx ()
+                  ((_ a ...) (list 'done))))
+              (f #'(m 1 2))
+              (syntax (q ...)))`
+	got, err := engine.Eval(ctx, engine.MustParse(ctx, src))
+	if err == nil {
+		t.Fatalf("expected an error from (syntax (q ...)) outside any syntax-case, got %s", got.SchemeString())
 	}
 }

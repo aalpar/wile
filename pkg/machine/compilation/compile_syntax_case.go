@@ -265,7 +265,18 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// form's source location.
 	bodyCompiler.pushSource(p.currentSource())
 
-	// Bind pattern variables from the match result
+	// Bind pattern variables from the match result.
+	//
+	// This is emitted UNCONDITIONALLY and must stay that way. The frame it
+	// pushes carries the form's syntax-case state under a reserved key, which is
+	// what (syntax ...) resolves against by a nearest-marked-ancestor walk, so
+	// the frame is load-bearing regardless of how many pattern variables the
+	// clause has. Do NOT add a "skip the frame when patternVars is empty"
+	// shortcut. It is worth naming the shape that will tempt someone: a
+	// whole-clause pattern of () is the first clause form with zero pattern
+	// variables, and CompileSyntaxPattern refuses it today
+	// (internal/match/syntax_adapter.go gates on *syntax.SyntaxPair), so the
+	// temptation arrives with the fix for that.
 	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))
 
 	// Create expander for the body environment (to expand macros like let)
