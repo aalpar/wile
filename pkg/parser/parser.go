@@ -852,14 +852,25 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			if err != nil {
 				return nil, p.cur, err
 			}
-			// Read and discard the commented datum. errNoDatum (a #; before a
-			// close delimiter) falls through, matching the prior nil-return
-			// behavior; only a real error aborts.
+			// Read and discard the commented datum.
 			_, _, cerr := p.readSyntax()
-			if cerr != nil && !errors.Is(cerr, errNoDatum) {
+			// errNoDatum (a #; before a close delimiter) is tolerated: R7RS
+			// §7.1.1 requires a datum after #;, and refusing one here would make
+			// "(1 #;)" a read error, which this reader deliberately does not do.
+			//
+			// Tolerating it must NOT advance, though. readSyntax consumed
+			// nothing and p.cur is the close delimiter itself, so advancing
+			// would hand the enclosing reader the token after it and the closer
+			// would never reach checkDelimiterMatch — which is how "[1 #;) 2]"
+			// read as (1 2) where the control "[1 2)" correctly errors. Leaving
+			// p.cur on the closer keeps the leniency and restores the check.
+			if errors.Is(cerr, errNoDatum) {
+				continue
+			}
+			if cerr != nil {
 				return nil, p.cur, cerr
 			}
-			// Advance past the commented datum
+			// Advance past the commented datum.
 			err = p.advance()
 			if err != nil {
 				return nil, p.cur, err
