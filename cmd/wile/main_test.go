@@ -873,6 +873,23 @@ func TestRunEval(t *testing.T) {
 			args:   []string{"-q", "-e", "(< 1 2)"},
 			stdout: "#t\n",
 		},
+		{
+			// go-flags unquotes any option value starting with '"' unless the
+			// field carries unquote:"false". Without the tag the string literal
+			// arrived as the bare symbol hi.
+			// Observed at 003b3353: stderr `no such binding "hi"`, exit 1.
+			name:   "leading quote preserved",
+			args:   []string{"-q", "-e", `"hi"`},
+			stdout: "\"hi\"\n",
+		},
+		{
+			// Same mechanism, second failure mode: strconv.Unquote turned
+			// `"\n"` into a bare newline, so nothing was evaluated and the
+			// process exited 0 having printed nothing.
+			name:   "leading quote preserved for escape-only literal",
+			args:   []string{"-q", "-e", `"\n"`},
+			stdout: "\"\\n\"\n",
+		},
 	}
 
 	for _, tc := range tcs {
@@ -883,6 +900,52 @@ func TestRunEval(t *testing.T) {
 			c.Assert(result.stdout, qt.Equals, tc.stdout)
 		})
 	}
+}
+
+// TestValueFlagsPreserveLeadingQuote covers the two blast-radius classes of the
+// go-flags unquote defect that TestRunEval's rows do not reach.
+//
+// go-flags v1.6.1 runs unquoteIfPossible (convert.go:360-365) on every option
+// value from parseOption (parser.go:547-548) unless the field carries
+// unquote:"false". Every value-bearing field in Options now carries it. The three
+// classes are: mangling (-e, covered by TestRunEval), path rewriting (-f and the
+// profile/cover paths, covered here), and leniency (--strict, covered here).
+//
+// One row per class rather than one per flag, so a flag added later that forgets
+// the tag reopens a class that is already pinned.
+//
+// Gate NOT covered here: that a newly added value flag carries the tag at all.
+// Nothing enforces that mechanically; cmd/wile/CLAUDE.local.md records the rule.
+func TestValueFlagsPreserveLeadingQuote(t *testing.T) {
+	t.Run("path class: -f loads a file whose name starts with a quote", func(t *testing.T) {
+		c := qt.New(t)
+		dir := t.TempDir()
+		// The value handed to -f must itself begin with '"' for unquoteIfPossible
+		// to fire, so the file's own name carries the quotes and the run is
+		// relative to its directory.
+		name := `"quoted.scm"`
+		err := os.WriteFile(filepath.Join(dir, name), []byte(`(display "loaded")(newline)`), 0644)
+		c.Assert(err, qt.IsNil)
+		t.Chdir(dir)
+
+		result := runCLI(t, "-q", "-f", name)
+		// Observed at 003b3353: the value was unquoted to quoted.scm, which does
+		// not exist, so this failed with a file-not-found error and exit 1.
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, "loaded\n")
+	})
+
+	t.Run("leniency class: --strict rejects a quoted choice", func(t *testing.T) {
+		c := qt.New(t)
+		// go-flags validates `choice` after unquoting, so a quoted choice used to
+		// slip through and silently behave as the bare one. Removing that leniency
+		// is deliberate: '"core"' is not a valid choice and must now be rejected.
+		// Observed at 003b3353: accepted, and the run proceeded under --strict core.
+		result := runCLI(t, "-q", "--strict", `"core"`, "-e", "(display 1)")
+		c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+		c.Assert(strings.Contains(result.stderr, "core"), qt.IsTrue,
+			qt.Commentf("stderr should name the rejected choice: %s", result.stderr))
+	})
 }
 
 func TestRunEvalWithFile(t *testing.T) {
