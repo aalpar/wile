@@ -1227,8 +1227,10 @@ func TestThreadState(t *testing.T) {
 //     on a started thread cancels its ctx but does NOT close its done channel
 //     (ownsDone is true only for a never-started thread), so before the fix the
 //     joiner stayed parked in a bare <-victim.done, which has no ctx arm, and its
-//     termination never took effect. Measured before the fix: no arm of this
-//     program ever returns and the watchdog fires.
+//     termination never took effect. Measured before the fix: 'join-timed-out,
+//     because the joiner's done never closed and the outer join's own 5 s bound
+//     expired. That bound is why this arm reports instead of hanging; drop it and
+//     the failure becomes a hang, which is what the watchdog is for.
 //
 //   - "joinee" is a CONTROL, and it CANNOT FAIL. It terminates the thread being
 //     joined, which already worked: Terminate cancels the joinee's ctx, its
@@ -1242,10 +1244,10 @@ func TestThreadState(t *testing.T) {
 // Both arms run under a watchdog because the gate's failure mode is a hang, and a
 // hanging test does not report.
 func TestTerminateUnparksUntimedThreadJoin(t *testing.T) {
-	// The rendezvous is a mutex, not a plain cell: the flag is read on the main
-	// thread and written on the joiner's, and only the mutex gives that a
-	// happens-before edge. Main holds m until the joiner hands it back
-	// immediately before parking.
+	// The rendezvous is the mutex itself, not a shared cell: main holds m until
+	// the joiner hands it back immediately before parking, and the mutex is what
+	// supplies the happens-before edge between the two threads. A plain pair cell
+	// polled with thread-yield! would be a data race.
 	const joiningThread = `
 (define m (make-mutex))
 (mutex-lock! m)
