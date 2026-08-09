@@ -4,7 +4,7 @@
 ;; string-prefix-ci?, string-suffix-ci?, string-prefix-length,
 ;; string-suffix-length, string-prefix-length-ci, string-suffix-length-ci.
 
-(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (except (scheme char) string-upcase string-downcase) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 2")
 
@@ -70,7 +70,17 @@
 
 (test-begin "substring/shared")
 (test "basic" "ell" (substring/shared "hello" 1 4))
-(test "is-substring" #t (eq? substring substring/shared))
+;; END is optional in SRFI-13. The former assertion here was
+;; (eq? substring substring/shared), which pinned the defect rather than the
+;; contract: it held precisely because substring/shared was an alias for the
+;; 3-argument substring, and so passed while (substring/shared "abcdef" 2)
+;; raised a wrong-number-of-arguments error.
+(test "optional-end" "cdef" (substring/shared "abcdef" 2))
+(test "optional-end-whole" "abcdef" (substring/shared "abcdef" 0))
+(test "optional-end-empty" "" (substring/shared "abcdef" 6))
+;; SRFI-13 permits sharing but does not require it; Wile copies, so the result
+;; must not be the input even when the range is the whole string.
+(test "copies" #f (eq? "abcdef" (substring/shared "abcdef" 0)))
 (test-end "substring/shared")
 
 (test-begin "string-tabulate")

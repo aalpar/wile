@@ -1,7 +1,16 @@
 (define-library (srfi 13)
   (description "SRFI 13: String Library — string predicates, search, trim, pad, replace, tokenize. Criterion arguments accept char, char-set (SRFI-14), or predicate procedure. v1 implementation is pure Scheme; FFI promotion deferred to profile-driven future work.")
   (import (scheme base)
-          (scheme char)
+          ;; SRFI-13's string-upcase / string-downcase take an optional
+          ;; [start [end]] range that R7RS's one-argument forms do not, so this
+          ;; library defines its own and delegates the no-range case to R7RS's
+          ;; full Unicode mapping. The rename is what makes that possible: a
+          ;; body-level (define string-upcase ...) shadows the import across the
+          ;; whole library body, so the delegate has to arrive under another name.
+          (except (scheme char) string-upcase string-downcase)
+          (rename (only (scheme char) string-upcase string-downcase)
+                  (string-upcase %r7rs-string-upcase)
+                  (string-downcase %r7rs-string-downcase))
           (srfi 14))
   (export
    ;; Phase 1: wile-goast top-five (SRFI-13 subset)
@@ -36,10 +45,15 @@
    string-replace string-tokenize
    string-filter string-delete
    string-concatenate reverse-list->string
-   string-for-each-index string-map
+   string-for-each-index string-map string-map!
    string-fold string-fold-right
    ;; Phase 7: mutating case (simple per-char mapping; see case.scm header)
    string-upcase! string-downcase!
+   ;; Non-mutating case with an optional [start [end]] range. Like string-map
+   ;; these shadow the R7RS bindings of the same name, so importing (scheme char)
+   ;; alongside (srfi 13) needs (except (scheme char) string-upcase string-downcase).
+   ;; The no-range call delegates to R7RS, so it is unchanged.
+   string-upcase string-downcase
    ;; Phase 8: titlecase (non-mutating; see case.scm header)
    string-titlecase)
   (include "13/util.scm"

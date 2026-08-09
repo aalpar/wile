@@ -2,7 +2,7 @@
 ;; Covers: string-trim, string-trim-right, string-trim-both, string-trim-left
 ;; (alias for string-trim), string-pad, string-pad-right.
 
-(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (except (scheme char) string-upcase string-downcase) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 4")
 

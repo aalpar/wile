@@ -558,22 +558,27 @@ for the underlying design.
 
 ### Standard-Library Export Supersets
 
-Three bundled standard libraries **re-export bindings that R7RS Appendix A homes
-in a different library**, as an embedding convenience, so a program can reach a
-common binding without importing its formal home. The extra exports are strictly
-additive: a program that imports one of these libraries and uses only the
-bindings R7RS assigns it behaves identically. The trade-off runs the other way —
+Some bundled standard libraries **export bindings their specification does not
+assign them** — usually one R7RS Appendix A homes in a different library,
+re-exported as an embedding convenience so a program can reach a common binding
+without importing its formal home. The extra exports are strictly additive: a
+program that imports one of these libraries and uses only the bindings the
+specification assigns it behaves identically. The trade-off runs the other way —
 code that imports one of the bindings below *from the convenience library* does
-not load on a strict R7RS implementation, where the binding is exported only from
-its home.
+not load on a strict implementation, where the binding is exported only from its
+home, or not at all.
 
-| Library | Also exports | R7RS home |
-|---------|--------------|-----------|
+| Library | Also exports | Home the specification gives it |
+|---------|--------------|---------------------------------|
 | `(scheme base)` | `case-lambda` | `(scheme case-lambda)` |
 | `(scheme base)` | `read` | `(scheme read)` |
 | `(scheme base)` | `write`, `display` | `(scheme write)` |
+| `(scheme base)` | `delay`, `delay-force`, `force` | `(scheme lazy)` |
 | `(scheme eval)` | `scheme-report-environment`, `null-environment` | `(scheme r5rs)` |
 | `(scheme cxr)` | `caar`, `cadr`, `cdar`, `cddr` | `(scheme base)` |
+| `(scheme r5rs)` | `call/cc` | `(scheme base)` |
+| `(scheme r5rs)` | `unquote`, `unquote-splicing` | `(scheme base)` |
+| `(srfi 13)` | `string-trim-left` | none — a Wile alias for SRFI-13 `string-trim` |
 
 Each binding remains exported from its R7RS home as well, so portable code that
 imports the home library is unaffected. `(scheme base)` also dual-homes
@@ -588,11 +593,37 @@ re-exports those ambient bindings rather than redefining them — so it surfaces
 the two-deep accessors R7RS assigns to `(scheme base)` alongside the three- and
 four-deep ones it owns.
 
-Pinned by `TestLibraryExportSupersets` (`pkg/wile`), which imports each binding
-through `(only (scheme …) id)` — an import set that resolves strictly through the
-named library's export list — so narrowing any library back to the strict R7RS
-surface fails the test and forces a deliberate update here rather than a silent
-public-API break.
+The `(scheme lazy)` row is the same shape but was, until 2026-08-09, *incomplete*
+in a way that made `(scheme base)` self-inconsistent: it exported the two promise
+producers, `delay` and `delay-force`, and not the consumer, so
+`(import (scheme base))` followed by `(force (delay (+ 1 2)))` failed with *no
+such binding `force`*. A superset that hands out a value with no operation to
+consume it is worse than either a strict surface or a complete one, so `force`
+was added rather than the two producers removed — consistent with the rule that
+exports are documented, never deleted.
+
+The two `(scheme r5rs)` rows are graded differently against the authorities, and
+kept for the same reason regardless. `unquote` / `unquote-splicing` are absent
+from Appendix A's enumeration but are named by R5RS §4.2.6 itself, and Wile's
+`(scheme base)` exports them exactly as Appendix A's `(scheme base)` does.
+`call/cc` is excluded by **both** the enumeration and the library's defining
+sentence — Appendix A describes `(scheme r5rs)` as the identifiers defined by
+R5RS, and R7RS's own "Language changes" lists `call/cc` as an R7RS **addition**,
+a synonym for `call-with-current-continuation`. Dropping it would nonetheless
+break any out-of-repo program that reaches `call/cc` through `(scheme r5rs)`,
+which is the break this section exists to prevent, so all three are documented
+rather than removed.
+
+Pinned by `TestLibraryExportDiff` (`pkg/wile/library_export_diff_test.go`), which
+diffs every bundled `.sld`'s export list against its authority in both
+directions. The table above is that test's *source* for the sanctioned-extra
+column, so an extra cannot be sanctioned in code without a row here, and a row
+here that no library exports fails
+`TestLibraryExportDiff_DocTableHasNoStaleRows`. Each sanctioned extra is
+additionally imported through `(only (scheme …) id)` — an import set that
+resolves strictly through the named library's export list — so narrowing any
+library back to the strict R7RS surface fails the test and forces a deliberate
+update here rather than a silent public-API break.
 
 ### `(description <string>)` Library Declaration
 
