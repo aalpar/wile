@@ -68,8 +68,8 @@ var (
 // claimed, the same aliasing.
 //
 // parent is non-nil for every closure a program can build: OpMakeClosure passes
-// mc.env, and all three NewClosureWithTemplate callers (extensions/eval
-// PrimCompile, machine/util.go, compilation/compile_syntax_rules.go) pass a
+// mc.env, and both production NewClosureWithTemplate callers (extensions/eval
+// PrimCompile, compilation/compile_syntax_rules.go) pass a
 // frame from NewEnvironmentFrameWithParent, which panics on a nil parent. A nil
 // ApplyParent therefore means the frame was RELEASED while this closure still
 // held it, since ResetForPool zeroes the parent. Apply faults on it rather than
@@ -85,7 +85,7 @@ func (p *MachineClosure) closureMarker() {
 
 // NewClosureWithTemplate builds a closure over an already-materialized
 // environment, taking its parent as the closure's parent. env must therefore
-// have one, which NewEnvironmentFrameWithParent guarantees for all three
+// have one, which NewEnvironmentFrameWithParent guarantees for both production
 // callers.
 func NewClosureWithTemplate(tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineClosure {
 	q := &MachineClosure{

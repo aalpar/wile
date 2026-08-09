@@ -26,19 +26,3 @@ func NewForeignClosure(env *environment.EnvironmentFrame, pcnt int, variadic boo
 		isVariadic: variadic,
 	}
 }
-
-// NewVMForeignClosure creates a *MachineClosure backed by a ForeignFunction
-// via a bytecode template (OpForeignFunctionCall + OpRestoreContinuation).
-// Use this instead of NewForeignClosure for foreign functions that do nested
-// VM execution (sub-context + Run), where the iterative VM loop prevents
-// Go stack growth that applyForeign would cause.
-func NewVMForeignClosure(env *environment.EnvironmentFrame, pcnt int, variadic bool, fn ForeignFunction) *MachineClosure {
-	tpl := NewNativeTemplate(pcnt, 0, variadic)
-	tpl.AppendOperations(
-		NewOperationForeignFunctionCall(fn),
-		NewOperationRestoreContinuation(),
-	)
-	lenv := environment.NewLocalEnvironment(pcnt)
-	env = environment.NewEnvironmentFrameWithParent(lenv, env)
-	return NewClosureWithTemplate(tpl, env)
-}

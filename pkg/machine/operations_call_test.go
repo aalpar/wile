@@ -15,11 +15,8 @@
 package machine
 
 import (
-	"context"
-	"errors"
 	"testing"
 
-	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -75,65 +72,6 @@ func TestOperationsCall(t *testing.T) {
 				qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
 			},
 		},
-		// --- ForeignFunctionCall ---
-		{
-			name: "ForeignFunctionCall/constructor",
-			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
-				return nil
-			}),
-			checkFn: func(t *testing.T, op Operation) {
-				qt.Assert(t, op, qt.IsNotNil)
-			},
-		},
-		{
-			name: "ForeignFunctionCall/SchemeString",
-			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
-				return nil
-			}),
-			checkFn: func(t *testing.T, op Operation) {
-				qt.Assert(t, op.SchemeString(), qt.Contains, "foreign-function-call")
-			},
-		},
-		{
-			name: "ForeignFunctionCall/IsVoid",
-			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
-				return nil
-			}),
-			checkFn: func(t *testing.T, op Operation) {
-				qt.Assert(t, op.IsVoid(), qt.IsFalse)
-			},
-		},
-		{
-			name: "ForeignFunctionCall/EqualTo_self",
-			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
-				return nil
-			}),
-			checkFn: func(t *testing.T, op Operation) {
-				// ForeignFunctionCall uses sameType, so two distinct instances are equal
-				qt.Assert(t, op.EqualTo(NewOperationForeignFunctionCall(func(_ CallContext) error {
-					return nil
-				})), qt.IsTrue)
-			},
-		},
-		{
-			name: "ForeignFunctionCall/EqualTo_different_type",
-			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
-				return nil
-			}),
-			checkFn: func(t *testing.T, op Operation) {
-				qt.Assert(t, op.EqualTo(values.NewInteger(1)), qt.IsFalse)
-			},
-		},
-		{
-			name: "ForeignFunctionCall/EqualTo_nil",
-			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
-				return nil
-			}),
-			checkFn: func(t *testing.T, op Operation) {
-				var nilOp *OperationForeignFunctionCall
-				qt.Assert(t, op.EqualTo(nilOp), qt.IsFalse)
-			},
-		},
 		// --- UnpackListToStack ---
 		{
 			name: "UnpackListToStack/constructor",
@@ -184,34 +122,4 @@ func TestOperationsCall(t *testing.T) {
 			tc.checkFn(t, tc.op)
 		})
 	}
-}
-
-func TestForeignFunctionCall_PanicTimerInterruptPassThrough(t *testing.T) {
-	// When a foreign function panics with *ErrTimerInterrupt, the panic
-	// recovery in OperationForeignFunctionCall.Apply must pass the error
-	// through unchanged — not wrap it in goErrorToSchemeException, which
-	// would turn it into a catchable Scheme exception and break the
-	// timer interrupt's role as a VM-level signal.
-	c := qt.New(t)
-
-	env := environment.NewNamespace().Runtime()
-	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
-	panicErr := &ErrTimerInterrupt{Handler: handler}
-
-	op := NewOperationForeignFunctionCall(func(_ CallContext) error {
-		panic(panicErr)
-	})
-
-	tpl := NewNativeTemplate(0, 0, false)
-	tpl.AppendSideTableOp(op)
-
-	mc := AcquireTopLevelContext(context.Background(), tpl, env)
-	defer ReleaseTopLevelContext(mc)
-
-	_, err := op.Apply(mc)
-
-	var timerErr *ErrTimerInterrupt
-	c.Assert(errors.As(err, &timerErr), qt.IsTrue,
-		qt.Commentf("expected *ErrTimerInterrupt pass-through, got %T: %v", err, err))
-	c.Assert(timerErr.Handler, qt.Equals, handler)
 }
