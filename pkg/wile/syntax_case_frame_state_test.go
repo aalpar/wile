@@ -241,3 +241,40 @@ func TestSyntaxEllipsisOutsideSyntaxCaseRaises(t *testing.T) {
 		t.Fatalf("expected an error from (syntax (q ...)) outside any syntax-case, got %s", got.SchemeString())
 	}
 }
+
+// End-to-end acceptance: a recursive syntax-list walk written the way real code
+// writes one — `let loop`, an inner syntax-case per iteration, and the loop
+// state read AFTER the form. That last part is what makes it discriminating:
+// the plainer walk (nothing read after the form, base case tested outside
+// syntax-case) already ran at 003b3353 and proves nothing.
+//
+// Observed at 003b3353: "+: expected number, got #'(#'2 #'3)" — `n` resolved
+// through the leaked pattern-variable frame and read the `rest` capture.
+//
+// This is NOT the canonical shape yet. That one uses a `()` whole-clause
+// pattern as its base case, which CompileSyntaxPattern still refuses (N2, filed
+// in TODO.md); with N2 fixed, this test's shape is what it reduces to.
+func TestRecursiveSyntaxListWalk(t *testing.T) {
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := `(begin
+              (define (walk stx)
+                (let loop ((s stx) (acc '()) (n 0))
+                  (if (null? (syntax->datum s))
+                      (list n (reverse acc))
+                      (let ((next (syntax-case s ()
+                                    ((x . rest) (cons (syntax->datum #'x) #'rest)))))
+                        (loop (cdr next) (cons (car next) acc) (+ n 1))))))
+              (walk #'(1 2 3)))`
+	got, err := engine.Eval(ctx, engine.MustParse(ctx, src))
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	want := "(3 (1 2 3))"
+	if got.SchemeString() != want {
+		t.Errorf("got %s, want %s", got.SchemeString(), want)
+	}
+}
