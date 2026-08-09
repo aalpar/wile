@@ -46,7 +46,6 @@
 // # Concurrency (SRFI-18+)
 //
 //   - [Thread], [Mutex], [ConditionVariable]: SRFI-18 threading
-//   - [RWMutex], [Once]: Go concurrency primitives
 //   - [AtomicBox], [AtomicInt64]: atomic operations
 //
 // # Singletons

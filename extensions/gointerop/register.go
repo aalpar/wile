@@ -22,72 +22,14 @@ import (
 
 // Extension is the Go interop extension.
 var Extension = registry.NewDescribedExtension("gointerop",
-	"Go concurrency primitives: read-write mutexes, once, atomic boxes.",
+	"Go concurrency primitives: atomic boxes.",
 	AddToRegistry)
 
 // Builder aggregates all Go interop registration functions.
-var Builder = registry.NewRegistryBuilder(addRWMutex, addOnce, addAtomic)
+var Builder = registry.NewRegistryBuilder(addAtomic)
 
 // AddToRegistry registers all Go interop primitives.
 var AddToRegistry = Builder.AddToRegistry
-
-func addRWMutex(r *registry.PrimitiveRegistry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "make-rw-mutex", ParamCount: 1, IsVariadic: true, Impl: PrimMakeRWMutex,
-			Doc: "Creates a new read-write mutex. Optional NAME for debugging.", ParamNames: []string{"name"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-		{Name: "rw-mutex?", ParamCount: 1, Impl: PrimRWMutexQ,
-			Doc: "Returns #t if OBJ is a read-write mutex.", ParamNames: []string{"obj"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		{Name: "rw-mutex-read-lock!", ParamCount: 1, Impl: PrimRWMutexReadLock,
-			Doc: "Acquires a shared read lock. Multiple readers may hold the lock concurrently.", ParamNames: []string{"rwm"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "rw-mutex-read-unlock!", ParamCount: 1, Impl: PrimRWMutexReadUnlock,
-			Doc: "Releases a shared read lock.", ParamNames: []string{"rwm"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "rw-mutex-write-lock!", ParamCount: 1, Impl: PrimRWMutexWriteLock,
-			Doc: "Acquires an exclusive write lock. Blocks until all readers and writers release.", ParamNames: []string{"rwm"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "rw-mutex-write-unlock!", ParamCount: 1, Impl: PrimRWMutexWriteUnlock,
-			Doc: "Releases an exclusive write lock.", ParamNames: []string{"rwm"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeVoid},
-		{Name: "rw-mutex-try-read-lock!", ParamCount: 1, Impl: PrimRWMutexTryReadLock,
-			Doc: "Attempts a non-blocking read lock. Returns #t if acquired, #f otherwise.", ParamNames: []string{"rwm"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		{Name: "rw-mutex-try-write-lock!", ParamCount: 1, Impl: PrimRWMutexTryWriteLock,
-			Doc: "Attempts a non-blocking write lock. Returns #t if acquired, #f otherwise.", ParamNames: []string{"rwm"}, Category: "rwmutex",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-	}, registry.PhaseSetRuntime)
-	return nil
-}
-
-func addOnce(r *registry.PrimitiveRegistry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "make-once", Impl: PrimMakeOnce,
-			Doc: "Creates a new once object for one-time initialization.", Category: "once",
-			ReturnType: values.TypeAny},
-		{Name: "once?", ParamCount: 1, Impl: PrimOnceQ,
-			Doc: "Returns #t if OBJ is a once object.", ParamNames: []string{"obj"}, Category: "once",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-		{Name: "once-do!", InvokesProcedure: true, ParamCount: 2, Impl: PrimOnceDo,
-			Doc: "Executes THUNK exactly once across all calls. Returns #t if this call executed THUNK.", ParamNames: []string{"once", "thunk"}, Category: "once",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeProcedure},
-			ReturnType: values.TypeBoolean},
-		{Name: "once-done?", ParamCount: 1, Impl: PrimOnceDoneQ,
-			Doc: "Returns #t if ONCE's thunk has already been executed.", ParamNames: []string{"once"}, Category: "once",
-			ParamTypes: []values.TypeConstraint{values.TypeAny},
-			ReturnType: values.TypeBoolean},
-	}, registry.PhaseSetRuntime)
-	return nil
-}
 
 func addAtomic(r *registry.PrimitiveRegistry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{

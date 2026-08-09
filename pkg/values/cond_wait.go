@@ -26,7 +26,7 @@ import (
 // predicate loop, exactly like sync.Cond.Wait.
 //
 // This is the single ctx-to-cond bridge for the synchronization value types
-// (RWMutex and the SRFI-18 Mutex). It is what lets a thread blocked ACQUIRING one be
+// (the SRFI-18 Mutex). It is what lets a thread blocked ACQUIRING one be
 // unparked by thread-terminate!'s ctx cancellation instead of stalling on a Go
 // sync primitive with no cancellable form. A thread that HOLDS a lock is
 // unaffected: this governs the wait side only, so a terminated holder's lock

@@ -266,8 +266,8 @@ func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, name st
 // OptionalName extracts an optional string-or-symbol name from a variadic
 // rest-parameter list. It returns "" when the list is empty or its first
 // element is neither a string nor a symbol — the convention shared by the
-// optionally-named constructors make-thread, make-mutex,
-// make-condition-variable, and make-rw-mutex. Unlike OptionalArg it never
+// optionally-named constructors make-thread, make-mutex and
+// make-condition-variable. Unlike OptionalArg it never
 // errors: a malformed name argument degrades to the unnamed case.
 func OptionalName(rest values.Value) string {
 	if values.IsEmptyList(rest) {

@@ -110,15 +110,9 @@ var (
 	ErrNotAConditionVariable  = NewTypeSentinel("condition variable")
 	ErrNotAnUncaughtException = NewTypeSentinel("uncaught-exception")
 	ErrNotATime               = NewTypeSentinel("time")
-	ErrNotARWMutex            = NewTypeSentinel("rw-mutex")
-	// ErrNotAOnce passes an explicit article because "once" is pronounced
-	// /wuns/: the letter rule would give "an once", but the consonant /w/
-	// sound calls for "a". The "a "-prefix pass-through in NewTypeSentinel
-	// preserves it.
-	ErrNotAOnce      = NewTypeSentinel("a once")
-	ErrNotAnAtomic   = NewTypeSentinel("atomic")
-	ErrPortClosed    = NewStaticError("port is closed")
-	ErrNotAHashtable = NewTypeSentinel("hashtable")
+	ErrNotAnAtomic            = NewTypeSentinel("atomic")
+	ErrPortClosed             = NewStaticError("port is closed")
+	ErrNotAHashtable          = NewTypeSentinel("hashtable")
 	// ErrImmutableHashtable is raised by hashtable-set!, hashtable-delete! and
 	// hashtable-clear! on a table that hashtable-copy produced without a true
 	// mutable argument. R6RS raises &assertion here; Wile has no R6RS condition
