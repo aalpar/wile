@@ -106,7 +106,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	if !hasSplice {
 		// Simple case: (list->vector (list elem1 elem2 ...))
 		var elems []syntax.SyntaxValue
-		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+		elems = append(elems, p.quasiHead("list", srcCtx))
 		for _, elem := range v.Values {
 			expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
 			if err != nil {
@@ -116,7 +116,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 		}
 		listExpr := p.buildQuasiSyntaxList(srcCtx, elems...)
 		return p.buildQuasiSyntaxList(srcCtx,
-			syntax.NewSyntaxSymbol("list->vector", srcCtx),
+			p.quasiHead("list->vector", srcCtx),
 			listExpr,
 		), nil
 	}
@@ -163,7 +163,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 
 	appendExpr := p.buildQuasiSyntaxList(srcCtx, p.segmentsToAppendArgs(srcCtx, segments)...)
 	return p.buildQuasiSyntaxList(srcCtx,
-		syntax.NewSyntaxSymbol("list->vector", srcCtx),
+		p.quasiHead("list->vector", srcCtx),
 		appendExpr,
 	), nil
 }

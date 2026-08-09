@@ -774,6 +774,32 @@ func (p *GlobalEnvironmentFrame) SealedBindingAt(key *values.Symbol, q syntax.Sc
 	return p.bindings[ref.slot]
 }
 
+// SealedGlobalIndexAt is SealedBindingAt's PIN: the same tier-floored probe, but
+// returning the index of the slot it landed on rather than the binding there.
+// nil means NONE.
+//
+// The two answer different questions. A caller that only wants to read the
+// startup set's value now takes the binding; a caller that wants to RECORD that
+// resolution for a later compile — a synthesized reference pinned to its
+// definition site, which is what the quasiquote expansion's list/cons/append
+// heads need — takes the index, because a pin re-resolves inside its own query
+// if its slot is later deleted while a bare *Binding cannot.
+//
+// The query is recorded rather than widened to the wildcard: the sealed startup
+// registrations are unscoped, so q is the empty set here, and re-resolution must
+// stay inside that hygiene key rather than matching any scope set of the name.
+// Thread-safe: uses RLock for read-only access.
+func (p *GlobalEnvironmentFrame) SealedGlobalIndexAt(key *values.Symbol, q syntax.ScopeSet, phase Phase) *GlobalIndex {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	ref, _, ok := p.probeRankedLocked(*key, q, phase, tierExactSealed)
+	if !ok {
+		return nil
+	}
+	return newScopeKeyedGlobalIndex(key, p, ref, q)
+}
+
 // IsSealedBindingAt reports whether a read of key under q at phase resolves to a
 // SEALED-tier slot — "the binding this name denotes here is part of the startup
 // set", which is what refusing to undefine a primitive asks. False covers both
