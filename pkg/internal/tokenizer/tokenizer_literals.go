@@ -117,8 +117,12 @@ func (p *Tokenizer) readEscapeSequence() {
 }
 
 // readDelimited reads content enclosed by a terminator rune (e.g. '"' or '|'),
-// processing backslash escape sequences along the way. On EOF before the closing
-// terminator, it converts the error to a TokenizerError with unterminatedMsg.
+// processing backslash escape sequences along the way. End of input before the
+// closing terminator becomes a TokenizerError carrying unterminatedMsg over
+// werr.ErrIncompleteInput: the literal is a valid prefix, so a REPL or any
+// caller of Engine.ReadExpressions must be able to ask for another line rather
+// than report a syntax error. Both EOF arms below say so, whether or not the
+// input broke off on a backslash.
 // Called after the opening delimiter has already been consumed.
 // Returns true if the terminator was found and consumed.
 func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool {
@@ -142,7 +146,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 		p.next()
 		if p.err != nil {
 			if errors.Is(p.err, io.EOF) {
-				p.fail(unterminatedMsg)
+				p.failWrap(werr.ErrIncompleteInput, unterminatedMsg)
 			}
 			return false
 		}
