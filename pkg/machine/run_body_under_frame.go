@@ -148,7 +148,7 @@ func (p *MachineContext) RunBodyUnderFrame(frame *MachineContinuation, body valu
 // with a #f handler); a non-nil handler is invoked by the driver with the abort
 // values (call-with-continuation-prompt). call-with-exit does NOT use this wrapper —
 // it needs a non-transparent finalizer frame (RunBodyUnderExitFrame).
-func (p *MachineContext) RunBodyUnderPrompt(body values.Value, tag *PromptTag, handler Closure, args ...values.Value) (*MachineContext, error) {
+func (p *MachineContext) RunBodyUnderPrompt(body values.Value, tag *PromptTag, handler values.Callable, args ...values.Value) (*MachineContext, error) {
 	frame := NewMachineContinuationWithPrompt(p.cont, returnTemplate, p.env, tag, handler)
 	return p.RunBodyUnderFrame(frame, body, args...)
 }
