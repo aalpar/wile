@@ -277,7 +277,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 					"Use 0 to disable the timeout."),
 			mcp.WithNumber("seconds",
 				mcp.Required(),
-				mcp.Description("Timeout in seconds (0 = no timeout)"),
+				mcp.Description(
+					"Timeout in seconds. 0 means no caller-supplied deadline, "+
+						"bounded by the server maximum of 10 minutes."),
 			),
 		),
 		srv.handleSetTimeout,
@@ -294,8 +296,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 }
 
 // initLocked lazily initializes the engine and meta-command handler.
-// The caller must hold the session (acquire returned true). Redirects current-output-port away from
-// os.Stdout to prevent Scheme output from corrupting the MCP transport.
+// The caller must hold the session (acquire returned true). Redirects
+// current-output-port away from os.Stdout to prevent Scheme output from
+// corrupting the MCP transport.
 func (p *mcpServer) initLocked(ctx context.Context) error {
 	if p.meta != nil {
 		return nil

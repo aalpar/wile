@@ -17,7 +17,7 @@ with `-e`, `-f`, and `-i`.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--mcp` | — | Start as MCP server on stdio |
-| `--mcp-timeout <seconds>` | 30 | Default eval timeout (0 = no timeout) |
+| `--mcp-timeout <seconds>` | 30 | Default eval timeout (0 = no caller-supplied deadline, bounded by the 10-minute server maximum) |
 
 ## Client configuration
 
@@ -72,6 +72,13 @@ If `wile` is not on `$PATH`, use the full path to the binary.
 
 ## Tools
 
+Every tool and resource handler runs under one session lock, so requests are
+serialized. A handler that cannot take the session within 30 seconds answers
+`server busy: ...` rather than blocking. That bound is deliberate and
+independent of any eval's timeout: mcp-go handles non-tool messages inline on
+its read loop, so a handler that blocked without bound would stop the server
+reading *any* further stdin message, not just delay one call.
+
 ### `eval`
 
 Evaluate one or more Scheme expressions in a persistent session. Definitions,
@@ -82,7 +89,7 @@ definitions within a single call work: the tool routes through
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `code` | string | yes | Scheme expression(s) to evaluate |
-| `timeout` | number | no | Per-call timeout in seconds (overrides session default; 0 = no timeout) |
+| `timeout` | number | no | Per-call timeout in seconds (overrides session default; 0 = no caller-supplied deadline, bounded by the 10-minute server maximum) |
 
 Returns JSON: `{"output":"...", "value":"..."}` where `output` is captured stdout
 (`display`, `write`, `newline`) and `value` is the result of the last expression.
@@ -157,7 +164,7 @@ Set the default eval timeout for the session.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `seconds` | number | yes | Timeout in seconds (0 = no timeout) |
+| `seconds` | number | yes | Timeout in seconds (0 = no caller-supplied deadline, bounded by the 10-minute server maximum) |
 
 ## Resources
 

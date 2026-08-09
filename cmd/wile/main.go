@@ -61,7 +61,7 @@ type Options struct {
 	Quiet        bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
 	Strict       string   `long:"strict" description:"Narrow the visible top level: 'core' binds only the core surface, 'no-bindings' binds nothing (everything, car included, must be imported)" choice:"core" choice:"no-bindings" unquote:"false"`
 	MCP          bool     `long:"mcp" description:"Start as MCP server on stdio"`
-	MCPTimeout   float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no timeout)" default:"30" unquote:"false"`
+	MCPTimeout   float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no caller-supplied deadline, bounded by the server maximum)" default:"30" unquote:"false"`
 	CPUProfile   string   `long:"cpuprofile" description:"Write CPU profile to file" unquote:"false"`
 	MemProfile   string   `long:"memprofile" description:"Write memory profile to file" unquote:"false"`
 	MutexProfile string   `long:"mutexprofile" description:"Write mutex contention profile to file" unquote:"false"`
