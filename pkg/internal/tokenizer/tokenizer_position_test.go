@@ -15,7 +15,9 @@
 package tokenizer
 
 import (
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -156,6 +158,49 @@ func TestTabAdvancesToNextTabStop(t *testing.T) {
 			last := tokens[len(tokens)-1]
 			c.Check(last.Value(), qt.Equals, "x")
 			c.Check(last.Start().Column(), qt.Equals, tc.wantColumn)
+		})
+	}
+}
+
+// TestPositionTrackingAcrossLineEndings pins line and column tracking against
+// the line-ending spelling. `\r` already ends a line comment and already counts
+// as whitespace, but readNextRune advanced the line only on `\n`, so a CR-only
+// source reported every token on line 1 with an ever-growing column while the
+// byte-identical LF source reported the true line. Byte indexes were never
+// affected, so CR and LF must agree on all three coordinates, and CRLF — one
+// line ending, not two — must agree on line and column while its indexes carry
+// the extra byte per line.
+func TestPositionTrackingAcrossLineEndings(t *testing.T) {
+	lines := []string{"(define (f n)", "  (* n 2))", "(newline)  (f 5)"}
+	// Line, column and LF-relative byte index of each token, in order. The
+	// third line's second open paren is the review's witness: 3:11 at byte 36.
+	wants := []struct {
+		line   int
+		column int
+		index  int
+	}{
+		{1, 0, 0}, {1, 1, 1}, {1, 8, 8}, {1, 9, 9}, {1, 11, 11}, {1, 12, 12},
+		{2, 2, 16}, {2, 3, 17}, {2, 5, 19}, {2, 7, 21}, {2, 8, 22}, {2, 9, 23},
+		{3, 0, 25}, {3, 1, 26}, {3, 8, 33}, {3, 11, 36}, {3, 12, 37}, {3, 14, 39},
+		{3, 15, 40},
+	}
+	for _, eol := range []string{"\n", "\r", "\r\n"} {
+		t.Run(fmt.Sprintf("eol=%q", eol), func(t *testing.T) {
+			c := qt.New(t)
+			tokens, err := Tokenize(strings.Join(lines, eol), false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			c.Assert(len(tokens), qt.Equals, len(wants))
+			for i, want := range wants {
+				start := tokens[i].Start()
+				// One extra byte per line ending already passed, for CRLF only.
+				index := want.index + (len(eol)-1)*(want.line-1)
+				c.Check(start.Line(), qt.Equals, want.line,
+					qt.Commentf("token %d %q line", i, tokens[i].String()))
+				c.Check(start.Column(), qt.Equals, want.column,
+					qt.Commentf("token %d %q column", i, tokens[i].String()))
+				c.Check(start.Index(), qt.Equals, index,
+					qt.Commentf("token %d %q index", i, tokens[i].String()))
+			}
 		})
 	}
 }

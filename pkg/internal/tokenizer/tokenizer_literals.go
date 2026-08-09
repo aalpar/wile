@@ -190,8 +190,10 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		// Peek ahead to see if hex digits follow - if not, #\x is just the character 'x'
 		p.next()
 		if p.err != nil {
-			// EOF after #\x means just the character 'x'
-			p.err = nil
+			// A failed peek still settles the character: nothing follows the
+			// 'x', so this is the graphic character. Leave p.err alone — it is
+			// the io.EOF that ends the source, or a real rune error worth
+			// reporting, and the sibling letter branch below keeps both.
 			p.state = TokenizerStateCharGraphic
 			return 'x'
 		}
