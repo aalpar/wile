@@ -39,10 +39,14 @@ var ErrProfileWidensEngine = werr.NewStaticError("profile widens the engine's ca
 //
 // The rule, in the order the three cases are decided:
 //
-//  1. No authorizer installed — allow. Widening via (environment '(wile ...))
-//     is the documented way to get a richer namespace from Scheme, and an
-//     embedder that installed no policy has not asked to be protected from it.
-//     Tightening here would break every un-sandboxed embedder for no gain.
+//  1. No authorizer installed — allow. This arm IS an escalation path, and is
+//     kept as one: a Small engine reaches make-thread and the system interface
+//     through (environment '(wile kitchen-sink)), measured 2026-08-07. The
+//     ground for keeping it is NOT that no such path exists — the 2026-06-04
+//     acceptance rested on exactly that sentence and it is refuted — but that
+//     an embedder who installed no policy has accepted whatever Scheme can
+//     reach. There is no policy here to consult about which of them meant it,
+//     and tightening would break every un-sandboxed embedder.
 //  2. Authorizer installed, profile contained in the engine's own surface —
 //     allow, without consulting the authorizer. A Console engine asking for
 //     '(wile console) or '(wile tiny) acquires nothing it did not already have,

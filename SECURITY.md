@@ -72,9 +72,16 @@ capabilities Scheme code can reach*, enforced in pure Go.
 
 ### Runtime posture
 
-- **Pure Go.** No CGo and no `unsafe` in production code, so Wile inherits
-  Go's memory safety. Scheme values are ordinary Go heap objects managed
-  by the Go garbage collector.
+- **Pure Go, memory-safe within a scope.** No CGo and no `unsafe` in
+  production code, and Scheme values are ordinary Go heap objects managed by
+  the Go garbage collector. Wile inherits Go's memory safety for an engine
+  that both withholds the threads capability **and** installs an authorizer.
+  Outside that scope it does not: see the concurrency bullet below for the
+  fault, and [Two-layer authorization](#two-layer-authorization) for why the
+  authorizer clause is needed to keep threads out of reach. This is a
+  permanent scoping of the claim, not a defect awaiting a fix — the
+  alternative was priced (per-element boxing, or serializing every shared
+  mutation through the owning sequencer) and declined.
 - **No ambient host access.** A freshly constructed engine exposes only the
   extensions you enable. Dangerous capabilities — filesystem, process
   execution, environment, Go interop — live in **opt-in extensions**. If an
@@ -88,14 +95,32 @@ capabilities Scheme code can reach*, enforced in pure Go.
   `set-car!`/`set-cdr!`, record and port writes, and `set!` on a captured
   variable are plain stores. Programs that share mutable state across
   SRFI-18 threads must synchronize it themselves, with SRFI-18 mutexes or
-  the `atomic` primitives. This matches R7RS and SRFI-18, neither of which
-  promises atomic mutation.
+  the `atomic` primitives. **The consequence is not bounded at a lost
+  update.** A Scheme value is a two-word Go interface, so a store racing a
+  read can be observed torn — the type word of one value beside the data
+  word of another. The Go runtime reports that as `runtime.throw`
+  (`unexpected fault address`, SIGBUS), which is not a recoverable panic:
+  `RunResumable`'s recover cannot contain it and **the host process dies**.
+  R7RS and SRFI-18 promise nothing about atomic mutation, but that is a
+  statement about Scheme semantics; this one is about the host.
 
 ### Two-layer authorization
 
 Sandboxing for embedded use has two orthogonal layers. The **effective
 capability set is the intersection of the two**: an operation is possible
 only if its extension is loaded *and* the authorizer allows it.
+
+**Carve-out: with no authorizer installed there is no intersection to take.**
+The profile-widening check has nothing to ask, so it allows: from an engine
+with no authorizer, `(environment '(wile kitchen-sink))` constructs a
+namespace registered with the *full* kitchen-sink extension set regardless of
+the profile the engine itself was built with. A `Small` engine reaches
+`make-thread` and the system interface that way. This is deliberate — an
+embedder who installed no policy has accepted whatever Scheme can reach — and
+it is why the memory-safety scope above names an installed authorizer as well
+as the threads capability. See
+[Profile namespaces widen the surface](docs/security/sandboxing.md#profile-namespaces-widen-the-surface)
+for the three cases and the rationale.
 
 **1. Profiles** (`WithProfile`) select a bundle of extensions plus, for some
 profiles, a built-in authorizer:
@@ -105,7 +130,7 @@ profiles, a built-in authorizer:
 | `Tiny`              | Core computation only — no I/O, filesystem, or threads             | none (open, but no risky prims) |
 | `Console`           | Port I/O, file access restricted to `/tmp`, virtual env map        | `ConsoleAuthorizer`            |
 | `ConsoleWithLoad`   | `Console` plus `eval`/`load` confined to `/tmp`                     | `ConsoleWithLoadAuthorizer`    |
-| `Small`             | R7RS-small complete — file I/O, system interface; no threads/interop | none                         |
+| `Small`             | R7RS-small complete — file I/O, system interface; threads/interop not registered, but reachable through the carve-out above | none |
 | `KitchenSink`       | Everything — threads, Go interop, process execution, namespaces    | none                           |
 
 `WithSandbox` is an orthogonal modifier that wraps the authorizer with an
