@@ -105,6 +105,10 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 		},
 		{
+			// R7RS §4.3.2 imposes no variable-occurrence condition on `...`: a
+			// variable-free subpattern repeats exactly as a variable-bearing one
+			// does, so this compiles to the same loop as the case below rather
+			// than to a literal compare against the ellipsis symbol.
 			variables: map[string]struct{}{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
@@ -114,12 +118,15 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 				ByteCodeVisitCdr{},
 				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
+				ByteCodeSkipIfEmpty{Offset: 9},
+				ByteCodePushContext{},
 				ByteCodeVisitCar{},
 				ByteCodeCompareCar{Value: testSyntaxSym("a")},
 				ByteCodeVisitCdr{},
 				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxSym("...")},
+				ByteCodePopContext{},
+				ByteCodeJump{Offset: -8},
 				ByteCodeDone{},
 			},
 		},
@@ -205,6 +212,9 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			matches:   true,
 		},
 		{
+			// `(a b) ...` now repeats, so a literal `...` in the INPUT is no
+			// longer what satisfies it — a trailing symbol where a repetition
+			// is expected fails.
 			variables: map[string]struct{}{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
@@ -212,6 +222,27 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			target: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			matches: false,
+		},
+		{
+			// ... and two repetitions of the variable-free subpattern match.
+			variables: map[string]struct{}{},
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			target: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20),
+				testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b")),
+				testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b"))),
+			matches: true,
+		},
+		{
+			// ... as does zero repetitions.
+			variables: map[string]struct{}{},
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			target:  testSyntaxList(testSyntaxInt(10), testSyntaxInt(20)),
 			matches: true,
 		},
 		{

@@ -337,9 +337,16 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 	}
 }
 
-// compileEllipsis handles the ellipsis pattern, which matches zero or more repetitions.
-// If the previous element contains pattern variables, generates a loop structure.
-// Otherwise, treats the ellipsis as a literal symbol.
+// compileEllipsis handles the ellipsis pattern, which matches zero or more
+// repetitions of the preceding pattern element.
+//
+// R7RS §4.3.2's "F matches P" clause list is purely structural: whether the
+// repeated subpattern happens to contain a pattern variable is not one of its
+// conditions, so `(_ 1 ...)` repeats the literal `1` exactly as `(_ x ...)`
+// repeats `x`. The two `...`-related exemptions the standard does grant are
+// implemented elsewhere and by other mechanisms: declaring `...` a literal
+// (the "\x00" ellipsis swap in compile_syntax_rules.go) and the `(... ...)`
+// escape, which arrives here with no preceding element.
 //
 // R7RS §4.3.2 allows ellipsis in the middle of a pattern, e.g., (a ... b c).
 // In this case, the loop must exit when exactly N elements remain (where N is
@@ -348,8 +355,11 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 // Returns true if CDR handling should be skipped (for ellipsis-in-middle patterns,
 // where the loop exits with the position already at the tail elements).
 func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
-	if !previousElementHasVariables(vis, entry) {
-		// No pattern variables - treat ellipsis as literal
+	if entry.lastElement == nil {
+		// Nothing precedes the ellipsis at this level, so there is no subpattern
+		// to repeat and entry.lastElementStart names no bytecode of ours (it is
+		// still the zero value, which indexes the enclosing level's codes).
+		// Match the ellipsis identifier literally.
 		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(vis.ellipsis, nil)})
 		return false
 	}
@@ -403,24 +413,6 @@ func countPatternTailElements(ellipsisPair *syntax.SyntaxPair) int {
 		cdr = pr.SyntaxCdr()
 	}
 	return count
-}
-
-// previousElementHasVariables checks if the element before ... contains pattern variables.
-func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
-	if entry.lastElement == nil {
-		return false
-	}
-
-	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
-	if ok {
-		return vis.analysis.ContainsVariables(prevPair)
-	}
-	prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
-	if ok {
-		_, isVar := vis.variables[prevSym.Key()]
-		return isVar
-	}
-	return false
 }
 
 // collectCapturedVariables gathers all pattern variables captured by an ellipsis pattern.
