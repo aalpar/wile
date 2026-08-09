@@ -129,6 +129,14 @@ type MachineContext struct {
 	pools *threadPools
 
 	timer *timerState // nil = no timer active; both handler and cancel set together
+
+	// immutableLiterals and authorizer are the namespace-derived engine state,
+	// snapshotted so a released environment frame cannot blank it. They are a
+	// FALLBACK, never the authority: the accessors still read p.env.Namespace()
+	// whenever it is live, so a sub-context given a different namespace's env
+	// keeps resolving against that namespace. See snapshotEngineState.
+	immutableLiterals *environment.ImmutableLiterals
+	authorizer        security.Authorizer
 }
 
 // timerState clusters the MachineContext fields that always travel
@@ -289,24 +297,50 @@ func (p *MachineContext) SetEnvPooled(v bool) {
 }
 
 // Authorizer returns the security authorizer from this context's namespace,
-// or nil if none is set.
+// falling back to the snapshot taken before the frame was released. See
+// snapshotEngineState for why the fallback exists and why nil here is
+// dangerous rather than merely absent.
 func (p *MachineContext) Authorizer() security.Authorizer {
 	ns := p.env.Namespace()
 	if ns == nil {
-		return nil
+		return p.authorizer
 	}
 	return ns.Authorizer()
 }
 
 // ImmutableLiterals returns the engine-scoped immutable-literal set from this
-// context's namespace, or nil if none is set. The five list/vector mutators
-// consult it to enforce R7RS §4.1.2 constant immutability.
+// context's namespace, falling back to the snapshot taken before the frame was
+// released. The five list/vector mutators consult it to enforce R7RS §4.1.2
+// constant immutability.
 func (p *MachineContext) ImmutableLiterals() *environment.ImmutableLiterals {
 	ns := p.env.Namespace()
 	if ns == nil {
-		return nil
+		return p.immutableLiterals
 	}
 	return ns.ImmutableLiterals()
+}
+
+// snapshotEngineState copies the namespace-derived engine state onto the
+// context so a released environment frame cannot blank it.
+//
+// Both lookups above resolve through p.env.Namespace(). OpReleaseEnvFrame hands
+// mc.env to the pool, and EnvironmentFrame.ResetForPool does *p =
+// EnvironmentFrame{}, which zeroes the namespace back-pointer while mc.env still
+// points at that frame — this is the one release site that leaves the pointer
+// dangling; the other two repoint mc.env at a live frame first. A promoted op
+// running immediately afterwards therefore saw a nil namespace, and both
+// consumers fail OPEN on nil: ImmutableLiterals.IsImmutable returns false on a
+// nil receiver, and security.CheckWithAuthorizer treats a nil authorizer as
+// allow. The immutable-literal half was live (a tail-position (set-cdr! p v)
+// mutated a quoted literal); the authorizer half is latent only because no
+// promoted op consults it yet.
+func (p *MachineContext) snapshotEngineState() {
+	ns := p.env.Namespace()
+	if ns == nil {
+		return
+	}
+	p.immutableLiterals = ns.ImmutableLiterals()
+	p.authorizer = ns.Authorizer()
 }
 
 func (p *MachineContext) Arg(index int) values.Value {
@@ -439,7 +473,13 @@ func (p *MachineContext) Run() error {
 			// callees) guarantees no continuation can still reach it. The next
 			// acquire (the tail call's own frame) reuses it. envPooled gates release
 			// to genuinely pool-owned frames and prevents a double release.
+			//
+			// mc.env keeps pointing at the frame, and ResetForPool zeroes its
+			// namespace, so snapshot the namespace-derived engine state first or
+			// the promoted op that follows runs with a nil immutable-literal set
+			// and a nil authorizer — both of which fail open.
 			if mc.envPooled {
+				mc.snapshotEngineState()
 				mc.releaseEnvFrame(mc.env)
 				mc.envPooled = false
 			}

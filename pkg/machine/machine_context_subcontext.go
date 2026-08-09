@@ -87,6 +87,13 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.maxStackSize = p.maxStackSize
 	mc.barrierValid = p.barrierValid // inherit barrier context
 	mc.windingStack = p.windingStack
+	// The namespace-derived engine-state snapshot travels with the child. Without
+	// it every eval, load, once-do! and parameter-converter sub-context starts on
+	// a pool-zeroed struct and reproduces the released-frame defect at a new site:
+	// a guard consulting a nil set, and a security check consulting a nil
+	// authorizer, both of which fail open. See MachineContext.snapshotEngineState.
+	mc.immutableLiterals = p.immutableLiterals
+	mc.authorizer = p.authorizer
 	return mc
 }
 
