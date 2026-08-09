@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -324,6 +325,74 @@ func TestMemberLookup_Errors(t *testing.T) {
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
 		})
 	}
+}
+
+// TestMemberLookup_CircularListTerminates pins the half of the walk that a
+// hand-rolled cdr loop cannot have: Brent cycle detection. Before MemberLookup
+// routed through ForEachList it spun forever on a circular list whose elements
+// do not contain the key — from the CLI that is SIGKILL, exit 137 — while assq
+// on the same shape returned in microseconds. Bounded by a goroutine because
+// the pre-fix failure mode is a hang, not a wrong value.
+func TestMemberLookup_CircularListTerminates(t *testing.T) {
+	c := qt.New(t)
+
+	// (1 2 3) with the last cdr pointing back at the head.
+	head := values.NewCons(values.NewInteger(1), values.EmptyList)
+	mid := values.NewCons(values.NewInteger(2), values.EmptyList)
+	tail := values.NewCons(values.NewInteger(3), values.EmptyList)
+	head.SetCdr(mid)
+	mid.SetCdr(tail)
+	tail.SetCdr(head)
+
+	mc := makeMC(values.NewInteger(99), head)
+
+	type result struct {
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		done <- result{err: MemberLookup(mc, "memq", valEq)}
+	}()
+
+	select {
+	case got := <-done:
+		c.Assert(got.err, qt.IsNotNil)
+		c.Assert(errors.Is(got.err, werr.ErrNotAList), qt.IsTrue,
+			qt.Commentf("got %v", got.err))
+		// The cycle sentinel stays reachable, as it does for assq.
+		c.Assert(errors.Is(got.err, werr.ErrCircularList), qt.IsTrue,
+			qt.Commentf("got %v", got.err))
+	case <-time.After(5 * time.Second):
+		t.Fatal("MemberLookup did not terminate on a circular list")
+	}
+}
+
+// TestMemberLookup_ObservesCancellation pins the other half: the amortized
+// context poll. A flat Go loop is invisible to an embedder deadline and to a
+// REPL interrupt (which cancels a child context), and WithMaxCallDepth is
+// inapplicable to it because nothing recurses — the context was the only lever
+// and MemberLookup never read it.
+//
+// The list must exceed Pair.ForEach's poll interval (every 1024 elements), and
+// the context is cancelled up front so the assertion is on the mechanism rather
+// than on wall-clock timing.
+func TestMemberLookup_ObservesCancellation(t *testing.T) {
+	c := qt.New(t)
+
+	elems := make([]values.Value, 4096)
+	for i := range elems {
+		elems[i] = values.NewInteger(int64(i))
+	}
+	lst := values.List(elems...)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mc := makeMCWithContext(ctx, values.NewInteger(-1), lst)
+
+	err := MemberLookup(mc, "memq", valEq)
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("MemberLookup walked a 4096-element list under a cancelled context"))
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
 }
 
 // ── AssocLookup ──────────────────────────────────────────────────────
