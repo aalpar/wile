@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // templateTreeHasOpcode recursively searches a NativeTemplate and its
@@ -307,6 +309,125 @@ func TestPromotedPrimitiveFallback(t *testing.T) {
 				t.Errorf("result = %s, want %s", got, tt.wantResult)
 			}
 		})
+	}
+}
+
+// TestPromotedOpIdentityGuard pins that promoted-opcode dispatch decides "is this
+// the registered cons?" by primitive identity, not by the ForeignClosure's name.
+//
+// A Go embedder's own primitive is bound with whatever name its closure carries,
+// and nothing stops that name from spelling a promoted primitive. Under a name
+// compare the peephole emits OpCons for it and the runtime guard accepts the
+// substitution, so the embedder's implementation never runs — the fail-OPEN
+// direction, and the one that silently changes program meaning.
+func TestPromotedOpIdentityGuard(t *testing.T) {
+	impostor := func(mc machine.CallContext) error {
+		mc.SetValue(values.NewSymbol("IMPOSTOR-RAN"))
+		return nil
+	}
+
+	tests := []struct {
+		name        string
+		closureName string
+		code        string
+		want        string
+	}{
+		{
+			name:        "closure named cons is not the promoted cons",
+			closureName: "cons",
+			code:        `(my-cons 1 2)`,
+			want:        "IMPOSTOR-RAN",
+		},
+		{
+			// set-cdr! is the mutating promoted op, so a hijack is not merely a
+			// wrong value: pp is destructively rewritten to (1 . 9). The argument
+			// must be a variable reference — a compound argument fails the
+			// all-push precondition and no promoted opcode is emitted at all.
+			name:        "closure named set-cdr! does not mutate its argument",
+			closureName: "set-cdr!",
+			code:        `(define pp (cons 1 2)) (define rr (my-cons pp 9)) (list rr pp)`,
+			want:        "(IMPOSTOR-RAN (1 . 2))",
+		},
+		{
+			// CONTROL, not a gate: a name that matches no promoted primitive
+			// passes with the guard in either form. It is here to show that the
+			// two rows above differ from it only in the closure's name.
+			name:        "control: unpromoted name runs the embedder's impl",
+			closureName: "zzz",
+			code:        `(my-cons 1 2)`,
+			want:        "IMPOSTOR-RAN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine, err := NewEngine(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = engine.RegisterPrimitive(PrimitiveSpec{
+				Name: "my-cons", ParamCount: 2, Impl: impostor,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			v, ok := engine.Get("my-cons")
+			if !ok {
+				t.Fatal("my-cons not bound after RegisterPrimitive")
+			}
+			fc, ok := v.Internal().(*machine.ForeignClosure)
+			if !ok {
+				t.Fatalf("my-cons is %T, want *machine.ForeignClosure", v.Internal())
+			}
+			fc.SetName(tt.closureName)
+
+			result, err := engine.EvalMultiple(ctx, tt.code)
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			got := result.SchemeString()
+			if got != tt.want {
+				t.Errorf("result = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPromotedOverrideAgreesWithGenericCall pins the other direction: a surface
+// narrowed with Without("+") and re-populated with the embedder's own + must run
+// that + everywhere. Under a name compare the direct call site is promoted to
+// OpAdd (the name still spells "+") while the indirect one goes through apply, so
+// the same program answers the same question two different ways with no
+// diagnostic — the fail-CLOSED direction of the same defect.
+func TestPromotedOverrideAgreesWithGenericCall(t *testing.T) {
+	ctx := context.Background()
+	full, err := NewEngine(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	override := func(mc machine.CallContext) error {
+		mc.SetValue(values.NewSymbol("OVERRIDE-RAN"))
+		return nil
+	}
+	reg := full.Registry().Without("+")
+	reg.AddPrimitive(registry.PrimitiveSpec{
+		Name: "+", ParamCount: 2, Impl: override,
+	}, registry.PhaseSetRuntime)
+
+	eng, err := NewEngine(ctx, WithRegistry(reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := eng.EvalMultiple(ctx,
+		`(begin (define (dir a b) (+ a b)) (define (gen f a b) (f a b)) (list (dir 1 2) (gen + 1 2)))`)
+	if err != nil {
+		t.Fatalf("eval: %v", err)
+	}
+	got := result.SchemeString()
+	want := "(OVERRIDE-RAN OVERRIDE-RAN)"
+	if got != want {
+		t.Errorf("result = %s, want %s", got, want)
 	}
 }
 
