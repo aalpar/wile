@@ -17,6 +17,7 @@ package bootstrap
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -39,10 +40,16 @@ var ErrProfileWidensEngine = werr.NewStaticError("profile widens the engine's ca
 //
 // The rule, in the order the three cases are decided:
 //
-//  1. No authorizer installed — allow. Widening via (environment '(wile ...))
-//     is the documented way to get a richer namespace from Scheme, and an
-//     embedder that installed no policy has not asked to be protected from it.
-//     Tightening here would break every un-sandboxed embedder for no gain.
+//  1. No authorizer installed — allow. This arm IS an escalation path, and is
+//     kept as one: a Small engine reaches make-thread, and `system` (the
+//     /bin/sh -c primitive, which the process extension registers and Small
+//     excludes), through (environment '(wile kitchen-sink)). Measured
+//     2026-08-07 — the probe ran a shell command that wrote a file. The
+//     ground for keeping it is NOT that no such path exists — the 2026-06-04
+//     acceptance rested on exactly that sentence and it is refuted — but that
+//     an embedder who installed no policy has accepted whatever Scheme can
+//     reach. There is no policy here to consult about which of them meant it,
+//     and tightening would break every un-sandboxed embedder.
 //  2. Authorizer installed, profile contained in the engine's own surface —
 //     allow, without consulting the authorizer. A Console engine asking for
 //     '(wile console) or '(wile tiny) acquires nothing it did not already have,
@@ -89,14 +96,28 @@ func checkProfileWidening(callerNS *environment.Namespace, profileName string, e
 	return nil
 }
 
-// extensionPrimitiveNames returns the set of primitive names a set of
-// extensions registers, by applying them to a scratch registry. Nothing is
-// bound into an environment — Apply is never called — so this costs the
-// registration walk only.
+// extensionPrimitiveNames returns the set of primitive names a PROFILE
+// registers — the core registry plus the profile's extensions — by applying
+// them to a scratch registry. Nothing is bound into an environment: Apply is
+// never called, so this costs the registration walk only.
+//
+// Core is part of the answer, not a background assumption. This mirrors
+// initializeEnvironmentWithRegistry, the function that actually populates a
+// profile namespace, and the asymmetry with it was the whole of a fail-open:
+// enginePrimitiveNames reads the engine's FULL registry, which does contain
+// core, while this walked only the extension list. namesNotIn could therefore
+// never see a core acquisition, and a WithoutCore() engine asking for tiny —
+// an empty extension slice, and so an apparently empty request — acquired the
+// core surface with no capability question put to the policy.
 func extensionPrimitiveNames(exts []registry.Extension) (map[string]struct{}, error) {
 	reg := registry.NewRegistry()
+	err := core.AddToRegistry(reg)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err,
+			"extensionPrimitiveNames: core failed to register")
+	}
 	for _, ext := range exts {
-		err := ext.AddToRegistry(reg)
+		err = ext.AddToRegistry(reg)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err,
 				"extensionPrimitiveNames: extension %q failed to register", ext.Name())
