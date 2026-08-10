@@ -23,11 +23,13 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -100,6 +102,74 @@ func TestLibraryExport_PatternVariableBinderIsExportable(t *testing.T) {
 `, `(import (exportlib)) (+ made-by-macro (rec-a (make-r 1)))`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.Equals, "43")
+}
+
+// A syntactic keyword in VALUE position is a compile error (R7RS §4.1.1,
+// §4.3.1 — a syntactic keyword is not a variable), and that must hold inside a
+// LIBRARY BODY too.
+//
+// It did not. CompileSymbol's library-scope arm emitted its global load
+// directly instead of through emitCachedBindingLoad, so it never applied that
+// function's BindingTypeVariable refusal. Measured: a library body
+// (define (peek) (list if)) evaluated to (#<primitive-expander:if>) and
+// (list define-syntax) to (#<syntax-compiler:define-syntax>) — the compiler's
+// own handler objects, handed to Scheme.
+//
+// NOT reachable through RunSchemeCode: that path has no library env, so the
+// library-scope arm never fires and the test would pass vacuously.
+func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
+	// One keyword per BindingType the refusal covers: `if` is a
+	// BindingTypePrimitive (a primitive expander), `define-syntax` a
+	// BindingTypeSyntax (a syntax compiler).
+	keywords := []string{"if", "define-syntax"}
+	for _, kw := range keywords {
+		t.Run(kw, func(t *testing.T) {
+			c := qt.New(t)
+			_, err := evalWithLib(t, `(define-library (exportlib)
+  (export peek)
+  (import (scheme base))
+  (begin
+    (define (peek) (list `+kw+`))))
+`, `(import (exportlib)) (peek)`)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrSyntacticKeywordAsVariable), qt.IsTrue,
+				qt.Commentf("want ErrSyntacticKeywordAsVariable, got: %v", err))
+		})
+	}
+}
+
+// The control for the test above: the TOP-LEVEL twins already refused, which is
+// what made the library arm a hole rather than a missing feature. Without this
+// row, a change that made the whole tree refuse keywords for some unrelated
+// reason would look like the fix.
+//
+// The two sentinels differ, and the difference is the same fact
+// headDenotesSpecialForm turns on: `if` has NO phase-0 binding at all, so the
+// top level reports it unbound, while `define-syntax` DOES have one (a
+// BindingTypeSyntax) and reaches the keyword refusal. Inside a library body
+// both resolve — through the library-scope arm — so both must reach the
+// refusal there.
+func TestTopLevel_SyntacticKeywordAsVariableRefused(t *testing.T) {
+	cases := []struct {
+		keyword string
+		want    error
+	}{
+		{"if", werr.ErrNoSuchBinding},
+		{"define-syntax", werr.ErrSyntacticKeywordAsVariable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.keyword, func(t *testing.T) {
+			c := qt.New(t)
+			_, err := evalWithLib(t, `(define-library (exportlib)
+  (export nothing)
+  (import (scheme base))
+  (begin (define nothing 0)))
+`, `(list `+tc.keyword+`)`)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, tc.want), qt.IsTrue,
+				qt.Commentf("want %v, got: %v", tc.want, err))
+		})
+	}
 }
 
 // A binder introduced by a macro TEMPLATE is hygienically distinct from the
