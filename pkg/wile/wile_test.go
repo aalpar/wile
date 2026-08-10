@@ -1028,11 +1028,11 @@ func TestEval_CancelNestedCalls(t *testing.T) {
 	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
 }
 
-// mockCloseableExtension is a test helper that implements both Extension and Closeable.
 // errTestCloser is the sentinel a failing test closer returns, so the assertion
 // can be errors.Is rather than a bare non-nil check.
 var errTestCloser = werr.NewStaticError("wile test: closer failed")
 
+// mockCloseableExtension is a test helper that implements both Extension and Closeable.
 type mockCloseableExtension struct {
 	name     string
 	closed   bool
