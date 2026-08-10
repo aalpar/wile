@@ -120,3 +120,4 @@
       (list (p) (parameterize ((p 2)) (p)) (p)))))
 
 (test-end)
+(test-exit)
