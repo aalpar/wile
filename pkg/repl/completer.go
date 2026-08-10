@@ -88,6 +88,10 @@ func (p *Completer) collectBindingNames() []string {
 }
 
 // completeFromList returns completions matching the given prefix.
+//
+// The returned length is a RUNE count, not a byte count: readline indexes its
+// []rune line buffer by it. Returning len(prefix) would panic on any non-ASCII
+// prefix whose byte excess exceeds the runes preceding the symbol.
 func (p *Completer) completeFromList(prefix string, candidates []string) ([][]rune, int) {
 	var matches [][]rune
 	for _, name := range candidates {
@@ -96,10 +100,12 @@ func (p *Completer) completeFromList(prefix string, candidates []string) ([][]ru
 			matches = append(matches, []rune(suffix))
 		}
 	}
-	return matches, len(prefix)
+	return matches, len([]rune(prefix))
 }
 
 // completeFilenames returns file/directory completions for the given prefix.
+//
+// The returned length is a RUNE count; see completeFromList.
 func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
 	matches, _ := filepath.Glob(prefix + "*")
 	var results [][]rune
@@ -111,7 +117,7 @@ func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
 		}
 		results = append(results, []rune(suffix))
 	}
-	return results, len(prefix)
+	return results, len([]rune(prefix))
 }
 
 // BindingNames returns all binding names visible in the environment.

@@ -4,7 +4,7 @@
 ;; string-for-each-index, string-map (SRFI-13 form), string-fold,
 ;; string-fold-right.
 
-(import (except (scheme base) string-map) (scheme write) (scheme char) (chibi test) (srfi 13))
+(import (except (scheme base) string-map) (scheme write) (except (scheme char) string-upcase string-downcase) (chibi test) (srfi 13))
 
 (test-begin "srfi-13 phase 6")
 
@@ -137,6 +137,25 @@
 (test "empty"  ""        (string-map char-upcase ""))
 (test "with-range" "ELL" (string-map char-upcase "hello" 1 4))
 (test-end "string-map (SRFI-13)")
+
+(test-begin "string-map!")
+(test "upcase" "HELLO"
+      (let ((s (string-copy "hello")))
+        (string-map! char-upcase s)
+        s))
+(test "start-only" "hELLO"
+      (let ((s (string-copy "hello")))
+        (string-map! char-upcase s 1)
+        s))
+(test "with-range" "hELLo"
+      (let ((s (string-copy "hello")))
+        (string-map! char-upcase s 1 4)
+        s))
+(test "empty" ""
+      (let ((s (string-copy "")))
+        (string-map! char-upcase s)
+        s))
+(test-end "string-map!")
 
 (test-end "srfi-13 phase 6")
 (test-exit)

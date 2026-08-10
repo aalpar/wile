@@ -199,6 +199,12 @@
     values
     call-with-values
     dynamic-wind
+    ;; force is the consumer of the delay / delay-force superset exports above.
+    ;; All three are homed in (scheme lazy) by R7RS Appendix A; exporting the two
+    ;; producers without the consumer left (import (scheme base)) able to build a
+    ;; promise it could not evaluate. Documented in
+    ;; docs/reference/r7rs-differences.md, "Standard-Library Export Supersets".
+    force
     ;; Ports
     port?
     input-port?

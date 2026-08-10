@@ -16,14 +16,42 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
 )
 
+// appendConstantLiteral marks v immutable and THEN appends it to the template's
+// literal pool, returning the pool index. Every constant appender must route
+// through here; nothing else may call MaybeAppendLiteral with a datum the
+// program can name.
+//
+// The order is the fix, not a detail. MaybeAppendLiteral dedups by
+// literalIdentical (reflect type + EqualTo), so the object that survives is
+// whichever equal? twin was appended FIRST, and membership in
+// ImmutableLiterals is pointer identity. Marking after the append therefore
+// stamped the discarded copy whenever an unmarked twin got there first, which
+// made literal immutability depend on declaration order within a compilation
+// unit: '#(1 2 3) mutated iff a bare #(1 2 3) appeared above it. Marking before
+// the append means the survivor was marked at its own append in either order,
+// so no pooled aggregate is ever reachable unmarked and no dedup key has to
+// know about immutability.
+//
+// A nil namespace (phase frames, some transient compile environments) is
+// tolerated: markLiteralImmutable is a no-op on a nil set.
+func (p *CompileTimeContinuation) appendConstantLiteral(v values.Value) machine.LiteralIndex {
+	ns := p.env.Namespace()
+	if ns != nil {
+		markLiteralImmutable(v, ns.ImmutableLiterals(), make(map[values.Value]struct{}))
+	}
+	return p.template.MaybeAppendLiteral(v)
+}
+
 // markLiteralImmutable records every pair and vector reachable from v in the
 // engine-scoped immutable-literal set. R7RS §4.1.2 makes quoted-literal
-// constants immutable; structure sharing (per-template equal? dedup) means one
-// mark on the canonical instance covers all sharing siblings. The visited map
-// makes cyclic literals (#0=(1 . #0#)) terminate.
+// constants immutable. Call it through appendConstantLiteral, which fixes the
+// order relative to the literal pool; marking a datum that is then discarded by
+// dedup is exactly the defect that order guards against. The visited map makes
+// cyclic literals (#0=(1 . #0#)) terminate.
 //
 // The cdr spine is walked iteratively; only cars recurse, matching
 // validateQuotedLiteralWithVisited (compile_time_continuation.go), which

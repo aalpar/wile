@@ -204,6 +204,12 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 		return compileVectorElement(vis, stack, vec, element, elementStart)
 	}
 
+	// Handle box elements (#&<pattern>)
+	box, ok := element.(*syntax.SyntaxBox)
+	if ok {
+		return compileBoxElement(vis, stack, box, elementStart)
+	}
+
 	// Handle symbol elements
 	sym, ok := element.(*syntax.SyntaxSymbol)
 	if ok {
@@ -217,7 +223,7 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 }
 
 // compilePairElement handles when the current element is a pair (nested list).
-// For empty pairs, emits RequireCarEmpty. For non-empty, emits VisitCar and pushes to stack.
+// Emits VisitCar and pushes the sub-pattern onto the stack.
 func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, pr *syntax.SyntaxPair, element syntax.SyntaxValue, elementStart int) ([]syntaxCompilerStackEntry, bool) {
 	l := len(stack)
 
@@ -229,16 +235,11 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 	// the descent op then operates on the car, which CaptureCdr preserves.
 	emitImproperTailIfPresent(vis, &stack[l-1])
 
-	if syntax.IsSyntaxEmptyList(pr) {
-		// Empty pair pattern () - verify input car is also empty
-		vis.codes = append(vis.codes, ByteCodeRequireCarEmpty{})
-		stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
-		stack[l-1].lastElement = element
-		stack[l-1].lastElementStart = elementStart
-		return stack, true
-	}
-
-	// Non-empty nested pair - descend into it
+	// Nested pair - descend into it. There is no empty-list case here: the
+	// caller reaches this function only after element.(*syntax.SyntaxPair)
+	// succeeds, and (*SyntaxPair).IsEmptyList is a constant false, so an empty
+	// list pattern arrives as the SyntaxEmptyList singleton and is compiled by
+	// compileElement's literal fallthrough instead.
 	vis.codes = append(vis.codes, ByteCodeVisitCar{})
 	stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
 	stack[l-1].lastElement = element
@@ -267,7 +268,6 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 
 	if len(vec.Values) == 0 {
 		// Empty vector pattern #() — verify input car is an empty vector.
-		// Analogous to RequireCarEmpty for empty list patterns.
 		vis.codes = append(vis.codes, ByteCodeRequireCarEmptyVector{})
 		stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
 		stack[l-1].lastElement = element
@@ -296,6 +296,51 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 	return stack, true
 }
 
+// compileBoxElement handles when the current element is a box pattern.
+//
+// A box holds exactly one datum, so `#&<pattern>` is compiled as a one-element
+// sub-list `(<pattern>)`: the descent op converts the input box the same way,
+// and every existing pair opcode then applies unchanged. Without this a box
+// pattern fell through to the literal CompareCar below, which compares the
+// box's CONTENT by value — so `((_ #&y) y)` never matched `(p #&7)`.
+func compileBoxElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
+	box *syntax.SyntaxBox, elementStart int,
+) ([]syntaxCompilerStackEntry, bool) {
+	l := len(stack)
+
+	// Capture an improper `. rest` tail before the descent op, same rationale as
+	// compilePairElement.
+	emitImproperTailIfPresent(vis, &stack[l-1])
+
+	vis.codes = append(vis.codes, ByteCodeVisitCarAsBox{})
+	chain := boxContentToPairChain(box)
+
+	// Analyze the converted chain so pointer-based analysis works for ellipsis
+	// detection inside box patterns (as compileVectorElement does).
+	localAnalysis := AnalyzePattern(chain, vis.variables)
+	vis.analysis.Merge(localAnalysis)
+
+	stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
+	stack[l-1].lastElement = chain
+	stack[l-1].lastElementStart = elementStart
+
+	stack = append(stack, syntaxCompilerStackEntry{
+		pr:        chain,
+		variables: map[string]struct{}{},
+	})
+	return stack, true
+}
+
+// boxContentToPairChain wraps a SyntaxBox's content in a one-element pair chain
+// so pair-based compilation handles it.
+func boxContentToPairChain(box *syntax.SyntaxBox) *syntax.SyntaxPair {
+	var content syntax.SyntaxValue = syntax.SyntaxEmptyList
+	if box.Value != nil {
+		content = box.Value
+	}
+	return syntax.NewSyntaxCons(content, syntax.SyntaxEmptyList, box.SourceContext())
+}
+
 // vectorElementsToPairChain converts a SyntaxVector's elements to a SyntaxPair
 // chain for pattern compilation. Used at compile time to reuse pair-based
 // compilation for vector pattern contents.
@@ -320,7 +365,12 @@ func compileSymbolElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 	if sym.Key() == "_" {
 		_, isLiteral := vis.literals[sym.Key()]
 		if !isLiteral {
-			// Wildcard - matches anything but doesn't bind (no bytecode emitted)
+			// Wildcard - matches an element without binding it. It has to emit
+			// SOMETHING: an element that produces no bytecode is invisible to
+			// ByteCodeDone's one-instruction lookahead, which is what made a
+			// trailing `_` after a sublist both reject valid input and accept
+			// input one element short.
+			vis.codes = append(vis.codes, ByteCodeDiscardCar{})
 			return false
 		}
 		// _ is in literals list, fall through to treat as literal
@@ -343,9 +393,16 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 	}
 }
 
-// compileEllipsis handles the ellipsis pattern, which matches zero or more repetitions.
-// If the previous element contains pattern variables, generates a loop structure.
-// Otherwise, treats the ellipsis as a literal symbol.
+// compileEllipsis handles the ellipsis pattern, which matches zero or more
+// repetitions of the preceding pattern element.
+//
+// R7RS §4.3.2's "F matches P" clause list is purely structural: whether the
+// repeated subpattern happens to contain a pattern variable is not one of its
+// conditions, so `(_ 1 ...)` repeats the literal `1` exactly as `(_ x ...)`
+// repeats `x`. The two `...`-related exemptions the standard does grant are
+// implemented elsewhere and by other mechanisms: declaring `...` a literal
+// (the "\x00" ellipsis swap in compile_syntax_rules.go) and the `(... ...)`
+// escape, which arrives here with no preceding element.
 //
 // R7RS §4.3.2 allows ellipsis in the middle of a pattern, e.g., (a ... b c).
 // In this case, the loop must exit when exactly N elements remain (where N is
@@ -354,8 +411,11 @@ func compileSymbolOrLiteral(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry
 // Returns true if CDR handling should be skipped (for ellipsis-in-middle patterns,
 // where the loop exits with the position already at the tail elements).
 func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
-	if !previousElementHasVariables(vis, entry) {
-		// No pattern variables - treat ellipsis as literal
+	if entry.lastElement == nil {
+		// Nothing precedes the ellipsis at this level, so there is no subpattern
+		// to repeat and entry.lastElementStart names no bytecode of ours (it is
+		// still the zero value, which indexes the enclosing level's codes).
+		// Match the ellipsis identifier literally.
 		vis.codes = append(vis.codes, ByteCodeCompareCar{Value: syntax.NewSyntaxSymbol(vis.ellipsis, nil)})
 		return false
 	}
@@ -409,24 +469,6 @@ func countPatternTailElements(ellipsisPair *syntax.SyntaxPair) int {
 		cdr = pr.SyntaxCdr()
 	}
 	return count
-}
-
-// previousElementHasVariables checks if the element before ... contains pattern variables.
-func previousElementHasVariables(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool {
-	if entry.lastElement == nil {
-		return false
-	}
-
-	prevPair, ok := entry.lastElement.(*syntax.SyntaxPair)
-	if ok {
-		return vis.analysis.ContainsVariables(prevPair)
-	}
-	prevSym, ok := entry.lastElement.(*syntax.SyntaxSymbol)
-	if ok {
-		_, isVar := vis.variables[prevSym.Key()]
-		return isVar
-	}
-	return false
 }
 
 // collectCapturedVariables gathers all pattern variables captured by an ellipsis pattern.
@@ -526,17 +568,24 @@ func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []Syntax
 	}
 }
 
-// isPairPattern checks if bytecode represents a descend pattern (VisitCar...Done
-// or VisitCarAsVector...Done). These auto-advance via handleByteCodeDone, so they
-// don't need an explicit VisitCdr in ellipsis loops.
+// isPairPattern checks if bytecode represents a descend pattern (VisitCar...Done,
+// VisitCarAsVector...Done or VisitCarAsBox...Done). These auto-advance via
+// handleByteCodeDone, so they don't need an explicit VisitCdr in ellipsis loops —
+// adding one skips every other element.
 func isPairPattern(codes []SyntaxCommand) bool {
 	if len(codes) < 2 {
 		return false
 	}
-	_, startsWithVisitCar := codes[0].(ByteCodeVisitCar)
-	_, startsWithVisitVector := codes[0].(ByteCodeVisitCarAsVector)
 	_, endsWithDone := codes[len(codes)-1].(ByteCodeDone)
-	return (startsWithVisitCar || startsWithVisitVector) && endsWithDone
+	if !endsWithDone {
+		return false
+	}
+	switch codes[0].(type) {
+	case ByteCodeVisitCar, ByteCodeVisitCarAsVector, ByteCodeVisitCarAsBox:
+		return true
+	default:
+		return false
+	}
 }
 
 // advanceToNextElement handles CDR advancement after processing an element.
@@ -594,24 +643,4 @@ func emitImproperTailIfPresent(vis *SyntaxCompiler, entry *syntaxCompilerStackEn
 	}
 	// The CDR is a literal symbol - compare it
 	vis.codes = append(vis.codes, ByteCodeCompareCdr{Value: syntax.NewSyntaxSymbol(sym.Key(), nil)})
-}
-
-// insert inserts codes into target at index i, adjusting jump offsets as needed.
-func insert(i int, target, codes []SyntaxCommand) []SyntaxCommand {
-	q := append([]SyntaxCommand{}, target[:i]...)
-	q = append(q, codes...)
-	q = append(q, target[i:]...)
-	for j := range q {
-		bc, ok := q[j].(ByteCodeJump)
-		if !ok {
-			continue
-		}
-		if j < i && j+bc.Offset >= i {
-			bc.Offset += len(codes)
-		} else if j > i+len(codes)-1 && j+bc.Offset <= i {
-			bc.Offset -= len(codes)
-		}
-		q[j] = bc
-	}
-	return q
 }

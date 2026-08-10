@@ -518,6 +518,27 @@ func TestMemq_CircularList(t *testing.T) {
 	}
 }
 
+// TestMemberSearch_CircularListNotFound covers the case the found-element suite
+// above cannot reach: a key that is absent from a circular list. memq and memv
+// used to spin here forever (SIGKILL from the CLI) while assq and assv raised
+// immediately. All four now report the same improper-list rejection.
+func TestMemberSearch_CircularListNotFound(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"memq", `(let ((x (list 'a 'b 'c))) (set-cdr! (cddr x) x) (memq 'zz x))`},
+		{"memv", `(let ((x (list 1 2 3))) (set-cdr! (cddr x) x) (memv 99 x))`},
+		{"assq", `(let ((x (list '(a 1) '(b 2)))) (set-cdr! (cdr x) x) (assq 'zz x))`},
+		{"assv", `(let ((x (list '(1 a) '(2 b)))) (set-cdr! (cdr x) x) (assv 99 x))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
+		})
+	}
+}
+
 func TestMemv_CircularList(t *testing.T) {
 	tcs := []struct {
 		name string

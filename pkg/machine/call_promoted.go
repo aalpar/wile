@@ -68,6 +68,13 @@ type promotedOp struct {
 	nonTail OpCode
 	tail    OpCode
 	fn      func(*MachineContext, string) error
+	// mutates records whether fn can write through to an object the program can
+	// still name. It exists so the immutability ratchet can SELECT the mutators
+	// off this table instead of restating a list that drifts from it; a promoted
+	// mutator nobody classified would otherwise skip the ratchet silently, which
+	// is how the tail-position set-cdr! bypass survived. Pinned by
+	// TestPromotedOpsAreClassified.
+	mutates bool
 }
 
 // One descriptor per promoted primitive. Run()'s case branches reference these
@@ -90,8 +97,22 @@ var (
 	promotedNumGt     = promotedOp{name: ">", arity: 2, nonTail: OpNumGt, tail: OpNumGtTail, fn: inlineNumGt}
 	promotedNumGe     = promotedOp{name: ">=", arity: 2, nonTail: OpNumGe, tail: OpNumGeTail, fn: inlineNumGe}
 	promotedNumEq     = promotedOp{name: "=", arity: 2, nonTail: OpNumEq, tail: OpNumEqTail, fn: inlineNumEq}
-	promotedSetCdr    = promotedOp{name: "set-cdr!", arity: 2, nonTail: OpSetCdr, tail: OpSetCdrTail, fn: inlineSetCdr}
+	promotedSetCdr    = promotedOp{name: "set-cdr!", arity: 2, nonTail: OpSetCdr, tail: OpSetCdrTail, fn: inlineSetCdr, mutates: true}
 )
+
+// PromotedMutatorNames returns the Scheme names of the promoted primitives that
+// write through to a program-visible object. Exported for the immutability
+// ratchet, which must run through the full optimizing pipeline (promoted opcodes
+// are the peephole's output) and therefore lives outside this package.
+func PromotedMutatorNames() []string {
+	q := make([]string, 0, 1)
+	for _, op := range promotedOps {
+		if op.mutates {
+			q = append(q, op.name)
+		}
+	}
+	return q
+}
 
 // promotedOps is the registry of promoted primitives. Listing a descriptor here
 // is what makes the peephole optimizer aware of it (via promotedOpForName);

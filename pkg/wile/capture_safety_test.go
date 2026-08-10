@@ -26,7 +26,7 @@ import (
 )
 
 // captureSafetyEngine builds a KitchenSink engine with every extension loaded, so
-// the procedure-invoking primitives from the eval / threads / files / gointerop
+// the procedure-invoking primitives from the eval / threads / files
 // extensions are bound and their BindingMeta.CaptureSafe stamp is observable.
 // CaptureSafe is stamped unconditionally at registration (independent of the
 // immutable-top-level flag), but KitchenSink + WithImmutableTopLevel mirrors how the
@@ -70,9 +70,18 @@ func TestInvokesProcedureCompleteness(t *testing.T) {
 		"call-with-composable-continuation", "with-timeout",
 		// eval extension: run / transform arbitrary code
 		"eval", "load", "expand", "compile",
-		// promises / threads / files / gointerop
+		// `error` raises through machine.RaiseInPlace exactly as raise does. It was
+		// absent from this list and unannotated for as long as both existed — the
+		// static guard could not see RaiseInPlace as a sink, and this list is
+		// hand-curated. Review-wave-1 item 5.
+		"error",
+		// promises / threads / files
 		"force", "make-thread", "thread-start!",
-		"call-with-input-file", "call-with-output-file", "once-do!",
+		"call-with-input-file", "call-with-output-file",
+		// thread-join!/mutex-lock! signal their SRFI-18 conditions through
+		// RaiseInPlace. Annotated rather than carved out: a carve-out list is the
+		// same exception mechanism that let `error` hide.
+		"thread-join!", "mutex-lock!",
 		// %parameter-convert applies the parameter's user converter via ApplyCallable
 		// (the converter may call/cc) — the crosscheck-found omission this list now pins.
 		"%parameter-convert",

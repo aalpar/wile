@@ -43,6 +43,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **An import no longer overwrites a definition of the same name.** Imported
+  bindings used to be installed at the very coordinates a top-level `define`
+  writes, so the two shared one slot and whichever ran second won *by
+  assignment*. `(define map 1)` followed by `(import (scheme base))` therefore
+  left `map` bound to the library's procedure, with the user's value gone and
+  the binding stamped as imported. Imports now install one tier below, so a
+  definition **shadows** an import in either order and the import stays visible
+  when no definition exists.
+
+  Two consequences worth knowing. `set!` on an import is still refused (R7RS
+  §5.2) and `namespace-undefine!` still removes an import — it recognises one by
+  provenance rather than by tier, so removing the definition reveals the import
+  underneath instead of leaving the name unbound. And a `define` after an import
+  no longer *drops* the import provenance, because it no longer touches the
+  import's binding at all; the name simply resolves to the definition.
+
+  Macro imports (the phase-1 half) deliberately keep the old placement: the
+  coordinate the relocation targets is occupied at phase 1 by bootstrap macros,
+  and moving them there would let an imported macro overwrite a bootstrap
+  transformer engine-wide. So `define-syntax` over an imported macro still
+  supersedes in place.
+
+- **`error` is now capture-safe-annotated.** It runs the installed exception
+  handler on the live chain, like `raise`, but was not marked as doing so — so a
+  self-recursive procedure calling `error` was compiled with an in-place
+  parameter rebind that corrupted any continuation captured inside the handler.
+  Replaying such a continuation twice now continues the loop identically. The
+  same annotation lands on `thread-join!` and `mutex-lock!`, which signal their
+  SRFI-18 conditions the same way. Each costs a small optimization at those call
+  sites.
+
 - **BREAKING — hashtables.** `(make-hashtable)` is gone; use
   `(make-equal-hashtable)` or the R6RS `(make-hashtable equal-hash equal?)`.
   `hashtable-ref`'s `default` is now **required** and an absent key never
@@ -88,6 +119,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   with the wrong argument count in order to assert the *run-time* error no longer
   compiles. Write such a call through `apply` to keep the argument count hidden until
   run time.
+
+### Removed
+
+- **BREAKING — the `rw-mutex-*` and `once-*` primitive families, and the exported
+  `values.RWMutex` / `values.Once` Go types.** Twelve primitives (`make-rw-mutex`,
+  `rw-mutex?`, `rw-mutex-read-lock!`, `rw-mutex-read-unlock!`,
+  `rw-mutex-write-lock!`, `rw-mutex-write-unlock!`, `rw-mutex-try-read-lock!`,
+  `rw-mutex-try-write-lock!`, `make-once`, `once?`, `once-do!`, `once-done?`) and
+  their two backing value types are gone, along with the `werr.ErrNotARWMutex` and
+  `werr.ErrNotAOnce` sentinels. `(wile gointerop)` now exports the six `atomic`
+  primitives only.
+
+  This is a modeling decision, not a cleanup. Wile's standing orientation is that
+  the unit of concurrency is the causal chain with one owner applying ordered
+  transitions, not many threads sharing state behind a lock; `gointerop` was
+  publishing the opposite model by lifting Go's lock and one-shot-init primitives
+  verbatim into Scheme. No standard mandates either family, neither had a consumer
+  anywhere in the tree, and between them they carried the largest
+  machinery-to-value ratio in it. They come back when a causal-chain tool needs
+  them, which is a different question from whether Scheme programs should be
+  handed a lock.
+
+  `values.RWMutex` and `values.Once` were exported from `pkg/values`, so this is a
+  public API removal; taken under the zero-consumer rule. **Kept, untouched:** the
+  SRFI-18 `mutex-*` and `condition-variable-*` families (named-standard
+  conformance is a separate question from the modeling one) and `atomic`.
+
+  Two things went with the families. `finishBlockingSync` had exactly two callers
+  and is deleted with them, taking its `ErrTimerExpired` carve-out — which existed
+  only because rw-mutex locks returned `Void` on success and so had no value
+  channel for "did not acquire". `werr.ErrOperationCancelled` survives but now has
+  no producer: every remaining blocking primitive reports a cancelled wait as an
+  error-free `#f`, which is what lets a wrapping `with-timeout` handler run.
+  `callForeignCached`'s eager recheck is unchanged.
+
+### Fixed
+
+- **`memq` and `memv` now terminate on a circular list and observe
+  cancellation.** They walked the spine in a flat Go loop that read neither the
+  cycle sentinel nor the context, so a key absent from a circular list spun
+  forever — SIGKILL, exit 137, from the CLI — and an embedder deadline or a REPL
+  interrupt was invisible even on a finite list. Both now route through the
+  canonical proper-list eliminator, as `assq` already did.
+
+  The behaviour change is visible: `(memq 'x <circular>)` returns *immediately*
+  with `expected a proper list` rather than at the deadline, matching `assq` on
+  the same shape. Finding an element that occurs before the back edge is
+  unaffected. `WithMaxCallDepth` never applied here — nothing recurses — so the
+  context was the only lever, and it was not being read.
 
 ## [1.19.1] - 2026-07-29
 

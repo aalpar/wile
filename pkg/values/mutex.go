@@ -186,14 +186,15 @@ func (p *Mutex) Lock(timeout *time.Duration, owner *Thread) (bool, error) {
 // termination.
 //
 // ctx cancellation unparks the untimed wait so a thread blocked here is reaped by
-// thread-terminate! rather than stalling on a bare cond.Wait — the same wait-side
-// fix the RWMutex type carries. Unlike the rw-mutex primitives (whose shared
-// helper finishBlockingSync raises ErrOperationCancelled on a false return),
-// mutex-lock! reports a cancelled acquire as #f: that primitive already
-// signals "did not acquire" as #f, and returning it error-free lets a wrapping
-// with-timeout handler run via callForeignCached's recheck without a carve-out.
-// The held side is untouched: a terminated holder's lock stays held (abandonment
-// is a separate, owner-driven path via MarkAbandoned).
+// thread-terminate! rather than stalling on a bare cond.Wait. A cancelled acquire
+// surfaces to mutex-lock! as #f, error-free: the timed form already spends #f on
+// "did not acquire", so cancellation needs no separate channel and no manufactured
+// error. Error-free is the load-bearing half. callForeignCached's eager
+// ErrTimerExpired recheck runs only on the error-free return path, so a wrapping
+// with-timeout gets its handler run without this call site having to special-case
+// the cancellation source (docs/concurrency/cancellation.md, "wait side vs held
+// side"). The held side is untouched: a terminated holder's lock stays held
+// (abandonment is a separate, owner-driven path via MarkAbandoned).
 func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *Thread) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -227,11 +228,26 @@ func (p *Mutex) LockContext(ctx context.Context, timeout *time.Duration, owner *
 
 			// sync.Cond doesn't support deadlines natively, so we
 			// arrange a wakeup via Broadcast from a side goroutine.
+			//
+			// The goroutine takes p.mu (which IS cond.L) before it
+			// Broadcasts, exactly as waitOnCondCtx's ctx goroutine does.
+			// Without it the Broadcast can land in the gap between the go
+			// statement and cond.Wait's enqueue on the notify list, and the
+			// waiter then parks with nothing left to wake it — measured as a
+			// stuck waiter within 12 000 trials at 3 µs and at 20 µs. Taking
+			// the lock blocks the timer until Wait has released cond.L and
+			// therefore enqueued. The goroutine may outlive this iteration
+			// while blocked on that lock, but it cannot leak: the caller
+			// releases cond.L at the next Wait or at the deferred unlock, and
+			// a Broadcast arriving after close(done) is a spurious wakeup the
+			// predicate loop already tolerates.
 			done := make(chan struct{})
 			go func() {
 				select {
 				case <-time.After(remaining):
+					p.mu.Lock()
 					p.cond.Broadcast()
+					p.mu.Unlock()
 				case <-done:
 				}
 			}()

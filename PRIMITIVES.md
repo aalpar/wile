@@ -63,7 +63,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Type | Description |
 |------|-------------|
 | Error Object | Exception with message and irritants |
-| EOF Object | End-of-file marker `#!eof` |
+| EOF Object | End-of-file marker, written `#<eof>` |
 
 ### Threading Types (SRFI-18)
 
@@ -78,8 +78,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Type | Description |
 |------|-------------|
-| RWMutex | Read-write mutual exclusion lock |
-| Once | Ensures function runs exactly once |
 | Atomic | Thread-safe mutable value |
 
 ### Meta Types
@@ -89,7 +87,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Syntax Object | Datum with lexical context information |
 | Environment | First-class evaluation environment |
 | Compile-Time Value | Value available during macro expansion |
-| Void | Absence of a meaningful value `#!void` |
+| Void | Absence of a meaningful value, written `#<void>` |
 
 ## Special Forms (Compile-Time)
 
@@ -839,28 +837,6 @@ discriminate them.
 | `time?` | Test for time object |
 | `time->seconds` | Convert time to seconds |
 | `seconds->time` | Convert seconds to time |
-
-## Go RWMutex
-
-| Primitive | Description |
-|-----------|-------------|
-| `make-rw-mutex` | Create a read-write mutex |
-| `rw-mutex?` | Test for RWMutex |
-| `rw-mutex-read-lock!` | Acquire read lock |
-| `rw-mutex-read-unlock!` | Release read lock |
-| `rw-mutex-write-lock!` | Acquire write lock |
-| `rw-mutex-write-unlock!` | Release write lock |
-| `rw-mutex-try-read-lock!` | Try to acquire read lock |
-| `rw-mutex-try-write-lock!` | Try to acquire write lock |
-
-## Go Once
-
-| Primitive | Description |
-|-----------|-------------|
-| `make-once` | Create a Once object |
-| `once?` | Test for Once |
-| `once-do!` | Execute function exactly once |
-| `once-done?` | Test if Once has executed |
 
 ## Go Atomic
 

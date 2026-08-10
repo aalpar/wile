@@ -107,8 +107,15 @@ func (p *ClausesWrapper) SchemeString() string {
 // SyntaxCaseClause wraps compiled pattern info for a syntax-case clause.
 // Created by the compiler, consumed by OperationSyntaxCaseMatch at runtime.
 type SyntaxCaseClause struct {
-	Bytecode       []match.SyntaxCommand
-	PatternVars    map[string]struct{}
+	Bytecode    []match.SyntaxCommand
+	PatternVars map[string]struct{}
+	// LiteralSyntax carries each pattern literal with the scopes it had at the
+	// macro definition site, the same data SyntaxRulesClause.LiteralSyntax
+	// carries. Without it match.go's hygiene block is gated off on this path
+	// (it needs a non-nil literal map AND a non-nil matcher), so a syntax-case
+	// pattern literal matched a use-site identifier that shadows it — R7RS
+	// §4.3.2 requires the two to share a binding.
+	LiteralSyntax  map[string]*syntax.SyntaxSymbol
 	EllipsisVars   map[int]map[string]struct{}
 	EllipsisDepths map[int]int
 }

@@ -24,14 +24,21 @@ import (
 	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/registry"
+	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
 // callerWithProfileSurface builds a Namespace standing in for an engine
-// constructed at the named profile: its registry carries that profile's
-// extensions, and auth is its policy (nil for an un-sandboxed engine).
+// constructed at the named profile: its registry carries core plus that
+// profile's extensions, and auth is its policy (nil for an un-sandboxed
+// engine).
+//
+// Core is in the stand-in because it is in the real thing —
+// initializeEnvironmentWithRegistry registers core before walking the
+// extension list, so an engine's surface is never smaller than core. A
+// stand-in without it would be narrower than any engine the gate ever sees.
 func callerWithProfileSurface(t *testing.T, profile string, auth security.Authorizer) *environment.Namespace {
 	t.Helper()
 	exts, err := ProfileExtensions(profile)
@@ -39,6 +46,10 @@ func callerWithProfileSurface(t *testing.T, profile string, auth security.Author
 		t.Fatalf("ProfileExtensions(%q): %v", profile, err)
 	}
 	reg := registry.NewRegistry()
+	coreErr := core.AddToRegistry(reg)
+	if coreErr != nil {
+		t.Fatalf("AddToRegistry(core): %v", coreErr)
+	}
 	for _, ext := range exts {
 		regErr := ext.AddToRegistry(reg)
 		if regErr != nil {
@@ -69,6 +80,42 @@ func denyNamespaceOnly() security.Authorizer {
 		}
 		return nil
 	})
+}
+
+// coreRegistryPrimitiveCount is the number of registered primitives whose Go
+// symbol is under github.com/aalpar/wile/pkg/registry/core in
+// testdata/axis-b-manifest.scm, the reproducible source (467 rows, one per
+// registered primitive).
+//
+// Two other counts are NOT this quantity and both gaps reconcile exactly. A
+// static count of unique `Name:` literals under pkg/registry/core gives 198,
+// missing the ten comparison names registered from a table rather than from a
+// per-name literal (char<?…char>=?, string<?…string>=?); 198 + 10 = 208 with
+// nothing in the other direction. Counting by the manifest's *file* column
+// gives 178, missing the thirty core primitives whose Impl is declared in
+// pkg/registry/helpers — 20 type predicates through helpers.MakeTypePredicate
+// and 10 accessors/mutators through helpers/accessor.go — while their specs,
+// and their symbols, are core's.
+const coreRegistryPrimitiveCount = 208
+
+// TestExtensionPrimitiveNamesCountsCore is the unit gate for review
+// 2026-08-07 wave 2 item 12. An empty extension slice is exactly the tiny
+// profile, and tiny is not an empty surface: it is the core registry. At
+// 003b3353 this returned 0, so namesNotIn could never see a core acquisition
+// and (environment '(wile tiny)) handed out 208 primitives with no capability
+// question asked.
+func TestExtensionPrimitiveNamesCountsCore(t *testing.T) {
+	c := qt.New(t)
+	names, err := extensionPrimitiveNames(nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(names), qt.Equals, coreRegistryPrimitiveCount)
+
+	// A sample of names an embedder would recognise, so a future registry
+	// churn that changes the count says which direction it moved.
+	for _, name := range []string{"car", "cons", "string-append", "vector-fill!", "char<?", "string<?"} {
+		_, ok := names[name]
+		c.Assert(ok, qt.IsTrue, qt.Commentf("core primitive %q missing from the tiny surface", name))
+	}
 }
 
 // TestCheckProfileWidening covers the three-case rule: no authorizer allows
@@ -162,7 +209,13 @@ func TestCheckProfileWidening(t *testing.T) {
 // TestCheckProfileWideningUnknownSurfaceIsNotContained pins the conservative
 // reading of an engine whose registry cannot be established: containment is not
 // provable, so a non-empty request must reach the authorizer rather than being
-// waved through. An empty request (tiny) widens nothing and is still allowed.
+// waved through.
+//
+// Tiny is one of those requests. It used to be the exception here — an empty
+// extension slice looked like an empty request, so it was waved through — and
+// that reading was the item 12 fail-open. A profile is core plus its
+// extensions, so the smallest request in the system is 208 names, and against
+// an unprovable surface even tiny must be asked about.
 func TestCheckProfileWideningUnknownSurfaceIsNotContained(t *testing.T) {
 	c := qt.New(t)
 	ns := environment.NewNamespace()
@@ -170,7 +223,9 @@ func TestCheckProfileWideningUnknownSurfaceIsNotContained(t *testing.T) {
 
 	tinyExts, err := ProfileExtensions("tiny")
 	c.Assert(err, qt.IsNil)
-	c.Assert(checkProfileWidening(ns, "tiny", tinyExts), qt.IsNil)
+	err = checkProfileWidening(ns, "tiny", tinyExts)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, ErrProfileWidensEngine), qt.IsTrue)
 
 	consoleExts, err := ProfileExtensions("console")
 	c.Assert(err, qt.IsNil)

@@ -346,6 +346,17 @@ func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveI
 		// Reached only when the mutable tier holds something that is NOT this
 		// primitive — a user shadow. Ask the SEALED tiers directly so the shadow
 		// cannot suppress the real answer.
+		//
+		// "Sealed tiers" now includes IMPORTS, which install at (ExactPhase(0),
+		// sealed) and outrank the ambient startup set, so this probe can answer with
+		// an import where it used to answer with the primitive. That is not a
+		// fail-open widening, because name only LOCATES here and identity DECIDES: a
+		// genuine re-export carries the same PrimitiveIdentity and gives the same
+		// answer, while a library that binds this name to something else fails
+		// recognizedValue and lands on the refusal below. The direction of the
+		// change is therefore fail-CLOSED, and it answers the more honest question —
+		// what does THIS namespace bind the name to — than reaching past an import
+		// to the startup set would.
 		sealed := runtime.Namespace().Store().SealedBindingAt(sym, values.EmptyScopes(), environment.PhaseRuntime)
 		q = recognizedValue(sealed, identity)
 	}

@@ -46,16 +46,9 @@ var nonDestructiveBangs = map[string]string{
 	"mutex-lock!":                      "lock acquisition",
 	"mutex-unlock!":                    "lock release",
 	"mutex-specific-set!":              "per-mutex slot",
-	"rw-mutex-read-lock!":              "lock acquisition",
-	"rw-mutex-read-unlock!":            "lock release",
-	"rw-mutex-write-lock!":             "lock acquisition",
-	"rw-mutex-write-unlock!":           "lock release",
-	"rw-mutex-try-read-lock!":          "lock acquisition",
-	"rw-mutex-try-write-lock!":         "lock acquisition",
 	"condition-variable-signal!":       "condition signalling",
 	"condition-variable-broadcast!":    "condition signalling",
 	"condition-variable-specific-set!": "per-condvar slot",
-	"once-do!":                         "run-once latch",
 
 	// Process / environment: outside the value world entirely.
 	"set-current-directory!": "process state, not a Scheme value",

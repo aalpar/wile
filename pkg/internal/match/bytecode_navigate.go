@@ -45,23 +45,20 @@ func (ByteCodeVisitCarAsVector) String() string {
 	return "VisitCarAsVector"
 }
 
+// ByteCodeVisitCarAsBox checks that the car of the current pair is a SyntaxBox,
+// wraps its content in a one-element SyntaxPair chain, and pushes the chain onto
+// the syntax stack. A box holds exactly one datum, so `#&<pattern>` matches as
+// the one-element sub-list `(<pattern>)` and every pair opcode applies unchanged.
+type ByteCodeVisitCarAsBox struct{}
+
+func (ByteCodeVisitCarAsBox) String() string {
+	return "VisitCarAsBox"
+}
+
 // ByteCodeRequireCarEmptyVector verifies that the car at the current position is an
 // empty SyntaxVector. Used for empty vector patterns #().
 type ByteCodeRequireCarEmptyVector struct{}
 
 func (ByteCodeRequireCarEmptyVector) String() string {
 	return "RequireCarEmptyVector"
-}
-
-// ByteCodeRequireCarEmpty verifies that the car at the current position is an empty list.
-//
-// Problem: Pattern () should only match input (). Without this check,
-// VisitCar + Done would match any list, because Done only checks that CDR is empty.
-//
-// Solution: Generate this instruction instead of VisitCar when the pattern
-// element is (). It verifies the input car is also empty before proceeding.
-type ByteCodeRequireCarEmpty struct{}
-
-func (p ByteCodeRequireCarEmpty) String() string {
-	return "RequireCarEmpty"
 }

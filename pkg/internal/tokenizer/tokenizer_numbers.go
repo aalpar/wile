@@ -48,58 +48,86 @@ func signedState(signed bool, s, u TokenizerState) TokenizerState {
 	return u
 }
 
-// readSpecialNumber reads inf.0 or nan.0 special number literals.
-// If onMismatch is provided, it is called when the keyword doesn't match and no
-// error is set; otherwise mismatchErr is raised. After the keyword it requires
-// '.' followed by at least one digit in radix r.
-func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMismatch func()) {
+// readSpecialNumber reads an <infnan> keyword (inf.0, nan.0) with its mandatory
+// '.' and at least one digit in radix r. It returns "" when the literal was
+// read, and otherwise the message describing why the run is not one — without
+// raising it, and without touching p.err.
+//
+// Reporting rather than raising is what makes the scanner speculative. The
+// sign-initial arms discard the message and hand the run to the symbol scanner
+// (a peculiar identifier is still possible there); the arms inside a complex
+// literal, where no identifier can follow, raise it through
+// requireSpecialNumber. Setting p.err on a path that then reports "not a
+// number" is what turned `+nan`, `+nane` and `+nan_x` into hard read errors.
+func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchMsg string) string {
+	// The keyword check precedes any error check. At end of input scanWith
+	// reports a short match AND io.EOF, so returning on the error first accepted
+	// a truncated keyword: `+in` at end of input read as +inf.0, `+n` as +nan.0.
 	n := p.scanCaseInsensitive([]byte(s))
-	if p.err != nil {
-		return
-	}
 	if n != 0 {
-		if onMismatch != nil {
-			onMismatch()
-			return
-		}
-		p.fail(mismatchErr)
-		return
+		return mismatchMsg
 	}
+	// A complete keyword still needs its ".0". At end of input curr() is the
+	// RuneError sentinel, which fails this test the same way ')' does — that is
+	// the second early-out, and it is why `+inf` at end of input read as +inf.0
+	// while `(list '+inf)` errored.
 	if !isDot(p.curr()) {
-		p.fail(MessageExpectingDecimalFraction)
-		return
+		return MessageExpectingDecimalFraction
 	}
 	p.next()
 	if !isDigit(r, p.curr()) {
-		p.fail(MessageExpectingDecimalFraction)
-		return
+		return MessageExpectingDecimalFraction
 	}
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
+	return ""
 }
 
-// readNan attempts to parse a NaN literal (e.g. "nan.0"). Returns true if
-// the full literal was parsed successfully. On text mismatch, consumes
-// remaining sign-subsequent characters (symbol fallback) and returns false
-// without setting an error. On text match but malformed suffix (e.g. "nan,0"),
-// returns false with p.err set.
-func (p *Tokenizer) readNan(s string, r int) bool {
-	matched := true
-	p.readSpecialNumber(s, r, "", func() {
-		matched = false
-		for p.err == nil && isSignSubsequent(p.curr()) {
-			p.next()
-		}
-	})
-	// Text matched but suffix was malformed (not ".0") — not a valid NaN.
-	// EOF is excluded: it means we hit end-of-input after a valid "nan.0".
-	if matched && p.err != nil && !errors.Is(p.err, io.EOF) {
-		matched = false
+// requireSpecialNumber reads an <infnan> in a position that admits no identifier
+// fallback — the imaginary part of a complex literal — and raises the mismatch
+// as a lexical fault.
+//
+// A pending fault is left alone: it is the more specific one and already carries
+// its stamp, and suppressing the mismatch diagnostic under one is what the
+// pre-fix reader did by returning before the keyword was checked.
+func (p *Tokenizer) requireSpecialNumber(s string, r int, mismatchMsg string) {
+	msg := p.readSpecialNumber(s, r, mismatchMsg)
+	if msg == "" || p.err != nil {
+		return
 	}
-	return matched
+	p.fail(msg)
 }
 
-func (p *Tokenizer) readInf(s string, r int) {
-	p.readSpecialNumber(s, r, MessageExpectingInf, nil)
+// atNumberEnd reports whether the scanner sits at a legal end for a numeral that
+// terminates implicitly: a delimiter, a '#' prefix, or end of input.
+//
+// R7RS §7.1.1 exempts only +i, -i and <infnan> from <peculiar identifier>, so a
+// complete one of those followed by anything else is an identifier, not a number
+// and a second datum — the rule CLAUDE.local.md already records for
+// radix-prefixed numerals. A pending diagnostic is not an end: the run goes back
+// to the symbol scanner with the fault still on p.err.
+func (p *Tokenizer) atNumberEnd() bool {
+	if p.err != nil {
+		return errors.Is(p.err, io.EOF)
+	}
+	return isDelimiterOrMarker(p.curr())
+}
+
+// fallBackToSymbol abandons a speculative numeric scan: the run is re-typed as a
+// peculiar identifier, its remaining subsequents are consumed, and the token
+// value is restored from the raw text.
+//
+// The restore is the point. Each arm used to mint its own symbol from wherever
+// the scanner had reached, dropping everything before it — `+.abc` became the
+// symbol `bc`, `+nabc` and `+node` became the empty symbol, and distinct
+// identifiers turned eq?.
+//
+// Nothing is un-read, so the package's no-backtracking rule holds, and p.err is
+// never cleared: the arms report "not a number" by returning false, so any error
+// still on the field is a real lexical fault and stays.
+func (p *Tokenizer) fallBackToSymbol() {
+	p.state = TokenizerStateSymbol
+	p.readSymbol()
+	p.value = append(p.value[:0], p.text...)
 }
 
 // readBigNum reads an arbitrary-precision number after the prefix marker.
@@ -201,89 +229,93 @@ func (p *Tokenizer) readOptionalDecimalPart(r int, hadHash bool) {
 	p.mayReadExponent(r) //nolint:errcheck
 }
 
-func (p *Tokenizer) readImaginaryOrSignedInfinity(r int) {
+// readImaginaryOrSignedInfinity scans a sign followed by 'i': the unit imaginary
+// +i/-i, the infinities +inf.0/-inf.0, and the complex literals built on them.
+// It reports whether the run is a number; false leaves it to the caller to
+// rescan as a peculiar identifier.
+func (p *Tokenizer) readImaginaryOrSignedInfinity(r int) bool {
+	p.next() // consume 'i'
+	if p.err == nil && (p.curr() == 'n' || p.curr() == 'N') {
+		return p.readSignedInfinity(r)
+	}
+	// +i and -i are the unit imaginary only when the token ends here; `+i2`,
+	// `+ifoo` and `-ibar` are single identifiers, not a number and a second
+	// datum. Extending requireDelimiterAfterRadixNumeral to r == 0 would make
+	// them read errors instead, which is equally nonconformant.
+	if !p.atNumberEnd() {
+		return false
+	}
 	p.state = TokenizerStateSignedImaginary
-	p.next()
-	if p.err != nil {
-		return
+	return true
+}
+
+// readSignedInfinity scans +inf.0/-inf.0 and the complex literals extending
+// them (+inf.0i, +inf.0+2i). Reports whether the run is a number.
+func (p *Tokenizer) readSignedInfinity(r int) bool {
+	if p.readSpecialNumber("nf", r, MessageExpectingInf) != "" {
+		return false
 	}
-	if p.curr() != 'n' && p.curr() != 'N' { // +i -i
-		// TODO +i -i
-		p.state = TokenizerStateSignedImaginary
-		return
-	}
-	// +inf.0
 	p.state = TokenizerStateSignedInf
-	p.readInf("nf", r)
-	if p.err != nil {
-		return
-	}
 	if isExplicitSign(p.curr()) {
-		// +inf.0+2i - complex with signed decimal real
+		// +inf.0+2i — rectangular complex with an <infnan> real part.
 		p.state = TokenizerStateSignedComplex
 		p.next()
 		if p.err != nil {
-			return
+			return false
 		}
 		p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
-		if p.err != nil {
-			return
-		}
-		if !isImaginary(p.curr()) { // +inf.0i
-			return
-		}
-		// skip 'i'
-		p.next()
-		return
+		p.mayConsumeImaginarySuffix()
+		return p.atNumberEnd()
 	}
-	if !isImaginary(p.curr()) { // +inf.0i
-		return
+	if p.mayConsumeImaginarySuffix() {
+		p.state = TokenizerStateSignedImaginaryInf
 	}
-	p.state = TokenizerStateSignedImaginaryInf
-	// skip 'i'
-	p.next()
+	return p.atNumberEnd()
 }
 
-func (p *Tokenizer) readSignedNan(r int) {
-	p.state = TokenizerStateSymbol
-	if !p.readNan("nan", r) {
-		return
+// readSignedNan scans +nan.0/-nan.0 and the imaginary form +nan.0i. Reports
+// whether the run is a number.
+func (p *Tokenizer) readSignedNan(r int) bool {
+	if p.readSpecialNumber("nan", r, MessageExpectingNan) != "" {
+		return false
 	}
 	p.state = TokenizerStateSignedNan
 	if p.mayConsumeImaginarySuffix() {
 		p.state = TokenizerStateSignedImaginaryNan
 	}
+	return p.atNumberEnd()
 }
 
-func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
-	p.next()
-	if p.err != nil {
-		return
-	}
-	switch {
+// readSignedDecimalFractionOrExponentWithImaginary scans a sign followed by '.':
+// the decimal fraction +.5, and the complex literals extending it. Reports
+// whether the run is a number.
+func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) bool {
+	p.next() // consume '.'
 	// A digit in the current radix is a digit, not a symbol character. The two
 	// sets overlap only in hex, where a-f are dot-subsequents as well: under #x,
 	// `-.f` is the fraction -0.9375 rather than the peculiar identifier -.f.
-	case isDigit(r, p.curr()):
-		p.state = TokenizerStateSignedDecimalFraction
-		p.tokRadix = effectiveRadix(r)
-	case p.readDotSubsequentSymbol():
-		// Symbol consumed; falls through to no-op digit/exponent reads below
-	default:
-		p.fail(MessageExpectingDecimalFraction)
-		return
+	//
+	// Anything else — a dot-subsequent, a delimiter, end of input — is not a
+	// fraction, and the caller rescans the whole run. Consuming the identifier
+	// here instead is what made `'+.abc` the symbol `bc` and `'-.f` the empty
+	// symbol.
+	if p.err != nil || !isDigit(r, p.curr()) {
+		return false
 	}
-	// read decimal fractional part
+	p.state = TokenizerStateSignedDecimalFraction
+	p.tokRadix = effectiveRadix(r)
+	// Past the point of no return: a fault from here on is a fault in a number,
+	// not a reason to reinterpret the run.
 	p.readDigitsAndHash(r)
 	if p.err != nil {
-		return
+		return true
 	}
-	// read optional exponent
 	p.mayReadExponent(r) //nolint:errcheck
 	if p.err != nil {
-		return
+		return true
 	}
 	p.readSignedComplexSuffix(r)
+	return true
 }
 
 func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
@@ -328,7 +360,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 			}
 			// If followed by 'n', it might be inf.0i - continue parsing
 			if p.curr() == 'n' {
-				p.readSpecialNumber("nf", r, MessageExpectingInf, nil)
+				p.requireSpecialNumber("nf", r, MessageExpectingInf)
 				if p.err != nil {
 					return
 				}
@@ -420,35 +452,44 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 	switch {
 	case isExplicitSign(p.curr()):
 		p.signed = true
-		p.state = TokenizerStateSymbol
+		// The token type is assigned by whichever arm reaches its point of no
+		// return, never before: this used to say TokenizerStateSymbol here, so a
+		// rune error one character into a numeral was stamped `symbol` in the
+		// diagnostic. mark() leaves the state at TokenizerStateFailed, which is
+		// the honest answer while the run is still undecided.
 		p.next()
 		if p.err != nil {
-			// Bare sign at EOF — populate value from text
+			// Bare sign at end of input, or a fault on the next rune. Either
+			// way the run is the symbol + or -.
+			p.state = TokenizerStateSymbol
 			p.value = append(p.value[:0], p.text...)
 			return
 		}
 		switch {
 		case isImaginary(p.curr()):
-			p.readImaginaryOrSignedInfinity(r)
+			if !p.readImaginaryOrSignedInfinity(r) {
+				p.fallBackToSymbol()
+			}
 			return
 		case p.curr() == 'n' || p.curr() == 'N':
-			p.readSignedNan(r)
+			if !p.readSignedNan(r) {
+				p.fallBackToSymbol()
+			}
 			return
 		case isDigit(r, p.curr()):
 			p.readIntegerAndFraction(true, r)
 			return
 		case isDot(p.curr()):
-			p.readSignedDecimalFractionOrExponentWithImaginary(r)
+			if !p.readSignedDecimalFractionOrExponentWithImaginary(r) {
+				p.fallBackToSymbol()
+			}
 			return
 		case isSignSubsequent(p.curr()):
-			p.state = TokenizerStateSymbol
-			for p.err == nil && isSymbolSubsequent(p.curr()) {
-				p.next()
-			}
-			p.value = append(p.value[:0], p.text...)
+			p.fallBackToSymbol()
 			return
 		}
 		// Bare sign (+/-) as symbol
+		p.state = TokenizerStateSymbol
 		p.value = append(p.value[:0], p.text...)
 		return
 	case isDot(p.curr()):
@@ -467,11 +508,22 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 	// Branch 1: Starts with explicit sign (+/-)
 	switch {
 	case p.curr() == 'i':
-		// Could be inf.0 - caller already handles unit imaginary 'i'
-		p.readInf("inf", r) //nolint:errcheck
+		// The imaginary part is either the unit imaginary (+inf.0+i) or another
+		// infinity (+inf.0+inf.0i); only the second continues into the keyword.
+		// The sole caller that reaches this arm is readSignedInfinity, which
+		// does NOT pre-handle the unit 'i' — scanning "inf" unconditionally
+		// consumed it and then mismatched, and `+inf.0+i` read as a number only
+		// because end of input suppressed the fault. `+inf.0+i)` was a read
+		// error. Same shape as readIntegerAndFraction and
+		// mayReadSignedImaginaryPart, which already peek this way.
+		p.next() // consume 'i'
+		if p.err != nil || p.curr() != 'n' {
+			return
+		}
+		p.requireSpecialNumber("nf", r, MessageExpectingInf)
 		return
 	case p.curr() == 'n':
-		p.readSpecialNumber("nan", r, MessageExpectingNan, nil)
+		p.requireSpecialNumber("nan", r, MessageExpectingNan)
 		return
 	case isDot(p.curr()):
 		// consume dot
@@ -556,7 +608,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) {
 			return
 		}
 		// Could be inf.0i - continue parsing "nf.0<digits>i"
-		p.readSpecialNumber("nf", r, MessageExpectingInf, nil)
+		p.requireSpecialNumber("nf", r, MessageExpectingInf)
 		if p.err != nil {
 			return
 		}
@@ -564,7 +616,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) {
 		return
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i
-		p.readSpecialNumber("nan", r, MessageExpectingNan, nil)
+		p.requireSpecialNumber("nan", r, MessageExpectingNan)
 		if p.err != nil {
 			return
 		}

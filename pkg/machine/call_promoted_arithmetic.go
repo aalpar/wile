@@ -92,13 +92,22 @@ func isNonRealComplex(n values.Number) bool {
 	}
 }
 
+// The promoted comparison ops derive from values.CompareNumbers, exactly as the
+// out-of-line primitives in pkg/registry/core do. They must: the peephole
+// promotes a call site into one of these WITHOUT changing what the program
+// means, so a promoted `<` that answered differently from the primitive `<`
+// would make optimization observable.
+//
+// NaN needs no special case. It is the kernel's OrderUnordered, which none of
+// the five accepts.
+
 // inlineNumLt pops two numbers and sets value register to (< a b).
 func inlineNumLt(mc *MachineContext, name string) error {
 	a, b, err := popTwoReals(mc, name)
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.BoolToBoolean(a.LessThan(b)))
+	mc.SetValue(values.BoolToBoolean(values.CompareNumbers(a, b) == values.OrderLess))
 	return nil
 }
 
@@ -109,11 +118,8 @@ func inlineNumLe(mc *MachineContext, name string) error {
 	if err != nil {
 		return err
 	}
-	if a.IsNaN() || b.IsNaN() {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.BoolToBoolean(!b.LessThan(a)))
+	v := values.CompareNumbers(a, b)
+	mc.SetValue(values.BoolToBoolean(v == values.OrderLess || v == values.OrderEqual))
 	return nil
 }
 
@@ -123,7 +129,7 @@ func inlineNumGt(mc *MachineContext, name string) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.BoolToBoolean(b.LessThan(a)))
+	mc.SetValue(values.BoolToBoolean(values.CompareNumbers(a, b) == values.OrderGreater))
 	return nil
 }
 
@@ -134,11 +140,8 @@ func inlineNumGe(mc *MachineContext, name string) error {
 	if err != nil {
 		return err
 	}
-	if a.IsNaN() || b.IsNaN() {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.BoolToBoolean(!a.LessThan(b)))
+	v := values.CompareNumbers(a, b)
+	mc.SetValue(values.BoolToBoolean(v == values.OrderGreater || v == values.OrderEqual))
 	return nil
 }
 
@@ -148,7 +151,7 @@ func inlineNumEq(mc *MachineContext, name string) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.BoolToBoolean(values.NumericEquals(a, b)))
+	mc.SetValue(values.BoolToBoolean(values.CompareNumbers(a, b) == values.OrderEqual))
 	return nil
 }
 

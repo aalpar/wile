@@ -157,7 +157,6 @@ func (*OperationMakeClosure) OpKind() OpCode {
 // rather than panic at runtime in AppendOperationsWithSource.
 
 var (
-	_ InlinedOperation = (*OperationForeignFunctionCall)(nil)
 	_ InlinedOperation = (*OperationMakeCaseLambdaClosure)(nil)
 	_ InlinedOperation = (*OperationPushWind)(nil)
 	_ InlinedOperation = (*OperationPopWind)(nil)
@@ -167,10 +166,6 @@ var (
 	_ InlinedOperation = (*OperationBoxValues)(nil)
 	_ InlinedOperation = (*OperationUnboxValues)(nil)
 )
-
-func (*OperationForeignFunctionCall) OpKind() OpCode {
-	return OpComplex
-}
 
 func (*OperationMakeCaseLambdaClosure) OpKind() OpCode {
 	return OpComplex

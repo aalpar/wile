@@ -61,7 +61,9 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 		if err != nil {
 			return err
 		}
-		li := p.template.MaybeAppendLiteral(val)
+		// No unquote anywhere: the quasiquote is a constant and gets the same
+		// R7RS §4.1.2 treatment (and the same pre-append mark) as a quote.
+		li := p.appendConstantLiteral(val)
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(li))
 		return nil
 	}
@@ -106,7 +108,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 	if !hasSplice {
 		// Simple case: (list->vector (list elem1 elem2 ...))
 		var elems []syntax.SyntaxValue
-		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
+		elems = append(elems, p.quasiHead("list", srcCtx))
 		for _, elem := range v.Values {
 			expandedElem, err := p.expandQuasi(ctx, elem, depth, kw, g)
 			if err != nil {
@@ -116,7 +118,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 		}
 		listExpr := p.buildQuasiSyntaxList(srcCtx, elems...)
 		return p.buildQuasiSyntaxList(srcCtx,
-			syntax.NewSyntaxSymbol("list->vector", srcCtx),
+			p.quasiHead("list->vector", srcCtx),
 			listExpr,
 		), nil
 	}
@@ -163,7 +165,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 
 	appendExpr := p.buildQuasiSyntaxList(srcCtx, p.segmentsToAppendArgs(srcCtx, segments)...)
 	return p.buildQuasiSyntaxList(srcCtx,
-		syntax.NewSyntaxSymbol("list->vector", srcCtx),
+		p.quasiHead("list->vector", srcCtx),
 		appendExpr,
 	), nil
 }

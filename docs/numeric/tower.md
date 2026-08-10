@@ -68,9 +68,9 @@ The rule, stated once: **contagion is a promotion question and the table owns it
 
 Big* arithmetic remains significantly slower (heap-allocated, no hardware acceleration), so keeping ordinary float arithmetic out of it matters.
 
-### Two Promotion Tables: Arithmetic vs Comparison
+### Arithmetic Promotes; Comparison Does Not
 
-Contagion is a property of ARITHMETIC, not of comparison, and the two use **different** tables (`values.promotionTable` and `values.comparisonTable`).
+Contagion is a property of ARITHMETIC, not of comparison. Arithmetic brings two operands into a common kind via `values.promotionTable`. **Comparison does not promote at all.**
 
 Rounding an operand is free when the result is already inexact, and fatal when the result is a boolean — the rounding is what *decides* the boolean:
 
@@ -79,20 +79,23 @@ Rounding an operand is free when the result is already inexact, and fatal when t
 (< (- (expt 2 100) 1) (exact->inexact (expt 2 100)))   ; => #t
 ```
 
-Both operands round to the same `float64`. A lossy comparison would call them equal; they are not, and Chez says so too. So `comparisonTable` promotes **up** to a domain that represents both operands exactly. It is exactly what `promotionTable` was before contagion was separated out of it — the "no lossy paths" invariant did not die, it moved to the table where it belongs.
+Both operands round to the same `float64`. A lossy comparison would call them equal; they are not, and Chez says so too.
 
-The two tables differ on exactly the pairs where arithmetic would round an exact operand — that is, where an exact kind meets a **float64-backed** inexact kind:
+`values.CompareNumbers` (`pkg/values/compare.go`) is the single authority behind `=`, `<`, `>`, `<=` and `>=`. It returns one of four verdicts — `OrderLess`, `OrderEqual`, `OrderGreater`, `OrderUnordered` — and its contract is that it **never rounds an operand**:
 
-| Pair | `promotionTable` (arithmetic) | `comparisonTable` (comparison) |
-|------|-------------------------------|--------------------------------|
-| exact × `Float` | `Float` (contaminates down) | `BigFloat` (promotes up) |
-| exact × `Complex` | `Complex` (contaminates down) | `BigComplex` (promotes up) |
-| exact × `BigFloat` | `BigFloat` | `BigFloat` — agree |
-| exact × `BigComplex` | `BigComplex` | `BigComplex` — agree |
+| Operands | How a common domain is reached |
+|----------|--------------------------------|
+| both exact | compared exactly |
+| mixed exact/inexact, both finite | the **inexact** operand is lifted to its exact rational |
+| either infinite | compared by sign class; equal infinities of the same sign are `OrderEqual` |
+| either NaN | `OrderUnordered`; all five predicates are `#f` |
+| complex | equality is component-wise; the ordering predicates raise on a non-real operand |
 
-`BigFloat` and `BigComplex` hold an exact operand without rounding it, so there is nothing to split. Everywhere else the tables agree. `TestComparisonResultKind_API` pins exactly this (it asserts the tables differ on every exact × float64-backed pair and agree on every other pair), and both tables are held to the semilattice laws (`TestPromotionTable_Associativity`, `TestComparisonTable_Associativity`).
+The lifting direction is the whole point. Every finite `float64` and every finite `big.Float` **is** a rational, so lifting the inexact operand always exists; lifting the exact operand into a float never does. R7RS §6.2.6 names the consequence of getting this backwards: "The implementation approach of converting all arguments to inexact numbers if any argument is inexact is not transitive."
 
-`PromotionResultKind(a, b)` and `ComparisonResultKind(a, b)` are **test-only** accessors, declared in `pkg/values/export_test.go` and not part of the public API. They were exported from `promotion.go` once; the doc comment there records why they were demoted (a raw index panic on an out-of-range `NumericKind`, and two same-typed functions whose confusion silently rounds an operand). Production code indexes the tables directly.
+There used to be a second kind table, `comparisonTable`, sending exact × `Float` to `BigFloat` and exact × `Complex` to `BigComplex` and calling that the lossless lattice. It was not lossless: `DefaultBigFloatPrecision` is 256, so an exact operand needing 301 significant bits was rounded on the way in and trichotomy failed outright. The table is deleted.
+
+`PromotionResultKind(a, b)` is a **test-only** accessor, declared in `pkg/values/export_test.go` and not part of the public API. It was exported from `promotion.go` once, alongside a `ComparisonResultKind` that read the deleted table; the doc comment there records why they were demoted (a raw index panic on an out-of-range `NumericKind`, and two same-typed functions whose confusion silently rounds an operand). Production code indexes the table directly.
 
 ### Hot-Loop Allocation Reduction (`BigInteger` only)
 

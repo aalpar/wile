@@ -24,7 +24,6 @@ import (
 	"math"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -40,16 +39,83 @@ import (
 )
 
 type mcpServer struct {
-	mu             sync.Mutex
+	// mu is a capacity-1 semaphore rather than a sync.Mutex because a handler
+	// must be able to bound how long it waits for the session. sync.Mutex has
+	// no bounded acquire, and an unbounded wait here does not merely delay one
+	// call: mcp-go handles non-tool messages inline on its read loop
+	// (stdio.go), so one blocked handler stops the server reading any further
+	// stdin message at all.
+	mu             chan struct{}
 	engine         *wile.Engine
 	meta           *repl.MetaCommandHandler
 	defaultTimeout time.Duration
 }
 
+// mcpLockWait bounds how long a handler waits for the session before answering
+// "busy". It is deliberately independent of any eval's deadline: the VM's
+// cancellation poll fires only between instructions, so a hold that blocks
+// inside one instruction is not interruptible by context at all, and a bound
+// derived from the eval's own timeout would inherit that hole.
+//
+// The trade-off is explicit: a caller that contends with a legitimately long
+// eval is told "busy" after this long instead of queueing behind it. That is
+// the price of guaranteeing the server keeps reading stdin, and MCP clients
+// issue tool calls sequentially, so contention is the exception.
+//
+// A var, not a const, only so tests can shorten it.
+var mcpLockWait = 30 * time.Second
+
+// mcpMaxEvalTimeout is the ceiling applied when no finite timeout is requested
+// -- a per-call "timeout":0, or a session default of 0 from --mcp-timeout 0 or
+// the set-timeout tool. "No timeout" means "no caller-supplied deadline", not
+// "hold the session for the life of the process".
+const mcpMaxEvalTimeout = 10 * time.Minute
+
+// mcpBusyMessage is returned when the session semaphore cannot be taken within
+// mcpLockWait.
+const mcpBusyMessage = "server busy: another evaluation still holds the session; " +
+	"retry, or use the reset tool once it completes"
+
+// errMCPSessionBusy is the sentinel for the same condition on the resource
+// handlers, which return an error rather than a tool result. Package-local
+// because the condition is specific to this server, matching the package-local
+// sentinel precedent under pkg/machine.
+var errMCPSessionBusy = werr.NewStaticError("mcp session busy")
+
+// newMCPServer builds a server with its session semaphore initialised. The
+// zero value is not usable: a nil channel blocks forever on acquire.
+func newMCPServer() *mcpServer {
+	return &mcpServer{
+		mu: make(chan struct{}, 1),
+	}
+}
+
+// acquire takes the session semaphore, waiting at most mcpLockWait, and
+// reports whether it succeeded. A false return means the caller must answer
+// mcpBusyMessage rather than block.
+func (p *mcpServer) acquire(ctx context.Context) bool {
+	timer := time.NewTimer(mcpLockWait)
+	defer timer.Stop()
+	select {
+	case p.mu <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return false
+	}
+}
+
+// release returns the session semaphore. It must only be called by a caller
+// whose acquire returned true.
+func (p *mcpServer) release() {
+	<-p.mu
+}
+
 // doMCP starts a Model Context Protocol server on stdio, exposing the Wile
 // documentation, evaluation, and session management tools.
 func doMCP(ctx context.Context, timeoutSec float64) error {
-	srv := &mcpServer{}
+	srv := newMCPServer()
 	if timeoutSec > 0 {
 		srv.defaultTimeout = time.Duration(timeoutSec * float64(time.Second))
 	}
@@ -106,7 +172,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 			mcp.WithNumber("timeout",
 				mcp.Description(
 					"Eval timeout in seconds. Overrides the session default. "+
-						"Use for long-running computations. 0 means no timeout."),
+						"Use for long-running computations. 0 means no "+
+						"caller-supplied deadline, which is bounded by the "+
+						"server maximum of 10 minutes, not unbounded."),
 			),
 		),
 		srv.handleEval,
@@ -209,7 +277,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 					"Use 0 to disable the timeout."),
 			mcp.WithNumber("seconds",
 				mcp.Required(),
-				mcp.Description("Timeout in seconds (0 = no timeout)"),
+				mcp.Description(
+					"Timeout in seconds. 0 means no caller-supplied deadline, "+
+						"bounded by the server maximum of 10 minutes."),
 			),
 		),
 		srv.handleSetTimeout,
@@ -226,8 +296,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 }
 
 // initLocked lazily initializes the engine and meta-command handler.
-// The caller must hold p.mu. Redirects current-output-port away from
-// os.Stdout to prevent Scheme output from corrupting the MCP transport.
+// The caller must hold the session (acquire returned true). Redirects
+// current-output-port away from os.Stdout to prevent Scheme output from
+// corrupting the MCP transport.
 func (p *mcpServer) initLocked(ctx context.Context) error {
 	if p.meta != nil {
 		return nil
@@ -295,7 +366,7 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 // silent failure to redirect corrupts the protocol stream (Scheme output
 // interleaved into JSON-RPC) with no diagnostic. Callers decide the policy — the
 // init and capture paths must surface it; the panic-recovery path logs and
-// continues. The caller must hold p.mu.
+// continues. The caller must hold the session (acquire returned true).
 func (p *mcpServer) redirectOutput(w io.Writer) error {
 	if p.engine == nil {
 		return werr.WrapForeignErrorf(werr.ErrEngineInit,
@@ -316,14 +387,33 @@ type evalResult struct {
 	Value  string `json:"value,omitempty"`
 }
 
+// handleEval evaluates Scheme under the session lock.
+//
+// INVARIANT: the server remains able to read stdin and answer further requests
+// regardless of any per-call timeout value. Two mechanisms hold it up, and the
+// first is primary:
+//
+//  1. The session is taken with a bounded acquire (mcpLockWait), so a handler
+//     that cannot get it answers "busy" instead of blocking. This is the
+//     mechanism that survives an eval the VM's cancellation poll cannot reach:
+//     the poll fires only between instructions, so a hold that blocks inside
+//     one instruction is not interruptible by context at all.
+//  2. Every eval runs under a finite deadline (mcpMaxEvalTimeout when none is
+//     supplied), so the holder itself eventually releases.
+//
+// Relying on ctx cancellation alone would restore the wedge for any code path
+// that blocks below the poll.
 func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (toolResult *mcp.CallToolResult, toolErr error) {
 	code := req.GetString("code", "")
 	if code == "" {
 		return mcp.NewToolResultError("code parameter is required"), nil
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	held := p.acquire(ctx)
+	if !held {
+		return mcp.NewToolResultError(mcpBusyMessage), nil
+	}
+	defer p.release()
 
 	// Recover from panics in the Scheme VM so a single bad eval
 	// does not crash the entire MCP server.
@@ -363,11 +453,16 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 	} else if timeout == 0 {
 		evalTimeout = 0
 	}
-	if evalTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, evalTimeout)
-		defer cancel()
+	// A zero timeout -- per-call, or a session default from --mcp-timeout 0 or
+	// the set-timeout tool -- used to skip context.WithTimeout entirely, giving
+	// an uncancellable hold on the session for the life of the process. It now
+	// means "no caller-supplied deadline", bounded by mcpMaxEvalTimeout.
+	if evalTimeout <= 0 {
+		evalTimeout = mcpMaxEvalTimeout
 	}
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, evalTimeout)
+	defer cancel()
 
 	// Capture stdout: redirect this engine's current-output-port to a buffer.
 	// initLocked already guaranteed io state (it errors otherwise), so this
@@ -417,8 +512,11 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 // runMeta routes a comma-command through MetaCommandHandler, capturing output
 // in a strings.Builder and returning it as a tool result.
 func (p *mcpServer) runMeta(ctx context.Context, line string) (toolResult *mcp.CallToolResult, toolErr error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	held := p.acquire(ctx)
+	if !held {
+		return mcp.NewToolResultError(mcpBusyMessage), nil
+	}
+	defer p.release()
 
 	defer func() {
 		r := recover()
@@ -481,8 +579,11 @@ func (p *mcpServer) handleDisassemble(ctx context.Context, req mcp.CallToolReque
 		return mcp.NewToolResultError("name parameter is required"), nil
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	held := p.acquire(ctx)
+	if !held {
+		return mcp.NewToolResultError(mcpBusyMessage), nil
+	}
+	defer p.release()
 
 	err := p.initLocked(ctx)
 	if err != nil {
@@ -496,9 +597,12 @@ func (p *mcpServer) handleDisassemble(ctx context.Context, req mcp.CallToolReque
 	return mcp.NewToolResultText(result), nil
 }
 
-func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *mcpServer) handleReset(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	held := p.acquire(ctx)
+	if !held {
+		return mcp.NewToolResultError(mcpBusyMessage), nil
+	}
+	defer p.release()
 	if p.engine == nil {
 		return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
 	}
@@ -516,7 +620,7 @@ func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.
 	return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
 }
 
-func (p *mcpServer) handleSetTimeout(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *mcpServer) handleSetTimeout(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	seconds := req.GetFloat("seconds", -1)
 	if seconds == -1 {
 		return mcp.NewToolResultError("seconds parameter is required"), nil
@@ -524,11 +628,16 @@ func (p *mcpServer) handleSetTimeout(_ context.Context, req mcp.CallToolRequest)
 	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 {
 		return mcp.NewToolResultError("seconds must be a non-negative number"), nil
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	held := p.acquire(ctx)
+	if !held {
+		return mcp.NewToolResultError(mcpBusyMessage), nil
+	}
+	defer p.release()
 	if seconds == 0 {
 		p.defaultTimeout = 0
-		return mcp.NewToolResultText("Eval timeout disabled."), nil
+		return mcp.NewToolResultText(fmt.Sprintf(
+			"Eval timeout set to the maximum of %s (0 means no caller-supplied "+
+				"deadline, not unbounded).", mcpMaxEvalTimeout)), nil
 	}
 	p.defaultTimeout = time.Duration(seconds * float64(time.Second))
 	return mcp.NewToolResultText(fmt.Sprintf("Eval timeout set to %s.", p.defaultTimeout)), nil
@@ -658,9 +767,13 @@ func (p *mcpServer) registerResources(s *server.MCPServer) {
 	)
 }
 
-func (p *mcpServer) handleSessionResource(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+func (p *mcpServer) handleSessionResource(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	held := p.acquire(ctx)
+	if !held {
+		return nil, werr.WrapForeignErrorf(errMCPSessionBusy,
+			"handleSessionResource: session not available within %s", mcpLockWait)
+	}
+	defer p.release()
 
 	state := sessionState{
 		TimeoutSeconds: p.defaultTimeout.Seconds(),
@@ -689,8 +802,12 @@ func (p *mcpServer) handleSessionResource(_ context.Context, _ mcp.ReadResourceR
 }
 
 func (p *mcpServer) handleLibrariesResource(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	held := p.acquire(ctx)
+	if !held {
+		return nil, werr.WrapForeignErrorf(errMCPSessionBusy,
+			"handleLibrariesResource: session not available within %s", mcpLockWait)
+	}
+	defer p.release()
 
 	err := p.initLocked(ctx)
 	if err != nil {
@@ -722,8 +839,12 @@ func (p *mcpServer) handleLibrariesResource(ctx context.Context, _ mcp.ReadResou
 }
 
 func (p *mcpServer) handlePrimitivesResource(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	held := p.acquire(ctx)
+	if !held {
+		return nil, werr.WrapForeignErrorf(errMCPSessionBusy,
+			"handlePrimitivesResource: session not available within %s", mcpLockWait)
+	}
+	defer p.release()
 
 	err := p.initLocked(ctx)
 	if err != nil {

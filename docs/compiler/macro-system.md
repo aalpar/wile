@@ -207,7 +207,7 @@ The pattern matcher is a stack-based VM that operates on raw `values.Value` type
 | `ByteCodePopContext` | End ellipsis iteration (pop capture context) |
 | `ByteCodeSkipIfEmpty` | Skip loop body if list is empty (zero iterations) |
 | `ByteCodeJump` | Unconditional jump for loops |
-| `ByteCodeRequireCarEmpty` | Assert car is empty list |
+| `ByteCodeRequireCarEmptyVector` | Assert car is an empty vector (`#()` pattern) |
 
 ### Ellipsis Handling
 

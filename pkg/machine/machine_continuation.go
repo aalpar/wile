@@ -35,9 +35,11 @@ const inlineEvalsCap = 2
 
 type MachineContinuation struct {
 	vmState
-	parent        *MachineContinuation
-	promptHandler Closure // Handler invoked on abort to this prompt
-	shared        bool    // true if this frame is part of a captured continuation chain
+	parent *MachineContinuation
+	// promptHandler is values.Callable, not Closure: it is only ever applied,
+	// via ApplyCallable, which dispatches six types where Closure has two.
+	promptHandler values.Callable // Handler invoked on abort to this prompt
+	shared        bool            // true if this frame is part of a captured continuation chain
 	// Inline eval storage: when the eval stack at save time has ≤ inlineEvalsCap
 	// items, values are stored here and evals is set to nil (sentinel).
 	//
@@ -190,11 +192,11 @@ func (p *MachineContinuation) SetPromptTag(t *PromptTag) {
 	p.promptTag = t
 }
 
-func (p *MachineContinuation) PromptHandler() Closure {
+func (p *MachineContinuation) PromptHandler() values.Callable {
 	return p.promptHandler
 }
 
-func (p *MachineContinuation) SetPromptHandler(h Closure) {
+func (p *MachineContinuation) SetPromptHandler(h values.Callable) {
 	p.promptHandler = h
 }
 
@@ -205,7 +207,7 @@ func (p *MachineContinuation) ThreadID() uint64 {
 // NewMachineContinuationWithPrompt creates a continuation frame that acts as
 // a continuation prompt. The tag identifies the prompt for abort/capture, and
 // the handler is invoked when an abort reaches this prompt.
-func NewMachineContinuationWithPrompt(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame, tag *PromptTag, handler Closure) *MachineContinuation {
+func NewMachineContinuationWithPrompt(parent *MachineContinuation, tpl *NativeTemplate, env *environment.EnvironmentFrame, tag *PromptTag, handler values.Callable) *MachineContinuation {
 	q := NewMachineContinuation(parent, tpl, env)
 	q.promptTag = tag
 	q.promptHandler = handler

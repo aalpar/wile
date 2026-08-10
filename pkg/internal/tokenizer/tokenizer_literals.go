@@ -117,8 +117,12 @@ func (p *Tokenizer) readEscapeSequence() {
 }
 
 // readDelimited reads content enclosed by a terminator rune (e.g. '"' or '|'),
-// processing backslash escape sequences along the way. On EOF before the closing
-// terminator, it converts the error to a TokenizerError with unterminatedMsg.
+// processing backslash escape sequences along the way. End of input before the
+// closing terminator becomes a TokenizerError carrying unterminatedMsg over
+// werr.ErrIncompleteInput: the literal is a valid prefix, so a REPL or any
+// caller of Engine.ReadExpressions must be able to ask for another line rather
+// than report a syntax error. Both EOF arms below say so, whether or not the
+// input broke off on a backslash.
 // Called after the opening delimiter has already been consumed.
 // Returns true if the terminator was found and consumed.
 func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool {
@@ -142,7 +146,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 		p.next()
 		if p.err != nil {
 			if errors.Is(p.err, io.EOF) {
-				p.fail(unterminatedMsg)
+				p.failWrap(werr.ErrIncompleteInput, unterminatedMsg)
 			}
 			return false
 		}
@@ -190,8 +194,10 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		// Peek ahead to see if hex digits follow - if not, #\x is just the character 'x'
 		p.next()
 		if p.err != nil {
-			// EOF after #\x means just the character 'x'
-			p.err = nil
+			// A failed peek still settles the character: nothing follows the
+			// 'x', so this is the graphic character. Leave p.err alone — it is
+			// the io.EOF that ends the source, or a real rune error worth
+			// reporting, and the sibling letter branch below keeps both.
 			p.state = TokenizerStateCharGraphic
 			return 'x'
 		}

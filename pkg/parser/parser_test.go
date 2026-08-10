@@ -353,39 +353,34 @@ func TestParser_Read(t *testing.T) {
 			),
 		},
 		{
+			// #n= reads as the labeled datum itself: the label table is populated
+			// before the datum is returned, so no wrapper survives into the value.
 			in: "#10=( 10 20 )",
-			sexpect: syntax.NewSyntaxDatumLabelAssignment(
-				10,
+			sexpect: syntax.NewSyntaxCons(
+				syntax.NewSyntaxObject(
+					values.NewInteger(10),
+					syntax.NewSourceContext("10", "",
+						syntax.NewSourceIndexes(6, 6, 1),
+						syntax.NewSourceIndexes(8, 8, 1),
+					),
+				),
 				syntax.NewSyntaxCons(
 					syntax.NewSyntaxObject(
-						values.NewInteger(10),
-						syntax.NewSourceContext("10", "",
-							syntax.NewSourceIndexes(6, 6, 1),
-							syntax.NewSourceIndexes(8, 8, 1),
-						),
-					),
-					syntax.NewSyntaxCons(
-						syntax.NewSyntaxObject(
-							values.NewInteger(20),
-							syntax.NewSourceContext("20", "",
-								syntax.NewSourceIndexes(9, 9, 1),
-								syntax.NewSourceIndexes(11, 11, 1),
-							),
-						),
-						syntax.SyntaxEmptyList,
+						values.NewInteger(20),
 						syntax.NewSourceContext("20", "",
 							syntax.NewSourceIndexes(9, 9, 1),
 							syntax.NewSourceIndexes(11, 11, 1),
 						),
 					),
-					syntax.NewSourceContext("(", "",
-						syntax.NewSourceIndexes(4, 4, 1),
-						syntax.NewSourceIndexes(5, 5, 1),
+					syntax.SyntaxEmptyList,
+					syntax.NewSourceContext("20", "",
+						syntax.NewSourceIndexes(9, 9, 1),
+						syntax.NewSourceIndexes(11, 11, 1),
 					),
 				),
-				syntax.NewSourceContext("#10=", "",
-					syntax.NewSourceIndexes(0, 0, 1),
+				syntax.NewSourceContext("(", "",
 					syntax.NewSourceIndexes(4, 4, 1),
+					syntax.NewSourceIndexes(5, 5, 1),
 				),
 			),
 		},

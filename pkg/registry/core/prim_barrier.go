@@ -17,7 +17,6 @@ package core
 import (
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // PrimCallWithContinuationBarrier implements (call-with-continuation-barrier thunk).
@@ -44,7 +43,7 @@ func PrimCallWithContinuationBarrier(cc machine.CallContext) error {
 	}
 	thunk := mc.Arg(0)
 
-	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "call-with-continuation-barrier")
+	thunkCls, err := helpers.RequireCallable(thunk, "call-with-continuation-barrier")
 	if err != nil {
 		return err
 	}

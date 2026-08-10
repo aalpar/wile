@@ -1,14 +1,17 @@
 (define-library (wile strings)
   (description "Wile string library: SRFI-13 surface plus Wile-specific extras (string-split, string-replace-all, etc.). Single-import convenience over (srfi 13). Re-exports the variadic R7RS comparison forms (string=?, string-ci=?, ...) alongside the SRFI-13 binary forms (string=, string-ci=, ...) so consumers can pick whichever shape fits. NOTE: SRFI-13 string-map shadows R7RS string-map; this library re-exports the SRFI-13 form. Programs needing R7RS multi-string string-map should import from (scheme base) directly.")
   (import (except (scheme base) string-map)
-          (scheme char)
+          (except (scheme char) string-upcase string-downcase)
           (srfi 13))
   (export
    ;; -- R7RS variadic comparisons (no slicing) -- from (scheme base) --
    string=? string<? string>? string<=? string>=?
    ;; -- R7RS case-insensitive variadic comparisons -- from (scheme char) --
    string-ci=? string-ci<? string-ci>? string-ci<=? string-ci>=?
-   ;; -- R7RS case conversion -- from (scheme char) --
+   ;; -- Case conversion -- string-foldcase from (scheme char); string-upcase and
+   ;; string-downcase are the SRFI-13 forms, which add an optional [start [end]]
+   ;; range and delegate the no-range call to R7RS, so they are a strict superset
+   ;; of what (scheme char) supplies. Same precedent as string-map below.
    string-upcase string-downcase string-foldcase
    ;; -- Re-exported from (srfi 13) -- Phase 1 --
    string-prefix? string-suffix?

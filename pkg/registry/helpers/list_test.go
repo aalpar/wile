@@ -17,7 +17,9 @@ package helpers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -274,6 +276,19 @@ func TestMemberLookup(t *testing.T) {
 			lst.Cdr(), // (2 3)
 		},
 		{
+			// The LAST element is the case a first-and-middle table cannot see.
+			// MemberLookup walks with values.ForEachFunc, which hands the element
+			// and never the cons cell, so the returned sublist comes from a cursor
+			// advanced separately inside the callback. A cursor that falls out of
+			// step with the iterator returns a WRONG SUBLIST, not an error — and
+			// the drift is cumulative, so it first becomes visible at the tail.
+			"found last element",
+			values.NewInteger(3),
+			lst,
+			valEq,
+			lst.Cdr().(values.Tuple).Cdr(), // (3)
+		},
+		{
 			"not found returns false",
 			values.NewInteger(99),
 			lst,
@@ -295,6 +310,49 @@ func TestMemberLookup(t *testing.T) {
 			err := MemberLookup(mc, "test", tc.eq)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+// TestMemberLookup_MatchAtEveryIndex is the cursor guard, and it is deliberately
+// exhaustive rather than sampled.
+//
+// values.ForEachFunc hands the ELEMENT and never the cons cell
+// (pkg/values/values.go), while MemberLookup must return the sublist starting at
+// the match. Pair.ForEach cannot supply it either: on a callback error it returns
+// (nil, err) rather than the stop position. So the sublist comes from a cursor
+// advanced by hand inside the callback, in lockstep with an iterator that hides
+// the cell — and the failure mode of losing that lockstep is a wrong sublist, not
+// an error. Nothing else in the suite would go red.
+//
+// Off-by-one drift is cumulative, so it is invisible near the head and grows
+// toward the tail. Matching at every index of a list long enough to accumulate it
+// is what makes the guard sound; a first-and-middle table is not.
+func TestMemberLookup_MatchAtEveryIndex(t *testing.T) {
+	c := qt.New(t)
+
+	const n = 12
+	elems := make([]values.Value, n)
+	for i := range elems {
+		elems[i] = values.NewInteger(int64(i))
+	}
+	lst := values.List(elems...)
+
+	for i := range n {
+		t.Run(fmt.Sprintf("index-%d", i), func(t *testing.T) {
+			// The expected answer, derived independently of MemberLookup: walk i
+			// cdrs from the head.
+			want := values.Value(lst)
+			for range i {
+				tup, ok := want.(values.Tuple)
+				c.Assert(ok, qt.IsTrue)
+				want = tup.Cdr()
+			}
+
+			mc := makeMC(values.NewInteger(int64(i)), lst)
+			err := MemberLookup(mc, "test", valEq)
+			c.Assert(err, qt.IsNil)
+			c.Assert(mc.GetValue(), valuestest.SchemeEquals, want)
 		})
 	}
 }
@@ -324,6 +382,74 @@ func TestMemberLookup_Errors(t *testing.T) {
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
 		})
 	}
+}
+
+// TestMemberLookup_CircularListTerminates pins the half of the walk that a
+// hand-rolled cdr loop cannot have: Brent cycle detection. Before MemberLookup
+// routed through ForEachList it spun forever on a circular list whose elements
+// do not contain the key — from the CLI that is SIGKILL, exit 137 — while assq
+// on the same shape returned in microseconds. Bounded by a goroutine because
+// the pre-fix failure mode is a hang, not a wrong value.
+func TestMemberLookup_CircularListTerminates(t *testing.T) {
+	c := qt.New(t)
+
+	// (1 2 3) with the last cdr pointing back at the head.
+	head := values.NewCons(values.NewInteger(1), values.EmptyList)
+	mid := values.NewCons(values.NewInteger(2), values.EmptyList)
+	tail := values.NewCons(values.NewInteger(3), values.EmptyList)
+	head.SetCdr(mid)
+	mid.SetCdr(tail)
+	tail.SetCdr(head)
+
+	mc := makeMC(values.NewInteger(99), head)
+
+	type result struct {
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		done <- result{err: MemberLookup(mc, "memq", valEq)}
+	}()
+
+	select {
+	case got := <-done:
+		c.Assert(got.err, qt.IsNotNil)
+		c.Assert(errors.Is(got.err, werr.ErrNotAList), qt.IsTrue,
+			qt.Commentf("got %v", got.err))
+		// The cycle sentinel stays reachable, as it does for assq.
+		c.Assert(errors.Is(got.err, werr.ErrCircularList), qt.IsTrue,
+			qt.Commentf("got %v", got.err))
+	case <-time.After(5 * time.Second):
+		t.Fatal("MemberLookup did not terminate on a circular list")
+	}
+}
+
+// TestMemberLookup_ObservesCancellation pins the other half: the amortized
+// context poll. A flat Go loop is invisible to an embedder deadline and to a
+// REPL interrupt (which cancels a child context), and WithMaxCallDepth is
+// inapplicable to it because nothing recurses — the context was the only lever
+// and MemberLookup never read it.
+//
+// The list must exceed Pair.ForEach's poll interval (every 1024 elements), and
+// the context is cancelled up front so the assertion is on the mechanism rather
+// than on wall-clock timing.
+func TestMemberLookup_ObservesCancellation(t *testing.T) {
+	c := qt.New(t)
+
+	elems := make([]values.Value, 4096)
+	for i := range elems {
+		elems[i] = values.NewInteger(int64(i))
+	}
+	lst := values.List(elems...)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mc := makeMCWithContext(ctx, values.NewInteger(-1), lst)
+
+	err := MemberLookup(mc, "memq", valEq)
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("MemberLookup walked a 4096-element list under a cancelled context"))
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
 }
 
 // ── AssocLookup ──────────────────────────────────────────────────────

@@ -96,8 +96,10 @@ func addReadWrite(r *registry.PrimitiveRegistry) error {
 			ReturnType: values.TypeVoid},
 		{Name: "write-string", ParamCount: 2, IsVariadic: true, Impl: PrimWriteString,
 			Doc: "Writes characters of STRING to PORT, optionally limited to the range from start to end.\n\nExamples:\n  (let ((p (open-output-string))) (write-string \"hello\" p) (get-output-string p))  => \"hello\"", ParamNames: []string{"string", "port"}, Category: "io",
-			Keywords:   []string{"put-string"},
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeTextualOutputPort},
+			Keywords: []string{"put-string"},
+			// The rest is (port [start [end]]): a port followed by integers,
+			// so no single constraint describes it.
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "display", ParamCount: 2, IsVariadic: true, Impl: makeWriteVariant("display", values.DisplayValueToString),
 			Doc: "Writes a human-readable representation of OBJ to PORT. Strings are not quoted, characters are written directly.\n\nExamples:\n  (let ((p (open-output-string))) (display \"hi\" p) (get-output-string p))  => \"hi\"\n  (display 42)  ; prints: 42", ParamNames: []string{"obj", "port"}, Category: "io",
@@ -144,12 +146,16 @@ func addReadWrite(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeBinaryInputPort}, ReturnType: values.TypeAny},
 		{Name: "read-bytevector!", ParamCount: 2, IsVariadic: true, Impl: PrimReadBytevectorBang,
 			Doc: "Reads bytes into BYTEVECTOR from a binary port. Returns the number of bytes read or eof-object.\n\nExamples:\n  (let ((bv (make-bytevector 3 0))) (read-bytevector! bv (open-input-bytevector #u8(1 2))) bv)  => #u8(1 2 0)", ParamNames: []string{"bytevector", "port"}, Category: "io",
-			Keywords:   []string{"get-bytevector-n!"},
-			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeBinaryInputPort}, ReturnType: values.TypeAny},
+			Keywords: []string{"get-bytevector-n!"},
+			// The rest is (port [start [end]]): a port followed by integers,
+			// so no single constraint describes it.
+			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "write-bytevector", ParamCount: 2, IsVariadic: true, Impl: PrimWriteBytevector,
 			Doc: "Writes bytes from BYTEVECTOR to a binary port, optionally limited to the range from start to end.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-bytevector #u8(1 2 3) p) (get-output-bytevector p))  => #u8(1 2 3)", ParamNames: []string{"bytevector", "port"}, Category: "io",
-			Keywords:   []string{"put-bytevector"},
-			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeBinaryOutputPort},
+			Keywords: []string{"put-bytevector"},
+			// The rest is (port [start [end]]): a port followed by integers,
+			// so no single constraint describes it.
+			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeAny},
 			ReturnType: values.TypeVoid},
 	}, registry.PhaseSetRuntime)
 	return nil

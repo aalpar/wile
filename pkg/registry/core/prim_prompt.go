@@ -74,7 +74,7 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
 
-	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "call-with-continuation-prompt")
+	thunkCls, err := helpers.RequireCallable(thunk, "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
@@ -84,10 +84,10 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 		return err
 	}
 
-	var handlerCls machine.Closure
+	var handlerCls values.Callable
 	if handlerVal != values.FalseValue {
 		var handlerErr error
-		handlerCls, handlerErr = helpers.RequireType[machine.Closure](handlerVal, werr.ErrNotAProcedure, "call-with-continuation-prompt")
+		handlerCls, handlerErr = helpers.RequireCallable(handlerVal, "call-with-continuation-prompt")
 		if handlerErr != nil {
 			return handlerErr
 		}
@@ -182,7 +182,7 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 
-	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-composable-continuation")
+	procCls, err := helpers.RequireCallable(proc, "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}

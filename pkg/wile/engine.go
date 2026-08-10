@@ -690,6 +690,23 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 }
 
 // Define binds a value to a name in the top-level environment.
+//
+// It REFUSES (werr.ErrImmutableBinding) to rebind a name that Scheme code
+// already defined at the top level, because under the default immutable top
+// level such a binding is proven rebind-stable and the compiler acts on that
+// proof irreversibly: it pins the value into self-tail-call sites and it refuses
+// a program at compile time on an arity mismatch against a stable callee. There
+// is no run at which to re-check the second one, so Define cannot be permitted
+// and merely deoptimized — it would turn a program that runs correctly into a
+// compile error.
+//
+// What still works, and is the intended shape: a name the host owns end to end.
+// A name never defined from Scheme carries no proof, so Define creates it and
+// may rebind it as often as it likes. A name the embedder also IMPORTED is also
+// rebindable — a define shadows an import rather than assigning through it.
+//
+// Use WithMutableTopLevel to opt the whole engine out; nothing is stamped stable
+// there, at the cost of the frame-reclaim win on user recursion.
 func (p *Engine) Define(name string, value Value) error {
 	sym := values.NewSymbol(name)
 	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, unwrapValue(value))
@@ -732,7 +749,26 @@ func (p *Engine) Get(name string) (Value, bool) {
 }
 
 // RegisterPrimitive adds a Go function as a Scheme primitive.
+//
+// The spec is validated first ([registry.PrimitiveSpec.Validate]) and an invalid
+// spec is returned as an error, never bound. This is the same contract
+// [registry.PrimitiveRegistry.AddPrimitives] enforces by panicking: an embedder
+// assembling a spec dynamically gets a value it can handle, rather than a
+// binding whose first call takes down the engine. The IsVariadic +
+// ParamCount:0 shape is the one that matters — its panic fires during frame
+// setup, so it wedges every subsequent evaluation on this engine, not just the
+// offending call.
+//
+// It shares [Engine.Define]'s refusal: a name Scheme code already defined at the
+// top level is rebind-stable under the default immutable top level and cannot be
+// replaced. Register before running Scheme that defines the same name.
 func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
+	err := spec.Validate()
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(werr.ErrInvalidArgument, err,
+			"RegisterPrimitive: invalid spec %q", spec.Name)
+	}
+
 	sym := values.NewSymbol(spec.Name)
 
 	closure := machine.NewForeignClosure(
@@ -747,7 +783,7 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 		closure.SetValidator(registry.BuildValidator(spec))
 	}
 
-	_, err := p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
+	_, err = p.env.DefineOwnGlobal(sym, environment.BindingTypeVariable, nil, closure)
 	return err
 }
 
@@ -1315,6 +1351,15 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.P
 	// filter is the whole query; enumerating the mutable tier too would index
 	// nothing extra at bootstrap and would drift into indexing user defines later
 	// (G2).
+	//
+	// The sealed tier is no longer only the startup set: imports install at
+	// (ExactPhase(0), sealed) so a user define shadows them rather than assigning
+	// through them (compilation.installImportedBinding). SealedSlots() therefore
+	// yields imported bindings too, and since this runs once per applyBaseEnvironment
+	// an imported Scheme procedure's structured docstring now gets a doc-only entry.
+	// That is wanted, not incidental — the alternative is documented procedures
+	// going missing from ,doc the moment they arrive by import — and G2 still holds
+	// because a user DEFINE is on the mutable tier and remains excluded.
 	//
 	// SealedSlots() is every sealed slot at EVERY phase (the fold merged the
 	// per-phase seal frames into one store), where the pre-fold walk visited only

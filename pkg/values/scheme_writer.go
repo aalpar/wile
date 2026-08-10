@@ -626,14 +626,40 @@ func (p *SchemeWriter) writeBox(sb *strings.Builder, bx *Box, depth int) {
 	p.write(sb, bx.Value, depth+1)
 }
 
+// sortHashtableEntries puts a snapshot into the order every renderer of a
+// hashtable uses: by rendered key, then by insertion ordinal.
+//
+// The rendered key alone is NOT an order. Keys that render alike are ordinary —
+// three (string-copy "a") keys in an eq table, three records that all render
+// #<record:point> — and the tie then fell through to whatever order snapshot()
+// produced, which is sync.Map.Range's PER-PROCESS SEEDED walk. That is why the
+// old comparator promised deterministic output and did not deliver it, and why
+// a stable sort is not the fix: stability preserves the input order faithfully,
+// and the input order is the random part. Six renders inside one process agreed;
+// eight processes gave eight different orders.
+//
+// The insertion ordinal is the tiebreak because it is the only ordering a table
+// carries that is a function of the PROGRAM. The bucket hash is not: an eq
+// table hashes by pointer. With it the comparator is total — no two live
+// entries share an ordinal — so the unstable sort is deterministic and the
+// stable one would only cost a copy.
+func sortHashtableEntries(entries []hashtableEntry) {
+	slices.SortFunc(entries, func(a, b hashtableEntry) int {
+		c := cmp.Compare(a.key.SchemeString(), b.key.SchemeString())
+		if c != 0 {
+			return c
+		}
+		return cmp.Compare(a.seq, b.seq)
+	})
+}
+
 // writeHashtable writes a hashtable with cycle detection, mirroring writeVector.
 // Without this arm the default write branch falls through to
 // Hashtable.SchemeString, whose path-scoped recursion emits "..." on a cycle and
 // never assigns datum labels, so sharing or a cycle routed through a hashtable
-// value would be under-represented (R7RS 6.13.3). Only values recurse: no
-// container type is Hashable, so a key is always a leaf. Entries are sorted by
-// rendered key for deterministic output, matching SchemeString. depth is the
-// nesting level of the table; its entries sit one level deeper.
+// value would be under-represented (R7RS 6.13.3). Entries are ordered by
+// sortHashtableEntries, which is what makes the output deterministic. depth is
+// the nesting level of the table; its entries sit one level deeper.
 func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable, depth int) {
 	if h == nil {
 		sb.WriteString("#hash()")
@@ -654,9 +680,7 @@ func (p *SchemeWriter) writeHashtable(sb *strings.Builder, h *Hashtable, depth i
 	}
 
 	entries := h.snapshot()
-	slices.SortFunc(entries, func(a, b hashtableEntry) int {
-		return cmp.Compare(a.key.SchemeString(), b.key.SchemeString())
-	})
+	sortHashtableEntries(entries)
 	sb.WriteString("#hash(")
 	for i, e := range entries {
 		if p.err != nil {

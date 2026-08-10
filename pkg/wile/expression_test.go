@@ -89,6 +89,17 @@ func TestReadExpressions(t *testing.T) {
 		{"complete forms then incomplete tail", "(+ 1 2) (+ 3", true, true, nil},
 		{"unbalanced single form", "(+ 1", true, true, nil},
 		{"hard syntax error", "(+ 1 2) )", true, false, nil},
+		// A line ending inside a delimited literal is a valid prefix, so the
+		// documented "error satisfying IsIncompleteInput" contract covers it.
+		// The backslash and block-comment spellings are the controls.
+		{"unterminated extended symbol", "(quote |abc", true, true, nil},
+		{"unterminated string", "(display \"abc", true, true, nil},
+		{"unterminated extended symbol on a continuation", "(quote |abc\\", true, true, nil},
+		{"unterminated block comment", "(quote #|abc", true, true, nil},
+		// `#\x` needs a one-rune lookahead to tell the character 'x' from a hex
+		// escape; end of input must not become a syntax error.
+		{"character x at end of input", "#\\x", false, false, []string{"#\\x"}},
+		{"character a at end of input", "#\\a", false, false, []string{"#\\a"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

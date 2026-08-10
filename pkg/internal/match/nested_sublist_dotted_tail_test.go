@@ -77,13 +77,15 @@ func TestNestedSublistDottedTail(t *testing.T) {
 // The chibi `let-optionals` macro relies on exactly this over a proper argument
 // list: `(var&default ... . rest)`.
 //
-// KNOWN LIMITATION (pinned by the "improper input" subtest below): a genuinely
-// improper input like `(1 2 . 5)` does NOT match — the ellipsis loop's VisitCdr
-// cannot traverse a dotted input tail (verified identical on master). This is
-// outside C12/C13's scope (nested-sublist + improper-PATTERN-tail), and chibi
-// feeds only proper lists, so it does not block the libraries.
+// A genuinely improper input like `(1 2 . 5)` matches too, binding rest to the
+// dotted tail (review wave 5, 2.3.4). ByteCodeVisitCdr used to refuse a dotted
+// input tail outright, which killed every improper input; it now exhausts the
+// position and carries the tail, so the ellipsis loop halts AFTER the last
+// capture rather than before it. Halting before it would silently drop the last
+// element — `(1 2 . 5)` would yield a=(1) rest=5 instead of a=(1 2) rest=5 —
+// which is why the subtest below asserts the captured VALUES, not just a match.
 //
-// Before the fix, after the ellipsis consumed every element the matcher
+// Before the C12/C13 fix, after the ellipsis consumed every element the matcher
 // position was the empty list and ByteCodeCaptureCdr rejected it as no-match,
 // so even a proper-list input never matched.
 func TestEllipsisThenImproperTail(t *testing.T) {
@@ -133,18 +135,63 @@ func TestEllipsisThenImproperTail(t *testing.T) {
 			qt.Commentf("rest = %v, want ()", rest))
 	})
 
-	// Improper input (1 2 . 5): does NOT match — known limitation, pinned so
-	// the docstring's claim stays honest. The ellipsis loop cannot traverse a
-	// dotted input tail; this is verified identical on master and is outside
-	// C12/C13's scope (chibi feeds only proper lists).
-	c.Run("improper input not matched", func(c *qt.C) {
+	// Improper input (1 2 . 5): ellipsis consumes 1 and 2; rest = 5. Racket
+	// gives ((1 2) 5) for the same pattern and input.
+	c.Run("improper input", func(c *qt.C) {
 		target := syntax.NewSyntaxCons(
 			testSyntaxInt(1),
 			syntax.NewSyntaxCons(testSyntaxInt(2), testSyntaxInt(5), nil),
 			nil,
 		)
-		_, err := compileAndMatch(target)
-		c.Assert(err, qt.IsNotNil,
-			qt.Commentf("(a ... . rest) does not match improper input (1 2 . 5)"))
+		m, err := compileAndMatch(target)
+		c.Assert(err, qt.IsNil,
+			qt.Commentf("(a ... . rest) must match improper input (1 2 . 5)"))
+		rest := m.GetBindings()["rest"]
+		c.Assert(syntaxValuesEqualForMatch(rest, testSyntaxInt(5)), qt.IsTrue,
+			qt.Commentf("rest = %v, want 5", rest))
+		// The loop must halt with the position on the LAST pair, so both 1 and
+		// 2 are captured. An exit test at the loop head captures only 1 and
+		// still satisfies the rest assertion above.
+		c.Assert(ellipsisCaptureCount(m, "a"), qt.Equals, 2)
 	})
+
+	// A dotted input tail that NO pattern element consumes is still a
+	// mismatch: `(a ...)` is a proper-list pattern.
+	c.Run("improper input against a proper pattern", func(c *qt.C) {
+		compiler := NewSyntaxCompiler()
+		properVars := map[string]struct{}{"a": {}}
+		compiler.variables = properVars
+		properPattern := syntax.NewSyntaxCons(
+			testSyntaxSym("a"),
+			testSyntaxList(testSyntaxSym("...")),
+			nil,
+		)
+		err := compiler.Compile(context.TODO(), properPattern)
+		c.Assert(err, qt.IsNil)
+		m := NewMatcher(properVars, compiler.codes, WithEllipsisVars(compiler.ellipsisVars))
+		target := syntax.NewSyntaxCons(
+			testSyntaxInt(1),
+			syntax.NewSyntaxCons(testSyntaxInt(2), testSyntaxInt(5), nil),
+			nil,
+		)
+		matchErr := m.MatchSyntax(context.Background(), target)
+		c.Assert(matchErr, qt.ErrorIs, ErrNotAMatch,
+			qt.Commentf("(a ...) must not match improper input (1 2 . 5)"))
+	})
+}
+
+// ellipsisCaptureCount counts the per-iteration capture contexts that bound
+// name, across every ellipsis group. The root context holds no ellipsis
+// captures, so this is how many repetitions the loop actually ran.
+func ellipsisCaptureCount(m *Matcher, name string) int {
+	count := 0
+	for _, children := range m.captureStack[0].children {
+		for _, child := range children {
+			_, ok := child.bindings[name]
+			if ok {
+				count++
+			}
+		}
+	}
+	return count
 }

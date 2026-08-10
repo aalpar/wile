@@ -197,7 +197,11 @@ Vertical-bar syntax allows arbitrary characters in symbol names:
 Every `#!<name>` token is read as a directive and discarded, so an unrecognized
 one contributes no datum rather than raising. There is no `#!void` or `#!eof`
 read syntax: the void value comes from `(if #f #f)` and the end-of-file object
-from `(eof-object)`.
+from `(eof-object)`. Both *write* as `#<void>` and `#<eof>` — the unreadable-object
+bracket the reader rejects, not a directive it would discard. Rendering them as
+`#!void` / `#!eof` let the writer manufacture input the reader silently deletes:
+`(write (vector 1 (if #f #f) 2))` produced `#(1 #!void 2)`, which read back as a
+two-element vector.
 
 ### Datum Labels
 
@@ -1550,28 +1554,6 @@ chain, so a `guard` around the call discriminates them:
 
 Requires gointerop extension.
 
-**RWMutex** — read-write lock:
-
-| Procedure | Description |
-|-----------|-------------|
-| `(make-rw-mutex)` | Create RWMutex |
-| `(rw-mutex? x)` | Is RWMutex |
-| `(rw-mutex-read-lock! m)` | Acquire read lock |
-| `(rw-mutex-read-unlock! m)` | Release read lock |
-| `(rw-mutex-write-lock! m)` | Acquire write lock |
-| `(rw-mutex-write-unlock! m)` | Release write lock |
-| `(rw-mutex-try-read-lock! m)` | Try read lock |
-| `(rw-mutex-try-write-lock! m)` | Try write lock |
-
-**Once** — exactly-once execution:
-
-| Procedure | Description |
-|-----------|-------------|
-| `(make-once)` | Create Once |
-| `(once? x)` | Is Once |
-| `(once-do! o thunk)` | Run thunk exactly once |
-| `(once-done? o)` | Has executed |
-
 **Atomic** — thread-safe mutable value:
 
 | Procedure | Description |
@@ -1623,7 +1605,7 @@ Extension primitives are also importable as R7RS libraries when `WithLibraryPath
 | `(wile files)` | File and directory I/O |
 | `(wile process)` | Process execution, subprocess management |
 | `(wile threads)` | SRFI-18 threading |
-| `(wile gointerop)` | Go concurrency: RWMutex, Once, Atomic |
+| `(wile gointerop)` | Go concurrency: Atomic |
 | `(wile introspection)` | Environment introspection, `features`, `available-libraries`, `disassemble` |
 | `(wile eval)` | `eval`, `environment`, `load`, `expand`, `compile`, load-path accessors |
 | `(wile namespace)` | Namespace introspection and management |
@@ -1672,8 +1654,8 @@ phase -1, so `for-template` bindings are installed but never consulted.
 | `(chibi optional)` | Optional argument handling |
 | `(chibi diff)` | Diff algorithm |
 | `(chibi term ansi)` | ANSI terminal colors |
-| `(srfi 1)` | List library (complete) — `xcons`, `cons*`, `iota`, `zip`, `filter`, `partition`, `fold`, `unfold`, `any`, `every`, etc. |
-| `(srfi 13)` | String library — `string-prefix?`, `string-contains`, `string-join`, `string-trim`, `string-tokenize`, etc. |
+| `(srfi 1)` | List library — `xcons`, `cons*`, `iota`, `zip`, `filter`, `partition`, `fold`, `unfold`, `any`, `every`, etc. Exports the whole SRFI-1 procedure index, including the R5RS list procedures and the `c…r` compositions it re-exports; until 2026-08-09 the export list elided 48 of those names, so `(import (only (srfi 1) caar))` failed |
+| `(srfi 13)` | String library — `string-prefix?`, `string-contains`, `string-join`, `string-trim`, `string-tokenize`, etc. A **subset** of SRFI-13: the R5RS string procedures stay at their R7RS homes, and the `/shared`, `string-unfold` and KMP-helper names are not supplied |
 | `(srfi 14)` | Character sets |
 | `(srfi 132)` | Sort libraries — list and vector sort, merge, select, median |
 
@@ -1764,7 +1746,7 @@ Racket-style `call-with-continuation-prompt`, `abort-current-continuation`, and 
 
 ### Go Concurrency Primitives
 
-RWMutexes, Once, Atomic values — backed by Go's `sync` package (RWMutex acquisition is a Wile-owned, cancellation-aware state machine). Available via `(wile gointerop)`.
+Atomic values — backed by Go's `sync/atomic`. Available via `(wile gointerop)`.
 
 ### Phase Control
 

@@ -21,6 +21,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/aalpar/wile/pkg/werr"
+
 	qt "github.com/frankban/quicktest"
 )
 
@@ -1191,15 +1193,21 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateUnsignedInteger,
 		},
 		{
+			// Was: scan "-nan" with MessageExpectingDecimalFraction. A keyword
+			// that is not followed by ".0" is not a number, and the scanner no
+			// longer leaves the diagnostic behind when it says so.
 			bs:    "-nan,0",
 			scan:  "-nan",
-			err0:  &TokenizerError{mess: MessageExpectingDecimalFraction},
 			state: TokenizerStateSymbol,
 		},
 		{
+			// Was: scan "-i" as TokenizerStateSignedImaginary, splitting the
+			// identifier into a number and `foo`. R7RS §7.1.1 exempts -i, not
+			// -i<subsequent>*.
 			bs:    "-ifoo",
-			scan:  "-i",
-			state: TokenizerStateSignedImaginary,
+			scan:  "-ifoo",
+			err0:  io.EOF,
+			state: TokenizerStateSymbol,
 		},
 		{
 			bs:    "-i",
@@ -1249,15 +1257,20 @@ func TestTokenizer_read(t *testing.T) {
 			err0:  io.EOF,
 			state: TokenizerStateSignedImaginaryInf,
 		},
+		// The same implicit-termination rule as -ifoo above, on the <infnan>
+		// spellings: these used to scan "+inf.0i" and leave "zz" behind as a
+		// second datum. Both are single identifiers.
 		{
 			bs:    "+inf.0izz",
-			scan:  "+inf.0i",
-			state: TokenizerStateSignedImaginaryInf,
+			scan:  "+inf.0izz",
+			err0:  io.EOF,
+			state: TokenizerStateSymbol,
 		},
 		{
 			bs:    "+nan.0izz",
-			scan:  "+nan.0i",
-			state: TokenizerStateSignedImaginaryNan,
+			scan:  "+nan.0izz",
+			err0:  io.EOF,
+			state: TokenizerStateSymbol,
 		},
 		// Quotation tokens
 		{
@@ -2436,6 +2449,172 @@ func TestEOFDuringToken(t *testing.T) {
 			p.read()
 			c.Check(p.state, qt.Equals, tc.state)
 			c.Check(p.err, qt.ErrorIs, tc.err)
+		})
+	}
+}
+
+// TestPeculiarIdentifierSpace drives every sign-prefixed spelling the number
+// scanner speculates on, three ways: at end of input, before a delimiter, and
+// before a non-delimiter. End of input and a delimiter must agree — the scanner
+// used to accept a truncated <infnan> keyword only at end of input, so `+in`
+// read as +inf.0 there and errored everywhere else.
+//
+// A non-delimiter always extends the run into one identifier, for every row:
+// R7RS §7.1.1 exempts only +i, -i and <infnan> from <peculiar identifier>, so
+// `+i2`, `+ifoo` and `+inf.0x` are single identifiers rather than a number
+// followed by a second datum.
+//
+// Token.Value() is asserted alongside the state: the arms that fall back to a
+// symbol used to mint it from the scanner's position rather than the token's
+// start, so `+.abc` was the symbol `bc` and `+nabc` was the empty symbol —
+// which made distinct identifiers eq?.
+func TestPeculiarIdentifierSpace(t *testing.T) {
+	tcs := []struct {
+		src string
+		// state and value are the first token's type and Token.Value() both at
+		// end of input and when a delimiter follows. value is "" for numbers,
+		// which never populate the value buffer.
+		state TokenizerState
+		value string
+	}{
+		// The ten truncated <infnan> spellings.
+		{src: "+in", state: TokenizerStateSymbol, value: "+in"},
+		{src: "+n", state: TokenizerStateSymbol, value: "+n"},
+		{src: "-n", state: TokenizerStateSymbol, value: "-n"},
+		{src: "-na", state: TokenizerStateSymbol, value: "-na"},
+		{src: "-nan", state: TokenizerStateSymbol, value: "-nan"},
+		{src: "+na", state: TokenizerStateSymbol, value: "+na"},
+		{src: "+nan", state: TokenizerStateSymbol, value: "+nan"},
+		{src: "-in", state: TokenizerStateSymbol, value: "-in"},
+		{src: "-inf", state: TokenizerStateSymbol, value: "-inf"},
+		{src: "+inf", state: TokenizerStateSymbol, value: "+inf"},
+		// Sign-dot and prefix-mismatch identifiers.
+		{src: "+.abc", state: TokenizerStateSymbol, value: "+.abc"},
+		{src: "-.f", state: TokenizerStateSymbol, value: "-.f"},
+		// Bare sign-dot: the speculative scanner's ONE deliberate over-reach past
+		// R7RS §7.1.1, and it is pinned rather than incidental. The grammar's
+		// `<explicit sign> . <dot subsequent> <subsequent>*` needs something after
+		// the dot, so `+.abc` and `-.f` above are legal identifiers while these
+		// two are not. Wile reads them anyway, because refusing them would mean
+		// deciding <dot subsequent> inside the numeral fallback — a second copy of
+		// the identifier grammar in the one place whose rule is "not a number, so
+		// a symbol". Chez 10.4.1 and Racket both accept them; documented at
+		// docs/reference/r7rs-differences.md -> "Bare Sign-Dot Identifiers".
+		{src: "+.", state: TokenizerStateSymbol, value: "+."},
+		{src: "-.", state: TokenizerStateSymbol, value: "-."},
+		// Control for the two rows above: `+..` IS a legal peculiar identifier
+		// (`.` is itself a <dot subsequent>), so it must read the same way for a
+		// reason the grammar supplies rather than by the same leniency.
+		{src: "+..", state: TokenizerStateSymbol, value: "+.."},
+		{src: "+nabc", state: TokenizerStateSymbol, value: "+nabc"},
+		{src: "+node", state: TokenizerStateSymbol, value: "+node"},
+		{src: "+nan_x", state: TokenizerStateSymbol, value: "+nan_x"},
+		// Unit-imaginary prefixes.
+		{src: "+i2", state: TokenizerStateSymbol, value: "+i2"},
+		{src: "-ibar", state: TokenizerStateSymbol, value: "-ibar"},
+		{src: "+ifoo", state: TokenizerStateSymbol, value: "+ifoo"},
+		// Bare signs.
+		{src: "+", state: TokenizerStateSymbol, value: "+"},
+		{src: "-", state: TokenizerStateSymbol, value: "-"},
+		// The numbers the exemption does cover; these must stay numbers.
+		{src: "+i", state: TokenizerStateSignedImaginary},
+		{src: "-i", state: TokenizerStateSignedImaginary},
+		{src: "+inf.0", state: TokenizerStateSignedInf},
+		{src: "-inf.0", state: TokenizerStateSignedInf},
+		{src: "+nan.0", state: TokenizerStateSignedNan},
+		{src: "-nan.0", state: TokenizerStateSignedNan},
+		{src: "+inf.0i", state: TokenizerStateSignedImaginaryInf},
+		{src: "+nan.0i", state: TokenizerStateSignedImaginaryNan},
+	}
+	for _, tc := range tcs {
+		checkFirstToken := func(c *qt.C, src string, state TokenizerState, text, value string, err error) {
+			p := NewTokenizer(strings.NewReader(src), false)
+			tok, nexterr := p.Next()
+			c.Assert(nexterr, qt.IsNil)
+			c.Check(tok.Type(), qt.Equals, state)
+			c.Check(tok.String(), qt.Equals, text)
+			c.Check(tok.Value(), qt.Equals, value)
+			c.Check(p.Err(), qt.ErrorIs, err)
+		}
+		t.Run(tc.src+"/eof", func(t *testing.T) {
+			c := qt.New(t)
+			checkFirstToken(c, tc.src, tc.state, tc.src, tc.value, io.EOF)
+		})
+		t.Run(tc.src+"/delimiter", func(t *testing.T) {
+			c := qt.New(t)
+			checkFirstToken(c, tc.src+")", tc.state, tc.src, tc.value, nil)
+		})
+		t.Run(tc.src+"/nondelimiter", func(t *testing.T) {
+			c := qt.New(t)
+			ext := tc.src + "x"
+			checkFirstToken(c, ext, TokenizerStateSymbol, ext, ext, io.EOF)
+		})
+	}
+}
+
+// TestCharacterXPeekPreservesError pins the `#\x` lookahead against the
+// package's former sole error-clearing site. Deciding that `#\x` is the graphic
+// character 'x' requires peeking one rune past it, and that peek can fail; the
+// old code cleared p.err unconditionally, which (a) erased the io.EOF that ends
+// a source of exactly `#\x`, letting the scanner run on into a phantom failed
+// token, and (b) replaced the specific rune-error diagnostic for a following
+// invalid byte with a generic "expecting token". The sibling letter branch
+// (`#\a`) never cleared and is the control: both spellings must agree.
+func TestCharacterXPeekPreservesError(t *testing.T) {
+	tcs := []struct {
+		name string
+		src  string
+		// want is the message the tokenizer must report once the single
+		// character token has been produced; wantEOF selects a clean io.EOF
+		// instead.
+		want    string
+		wantEOF bool
+	}{
+		{name: "x at end of input", src: "#\\x", wantEOF: true},
+		{name: "letter at end of input (control)", src: "#\\a", wantEOF: true},
+		{name: "x then undecodable byte", src: "#\\x\xff", want: MessageRuneError},
+		{name: "letter then undecodable byte (control)", src: "#\\a\xff", want: MessageRuneError},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.src, false)
+			c.Assert(len(toks), qt.Equals, 1)
+			c.Check(toks[0].Type(), qt.Equals, TokenizerStateCharGraphic)
+			c.Check(toks[0].Value(), qt.Equals, tc.src[2:3])
+			if tc.wantEOF {
+				c.Check(err, qt.ErrorIs, io.EOF)
+				return
+			}
+			c.Check(err, qt.ErrorIs, NewTokenizerError(tc.want))
+		})
+	}
+}
+
+// TestUnterminatedDelimitedIsIncompleteInput pins readDelimited's plain-EOF arm
+// against its own backslash-EOF sibling fourteen lines above. Both mean "the
+// literal is a valid prefix that needs more input"; only the backslash arm said
+// so, so a REPL line ending inside `|…|` or `"…"` was a hard syntax error while
+// the same line ending on a backslash continued. The block-comment arm and the
+// backslash arm are the controls.
+func TestUnterminatedDelimitedIsIncompleteInput(t *testing.T) {
+	tcs := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{name: "extended symbol", src: "(quote |abc", want: MessageUnterminatedExtendedSymbol},
+		{name: "string", src: "(display \"abc", want: MessageUnterminatedString},
+		{name: "extended symbol on a continuation (control)", src: "(quote |abc\\", want: MessageUnterminatedExtendedSymbol},
+		{name: "string on a continuation (control)", src: "(display \"abc\\", want: MessageUnterminatedString},
+		{name: "block comment (control)", src: "(quote #|abc", want: MessageUnterminatedBlockComment},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			_, err := Tokenize(tc.src, false)
+			c.Check(err, qt.ErrorIs, werr.ErrIncompleteInput)
+			c.Check(err, qt.ErrorIs, NewTokenizerError(tc.want))
 		})
 	}
 }

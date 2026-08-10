@@ -136,7 +136,7 @@ func TestThread_TerminateBeforeStart_ClosesDone(t *testing.T) {
 	}
 
 	timeout := 10 * time.Second
-	_, err := th.Join(&timeout)
+	_, err := th.Join(context.Background(), &timeout)
 
 	// UncaughtThreadException.Unwrap exposes the stored cause, so one errors.As
 	// reaches through the wrapper a JoinTimeoutException would never carry.

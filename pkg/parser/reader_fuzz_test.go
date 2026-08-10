@@ -54,11 +54,20 @@ var fuzzSeeds = []string{
 	"#u8(1 2 3", "#0=#1#", strings.Repeat("(", 12000),
 }
 
+// fuzzSkipModes is the skipComments axis both targets sweep. The reader has two
+// behaviours, not one: with skipComments false, comments, datum comments and
+// directives are returned as data and the readDatumComment / readComment /
+// readDirective branches are live. Running only the skipping mode left
+// readDatumComment unreachable from the fuzzer despite "#;" sitting in the seed
+// corpus — which is why "#;)" (a nil-Value node that panics on SchemeString)
+// survived to be found by hand.
+var fuzzSkipModes = [...]bool{true, false}
+
 // readFuzzDatum reads a single datum from src with a fresh parser. Panics
 // propagate to the calling fuzz body's recover guard.
-func readFuzzDatum(src string) (syntax.SyntaxValue, error) {
+func readFuzzDatum(src string, skipComments bool) (syntax.SyntaxValue, error) {
 	env := environment.NewNamespace().Runtime()
-	p := NewParser(env, true, strings.NewReader(src))
+	p := NewParser(env, skipComments, strings.NewReader(src))
 	return p.ReadSyntax(context.TODO())
 }
 
@@ -86,35 +95,45 @@ func FuzzReadSyntax(f *testing.F) {
 				t.Fatalf("reader panicked on %q: %v\n(must surface a located error, never crash the host)", src, r)
 			}
 		}()
-		env := environment.NewNamespace().Runtime()
-		p := NewParser(env, true, strings.NewReader(src))
-		// A clean end is io.EOF; any other error must be a located *ParserError.
-		// The parser cannot be reused after an error, so stop on the first one.
-		// Cap iterations as a non-advancement safety valve: a real input yields
-		// at most len(src) datums, so reaching the cap signals a stuck reader.
-		maxData := len(src) + 16
-		for range maxData {
-			v, err := p.ReadSyntax(context.TODO())
-			if errors.Is(err, io.EOF) {
-				return
-			}
-			if err != nil {
-				var perr *ParserError
-				if !errors.As(err, &perr) {
-					t.Fatalf("reader returned %T for %q; want *ParserError or io.EOF: %v", err, src, err)
-				}
-				return
-			}
-			if v == nil {
-				t.Fatalf("ReadSyntax returned (nil, nil) for %q — violates the value | io.EOF | *ParserError contract", src)
-			}
+		for _, skipComments := range fuzzSkipModes {
+			readAllFuzzDatums(t, src, skipComments)
 		}
-		// A real input yields at most len(src) datums, so exhausting the cap
-		// without an EOF/error/nil exit means the reader advanced past every
-		// byte yet never terminated — a stuck reader, which is a failure, not a
-		// silently-tolerated cap.
-		t.Fatalf("reader did not terminate after %d reads on %q (possible non-advancement)", maxData, src)
 	})
+}
+
+// readAllFuzzDatums drains src through one parser and asserts the reader's
+// untrusted-input contract on every datum: a value, io.EOF, or a located
+// *ParserError, and termination.
+func readAllFuzzDatums(t *testing.T, src string, skipComments bool) {
+	t.Helper()
+	env := environment.NewNamespace().Runtime()
+	p := NewParser(env, skipComments, strings.NewReader(src))
+	// A clean end is io.EOF; any other error must be a located *ParserError.
+	// The parser cannot be reused after an error, so stop on the first one.
+	// Cap iterations as a non-advancement safety valve: a real input yields
+	// at most len(src) datums, so reaching the cap signals a stuck reader.
+	maxData := len(src) + 16
+	for range maxData {
+		v, err := p.ReadSyntax(context.TODO())
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err != nil {
+			var perr *ParserError
+			if !errors.As(err, &perr) {
+				t.Fatalf("reader returned %T for %q (skipComments=%v); want *ParserError or io.EOF: %v", err, src, skipComments, err)
+			}
+			return
+		}
+		if v == nil {
+			t.Fatalf("ReadSyntax returned (nil, nil) for %q (skipComments=%v) — violates the value | io.EOF | *ParserError contract", src, skipComments)
+		}
+	}
+	// A real input yields at most len(src) datums, so exhausting the cap
+	// without an EOF/error/nil exit means the reader advanced past every
+	// byte yet never terminated — a stuck reader, which is a failure, not a
+	// silently-tolerated cap.
+	t.Fatalf("reader did not terminate after %d reads on %q (skipComments=%v, possible non-advancement)", maxData, src, skipComments)
 }
 
 // FuzzReadWriteRoundTrip closes the "valid on read" loop with the writer: any
@@ -150,22 +169,33 @@ func FuzzReadWriteRoundTrip(f *testing.F) {
 				t.Fatalf("read/write/read panicked on %q: %v", src, r)
 			}
 		}()
-		v, err := readFuzzDatum(src)
-		if err != nil {
-			return // malformed or empty input (incl. io.EOF) is the other target's concern
-		}
-		if v == nil {
-			t.Fatalf("readFuzzDatum returned (nil, nil) for %q — violates the reader contract", src)
-		}
-		out, writeErr := values.WriteValueToString(v.UnwrapAll())
-		if writeErr != nil {
-			return // depth-bounded refusal, not a re-readability failure
-		}
-		_, rereadErr := readFuzzDatum(out)
-		if rereadErr != nil {
-			t.Fatalf("writer emitted non-re-readable output:\n  input:   %q\n  written: %q\n  reread:  %v", src, out, rereadErr)
+		for _, skipComments := range fuzzSkipModes {
+			roundTripFuzzDatum(t, src, skipComments)
 		}
 	})
+}
+
+// roundTripFuzzDatum reads one datum from src, writes it, and reads the output
+// back, in one skipComments mode. Both modes are swept: the preserving mode
+// yields comment and directive nodes the skipping mode never produces, and
+// those must be writable and re-readable like any other value.
+func roundTripFuzzDatum(t *testing.T, src string, skipComments bool) {
+	t.Helper()
+	v, err := readFuzzDatum(src, skipComments)
+	if err != nil {
+		return // malformed or empty input (incl. io.EOF) is the other target's concern
+	}
+	if v == nil {
+		t.Fatalf("readFuzzDatum returned (nil, nil) for %q (skipComments=%v) — violates the reader contract", src, skipComments)
+	}
+	out, writeErr := values.WriteValueToString(v.UnwrapAll())
+	if writeErr != nil {
+		return // depth-bounded refusal, not a re-readability failure
+	}
+	_, rereadErr := readFuzzDatum(out, skipComments)
+	if rereadErr != nil {
+		t.Fatalf("writer emitted non-re-readable output (skipComments=%v):\n  input:   %q\n  written: %q\n  reread:  %v", skipComments, src, out, rereadErr)
+	}
 }
 
 // TestFuzzCorpusNonTrivial guards the harvested seed corpus against silently

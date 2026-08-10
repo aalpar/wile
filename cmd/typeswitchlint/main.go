@@ -101,8 +101,6 @@ var knownValueTypes = []string{
 	"*values.JoinTimeoutException",
 	"*values.TerminatedThreadException",
 	"*values.AbandonedMutexException",
-	"*values.RWMutex",
-	"*values.Once",
 	"*values.AtomicBox",
 	"*values.AtomicInt64",
 	"*values.Time",

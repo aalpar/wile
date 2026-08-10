@@ -22,7 +22,14 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-type Stack values.Vector
+// Stack is the VM's evaluation stack. It is deliberately its own slice type and
+// NOT defined as values.Vector: the two happen to have the same shape today, but
+// they answer to different contracts. A Vector is a Scheme datum whose
+// immutability is user-visible; the eval stack is VM-internal scratch that is
+// pushed, popped and drained on every instruction. Keeping them separate means
+// giving Vector a per-instance immutability flag does not silently widen the
+// stack or drag it onto the datum's accessor API.
+type Stack []values.Value
 
 // NewStack creates a new stack with the given initial values.
 func NewStack(vs ...values.Value) *Stack {

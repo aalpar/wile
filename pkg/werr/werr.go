@@ -110,15 +110,9 @@ var (
 	ErrNotAConditionVariable  = NewTypeSentinel("condition variable")
 	ErrNotAnUncaughtException = NewTypeSentinel("uncaught-exception")
 	ErrNotATime               = NewTypeSentinel("time")
-	ErrNotARWMutex            = NewTypeSentinel("rw-mutex")
-	// ErrNotAOnce passes an explicit article because "once" is pronounced
-	// /wuns/: the letter rule would give "an once", but the consonant /w/
-	// sound calls for "a". The "a "-prefix pass-through in NewTypeSentinel
-	// preserves it.
-	ErrNotAOnce      = NewTypeSentinel("a once")
-	ErrNotAnAtomic   = NewTypeSentinel("atomic")
-	ErrPortClosed    = NewStaticError("port is closed")
-	ErrNotAHashtable = NewTypeSentinel("hashtable")
+	ErrNotAnAtomic            = NewTypeSentinel("atomic")
+	ErrPortClosed             = NewStaticError("port is closed")
+	ErrNotAHashtable          = NewTypeSentinel("hashtable")
 	// ErrImmutableHashtable is raised by hashtable-set!, hashtable-delete! and
 	// hashtable-clear! on a table that hashtable-copy produced without a true
 	// mutable argument. R6RS raises &assertion here; Wile has no R6RS condition
@@ -218,10 +212,17 @@ var (
 
 	// Synchronization errors
 
-	// ErrOperationCancelled is raised when a thread blocked acquiring a
-	// synchronization primitive (rw-mutex lock) is unparked by ctx cancellation
-	// before it acquires. mutex-lock! signals the same condition as #f (it has a
-	// did-not-acquire value already).
+	// ErrOperationCancelled is for a thread unparked by ctx cancellation before a
+	// blocking operation completed. Two producers: thread-sleep!, which returns
+	// Void, and Thread.Join, which returns the joinee's result. Neither has a
+	// value channel free for "did not finish" — exactly the shape of the removed
+	// rw-mutex lock family that was this sentinel's original producer.
+	// Primitives that DO have one use it instead — mutex-lock! and
+	// (mutex-unlock! m cv) both report a cancelled wait as #f, error-free, which
+	// is also what lets a wrapping with-timeout handler run
+	// (docs/concurrency/cancellation.md). Raise this only where that convention
+	// cannot be borrowed, and pair it with the raw ctx cause so a host can still
+	// distinguish context.Canceled from context.DeadlineExceeded.
 	ErrOperationCancelled = NewStaticError("synchronization operation cancelled")
 
 	// Process errors

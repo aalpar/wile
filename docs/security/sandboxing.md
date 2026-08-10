@@ -28,7 +28,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. Gated: `exit`/`emergency-exit` as `process:exit`, `command-line` as `process:read`; the clock primitives are ungated. |
 | **Privileged** | process | `extensions/process` | Process execution: `system`, `process-spawn`, `process-wait`, `process-kill`. |
 | **Privileged** | namespace | `pkg/internal/extensions/namespace` | Namespace introspection: `namespace?`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. Not gated by any authorizer; exclude it from the registry rather than relying on a policy. |
-| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Not gated by any authorizer. Safe for trusted code. |
+| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: atomic boxes. Resource exhaustion via unbounded object creation. No ambient authority. Not gated by any authorizer. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Not gated by any authorizer. Safe for trusted code. |
 
 **Safe** means no ambient authority (Dennis & Van Horn 1966; Miller, "Robust Composition", 2006) — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
@@ -129,7 +129,7 @@ When the eval extension is present, Scheme code can construct a namespace for an
 
 | Engine | Request | Outcome |
 |--------|---------|---------|
-| No authorizer | anything | Allowed. Widening is the documented way to get a richer namespace from Scheme, and an embedder that installed no policy has not asked to be protected from it. |
+| No authorizer | anything | Allowed. This arm is an escalation path and is kept as one — a `Small` engine reaches `make-thread`, and `system` (the `/bin/sh -c` primitive, registered by the `process` extension `Small` excludes), through `(environment '(wile kitchen-sink))`. The ground is not that no such path exists, but that an embedder who installed no policy has accepted whatever Scheme can reach. |
 | Authorizer installed | profile ⊆ the engine's own surface | Allowed, without consulting the authorizer. Acquiring nothing new is not a capability question. |
 | Authorizer installed | profile ⊄ the engine's own surface | Refused, unless the authorizer permits `namespace:create` with the profile name as target. The built-in authorizers deny unknown resources, so `Console`/`ConsoleWithLoad` refuse; a custom authorizer can opt in. |
 
@@ -278,7 +278,7 @@ The result is that the registry layer costs nothing at runtime and fails at comp
 | Stack depth | Partially covered | `WithMaxCallDepth(n)` limits continuation stack depth. |
 | Goroutine exhaustion | Not covered (if threads or gointerop extension loaded) | Don't load threads or gointerop extensions for untrusted code. Omitting them is now sufficient against `(environment '(wile kitchen-sink))` *provided an authorizer is installed* — see [Extension-set escalation](#profile-namespaces-widen-the-surface) below. |
 | Information flow | Not covered | A privileged library can pass capabilities (e.g., an open file handle) to unprivileged code via exported values. Preventing this requires an object-capability model. |
-| Extension-set escalation | Covered when an authorizer is installed | `(environment '(wile <profile>))` may only construct a namespace contained in the engine's own primitive surface; widening is refused unless the authorizer permits `namespace:create`. An engine with **no** authorizer keeps the unrestricted widening path by design. See [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface). |
+| Extension-set escalation | Covered when an authorizer is installed | `(environment '(wile <profile>))` may only construct a namespace contained in the engine's own primitive surface; widening is refused unless the authorizer permits `namespace:create`. An engine with **no** authorizer keeps the unrestricted widening path by design: an embedder who installed no policy has accepted whatever Scheme can reach, which for this row means a `Small` engine can reach `make-thread`. Not that no such path exists — it does, and is measured. See [Profile namespaces widen the surface](#profile-namespaces-widen-the-surface). |
 | `include` | Covered by authorizer | `include` is a compile-time form that reads files. It is NOT gated by the files extension — it's part of the compiler. However, it is gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so an authorizer can restrict it. Without an authorizer, it is unrestricted. `include-ci` is the same code path (`compileIncludeImpl` with case folding on) and is gated identically. |
 
 ### The `include` note
@@ -297,7 +297,7 @@ Without an authorizer or `WithSourceFS`, `include` is unrestricted on the OS fil
 
 Isolation invariants are verified in `pkg/wile/engine_sandbox_test.go`:
 
-- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-rw-mutex`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`) (`TestConsole_RejectsPrivileged`)
+- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-atomic`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`) (`TestConsole_RejectsPrivileged`)
 - Safe engine allows safe primitives (`TestConsole_AllowsSafe`)
 - `WithoutCore()` produces a bare engine, and `WithoutCore()` + extension gives only that extension (`TestWithoutCore_BareEngine`, `TestWithoutCore_PlusExtension`)
 - Library propagation respects restrictions (`TestConsole_LibraryPropagation`)

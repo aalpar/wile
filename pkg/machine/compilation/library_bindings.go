@@ -510,6 +510,16 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 //     source, or re-importing the same library) is permitted;
 //   - a pre-existing user definition is not an import and is left to shadow.
 //
+// The second bullet was FALSE until the base install moved to T2: the define and
+// the import shared one (ExactPhase(0), mutable) slot, so the import assigned
+// through the define instead of being shadowed by it — measured, (define map 1)
+// then (import (scheme base)) left one slot whose value went 1 ->
+// #<case-lambda-closure> and whose meta went imported=false -> imported=true, and
+// this guard never fired because the pre-existing binding was not IsImported().
+// Now the two live at different coordinates, `!created` can only mean "an import
+// already sits here", and the guard's own precondition is what makes the bullet
+// true rather than aspirational.
+//
 // Whether the two denote the same definition (diamond) or two definitions of one name
 // (conflict) is decided by sameImportedBinding — see its doc for the by-name comparison
 // and why it is used instead of value identity.
@@ -572,6 +582,24 @@ func sameImportedBinding(a, b values.Value) bool {
 	}
 }
 
+// importPlacement selects the store TIER an import install lands on. It is a
+// parameter rather than a property of the frame because the two tiers differ in
+// whether a later define of the same name SUPERSEDES the import or SHADOWS it,
+// and only one install site can safely take the shadowable tier — see
+// installImportedBinding's doc.
+type importPlacement int
+
+const (
+	// placementShadowable puts the import at T2, (ExactPhase(0), sealed), where a
+	// user top-level define's own (ExactPhase(0), mutable) T1 slot outranks it. A
+	// define then shadows the import instead of assigning through it.
+	placementShadowable importPlacement = iota
+	// placementInPlace keeps the historical T1 coordinates,
+	// (ExactPhase(N), mutable), where a same-name define shares the slot and
+	// supersedes the import by assignment.
+	placementInPlace
+)
+
 // installImportedBinding installs source into env under localSym, and is the
 // single implementation behind every import install site (base phase, propagated
 // phase, direct library-internal, and the expand-phase copy of a syntax binding).
@@ -579,10 +607,46 @@ func sameImportedBinding(a, b values.Value) bool {
 // The binding is created AMBIENT, under the empty scope set. That is what makes
 // an imported name behave like one: a plain top-level reference carries the empty
 // set and reaches it, and the importing unit's own (define ...) of the same name
-// carries the empty set too, so it shares the slot and supersedes the import
-// rather than sitting beside it (R7RS §5.3.1). A library body's own define, by
-// contrast, carries the library scope and gets its own slot; the export lookup
-// prefers it by maximal resolution (see findLibraryBinding).
+// carries the empty set too.
+//
+// # Which TIER, and why it is not the same answer at every site
+//
+// Historically every install went through the view, i.e.
+// MaybeCreateOwnGlobalBinding, whose writeCoordinates yield
+// (ExactPhase(N), mutable) — T1, the same coordinates a user top-level define
+// writes. Sharing the slot made a define an ASSIGNMENT through the import, which
+// is how (define map 1) followed by (import (scheme base)) silently clobbered the
+// define: one slot, value 1 -> #<case-lambda-closure>, meta imported false ->
+// true. importConflicts' own doc comment says "a pre-existing user definition is
+// not an import and is left to shadow" — that sentence was FALSE, and moving the
+// base install to T2 is what makes it true.
+//
+// placementShadowable therefore writes (ExactPhase(0), sealed), bypassing the
+// view, because no view can produce that coordinate: writeCoordinates maps
+// sealed-at-phase-0 to AnyPhase() (T3, the ambient startup set). T1 mutable
+// outranks T2 sealed, so a define shadows while the import stays visible when no
+// define exists.
+//
+// # THE HAZARD, and why only ONE site takes the shadowable tier
+//
+// (ExactPhase(0), sealed) is an EMPTY coordinate — that is the whole reason it is
+// safe. (ExactPhase(1), sealed) is NOT: bootstrap macros and primitive expanders
+// live there (primitive_expanders_registry.go registers through
+// SealedWriteViewAt(PhaseExpand); `when` is present in SealedSlots()). Relocating
+// a phase-1 install would land an imported macro on exactly a bootstrap macro's
+// coordinates with the same ambient scope set, so CreateGlobalBindingAt REUSES
+// the slot, created == false, importConflicts returns false (the bootstrap macro
+// is not IsImported()), and SetOwnGlobalValue overwrites the sealed ambient
+// transformer IN PLACE, ENGINE-WIDE — then markBindingImported stamps the startup
+// set as imported. Every compiled pin to it would then see the import's value,
+// and no test would name it: from the outside, the import "works".
+//
+// So the phase is re-checked here rather than trusted from the call site: a
+// placementShadowable install at any phase but 0 falls back to the view. A
+// for-syntax import ((import (for (lib) expand))) routes its BASE install through
+// AtPhase(1) and would otherwise reach the hazard through the safe-looking site.
+//
+// # One slot, four operations
 //
 // Creation, the conflict check, the value write, and the provenance stamp all
 // address ONE slot — the one the create PINNED, under that ambient key. They used
@@ -600,9 +664,17 @@ func installImportedBinding(
 	internalName string,
 	sourceLib LibraryName,
 	phaseContext string,
+	placement importPlacement,
 ) error {
 	ambient := []*syntax.Scope{}
-	idx, created := env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
+	var idx *environment.GlobalIndex
+	var created bool
+	if placement == placementShadowable && env.PhaseLevel() == environment.PhaseRuntime {
+		idx, created = env.GlobalEnvironment().CreateGlobalBindingAt(
+			localSym, bt, ambient, environment.ExactPhase(env.PhaseLevel()), true)
+	} else {
+		idx, created = env.MaybeCreateOwnGlobalBinding(localSym, bt, ambient)
+	}
 
 	own := env.GlobalEnvironment()
 	target := own.GetOwnGlobalBinding(idx)
@@ -663,11 +735,17 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		// source phase still needs a home, so it falls through to the base install.
 		skipBase := libBinding.BindingType() == environment.BindingTypeSyntax && sourcePhase > 0
 		if !skipBase {
-			// Create binding in the target at the base phase.
+			// Create binding in the target at the base phase. This is the ONE site
+			// that takes the shadowable tier: at targetPhase 0 it resolves to
+			// (ExactPhase(0), sealed), an empty coordinate, so a user top-level
+			// define gets its own T1 slot and shadows rather than assigning through
+			// the import. At any other targetPhase installImportedBinding falls back
+			// to the view — see the hazard in its doc.
 			phaseEnv := targetEnv.AtPhase(targetPhase)
 			localSym := values.NewSymbol(localName)
 			err := installImportedBinding(phaseEnv, localSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib.Name, " at phase "+targetPhase.String())
+				libBinding, externalName, internalName, lib.Name, " at phase "+targetPhase.String(),
+				placementShadowable)
 			if err != nil {
 				return err
 			}
@@ -694,8 +772,29 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			// fresh but the propagated (e.g. expand) entry already exists.
 			propagateEnv := targetEnv.AtPhase(propagatePhase)
 			propagateSym := values.NewSymbol(localName)
+			// DELIBERATELY placementInPlace, and this is a REFUSAL, not an omission.
+			//
+			// The whole point of the propagation is that propagatePhase > 0, so the
+			// shadowable tier would resolve to (ExactPhase(1), sealed) — which, unlike
+			// (ExactPhase(0), sealed), is NOT an empty coordinate. Bootstrap macros
+			// and primitive expanders live there (`when` is in SealedSlots()). An
+			// imported macro of the same name would land on exactly those coordinates
+			// with the same ambient scope set, so CreateGlobalBindingAt REUSES the
+			// slot, created == false, importConflicts returns false (the bootstrap
+			// macro is not IsImported()), SetOwnGlobalValue overwrites the sealed
+			// ambient transformer IN PLACE and ENGINE-WIDE, and markBindingImported
+			// stamps the startup set as imported. From the outside the import would
+			// simply "work"; no existing test names it.
+			//
+			// Relocating this site is a SEPARATE DECISION that needs its own way to
+			// keep imports off the startup set's coordinates — a distinct rank, or a
+			// scope set that is not the ambient one. It is not a matter of passing the
+			// other constant here. Until then a phase-1 define-syntax over an import
+			// still supersedes in place, which is the known residual recorded in
+			// TODO.md against the Imported arm of IsStable().
 			err := installImportedBinding(propagateEnv, propagateSym, libBinding.BindingType(),
-				libBinding, externalName, internalName, lib.Name, " propagated to phase "+propagatePhase.String())
+				libBinding, externalName, internalName, lib.Name, " propagated to phase "+propagatePhase.String(),
+				placementInPlace)
 			if err != nil {
 				return err
 			}
@@ -776,8 +875,24 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			installEnv = targetEnv.Expand()
 			phaseNote = " in expand phase"
 		}
+		// DELIBERATELY placementInPlace for BOTH arms, and this is a REFUSAL.
+		//
+		// The syntax arm installs into targetEnv.Expand(), so it carries exactly the
+		// (ExactPhase(1), sealed) hazard spelled out at the propagated install above:
+		// an imported macro would overwrite a same-named bootstrap transformer in the
+		// sealed startup set, engine-wide and silently.
+		//
+		// The variable arm is at phase 0 and would be coordinate-safe, but it is left
+		// alone on purpose. targetEnv here is a library body's own child runtime
+		// frame, where the shadow-vs-supersede question this relocation answers does
+		// not arise the same way: the library's own define carries the LIBRARY scope
+		// and already gets its own slot, so it shadows the ambient import without any
+		// tier change (the comment above says so). Moving it would change a working
+		// resolution for no stated defect, and split one function's two arms across
+		// two tiers on no principle. It is a separate decision.
 		err := installImportedBinding(installEnv, localSym, importedBinding.BindingType(),
-			importedBinding, externalName, internalName, lib.Name, phaseNote)
+			importedBinding, externalName, internalName, lib.Name, phaseNote,
+			placementInPlace)
 		if err != nil {
 			return err
 		}

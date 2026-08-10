@@ -49,7 +49,10 @@ func addVectors(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeInteger}, ReturnType: values.TypeVector},
 		{Name: "vector-copy!", ParamCount: 3, IsVariadic: true, Impl: PrimVectorCopyTo,
 			Doc: "Copies elements from FROM into TO starting at index AT. Regions may overlap.\n\nExamples:\n  (let ((v (vector 1 2 3 4 5))) (vector-copy! v 0 #(a b c) 0 2) v)  => #(a b 3 4 5)", ParamNames: []string{"to", "at", "from"}, Category: "vectors",
-			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeInteger, values.TypeVector}, ReturnType: values.TypeVoid},
+			// The rest is (from [start [end]]): a vector followed by integers,
+			// so no single constraint describes it. TypeAny, as vector-fill!
+			// uses for its middle slot.
+			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeInteger, values.TypeAny}, ReturnType: values.TypeVoid},
 		{Name: "vector-fill!", ParamCount: 3, IsVariadic: true, Impl: PrimVectorFill,
 			Doc: "Sets all elements of VECTOR from START to end to FILL. START defaults to 0, end to vector length.\n\nExamples:\n  (let ((v (vector 1 2 3))) (vector-fill! v 0) v)  => #(0 0 0)", ParamNames: []string{"vector", "fill", "start"}, Category: "vectors",
 			ParamTypes: []values.TypeConstraint{values.TypeVector, values.TypeAny, values.TypeInteger}, ReturnType: values.TypeVoid},

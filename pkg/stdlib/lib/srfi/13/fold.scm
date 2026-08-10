@@ -144,3 +144,47 @@ See also: `string-fold', `string-tabulate'."
      (%string-map-impl proc s start (string-length s)))
     ((proc s start end)
      (%string-map-impl proc s start end))))
+
+(define (%string-map!-impl proc s start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i a))
+      (cond ((>= i b) (if #f #f))
+            (else
+             (string-set! s i (proc (string-ref s i)))
+             (loop (+ i 1)))))))
+
+(define string-map!
+  (case-lambda
+    ((proc s)
+     "Mutate S in place, replacing each char in [start, end) with (PROC ch).
+
+The destructive counterpart of `string-map'. PROC must return a char, and
+the string's length cannot change, so a mapping that would produce more
+than one char per input (full Unicode case mapping, for instance) has no
+in-place form — use `string-map' for those.
+
+Examples:
+  (let ((s (string-copy \"hello\")))
+    (string-map! char-upcase s)
+    s)
+  => \"HELLO\"
+  (let ((s (string-copy \"hello\")))
+    (string-map! char-upcase s 1 4)
+    s)
+  => \"hELLo\"
+
+Parameters:
+  proc : procedure -- (proc char) -> char
+  s : mutable string
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: unspecified
+Category: srfi-13
+Keywords: map, transform, mutate, in-place
+
+See also: `string-map', `string-upcase!', `string-for-each-index'."
+     (%string-map!-impl proc s 0 (string-length s)))
+    ((proc s start)
+     (%string-map!-impl proc s start (string-length s)))
+    ((proc s start end)
+     (%string-map!-impl proc s start end))))

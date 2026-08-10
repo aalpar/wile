@@ -16,12 +16,14 @@ package threads_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	extthreads "github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/pkg/testutil"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -54,6 +56,36 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	result, err := engine.EvalMultiple(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNil)
 	return result
+}
+
+// evalWithWatchdog runs code on its own goroutine and fails the test if Eval has
+// not returned within d.
+//
+// The failure mode every cancellation gate in this file guards against is a HANG,
+// and a hanging test does not report: it is killed by the package timeout with no
+// assertion attached and no indication of which case stalled. Making the watchdog
+// part of the assertion is what turns "the suite timed out" into a named failure.
+func evalWithWatchdog(t *testing.T, engine *wile.Engine, code string, d time.Duration) (wile.Value, error) {
+	t.Helper()
+	type outcome struct {
+		value wile.Value
+		err   error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		v, err := engine.EvalMultiple(context.Background(), code)
+		done <- outcome{value: v, err: err}
+	}()
+
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case o := <-done:
+		return o.value, o.err
+	case <-timer.C:
+		t.Fatalf("Eval did not return within %v — the parked primitive has no cancellation edge", d)
+		return nil, nil
+	}
 }
 
 // evalExpectError runs Scheme code and asserts that it produces an error.
@@ -319,7 +351,11 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 
 			select {
 			case err := <-done:
-				c.Assert(err, qt.IsNotNil)
+				// Against the sentinel, never against nil. A test named for
+				// cancellation that only knows an error arrived cannot see
+				// WHICH cancellation, which is the whole content of the claim.
+				c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue,
+					qt.Commentf("thread-sleep! must report a cancelled sleep as ErrOperationCancelled, got %v", err))
 			case <-time.After(2 * time.Second):
 				t.Fatal("thread-sleep! did not respect context cancellation")
 			}
@@ -1178,6 +1214,161 @@ func TestThreadState(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+		})
+	}
+}
+
+// TestTerminateUnparksUntimedThreadJoin covers the cancellation edge on an
+// untimed thread-join!, and it has two arms that must not be confused with each
+// other. Which thread gets terminated is the whole content of the test.
+//
+//   - "joining-thread" is the GATE. It terminates the thread that is PARKED IN
+//     the join, and asserts that its own untimed thread-join! unparks. Terminate
+//     on a started thread cancels its ctx but does NOT close its done channel
+//     (ownsDone is true only for a never-started thread), so before the fix the
+//     joiner stayed parked in a bare <-victim.done, which has no ctx arm, and its
+//     termination never took effect. Measured before the fix: 'join-timed-out,
+//     because the joiner's done never closed and the outer join's own 5 s bound
+//     expired. That bound is why this arm reports instead of hanging; drop it and
+//     the failure becomes a hang, which is what the watchdog is for.
+//
+//   - "joinee" is a CONTROL, and it CANNOT FAIL. It terminates the thread being
+//     joined, which already worked: Terminate cancels the joinee's ctx, its
+//     goroutine unwinds and closes done, and since 2026-08-02 the joiner unparks
+//     by raising terminated-thread-exception. Measured before the fix: green, in
+//     well under a second. It is here because it is the natural misreading of
+//     "park a thread in an untimed thread-join!, terminate it, assert the join
+//     returns" — the gate as originally filed, which passed without the fix. Keep
+//     it labelled, or the weaker form gets restored as the gate.
+//
+// Both arms run under a watchdog because the gate's failure mode is a hang, and a
+// hanging test does not report.
+func TestTerminateUnparksUntimedThreadJoin(t *testing.T) {
+	// The rendezvous is the mutex itself, not a shared cell: main holds m until
+	// the joiner hands it back immediately before parking, and the mutex is what
+	// supplies the happens-before edge between the two threads. A plain pair cell
+	// polled with thread-yield! would be a data race.
+	const joiningThread = `
+(define m (make-mutex))
+(mutex-lock! m)
+(define victim (make-thread (lambda () (thread-sleep! 3600))))
+(define joiner (make-thread (lambda ()
+  (mutex-unlock! m)
+  (thread-join! victim))))
+(thread-start! victim)
+(thread-start! joiner)
+(mutex-lock! m)
+(thread-terminate! joiner)
+(define outcome
+  (guard (e ((terminated-thread-exception? e) 'terminated)
+            ((join-timeout-exception? e) 'join-timed-out)
+            (#t 'other))
+    (thread-join! joiner 5)
+    'returned-normally))
+(thread-terminate! victim)
+outcome`
+
+	const joinee = `
+(define victim (make-thread (lambda () (thread-sleep! 3600))))
+(thread-start! victim)
+(thread-terminate! victim)
+(guard (e ((terminated-thread-exception? e) 'terminated)
+          ((join-timeout-exception? e) 'join-timed-out)
+          (#t 'other))
+  (thread-join! victim)
+  'returned-normally)`
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"joining-thread", joiningThread},
+		{"joinee", joinee},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			result, err := evalWithWatchdog(t, engine, tc.code, 12*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Internal().SchemeString(), qt.Equals, "terminated")
+		})
+	}
+}
+
+// TestWithTimeoutInterruptsParkedThreadJoin is defect 35's second shape and the
+// composition analogue of TestWithTimeoutInterruptsParkedMutexLock: an untimed
+// thread-join! parked inside a with-timeout must run the handler. victim never
+// terminates, so the only thing that can end the join is the timer.
+//
+// Measured before the fix: Eval never returns, and the watchdog fires.
+func TestWithTimeoutInterruptsParkedThreadJoin(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	result, err := evalWithWatchdog(t, engine, `
+(define victim (make-thread (lambda () (thread-sleep! 3600))))
+(thread-start! victim)
+(define outcome
+  (with-timeout 500
+    (lambda (k) 'timed-out)
+    (lambda () (thread-join! victim))))
+(thread-terminate! victim)
+outcome`, 12*time.Second)
+
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Internal().SchemeString(), qt.Equals, "timed-out")
+}
+
+// TestWithTimeoutInterruptsParkedThreadSleep is defect 38's COMPOSITION arm: the
+// Scheme-level proof that a thread-sleep! parked inside a with-timeout runs the
+// handler rather than escaping an error to the host.
+//
+// It is TestWithTimeoutInterruptsParkedMutexLock (extensions/gointerop) ported to
+// thread-sleep!, and the port is not cosmetic: mutex-lock! reaches the handler by
+// reporting a cancelled acquire as an error-free #f, which is what lets
+// callForeignCached's eager ErrTimerExpired recheck fire. thread-sleep! returns
+// Void and so has no such value channel, and before the fix it returned the raw
+// ctx.Err() instead: the sleep aborted the whole evaluation with "context deadline
+// exceeded" and the handler never ran.
+//
+// Both shapes matter because the escaping error IS a catchable Scheme condition,
+// so a guard around the sleep changes which mechanism resolves the timeout. The
+// guarded arm additionally records whether its clause body ran, because
+// with-timeout's handler value alone cannot distinguish "nothing was raised" from
+// "something was raised and the guard clause was skipped mid-dispatch".
+func TestWithTimeoutInterruptsParkedThreadSleep(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"unguarded", `
+(with-timeout 300
+  (lambda (k) 'timed-out)
+  (lambda () (thread-sleep! 60)))`, "timed-out"},
+
+		// The flag is a pair cell, not a top-level set!: top-level bindings are
+		// immutable by default, so the mutation needs a mutable cell.
+		{"guarded", `
+(define guard-flag (list 'not-run))
+(define outcome
+  (with-timeout 300
+    (lambda (k) 'timed-out)
+    (lambda ()
+      (guard (e (#t (set-car! guard-flag 'guard-ran) 'guard-value))
+        (thread-sleep! 60)))))
+(list outcome (car guard-flag))`, "(timed-out not-run)"},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngine(t)
+			result, err := evalWithWatchdog(t, engine, tc.code, 10*time.Second)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Internal().SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }

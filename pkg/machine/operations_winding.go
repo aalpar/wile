@@ -43,20 +43,35 @@ func NewOperationPushWind() *OperationPushWind {
 }
 
 func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
-	// Get before closure from stack (at depth 2)
-	beforeVal := mc.evals.PeekK(2)
-	before, ok := beforeVal.(Closure)
+	// `before` is not re-checked here. compileDynamicWind emits phase 2 (apply
+	// `before` via OpApply) before phase 3 (this op), so a value that reaches
+	// depth 2 has already survived ApplyCallable's dispatch — and all six types
+	// it dispatches implement values.Callable. The old `.(Closure)` assertion
+	// was reachable only because Closure is narrower than what ApplyCallable
+	// accepts; widening it to values.Callable makes the branch unreachable, so
+	// it is gone rather than left as dead code. A non-procedure in `before`
+	// still fails, one phase earlier, with ApplyCallable's own diagnostic.
+	before, ok := mc.evals.PeekK(2).(values.Callable)
 	if !ok {
-		err := mc.WrapError(werr.ErrNotAProcedure, "dynamic-wind: before must be a procedure")
+		err := mc.WrapError(werr.ErrInternal,
+			"push-wind: before survived OpApply but is not callable")
 		return mc, err
 	}
 
-	// Get after closure from stack (at depth 0 = top)
-	afterVal := mc.evals.PeekK(0)
-	after, ok := afterVal.(Closure)
+	// `after`, by contrast, is checked here and not applied until phase 6, so
+	// this is the only boundary it crosses — and the only operand position whose
+	// diagnostic does not already come from ApplyCallable. Bridge it: this is an
+	// argument-domain fault (R7RS §6.10 requires a procedure), so it belongs to
+	// the Scheme program and must be reachable by guard / with-exception-handler.
+	// The bridge goes HERE and not at Run()'s OpComplex arm, which dispatches
+	// every side-table operation (op_kind.go's OpKind()==OpComplex set):
+	// blanket-bridging there would also make OperationPopWind's werr.ErrInternal
+	// (below) guard-able, which CODING_STYLE.md forbids for impossible states.
+	// Pinned by TestPopWindInternalErrorStaysUncatchable.
+	after, ok := mc.evals.PeekK(0).(values.Callable)
 	if !ok {
 		err := mc.WrapError(werr.ErrNotAProcedure, "dynamic-wind: after must be a procedure")
-		return mc, err
+		return bridgeForeignError(mc, err)
 	}
 
 	// Create and push the winding frame, snapshotting the reachable marks at the

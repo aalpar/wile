@@ -202,10 +202,40 @@ func PrimThreadSleep(mc machine.CallContext) error {
 	select {
 	case <-time.After(d):
 	case <-mc.Context().Done():
-		return mc.Context().Err()
+		return waitCancelled(mc, "thread-sleep!")
 	}
 	mc.SetValue(values.Void)
 	return nil
+}
+
+// waitCancelled reports a blocking primitive in this extension whose context was
+// cancelled before the wait completed. Which of the two outcomes applies is
+// decided by the cancellation SOURCE, and the two callers — thread-sleep! and
+// thread-join! — need it for the same reason: neither has a spare value channel.
+// thread-sleep! returns Void; thread-join! returns the joined thread's result.
+// mutex-lock!, whose #f already means "did not acquire", needs none of this.
+//
+//   - Timer expiry (with-timeout). Return error-free. callForeignCached's eager
+//     ErrTimerExpired recheck runs only on the error-free foreign return, and it
+//     is what raises the ErrTimerInterrupt that dispatches the with-timeout
+//     handler. Returning an error here instead routes through
+//     applyCallableError, which turns it into an ordinary Scheme condition: with
+//     no guard the whole evaluation aborts and the handler never runs, which was
+//     the defect in both primitives. The Void is never observed — the interrupt
+//     discards it.
+//   - Anything else (the embedder cancelled the engine context, thread-terminate!
+//     cancelled THIS thread). Report ErrOperationCancelled, with the raw ctx cause
+//     retained so a host can still tell context.Canceled from
+//     context.DeadlineExceeded. thread-sleep! used to return ctx.Err() raw, which
+//     handed the embedder an error carrying no sentinel to match on.
+func waitCancelled(mc machine.CallContext, site string) error {
+	cause := context.Cause(mc.Context())
+	if errors.Is(cause, machine.ErrTimerExpired) {
+		mc.SetValue(values.Void)
+		return nil
+	}
+	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, cause,
+		"%s: cancelled before the wait completed", site)
 }
 
 // PrimThreadTerminate forcefully terminates a thread
@@ -250,7 +280,32 @@ func PrimThreadJoin(mc machine.CallContext) error {
 		}
 	}
 
-	result, err := thread.Join(timeout)
+	result, err := thread.Join(mc.Context(), timeout)
+
+	// The joiner's own cancellation is the FOURTH outcome, and it is not an
+	// SRFI-18 condition: the other three describe how the JOINEE ended, this one
+	// says the joiner stopped waiting. It is therefore handled before
+	// raiseJoinCondition rather than inside joinConditionFor, which maps joinee
+	// outcomes only.
+	//
+	// How the four compose for a Scheme guard around the join:
+	//
+	//	(guard (e ((join-timeout-exception? e) ...)        ; TIMEOUT elapsed
+	//	          ((terminated-thread-exception? e) ...)   ; joinee was terminated
+	//	          ((uncaught-exception? e) ...)            ; joinee raised
+	//	          ((error-object? e) ...))                 ; joiner was cancelled
+	//	  (thread-join! t))
+	//
+	// The first three arrive as their own condition objects via RaiseInPlace. The
+	// fourth arrives as an ordinary error-object, because ErrOperationCancelled is
+	// a Go sentinel with no SRFI-18 condition to name it — SRFI-18 has none, the
+	// spec never contemplated a cancellable joiner. Under a with-timeout the
+	// fourth outcome does not reach the guard at all: waitCancelled returns
+	// error-free and the timer interrupt runs the handler instead, exactly as it
+	// does for a parked mutex-lock!.
+	if errors.Is(err, werr.ErrOperationCancelled) {
+		return waitCancelled(mc, "thread-join!")
+	}
 	if err != nil {
 		return raiseJoinCondition(mc, err, timeoutVal)
 	}

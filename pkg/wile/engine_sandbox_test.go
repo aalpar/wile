@@ -55,7 +55,7 @@ func TestConsole_RejectsPrivileged(t *testing.T) {
 	}{
 		{"eval (eval)", `(eval '(+ 1 2))`},
 		{"exit (system)", `(exit 0)`},
-		{"make-rw-mutex (gointerop)", `(make-rw-mutex)`},
+		{"make-atomic (gointerop)", `(make-atomic 0)`},
 		{"load (eval)", `(load "x")`},
 	}
 	for _, tc := range compileTimeRejected {

@@ -105,6 +105,10 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 			},
 		},
 		{
+			// R7RS §4.3.2 imposes no variable-occurrence condition on `...`: a
+			// variable-free subpattern repeats exactly as a variable-bearing one
+			// does, so this compiles to the same loop as the case below rather
+			// than to a literal compare against the ellipsis symbol.
 			variables: map[string]struct{}{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
@@ -114,12 +118,15 @@ func (UtilsMatcherSuite) TestMatchCompile(c *qt.C) {
 				ByteCodeVisitCdr{},
 				ByteCodeCompareCar{Value: testSyntaxInt(20)},
 				ByteCodeVisitCdr{},
+				ByteCodeSkipIfEmpty{Offset: 9},
+				ByteCodePushContext{},
 				ByteCodeVisitCar{},
 				ByteCodeCompareCar{Value: testSyntaxSym("a")},
 				ByteCodeVisitCdr{},
 				ByteCodeCompareCar{Value: testSyntaxSym("b")},
 				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxSym("...")},
+				ByteCodePopContext{},
+				ByteCodeJump{Offset: -8},
 				ByteCodeDone{},
 			},
 		},
@@ -205,6 +212,9 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			matches:   true,
 		},
 		{
+			// `(a b) ...` now repeats, so a literal `...` in the INPUT is no
+			// longer what satisfies it — a trailing symbol where a repetition
+			// is expected fails.
 			variables: map[string]struct{}{},
 			in: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
@@ -212,6 +222,27 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			target: testSyntaxList(
 				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
 					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			matches: false,
+		},
+		{
+			// ... and two repetitions of the variable-free subpattern match.
+			variables: map[string]struct{}{},
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			target: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20),
+				testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b")),
+				testSyntaxList(testSyntaxSym("a"), testSyntaxSym("b"))),
+			matches: true,
+		},
+		{
+			// ... as does zero repetitions.
+			variables: map[string]struct{}{},
+			in: testSyntaxList(
+				testSyntaxInt(10), testSyntaxInt(20), testSyntaxList(
+					testSyntaxSym("a"), testSyntaxSym("b")), testSyntaxSym("...")),
+			target:  testSyntaxList(testSyntaxInt(10), testSyntaxInt(20)),
 			matches: true,
 		},
 		{
@@ -247,162 +278,6 @@ func (UtilsMatcherSuite) TestMatchExecute(c *qt.C) {
 			} else {
 				c.Assert(err, qt.ErrorIs, ErrNotAMatch, qt.Commentf("expected no match"))
 			}
-		})
-	}
-}
-
-func (UtilsMatcherSuite) TestInsert(c *qt.C) {
-	tcs := []struct {
-		in  []SyntaxCommand
-		out []SyntaxCommand
-		i   int
-	}{
-		{
-			i: 0,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeDone{},
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-		},
-		{
-			i: 1,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeDone{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-		},
-		{
-			i: 2,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +3},
-				ByteCodeDone{},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-		},
-		{
-			i: 3,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +3},
-				ByteCodeVisitCar{},
-				ByteCodeDone{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -3},
-				ByteCodeVisitCar{},
-			},
-		},
-		{
-			i: 4,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeDone{},
-				ByteCodeJump{Offset: -3},
-				ByteCodeVisitCar{},
-			},
-		},
-		{
-			i: 5,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeDone{},
-				ByteCodeVisitCar{},
-			},
-		},
-		{
-			i: 6,
-			in: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-			},
-			out: []SyntaxCommand{
-				ByteCodeVisitCar{},
-				ByteCodeJump{Offset: +2},
-				ByteCodeVisitCar{},
-				ByteCodeCompareCar{Value: testSyntaxSym("b")},
-				ByteCodeJump{Offset: -2},
-				ByteCodeVisitCar{},
-				ByteCodeDone{},
-			},
-		},
-	}
-	for i, tc := range tcs {
-		c.Run(fmt.Sprintf("%d: %q", i, tc.in), func(c *qt.C) {
-			q := insert(tc.i, tc.in, []SyntaxCommand{ByteCodeDone{}})
-			c.Assert(bytecodeEqual(q, tc.out), qt.IsTrue,
-				qt.Commentf("got %v, want %v", q, tc.out))
 		})
 	}
 }
@@ -728,4 +603,39 @@ func TestCompileDottedWildcardTail(t *testing.T) {
 			c.Assert(bound, qt.IsTrue)
 		})
 	}
+}
+
+// A `_` in ELEMENT position compiles to DiscardCar, not to nothing. An element
+// that emits no bytecode is invisible to ByteCodeDone's one-instruction
+// lookahead, which is what made a trailing `_` after a sublist reject valid
+// input (`((k (y) _) …)` vs `(d (1) 9)`) and accept input one element short
+// (`((k (y) _ _) …)` vs the same two-element input).
+func TestCompileWildcardElementEmitsDiscardCar(t *testing.T) {
+	c := qt.New(t)
+
+	// Pattern: (k (y) _)
+	pattern := testSyntaxList(
+		testSyntaxSym("k"),
+		testSyntaxList(testSyntaxSym("y")),
+		testSyntaxSym("_"),
+	)
+	variables := map[string]struct{}{"y": {}}
+
+	compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(fmt.Sprintf("%v", compiled.Codes), qt.Contains, "DiscardCar")
+
+	c.Run("matches a three-element input", func(c *qt.C) {
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+		input := testSyntaxList(testSyntaxSym("d"), testSyntaxList(testSyntaxInt(1)), testSyntaxInt(9))
+		c.Assert(sm.Match(context.Background(), input), qt.IsNil)
+		_, bound := sm.GetBindings()["_"]
+		c.Assert(bound, qt.IsFalse, qt.Commentf("wildcard `_` must not bind"))
+	})
+
+	c.Run("rejects a two-element input", func(c *qt.C) {
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
+		input := testSyntaxList(testSyntaxSym("d"), testSyntaxList(testSyntaxInt(1)))
+		c.Assert(sm.Match(context.Background(), input), qt.ErrorIs, ErrNotAMatch)
+	})
 }

@@ -185,13 +185,28 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "set! own define later unit refused",
 			units:   []string{`(define z 1)`, `(set! z 2)`},
 			wantErr: werr.ErrImmutableBinding},
-		// P4: define supersedes an import IN PLACE and drops the import
-		// provenance, so a same-unit set! is then permitted (R7RS §5.3.1).
-		// Same-unit requires the begin-wrap for the reason given at "set! own
-		// define same unit ok" above. Uses g (lib-shadow's export) rather
-		// than map: map is ALSO a Stable stdlib anchor in this profile with NO
-		// import at all (see "set! imported refused" and its two control
-		// rows below), so asserting "10" against map would be produced by
+		// P4: a define after an import wins, and a same-unit set! of it is then
+		// permitted (R7RS §5.3.1).
+		//
+		// THE MECHANISM CHANGED AND THIS BLOCK USED TO DESCRIBE THE OLD ONE. It
+		// read "define supersedes an import IN PLACE and drops the import
+		// provenance". That was accurate while imports installed at
+		// (ExactPhase(0), mutable) — the same coordinates a top-level define
+		// writes — so the two shared one slot and define was an ASSIGNMENT
+		// through the import, with compile_define.go clearing m.Imported to
+		// re-permit set!.
+		//
+		// Imports now install at (ExactPhase(0), sealed) (T2), so the define gets
+		// its OWN (ExactPhase(0), mutable) T1 slot and SHADOWS the import. The
+		// import's provenance is not dropped because it is not touched; set! is
+		// permitted because the slot being set was never imported. `want: "10"`
+		// is unchanged and PASSED THROUGHOUT — which is exactly why the stale
+		// rationale had to be corrected by reading, not by a failing test.
+		//
+		// Uses g (lib-shadow's export) rather than map: map is ALSO a Stable
+		// stdlib anchor in this profile with NO import at all (see "set!
+		// imported refused" and its two control rows below), so asserting "10"
+		// against map would be produced by
 		// define-over-a-sealed-primitive-plus-same-unit-set! (already covered
 		// by "set! own define same unit ok" above) and would pin nothing
 		// about import supersession specifically. The (g) call between the
@@ -202,6 +217,47 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "define supersedes import then set!",
 			units: []string{`(import (lib-shadow))`, `(g)`, `(begin (define g 9) (set! g 10) g)`},
 			want:  "10"},
+		// The ORDER twin of the row above, and the row that pins the tier move.
+		// An import arriving AFTER a define of the same name must leave the
+		// define standing. It did not: one shared slot meant the import's
+		// SetOwnGlobalValue wrote straight over the user's value and
+		// markBindingImported then stamped the user's binding imported=true.
+		// Measured before the move, this row read "#<machine-closure>" —
+		// lib-shadow's g — with the define silently gone.
+		//
+		// importConflicts' doc comment claims "a pre-existing user definition is
+		// not an import and is left to shadow"; this row is that sentence.
+		{name: "import after define does not clobber the define",
+			units: []string{`(define g 9)`, `(import (lib-shadow))`, `g`},
+			want:  "9"},
+		// ...and the import is still THERE, underneath. Shadowing, not refusal:
+		// deleting the shadow must reveal the library's g rather than leave the
+		// name unbound. Without this the row above would also pass if the import
+		// had simply been dropped on the floor.
+		{name: "import after define is shadowed, not lost",
+			units: []string{
+				`(define g 9)`,
+				`(import (lib-shadow))`,
+				`(namespace-undefine! (interaction-environment) 'g)`,
+				`(g)`,
+			},
+			want: "3"},
+		// P7: namespace-undefine! over an IMPORT still deletes it. The import
+		// moved to the sealed tier, where the primitive's blanket refusal
+		// ("cannot undefine sealed binding … a primitive or bootstrap
+		// procedure") would otherwise have caught it — a wrong message and a
+		// withdrawn capability, since building a restricted namespace by
+		// importing and then removing names is what the primitive is for.
+		// PrimNamespaceUndefine narrows the refusal with IsImported(); this row
+		// is the discriminator, and "undefine sealed primitive refused" below is
+		// the control proving the refusal itself still works.
+		{name: "undefine over import deletes it",
+			units: []string{
+				`(import (lib-shadow))`,
+				`(begin (namespace-undefine! (interaction-environment) 'g)
+					(namespace-bound? (interaction-environment) 'g))`,
+			},
+			want: "#f"},
 		// P2: set! on an imported binding refused (R7RS §5.2). Uses g rather
 		// than map for the reason given at "define supersedes import then
 		// set!" above (map is Stable in this profile with no import at all —

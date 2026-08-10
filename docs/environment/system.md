@@ -86,15 +86,21 @@ Four constructors, and the differences between them are not cosmetic:
 | `NewChildRuntime()` | own store, own sealed tier | is itself | not first-class — library loading only |
 
 The empty sealed tier under `NewChildNamespace` is what splits the two
-`(environment …)` forms apart. An import-spec environment copies the imported
-bindings into the child's **mutable runtime**, so they are ordinary user bindings;
-a profile environment routes a curated registry apply through the child's
-**sealed-write view** (`NewProfileEnvironment`, `pkg/internal/bootstrap/bootstrap.go`),
-landing those bindings in the sealed tier of the child's own store, so the
-same names are immutable there:
+`(environment …)` forms apart. An import-spec environment installs the imported
+bindings at `(ExactPhase(0), sealed)`, the **T2** coordinate, which no view can
+write and which nothing else occupies; a profile environment routes a curated
+registry apply through the child's **sealed-write view**
+(`NewProfileEnvironment`, `pkg/internal/bootstrap/bootstrap.go`), landing those
+bindings in the **ambient** sealed tier, T3.
+
+Both are "sealed", and they are still not the same thing. T1 mutable outranks
+T2, so a user `define` gets its own slot and **shadows** an import — it does not
+assign through it, which is what sharing one mutable slot used to mean. And
+`namespace-undefine!` distinguishes them by import *provenance*, not by rank, so
+an import is removable and a profile's primitive is not:
 
 ```scheme
-(namespace-undefine! (environment '(scheme base)) 'car)  ; succeeds
+(namespace-undefine! (environment '(scheme base)) 'car)  ; succeeds — an import
 (namespace-undefine! (environment '(wile console)) 'car)
 ;; => namespace-undefine!: cannot undefine sealed binding "car"
 ```

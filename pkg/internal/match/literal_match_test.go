@@ -77,11 +77,6 @@ func TestByteCodeString(t *testing.T) {
 		c.Assert(bc.String(), qt.Matches, `CompareCdr\(.*\)`)
 	})
 
-	c.Run("RequireCarEmpty", func(c *qt.C) {
-		bc := ByteCodeRequireCarEmpty{}
-		c.Assert(bc.String(), qt.Equals, "RequireCarEmpty")
-	})
-
 	c.Run("SkipIfTailCount", func(c *qt.C) {
 		bc := ByteCodeSkipIfTailCount{Offset: 5, Count: 2}
 		c.Assert(bc.String(), qt.Equals, "SkipIfTailCount(5, count=2)")
@@ -408,43 +403,6 @@ func TestExpandEscapedSyntaxTemplate(t *testing.T) {
 		c.Assert(len(scopes), qt.Equals, 2)
 		c.Assert(scopes, qt.Contains, extraScope)
 		c.Assert(scopes, qt.Contains, is)
-	})
-}
-
-// --- MatchSyntax RequireCarEmpty coverage ---
-
-func TestMatchSyntax_RequireCarEmpty(t *testing.T) {
-	c := qt.New(t)
-
-	// Bytecode for: (() x) — RequireCarEmpty checks car is () and advances cdr
-	// RequireCarEmpty already advances to cdr, so no VisitCdr needed after it
-	codes := []SyntaxCommand{
-		ByteCodeRequireCarEmpty{},
-		ByteCodeCaptureCar{Binding: "x"},
-		ByteCodeDone{},
-	}
-	vars := map[string]struct{}{"x": {}}
-
-	c.Run("empty list at car matches", func(c *qt.C) {
-		m := NewMatcher(vars, codes)
-		target := testSyntaxList(
-			syntax.SyntaxEmptyList,
-			testSyntaxInt(42),
-		)
-		err := m.MatchSyntax(context.Background(), target)
-		c.Assert(err, qt.IsNil)
-		bindings := m.GetBindings()
-		c.Assert(bindings["x"], qt.IsNotNil)
-	})
-
-	c.Run("non-empty at car fails", func(c *qt.C) {
-		m := NewMatcher(vars, codes)
-		target := testSyntaxList(
-			testSyntaxList(testSyntaxInt(1)),
-			testSyntaxInt(42),
-		)
-		err := m.MatchSyntax(context.Background(), target)
-		c.Assert(err, qt.IsNotNil)
 	})
 }
 

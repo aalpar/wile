@@ -33,6 +33,12 @@ import (
 // makeMC constructs a MachineContext with the given values as local bindings.
 // This allows testing functions that read arguments via mc.Arg(i).
 func makeMC(args ...values.Value) *machine.MachineContext {
+	return makeMCWithContext(context.Background(), args...)
+}
+
+// makeMCWithContext is makeMC with the caller's context, for helpers whose
+// contract includes observing cancellation.
+func makeMCWithContext(ctx context.Context, args ...values.Value) *machine.MachineContext {
 	local := environment.NewLocalEnvironment(len(args))
 	for i, arg := range args {
 		local.Bindings()[i].SetValue(arg)
@@ -41,7 +47,7 @@ func makeMC(args ...values.Value) *machine.MachineContext {
 	env := environment.NewEnvironmentFrameWithParent(local, topLevel.Runtime())
 	tpl := machine.NewNativeTemplate(len(args), 0, false)
 	return machine.NewMachineContext(
-		context.Background(),
+		ctx,
 		machine.NewMachineContinuation(nil, tpl, env),
 	)
 }

@@ -199,5 +199,32 @@
       (with-differential D (plus times zero one negate deriv)
         (deriv (plus (cons 2 3) (cons 4 5)))))))
 
+;; ──────────────────────────────────────────────
+;; Negative validation — the third validate-ring inheritor
+;; ──────────────────────────────────────────────
+;;
+;; validate-differential-ring replays validate-ring's findings into its own
+;; reporter, so a ring axiom validate-ring did not check was invisible here
+;; too. Observed at 003b3353: the structure below validated as a differential
+;; ring, because the underlying non-ring validated as a ring.
+;;
+;; WHAT THIS DOES NOT COVER: the derivation laws themselves (additivity and
+;; Leibniz) — the trivial derivation below satisfies both, deliberately, so the
+;; only thing that can fail is the inherited ring axiom.
+
+(test-group "validate-differential-ring inherits ring rejection"
+  (let* ((broken (make-ring + (lambda (a b) (* a a b)) 0 1 -))
+         (D (make-differential-ring broken (lambda (x) 0)))
+         (result (validate-differential-ring D '(-2 -1 0 1 2)))
+         (types (if (eq? result #t) '() (map car result)))
+         (has? (lambda (type)
+                 (let loop ((ts types))
+                   (cond ((null? ts) #f)
+                         ((eq? (car ts) type) #t)
+                         (else (loop (cdr ts))))))))
+    (test #f (eq? result #t))
+    (test #t (has? 'multiplicative-associativity))
+    (test #t (has? 'right-distributivity))))
+
 (test-end)
 (test-exit)

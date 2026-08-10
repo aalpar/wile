@@ -14,18 +14,6 @@
 
 // Package gointerop provides Go concurrency primitive wrappers.
 //
-// # Read-Write Mutexes
-//
-//   - make-rw-mutex, rw-mutex?
-//   - rw-mutex-read-lock!, rw-mutex-read-unlock!
-//   - rw-mutex-write-lock!, rw-mutex-write-unlock!
-//   - rw-mutex-try-read-lock!, rw-mutex-try-write-lock!
-//
-// # Once
-//
-//   - make-once, once?
-//   - once-do!, once-done?
-//
 // # Atomics
 //
 //   - make-atomic, atomic?
