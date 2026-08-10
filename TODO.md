@@ -2094,6 +2094,48 @@ rather than split across tiers.
   the count before sizing the work; it comes from the plan's review notes, not from a
   measurement in-tree.
 
+### `extensions/gointerop` is named for a story it does not tell (2026-08-09)
+
+- [ ] **Rename or relocate `extensions/gointerop`** [Naming / API, S, **not a defect** — nothing
+  misbehaves]: the package registers exactly six primitives, all atomic boxes — `make-atomic`,
+  `atomic?`, `atomic-load`, `atomic-store!`, `atomic-swap!`, `atomic-compare-and-swap!` — and its
+  implementation file is 85 lines. Nothing in it touches Go values, reflection, or host functions.
+  The RWMutex/Once removal already corrected the *description* string ("Go concurrency primitives:
+  atomic boxes") and `doc.go` already lists only atomics; the **name** was not corrected, and the
+  removal plan declared the rename out of scope and asked that it be raised separately. This is
+  that row.
+  The actual Go-interop surface is `Engine.RegisterFunc` / `RegisterFuncs` /
+  `RegisterPrimitive` plus the reflection bridge in `pkg/wile/ffi_wrapper.go` and the two
+  `ffi_*_converters.go` — a Go-host-side API a Scheme program cannot reach at all.
+  **Go package and Scheme library rename independently**: the library name `(wile gointerop)`
+  comes from the extension NAME STRING (`register.go:24`), not from the package path, and
+  `registry.WithLibraryName` is unused here.
+  Measured blast radius (excluding `memory/` and `plans/`): 2 import sites + 2 registration-list
+  entries; 4 production comment mentions; 17 lines across 10 test files; 6 rows of
+  `testdata/axis-b-manifest.scm` carrying the symbol path (regenerate with `WILE_AXIS_B_UPDATE=1`);
+  8 doc files. Two ratchets key on literals — `extension_consistency_test.go` on the extension-name
+  string and `callable_narrowing_ratchet_test.go` on the source-file PATH — and both **fail loudly**
+  under `go test` rather than silently, so the rename cannot rot them unnoticed.
+
+### No memory or CPU custodian at the engine level (2026-08-09)
+
+- [ ] **A short program can consume unbounded memory and time, uninterruptibly** [Design, M,
+  engine-level]: `(expt 10 1000000000)` is a 20-character form; measured scaling puts it at
+  roughly 16 minutes and 3.7 GB, and `with-timeout` does not bound it — the handler runs only
+  after the primitive returns. **Filed against the engine, not against `expt`**, because the
+  primitive-surface panic sweep's proposal to cap `exptExact` was refuted on two counts:
+  uninterruptibility is a documented VM-wide property of every foreign call
+  (`docs/concurrency/cancellation.md:126`, "the same VM-wide cancellation latency every primitive
+  has"), and a 60-character loop of `*` with no `expt` anywhere reaches 147 MB and 14.3 s, so a
+  ceiling on `expt` alone would refuse `(expt 10 N)` while permitting its own square-and-multiply
+  algorithm written out in Scheme — the behavioural asymmetry this project's policy says to remove
+  rather than add. `docs/environment/racket-namespaces.md:288-290` already names the gap: resource
+  limits exist as engine options (`WithMaxCallDepth`, `WithMaxStackSize`, `WithMaxExpandDepth`) and
+  "the custodian half has no counterpart". The existing per-primitive ceilings
+  (`MaxReadBytevectorBytes`, `MaxReadStringBytes`, `MaxMakeLength`) are not precedent: each bounds
+  an explicit LENGTH ARGUMENT naming one allocation, which is a domain check on a caller-supplied
+  value. An exponent is not a length.
+
 ### Channel done-channel lifecycle follow-ups (adversarial review 2026-07-16, `fix/channel-lifecycle-ctx`)
 
 Residue from the adversarial review of the done-channel lifecycle rewrite. The
@@ -2104,8 +2146,27 @@ laundering I hypothesized is blocked by the eager `ErrTimerExpired` check at
 `call_foreign_cached.go` after every foreign return: 60/60 handler-runs, 0/40
 side-effect leaks). These four items are the leftover design/API/docs/test debt.
 
-- [ ] **Cancellation "seam" is built but discarded** [Design, S–M — action (A) DONE, B-vs-C still gated]: **(A) done 2026-07-16:** the `PrimChannelSend` comment (`extensions/gointerop/prim_gointerop.go`) now names the real, non-local invariants per source and points at `docs/concurrency/cancellation.md`. Two corrections to the framing below, which is stale: the old comment's "the thread is unwound anyway" was wrong for `thread-terminate!` *even on its own terms* — safety there is now `Thread.setOutcome`'s write-once rule, **not** the ≈1024-op ctx-check window (a cancelled op in tail position has no following op to trip it; see the `thread-terminate!` items above). And the claim "no channel or timer test would catch the change" is no longer true: `TestWithTimeoutInterruptsParkedReceive` fails if the eager recheck regresses (mutation-verified). **B-vs-C still open**, but narrowed: with `with-timeout` covered by the eager recheck and `thread-terminate!` by write-once, an embedder-supplied deadline is the *only* source where the seam would change an observable result — so item 1's B-vs-C and open decision 3 (embedder-deadline observability) have collapsed into one question. If that laundering is acceptable, B has no consumer and C follows. Original scoping below.
-- [ ] **~~Cancellation seam~~ (original scoping, retained for context)** [Design/Correctness-adjacent, S–M]: `SendOutcome`/`RecvOutcome` (`pkg/values/channel.go`) exist expressly to keep the ctx-cancellation cause visible ("the seam"), but `PrimChannelSend`/`PrimChannelReceive` (`extensions/gointerop/prim_gointerop.go`) collapse it unconditionally (Option A): `RecvCancelled`→`Void` (indistinguishable from a legitimately closed+drained channel), `SendCancelled`→`ErrChannelClosed` (catchable by an ordinary channel-error `guard`). The justifying comment ("the thread is unwound anyway") is true only for `thread-terminate!`; it does **not** cover `with-timeout` (safe only via the eager `ErrTimerExpired` recheck in `callForeignCached`, a non-local invariant the comment never states) or an embedder-supplied deadline (`mc.timer == nil`, cause `DeadlineExceeded` → no eager recheck; body runs up to `contextCheckMask`≈1024 ops with a laundered `Void` before the deadline propagates — bounded, VM-consistent, and strictly better than the old infinite hang, but the one path where "cancelled receive looks exactly like closed channel" is observable). **Possible actions:** (A) tighten the comment to name the real invariant (eager `ErrTimerExpired` check + bounded `thread-terminate!` latency + the embedder-deadline window); (B) *use* the seam — surface `RecvCancelled`/`SendCancelled` distinctly so a cancelled op cannot be confused with close; (C) delete the seam and collapse to a bool if Option A is a committed contract. **Recommendation: A now** (cheap; closes the misleading-comment hazard that guards the test item below). **B or C deferred**, gated on the open question "is Option A a committed contract?" — if committed, C; if placeholder, B. Do not do both A-longterm and C.
+- [ ] **Is Option A (launder a cancelled wait as an ordinary result) a committed contract?**
+  [Design, S–M]: **REWRITTEN 2026-08-09; the two rows this replaces named code that no longer
+  exists.** They were about `PrimChannelSend`/`PrimChannelReceive` and
+  `SendOutcome`/`RecvOutcome` in `pkg/values/channel.go` — verified absent from every `.go`
+  file in the tree; channels and wait-groups were removed in 1.19.1 by
+  `c2959eb1`, `pkg/values/channel.go` does not exist, and
+  `TestWithTimeoutInterruptsParkedReceive` (which one row credited itself with) is gone too.
+  `extensions/gointerop/prim_gointerop.go` is 85 lines of atomics.
+  **The QUESTION survived the code, on the SRFI-18 wait side**, which is why this is a rewrite
+  and not a deletion: `mutex-lock!` and `(mutex-unlock! m cv)` each have a free value channel
+  and report a ctx-cancelled wait as an ordinary error-free `#f`, indistinguishable from a
+  legitimate failed acquire or an unsignalled wait
+  (`docs/concurrency/cancellation.md:89-98`). `thread-sleep!` and `thread-join!` do NOT
+  launder — they raise `werr.ErrOperationCancelled` carrying the raw ctx cause (:99-112).
+  The error-free `#f` is load-bearing rather than sloppy: `callForeignCached`'s eager
+  `ErrTimerExpired` recheck fires only on the error-free return path (:121). Only an
+  embedder-supplied deadline (`mc.timer == nil`) can observe the laundering, bounded by the
+  ~1024-op VM poll (:123, which also records that no test covers it). Decide the contract and
+  the asymmetry follows: committed ⇒ document it and stop calling it a seam; placeholder ⇒
+  surface the cancellation distinctly on the two laundering waits, as `thread-sleep!` and
+  `thread-join!` already do.
 - [x] **`RWMutex` and `Once` removed from the Scheme surface** [API/modeling, M, Done — deleted]: 12 primitives (`make-rw-mutex`, `rw-mutex?`, the six lock ops, `make-once`, `once?`, `once-do!`, `once-done?`), `values.RWMutex`, `values.Once`, `werr.ErrNotARWMutex`, `werr.ErrNotAOnce`, and `finishBlockingSync` with its `ErrTimerExpired` carve-out. `(wile gointerop)` is now the six `atomic` primitives only. **A modeling decision, not a cleanup** — `gointerop` was publishing Go's shared-state model against the project's own causal-chain orientation. Zero Scheme consumers, zero Go consumers outside the package; `values.RWMutex`/`values.Once` were exported from `pkg/values`, so this is a public API removal under the zero-consumer rule, same as `ChannelSelect`. Kept untouched: SRFI-18 `mutex-*`/`condition-variable-*` (named-standard conformance is a separate question) and `atomic` (~90 test call sites). **Four things the plan did not predict:** (1) its verification grep expects hits only in `memory/`/`plans/`/CHANGELOG, but ~13 live `sync.RWMutex` struct fields make that unachievable — the expectation was never satisfiable; (2) seven test files it never listed broke the build or a table, notably `pkg/registry/helpers/args_test.go`, where `ErrNotAOnce` was the **sole** pass-through-article row (the sentinel is now built inline so `typeNameFromSentinel`'s article path stays covered); (3) `pkg/values/concurrency_wrappers_test.go` was 100% RWMutex/Once and went whole, not row-by-row; (4) **`werr.ErrOperationCancelled` now has no producer** — kept with a rewritten comment rather than deleted, since removing an exported sentinel was outside the plan's enumerated scope. **DECIDE:** delete it, or keep it for a future primitive that returns a value on success and so cannot borrow the error-free-`#f` convention. `TestWithTimeoutInterruptsParkedRWMutex` was **ported** to `mutex-lock!`, not dropped — it is the only test spanning `callForeignCached`'s eager recheck and the primitive's error-free `#f`, and no Go-level test covers that join. `TestEmbedderDeadlineRWMutexRaisesCancelled` has no analogue: under an embedder deadline `mutex-lock!` returns `#f` and the VM's top-of-loop check surfaces `DeadlineExceeded` (`pkg/machine/machine_context.go:365`) where rw-mutex raised `ErrOperationCancelled`, and `cancellation.md`'s third table row now records that no test covers it.
 - [x] **`ChannelSelect` was complete, tested, CHANGELOG-cited — and registered nowhere** [API/dead-code, S–M, Done — deleted]: removed `ChannelSelect`, `SelectCase`, `SelectCaseKind` + its 3 constants, `firstDeadCase`, and the 8 `TestChannelSelect*` functions — ~312 lines, no consumer anywhere. Three corrections found while scoping it: (1) it was **exported from `values/`, a public embedding package**, reachable from Go even though no Scheme program could call it, so this is a public API removal taken under the zero-consumer rule, not internal cleanup; (2) wiring it would have needed a **ctx arm, not just `done` arms** — it took no `context.Context` while `Send`/`Receive` both do, so exposing it as-is reintroduces the T1.3 leak at a new site (a throwaway prototype confirmed 2N+1 arms work `-race`-clean, so the decision was never technical); (3) the CHANGELOG line was **not** deleted — 1.18.0 and 1.3.0 are released sections and deleting from them rewrites shipped history, so a removal note plus a correction went into `[Unreleased]` (the 1.18.0 entry had announced `channel-select` as a Scheme primitive that never existed). If a consumer ever appears: `reflect.Select` panics past 65536 cases and the list would come from Scheme, so it needs an arity guard.
 - [ ] **Stale sub-context comment on `with-timeout`** [Docs, XS]: `PrimWithTimeout` (`pkg/registry/core/prim_timer.go`) header says "The sub-context pattern ... a fresh sub-context isolates the thunk's execution," but the same function's body twelve lines down (and `RunBodyUnderTimer`) says it runs the thunk **INLINE on the live chain, not in a sub-context** (the accurate description). REVIEW.md lists stale comments as a recurring trap; this one misdescribes the isolation model of the code that makes the `with-timeout` cancellation path safe. **Possible actions:** (A) delete the stale sub-context sentence; (B) rewrite it to match the inline model. **Recommendation: A (delete)** — the accurate description already exists in the same comment, so B just duplicates it.
@@ -2113,7 +2174,7 @@ side-effect leaks). These four items are the leftover design/API/docs/test debt.
   - **`thread-terminate!` discarded its own SRFI-18 end-exception** [Correctness, S, Done]: `Thread.Terminate` stored a `TerminatedThreadException` and `Thread.Start`'s goroutine then unconditionally overwrote it; `defer close(p.done)` is registered first and so runs last, guaranteeing the overwrite landed before any joiner was released — a started thread's joiner could **never** observe the exception. Worst case: a thread parked in `channel-receive` in **tail position** returned the cancelled receive's laundered `Void` as its ordinary result, with no following VM op to trip the ctx check, so terminate-then-join reported the terminated thread as having *succeeded*. That invalidated the design doc's three-sources table, which had argued the ≈1024-op unwind window was itself the protection. Fixed by making the outcome write-once (`Thread.setOutcome`): first writer wins, so `Terminate` beats the completion path while SRFI-18's "if the thread is not already terminated" clause still holds. Prior coverage was vacuous — both existing tests asserted the `#t` literal they wrote. Guard: `extensions/threads/prim_threads_terminate_outcome_test.go`.
   - **`thread-join!` on a terminated but never-started thread blocked forever** [Correctness, S, Done]: `done` is closed only by the goroutine `Start` spawns, which never ran and never could (`Start` rejects `state != ThreadNew`), so `Join` parked forever while the exception the joiner wanted sat in the outcome field. `Terminate` now closes `done` when it is the one ending a `ThreadNew` thread. The two closers are mutually exclusive because `Start` makes the `ThreadNew → ThreadRunnable` transition under `p.mu` before spawning and refuses any other state — so no `sync.Once` is needed, which mattered: a double close is a fatal host panic, the same hazard class as the `channel-send!` TOCTOU. Guards: `pkg/values/thread_lifecycle_test.go` (20000-trial `-race` no-double-close with a starting gate) and `TestThreadTerminateNeverStartedThreadIsJoinable`, which joins with *no* timeout so a regression is an unbounded park rather than a misleading `JoinTimeoutException`.
 
-**Two decisions gate the deferred sub-items:** *is Option A a committed contract?* (drives item 1's B-vs-C) and *is `channel-select` on the roadmap?* (drives item 2's A-vs-B). Everything else (comment fixes + the tests) is safe to do now regardless. Suggested order: tests → delete stale comment → tighten seam rationale → resolve `ChannelSelect` → resolve the seam.
+**One decision gates the deferred sub-item:** *is Option A a committed contract?* — see the rewritten row above. The second decision this line used to name, *is `channel-select` on the roadmap?*, is spent: `ChannelSelect` was deleted with the rest of the channel surface in 1.19.1.
 
 ### List/Pair Primitive Cleanup (from inline annotations)
 
