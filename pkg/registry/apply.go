@@ -142,8 +142,10 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	//     view. Primitives like compile/expand/free-identifier=? resolve user-level names
 	//     through this env; capturing the sealed-write view would hide every user define.
 	//     Only the binding location is sealed for immutability — resolution stays merged.
-	// Compile-time bindings stay on env.Compile(); the runtime and expand phases both
-	// carve to their sealed-write view.
+	// Compile-time bindings stay on env.Compile(). The expand phase always carves to
+	// its sealed-write view; the runtime phase does so only when the caller supplies
+	// WithRuntimeTarget, which LoadBootstrapCore always does and a bare reg.Apply
+	// does not.
 	runtimeEnv := env
 	if cfg.runtimeTarget != nil {
 		runtimeEnv = cfg.runtimeTarget
@@ -226,10 +228,12 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 
 // registerPhasePrimitive installs a ForeignClosure for spec. The binding (and any
 // Stable stamp) lives in bindingEnv; the closure captures closureEnv as its lexical env
-// (the frame a foreign fn resolves user code against). These differ only for sealed
-// runtime primitives: the binding is sealed (bindingEnv = sealed base) while the closure
-// resolves through the mutable runtime (closureEnv = env) so compile/expand/identifier
-// primitives still see user defines. The phase parameter is error-message context only.
+// (the frame a foreign fn resolves user code against). The two differ at BOTH phases
+// whenever the binding is sealed: the binding goes to a sealed-write view while the
+// closure resolves through the matching mutable frame (env at phase 0, env.Expand() at
+// phase 1) so compile/expand/identifier primitives still see user defines. Phase 0 is
+// sealed only under WithRuntimeTarget; phase 1 always is. The phase parameter is
+// error-message context only.
 // This is the single registration helper shared by Runtime and Expand phases — collapsed
 // per Instance C of the dispatch-axis-as-data finding (plans/2026-05-08-dispatch-axis-as-data.md).
 func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, cfg applyConfig) error {
@@ -296,17 +300,27 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	// primitive here would be pointless (it is not CaptureSafe) and is excluded. The
 	// set!-gate (compile_validated.go) then makes the trust a guarantee.
 	//
-	// The stamp is sound at BOTH phases, and for the same reason: bindingEnv is a
-	// sealed-write view at either phase, so no legal program writes this slot. A
-	// user define lands at (0, mutable) and a define-for-syntax at (1, mutable) —
-	// other coordinates, hence shadows. That is the whole content of Stable, which
-	// asserts the writer set is closed. Both halves are needed and only the caller
-	// supplies the first: LoadBootstrapCore pairs WithStableBasePrimitives with
-	// WithRuntimeTarget, and without the latter the phase-0 row binds into the
-	// MUTABLE env and the stamp asserts something false there. While the expand row
-	// wrote through env.Expand() the phase-1 half was false in the shipped
-	// configuration: a top-level define-for-syntax superseded this very slot with
-	// the stamp still on it.
+	// Stable asserts the writer set for this slot is closed, and the argument now
+	// runs the same way at both phases — but it takes two steps, not one, because
+	// "bindingEnv is a sealed-write view" alone does not close the set.
+	//
+	//  1. USER code never addresses these coordinates. A define lands at
+	//     (0, mutable) and a define-for-syntax at (1, mutable); both are other
+	//     coordinates, hence shadows. Before the phase-1 carve the expand row wrote
+	//     through env.Expand(), so this step was simply false there: a top-level
+	//     define-for-syntax superseded this very slot with the stamp still on it.
+	//  2. BOOTSTRAP Scheme does address them — a registry macro/procedure source
+	//     compiles with env == the owner's phase-0 seal, so its define-syntax and
+	//     define-for-syntax write one phase up, into the (1, sealed) view this row
+	//     targets. Those sites go through createPhaseBindingUnlessStable
+	//     (compile_define_syntax.go), which refuses a Stable slot, so a registry
+	//     that supplies both an expand-phase primitive and a bootstrap macro of one
+	//     name fails engine construction instead of overwriting the primitive.
+	//
+	// Phase 0 additionally needs the caller: LoadBootstrapCore pairs
+	// WithStableBasePrimitives with WithRuntimeTarget, and without the latter the
+	// phase-0 row binds into the MUTABLE env and step 1 asserts something false
+	// there.
 	if cfg.stableBase && !spec.InvokesProcedure {
 		b.UpdateMeta(func(m *environment.BindingMeta) bool {
 			m.Stable = true

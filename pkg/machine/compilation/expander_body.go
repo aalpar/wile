@@ -169,7 +169,10 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// index is PINNED to the slot this call landed on, at the writing view's own
 	// coordinates, so the write below cannot drift onto another slot of the same
 	// name. Same shape as the top-level site in compile_define_syntax.go.
-	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(keyword, environment.BindingTypeSyntax, symbolScopes)
+	globalIndex, err := createPhaseBindingUnlessStable(expandEnv, keyword, environment.BindingTypeSyntax, symbolScopes, "define-syntax")
+	if err != nil {
+		return wrapSourcedError(dsPair.SourceContext(), err)
+	}
 	binding := expandEnv.GlobalEnvironment().GetOwnGlobalBinding(globalIndex)
 	if binding != nil {
 		binding.UpdateMeta(func(m *environment.BindingMeta) bool {

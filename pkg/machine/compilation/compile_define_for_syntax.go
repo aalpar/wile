@@ -113,10 +113,18 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// INSIDE the compiler, and a phase-1 define is R7RS-legal here whatever the name.
 	// The one Stable-stamped phase-1 population is the registry's expand-phase
 	// copies, and those live at (1, sealed) (registry.Apply's phaseTargets), so a
-	// create for the same name lands on a fresh (1, mutable) slot and SHADOWS the
-	// copy — the phase-1 twin of a phase-0 define over a sealed primitive. Pinned by
-	// TestBindingModelMatrix's three M7 rows.
-	gi, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable, nil)
+	// USER create for the same name lands on a fresh (1, mutable) slot and SHADOWS
+	// the copy — the phase-1 twin of a phase-0 define over a sealed primitive.
+	// Pinned by TestBindingModelMatrix's three M7 rows.
+	//
+	// A bootstrap source is the case that is NOT at (1, mutable): it compiles with
+	// p.env == the owner's phase-0 seal, so NextPhase() is the sealed expand view
+	// and this create shares the registry copies' coordinate. Only there can the
+	// helper's Stable refusal fire; see createPhaseBindingUnlessStable.
+	gi, err := createPhaseBindingUnlessStable(expandEnv, nameSym, environment.BindingTypeVariable, nil, "define-for-syntax")
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
 	err = expandEnv.GlobalEnvironment().SetOwnGlobalValue(gi, result)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key))

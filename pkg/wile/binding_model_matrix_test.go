@@ -546,10 +546,11 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 		// for as long as the filter was phase-blind. Sealing the expand copies
 		// later shut that door from the other side: with no (1, mutable)
 		// candidate left, even a phase-blind filter would refuse, so this row
-		// alone no longer discriminates the two filters. What it still pins is
-		// the behaviour — the heal asks for (0, mutable), finds nothing, and
+		// alone no longer discriminates the two filters. It is now a
+		// PRESERVATION row — the heal asks for (0, mutable), finds nothing, and
 		// refuses exactly as the square row above does, which is the point: a
-		// dual-phase name and a single-phase one behave the same.
+		// dual-phase name and a single-phase one behave the same. The filter
+		// itself is pinned two rows down, by "…refuses phase-1 MUTABLE slot…".
 		{name: "stale pin self-heal refuses phase-1 slot after undefine",
 			units: []string{
 				`(define car 1)`,
@@ -569,6 +570,29 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 				`(begin-for-syntax (define probe (car (list 7 8)))) (define-syntax reveal-probe (er-macro-transformer (lambda (form rename compare) probe))) (reveal-probe)`,
 			},
 			want: "7"},
+		// The DISCRIMINATING form of the two rows above — the replacement
+		// ratchet for what sealing the expand copies took away. A leading
+		// define-for-syntax manufactures the (1, mutable) candidate the seal
+		// removed: car then owns [(ANY, sealed), (1, sealed) registry copy,
+		// (1, mutable) = 42, (0, mutable) shadow]. namespace-undefine! removes
+		// the (0, mutable) shadow only, so the stale pin from f's set! heals at
+		// (0, mutable) and finds nothing. A filter that asked "mutable?" without
+		// asking "same phase?" would find the 42 and write 2 across the phase
+		// boundary — an escalation no other write path permits.
+		//
+		// MEASURED both directions: green against healWriteLocked's
+		// coordinate-exact re-resolve, and the ONLY row in this table that goes
+		// red when healWriteLocked is replaced by the phase-blind mutable-only
+		// scan it superseded.
+		{name: "stale pin self-heal refuses phase-1 mutable slot after undefine",
+			units: []string{
+				`(define-for-syntax car 42)`,
+				`(define car 1)`,
+				`(define (f) (set! car 2))`,
+				`(namespace-undefine! (interaction-environment) 'car)`,
+				`(f)`,
+			},
+			wantErr: machine.ErrBindingNotFound},
 	}
 	runMatrix(t, rows, wile.WithMutableTopLevel())
 }

@@ -29,9 +29,11 @@ package environment
 // checked where it is reached (emitCachedBindingLoad's refusal,
 // LookupPhaseBinding's tag filter); which frame holds it never carried that
 // authority. Nor is there a placement left for a kind column to express:
-// registry.Apply's phaseTargets (apply.go) takes this view at BOTH phases, so
-// the expand-phase primitives are sealed alongside the bootstrap macros and the
-// primitive expanders.
+// registry.Apply's phaseTargets (apply.go) takes this view for its expand-phase
+// primitives, which therefore sit sealed alongside the bootstrap macros and the
+// primitive expanders. (Apply reaches the phase-0 seal only through
+// WithRuntimeTarget, which LoadBootstrapCore always supplies and a bare
+// reg.Apply does not — see apply.go's phaseTargets bullet.)
 //
 // The rows are ONE ambient set, not a hierarchy of phases: no phase ever
 // resolves into the phase below it. Phases at or above 2 have no sealed-write
