@@ -42,8 +42,14 @@ func captureSafetyEngine(t *testing.T) *wile.Engine {
 	return eng
 }
 
-// The Q-E1 audit set: every Go primitive that runs a Scheme procedure or
-// arbitrary code (ApplyCallable, or sub-context compile/run for eval/load).
+// The Q-E1 audit set: every BINDING that runs a Scheme procedure or arbitrary
+// code (ApplyCallable, or sub-context compile/run for eval/load), whatever
+// implements it. Almost every entry is a Go primitive carrying
+// PrimitiveSpec.InvokesProcedure, and TestProcedureInvokersMatchesInvokesProcedure
+// derives the list from those annotations — but the set is defined by the
+// BEHAVIOR, so a Scheme-level invoker belongs here too, with a
+// nonPrimitiveProcedureInvokers row saying why no annotation can reach it.
+// with-exception-handler is one today.
 //
 // Package-level so TestProcedureInvokersMatchesInvokesProcedure can derive it
 // from the registry rather than trust it, mirroring nonDestructiveBangs in
@@ -57,6 +63,13 @@ var procedureInvokers = []string{
 	"call-with-composable-continuation", "with-timeout",
 	// eval extension: run / transform arbitrary code
 	"eval", "load", "expand", "expand-once", "compile",
+	// The environment/namespace constructors take import specs, and loading a
+	// library runs the transformers in its body (compilation.ImportSpecInto →
+	// LoadLibrary → invokeTransformerClosure). All three were live unannotated
+	// invokers until the ImportSpecInto selector was added; review-wave-4 item 10
+	// found expand/expand-once by grepping for names it had already chosen, which
+	// is why this third spelling survived that pass.
+	"environment", "make-namespace", "namespace-require",
 	// `error` raises through machine.RaiseInPlace exactly as raise does. It was
 	// absent from this list and unannotated for as long as both existed — the
 	// static guard could not see RaiseInPlace as a sink, and this list is

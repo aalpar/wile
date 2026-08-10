@@ -39,8 +39,12 @@ var captureOperatorNames = map[string]struct{}{
 // environment.BindingMeta.CaptureSafe (registry/apply.go) and read by classifyCallee
 // via Binding.IsCaptureSafe(). This package cannot import pkg/registry, so the flag
 // flows binding-side exactly as Stable does. The flipped default (most primitives
-// are capture-safe; the ~24 procedure-invoking ones are annotated InvokesProcedure:
-// true) is guarded by TestInvokesProcedureCompleteness (pkg/wile). A capture-safe
+// are capture-safe; the procedure-invoking minority is annotated InvokesProcedure:
+// true — deliberately not counted here, the count has drifted four times) is
+// guarded by three tests in pkg/wile: TestInvokesProcedureStaticGuard finds the
+// requirement in the Impl's call graph, TestProcedureInvokersMatchesInvokesProcedure
+// derives the name list from the annotations, and TestInvokesProcedureCompleteness
+// pins that list to IsCaptureSafe()==false on the live binding. A capture-safe
 // Scheme procedure (stdlib zero?/not, or a user helper) is additionally trusted by
 // compile-time proof — see ProcedureBodyIsCaptureSafe (self_tail.go).
 
