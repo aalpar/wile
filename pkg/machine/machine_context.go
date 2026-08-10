@@ -130,6 +130,13 @@ type MachineContext struct {
 
 	timer *timerState // nil = no timer active; both handler and cancel set together
 
+	// brk is the innermost armed debugger break boundary, or nil when no
+	// suspension is possible on this context (a bare embedder with a Go-only
+	// debugger, and every load/eval sub-context). Like the fields above and
+	// unlike vmState, it describes the executing context and must NOT be saved
+	// into continuations. See InstallBreakPrompt.
+	brk *breakState
+
 	// lastBreakFile/lastBreakLine/lastBreakFired are the debugger's per-line
 	// de-duplication cursor, read and written only by CheckBreakpoint. Several
 	// consecutive instructions carry one source line, and a breakpoint names a
@@ -422,10 +429,19 @@ func (p *MachineContext) Run() error {
 
 		if mc.debugger != nil {
 			bp := mc.debugger.CheckBreakpoint(mc)
-			if bp != nil {
+			stop := bp != nil
+			if !stop {
+				stop = mc.debugger.ShouldStep(mc)
+			}
+			if stop {
+				// With a break boundary armed, emit the signal and let the driver
+				// suspend at the boundary — the same shape as the timer emit above.
+				// Without one, fall back to calling the render-only callback inline,
+				// which is all a Go-embedded debugger has ever had.
+				if mc.brk != nil {
+					return &ErrBreakInterrupt{Handler: mc.brk.handler, Tag: mc.brk.tag, BP: bp}
+				}
 				mc.debugger.TriggerBreak(mc, bp)
-			} else if mc.debugger.ShouldStep(mc) {
-				mc.debugger.TriggerBreak(mc, nil)
 			}
 		}
 
@@ -1648,6 +1664,32 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			continue
 		}
 
+		// A break is emitted only with p.brk armed, and the only thing that arms it
+		// pushes the boundary frame in the same call, so a break reaching the top
+		// driver MUST have a boundary on the chain.
+		var breakErr *ErrBreakInterrupt
+		if errors.As(err, &breakErr) {
+			boundary, found := p.FindPrompt(breakErr.Tag)
+			if !found {
+				return werr.WrapForeignErrorf(werr.ErrInternal,
+					"debugger: no boundary frame found for break interrupt")
+			}
+			applyErr := p.resolveBreakInterrupt(breakErr, boundary)
+			if applyErr != nil {
+				if isControlSignal(applyErr) {
+					// The suspension handler transferred control instead of resuming
+					// — an abandoning handler aborts to the break prompt, which is
+					// still on the chain. Dispatch it here rather than returning it,
+					// or the embedder receives a raw "abort to prompt" (defect 27's
+					// shape).
+					pending = applyErr
+					continue
+				}
+				return applyErr
+			}
+			continue
+		}
+
 		return err
 	}
 }
@@ -1701,6 +1743,27 @@ func (p *MachineContext) RunWithinBoundary() error {
 				boundary, found := p.FindPrompt(timerErr.Tag)
 				if found {
 					applyErr := p.resolveTimerInterrupt(timerErr, boundary)
+					if applyErr != nil {
+						return applyErr
+					}
+					continue
+				}
+			}
+			// Same shape for a debugger break, with the same not-found rule: the break
+			// prompt is installed on the TOP-LEVEL chain, so a break emitted inside a
+			// surviving sub-context re-raises to the enclosing driver rather than being
+			// resolved against a boundary this chain cannot see. (A load/eval
+			// sub-context never emits at all: it inherits the debugger but not brk.)
+			//
+			// Out of scope, and correct: the foreign-call interrupt rechecks in
+			// call_foreign_cached.go and applyForeign need no break arm. A breakpoint is
+			// evaluated at exactly one site — the top of the PC loop — so a break can
+			// never be pending across a foreign call the way a wall-clock timer can.
+			var breakErr *ErrBreakInterrupt
+			if errors.As(err, &breakErr) {
+				boundary, found := p.FindPrompt(breakErr.Tag)
+				if found {
+					applyErr := p.resolveBreakInterrupt(breakErr, boundary)
 					if applyErr != nil {
 						return applyErr
 					}
@@ -1827,5 +1890,48 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	}
 
 	_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
+	return applyErr
+}
+
+// resolveBreakInterrupt is the shared debugger-break arm of RunResumable and
+// RunWithinBoundary, modelled on resolveTimerInterrupt: each call site does its own
+// FindPrompt and reaches this helper only with boundary (the frame
+// InstallBreakPrompt pushed) already matched.
+//
+// It (1) freezes the break point's location, trace and depth from the LIVE chain and
+// hands them to the debugger, BEFORE anything is restored — afterwards the context
+// describes the boundary, not the break point, and the whole context is recycled once
+// the evaluation ends; (2) captures the suspended computation DELIMITED at boundary as
+// a composable continuation the handler may resume; (3) HARD-SUSPENDS onto the boundary
+// without unwinding; (4) applies the handler to that resumable.
+//
+// The break prompt STAYS ARMED across the suspension: p.cont = boundary leaves the
+// frame itself on the chain, so a second break — the next step stop, or the same
+// breakpoint on the next call — routes to it again. Nothing is torn down here, which
+// is where this departs from the timer: a break has no ctx half, no cancel to call and
+// no saved context to restore.
+//
+// The live winding stack is deliberately NOT reset to the boundary's (the timer does
+// reset it, to drop the timed-out thunk's after-thunks un-run). Leaving it live is what
+// lets an abandoning handler raise ErrPromptAbort{SourceWinding: …} and have resolveAbort
+// run the dynamic-wind after-thunks between the break point and the boundary.
+//
+// Rider: CaptureInterruptContinuationAt slices through SliceContinuationAt, which calls
+// MarkChainShared. That mark is monotonic, so the FIRST break permanently forgoes env
+// frame pooling for the rest of that evaluation. A stepped run is therefore not
+// performance-representative; benchmark with no breakpoint armed.
+func (p *MachineContext) resolveBreakInterrupt(breakErr *ErrBreakInterrupt, boundary *MachineContinuation) error {
+	p.debugger.setBreak(newBreakSnapshot(p), breakErr.BP)
+
+	segment := p.CaptureInterruptContinuationAt(boundary)
+	windingCopy := p.windingStack.Copy()
+	resumable := NewComposableContinuation(segment, windingCopy, p.threadID, p.barrierValid)
+
+	p.cont = boundary
+	oldEvals := p.evals
+	p.evals = p.acquireStack()
+	p.releaseStack(oldEvals)
+
+	_, applyErr := p.ApplyCallable(breakErr.Handler, resumable)
 	return applyErr
 }

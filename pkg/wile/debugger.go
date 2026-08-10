@@ -15,6 +15,7 @@
 package wile
 
 import (
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/values"
 )
@@ -169,6 +170,58 @@ func (p *Debugger) CurrentState() values.DebugState {
 		return nil
 	}
 	return p.currentMC
+}
+
+// breakHandler builds the callable the VM applies while suspended at a break.
+// It receives the resumable composable continuation as its single argument,
+// asks the registered verdict function what to do, and either resumes that
+// continuation (every verdict but BreakAbandon) or aborts to tag.
+//
+// It lives here, not in pkg/repl, because the bridge needs machine types and
+// pkg/repl deliberately does not import pkg/machine.
+func (p *Debugger) breakHandler(env *environment.EnvironmentFrame, tag *machine.PromptTag) *machine.ForeignClosure {
+	fn := func(cc machine.CallContext) error {
+		mc, err := machine.RequireMachineContext(cc, "debugger-break")
+		if err != nil {
+			return err
+		}
+		action := BreakContinue
+		if p.onBreakSuspend != nil {
+			state, bp := p.inner.BreakState()
+			action = p.onBreakSuspend(state, machineBreakpointToInfo(bp))
+		}
+		if action == BreakAbandon {
+			// Disarm first: the after-thunks resolveAbort is about to run below
+			// this prompt are the user's code, and stopping in them while
+			// abandoning would suspend on a computation already discarded.
+			mc.SetDebugger(nil)
+			return &machine.ErrPromptAbort{
+				Tag:           tag,
+				Values:        []values.Value{values.Void},
+				SourceWinding: mc.WindingStack().Copy(),
+			}
+		}
+		p.armStepMode(action, mc)
+		// Resume. applyForeign returns early rather than restoring, because
+		// applying a composable continuation repoints the template.
+		_, aerr := mc.ApplyCallable(mc.Arg(0))
+		return aerr
+	}
+	return machine.NewForeignClosure(env, 1, false, fn)
+}
+
+// armStepMode translates a non-abandon verdict into the debugger's step mode.
+func (p *Debugger) armStepMode(action BreakAction, mc *machine.MachineContext) {
+	switch action {
+	case BreakStep:
+		p.inner.StepInto()
+	case BreakNext:
+		p.inner.StepOver(mc)
+	case BreakFinish:
+		p.inner.StepOut(mc)
+	default:
+		p.inner.Continue()
+	}
 }
 
 // machineDebugger returns the wrapped machine.Debugger for Engine use.

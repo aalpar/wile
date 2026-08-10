@@ -1147,6 +1147,7 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {
 		mc.SetDebugger(p.debugger.machineDebugger())
+		p.armBreakPrompt(mc, cc)
 	}
 
 	err := mc.RunWithEscapeHandling()
@@ -1156,6 +1157,26 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(val), nil
+}
+
+// armBreakPrompt installs the debugger's break boundary on mc when — and only
+// when — a suspension handler is registered. Without one, a break falls back to
+// the render-only callback and no prompt frame is pushed, so an embedder with a
+// Go-only debugger pays nothing and sees no change in call depth or tail-call
+// shape.
+//
+// The install and the handler are two calls because the handler closes over the
+// tag the install mints.
+func (p *Engine) armBreakPrompt(mc *machine.MachineContext, cc *CompiledCode) {
+	if p.debugger.onBreakSuspend == nil {
+		return
+	}
+	closureEnv := cc.env.MutableRuntimeOrNil()
+	if closureEnv == nil {
+		closureEnv = cc.env
+	}
+	tag := mc.InstallBreakPrompt(nil)
+	mc.SetBreakHandler(p.debugger.breakHandler(closureEnv, tag))
 }
 
 // LastCounters returns the VM performance counters from the most recent

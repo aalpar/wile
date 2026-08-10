@@ -16,6 +16,8 @@ package machine
 
 import (
 	"sync"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // BreakpointID uniquely identifies a breakpoint.
@@ -47,10 +49,17 @@ type Debugger struct {
 	breakpoints map[BreakpointID]*Breakpoint
 	nextID      BreakpointID
 
-	// Stepping state — stepMode == StepNone means not stepping.
+	// Stepping state — stepMode == StepNone means not stepping. Guarded by mu:
+	// under SRFI-18 the thread that sets a step mode is not the thread that
+	// evaluates it, and `breakpoints` next to it has always been guarded.
 	stepMode       StepMode
 	stepFrameDepth int                  // For step-over
 	stepFrame      *MachineContinuation // For step-out
+
+	// breakSnap/breakBP are the most recent break's frozen state, recorded by
+	// setBreak and read by BreakState. Guarded by mu for the same reason.
+	breakSnap *BreakSnapshot
+	breakBP   *Breakpoint
 
 	// Callback when breakpoint hit
 	onBreak func(mc *MachineContext, bp *Breakpoint)
@@ -187,8 +196,37 @@ func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 	return nil
 }
 
+// setBreak records the frozen state of a break so it outlives the suspension and
+// the MachineContext that produced it.
+func (p *Debugger) setBreak(snap *BreakSnapshot, bp *Breakpoint) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.breakSnap = snap
+	p.breakBP = bp
+}
+
+// BreakState returns the most recent break's frozen state and the breakpoint that
+// caused it, or (nil, nil) if no break has happened. The breakpoint is nil for a
+// step stop.
+func (p *Debugger) BreakState() (values.DebugState, *Breakpoint) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.breakSnap == nil {
+		// Returning p.breakSnap directly would hand back a non-nil interface
+		// holding a nil pointer, which every `== nil` caller reads as "there was
+		// a break".
+		return nil, nil
+	}
+	return p.breakSnap, p.breakBP
+}
+
 // ShouldStep checks if we should break due to stepping.
 func (p *Debugger) ShouldStep(mc *MachineContext) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	switch p.stepMode {
 	case StepNone:
 		return false
@@ -207,6 +245,9 @@ func (p *Debugger) ShouldStep(mc *MachineContext) bool {
 
 // Continue resumes execution.
 func (p *Debugger) Continue() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.stepMode = StepNone
 	p.stepFrame = nil
 	p.stepFrameDepth = 0
@@ -214,6 +255,9 @@ func (p *Debugger) Continue() {
 
 // StepInto enables step-into mode.
 func (p *Debugger) StepInto() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.stepMode = StepInto
 	p.stepFrame = nil
 	p.stepFrameDepth = 0
@@ -221,12 +265,18 @@ func (p *Debugger) StepInto() {
 
 // StepOver enables step-over mode.
 func (p *Debugger) StepOver(mc *MachineContext) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.stepMode = StepOver
 	p.stepFrameDepth = mc.CallDepth()
 }
 
 // StepOut enables step-out mode.
 func (p *Debugger) StepOut(mc *MachineContext) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.stepMode = StepOut
 	p.stepFrame = mc.cont
 }
@@ -236,8 +286,15 @@ func (p *Debugger) OnBreak(fn func(mc *MachineContext, bp *Breakpoint)) {
 	p.onBreak = fn
 }
 
-// TriggerBreak calls the break callback if set.
+// TriggerBreak records the break and calls the break callback if set. It is the
+// fallback taken when no break boundary is armed on mc: the callback runs INLINE
+// on the live context, so it can render the stop but cannot influence execution.
+//
+// The state is frozen into a snapshot here for the same reason the suspending
+// path does it — mc is pool-recycled and zeroed when the evaluation ends, so a
+// consumer reading it after the run gets a blank context.
 func (p *Debugger) TriggerBreak(mc *MachineContext, bp *Breakpoint) {
+	p.setBreak(newBreakSnapshot(mc), bp)
 	if p.onBreak != nil {
 		p.onBreak(mc, bp)
 	}
