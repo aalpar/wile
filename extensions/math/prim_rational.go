@@ -15,7 +15,6 @@
 package math
 
 import (
-	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/machine"
@@ -231,15 +230,23 @@ func PrimExactIntegerSqrt(mc machine.CallContext) error {
 		if v.Value < 0 {
 			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
 		}
-		s := int64(math.Sqrt(float64(v.Value)))
-		for s*s > v.Value {
-			s--
-		}
-		for (s+1)*(s+1) <= v.Value {
-			s++
-		}
-		r := v.Value - s*s
-		mc.SetValues(values.NewInteger(s), values.NewInteger(r))
+		// big.Int.Sqrt, not a corrected float64 seed. The two int64 correction
+		// loops this replaced overflowed: for v >= 3037000499² the product
+		// (s+1)*(s+1) wraps negative, so the loop walked past the true root
+		// and returned a pair that satisfies n = s² + r only MODULO 2^64 —
+		// (exact-integer-sqrt 9223372030926249001) answered
+		// (14564942733 26161807488), violating R7RS §6.2.6 in true arithmetic.
+		// At MaxInt64 the wrapped guard is true for every int64 and it never
+		// returned at all. Same computation as the *BigInteger arm below,
+		// which was correct at these magnitudes all along; the two now agree
+		// by running one algorithm rather than by being kept in step.
+		//
+		// Both outputs fit int64 for any non-negative int64 input: s is at
+		// most 3037000499 and r is at most 2s.
+		bv := big.NewInt(v.Value)
+		s := new(big.Int).Sqrt(bv)
+		r := new(big.Int).Sub(bv, new(big.Int).Mul(s, s))
+		mc.SetValues(values.NewInteger(s.Int64()), values.NewInteger(r.Int64()))
 		return nil
 
 	case *values.BigInteger:

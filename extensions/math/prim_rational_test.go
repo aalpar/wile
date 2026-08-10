@@ -117,6 +117,33 @@ func TestExactIntegerSqrtBigInteger(t *testing.T) {
 			`(let-values (((s r) (exact-integer-sqrt (+ (expt 2 100) 1))))
 			   (= r 1))`,
 			values.TrueValue},
+
+		// The int64 arm used to correct a float64 seed with `(s+1)*(s+1) <= v`,
+		// which WRAPS for v >= 3037000499². 9223372030926249001 is exactly
+		// that square and is the smallest wrong answer: it returned
+		// (14564942733 26161807488), a pair that satisfies n = s² + r only
+		// modulo 2^64. Assert the R7RS §6.2.6 invariant itself, in exact
+		// arithmetic, rather than the literal pair — a wrapped answer passes
+		// an == check against whatever it happened to produce.
+		{"exact-integer-sqrt at the int64 overflow threshold",
+			`(let-values (((s r) (exact-integer-sqrt 9223372030926249001)))
+			   (and (= s 3037000499) (= r 0)
+			        (= (+ (* s s) r) 9223372030926249001)
+			        (< 9223372030926249001 (* (+ s 1) (+ s 1)))))`,
+			values.TrueValue},
+		// One below the threshold: correct before the fix, so this is the
+		// control that shows the boundary is where the report says it is.
+		{"exact-integer-sqrt just below the threshold",
+			`(let-values (((s r) (exact-integer-sqrt 9223372030926249000)))
+			   (and (= s 3037000498) (= (+ (* s s) r) 9223372030926249000)))`,
+			values.TrueValue},
+		// At MaxInt64 the wrapped guard was true for EVERY int64, so this did
+		// not merely answer wrongly — it never returned.
+		{"exact-integer-sqrt at MaxInt64 terminates",
+			`(let-values (((s r) (exact-integer-sqrt 9223372036854775807)))
+			   (and (= s 3037000499) (= r 5928526806)
+			        (= (+ (* s s) r) 9223372036854775807)))`,
+			values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

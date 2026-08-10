@@ -343,9 +343,18 @@ func PrimSqrt(mc machine.CallContext) error {
 	switch v := o.(type) {
 	case *values.Integer:
 		if v.Value < 0 {
-			// Check for negative perfect square: result is exact imaginary
-			absVal := -v.Value
-			root, ok := exactIntegerSqrt(absVal)
+			// Check for negative perfect square: result is exact imaginary.
+			//
+			// MinInt64 negates to ITSELF, so `-v.Value` used to hand
+			// exactIntegerSqrt a negative magnitude that its correction loop
+			// could never satisfy: (sqrt -9223372036854775808) never returned.
+			// 2^63 is not a perfect square, so excluding it forfeits no exact
+			// answer — the inexact branch below is the right one for it. Same
+			// hazard, same reason, as exptExact's big.Int.Abs guard below.
+			root, ok := int64(0), false
+			if v.Value != math.MinInt64 {
+				root, ok = exactIntegerSqrt(-v.Value)
+			}
 			if ok {
 				mc.SetValue(values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(root)))
 				return nil
@@ -540,23 +549,32 @@ func PrimExpt(mc machine.CallContext) error {
 	return nil
 }
 
-// exactIntegerSqrt checks if n (non-negative) is a perfect square.
-// For n <= 2^53 the float64 sqrt is exact; for larger values we verify
-// that root*root == n. Returns (root, true) on success.
+// exactIntegerSqrt checks if n is a perfect square, returning (root, true) on
+// success and (0, false) otherwise, including for every negative n.
+//
+// It computes in big.Int rather than correcting a float64 seed in int64. The
+// correction loops this replaced were unconditionally infinite at the top of
+// the range: with n = MaxInt64 the guard `(root+1)*(root+1) <= n` compares a
+// WRAPPED product, and no int64 exceeds MaxInt64, so the condition held for
+// every value of root and (sqrt 9223372036854775807) never returned. The
+// negative direction hung for a different reason — see PrimSqrt's MinInt64
+// guard — and the doc comment's "non-negative" precondition was declared but
+// never enforced, which is what let that reach here at all.
+//
+// Same computation as the *values.BigInteger arm of PrimSqrt just above, which
+// was always correct at these magnitudes; this makes the two agree by running
+// the same code rather than by keeping two implementations in step.
 func exactIntegerSqrt(n int64) (int64, bool) {
+	if n < 0 {
+		return 0, false
+	}
 	if n == 0 {
 		return 0, true
 	}
-	root := int64(math.Sqrt(float64(n)))
-	// Correct for float64 rounding near the boundary of large integers
-	for root*root > n {
-		root--
+	bn := big.NewInt(n)
+	root := new(big.Int).Sqrt(bn)
+	if new(big.Int).Mul(root, root).Cmp(bn) != 0 {
+		return 0, false
 	}
-	for (root+1)*(root+1) <= n {
-		root++
-	}
-	if root*root == n {
-		return root, true
-	}
-	return 0, false
+	return root.Int64(), true
 }
