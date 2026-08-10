@@ -182,9 +182,26 @@ var correctedDocClaims = []correctedDocClaim{
 		name:  "CONTRIBUTING_PRIMITIVES_is_complete",
 		doc:   "CONTRIBUTING.md",
 		stale: "Complete primitives reference",
-		why: "PRIMITIVES.md is not complete and now says so: 73 names bound in the CLI's default " +
-			"top level are never spelled in a code span there. Two tracked documents disagreeing " +
-			"about the same document is the drift this pass exists to close.",
+		why: "PRIMITIVES.md is not complete and now says so, naming the gap in its own lead. " +
+			"That figure is derived by TestProseCountsMatchTheirSource/PRIMITIVES_undocumented_names; " +
+			"do not copy it here, or this row rots the next time a primitive is registered. Two " +
+			"tracked documents disagreeing about the same document is the drift this pass exists to close.",
+	},
+	{
+		name:  "INDEX_PRIMITIVES_is_complete",
+		doc:   "docs/INDEX.md",
+		stale: "Complete reference of types and primitives",
+		why: "The third tracked document making the claim CONTRIBUTING_PRIMITIVES_is_complete " +
+			"condemns. Its wording differs from CONTRIBUTING's, which is why one row could not " +
+			"cover both — a forbidden-phrase gate sees spellings, not claims.",
+	},
+	{
+		name:  "CODING_STYLE_syntax_is_public",
+		doc:   "CODING_STYLE.md",
+		stale: `"github.com/aalpar/wile/pkg/internal/syntax"`,
+		why: "Third instance of the CONTRIBUTING_syntax_is_public defect, and the worst-placed: " +
+			"it sits inside the canonical import-grouping example, so it is copied rather than read. " +
+			"pkg/internal/ holds bootstrap, extensions, forms, match, tokenizer and validate — no syntax.",
 	},
 	{
 		name:  "CONTRIBUTING_stdlib_test_dir",
@@ -211,6 +228,28 @@ var correctedDocClaims = []correctedDocClaim{
 		doc:   "test/README.md",
 		stale: "`test/regression/issue-123-macro-hygiene.scm`",
 		why:   "Verbatim twin of CONTRIBUTING_regression_name_never_runs, and false for the same reason.",
+	},
+	{
+		name:  "testREADME_regression_pattern_never_runs",
+		doc:   "test/README.md",
+		stale: "`test/regression/issue-<num>-<slug>.scm`",
+		why: "The Adding New Tests instruction, as opposed to the naming table's example. It told " +
+			"contributors to create precisely the file test/run-all.sh's `-name '*-test.scm'` can " +
+			"never discover, so the regression would be silently unguarded. Pinning the example " +
+			"string alone left this green.",
+	},
+	{
+		name:  "testREADME_library_test_subdir",
+		doc:   "test/README.md",
+		stale: "`lib/<library>/test/<module>-test.scm`",
+		why: "Two errors in one path: pkg/stdlib/lib has no test/ subdirectory at any depth (see " +
+			"testREADME_stdlib_test_dir), and the root is pkg/stdlib/lib, not lib.",
+	},
+	{
+		name:  "testREADME_discovery_root",
+		doc:   "test/README.md",
+		stale: "`lib/` directory (recursive)",
+		why:   "test/run-all.sh searches pkg/stdlib/lib; the repository has no top-level lib/.",
 	},
 	{
 		name:  "COMPATIBILITY_chibi_test_path",

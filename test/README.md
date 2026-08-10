@@ -124,7 +124,7 @@ The `(chibi test)` framework provides:
 
 The `run-all.sh` script discovers all test files by searching for `*-test.scm` in:
 - `test/` directory (recursive)
-- `lib/` directory (recursive)
+- `pkg/stdlib/lib/` directory (recursive)
 
 Tests are executed in lexicographic order by file path.
 
@@ -134,10 +134,14 @@ Scheme tests run as part of `make test` in CI. The Go test `TestSchemeTestSuite`
 
 ## Adding New Tests
 
-1. **For library code**: Create `lib/<library>/test/<module>-test.scm`
+1. **For library code**: Create `pkg/stdlib/lib/<library>/<module>-test.scm`
 2. **For core features**: Create `test/scheme/<feature>-test.scm`
-3. **For bug fixes**: Create `test/regression/issue-<num>-<slug>.scm`
+3. **For bug fixes**: Create `test/regression/issue-<num>-<slug>-test.scm`
 4. **Run tests**: `make test` or `./test/run-all.sh`
+
+Every one of these ends in `-test.scm` because that suffix is what
+`run-all.sh` matches. A file named without it is never discovered, and the
+suite reports success while the test never ran.
 
 Tests are automatically discovered—no need to register them in a central list.
 
