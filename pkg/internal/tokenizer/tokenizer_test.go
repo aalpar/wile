@@ -2489,6 +2489,21 @@ func TestPeculiarIdentifierSpace(t *testing.T) {
 		// Sign-dot and prefix-mismatch identifiers.
 		{src: "+.abc", state: TokenizerStateSymbol, value: "+.abc"},
 		{src: "-.f", state: TokenizerStateSymbol, value: "-.f"},
+		// Bare sign-dot: the speculative scanner's ONE deliberate over-reach past
+		// R7RS §7.1.1, and it is pinned rather than incidental. The grammar's
+		// `<explicit sign> . <dot subsequent> <subsequent>*` needs something after
+		// the dot, so `+.abc` and `-.f` above are legal identifiers while these
+		// two are not. Wile reads them anyway, because refusing them would mean
+		// deciding <dot subsequent> inside the numeral fallback — a second copy of
+		// the identifier grammar in the one place whose rule is "not a number, so
+		// a symbol". Chez 10.4.1 and Racket both accept them; documented at
+		// docs/reference/r7rs-differences.md -> "Bare Sign-Dot Identifiers".
+		{src: "+.", state: TokenizerStateSymbol, value: "+."},
+		{src: "-.", state: TokenizerStateSymbol, value: "-."},
+		// Control for the two rows above: `+..` IS a legal peculiar identifier
+		// (`.` is itself a <dot subsequent>), so it must read the same way for a
+		// reason the grammar supplies rather than by the same leniency.
+		{src: "+..", state: TokenizerStateSymbol, value: "+.."},
 		{src: "+nabc", state: TokenizerStateSymbol, value: "+nabc"},
 		{src: "+node", state: TokenizerStateSymbol, value: "+node"},
 		{src: "+nan_x", state: TokenizerStateSymbol, value: "+nan_x"},

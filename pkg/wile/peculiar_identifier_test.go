@@ -49,6 +49,39 @@ func TestPeculiarIdentifiersAreDistinctBindings(t *testing.T) {
 		code: `(symbol->string '+.abc)`,
 		want: `"+.abc"`,
 	}, {
+		// A bare sign-dot is NOT a valid R7RS <peculiar identifier> — the third
+		// production needs a <dot subsequent> after the dot — but Wile accepts it,
+		// because the speculative number scanner hands any failed numeral to the
+		// symbol scanner whole. Chez 10.4.1 and Racket both accept it too. Pinned
+		// so the leniency is a decision rather than a side effect; documented at
+		// docs/reference/r7rs-differences.md -> "Bare Sign-Dot Identifiers".
+		name: "bare_sign_dot_is_a_symbol",
+		code: `(symbol->string '+.)`,
+		want: `"+."`,
+	}, {
+		name: "bare_sign_dot_signs_are_distinct",
+		code: `(eq? '+. '-.)`,
+		want: `#f`,
+	}, {
+		// The reader must produce exactly the symbol its name spells — the failure
+		// this whole file exists for was sign-dot runs minting a TRUNCATED name.
+		name: "bare_sign_dot_reader_agrees_with_string_to_symbol",
+		code: `(eq? (string->symbol "+.") '+.)`,
+		want: `#t`,
+	}, {
+		// The round trip the deviation doc claims, asserted through evalOne's own
+		// SchemeString rendering. `+.` is not writable bare, so the writer must
+		// reach for R7RS's vertical-line syntax; emitting it bare would produce
+		// output this reader accepts but a conforming one rejects. Contrast the
+		// `+..` row: a legal peculiar identifier needs no bars.
+		name: "bare_sign_dot_writes_with_vertical_lines",
+		code: `'+.`,
+		want: `|+.|`,
+	}, {
+		name: "legal_sign_dot_writes_bare",
+		code: `'+..`,
+		want: `+..`,
+	}, {
 		name: "sign_dot_symbol_at_end_of_input",
 		code: `(symbol->string '-.f)`,
 		want: `"-.f"`,

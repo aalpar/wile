@@ -487,6 +487,46 @@ a delimiter.** `#b19` is an error rather than the number 1 followed by the numbe
 radix prefix still splits — `1abc` reads as `1` then the symbol `abc` — which is
 a known inconsistency, not a decision.
 
+### Bare Sign-Dot Identifiers: `+.` and `-.`
+
+Wile reads `+.` and `-.` as symbols. R7RS §7.1.1's grammar does not admit them:
+
+```
+⟨peculiar identifier⟩ → ⟨explicit sign⟩
+                      | ⟨explicit sign⟩ ⟨sign subsequent⟩ ⟨subsequent⟩*
+                      | ⟨explicit sign⟩ . ⟨dot subsequent⟩ ⟨subsequent⟩*
+                      | . ⟨dot subsequent⟩ ⟨subsequent⟩*
+```
+
+The third production requires a ⟨dot subsequent⟩ after the dot, so `+..` and
+`+.a` are valid identifiers while a bare `+.` is not.
+
+Wile accepts them anyway, and they round-trip: `write` emits `|+.|`, using
+R7RS's own vertical-line syntax.
+
+```scheme
+(write '+.)   ⇒ |+.|
+(write '-.)   ⇒ |-.|
+(write '+..)  ⇒ +..
+(write '+.a)  ⇒ +.a
+```
+
+This falls out of the number scanner being **speculative**: a run beginning with
+an explicit sign is scanned as a numeral, and on any failure the whole run is
+handed to the symbol scanner rather than minting a partial token. Refusing `+.`
+specifically would mean deciding ⟨dot subsequent⟩ inside that fallback — a second
+implementation of the identifier grammar, in the one place whose design is "if it
+is not a number, it is a symbol."
+
+Both reference implementations agree. Measured: Chez Scheme 10.4.1 reads `+.` as
+a symbol and writes it `\x2B;.`; Racket reads it as a symbol and writes it bare.
+Chez's escaping shows it shares Wile's judgement that the spelling needs quoting
+on output, differing only in syntax.
+
+A program relying on `+.` as an identifier does not port to an implementation
+that follows the grammar strictly. A program relying on `+.` being a *read error*
+does not port to Chez or Racket.
+
 ### Boxes
 
 `#&⟨datum⟩` reads a box, the same syntax `write` already emitted for one. This
