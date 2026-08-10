@@ -76,7 +76,8 @@ func WithStableBasePrimitives() ApplyOption {
 // WithRuntimeTarget routes PhaseRuntime primitive registration and global values
 // into the given frame instead of env. frame is the sealed-write root view — used
 // by bootstrap to seat primitives in the immutable sealed-write view while
-// expand-phase prims stay in env.Expand() and compile-time bindings stay in
+// expand-phase prims go to the phase-1 sealed-write view (which Apply derives
+// itself, from env) and compile-time bindings stay in
 // env.Compile(). Defaults to env when unset, but LoadBootstrapCore always sets
 // it, for the engine root and every library env alike — each into its OWN
 // phase-0 sealed-write view (SealedWriteViewAt(PhaseRuntime)); there is no
@@ -130,14 +131,19 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 	//   - bindingEnv: where the binding lives. PhaseRuntime → the owner's sealed-write
 	//     view when WithRuntimeTarget is set (immutable; LoadBootstrapCore always sets
 	//     it, for the engine root and every library env alike), else env. PhaseExpand →
-	//     env.Expand().
+	//     env.SealedWriteViewAt(PhaseExpand), the phase-1 half of the same carve: a
+	//     top-level define-for-syntax of this name then creates a distinct (1, mutable)
+	//     shadow instead of writing through this slot, exactly as a phase-0 define
+	//     shadows a sealed primitive. RegisterPrimitiveExpanders takes the same target
+	//     for the same reason (primitive_expanders_registry.go).
 	//   - closureEnv: what the ForeignClosure captures as its lexical env — the frame a
 	//     foreign fn resolves user code against via mc.EnvironmentFrame(). This MUST be a
 	//     frame that reaches user defines: the MUTABLE runtime (env), NOT the sealed-write
 	//     view. Primitives like compile/expand/free-identifier=? resolve user-level names
 	//     through this env; capturing the sealed-write view would hide every user define.
 	//     Only the binding location is sealed for immutability — resolution stays merged.
-	// Compile-time bindings stay on env.Compile() (the carve is phase-0-only).
+	// Compile-time bindings stay on env.Compile(); the runtime and expand phases both
+	// carve to their sealed-write view.
 	runtimeEnv := env
 	if cfg.runtimeTarget != nil {
 		runtimeEnv = cfg.runtimeTarget
@@ -149,7 +155,7 @@ func (p *PrimitiveRegistry) Apply(ctx context.Context, env *environment.Environm
 		closureEnv *environment.EnvironmentFrame
 	}{
 		{environment.PhaseRuntime, runtimeEnv, env},
-		{environment.PhaseExpand, expandEnv, expandEnv},
+		{environment.PhaseExpand, env.SealedWriteViewAt(environment.PhaseExpand), expandEnv},
 	}
 	// First-wins on a duplicate name+phase, matching FindPrimitive's first-match
 	// lookup. Without the bound set this loop is last-wins: registerPhasePrimitive
@@ -289,6 +295,14 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	// CaptureSafe yet not Stable and never trusted. Stamping a procedure-invoking
 	// primitive here would be pointless (it is not CaptureSafe) and is excluded. The
 	// set!-gate (compile_validated.go) then makes the trust a guarantee.
+	//
+	// The stamp is sound at BOTH phases, and for the same reason. Stable asserts a
+	// closed writer set over this slot, which holds only because bindingEnv is a
+	// sealed-write view at either phase: no legal program writes there. A user
+	// define lands at (0, mutable) and a define-for-syntax at (1, mutable) — other
+	// coordinates, so both are shadows. While the expand row wrote through
+	// env.Expand() the phase-1 half of that argument was false: a top-level
+	// define-for-syntax superseded this very slot with the stamp still on it.
 	if cfg.stableBase && !spec.InvokesProcedure {
 		b.UpdateMeta(func(m *environment.BindingMeta) bool {
 			m.Stable = true
