@@ -17,7 +17,9 @@ package wile_test
 import (
 	"context"
 	"testing"
+	"testing/fstest"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -468,6 +470,202 @@ func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
 			got := mustEvalScheme(t, tc.src)
 			if got != tc.want {
 				t.Errorf("got %s, want %s (cell closed by %s)", got, tc.want, tc.closedBy)
+			}
+		})
+	}
+}
+
+// evalMultiForm evaluates src as SEPARATE top-level forms on a fresh engine and
+// returns the last value's printed representation.
+//
+// It exists because mustEvalScheme above cannot express the wave 1 §6 defect:
+// that helper evaluates ONE (begin ...) form, and a define in a begin body binds
+// its name in that body, not at top level. `(begin (define else #f) (cond (else
+// 'TOOK-ELSE)))` therefore returns #<void> at HEAD, but for an unrelated reason —
+// the body-local `else` is a lexical shadow the literal check already refuses, so
+// the clause degrades to an ordinary (test . body) clause whose test is #f. Only a
+// genuine top-level define exercises the definition-site question.
+func evalMultiForm(t *testing.T, src string) string {
+	t.Helper()
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+	v, err := engine.EvalMultiple(ctx, src)
+	if err != nil {
+		t.Fatalf("eval %q: %v", src, err)
+	}
+	return v.Internal().SchemeString()
+}
+
+// Wave 1 §6 — a syntax-rules pattern literal is identified by its DEFINITION-site
+// binding, not by whatever the use site happens to have bound the name to.
+//
+// R7RS §4.3.2: an input subform matches a literal identifier only if both
+// occurrences have the same lexical binding, or the two are the same identifier
+// and both are unbound. Before this fix both sides were resolved through the one
+// USE-site environment, which makes the comparison vacuous for a zero-scoped
+// global: `(define else #f)` rebinds `else` at top level, both sides resolve to
+// that same new binding, and the literal matched — so `cond` took its else branch
+// on a name the program had taken over. Racket 9.2 returns #<void> for row 1 and a
+// procedure for row 2.
+func TestPatternLiteralIdentifiedByDefinitionSiteBinding(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			// TOOK-ELSE at the base.
+			name: "top-level define of else does not match cond's else literal",
+			src:  "(define else #f)\n(cond (else 'TOOK-ELSE))",
+			want: "#<void>",
+		},
+		{
+			// #f at the base: `=>` still matched the literal, so the clause was
+			// read as (test => receiver) and applied the lambda to 7. With `=>`
+			// taken over by the program the clause is an ordinary (test result
+			// ...) clause, whose value is the last result — the lambda itself.
+			// procedure? wraps it because a closure's printed form is unstable.
+			name: "top-level define of => makes the cond clause an ordinary one",
+			src:  "(define => #f)\n(procedure? (cond (7 => (lambda (v) 'X)) (#t 'FELL)))",
+			want: "#t",
+		},
+		{
+			// CONTROL: a lexical shadow was already refused, and must stay refused.
+			name: "let-bound else is still not the literal",
+			src:  "(let ((else #f)) (cond (else 'TOOK-ELSE)))",
+			want: "#<void>",
+		},
+		{
+			// CONTROL: a user macro whose literal is unbound at ITS definition site
+			// keeps matching the same-named use-site identifier, per R7RS's
+			// "same identifier, both unbound" arm. A pin that fired on an unbound
+			// literal would answer (OTHER lit 1) here.
+			name: "literal unbound at definition time still matches by name",
+			src: "(define-syntax m (syntax-rules (lit) ((_ lit x) (list 'LIT x)) ((_ y x) (list 'OTHER y x))))\n" +
+				"(define lit 5)\n" +
+				"(m lit 1)",
+			want: "(LIT 1)",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := evalMultiForm(t, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// w16LibEngine builds an engine whose library search path holds exactly one
+// library file, mirroring newHostileEngine (import_postseal_test.go).
+func w16LibEngine(t *testing.T, librarySrc string) *wile.Engine {
+	t.Helper()
+	libFS := fstest.MapFS{
+		"w16lib.scm": &fstest.MapFile{Data: []byte(librarySrc)},
+	}
+	eng, err := wile.NewEngine(context.Background(),
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(libFS),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."))
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	return eng
+}
+
+// The cross-library half of wave 1 §6, and the reason the definition-site pin
+// cannot be replaced by "is the use-site name bound?". A library defines `lit`
+// and a macro with `lit` as a pattern literal, and exports only the macro. The
+// importing program cannot see the library's `lit` at all, so its own `lit` — or
+// its complete absence of one — is a different binding and must not match. Every
+// row answered MATCHED-LITERAL at the base.
+func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
+	const libRules = `(define-library (w16lib)
+  (export mg)
+  (import (scheme base))
+  (begin
+    (define lit 42)
+    (define-syntax mg
+      (syntax-rules (lit)
+        ((_ lit) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+	const libRulesExportingLit = `(define-library (w16lib)
+  (export mg lit)
+  (import (scheme base))
+  (begin
+    (define lit 42)
+    (define-syntax mg
+      (syntax-rules (lit)
+        ((_ lit) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+	const libCase = `(define-library (w16lib)
+  (export mg)
+  (import (scheme base))
+  (begin
+    (define lit 42)
+    (define-syntax mg
+      (lambda (stx)
+        (syntax-case stx (lit)
+          ((_ lit) #''MATCHED-LITERAL)
+          ((_ x) #''OTHER))))))
+`
+
+	cases := []struct {
+		name string
+		lib  string
+		src  string
+		want string
+	}{
+		{
+			name: "importing only the macro leaves the literal's binding out of reach",
+			lib:  libRules,
+			src:  "(import (w16lib))\n(mg lit)",
+			want: "OTHER",
+		},
+		{
+			name: "the program's own lit is a different binding",
+			lib:  libRules,
+			src:  "(import (w16lib))\n(define lit 7)\n(mg lit)",
+			want: "OTHER",
+		},
+		{
+			// The import mints a FRESH *Binding for a re-exported name, so the
+			// use-site and definition-site pointers can never be equal here. This
+			// row is what makes literalNotShadowed's IsImported rider load-bearing:
+			// without it the answer degrades to OTHER.
+			name: "importing the literal too restores the match",
+			lib:  libRulesExportingLit,
+			src:  "(import (w16lib))\n(mg lit)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			name: "syntax-case takes the same path",
+			lib:  libCase,
+			src:  "(import (w16lib))\n(mg lit)",
+			want: "OTHER",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := w16LibEngine(t, tc.lib)
+			got := evalString(t, eng, tc.src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
 			}
 		})
 	}
