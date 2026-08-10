@@ -1065,10 +1065,10 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 //
 // Every authorizer denial that reached a primitive frame was converted into a
 // Scheme condition by applyCallableError, so any enclosing guard or
-// with-exception-handler absorbed it: all thirteen sweep expressions, plus
-// (load ...), plus a denial inside an SRFI-18 thread joined under guard, all
-// evaluated to 'caught with a nil host error. A sandboxed program could
-// therefore neutralise its own sandbox's refusals.
+// with-exception-handler absorbed it: all eleven rows of the sweep, plus
+// (open-input-file ...) and (load ...), plus a denial inside an SRFI-18 thread
+// joined under guard, all evaluated to 'caught with a nil host error. A
+// sandboxed program could therefore neutralise its own sandbox's refusals.
 //
 // The scope is the RUNTIME gate sites. The three compile-time load gates
 // surface as *CompilationError and were already unswallowable.
