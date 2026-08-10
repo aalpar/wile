@@ -202,12 +202,34 @@ type zeroRow struct {
 // columns are the action to take when the LEFT operand is an exact zero and when
 // the RIGHT one is.
 //
-// Every row is pinned to Chez and Racket, which agree on all of them:
+// WHAT LICENSES EACH ROW, which is not the same question as what the references
+// do. R7RS §6.2.6 leaves an implementation latitude here: an exact zero operand
+// may yield an exact result. Every row below sits INSIDE that latitude, so none
+// of them is obligated by the spec and none of them deviates from it. Chez and
+// Racket are the TIE-BREAK within the permitted space, not the authority — a
+// distinction the review plugin's conformance-authorities.md draws, and which an
+// earlier revision of this comment ("every row is pinned to Chez and Racket")
+// collapsed. Keep them apart: an implementation cited as authority is how a
+// permitted choice gets mistaken for an obligation, in either direction.
+//
+// Measured 2026-08-09 against petite 10.x and racket. All three agree on every
+// row, and Wile changes nothing here:
 //
 //	(* 0 +inf.0) => 0        (* 0 +nan.0) => 0        annihilates unconditionally
+//	(+ 0 +nan.0) => +nan.0   (- 0 +nan.0) => +nan.0   identity/negate: NaN survives
 //	(+ 0 -0.0)   => -0.0     (+ -0.0 0)   => -0.0     identity: the operand is UNTOUCHED
 //	(- 0 -0.0)   => 0.0      (- -0.0 0)   => -0.0     ASYMMETRIC: negate vs identity
 //	(/ 0 +nan.0) => 0        (/ 1 0)      => raises   dividend annihilates; divisor raises
+//
+// A 2026-08-07 review filed the (/ 0 +nan.0) row as a defect, quoting R7RS
+// §6.2.6 as "an implementation may return an exact zero unless one of the other
+// arguments is a NaN". NOT TAKEN, for two reasons that are worth leaving here so
+// it is not re-opened a third time: the quoted clause would condemn
+// (* 0 +nan.0) identically, which the same review keeps as conformant; and the
+// quote could not be verified against the document. Anyone re-opening this needs
+// the spec text in hand and an answer for whether it binds * as well as /. If it
+// does, this is a three-row change AND a docs/reference/r7rs-differences.md row,
+// because it puts Wile on the far side of both references.
 //
 // The two non-obvious entries:
 //
@@ -218,8 +240,13 @@ type zeroRow struct {
 //
 // zeroDiv's left column is an annihilation, structurally identical to zeroMul's:
 // an exact 0 divided by ANYTHING is exactly 0, including by NaN and by an inexact
-// zero. (/ 0 0.0) is 0 in both oracles, NOT NaN -- the strong update overrides IEEE
-// for the same reason (* 0 +inf.0) does.
+// zero. (/ 0 0.0) is 0 in both references, NOT NaN -- the strong update overrides
+// IEEE for the same reason (* 0 +inf.0) does.
+//
+// Note which rows the strong update reaches: only the ANNIHILATORS. Add and
+// subtract are identity/negate, so their other operand is returned untouched and
+// a NaN survives -- which is why (+ 0 +nan.0) is +nan.0 while (* 0 +nan.0) is 0.
+// That is the table's shape, not an inconsistency between them.
 var exactZeroTable = [numZeroOps]zeroRow{
 	zeroAdd: {left: zeroYieldOther, right: zeroYieldOther},
 	zeroSub: {left: zeroNegateOther, right: zeroYieldOther},
