@@ -822,10 +822,11 @@ func (p *GlobalEnvironmentFrame) IsSealedBindingAt(key *values.Symbol, q syntax.
 // Reuse requires EXACT scope-set equality — see scopeSetsEqual for why
 // compatibility (the subset predicate resolution uses) would be a hygiene hole
 // here — AND coordinate equality: two entries of one name at different (phase,
-// sealed) are different variables — that is what makes a phase-0 define a
-// SHADOW of a sealed entry (new slot) while a define-for-syntax over the
-// (1, mutable) registry copy stays a SUPERSEDE (same slot). Scope equality
-// alone was sufficient only while coordinates were frame identity.
+// sealed) are different variables. That is what makes a phase-0 define a SHADOW
+// of the sealed entry (new slot) rather than a write through it, and what makes
+// a define-for-syntax over the registry's (1, sealed) expand copy a shadow for
+// the same reason, at the phase above. Scope equality alone was sufficient only
+// while coordinates were frame identity.
 //
 // (ANY, mutable) is refused: no population produces it (design §4.1), and
 // modeling it would give the wildcard a mutable row that outranked nothing.

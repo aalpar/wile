@@ -110,17 +110,13 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// a rebind of a Stable binding at matching coordinates, which is what closes the
 	// three reflective doors around the compiler's own immutability gate
 	// (Engine.Define, Engine.RegisterPrimitive, namespace-define!). This site is
-	// INSIDE the compiler, and superseding the registry's (1, mutable) phase-1 copy
-	// is intended, documented behaviour — pinned by three rows of
-	// TestBindingModelMatrix ("define-for-syntax supersedes expand copy ...").
-	// registerPhasePrimitive stamps that copy Stable, so routing through the guard
-	// would refuse (define-for-syntax car ...) outright.
-	//
-	// KNOWN RESIDUAL, recorded rather than fixed here: that Stable stamp therefore
-	// does NOT sit over a closed writer set, which is the premise Q3 rests on. Either
-	// the phase-1 copy should not be stamped Stable, or this supersede should be
-	// refused; both are decisions above this call site's pay grade. The exposure is
-	// bounded to phase-1 code, and it predates this change.
+	// INSIDE the compiler, and a phase-1 define is R7RS-legal here whatever the name.
+	// It no longer meets a Stable binding at matching coordinates anyway: the
+	// registry's expand-phase copies live at (1, sealed) (registry.Apply's
+	// phaseTargets), so a create for the same name lands on a fresh (1, mutable)
+	// slot and SHADOWS the copy — the phase-1 twin of a phase-0 define over a sealed
+	// primitive, pinned by three rows of TestBindingModelMatrix ("define-for-syntax
+	// ... expand copy ...").
 	gi, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable, nil)
 	err = expandEnv.GlobalEnvironment().SetOwnGlobalValue(gi, result)
 	if err != nil {

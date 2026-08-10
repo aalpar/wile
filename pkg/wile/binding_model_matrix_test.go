@@ -36,26 +36,29 @@ import (
 // photograph instead of against memory. Every row passes against the PRE-fold
 // tree; a fold that flips any row has changed semantics, not encoding.
 //
-// Two deliberate asymmetries this table owns (measured, plan §0 M6/M7):
-//   - define NEVER lands on a sealed slot (it targets the mutable layer),
-//     while a compile-RESOLVED set! pin CAN reach one when nothing refuses it
-//     (mutable-top-level variant) — G13's own-frame restriction is about the
-//     deferred write, and define is its observable face. The "define shadows
-//     sealed primitive" rows assert a captured VALUE, which is insensitive to
-//     what later happens to the binding, so they do not carry this claim; the
-//     h/car pair in TestBindingModelMatrixMutableTopLevel ("set! observed
-//     through an existing call site" / "define NOT observed through an
-//     existing call site") does, by observing through a procedure that
-//     re-resolves car at call time instead of a value captured once.
+// Two claims this table owns (measured, plan §0 M6/M7):
+//   - The define/set! asymmetry: define NEVER lands on a sealed slot (it
+//     targets the mutable layer), while a compile-RESOLVED set! pin CAN reach
+//     one when nothing refuses it (mutable-top-level variant) — G13's own-frame
+//     restriction is about the deferred write, and define is its observable
+//     face. The "define shadows sealed primitive" rows assert a captured VALUE,
+//     which is insensitive to what later happens to the binding, so they do not
+//     carry this claim; the h/car pair in
+//     TestBindingModelMatrixMutableTopLevel ("set! observed through an existing
+//     call site" / "define NOT observed through an existing call site") does,
+//     by observing through a procedure that re-resolves car at call time
+//     instead of a value captured once.
 //   - car exists twice: the sealed phase-0 binding and the registry's
-//     (1, mutable) expand copy. Phase-0 mutation must not touch the copy —
-//     pinned by "expand copy survives phase-0 set!" (mutable table). The
-//     converse direction — phase-1 mutation must not touch the phase-0
-//     binding, and actually SUPERSEDES the copy in place rather than
-//     shadowing it — is pinned by "define-for-syntax supersedes expand
-//     copy, phase 0 intact" and "...in place, not a shadow"; "...value
-//     visible at phase 1, by name" pins only the by-name view, which reads
-//     the same under either supersede or shadow.
+//     (1, sealed) expand copy. Each is hermetic against a mutation at the
+//     other's phase — phase 0 pinned by "expand copy survives phase-0 set!"
+//     (mutable table), phase 1 by "define-for-syntax over expand copy leaves
+//     phase 0 intact". Neither direction is a supersede: both mutations land
+//     in the MUTABLE tier of their own phase and shadow. The phase-1 half of
+//     that was not always true — until the expand copies were sealed
+//     (registry.Apply's phaseTargets) a define-for-syntax wrote through the
+//     copy in place. "define-for-syntax shadows expand copy, pre-resolved
+//     reference intact" is what discriminates the two readings; "...value
+//     visible at phase 1, by name" reads the same under either.
 //
 // See plans/2026-08-05-flat-binding-model-{design,impl}.local.md.
 
@@ -434,7 +437,8 @@ func TestBindingModelMatrix(t *testing.T) {
 		// the set! compiles against a binding not yet stamped, so it pins the
 		// (0, mutable) shadow and the sequence proceeds exactly as it does with
 		// the flag on. A census of a bootstrapped KitchenSink namespace puts
-		// 146 names at (1, mutable) — this is not a car special case.
+		// 146 names at (1, sealed) with a phase-0 twin — this is not a car
+		// special case.
 		{name: "stale pin self-heal refused under the immutable default",
 			units: []string{
 				`(begin (define car 1) (define (f) (set! car 2)))`,
@@ -482,7 +486,7 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 				`(h '(1 2))`,
 			},
 			want: "1"},
-		// M7: ...and the (1, mutable) expand copy of car is a different binding
+		// M7: ...and the (1, sealed) expand copy of car is a different binding
 		// — unaffected by the phase-0 set! above. A bare 'ok trailing form
 		// can't tell a no-op begin-for-syntax from one that actually ran:
 		// reveal-probe reads probe back through a phase-1
@@ -533,16 +537,19 @@ func TestBindingModelMatrixMutableTopLevel(t *testing.T) {
 		// companion — car here, and with it the ~28 dual-phase registration
 		// blocks in pkg/registry/core (pairs, lists, strings, arithmetic,
 		// vectors, predicates, characters, equality, hashes, syntax). car's
-		// slots are [(ANY, sealed), (1, mutable) expand copy, (0, mutable)
+		// slots here are [(ANY, sealed), (1, sealed) expand copy, (0, mutable)
 		// shadow]; namespace-undefine! removes only the shadow. A self-heal
 		// that filtered on sealed/mutable ALONE did not eliminate this hazard,
-		// it relocated it: the (1, mutable) expand copy was the only remaining
-		// candidate, so the write succeeded silently and landed on the startup
-		// set's phase-1 primitive — this row measured "2" for as long as the
-		// filter was phase-blind. The pin now carries its coordinates, so the
-		// heal asks for (0, mutable) and finds nothing: same refusal as the
-		// square row above, which is the point — a dual-phase name and a
-		// single-phase one now behave the same.
+		// it relocated it: the expand copy sat at (1, MUTABLE) then, so it was
+		// the only remaining candidate, the write succeeded silently, and it
+		// landed on the startup set's phase-1 primitive — this row measured "2"
+		// for as long as the filter was phase-blind. Sealing the expand copies
+		// later shut that door from the other side: with no (1, mutable)
+		// candidate left, even a phase-blind filter would refuse, so this row
+		// alone no longer discriminates the two filters. What it still pins is
+		// the behaviour — the heal asks for (0, mutable), finds nothing, and
+		// refuses exactly as the square row above does, which is the point: a
+		// dual-phase name and a single-phase one behave the same.
 		{name: "stale pin self-heal refuses phase-1 slot after undefine",
 			units: []string{
 				`(define car 1)`,
