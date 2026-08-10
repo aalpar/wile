@@ -56,6 +56,35 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
   (if (< n 2) (saved #f))
   (with-exception-handler (lambda (e) 'recovered) (lambda () (raise 'oops))))`,
 		},
+		{
+			// The resume happens INSIDE the handler's own dynamic extent, so the
+			// escalator frame is on the live chain when the segment is reinstated:
+			// a within-extent jump, not a revival. The handler still returns
+			// normally, so §6.11 must still fire.
+			Name: "call/cc resumed INSIDE the handler",
+			Code: `(with-exception-handler
+                     (lambda (e) (call/cc (lambda (k) (k 1))) 42)
+                     (lambda () (list 'a (error "boom") 'b)))`,
+		},
+		{
+			// Same shape one call deeper. ONE datum: RunSchemeCode reads a single
+			// form, so a leading (define (helper) …) would be the whole program and
+			// the row would pass vacuously. letrec keeps it one expression.
+			Name: "call/cc resumed inside a procedure the handler calls",
+			Code: `(letrec ((helper (lambda () (call/cc (lambda (k) (k 'x))))))
+                     (with-exception-handler
+                       (lambda (e) (helper) 42)
+                       (lambda () (list 'a (error "boom") 'b))))`,
+		},
+		{
+			// The condition comes from a primitive's Go error through
+			// applyCallableError rather than from `error`, which reaches
+			// raiseToHandlers by a different route.
+			Name: "call/cc resumed INSIDE the handler, primitive-raised condition",
+			Code: `(with-exception-handler
+                     (lambda (e) (call/cc (lambda (k) (k 1))) 42)
+                     (lambda () (car 5)))`,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
