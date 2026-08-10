@@ -138,6 +138,37 @@ func TestOSFileResolver_StatPermissionIsNotNotFound(t *testing.T) {
 	qt.Assert(t, err.Error(), qt.Contains, "stat ")
 }
 
+// TestOSFileResolver_OpenFailureIsReportedAsOne is the twin of
+// TestOSFileResolver_StatPermissionIsNotNotFound: a candidate the resolver DID
+// try to open, and failed to, keeps werr.ErrFileOpen.
+//
+// The two together are the "opener owns the diagnosis" contract. Since
+// authorizeCandidates stopped relabelling every opener error as ErrFileOpen —
+// which is what mislabelled a stat — nothing else would notice a genuine open
+// failure arriving with no Wile sentinel at all.
+func TestOSFileResolver_OpenFailureIsReportedAsOne(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file permission bits")
+	}
+	dir := realDir(t, t.TempDir())
+	unreadable := filepath.Join(dir, "unreadable.scm")
+	err := os.WriteFile(unreadable, []byte("(display 1)"), 0o000)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv(SchemeIncludePathEnv, dir)
+	r := NewOSFileResolver(environment.NewNamespace().Runtime())
+
+	// Stat succeeds — the file is there and is regular — so the failure happens
+	// in the open, which is the half that owns ErrFileOpen.
+	_, _, err = r.ResolveAndOpen(context.Background(), "unreadable.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileOpen), qt.IsTrue,
+		qt.Commentf("a failed open is reported as one: %v", err))
+	qt.Assert(t, errors.Is(err, fs.ErrPermission), qt.IsTrue,
+		qt.Commentf("the cause must survive the wrap"))
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse)
+}
+
 // TestOSFileResolver_SymlinkEscapeDeniedUnconfined proves the non-confining arm
 // (a custom, non-RootConfined path-gating authorizer) does not follow a
 // pre-planted symlink out of the authorized subtree. The authorizer allows only

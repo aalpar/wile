@@ -112,7 +112,7 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 			return nil, werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, fs.ErrNotExist,
 				"candidate %s is a directory", candidate)
 		}
-		return confinedOpenFile(auth, candidate)
+		return openConfined(auth, candidate)
 	}
 
 	f, resolved, err := authorizeCandidates(auth, "", candidates, opener)

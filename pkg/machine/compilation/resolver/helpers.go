@@ -213,6 +213,25 @@ func osSearchDirs(env *environment.EnvironmentFrame) []string {
 	return dirs
 }
 
+// openConfined opens absPath through confinedOpenFile (see confined.go) and
+// labels the failure, which confinedOpenFile itself leaves as the raw os error.
+// Absence keeps the ErrFileNotFound sentinel so a search may continue past it;
+// every other failure really is an open failure and says so.
+//
+// Both OS arms go through here, so the absolute path and the search-relative
+// candidate cannot end up labelled differently for the same failure.
+func openConfined(auth security.Authorizer, absPath string) (fs.File, error) {
+	f, err := confinedOpenFile(auth, absPath)
+	if err == nil {
+		return f, nil
+	}
+	sentinel := werr.ErrFileOpen
+	if errors.Is(err, os.ErrNotExist) {
+		sentinel = werr.ErrFileNotFound
+	}
+	return nil, werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
+}
+
 // openAuthorized performs security authorization then opens absPath on the OS
 // filesystem, through os.Root when the authorizer confines access to a root so
 // the check and the open cannot observe different files (see confined.go).
@@ -225,13 +244,9 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	f, err := confinedOpenFile(auth, absPath)
+	f, err := openConfined(auth, absPath)
 	if err != nil {
-		sentinel := werr.ErrFileOpen
-		if errors.Is(err, os.ErrNotExist) {
-			sentinel = werr.ErrFileNotFound
-		}
-		return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
+		return nil, "", err
 	}
 	return f, absPath, nil
 }
