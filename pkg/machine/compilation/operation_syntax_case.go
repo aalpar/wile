@@ -492,7 +492,11 @@ func (p *OperationStoreSyntaxCaseInput) Apply(mc *machine.MachineContext) (*mach
 	if ok {
 		sc.input = stx
 	} else {
-		sc.input = schemeutil.DatumToSyntaxValue(mc.Context(), nil, val)
+		converted, err := schemeutil.DatumToSyntaxValue(mc.Context(), nil, val)
+		if err != nil {
+			return nil, err
+		}
+		sc.input = converted
 	}
 	mc.SetSyntaxCaseState(sc)
 	mc.IncrPC()

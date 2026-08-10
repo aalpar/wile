@@ -99,7 +99,10 @@ func PrimEval(cc machine.CallContext) error {
 
 	// Convert datum to syntax value, expand, and compile.
 	sctx := syntax.NewZeroValueSourceContext()
-	stx := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
+	stx, err := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "eval")
+	}
 
 	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, compilation.DefaultInlineThreshold, compilation.DefaultMaxExpandDepth)
 	if err != nil {
@@ -597,7 +600,11 @@ func PrimCompile(mc machine.CallContext) error {
 	} else {
 		// Convert datum to syntax value
 		sctx := syntax.NewZeroValueSourceContext()
-		syntaxVal = schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
+		converted, err := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "compile")
+		}
+		syntaxVal = converted
 	}
 
 	// Expand and compile against a top level, not the caller's frame.

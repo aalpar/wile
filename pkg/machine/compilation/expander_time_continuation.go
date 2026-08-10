@@ -609,7 +609,10 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// Re-wrap the result to syntax.
 	// Already-SyntaxValue nodes (from rename) pass through unchanged.
 	// Raw symbols get use-site source context (no special scopes = use-site resolution).
-	wrapped := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
+	wrapped, err := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
+	if err != nil {
+		return nil, wrapSourcedError(sym.SourceContext(), err)
+	}
 	return wrapped, nil
 }
 

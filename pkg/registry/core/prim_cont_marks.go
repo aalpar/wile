@@ -15,6 +15,8 @@
 package core
 
 import (
+	"context"
+
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
 	"github.com/aalpar/wile/pkg/values"
@@ -93,15 +95,19 @@ func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "continuation-mark-set->list*: expected a list of keys")
 	}
 
+	// The canonical proper-list eliminator, not a hand-rolled walk: it carries
+	// the Brent cycle detector and the deadline poll. Without them a key list
+	// closed into a cycle by set-cdr! grew `keys` at gigabytes per second and
+	// never returned — and nothing could see it, because non-termination plus
+	// allocation is not something the VM boundary's recover can catch.
 	var keys []values.Value
-	current := values.Value(keyTuple)
-	for !values.IsEmptyList(current) {
-		t, ok := current.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "continuation-mark-set->list*: improper key list")
-		}
-		keys = append(keys, t.Car())
-		current = t.Cdr()
+	err = helpers.ForEachList(mc.Context(), keyTuple, "continuation-mark-set->list*",
+		func(_ context.Context, _ int, _ bool, key values.Value) error {
+			keys = append(keys, key)
+			return nil
+		})
+	if err != nil {
+		return err
 	}
 
 	noneVal := values.Value(values.FalseValue)

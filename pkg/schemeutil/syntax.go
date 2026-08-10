@@ -19,18 +19,41 @@ import (
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // DatumToSyntaxValue wraps a raw Scheme datum in syntax objects, attaching
 // the provided SourceContext for source location and scope tracking.
 // Recursively wraps pairs, vectors, and boxed values. If the input is already
 // a SyntaxValue, it is returned unchanged.
-func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value) syntax.SyntaxValue {
+//
+// A circular datum is refused with werr.ErrCircularList. It has to be: every
+// caller hands the result to the expander or the compiler, and a circular
+// program is not a program. Before the refusal, (eval x) on a datum with a
+// car, vector or box cycle killed the HOST PROCESS with a runtime stack
+// overflow — a throw, not a panic, so no recover could contain it and every
+// other engine in the process died with it. A cdr cycle failed more quietly
+// and worse: the spine walk's ErrCircularList was discarded, the list was
+// silently truncated at the cycle, and the mangled graph surfaced downstream
+// as a diagnostic naming an internal syntax type.
+//
+// Refusing here rather than memoizing into a cyclic syntax graph is the same
+// rule the compiler already applies to circular quoted data, and it is the
+// only one that terminates: a faithful cyclic graph merely moves the hang into
+// the expander, which was measured before this shape was chosen.
+func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value) (syntax.SyntaxValue, error) {
+	return datumToSyntaxValueVisited(ctx, sctx, o, map[values.Value]bool{})
+}
+
+// datumToSyntaxValueVisited is DatumToSyntaxValue's worker. visited is
+// PATH-scoped — entries are removed on the way back out — so shared structure
+// converts exactly as it did before and only a true cycle is refused.
+func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, o values.Value, visited map[values.Value]bool) (syntax.SyntaxValue, error) {
 	if values.IsVoid(o) {
-		return syntax.SyntaxVoid
+		return syntax.SyntaxVoid, nil
 	}
 	if values.IsEmptyList(o) {
-		return syntax.SyntaxEmptyList
+		return syntax.SyntaxEmptyList, nil
 	}
 	switch v := o.(type) {
 	case syntax.SyntaxValue:
@@ -41,48 +64,100 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 		// with the caller's sctx, discarding its own source location and scope
 		// set. (*SyntaxVector is not a Tuple, but reaches this arm as a
 		// SyntaxValue and is likewise returned unchanged.)
-		return v
+		return v, nil
 	case *values.Symbol:
-		return syntax.NewSyntaxSymbol(v.Key, sctx)
+		return syntax.NewSyntaxSymbol(v.Key, sctx), nil
 	case values.Tuple:
-		// If the datum is a Tuple (Pair), wrap it in SyntaxValue
-		var tuple0stx *syntax.SyntaxPair
-		tuple1, ok := v.Cdr().(values.Tuple)
-		if !ok {
-			// If the cdr is not a Tuple, we have an improper list - wrap both car and cdr
-			return syntax.NewSyntaxCons(DatumToSyntaxValue(ctx, sctx, v.Car()), DatumToSyntaxValue(ctx, sctx, v.Cdr()), sctx)
-		}
-		var v0 values.Value
-		var tuple *syntax.SyntaxPair
-		tuple0stx = syntax.NewSyntaxCons(DatumToSyntaxValue(ctx, sctx, v.Car()), DatumToSyntaxValue(ctx, sctx, values.EmptyList), sctx)
-		tuple = tuple0stx
-		// improper-list aware: v0 captures the trailing non-list cdr (if any)
-		// and is wired into the constructed syntax tail below. Do not migrate
-		// to values.ForEachProperList — that helper rejects improper lists.
-		v0, _ = tuple1.ForEach(ctx, func(_ context.Context, _ int, _ bool, v1 values.Value) error {
-			tuple.SetCdr(
-				syntax.NewSyntaxCons(
-					DatumToSyntaxValue(ctx, sctx, v1),
-					DatumToSyntaxValue(ctx, sctx, values.EmptyList),
-					sctx))
-			tuple = tuple.Cdr().(*syntax.SyntaxPair)
-			return nil
-		})
-		tuple.SetCdr(DatumToSyntaxValue(ctx, sctx, v0))
-		return tuple0stx
+		return datumListToSyntaxValue(ctx, sctx, o, v, visited)
 	case *values.Box:
-		bx0 := values.NewBox(DatumToSyntaxValue(ctx, sctx, v.Unbox()))
-		return syntax.NewSyntaxObject(bx0, sctx)
+		if visited[o] {
+			return nil, circularDatumError()
+		}
+		visited[o] = true
+		defer delete(visited, o)
+		inner, err := datumToSyntaxValueVisited(ctx, sctx, v.Unbox(), visited)
+		if err != nil {
+			return nil, err
+		}
+		return syntax.NewSyntaxObject(values.NewBox(inner), sctx), nil
 	case *values.Vector:
+		if visited[o] {
+			return nil, circularDatumError()
+		}
+		visited[o] = true
+		defer delete(visited, o)
 		vt0 := syntax.NewSyntaxVector(sctx)
 		for i := range *v {
-			vt0.Values = append(vt0.Values, DatumToSyntaxValue(ctx, sctx, (*v)[i]))
+			e, err := datumToSyntaxValueVisited(ctx, sctx, (*v)[i], visited)
+			if err != nil {
+				return nil, err
+			}
+			vt0.Values = append(vt0.Values, e)
 		}
-		return vt0
+		return vt0, nil
 	default:
 		// If the datum is not a Datum, we convert it to a Datum first.
-		return syntax.NewSyntaxObject(v, sctx)
+		return syntax.NewSyntaxObject(v, sctx), nil
 	}
+}
+
+// datumListToSyntaxValue converts one cons spine iteratively, so list LENGTH
+// never becomes Go stack depth; only cars recurse, and their depth is nesting,
+// which the reader bounds. Every cell walked stays in visited for the whole
+// walk, so a cdr pointing back at ANY earlier cell is caught, not only one
+// pointing at the head. An improper tail falls out of the same loop: it is
+// just a cdr that is not a Tuple.
+//
+// This replaces a Pair.ForEach whose ErrCircularList return was discarded.
+// ctx is no longer polled: the walk is now bounded by the size of a datum
+// already resident in memory, and the caller re-checks the deadline on the
+// very next step.
+func datumListToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o values.Value, v values.Tuple, visited map[values.Value]bool) (syntax.SyntaxValue, error) {
+	if visited[o] {
+		return nil, circularDatumError()
+	}
+	spine := []values.Value{o}
+	visited[o] = true
+	defer func() {
+		for _, cell := range spine {
+			delete(visited, cell)
+		}
+	}()
+
+	head := syntax.NewSyntaxCons(nil, nil, sctx)
+	cur, place := v, head
+	for {
+		car, err := datumToSyntaxValueVisited(ctx, sctx, cur.Car(), visited)
+		if err != nil {
+			return nil, err
+		}
+		place.Values[0] = car
+
+		cdr := cur.Cdr()
+		next, isTuple := cdr.(values.Tuple)
+		if !isTuple || values.IsEmptyList(cdr) {
+			tail, err := datumToSyntaxValueVisited(ctx, sctx, cdr, visited)
+			if err != nil {
+				return nil, err
+			}
+			place.Values[1] = tail
+			return head, nil
+		}
+		if visited[cdr] {
+			return nil, circularDatumError()
+		}
+		visited[cdr] = true
+		spine = append(spine, cdr)
+
+		cell := syntax.NewSyntaxCons(nil, nil, sctx)
+		place.Values[1] = cell
+		cur, place = next, cell
+	}
+}
+
+// circularDatumError is the one diagnostic every cyclic shape produces here.
+func circularDatumError() error {
+	return werr.WrapForeignErrorf(werr.ErrCircularList, "DatumToSyntaxValue: circular datum")
 }
 
 // IsSyntaxComment returns true if the given value is a SyntaxComment.

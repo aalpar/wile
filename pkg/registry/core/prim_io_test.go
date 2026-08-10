@@ -28,7 +28,6 @@ import (
 	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
-	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
@@ -96,7 +95,7 @@ func TestDisplayWithBuffer(t *testing.T) {
 
 	// (display "hello")
 	prog := values.List(values.NewSymbol("display"), values.NewString("hello"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -118,7 +117,7 @@ func TestWriteWithBuffer(t *testing.T) {
 
 	// (write 42)
 	prog := values.List(values.NewSymbol("write"), values.NewInteger(42))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -140,7 +139,7 @@ func TestWriteCharWithBuffer(t *testing.T) {
 
 	// (write-char #\A)
 	prog := values.List(values.NewSymbol("write-char"), values.NewCharacter('A'))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -162,7 +161,7 @@ func TestNewlineWithBuffer(t *testing.T) {
 
 	// (newline)
 	prog := values.List(values.NewSymbol("newline"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -184,7 +183,7 @@ func TestReadToken(t *testing.T) {
 
 	// (read-token)
 	prog := values.List(values.NewSymbol("read-token"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -208,7 +207,7 @@ func TestReadSyntax(t *testing.T) {
 
 	// (read-syntax)
 	prog := values.List(values.NewSymbol("read-syntax"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -233,7 +232,7 @@ func TestRead(t *testing.T) {
 
 	// (read)
 	prog := values.List(values.NewSymbol("read"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -264,7 +263,7 @@ func TestReadWithPort(t *testing.T) {
 	// First define a variable holding the port, then call read on it
 	// For simplicity, test read-token with no port (uses default)
 	prog := values.List(values.NewSymbol("read-token"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	// Redirect this engine's current-input-port to the test port.
@@ -289,7 +288,7 @@ func TestDisplayWithSymbol(t *testing.T) {
 	// (display 'hello) - symbol
 	prog := values.List(values.NewSymbol("display"),
 		values.List(values.NewSymbol("quote"), values.NewSymbol("hello")))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -311,7 +310,7 @@ func TestWriteWithString(t *testing.T) {
 
 	// (write "hello") - string with quotes
 	prog := values.List(values.NewSymbol("write"), values.NewString("hello"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -333,7 +332,7 @@ func TestWriteCharWithUnicode(t *testing.T) {
 
 	// (write-char #\λ) - unicode character
 	prog := values.List(values.NewSymbol("write-char"), values.NewCharacter('λ'))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -356,7 +355,7 @@ func TestReadMultipleTokens(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	prog := values.List(values.NewSymbol("read-token"))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -379,7 +378,7 @@ func TestDisplayWithInteger(t *testing.T) {
 
 	// (display 123) - integer
 	prog := values.List(values.NewSymbol("display"), values.NewInteger(123))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -401,7 +400,7 @@ func TestDisplayWithBoolean(t *testing.T) {
 
 	// (display #t)
 	prog := values.List(values.NewSymbol("display"), values.TrueValue)
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -424,7 +423,7 @@ func TestWriteWithSymbol(t *testing.T) {
 	// (write 'foo) - symbol
 	prog := values.List(values.NewSymbol("write"),
 		values.List(values.NewSymbol("quote"), values.NewSymbol("foo")))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -464,7 +463,7 @@ func TestDisplayWithList(t *testing.T) {
 	prog := values.List(values.NewSymbol("display"),
 		values.List(values.NewSymbol("quote"),
 			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -488,7 +487,7 @@ func TestWriteWithList(t *testing.T) {
 	prog := values.List(values.NewSymbol("write"),
 		values.List(values.NewSymbol("quote"),
 			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))))
-	err = ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
+	err = ccnt.CompileExpression(cctx, mustDatumToSyntax(sctx, prog))
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))

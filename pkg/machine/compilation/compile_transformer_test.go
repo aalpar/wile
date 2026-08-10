@@ -21,7 +21,6 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
@@ -41,7 +40,7 @@ func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
 			values.NewInteger(42),
 		),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
+	transformerStx := mustDatumToSyntax(sctx, transformer)
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
@@ -58,7 +57,7 @@ func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
 		values.List(values.NewSymbol("stx")),
 		values.List(values.NewSymbol("quote"), values.NewInteger(42)),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
+	transformerStx := mustDatumToSyntax(sctx, transformer)
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
@@ -78,7 +77,7 @@ func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
 			values.NewSymbol("form"),
 		),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
+	transformerStx := mustDatumToSyntax(sctx, transformer)
 
 	result, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
@@ -97,7 +96,7 @@ func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
 		values.NewSymbol("unsupported-keyword"),
 		values.NewInteger(42),
 	)
-	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
+	transformerStx := mustDatumToSyntax(sctx, transformer)
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNotNil)
@@ -110,7 +109,7 @@ func TestCompileTransformerToMachineClosure_NotAPair(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Just a symbol, not a pair
-	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("not-a-list"))
+	transformerStx := mustDatumToSyntax(sctx, values.NewSymbol("not-a-list"))
 
 	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, machine.NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNotNil)
@@ -141,7 +140,7 @@ func TestProceduralMacroExpandTimePath(t *testing.T) {
 			values.List(values.NewSymbol("quote"), values.NewInteger(42)),
 		),
 	)
-	defineSyntaxStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, defineSyntaxExpr).(*syntax.SyntaxPair)
+	defineSyntaxStx := mustDatumToSyntax(sctx, defineSyntaxExpr).(*syntax.SyntaxPair)
 
 	// Use the expand-time path to compile the define-syntax
 	err := compileDefineSyntaxFromSyntax(context.Background(), env, defineSyntaxStx, nil, machine.NewVMMacroEvaluator())

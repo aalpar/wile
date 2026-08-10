@@ -45,7 +45,8 @@ func TestDatumToSyntax_VoidVector(t *testing.T) {
 	// expected outcome is an empty SyntaxVector — same shape the
 	// old Datum()-returns-nil + range-over-nil path produced.
 	sctx := syntax.NewZeroValueSourceContext()
-	result := datumToSyntax(voidVec, sctx)
+	result, err := datumToSyntax(voidVec, sctx)
+	c.Assert(err, qt.IsNil)
 
 	sv, ok := result.(*syntax.SyntaxVector)
 	c.Assert(ok, qt.IsTrue,

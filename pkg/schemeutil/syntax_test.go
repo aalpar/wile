@@ -16,11 +16,13 @@ package schemeutil
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
@@ -42,18 +44,21 @@ func (p *DatumToSyntaxValueSuite) Init(_ *qt.C) {
 }
 
 func (p *DatumToSyntaxValueSuite) TestVoid(c *qt.C) {
-	result := DatumToSyntaxValue(context.Background(), p.sctx, values.Void)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, values.Void)
+	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Equals, syntax.SyntaxVoid)
 }
 
 func (p *DatumToSyntaxValueSuite) TestEmptyList(c *qt.C) {
-	result := DatumToSyntaxValue(context.Background(), p.sctx, values.EmptyList)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, values.EmptyList)
+	c.Assert(err, qt.IsNil)
 	c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue)
 }
 
 func (p *DatumToSyntaxValueSuite) TestSymbol(c *qt.C) {
 	sym := values.NewSymbol("foo")
-	result := DatumToSyntaxValue(context.Background(), p.sctx, sym)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, sym)
+	c.Assert(err, qt.IsNil)
 	synSym, ok := result.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(synSym.Key(), qt.Equals, "foo")
@@ -61,7 +66,8 @@ func (p *DatumToSyntaxValueSuite) TestSymbol(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestProperList(c *qt.C) {
 	list := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
-	result := DatumToSyntaxValue(context.Background(), p.sctx, list)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, list)
+	c.Assert(err, qt.IsNil)
 
 	// Convert back to datum and compare
 	datum := result.UnwrapAll()
@@ -70,7 +76,8 @@ func (p *DatumToSyntaxValueSuite) TestProperList(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestImproperList(c *qt.C) {
 	pair := values.NewCons(values.NewInteger(1), values.NewInteger(2))
-	result := DatumToSyntaxValue(context.Background(), p.sctx, pair)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, pair)
+	c.Assert(err, qt.IsNil)
 
 	// Convert back to datum and compare
 	datum := result.UnwrapAll()
@@ -81,7 +88,8 @@ func (p *DatumToSyntaxValueSuite) TestImproperListLonger(c *qt.C) {
 	// (1 2 . 3)
 	pair := values.NewCons(values.NewInteger(1),
 		values.NewCons(values.NewInteger(2), values.NewInteger(3)))
-	result := DatumToSyntaxValue(context.Background(), p.sctx, pair)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, pair)
+	c.Assert(err, qt.IsNil)
 
 	// Convert back to datum and compare
 	datum := result.UnwrapAll()
@@ -90,7 +98,8 @@ func (p *DatumToSyntaxValueSuite) TestImproperListLonger(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestVector(c *qt.C) {
 	vec := values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
-	result := DatumToSyntaxValue(context.Background(), p.sctx, vec)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, vec)
+	c.Assert(err, qt.IsNil)
 
 	synVec, ok := result.(*syntax.SyntaxVector)
 	c.Assert(ok, qt.IsTrue)
@@ -103,7 +112,8 @@ func (p *DatumToSyntaxValueSuite) TestVector(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestBox(c *qt.C) {
 	box := values.NewBox(values.NewInteger(42))
-	result := DatumToSyntaxValue(context.Background(), p.sctx, box)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, box)
+	c.Assert(err, qt.IsNil)
 
 	synObj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
@@ -116,7 +126,8 @@ func (p *DatumToSyntaxValueSuite) TestBox(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestAlreadySyntax(c *qt.C) {
 	original := syntax.NewSyntaxSymbol("foo", p.sctx)
-	result := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Equals, original)
 }
 
@@ -133,7 +144,8 @@ func (p *DatumToSyntaxValueSuite) TestAlreadySyntaxPair(c *qt.C) {
 		syntax.SyntaxEmptyList,
 		origCtx)
 
-	result := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	c.Assert(err, qt.IsNil)
 
 	// Same pointer: passed through, not rebuilt.
 	c.Assert(result, qt.Equals, original)
@@ -153,7 +165,8 @@ func (p *DatumToSyntaxValueSuite) TestAlreadySyntaxVector(c *qt.C) {
 	original := syntax.NewSyntaxVector(origCtx)
 	original.Values = append(original.Values, syntax.NewSyntaxSymbol("a", origCtx))
 
-	result := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	c.Assert(err, qt.IsNil)
 
 	// Same pointer: passed through, not rebuilt.
 	c.Assert(result, qt.Equals, original)
@@ -163,7 +176,8 @@ func (p *DatumToSyntaxValueSuite) TestAlreadySyntaxVector(c *qt.C) {
 
 func (p *DatumToSyntaxValueSuite) TestInteger(c *qt.C) {
 	num := values.NewInteger(42)
-	result := DatumToSyntaxValue(context.Background(), p.sctx, num)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, num)
+	c.Assert(err, qt.IsNil)
 
 	synObj, ok := result.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
@@ -175,7 +189,8 @@ func (p *DatumToSyntaxValueSuite) TestNestedList(c *qt.C) {
 	list := values.List(
 		values.List(values.NewInteger(1), values.NewInteger(2)),
 		values.List(values.NewInteger(3), values.NewInteger(4)))
-	result := DatumToSyntaxValue(context.Background(), p.sctx, list)
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, list)
+	c.Assert(err, qt.IsNil)
 
 	// Convert back to datum and compare
 	datum := result.UnwrapAll()
@@ -201,7 +216,8 @@ func (p *RoundTripSuite) TestProperList(c *qt.C) {
 		values.NewSymbol("x"),
 		values.NewInteger(42))
 
-	syntaxVal := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	syntaxVal, err := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	c.Assert(err, qt.IsNil)
 	result := syntaxVal.UnwrapAll()
 	c.Assert(result, valuestest.SchemeEquals, original)
 }
@@ -213,11 +229,75 @@ func (p *RoundTripSuite) TestComplexStructure(c *qt.C) {
 		values.List(values.NewSymbol("x"), values.NewSymbol("y")),
 		values.List(values.NewSymbol("+"), values.NewSymbol("x"), values.NewSymbol("y")))
 
-	syntaxVal := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	syntaxVal, err := DatumToSyntaxValue(context.Background(), p.sctx, original)
+	c.Assert(err, qt.IsNil)
 	result := syntaxVal.UnwrapAll()
 	c.Assert(result, valuestest.SchemeEquals, original)
 }
 
 func TestRoundTrip(t *testing.T) {
 	qtsuite.Run(qt.New(t), &RoundTripSuite{})
+}
+
+// TestCdrCycle and the three that follow cover every aggregate arm that
+// recurses. Each of them used to end the HOST PROCESS with `fatal error:
+// stack overflow` — a runtime throw, which no recover can intercept, so an
+// embedder lost every engine in the process rather than one evaluation.
+// The cdr case was different and quieter: the spine walk's ErrCircularList
+// was discarded, the list was silently truncated at the cycle, and the
+// mangled graph surfaced downstream as a diagnostic naming an internal
+// syntax type.
+func (p *DatumToSyntaxValueSuite) TestCdrCycle(c *qt.C) {
+	x := values.List(values.NewInteger(1))
+	x.(*values.Pair).SetCdr(x)
+	_, err := DatumToSyntaxValue(context.Background(), p.sctx, x)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrCircularList), qt.IsTrue)
+}
+
+func (p *DatumToSyntaxValueSuite) TestCarCycle(c *qt.C) {
+	x := values.List(values.NewInteger(1))
+	x.(*values.Pair).SetCar(x)
+	_, err := DatumToSyntaxValue(context.Background(), p.sctx, x)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrCircularList), qt.IsTrue)
+}
+
+func (p *DatumToSyntaxValueSuite) TestVectorSelfReference(c *qt.C) {
+	v := values.NewVector(values.FalseValue)
+	(*v)[0] = v
+	_, err := DatumToSyntaxValue(context.Background(), p.sctx, v)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrCircularList), qt.IsTrue)
+}
+
+func (p *DatumToSyntaxValueSuite) TestBoxSelfReference(c *qt.C) {
+	b := values.NewBox(values.FalseValue)
+	b.Value = b
+	_, err := DatumToSyntaxValue(context.Background(), p.sctx, b)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrCircularList), qt.IsTrue)
+}
+
+// TestCycleOnInnerSpineCell closes the cycle on the third cell rather than
+// the head. A visited set that remembered only the entry point would walk
+// straight past it, which is why every cell of the spine stays marked for
+// the whole walk.
+func (p *DatumToSyntaxValueSuite) TestCycleOnInnerSpineCell(c *qt.C) {
+	x := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+	third := x.(*values.Pair).Cdr().(*values.Pair).Cdr().(*values.Pair)
+	third.SetCdr(x.(*values.Pair).Cdr())
+	_, err := DatumToSyntaxValue(context.Background(), p.sctx, x)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrCircularList), qt.IsTrue)
+}
+
+// TestSharedStructureIsNotACycle is the control that keeps the visited set
+// PATH-scoped. A DAG must still convert; only a true back-edge is refused.
+func (p *DatumToSyntaxValueSuite) TestSharedStructureIsNotACycle(c *qt.C) {
+	shared := values.List(values.NewInteger(1), values.NewInteger(2))
+	result, err := DatumToSyntaxValue(context.Background(), p.sctx, values.List(shared, shared))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.IsNotNil)
+	c.Assert(result.UnwrapAll(), valuestest.SchemeEquals, values.List(shared, shared))
 }
