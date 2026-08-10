@@ -52,7 +52,7 @@ var compileBenchCorpus = []string{
 func newCompileBenchEnv() *environment.EnvironmentFrame {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	for _, name := range []string{"<", ">", "=", "+", "-", "*", "null?", "car", "cdr", "list"} {
-		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypePrimitive, nil)
+		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypeVariable, nil)
 	}
 	return env
 }
