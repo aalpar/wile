@@ -67,7 +67,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 5)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   ";[38;5;"
+   "\x1B;[38;5;"
    (number->string (+ (* 36 red-level) (* 6 green-level) blue-level 16))
    "m"))
 
@@ -101,7 +101,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 255)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   ";[38;2;"
+   "\x1B;[38;2;"
    (number->string red-level) ";"
    (number->string green-level) ";"
    (number->string blue-level)
@@ -232,7 +232,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 5)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   ";[48;5;"
+   "\x1B;[48;5;"
    (number->string (+ (* 36 red-level) (* 6 green-level) blue-level 16))
    "m"))
 
@@ -266,7 +266,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 255)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   ";[48;5;"
+   "\x1B;[48;2;"
    (number->string red-level) ";"
    (number->string green-level) ";"
    (number->string blue-level)

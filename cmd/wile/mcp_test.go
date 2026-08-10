@@ -48,7 +48,32 @@ func resultText(c *qt.C, res *mcp.CallToolResult) string {
 
 // newTestServer creates a fresh mcpServer for testing.
 func newTestServer() *mcpServer {
-	return &mcpServer{}
+	return newMCPServer()
+}
+
+// shortenLockWait shrinks the session-acquire bound for the duration of a test,
+// so a contention arm does not have to wait out the production bound.
+func shortenLockWait(t *testing.T, d time.Duration) {
+	t.Helper()
+	prev := mcpLockWait
+	mcpLockWait = d
+	t.Cleanup(func() {
+		mcpLockWait = prev
+	})
+}
+
+// waitForSessionHeld blocks until the session semaphore is taken, so a
+// contention arm genuinely contends rather than racing ahead of the holder.
+func waitForSessionHeld(c *qt.C, srv *mcpServer) {
+	c.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(srv.mu) == 1 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	c.Fatalf("session was never taken")
 }
 
 // --- handleEval tests ---
@@ -288,11 +313,15 @@ func TestHandleSetTimeout(t *testing.T) {
 			wantTimeout: 60 * time.Second,
 		},
 		{
-			name:            "disable with 0",
+			// 0 stores a zero default, which handleEval reads as "no
+			// caller-supplied deadline" and bounds by mcpMaxEvalTimeout. The
+			// message must say so: "disabled" was the wording that described
+			// the unbounded hold, and it is no longer true.
+			name:            "0 means the server maximum, not unbounded",
 			initTimeout:     30 * time.Second,
 			args:            map[string]any{"seconds": 0.0},
 			wantTimeout:     0,
-			wantTextContain: "disabled",
+			wantTextContain: "maximum",
 		},
 		{
 			name:      "missing param",
@@ -739,18 +768,20 @@ func TestInitLocked_Idempotent(t *testing.T) {
 	srv := newTestServer()
 	ctx := context.Background()
 
-	srv.mu.Lock()
+	held := srv.acquire(ctx)
+	c.Assert(held, qt.IsTrue)
 	err := srv.initLocked(ctx)
-	srv.mu.Unlock()
+	srv.release()
 	c.Assert(err, qt.IsNil)
 
 	// Save the engine pointer.
 	engine1 := srv.engine
 
 	// Call again — should be a no-op.
-	srv.mu.Lock()
+	held = srv.acquire(ctx)
+	c.Assert(held, qt.IsTrue)
 	err = srv.initLocked(ctx)
-	srv.mu.Unlock()
+	srv.release()
 	c.Assert(err, qt.IsNil)
 	c.Assert(srv.engine, qt.Equals, engine1,
 		qt.Commentf("second initLocked should not recreate the engine"))
@@ -777,12 +808,84 @@ func TestHandleEval_PerCallTimeoutOverridesDefault(t *testing.T) {
 	srv.defaultTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 
-	// Per-call timeout of 0 disables timeout entirely,
-	// but we still need a finite test. Use a short expression instead.
+	// Per-call timeout of 0 means "no caller-supplied deadline" and overrides
+	// the session default; it is bounded by mcpMaxEvalTimeout rather than
+	// unbounded, so a short expression is what this arm needs.
 	res, err := srv.handleEval(ctx, toolReq(map[string]any{
 		"code":    "(+ 1 1)",
 		"timeout": 0.0,
 	}))
 	c.Assert(err, qt.IsNil)
 	c.Assert(res.IsError, qt.IsFalse)
+}
+
+// TestHandleEval_ZeroTimeoutDoesNotWedgeServer pins the liveness invariant:
+// the server remains able to serve further requests regardless of any per-call
+// timeout value.
+//
+// A single eval carrying "timeout":0 used to set evalTimeout = 0, skip
+// context.WithTimeout entirely, and hold p.mu for the life of the process. Every
+// later handler blocked on p.mu.Lock(), and because mcp-go handles non-tool
+// messages inline on its read loop (stdio.go), the first blocked request stopped
+// the server reading ANY further stdin message. A default-configured
+// (--mcp-timeout 30) server was wedged permanently by one call, with no server
+// flag and no prior tool call.
+//
+// Gate NOT covered here: the in-Run() block Wave 3 §1.2 70a introduces. The VM's
+// cancellation poll fires only BETWEEN instructions, so a Scheme break thunk
+// invoked below the poll cannot be interrupted by ctx at all. That is why the
+// bounded semaphore acquire, not ctx cancellation, is the primary mechanism --
+// but this test predates that code path and cannot exercise it.
+func TestHandleEval_ZeroTimeoutDoesNotWedgeServer(t *testing.T) {
+	c := qt.New(t)
+	shortenLockWait(t, 500*time.Millisecond)
+	srv := newTestServer()
+
+	// The looping eval is cancelled through its own request context when the
+	// test ends, so the goroutine does not outlive the test.
+	evalCtx, cancelEval := context.WithCancel(context.Background())
+	defer cancelEval()
+
+	evalReturned := make(chan struct{})
+	go func() {
+		defer close(evalReturned)
+		_, _ = srv.handleEval(evalCtx, toolReq(map[string]any{
+			"code":    "(let loop () (loop))",
+			"timeout": 0.0,
+		}))
+	}()
+
+	// Wait for the eval to actually be running under the session lock, so the
+	// second request genuinely contends rather than racing ahead of it.
+	waitForSessionHeld(c, srv)
+
+	secondReturned := make(chan struct{})
+	var secondResult *mcp.CallToolResult
+	go func() {
+		defer close(secondReturned)
+		secondResult, _ = srv.handleReset(context.Background(), toolReq(nil))
+	}()
+
+	select {
+	case <-secondReturned:
+	case <-time.After(10 * time.Second):
+		// Observed at 003b3353: this branch is taken -- the second request
+		// never returns.
+		t.Fatal("second request never returned: the session lock is held without bound")
+	}
+
+	// It must return the busy answer, not block and not silently succeed while
+	// the eval is still running.
+	c.Assert(secondResult.IsError, qt.IsTrue)
+	c.Assert(strings.Contains(resultText(c, secondResult), "server busy"), qt.IsTrue,
+		qt.Commentf("got: %s", resultText(c, secondResult)))
+
+	// The eval is still holding the session; cancelling its request context
+	// releases it, which also proves the hold is not permanent.
+	cancelEval()
+	select {
+	case <-evalReturned:
+	case <-time.After(10 * time.Second):
+		t.Fatal("cancelling the eval's request context did not release the session")
+	}
 }
