@@ -15,7 +15,6 @@
 package values
 
 import (
-	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -115,106 +114,19 @@ func ExactnessOf(n Number) Exactness {
 	return Inexact
 }
 
-// IntegerEqualsFloat compares an exact integer to an inexact float.
-// Returns true only if the float exactly represents the integer value.
+// NumericEquals implements R7RS `=` semantics for two numbers.
 //
-// R7RS §6.2.5: Numeric equality must not lose precision. An exact integer
-// and an inexact float are equal only if the float exactly represents
-// the integer's value.
-func IntegerEqualsFloat(i *Integer, f *Float) bool {
-	// NaN is not equal to anything
-	if math.IsNaN(f.Value) {
-		return false
-	}
-	// Infinity cannot equal any integer
-	if math.IsInf(f.Value, 0) {
-		return false
-	}
-	// Non-integer floats cannot equal integers
-	if f.Value != math.Trunc(f.Value) {
-		return false
-	}
-	// For integers within float64's exact range (|n| <= 2^53), direct compare
-	const maxExactFloat64Int = int64(1) << 53
-	if i.Value >= -maxExactFloat64Int && i.Value <= maxExactFloat64Int {
-		return float64(i.Value) == f.Value
-	}
-	// For larger integers, convert float to big.Rat and compare exactly
-	r := new(big.Rat).SetFloat64(f.Value)
-	if r == nil || !r.IsInt() {
-		return false
-	}
-	return r.Num().Int64() == i.Value
-}
-
-// BigIntegerEqualsFloat compares a BigInteger to a Float.
-// Returns true only if the float exactly represents the BigInteger value.
-func BigIntegerEqualsFloat(bi *BigInteger, f *Float) bool {
-	if math.IsNaN(f.Value) || math.IsInf(f.Value, 0) {
-		return false
-	}
-	if f.Value != math.Trunc(f.Value) {
-		return false
-	}
-	r := new(big.Rat).SetFloat64(f.Value)
-	if r == nil || !r.IsInt() {
-		return false
-	}
-	return bi.BigInt().Cmp(r.Num()) == 0
-}
-
-// NumericEquals implements R7RS = semantics for two numbers.
+// R7RS §6.2.6: `=` returns #t if its arguments are numerically equal. It is one
+// of the five predicates derived from CompareNumbers (compare.go) and it accepts
+// exactly one of that kernel's four verdicts, so it agrees with `<`, `>`, `<=`
+// and `>=` by construction rather than by two implementations happening to
+// coincide.
 //
-// R7RS §6.2.5: The = procedure returns #t if its arguments are numerically
-// equal. For IEEE 754 floats: infinities of the same sign are equal, NaN is
-// not equal to anything (including itself). Cross-type Integer/BigInteger vs
-// Float comparisons go through the exact-precision helpers above so no
-// precision is lost; all other type pairs fall back to subtraction.
+// This used to be a hand-written ladder of type pairs -- Integer/Float and
+// BigInteger/Float got exact arms, everything else fell through to
+// a.Subtract(b).IsZero(). Subtract routes through the CONTAGION table, so
+// Rational vs Float rounded the exact operand and answered #t for two distinct
+// numbers, and Inf - Inf is NaN so an infinity was not equal to itself.
 func NumericEquals(a, b Number) bool {
-	// Handle Float specially due to IEEE 754 infinity and NaN.
-	af, aIsFloat := a.(*Float)
-	bf, bIsFloat := b.(*Float)
-	if aIsFloat && bIsFloat {
-		// NaN != NaN per IEEE 754.
-		if math.IsNaN(af.Value) || math.IsNaN(bf.Value) {
-			return false
-		}
-		// Direct comparison handles infinities correctly.
-		return af.Value == bf.Value
-	}
-
-	// Handle Integer vs Float specially to preserve precision.
-	intA, ok := a.(*Integer)
-	if ok {
-		floatB, ok := b.(*Float)
-		if ok {
-			return IntegerEqualsFloat(intA, floatB)
-		}
-	}
-	intB, ok := b.(*Integer)
-	if ok {
-		floatA, ok := a.(*Float)
-		if ok {
-			return IntegerEqualsFloat(intB, floatA)
-		}
-	}
-
-	// Handle BigInteger vs Float.
-	bigA, ok := a.(*BigInteger)
-	if ok {
-		floatB, ok := b.(*Float)
-		if ok {
-			return BigIntegerEqualsFloat(bigA, floatB)
-		}
-	}
-	bigB, ok := b.(*BigInteger)
-	if ok {
-		floatA, ok := a.(*Float)
-		if ok {
-			return BigIntegerEqualsFloat(bigB, floatA)
-		}
-	}
-
-	// For other types, use subtraction.
-	return a.Subtract(b).IsZero()
+	return CompareNumbers(a, b) == OrderEqual
 }

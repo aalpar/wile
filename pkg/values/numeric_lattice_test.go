@@ -178,9 +178,10 @@ func Join(a, b TypeClass) TypeClass {
 //
 //	(= (- (expt 2 100) 1) (exact->inexact (expt 2 100)))  =>  #f, not #t
 //
-// That rule now lives in values.comparisonTable, reachable as
-// values.ComparisonResultKind and exercised by TestLattice_PrecisionLoss's
-// comparison subtest below.
+// That rule now lives in values.CompareNumbers, which reaches a common domain by
+// lifting the INEXACT operand to its exact rational rather than by promoting to
+// a kind at all. Exercised by TestLattice_PrecisionLoss's comparison subtest
+// below.
 func maxPrecision(a, b PrecisionRank) PrecisionRank {
 	if a > b {
 		return a
@@ -756,10 +757,10 @@ func TestLattice_PrecisionLoss(t *testing.T) {
 				"to it; if the comparison rounded the bignum to float64 both would "+
 				"collapse to equal"))
 
-		// The comparison table is what buys this, and it differs from the arithmetic
-		// table on exactly this pair.
-		c.Assert(values.ComparisonResultKind(values.KindBigInteger, values.KindFloat),
-			qt.Equals, values.KindBigFloat)
+		// values.CompareNumbers is what buys this. Arithmetic still contaminates
+		// down to Float on the same pair, which is the asymmetry the two halves of
+		// this subtest exist to hold apart.
+		c.Assert(values.CompareNumbers(exactMinusOne, inexact), qt.Equals, values.OrderLess)
 		c.Assert(values.PromotionResultKind(values.KindBigInteger, values.KindFloat),
 			qt.Equals, values.KindFloat)
 	})

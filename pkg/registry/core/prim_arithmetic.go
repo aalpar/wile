@@ -65,12 +65,20 @@ func PrimDiv(mc machine.CallContext) error {
 		})
 }
 
+// The five numeric comparison primitives are DERIVED, each from one or two of
+// values.CompareNumbers' four verdicts. They are written this way so they cannot
+// disagree: `=` used to be a separate implementation from `<`, and the two
+// answered #f and #f for a pair where <= and >= both answered #t.
+//
+// NaN needs no special case here. It is the kernel's OrderUnordered, which none
+// of the five accepts.
+
 // PrimNumEq implements the = primitive.
 //
 // R7RS §6.2.6: Returns #t if its arguments are numerically equal.
 func PrimNumEq(mc machine.CallContext) error {
 	return helpers.NumericChainCompare(mc, "=", func(prev, curr values.Number) bool {
-		return !values.NumericEquals(prev, curr)
+		return values.CompareNumbers(prev, curr) != values.OrderEqual
 	})
 }
 
@@ -79,7 +87,7 @@ func PrimNumEq(mc machine.CallContext) error {
 // R7RS §6.2.6: Ordering comparisons require real arguments.
 func PrimNumLt(mc machine.CallContext) error {
 	return helpers.NumericChainCompareReal(mc, "<", func(prev, curr values.Number) bool {
-		return !prev.LessThan(curr)
+		return values.CompareNumbers(prev, curr) != values.OrderLess
 	})
 }
 
@@ -88,7 +96,7 @@ func PrimNumLt(mc machine.CallContext) error {
 // R7RS §6.2.6: Ordering comparisons require real arguments.
 func PrimNumGt(mc machine.CallContext) error {
 	return helpers.NumericChainCompareReal(mc, ">", func(prev, curr values.Number) bool {
-		return !curr.LessThan(prev)
+		return values.CompareNumbers(prev, curr) != values.OrderGreater
 	})
 }
 
@@ -98,11 +106,8 @@ func PrimNumGt(mc machine.CallContext) error {
 // IEEE 754: Any comparison with NaN returns #f.
 func PrimNumLe(mc machine.CallContext) error {
 	return helpers.NumericChainCompareReal(mc, "<=", func(prev, curr values.Number) bool {
-		// NaN fails all comparisons per IEEE 754
-		if prev.IsNaN() || curr.IsNaN() {
-			return true
-		}
-		return curr.LessThan(prev)
+		v := values.CompareNumbers(prev, curr)
+		return v != values.OrderLess && v != values.OrderEqual
 	})
 }
 
@@ -112,11 +117,8 @@ func PrimNumLe(mc machine.CallContext) error {
 // IEEE 754: Any comparison with NaN returns #f.
 func PrimNumGe(mc machine.CallContext) error {
 	return helpers.NumericChainCompareReal(mc, ">=", func(prev, curr values.Number) bool {
-		// NaN fails all comparisons per IEEE 754
-		if prev.IsNaN() || curr.IsNaN() {
-			return true
-		}
-		return prev.LessThan(curr)
+		v := values.CompareNumbers(prev, curr)
+		return v != values.OrderGreater && v != values.OrderEqual
 	})
 }
 

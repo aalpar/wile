@@ -42,10 +42,11 @@ var (
 //
 // # Precision Preservation
 //
-// COMPARISON with a Float is lossless: comparisonTable (promotion.go) promotes
-// both operands to BigFloat, so a BigInteger with more than 53 significant bits
-// is not truncated into the Float's mantissa. Comparing 2^53+1 with 2^53.0 would
-// otherwise report equality, both operands having landed on the same float64.
+// COMPARISON with a Float is lossless: CompareNumbers (compare.go) lifts the
+// FLOAT to its exact rational rather than rounding the BigInteger, so a
+// BigInteger with more than 53 significant bits is not truncated into the
+// Float's mantissa. Comparing 2^53+1 with 2^53.0 would otherwise report
+// equality, both operands having landed on the same float64.
 //
 // ARITHMETIC with a Float does NOT promote to BigFloat. It follows R7RS §6.2.2
 // exactness contagion to the inexact operand's own kind (promotionTable Zone 2),
