@@ -111,12 +111,11 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// three reflective doors around the compiler's own immutability gate
 	// (Engine.Define, Engine.RegisterPrimitive, namespace-define!). This site is
 	// INSIDE the compiler, and a phase-1 define is R7RS-legal here whatever the name.
-	// It no longer meets a Stable binding at matching coordinates anyway: the
-	// registry's expand-phase copies live at (1, sealed) (registry.Apply's
-	// phaseTargets), so a create for the same name lands on a fresh (1, mutable)
-	// slot and SHADOWS the copy — the phase-1 twin of a phase-0 define over a sealed
-	// primitive, pinned by three rows of TestBindingModelMatrix ("define-for-syntax
-	// ... expand copy ...").
+	// The one Stable-stamped phase-1 population is the registry's expand-phase
+	// copies, and those live at (1, sealed) (registry.Apply's phaseTargets), so a
+	// create for the same name lands on a fresh (1, mutable) slot and SHADOWS the
+	// copy — the phase-1 twin of a phase-0 define over a sealed primitive. Pinned by
+	// TestBindingModelMatrix's three M7 rows.
 	gi, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable, nil)
 	err = expandEnv.GlobalEnvironment().SetOwnGlobalValue(gi, result)
 	if err != nil {

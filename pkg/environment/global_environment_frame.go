@@ -64,9 +64,9 @@ import (
 // the moment the slot STOPS living: a delete nils it, the pin falls through to
 // re-resolution, and the query alone says which hygiene boundary to stay inside
 // but nothing about which phase or tier. Without them re-resolution is
-// phase-blind, and a pin addressing (0, mutable) re-heals onto a (1, mutable)
-// slot of the same name — the phase-1 registry copy of a primitive, in the case
-// that motivated recording them.
+// phase-blind, and a pin addressing (0, mutable) re-heals onto any other slot of
+// the same name — in the case that motivated recording them, the registry's
+// phase-1 copy of a primitive, which sat at (1, mutable) then and is sealed now.
 type GlobalIndex struct {
 	Index  *values.Symbol
 	Env    *GlobalEnvironmentFrame

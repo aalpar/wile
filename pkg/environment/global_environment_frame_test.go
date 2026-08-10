@@ -737,7 +737,10 @@ func TestStalePinHealsUseTheirCoordinates(t *testing.T) {
 	store := ns.Store()
 	sym := values.NewSymbol("dual")
 
-	// The same name at three coordinates, as a dual-phase primitive has them.
+	// The same name at three coordinates. A real dual-phase primitive's phase-1
+	// copy is sealed rather than mutable (registry.Apply's phaseTargets); the
+	// mutable one here is the harder case, since it is the slot a phase-blind
+	// heal would actually reach.
 	mustDefine(c, ns.Runtime().SealedWriteViewAt(PhaseRuntime), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
 	mustDefine(c, ns.AtPhase(PhaseExpand), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(2))
 	pin := mustDefine(c, runtime, sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(3))

@@ -962,9 +962,10 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 	// seal, so no define-syntax-defined macro (bootstrap or user) was reachable —
 	// only special forms handled by the primitive expanders. Post-fold there is one
 	// store, and Copy() has no way to copy part of it, so a report env also inherits
-	// the (1, sealed) bootstrap macros and (1, mutable)/(2, mutable) registry and
-	// compile-time bindings. That means derived syntax (cond, when, case, do, …) is
-	// reachable through scheme-report-environment where it previously was not — an
+	// the (1, sealed) bootstrap macros, primitive expanders and registry expand
+	// copies, plus the (2, mutable) compile-time bindings. That means derived syntax
+	// (cond, when, case, do, …) is reachable through
+	// scheme-report-environment where it previously was not — an
 	// accepted widening, not a bug: R5RS §6.5 specifies that the report environment
 	// supplies the report's bindings, and cond/when/case/do are R5RS derived
 	// expressions. Pinned in binding_model_matrix_test.go ("report env reaches

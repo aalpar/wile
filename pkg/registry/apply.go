@@ -75,9 +75,9 @@ func WithStableBasePrimitives() ApplyOption {
 
 // WithRuntimeTarget routes PhaseRuntime primitive registration and global values
 // into the given frame instead of env. frame is the sealed-write root view — used
-// by bootstrap to seat primitives in the immutable sealed-write view while
-// expand-phase prims go to the phase-1 sealed-write view (which Apply derives
-// itself, from env) and compile-time bindings stay in
+// by bootstrap to seat primitives in the immutable sealed-write view. This option
+// covers phase 0 only: expand-phase prims go to the phase-1 sealed-write view,
+// which Apply derives from env itself, and compile-time bindings stay in
 // env.Compile(). Defaults to env when unset, but LoadBootstrapCore always sets
 // it, for the engine root and every library env alike — each into its OWN
 // phase-0 sealed-write view (SealedWriteViewAt(PhaseRuntime)); there is no
@@ -296,13 +296,17 @@ func registerPhasePrimitive(bindingEnv, closureEnv *environment.EnvironmentFrame
 	// primitive here would be pointless (it is not CaptureSafe) and is excluded. The
 	// set!-gate (compile_validated.go) then makes the trust a guarantee.
 	//
-	// The stamp is sound at BOTH phases, and for the same reason. Stable asserts a
-	// closed writer set over this slot, which holds only because bindingEnv is a
-	// sealed-write view at either phase: no legal program writes there. A user
-	// define lands at (0, mutable) and a define-for-syntax at (1, mutable) — other
-	// coordinates, so both are shadows. While the expand row wrote through
-	// env.Expand() the phase-1 half of that argument was false: a top-level
-	// define-for-syntax superseded this very slot with the stamp still on it.
+	// The stamp is sound at BOTH phases, and for the same reason: bindingEnv is a
+	// sealed-write view at either phase, so no legal program writes this slot. A
+	// user define lands at (0, mutable) and a define-for-syntax at (1, mutable) —
+	// other coordinates, hence shadows. That is the whole content of Stable, which
+	// asserts the writer set is closed. Both halves are needed and only the caller
+	// supplies the first: LoadBootstrapCore pairs WithStableBasePrimitives with
+	// WithRuntimeTarget, and without the latter the phase-0 row binds into the
+	// MUTABLE env and the stamp asserts something false there. While the expand row
+	// wrote through env.Expand() the phase-1 half was false in the shipped
+	// configuration: a top-level define-for-syntax superseded this very slot with
+	// the stamp still on it.
 	if cfg.stableBase && !spec.InvokesProcedure {
 		b.UpdateMeta(func(m *environment.BindingMeta) bool {
 			m.Stable = true
