@@ -74,13 +74,82 @@ func isSchemeFile(name string) bool {
 }
 
 // isAuthorized reports whether the security authorizer permits loading the
-// given path. Returns true when no authorizer is configured (open sandbox).
-func isAuthorized(auth security.Authorizer, target string) bool {
+// given path, drawn from source (empty = the host OS filesystem).
+// Returns true when no authorizer is configured (open sandbox).
+func isAuthorized(auth security.Authorizer, target, source string) bool {
 	return security.CheckWithAuthorizer(auth, security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   target,
+		Resource:     security.ResourceCode,
+		Action:       security.ActionLoad,
+		Target:       target,
+		TargetSource: source,
 	}) == nil
+}
+
+// IsNotFound reports whether err means the file is genuinely absent, which is
+// the only condition that licenses continuing a search: falling through to the
+// next resolver in a chain, or from a library's .sld to its .scm.
+//
+// It accepts both sentinels because both are minted for absence and neither
+// implies the other: werr.ErrFileNotFound is a bare static sentinel with no
+// fs.ErrNotExist in its chain, and a raw fs.ErrNotExist arrives from the
+// virtual-filesystem side without ever being relabelled.
+func IsNotFound(err error) bool {
+	return errors.Is(err, werr.ErrFileNotFound) || errors.Is(err, fs.ErrNotExist)
+}
+
+// authorizeCandidates walks candidates in search order, authorizing each one
+// BEFORE open is allowed to touch it, and returns the first candidate that is
+// both permitted and present.
+//
+// The ordering is the point. Locating a candidate first and gating afterwards
+// hands out an oracle (a denied path that exists answers differently from one
+// that does not) and, when open blocks or has side effects — a FIFO under
+// os.DirFS, an embedder's instrumented fs.FS — performs the very act the
+// authorizer was about to refuse. Here a refusal costs the candidate nothing.
+//
+// A denial does not abort the search: a later search directory may hold a
+// permitted copy. The FIRST denial is remembered and reported only if no
+// candidate succeeds, so denied-and-existent and denied-and-absent are
+// indistinguishable. Absence continues the search; any other open failure is
+// propagated with its cause, never relabelled as absence.
+//
+// source labels the namespace the candidates are drawn from; see
+// security.AccessRequest.TargetSource. Returns sourceload.ErrNotFound when
+// every candidate was absent, so the caller can build its own searched-dirs
+// diagnostic.
+func authorizeCandidates(
+	auth security.Authorizer,
+	source string,
+	candidates []string,
+	open func(candidate string) (fs.File, error),
+) (fs.File, string, error) {
+	var denied error
+	for _, candidate := range candidates {
+		authErr := security.CheckWithAuthorizer(auth, security.AccessRequest{
+			Resource:     security.ResourceCode,
+			Action:       security.ActionLoad,
+			Target:       candidate,
+			TargetSource: source,
+		})
+		if authErr != nil {
+			if denied == nil {
+				denied = authErr
+			}
+			continue
+		}
+		f, openErr := open(candidate)
+		if openErr == nil {
+			return f, candidate, nil
+		}
+		if errors.Is(openErr, fs.ErrNotExist) {
+			continue
+		}
+		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileOpen, openErr, "open %s", candidate)
+	}
+	if denied != nil {
+		return nil, "", denied
+	}
+	return nil, "", sourceload.ErrNotFound
 }
 
 // osSearchDirs returns the fallback directory list for OS-based file search.
@@ -145,7 +214,7 @@ func WalkOSSchemeFiles(baseDir string, auth security.Authorizer, fn func(relPath
 			return nil
 		}
 		absPath, absErr := filepath.Abs(path)
-		if walkErr != nil || absErr != nil || !isSchemeFile(d.Name()) || !isAuthorized(auth, absPath) {
+		if walkErr != nil || absErr != nil || !isSchemeFile(d.Name()) || !isAuthorized(auth, absPath, "") {
 			return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
 		}
 		rel, relErr := filepath.Rel(baseDir, path)

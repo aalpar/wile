@@ -19,6 +19,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestOSFileResolver_RelativeArmGatesBeforeOpen proves the ordering rather than
@@ -63,6 +65,69 @@ func TestOSFileResolver_RelativeArmGatesBeforeOpen(t *testing.T) {
 		// so the test binary will leak it. That is the defect, made visible.
 		t.Fatal("ResolveAndOpen blocked: the file was opened before the authorizer denied it")
 	}
+}
+
+// TestFSFileResolver_GatesBeforeOpen is the FS twin of the test above, and
+// proves the same ordering the same way: the only candidate is a FIFO, so an
+// open that precedes the gate blocks until a writer appears. The FS resolver
+// used to find the file through sourceload.Finder — which opens to decide
+// existence — and consult the authorizer only afterwards.
+func TestFSFileResolver_GatesBeforeOpen(t *testing.T) {
+	dir := realDir(t, t.TempDir())
+	err := syscall.Mkfifo(filepath.Join(dir, "trap.scm"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	r := NewFSFileResolver(os.DirFS(dir), ns.Runtime())
+
+	errc := make(chan error, 1)
+	go func() {
+		_, _, resolveErr := r.ResolveAndOpen(context.Background(), "trap.scm")
+		errc <- resolveErr
+	}()
+
+	select {
+	case resolveErr := <-errc:
+		qt.Assert(t, resolveErr, qt.IsNotNil)
+		qt.Assert(t, errors.Is(resolveErr, security.ErrAccessDenied), qt.IsTrue)
+	case <-time.After(5 * time.Second):
+		// The goroutine is stuck inside open(2) on the FIFO; it never returns,
+		// so the test binary will leak it. That is the defect, made visible.
+		t.Fatal("ResolveAndOpen blocked: the file was opened before the authorizer denied it")
+	}
+}
+
+// TestOSFileResolver_StatPermissionIsNotNotFound pins the other half of the
+// fall-through protocol on the OS side. A stat that fails with EACCES says
+// nothing about whether the file exists, so reporting it as not-found both lies
+// to the caller and lets the search continue into a lower-priority directory.
+func TestOSFileResolver_StatPermissionIsNotNotFound(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permission bits")
+	}
+	base := realDir(t, t.TempDir())
+	locked := filepath.Join(base, "locked")
+	err := os.Mkdir(locked, 0o755)
+	qt.Assert(t, err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(locked, "hidden.scm"), []byte("(display 1)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+	err = os.Chmod(locked, 0o000)
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = os.Chmod(locked, 0o755)
+	})
+
+	t.Setenv(SchemeIncludePathEnv, base)
+	ns := environment.NewNamespace()
+	r := NewOSFileResolver(ns.Runtime())
+
+	_, _, err = r.ResolveAndOpen(context.Background(), "locked/hidden.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse,
+		qt.Commentf("EACCES on the parent directory is not an absence"))
+	qt.Assert(t, errors.Is(err, fs.ErrPermission), qt.IsTrue,
+		qt.Commentf("the cause must survive the wrap"))
 }
 
 // TestOSFileResolver_SymlinkEscapeDeniedUnconfined proves the non-confining arm

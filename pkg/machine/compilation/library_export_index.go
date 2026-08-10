@@ -279,8 +279,15 @@ func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistr
 
 // tryParseLibrary opens and parses a single library file, returning its
 // summary. Tries .sld first, falling back to .scm on file-not-found.
-// Returns (nil, nil) when neither file exists. Returns a non-nil error
+// Returns (nil, nil) when the resolver reports absence. Returns a non-nil error
 // for security denials, I/O failures, or parse errors.
+//
+// "Absence" is narrower than it reads: a search in which every candidate was
+// DENIED now reports the denial rather than not-found, because the resolver no
+// longer distinguishes a denied path that exists from one that does not. That
+// costs the index nothing in practice — BuildExportIndex only calls this for
+// paths EnumerateFiles already authorized, and a later permitted candidate that
+// opens discards the recorded denial.
 func tryParseLibrary(ctx context.Context, resolver FileResolver, name LibraryName) (*LibrarySummary, error) {
 	f, filePath, err := ResolveLibraryFile(ctx, resolver, name)
 	if err != nil {

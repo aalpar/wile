@@ -23,7 +23,6 @@ package compilation
 import (
 	"cmp"
 	"context"
-	"errors"
 	"io/fs"
 	"maps"
 	"slices"
@@ -399,7 +398,9 @@ func FilePathToLibraryName(path string) (LibraryName, error) {
 
 // ResolveLibraryFile resolves a library name to an open file handle,
 // trying each extension in libraryExtensions order.
-// Non-file-not-found errors (security denial, I/O) propagate immediately.
+// Non-file-not-found errors (security denial, I/O) propagate immediately: only
+// the ABSENCE of the .sld licenses trying the .scm, or an unreadable .sld would
+// silently be replaced by a readable file of the same name.
 func ResolveLibraryFile(ctx context.Context, res FileResolver, name LibraryName) (fs.File, string, error) {
 	basePath := name.Key()
 	var lastErr error
@@ -408,7 +409,7 @@ func ResolveLibraryFile(ctx context.Context, res FileResolver, name LibraryName)
 		if err == nil {
 			return f, filePath, nil
 		}
-		if !errors.Is(err, werr.ErrFileNotFound) {
+		if !resolver.IsNotFound(err) {
 			return nil, "", err
 		}
 		lastErr = err

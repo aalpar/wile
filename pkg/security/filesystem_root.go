@@ -30,12 +30,27 @@ import (
 // code:eval (dynamic (eval <datum>)/(compile <datum>)) is denied outright: its
 // Target is a label, not a path, so there is nothing to confine. Use
 // ConsoleWithLoadAuthorizer if sandboxed eval is required.
+//
+// A target drawn from a virtual filesystem (AccessRequest.TargetSource set) is
+// likewise denied outright. Use FilesystemRootWithVirtualSources to serve one.
 func FilesystemRoot(root string) Authorizer {
 	return &filesystemRootAuthorizer{root: root}
 }
 
+// FilesystemRootWithVirtualSources returns a FilesystemRoot authorizer that
+// additionally serves targets drawn from a virtual filesystem (an embedder's
+// WithSourceFS). It applies NO path confinement to those targets: a virtual
+// path has no relation to the host filesystem, so root cannot bound it. The
+// embedder is asserting that the fs.FS it supplied is itself the boundary.
+//
+// Host-filesystem targets are confined to root exactly as under FilesystemRoot.
+func FilesystemRootWithVirtualSources(root string) Authorizer {
+	return &filesystemRootAuthorizer{root: root, allowVirtualSources: true}
+}
+
 type filesystemRootAuthorizer struct {
-	root string
+	root                string
+	allowVirtualSources bool
 }
 
 func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
@@ -59,9 +74,26 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	// (consoleWithLoadAuthorizer answers the same question the same way — on the
 	// action — and ALLOWS, because permitting eval under /tmp is that profile's
 	// whole point. What neither may do is ask containedInRoot about a non-path.)
+	//
+	// A virtual-filesystem target is the same mistake in the other axis: "evil.scm"
+	// inside an embedder's WithSourceFS is a complete path in ITS namespace, and
+	// containedInRoot resolves it against the process CWD, so an untrusted fs.FS
+	// was admitted whenever the host happened to run inside its own root. So this
+	// too is decided on the DISCRIMINATOR and never reaches containedInRoot —
+	// including in the allow direction, or the opt-in variant would inherit the
+	// same coincidence it exists to escape.
 	if req.Action == ActionEval {
 		return werr.WrapForeignErrorf(ErrAccessDenied,
 			"code:eval is not permitted under a filesystem-root authorizer")
+	}
+
+	if req.TargetSource != "" {
+		if p.allowVirtualSources {
+			return nil
+		}
+		return werr.WrapForeignErrorf(ErrAccessDenied,
+			"target %q comes from virtual source %q, not the host filesystem",
+			req.Target, req.TargetSource)
 	}
 
 	if !containedInRoot(p.root, req.Target) {

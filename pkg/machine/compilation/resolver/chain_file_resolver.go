@@ -50,7 +50,7 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 		if err == nil {
 			return f, resolved, nil
 		}
-		if !errors.Is(err, werr.ErrFileNotFound) {
+		if !IsNotFound(err) {
 			return nil, "", err
 		}
 		lastErr = err

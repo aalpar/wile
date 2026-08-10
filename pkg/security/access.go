@@ -29,6 +29,15 @@ type AccessRequest struct {
 	Resource string
 	Action   string
 	Target   string
+	// TargetSource names the namespace Target is drawn from. The zero value is
+	// the host OS filesystem — the only kind that existed before this field, so
+	// no built-in authorizer changes meaning for a request that omits it. A
+	// non-empty value (today only SourceVirtualFS) says Target is a path inside
+	// a virtual fs.FS supplied through WithSourceFS, and is therefore meaningless
+	// to OS path containment: "evil.scm" names a file in that fs.FS, while
+	// resolving it as an OS path silently reinterprets it against the process
+	// working directory.
+	TargetSource string
 }
 
 // Well-known resource constants. Extensions may define additional
@@ -63,6 +72,14 @@ const (
 	StreamStdout = "stdout"
 	StreamStderr = "stderr"
 )
+
+// SourceVirtualFS is the TargetSource of a path served by a virtual filesystem
+// (an embedder's WithSourceFS). It is the only named source: an fs.FS is an
+// anonymous interface value with no name to report, and deriving one from its
+// Go type would make the authorizer's answer depend on the embedder's type
+// names. There is deliberately no wildcard — "any source" is the zero value's
+// absence of a claim, not a value.
+const SourceVirtualFS = "virtual-fs"
 
 // Well-known action constants. Extensions may define additional
 // actions without modifying this package.

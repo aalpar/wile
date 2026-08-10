@@ -88,7 +88,7 @@ Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `securi
 
 `EmbedFileResolver` performs no check: it serves the compiled-in bootstrap sources, which are not attacker-controlled.
 
-Note that the resolver gate keys on the resolved *target string*. Under `WithSourceFS`, that string is a virtual path, so a path-confining authorizer (`ConsoleAuthorizer`, `FilesystemRoot`) will reject it for being outside the root. Confine either with the resolver chain or with a path authorizer, not both.
+Note that the resolver gate keys on the resolved *target string*. Under `WithSourceFS`, that string is a virtual path meaningful only to the supplied `fs.FS`, so the request carries `TargetSource: security.SourceVirtualFS` to say so. `FilesystemRoot` and `ConsoleWithLoadAuthorizer` refuse such a target outright, on the source rather than by containment — a virtual path handed to `containedInRoot` is resolved against the *process working directory*, which made the verdict depend on where the host happened to be running. To serve an `fs.FS` under one of those policies, use the opt-in variants `FilesystemRootWithVirtualSources(root)` or `ConsoleWithLoadAllowingVirtualSources()`, which apply **no** path confinement to virtual targets: the `fs.FS` itself is then the boundary. `ConsoleAuthorizer` needs no variant — it denies the whole `code` resource already.
 
 ### Profile with library support
 

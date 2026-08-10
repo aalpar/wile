@@ -29,10 +29,10 @@ func TestDenyAll(t *testing.T) {
 		name string
 		req  AccessRequest
 	}{
-		{"file read", AccessRequest{ResourceFile, ActionRead, "/tmp/x"}},
-		{"code load", AccessRequest{ResourceCode, ActionLoad, "lib.sld"}},
-		{"env read", AccessRequest{ResourceEnv, ActionRead, "PATH"}},
-		{"process exit", AccessRequest{ResourceProcess, ActionExit, ""}},
+		{"file read", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/tmp/x"}},
+		{"code load", AccessRequest{Resource: ResourceCode, Action: ActionLoad, Target: "lib.sld"}},
+		{"env read", AccessRequest{Resource: ResourceEnv, Action: ActionRead, Target: "PATH"}},
+		{"process exit", AccessRequest{Resource: ResourceProcess, Action: ActionExit, Target: ""}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -51,15 +51,15 @@ func TestReadOnly(t *testing.T) {
 		req   AccessRequest
 		allow bool
 	}{
-		{"file read", AccessRequest{ResourceFile, ActionRead, "/tmp/x"}, true},
-		{"file stat", AccessRequest{ResourceFile, ActionStat, "/tmp/x"}, true},
+		{"file read", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/tmp/x"}, true},
+		{"file stat", AccessRequest{Resource: ResourceFile, Action: ActionStat, Target: "/tmp/x"}, true},
 		// ReadOnly applies no path confinement: it reads any path the host can.
-		{"file read any path (no confinement)", AccessRequest{ResourceFile, ActionRead, "/etc/passwd"}, true},
+		{"file read any path (no confinement)", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/etc/passwd"}, true},
 		// R11: ReadOnly must NOT permit loading (and running) code.
-		{"code load denied", AccessRequest{ResourceCode, ActionLoad, "lib.sld"}, false},
-		{"file write", AccessRequest{ResourceFile, ActionWrite, "/tmp/x"}, false},
-		{"file delete", AccessRequest{ResourceFile, ActionDelete, "/tmp/x"}, false},
-		{"process exit", AccessRequest{ResourceProcess, ActionExit, ""}, false},
+		{"code load denied", AccessRequest{Resource: ResourceCode, Action: ActionLoad, Target: "lib.sld"}, false},
+		{"file write", AccessRequest{Resource: ResourceFile, Action: ActionWrite, Target: "/tmp/x"}, false},
+		{"file delete", AccessRequest{Resource: ResourceFile, Action: ActionDelete, Target: "/tmp/x"}, false},
+		{"process exit", AccessRequest{Resource: ResourceProcess, Action: ActionExit, Target: ""}, false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -85,12 +85,12 @@ func TestReadOnlyWithLoad(t *testing.T) {
 		req   AccessRequest
 		allow bool
 	}{
-		{"file read", AccessRequest{ResourceFile, ActionRead, "/tmp/x"}, true},
-		{"file stat", AccessRequest{ResourceFile, ActionStat, "/tmp/x"}, true},
-		{"code load allowed", AccessRequest{ResourceCode, ActionLoad, "lib.sld"}, true},
-		{"file write", AccessRequest{ResourceFile, ActionWrite, "/tmp/x"}, false},
-		{"file delete", AccessRequest{ResourceFile, ActionDelete, "/tmp/x"}, false},
-		{"process exit", AccessRequest{ResourceProcess, ActionExit, ""}, false},
+		{"file read", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/tmp/x"}, true},
+		{"file stat", AccessRequest{Resource: ResourceFile, Action: ActionStat, Target: "/tmp/x"}, true},
+		{"code load allowed", AccessRequest{Resource: ResourceCode, Action: ActionLoad, Target: "lib.sld"}, true},
+		{"file write", AccessRequest{Resource: ResourceFile, Action: ActionWrite, Target: "/tmp/x"}, false},
+		{"file delete", AccessRequest{Resource: ResourceFile, Action: ActionDelete, Target: "/tmp/x"}, false},
+		{"process exit", AccessRequest{Resource: ResourceProcess, Action: ActionExit, Target: ""}, false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -113,15 +113,15 @@ func TestFilesystemRoot(t *testing.T) {
 		req   AccessRequest
 		allow bool
 	}{
-		{"file inside root", AccessRequest{ResourceFile, ActionRead, "/app/data/file.txt"}, true},
-		{"file at root", AccessRequest{ResourceFile, ActionRead, "/app/data"}, true},
-		{"file in subdir", AccessRequest{ResourceFile, ActionRead, "/app/data/sub/deep.txt"}, true},
-		{"code inside root", AccessRequest{ResourceCode, ActionLoad, "/app/data/lib.sld"}, true},
-		{"file outside root", AccessRequest{ResourceFile, ActionRead, "/etc/passwd"}, false},
-		{"file parent traversal", AccessRequest{ResourceFile, ActionRead, "/app/data/../secret"}, false},
-		{"file sibling", AccessRequest{ResourceFile, ActionRead, "/app/other/file"}, false},
-		{"env read (non-file)", AccessRequest{ResourceEnv, ActionRead, "PATH"}, true},
-		{"process exit (non-file)", AccessRequest{ResourceProcess, ActionExit, ""}, true},
+		{"file inside root", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/data/file.txt"}, true},
+		{"file at root", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/data"}, true},
+		{"file in subdir", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/data/sub/deep.txt"}, true},
+		{"code inside root", AccessRequest{Resource: ResourceCode, Action: ActionLoad, Target: "/app/data/lib.sld"}, true},
+		{"file outside root", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/etc/passwd"}, false},
+		{"file parent traversal", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/data/../secret"}, false},
+		{"file sibling", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/other/file"}, false},
+		{"env read (non-file)", AccessRequest{Resource: ResourceEnv, Action: ActionRead, Target: "PATH"}, true},
+		{"process exit (non-file)", AccessRequest{Resource: ResourceProcess, Action: ActionExit, Target: ""}, true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestFilesystemRoot(t *testing.T) {
 func TestAll_Empty(t *testing.T) {
 	c := qt.New(t)
 	auth := All()
-	err := auth.Authorize(AccessRequest{ResourceFile, ActionWrite, "/tmp/x"})
+	err := auth.Authorize(AccessRequest{Resource: ResourceFile, Action: ActionWrite, Target: "/tmp/x"})
 	c.Assert(err, qt.IsNil)
 }
 
@@ -148,9 +148,9 @@ func TestAll_SinglePassthrough(t *testing.T) {
 	inner := ReadOnly()
 	auth := All(inner)
 	// All with single arg returns that arg directly
-	err := auth.Authorize(AccessRequest{ResourceFile, ActionRead, "/tmp/x"})
+	err := auth.Authorize(AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/tmp/x"})
 	c.Assert(err, qt.IsNil)
-	err = auth.Authorize(AccessRequest{ResourceFile, ActionWrite, "/tmp/x"})
+	err = auth.Authorize(AccessRequest{Resource: ResourceFile, Action: ActionWrite, Target: "/tmp/x"})
 	c.Assert(errors.Is(err, ErrAccessDenied), qt.IsTrue)
 }
 
@@ -165,10 +165,10 @@ func TestAll_Composition(t *testing.T) {
 		req   AccessRequest
 		allow bool
 	}{
-		{"read inside", AccessRequest{ResourceFile, ActionRead, "/app/data/f.txt"}, true},
-		{"read outside", AccessRequest{ResourceFile, ActionRead, "/etc/passwd"}, false},
-		{"write inside", AccessRequest{ResourceFile, ActionWrite, "/app/data/f.txt"}, false},
-		{"write outside", AccessRequest{ResourceFile, ActionWrite, "/etc/passwd"}, false},
+		{"read inside", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/app/data/f.txt"}, true},
+		{"read outside", AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/etc/passwd"}, false},
+		{"write inside", AccessRequest{Resource: ResourceFile, Action: ActionWrite, Target: "/app/data/f.txt"}, false},
+		{"write outside", AccessRequest{Resource: ResourceFile, Action: ActionWrite, Target: "/etc/passwd"}, false},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -190,7 +190,7 @@ func TestAll_ShortCircuit(t *testing.T) {
 		return nil
 	})
 	auth := All(DenyAll(), counter)
-	err := auth.Authorize(AccessRequest{ResourceFile, ActionRead, "/tmp/x"})
+	err := auth.Authorize(AccessRequest{Resource: ResourceFile, Action: ActionRead, Target: "/tmp/x"})
 	c.Assert(errors.Is(err, ErrAccessDenied), qt.IsTrue)
 	c.Assert(calls, qt.Equals, 0) // counter never reached
 }

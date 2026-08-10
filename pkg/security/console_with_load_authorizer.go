@@ -27,8 +27,23 @@ package security
 // path to restrict and is allowed here so the profile's documented sandboxed
 // (eval ...) keeps working; the side effects of evaluated code remain gated
 // at their own file/process/env sinks.
+//
+// A target drawn from a virtual filesystem (AccessRequest.TargetSource set) is
+// denied outright: its path names a file inside an embedder's fs.FS and has no
+// relation to /tmp. Use ConsoleWithLoadAllowingVirtualSources to serve one —
+// which is what an embedder that stages its Scheme sources in an fs.FS rather
+// than under /tmp now needs.
 func ConsoleWithLoadAuthorizer() Authorizer {
 	return consoleWithLoadAuthorizer{}
+}
+
+// ConsoleWithLoadAllowingVirtualSources returns a ConsoleWithLoad authorizer
+// that additionally serves targets drawn from a virtual filesystem. It applies
+// NO path confinement to those targets: the embedder is asserting that the
+// fs.FS it supplied is itself the boundary. Host-filesystem targets stay
+// confined to /tmp exactly as under ConsoleWithLoadAuthorizer.
+func ConsoleWithLoadAllowingVirtualSources() Authorizer {
+	return consoleWithLoadAuthorizer{allowVirtualSources: true}
 }
 
 // consoleWithLoadAuthorizer is Console plus a sandboxed code arm. It embeds
@@ -38,6 +53,7 @@ func ConsoleWithLoadAuthorizer() Authorizer {
 // class of divergence unrepresentable. Only ResourceCode is genuinely ours.
 type consoleWithLoadAuthorizer struct {
 	consoleAuthorizer
+	allowVirtualSources bool
 }
 
 func (a consoleWithLoadAuthorizer) Authorize(req AccessRequest) error {
@@ -45,9 +61,19 @@ func (a consoleWithLoadAuthorizer) Authorize(req AccessRequest) error {
 		return a.consoleAuthorizer.Authorize(req)
 	}
 	// code:eval (dynamic (eval <datum>)/(compile <datum>)) has no path to
-	// confine; code:load is confined to the shared root like file access.
+	// confine; code:load is confined to the shared root like file access. A
+	// virtual-filesystem target has no path to confine either — containedInRoot
+	// would resolve it against the process CWD, making the verdict a coincidence
+	// of where the host runs — so it is decided on the discriminator in BOTH
+	// directions and never reaches containedInRoot.
 	if req.Action == ActionEval {
 		return nil
+	}
+	if req.TargetSource != "" {
+		if a.allowVirtualSources {
+			return nil
+		}
+		return ErrAccessDenied
 	}
 	if !containedInRoot(consoleRoot, req.Target) {
 		return ErrAccessDenied

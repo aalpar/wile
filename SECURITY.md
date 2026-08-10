@@ -147,6 +147,11 @@ privileged operations at runtime. Each gated operation issues an
 - **Target:** operation-specific — a file path, env-var name, or library name.
   For `code:eval` the target is the literal `<eval>` or `<compile>`: there is no
   path to inspect, so a custom Authorizer must decide on the action alone.
+- **TargetSource:** the namespace `Target` is drawn from. Empty means the host
+  OS filesystem. `virtual-fs` (`security.SourceVirtualFS`) means a path inside
+  an embedder's `WithSourceFS`, which OS path containment cannot bound — so, as
+  with `code:eval`, a custom Authorizer must decide on it rather than on the
+  path.
 
 `stream` gates the host's standard streams, which the `io` extension pre-opens
 as `current-{input,output,error}-port`. Unlike the other resources it is checked
@@ -165,7 +170,9 @@ Authorizer that gates only `code:load` leaves `(eval …)` open.
 Gate sites include file primitives, the system/process and eval extensions,
 `include`, and library import. Built-in authorizers include `DenyAll()`,
 `ReadOnly()`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`,
-`SandboxAuthorizer(envPrefix)`, and `FilesystemRoot(root)`; `All(...)`
+`SandboxAuthorizer(envPrefix)`, and `FilesystemRoot(root)`, plus the
+virtual-filesystem opt-ins `FilesystemRootWithVirtualSources(root)` and
+`ConsoleWithLoadAllowingVirtualSources()`; `All(...)`
 composes several into one (all must allow). Set one with `WithAuthorizer`,
 or get one implicitly from a profile. Custom policies implement the
 one-method `Authorizer` interface.

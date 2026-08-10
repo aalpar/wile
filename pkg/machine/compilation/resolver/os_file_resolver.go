@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/werr"
 )
 
@@ -74,39 +74,44 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 // /tmp/x/oracle.scm, and (include "etc/passwd") read /etc/passwd, under the
 // CLI's default unauthorized profile. See reviews/2026-08-07/REVIEW.md 2.1.5.
 //
-// A candidate is located with os.Stat — a probe that hands out no descriptor —
-// and only an authorized candidate is ever opened. Doing the search here rather
-// than through sourceload.Finder is what buys that ordering: Finder opens the
-// file to decide it exists, which would put the handle ahead of the gate.
+// Every candidate is authorized BEFORE it is stat'd, which is one step earlier
+// than the obvious ordering and is what closes the existence oracle: statting
+// first made a denied path that exists ("access denied") answer differently
+// from one that does not ("not found"). The cost is that an authorizer now sees
+// one request per search directory even for names that do not exist anywhere,
+// so authorizer logs are noisier than the number of files actually opened.
+//
+// A stat failure that is not absence (EACCES on a parent directory) is
+// propagated rather than swallowed: it says nothing about whether the file is
+// there, so reporting not-found would both lie and let the search fall through
+// to a lower-priority directory.
 func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.File, string, error) {
 	auth := p.env.Namespace().Authorizer()
 	searchDirs := p.osAbsSearchDirs(ctx)
 
+	candidates := make([]string, 0, len(searchDirs))
 	for _, dir := range searchDirs {
-		candidate := filepath.Join(dir, path)
+		candidates = append(candidates, filepath.Join(dir, path))
+	}
+
+	opener := func(candidate string) (fs.File, error) {
 		fi, statErr := os.Stat(candidate)
-		if statErr != nil || fi.IsDir() {
-			continue
+		if statErr != nil {
+			return nil, statErr
 		}
+		if fi.IsDir() {
+			return nil, werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, fs.ErrNotExist,
+				"candidate %s is a directory", candidate)
+		}
+		return confinedOpenFile(auth, candidate)
+	}
 
-		authErr := security.CheckWithAuthorizer(auth, security.AccessRequest{
-			Resource: security.ResourceCode,
-			Action:   security.ActionLoad,
-			Target:   candidate,
-		})
-		if authErr != nil {
-			return nil, "", authErr
-		}
-
-		f, openErr := confinedOpenFile(auth, candidate)
-		if openErr != nil {
-			sentinel := werr.ErrFileOpen
-			if errors.Is(openErr, os.ErrNotExist) {
-				sentinel = werr.ErrFileNotFound
-			}
-			return nil, "", werr.WrapForeignErrorWithCause(sentinel, openErr, "open %s", candidate)
-		}
-		return f, candidate, nil
+	f, resolved, err := authorizeCandidates(auth, "", candidates, opener)
+	if err == nil {
+		return f, resolved, nil
+	}
+	if !errors.Is(err, sourceload.ErrNotFound) {
+		return nil, "", err
 	}
 
 	searched := p.buildSearchedList(searchDirs)

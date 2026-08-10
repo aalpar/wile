@@ -17,6 +17,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -747,6 +748,111 @@ func TestChainFileResolver_SecurityDenialStopsChain(t *testing.T) {
 	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+// permissionFS answers every request for its one named path with a hard
+// fs.ErrPermission, and not-exist for anything else. It deliberately does not
+// implement fs.StatFS so that both fs.Stat and Open surface the same failure.
+type permissionFS struct {
+	name string
+}
+
+func (p permissionFS) Open(name string) (fs.File, error) {
+	if name == p.name {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrPermission}
+	}
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+// TestChainFileResolver_HardErrorStopsChain pins the fall-through protocol: only
+// genuine ABSENCE continues the chain. A hard error (here fs.ErrPermission) used
+// to be relabelled with the werr.ErrFileNotFound sentinel, so the chain fell
+// through to a lower-priority resolver and served ITS copy of secret.scm — a
+// higher-priority file that exists but cannot be read was silently substituted.
+func TestChainFileResolver_HardErrorStopsChain(t *testing.T) {
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+
+	backup := fstest.MapFS{"secret.scm": {Data: []byte("(display \"backup\")")}}
+
+	r := NewChainFileResolver([]environment.FileResolver{
+		NewFSFileResolver(permissionFS{name: "secret.scm"}, env),
+		NewEmbedFileResolver(backup),
+	})
+
+	f, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, f, qt.IsNil, qt.Commentf("a hard error must not yield the next resolver's file"))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, fs.ErrPermission), qt.IsTrue,
+		qt.Commentf("the cause must survive the wrap (Error Chains: Lossless and Traversable)"))
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsFalse,
+		qt.Commentf("a permission failure is not an absence"))
+}
+
+// countingFS wraps an fs.FS and counts Open calls. It deliberately does NOT
+// implement fs.StatFS, so fs.Stat falls back to Open — which is what makes
+// "authorize before the STAT" load-bearing rather than merely "before the open".
+type countingFS struct {
+	inner fs.FS
+	opens int
+}
+
+func (p *countingFS) Open(name string) (fs.File, error) {
+	p.opens++
+	return p.inner.Open(name)
+}
+
+// TestFSFileResolver_GatesBeforeStat is the portable twin of the FIFO test in
+// confined_unix_test.go: a denied candidate must never be touched at all. The
+// resolver used to stat-and-open first and consult the authorizer afterwards.
+func TestFSFileResolver_GatesBeforeStat(t *testing.T) {
+	counter := &countingFS{inner: fstest.MapFS{"trap.scm": {Data: []byte("(launch-missiles)")}}}
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	r := NewFSFileResolver(counter, ns.Runtime())
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "trap.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+	qt.Assert(t, counter.opens, qt.Equals, 0,
+		qt.Commentf("a denied candidate must not be opened, and fs.Stat's fallback is an Open"))
+}
+
+// TestOSFileResolver_DenialIsIndistinguishableFromAbsence closes the existence
+// oracle: statting before authorizing made "access denied" versus "not found"
+// report whether a denied path exists. Both rows must now answer the same way.
+//
+// The DenyAll() namespace is what makes this test real — under a nil or
+// permissive authorizer both rows say "not found" and it passes either way.
+func TestOSFileResolver_DenialIsIndistinguishableFromAbsence(t *testing.T) {
+	dir := realDir(t, t.TempDir())
+	err := os.WriteFile(filepath.Join(dir, "exists.scm"), []byte("(display 1)"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	tcs := []struct {
+		name string
+		path string
+	}{
+		{"existing denied file", "exists.scm"},
+		{"absent path", "absent-xyz-12345.scm"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Chdir(dir)
+			t.Setenv(SchemeIncludePathEnv, "")
+
+			ns := environment.NewNamespace()
+			ns.SetAuthorizer(security.DenyAll())
+			r := NewOSFileResolver(ns.Runtime())
+
+			_, _, resolveErr := r.ResolveAndOpen(context.Background(), tc.path)
+			qt.Assert(t, resolveErr, qt.IsNotNil)
+			qt.Assert(t, errors.Is(resolveErr, security.ErrAccessDenied), qt.IsTrue,
+				qt.Commentf("both rows must report the denial"))
+			qt.Assert(t, errors.Is(resolveErr, werr.ErrFileNotFound), qt.IsFalse,
+				qt.Commentf("reporting absence tells the program the file is not there"))
+		})
+	}
 }
 
 func TestChainFileResolver_PanicsOnEmptyResolvers(t *testing.T) {

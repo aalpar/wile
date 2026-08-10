@@ -17,6 +17,8 @@ package wile
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -47,6 +49,56 @@ func (p *recordingAuthorizer) streamTargets() []string {
 		}
 	}
 	return q
+}
+
+// codeLoadRequests returns the recorded code:load requests, in order.
+func (p *recordingAuthorizer) codeLoadRequests() []security.AccessRequest {
+	var q []security.AccessRequest
+	for _, r := range p.reqs {
+		if r.Resource == security.ResourceCode && r.Action == security.ActionLoad {
+			q = append(q, r)
+		}
+	}
+	return q
+}
+
+// TestVirtualSourceIsNotGatedAgainstProcessCWD pins the end of the CWD
+// coincidence. A file served by WithSourceFS is named by a path that only its
+// fs.FS understands ("evil.scm"), and a path-confining authorizer resolves such
+// a name against the PROCESS working directory. With the CWD inside the
+// confinement root the untrusted program was admitted and ran; with the CWD
+// outside it was refused for a reason that had nothing to do with the file.
+func TestVirtualSourceIsNotGatedAgainstProcessCWD(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	trusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	untrusted, err := filepath.EvalSymlinks(t.TempDir())
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(untrusted, "evil.scm"), []byte("(define evil-ran 42)"), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	rec := &recordingAuthorizer{inner: security.FilesystemRoot(trusted)}
+	engine, err := NewEngine(ctx,
+		WithProfile(KitchenSink),
+		WithAuthorizer(rec),
+		WithSourceFS(os.DirFS(untrusted)))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	t.Chdir(trusted)
+
+	_, err = engine.EvalMultiple(ctx, `(include "evil.scm") evil-ran`)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("a virtual path is not a path under the root"))
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+
+	// The gate must have been consulted with the path the fs.FS was asked for,
+	// verbatim — the missing assertion that let the CWD coincidence hide.
+	reqs := rec.codeLoadRequests()
+	c.Assert(len(reqs) > 0, qt.IsTrue, qt.Commentf("no code:load request was recorded"))
+	c.Assert(reqs[0].Target, qt.Equals, "evil.scm")
+	c.Assert(reqs[0].TargetSource, qt.Equals, security.SourceVirtualFS)
 }
 
 // TestHostStdioIsGated pins the stream gate (reviews/2026-08-07/REVIEW.md 2.1.1).
