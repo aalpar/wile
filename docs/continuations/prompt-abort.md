@@ -34,8 +34,8 @@ Both are declared in `machine/prompt_abort.go`.
                                       │
       ┌──────────────────────────────────────────────────────────────┐
       │ applyCallableError (machine/foreign_closure.go), reached via │
-      │ bridgeForeignError from applyForeign and                     │
-      │ OperationForeignFunctionCall                                 │
+      │ bridgeForeignError from applyForeign, callForeignCached,     │
+      │ the promoted-op call sites and OperationPushWind             │
       │                                                              │
       │ errors.As matches a control signal?                          │
       │   YES → return it unchanged                                  │
@@ -72,10 +72,12 @@ Both are declared in `machine/prompt_abort.go`.
 // 5. any other Go error → RaiseInPlace(goErrorToCondition(err))
 ```
 
-`OperationForeignFunctionCall.Apply` additionally recovers panics in a `defer`
-and routes the recovered error through the same function; `errors.As` sees
-through the `ErrPanicRecovery` wrap to the chained cause, so a control signal
-that escaped as a panic is still recognized.
+No live call site recovers panics around this function. The one that did,
+`OperationForeignFunctionCall.Apply`, was deleted in 2026-08 as unreachable
+code; a control signal that escapes as a *panic* is therefore recognized only
+at the VM boundary (`RunResumable`), which contains it as an uncatchable
+`*SchemeError` rather than re-classifying it. Control signals travel as
+returned errors, not as panics.
 
 The control-signal checks must precede the fallthrough: without them, a prompt
 abort or a resume would be converted into a catchable Scheme condition and never

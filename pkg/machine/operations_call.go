@@ -16,7 +16,6 @@ package machine
 
 import (
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // --- Apply ---
@@ -98,55 +97,6 @@ func NewOperationReleaseEnvFrame() *OperationReleaseEnvFrame {
 // EqualTo returns true if o is also an OperationReleaseEnvFrame (identity by type).
 func (p *OperationReleaseEnvFrame) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationReleaseEnvFrame)
-	return SameType(p, v, ok)
-}
-
-// --- ForeignFunctionCall ---
-
-// OperationForeignFunctionCall executes a Go function within the VM loop.
-// Used for foreign closures that do nested VM execution (sub-context + Run),
-// where the iterative VM loop prevents Go stack growth. Leaf primitives use
-// ForeignClosure + applyForeign instead.
-type OperationForeignFunctionCall struct {
-	OperationBase
-	Function ForeignFunction
-}
-
-func NewOperationForeignFunctionCall(ffn ForeignFunction) *OperationForeignFunctionCall {
-	return &OperationForeignFunctionCall{
-		OperationBase: NewOperationBase("machine-operation-foreign-function-call"),
-		Function:      ffn,
-	}
-}
-
-func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineContext, rerr error) {
-	if p.Function == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "foreign function is nil")
-	}
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		err := werr.RecoverAsError(r, werr.ErrPanicRecovery, "foreign function call")
-		// bridgeForeignError matches VM signal types (prompt abort, exception escape,
-		// timer interrupt, continuation resume) with errors.As, which sees through the
-		// ErrPanicRecovery wrap to the chained cause, and for a Scheme exception returns
-		// (mc, nil) when the in-place handler reconfigured mc to run inline so the VM
-		// continues into it. Mirrors the error-return path below.
-		rmc, rerr = bridgeForeignError(mc, err)
-	}()
-	mc.counters.ForeignCalls++
-	err := p.Function(mc)
-	if err != nil {
-		return bridgeForeignError(mc, err)
-	}
-	mc.pc++
-	return mc, nil
-}
-
-func (p *OperationForeignFunctionCall) EqualTo(o values.Value) bool {
-	v, ok := o.(*OperationForeignFunctionCall)
 	return SameType(p, v, ok)
 }
 

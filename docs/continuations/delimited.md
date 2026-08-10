@@ -322,7 +322,7 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 | `machine/machine_context_winding.go` | `RestoreWithWindingFrom` |
 | `machine/machine_context_apply.go` | `ReinstallSegment`, `applyComposableContinuation` |
 | `machine/foreign_closure.go` | `applyCallableError` (control-signal passthrough) |
-| `machine/operations_call.go` | `OperationForeignFunctionCall` (panic recovery → `bridgeForeignError`) |
+| `machine/machine_context_apply.go` | `bridgeForeignError` (the only wrapper around it) |
 | `registry/core/prim_prompt.go` | Prompt primitive implementations |
 | `machine/captured_continuation.go` | `CapturedContinuation` and `applyCapturedContinuation`: the call/cc escape value |
 | `registry/core/prim_control.go` | `PrimCallCC` |

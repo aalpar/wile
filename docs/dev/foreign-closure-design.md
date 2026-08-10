@@ -26,8 +26,11 @@ Closure (interface)
 `ForeignClosure` holds a `ForeignFunction` directly with no `NativeTemplate`.
 `applyForeign` does arity check, arg binding, optional contract validation
 (`ForeignClosure.SetValidator`), error conversion, and continuation restore —
-the same work the VM loop did, except per-call panic recovery, which remains in
-the bytecode path's `OperationForeignFunctionCall`. Foreign functions reachable
+the same work the VM loop did. **There is no per-call panic recovery on any
+live path.** An earlier revision of this sentence said recovery "remains in the
+bytecode path's `OperationForeignFunctionCall`"; that operation, its opcode and
+its only builder were deleted in 2026-08 after they were measured to have zero
+production references. Foreign functions reachable
 via the direct fast path must return errors rather than panic; the
 type-coercion helpers in `pkg/values/promotion.go` and
 `pkg/values/numeric_tower.go` panic on `ErrNotANumber` / `ErrNotAReal` /
@@ -213,31 +216,28 @@ existing `Run()` loop. `OpForeignFunctionCall` was just another iteration of
 the loop — iterative, not recursive. Each level added only `fn` +
 `sub.Run()` ≈ 2 persistent frames instead of 4.
 
-### Fix: NewVMForeignClosure
+### The `NewVMForeignClosure` escape hatch — deleted 2026-08
 
-Foreign closures that do nested VM execution use the bytecode trampoline:
+The bytecode trampoline was kept as a documented escape hatch: a
+`NewVMForeignClosure` built a `*MachineClosure` whose two-op template was
+`OperationForeignFunctionCall` + `OperationRestoreContinuation`, so
+`ApplyCallable` dispatched through the VM loop instead of `applyForeign`.
 
-```go
-func NewVMForeignClosure(env, pcnt, variadic, fn) *MachineClosure {
-    tpl := NewNativeTemplate(pcnt, 0, variadic)
-    tpl.AppendOperations(
-        NewOperationForeignFunctionCall(fn),
-        NewOperationRestoreContinuation(),
-    )
-    // tpl.computeNoCopyApply() — removed in PR #561
-    // ...
-    return NewClosureWithTemplate(tpl, env)
-}
-```
+It is gone. At the deletion commit the whole cluster was unreachable:
+`NewVMForeignClosure` had zero Go references outside its own declaration and
+doc comment, `OpForeignFunctionCall` was never a Go identifier at all (the
+operation reported `OpKind() == OpComplex`), and
+`NewOperationForeignFunctionCall` was called only from that dead builder and
+from tests — including one guard test asserting panic pass-through on a
+production path that did not exist. Keeping a documented escape hatch that
+nothing exercised meant carrying a second, silently divergent dispatch path;
+the recorded scoping decision was to delete rather than to re-site the guard.
 
-This creates a `*MachineClosure` (not `*ForeignClosure`), so `ApplyCallable`
-dispatches through `Apply` → VM loop → `OpForeignFunctionCall` — keeping the
-loop iterative.
-
-**`NewVMForeignClosure` now has zero callers anywhere, production or test.**
-All registered primitives use the direct `*ForeignClosure` / `applyForeign`
-fast path. The constructor is kept as the documented escape hatch for the
-decision below, not because anything currently needs it.
+**Consequence for the next reader:** the "which path?" question below no longer
+has two answers. Every primitive is a `*ForeignClosure` via
+`machine.NewForeignClosure`, unconditionally, and the Go-stack-depth argument
+above is history, not a live trade-off. A future nested-VM primitive that needs
+the trampoline re-adds it deliberately, with a caller.
 
 ### Resume Is a Trampoline, Not a Nested Run
 
@@ -252,16 +252,13 @@ never the fix here; returning the segment unrun was.
 
 ### Decision Criteria: Which Path?
 
-| Closure creates sub-context + `Run()`? | Use |
-|-----------------------------------------|-----|
-| No (leaf primitive) | `NewForeignClosure` → `*ForeignClosure` → `applyForeign` |
-| Yes (nested VM execution) | `NewVMForeignClosure` → `*MachineClosure` → VM loop |
+There is one path: `NewForeignClosure` → `*ForeignClosure` → `applyForeign`.
+The second row of this table used to read "nested VM execution →
+`NewVMForeignClosure` → `*MachineClosure` → VM loop"; that row named a Go-stack
+safety valve nothing had used since resume became a trampoline, and it was
+deleted with the code (above).
 
-The distinction is about Go stack safety, not performance. The bytecode path
-is slightly slower (two opcode dispatches) but prevents unbounded Go stack
-growth.
-
-**Arity gotcha, both paths.** A variadic closure binds its rest list into slot
+**Arity gotcha.** A variadic closure binds its rest list into slot
 `ParamCount-1`, so `ParamCount: 0` with `IsVariadic: true` makes `bindArgs`
 index `bnds[:-1]` and panic. `PrimitiveSpec.Validate`
 (`../../pkg/registry/primitive_registry.go`) rejects that combination, and `AddPrimitive`

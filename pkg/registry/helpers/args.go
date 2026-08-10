@@ -65,6 +65,35 @@ func RequireType[T any](v values.Value, sentinel error, name string) (T, error) 
 	return result, nil
 }
 
+// RequireCallable asserts that v is applicable, i.e. that it implements
+// values.Callable. That is exactly what a `ParamTypes: TypeProcedure`
+// annotation promises — values.TypeProcedure's check is
+// makeCheck[Callable]("procedure") — and exactly the set
+// MachineContext.ApplyCallable dispatches: lambda, foreign procedure,
+// case-lambda, parameter object, composable continuation, captured
+// continuation.
+//
+// Use this, not RequireType[machine.Closure], for any parameter a primitive
+// only applies. machine.Closure has two implementors against ApplyCallable's
+// six, so narrowing to it rejects values for which Scheme's own `procedure?`
+// answers #t — a case-lambda, a parameter object, a continuation.
+//
+// The offender is rendered with SchemeString, not %T: a Go type name in a
+// Scheme-facing diagnostic is unactionable, and it reads as a contradiction
+// whenever the value is a procedure by the language's own predicate.
+func RequireCallable(v values.Value, name string) (values.Callable, error) {
+	if v == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAProcedure,
+			"%s: expected %s but got nothing", name, typeNameFromSentinel(werr.ErrNotAProcedure))
+	}
+	q, ok := v.(values.Callable)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAProcedure,
+			"%s: expected %s but got %s", name, typeNameFromSentinel(werr.ErrNotAProcedure), v.SchemeString())
+	}
+	return q, nil
+}
+
 // RequireTuple extracts mc.Arg(index) and asserts it is a values.Tuple
 // (proper list or empty list). On failure it returns a wrapped ErrNotAList
 // error in the canonical "<name>: argument <index+1>: expected a list but

@@ -143,7 +143,7 @@ func callWithFile(
 		return err
 	}
 
-	proc, err := helpers.RequireType[machine.Closure](mc.Arg(1), werr.ErrNotAProcedure, name)
+	proc, err := helpers.RequireCallable(mc.Arg(1), name)
 	if err != nil {
 		return err
 	}

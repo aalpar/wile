@@ -203,16 +203,10 @@ func TestOperationToInstruction_AllDirectDispatch(t *testing.T) {
 func TestOperationToInstruction_SideTableReturnsFalse(t *testing.T) {
 	c := qt.New(t)
 
-	// Construct a no-op ForeignFunction for OperationForeignFunctionCall.
-	noopFn := func(CallContext) error {
-		return nil
-	}
-
 	tests := []struct {
 		name string
 		op   Operation
 	}{
-		{"ForeignFunctionCall", NewOperationForeignFunctionCall(noopFn)},
 		{"MakeCaseLambdaClosure", NewOperationMakeCaseLambdaClosure(1)},
 		{"PushWind", NewOperationPushWind()},
 		{"PopWind", NewOperationPopWind()},

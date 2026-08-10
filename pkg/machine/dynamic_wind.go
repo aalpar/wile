@@ -17,6 +17,8 @@ package machine
 import (
 	"slices"
 	"sync/atomic"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // DynamicWindFrame represents a single dynamic-wind extent.
@@ -47,9 +49,16 @@ import (
 //
 // See BIBLIOGRAPHY.md "Dynamic-Wind" and "Continuation-Wind Interaction".
 type DynamicWindFrame struct {
-	Before Closure // Called when entering this extent
-	After  Closure // Called when exiting this extent
-	ID     uint64  // Unique identifier for extent matching
+	// Before/After are values.Callable, not Closure: both are only ever applied,
+	// via ApplyCallable, which dispatches six types where Closure has two. A
+	// case-lambda, a parameter object or a continuation is a procedure by
+	// procedure?'s own answer and must be accepted here.
+	//
+	// Assign only untyped nil. A typed nil stored in an interface field is not
+	// nil, and the winding reconcile tests `frame.Before != nil`.
+	Before values.Callable // Called when entering this extent
+	After  values.Callable // Called when exiting this extent
+	ID     uint64          // Unique identifier for extent matching
 	// entryMarks is the snapshot of reachable continuation marks at the dynamic-wind
 	// call site, taken when the frame is pushed. R7RS §6.10 runs the before/after
 	// thunks in the dynamic environment of the dynamic-wind call, NOT the body's — so a
@@ -65,7 +74,7 @@ type DynamicWindFrame struct {
 var nextWindingID atomic.Uint64
 
 // NewDynamicWindFrame creates a new winding frame with a unique ID.
-func NewDynamicWindFrame(before, after Closure) DynamicWindFrame {
+func NewDynamicWindFrame(before, after values.Callable) DynamicWindFrame {
 	id := nextWindingID.Add(1)
 	return DynamicWindFrame{
 		Before: before,
