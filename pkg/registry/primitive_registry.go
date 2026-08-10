@@ -127,6 +127,18 @@ type InitFunc func() error
 // shared across engines.
 type NamespaceInit func(env *environment.EnvironmentFrame) error
 
+// CloseFunc is a per-engine cleanup hook registered from an extension's
+// AddToRegistry — which buildRegistry runs once per engine — and invoked by
+// Engine.Close().
+//
+// Distinct from registry.Closeable/WithClose, which hangs off the
+// process-global Extension value and therefore cannot be per-engine: every
+// engine loading `threads.Extension` stores THAT one pointer, so a WithClose
+// hook on it would let engine A's Close() reap engine B's threads. A hook
+// registered here closes over state minted inside AddToRegistry, so each
+// engine gets its own.
+type CloseFunc func() error
+
 // GlobalValue pairs a name with a value to be registered as a global binding.
 type GlobalValue struct {
 	Name  string
@@ -159,8 +171,10 @@ type BindingSpec struct {
 //  6. PrimitiveRegistry.Apply (registry/apply.go) — materialize the new category into the environment
 //     at the appropriate lifecycle step
 //
-// All eight categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
-// macroSources, procedureSources, globalValues, namespaceInits) follow this pattern.
+// All nine categories today (primitives, bindingSpecs, docPrimitives, initFuncs,
+// macroSources, procedureSources, globalValues, namespaceInits, closeFuncs)
+// follow this pattern, except that closeFuncs has no step 6: a cleanup hook is
+// read by Engine.Close, not bound into an environment.
 // Forgetting any step is a silent aliasing or drift hazard — Clone, Without,
 // WithoutCategory, and WithoutBindings all assume deepCopy covers every field.
 //
@@ -205,6 +219,10 @@ type PrimitiveRegistry struct {
 	// per-Namespace state (e.g. I/O port parameters + caches) that must not be
 	// shared across engines.
 	namespaceInits []NamespaceInit
+	// closeFuncs are per-engine cleanup hooks collected by Engine.Close. Unlike
+	// the other categories, Apply never materializes these into an environment —
+	// the engine reads them directly (see CloseFunc).
+	closeFuncs []CloseFunc
 }
 
 // NewRegistry creates a new empty registry.
@@ -219,6 +237,7 @@ func NewRegistry() *PrimitiveRegistry {
 		procedureSourceCategories: make(map[string][]string),
 		globalValues:              make([]GlobalValue, 0, 4),
 		namespaceInits:            make([]NamespaceInit, 0, 4),
+		closeFuncs:                make([]CloseFunc, 0, 4),
 	}
 	return q
 }
@@ -465,6 +484,30 @@ func (p *PrimitiveRegistry) NamespaceInits() []NamespaceInit {
 	return q
 }
 
+// AddCloser registers a per-engine cleanup hook, collected by Engine.Close.
+// Extensions holding OS resources (goroutines, child processes) call it from
+// AddToRegistry, closing over the per-engine state that tracks those resources.
+// See CloseFunc for why registry.Closeable cannot serve this.
+func (p *PrimitiveRegistry) AddCloser(fn CloseFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closeFuncs = append(p.closeFuncs, fn)
+}
+
+// Closers returns a defensive copy of the registered per-engine cleanup hooks.
+//
+// A registry reused across engines (WithRegistry) accumulates one hook per
+// engine that loaded the extension, so an engine must take only the hooks
+// registered by its own extension loop — see buildRegistry's startClosers
+// snapshot.
+func (p *PrimitiveRegistry) Closers() []CloseFunc {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]CloseFunc, len(p.closeFuncs))
+	copy(q, p.closeFuncs)
+	return q
+}
+
 // AddDocOnlyPrimitive registers a documentation-only primitive entry.
 // It does not create a runtime binding — used for Scheme-defined procedures
 // that are already bound in the environment but need registry visibility
@@ -670,7 +713,7 @@ func (p *PrimitiveRegistry) Clone() *PrimitiveRegistry {
 	return p.deepCopy()
 }
 
-// deepCopy returns a PrimitiveRegistry whose 8 category slices are independent
+// deepCopy returns a PrimitiveRegistry whose 9 category slices are independent
 // copies of p's. Element types are not transitively cloned — the copy is
 // one level deep (slice header + backing array). Callers may overwrite
 // individual slices on the returned PrimitiveRegistry to express filter-style
@@ -697,6 +740,7 @@ func (p *PrimitiveRegistry) deepCopy() *PrimitiveRegistry {
 		procedureSourceCategories: maps.Clone(p.procedureSourceCategories),
 		globalValues:              make([]GlobalValue, len(p.globalValues)),
 		namespaceInits:            make([]NamespaceInit, len(p.namespaceInits)),
+		closeFuncs:                make([]CloseFunc, len(p.closeFuncs)),
 	}
 	copy(q.primitives, p.primitives)
 	copy(q.bindingSpecs, p.bindingSpecs)
@@ -706,6 +750,7 @@ func (p *PrimitiveRegistry) deepCopy() *PrimitiveRegistry {
 	copy(q.procedureSources, p.procedureSources)
 	copy(q.globalValues, p.globalValues)
 	copy(q.namespaceInits, p.namespaceInits)
+	copy(q.closeFuncs, p.closeFuncs)
 	return q
 }
 

@@ -394,3 +394,21 @@ func TestClone_PreservesNamespaceInits(t *testing.T) {
 	qt.Assert(t, clone.Apply(context.Background(), ns.Runtime()), qt.IsNil)
 	qt.Assert(t, ran, qt.Equals, 1) // hook survived the clone
 }
+
+// TestClone_PreservesClosers is the same guard for closeFuncs. A dialect reaches
+// the engine through Without/WithoutCategory, both of which go through deepCopy,
+// so a dropped hook here means an engine built from a filtered registry silently
+// stops reaping its threads and children.
+func TestClone_PreservesClosers(t *testing.T) {
+	r := NewRegistry()
+	ran := 0
+	r.AddCloser(func() error {
+		ran++
+		return nil
+	})
+	clone := r.Clone()
+	closers := clone.Closers()
+	qt.Assert(t, closers, qt.HasLen, 1) // hook survived the clone
+	qt.Assert(t, closers[0](), qt.IsNil)
+	qt.Assert(t, ran, qt.Equals, 1)
+}
