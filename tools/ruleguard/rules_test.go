@@ -102,11 +102,13 @@ func (p *Integer) Get() int64 {
 
 	// golangci-lint configuration: only enable gocritic/ruleguard.
 	//
-	// The issues block is load-bearing, not hygiene. golangci-lint's default
-	// max-same-issues is 3 and counts by identical message text; the six
-	// noUncheckedArgCast positives all share one message, so with the default
-	// cap only the first three reach the output and the rest read as dead
-	// patterns.
+	// The issues block is load-bearing. Both of golangci-lint's default output
+	// caps hide diagnostics this table asserts on. max-same-issues is 3 and
+	// counts by identical message text, so with it in place only three of the
+	// six same-message noUncheckedArgCast positives are emitted (measured:
+	// 41:2, 46:9 and 51:9 dropped, making live patterns read as dead).
+	// uniq-by-line keeps one issue per line, which would hide a second rule
+	// firing on a line another expectation already pins.
 	writeFile(".golangci.yml", `version: "2"
 run:
   timeout: 1m
@@ -292,8 +294,9 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 
 	// ── Production fixture: Arg() type assertions ────────────────────
 	//
-	// Targets noUncheckedArgCast. One function per matched AST position, so a
-	// dead pattern shows up as exactly one failing subtest.
+	// Targets noUncheckedArgCast: one function per pattern, so a dead pattern
+	// shows up as exactly one failing subtest, plus a second call-argument
+	// case that puts the assertion in a non-first argument slot.
 
 	writeFile("argcast.go", `package main
 
