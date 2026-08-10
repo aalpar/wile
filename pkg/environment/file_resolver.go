@@ -44,18 +44,3 @@ type FileResolver interface {
 type LibrarySearcher interface {
 	GetSearchPaths() []string
 }
-
-// PathTracker tracks the stack of files currently being loaded.
-// Implementations provide relative path resolution for include/load
-// and load provenance introspection.
-//
-// The concrete implementation is sourceload.LoadStack. This interface
-// is defined here so environment/ can store it without importing
-// machine/compilation/sourceload/.
-type PathTracker interface {
-	Push(path string)
-	Pop()
-	Current() string
-	CurrentDir() string
-	Depth() int
-}

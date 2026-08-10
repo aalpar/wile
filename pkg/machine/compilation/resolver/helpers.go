@@ -35,30 +35,20 @@ import (
 // target and the read target are guaranteed to be the same object — that
 // identity is what closes the per-thread include-resolution race.
 //
-// The per-load-chain stack carried on ctx (installed by the library loader)
-// takes precedence so concurrent library loads each resolve relative includes
-// against their own directory; env.LoadPathStack() (the single per-namespace
-// stack) is the fallback for top-level (load …) / (include …) outside a library
-// load. Returns nil when neither is available.
-func SelectLoadStack(ctx context.Context, env *environment.EnvironmentFrame) *sourceload.LoadStack {
-	ctxStack := sourceload.LoadStackFromContext(ctx)
-	if ctxStack != nil {
-		return ctxStack
-	}
-	tracker := env.LoadPathStack()
-	if tracker == nil {
-		return nil
-	}
-	// The sole PathTracker implementation is *sourceload.LoadStack
-	// (environment/file_resolver.go); a non-LoadStack tracker would be a contract
-	// violation, so fall back to "no stack" rather than asserting blindly. The
-	// explicit !ok branch is the seam where a second tracker type, if ever added,
-	// must decide how to surface itself here.
-	q, ok := tracker.(*sourceload.LoadStack)
-	if !ok {
-		return nil
-	}
-	return q
+// The stack is carried on ctx and nowhere else, so it is per load CHAIN:
+// concurrent library loads, concurrent (load …) calls on separate SRFI-18
+// threads, and an embedder's own Engine.ContextWithLoadPath each get their own.
+// Returns nil outside any load, which is not an error — a top-level (include …)
+// with no enclosing load resolves against the search paths.
+//
+// This used to fall back to a single LoadStack hung off the Namespace when ctx
+// carried none. That stack was shared by every thread in the engine, so two
+// threads loading files in different directories interleaved their pushes and
+// one compiled the other's file — a source substitution, invisible to -race
+// because it is not a data race. The fallback is gone and the per-namespace
+// stack with it; there is one discipline now, not two.
+func SelectLoadStack(ctx context.Context) *sourceload.LoadStack {
+	return sourceload.LoadStackFromContext(ctx)
 }
 
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.

@@ -898,9 +898,19 @@ func TestAuthorizer_DenyBlocksCommandLine(t *testing.T) {
 //
 // The sweep is representative, not exhaustive: it covers one primitive per gate
 // action (process:read/exit/exec/exec-shell, env:read, file:stat/write/delete,
-// code:eval), not every gated primitive — e.g. open-input-file shares file:read/stat
-// with the file-exists? row, and current-directory is uncovered. A new gate action
-// should add a row here.
+// code:eval), PLUS one per separately-reachable gate SITE, not every gated
+// primitive — e.g. open-input-file shares file:read/stat with the file-exists?
+// row, and current-directory is uncovered. A new gate action should add a row
+// here, and so should a new gate site on an existing action.
+//
+// The second clause is load-bearing and was added when expand/expand-once were
+// gated: they share code:eval with the eval row, so under the action-only
+// charter this sweep would never have grown a row for them, and a regression
+// that dropped their gate would have passed. They are two rows and not one used
+// as a proxy for the other, because they reach their gate by different paths —
+// expand is InvokesProcedure and dispatches through the recovered
+// OperationForeignFunctionCall path, expand-once is a leaf call through
+// callForeignCached.
 //
 // The sweep also does NOT cover stream:{read,write}. That gate runs once per
 // engine, when io.NewState builds the port parameters, so a denial surfaces as a
@@ -937,6 +947,8 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 		{"open-output-file (files, file:write)", `(open-output-file "/tmp/x")`},
 		{"delete-file (files, file:delete)", `(delete-file "/tmp/x")`},
 		{"eval (eval, code:eval)", `(eval '(+ 1 2))`},
+		{"expand (eval, code:eval — separate gate site)", `(expand (datum->syntax #f '(+ 1 2)))`},
+		{"expand-once (eval, code:eval — separate gate site)", `(expand-once (datum->syntax #f '(+ 1 2)))`},
 		{"system (process, process:exec-shell)", `(system "true")`},
 		{"process-spawn (process, process:exec)", `(process-spawn "true")`},
 	}

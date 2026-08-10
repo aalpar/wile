@@ -237,7 +237,10 @@ func PrimUtf8ToString(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"utf8->string: bytevector is not well-formed UTF-8")
 	}
-	mc.SetValue(values.NewString(string(bytes)))
+	// Mutable, for the reason given on number->string: R7RS §3.4's storage model
+	// makes a freshly allocated string's locations mutable absent a clause saying
+	// otherwise, and §6.9 states none. values.NewString defaults to immutable.
+	mc.SetValue(values.NewMutableString(string(bytes)))
 	return nil
 }
 

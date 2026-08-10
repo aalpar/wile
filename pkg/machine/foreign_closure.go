@@ -34,31 +34,45 @@ func goErrorToCondition(err error) values.Value {
 	return values.NewErrorObjectWithCauseAndKind(err.Error(), err, kind)
 }
 
+// isControlSignal reports whether err is Scheme-level control flow rather than a
+// failure: a prompt abort (a handler escaping), the uncaught-exception carrier (a
+// deeper RaiseInPlace found no handler), a timer interrupt, or the trampoline's
+// continuation-resume bounce. Every one of them is addressed to a driver's
+// dispatch loop, so a site that treats it as an ordinary error either converts it
+// into a catchable Scheme condition or hands it to the embedder — both of which
+// lose the transfer.
+//
+// This is the single classifier. Do not open a fifth errors.As chain against
+// these four types; call this instead, so a new control signal is added in one
+// place. It is deliberately a POSITIVE test for the known control types rather
+// than a negative test for "ordinary error": Wave 1 §4.3 converts two VM-internal
+// panics (machine_context.go's DrainN, and the fused promoted ops' Stack.Pop2)
+// into raised conditions that travel this same chain, and those must keep
+// reaching their error handling rather than being absorbed as control flow.
+func isControlSignal(err error) bool {
+	var abortErr *ErrPromptAbort
+	if errors.As(err, &abortErr) {
+		return true
+	}
+	var excErr *ErrExceptionEscape
+	if errors.As(err, &excErr) {
+		return true
+	}
+	var timerErr *ErrTimerInterrupt
+	if errors.As(err, &timerErr) {
+		return true
+	}
+	var resumeErr *ErrResumeContinuation
+	return errors.As(err, &resumeErr)
+}
+
 // applyCallableError converts a Go error from a primitive into a Scheme exception
 // by invoking the current handler in place (RaiseInPlace) — the single bridge
 // between Go-level failures and the mark-based handler chain, so they are catchable
 // by guard and with-exception-handler. Errors that are already Scheme-level control
-// flow pass through unchanged: prompt aborts (a handler escaping), the uncaught
-// exception carrier (a deeper RaiseInPlace found no handler), and timer interrupts.
+// flow pass through unchanged; see isControlSignal.
 func applyCallableError(mc *MachineContext, err error) error {
-	var abortErr *ErrPromptAbort
-	if errors.As(err, &abortErr) {
-		return err
-	}
-	var excErr *ErrExceptionEscape
-	if errors.As(err, &excErr) {
-		return err
-	}
-	var timerErr *ErrTimerInterrupt
-	if errors.As(err, &timerErr) {
-		return err
-	}
-	// A continuation-resume control signal (the trampoline bounce) is Scheme-level
-	// control flow, not a Go failure: pass it through so it reaches the nearest
-	// DefaultPromptTag driver. Without this, RaiseInPlace below would convert it
-	// into a catchable Scheme condition.
-	var resumeErr *ErrResumeContinuation
-	if errors.As(err, &resumeErr) {
+	if isControlSignal(err) {
 		return err
 	}
 	return RaiseInPlace(mc, goErrorToCondition(err), false)

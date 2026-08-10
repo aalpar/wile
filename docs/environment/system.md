@@ -114,7 +114,7 @@ is the authority — new fields must pick one):
 |---|---|---|
 | Per-VM | `Name`, `parent`, `phases`, `runtime`, `moduleInstances`, `syntaxInterns` | child gets its own; `syntaxInterns` is nil and `InternSyntax` delegates to the parent |
 | Captured at construction | `libraryRegistry`, `libraryEnvFactory`, `registry`, `authorizer`, `envMap` | child copies the parent's pointer at fork time; a later `parent.SetRegistry(other)` does **not** reach it, but mutation *through* the shared pointer does |
-| Delegated to root | `fileResolver`, `loadPathStack`, `scopeRegistry`, `immutableLiterals`, `immutableTopLevel` | child stores nothing; reads walk the parent chain |
+| Delegated to root | `fileResolver`, `scopeRegistry`, `immutableLiterals`, `immutableTopLevel` | child stores nothing; reads walk the parent chain |
 | Pointer-shared (`*EngineServices`) | `ioState`, `formRegistry`, `inlineThreshold`, `maxExpandDepth`, `exportIndex` | one struct for the whole namespace tree |
 | Owned outright | `sealedWriteRoot`, `inlineHOFTemplates`, `effectiveRegistry`, `extensionState` | child builds its own; unrelated to the parent's |
 
@@ -511,21 +511,23 @@ These invariants must be maintained:
 
 ## Load-Path Stack
 
-A load stack enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `Namespace` (per-VM, not per-thread). The stack is behind the `PathTracker` interface so `environment/` does not depend on `machine/compilation/`:
+A load stack enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is carried on the `context.Context`, one per load CHAIN:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  PathTracker interface (environment/file_resolver.go)                  │
-│    Push(absPath) / Pop() / Current() / CurrentDir() / Depth()          │
-│                                                                        │
-│  Concrete impl: *LoadStack                                             │
-│    (machine/compilation/sourceload/load_stack.go)                      │
+│  *LoadStack (machine/compilation/sourceload/load_stack.go)             │
+│    Push(absPath) / Pop() / Current() / CurrentDir() / Depth() / Paths()│
 │    paths []string    ← LIFO stack of resolver-supplied paths           │
 │    mu    sync.RWMutex ← thread-safe access                             │
+│                                                                        │
+│  On the context: sourceload.WithLoadStack / LoadStackFromContext       │
+│  Selected by:    resolver.SelectLoadStack(ctx)                         │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-The engine wires in the concrete implementation via `ns.SetLoadPathStack(sourceload.NewLoadStack())` at startup (see `engine.go`).
+There is no `PathTracker` interface any more. It existed so `environment/` could hold a stack without importing `machine/compilation/`; nothing in `environment/` holds one now, so the indirection had nothing left to buy.
+
+A `*LoadStack` is created per load chain and carried on the context by whichever of `load`, `include` or `import` opens the chain. Nothing creates one at engine startup, and nothing hangs one off the `Namespace`.
 
 ### Resolution Strategy
 
@@ -535,20 +537,21 @@ Filename resolution goes through the `FileResolver` interface (`environment/file
 1. Absolute path     → use as-is (authorizer-gated)
 2. Stack-relative    → path relative to stack.CurrentDir()
 3. Fallback dirs     → library registry paths, SCHEME_INCLUDE_PATH, CWD
-4. Filesystem root   → "."
 ```
 
 Stack-relative takes precedence over fallback directories. Error messages list all searched paths.
 
 ### Integration Points
 
-All three file-loading operations push/pop the stack:
+All three file-loading operations get-or-create the chain's stack and push/pop on it:
 
 | Operation | Location | Phase |
 |-----------|----------|-------|
 | `load` | `extensions/eval/prim_eval.go` | Runtime |
 | `include` | `machine/compilation/compile_time_continuation_include.go` | Compile-time |
 | `import` (library loading) | `machine/compilation/library_loader.go` | Compile-time |
+
+Each finds the stack with `resolver.SelectLoadStack(ctx)`, and creates one — installing it on the context it passes downward — when there is none. That get-or-create is what makes the outermost of the three own the chain while the inner ones nest inside it.
 
 This enables correct nested resolution: `(load "a.scm")` containing `(load "b.scm")` resolves `b.scm` relative to `a.scm`'s directory.
 
@@ -563,26 +566,29 @@ This enables correct nested resolution: `(load "a.scm")` containing `(load "b.sc
 ### Go Embedder API
 
 ```go
-// Recommended: automatic push/pop via defer
-err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
-    _, err := engine.EvalMultiple(ctx, `(load "helper.scm")`) // resolves relative to /app/scripts/
+// Name the file the code is being evaluated on behalf of. The push's extent IS
+// the derived context's reach, so there is nothing to pop and no way to unbalance
+// the stack — an early return, an error or a panic cannot leave it dirty.
+loadCtx, err := engine.ContextWithLoadPath(ctx, "/app/scripts/main.scm")
+if err != nil {
     return err
-})
-
-// Direct access
-engine.PushLoadPath("/app/scripts/main.scm")
-defer engine.PopLoadPath()
+}
+_, err = engine.EvalMultiple(loadCtx, `(load "helper.scm")`) // resolves relative to /app/scripts/
 
 // Query
-engine.CurrentLoadPath()       // "" if none
-engine.CurrentLoadDirectory()  // "" if none
+engine.CurrentLoadPath(loadCtx)       // "" outside a load
+engine.CurrentLoadDirectory(loadCtx)  // "" outside a load
 ```
 
-### Design: Per-VM, Not Per-Thread
+`ContextWithLoadPath` returns an error only for an empty path. The returned context carries its OWN stack, seeded from `ctx`'s if there is one, so a caller cannot leak a push into the context it was handed.
 
-The stack lives on `Namespace`, shared across all child environments via delegation. This is intentional: library loading must resolve paths relative to the importing file even when the library runs in its own isolated environment.
+### Design: Per Load Chain, Not Per VM
 
-**Concurrency caveat**: Concurrent `(load ...)` from multiple SRFI-18 threads can corrupt LIFO ordering. Single-threaded loading (the common case) is fully correct.
+The stack lives on the **context**, so its scope is one load chain: an outer `(load …)`, the files it includes, the files those load. Two chains never share one, which is what makes concurrent loading correct.
+
+It used to live on the `Namespace`, shared by every thread in the engine, and that was a defect rather than a caveat. Two SRFI-18 threads each loading a file that includes the same basename from different directories interleaved their pushes, and **one thread compiled the other thread's file** — a source substitution, not a data race, so `-race` could not see it.
+
+Library loading still resolves relative to the importing file, which was the original motivation for the per-VM stack: the chain's stack is threaded through the context into the library load, so the isolated library environment is not what carries it.
 
 ---
 
@@ -590,7 +596,7 @@ The stack lives on `Namespace`, shared across all child environments via delegat
 
 - `Namespace.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
-- `PathTracker` / concrete `LoadStack` - Thread-safe for individual operations (uses RWMutex); LIFO ordering only guaranteed single-threaded
+- `LoadStack` - Thread-safe for individual operations (uses RWMutex). LIFO ordering is now guaranteed under concurrency too, because each load chain owns its own stack rather than sharing one per VM
 - `GlobalEnvironmentFrame` keys/slots - Thread-safe (RWMutex; `CreateGlobalBindingAt` takes the write lock for its check-then-write)
 - Global `Binding` value and metadata - Thread-safe: a global binding's value and its `*BindingMeta` live in an `atomicCell`, read lock-free and published by store / copy-on-write CAS (`Binding.UpdateMeta`). Never write a global's meta field in place
 - Local `Binding` operations - Not thread-safe (locals are frame-private, single-threaded compilation assumed)

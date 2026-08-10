@@ -39,8 +39,12 @@ func TestInexact(t *testing.T) {
 		{Name: "inexact on rational 1/4", Code: `(inexact 1/4)`, Expected: values.NewFloat(0.25)},
 		{Name: "inexact on rational 3/4", Code: `(inexact 3/4)`, Expected: values.NewFloat(0.75)},
 
-		// Complex - already inexact
-		{Name: "inexact on complex", Code: `(inexact 1+2i)`, Expected: values.NewBigComplexFromBigFloats(values.NewBigFloatFromFloat64(1.0), values.NewBigFloatFromFloat64(2.0))},
+		// Complex - the inexact representation of a real is float64, so an exact
+		// complex converts PER PART to a *Complex, not to a BigComplex of
+		// BigFloats. The old expectation was a value no reader syntax
+		// reconstructs: it printed as "1.0+2.0i" and read back as this *Complex,
+		// so the R7RS 6.2.7 write/read round trip failed on it.
+		{Name: "inexact on complex", Code: `(inexact 1+2i)`, Expected: values.NewComplexFromParts(1.0, 2.0)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

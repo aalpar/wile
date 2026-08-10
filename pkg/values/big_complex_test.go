@@ -350,9 +350,13 @@ func TestBigComplex_Exactness(t *testing.T) {
 	)
 	c.Assert(mixed.IsExact(), qt.IsFalse)
 
-	// ToInexact
+	// ToInexact converts PER PART, and the inexact representation of a real is
+	// float64 — so the result is a *Complex, not a BigComplex of BigFloats. That
+	// is what makes the value printable and re-readable (R7RS §6.2.7); a
+	// BigComplex result printed as "3.0+4.0i" and read back as a *Complex.
 	inexactFromExact := exact.ToInexact()
-	c.Assert(inexactFromExact.(*values.BigComplex).IsExact(), qt.IsFalse)
+	c.Assert(inexactFromExact, qt.DeepEquals, values.NewComplexFromParts(3.0, 4.0))
+	c.Assert(inexactFromExact.IsExact(), qt.IsFalse)
 
 	// ToExact
 	exactFromInexact, err := inexact.ToExact()
@@ -1200,4 +1204,58 @@ func TestBigComplex_NaNEquality(t *testing.T) {
 	// slot — the rule is component-wise, not "contains a NaN somewhere".
 	c.Assert(nanReal.EqualTo(nanImag), qt.IsFalse)
 	c.Assert(nanBoth.EqualTo(nanReal), qt.IsFalse)
+}
+
+// TestBigComplex_HashCodeAgreesWithRealForExactZeroImag pins the hash contract
+// for the real-valued BigComplex: a value with an exact-zero imaginary part
+// compares equal to the bare real under EqualTo, EqvNumber and Equal, so it MUST
+// hash as that real.
+//
+// Before the fix HashCode mixed the zero's own hash into the result -- the zero
+// is not the identity of ^ -- so the hashes differed while the values compared
+// equal. A hashtable lookup therefore missed in BOTH directions (real key,
+// complex stored; and the reverse), in BOTH table kinds.
+//
+// There is no Scheme route to this state: every Scheme-surface constructor
+// canonicalizes a zero-imaginary complex down to its real. It is reachable from
+// the embedder API, which is why the gate is a Go test.
+func TestBigComplex_HashCodeAgreesWithRealForExactZeroImag(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		cplx *values.BigComplex
+		real values.Number
+	}{
+		{
+			name: "BigInteger real part vs Integer",
+			cplx: values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(0)),
+			real: values.NewInteger(3),
+		},
+		{
+			// The blast radius is every part type validateBigComplexPart admits,
+			// not only *BigInteger.
+			name: "Rational real part vs Rational",
+			cplx: values.NewBigComplex(values.NewRational(3, 4), values.NewBigIntegerFromInt64(0)),
+			real: values.NewRational(3, 4),
+		},
+	}
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			// The premise: these compare equal by all three predicates.
+			c.Assert(tc.cplx.EqualTo(tc.real), qt.IsTrue)
+			c.Assert(values.EqvNumber(tc.cplx, tc.real), qt.IsTrue)
+			c.Assert(values.Equal(tc.cplx, tc.real), qt.IsTrue)
+
+			// Therefore the hashes must agree, in both directions.
+			hashable, ok := tc.real.(values.Hashable)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(tc.cplx.HashCode(), qt.Equals, hashable.HashCode())
+		})
+	}
+
+	// Control: a genuinely non-real BigComplex must still mix the imaginary part
+	// in, or the fix would have collapsed every complex onto its real part.
+	nonReal := values.NewBigComplex(values.NewBigIntegerFromInt64(3), values.NewBigIntegerFromInt64(4))
+	c.Assert(nonReal.HashCode(), qt.Not(qt.Equals), values.NewInteger(3).HashCode())
 }

@@ -493,15 +493,6 @@ func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	p.namespace.SetLibraryRegistry(registry)
 }
 
-// LoadPathStack returns the load path tracker. Shortcut for
-// p.Namespace().LoadPathStack(); see the comment block above.
-func (p *EnvironmentFrame) LoadPathStack() PathTracker {
-	if p.namespace == nil {
-		return nil
-	}
-	return p.namespace.LoadPathStack()
-}
-
 // hasLocal returns true if this frame has local bindings.
 // The sentinel for "no local environment" is local.keys == nil (zero value).
 func (p *EnvironmentFrame) hasLocal() bool {

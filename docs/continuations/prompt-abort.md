@@ -105,7 +105,7 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │  p.promptTag = DefaultPromptTag                                    │
 │                                                                    │
 │  loop:                                                             │
-│    err := p.Run()                                                  │
+│    err := pending, else p.Run()  (pending = a routed signal)       │
 │    │                                                               │
 │    ├─ err == nil (normal completion)                               │
 │    │   ├─ UnwindTo(0) if winding frames remain                     │
@@ -114,12 +114,14 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 │    ├─ ErrPromptAbort                                               │
 │    │   FindPrompt(tag); not found → error "no prompt found"        │
 │    │   resolveAbort(abortErr, prompt)                              │
+│    │   control signal? → pending; continue loop                    │
 │    │   done? return nil  (context-level deliver)                   │
 │    │   continue loop                                               │
 │    │                                                               │
 │    ├─ ErrResumeContinuation  (the trampoline bounce)               │
 │    │   boundary := FindPrompt(tag)                                 │
 │    │   ReinstallSegment(seg, boundary, SourceWinding, vals, true)  │
+│    │   control signal? → pending; continue loop                    │
 │    │   wasEmpty? boundary == nil → return nil; else Restore(bnd)   │
 │    │   continue loop                                               │
 │    │                                                               │
@@ -135,7 +137,9 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 `RunWithinBoundary`. Given an already-matched prompt it:
 
 1. reconciles dynamic-wind from `abortErr.SourceWinding` (the winding at the
-   escape point, possibly a deeper sub-context) to `prompt.windingStack`;
+   escape point, possibly a deeper sub-context) — or, when the abort carries no
+   `SourceWinding`, from the driver's own winding (value-delivery aborts) — to
+   `prompt.windingStack`;
 2. `Restore(prompt)`: restores *past* the prompt frame, skipping it;
 3. applies the prompt's handler to the abort values, or, when there is no
    handler, delivers all of them with `SetValues` (R7RS §6.10: zero values stay
@@ -144,6 +148,19 @@ routed by `FindPrompt`, a resume by `ReinstallSegment`.
 The two drivers differ only in how they treat a *not-found* prompt: the
 top-level `RunResumable` raises, while `RunWithinBoundary` re-raises the abort
 so its enclosing driver owns it.
+
+**Step 1 runs after-thunks, and an after-thunk can transfer control.** A `raise`
+there caught by a `guard` placed *around* the `call/cc` escapes via
+`call-with-exit`; so does a bare `call-with-exit` with no exception anywhere.
+Both surface as `resolveAbort`'s (and, on the resume arm,
+`ReinstallSegment`'s) error return, and both are addressed to a prompt still on
+this chain. The driver therefore classifies that error with `isControlSignal`
+and feeds it back to the top of its own loop as `pending` rather than returning
+it — the two reconcile paths are the only places a control signal is produced
+*by* the driver rather than delivered *to* it. Returning it instead is what put
+a raw `abort to prompt #<continuation-prompt-tag:exit>` in front of the
+embedder. Classification is by control-signal-ness, not by exception
+provenance: the no-exception shape leaks identically.
 
 ### Context-level abort
 

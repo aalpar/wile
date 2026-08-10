@@ -31,13 +31,15 @@ import (
 	"github.com/aalpar/wile/pkg/werr"
 )
 
-// newTestNamespace returns a Namespace with a load stack initialized.
-// Tests that call LoadPathStack().Push() must use this instead of
-// environment.NewNamespace() to avoid a nil dereference.
+// newTestNamespace returns a Namespace for resolver tests.
+//
+// It used to seed a per-namespace load stack. There is no such stack any more:
+// the load stack is carried on the CONTEXT, per load chain. A test that needs
+// one installs it with sourceload.WithLoadStack on the ctx it passes in — see
+// the ctxStack cases below, which were the only shape that ever worked under
+// concurrency and are now the only shape there is.
 func newTestNamespace() *environment.Namespace {
-	ns := environment.NewNamespace()
-	ns.SetLoadPathStack(sourceload.NewLoadStack())
-	return ns
+	return environment.NewNamespace()
 }
 
 // realDir normalizes a temp directory path to account for macOS symlinks
@@ -102,15 +104,15 @@ func TestOSFileResolver_RelativeViaLoadPathStack(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	env := newTestNamespace().Runtime()
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	// Push a file path in the target directory so CurrentDir() returns dir.
 	stack.Push(filepath.Join(dir, "parent.scm"))
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	t.Setenv(SchemeIncludePathEnv, "")
 
 	r := NewOSFileResolver(env)
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "found.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "found.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, filepath.Join(dir, "found.scm"))
@@ -337,12 +339,12 @@ func TestOSFileResolver_LoadPathStackPriorityOverFallbacks(t *testing.T) {
 	t.Setenv(SchemeIncludePathEnv, fallbackDir)
 
 	env := newTestNamespace().Runtime()
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push(filepath.Join(stackDir, "parent.scm"))
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewOSFileResolver(env)
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "dup.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "dup.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, filepath.Join(stackDir, "dup.scm"))
@@ -362,12 +364,12 @@ func TestOSFileResolver_DotDotResolution(t *testing.T) {
 	t.Setenv(SchemeIncludePathEnv, "")
 
 	env := newTestNamespace().Runtime()
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push(filepath.Join(deepDir, "parent.scm"))
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewOSFileResolver(env)
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "../../foo.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "../../foo.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, filepath.Join(base, "foo.scm"))
@@ -470,36 +472,39 @@ func TestFSFileResolver_RelativeToLoadPathStack(t *testing.T) {
 		"lib/helper.scm": {Data: []byte("42")},
 	}
 	env := newTestNamespace().Runtime()
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push("lib/main.sld")
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewFSFileResolver(fsys, env)
 
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "helper.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "helper.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, "lib/helper.scm")
 }
 
-// The per-load-chain LoadStack carried on ctx takes precedence over the shared
-// per-namespace stack: a relative include resolves against the ctx stack's
-// directory even when the namespace stack points elsewhere. This is the wiring
-// that lets concurrent library loads resolve their includes independently.
-func TestFSFileResolver_CtxStackPreferredOverEnvStack(t *testing.T) {
+// An inner load chain's stack shadows the outer one: a relative include inside a
+// nested load resolves against the INNER chain's directory. This used to be
+// stated as "the ctx stack takes precedence over the shared per-namespace
+// stack"; there is no per-namespace stack any more, and the property that
+// replaced it is this one — every chain carries its own, so nesting shadows and
+// two chains on separate threads cannot see each other's pushes at all.
+func TestFSFileResolver_InnerChainStackShadowsOuter(t *testing.T) {
 	fsys := fstest.MapFS{
 		"a/helper.scm": {Data: []byte("1")},
 		"b/helper.scm": {Data: []byte("2")},
 	}
 	env := newTestNamespace().Runtime()
-	// Shared namespace stack points at directory "a".
-	env.LoadPathStack().Push("a/main.sld")
-	defer env.LoadPathStack().Pop()
+	// The outer chain points at directory "a".
+	outer := sourceload.NewLoadStack()
+	outer.Push("a/main.sld")
+	ctx := sourceload.WithLoadStack(context.Background(), outer)
 
-	// Per-load-chain ctx stack points at directory "b".
-	ctxStack := sourceload.NewLoadStack()
-	ctxStack.Push("b/lib.sld")
-	ctx := sourceload.WithLoadStack(context.Background(), ctxStack)
+	// The inner chain points at directory "b".
+	inner := sourceload.NewLoadStack()
+	inner.Push("b/lib.sld")
+	ctx = sourceload.WithLoadStack(ctx, inner)
 
 	r := NewFSFileResolver(fsys, env)
 
@@ -556,12 +561,12 @@ func TestFSFileResolver_LoadPathStackPriorityOverSearchPaths(t *testing.T) {
 	ns.SetLibraryRegistry(&testSearcher{paths: []string{"search-dir"}})
 	env := ns.Runtime()
 
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push("stack-dir/parent.scm")
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewFSFileResolver(fsys, env)
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "util.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "util.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, "stack-dir/util.scm")
@@ -621,13 +626,13 @@ func TestFSFileResolver_DotDotTraversal(t *testing.T) {
 		"sub/current.scm": {Data: []byte("here")},
 	}
 	env := newTestNamespace().Runtime()
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push("sub/current.scm")
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewFSFileResolver(fsys, env)
 	// path.Join("sub", "../sibling.scm") cleans to "sibling.scm"
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "../sibling.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "../sibling.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, "sibling.scm")
@@ -639,14 +644,14 @@ func TestFSFileResolver_FallsThroughToRoot(t *testing.T) {
 		"sub/other.scm": {Data: []byte("other")},
 	}
 	env := newTestNamespace().Runtime()
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push("sub/other.scm")
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewFSFileResolver(fsys, env)
 	// "root-only.scm" is NOT in "sub/", so load-path-stack miss,
 	// no search paths, falls through to FS root
-	f, resolved, err := r.ResolveAndOpen(context.Background(), "root-only.scm")
+	f, resolved, err := r.ResolveAndOpen(ctx, "root-only.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, "root-only.scm")
@@ -658,12 +663,12 @@ func TestFSFileResolver_NotFoundListsSearchedPaths(t *testing.T) {
 	ns.SetLibraryRegistry(&testSearcher{paths: []string{"lib", "vendor"}})
 	env := ns.Runtime()
 
-	stack := env.LoadPathStack()
+	stack := sourceload.NewLoadStack()
 	stack.Push("src/main.scm")
-	defer stack.Pop()
+	ctx := sourceload.WithLoadStack(context.Background(), stack)
 
 	r := NewFSFileResolver(fsys, env)
-	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	_, _, err := r.ResolveAndOpen(ctx, "missing.scm")
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
 	// Error should mention all searched locations

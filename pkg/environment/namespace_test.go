@@ -15,7 +15,6 @@
 package environment
 
 import (
-	"path"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -23,41 +22,6 @@ import (
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
 )
-
-// testPathTracker is a minimal PathTracker for testing, avoiding an import of
-// machine/compilation/sourceload (which would create a circular dependency).
-type testPathTracker struct {
-	paths []string
-}
-
-func (p *testPathTracker) Push(filePath string) {
-	p.paths = append(p.paths, filePath)
-}
-
-func (p *testPathTracker) Pop() {
-	if len(p.paths) > 0 {
-		p.paths = p.paths[:len(p.paths)-1]
-	}
-}
-
-func (p *testPathTracker) Current() string {
-	if len(p.paths) == 0 {
-		return ""
-	}
-	return p.paths[len(p.paths)-1]
-}
-
-func (p *testPathTracker) CurrentDir() string {
-	c := p.Current()
-	if c == "" {
-		return ""
-	}
-	return path.Dir(c)
-}
-
-func (p *testPathTracker) Depth() int {
-	return len(p.paths)
-}
 
 // testAuthorizer is a no-op security.Authorizer for testing.
 type testAuthorizer struct{ name string }
@@ -179,83 +143,6 @@ func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
 
 	// Child should inherit topLevel
 	c.Assert(child.Namespace(), qt.Equals, topLevel)
-}
-
-func TestNamespace_ChildSharesLoadPathStack(t *testing.T) {
-	c := qt.New(t)
-
-	parent := NewNamespace()
-	parent.SetLoadPathStack(&testPathTracker{})
-	child := parent.NewChildNamespace()
-
-	// Verify both have non-nil stacks
-	c.Assert(parent.LoadPathStack(), qt.Not(qt.IsNil))
-	c.Assert(child.LoadPathStack(), qt.Not(qt.IsNil))
-
-	// Verify they share the same stack (per-VM design)
-	c.Assert(child.LoadPathStack(), qt.Equals, parent.LoadPathStack())
-
-	// Push to parent, verify child sees it
-	parent.LoadPathStack().Push("/parent/file.scm")
-	c.Assert(child.LoadPathStack().Current(), qt.Equals, "/parent/file.scm")
-	c.Assert(child.LoadPathStack().Depth(), qt.Equals, 1)
-
-	// Push to child, verify parent sees it
-	child.LoadPathStack().Push("/child/file.scm")
-	c.Assert(parent.LoadPathStack().Current(), qt.Equals, "/child/file.scm")
-	c.Assert(parent.LoadPathStack().Depth(), qt.Equals, 2)
-
-	// Pop from child, verify parent sees it
-	child.LoadPathStack().Pop()
-	c.Assert(parent.LoadPathStack().Current(), qt.Equals, "/parent/file.scm")
-	c.Assert(parent.LoadPathStack().Depth(), qt.Equals, 1)
-
-	// Verify CurrentDir works through delegation
-	c.Assert(child.LoadPathStack().CurrentDir(), qt.Equals, "/parent")
-}
-
-// TestNamespace_ChildSetLoadPathStackPropagatesToRoot is a regression
-// test for the Phase 5 fix: pre-fix, SetLoadPathStack(s) on a child
-// silently set the child's local field while LoadPathStack() delegated
-// to the root, so the write was effectively dropped (a future read
-// from the root or any sibling would not see it). Both sides now go
-// through root() and a write on any namespace must be observable from
-// every other namespace in the same tree.
-func TestNamespace_ChildSetLoadPathStackPropagatesToRoot(t *testing.T) {
-	c := qt.New(t)
-
-	parent := NewNamespace()
-	child := parent.NewChildNamespace()
-	grandchild := child.NewChildNamespace()
-
-	// Setting on the deepest namespace must be observable everywhere.
-	tracker := &testPathTracker{}
-	grandchild.SetLoadPathStack(tracker)
-
-	c.Assert(parent.LoadPathStack(), qt.Equals, tracker)
-	c.Assert(child.LoadPathStack(), qt.Equals, tracker)
-	c.Assert(grandchild.LoadPathStack(), qt.Equals, tracker)
-}
-
-func TestNamespace_NestedChildSharesLoadPathStack(t *testing.T) {
-	c := qt.New(t)
-
-	root := NewNamespace()
-	root.SetLoadPathStack(&testPathTracker{})
-	child1 := root.NewChildNamespace()
-	child2 := child1.NewChildNamespace()
-
-	// All three should share the same stack
-	c.Assert(child1.LoadPathStack(), qt.Equals, root.LoadPathStack())
-	c.Assert(child2.LoadPathStack(), qt.Equals, root.LoadPathStack())
-
-	// Push to deepest child
-	child2.LoadPathStack().Push("/deep/file.scm")
-
-	// All should see it
-	c.Assert(root.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
-	c.Assert(child1.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
-	c.Assert(child2.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
 }
 
 func TestConstructorEquivalence(t *testing.T) {

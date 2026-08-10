@@ -79,7 +79,7 @@ Every enforcement point calls `security.CheckWithAuthorizer(auth, req)`. `securi
 | Site | Request |
 |------|---------|
 | `extensions/files`: `openFilePort`, `callWithFile`, `PrimFileExistsQ`, `PrimDeleteFile`, `PrimCreateDirectory`/`PrimDeleteDirectory`/`PrimDirectoryFiles`/`PrimCurrentDirectory`/`PrimSetCurrentDirectory`, plus `unconfinedTarget` in `confined.go` re-gating a resolved real path | `file:{read,write,delete,stat}` on the path |
-| `extensions/eval`: `PrimEval`, `PrimCompile` | `code:eval` |
+| `extensions/eval`: `PrimEval`, `PrimCompile`, `PrimExpand`, `PrimExpandOnce` | `code:eval` |
 | `extensions/system`: `PrimCommandLine`, `PrimExit`/`PrimEmergencyExit` | `process:read`, `process:exit` |
 | `extensions/process`: `PrimSystem`, `PrimProcessSpawn` (`PrimProcessWait`/`PrimProcessKill` are ungated: they act on a process handle already obtained through a gated spawn) | `process:exec-shell`, `process:exec` |
 | `pkg/internal/extensions/envvars`: `PrimGetEnvironmentVariable`, `PrimGetEnvironmentVariables` | `env:read` |

@@ -73,7 +73,7 @@ var _ values.Value = (*Namespace)(nil)
 //
 //	Delegated to root via root() walk (the field lives only on the root
 //	namespace; children reach it through the parent chain in O(depth)):
-//	  fileResolver, loadPathStack, scopeRegistry, immutableLiterals,
+//	  fileResolver, scopeRegistry, immutableLiterals,
 //	  immutableTopLevel
 //
 //	Pointer-shared via *EngineServices (allocated once in NewNamespace;
@@ -115,11 +115,6 @@ type Namespace struct {
 	syntaxInterns   map[values.Value]syntax.SyntaxValue
 	syntaxInternsMu sync.RWMutex
 
-	// loadPathStack tracks files currently being loaded for relative path
-	// resolution. Only exists on the root Namespace (nil in children).
-	// Children access via LoadPathStack() which delegates to parent.
-	loadPathStack PathTracker
-
 	// immutableLiterals is the engine-scoped set of immutable literal
 	// pair/vector objects (R7RS §4.1.2). Delegated to root (see the field
 	// inheritance policy comment above): only the root Namespace holds it
@@ -141,7 +136,7 @@ type Namespace struct {
 	// of such a binding. This field's zero value is false, but the engine
 	// default is ON: newEngineConfig seeds it true (wile/options.go), and
 	// WithMutableTopLevel() opts back out. It gates the frame-reclamation
-	// optimizer's top-level payoff. Delegated to root like loadPathStack so the
+	// optimizer's top-level payoff. Delegated to root like fileResolver so the
 	// compiler and validator see one engine-scoped setting.
 	immutableTopLevel bool
 
@@ -246,7 +241,6 @@ type ModuleInstance struct {
 
 // NewNamespace creates a new Namespace.
 // This is the primary entry point for creating an isolated Wile VM instance.
-// Call SetLoadPathStack before any file loading operations.
 func NewNamespace() *Namespace {
 	q := &Namespace{
 		syntaxInterns:     make(map[values.Value]syntax.SyntaxValue),
@@ -396,7 +390,7 @@ func (p *Namespace) Phases() *PhaseRegistry {
 // does not guard against a nil receiver — Namespace is a value type
 // whose nil-state is meaningless, and silently returning nil here would
 // only push the inevitable panic deeper into the dependent accessor
-// (which would then read .fileResolver / .loadPathStack / etc. off
+// (which would then read .fileResolver / .scopeRegistry / etc. off
 // nil). EnvironmentFrame's nil-namespace shortcut guards exist because
 // EnvironmentFrame can legitimately be constructed without a Namespace
 // (newEnvironmentFrame test fixtures); Namespace itself cannot.
@@ -558,19 +552,6 @@ func (p *Namespace) LibraryEnvFactory() LibraryEnvFactory {
 // SetLibraryEnvFactory sets the factory for creating library environments.
 func (p *Namespace) SetLibraryEnvFactory(f LibraryEnvFactory) {
 	p.libraryEnvFactory = f
-}
-
-// SetLoadPathStack sets the load path tracker for this namespace.
-// Delegated to root: the tracker always lives on the root Namespace.
-// Must be called before any file loading operations.
-func (p *Namespace) SetLoadPathStack(s PathTracker) {
-	p.root().loadPathStack = s
-}
-
-// LoadPathStack returns the load path tracker for tracking files currently
-// being loaded. Delegated to root.
-func (p *Namespace) LoadPathStack() PathTracker {
-	return p.root().loadPathStack
 }
 
 // Registry returns the primitive registry.

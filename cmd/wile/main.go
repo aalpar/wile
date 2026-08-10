@@ -402,12 +402,13 @@ func main() {
 					if absErr != nil {
 						Failf(absErr, "cannot resolve path")
 					}
-					loadErr := eng.WithLoadPath(absPath, func() error {
-						_, evalErr := eng.EvalProgram(ctx, string(content), fn)
-						return evalErr
-					})
-					if loadErr != nil {
-						Fail(loadErr)
+					loadCtx, ctxErr := eng.ContextWithLoadPath(ctx, absPath)
+					if ctxErr != nil {
+						Fail(ctxErr)
+					}
+					_, evalErr := eng.EvalProgram(loadCtx, string(content), fn)
+					if evalErr != nil {
+						Fail(evalErr)
 					}
 				} else {
 					// Run last file (print results) and exit in non-interactive mode
@@ -582,14 +583,13 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 	// EvalProgram wraps the file in a single (begin ...) unit so all top-level
 	// defines are mutually visible and share one continuation chain; run with the
 	// file's directory on the load path so relative include/load resolves.
-	var result wile.Value
-	loadErr := eng.WithLoadPath(absPath, func() error {
-		var evalErr error
-		result, evalErr = eng.EvalProgram(ctx, string(content), filename)
-		return evalErr
-	})
-	if loadErr != nil {
-		Fail(loadErr)
+	loadCtx, ctxErr := eng.ContextWithLoadPath(ctx, absPath)
+	if ctxErr != nil {
+		Fail(ctxErr)
+	}
+	result, evalErr := eng.EvalProgram(loadCtx, string(content), filename)
+	if evalErr != nil {
+		Fail(evalErr)
 	}
 
 	if result != nil && !result.IsVoid() {
@@ -655,9 +655,11 @@ func checkFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filenam
 		Failf(absErr, "cannot resolve path")
 	}
 
-	checkErr := eng.WithLoadPath(absPath, func() error {
-		return eng.CheckProgram(ctx, string(content), filename)
-	})
+	loadCtx, ctxErr := eng.ContextWithLoadPath(ctx, absPath)
+	if ctxErr != nil {
+		Fail(ctxErr)
+	}
+	checkErr := eng.CheckProgram(loadCtx, string(content), filename)
 	if checkErr != nil {
 		Fail(checkErr)
 	}

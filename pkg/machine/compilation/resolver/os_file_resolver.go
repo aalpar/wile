@@ -129,7 +129,7 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 func (p *OSFileResolver) osAbsSearchDirs(ctx context.Context) []string {
 	var dirs []string
 
-	s := SelectLoadStack(ctx, p.env)
+	s := SelectLoadStack(ctx)
 	if s != nil {
 		cur := s.CurrentDir()
 		if cur != "" && cur != "." {

@@ -76,3 +76,13 @@ func (p *LoadStack) Depth() int {
 	defer p.mu.RUnlock()
 	return len(p.paths)
 }
+
+// Paths returns a copy of the stack's paths, outermost first. It exists so a
+// derived stack can be seeded from an existing one without sharing its storage:
+// Engine.ContextWithLoadPath hands back a context carrying its OWN stack, so a
+// caller cannot leak a push into the context it was given.
+func (p *LoadStack) Paths() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return append([]string(nil), p.paths...)
+}

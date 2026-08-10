@@ -22,7 +22,6 @@ See [system.md](system.md) for detailed API documentation.
 │                         Namespace (root, one per VM)                          │
 │                                                                               │
 │  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance          │
-│  loadPathStack ─── PathTracker           ← interface; impl *LoadStack         │
 │  libraryRegistry ─ LibrarySearcher       ← *compilation.LibraryRegistry       │
 │  phases ────────── *PhaseRegistry        ← phase views + sealed-write views   │
 │  runtime ───────── *EnvironmentFrame     ← the ROOT VIEW (mutable phase 0)    │

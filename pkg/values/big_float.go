@@ -262,11 +262,16 @@ func (p *BigFloat) Multiply(o Number) Number {
 	if exactZeroEither(p, o) {
 		return NewInteger(0)
 	}
-	if p.nan || o.IsNaN() {
-		return NewBigFloatNaN()
-	}
 	v, ok := o.(*BigFloat)
 	if ok {
+		// The NaN test belongs INSIDE the same-type branch, as Add and Subtract
+		// already place it. Ahead of the dispatch it also swallowed the mixed-kind
+		// cases: (* #m2.0 3.0+nan.0i) collapsed a complex operand to a real
+		// +nan.0, destroying both the real part and the complexness, while the
+		// reverse operand order and the *Float sibling both answered 6.0+nan.0i.
+		if p.nan || v.nan {
+			return NewBigFloatNaN()
+		}
 		return recoverNaN(func() *BigFloat {
 			return &BigFloat{value: new(big.Float).Mul(p.value, v.value)}
 		})
@@ -283,11 +288,13 @@ func (p *BigFloat) Divide(o Number) (Number, error) {
 	case zeroYieldExactZero:
 		return NewInteger(0), nil
 	}
-	if p.nan || o.IsNaN() {
-		return NewBigFloatNaN(), nil
-	}
 	v, ok := o.(*BigFloat)
 	if ok {
+		// Inside the same-type branch, for the reason given on Multiply: ahead of
+		// the dispatch this collapsed (/ #m2.0 3.0+nan.0i) to a real +nan.0.
+		if p.nan || v.nan {
+			return NewBigFloatNaN(), nil
+		}
 		// Do NOT hand-roll the inexact-zero case. big.Float represents negative zero
 		// (Signbit() reports it; String() prints "-0") and Quo already gets every sign
 		// right: Quo(1, -0.0) is -Inf and Quo(-1, -0.0) is +Inf. It panics with

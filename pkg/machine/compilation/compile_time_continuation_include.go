@@ -21,6 +21,7 @@ import (
 	"io/fs"
 
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
+	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -68,18 +69,26 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			}
 			defer file.Close() //nolint:errcheck
 
-			// Push to stack after successful open, pop on exit.
-			// resolver.SelectLoadStack returns the same stack the FS/OS resolvers
-			// read from, so this (include …) pushes onto — and later resolves nested
-			// relative paths against — exactly the stack resolution will consult: its
-			// own per-load-chain directory when compiled on an SRFI-18 thread, or the
-			// shared per-namespace stack for a top-level (include …) outside any
-			// library load.
-			stack := resolver.SelectLoadStack(ctctx.ctx, p.env)
-			if stack != nil {
-				stack.Push(filePath)
-				defer stack.Pop()
+			// Push to stack after successful open, pop on exit, so a nested relative
+			// path inside the included file resolves against ITS directory rather
+			// than the includer's. resolver.SelectLoadStack returns the same object
+			// the FS/OS resolvers read from, which is what keeps the push target and
+			// the read target identical.
+			//
+			// A top-level (include …) outside any load carries no stack, so this
+			// creates one and installs it on the ctx used for the rest of THIS file
+			// — the same get-or-create PrimLoad performs. Without it a chain of
+			// includes could not resolve past its first hop: the include compiler
+			// would push nowhere and the resolver would read nothing. `inner` is a
+			// copy, so the derived ctx does not escape this file's extent.
+			inner := ctctx
+			stack := resolver.SelectLoadStack(inner.ctx)
+			if stack == nil {
+				stack = sourceload.NewLoadStack()
+				inner.ctx = sourceload.WithLoadStack(inner.ctx, stack)
 			}
+			stack.Push(filePath)
+			defer stack.Pop()
 
 			// Create parser for the file
 			reader := bufio.NewReader(file)
@@ -91,7 +100,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			// Read all forms from the file first, then process them with letrec* semantics
 			var forms []syntax.SyntaxValue
 			for {
-				stx, readErr := fileParser.ReadSyntax(ctctx.ctx)
+				stx, readErr := fileParser.ReadSyntax(inner.ctx)
 				if readErr != nil {
 					if errors.Is(readErr, io.EOF) {
 						break
@@ -102,7 +111,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			}
 
 			// Process forms with letrec* semantics: pre-declare all bindings first
-			err = p.processFormsWithLetrecSemantics(ctctx, forms, "include "+fn.Value)
+			err = p.processFormsWithLetrecSemantics(inner, forms, "include "+fn.Value)
 			if err != nil {
 				return err
 			}
