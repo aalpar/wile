@@ -124,7 +124,7 @@ func addMutexes(r *registry.PrimitiveRegistry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeVoid},
 		{Name: "mutex-state", ParamCount: 1, Impl: PrimMutexState,
-			Doc: "Returns the state of MUTEX: the symbol not-owned, abandoned, or the owning thread.", ParamNames: []string{"mutex"}, Category: "mutexes",
+			Doc: "Returns the state of MUTEX (SRFI-18): the owning thread; or the symbol not-owned if it is held with no owning thread; abandoned if its owner terminated while holding it; not-abandoned if it is not held.", ParamNames: []string{"mutex"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		// InvokesProcedure: acquiring an abandoned mutex signals through
 		// machine.RaiseInPlace, same live-chain handler run as thread-join! above.

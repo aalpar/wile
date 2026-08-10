@@ -99,19 +99,37 @@ func TestMutex_LockUnlock_WithOwner(t *testing.T) {
 func TestMutex_StateValue(t *testing.T) {
 	m := values.NewMutex("test")
 
-	// Unlocked → 'not-owned (per SRFI-18 collapse).
+	// Unlocked → 'not-abandoned. NOT 'not-owned, and the difference is the
+	// whole point: SRFI-18's two unowned answers are distinct.
+	//
+	// This assertion used to read 'not-owned, with a comment calling the
+	// sameness "the load-bearing SRFI-18 collapse the refactor relies on".
+	// That belief was wrong, and it is why item 17 was filed as a
+	// REPRESENTATION problem: MutexState plus the owner field always encoded
+	// all four SRFI-18 answers faithfully — MutexAbandoned is not a held
+	// state, both wait loops exit on it exactly as on MutexUnlocked — and the
+	// collapse existed only in this renderer, which returned 'not-owned from
+	// three branches and left 'not-abandoned unreachable.
 	sv := m.StateValue()
-	qt.Assert(t, sv, valuestest.SchemeEquals, values.NewSymbol("not-owned"))
+	qt.Assert(t, sv, valuestest.SchemeEquals, values.NewSymbol("not-abandoned"))
 
-	// Locked with nil owner → 'not-owned. This is the load-bearing SRFI-18
-	// collapse the refactor relies on: MutexUnlocked and MutexLocked with
-	// owner==nil both surface as the same Scheme symbol. A regression that
-	// drops the owner-nil check inside the MutexLocked branch would fail
-	// here rather than at a far-away user-reported bug.
+	// Locked with nil owner → 'not-owned. THIS is what 'not-owned means: the
+	// mutex IS held, by a caller with no Thread object — mutex-lock! takes an
+	// optional owner and #f is legal, and the primordial thread has none. A
+	// regression that drops the owner-nil check inside the MutexLocked branch
+	// fails here rather than at a far-away user-reported bug.
 	m.Lock(nil, nil)
 	sv = m.StateValue()
 	qt.Assert(t, sv, valuestest.SchemeEquals, values.NewSymbol("not-owned"))
+
+	// The discrimination itself, asserted directly: held-with-no-owner and
+	// not-held must never render the same. One symbol for both is exactly the
+	// defect, and it is invisible to any test that checks only one of them.
+	held := m.StateValue()
 	m.Unlock(nil, nil)
+	notHeld := m.StateValue()
+	qt.Assert(t, held.EqualTo(notHeld), qt.IsFalse,
+		qt.Commentf("held-unowned rendered as %v, not-held as %v", held, notHeld))
 
 	// Locked with owner → owner thread.
 	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "owner")

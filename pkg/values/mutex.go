@@ -28,8 +28,9 @@ import (
 // The singletons avoid re-allocating the symbol; eq? on symbols is by name
 // (see EqIdentity), so a singleton is eq? to a reader-produced 'not-owned.
 var (
-	SymbolMutexNotOwned  = NewSymbol("not-owned")
-	SymbolMutexAbandoned = NewSymbol("abandoned")
+	SymbolMutexNotOwned     = NewSymbol("not-owned")
+	SymbolMutexNotAbandoned = NewSymbol("not-abandoned")
+	SymbolMutexAbandoned    = NewSymbol("abandoned")
 )
 
 var (
@@ -147,16 +148,27 @@ func (p *Mutex) StateValue() Value {
 
 	switch p.state {
 	case MutexUnlocked:
-		return SymbolMutexNotOwned
+		// NOT 'not-owned. SRFI-18's two "unowned" answers are distinct: a
+		// mutex nobody holds is 'not-abandoned, and 'not-owned is a HELD
+		// mutex with no owning thread. This branch returned 'not-owned, which
+		// made the two indistinguishable at the Scheme surface and left
+		// 'not-abandoned unreachable — the whole of the "collapsed states"
+		// defect. The enum itself was always faithful; only the rendering was
+		// not.
+		return SymbolMutexNotAbandoned
 	case MutexLocked:
 		if p.owner != nil {
 			return p.owner
 		}
+		// Held, but acquired without an owning thread — mutex-lock! takes an
+		// optional owner and #f is legal, and the primordial thread has no
+		// Thread object at all. This is SRFI-18's 'not-owned.
 		return SymbolMutexNotOwned
 	case MutexAbandoned:
 		return SymbolMutexAbandoned
 	default:
-		return SymbolMutexNotOwned
+		// Unreachable: the three cases above are exhaustive over MutexState.
+		return SymbolMutexNotAbandoned
 	}
 }
 

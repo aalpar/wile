@@ -476,7 +476,13 @@ var PrimMutexSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAMutex, "mutex-sp
 
 // PrimMutexState returns the mutex's state
 // (mutex-state mutex) -> symbol or thread
-// Returns: 'not-owned, 'abandoned, or the owner thread
+//
+// SRFI-18's four answers, all reachable:
+//   - the owner thread — held, and a thread owns it
+//   - 'not-owned       — HELD, with no owning thread (mutex-lock! takes an
+//     optional owner and #f is legal)
+//   - 'abandoned       — the owner terminated while holding it
+//   - 'not-abandoned   — not held, and not abandoned
 var PrimMutexState = helpers.MakeUnaryAccessor(werr.ErrNotAMutex, "mutex-state", func(mutex *values.Mutex) values.Value {
 	return mutex.StateValue()
 })

@@ -392,10 +392,14 @@ func TestMutexBasics(t *testing.T) {
 			`(> (string-length (mutex-name (make-mutex))) 0)`,
 			values.TrueValue},
 
-		// mutex-state on new mutex (not-owned)
+		// A fresh mutex is NOT HELD, so SRFI-18 says 'not-abandoned. This
+		// asserted "not-owned" and was pinning the defect: 'not-owned is the
+		// answer for a mutex that IS held with no owning thread, and rendering
+		// both cases the same made them indistinguishable at the Scheme
+		// surface while leaving 'not-abandoned unreachable.
 		{"mutex-state new",
 			`(and (symbol? (mutex-state (make-mutex)))
-			      (equal? (symbol->string (mutex-state (make-mutex))) "not-owned"))`,
+			      (equal? (symbol->string (mutex-state (make-mutex))) "not-abandoned"))`,
 			values.TrueValue},
 
 		// mutex-specific defaults to void (nil)
@@ -462,14 +466,37 @@ func TestMutexLockUnlock(t *testing.T) {
 			          (equal? (symbol->string s) "not-owned"))))`,
 			values.TrueValue},
 
-		// mutex-state after unlock
+		// Unlocked again, so not held: 'not-abandoned, for the same reason as
+		// the fresh-mutex row.
 		{"mutex-state after unlock",
 			`(let ((m (make-mutex)))
 			   (mutex-lock! m)
 			   (mutex-unlock! m)
 			   (let ((s (mutex-state m)))
 			     (and (symbol? s)
-			          (equal? (symbol->string s) "not-owned"))))`,
+			          (equal? (symbol->string s) "not-abandoned"))))`,
+			values.TrueValue},
+
+		// The DISCRIMINATING pair, and the reason the two symbols exist: held
+		// and not-held must not render the same. If a future edit collapses
+		// them again, exactly one of these two rows goes red.
+		{"mutex-state distinguishes held-unowned from not-held",
+			`(let ((m (make-mutex)))
+			   (let ((held (begin (mutex-lock! m) (mutex-state m))))
+			     (mutex-unlock! m)
+			     (and (equal? (symbol->string held) "not-owned")
+			          (equal? (symbol->string (mutex-state m)) "not-abandoned")
+			          (not (eq? held (mutex-state m))))))`,
+			values.TrueValue},
+
+		// The fourth answer: held by a thread renders as that thread, not a
+		// symbol. Completes the SRFI-18 quadruple alongside the rows above and
+		// the abandoned case in TestMutexAbandonment.
+		{"mutex-state held by a thread is that thread",
+			`(let ((m (make-mutex)) (t (make-thread (lambda () 1))))
+			   (mutex-lock! m #f t)
+			   (and (not (symbol? (mutex-state m)))
+			        (eq? (mutex-state m) t)))`,
 			values.TrueValue},
 
 		// mutex-lock! with #f owner (no owner)

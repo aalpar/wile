@@ -92,6 +92,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   unconditionally, so under `NoMutation` a record type that DECLARES a modifier
   now fails at *definition* time. A modifier-free one is unaffected.
 
+- **BREAKING (Scheme): `(mutex-state m)` distinguishes not-held from
+  held-with-no-owner.** An unlocked mutex now answers `'not-abandoned`; it
+  answered `'not-owned`, which is SRFI-18's answer for a mutex that IS held by
+  a caller with no owning thread. Both cases rendered as one symbol, so the two
+  were indistinguishable and `'not-abandoned` was unreachable — all four
+  SRFI-18 answers are now reachable and distinct.
+
+  The representation was never at fault: `MutexAbandoned` is not a held state
+  (both wait loops exit on it exactly as on `MutexUnlocked`), so the three-value
+  enum plus the owner field always encoded all four answers. Only the renderer
+  collapsed them.
+
 - **BREAKING (Scheme): a datum nested deeper than 10,000 levels is refused.**
   `datum->syntax` and `eval` bound structural NESTING the way the reader and
   the writer already do (`parser.DefaultMaxParseDepth`,
