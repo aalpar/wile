@@ -4,13 +4,11 @@ This document catalogs differences between the current implementation and the R7
 
 **Reference:** [R7RS-small Specification](https://small.r7rs.org/attachment/r7rs.pdf)
 
-**Last Updated:** 2026-07-14
-
 ---
 
 ## Summary
 
-Eleven known differences exist:
+16 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
@@ -590,7 +588,7 @@ only after loading the math extension (profile `Small` and above).
 
 ### FFI Numeric Argument Precision
 
-For embedders using `wile.RegisterFunc` with Go functions taking
+For embedders using `Engine.RegisterFunc` with Go functions taking
 `float64` or `complex128` parameters: the default conversion is now
 **precision-aware**. Passing a Scheme numeric value that cannot be
 exactly represented in the Go fixed-precision type (e.g. `1/3`,
@@ -689,8 +687,8 @@ The string is captured at compile time into the library's summary
 (`CompiledLibrary.Description` / `LibrarySummary.Description`) and surfaced by the
 documentation and reflection tooling (`,doc` and `,apropos` in the REPL, `apropos`
 search, and the `library-description` reflection primitive). It has no runtime
-effect and does not alter the library's exports or imports. All 61 bundled
-`.sld` files carry one.
+effect and does not alter the library's exports or imports. Every bundled
+`.sld` file carries one.
 
 A strict R7RS reader rejects an unrecognized library declaration, so a `.sld`
 using `(description …)` does not port to such an implementation; the declaration

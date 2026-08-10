@@ -88,9 +88,13 @@ Wile uses `(chibi test)` for Scheme-level unit tests. Tests are automatically di
 
 | Type | Location | Example |
 |------|----------|---------|
-| Library tests | `stdlib/lib/<library>/test/<module>-test.scm` | `stdlib/lib/srfi/1/test/fold-test.scm` |
+| Library tests | `pkg/stdlib/lib/<library>/<module>-test.scm` | `pkg/stdlib/lib/wile/algebra/sat-test.scm` |
 | Core tests | `test/scheme/<feature>-test.scm` | `test/scheme/numeric-tower-test.scm` |
-| Regression tests | `test/regression/issue-<num>-<slug>.scm` | `test/regression/issue-123-macro-hygiene.scm` |
+| Regression tests | `test/regression/issue-<num>-<slug>-test.scm` | `test/regression/issue-123-macro-hygiene-test.scm` (directory not yet populated) |
+
+The `-test.scm` suffix, not the directory, is what makes a file run: `test/run-all.sh`
+discovers with `find test pkg/stdlib/lib -name '*-test.scm'`, so a file named without
+that suffix is skipped wherever it is placed.
 
 **Test template:**
 
@@ -247,8 +251,8 @@ string → Tokenizer → Parser → SyntaxValue
 | `machine/` | VM, compiler, macro expander |
 | `registry/` | Primitive registration |
 | `internal/tokenizer` | Lexical analysis |
-| `internal/parser` | Syntax tree construction |
-| `internal/syntax` | Hygienic syntax objects |
+| `parser/` | Syntax tree construction |
+| `syntax/` | Hygienic syntax objects |
 | `internal/match` | Macro pattern matching |
 
 ### Essential Reading

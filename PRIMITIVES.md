@@ -1,6 +1,6 @@
 # Wile Primitives Reference
 
-Complete list of supported types, primitives, and special forms in Wile.
+Reference for the types, primitives, and special forms in Wile. It is **not exhaustive**: 73 names bound in the default top level are absent from this document. The basis is `(environment-bound-names (interaction-environment))` under the CLI's KitchenSink profile, less `%`-prefixed internals; `Engine.BoundNames()` is a broader surface (all phases plus the sealed base) and is not the basis.
 
 ## Types
 

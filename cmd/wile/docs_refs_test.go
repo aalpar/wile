@@ -120,6 +120,140 @@ var uncleanedDocs = map[string]bool{
 	"tools/sage/README.md":                   true,
 }
 
+// TestCorrectedDocClaimsStayCorrected is a per-document forbidden-phrase
+// ratchet: each row names a claim a tracked document used to make and that was
+// measured false, so the document must never carry that exact wording again.
+//
+// What it does NOT cover, stated because a suite named for a property owes the
+// reader its boundary. This is not a path-existence checker and not a truth
+// checker: it sees the stale spelling, never the corrected one, so an edit that
+// deletes the phrase and writes a second falsehood passes. A tree-wide "every
+// cited repo path resolves" check would cover more and is not available as this
+// gate — tracked .md carries well over a hundred backticked path spans that do
+// not resolve today (historical CHANGELOG entries, docs written before the
+// pkg/ move), so it would need an allowlist larger than the fix. Re-measure that
+// with docPathRef and looksLikeRepoPath over `git ls-files -- '*.md'` rather
+// than trusting the figure; it was taken 2026-08-10.
+func TestCorrectedDocClaimsStayCorrected(t *testing.T) {
+	root := gitOutput(t, ".", "rev-parse", "--show-toplevel")
+
+	for _, c := range correctedDocClaims {
+		t.Run(c.name, func(t *testing.T) {
+			body, err := os.ReadFile(filepath.Join(root, c.doc))
+			if err != nil {
+				t.Fatalf("%s: %v", c.doc, err)
+			}
+			if !strings.Contains(string(body), c.stale) {
+				return
+			}
+			t.Errorf("%s carries %q again.\n%s", c.doc, c.stale, c.why)
+		})
+	}
+}
+
+// correctedDocClaim is one wording removed from a tracked document because it
+// was measured false, together with the measurement that condemned it.
+//
+// stale carries its own backticks wherever the claim is a code span. Without
+// them a corrected spelling that extends the stale one — `pkg/stdlib/lib/chibi/
+// test.sld` over `stdlib/lib/chibi/test.sld` — would keep its row red forever
+// and the row would say nothing.
+type correctedDocClaim struct {
+	name  string
+	doc   string
+	stale string
+	why   string
+}
+
+var correctedDocClaims = []correctedDocClaim{
+	{
+		name:  "CONTRIBUTING_parser_is_public",
+		doc:   "CONTRIBUTING.md",
+		stale: "`internal/parser`",
+		why:   "The package is pkg/parser and has been public since it was promoted out of pkg/internal.",
+	},
+	{
+		name:  "CONTRIBUTING_syntax_is_public",
+		doc:   "CONTRIBUTING.md",
+		stale: "`internal/syntax`",
+		why:   "The package is pkg/syntax and has been public since it was promoted out of pkg/internal.",
+	},
+	{
+		name:  "CONTRIBUTING_stdlib_test_dir",
+		doc:   "CONTRIBUTING.md",
+		stale: "`stdlib/lib/srfi/1/test/fold-test.scm`",
+		why: "pkg/stdlib/lib holds no test/ directory at any depth. Its two suites, " +
+			"wile/er-macro-test.scm and wile/algebra/sat-test.scm, sit beside the library they test.",
+	},
+	{
+		name:  "CONTRIBUTING_regression_name_never_runs",
+		doc:   "CONTRIBUTING.md",
+		stale: "`test/regression/issue-123-macro-hygiene.scm`",
+		why: "test/run-all.sh discovers by `find test pkg/stdlib/lib -name '*-test.scm'`, so a " +
+			"name ending .scm but not -test.scm is never run wherever it is put.",
+	},
+	{
+		name:  "testREADME_stdlib_test_dir",
+		doc:   "test/README.md",
+		stale: "`stdlib/lib/srfi/1/test/fold-test.scm`",
+		why:   "Verbatim twin of the CONTRIBUTING.md row above, and false for the same reason.",
+	},
+	{
+		name:  "testREADME_regression_name_never_runs",
+		doc:   "test/README.md",
+		stale: "`test/regression/issue-123-macro-hygiene.scm`",
+		why:   "Verbatim twin of the CONTRIBUTING.md row above, and false for the same reason.",
+	},
+	{
+		name:  "COMPATIBILITY_chibi_test_path",
+		doc:   "test/COMPATIBILITY.md",
+		stale: "`stdlib/lib/chibi/test.sld`",
+		why:   "The stdlib moved under pkg/ in 5536e995; the file is at pkg/stdlib/lib/chibi/test.sld.",
+	},
+	{
+		name:  "sage_algebra_design_suffix",
+		doc:   "tools/sage/README.md",
+		stale: "`memory/2026-04-12-sage-algebra-validation-design.md`",
+		why:   "The archived design carries the .local.md suffix every file in memory/ carries.",
+	},
+	{
+		name:  "sage_oracle_coverage_location",
+		doc:   "tools/sage/README.md",
+		stale: "`plans/2026-06-07-sage-oracle-coverage-design.md`",
+		why:   "That design was archived: it is memory/2026-06-07-sage-oracle-coverage-design.local.md.",
+	},
+	{
+		name:  "r7rs_RegisterFunc_spelling",
+		doc:   "docs/reference/r7rs-differences.md",
+		stale: "`wile.RegisterFunc`",
+		why: "RegisterFunc is a method on Engine (pkg/wile/ffi.go), not a package-level " +
+			"function; wile.RegisterFunc does not compile. Engine.RegisterFunc is the spelling " +
+			"docs/embedding/api-design.md already uses.",
+	},
+	{
+		name:  "CHANGELOG_versioned_names_unimplemented",
+		doc:   "CHANGELOG.md",
+		stale: "since versioned library names are unimplemented",
+		why: "Version references are implemented: they are parsed and dropped, so " +
+			"`(import (rnrs hashtables (6)))` resolves and (hashtable? (make-eq-hashtable)) " +
+			"answers #t. r7rs-differences.md item 15 documents the drop.",
+	},
+	{
+		name:  "TODO_versioned_name_rejected",
+		doc:   "TODO.md",
+		stale: "import-set resolver rejects a list as a name part",
+		why: "The resolver accepts a list in the final position and drops it as an R6RS version " +
+			"reference; only a list elsewhere in the name is an error.",
+	},
+	{
+		name:  "TODO_four_blind_guards",
+		doc:   "TODO.md",
+		stale: "and 4 more are guarded by a test",
+		why: "Three, not four: TestRunEval is not blind. runCLI re-execs the test binary through " +
+			"TestMain, which calls main(), so go-flags parsing is exercised end to end.",
+	},
+}
+
 // resolveRef turns a reference as written in doc into a repo-relative path.
 // Markdown links resolve against the citing doc's directory; prose cites paths
 // from the repo root ("see `memory/foo.md`") and the text does not say which.

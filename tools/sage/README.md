@@ -27,5 +27,5 @@ for you). Snapshots are static and require no Sage at CI time.
 
 ## Design
 
-See `memory/2026-04-12-sage-algebra-validation-design.md` and the coverage
-extension `plans/2026-06-07-sage-oracle-coverage-design.md`.
+See `memory/2026-04-12-sage-algebra-validation-design.local.md` and the coverage
+extension `memory/2026-06-07-sage-oracle-coverage-design.local.md`.
