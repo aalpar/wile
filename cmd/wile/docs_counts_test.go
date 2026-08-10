@@ -252,6 +252,26 @@ func countSummaryDeviations(t *testing.T, source string) int {
 // whitespace rather than treating the whole span as a single name.
 var docCodeSpan = regexp.MustCompile("`([^`\n]+)`")
 
+// spanTokenNames yields the primitive names a whitespace-delimited code-span
+// token can be spelling: the token itself, and — when the token is wrapped in
+// list or quote punctuation — the bare name inside it. Splitting on whitespace
+// alone does NOT recover a name from an applied form, since "`(vector-ref v k)`"
+// splits to "(vector-ref", "v", "k)" and enters neither "vector-ref" nor a
+// closing-paren-free "k".
+//
+// Only edge characters that cannot occur at that edge of a Scheme identifier are
+// trimmed. `?` and `!` are identifier characters (char-ready?, set-car!) and
+// trimming them would silently un-document every predicate and mutator, so the
+// cut set is deliberately narrow.
+func spanTokenNames(token string) []string {
+	q := []string{token}
+	bare := strings.Trim(token, "()[]',")
+	if bare != "" && bare != token {
+		q = append(q, bare)
+	}
+	return q
+}
+
 // countUndocumentedBoundNames counts the names bound in the CLI's default top
 // level that PRIMITIVES.md never spells.
 //
@@ -261,17 +281,22 @@ var docCodeSpan = regexp.MustCompile("`([^`\n]+)`")
 // a reader gets by typing `wile`. `%`-prefixed names are engine internals with
 // no user-facing contract and are excluded on both sides.
 //
-// A name counts as documented when it appears as a whitespace-separated token
-// inside any code span, so the result is exact for "never spelled in a code
-// span" and a lower bound on "has no entry": a name named only in passing, in
-// another primitive's prose, suppresses its own row. The generous direction is
-// deliberate, since the alternative is parsing the document's table shape.
+// A name counts as documented when a code span spells it, either as a whole
+// whitespace-separated token or as one wrapped in list/quote punctuation (see
+// spanTokenNames). That makes the result exact for "never spelled in a code
+// span" — a primitive documented only in applied form, `(char-ready? port)`,
+// still counts — and a lower bound on "has no entry": a name mentioned only in
+// passing, in another primitive's prose, suppresses its own row. The generous
+// direction is deliberate, since the alternative is parsing the document's
+// table shape.
 func countUndocumentedBoundNames(t *testing.T, source string) int {
 	t.Helper()
 	documented := map[string]bool{}
 	for _, m := range docCodeSpan.FindAllStringSubmatch(source, -1) {
 		for token := range strings.FieldsSeq(m[1]) {
-			documented[token] = true
+			for _, name := range spanTokenNames(token) {
+				documented[name] = true
+			}
 		}
 	}
 
