@@ -277,6 +277,16 @@ func NumericChainCompareReal(
 // First arg at index 0, rest at index 1. Returns the extremum value
 // where isBetter returns true if candidate should replace current.
 // Per R7RS, if any argument is inexact, the result is inexact.
+//
+// Non-real complex arguments are rejected, as they are by the ordering
+// predicates (NumericChainCompareReal). min and max are ORDERING operations —
+// R7RS §6.2.6 gives them real arguments — and they were the only numeric
+// primitives left reading BigComplex.LessThan, whose own doc says nothing may
+// read it as such. Before this, (min 1+2i 3) answered 1+2i, a non-real result
+// from a real-valued procedure. It is an internal-consistency defect rather
+// than a conformance one: the inputs are already erroneous under §6.2.6, and
+// WithContractEnforcement() rejected them, so no conforming program observed
+// the wrong value.
 func NumericExtremum(
 	mc machine.CallContext,
 	name string,
@@ -286,6 +296,9 @@ func NumericExtremum(
 	best, ok := first.(values.Number)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, first)
+	}
+	if isNonRealComplex(best) {
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: requires real arguments", name)
 	}
 
 	// Track if any argument is inexact
@@ -313,6 +326,9 @@ func NumericExtremum(
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 		}
+		if isNonRealComplex(curr) {
+			return werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: requires real arguments", name)
+		}
 		if !curr.IsExact() {
 			hasInexact = true
 		}
@@ -332,6 +348,9 @@ func NumericExtremum(
 		curr, ok := v.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
+		}
+		if isNonRealComplex(curr) {
+			return werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: requires real arguments", name)
 		}
 
 		if !curr.IsExact() {

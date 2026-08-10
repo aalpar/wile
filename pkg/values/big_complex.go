@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -558,21 +559,43 @@ func toExactPart(n Number) (Number, error) {
 
 // ToInexact converts this BigComplex to an inexact representation.
 //
-// R7RS §6.2.6: inexact returns an inexact representation of its argument.
-// Only a wholly-exact BigComplex is converted: the guard is IsExact(), a
-// conjunction over both parts, so a mixed-exactness BigComplex (exact real,
-// inexact imag) is returned unchanged, converting nothing. When the converted
-// imaginary part is zero, the real part alone is returned as a *BigFloat.
+// R7RS §6.2.6: inexact returns an inexact representation of its argument. The
+// conversion is PER PART, and the inexact representation of a real is float64,
+// so the result is a *Complex (or a *Float when the imaginary part vanishes) —
+// not a BigComplex of BigFloats.
+//
+// Two things changed here and they are one decision.
+//
+// The guard was IsExact(), a conjunction over both parts, so a mixed-exactness
+// BigComplex was returned UNCHANGED — its own doc said "converting nothing",
+// which is not a conversion. Per-part conversion has no such branch to get
+// wrong.
+//
+// Converting to BigFloat parts was the deeper problem: it produced a value no
+// reader syntax reconstructs. (number->string (inexact 3+4i)) writes "3.0+4.0i",
+// which reads back as a float64-part *Complex, so the R7RS §6.2.7 write/read
+// round trip failed and (eqv? (inexact 3+4i) 3.0+4.0i) was #f for two inexact
+// complexes that print identically. Fixing it upstream of the printer, rather
+// than teaching the printer a BigComplex syntax, is what keeps the round trip a
+// property of the value instead of a property of the renderer.
+//
+// The cost is float64 saturation, accepted and identical to what the rest of
+// the tower already does (rational.go documents the same loss as "what Chez
+// gives"): (inexact (make-rectangular (expt 10 400) 1)) is now +inf.0+1.0i.
+// Construction is untouched — (make-rectangular #m3 #m4) is still a BigComplex.
 func (p *BigComplex) ToInexact() Number {
-	if !p.IsExact() {
+	realInexact, _, _, err := ToFloat64WithAccuracy(p.real)
+	if err != nil {
 		return p
 	}
-	realInexact := toBigFloat(p.real)
-	imagInexact := toBigFloat(p.imag)
-	if imagInexact.IsZero() {
-		return realInexact
+	imagInexact, _, _, err := ToFloat64WithAccuracy(p.imag)
+	if err != nil {
+		return p
 	}
-	return NewBigComplexFromBigFloats(realInexact, imagInexact)
+	if imagInexact == 0 && !math.Signbit(imagInexact) {
+		return NewFloat(realInexact)
+	}
+	return NewComplexFromParts(realInexact, imagInexact)
 }
 
 // Abs returns the magnitude of this BigComplex as a Number.
@@ -748,6 +771,20 @@ func (p *BigComplex) EqualTo(v Value) bool {
 // inexact numbers by Kind, so a BigComplex is never eqv? to a Complex, and the branch's
 // own TestBigComplex_EqualTo asserts as much.
 func (p *BigComplex) HashCode() uint64 {
+	// A BigComplex whose imaginary part is an exact zero compares EqualTo / Eqv /
+	// Equal with the bare real, so it MUST hash as that real or a hashtable lookup
+	// misses in both directions and in both table kinds. Mixing the zero into the
+	// hash is what broke it: the zero's own hash is not the identity of ^.
+	//
+	// IsReal() is deliberately looser than EqvNumber's condition, which also
+	// requires the whole complex to be exact. That costs a collision when the real
+	// part is inexact and the imaginary part exactly zero, and collisions are
+	// legal: the contract is one-directional (equal values hash equally), not a
+	// bijection. Applies to every part type validateBigComplexPart admits, not
+	// only *BigInteger -- a *Rational real part has the same obligation.
+	if p.IsReal() {
+		return hashBigComplexPart(p.real)
+	}
 	return hashBigComplexPart(p.real) ^ (hashBigComplexPart(p.imag) * 0x9e3779b97f4a7c15)
 }
 

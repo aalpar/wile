@@ -45,6 +45,16 @@ func ensureInexactDecimal(s string) string {
 }
 
 // PrimNumberToString implements the number->string primitive.
+//
+// Every result is a MUTABLE string. R7RS §3.4's storage model makes a newly
+// allocated object's locations mutable unless a procedure's own description says
+// otherwise, and number->string has no such clause — unlike command-line and the
+// get-environment-variable family (§6.14, "it is an error to mutate any of these
+// strings"), which correctly refuse.
+//
+// values.NewString defaults to immutable, so mutability is not the absence of a
+// flag here: an allocator that wants it must call NewMutableString explicitly.
+// That polarity is why every one of these arms was wrong the same way.
 func PrimNumberToString(mc machine.CallContext) error {
 	n := mc.Arg(0)
 	rest := mc.Arg(1)
@@ -64,30 +74,30 @@ func PrimNumberToString(mc machine.CallContext) error {
 	}
 	switch v := n.(type) {
 	case *values.Integer:
-		mc.SetValue(values.NewString(strconv.FormatInt(v.Value, radix)))
+		mc.SetValue(values.NewMutableString(strconv.FormatInt(v.Value, radix)))
 	case *values.Float:
 		switch {
 		case math.IsInf(v.Value, 1):
-			mc.SetValue(values.NewString(values.PositiveInfinityString))
+			mc.SetValue(values.NewMutableString(values.PositiveInfinityString))
 		case math.IsInf(v.Value, -1):
-			mc.SetValue(values.NewString(values.NegativeInfinityString))
+			mc.SetValue(values.NewMutableString(values.NegativeInfinityString))
 		case math.IsNaN(v.Value):
-			mc.SetValue(values.NewString(values.NaNString))
+			mc.SetValue(values.NewMutableString(values.NaNString))
 		default:
 			s := strconv.FormatFloat(v.Value, 'g', -1, 64)
 			s = ensureInexactDecimal(s)
-			mc.SetValue(values.NewString(s))
+			mc.SetValue(values.NewMutableString(s))
 		}
 	case *values.Rational:
-		mc.SetValue(values.NewString(v.SchemeString()))
+		mc.SetValue(values.NewMutableString(v.SchemeString()))
 	case *values.Complex:
-		mc.SetValue(values.NewString(v.SchemeString()))
+		mc.SetValue(values.NewMutableString(v.SchemeString()))
 	case *values.BigComplex:
-		mc.SetValue(values.NewString(v.SchemeString()))
+		mc.SetValue(values.NewMutableString(v.SchemeString()))
 	case *values.BigInteger:
-		mc.SetValue(values.NewString(v.BigInt().Text(radix)))
+		mc.SetValue(values.NewMutableString(v.BigInt().Text(radix)))
 	case *values.BigFloat:
-		mc.SetValue(values.NewString(v.SchemeString()))
+		mc.SetValue(values.NewMutableString(v.SchemeString()))
 	default:
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected a number but got %T", n)
 	}
