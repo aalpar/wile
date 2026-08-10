@@ -302,9 +302,9 @@ inlined.
 
 Promoted opcodes record the original `cachedBindings` index in their
 `Arg`. At runtime, `execPromoted` verifies that the binding still holds
-the expected `*ForeignClosure` with the expected primitive identity. If the binding was
-reassigned via `set!` (e.g., `(set! eq? car)`), `callPromotedFallback`
-takes over:
+the expected `*ForeignClosure` with the expected primitive identity. If
+the binding was reassigned via `set!` (e.g., `(set! eq? car)`),
+`callPromotedFallback` takes over:
 
 1. Pop arguments using `PopN(arity)` (not `Drain()` — the eval stack
    may contain outer arguments from a containing call)

@@ -36,10 +36,14 @@ import (
 //
 // eq? is the exception: it is also a promoted-op descriptor's identity, and those
 // descriptors live in pkg/machine, which cannot import this package. So its one
-// token is minted there and ALIASED here. Re-minting it would give the hashtable
-// surface a token no closure carries, and (make-hashtable eq? ...) would silently
-// stop recognizing eq? — recognizedValue (prim_hashtables.go) pointer-compares
-// against this variable.
+// token is minted there and ALIASED here.
+//
+// A spec carries exactly ONE Identity, so both consumers must name the same
+// variable, and minting a second token for eq? anywhere breaks whichever one does
+// not own the spec's declaration: leave equality.go pointing here and eq? stops
+// being inlined; point it at machine's and recognizedValue (prim_hashtables.go),
+// which pointer-compares against this variable, stops recognizing eq? in
+// (make-hashtable eq? ...). The alias is what keeps the question single.
 var (
 	identityEqualHash = machine.NewPrimitiveIdentity("equal-hash")
 	identityEqualQ    = machine.NewPrimitiveIdentity("equal?")

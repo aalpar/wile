@@ -33,7 +33,7 @@
 // binary drift ~1.2% geo mean, 14/16 benchmarks in the same direction. Only
 // interleaving the two binaries within each run cancels that drift.
 //
-// Edit sites (4 files):
+// Edit sites (4 places):
 //  1. opcode.go           — add OpXxx + OpXxxTail constants inside the promoted
 //     range (OpEqQ..OpDivTail); add two opcodeTable entries with
 //     operandKind: OperandCachedBinding
