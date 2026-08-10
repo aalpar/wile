@@ -413,10 +413,17 @@ func TestFreeTemplateIdInsideSyntaxCaseClauseResolvesAtDefinitionSite(t *testing
 // conjuncts nil on this path.
 //
 // The correct behaviour is a 2x2 over {syntax-rules, syntax-case} x {let-bound
-// shadow, global shadow}. The plumbing in this change closes the syntax-case x
-// let-bound cell; the two global-shadow cells need wave 1 §6's two-sided
-// checker semantics and are recorded here as the current state so the matrix is
-// visible rather than half-written.
+// shadow, global shadow}. The plumbing in this change closed the syntax-case x
+// let-bound cell.
+//
+// The two global-shadow cells were once labelled as recording a WRONG answer that
+// wave 1 §6 would flip. That label was mistaken and the (ELSE 1) wants must NOT be
+// flipped. These rows are one compilation unit: the macro and the `define else`
+// live in the same (begin ...), so the definition-site pin and the use-site
+// resolution are the SAME binding and R7RS §4.3.2's first arm matches. Racket 9.2
+// answers (ELSE 1) for the same program. The definition-site pin preserves it;
+// wave 1 §6's own gate is TestPatternLiteralIdentifiedByDefinitionSiteBinding
+// below, where the two forms are separate top-level units.
 func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
 	const rulesMacro = `(define-syntax m
                           (syntax-rules (else)
@@ -432,9 +439,7 @@ func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
 		name string
 		src  string
 		want string
-		// closedBy names the change that makes want correct; "wave1-6" cells
-		// record today's WRONG answer deliberately, so this test does not
-		// silently start passing for the wrong reason.
+		// closedBy names the change that makes want correct.
 		closedBy string
 	}{
 		{
@@ -455,13 +460,13 @@ func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
 			name:     "syntax-rules, global shadow",
 			src:      "(begin " + rulesMacro + " (define else 5) (m else 1))",
 			want:     "(ELSE 1)",
-			closedBy: "wave1-6",
+			closedBy: "already-correct: same unit, one binding",
 		},
 		{
 			name:     "syntax-case, global shadow",
 			src:      "(begin " + caseMacro + " (define else 5) (m else 1))",
 			want:     "(ELSE 1)",
-			closedBy: "wave1-6",
+			closedBy: "already-correct: same unit, one binding",
 		},
 	}
 

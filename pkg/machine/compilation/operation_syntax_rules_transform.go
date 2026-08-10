@@ -49,6 +49,7 @@ package compilation
 // Reference: "Binding as Sets of Scopes" (Flatt, 2016)
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -91,6 +92,68 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 	}
 	s := values.NewSymbol(sym)
 	return p.env.GetBinding(s, syntax.ScopesOf(scopes))
+}
+
+// GetBindingAcrossPhases resolves the use-site side of the R7RS §4.3.2 literal
+// comparison the same way resolveLiteralDefinitions resolved the definition-site
+// side, so the two are drawn from one lookup shape.
+func (p *envBindingChecker) GetBindingAcrossPhases(sym string, scopes []*syntax.Scope) (*environment.Binding, bool) {
+	return lookupBindingAcrossPhases(p.env, sym, scopes)
+}
+
+// lookupBindingAcrossPhases resolves sym in env's own lexical chain first, then
+// in each phase the owner has instantiated, returning the first hit.
+//
+// Both probes are load-bearing and the order is not free; each was removed and
+// measured. Auxiliary syntax (else, =>) is registered at PhaseCompile
+// (registry/core/specialforms.go), so a phase-0-only probe reports it unbound: the
+// definition-site pin comes back nil, which is no pin at all, and (define else #f)
+// followed by (cond (else 'TOOK-ELSE)) takes the else branch again. A phase VIEW,
+// conversely, has no lexical parent chain, so a phases-only probe cannot see a
+// let-bound shadow — it answers the phase-2 auxiliary binding for the input
+// identifier in (let ((else #f)) (cond (else 'TOOK-ELSE))), and that control
+// regresses to TOOK-ELSE.
+//
+// ok is false only for an ambiguous resolution. EnvironmentFrame.GetBinding
+// panics with werr.ErrAmbiguousBinding on an equal-cardinality incomparable scope
+// tie and there is no other production recover site, so the panic is converted
+// into the answer here rather than escaping through the matcher. Anything else
+// recovered is re-panicked unchanged.
+func lookupBindingAcrossPhases(env *environment.EnvironmentFrame, sym string, scopes []*syntax.Scope) (q *environment.Binding, ok bool) {
+	if env == nil {
+		return nil, true
+	}
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		rerr, isErr := r.(error)
+		if isErr && errors.Is(rerr, werr.ErrAmbiguousBinding) {
+			q = nil
+			ok = false
+			return
+		}
+		panic(r)
+	}()
+
+	s := values.NewSymbol(sym)
+	sq := syntax.ScopesOf(scopes)
+	q = env.GetBinding(s, sq)
+	if q != nil {
+		return q, true
+	}
+	for _, phase := range env.PresentPhases() {
+		v := env.AtPhase(phase)
+		if v == nil {
+			continue
+		}
+		q = v.GetBinding(s, sq)
+		if q != nil {
+			return q, true
+		}
+	}
+	return nil, true
 }
 
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.

@@ -217,6 +217,39 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	return createTransformerClosure(env, clauses, literals)
 }
 
+// resolveLiteralDefinitions snapshots each pattern literal's binding in the macro
+// DEFINITION environment, at macro-compile time.
+//
+// The snapshot has to be taken now because no environment consulted later can
+// answer the question. A top-level define made after the macro was defined is
+// visible from the definition frame too — the bootstrap definition frame and the
+// user top level reach one owner store — so a definition-site ENV resolved at
+// match time hands back the identical *Binding the use site does, and the R7RS
+// §4.3.2 comparison is vacuous. Only the definition-TIME resolution discriminates.
+//
+// Storing a resolved *Binding rather than re-resolving is sound in both binding
+// homes: globals live in a []*Binding that is pointer-stable across append, and a
+// local lives in a []Binding that EnsureLocalBinding may reallocate — where a
+// stale pointer degrades to a forgone match and can never alias a live binding,
+// because Go retains the old array.
+//
+// Returns nil (no pins, today's behaviour verbatim) for a nil env or no literals.
+func resolveLiteralDefinitions(env *environment.EnvironmentFrame, literalSyntax map[string]*syntax.SyntaxSymbol) map[string]match.LiteralPin {
+	if env == nil || len(literalSyntax) == 0 {
+		return nil
+	}
+	q := make(map[string]match.LiteralPin, len(literalSyntax))
+	for k, ls := range literalSyntax {
+		binding, ok := lookupBindingAcrossPhases(env, k, ls.Scopes())
+		if !ok {
+			q[k] = match.LiteralPin{Ambiguous: true}
+			continue
+		}
+		q[k] = match.LiteralPin{Binding: binding}
+	}
+	return q
+}
+
 // compileClauseWithEllipsisAndLiterals compiles a single pattern-template pair with
 // custom ellipsis and literal syntax for hygiene.
 // The env parameter is used to resolve free identifiers to their definition-time bindings.
@@ -264,12 +297,16 @@ func compileClauseWithEllipsisAndLiterals(
 	}
 
 	// Create matcher with ellipsis variable mapping, custom ellipsis, and literal syntax
-	// The literalSyntax enables scope-aware matching for auxiliary syntax hygiene
+	// The literalSyntax enables scope-aware matching for auxiliary syntax hygiene,
+	// and literalDefs pins each literal to the binding it had HERE, which is the
+	// only side of the R7RS §4.3.2 comparison the use site cannot recompute.
+	literalDefs := resolveLiteralDefinitions(env, literalSyntax)
 	matcher := match.NewSyntaxMatcher(variables, compiled.Codes, &match.SyntaxMatcherOpts{
 		EllipsisVars:   compiled.EllipsisVars,
 		EllipsisDepths: compiled.EllipsisDepths,
 		EllipsisID:     ellipsis,
 		LiteralSyntax:  literalSyntax,
+		LiteralDefs:    literalDefs,
 	})
 
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)

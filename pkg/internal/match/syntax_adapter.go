@@ -54,6 +54,29 @@ type FreeIdResolver interface {
 	GetLibraryScope() *syntax.Scope
 }
 
+// LiteralPin is the DEFINITION-site resolution of one pattern literal, captured
+// when the syntax-rules or syntax-case form was compiled.
+//
+// R7RS §4.3.2 compares the literal's binding at the macro DEFINITION site with
+// the input identifier's binding at the USE site. Resolving both sides through
+// the one use-site environment answers neither question for a zero-scoped global:
+// a top-level (define else #f) made after the macro was defined is visible from
+// the definition frame too (both reach one owner store), so the two sides resolve
+// to the identical *Binding and the comparison is vacuous. Only a definition-TIME
+// snapshot discriminates.
+//
+// The zero value is deliberately NOT a pin. A nil Binding with Ambiguous false
+// means "unbound at definition time", which is R7RS's "the two identifiers are
+// the same and both have no lexical binding" arm, and must leave the use-site-only
+// comparison verbatim — the pin tightens, it never loosens. Ambiguous records an
+// ErrAmbiguousBinding tie at definition time; a scope-aware lookup has three
+// answers, and for this consumer the conservative one is "the literal does not
+// match".
+type LiteralPin struct {
+	Binding   *environment.Binding
+	Ambiguous bool
+}
+
 // BindingChecker is an interface for checking if a symbol has a lexical binding.
 // This is used for R7RS auxiliary syntax hygiene: literals like => and else
 // should not match when the identifier has been locally bound.
@@ -69,6 +92,14 @@ type BindingChecker interface {
 	// pointer equality to check if two identifiers have the same
 	// binding (per R7RS §4.3.2).
 	GetBinding(sym string, scopes []*syntax.Scope) *environment.Binding
+
+	// GetBindingAcrossPhases resolves sym the way a LiteralPin was resolved, so
+	// the two sides of the R7RS §4.3.2 comparison are drawn from the same kind of
+	// lookup: the frame's own lexical chain first, then every phase the owner has
+	// instantiated. The phase search is what makes auxiliary syntax visible —
+	// else and => are registered at PhaseCompile, where GetBinding above (phase 0
+	// only) reports them as unbound. ok is false when resolution was ambiguous.
+	GetBindingAcrossPhases(sym string, scopes []*syntax.Scope) (*environment.Binding, bool)
 }
 
 // SyntaxMatcher adapts the core Matcher to work with syntax objects and hygiene.
@@ -103,6 +134,7 @@ type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                          // Custom ellipsis identifier (default "...")
 	literalSyntax  map[string]*syntax.SyntaxSymbol // Pattern literals with their scopes for hygiene
+	literalDefs    map[string]LiteralPin           // Definition-site resolution of each pattern literal; absent key = no pin
 	bindingChecker BindingChecker                  // Construction-time R7RS binding lookup; nil when the caller supplies one per match instead
 }
 
@@ -113,6 +145,10 @@ type SyntaxMatcherOpts struct {
 	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string
 	LiteralSyntax  map[string]*syntax.SyntaxSymbol
+	// LiteralDefs pins each pattern literal to its definition-site binding. It is
+	// optional and tightening-only: an absent or zero LiteralPin leaves the
+	// use-site-only comparison in place.
+	LiteralDefs map[string]LiteralPin
 	// BindingChecker resolves an identifier to its binding for the R7RS §4.3.2
 	// literal check. Pair it with LiteralSyntax: the check needs both, and a
 	// nil in either position turns it off.
@@ -136,6 +172,7 @@ func NewSyntaxMatcher(
 		ellipsisDepths map[int]int
 		ellipsisID     = DefaultEllipsis
 		literalSyntax  map[string]*syntax.SyntaxSymbol
+		literalDefs    map[string]LiteralPin
 		bindingChecker BindingChecker
 	)
 	if opts != nil {
@@ -145,6 +182,7 @@ func NewSyntaxMatcher(
 			ellipsisID = opts.EllipsisID
 		}
 		literalSyntax = opts.LiteralSyntax
+		literalDefs = opts.LiteralDefs
 		bindingChecker = opts.BindingChecker
 	}
 	return &SyntaxMatcher{
@@ -155,14 +193,15 @@ func NewSyntaxMatcher(
 		),
 		ellipsisID:     ellipsisID,
 		literalSyntax:  literalSyntax,
+		literalDefs:    literalDefs,
 		bindingChecker: bindingChecker,
 	}
 }
 
 // CloneForMatch returns a SyntaxMatcher that shares this matcher's immutable
 // compiled pattern (bytecode, pattern variables, ellipsis metadata, literal
-// syntax, binding checker) but has independent per-invocation matching state —
-// the embedded Matcher's capture and syntax stacks.
+// syntax, literal pins, binding checker) but has independent per-invocation
+// matching state — the embedded Matcher's capture and syntax stacks.
 //
 // A SyntaxMatcher built once at macro-definition time is stored on the (shared)
 // macro binding and reused for every expansion of that macro, including
@@ -178,6 +217,7 @@ func (p *SyntaxMatcher) CloneForMatch() *SyntaxMatcher {
 		matcher:        p.matcher.clone(),
 		ellipsisID:     p.ellipsisID,
 		literalSyntax:  p.literalSyntax,
+		literalDefs:    p.literalDefs,
 		bindingChecker: p.bindingChecker,
 	}
 }
@@ -223,7 +263,8 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	if p.literalSyntax != nil {
 		literalMatcher = func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
 			patternLit := p.literalSyntax[patternLiteralKey]
-			return literalScopesMatchWithChecker(checker, inputSym, patternLit)
+			pin := p.literalDefs[patternLiteralKey]
+			return literalScopesMatchWithDef(checker, inputSym, patternLit, pin)
 		}
 	}
 
@@ -306,7 +347,13 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 	return p.matcher.GetBindings()
 }
 
-// literalScopesMatchWithChecker checks if an input symbol should match a pattern literal.
+// literalScopesMatchWithChecker is literalScopesMatchWithDef with no
+// definition-site pin: the unpinned, use-site-only comparison.
+func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *syntax.SyntaxSymbol) bool {
+	return literalScopesMatchWithDef(checker, input, pattern, LiteralPin{})
+}
+
+// literalScopesMatchWithDef checks if an input symbol should match a pattern literal.
 //
 // Per R7RS §4.3.2, a subform in the input matches a literal identifier if and
 // only if it is an identifier and either:
@@ -314,16 +361,16 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 //     macro definition have the same lexical binding, or
 //   - the two identifiers are the same and both have no lexical binding.
 //
-// This function returns true if the input symbol refers to the same binding
-// as the pattern literal. It performs two checks:
-//
 // The checker is a parameter, not a field read: see MatchWithBindingChecker.
 //
-// 1. Binding check (R7RS compliant): If a binding checker is available, compare
-// the input's binding with the pattern literal's binding by pointer identity.
-// They match only when both resolve to the same binding, or both are unbound.
-// This is an identity comparison, not a boundness test: after library import,
-// auxiliary syntax like => is bound on both sides.
+// 1. Binding check (R7RS compliant). With a pin (pin.Binding non-nil) the
+// definition-site binding captured at macro-compile time is compared against a
+// phase-searching use-site resolution — the only pairing that actually asks the
+// spec's two questions, since a definition-site ENVIRONMENT resolved at match
+// time returns the same *Binding as the use-site one (see LiteralPin). Without a
+// pin, both sides are resolved through the use-site checker by pointer identity,
+// which still discriminates a lexical shadow: the let-bound `=>` below is a local
+// binding the pattern's `=>` does not reach.
 //
 // 2. Scope check (for let-syntax): We also check rebinding scopes from
 // let-syntax/letrec-syntax. If input has rebinding scopes that pattern doesn't,
@@ -341,25 +388,35 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 //	(let-syntax ((=> ...)) (cond (#t => 'ok)))
 //	The input => has rebinding scope {letSyntaxScope}
 //	Pattern => has no rebinding scopes, so they don't match
-func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *syntax.SyntaxSymbol) bool {
+func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.SyntaxSymbol, pin LiteralPin) bool {
 	if input == nil || pattern == nil {
 		return false
 	}
 
-	// R7RS §4.3.2 binding check: literals match if both have the same lexical
-	// binding, or both have no lexical binding. After library import, auxiliary
-	// syntax like => gets exported to phase 0, so both input and pattern may
-	// have bindings. We compare the actual bindings, not just whether they exist.
-	if checker != nil {
+	// An ambiguous definition-site resolution is refused rather than broken by
+	// order: for this consumer the conservative answer is "not the literal".
+	if pin.Ambiguous {
+		return false
+	}
+
+	if pin.Binding != nil && checker != nil {
+		useB, ok := checker.GetBindingAcrossPhases(input.Key(), input.Scopes())
+		if !ok {
+			return false
+		}
+		if !literalNotShadowed(pin.Binding, useB) {
+			return false
+		}
+	} else if checker != nil {
+		// Unpinned: both sides through the use-site environment. After library
+		// import, auxiliary syntax like => gets exported to phase 0, so both input
+		// and pattern may have bindings — compare the bindings, not their existence.
 		inputBinding := checker.GetBinding(input.Key(), input.Scopes())
 		patternBinding := checker.GetBinding(pattern.Key(), pattern.Scopes())
-
-		// R7RS §4.3.2: literals match if both have the same binding, or both unbound
 		if inputBinding != patternBinding {
 			// Different bindings (or one bound and one not) - don't match
 			return false
 		}
-		// Same binding (including both nil) - continue to scope check below
 	}
 
 	// Also check rebinding scopes for let-syntax shadowing.
@@ -371,6 +428,47 @@ func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *synta
 	// For the input to match the pattern literal, the input must not have
 	// any rebinding scopes that the pattern doesn't have.
 	return syntax.ScopesMatch(patternRebindingScopes, inputRebindingScopes)
+}
+
+// sameLiteralBinding decides whether a definition-site and a use-site resolution
+// denote the same pattern literal.
+//
+// Pointer identity is the primary test, and it covers both-nil. Kind equivalence
+// on BindingTypePrimitive is the necessary widening: each library environment
+// mints its OWN *Binding for every special form and auxiliary-syntax name (see
+// memory "library envs are primitive islands"), so after any (import (scheme
+// base)) the use site's `else` is a different object from the phase-2 one a
+// bootstrap macro pinned. Strict pointer identity there refuses `cond` in every
+// R7RS program with an import. The widening is bounded by the caller, which
+// already requires identical spelling before any binding check runs (match.go,
+// ByteCodeCompareCar), and by the rebinding-scope check that follows.
+func sameLiteralBinding(a, b *environment.Binding) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.BindingType() == environment.BindingTypePrimitive &&
+		b.BindingType() == environment.BindingTypePrimitive
+}
+
+// literalNotShadowed decides whether the use site's resolution of a pattern
+// literal is still the literal the macro was defined against.
+//
+// The IsImported rider covers the one legitimate case pointer identity cannot:
+// an import mints a FRESH *Binding for a re-exported ordinary name, so a library
+// that exports both a macro and the variable the macro uses as a literal can
+// never be pointer-equal at the use site. Any imported binding of the name is
+// therefore accepted — deliberately over-accepting, since the rider cannot tell
+// which library the import came from. The under-accepting alternative breaks the
+// legitimate re-export, and this predicate's false positive is a forgone
+// discrimination, not a capture.
+func literalNotShadowed(defB, useB *environment.Binding) bool {
+	if sameLiteralBinding(defB, useB) {
+		return true
+	}
+	return useB != nil && useB.IsImported()
 }
 
 // filterRebindingScopes returns only the scopes that are marked as rebinding scopes.

@@ -217,11 +217,15 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		return err
 	}
 
-	// Create a wrapper for the compiled pattern
+	// Create a wrapper for the compiled pattern. p.env is the macro's definition
+	// environment, so LiteralDefs is the definition-site resolution that
+	// OperationSyntaxCaseMatch, running in the use site's environment, cannot
+	// recompute.
 	clauseWrapper := &SyntaxCaseClause{
 		Bytecode:       compiled.Codes,
 		PatternVars:    patternVars,
 		LiteralSyntax:  literalSyntax,
+		LiteralDefs:    resolveLiteralDefinitions(p.env, literalSyntax),
 		EllipsisVars:   compiled.EllipsisVars,
 		EllipsisDepths: compiled.EllipsisDepths,
 	}
