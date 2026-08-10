@@ -10,6 +10,79 @@
 ;; ASCII inputs this is identical to the non-bang form. Programs that
 ;; need full Unicode case mapping must use the non-bang R7RS forms.
 
+(define (%string-upcase-impl s start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (%r7rs-string-upcase (string-copy s a b))))
+
+(define (%string-downcase-impl s start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (%r7rs-string-downcase (string-copy s a b))))
+
+(define string-upcase
+  (case-lambda
+    ((s)
+     "Return a fresh string holding the chars of S in [start, end) upcased.
+
+This is the SRFI-13 form: a single string with an optional [start [end]]
+range. R7RS's string-upcase takes exactly one argument; the two are
+distinct, and within (srfi 13) scope the SRFI-13 form shadows R7RS.
+Importing (scheme char) alongside (srfi 13) therefore needs
+(except (scheme char) string-upcase string-downcase).
+
+The no-range call delegates to R7RS string-upcase, so it keeps FULL
+Unicode case mapping and can change the string's length (German 'ß'
+uppercases to \"SS\"). The ranged calls upcase a copy of the substring, so
+they can too — unlike string-upcase!, which cannot change a string's
+length and so falls back to simple per-char mapping.
+
+Examples:
+  (string-upcase \"hello\")      => \"HELLO\"
+  (string-upcase \"hello\" 1 4)  => \"ELL\"
+
+Parameters:
+  s : string
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: string (fresh)
+Category: srfi-13
+Keywords: upcase, uppercase, case, range
+
+See also: `string-upcase!' (mutating, simple mapping), `string-downcase',
+          `string-map'."
+     (%r7rs-string-upcase s))
+    ((s start)
+     (%string-upcase-impl s start (string-length s)))
+    ((s start end)
+     (%string-upcase-impl s start end))))
+
+(define string-downcase
+  (case-lambda
+    ((s)
+     "Return a fresh string holding the chars of S in [start, end) downcased.
+
+The SRFI-13 form of R7RS's one-argument string-downcase, with an optional
+[start [end]] range; see `string-upcase' for the shadowing note and for
+why the no-range call keeps full Unicode mapping.
+
+Examples:
+  (string-downcase \"HELLO\")      => \"hello\"
+  (string-downcase \"HELLO\" 1 4)  => \"ell\"
+
+Parameters:
+  s : string
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: string (fresh)
+Category: srfi-13
+Keywords: downcase, lowercase, case, range
+
+See also: `string-downcase!' (mutating, simple mapping), `string-upcase'."
+     (%r7rs-string-downcase s))
+    ((s start)
+     (%string-downcase-impl s start (string-length s)))
+    ((s start end)
+     (%string-downcase-impl s start end))))
+
 (define (%string-upcase!-impl s start end)
   (let-values (((a b) (%string-range-check s start end)))
     (let loop ((i a))

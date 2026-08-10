@@ -81,7 +81,33 @@ See also: `string-drop', `string-take-right'."
   (%check-take-drop-n "string-drop-right" s n)
   (substring s 0 (- (string-length s) n)))
 
-(define substring/shared substring)
+(define substring/shared
+  (case-lambda
+    ((s start)
+     "Return the substring of S from START to the end, or from START to END.
+
+SRFI-13 permits but does not require the result to share storage with
+S (\"compliant implementations are allowed, but not required, to provide
+this kind of sharing\"), so this copies. The deviation that mattered was
+arity: END is optional in SRFI-13, and a 2-argument call raised a
+wrong-number-of-arguments error until 2026-08-09.
+
+Examples:
+  (substring/shared \"abcdef\" 2)    => \"cdef\"
+  (substring/shared \"abcdef\" 2 4)  => \"cd\"
+
+Parameters:
+  s : string
+  start : integer (0 <= start <= (string-length s))
+  end : integer (optional, default (string-length s))
+Returns: string (fresh; sharing is permitted, not required)
+Category: srfi-13
+Keywords: substring, share, slice, range
+
+See also: `string-copy' (R7RS), `string-take', `string-drop'."
+     (string-copy s start (string-length s)))
+    ((s start end)
+     (string-copy s start end))))
 
 (define (string-tabulate proc len)
   "Return a string of length LEN whose i-th char is (PROC i).

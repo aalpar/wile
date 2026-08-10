@@ -1654,8 +1654,8 @@ phase -1, so `for-template` bindings are installed but never consulted.
 | `(chibi optional)` | Optional argument handling |
 | `(chibi diff)` | Diff algorithm |
 | `(chibi term ansi)` | ANSI terminal colors |
-| `(srfi 1)` | List library (complete) — `xcons`, `cons*`, `iota`, `zip`, `filter`, `partition`, `fold`, `unfold`, `any`, `every`, etc. |
-| `(srfi 13)` | String library — `string-prefix?`, `string-contains`, `string-join`, `string-trim`, `string-tokenize`, etc. |
+| `(srfi 1)` | List library — `xcons`, `cons*`, `iota`, `zip`, `filter`, `partition`, `fold`, `unfold`, `any`, `every`, etc. Exports the whole SRFI-1 procedure index, including the R5RS list procedures and the `c…r` compositions it re-exports; until 2026-08-09 the export list elided 48 of those names, so `(import (only (srfi 1) caar))` failed |
+| `(srfi 13)` | String library — `string-prefix?`, `string-contains`, `string-join`, `string-trim`, `string-tokenize`, etc. A **subset** of SRFI-13: the R5RS string procedures stay at their R7RS homes, and the `/shared`, `string-unfold` and KMP-helper names are not supplied |
 | `(srfi 14)` | Character sets |
 | `(srfi 132)` | Sort libraries — list and vector sort, merge, select, median |
 

@@ -2,6 +2,18 @@
 (define-library (srfi 1)
   (description "SRFI 1: List library — comprehensive list operations beyond R7RS.")
   (export
+   ;; SRFI-1 re-exports the R5RS list procedures unchanged, so (import (srfi 1))
+   ;; alone yields a working list library. These resolve to the ambient bootstrap
+   ;; bindings — same identity as (scheme base)'s, which is why importing both
+   ;; raises no R7RS §5.6 conflict (the legal re-export diamond).
+   cons car cdr set-car! set-cdr! pair? null? list length append reverse
+   list-ref map for-each member memq memv assoc assq assv
+   ;; The c…r compositions. SRFI-1's export paragraph elides these behind an
+   ;; ellipsis; enumerating them is what makes (only (srfi 1) caar) resolve.
+   caar cadr cdar cddr
+   caaar caadr cadar caddr cdaar cdadr cddar cdddr
+   caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
+   cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr
    xcons cons* make-list list-tabulate list-copy circular-list iota
    proper-list? circular-list? dotted-list? not-pair? null-list? list=
    first second third fourth fifth sixth seventh eighth ninth tenth
