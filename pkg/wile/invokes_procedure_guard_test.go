@@ -58,11 +58,22 @@
 // This paragraph used to claim "no such case exists today". It was false, and it
 // was false about the most consequential primitive in the tree: `error` reached
 // ApplyCallable through machine.RaiseInPlace, a helper in pkg/machine, and went
-// unannotated for the whole life of this guard (review-wave-1 item 5). The
-// selector is listed now, so the instance is closed — but the hole is structural.
-// Every sink reachable only under a name not in the two selector sets above is
-// still invisible, and nothing here detects that.
-// TestInvokesProcedureCompleteness remains the behavioral backstop.
+// unannotated for the whole life of this guard (review-wave-1 item 5).
+//
+// It was false twice. `expand` and `expand-once` reach their sink through
+// pkg/machine/compilation (ExpanderTimeContinuation.ExpandExpression /
+// ExpandOnce) and then pkg/machine (invokeTransformerClosure); the registry's
+// 455 primitives resolve to 16 impl packages and neither of those two is among
+// them, so the analyzer parsed neither and discovered neither. `expand` carried
+// a hand-placed annotation; `expand-once` carried none, which is what the
+// selectors below now catch (review-wave-4 item 10).
+//
+// Both instances are closed. The hole is structural and is not: every sink
+// reachable only under a name not in the two selector sets above is still
+// invisible, and nothing here detects that.
+// TestInvokesProcedureCompleteness remains the behavioral backstop, and
+// TestProcedureInvokersMatchesInvokesProcedure (capture_safety_test.go) now
+// keeps its list derived from the annotations rather than curated.
 
 package wile
 
@@ -132,6 +143,15 @@ var subContextFactories = map[string]bool{
 // primitive it most needed to catch. Adding the selector closes the INSTANCE. It
 // does not close the selector-keying that makes the guard blind in kind: a sink
 // reached under any name not listed here is still invisible.
+//
+// ExpandExpression/ExpandOnce are the second instance, and they are not even
+// machine-package names: they are *ExpanderTimeContinuation methods in
+// pkg/machine/compilation, and their sink (invokeTransformerClosure, an
+// Apply+Run on a sub-context) is a further package away in pkg/machine. Neither
+// package hosts a registered primitive Impl, so the analyzer parses neither, and
+// expand/expand-once were invisible to it — `expand` was annotated by hand and
+// `expand-once` was not annotated at all. Selector matching does not care which
+// package a name comes from, so listing them here reaches both.
 var procInvokingDriverSelectors = map[string]bool{
 	"RunBodyUnderFrame":     true,
 	"RunBodyUnderConsumer":  true,
@@ -139,6 +159,8 @@ var procInvokingDriverSelectors = map[string]bool{
 	"RunBodyUnderPrompt":    true,
 	"RunWithinBoundary":     true,
 	"RaiseInPlace":          true,
+	"ExpandExpression":      true,
+	"ExpandOnce":            true,
 }
 
 // closureSuffix matches the trailing .func1[.func2...] that runtime function names
@@ -454,6 +476,9 @@ func TestInvokesProcedureStaticGuard(t *testing.T) {
 		// / RaiseInPlace), outside the analyzer's static call graph, same as the
 		// pre-existing note above on raise.)
 		modulePath + "/extensions/eval.PrimEval",
+		// Pins the ExpandExpression/ExpandOnce selectors as load-bearing: dropping
+		// them fails this row instead of silently reopening the hole they close.
+		modulePath + "/extensions/eval.PrimExpandOnce",
 	}
 	for _, key := range mustDiscover {
 		if !invokes[key] {
