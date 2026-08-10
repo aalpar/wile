@@ -500,6 +500,12 @@ func (p *PrimitiveRegistry) AddCloser(fn CloseFunc) {
 // engine that loaded the extension, so an engine must take only the hooks
 // registered by its own extension loop — see buildRegistry's startClosers
 // snapshot.
+//
+// That path is still only partly per-engine, by a property of AddPrimitives
+// rather than of this seam: the FIRST registration of a name is the one Apply
+// binds, so on a shared registry every engine calls the first engine's
+// primitive and its hook is the one that sees the resources. Each engine does
+// run its own hook; the later ones just find nothing tracked.
 func (p *PrimitiveRegistry) Closers() []CloseFunc {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

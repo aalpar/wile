@@ -871,9 +871,16 @@ func TestAddCloserCollectsPerRegistrationHooks(t *testing.T) {
 	c.Assert(errors.Is(closers[1](), errCloserTest), qt.IsTrue)
 	c.Assert(order, qt.DeepEquals, []string{"first", "second"})
 
-	// Defensive copy: truncating the returned slice must not shorten the registry's.
-	closers = closers[:0]
-	c.Assert(r.Closers(), qt.HasLen, 2)
+	// Defensive copy: overwriting an element of the returned slice must not
+	// reach the registry's backing array. A length check alone would pass even
+	// on a shared array.
+	closers[0] = nil
+	c.Assert(closers[0], qt.IsNil) // the local copy did take the write
+	again := r.Closers()
+	c.Assert(again, qt.HasLen, 2)
+	c.Assert(again[0], qt.IsNotNil)
+	c.Assert(again[0](), qt.IsNil)
+	c.Assert(order, qt.DeepEquals, []string{"first", "second", "first"})
 }
 
 func TestNewDescribedExtensionForwardsToOptions(t *testing.T) {
