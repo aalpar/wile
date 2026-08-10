@@ -1477,11 +1477,12 @@ func defineBodyOf(c *qt.C, e ValidatedExpr) []ValidatedExpr {
 // distinguishable: (quote) needs one argument, (if) needs two.
 //
 // The rows cover the binder shapes that reach a body: a lambda parameter, a
-// define-function-form parameter, that form's REST parameter, and (below) an
-// internal define. The define-function-form rows are the ones
-// validateDefineFunction used to miss — it validated its body against the
-// un-extended environment, so (define (f quote) (quote 9)) called the special
-// form and the procedure evaluated to 9 instead of applying its argument.
+// define-function-form parameter, that form's REST parameter, and an internal
+// define (bare, and through the begin define-values expands to). The
+// define-function-form rows are the ones validateDefineFunction used to miss —
+// it validated its body against the un-extended environment, so
+// (define (f quote) (quote 9)) called the special form and the procedure
+// evaluated to 9 instead of applying its argument.
 func TestValidateShadowing(t *testing.T) {
 	tests := []struct {
 		name  string

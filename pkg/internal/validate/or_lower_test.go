@@ -93,9 +93,6 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 		}
 	})
 
-	// (cond (test => f)) expands to (let ((t test)) (if t (f t) ...)) — the same
-	// let, but the consequent CONSUMES the bound value rather than returning it,
-	// so the register passthrough does not apply.
 	// THE OPAQUE HALF. WalkSubExprs reports a quasiquote template and a
 	// passthrough form childless (opaque_subtree.go says so in its own words),
 	// so the binding-ref walk alone concludes "nothing in there" and the frame
@@ -151,6 +148,9 @@ func TestLetIsOrShapedRefusals(t *testing.T) {
 		}
 	})
 
+	// (cond (test => f)) expands to (let ((t test)) (if t (f t) ...)) — the same
+	// let, but the consequent CONSUMES the bound value rather than returning it,
+	// so the register passthrough does not apply.
 	t.Run("consequent is not the binder", func(t *testing.T) {
 		v := &ValidatedLet{
 			validatedBase: validatedBase{formName: "let"},

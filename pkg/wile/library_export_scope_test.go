@@ -118,9 +118,10 @@ func TestLibraryExport_PatternVariableBinderIsExportable(t *testing.T) {
 // NOT reachable through RunSchemeCode: that path has no library env, so the
 // library-scope arm never fires and the test would pass vacuously.
 func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
-	// One keyword per BindingType the refusal covers: `if` is a
-	// BindingTypePrimitive (a primitive expander), `define-syntax` a
-	// BindingTypeSyntax (a syntax compiler).
+	// One keyword per HANDLER KIND: `if` is a primitive expander,
+	// `define-syntax` a syntax compiler. Both carry BindingTypePrimitive
+	// (measured: define-syntax's phase-0 binding is type 3), so the refusal
+	// tags them alike and the two rows differ in what leaked, not in why.
 	keywords := []string{"if", "define-syntax"}
 	for _, kw := range keywords {
 		t.Run(kw, func(t *testing.T) {
@@ -145,10 +146,10 @@ func TestLibraryBody_SyntacticKeywordAsVariableRefused(t *testing.T) {
 //
 // The two sentinels differ, and the difference is the same fact
 // headDenotesSpecialForm turns on: `if` has NO phase-0 binding at all, so the
-// top level reports it unbound, while `define-syntax` DOES have one (a
-// BindingTypeSyntax) and reaches the keyword refusal. Inside a library body
-// both resolve — through the library-scope arm — so both must reach the
-// refusal there.
+// top level reports it unbound, while `define-syntax` DOES have one (measured:
+// BindingTypePrimitive, a syntax compiler) and reaches the keyword refusal.
+// Inside a library body both resolve, through the library-scope arm, so both
+// must reach the refusal there.
 func TestTopLevel_SyntacticKeywordAsVariableRefused(t *testing.T) {
 	cases := []struct {
 		keyword string

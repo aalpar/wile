@@ -311,10 +311,11 @@ func TestBindingModelMatrix(t *testing.T) {
 		// IDENTITY: the head resolves by scopes and denotes the form only when
 		// it resolves to the SEALED binding (or to nothing at all).
 		//
-		// TWO UNITS ARE LOAD-BEARING. EvalMultiple compiles a unit before
-		// running it, so with both forms in one unit the define has not executed
-		// when the set! is validated, GetBinding returns nil, and the table wins
-		// on both the broken and the fixed tree — a vacuous gate.
+		// Two units, so the shadow has to survive ACROSS compilation units
+		// rather than only inside the one that declared it. One unit also
+		// discriminates — the expander predeclares a top-level define's binding
+		// before validation runs, so GetBinding finds it either way (measured on
+		// both binaries with a single -e) — but it would pin the weaker claim.
 		// Measured at the parent commit: "set! requires exactly 2 argument(s),
 		// got 4 in set! form: invalid syntax".
 		{name: "define shadows set! special form",
@@ -330,10 +331,21 @@ func TestBindingModelMatrix(t *testing.T) {
 			units: []string{`(define apply 7)`, `apply`},
 			want:  "7"},
 		// The IMPORTED-RENAME arm, which the deleted local-only check could
-		// never see. It must live in a LIBRARY BODY: at ordinary top level the
-		// whole unit is validated before any import executes, so the head
-		// resolves to nothing and the table wins either way. Measured at the
-		// parent commit: "set! requires exactly 2 argument(s), got 4".
+		// never see. Measured at the parent commit:
+		// "set! requires exactly 2 argument(s), got 4".
+		//
+		// It has to be a LIBRARY BODY, and the reason is the TIER, not
+		// evaluation order. A top-level import installs at (phase 0, SEALED)
+		// (see "define supersedes import then set!" above), so GetBinding and
+		// SealedBindingAt return the SAME pointer and the identity rule
+		// correctly says "this is still the form" — probed directly: resolved
+		// and sealed are one pointer, BindingTypeVariable, imported=true, even
+		// with the import in its own earlier unit. A library env is a flat
+		// island with no sealed tier of its own, so there the import is the
+		// maximal resolution and nothing sealed answers. Shadowing a special
+		// form by importing a rename at the ordinary top level therefore still
+		// does NOT happen, and that is a deliberate consequence of keeping the
+		// sealed compare rather than an oversight.
 		{name: "imported rename shadows set! special form",
 			units: []string{`(import (lib-setbang)) (probe)`},
 			want:  "(1 2 3 4)"},

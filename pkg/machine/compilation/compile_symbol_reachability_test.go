@@ -75,7 +75,7 @@ const (
 // absent: a local slot cannot hold a compile-time meaning, and including it
 // would make every lexical arm demand a refusal it has nothing to apply it to.
 var globalLoadOps = map[string]bool{
-	"NewOperationLoadCachedBinding":                           true,
+	"NewOperationLoadCachedBinding":                            true,
 	"NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate": true,
 }
 
@@ -342,7 +342,8 @@ package fake
 func refuseCompileTimeMeaning(a, b int) error { return nil }
 
 func emitCachedBindingLoad(a, b int) error {
-	if err := refuseCompileTimeMeaning(a, b); err != nil {
+	err := refuseCompileTimeMeaning(a, b)
+	if err != nil {
 		return err
 	}
 	p.AppendOperations(machine.NewOperationLoadCachedBinding(0))
@@ -354,7 +355,8 @@ func CompileSymbol() error {
 		return emitCachedBindingLoad(1, 2)
 	}
 	if directlyGuarded {
-		if err := refuseCompileTimeMeaning(1, 2); err != nil {
+		err := refuseCompileTimeMeaning(1, 2)
+		if err != nil {
 			return err
 		}
 		p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
