@@ -156,6 +156,10 @@ var PrimThreadSpecificSet = helpers.MakeBinarySetter(werr.ErrNotAThread, "thread
 
 // PrimThreadStart starts a thread
 // (thread-start! thread) -> thread
+//
+// The registered thread-start! is NOT this function: addThreads binds a
+// per-engine variant that also records the thread for Engine.Close (close.go).
+// An embedder registering this one directly gets a thread nobody terminates.
 func PrimThreadStart(mc machine.CallContext) error {
 	thread, err := helpers.RequireArg[*values.Thread](mc, 0, werr.ErrNotAThread, "thread-start!")
 	if err != nil {

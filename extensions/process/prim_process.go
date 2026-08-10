@@ -58,10 +58,27 @@ func PrimSystem(mc machine.CallContext) error {
 
 // PrimProcessSpawn implements the (process-spawn) primitive.
 // Creates a subprocess with stdin/stdout/stderr pipes.
+//
+// The registered process-spawn is NOT this function: addPrimitives binds a
+// per-engine variant that also records the child for Engine.Close (close.go).
+// An embedder registering this one directly gets a child nobody reaps.
 func PrimProcessSpawn(mc machine.CallContext) error {
-	command, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "process-spawn")
+	proc, err := spawnProcess(mc)
 	if err != nil {
 		return err
+	}
+	mc.SetValue(proc)
+	return nil
+}
+
+// spawnProcess is process-spawn's body, returning the process instead of
+// setting it as the call's result. Split out because machine.CallContext has no
+// result getter, so a caller that must also see the spawned process (the
+// per-engine tracker in close.go) cannot read it back from mc.
+func spawnProcess(mc machine.CallContext) (*values.Process, error) {
+	command, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "process-spawn")
+	if err != nil {
+		return nil, err
 	}
 	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceProcess,
@@ -69,7 +86,7 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		Target:   command.Value,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Collect string arguments from the rest list.
@@ -78,7 +95,7 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 	ctx := mc.Context()
 	restTuple, ok := rest.(values.Tuple)
 	if !ok {
-		return werr.WrapForeignErrorf(
+		return nil, werr.WrapForeignErrorf(
 			werr.ErrNotAList,
 			"process-spawn: arguments must be a proper list, got %T", rest,
 		)
@@ -95,25 +112,25 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		return nil
 	})
 	if iterErr != nil {
-		return iterErr
+		return nil, iterErr
 	}
 
 	cmd := exec.CommandContext(ctx, command.Value, args...)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
-		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
+		return nil, werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		stdinPipe.Close() //nolint:errcheck
-		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
+		return nil, werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		stdinPipe.Close()  //nolint:errcheck
 		stdoutPipe.Close() //nolint:errcheck
-		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
+		return nil, werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
 	err = cmd.Start()
@@ -121,18 +138,17 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		stdinPipe.Close()  //nolint:errcheck
 		stdoutPipe.Close() //nolint:errcheck
 		stderrPipe.Close() //nolint:errcheck
-		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
+		return nil, werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
-	proc := values.NewProcess(
+	q := values.NewProcess(
 		command.Value,
 		cmd,
 		values.NewCharacterOutputPortFromWriter(stdinPipe),
 		values.NewCharacterInputPortFromReader(stdoutPipe),
 		values.NewCharacterInputPortFromReader(stderrPipe),
 	)
-	mc.SetValue(proc)
-	return nil
+	return q, nil
 }
 
 // PrimProcessStdout implements the (process-stdout) primitive.
