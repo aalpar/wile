@@ -38,9 +38,9 @@ type BreakAction int
 const (
 	// BreakContinue resumes the suspended computation with stepping off.
 	BreakContinue BreakAction = iota
-	// BreakStep resumes and stops at the next expression, entering calls.
+	// BreakStep resumes and stops at the next source line, entering calls.
 	BreakStep
-	// BreakNext resumes and stops at the next expression in the same or a
+	// BreakNext resumes and stops at the next source line in the same or a
 	// shallower frame, running nested calls to completion.
 	BreakNext
 	// BreakFinish resumes and stops once execution reaches a strictly
@@ -225,7 +225,12 @@ func (p *Debugger) breakHandler(env *environment.EnvironmentFrame, tag *machine.
 				SourceWinding: mc.WindingStack().Copy(),
 			}
 		}
-		depth, _ := breakDepthOf(state)
+		depth, known := breakDepthOf(state)
+		if !known {
+			// No recorded break means no depth to step relative to, and a step
+			// mode armed against a meaningless depth would never stop again.
+			action = BreakContinue
+		}
 		p.armStepMode(action, depth)
 		// Resume, re-delivering the value register frozen at the break — resuming
 		// with no arguments would clear it. applyForeign returns early rather than

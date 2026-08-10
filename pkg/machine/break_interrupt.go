@@ -42,22 +42,23 @@ func (p *ErrBreakInterrupt) Error() string {
 }
 
 // breakState clusters the MachineContext fields describing an armed break
-// boundary: the suspension handler and the prompt tag of its frame, plus the
-// enclosing boundary so installs nest.
+// boundary: the suspension handler and the prompt tag of its frame, which are
+// written together and read together at the emit site.
 //
 // It deliberately does NOT reuse timerState. That record's
 // (handler == nil) ⇔ (cancel == nil) invariant names RunBodyUnderTimer as its
 // sole production writer, and a break has neither a cancel function nor a saved
-// context to restore: nothing about it is a timeout.
+// context to restore: nothing about it is a timeout. It also carries no parent
+// pointer, because a boundary is installed once per run and never torn down —
+// there is nothing to nest and nothing to pop.
 type breakState struct {
 	handler values.Callable
 	tag     *PromptTag
-	parent  *breakState
 }
 
-// breakTraceDepth is how many frames a break snapshot renders. It matches the
-// depth the REPL's ,backtrace asks for closely enough that the snapshot is not
-// the limiting factor.
+// breakTraceDepth is how many frames a break snapshot renders. Comfortably above
+// the 20 the REPL's ,backtrace asks for, so the snapshot is never the truncating
+// party.
 const breakTraceDepth = 32
 
 var _ values.DebugState = (*BreakSnapshot)(nil)
@@ -131,7 +132,7 @@ func (p *BreakSnapshot) CallDepth() int {
 // OpRestoreContinuation returns on the nil parent with the value register intact.
 func (p *MachineContext) InstallBreakPrompt(handler values.Callable) *PromptTag {
 	tag := NewPromptTag("debugger-break")
-	p.brk = &breakState{handler: handler, tag: tag, parent: p.brk}
+	p.brk = &breakState{handler: handler, tag: tag}
 
 	frame := NewMachineContinuationWithPrompt(p.cont, returnTemplate, p.env, tag, nil)
 	frame.threadID = p.threadID

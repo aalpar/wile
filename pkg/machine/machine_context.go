@@ -142,10 +142,11 @@ type MachineContext struct {
 	breakResumeValues MultipleValues
 
 	// lastBreakFile/lastBreakLine/lastBreakFired are the debugger's per-line
-	// de-duplication cursor, read and written only by CheckBreakpoint. Several
-	// consecutive instructions carry one source line, and a breakpoint names a
-	// LINE, so the cursor collapses them into a single stop per entry to the
-	// line. They live here rather than on the Debugger because the Debugger is
+	// de-duplication cursor, maintained by CheckBreakpoint and consulted (for a
+	// step stop) by the debugger hook in Run. Several consecutive instructions
+	// carry one source line, and a breakpoint names a LINE, so the cursor
+	// collapses them into a single stop per entry to the line.
+	// They live here rather than on the Debugger because the Debugger is
 	// shared across SRFI-18 threads and sub-contexts while the cursor is a
 	// property of one instruction stream; per-context also means no lock.
 	// Like the fields above and unlike vmState, they describe the executing
@@ -1762,8 +1763,13 @@ func (p *MachineContext) RunWithinBoundary() error {
 			// Same shape for a debugger break, with the same not-found rule: the break
 			// prompt is installed on the TOP-LEVEL chain, so a break emitted inside a
 			// surviving sub-context re-raises to the enclosing driver rather than being
-			// resolved against a boundary this chain cannot see. (A load/eval
-			// sub-context never emits at all: it inherits the debugger but not brk.)
+			// resolved against a boundary this chain cannot see.
+			//
+			// No sub-context can reach the found branch today: NewSubContext copies
+			// neither brk nor the debugger, and NewSubContextWithTemplate (load, eval)
+			// copies the debugger but not brk, so those stops take the render-only
+			// fallback. The arm is here for symmetry with the timer, so that arming a
+			// boundary on a sub-context later does not silently escape its driver.
 			//
 			// Out of scope, and correct: the foreign-call interrupt rechecks in
 			// call_foreign_cached.go and applyForeign need no break arm. A breakpoint is
