@@ -180,7 +180,7 @@ will fire on every call.
 
 #### At the `(dbg)` prompt
 
-While execution is suspended only six of the commands above do anything:
+While execution is suspended only six of the commands above are accepted:
 `,continue`, `,step`, `,next` and `,finish` each resume with a different
 stepping mode, and `,backtrace` and `,where` report the suspended state and
 leave you at the prompt. Anything else — including a Scheme expression — is
@@ -192,11 +192,12 @@ A breakpoint names a source LINE, so one entry to that line is one stop even
 though the line compiles to several instructions. A loop whose entire body is
 one source line therefore stops once, not once per iteration.
 
-`,finish` is keyed on call DEPTH: it resumes and stops as soon as execution
-reaches a strictly shallower frame. Its predecessor compared frame pointers,
-which cannot survive a suspension (the captured frames are copies), and a
-consequence of the depth key is that `,finish` also stops on a sibling frame
-entered at the same-or-shallower depth, not only on the caller.
+`,finish` is keyed on call DEPTH: it resumes and stops at the first source line
+reached at a strictly shallower depth. Its predecessor compared frame pointers,
+which cannot survive a suspension — the captured frames are copies. The
+consequence of the depth key is that the stop is not guaranteed to be in the
+frame that called the suspended one; it is whichever frame at a shallower depth
+executes a source line first.
 
 Two limits worth knowing. A breakpoint inside code reached through `load` or
 `eval` reports its stop but does not suspend: that code runs on a sub-context
