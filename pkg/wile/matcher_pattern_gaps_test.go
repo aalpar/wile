@@ -486,10 +486,12 @@ func TestPatternLiteralRespectsAUseSiteShadow(t *testing.T) {
 // It exists because mustEvalScheme above cannot express the wave 1 §6 defect:
 // that helper evaluates ONE (begin ...) form, and a define in a begin body binds
 // its name in that body, not at top level. `(begin (define else #f) (cond (else
-// 'TOOK-ELSE)))` therefore returns #<void> at HEAD, but for an unrelated reason —
-// the body-local `else` is a lexical shadow the literal check already refuses, so
-// the clause degrades to an ordinary (test . body) clause whose test is #f. Only a
-// genuine top-level define exercises the definition-site question.
+// 'TOOK-ELSE)))` therefore answers #<void> both before and after the fix, for an
+// unrelated reason — the body-local `else` is a lexical shadow the literal check
+// already refused, so the clause degrades to an ordinary (test result ...) clause
+// whose test is #f. (Substituting a truthy value makes the degradation visible:
+// the same form with `(define else 7)` yields the clause's body.) Only a genuine
+// top-level define exercises the definition-site question.
 func evalMultiForm(t *testing.T, src string) string {
 	t.Helper()
 	ctx := context.Background()

@@ -434,14 +434,19 @@ func literalScopesMatchWithDef(checker BindingChecker, input, pattern *syntax.Sy
 // denote the same pattern literal.
 //
 // Pointer identity is the primary test, and it covers both-nil. Kind equivalence
-// on BindingTypePrimitive is the necessary widening: each library environment
-// mints its OWN *Binding for every special form and auxiliary-syntax name (see
-// memory "library envs are primitive islands"), so after any (import (scheme
-// base)) the use site's `else` is a different object from the phase-2 one a
-// bootstrap macro pinned. Strict pointer identity there refuses `cond` in every
-// R7RS program with an import. The widening is bounded by the caller, which
-// already requires identical spelling before any binding check runs (match.go,
-// ByteCodeCompareCar), and by the rebinding-scope check that follows.
+// on BindingTypePrimitive is the widening that keeps auxiliary syntax working:
+// each library environment mints its OWN *Binding for every special form and
+// auxiliary-syntax name (memory "library envs are primitive islands"), so a
+// bootstrap macro's pinned phase-2 `else` is a different object from the one a
+// library-loaded use site resolves. Measured reachable: under the library-heavy
+// suites (TestChibiTestComparator, the SRFI library tests) `else` arrives here
+// with two distinct primitive bindings that IsImported does not cover, and
+// strict pointer identity would stop `cond`'s else clause matching there.
+//
+// The widening is bounded by the caller, which already requires identical
+// spelling before any binding check runs (match.go, ByteCodeCompareCar), and by
+// the rebinding-scope check that follows. It only ever ACCEPTS, so its failure
+// mode is a forgone tightening, never a capture.
 func sameLiteralBinding(a, b *environment.Binding) bool {
 	if a == b {
 		return true
