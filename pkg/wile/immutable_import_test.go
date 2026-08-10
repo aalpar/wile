@@ -104,6 +104,52 @@ func TestSetBangOnShadowedImportAllowed(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "99")
 }
 
+// TestDefineSyntaxSupersedesImportClearsImported pins the syntax half of the
+// R7RS §5.3.1 supersede rule. A top-level define-syntax over an imported macro
+// reuses the import's (1, mutable) slot and writes the user's transformer, so
+// the import *provenance* has to go with it — exactly as the variable path
+// already does in compile_define.go.
+//
+// Before the fix the syntax path touched only m.Doc, so imported stayed true.
+// IsStable() is `m.Imported || m.Stable`, which meant validate.classifyCallee
+// and the frame-reclaim classifier were told "cannot be rebound" about a
+// binding the user had just rebound.
+//
+// The pointer equality is the non-vacuity guard: it distinguishes supersede
+// in place from a second slot that merely outranks the first, which would make
+// the flag assertions pass for the wrong reason.
+func TestDefineSyntaxSupersedesImportClearsImported(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng := newEngineWithStdlib(t)
+
+	_, err := eng.EvalMultiple(ctx, `(import (scheme base))`)
+	c.Assert(err, qt.IsNil)
+
+	sym := values.NewSymbol("when")
+	before := eng.Namespace().Expand().GetBinding(sym, values.AllScopes())
+	c.Assert(before, qt.IsNotNil, qt.Commentf("when should be bound at phase 1 after import"))
+	c.Assert(before.IsImported(), qt.IsTrue,
+		qt.Commentf("premise: the import outranks bootstrap's sealed when"))
+
+	_, err = eng.EvalMultiple(ctx,
+		`(define-syntax when (syntax-rules () ((_ x) (quote user-when))))`)
+	c.Assert(err, qt.IsNil)
+
+	after := eng.Namespace().Expand().GetBinding(sym, values.AllScopes())
+	c.Assert(after, qt.IsNotNil)
+	c.Assert(after, qt.Equals, before,
+		qt.Commentf("define-syntax must supersede the import in place, not shadow it"))
+	c.Assert(after.IsImported(), qt.IsFalse,
+		qt.Commentf("define-syntax supersedes an import, so the import provenance is dropped (R7RS §5.3.1)"))
+	c.Assert(after.IsStable(), qt.IsFalse,
+		qt.Commentf("a binding the user just rebound is not stable"))
+
+	result, err := eng.EvalMultiple(ctx, `(when 1)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "user-when")
+}
+
 // TestImportedBindingStableFlag verifies that after importing (scheme base),
 // the binding for "cons" has both IsImported and IsStable flags set.
 func TestImportedBindingStableFlag(t *testing.T) {
