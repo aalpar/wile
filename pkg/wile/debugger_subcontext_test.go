@@ -103,6 +103,66 @@ func newDebuggedEngine(t *testing.T, src string) (*wile.Engine, string, *wile.De
 	return eng, path, dbg
 }
 
+// TestDebuggerSuspendsAndTheVerdictControlsExecution is GATE (1) for Wave 3
+// item 13a: it must fail before the break-interrupt suspension lands and pass
+// after.
+//
+// The discriminating assertion is that the handler's VERDICT changes what the
+// program computes. Asserting a non-nil CurrentLocation or a non-empty
+// FormatStackTrace from INSIDE the callback would be vacuous: the render-only
+// callback is invoked inline from the live MachineContext, so both already
+// worked at dfd8e230 (the REPL printed "Breakpoint 0 hit at bp.scm:2:5"). Only
+// a callback that can stop the VM can change the result.
+//
+// Arm A additionally pins that BreakAbandon routes through the ABORT path
+// rather than simply returning an error: the dynamic-wind after-thunk between
+// the break point and the top level must still run.
+func TestDebuggerSuspendsAndTheVerdictControlsExecution(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("abandon", func(t *testing.T) {
+		eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
+		fires := 0
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+			fires++
+			return wile.BreakAbandon
+		})
+		dbg.SetBreakpoint(path, 2, 0)
+
+		// The flag is a vector cell, not a set! on a top-level name: the default
+		// immutable top level refuses to compile the latter.
+		_, err := eng.EvalMultiple(ctx, `(define ran (make-vector 1 #f))`)
+		qt.Assert(t, err, qt.IsNil)
+
+		val, err := eng.EvalMultiple(ctx,
+			`(dynamic-wind (lambda () #f) (lambda () (foo 21)) (lambda () (vector-set! ran 0 #t)))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, val.SchemeString(), qt.Not(qt.Equals), "42",
+			qt.Commentf("abandoning the break must discard the computation, not run it to 42"))
+		qt.Assert(t, fires, qt.Equals, 1)
+
+		ran, err := eng.EvalMultiple(ctx, `(vector-ref ran 0)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, ran.SchemeString(), qt.Equals, "#t",
+			qt.Commentf("abandon aborts to the break prompt, so after-thunks below it still run"))
+	})
+
+	t.Run("continue", func(t *testing.T) {
+		eng, path, dbg := newDebuggedEngine(t, oneLineBodySource)
+		fires := 0
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+			fires++
+			return wile.BreakContinue
+		})
+		dbg.SetBreakpoint(path, 2, 0)
+
+		val, err := eng.EvalMultiple(ctx, `(foo 21)`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, val.SchemeString(), qt.Equals, "42")
+		qt.Assert(t, fires, qt.Equals, 1)
+	})
+}
+
 // TestBreakpointFiresOncePerSourceLine is GATE (2) for Wave 3 item 13a: it must
 // fail before the CheckBreakpoint de-duplication lands and pass after.
 //

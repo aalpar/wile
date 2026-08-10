@@ -29,12 +29,35 @@ type BreakpointInfo struct {
 	HitCount int
 }
 
+// BreakAction is a suspension handler's verdict: what the VM should do with the
+// computation it stopped. It is returned by the callback registered with
+// [Debugger.OnBreakSuspend], which runs while the VM is suspended.
+type BreakAction int
+
+const (
+	// BreakContinue resumes the suspended computation with stepping off.
+	BreakContinue BreakAction = iota
+	// BreakStep resumes and stops at the next expression, entering calls.
+	BreakStep
+	// BreakNext resumes and stops at the next expression in the same or a
+	// shallower frame, running nested calls to completion.
+	BreakNext
+	// BreakFinish resumes and stops once execution reaches a strictly
+	// shallower frame than the one that was suspended.
+	BreakFinish
+	// BreakAbandon does not resume: the computation is discarded and the
+	// evaluation returns void. dynamic-wind after-thunks between the break
+	// point and the top level still run.
+	BreakAbandon
+)
+
 // Debugger controls breakpoints and stepping for an Engine.
 // It wraps the internal machine.Debugger to avoid exposing VM types.
 type Debugger struct {
-	inner     *machine.Debugger
-	currentMC *machine.MachineContext
-	onBreak   func(state values.DebugState, bp *BreakpointInfo)
+	inner          *machine.Debugger
+	currentMC      *machine.MachineContext
+	onBreak        func(state values.DebugState, bp *BreakpointInfo)
+	onBreakSuspend func(state values.DebugState, bp *BreakpointInfo) BreakAction
 }
 
 // NewDebugger creates a new Debugger.
@@ -123,6 +146,20 @@ func (p *Debugger) IsStepping() bool {
 // trace access without exposing VM internals.
 func (p *Debugger) OnBreak(fn func(state values.DebugState, bp *BreakpointInfo)) {
 	p.onBreak = fn
+}
+
+// OnBreakSuspend installs the handler that runs while the VM is SUSPENDED at a
+// breakpoint or step stop, and whose verdict decides what happens next.
+//
+// nil means NONE: with no suspend handler the VM does not suspend at all and the
+// render-only [Debugger.OnBreak] callback is invoked inline instead, which is the
+// behaviour an embedder with a Go-only debugger has always had.
+//
+// Breaks inside load and eval do not suspend. Their freshly compiled template
+// runs on a sub-context whose own continuation chain does not carry the break
+// prompt, so those stops fall back to OnBreak.
+func (p *Debugger) OnBreakSuspend(fn func(state values.DebugState, bp *BreakpointInfo) BreakAction) {
+	p.onBreakSuspend = fn
 }
 
 // CurrentState returns the DebugState from the most recent break, or
