@@ -1061,14 +1061,18 @@ func TestAuthorizer_DenyAllSweep(t *testing.T) {
 	}
 }
 
-// TestDenialIsUnswallowable is the guard-wrapped mirror of the sweep above.
+// TestDenialIsUnswallowable is the handler-wrapped mirror of the sweep above:
+// fifteen guard rows and one with-exception-handler row.
 //
 // Every authorizer denial that reached a primitive frame was converted into a
-// Scheme condition by applyCallableError, so any enclosing guard or
-// with-exception-handler absorbed it: all eleven rows of the sweep, plus
-// (open-input-file ...) and (load ...), plus a denial inside an SRFI-18 thread
-// joined under guard, all evaluated to 'caught with a nil host error. A
-// sandboxed program could therefore neutralise its own sandbox's refusals.
+// Scheme condition by applyCallableError, so any enclosing handler absorbed it.
+// The fifteen guarded forms — all eleven rows of the sweep, plus
+// (open-input-file ...) and (load ...), plus dynamic-wind, plus a denial inside
+// an SRFI-18 thread joined under guard — evaluated to 'caught with a nil host
+// error. The sixteenth, with-exception-handler, is the one row that failed
+// LOUDLY before the fix but for the wrong reason, and its own comment below
+// says so. A sandboxed program could therefore neutralise its own sandbox's
+// refusals.
 //
 // The scope is the RUNTIME gate sites. The three compile-time load gates
 // surface as *CompilationError and were already unswallowable.
@@ -1157,6 +1161,100 @@ func TestDenialIsUnswallowable(t *testing.T) {
 			v, err := open.Eval(ctx, open.MustParse(ctx, tc.code))
 			c.Assert(err, qt.IsNil, qt.Commentf("%s must stay catchable", tc.code))
 			c.Assert(v.SchemeString(), qt.Equals, "caught")
+		})
+	}
+}
+
+// TestDenialCarriesItsProvenance pins that making a denial unswallowable did
+// not cost it its location.
+//
+// A denial travels as a *machine.SchemeError rather than as the exception-escape
+// carrier, precisely because it is not a Scheme condition. wrapRuntimeError
+// unpacked only the latter, so Source and StackTrace came back EMPTY and Message
+// was the generic "runtime error": an embedder asking a RuntimeError to point at
+// the offending form got nothing, for the one error class the sandbox exists to
+// report. The location survived only flattened into the cause's text, which the
+// repo's "Error Chains: Lossless and Traversable" rule does not accept.
+func TestDenialCarriesItsProvenance(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	engine, err := NewEngine(ctx, WithProfile(KitchenSink), WithAuthorizer(security.DenyAll()))
+	c.Assert(err, qt.IsNil)
+	defer engine.Close() //nolint:errcheck // test cleanup
+
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/hosts")`))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+
+	var re *RuntimeError
+	c.Assert(errors.As(err, &re), qt.IsTrue)
+	c.Assert(re.Source, qt.Not(qt.Equals), "",
+		qt.Commentf("the raise-site location must reach the embedder as a field"))
+	c.Assert(re.StackTrace, qt.Not(qt.Equals), "",
+		qt.Commentf("the VM trace must reach the embedder as a field"))
+	c.Assert(re.Message, qt.Contains, "access denied",
+		qt.Commentf("got the generic placeholder instead of the denial: %q", re.Message))
+	// Condition stays nil BY DESIGN: a denial is the sandbox's answer, not a
+	// Scheme condition, and IsSchemeException must keep saying so.
+	c.Assert(re.IsSchemeException(), qt.IsFalse)
+}
+
+// TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError records what the
+// unswallowable denial costs, and pins it to the behaviour of every other error
+// that leaves the VM rather than to nothing at all.
+//
+// Under a guard the after thunk of an enclosing dynamic-wind ran, because the
+// guard reinstated a continuation. A denial no longer takes that path, so the
+// after thunk does not run — exactly as it does not run for an uncaught
+// (error …). Both rows are here so the day Wile decides an escaping error must
+// unwind the wind chain, they move together, and so that "the denial leaks the
+// cleanup" is never read as a property of denials in particular.
+func TestUncaughtDenialUnwindsLikeAnyOtherUncaughtError(t *testing.T) {
+	ctx := context.Background()
+
+	// Each row states its own guarding, because that is the variable: the denial
+	// row IS guarded and escapes anyway, which is the point of the design; the
+	// control row is unguarded, which is the only way an ordinary error also
+	// escapes. A guarded (error …) is caught, and its after thunk duly runs.
+	tcs := []struct {
+		name string
+		opts []EngineOption
+		code string
+	}{
+		{
+			"guarded denial escapes the guard",
+			[]EngineOption{WithProfile(KitchenSink), WithAuthorizer(security.DenyAll())},
+			`(guard (e (#t 'caught))
+               (dynamic-wind (lambda () #t)
+                             (lambda () (open-input-file "/etc/hosts"))
+                             (lambda () (vector-set! cleaned 0 'yes))))`,
+		},
+		{
+			"unguarded error escapes too",
+			[]EngineOption{WithProfile(KitchenSink)},
+			`(dynamic-wind (lambda () #t)
+                           (lambda () (error "boom"))
+                           (lambda () (vector-set! cleaned 0 'yes)))`,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := NewEngine(ctx, tc.opts...)
+			c.Assert(err, qt.IsNil)
+			defer engine.Close() //nolint:errcheck // test cleanup
+
+			_, err = engine.EvalMultiple(ctx, `(define cleaned (vector #f))`)
+			c.Assert(err, qt.IsNil)
+
+			_, err = engine.EvalMultiple(ctx, tc.code)
+			c.Assert(err, qt.IsNotNil, qt.Commentf("the error must leave the VM"))
+
+			v, err := engine.EvalMultiple(ctx, `(vector-ref cleaned 0)`)
+			c.Assert(err, qt.IsNil)
+			c.Assert(v.SchemeString(), qt.Equals, "#f",
+				qt.Commentf("an escaping error does not run the wind chain — for either row"))
 		})
 	}
 }

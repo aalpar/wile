@@ -105,12 +105,13 @@ func applyCallableError(mc *MachineContext, err error) error {
 			// re-enters here.
 			return err
 		}
-		// WrapError, not a bare pass-through: the embedder recovers Source and
-		// StackTrace only from an *ErrExceptionEscape, so returning err raw drops
-		// the raise-site location and the VM trace the uncaught path carries.
+		// WrapError, not a bare pass-through: it stamps the raise-site location
+		// and the VM trace onto the error, which returning err raw would drop.
 		// *SchemeError is deliberately not *ErrExceptionEscape — that is the
 		// uncaught-CONDITION carrier, which the SRFI-18 join turns back into a
-		// catchable values.UncaughtException.
+		// catchable values.UncaughtException. The embedder side of that choice is
+		// Engine.wrapDenial, which unpacks this carrier into RuntimeError.Source
+		// and .StackTrace; without it the stamp survives only as message text.
 		return mc.WrapError(err, "")
 	}
 	return RaiseInPlace(mc, goErrorToCondition(err), false)
