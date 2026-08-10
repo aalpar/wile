@@ -183,8 +183,8 @@ var correctedDocClaims = []correctedDocClaim{
 		doc:   "CONTRIBUTING.md",
 		stale: "Complete primitives reference",
 		why: "PRIMITIVES.md is not complete and now says so: 73 names bound in the CLI's default " +
-			"top level never appear in it. Two tracked documents disagreeing about the same " +
-			"document is the drift this pass exists to close.",
+			"top level are never spelled in a code span there. Two tracked documents disagreeing " +
+			"about the same document is the drift this pass exists to close.",
 	},
 	{
 		name:  "CONTRIBUTING_stdlib_test_dir",
@@ -204,13 +204,13 @@ var correctedDocClaims = []correctedDocClaim{
 		name:  "testREADME_stdlib_test_dir",
 		doc:   "test/README.md",
 		stale: "`stdlib/lib/srfi/1/test/fold-test.scm`",
-		why:   "Verbatim twin of the CONTRIBUTING.md row above, and false for the same reason.",
+		why:   "Verbatim twin of CONTRIBUTING_stdlib_test_dir, and false for the same reason.",
 	},
 	{
 		name:  "testREADME_regression_name_never_runs",
 		doc:   "test/README.md",
 		stale: "`test/regression/issue-123-macro-hygiene.scm`",
-		why:   "Verbatim twin of the CONTRIBUTING.md row above, and false for the same reason.",
+		why:   "Verbatim twin of CONTRIBUTING_regression_name_never_runs, and false for the same reason.",
 	},
 	{
 		name:  "COMPATIBILITY_chibi_test_path",
@@ -222,7 +222,7 @@ var correctedDocClaims = []correctedDocClaim{
 		name:  "sage_algebra_design_suffix",
 		doc:   "tools/sage/README.md",
 		stale: "`memory/2026-04-12-sage-algebra-validation-design.md`",
-		why:   "The archived design carries the .local.md suffix every file in memory/ carries.",
+		why:   "The archived design is memory/2026-04-12-sage-algebra-validation-design.local.md; the .md spelling names nothing.",
 	},
 	{
 		name:  "sage_oracle_coverage_location",
@@ -235,8 +235,8 @@ var correctedDocClaims = []correctedDocClaim{
 		doc:   "docs/reference/r7rs-differences.md",
 		stale: "`wile.RegisterFunc`",
 		why: "RegisterFunc is a method on Engine (pkg/wile/ffi.go), not a package-level " +
-			"function; wile.RegisterFunc does not compile. Engine.RegisterFunc is the spelling " +
-			"docs/embedding/api-design.md already uses.",
+			"function, so wile.RegisterFunc does not compile. It was the tree's only such " +
+			"spelling; TODO.md writes the qualified form as Engine.RegisterFunc.",
 	},
 	{
 		name:  "CHANGELOG_versioned_names_unimplemented",
