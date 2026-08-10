@@ -38,16 +38,24 @@ import (
 // 0.01s, 50k 4.33s -> 0.01s, 100k 17.25s -> 0.01s. The headline 4,194,304-variable
 // case extrapolated to about 8.5 hours and now answers in 0.35s.
 //
-// The gate uses 200,000 rather than the headline: it cost about 70 seconds
-// before the fix and about 20 milliseconds after, while allocating a few tens
-// of megabytes instead of 251.
+// The gate uses 200,000 rather than the headline, and allocates a few tens of
+// megabytes instead of 251.
 //
-// The budget is 5 s, not a minute, and the difference matters. At a minute
-// even a FULL revert only overshoots by ~16%, and reverting either half alone
-// still passes — a gate that cannot see the change it names. At 5 s it catches
-// the full revert (70 s), the heap alone (~59% of the cost, ~41 s) and the
-// persistent cursor alone (~41%, ~29 s), while still leaving a 350x margin
-// over the 14 ms this actually takes.
+// The budget is 10 s, not a minute, and the difference is the whole value of
+// the gate. Measured on an Apple M4 Max — close to the fastest single-thread
+// hardware available, so this is the DETECTION side's best case:
+//
+//	full revert (both halves)     70.8 s
+//	heap reverted, cursor kept    43.5 s
+//	cursor reverted, heap kept    31.6 s
+//	this code                     16.7 ms
+//
+// At a minute the gate catches only the simultaneous revert of both halves,
+// and only by 18% — either half alone passes, so it could not see the change
+// it is named for. At 10 s it catches all three with at least 3x to spare, and
+// still leaves ~600x on the pass side. That side has less slack than it looks:
+// `make test-race` runs this instrumented, where the same solve costs 345 ms,
+// so the real margin under race is ~29x.
 func TestSolveIsNotQuadraticInVariableCount(t *testing.T) {
 	const numVars = 200000
 	const budget = 10 * time.Second
