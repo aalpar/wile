@@ -92,14 +92,18 @@ type BindingChecker interface {
 // be treated as regular expressions when locally shadowed.
 //
 // R7RS Binding Check: For full R7RS compliance (§4.3.2), we also compare the
-// input identifier's binding with the pattern literal's. This is handled via
-// the bindingChecker field, which only MatchWithBindingChecker sets; Match()
-// passes nil and so skips the binding check.
+// input identifier's binding with the pattern literal's. The checker can arrive
+// two ways, and both are read-only after construction: on the opts struct, for
+// a matcher built per invocation (syntax-case, whose clause is matched in the
+// environment it was compiled against), or as MatchWithBindingChecker's
+// argument, for a matcher compiled once at macro-definition time and matched
+// against a different use-site environment each expansion (syntax-rules).
+// Match() supplies neither and so skips the binding check.
 type SyntaxMatcher struct {
 	matcher        *Matcher
 	ellipsisID     string                          // Custom ellipsis identifier (default "...")
 	literalSyntax  map[string]*syntax.SyntaxSymbol // Pattern literals with their scopes for hygiene
-	bindingChecker BindingChecker                  // For R7RS binding lookup during matching
+	bindingChecker BindingChecker                  // Construction-time R7RS binding lookup; nil when the caller supplies one per match instead
 }
 
 // SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
@@ -109,6 +113,10 @@ type SyntaxMatcherOpts struct {
 	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string
 	LiteralSyntax  map[string]*syntax.SyntaxSymbol
+	// BindingChecker resolves an identifier to its binding for the R7RS §4.3.2
+	// literal check. Pair it with LiteralSyntax: the check needs both, and a
+	// nil in either position turns it off.
+	BindingChecker BindingChecker
 }
 
 // NewSyntaxMatcher creates a syntax-aware matcher that wraps the core Matcher
@@ -128,6 +136,7 @@ func NewSyntaxMatcher(
 		ellipsisDepths map[int]int
 		ellipsisID     = DefaultEllipsis
 		literalSyntax  map[string]*syntax.SyntaxSymbol
+		bindingChecker BindingChecker
 	)
 	if opts != nil {
 		ellipsisVars = opts.EllipsisVars
@@ -136,6 +145,7 @@ func NewSyntaxMatcher(
 			ellipsisID = opts.EllipsisID
 		}
 		literalSyntax = opts.LiteralSyntax
+		bindingChecker = opts.BindingChecker
 	}
 	return &SyntaxMatcher{
 		matcher: NewMatcher(variables, codes,
@@ -143,37 +153,40 @@ func NewSyntaxMatcher(
 			WithEllipsisDepths(ellipsisDepths),
 			WithEllipsisID(ellipsisID),
 		),
-		ellipsisID:    ellipsisID,
-		literalSyntax: literalSyntax,
+		ellipsisID:     ellipsisID,
+		literalSyntax:  literalSyntax,
+		bindingChecker: bindingChecker,
 	}
 }
 
 // CloneForMatch returns a SyntaxMatcher that shares this matcher's immutable
 // compiled pattern (bytecode, pattern variables, ellipsis metadata, literal
-// syntax) but has independent per-invocation matching state — the embedded
-// Matcher's capture/syntax stacks and this wrapper's bindingChecker.
+// syntax, binding checker) but has independent per-invocation matching state —
+// the embedded Matcher's capture and syntax stacks.
 //
 // A SyntaxMatcher built once at macro-definition time is stored on the (shared)
 // macro binding and reused for every expansion of that macro, including
-// concurrent expansions from SRFI-18 threads. MatchWithBindingChecker mutates
-// bindingChecker and the embedded Matcher's stacks per call, and Expand reads the
-// capture stack the match populated, so concurrent expansions on one shared
-// instance corrupt each other. Each expansion must therefore run on its own
-// clone. The immutable fields are shared by reference (read-only after
-// construction), so a clone is one small allocation, not a deep copy — and the
-// match stacks are reallocated per match regardless, so this adds no per-call
-// allocation beyond the wrapper itself.
+// concurrent expansions from SRFI-18 threads. The embedded Matcher's stacks are
+// rewritten per call and Expand reads the capture stack the match populated, so
+// concurrent expansions on one shared instance corrupt each other. Each
+// expansion must therefore run on its own clone. Every other field is read-only
+// after construction, so a clone is one small allocation, not a deep copy — and
+// the match stacks are reallocated per match regardless, so this adds no
+// per-call allocation beyond the wrapper itself.
 func (p *SyntaxMatcher) CloneForMatch() *SyntaxMatcher {
 	return &SyntaxMatcher{
-		matcher:       p.matcher.clone(),
-		ellipsisID:    p.ellipsisID,
-		literalSyntax: p.literalSyntax,
+		matcher:        p.matcher.clone(),
+		ellipsisID:     p.ellipsisID,
+		literalSyntax:  p.literalSyntax,
+		bindingChecker: p.bindingChecker,
 	}
 }
 
-// Match performs pattern matching on syntax objects.
-// This is the basic method without binding checking. For full R7RS compliance
-// with auxiliary syntax hygiene, use MatchWithBindingChecker instead.
+// Match performs pattern matching on syntax objects, using whatever binding
+// checker was supplied at construction (SyntaxMatcherOpts.BindingChecker) —
+// none, for a matcher built without one. Callers that resolve the checker per
+// invocation, because the matcher outlives one use site, call
+// MatchWithBindingChecker instead.
 func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) error {
 	return p.MatchWithBindingChecker(ctx, input, nil)
 }
@@ -186,11 +199,18 @@ func (p *SyntaxMatcher) Match(ctx context.Context, input syntax.SyntaxValue) err
 // or both have no lexical binding. If the input has a binding (from let,
 // lambda, etc.) but the pattern literal doesn't, they won't match.
 //
-// Pass nil for checker to use scope-based matching only (less strict).
+// Pass nil for checker to fall back to the checker supplied at construction
+// (SyntaxMatcherOpts.BindingChecker), and nil in both places for scope-based
+// matching only (less strict).
+//
+// The checker is CLOSED OVER rather than stored on the receiver. It used to be
+// assigned to p.bindingChecker and cleared by a defer, which turned a field
+// that reads as configuration into per-call state on a value shared across
+// expansions.
 func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input syntax.SyntaxValue, checker BindingChecker) error {
-	// Store binding checker for use in literal matching
-	p.bindingChecker = checker
-	defer func() { p.bindingChecker = nil }()
+	if checker == nil {
+		checker = p.bindingChecker
+	}
 
 	// Ensure input is a pair
 	inputPair, ok := input.(*syntax.SyntaxPair)
@@ -203,7 +223,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	if p.literalSyntax != nil {
 		literalMatcher = func(inputSym *syntax.SyntaxSymbol, patternLiteralKey string) bool {
 			patternLit := p.literalSyntax[patternLiteralKey]
-			return p.literalScopesMatchWithChecker(inputSym, patternLit)
+			return literalScopesMatchWithChecker(checker, inputSym, patternLit)
 		}
 	}
 
@@ -297,6 +317,8 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 // This function returns true if the input symbol refers to the same binding
 // as the pattern literal. It performs two checks:
 //
+// The checker is a parameter, not a field read: see MatchWithBindingChecker.
+//
 // 1. Binding check (R7RS compliant): If a binding checker is available, compare
 // the input's binding with the pattern literal's binding by pointer identity.
 // They match only when both resolve to the same binding, or both are unbound.
@@ -319,7 +341,7 @@ func (p *SyntaxMatcher) GetBindings() map[string]syntax.SyntaxValue {
 //	(let-syntax ((=> ...)) (cond (#t => 'ok)))
 //	The input => has rebinding scope {letSyntaxScope}
 //	Pattern => has no rebinding scopes, so they don't match
-func (p *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.SyntaxSymbol) bool {
+func literalScopesMatchWithChecker(checker BindingChecker, input, pattern *syntax.SyntaxSymbol) bool {
 	if input == nil || pattern == nil {
 		return false
 	}
@@ -328,9 +350,9 @@ func (p *SyntaxMatcher) literalScopesMatchWithChecker(input, pattern *syntax.Syn
 	// binding, or both have no lexical binding. After library import, auxiliary
 	// syntax like => gets exported to phase 0, so both input and pattern may
 	// have bindings. We compare the actual bindings, not just whether they exist.
-	if p.bindingChecker != nil {
-		inputBinding := p.bindingChecker.GetBinding(input.Key(), input.Scopes())
-		patternBinding := p.bindingChecker.GetBinding(pattern.Key(), pattern.Scopes())
+	if checker != nil {
+		inputBinding := checker.GetBinding(input.Key(), input.Scopes())
+		patternBinding := checker.GetBinding(pattern.Key(), pattern.Scopes())
 
 		// R7RS §4.3.2: literals match if both have the same binding, or both unbound
 		if inputBinding != patternBinding {

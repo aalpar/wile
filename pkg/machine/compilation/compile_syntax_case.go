@@ -183,7 +183,9 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// Collect pattern variables from the pattern
 	// Note: isFirst=false because syntax-case patterns don't have a required leading keyword
 	// (unlike syntax-rules which always has the macro name as the first element)
-	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
+	// literalSyntax names the pattern literals, so they are excluded here; it is
+	// also stored on the clause below, which is what carries their definition-site
+	// scopes to the matcher for the R7RS §4.3.2 binding check.
 	patternVars := make(map[string]struct{})
 	// patternVarSyntax records each pattern variable's syntax symbol (with its
 	// scopes) so the ellipsis template-expansion path can do scope-aware
@@ -219,6 +221,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	clauseWrapper := &SyntaxCaseClause{
 		Bytecode:       compiled.Codes,
 		PatternVars:    patternVars,
+		LiteralSyntax:  literalSyntax,
 		EllipsisVars:   compiled.EllipsisVars,
 		EllipsisDepths: compiled.EllipsisDepths,
 	}

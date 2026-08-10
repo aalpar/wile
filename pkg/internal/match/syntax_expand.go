@@ -224,6 +224,26 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 	case *syntax.SyntaxVector:
 		return p.expandVectorTemplate(t, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 
+	case *syntax.SyntaxBox:
+		// A box is a container, like a vector: `#&<template>` holds a template,
+		// not a datum, so its content is expanded (pkg/syntax/syntax_box.go's
+		// own contract: "a box in a macro template propagates scopes to what it
+		// holds"). Falling into the self-evaluating arm below emitted the whole
+		// boxed subtree verbatim, ellipses included — `#&x` stayed `#&x` while
+		// the vector analogue `#(x x)` already gave `#(5 5)`.
+		//
+		// Routing through expandSyntaxValue rather than element-wise is what
+		// makes `#&(x ...)` repeat: the ellipsis follows the content's first
+		// element, so only the pair walk can see it.
+		if t.Value == nil {
+			return t, nil
+		}
+		inner, err := p.expandSyntaxValue(t.Value, ctx, ellipsisVars, excludeEllipsisIDs, opts)
+		if err != nil {
+			return nil, err
+		}
+		return syntax.NewSyntaxBox(inner, opts.resolveSourceContext(t)), nil
+
 	default:
 		// Self-evaluating values - return as-is
 		return template, nil
@@ -414,8 +434,19 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		return newSym.WithResolvedBinding(globalBinding)
 	}
 
+	// Local binding whose binder carries NO scopes — a pattern variable in a
+	// syntax-case clause body's frame is bound that way. There is no scope set
+	// to substitute, so this arm keeps the template symbol scope-less; what it
+	// must not do is hand it srcCtx, which UseSiteCtx has already replaced with
+	// the INVOKING code's context. That let a syntax-rules macro defined inside
+	// a syntax-case clause body resolve a free template reference to the use
+	// site's binding: 99 where hygiene requires 42 (Racket gives 42), and the
+	// sibling local-binding arm above gives 42 for the identical shape.
+	//
+	// templateCtx differs from srcCtx only in its scope set (definition-site
+	// rather than use-site); position and origin are the same object.
 	if resolution.GetHasLocalBinding() {
-		return syntax.NewSyntaxSymbol(key, srcCtx)
+		return syntax.NewSyntaxSymbol(key, templateCtx)
 	}
 
 	// Resolution non-nil but all methods returned zero — binding was unresolvable
@@ -760,6 +791,10 @@ func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, var
 		for _, elem := range t.Values {
 			p.findSyntaxVarsRecursive(elem, vars)
 		}
+	case *syntax.SyntaxBox:
+		if t.Value != nil {
+			p.findSyntaxVarsRecursive(t.Value, vars)
+		}
 	}
 }
 
@@ -809,6 +844,18 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 			elements[i] = expanded
 		}
 		return syntax.NewSyntaxVector(opts.resolveSourceContext(t), elements...), nil
+
+	case *syntax.SyntaxBox:
+		// Same reason as the vector arm: a box is a structured template, so the
+		// escape descends into it rather than leaving its variables standing.
+		if t.Value == nil {
+			return t, nil
+		}
+		inner, err := p.expandEscapedSyntaxTemplate(t.Value, ctx, ellipsisVars, opts)
+		if err != nil {
+			return nil, err
+		}
+		return syntax.NewSyntaxBox(inner, opts.resolveSourceContext(t)), nil
 
 	default:
 		return template, nil

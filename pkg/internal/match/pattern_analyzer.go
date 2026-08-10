@@ -98,6 +98,15 @@ func analyzeRecursive(
 		}
 		return varsInVector
 
+	case *syntax.SyntaxBox:
+		// `#&<pattern>` — same treatment as a vector: the compiler converts the
+		// box to a one-element pair chain and Merges that chain's analysis, so
+		// here we only propagate the names upward.
+		if t.Value == nil {
+			return nil
+		}
+		return analyzeRecursive(t.Value, variables, analysis)
+
 	default:
 		return nil
 	}

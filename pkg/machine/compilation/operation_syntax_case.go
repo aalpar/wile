@@ -209,10 +209,26 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 	}
 	input := sc.input
 
-	// Create a matcher
+	// Create a matcher.
+	//
+	// LiteralSyntax and BindingChecker are what turn on match.go's R7RS §4.3.2
+	// literal check; it needs BOTH, and this path used to supply neither, so a
+	// pattern literal matched a use-site identifier that shadows it —
+	// (let ((else 5)) (m else 1)) took the `else` clause where the identical
+	// syntax-rules macro correctly took the fallback.
+	//
+	// The environment is the use site's, not the definition site's, for the
+	// same reason OperationSyntaxRulesTransform gives: the question is whether
+	// the INVOKING code has bound the literal.
+	bindingEnv := mc.EnvironmentFrame()
+	if mc.ExpanderContext() != nil && mc.ExpanderContext().Env() != nil {
+		bindingEnv = mc.ExpanderContext().Env()
+	}
 	matcher := match.NewSyntaxMatcher(clause.PatternVars, clause.Bytecode, &match.SyntaxMatcherOpts{
 		EllipsisVars:   clause.EllipsisVars,
 		EllipsisDepths: clause.EllipsisDepths,
+		LiteralSyntax:  clause.LiteralSyntax,
+		BindingChecker: &envBindingChecker{env: bindingEnv},
 	})
 
 	// Try to match. ErrNotAMatch is normal control flow for syntax-case
