@@ -219,9 +219,9 @@ perf lever.
   control gap is 18.21 → 4.25 ns (4.3×) on linux/amd64, but measured here it is
   6.95 → 3.78 ns (**1.84×**, a 3.2 ns delta rather than 14 ns).
 
-  Still verified open against source: the eval stack is a boxed `values.Vector`
-  (`pkg/machine/stack.go:25`); no unboxed register lane in `vmState`, no scalar
-  lane on `Binding`. Design is settled — **Design A is REJECTED**
+  Still verified open against source: the eval stack is a boxed `[]values.Value`
+  (`machine.Stack`, `pkg/machine/stack.go`); no unboxed register lane in
+  `vmState`, no scalar lane on `Binding`. Design is settled — **Design A is REJECTED**
   (`plans/2026-06-24-unboxed-scalar-arithmetic-design.md`, "Decision note
   2026-07-11"); the live plan is Design B + Phase 4 binding-slot unboxing.
   Remaining work is Phase 1 (single register lane + fusion pass + no-loss gate)
