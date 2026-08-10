@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"fmt"
+
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -56,9 +58,9 @@ type breakState struct {
 	tag     *PromptTag
 }
 
-// breakTraceDepth is how many frames a break snapshot renders. Comfortably above
-// the 20 the REPL's ,backtrace asks for, so the snapshot is never the truncating
-// party.
+// breakTraceDepth is how many frames a break snapshot CAPTURES. It bounds what
+// a later render can show, so it sits comfortably above the 20 the REPL's
+// ,backtrace asks for; the render itself honours whatever budget it is given.
 const breakTraceDepth = 32
 
 var _ values.DebugState = (*BreakSnapshot)(nil)
@@ -73,18 +75,27 @@ var _ values.DebugState = (*BreakSnapshot)(nil)
 // during the suspension p.cont has already been moved to the break boundary, so
 // the live context no longer describes the break point either.
 type BreakSnapshot struct {
-	loc   *values.DebugLocation
-	trace string
-	depth int
+	loc *values.DebugLocation
+	// frames is the trace as captured, at most breakTraceDepth real frames plus
+	// CaptureStackTrace's own trailing ellipsis when the chain ran deeper.
+	frames StackTrace
+	// capped records that the ellipsis is present, so a truncating render can
+	// say "or more" rather than assert an exact remainder it does not know.
+	capped bool
+	depth  int
 }
 
 // newBreakSnapshot freezes mc's current location, stack trace and call depth.
 // It must be called while mc still holds the break point's chain.
 func newBreakSnapshot(mc *MachineContext) *BreakSnapshot {
+	frames := mc.CaptureStackTrace(breakTraceDepth)
 	return &BreakSnapshot{
-		loc:   mc.CurrentLocation(),
-		trace: mc.FormatStackTrace(breakTraceDepth),
-		depth: mc.CallDepth(),
+		loc: mc.CurrentLocation(),
+		// CaptureStackTrace appends at most one ellipsis frame and only after
+		// filling its budget, so exceeding the budget is exactly "it truncated".
+		frames: frames,
+		capped: len(frames) > breakTraceDepth,
+		depth:  mc.CallDepth(),
 	}
 }
 
@@ -94,13 +105,31 @@ func (p *BreakSnapshot) CurrentLocation() *values.DebugLocation {
 	return p.loc
 }
 
-// FormatStackTrace returns the stack trace rendered at the break. maxDepth is
-// ignored: the frames it would walk are the live chain's, which has already moved
-// on (or been recycled) by the time a caller holds a snapshot, so the depth is
-// fixed at capture time to breakTraceDepth.
+// FormatStackTrace renders at most maxDepth frames of the trace frozen at the
+// break, per values.DebugState. maxDepth <= 0 means "no bound", matching the
+// interface's other implementation, whose walk a non-positive budget does not
+// enter.
+//
+// The frames are the ones captured at the break, not a fresh walk: the live
+// chain has moved to the break boundary (or been recycled) by then, so a request
+// deeper than breakTraceDepth can only be answered with what was captured.
 // Implements values.DebugState.
-func (p *BreakSnapshot) FormatStackTrace(_ int) string {
-	return p.trace
+func (p *BreakSnapshot) FormatStackTrace(maxDepth int) string {
+	if maxDepth <= 0 || maxDepth >= len(p.frames) {
+		return p.frames.String()
+	}
+	hidden := len(p.frames) - maxDepth
+	more := "more frames"
+	if p.capped {
+		// The deepest captured entry is capture's own ellipsis, which is not a
+		// frame — and the chain it stood for is longer than anything counted here.
+		hidden--
+		more = "or more frames"
+	}
+	q := make(StackTrace, maxDepth, maxDepth+1)
+	copy(q, p.frames)
+	q = append(q, StackFrame{FunctionName: fmt.Sprintf("... %d %s ...", hidden, more)})
+	return q.String()
 }
 
 // CallDepth returns the continuation depth at the break point. It is the key

@@ -25,8 +25,14 @@ type DebugLocation struct {
 }
 
 // DebugState provides read-only access to VM execution state.
-// Implemented by the VM's MachineContext; consumed by presentation
-// layers (REPL, debugger UI) without importing machine/.
+// Consumed by presentation layers (REPL, debugger UI) without importing
+// machine/.
+//
+// Two implementations, and a debugger UI receives the second: the VM's live
+// MachineContext, and the frozen snapshot a break records — the context is
+// pool-recycled once the evaluation ends, so a break's state must outlive it.
+// A method added here must therefore be answerable from frozen data, not only
+// from a live chain.
 type DebugState interface {
 	// CurrentLocation returns the source location at the current
 	// execution point, or nil if no source info is available.

@@ -16,8 +16,10 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -275,12 +277,21 @@ func TestDebuggerSuspendsAndTheVerdictControlsExecution(t *testing.T) {
 // Step-out was keyed on the frame POINTER stashed at the stop. Suspension made
 // that key worthless: SliceContinuationAt deep-copies every frame, so resuming
 // hands the VM a chain of Copy()s and `mc.cont != stepFrame` is already true at
-// the first opcode after the resume. The stop lands back on line 2, inside the
-// procedure the user asked to finish, which is step-INTO behaviour.
+// the first opcode after the resume, which is step-INTO behaviour.
+//
+// inner's body spans TWO source lines, and that is the whole discriminating
+// power of this test. With a one-line body the only line left to stop on after
+// the break is the caller's, so every candidate step-out arm — `true`,
+// `CurrentSource() != nil`, `<=`, `<` — lands on it and the gate passes
+// vacuously: the one-stop-per-source-line cursor, not the depth comparison, is
+// what forbids stopping twice on line 2. Line 3 is reachable, carries source,
+// and sits at inner's own depth, so only a comparison that is STRICTLY shallower
+// than the break's depth skips it.
 func TestStepOutDoesNotDegenerateIntoStepInto(t *testing.T) {
 	ctx := context.Background()
 	src := "(define (inner x)\n" +
-		"  (+ x 1))\n" +
+		"  (let ((y (+ x 1)))\n" +
+		"    (* y 2)))\n" +
 		"(define (outer x)\n" +
 		"  (+ (inner x) 100))\n"
 	eng, path, dbg := newDebuggedEngine(t, src)
@@ -302,12 +313,13 @@ func TestStepOutDoesNotDegenerateIntoStepInto(t *testing.T) {
 
 	val, err := eng.EvalMultiple(ctx, `(outer 5)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, val.SchemeString(), qt.Equals, "106")
+	qt.Assert(t, val.SchemeString(), qt.Equals, "112")
 
 	qt.Assert(t, len(lines) >= 2, qt.IsTrue,
 		qt.Commentf("finishing inner must produce a second stop, got stops %v", lines))
-	qt.Assert(t, lines[1], qt.Equals, 4,
-		qt.Commentf("finish must land back in outer on line 4, not on line 2 in inner"))
+	qt.Assert(t, lines[1], qt.Equals, 5,
+		qt.Commentf("finish must land back in outer on line 5; line 3 is inner's own "+
+			"second body line and stopping there is step-into, got stops %v", lines))
 }
 
 // TestBreakpointFiresOncePerSourceLine is GATE (2) for Wave 3 item 13a: it must
@@ -336,4 +348,146 @@ func TestBreakpointFiresOncePerSourceLine(t *testing.T) {
 	qt.Assert(t, len(bps), qt.Equals, 1)
 	qt.Assert(t, bps[0].HitCount, qt.Equals, 1,
 		qt.Commentf("HitCount is what ,list prints (4 at dfd8e230)"))
+}
+
+// TestEveryBreakpointOnALineFires pins that the once-per-line de-duplication is
+// keyed on the BREAKPOINT, not on the line.
+//
+// Keyed on the line, the first breakpoint to fire set the cursor and every other
+// breakpoint on that line went inert for the whole entry — including one on a
+// column not yet reached. Which one survived was Go's map iteration order over
+// the breakpoint table, so the loser was not even stable. Measured at 2e599c64:
+// callback ids [0], hits 1 and 0.
+func TestEveryBreakpointOnALineFires(t *testing.T) {
+	ctx := context.Background()
+	eng, path, dbg := newDebuggedEngine(t, "(define (foo x)\n  (+ (* x 2) (* x 3)))\n")
+
+	var ids []int
+	dbg.OnBreak(func(_ values.DebugState, bp *wile.BreakpointInfo) {
+		if bp != nil {
+			ids = append(ids, bp.ID)
+		}
+	})
+	// Two columns of line 2: the two multiplications. Distinct instructions, so
+	// a per-breakpoint cursor reaches both and a per-line cursor reaches one.
+	first := dbg.SetBreakpoint(path, 2, 6)
+	second := dbg.SetBreakpoint(path, 2, 14)
+
+	_, err := eng.EvalMultiple(ctx, `(foo 21)`)
+	qt.Assert(t, err, qt.IsNil)
+
+	qt.Assert(t, len(ids), qt.Equals, 2,
+		qt.Commentf("both breakpoints on line 2 must stop, got ids %v", ids))
+	hits := map[int]int{}
+	for _, bp := range dbg.Breakpoints() {
+		hits[bp.ID] = bp.HitCount
+	}
+	qt.Assert(t, hits[first], qt.Equals, 1)
+	qt.Assert(t, hits[second], qt.Equals, 1,
+		qt.Commentf("the later column must not be masked by the earlier one"))
+}
+
+// TestBreakSnapshotHonoursMaxDepth pins values.DebugState's "walking at most
+// maxDepth frames" for the snapshot implementation a debugger UI actually
+// receives.
+//
+// The snapshot rendered its trace once at capture time and ignored the
+// parameter: measured at 2e599c64, FormatStackTrace returned the same 33 frame
+// lines for 1, 5, 20 and 100 alike, so the REPL's ,backtrace printed 32 frames
+// after asking for 20.
+func TestBreakSnapshotHonoursMaxDepth(t *testing.T) {
+	ctx := context.Background()
+	src := "(define (deep n)\n" +
+		"  (if (= n 0)\n" +
+		"      0\n" +
+		"      (+ 1 (deep (- n 1)))))\n"
+	eng, path, dbg := newDebuggedEngine(t, src)
+
+	dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+		return wile.BreakContinue
+	})
+	dbg.SetBreakpoint(path, 3, 0)
+
+	_, err := eng.EvalMultiple(ctx, `(deep 40)`)
+	qt.Assert(t, err, qt.IsNil)
+
+	state := dbg.CurrentState()
+	qt.Assert(t, state, qt.IsNotNil)
+	// A budget of 1 and a budget of 5 must differ, and neither may exceed its
+	// own budget. The trailing "... N more frames ..." line is the truncation
+	// marker, not a frame, so each render carries one of them.
+	for _, budget := range []int{1, 5, 20} {
+		frames := countTraceFrames(state.FormatStackTrace(budget))
+		qt.Assert(t, frames, qt.Equals, budget,
+			qt.Commentf("FormatStackTrace(%d) walked %d frames", budget, frames))
+	}
+}
+
+// countTraceFrames counts real frame lines in a rendered trace. The truncation
+// marker is itself a StackFrame, so it renders with the same "  at " prefix and
+// has to be excluded by its text.
+func countTraceFrames(trace string) int {
+	q := 0
+	for line := range strings.SplitSeq(trace, "\n") {
+		if !strings.HasPrefix(line, "  at ") {
+			continue
+		}
+		if strings.Contains(line, "more frames") {
+			continue
+		}
+		q++
+	}
+	return q
+}
+
+// TestUnarmedDebuggerCostsNoFrame pins that a registered suspension handler
+// alone does not install the break boundary.
+//
+// The REPL registers its handler for the whole session, so arming on the
+// handler alone put a break prompt frame on EVERY evaluation typed at the
+// prompt: a locationless <anonymous> at the bottom of every stack trace, and one
+// unit of the call-depth budget spent, for a user who never set a breakpoint.
+// Measured at 2e599c64: `(car (list))` reported three frames where the same
+// engine without a debugger reported two.
+func TestUnarmedDebuggerCostsNoFrame(t *testing.T) {
+	ctx := context.Background()
+
+	traceOf := func(t *testing.T, arm func(*wile.Debugger)) string {
+		t.Helper()
+		eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+		qt.Assert(t, err, qt.IsNil)
+		if arm != nil {
+			dbg := wile.NewDebugger()
+			arm(dbg)
+			eng.SetDebugger(dbg)
+		}
+		_, err = eng.EvalMultiple(ctx, `(car (list))`)
+		qt.Assert(t, err, qt.IsNotNil)
+		var rt *wile.RuntimeError
+		qt.Assert(t, errors.As(err, &rt), qt.IsTrue)
+		return rt.StackTrace
+	}
+
+	bare := traceOf(t, nil)
+	qt.Assert(t, countTraceFrames(bare) > 0, qt.IsTrue,
+		qt.Commentf("the control arm must produce a trace to compare against"))
+
+	handlerOnly := traceOf(t, func(dbg *wile.Debugger) {
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+			return wile.BreakContinue
+		})
+	})
+	qt.Assert(t, handlerOnly, qt.Equals, bare,
+		qt.Commentf("a suspension handler with nothing armed must not change the stack"))
+
+	// Arming a breakpoint installs the boundary, and the boundary must still not
+	// show up as a frame: it is VM scaffolding, not a call the program made.
+	armed := traceOf(t, func(dbg *wile.Debugger) {
+		dbg.OnBreakSuspend(func(_ values.DebugState, _ *wile.BreakpointInfo) wile.BreakAction {
+			return wile.BreakContinue
+		})
+		dbg.SetBreakpoint("no-such-file.scm", 1, 0)
+	})
+	qt.Assert(t, armed, qt.Equals, bare,
+		qt.Commentf("the break boundary must be elided from stack traces"))
 }

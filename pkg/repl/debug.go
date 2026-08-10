@@ -26,10 +26,13 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// DebugContext holds the state for debug commands. The break state itself
-// (the most recent break's MachineContext) is owned by the wrapped
-// wile.Debugger and read through p.debugger.CurrentState() — DebugContext
-// deliberately keeps no parallel copy, so the two can never disagree.
+// DebugContext holds the state for debug commands. The break state itself — a
+// snapshot frozen at the most recent break, NOT a live VM context — is owned by
+// the wrapped wile.Debugger and read through p.debugger.CurrentState().
+// DebugContext deliberately keeps no parallel copy, so the two can never
+// disagree. Handing back the live context instead is what made ,where and
+// ,backtrace report "No source location available": it is pool-recycled and
+// zeroed the moment the evaluation ends.
 type DebugContext struct {
 	debugger *wile.Debugger
 }

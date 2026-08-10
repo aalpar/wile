@@ -1160,15 +1160,23 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 }
 
 // armBreakPrompt installs the debugger's break boundary on mc when — and only
-// when — a suspension handler is registered. Without one, a break falls back to
-// the render-only callback and no prompt frame is pushed, so an embedder with a
-// Go-only debugger pays nothing and sees no change in call depth or tail-call
-// shape.
+// when — a suspension handler is registered AND the debugger has something that
+// could stop this run. Otherwise a break falls back to the render-only callback
+// and no prompt frame is pushed.
+//
+// Both conditions are load-bearing, because the boundary is not free: it is a
+// real continuation frame, so it costs one unit of the call-depth budget for the
+// whole run and changes the tail-call shape at the top level. The REPL registers
+// a suspension handler for its entire session, so without the second condition
+// every evaluation typed at the prompt paid for a debugger nobody had armed.
 //
 // The install and the handler are two calls because the handler closes over the
 // tag the install mints.
 func (p *Engine) armBreakPrompt(mc *machine.MachineContext, cc *CompiledCode) {
 	if p.debugger.onBreakSuspend == nil {
+		return
+	}
+	if !p.debugger.canStop() {
 		return
 	}
 	closureEnv := cc.env.MutableRuntimeOrNil()

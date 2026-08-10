@@ -163,9 +163,15 @@ func (p *Debugger) IsStepping() bool {
 	return p.inner.IsStepping()
 }
 
-// OnBreak sets the callback invoked when a breakpoint is hit or a
-// step completes. The DebugState provides source location and stack
-// trace access without exposing VM internals.
+// OnBreak sets the render-only callback for a breakpoint hit or a completed
+// step. The DebugState provides source location and stack trace access without
+// exposing VM internals.
+//
+// It is the fallback, not the general notification: a stop that SUSPENDS invokes
+// [Debugger.OnBreakSuspend] instead and does not invoke this. With a suspension
+// handler registered, the stops that still reach here are the ones that cannot
+// suspend — breaks inside load and eval, and any run the boundary was not armed
+// for.
 func (p *Debugger) OnBreak(fn func(state values.DebugState, bp *BreakpointInfo)) {
 	p.onBreak = fn
 }
@@ -260,6 +266,12 @@ func (p *Debugger) armStepMode(action BreakAction, depth int) {
 // machineDebugger returns the wrapped machine.Debugger for Engine use.
 func (p *Debugger) machineDebugger() *machine.Debugger {
 	return p.inner
+}
+
+// canStop reports whether an enabled breakpoint or an armed step mode could stop
+// the next run. See [machine.Debugger.CanStop] for why arming on nothing costs.
+func (p *Debugger) canStop() bool {
+	return p.inner.CanStop()
 }
 
 func machineBreakpointToInfo(bp *machine.Breakpoint) *BreakpointInfo {

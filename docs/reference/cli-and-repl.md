@@ -176,7 +176,8 @@ The commands below are available at the ordinary prompt.
 
 Breakpoints survive across continuation resumes — they are attached to source
 locations, not to particular VM states. A breakpoint set inside a procedure
-will fire on every call.
+fires on every call that re-enters its line; see the stop-counting rule below
+for the shapes where a call does not re-enter it.
 
 #### At the `(dbg)` prompt
 
@@ -189,8 +190,14 @@ still. `Ctrl-D` abandons the suspended computation; its `dynamic-wind`
 after-thunks still run.
 
 A breakpoint names a source LINE, so one entry to that line is one stop even
-though the line compiles to several instructions. A loop whose entire body is
-one source line therefore stops once, not once per iteration.
+though the line compiles to several instructions. The counting is per
+breakpoint: two breakpoints on one line, at different columns, each stop once
+per entry.
+
+The stop is keyed on entering the line, so any construct that never leaves it
+stops once rather than once per activation — a loop whose entire body is one
+source line, and equally a recursion whose entire body is one source line. Give
+the body a second line to get a stop per activation.
 
 `,finish` is keyed on call DEPTH: it resumes and stops at the first source line
 reached at a strictly shallower depth. Its predecessor compared frame pointers,

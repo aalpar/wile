@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -147,19 +148,26 @@ func (p *Debugger) Breakpoints() []*Breakpoint {
 //
 // It is not a pure query: a matching breakpoint's HitCount is incremented, and
 // mc's de-duplication cursor is advanced on every call. The increment is a write
-// and is taken under the WRITE lock, so concurrent SRFI-18 threads sharing one
-// Debugger do not race on HitCount. The returned *Breakpoint is the live object,
-// not a copy, so callers read fields that Enable/Disable mutate under the same lock.
+// and is taken under the WRITE lock, so two SRFI-18 threads sharing one Debugger
+// no longer lose increments against each other. That is all the lock buys: the
+// returned *Breakpoint is the live object, and every field a caller then reads
+// (HitCount, Enabled) is read outside this lock. The returned pointer being live
+// is deliberate — callers see Enable/Disable's effect — not a claim of safety.
 //
-// It fires once per ENTRY to a source line, not once per instruction on it: a
-// single source line compiles to several instructions, and stopping on each of
-// them reported one stop as several (four, for a `(+ x x)` body) and inflated
-// HitCount by the same factor. The cursor advances on every call so that leaving
-// a line and returning to it re-arms — which is what makes a procedure called
-// four times break four times.
+// Each breakpoint fires once per ENTRY to its source line, not once per
+// instruction on it: a single source line compiles to several instructions, and
+// stopping on each of them reported one stop as several (four, for a `(+ x x)`
+// body) and inflated HitCount by the same factor. The cursor advances on every
+// call so that leaving a line and returning to it re-arms — which is what makes
+// a procedure called four times break four times.
 //
-// Known limitation: a loop whose ENTIRE body is one source line never leaves that
-// line, so it breaks once, not once per iteration.
+// Suppression is per BREAKPOINT, not per line. Keying it on the line alone let
+// the first breakpoint to fire mask every other breakpoint on that line for the
+// whole entry — including one on a later column that had not yet been reached —
+// and left which of them survived to Go's map iteration order.
+//
+// Known limitation: a recursion or loop whose ENTIRE body is one source line
+// never leaves that line, so it breaks once, not once per activation.
 func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 	source := mc.CurrentSource()
 	if source == nil {
@@ -171,13 +179,7 @@ func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 		mc.lastBreakFile = source.File
 		mc.lastBreakLine = line
 		mc.lastBreakFired = false
-	}
-	// Suppression is keyed on having already fired ON this line, not merely on
-	// being on it again: a column-qualified breakpoint (,break f:2:7) sits on an
-	// instruction that is typically not the first one carrying line 2, and a
-	// plain line cursor would swallow it before it ever matched.
-	if mc.lastBreakFired {
-		return nil
+		mc.lastBreakIDs = mc.lastBreakIDs[:0]
 	}
 
 	p.mu.Lock()
@@ -187,15 +189,49 @@ func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 		if !bp.Enabled {
 			continue
 		}
-		if bp.File == source.File && bp.Line == line {
-			if bp.Column == 0 || bp.Column == source.Start.Column() {
-				bp.HitCount++
-				mc.lastBreakFired = true
-				return bp
-			}
+		if bp.File != source.File || bp.Line != line {
+			continue
 		}
+		// Column 0 means "any column on the line"; a column-qualified breakpoint
+		// (,break f:2:7) sits on an instruction that is typically not the first
+		// one carrying line 2.
+		if bp.Column != 0 && bp.Column != source.Start.Column() {
+			continue
+		}
+		if slices.Contains(mc.lastBreakIDs, bp.ID) {
+			continue
+		}
+		bp.HitCount++
+		mc.lastBreakIDs = append(mc.lastBreakIDs, bp.ID)
+		mc.lastBreakFired = true
+		return bp
 	}
 	return nil
+}
+
+// CanStop reports whether anything could stop execution right now: an enabled
+// breakpoint, or an armed step mode.
+//
+// It is the arming test for the break boundary. A boundary nothing can reach is
+// not free — it is a real continuation frame, so it shows up in every stack
+// trace and costs one unit of the call-depth budget for the whole run.
+//
+// It is a snapshot, not a subscription: a breakpoint set from another goroutine
+// after a run has begun is not seen by that run, which falls back to the
+// render-only callback for its remainder.
+func (p *Debugger) CanStop() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.stepMode != StepNone {
+		return true
+	}
+	for _, bp := range p.breakpoints {
+		if bp.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // setBreak records the frozen state of a break so it outlives the suspension and
@@ -313,7 +349,13 @@ func (p *Debugger) TriggerBreak(mc *MachineContext, bp *Breakpoint) {
 	}
 }
 
-// IsStepping returns whether the debugger is in stepping mode.
+// IsStepping returns whether the debugger is in stepping mode. It takes the read
+// lock like every other stepMode accessor: an embedder polling this from a
+// supervising goroutine while a break handler on the VM goroutine arms a step
+// mode is otherwise an unsynchronized read of the same field.
 func (p *Debugger) IsStepping() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	return p.stepMode != StepNone
 }

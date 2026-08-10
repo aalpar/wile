@@ -141,11 +141,15 @@ type MachineContext struct {
 	// resolveBreakInterrupt and BreakResumeValues.
 	breakResumeValues MultipleValues
 
-	// lastBreakFile/lastBreakLine/lastBreakFired are the debugger's per-line
-	// de-duplication cursor, maintained by CheckBreakpoint and consulted (for a
-	// step stop) by the debugger hook in Run. Several consecutive instructions
-	// carry one source line, and a breakpoint names a LINE, so the cursor
-	// collapses them into a single stop per entry to the line.
+	// lastBreakFile/lastBreakLine/lastBreakFired/lastBreakIDs are the debugger's
+	// per-line de-duplication cursor, maintained by CheckBreakpoint and consulted
+	// (for a step stop) by the debugger hook in Run. Several consecutive
+	// instructions carry one source line, and a breakpoint names a LINE, so the
+	// cursor collapses them into a single stop per breakpoint per entry to the
+	// line. lastBreakFired is the whole-line half, which suppresses a STEP stop
+	// once anything has stopped on the line; lastBreakIDs is the per-breakpoint
+	// half, without which the first breakpoint to fire masks every other
+	// breakpoint on the same line.
 	// They live here rather than on the Debugger because the Debugger is
 	// shared across SRFI-18 threads and sub-contexts while the cursor is a
 	// property of one instruction stream; per-context also means no lock.
@@ -154,6 +158,7 @@ type MachineContext struct {
 	lastBreakFile  string
 	lastBreakLine  int
 	lastBreakFired bool
+	lastBreakIDs   []BreakpointID
 
 	// immutableLiterals and authorizer are the namespace-derived engine state,
 	// snapshotted so a released environment frame cannot blank it. They are a
@@ -1185,6 +1190,9 @@ const defaultBacktraceDepth = 20
 // The walk stops at a context with isolatedMarks set (a re-invoked continuation
 // running a grafted chain), mirroring findParameterInMarks: the trace then shows
 // the continuation's own extent, not the invoker's.
+//
+// The debugger's break-boundary frame is elided: it is VM scaffolding rather
+// than a Scheme call, and it is transparent to the computation it wraps.
 func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 	trace := make(StackTrace, 0, 16)
 	depth := 0
@@ -1214,6 +1222,13 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 		// call instruction), so pc-1 gives the call site source location.
 		cont := mc.cont
 		for cont != nil && depth < maxDepth {
+			// The debugger's break boundary is a frame the VM pushed, not a call
+			// the program made. Rendering it puts a locationless <anonymous> at
+			// the bottom of every trace taken while a boundary is armed.
+			if mc.brk != nil && cont.promptTag == mc.brk.tag {
+				cont = cont.parent
+				continue
+			}
 			frame := StackFrame{}
 			if cont.template != nil {
 				frame.FunctionName = cont.template.Name()
