@@ -1562,6 +1562,48 @@ func TestValidateShadowing(t *testing.T) {
 				return defineBodyOf(c, lambdaBodyOf(c, e)[0])[0]
 			},
 		},
+		{
+			// (lambda () (define quote 1) (quote)) — an INTERNAL DEFINE, not a
+			// parameter. The binder is produced by validating the body's own
+			// first element, so only a per-body environment that grows as the
+			// body is validated can see it (bindBodyDefineNames).
+			name: "internal define shadows quote",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("define"),
+					values.NewSymbol("quote"),
+					values.NewInteger(1),
+				),
+				values.List(values.NewSymbol("quote")),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return lambdaBodyOf(c, e)[1]
+			},
+		},
+		{
+			// The same through a begin — the shape define-values expands to, and
+			// the reason bindBodyDefineNames folds over *ValidatedBegin rather
+			// than matching *ValidatedDefine alone.
+			name: "internal define inside begin shadows quote",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.EmptyList,
+				values.List(
+					values.NewSymbol("begin"),
+					values.List(
+						values.NewSymbol("define"),
+						values.NewSymbol("quote"),
+						values.NewInteger(1),
+					),
+				),
+				values.List(values.NewSymbol("quote")),
+			),
+			shadowed: func(c *qt.C, e ValidatedExpr) ValidatedExpr {
+				return lambdaBodyOf(c, e)[1]
+			},
+		},
 	}
 
 	env := environment.NewNamespace().Runtime()

@@ -47,16 +47,54 @@ func validateBodySlice(
 	result *ValidationResult,
 ) ([]ValidatedExpr, bool) {
 	var body []ValidatedExpr
+	bodyEnv := env
 	for i := start; i < len(elements); i++ {
-		expr := validateExpr(ctx, env, elements[i], result)
+		expr := validateExpr(ctx, bodyEnv, elements[i], result)
 		if expr != nil {
 			body = append(body, expr)
+			bodyEnv = bindBodyDefineNames(bodyEnv, expr)
 		}
 	}
 	if len(body) != len(elements)-start {
 		return nil, false
 	}
 	return body, true
+}
+
+// bindBodyDefineNames extends env with the names an ALREADY-VALIDATED body
+// expression defines, so a later expression in the same body sees them as local
+// variables. Without it an internal define cannot shadow a special form
+// (R7RS §4.2.2, §4.3): (let () (define quote (lambda (x) (* x x x))) (quote 9))
+// read `quote` as the special form and yielded 9.
+//
+// This is INCREMENTAL where its compile-side analogue
+// (compilation.predeclareDefineFromValidatedRecursive) is a PRE-pass over the
+// whole body. A pre-pass is impossible here: validation is what PRODUCES the
+// *ValidatedDefine to scan. So this covers the backward direction only — a
+// reference after the define — which is the only direction a shadow needs; a
+// forward reference to an internal binding is not evaluated before the define
+// runs (R7RS §5.3.2), and the compiler's pre-pass is what makes it resolve.
+//
+// The nil-env guard is required, not defensive: createChildEnvWithSymbols
+// bottoms out in NewEnvironmentFrameWithParent, which PANICS on a nil parent,
+// and this package's callers routinely validate with no environment at all.
+func bindBodyDefineNames(env *environment.EnvironmentFrame, expr ValidatedExpr) *environment.EnvironmentFrame {
+	if env == nil {
+		return nil
+	}
+	switch v := expr.(type) {
+	case *ValidatedDefine:
+		return createChildEnvWithSymbols(env, []*syntax.SyntaxSymbol{v.Name()})
+
+	case *ValidatedBegin:
+		// define-values and friends expand to (begin (define …) …), so the
+		// defines a body actually introduces can sit one level down.
+		for _, sub := range v.Body() {
+			env = bindBodyDefineNames(env, sub)
+		}
+		return env
+	}
+	return env
 }
 
 func validateExpr(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, result *ValidationResult) ValidatedExpr {
