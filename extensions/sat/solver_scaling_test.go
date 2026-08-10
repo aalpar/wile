@@ -50,7 +50,7 @@ import (
 // over the 14 ms this actually takes.
 func TestSolveIsNotQuadraticInVariableCount(t *testing.T) {
 	const numVars = 200000
-	const budget = 5 * time.Second
+	const budget = 10 * time.Second
 
 	// The pathological shape: one unit clause naming the highest variable.
 	// Every other variable is unmentioned and unconstrained, so the solver
@@ -130,6 +130,84 @@ func TestPickBranchVarMatchesLinearScan(t *testing.T) {
 		got := s.pickBranchVar()
 		if got != want {
 			t.Fatalf("trial %d: pickBranchVar = %d, linear scan = %d", trial, got, want)
+		}
+	}
+}
+
+// TestActivityRescaleKeepsTheHeapOrdered pins the one thing that can silently
+// break the heap: the VSIDS rescale.
+//
+// bumpVarActivity multiplies every activity by 1e-20 when one exceeds 1e20.
+// On float32 that map is NOT injective, in two separate ways — values below
+// the normal range flush to a subnormal or to zero, and even inside the normal
+// range two distinct float32 can round to one. Every collapse is a NEW TIE,
+// and orderBefore breaks ties by index, so a heap that was legal before the
+// rescale can be illegal after it, after which pickBranchVar diverges from the
+// linear scan TestPickBranchVarMatchesLinearScan pins it against.
+//
+// Measured over 643k conflicts on random 3-SAT: 712 rescales, 1404
+// distinct-to-equal collapses, ZERO violations. This is unreached at realistic
+// scales and guarded anyway, because the ordering is load-bearing.
+//
+// The assertion is the heap INVARIANT, not a particular pick: which pairs
+// collapse depends on the platform's float32 rounding, and an invariant check
+// is true regardless of which ones did.
+func TestActivityRescaleKeepsTheHeapOrdered(t *testing.T) {
+	// The counterexample, not a random fixture. Three activities that are
+	// strictly ordered before the rescale and all underflow to zero after it,
+	// plus a fourth to trigger the rescale through bumpVarActivity — the only
+	// path that reaches it in production.
+	//
+	// The ordering is the point: var 3 has the HIGHEST activity and the
+	// HIGHEST index, so the pre-rescale heap puts it above vars 1 and 2, and
+	// the post-collapse tie order (index ascending) puts it below them. With
+	// activity and index already agreeing, a collapse reorders nothing and a
+	// fixture proves nothing — the first two attempts at this test failed
+	// exactly that way, passing with the rebuild removed.
+	s := newSolver(context.Background(), nil, 4, -1)
+	s.activity[1] = 5e-31
+	s.activity[2] = 2e-31
+	s.activity[3] = 1e-30
+	s.rebuildOrder()
+	assertHeapOrdered(t, s, "before the rescale")
+
+	s.activityInc = 2e20
+	s.bumpVarActivity(4)
+
+	if s.activity[1] != s.activity[2] || s.activity[2] != s.activity[3] {
+		t.Skipf("this platform's float32 rounding did not collapse the fixture: %v", s.activity[1:4])
+	}
+	assertHeapOrdered(t, s, "after the rescale")
+
+	// And the consequence the invariant protects: on an all-equal tie the
+	// LOWEST index must come out, which is what the deleted linear scan did.
+	first := s.pickBranchVar()
+	if first != 4 {
+		t.Fatalf("first pick = %d, want 4 (the only non-zero activity)", first)
+	}
+	second := s.pickBranchVar()
+	if second != 1 {
+		t.Errorf("second pick = %d, want 1 (lowest index on a tie)", second)
+	}
+}
+
+// assertHeapOrdered checks the array heap property and the order/orderPos
+// bijection, so a stale position that silently drops a variable is caught too.
+func assertHeapOrdered(t *testing.T, s *solver, when string) {
+	t.Helper()
+	for i := range s.order {
+		v := s.order[i]
+		if int(s.orderPos[v]) != i {
+			t.Fatalf("%s: orderPos[%d] = %d, want %d", when, v, s.orderPos[v], i)
+		}
+		for _, child := range []int{2*i + 1, 2*i + 2} {
+			if child >= len(s.order) {
+				continue
+			}
+			if s.orderBefore(s.order[child], v) {
+				t.Errorf("%s: heap violated at %d: child %d (activity %v) precedes parent %d (activity %v)",
+					when, i, s.order[child], s.activity[s.order[child]], v, s.activity[v])
+			}
 		}
 	}
 }

@@ -357,8 +357,7 @@ func (s *solver) bumpVarActivity(v int32) {
 	s.activity[v] += s.activityInc
 	if s.orderPos[v] >= 0 {
 		// Activity only ever rises here, so the variable can only move
-		// toward the root. The rescale below multiplies every activity by
-		// the same factor, which preserves the order entirely.
+		// toward the root.
 		s.orderUp(int(s.orderPos[v]))
 	}
 	if s.activity[v] > 1e20 {
@@ -366,6 +365,30 @@ func (s *solver) bumpVarActivity(v int32) {
 			s.activity[i] *= 1e-20
 		}
 		s.activityInc *= 1e-20
+		// Rebuild, because *1e-20 on float32 is NOT order-preserving. It is
+		// not injective in two separate ways: values below the normal range
+		// flush to a subnormal or to zero, and even inside the normal range
+		// two distinct float32 can round to one (1.5000003e-18 and
+		// 1.5000004e-18 both land on 1.5000003e-38). Every collapse is a new
+		// tie, and orderBefore breaks ties by INDEX, so a pre-rescale heap
+		// can be a post-rescale violation — after which pickBranchVar returns
+		// a different variable from the linear scan it replaced, which is the
+		// one property TestPickBranchVarMatchesLinearScan exists to pin.
+		//
+		// Instrumented over 643k conflicts on 8 random 3-SAT instances: 712
+		// rescales, 1404 distinct-to-equal collapses, and ZERO violations —
+		// so this is unreached at realistic scales. It is here because the
+		// invariant is pinned, not because the search was observed to break
+		// it. Floyd's build is O(n) and runs about once per 900 conflicts.
+		s.rebuildOrder()
+	}
+}
+
+// rebuildOrder restores the heap property over the whole array in O(n),
+// bottom-up. Used after an activity rescale, which can reorder ties.
+func (s *solver) rebuildOrder() {
+	for i := len(s.order)/2 - 1; i >= 0; i-- {
+		s.orderDown(i)
 	}
 }
 
