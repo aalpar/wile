@@ -84,7 +84,29 @@ func WrapForeignErrorf(err error, msg string, vs ...any) error {
 }
 `)
 
+	// Minimal values stub. The package MUST be named "values": the
+	// noUncheckedArgCast patterns are syntactic on the `*values.$t` selector,
+	// so any other package name silently matches nothing.
+	writeFile("values/values.go", `package values
+
+// Integer is a concrete pointer target for the assertion fixtures.
+type Integer struct {
+	Value int64
+}
+
+// Get exists so the selector-chain form has something to chain onto.
+func (p *Integer) Get() int64 {
+	return p.Value
+}
+`)
+
 	// golangci-lint configuration: only enable gocritic/ruleguard.
+	//
+	// The issues block is load-bearing, not hygiene. golangci-lint's default
+	// max-same-issues is 3 and counts by identical message text; the six
+	// noUncheckedArgCast positives all share one message, so with the default
+	// cap only the first three reach the output and the rest read as dead
+	// patterns.
 	writeFile(".golangci.yml", `version: "2"
 run:
   timeout: 1m
@@ -104,6 +126,9 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+issues:
+  uniq-by-line: false
+  max-same-issues: 0
 `)
 
 	// ── Production fixture: positive cases (should trigger) ──────────
@@ -265,6 +290,74 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 }
 `)
 
+	// ── Production fixture: Arg() type assertions ────────────────────
+	//
+	// Targets noUncheckedArgCast. One function per matched AST position, so a
+	// dead pattern shows up as exactly one failing subtest.
+
+	writeFile("argcast.go", `package main
+
+import "testmod/values"
+
+type argCtx struct {
+	args []any
+}
+
+func (p *argCtx) Arg(n int) any {
+	return p.args[n]
+}
+
+func consume(v *values.Integer) int64 {
+	return v.Get()
+}
+
+func consume2(i int, v *values.Integer) int64 {
+	return v.Get() + int64(i)
+}
+
+// noUncheckedArgCast — positive (short assign)
+func shortAssignBad(mc *argCtx) {
+	n := mc.Arg(0).(*values.Integer)
+	_ = n
+}
+
+// noUncheckedArgCast — positive (plain assign)
+func plainAssignBad(mc *argCtx) {
+	var n *values.Integer
+	n = mc.Arg(0).(*values.Integer)
+	_ = n
+}
+
+// noUncheckedArgCast — positive (selector chain)
+func selectorChainBad(mc *argCtx) int64 {
+	return mc.Arg(0).(*values.Integer).Get()
+}
+
+// noUncheckedArgCast — positive (return)
+func returnBad(mc *argCtx) *values.Integer {
+	return mc.Arg(0).(*values.Integer)
+}
+
+// noUncheckedArgCast — positive (call argument, sole)
+func callArgSoleBad(mc *argCtx) int64 {
+	return consume(mc.Arg(0).(*values.Integer))
+}
+
+// noUncheckedArgCast — positive (call argument, non-first)
+func callArgNonFirstBad(mc *argCtx) int64 {
+	return consume2(1, mc.Arg(0).(*values.Integer))
+}
+
+// noUncheckedArgCast — negative (comma-ok)
+func commaOkGood(mc *argCtx) {
+	n, ok := mc.Arg(0).(*values.Integer)
+	if !ok {
+		return
+	}
+	_ = n
+}
+`)
+
 	// Populate go.sum via "go get" instead of "go mod tidy". The latter
 	// would strip the dsl require (nothing in our Go sources imports it)
 	// but golangci-lint needs it to parse the rules file.
@@ -400,6 +493,48 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 		{
 			name:    "noDirectValueRegisterAccess/negative_test_file_exempt",
 			substr:  `fixture_test.go:39:`,
+			present: false,
+		},
+
+		// ── noUncheckedArgCast ───────────────────────────────────
+		{
+			name:    "noUncheckedArgCast/positive_short_assign",
+			substr:  `argcast.go:23:2: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_plain_assign",
+			substr:  `argcast.go:30:2: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_selector_chain",
+			substr:  `argcast.go:36:9: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_return",
+			substr:  `argcast.go:41:2: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_call_arg_sole",
+			substr:  `argcast.go:46:9: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/positive_call_arg_nonfirst",
+			substr:  `argcast.go:51:9: ruleguard: unchecked type assertion on Arg()`,
+			present: true,
+		},
+		{
+			name:    "noUncheckedArgCast/negative_comma_ok",
+			substr:  `argcast.go:56:`,
+			present: false,
+		},
+		{
+			name:    "noUncheckedArgCast/negative_values_stub",
+			substr:  `values/values.go`,
 			present: false,
 		},
 	}
