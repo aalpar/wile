@@ -15,7 +15,9 @@
 package values_test
 
 import (
+	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -346,5 +348,128 @@ func TestUnlockCVNoLostWakeup(t *testing.T) {
 			t.Fatalf("iteration %d: consumer never woke — the signal was lost "+
 				"because the waiter was not enqueued before the mutex was released", i)
 		}
+	}
+}
+
+// lockContextResult is one waiter's return from LockContext, moved off the
+// waiter goroutine so the driver can put a watchdog on it.
+type lockContextResult struct {
+	acquired bool
+	err      error
+}
+
+// runLockContextWaiters launches n concurrent waiters on the already-held m and
+// collects the ones that return within the watchdog. A short return slice is a
+// lost wakeup; reporting it rather than failing here keeps both arms of the
+// lost-wakeup driver on one mechanism.
+//
+// n > 1 is load-bearing, not throughput. The window being raced is the gap
+// between the `go` statement and cond.Wait's notifyListAdd, a few hundred
+// nanoseconds, and it is only entered when the waiter is descheduled inside it.
+// One waiter at a time on an idle machine is almost never descheduled there —
+// measured: 36 000 sequential single-waiter trials across three durations found
+// nothing on an idle box, while the same driver reproduced within 12 000 when
+// something else was loading the machine. Saturating the Ps is what makes the
+// interleaving reachable without depending on what else happens to be running.
+func runLockContextWaiters(ctx context.Context, m *values.Mutex, n int, timeout *time.Duration, watchdog time.Duration) []lockContextResult {
+	res := make(chan lockContextResult, n)
+	for range n {
+		go func() {
+			acquired, err := m.LockContext(ctx, timeout, nil)
+			res <- lockContextResult{acquired: acquired, err: err}
+		}()
+	}
+
+	timer := time.NewTimer(watchdog)
+	defer timer.Stop()
+
+	q := make([]lockContextResult, 0, n)
+	for len(q) < n {
+		select {
+		case r := <-res:
+			q = append(q, r)
+		case <-timer.C:
+			return q
+		}
+	}
+	return q
+}
+
+// TestMutexLockContextNoLostWakeup drives both of LockContext's wait mechanisms
+// under one driver: the TIMED path, whose wakeup comes from a timer goroutine
+// launched next to cond.Wait, and the untimed CANCELLED path, whose wakeup comes
+// from waitOnCondCtx. Every trial must resolve.
+//
+// The timed arm is the defect: its timer goroutine's Broadcast is lost whenever
+// it lands between the `go` statement and cond.Wait's notifyListAdd, and the
+// waiter then parks with nothing left to wake it. The cancelled arm is the
+// control — same shape, same trials, same durations, but its Broadcast is taken
+// under cond.L, so it must lose zero wakeups. Without the control the driver is
+// not shown to discriminate between the two mechanisms.
+//
+// The bound was re-measured on this base rather than inherited. At 1 ms, the
+// duration the review's driver reproduced at, 12 000 single-waiter trials pass.
+// Shortening the timer widens the window, and 3 µs and 20 µs both reproduced —
+// but only while the machine was loaded by other work; on an idle box the same
+// 36 000 trials found nothing. Concurrency is what removes that dependence: each
+// trial launches waiters on every P, so the descheduling the race needs is
+// produced by the driver rather than borrowed from whatever else is running.
+func TestMutexLockContextNoLostWakeup(t *testing.T) {
+	const trials = 1500
+	// Enough to keep every P busy; trials × waiters is the acquire count.
+	waiters := 8 * runtime.GOMAXPROCS(0)
+	// Generous: the assertion is "returned at all", not "returned promptly".
+	const watchdog = 5 * time.Second
+
+	timeouts := []time.Duration{
+		3 * time.Microsecond,
+		20 * time.Microsecond,
+		100 * time.Microsecond,
+	}
+
+	assertAllTimedOut := func(t *testing.T, q []lockContextResult) {
+		t.Helper()
+		for _, r := range q {
+			qt.Assert(t, r.acquired, qt.IsFalse)
+			qt.Assert(t, r.err, qt.IsNil)
+		}
+	}
+
+	for _, timeout := range timeouts {
+		t.Run("timed/"+timeout.String(), func(t *testing.T) {
+			for i := range trials {
+				m := values.NewMutex("timed")
+				m.Lock(nil, nil) // held for the whole trial: the waiters can only time out
+
+				d := timeout
+				q := runLockContextWaiters(context.Background(), m, waiters, &d, watchdog)
+				if len(q) != waiters {
+					t.Fatalf("trial %d: %d of %d waiters never returned from a %v timed acquire — the "+
+						"timer goroutine broadcast before cond.Wait enqueued on the notify list",
+						i, waiters-len(q), waiters, timeout)
+				}
+				assertAllTimedOut(t, q)
+
+				m.Unlock(nil, nil)
+			}
+		})
+
+		t.Run("cancelled/"+timeout.String(), func(t *testing.T) {
+			for i := range trials {
+				m := values.NewMutex("cancelled")
+				m.Lock(nil, nil)
+
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
+				q := runLockContextWaiters(ctx, m, waiters, nil, watchdog)
+				cancel()
+				if len(q) != waiters {
+					t.Fatalf("trial %d: %d of %d waiters never returned from a %v cancelled untimed acquire",
+						i, waiters-len(q), waiters, timeout)
+				}
+				assertAllTimedOut(t, q)
+
+				m.Unlock(nil, nil)
+			}
+		})
 	}
 }

@@ -212,15 +212,17 @@ var (
 
 	// Synchronization errors
 
-	// ErrOperationCancelled is for a thread unparked by ctx cancellation before
-	// it acquired a synchronization primitive. It currently has NO producer: its
-	// only one was the rw-mutex lock family, which returned Void on success and
-	// so had no value channel for "did not acquire". Every surviving blocking
-	// primitive does have one — mutex-lock! and (mutex-unlock! m cv) both report
-	// a cancelled wait as #f, error-free, which is also what lets a wrapping
-	// with-timeout handler run (docs/concurrency/cancellation.md). Retained for a
-	// future primitive that returns a value on success and therefore cannot
-	// borrow that convention; delete it if none appears.
+	// ErrOperationCancelled is for a thread unparked by ctx cancellation before a
+	// blocking operation completed. Two producers: thread-sleep!, which returns
+	// Void, and Thread.Join, which returns the joinee's result. Neither has a
+	// value channel free for "did not finish" — exactly the shape of the removed
+	// rw-mutex lock family that was this sentinel's original producer.
+	// Primitives that DO have one use it instead — mutex-lock! and
+	// (mutex-unlock! m cv) both report a cancelled wait as #f, error-free, which
+	// is also what lets a wrapping with-timeout handler run
+	// (docs/concurrency/cancellation.md). Raise this only where that convention
+	// cannot be borrowed, and pair it with the raw ctx cause so a host can still
+	// distinguish context.Canceled from context.DeadlineExceeded.
 	ErrOperationCancelled = NewStaticError("synchronization operation cancelled")
 
 	// Process errors

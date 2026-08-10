@@ -86,8 +86,8 @@ exists to prevent. A stuck lock is the safe outcome. SRFI-18's own
 owner-driven `MarkAbandoned` is a different, spec-mandated path, not an
 override of this.
 
-How a cancelled wait surfaces to Scheme is the same for both remaining
-primitives, and that uniformity is what keeps the design small:
+How a cancelled wait surfaces to Scheme is decided by one question: does the
+primitive have a free value channel?
 
 - `mutex-lock!` already signals "did not acquire" as `#f` (its timeout form does),
   so a cancelled acquire returns `#f`. Returning it *error-free* is load-bearing —
@@ -96,6 +96,20 @@ primitives, and that uniformity is what keeps the design small:
   without a signal" as `#f`, so a cancelled cv wait returns `#f`. `blockOnWaiter`
   deregisters the waiter on the ctx arm, except when `Signal`/`Broadcast` claimed
   it at the boundary, which still reports signaled.
+- `thread-sleep!` and `thread-join!` have no such channel — one returns Void, the
+  other returns the joinee's result. A cancelled wait is reported as
+  `werr.ErrOperationCancelled` carrying the raw ctx cause, so an embedder gets a
+  sentinel to match rather than a bare `context.Canceled`. The price is that these
+  two must discriminate on the cancellation *source* (`waitCancelled` in
+  `extensions/threads/prim_threads.go`): under `ErrTimerExpired` they return
+  error-free, because the eager recheck below runs only on that path and is the
+  only thing that dispatches the `with-timeout` handler. That special case is
+  exactly what a free value channel buys the other two out of.
+
+  For `thread-join!` this is a *fourth* outcome alongside the three SRFI-18
+  conditions. The other three describe how the JOINEE ended; this one says the
+  joiner stopped waiting, and SRFI-18 has no condition for it, so it reaches a
+  `guard` as an ordinary error object.
 
 ## Who cancels the ctx: three sources, three safety arguments
 
@@ -166,6 +180,26 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
   Its sibling `TestUnlockCVDeliversSignalAcrossThreads` pins the other half of that
   path, that enqueueing the waiter before releasing the mutex closes the SRFI-18
   lost-wakeup window.
+
+`extensions/threads/prim_threads_test.go` covers the two primitives that do not
+share the `#f` convention:
+
+- `TestThreadSleepContextCancellation` — an embedder-cancelled sleep reports
+  `werr.ErrOperationCancelled`. Asserted against the sentinel with `errors.Is`,
+  never against `!= nil`: a test named for cancellation that cannot see *which*
+  cancellation is a blind guard.
+- `TestWithTimeoutInterruptsParkedThreadSleep` and
+  `TestWithTimeoutInterruptsParkedThreadJoin` — the composition proofs for the
+  source discrimination. The sleep one runs both shapes: unguarded, the handler
+  runs; guarded, the handler still runs and the guard clause is never entered,
+  because nothing is raised.
+- `TestTerminateUnparksUntimedThreadJoin` — terminating the thread that is
+  **parked in** the join unparks it. Its `joinee` arm is a labelled control that
+  cannot fail: terminating the thread being **joined** always worked, and is the
+  natural misreading of the same sentence.
+
+All four run under a watchdog, because the failure mode is a hang and a hanging
+test does not report.
 
 The eager recheck's own guards are Go-level:
 `pkg/machine/call_foreign_cached_test.go`, `timer_interrupt_test.go`,
