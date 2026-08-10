@@ -140,17 +140,12 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	if ok {
 		symVal, ok := sym.Unwrap().(*values.Symbol)
 		if ok {
-			// R7RS §4.2.2: Local variable bindings shadow special forms
-			// Check if there's a local variable binding that shadows this form
-			hasLocal := env.HasLocalVariableBinding(symVal, syntax.ScopesOf(sym.Scopes()))
-			if hasLocal {
-				// Local variable shadows the special form - treat as procedure call
-				return validateCall(ctx, env, pair, result)
-			}
-
-			// Look up the form in the registry
+			// The registry answers CANDIDACY by name; headDenotesSpecialForm
+			// answers whether the head really denotes that form here, by the
+			// binding it resolves to. The name test comes first so an ordinary
+			// call pays no resolution.
 			spec := forms.RegistryFor(env).Lookup(symVal.Key)
-			if spec != nil && spec.Validate != nil {
+			if spec != nil && spec.Validate != nil && headDenotesSpecialForm(env, symVal, sym) {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -170,6 +165,55 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 
 	// Not a special form - it's a function call
 	return validateCall(ctx, env, pair, result)
+}
+
+// headDenotesSpecialForm reports whether a form head the validator's table
+// already recognizes BY NAME actually denotes that special form here, rather
+// than an ordinary operator that happens to share the spelling.
+//
+// R7RS §4.3 makes a variable binding shadow a syntactic one, and §5.3.1 lets a
+// top-level define do it too. A name cannot answer that question; only the
+// binding the head RESOLVES to can. So it is asked as an identity compare: the
+// head denotes the form when it resolves to the binding the startup set
+// installed, or to no binding at all, and denotes a variable otherwise.
+//
+// Both resolutions run in ONE call off ONE env, and neither may be hoisted out:
+// a local binding is a pointer into a frame's []Binding and EnsureLocalBinding
+// can reallocate it, so a *Binding is an identity only inside a window that
+// creates no bindings.
+//
+// THE BindingTypeVariable ARM IS THE LIBRARY CASE, not an optimization.
+// (scheme base) exports the special forms themselves, so inside a library body
+// that imports it, `define` resolves to an IMPORTED binding — a
+// BindingTypePrimitive with no sealed twin at phase 0 — and a rule that only
+// compared against the sealed binding would route every library define to
+// validateCall. An imported re-export of a special form still denotes the form;
+// only a VARIABLE shadows one.
+//
+// GetBinding panics with werr.ErrAmbiguousBinding on an incomparable scope-set
+// tie. That is deliberately not caught: it reaches the compile path's recover
+// boundary and surfaces as a CompilationError chaining the sentinel, which is
+// the answer an ambiguous identifier is supposed to get.
+func headDenotesSpecialForm(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) bool {
+	if env == nil {
+		return true
+	}
+	ge := env.GlobalEnvironment()
+	if ge == nil {
+		return true
+	}
+	q := syntax.ScopesOf(sym.Scopes())
+	b := env.GetBinding(symVal, q)
+	if b == nil {
+		// Measured: if, lambda, quote, set!, let, begin, define and
+		// with-continuation-mark have no phase-0 binding of any kind. The table
+		// is the only thing that knows them, so a miss means the form.
+		return true
+	}
+	if b.BindingType() != environment.BindingTypeVariable {
+		return true
+	}
+	return b == ge.SealedBindingAt(symVal, q, env.PhaseLevel())
 }
 
 // collectList converts a syntax list to a slice of elements, reporting whether

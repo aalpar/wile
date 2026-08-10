@@ -96,6 +96,23 @@ func matrixEngine(t *testing.T, extra ...wile.EngineOption) *wile.Engine {
   (import (scheme base))
   (begin (define map 3) (define (g) map)))
 `)},
+			// lib-renamer/lib-setbang are the IMPORTED-RENAME half of the
+			// special-form shadow ("imported rename shadows set!" below). The
+			// except is not decoration: (scheme base) exports set! itself, and
+			// the import-conflict detector (R7RS §5.6, library_bindings.go:688)
+			// refuses two different bindings of one name, which would make the
+			// row fail for the wrong reason.
+			"lib-renamer.scm": &fstest.MapFile{Data: []byte(`(define-library (lib-renamer)
+  (export put!)
+  (import (scheme base))
+  (begin (define put! list)))
+`)},
+			"lib-setbang.scm": &fstest.MapFile{Data: []byte(`(define-library (lib-setbang)
+  (export probe)
+  (import (except (scheme base) set!)
+          (rename (lib-renamer) (put! set!)))
+  (begin (define (probe) (set! 1 2 3 4))))
+`)},
 		}),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
@@ -286,6 +303,40 @@ func TestBindingModelMatrix(t *testing.T) {
 		{name: "define over bootstrap macro name",
 			units: []string{`(define when 5) (list when (when #t 1))`},
 			want:  "(5 1)"},
+		// A SPECIAL FORM is shadowable too (R7RS §4.3: "local variable bindings
+		// can shadow syntactic bindings"). The validator used to decide "is this
+		// a special form" by a registry hit on the NAME, gated only on a
+		// lexical-chain local check, so a top-level define was invisible to it
+		// and (set! 1 2 3 4) was read as the form. It is now decided by binding
+		// IDENTITY: the head resolves by scopes and denotes the form only when
+		// it resolves to the SEALED binding (or to nothing at all).
+		//
+		// TWO UNITS ARE LOAD-BEARING. EvalMultiple compiles a unit before
+		// running it, so with both forms in one unit the define has not executed
+		// when the set! is validated, GetBinding returns nil, and the table wins
+		// on both the broken and the fixed tree — a vacuous gate.
+		// Measured at the parent commit: "set! requires exactly 2 argument(s),
+		// got 4 in set! form: invalid syntax".
+		{name: "define shadows set! special form",
+			units: []string{`(define set! list)`, `(set! 1 2 3 4)`},
+			want:  "(1 2 3 4)"},
+		// The other side of the identity rule, and the reason the sealed-pointer
+		// COMPARE is needed rather than a bare "has a binding" test: apply and
+		// dynamic-wind are both validator table entries AND phase-0 bindings
+		// that resolve to their own sealed slot, so an unshadowed one must keep
+		// denoting the form. This row is a RATCHET (green before and after) —
+		// it pins that shadowing apply leaves its codegen intact.
+		{name: "define apply then read it back",
+			units: []string{`(define apply 7)`, `apply`},
+			want:  "7"},
+		// The IMPORTED-RENAME arm, which the deleted local-only check could
+		// never see. It must live in a LIBRARY BODY: at ordinary top level the
+		// whole unit is validated before any import executes, so the head
+		// resolves to nothing and the table wins either way. Measured at the
+		// parent commit: "set! requires exactly 2 argument(s), got 4".
+		{name: "imported rename shadows set! special form",
+			units: []string{`(import (lib-setbang)) (probe)`},
+			want:  "(1 2 3 4)"},
 		// M8: delete own define works; delete sealed refused. Three separate
 		// units (not a begin-wrap, and not one multi-form EvalMultiple call) so
 		// runMatrix's per-unit failedAt can pin the failure to the READ
